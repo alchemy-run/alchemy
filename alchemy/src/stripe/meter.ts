@@ -303,7 +303,7 @@ export const Meter = Resource(
         stripeAPIResponse = await stripe.billing.meters.create(createParams);
       } catch (error) {
         logger.warn("Error creating/updating meter:", error);
-        if (isStripeConflictError(error) && props.adopt) {
+        if (isStripeConflictError(error) && (props.adopt ?? this.scope.adopt)) {
           throw new Error(
             "Meter adoption is not supported - meters cannot be uniquely identified for adoption",
           );

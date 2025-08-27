@@ -109,25 +109,24 @@ describe("Cloudflare Queue Resource", async () => {
     }
   }, 120000);
 
-  test("throws error on name change", async (scope) => {
-    const immutableQueueName = `${BRANCH_PREFIX}-test-queue-immutable`;
+  test("rename queue", async (scope) => {
+    const originalQueueName = `${BRANCH_PREFIX}-test-queue-immutable`;
     const newQueueName = `${BRANCH_PREFIX}-test-queue-new-name`;
 
     try {
       // Create a queue
-      const queue = await Queue(immutableQueueName, {
-        name: immutableQueueName,
+      let queue = await Queue(originalQueueName, {
+        name: originalQueueName,
         adopt: true,
       });
 
-      expect(queue.name).toEqual(immutableQueueName);
+      expect(queue.name).toEqual(originalQueueName);
 
       // Attempt to update name, which should throw an error
-      await expect(
-        Queue(immutableQueueName, {
-          name: newQueueName, // Different from original
-        }),
-      ).rejects.toThrow("Cannot update Queue name");
+      queue = await Queue(originalQueueName, {
+        name: newQueueName, // Different from original
+      });
+      expect(queue.name).toEqual(newQueueName);
     } finally {
       await alchemy.destroy(scope);
     }

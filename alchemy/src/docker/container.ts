@@ -71,6 +71,8 @@ export interface ContainerProps {
 
   /**
    * Container name
+   *
+   * @default ${app}-${stage}-${id}
    */
   name?: string;
 
@@ -125,6 +127,11 @@ export interface Container
    * Container ID
    */
   id: string;
+
+  /**
+   * Container name
+   */
+  name: string;
 
   /**
    * Container state
@@ -184,7 +191,11 @@ export const Container = Resource(
 
     // Use provided name or generate one based on resource ID
     const containerName =
-      props.name || `alchemy-${id.replace(/[^a-zA-Z0-9_.-]/g, "-")}`;
+      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
+
+    if (this.phase === "update" && this.output.name !== containerName) {
+      this.replace();
+    }
 
     // Handle delete phase
     if (this.phase === "delete") {
@@ -259,6 +270,7 @@ export const Container = Resource(
       return this({
         ...props,
         id: containerId,
+        name: containerName,
         state: containerState,
         createdAt: Date.now(),
       });

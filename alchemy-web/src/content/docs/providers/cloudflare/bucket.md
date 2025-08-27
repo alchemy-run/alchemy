@@ -17,6 +17,24 @@ const bucket = await R2Bucket("my-bucket", {
 });
 ```
 
+## Bind to a Worker
+
+```ts
+import { Worker, R2Bucket } from "alchemy/cloudflare";
+
+const bucket = await R2Bucket("my-bucket", {
+  name: "my-bucket",
+});
+
+await Worker("my-worker", {
+  name: "my-worker",
+  script: "console.log('Hello, world!')",
+  bindings: {
+    BUCKET: bucket,
+  },
+});
+```
+
 ## With Location Hint
 
 Create a bucket with location hint for optimal performance:
@@ -81,20 +99,86 @@ const tempBucket = await R2Bucket("temp-storage", {
 });
 ```
 
-## Bind to a Worker
+## With Lifecycle Rules
+
+Configure automatic transitions like aborting multipart uploads, deleting objects after an age or date, or moving objects to Infrequent Access.
 
 ```ts
-import { Worker, R2Bucket } from "alchemy/cloudflare";
+import { R2Bucket } from "alchemy/cloudflare";
 
-const bucket = await R2Bucket("my-bucket", {
-  name: "my-bucket",
-});
-
-await Worker("my-worker", {
-  name: "my-worker",
-  script: "console.log('Hello, world!')",
-  bindings: {
-    BUCKET: bucket,
-  },
+const bucket = await R2Bucket("logs", {
+  name: "logs",
+  lifecycle: [
+    // Abort incomplete multipart uploads after 7 days
+    {
+      id: "abort-mpu-7d",
+      conditions: { prefix: "" }, // empty means apply to all objects/uploads
+      enabled: true,
+      abortMultipartUploadsTransition: {
+        condition: { type: "Age", maxAge: 7 * 24 * 60 * 60 },
+      },
+    },
+    // Delete objects after 30 days
+    {
+      id: "delete-30d",
+      conditions: { prefix: "archive/" },
+      deleteObjectsTransition: {
+        condition: { type: "Age", maxAge: 30 * 24 * 60 * 60 },
+      },
+    },
+    // Transition storage class to InfrequentAccess after 60 days
+    {
+      id: "ia-60d",
+      conditions: { prefix: "cold/" },
+      storageClassTransitions: [
+        {
+          condition: { type: "Age", maxAge: 60 * 24 * 60 * 60 },
+          storageClass: "InfrequentAccess",
+        },
+      ],
+    },
+  ],
 });
 ```
+
+- **conditions.prefix**: Scope rule to keys beginning with a prefix. Use "" for all keys.
+- **enabled**: Defaults to `true` when omitted.
+- **Age condition fields**: lifecycle uses `maxAge` (seconds).
+- **Date condition fields**: use ISO strings like `"2025-01-01T00:00:00Z"`.
+
+## With Object Lock Rules
+
+Apply retention locks to objects by age, until a fixed date, or indefinitely.
+
+```ts
+import { R2Bucket } from "alchemy/cloudflare";
+
+const bucket = await R2Bucket("legal-holds", {
+  name: "legal-holds",
+  lock: [
+    // Lock all objects for 7 days
+    {
+      id: "retain-7d",
+      prefix: "",
+      enabled: true,
+      condition: { type: "Age", maxAgeSeconds: 7 * 24 * 60 * 60 },
+    },
+    // Indefinite lock for the legal prefix
+    {
+      id: "legal-indef",
+      prefix: "legal/",
+      condition: { type: "Indefinite" },
+    },
+    // Retain until a specific date
+    {
+      id: "retain-until-2025",
+      prefix: "exports/",
+      condition: { type: "Date", date: "2025-01-01T00:00:00Z" },
+    },
+  ],
+});
+```
+
+- **prefix**: Scope the lock rule to objects starting with the prefix. Omit or set to "" for all keys.
+- **enabled**: Defaults to `true` when omitted.
+- **Age condition fields**: lock uses `maxAgeSeconds` (seconds).

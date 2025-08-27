@@ -26,6 +26,14 @@ export const force = z
   .default(false)
   .describe("Apply updates to resources even if there are no changes");
 
+export const adopt = z
+  .boolean()
+  .optional()
+  .default(false)
+  .describe(
+    "Adopt resources if they already exist but are not yet managed by your Alchemy app",
+  );
+
 export const execArgs = {
   cwd: z
     .string()
@@ -61,6 +69,7 @@ export async function execAlchemy(
     envFile,
     read,
     dev,
+    adopt,
   }: {
     cwd?: string;
     quiet?: boolean;
@@ -71,6 +80,7 @@ export async function execAlchemy(
     envFile?: string;
     read?: boolean;
     dev?: boolean;
+    adopt?: boolean;
   },
 ) {
   const args: string[] = [];
@@ -89,6 +99,7 @@ export async function execAlchemy(
     execArgs.push(`--env-file ${envFile}`);
   }
   if (dev) args.push("--dev");
+  if (adopt) args.push("--adopt");
 
   // Check for alchemy.run.ts or alchemy.run.js (if not provided)
   if (!main) {

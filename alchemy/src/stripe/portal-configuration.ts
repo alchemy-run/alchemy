@@ -499,7 +499,10 @@ export const PortalConfiguration = Resource(
           configuration =
             await stripe.billingPortal.configurations.create(createParams);
         } catch (error) {
-          if (isStripeConflictError(error) && props.adopt) {
+          if (
+            isStripeConflictError(error) &&
+            (props.adopt ?? this.scope.adopt)
+          ) {
             throw new Error(
               "PortalConfiguration adoption is not supported - portal configurations cannot be uniquely identified for adoption",
             );

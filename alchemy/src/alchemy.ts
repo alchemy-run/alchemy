@@ -1,7 +1,7 @@
 import { execArgv } from "node:process";
 import { onExit } from "signal-exit";
-import { ReplacedSignal } from "./apply.ts";
-import { DestroyStrategy, DestroyedSignal, destroy } from "./destroy.ts";
+import { isReplacedSignal } from "./apply.ts";
+import { DestroyStrategy, destroy, isDestroyedSignal } from "./destroy.ts";
 import { env } from "./env.ts";
 import {
   ResourceFQN,
@@ -119,6 +119,7 @@ async function _alchemy(
         : process.env.STAGE;
     })(),
     password: process.env.ALCHEMY_PASSWORD,
+    adopt: cliArgs.includes("--adopt"),
   } satisfies Partial<AlchemyOptions>;
   const mergedOptions = {
     ...cliOptions,
@@ -239,6 +240,10 @@ export interface AlchemyOptions {
    */
   destroyStrategy?: DestroyStrategy;
   /**
+   * If true, children of the resource will not be destroyed (but their state will be deleted).
+   */
+  noop?: boolean;
+  /**
    * If true, will not print any Create/Update/Delete messages.
    *
    * @default false
@@ -261,6 +266,12 @@ export interface AlchemyOptions {
    * If not provided, the default fallback logger will be used.
    */
   logger?: LoggerApi;
+  /**
+   * Whether to adopt resources if they already exist but are not yet managed by your Alchemy app.
+   *
+   * @default false
+   */
+  adopt?: boolean;
 }
 
 export interface ScopeOptions extends AlchemyOptions {
@@ -320,6 +331,7 @@ async function run<T>(
     scopeName: id,
     telemetryClient,
   });
+  let noop = options?.noop ?? false;
   try {
     if (options?.isResource !== true && _scope.parent) {
       // TODO(sam): this is an awful hack to differentiate between naked scopes and resources
@@ -357,13 +369,16 @@ async function run<T>(
     }
     return await _scope.run(async () => fn.bind(_scope)(_scope));
   } catch (error) {
-    if (
-      !(error instanceof DestroyedSignal || error instanceof ReplacedSignal)
-    ) {
+    if (!(isDestroyedSignal(error) || isReplacedSignal(error))) {
       _scope.fail();
+    }
+    if (isDestroyedSignal(error)) {
+      noop = noop || error.noop;
     }
     throw error;
   } finally {
-    await _scope.finalize();
+    await _scope.finalize({
+      noop,
+    });
   }
 }

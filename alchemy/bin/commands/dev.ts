@@ -1,5 +1,6 @@
 import z from "zod";
 import {
+  adopt,
   entrypoint,
   execAlchemy,
   execArgs,
@@ -17,6 +18,7 @@ export const dev = loggedProcedure
       z.object({
         ...execArgs,
         force,
+        adopt,
       }),
     ]),
   )

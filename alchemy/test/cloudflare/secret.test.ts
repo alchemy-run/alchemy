@@ -31,6 +31,7 @@ describe("Secret Resource", () => {
     try {
       // Create a test secret in the default store
       testSecret = await Secret(testId, {
+        name: testId,
         value: secret("test-secret-value"),
       });
 
