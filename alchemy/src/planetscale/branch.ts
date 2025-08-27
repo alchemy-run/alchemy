@@ -6,7 +6,6 @@ import {
   ensureProductionBranchClusterSize,
   sanitizeClusterSize,
   waitForBranchReady,
-  waitForDatabaseReady,
   type PlanetScaleClusterSize,
 } from "./utils.ts";
 
@@ -196,7 +195,7 @@ export const Branch = Resource(
     }
 
     if (typeof props.parentBranch !== "string" && props.parentBranch) {
-      await waitForDatabaseReady(
+      await waitForBranchReady(
         api,
         props.organizationId,
         props.databaseName,

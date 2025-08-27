@@ -3,7 +3,10 @@ import { alchemy } from "../../src/alchemy.ts";
 import { destroy } from "../../src/destroy.ts";
 import { PlanetScaleClient } from "../../src/planetscale/api/client.gen.ts";
 import { Database } from "../../src/planetscale/database.ts";
-import { waitForDatabaseReady } from "../../src/planetscale/utils.ts";
+import {
+  waitForBranchReady,
+  waitForDatabaseReady,
+} from "../../src/planetscale/utils.ts";
 import { BRANCH_PREFIX } from "../util.ts";
 // must import this or else alchemy.test won't exist
 import "../../src/test/vitest.ts";
@@ -185,7 +188,7 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent.each(kinds)(
         expect(database).toMatchObject({
           defaultBranch,
         });
-        await waitForDatabaseReady(
+        await waitForBranchReady(
           api,
           organizationId,
           database.name,
@@ -212,7 +215,7 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent.each(kinds)(
         });
 
         // Verify branch cluster size was updated
-        await waitForDatabaseReady(
+        await waitForBranchReady(
           api,
           organizationId,
           database.name,

@@ -22,6 +22,9 @@ export type PlanetScaleClusterSize =
   | "PS_2800"
   | (string & {});
 
+/**
+ * Ensures that the given cluster size is in the correct format.
+ */
 export function sanitizeClusterSize(input: {
   size: PlanetScaleClusterSize;
   kind?: "mysql" | "postgresql";
@@ -43,88 +46,45 @@ export function sanitizeClusterSize(input: {
   return input.size;
 }
 
+/**
+ * Polls a branch until it is ready.
+ */
 export async function waitForBranchReady(
   api: PlanetScaleClient,
   organization: string,
   database: string,
   branch: string,
 ): Promise<DatabaseBranch> {
-  const start = Date.now();
-  let delay = 1000;
-
-  while (true) {
-    const res = await api.organizations.databases.branches.get({
-      path: { organization, database, name: branch },
-    });
-
-    if (res.ready) {
-      return res;
-    }
-
-    if (Date.now() - start > 600_000) {
-      throw new Error(`Timeout waiting for branch "${branch}" to be ready`);
-    }
-
-    await new Promise((r) => setTimeout(r, delay));
-    delay = Math.min(delay * 2, 5_000);
-  }
+  return await poll({
+    description: `branch "${branch}" ready`,
+    fn: () =>
+      api.organizations.databases.branches.get({
+        path: { organization, database, name: branch },
+      }),
+    predicate: (branch) => branch.ready,
+  });
 }
 
 /**
- * Wait for a database to be ready with exponential backoff
+ * Polls a database until it is ready.
  */
 export async function waitForDatabaseReady(
   api: PlanetScaleClient,
   organization: string,
   database: string,
-  branch?: string,
 ): Promise<void> {
-  const startTime = Date.now();
-  let waitMs = 1000;
-  while (true) {
-    const response = branch
-      ? await api.organizations.databases.branches.get({
-          path: {
-            organization,
-            database,
-            name: branch,
-          },
-          result: "full",
-        })
-      : await api.organizations.databases.get({
-          path: {
-            organization,
-            name: database,
-          },
-          result: "full",
-        });
-
-    if (response.error) {
-      throw new Error(
-        `Failed to check state for database "${database}" ${branch ? `branch "${branch}"` : ""}`,
-        {
-          cause: response.error,
-        },
-      );
-    }
-
-    if (response.data.ready) {
-      return;
-    }
-
-    if (Date.now() - startTime >= 600_000) {
-      throw new Error(
-        `Timeout waiting for database "${database}" ${branch ? `branch "${branch}"` : ""} to be ready`,
-      );
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, waitMs));
-    waitMs = Math.min(waitMs * 2, 5_000); // Cap at 5s intervals, same as PlanetScale terraform provider
-  }
+  await poll({
+    description: `database "${database}" ready`,
+    fn: () =>
+      api.organizations.databases.get({
+        path: { organization, name: database },
+      }),
+    predicate: (database) => database.ready,
+  });
 }
 
 /**
- * Wait for a keyspace to be ready
+ * Polls a keyspace until it is finished resizing.
  */
 export async function waitForKeyspaceReady(
   api: PlanetScaleClient,
@@ -133,54 +93,15 @@ export async function waitForKeyspaceReady(
   branch: string,
   keyspace: string,
 ): Promise<void> {
-  const start = Date.now();
-  let delay = 1000;
-
-  while (true) {
-    const res =
-      await api.organizations.databases.branches.keyspaces.resizes.list({
-        path: {
-          organization,
-          database,
-          branch,
-          name: keyspace,
-        },
-      });
-    // once it's fully ready, we can proceed
-    if (res.data.every((item) => item.state !== "resizing")) {
-      return;
-    }
-
-    if (Date.now() - start > 600_000) {
-      throw new Error(`Timeout waiting for keyspace "${keyspace}" to be ready`);
-    }
-
-    await new Promise((r) => setTimeout(r, delay));
-    delay = Math.min(delay * 2, 5_000);
-  }
-}
-
-async function ensureProductionBranch(
-  api: PlanetScaleClient,
-  organization: string,
-  database: string,
-  name: string,
-): Promise<void> {
-  const data = await api.organizations.databases.branches.get({
-    path: {
-      organization,
-      database,
-      name,
-    },
+  await poll({
+    description: `keyspace "${keyspace}" ready`,
+    fn: () =>
+      api.organizations.databases.branches.keyspaces.resizes.list({
+        path: { organization, database, branch, name: keyspace },
+      }),
+    predicate: (response) =>
+      response.data.every((item) => item.state !== "resizing"),
   });
-  if (!data.production) {
-    if (!data.ready) {
-      await waitForBranchReady(api, organization, database, name);
-    }
-    await api.organizations.databases.branches.promote.post({
-      path: { organization, database, name },
-    });
-  }
 }
 
 /**
@@ -224,6 +145,35 @@ export async function ensureProductionBranchClusterSize(
   }
 }
 
+/**
+ * Checks if a branch is production and promotes it if it is not.
+ */
+async function ensureProductionBranch(
+  api: PlanetScaleClient,
+  organization: string,
+  database: string,
+  name: string,
+): Promise<void> {
+  const data = await api.organizations.databases.branches.get({
+    path: {
+      organization,
+      database,
+      name,
+    },
+  });
+  if (!data.production) {
+    if (!data.ready) {
+      await waitForBranchReady(api, organization, database, name);
+    }
+    await api.organizations.databases.branches.promote.post({
+      path: { organization, database, name },
+    });
+  }
+}
+
+/**
+ * Ensures that a MySQL branch has the correct cluster size.
+ */
 async function ensureMySQLClusterSize(
   api: PlanetScaleClient,
   organization: string,
@@ -276,6 +226,9 @@ async function ensureMySQLClusterSize(
   }
 }
 
+/**
+ * Ensures that a Postgres branch has the correct cluster size.
+ */
 async function ensurePostgresClusterSize(
   api: PlanetScaleClient,
   organization: string,
@@ -313,6 +266,9 @@ async function ensurePostgresClusterSize(
   );
 }
 
+/**
+ * Polls for a pending Postgres change to be completed.
+ */
 async function waitForPendingPostgresChanges(
   api: PlanetScaleClient,
   organization: string,
@@ -320,31 +276,74 @@ async function waitForPendingPostgresChanges(
   branch: string,
   changeId?: string,
 ) {
-  const startTime = Date.now();
-  let waitMs = 1000;
+  await poll({
+    description: `changes for branch "${branch}"`,
+    fn: () =>
+      api.organizations.databases.branches.changes.list({
+        path: { organization, database, branch },
+      }),
+    predicate: (response) =>
+      response.data.every(
+        (change) =>
+          change.state === "completed" ||
+          change.state === "canceled" ||
+          (changeId && change.id === changeId),
+      ),
+  });
+}
+
+/**
+ * Polls a function until it returns a result that satisfies the predicate.
+ */
+async function poll<T>(input: {
+  /**
+   * A description of the operation being polled.
+   */
+  description: string;
+
+  /**
+   * The function to poll.
+   */
+  fn: () => Promise<T>;
+
+  /**
+   * A predicate that determines if the operation has completed.
+   */
+  predicate: (result: T) => boolean;
+
+  /**
+   * The initial delay between polls.
+   * @default 250ms
+   */
+  initialDelay?: number;
+
+  /**
+   * The maximum delay between polls.
+   * @default 5_000ms (5 seconds)
+   */
+  maxDelay?: number;
+
+  /**
+   * The timeout for the poll in milliseconds.
+   * @default 1_000_000 (~16 minutes)
+   */
+  timeout?: number;
+}): Promise<T> {
+  const start = Date.now();
+  let delay = input.initialDelay ?? 250;
   while (true) {
-    const response = await api.organizations.databases.branches.changes.list({
-      path: { organization, database, branch },
-    });
-    const done = changeId
-      ? response.data.find(
-          (change) =>
-            change.id === changeId &&
-            (change.state === "completed" || change.state === "canceled"),
-        )
-      : response.data.every(
-          (x) => x.state === "completed" || x.state === "canceled",
-        );
-    if (done) {
-      return;
+    const result = await input.fn();
+    if (input.predicate(result)) {
+      return result;
     }
-
-    // extra long timeout because postgres changes take forever
-    if (Date.now() - startTime >= 1_000_000) {
-      throw new Error(`Timeout waiting for changes for branch "${branch}"`);
+    if (Date.now() - start >= (input.timeout ?? 1_000_000)) {
+      throw new Error(
+        `Timed out waiting for ${input.description} after ${Math.round(
+          (input.timeout ?? 1_000_000) / 1000,
+        )}s`,
+      );
     }
-
-    await new Promise((resolve) => setTimeout(resolve, waitMs));
-    waitMs = Math.min(waitMs * 2, 5_000);
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    delay = Math.min(delay * 2, input.maxDelay ?? 5_000);
   }
 }
