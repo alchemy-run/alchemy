@@ -151,6 +151,11 @@ async function _alchemy(
           ? cliArgs[i + 1]
           : process.env.STAGE;
       })(),
+      // Parse cdp-manager-url argument (--cdp-manager-url http://localhost:1336) functionally and inline as a property declaration
+      cdpManagerUrl: (function parseCdpManagerUrl() {
+        const i = cliArgs.indexOf("--cdp-manager-url");
+        return i !== -1 && i + 1 < cliArgs.length ? cliArgs[i + 1] : undefined;
+      })(),
       password: process.env.ALCHEMY_PASSWORD,
     } satisfies Partial<AlchemyOptions>;
     const mergedOptions = {
@@ -414,6 +419,10 @@ export interface AlchemyOptions {
    * If not provided, the default fallback logger will be used.
    */
   logger?: LoggerApi;
+  /**
+   * A custom CDP manager URL to use for this scope.
+   */
+  cdpManagerUrl?: string;
 }
 
 export interface ScopeOptions extends AlchemyOptions {

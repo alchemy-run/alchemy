@@ -3,6 +3,7 @@ import { createServer, type Server } from "node:http";
 import path from "pathe";
 import { WebSocketServer, type WebSocket as WsWebSocket } from "ws";
 import { findOpenPort } from "../../../src/util/find-open-port.ts";
+import { CDPProxy } from "./cdp-proxy.ts";
 
 export const LOGS_DIRECTORY = path.join(process.cwd(), ".alchemy", "logs");
 const DEBUGGER_URLS_FILE = path.join(
@@ -52,9 +53,46 @@ export class CDPManager {
     return this.url;
   }
 
-  private handleRequest(_req: any, res: any): void {
-    res.writeHead(404, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "Not found" }));
+  private async handleRequest(req: any, res: any): Promise<void> {
+    const url = new URL(req.url, this.url);
+    console.log("================= A");
+    console.log(url.pathname, req.method);
+    if (url.pathname.match(/^\/servers$/) && req.method === "POST") {
+      // console.log("================= B");
+      // console.log(url);
+
+      let rawBody = "";
+      req.on("data", (chunk) => {
+        rawBody += chunk.toString(); // Accumulate data chunks
+      });
+
+      req.on("end", async () => {
+        const body = JSON.parse(rawBody);
+        if (body.type == null || body.payload == null) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Invalid server type" }));
+          return;
+        }
+        switch (body.type) {
+          case "proxy": {
+            await this.registerCDPServer(
+              new CDPProxy(body.payload.inspectorUrl, {
+                ...body.payload.options,
+                server: this.server,
+              }),
+            );
+            break;
+          }
+          default: {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Invalid server type" }));
+          }
+        }
+      });
+    } else {
+      res.writeHead(404, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Not found" }));
+    }
   }
 
   private handleUpgrade(request: any, socket: any, head: any): void {
@@ -102,7 +140,7 @@ export class CDPManager {
 
 export abstract class CDPServer {
   protected logFile: string;
-  protected domains: Set<string>;
+  protected domains: Array<string>;
   public readonly name: string;
   private wss: WebSocketServer;
   private connectedClients: Set<WsWebSocket> = new Set();
@@ -120,12 +158,12 @@ export abstract class CDPServer {
     name: string;
     server: Server;
     logFile?: string;
-    domains?: Set<string>;
+    domains?: Array<string>;
   }) {
-    this.domains = options.domains ?? new Set(["Log", "Debugger"]);
+    this.domains = options.domains ?? ["Log", "Debugger"];
+    this.name = options.name.replace(/[\\/:.]/g, "-");
     this.logFile =
-      options.logFile ?? path.join(LOGS_DIRECTORY, `${options.name}.log`);
-    this.name = options.name;
+      options.logFile ?? path.join(LOGS_DIRECTORY, `${this.name}.log`);
     fs.writeFileSync(this.logFile, "");
     this.wss = new WebSocketServer({
       noServer: true,
@@ -156,7 +194,7 @@ export abstract class CDPServer {
       const messageDomain = data.method?.split(".")?.[0];
 
       if (data.id == null) {
-        if (messageDomain != null && !this.domains.has(messageDomain)) {
+        if (messageDomain != null && !this.domains.includes(messageDomain)) {
           return;
         }
         await fs.promises.appendFile(this.logFile, `${data}\n`);
@@ -202,6 +240,7 @@ export abstract class CDPServer {
 export type ClientCDPMessage = {
   id: number;
   method: string;
+  params?: Record<string, any>;
 };
 
 export type ServerCDPMessage = {

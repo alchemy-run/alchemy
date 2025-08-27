@@ -78,6 +78,7 @@ export const buildWorkerOptions = async (
         proxy: false,
       },
     ],
+    unsafeInspectorProxy: true,
     containerEngine: {
       localDocker: {
         socketPath:

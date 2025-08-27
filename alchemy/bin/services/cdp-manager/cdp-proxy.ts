@@ -14,11 +14,19 @@ export class CDPProxy extends CDPServer {
     inspectorUrl: string,
     options: ConstructorParameters<typeof CDPServer>[0] & {
       connect?: boolean;
+      hotDomains?: Array<string>;
     },
   ) {
     super(options);
     this.inspectorUrl = inspectorUrl;
     this.onStartMessageQueue = [];
+    for (const domain of options.hotDomains ?? []) {
+      this.onStartMessageQueue.push({
+        id: ++this.internalMessageId,
+        method: `${domain}.enable`,
+        params: {},
+      });
+    }
     if (options.connect ?? true) {
       this.start();
     }
@@ -71,7 +79,7 @@ export class CDPProxy extends CDPServer {
     data: ClientCDPMessage,
   ): Promise<void> {
     const messageDomain = data.method?.split(".")?.[0];
-    if (messageDomain != null && !this.domains.has(messageDomain)) {
+    if (messageDomain != null && !this.domains.includes(messageDomain)) {
       return;
     }
     this.inspectorWs!.send(JSON.stringify(data));

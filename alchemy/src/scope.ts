@@ -84,6 +84,10 @@ export interface ScopeOptions extends ProviderCredentials {
    * @default "./.alchemy"
    */
   dotAlchemy?: string;
+  /**
+   * The URL of the CDP manager to use for the scope.
+   */
+  cdpManagerUrl?: string;
 }
 
 /**
@@ -180,6 +184,7 @@ export class Scope {
   public readonly logger: LoggerApi;
   public readonly telemetryClient: ITelemetryClient;
   public readonly dataMutex: AsyncMutex;
+  public readonly cdpManagerUrl: string | undefined;
 
   // Provider credentials for scope-level credential overrides
   public readonly providerCredentials: ProviderCredentials;
@@ -217,6 +222,7 @@ export class Scope {
       telemetryClient,
       logger,
       dotAlchemy,
+      cdpManagerUrl,
       ...providerCredentials
     } = options;
 
@@ -238,6 +244,8 @@ export class Scope {
       options.dotAlchemy ??
       this.parent?.dotAlchemy ??
       path.join(process.cwd(), ".alchemy");
+
+    this.cdpManagerUrl = cdpManagerUrl ?? this.parent?.cdpManagerUrl;
 
     this.stage = stage ?? this.parent?.stage ?? DEFAULT_STAGE;
     this.parent?.children.set(this.scopeName!, this);
@@ -381,7 +389,10 @@ export class Scope {
     await this.state.deinit?.();
   }
 
-  public fqn(resourceID: ResourceID): string {
+  public fqn(resourceID?: ResourceID): string {
+    if (resourceID == null) {
+      return this.chain.join("/");
+    }
     return [...this.chain, resourceID].join("/");
   }
 
