@@ -20,8 +20,8 @@ export const applyLocalD1Migrations = async (
   });
   try {
     await miniflare.ready;
-    const db = await miniflare.getD1Database("DB");
-    const session = db.withSession("first-primary");
+    const db: D1Database = await miniflare.getD1Database("DB");
+    const session: D1DatabaseSession = db.withSession("first-primary");
     await session
       .prepare(
         `CREATE TABLE IF NOT EXISTS ${options.migrationsTable} (
