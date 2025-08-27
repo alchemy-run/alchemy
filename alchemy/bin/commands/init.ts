@@ -180,6 +180,7 @@ async function detectFramework(
       { label: "TanStack Start", value: "tanstack-start" },
       { label: "Redwood SDK", value: "rwsdk" },
       { label: "Nuxt.js", value: "nuxt" },
+      { label: "Next.js", value: "nextjs" },
     ] as const,
     initialValue: detectedFramework,
   });
@@ -476,7 +477,7 @@ async function createAlchemyRunFile(context: InitContext): Promise<void> {
 }
 
 const FRAMEWORK_DEPENDENCIES: Record<TemplateType, DependencyVersionMap[]> = {
-  nextjs: ["alchemy", "@opennextjs/cloudflare"],
+  nextjs: ["alchemy", "@opennextjs/cloudflare", "sharp"],
   hono: ["alchemy"],
   nuxt: ["alchemy", "nitro-cloudflare-dev"],
   sveltekit: ["alchemy", "@sveltejs/adapter-cloudflare"],
