@@ -1,9 +1,12 @@
 import type { Plugin } from "esbuild";
 import type { NodeJSCompatMode } from "miniflare";
+import { builtinModules } from "node:module";
 import { relative } from "node:path";
 import chalk from "picocolors";
 import { dedent } from "../../util/dedent.ts";
 import { logger } from "../../util/logger.ts";
+
+const NODEJS_MODULES_RE = new RegExp(`^(node:)?(${builtinModules.join("|")})$`);
 
 /**
  * An esbuild plugin that will:
@@ -28,7 +31,7 @@ export const esbuildPluginNodeCompatImports = (
       warnedPackages.clear();
     });
     pluginBuild.onResolve(
-      { filter: /node:.*/ },
+      { filter: NODEJS_MODULES_RE },
       async ({ path, kind, resolveDir, importer }) => {
         const specifier = `${path}:${kind}:${resolveDir}:${importer}`;
         if (seen.has(specifier)) {
