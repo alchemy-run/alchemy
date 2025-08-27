@@ -84,12 +84,12 @@ function errorOnServiceWorkerFormat(build: PluginBuild) {
         errors: [
           {
             text: dedent`
-							Unexpected external import of ${pathList}.
-							Your worker has no default export, which means it is assumed to be a Service Worker format Worker.
-							Did you mean to create a ES Module format Worker?
-							If so, try adding \`export default { ... }\` in your entry-point.
-							See https://developers.cloudflare.com/workers/reference/migrate-to-module-workers/.
-						`,
+                Unexpected external import of ${pathList}.
+                Your worker has no default export, which means it is assumed to be a Service Worker format Worker.
+                Did you mean to create a ES Module format Worker?
+                If so, try adding \`export default { ... }\` in your entry-point.
+                See https://developers.cloudflare.com/workers/reference/migrate-to-module-workers/.
+            `,
           },
         ],
       };
@@ -177,14 +177,13 @@ function handleUnenvAliasedPackages(
     ({ path }) => {
       return {
         contents: dedent`
-					import * as esm from '${path}';
-					module.exports = Object.entries(esm)
-								.filter(([k,]) => k !== 'default')
-								.reduce((cjs, [k, value]) =>
-									Object.defineProperty(cjs, k, { value, enumerable: true }),
-									"default" in esm ? esm.default : {}
-								);
-				`,
+            import * as esm from '${path}';
+            module.exports = Object.entries(esm)
+                .filter(([k,]) => k !== 'default')
+                .reduce((cjs, [k, value]) =>
+                    Object.defineProperty(cjs, k, { value, enumerable: true }),
+                    "default" in esm ? esm.default : {}
+                );`,
         loader: "js",
       };
     },
@@ -262,9 +261,8 @@ function handleNodeJSGlobals(
 
     return {
       contents: dedent`
-				import { ${imports.join(", ")} } from "${module}";
-				${injects.map(({ injectedName, importName }) => `globalThis.${injectedName} = ${importName};`).join("\n")}
-			`,
+        import { ${imports.join(", ")} } from "${module}";
+        ${injects.map(({ injectedName, importName }) => `globalThis.${injectedName} = ${importName};`).join("\n")}`,
     };
   });
 }
