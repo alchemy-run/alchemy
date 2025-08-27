@@ -680,11 +680,23 @@ async function updateAstroProject(context: InitContext): Promise<void> {
 }
 
 async function updateNextjsProject(context: InitContext): Promise<void> {
-  const nextConfigPath = resolve(context.cwd, "next.config.ts");
-  const openNextConfigPath = resolve(context.cwd, "open-next.config.ts");
+  const resolveFile = async (name: string) => {
+    const candidates = ["ts", "js", "cjs", "mjs"].map((ext) =>
+      resolve(context.cwd, `${name}.${ext}`),
+    );
+    for (const candidate of candidates) {
+      if (await fs.pathExists(candidate)) {
+        return { path: candidate, exists: true };
+      }
+    }
+    return { path: candidates[0], exists: false };
+  };
 
-  if (await fs.pathExists(nextConfigPath)) {
-    const fileContent = await fs.readFile(nextConfigPath, "utf-8");
+  const nextConfig = await resolveFile("next.config");
+  const openNextConfig = await resolveFile("open-next.config");
+
+  if (nextConfig.exists) {
+    const fileContent = await fs.readFile(nextConfig.path, "utf-8");
     let updated = fileContent;
     if (
       !fileContent.includes(
@@ -696,10 +708,10 @@ async function updateNextjsProject(context: InitContext): Promise<void> {
     if (!fileContent.includes("initOpenNextCloudflareForDev()")) {
       updated += "\n\ninitOpenNextCloudflareForDev();";
     }
-    await fs.writeFile(nextConfigPath, updated);
+    await fs.writeFile(nextConfig.path, updated);
   } else {
     await fs.writeFile(
-      nextConfigPath,
+      nextConfig.path,
       `import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 import type { NextConfig } from "next";
 
@@ -713,9 +725,9 @@ initOpenNextCloudflareForDev();`,
     );
   }
 
-  if (!(await fs.pathExists(openNextConfigPath))) {
+  if (!openNextConfig.exists) {
     await fs.writeFile(
-      openNextConfigPath,
+      openNextConfig.path,
       `import { defineCloudflareConfig } from "@opennextjs/cloudflare";
 
 export default defineCloudflareConfig({
