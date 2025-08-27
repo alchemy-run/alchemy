@@ -706,7 +706,7 @@ async function updateNextjsProject(context: InitContext): Promise<void> {
       updated = `import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";\n${fileContent}`;
     }
     if (!fileContent.includes("initOpenNextCloudflareForDev()")) {
-      updated += "\n\ninitOpenNextCloudflareForDev();";
+      updated += "\ninitOpenNextCloudflareForDev();\n";
     }
     await fs.writeFile(nextConfig.path, updated);
   } else {
@@ -721,7 +721,8 @@ const nextConfig: NextConfig = {
 
 export default nextConfig;
 
-initOpenNextCloudflareForDev();`,
+initOpenNextCloudflareForDev();
+`,
     );
   }
 
