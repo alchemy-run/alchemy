@@ -236,7 +236,7 @@ async function checkExistingAlchemyFiles(context: InitContext): Promise<void> {
 }
 
 const ALCHEMY_RUN_TEMPLATES: Record<
-  TemplateType,
+  Exclude<TemplateType, "hono">,
   (context: InitContext) => string
 > = {
   typescript: (context) => `/// <reference types="@types/node" />
@@ -249,22 +249,6 @@ const app = await alchemy("${context.projectName}");
 export const worker = await Worker("worker", {
   name: \`\${app.name}-\${app.stage}\`,
   entrypoint: "src/worker.ts",
-});
-
-console.log(worker.url);
-await app.finalize();
-`,
-
-  hono: (context) => `/// <reference types="@types/node" />
-
-import alchemy from "alchemy";
-import { Worker } from "alchemy/cloudflare";
-
-const app = await alchemy("${context.projectName}");
-
-export const worker = await Worker("worker", {
-name: \`\${app.name}-\${app.stage}\`,
-entrypoint: "src/worker.ts",
 });
 
 console.log(worker.url);
