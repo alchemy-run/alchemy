@@ -725,6 +725,31 @@ export default defineCloudflareConfig({
 `,
     );
   }
+  await fs.writeFile(
+    resolve(context.cwd, "env.d.ts"),
+    `
+    import type { website } from "./alchemy.run.ts";
+
+export type CloudflareEnv = typeof website.Env;
+
+declare global {
+  type Env = CloudflareEnv
+}
+
+declare module "cloudflare:workers" {
+  namespace Cloudflare {
+    export interface Env extends CloudflareEnv {}
+  }
+}`,
+  );
+
+  const tsConfigPath = resolve(context.cwd, "tsconfig.json");
+  await updateTsConfig(tsConfigPath, {
+    include: ["alchemy.run.ts", "env.d.ts"],
+    compilerOptions: {
+      types: ["@cloudflare/workers-types", "env.d.ts"],
+    },
+  });
 }
 
 async function updateReactRouterProject(context: InitContext): Promise<{
