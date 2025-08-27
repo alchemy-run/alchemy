@@ -1,23 +1,10 @@
 import type { Plugin } from "esbuild";
 import type { NodeJSCompatMode } from "miniflare";
-import { builtinModules } from "node:module";
 import { relative } from "node:path";
 import chalk from "picocolors";
 import { dedent } from "../../util/dedent.ts";
 import { logger } from "../../util/logger.ts";
-
-const NODEJS_MODULES_RE = new RegExp(
-  `^(node:)?(${builtinModules
-    .filter(
-      (m) =>
-        ![
-          // in some runtimes (like bun), `ws` is a built-in module but is not in `node`
-          // bundling for `nodejs_compat` should not polyfill these modules
-          "ws",
-        ].includes(m),
-    )
-    .join("|")})$`,
-);
+import { NODEJS_MODULES_RE } from "./nodejs-builtin-modules.ts";
 
 /**
  * An esbuild plugin that will:
