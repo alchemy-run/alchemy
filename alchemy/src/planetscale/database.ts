@@ -14,8 +14,10 @@ import {
 export interface DatabaseProps {
   /**
    * The name of the database
+   *
+   * @default ${app}-${stage}-${id}
    */
-  name: string;
+  name?: string;
 
   /**
    * The organization ID where the database will be created
@@ -105,6 +107,11 @@ export interface Database
   id: string;
 
   /**
+   * The name of the database
+   */
+  name: string;
+
+  /**
    * The current state of the database
    */
   state: string;
@@ -173,9 +180,10 @@ export const Database = Resource(
   "planetscale::Database",
   async function (
     this: Context<Database>,
-    _id: string,
+    id: string,
     props: DatabaseProps,
   ): Promise<Database> {
+    const adopt = props.adopt ?? this.scope.adopt;
     const apiKey =
       props.apiKey?.unencrypted || process.env.PLANETSCALE_API_TOKEN;
     if (!apiKey) {
@@ -183,6 +191,16 @@ export const Database = Resource(
     }
 
     const api = new PlanetScaleApi({ apiKey });
+
+    const databaseName =
+      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
+
+    if (this.phase === "update" && this.output.name !== databaseName) {
+      await api.patch(
+        `/organizations/${props.organizationId}/databases/${this.output.name}`,
+        { new_name: databaseName },
+      );
+    }
 
     if (this.phase === "delete") {
       try {
@@ -207,26 +225,26 @@ export const Database = Resource(
     try {
       // Check if database exists
       const getResponse = await api.get(
-        `/organizations/${props.organizationId}/databases/${props.name}`,
+        `/organizations/${props.organizationId}/databases/${databaseName}`,
       );
       const getData = await getResponse.json<any>();
-      if (this.phase === "update" || (props.adopt && getResponse.ok)) {
+      if (this.phase === "update" || (adopt && getResponse.ok)) {
         if (!getResponse.ok) {
-          throw new Error(`Database ${props.name} not found`);
+          throw new Error(`Database ${databaseName} not found`);
         }
         // Update database settings
         // If updating to a non-'main' default branch, create it first
         if (props.defaultBranch && props.defaultBranch !== "main") {
           const branchResponse = await api.get(
-            `/organizations/${props.organizationId}/databases/${props.name}/branches/${props.defaultBranch}`,
+            `/organizations/${props.organizationId}/databases/${databaseName}/branches/${props.defaultBranch}`,
           );
           if (!getData.ready) {
-            await waitForDatabaseReady(api, props.organizationId, props.name);
+            await waitForDatabaseReady(api, props.organizationId, databaseName);
           }
           if (!branchResponse.ok && branchResponse.status === 404) {
             // Create the branch
             const createBranchResponse = await api.post(
-              `/organizations/${props.organizationId}/databases/${props.name}/branches`,
+              `/organizations/${props.organizationId}/databases/${databaseName}/branches`,
               {
                 name: props.defaultBranch,
                 parent_branch: "main",
@@ -242,7 +260,7 @@ export const Database = Resource(
         }
 
         const updateResponse = await api.patch(
-          `/organizations/${props.organizationId}/databases/${props.name}`,
+          `/organizations/${props.organizationId}/databases/${databaseName}`,
           {
             automatic_migrations: props.automaticMigrations,
             migration_framework: props.migrationFramework,
@@ -265,7 +283,7 @@ export const Database = Resource(
         await fixClusterSize(
           api,
           props.organizationId,
-          props.name,
+          databaseName,
           props.defaultBranch || "main",
           props.clusterSize,
           getData.ready,
@@ -275,6 +293,7 @@ export const Database = Resource(
         return this({
           ...props,
           id: data.id,
+          name: databaseName,
           state: data.state,
           defaultBranch: data.default_branch,
           plan: data.plan,
@@ -285,14 +304,14 @@ export const Database = Resource(
       }
 
       if (getResponse.ok) {
-        throw new Error(`Database with name ${props.name} already exists`);
+        throw new Error(`Database with name ${databaseName} already exists`);
       }
 
       // Create new database
       const createResponse = await api.post(
         `/organizations/${props.organizationId}/databases`,
         {
-          name: props.name,
+          name: databaseName,
           region_slug: props.region?.slug,
           require_approval_for_deploy: props.requireApprovalForDeploy,
           allow_data_branching: props.allowDataBranching,
@@ -316,17 +335,17 @@ export const Database = Resource(
 
       // If a non-'main' default branch is specified, create it
       if (props.defaultBranch && props.defaultBranch !== "main") {
-        await waitForDatabaseReady(api, props.organizationId, props.name);
+        await waitForDatabaseReady(api, props.organizationId, databaseName);
 
         // Check if branch exists
         const branchResponse = await api.get(
-          `/organizations/${props.organizationId}/databases/${props.name}/branches/${props.defaultBranch}`,
+          `/organizations/${props.organizationId}/databases/${databaseName}/branches/${props.defaultBranch}`,
         );
 
         if (!branchResponse.ok && branchResponse.status === 404) {
           // Create the branch
           const createBranchResponse = await api.post(
-            `/organizations/${props.organizationId}/databases/${props.name}/branches`,
+            `/organizations/${props.organizationId}/databases/${databaseName}/branches`,
             {
               name: props.defaultBranch,
               parent_branch: "main",
@@ -342,7 +361,7 @@ export const Database = Resource(
           await fixClusterSize(
             api,
             props.organizationId,
-            props.name,
+            databaseName,
             props.defaultBranch || "main",
             props.clusterSize,
             false,
@@ -350,7 +369,7 @@ export const Database = Resource(
 
           // Update database to use new branch as default
           const updateResponse = await api.patch(
-            `/organizations/${props.organizationId}/databases/${props.name}`,
+            `/organizations/${props.organizationId}/databases/${databaseName}`,
             {
               default_branch: props.defaultBranch,
             },
@@ -366,6 +385,7 @@ export const Database = Resource(
           return this({
             ...props,
             id: data.id,
+            name: databaseName,
             state: updatedData.state,
             defaultBranch: updatedData.default_branch,
             plan: updatedData.plan,
@@ -379,6 +399,7 @@ export const Database = Resource(
       return this({
         ...props,
         id: data.id,
+        name: databaseName,
         state: data.state,
         defaultBranch: data.default_branch || "main",
         plan: data.plan,

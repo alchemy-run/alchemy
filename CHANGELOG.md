@@ -1,3 +1,50 @@
+## v0.63.1
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **core**: Support importing find-process on plain node &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/912 [<samp>(6bfe9)</samp>](https://github.com/sam-goodwin/alchemy/commit/6bfe96c2)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.63.0...v0.63.1)
+
+---
+
+## v0.63.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- Generate physical names from app, stage and resource ID &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/893 [<samp>(0b9c5)</samp>](https://github.com/sam-goodwin/alchemy/commit/0b9c57e4)
+- **cli**:
+  - Add hono template in create command &nbsp;-&nbsp; by **Aman Varshney** in https://github.com/sam-goodwin/alchemy/issues/898 [<samp>(b7d9d)</samp>](https://github.com/sam-goodwin/alchemy/commit/b7d9db71)
+  - Support --adopt flag to blanket adopt resources &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/900 [<samp>(50a84)</samp>](https://github.com/sam-goodwin/alchemy/commit/50a84fde)
+- **cloudflare**:
+  - R2 bucket lifecycle and lock rules &nbsp;-&nbsp; by **John Royal** and **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/901 [<samp>(bf81a)</samp>](https://github.com/sam-goodwin/alchemy/commit/bf81aba4)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**:
+  - Allow React Router apps to be deployed in SPA mode &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/883 [<samp>(771cd)</samp>](https://github.com/sam-goodwin/alchemy/commit/771cd994)
+  - Skip path validation during astro output type check &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/892 [<samp>(5a7d7)</samp>](https://github.com/sam-goodwin/alchemy/commit/5a7d7cf9)
+  - WranglerJson type instantiation &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/905 [<samp>(36d36)</samp>](https://github.com/sam-goodwin/alchemy/commit/36d36237)
+  - Set `spa: false` for astro resource &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/903 [<samp>(8dc29)</samp>](https://github.com/sam-goodwin/alchemy/commit/8dc29c2b)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.62.3...v0.63.0)
+
+---
+
+## v0.62.3
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cli**:
+  - Incljude .wrangler/ in .gitignore &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(f7f0c)</samp>](https://github.com/sam-goodwin/alchemy/commit/f7f0cb55)
+- **cloudflare**:
+  - Use correct D1 databaseId value in phases &nbsp;-&nbsp; by **Rhayxz** in https://github.com/sam-goodwin/alchemy/issues/889 [<samp>(09aec)</samp>](https://github.com/sam-goodwin/alchemy/commit/09aecfd5)
+  - Allow overwriting `spa: true` in vite apps &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/882 [<samp>(39598)</samp>](https://github.com/sam-goodwin/alchemy/commit/39598369)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.62.2...v0.62.3)
+
+---
+
 ## v0.62.2
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes

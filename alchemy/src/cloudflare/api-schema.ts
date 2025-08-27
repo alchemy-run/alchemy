@@ -48,33 +48,33 @@ export interface APISchemaProps<S extends OpenAPIV3.Document>
 /**
  * APISchema resource attributes.
  */
-export interface APISchema<S extends OpenAPIV3.Document = OpenAPIV3.Document>
-  extends Resource<"cloudflare::APISchema"> {
-  /**
-   * Schema ID
-   */
-  id: string;
+export type APISchema<S extends OpenAPIV3.Document = OpenAPIV3.Document> =
+  Resource<"cloudflare::APISchema"> & {
+    /**
+     * Schema ID
+     */
+    id: string;
 
-  /**
-   * Name for the schema
-   */
-  name: string;
+    /**
+     * Name for the schema
+     */
+    name: string;
 
-  /**
-   * The API Schema
-   */
-  schema: S;
+    /**
+     * The API Schema
+     */
+    schema: S;
 
-  /**
-   * Source of the schema
-   */
-  source: string;
+    /**
+     * Source of the schema
+     */
+    source: string;
 
-  /**
-   * Whether validation is enabled
-   */
-  enabled: boolean;
-}
+    /**
+     * Whether validation is enabled
+     */
+    enabled: boolean;
+  };
 
 /**
  * Cloudflare API Gateway Schema manages OpenAPI v3 schemas for API validation.
@@ -160,10 +160,17 @@ export const APISchema = Resource("cloudflare::APISchema", async function <
 
   let schemaDetails: CloudflareSchemaDetails;
 
+  const schemaName =
+    props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
+
+  if (this.phase === "update" && this.output?.name !== schemaName) {
+    this.replace();
+  }
+
   if (this.phase === "update" && this.output?.id) {
     // Check if we need to replace due to name, schema content change, or disabling validation
     if (
-      props.name !== this.output.name ||
+      schemaName !== this.output.name ||
       JSON.stringify(parsedSchema) !== JSON.stringify(this.output.schema) ||
       (this.output.enabled === true && props.enabled === false)
     ) {
@@ -179,7 +186,7 @@ export const APISchema = Resource("cloudflare::APISchema", async function <
     // Create new schema
     schemaDetails = await uploadSchema(api, zoneId, {
       file: yaml.stringify(parsedSchema),
-      name: props.name || id,
+      name: schemaName,
       validation_enabled: props.enabled !== false,
     });
   }

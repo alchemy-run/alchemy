@@ -1,4 +1,14 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { existsSync, readlinkSync, statSync } from "node:fs";
+
+const dynamicImportContext = new AsyncLocalStorage<boolean>();
+
+/**
+ * Used to disable path validation during dynamic imports.
+ */
+export const withSkipPathValidation = <T>(callback: () => T) => {
+  return dynamicImportContext.run(true, callback);
+};
 
 export const DEFAULT_CONFIG_PATH = ".alchemy/local/wrangler.jsonc";
 export const DEFAULT_PERSIST_PATH = ".alchemy/miniflare/v3";
@@ -42,6 +52,9 @@ export const validatePersistPath = (
 const warned = new Set<string>();
 
 const warnOrThrow = (message: string, throws: boolean) => {
+  if (dynamicImportContext.getStore()) {
+    return;
+  }
   if (throws) {
     throw new Error(message);
   }

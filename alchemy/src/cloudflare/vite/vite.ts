@@ -4,8 +4,7 @@ import type { Bindings } from "../bindings.ts";
 import { Website, type WebsiteProps } from "../website.ts";
 import type { Worker } from "../worker.ts";
 
-export interface ViteProps<B extends Bindings>
-  extends Omit<WebsiteProps<B>, "spa"> {}
+export interface ViteProps<B extends Bindings> extends WebsiteProps<B> {}
 
 export type Vite<B extends Bindings> = B extends { ASSETS: any }
   ? never
@@ -17,8 +16,8 @@ export async function Vite<B extends Bindings>(
 ): Promise<Vite<B>> {
   const runner = await getPackageManagerRunner();
   return await Website(id, {
-    ...props,
     spa: true,
+    ...props,
     assets:
       typeof props.assets === "string"
         ? { directory: props.assets }

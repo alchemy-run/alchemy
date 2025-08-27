@@ -156,7 +156,8 @@ export const PromotionCode = Resource(
     _id: string,
     props: PromotionCodeProps,
   ): Promise<PromotionCode> {
-    const stripe = createStripeClient({ apiKey: props.apiKey });
+    const adopt = props.adopt ?? this.scope.adopt;
+    const stripe = await createStripeClient({ apiKey: props.apiKey });
 
     if (this.phase === "delete") {
       try {
@@ -203,7 +204,7 @@ export const PromotionCode = Resource(
         try {
           promotionCode = await stripe.promotionCodes.create(createParams);
         } catch (error) {
-          if (isStripeConflictError(error) && props.adopt) {
+          if (isStripeConflictError(error) && adopt) {
             if (props.code) {
               const existingPromotionCodes = await stripe.promotionCodes.list({
                 code: props.code,

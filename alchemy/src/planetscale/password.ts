@@ -14,8 +14,10 @@ import type { Database } from "./database.ts";
 export interface PasswordProps {
   /**
    * The name of the password
+   *
+   * @default ${app}-${stage}-${id}
    */
-  name: string;
+  name?: string;
 
   /**
    * The organization ID where the password will be created
@@ -72,6 +74,11 @@ export interface Password
    * The unique identifier for the password
    */
   id: string;
+
+  /**
+   * Name of the Password.
+   */
+  name: string;
 
   /**
    * The timestamp when the password expires (ISO 8601 format)
@@ -255,7 +262,7 @@ export const Password = Resource(
   "planetscale::Password",
   async function (
     this: Context<Password>,
-    _id: string,
+    id: string,
     props: PasswordProps,
   ): Promise<Password> {
     const apiKey =
@@ -266,7 +273,7 @@ export const Password = Resource(
     const nameSlug = this.isReplacement
       ? lowercaseId()
       : (this.output?.nameSlug ?? lowercaseId());
-    const name = `${props.name.toLowerCase()}-${nameSlug}`;
+    const name = `${(props.name ?? this.output?.name ?? this.scope.createPhysicalName(id)).toLowerCase()}-${nameSlug}`;
 
     const api = new PlanetScaleApi({ apiKey });
     const branchName =

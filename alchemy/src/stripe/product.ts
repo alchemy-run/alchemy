@@ -157,7 +157,8 @@ export const Product = Resource(
     _id: string,
     props: ProductProps,
   ): Promise<Product> {
-    const stripe = createStripeClient({ apiKey: props.apiKey });
+    const adopt = props.adopt ?? this.scope.adopt;
+    const stripe = await createStripeClient({ apiKey: props.apiKey });
 
     if (this.phase === "delete") {
       try {
@@ -202,7 +203,7 @@ export const Product = Resource(
           metadata: props.metadata,
           tax_code: props.taxCode,
         };
-        if (props.adopt) {
+        if (adopt) {
           const existingProducts = await stripe.products.list({
             limit: 100,
           });

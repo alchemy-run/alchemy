@@ -198,7 +198,7 @@ async function ensureCustomDomain(
 ): Promise<CustomDomain> {
   const environment = props.environment || "production";
   const domainHostname = props.name;
-
+  const adopt = props.adopt ?? context.scope.adopt;
   // Check if domain binding already exists for this account
   const listResponse = await api.get(
     `/accounts/${api.accountId}/workers/domains`,
@@ -239,7 +239,7 @@ async function ensureCustomDomain(
 
   // Handle the case where domain already exists during create phase
   if (context.phase === "create" && bindingExists) {
-    if (!props.adopt) {
+    if (!adopt) {
       throw new Error(
         `CustomDomain for ${domainHostname} already exists in zone ${props.zoneId}. ` +
           "Set adopt: true to take control of the existing domain binding.",

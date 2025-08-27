@@ -31,7 +31,7 @@ export interface D1DatabaseProps extends CloudflareApiOptions {
   /**
    * Name of the database
    *
-   * @default id
+   * @default ${app}-${stage}-${id}
    */
   name?: string;
 
@@ -263,17 +263,24 @@ const _D1Database = Resource(
     id: string,
     props: D1DatabaseProps = {},
   ): Promise<D1Database> {
-    const databaseName = props.name ?? id;
+    const databaseName =
+      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
+
+    if (this.phase === "update" && this.output?.name !== databaseName) {
+      this.replace();
+    }
+
     const local = this.scope.local && !props.dev?.remote;
     const dev = {
       id: this.output?.dev?.id ?? this.output?.id ?? id,
       remote: props.dev?.remote ?? false,
     };
+    const adopt = props.adopt ?? this.scope.adopt;
 
     if (local) {
       if (props.migrationsFiles && props.migrationsFiles.length > 0) {
         await applyLocalD1Migrations({
-          databaseId: this.output?.id ?? id,
+          databaseId: dev.id,
           migrationsTable: props.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE,
           migrations: props.migrationsFiles,
         });
@@ -327,7 +334,7 @@ const _D1Database = Resource(
       } catch (error) {
         // Check if this is a "database already exists" error and adopt is enabled
         if (
-          props.adopt &&
+          adopt &&
           error instanceof CloudflareApiError &&
           error.message.includes("already exists")
         ) {

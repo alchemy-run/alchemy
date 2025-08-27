@@ -37,6 +37,7 @@ describe.sequential("NodeJS Import Warning Plugin", () => {
 
     try {
       await Worker(`${BRANCH_PREFIX}-test-node-imports`, {
+        name: `${BRANCH_PREFIX}-test-node-imports`,
         entrypoint,
         format: "esm",
         adopt: true,
@@ -65,6 +66,7 @@ describe.sequential("NodeJS Import Warning Plugin", () => {
 
     try {
       await Worker(`${BRANCH_PREFIX}-test-node-imports-with-compat`, {
+        name: `${BRANCH_PREFIX}-test-node-imports-with-compat`,
         entrypoint,
         format: "esm",
         compatibilityDate: "2024-09-23",
@@ -87,6 +89,7 @@ describe.sequential("NodeJS Import Warning Plugin", () => {
 
     try {
       await Worker(`${BRANCH_PREFIX}-test-async-hooks`, {
+        name: `${BRANCH_PREFIX}-test-async-hooks`,
         entrypoint,
         format: "esm",
         adopt: true,
@@ -115,6 +118,7 @@ describe.sequential("NodeJS Import Warning Plugin", () => {
 
     try {
       await Worker(`${BRANCH_PREFIX}-test-async-hooks-with-als`, {
+        name: `${BRANCH_PREFIX}-test-async-hooks-with-als`,
         entrypoint,
         format: "esm",
         compatibilityDate: "2024-09-23",

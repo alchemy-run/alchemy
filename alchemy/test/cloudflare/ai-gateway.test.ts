@@ -23,6 +23,7 @@ describe("AiGateway Resource", () => {
     try {
       // Create a test AI Gateway with basic settings
       gateway = await AiGateway(testId, {
+        gatewayName: testId,
         collectLogs: true,
         cacheTtl: 0,
         rateLimitingTechnique: "fixed",
@@ -45,6 +46,7 @@ describe("AiGateway Resource", () => {
 
       // Update the gateway
       gateway = await AiGateway(testId, {
+        gatewayName: testId,
         collectLogs: true,
         cacheTtl: 60,
         rateLimitingTechnique: "sliding",
@@ -85,6 +87,7 @@ describe("AiGateway Resource", () => {
     try {
       // Create a test AI Gateway with authentication and logging
       gateway = await AiGateway(`${testId}-auth`, {
+        gatewayName: `${testId}-auth`,
         collectLogs: true,
         authentication: true,
         logManagement: 10000,
@@ -125,6 +128,7 @@ describe("AiGateway Resource", () => {
     try {
       // Create a test AI Gateway with rate limiting
       gateway = await AiGateway(`${testId}-ratelimit`, {
+        gatewayName: `${testId}-ratelimit`,
         rateLimitingInterval: 30,
         rateLimitingLimit: 50,
         rateLimitingTechnique: "sliding",

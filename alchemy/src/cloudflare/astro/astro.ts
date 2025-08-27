@@ -2,6 +2,7 @@ import { join, resolve } from "node:path";
 import { getPackageManagerRunner } from "../../util/detect-package-manager.ts";
 import type { Assets } from "../assets.ts";
 import type { Bindings } from "../bindings.ts";
+import { withSkipPathValidation } from "../miniflare/paths.ts";
 import { Website, type WebsiteProps } from "../website.ts";
 import type { Worker } from "../worker.ts";
 
@@ -80,6 +81,7 @@ export async function Astro<B extends Bindings>(
       props.entrypoint ??
       (output === "server" ? "dist/_worker.js/index.js" : undefined),
     assets: props.assets ?? "dist",
+    spa: false,
   });
 }
 
@@ -92,7 +94,9 @@ async function resolveOutputType(cwd: string): Promise<"server" | "static"> {
   ];
   for (const candidate of candidates) {
     try {
-      const config = await import(join(cwd, candidate));
+      const config = await withSkipPathValidation(
+        () => import(join(cwd, candidate)),
+      );
       if (
         typeof config.default === "object" &&
         config.default &&

@@ -353,7 +353,8 @@ export const Price = Resource(
     _id: string,
     props: PriceProps,
   ): Promise<Price> {
-    const stripe = createStripeClient({ apiKey: props.apiKey });
+    const adopt = props.adopt ?? this.scope.adopt;
+    const stripe = await createStripeClient({ apiKey: props.apiKey });
 
     if (this.phase === "delete") {
       try {
@@ -475,7 +476,7 @@ export const Price = Resource(
             limit: 1,
           });
           if (existingPrices.data.length > 0) {
-            if (props.adopt) {
+            if (adopt) {
               const existingPrice = existingPrices.data[0];
               const updateParams: Stripe.PriceUpdateParams & {
                 expand?: string[];

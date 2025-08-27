@@ -20,6 +20,8 @@ import { deleteMiniflareBinding } from "./miniflare/delete.ts";
 export interface KVNamespaceProps extends CloudflareApiOptions {
   /**
    * Title of the namespace
+   *
+   * @default ${app}-${stage}-${id}
    */
   title?: string;
 
@@ -209,7 +211,9 @@ const _KVNamespace = Resource(
     id: string,
     props: KVNamespaceProps,
   ): Promise<KVNamespace> {
-    const title = props.title ?? id;
+    const title =
+      props.title ?? this.output?.title ?? this.scope.createPhysicalName(id);
+
     const local = this.scope.local && !props.dev?.remote;
     const dev = {
       id: this.output?.dev?.id ?? this.output?.namespaceId ?? id,
@@ -229,6 +233,10 @@ const _KVNamespace = Resource(
     }
 
     const api = await createCloudflareApi(props);
+
+    if (this.phase === "update" && this.output?.title !== title) {
+      await renameKVNamespace(api, this.output.namespaceId, title);
+    }
 
     if (this.phase === "delete") {
       if (this.output.dev?.id) {
@@ -289,7 +297,7 @@ export async function createKVNamespace(
       (error.errorData as CloudflareApiErrorPayload[]).some(
         (e) => e.code === 10014,
       ) &&
-      props.adopt
+      (props.adopt ?? Scope.current.adopt)
     ) {
       const existingNamespace = await findKVNamespaceByTitle(api, props.title);
 
@@ -455,4 +463,19 @@ export async function findKVNamespaceByTitle(
 
   // No matching namespace found
   return null;
+}
+
+export async function renameKVNamespace(
+  api: CloudflareApi,
+  namespaceId: string,
+  title: string,
+) {
+  const response = await api.put(
+    `/accounts/${api.accountId}/storage/kv/namespaces/${namespaceId}`,
+    { title },
+  );
+
+  if (!response.ok) {
+    await handleApiError(response, "update", "kv_namespace", namespaceId);
+  }
 }

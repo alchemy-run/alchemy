@@ -35,6 +35,7 @@ Deploy an Alchemy project by running `alchemy deploy`.
 - `--env-file` - Path to environment file to load
 - `--watch` - Watch for changes to infrastructure and redeploy automatically (default: false)
 - `--force` - Apply updates to resources even if there are no changes (default: false)
+- `--adopt` - Adopt existing resources that are not yet managed by your Alchemy app (default: false)
 - `-h, --help` - Display help for command
 
 :::tip
@@ -47,6 +48,9 @@ alchemy deploy
 
 # specify a stage
 alchemy deploy --stage prod 
+
+# adopt existing resources
+alchemy deploy --adopt 
 
 # use a custom script
 alchemy deploy ./my-infra.ts 
@@ -183,6 +187,7 @@ Run an Alchemy program in dev-mode with local simulation and hot reloading.
 - `--stage` - Specify which stage/environment to target. Defaults to your username (`$USER`, or `$USERNAME` on Windows)
 - `--env-file` - Path to environment file to load
 - `--force` - Apply updates to resources even if there are no changes (default: false)
+- `--adopt` - Adopt existing resources that are not yet managed by your Alchemy app (default: false)
 - `-h, --help` - Display help for command
 
 :::tip
@@ -204,6 +209,9 @@ alchemy dev --env-file .env.dev
 
 # force update all resources even without changes
 alchemy dev --force
+
+# adopt existing resources
+alchemy dev --adopt 
 ```
 :::
 

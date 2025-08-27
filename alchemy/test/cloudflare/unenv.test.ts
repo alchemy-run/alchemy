@@ -20,6 +20,7 @@ describe("Worker Unenv Tests", () => {
       // Create a temporary directory for the files
       // Create the worker using the entrypoint file
       const worker = await Worker(`${BRANCH_PREFIX}-test-worker-unenv`, {
+        name: `${BRANCH_PREFIX}-test-worker-unenv`,
         adopt: true,
         entrypoint: path.join(import.meta.dirname, "unenv-handler.ts"),
         format: "esm",
