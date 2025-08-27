@@ -31,12 +31,11 @@ export function sanitizeClusterSize(input: {
   arch?: "x86" | "arm";
   region?: string;
 }): string {
-  // Postgres cluster sizes are formatted as `PS_<size>_<provider>_<arch>`,
+  // NAS-backed Postgres cluster sizes are formatted as `PS_<size>_<provider>_<arch>`,
   // where <provider> is either "AWS" or "GCP", and <arch> is either "ARM" or "X86".
-  if (
-    input.kind === "postgresql" &&
-    !input.size.match(/(AWS|GCP)_(ARM|X86)$/)
-  ) {
+  // Postgres clusters backed by PlanetScale Metal are more complex (e.g. "M6_160_AWS_INTEL_D_METAL_118"),
+  // so to avoid messing with those, we just check for AWS or GCP in the size.
+  if (input.kind === "postgresql" && !input.size.match(/(AWS|GCP)/)) {
     // Infer the provider from the region.
     // Not all AWS regions start with "aws-", but all GCP regions start with "gcp-".
     const provider = input.region?.startsWith("gcp") ? "GCP" : "AWS";
