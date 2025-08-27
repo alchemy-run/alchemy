@@ -176,46 +176,45 @@ export interface HyperdriveProps extends CloudflareApiOptions {
  * Output returned after Cloudflare Hyperdrive creation/update.
  * IMPORTANT: The interface name MUST match the exported resource name.
  */
-export interface Hyperdrive
-  extends Resource<"cloudflare::Hyperdrive">,
-    Omit<HyperdriveProps, "origin" | "dev"> {
-  /**
-   * The ID of the resource
-   */
-  id: string;
-
-  /**
-   * Name of the Hyperdrive configuration
-   */
-  name: string;
-
-  /**
-   * The Cloudflare-generated UUID of the hyperdrive
-   */
-  hyperdriveId: string;
-
-  /**
-   * Database connection origin configuration
-   */
-  origin: HyperdrivePublicOrigin | HyperdriveOriginWithAccess;
-
-  /**
-   * Local development configuration
-   * @internal
-   */
-  dev: {
+export type Hyperdrive = Resource<"cloudflare::Hyperdrive"> &
+  Omit<HyperdriveProps, "origin" | "dev"> & {
     /**
-     * The connection string to use for local development
+     * The ID of the resource
      */
-    origin: Secret;
-  };
+    id: string;
 
-  /**
-   * Resource type identifier for binding.
-   * @internal
-   */
-  type: "hyperdrive";
-}
+    /**
+     * Name of the Hyperdrive configuration
+     */
+    name: string;
+
+    /**
+     * The Cloudflare-generated UUID of the hyperdrive
+     */
+    hyperdriveId: string;
+
+    /**
+     * Database connection origin configuration
+     */
+    origin: HyperdrivePublicOrigin | HyperdriveOriginWithAccess;
+
+    /**
+     * Local development configuration
+     * @internal
+     */
+    dev: {
+      /**
+       * The connection string to use for local development
+       */
+      origin: Secret;
+    };
+
+    /**
+     * Resource type identifier for binding.
+     * @internal
+     */
+    type: "hyperdrive";
+  };
 
 /**
  * Represents a Cloudflare Hyperdrive configuration.
@@ -339,7 +338,9 @@ const _Hyperdrive = Resource(
     const hyperdriveId = props.hyperdriveId || this.output?.hyperdriveId;
 
     const name =
-      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
+      props.name ??
+      this.output?.name ??
+      this.scope.createPhysicalName(id).toLowerCase();
 
     if (this.scope.local) {
       return this({
@@ -385,7 +386,10 @@ const _Hyperdrive = Resource(
     let apiResource: any;
 
     // Prepare request body with unwrapped secrets
-    const requestBody = prepareRequestBody(props);
+    const requestBody = prepareRequestBody({
+      ...props,
+      name,
+    });
 
     try {
       if (this.phase === "update" && hyperdriveId) {
@@ -405,22 +409,14 @@ const _Hyperdrive = Resource(
             response = await api.put(configPath, requestBody);
           } else if (getResponse.status === 404) {
             // Hyperdrive doesn't exist, create new
-            response = await api.post(configsPath, {
-              ...requestBody,
-              // Ensure name is set correctly if not already set
-              name: props.name || id,
-            });
+            response = await api.post(configsPath, requestBody);
           } else {
             // Unexpected error during GET check
             await handleApiError(getResponse, "get", "hyperdrive", id);
           }
         } else {
           // No hyperdriveId, create new
-          response = await api.post(configsPath, {
-            ...requestBody,
-            // Ensure name is set correctly if not already set
-            name: props.name || id,
-          });
+          response = await api.post(configsPath, requestBody);
         }
       }
 
