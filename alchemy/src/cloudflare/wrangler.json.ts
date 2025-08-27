@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
+import { Scope } from "../scope.ts";
 import { isSecret } from "../secret.ts";
 import { assertNever } from "../util/assert-never.ts";
 import {
@@ -86,9 +87,7 @@ export interface WranglerJsonProps {
 /**
  * Output returned after WranglerJson creation/update
  */
-export interface WranglerJson
-  extends Resource<"cloudflare::WranglerJson">,
-    WranglerJsonProps {
+export interface WranglerJson extends WranglerJsonProps {
   /**
    * Time at which the file was created
    */
@@ -110,128 +109,123 @@ export interface WranglerJson
   spec: WranglerJsonSpec;
 }
 
+// we are deprecating the WranglerJson resource (it is now just a funciton)
+// but, a user may still have a resource that depends on it, so we register a no-op dummy resource so that it can be cleanly delted
+Resource("cloudflare::WranglerJson", async function (this: Context<any>) {
+  if (this.phase === "delete") {
+    return this.destroy();
+  }
+
+  throw new Error("Not implemented");
+});
+
 /**
  * Resource for managing wrangler.json configuration files
  */
-export const WranglerJson = Resource(
-  "cloudflare::WranglerJson",
-  {
-    alwaysUpdate: true,
-  },
-  async function (
-    this: Context<WranglerJson>,
-    _id: string,
-    props: WranglerJsonProps,
-  ): Promise<WranglerJson> {
-    if (this.phase === "delete") {
-      return this.destroy();
-    }
+export async function WranglerJson(
+  props: WranglerJsonProps,
+): Promise<WranglerJson> {
+  const cwd = props.worker.cwd ? path.resolve(props.worker.cwd) : process.cwd();
 
-    const cwd = props.worker.cwd
-      ? path.resolve(props.worker.cwd)
-      : process.cwd();
+  const toAbsolute = <T extends string | undefined>(input: T): T => {
+    return (input ? path.resolve(cwd, input) : undefined) as T;
+  };
 
-    const toAbsolute = <T extends string | undefined>(input: T): T => {
-      return (input ? path.resolve(cwd, input) : undefined) as T;
-    };
+  const main = toAbsolute(props.main ?? props.worker.entrypoint);
+  let filePath = toAbsolute(props.path ?? cwd);
+  if (!path.basename(filePath).match(".json")) {
+    filePath = path.join(filePath, props.name ?? "wrangler.jsonc");
+  }
 
-    const main = toAbsolute(props.main ?? props.worker.entrypoint);
-    let filePath = toAbsolute(props.path ?? cwd);
-    if (!path.basename(filePath).match(".json")) {
-      filePath = path.join(filePath, props.name ?? "wrangler.jsonc");
-    }
+  const dirname = path.dirname(filePath);
 
-    const dirname = path.dirname(filePath);
+  if (!main) {
+    throw new Error(
+      "Worker must have an entrypoint to generate a wrangler.json",
+    );
+  }
 
-    if (!main) {
-      throw new Error(
-        "Worker must have an entrypoint to generate a wrangler.json",
-      );
-    }
+  const worker = props.worker;
 
-    const worker = props.worker;
+  const spec: WranglerJsonSpec = {
+    name: worker.name,
+    // Use entrypoint as main if it exists
+    main: path.relative(dirname, main),
+    // see: https://developers.cloudflare.com/workers/configuration/compatibility-dates/
+    compatibility_date: worker.compatibilityDate,
+    compatibility_flags: props.worker.compatibilityFlags,
+    assets: props.assets
+      ? {
+          directory: toAbsolute(props.assets.directory),
+          binding: props.assets.binding,
+          not_found_handling: props.worker.assets?.not_found_handling,
+          html_handling: props.worker.assets?.html_handling,
+          run_worker_first: props.worker.assets?.run_worker_first,
+        }
+      : undefined,
+    placement: worker.placement,
+    limits: worker.limits,
+  };
 
-    const spec: WranglerJsonSpec = {
-      name: worker.name,
-      // Use entrypoint as main if it exists
-      main: path.relative(dirname, main),
-      // see: https://developers.cloudflare.com/workers/configuration/compatibility-dates/
-      compatibility_date: worker.compatibilityDate,
-      compatibility_flags: props.worker.compatibilityFlags,
-      assets: props.assets
-        ? {
-            directory: toAbsolute(props.assets.directory),
-            binding: props.assets.binding,
-            not_found_handling: props.worker.assets?.not_found_handling,
-            html_handling: props.worker.assets?.html_handling,
-            run_worker_first: props.worker.assets?.run_worker_first,
-          }
-        : undefined,
-      placement: worker.placement,
-      limits: worker.limits,
-    };
+  // Process bindings if they exist
+  if (worker.bindings) {
+    processBindings(
+      spec,
+      worker.bindings,
+      worker.eventSources,
+      worker.name,
+      cwd,
+      props.secrets ?? false,
+      Scope.current.local && !props.worker.dev?.remote,
+    );
+  }
 
-    // Process bindings if they exist
-    if (worker.bindings) {
-      processBindings(
-        spec,
-        worker.bindings,
-        worker.eventSources,
-        worker.name,
-        cwd,
-        props.secrets ?? false,
-        this.scope.local && !props.worker.dev?.remote,
-      );
-    }
+  // Add environment variables as vars
+  if (worker.env) {
+    spec.vars = { ...worker.env };
+  }
 
-    // Add environment variables as vars
-    if (worker.env) {
-      spec.vars = { ...worker.env };
-    }
+  if (worker.crons && worker.crons.length > 0) {
+    spec.triggers = { crons: worker.crons };
+  }
 
-    if (worker.crons && worker.crons.length > 0) {
-      spec.triggers = { crons: worker.crons };
-    }
+  if (spec.assets) {
+    spec.assets.directory = path.relative(dirname, spec.assets.directory);
+  }
 
-    if (spec.assets) {
-      spec.assets.directory = path.relative(dirname, spec.assets.directory);
-    }
+  // Apply the wrangler configuration hook as the final transformation
+  const finalSpec = props.transform?.wrangler
+    ? await props.transform.wrangler(spec)
+    : spec;
 
-    // Apply the wrangler configuration hook as the final transformation
-    const finalSpec = props.transform?.wrangler
-      ? await props.transform.wrangler(spec)
-      : spec;
-
-    await fs.mkdir(dirname, { recursive: true });
-    if (props.secrets) {
-      // If secrets are enabled, decrypt them in the wrangler.json file,
-      // but do not modify `finalSpec` so that way secrets aren't written to state unencrypted.
-      const withSecretsUnwrapped = {
-        ...finalSpec,
-        vars: {
-          ...finalSpec.vars,
-          ...Object.fromEntries(
-            Object.entries(finalSpec.vars ?? {}).map(([key, value]) =>
-              isSecret(value) ? [key, value.unencrypted] : [key, value],
-            ),
+  await fs.mkdir(dirname, { recursive: true });
+  if (props.secrets) {
+    // If secrets are enabled, decrypt them in the wrangler.json file,
+    // but do not modify `finalSpec` so that way secrets aren't written to state unencrypted.
+    const withSecretsUnwrapped = {
+      ...finalSpec,
+      vars: {
+        ...finalSpec.vars,
+        ...Object.fromEntries(
+          Object.entries(finalSpec.vars ?? {}).map(([key, value]) =>
+            isSecret(value) ? [key, value.unencrypted] : [key, value],
           ),
-        },
-      };
-      await writeJSON(filePath, withSecretsUnwrapped);
-    } else {
-      await writeJSON(filePath, finalSpec);
-    }
+        ),
+      },
+    };
+    await writeJSON(filePath, withSecretsUnwrapped);
+  } else {
+    await writeJSON(filePath, finalSpec);
+  }
 
-    // Return the resource
-    return this({
-      ...props,
-      path: path.relative(cwd, filePath),
-      spec: finalSpec,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    });
-  },
-);
+  return {
+    ...props,
+    path: path.relative(cwd, filePath),
+    spec: finalSpec,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+}
 
 const writeJSON = async (filePath: string, content: any) => {
   await fs.writeFile(filePath, `${JSON.stringify(content, null, 2)}\n`);

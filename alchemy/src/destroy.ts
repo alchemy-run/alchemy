@@ -15,7 +15,16 @@ import type { State } from "./state.ts";
 import { formatFQN } from "./util/cli.ts";
 import { logger } from "./util/logger.ts";
 
-export class DestroyedSignal extends Error {}
+export function isDestroyedSignal(error: any): error is DestroyedSignal {
+  return error instanceof Error && (error as any).kind === "DestroyedSignal";
+}
+
+export class DestroyedSignal extends Error {
+  readonly kind = "DestroyedSignal";
+  constructor(public readonly noop: boolean) {
+    super();
+  }
+}
 
 export type DestroyStrategy = "sequential" | "parallel";
 
@@ -28,6 +37,10 @@ export interface DestroyOptions {
     props?: ResourceProps | undefined;
     output?: Resource<string>;
   };
+  /**
+   * If true, children of the resource will not be destroyed (but their state will be deleted).
+   */
+  noop?: boolean;
 }
 
 function isScopeArgs(a: any): a is [scope: Scope, options?: DestroyOptions] {
@@ -98,7 +111,7 @@ export async function destroy<Type extends string>(
   const quiet = options?.quiet ?? scope.quiet;
 
   try {
-    if (!quiet) {
+    if (!quiet && !options?.noop) {
       logger.task(instance[ResourceFQN], {
         prefix: options?.replace ? "cleanup" : "deleting",
         prefixColor: options?.replace ? "magenta" : "redBright",
@@ -149,6 +162,8 @@ export async function destroy<Type extends string>(
     });
 
     let nestedScope: Scope | undefined;
+    let noop = options?.noop ?? false;
+
     try {
       // BUG: this does not restore persisted scope
       await alchemy.run(
@@ -158,17 +173,19 @@ export async function destroy<Type extends string>(
           isResource: instance[ResourceKind] !== "alchemy::Scope",
           parent: scope,
           destroyStrategy: instance[DestroyStrategy] ?? "sequential",
+          noop,
         },
         async (scope) => {
           nestedScope = options?.replace?.props == null ? scope : undefined;
-          return await Provider.handler.bind(ctx)(
-            instance[ResourceID],
-            ctx.props,
-          );
+          if (noop) {
+            return ctx.destroy(noop);
+          }
+          return Provider.handler.bind(ctx)(instance[ResourceID], ctx.props);
         },
       );
     } catch (err) {
-      if (err instanceof DestroyedSignal) {
+      if (isDestroyedSignal(err)) {
+        noop = noop || err.noop;
         // TODO: should we fail if the DestroyedSignal is not thrown?
       } else {
         throw err;
@@ -178,6 +195,7 @@ export async function destroy<Type extends string>(
     if (nestedScope) {
       await destroy(nestedScope, {
         ...options,
+        noop,
         strategy: instance[DestroyStrategy] ?? "sequential",
       });
     }
@@ -195,7 +213,7 @@ export async function destroy<Type extends string>(
       await scope.set("pendingDeletions", pendingDeletions);
     }
 
-    if (!quiet) {
+    if (!quiet && !options?.noop) {
       logger.task(instance[ResourceFQN], {
         prefix: options?.replace ? "cleaned" : "deleted",
         prefixColor: "greenBright",

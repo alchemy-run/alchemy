@@ -709,14 +709,29 @@ const _Worker = Resource(
     id: string,
     props: WorkerProps<B>,
   ) {
-    const adopt = props.adopt ?? this.scope.adopt;
+    let adopt = props.adopt ?? this.scope.adopt;
+    const workerName =
+      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
+    if (this.phase === "create" && !props.adopt) {
+      // it is possible that this worker already exists and was created by the old Website wrapper with a nested scope
+      // we need to detect this and set adopt=true so that the previous version will be adopted seamlessly
+
+      // HEURISTIC: `this.scope` would previously be the nested outer scope alchemy.run
+      // so, if `this.scope` has a child of `wrangler.jsonc`, then it is likely that it was created by the old Website wrapper with a nested scope
+      if (await this.scope.has("wrangler.jsonc", "cloudflare::WranglerJson")) {
+        logger.warn(
+          `Migrating Worker '${workerName}' from the legacy Website wrapper.`,
+        );
+        props.adopt = true;
+      }
+    }
+
     const options = (() => {
       if (props.projectRoot) {
         logger.warn("projectRoot is deprecated, use cwd instead");
         props.cwd = props.projectRoot;
       }
-      const name =
-        props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
+
       const cwd = path.resolve(props.cwd ?? process.cwd());
       const compatibilityDate =
         props.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE;
@@ -739,7 +754,8 @@ const _Worker = Resource(
         cwd,
         compatibilityDate,
         compatibilityFlags,
-        outdir: props.bundle?.outdir ?? path.join(cwd, ".alchemy", "out", name),
+        outdir:
+          props.bundle?.outdir ?? path.join(cwd, ".alchemy", "out", workerName),
         sourceMap: "sourceMap" in props ? props.sourceMap : undefined,
       });
 
@@ -756,19 +772,19 @@ const _Worker = Resource(
           containers.push(binding);
         } else if (
           binding.type === "workflow" &&
-          (!binding.scriptName || binding.scriptName === name)
+          (!binding.scriptName || binding.scriptName === workerName)
         ) {
           workflows.push(binding);
         } else if (
           binding.type === "durable_object_namespace" &&
-          (!binding.scriptName || binding.scriptName === name)
+          (!binding.scriptName || binding.scriptName === workerName)
         ) {
           durableObjects.push(binding);
         }
       }
 
       return {
-        name,
+        name: workerName,
         cwd,
         compatibilityDate,
         compatibilityFlags,
@@ -780,7 +796,19 @@ const _Worker = Resource(
         durableObjects,
       };
     })();
+
     if (this.phase === "delete") {
+      // Heuristic: we must detect the case where this is the Worker wrapped in the old Website nested scope and not delete it
+      // we must not delete it because what we're actually doing is migrating to a flat worker
+      // we will achieve this by checking for a sibling resource with ID wrangler.jsonc and type cloudflare::WranglerJson
+      if (await this.scope.has("wrangler.jsonc", "cloudflare::WranglerJson")) {
+        // skip deletion
+        logger.warn(
+          `Migrating Worker '${options.name}' from the legacy Website wrapper.`,
+        );
+        return this.destroy(true);
+      }
+
       if (options.bundle.isOk()) {
         await options.bundle.value.delete?.();
       }

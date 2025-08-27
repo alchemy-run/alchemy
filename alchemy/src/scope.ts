@@ -288,6 +288,11 @@ export class Scope {
     this.dataMutex = new AsyncMutex();
   }
 
+  public async has(id: string, type?: string): Promise<boolean> {
+    const state = await this.state.get(id);
+    return state !== undefined && (type === undefined || state.kind === type);
+  }
+
   public createPhysicalName(id: string, delimiter = "-"): string {
     const app = this.appName;
     const stage = this.stage;
@@ -489,9 +494,9 @@ export class Scope {
     return null;
   }
 
-  public async finalize(force?: boolean) {
+  public async finalize(options?: { force?: boolean; noop?: boolean }) {
     const shouldForce =
-      force ||
+      options?.force ||
       this.parent === undefined ||
       this?.parent?.scopeName === this.root.scopeName;
     if (this.phase === "read") {
@@ -520,7 +525,10 @@ export class Scope {
         await this.destroyPendingDeletions();
         await Promise.all(
           Array.from(this.children.values()).map((child) =>
-            child.finalize(shouldForce),
+            child.finalize({
+              force: shouldForce,
+              noop: options?.noop,
+            }),
           ),
         );
       }
@@ -541,6 +549,7 @@ export class Scope {
         quiet: this.quiet,
         strategy: this.destroyStrategy,
         force: shouldForce,
+        noop: options?.noop,
       });
       this.rootTelemetryClient?.record({
         event: "app.success",
