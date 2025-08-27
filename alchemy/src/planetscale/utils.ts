@@ -1,4 +1,5 @@
 import type { PlanetScaleClient } from "./api/client.gen.ts";
+import type { DatabaseBranch } from "./api/types.gen.ts";
 
 export type PlanetScaleClusterSize =
   | "PS_DEV"
@@ -20,6 +21,54 @@ export type PlanetScaleClusterSize =
   | "PS_2700"
   | "PS_2800"
   | (string & {});
+
+export function sanitizeClusterSize(input: {
+  size: PlanetScaleClusterSize;
+  kind?: "mysql" | "postgresql";
+  arch?: "x86" | "arm";
+  region?: string;
+}): string {
+  // Postgres cluster sizes are formatted as `PS_<size>_<provider>_<arch>`,
+  // where <provider> is either "AWS" or "GCP", and <arch> is either "ARM" or "X86".
+  if (
+    input.kind === "postgresql" &&
+    !input.size.match(/(AWS|GCP)_(ARM|X86)$/)
+  ) {
+    // Infer the provider from the region.
+    // Not all AWS regions start with "aws-", but all GCP regions start with "gcp-".
+    const provider = input.region?.startsWith("gcp") ? "GCP" : "AWS";
+    const arch = (input.arch ?? "x86").toUpperCase();
+    return `${input.size}_${provider}_${arch}`;
+  }
+  return input.size;
+}
+
+export async function waitForBranchReady(
+  api: PlanetScaleClient,
+  organization: string,
+  database: string,
+  branch: string,
+): Promise<DatabaseBranch> {
+  const start = Date.now();
+  let delay = 1000;
+
+  while (true) {
+    const res = await api.organizations.databases.branches.get({
+      path: { organization, database, name: branch },
+    });
+
+    if (res.ready) {
+      return res;
+    }
+
+    if (Date.now() - start > 600_000) {
+      throw new Error(`Timeout waiting for branch "${branch}" to be ready`);
+    }
+
+    await new Promise((r) => setTimeout(r, delay));
+    delay = Math.min(delay * 2, 5_000);
+  }
+}
 
 /**
  * Wait for a database to be ready with exponential backoff
@@ -111,6 +160,29 @@ export async function waitForKeyspaceReady(
   }
 }
 
+async function ensureProductionBranch(
+  api: PlanetScaleClient,
+  organization: string,
+  database: string,
+  name: string,
+): Promise<void> {
+  const data = await api.organizations.databases.branches.get({
+    path: {
+      organization,
+      database,
+      name,
+    },
+  });
+  if (!data.production) {
+    if (!data.ready) {
+      await waitForBranchReady(api, organization, database, name);
+    }
+    await api.organizations.databases.branches.promote.post({
+      path: { organization, database, name },
+    });
+  }
+}
+
 /**
  * Ensure a branch is production and has the correct cluster size.
  * If a branch is not production, it will be promoted to production because
@@ -121,6 +193,7 @@ export async function ensureProductionBranchClusterSize(
   organization: string,
   database: string,
   branch: string,
+  kind: "mysql" | "postgresql",
   expectedClusterSize: PlanetScaleClusterSize,
   isDBReady: boolean,
 ): Promise<void> {
@@ -128,27 +201,42 @@ export async function ensureProductionBranchClusterSize(
     await waitForDatabaseReady(api, organization, database);
   }
 
-  // 1. Ensure branch is production
-  const branchData = await api.organizations.databases.branches.get({
-    path: {
-      organization,
-      database,
-      name: branch,
-    },
-  });
-  if (!branchData.production) {
-    if (!branchData.ready) {
-      await waitForDatabaseReady(api, organization, database, branch);
-    }
-    await api.organizations.databases.branches.promote.post({
-      path: {
+  switch (kind) {
+    case "mysql": {
+      // For MySQL, we promote first then resize (otherwise you get an error)
+      await ensureProductionBranch(api, organization, database, branch);
+      await ensureMySQLClusterSize(
+        api,
         organization,
         database,
-        name: branch,
-      },
-    });
+        branch,
+        expectedClusterSize,
+      );
+      break;
+    }
+    case "postgresql": {
+      // For Postgres, we resize first then promote
+      await ensurePostgresClusterSize(
+        api,
+        organization,
+        database,
+        branch,
+        expectedClusterSize,
+      );
+      await ensureProductionBranch(api, organization, database, branch);
+      break;
+    }
   }
-  // 2. Load default keyspace
+}
+
+async function ensureMySQLClusterSize(
+  api: PlanetScaleClient,
+  organization: string,
+  database: string,
+  branch: string,
+  expectedClusterSize: PlanetScaleClusterSize,
+): Promise<void> {
+  // 1. Load default keyspace
   const keyspaces = await api.organizations.databases.branches.keyspaces.list({
     path: {
       organization,
@@ -161,7 +249,7 @@ export async function ensureProductionBranchClusterSize(
     throw new Error(`No default keyspace found for branch ${branch}`);
   }
 
-  // 3. Wait until any in-flight resize is done
+  // 2. Wait until any in-flight resize is done
   await waitForKeyspaceReady(
     api,
     organization,
@@ -170,7 +258,7 @@ export async function ensureProductionBranchClusterSize(
     defaultKeyspace.name,
   );
 
-  // 4. If size mismatch, trigger resize and wait again
+  // 3. If size mismatch, trigger resize and wait again
   // Ideally this would use the undocumented Keyspaces API, but there seems to be a missing oauth scope that we cannot add via the console yet
   if (defaultKeyspace.cluster_name !== expectedClusterSize) {
     await api.organizations.databases.branches.cluster.patch({
@@ -190,5 +278,78 @@ export async function ensureProductionBranchClusterSize(
       branch,
       defaultKeyspace.name,
     );
+  }
+}
+
+async function ensurePostgresClusterSize(
+  api: PlanetScaleClient,
+  organization: string,
+  database: string,
+  branch: string,
+  expectedClusterSize: PlanetScaleClusterSize,
+): Promise<void> {
+  const data = await api.organizations.databases.branches.get({
+    path: {
+      organization,
+      database,
+      name: branch,
+    },
+  });
+  if (data.cluster_name === expectedClusterSize) {
+    return;
+  }
+  await waitForPendingPostgresChanges(api, organization, database, branch);
+  const change = await api.organizations.databases.branches.changes.patch({
+    path: {
+      organization,
+      database,
+      branch,
+    },
+    body: {
+      cluster_size: expectedClusterSize,
+    },
+  });
+  await waitForPendingPostgresChanges(
+    api,
+    organization,
+    database,
+    branch,
+    change.id,
+  );
+}
+
+async function waitForPendingPostgresChanges(
+  api: PlanetScaleClient,
+  organization: string,
+  database: string,
+  branch: string,
+  changeId?: string,
+) {
+  const startTime = Date.now();
+  let waitMs = 1000;
+  while (true) {
+    const response = await api.organizations.databases.branches.changes.list({
+      path: { organization, database, branch },
+    });
+    const done = changeId
+      ? response.data.find(
+          (change) =>
+            change.id === changeId &&
+            (change.state === "completed" || change.state === "canceled"),
+        )
+      : response.data.every(
+          (x) => x.state === "completed" || x.state === "canceled",
+        );
+    if (done) {
+      return;
+    }
+
+    if (Date.now() - startTime >= 1_000_000) {
+      // postgres changes take forever
+      throw new Error(`Timeout waiting for changes for branch "${branch}"`);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+    waitMs = Math.min(waitMs * 2, 5_000);
   }
 }

@@ -4,6 +4,8 @@ import type { PlanetScaleProps } from "./api/client.gen.ts";
 import { PlanetScaleClient } from "./api/client.gen.ts";
 import {
   ensureProductionBranchClusterSize,
+  sanitizeClusterSize,
+  waitForBranchReady,
   waitForDatabaseReady,
   type PlanetScaleClusterSize,
 } from "./utils.ts";
@@ -159,6 +161,11 @@ export const Branch = Resource(
 
     const branchName =
       props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
+    const parentBranchName = !props.parentBranch
+      ? "main"
+      : typeof props.parentBranch === "string"
+        ? props.parentBranch
+        : props.parentBranch.name;
 
     if (this.phase === "update" && this.output.name !== branchName) {
       // TODO(sam): maybe we don't need to replace? just branch again? or rename?
@@ -187,12 +194,6 @@ export const Branch = Resource(
       }
       return this.destroy();
     }
-
-    const parentBranchName = !props.parentBranch
-      ? "main"
-      : typeof props.parentBranch === "string"
-        ? props.parentBranch
-        : props.parentBranch.name;
 
     if (typeof props.parentBranch !== "string" && props.parentBranch) {
       await waitForDatabaseReady(
@@ -262,7 +263,15 @@ export const Branch = Resource(
         });
       }
 
-      if (props.clusterSize && data.cluster_name !== props.clusterSize) {
+      const clusterSize = props.clusterSize
+        ? sanitizeClusterSize({
+            size: props.clusterSize,
+            kind: data.kind,
+            arch: data.cluster_architecture === "aarch64" ? "arm" : "x86",
+            region: data.region.slug,
+          })
+        : undefined;
+      if (clusterSize && data.cluster_name !== clusterSize) {
         await api.organizations.databases.branches.cluster.patch({
           path: {
             organization: props.organizationId,
@@ -270,7 +279,7 @@ export const Branch = Resource(
             name: branchName,
           },
           body: {
-            cluster_size: props.clusterSize,
+            cluster_size: clusterSize,
           },
         });
       }
@@ -284,7 +293,21 @@ export const Branch = Resource(
         htmlUrl: data.html_url,
       });
     }
-    await waitForDatabaseReady(api, props.organizationId, props.databaseName);
+    let clusterSize: string | undefined;
+    const parent = await waitForBranchReady(
+      api,
+      props.organizationId,
+      props.databaseName,
+      parentBranchName,
+    );
+    if (props.clusterSize) {
+      clusterSize = sanitizeClusterSize({
+        size: props.clusterSize,
+        kind: parent.kind,
+        arch: parent.cluster_architecture === "aarch64" ? "arm" : "x86",
+        region: parent.region.slug,
+      });
+    }
 
     // Branch doesn't exist, create it
     const data = await api.organizations.databases.branches.post({
@@ -297,14 +320,14 @@ export const Branch = Resource(
         parent_branch: parentBranchName,
         backup_id: props.backupId,
         seed_data: props.seedData,
-        cluster_size: props.clusterSize,
+        cluster_size: clusterSize,
       },
     });
 
     // Handle safe migrations if specified
     if (props.safeMigrations !== undefined) {
-      // We can't change the migrations mode if the database is not ready
-      await waitForDatabaseReady(
+      // We can't change the migrations mode if the branch is not ready
+      await waitForBranchReady(
         api,
         props.organizationId,
         props.databaseName,
@@ -322,14 +345,15 @@ export const Branch = Resource(
     }
 
     // Handle cluster size update if specified
-    if (props.clusterSize) {
+    if (clusterSize) {
       // Wait for database to be ready before modifying cluster size
       await ensureProductionBranchClusterSize(
         api,
         props.organizationId,
         props.databaseName,
         branchName,
-        props.clusterSize,
+        data.kind,
+        clusterSize,
         true,
       );
     }
