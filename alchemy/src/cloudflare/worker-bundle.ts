@@ -76,6 +76,8 @@ export function normalizeWorkerBundle(props: {
             cwd: props.cwd,
             outdir: props.outdir,
             sourcemap: props.sourceMap !== false ? true : undefined,
+            compatibilityDate: props.compatibilityDate,
+            compatibilityFlags: props.compatibilityFlags,
             ...props.bundle,
           }),
     );
@@ -248,6 +250,8 @@ export namespace WorkerBundleSource {
     entrypoint: string;
     cwd: string;
     outdir: string;
+    compatibilityDate: string;
+    compatibilityFlags: string[];
   }
 
   export class ESBuild implements WorkerBundleSource {
@@ -328,6 +332,8 @@ export namespace WorkerBundleSource {
         nodeCompat,
         cwd,
         format,
+        compatibilityDate: _compatibilityDate,
+        compatibilityFlags: _compatibilityFlags,
         ...props
       } = this.props;
       return {
@@ -357,7 +363,10 @@ export namespace WorkerBundleSource {
         plugins: [
           esbuildPluginAlias(props.alias ?? {}, this.props.cwd),
           nodeCompat === "v2"
-            ? esbuildPluginHybridNodeCompat()
+            ? esbuildPluginHybridNodeCompat({
+                compatibilityDate: this.props.compatibilityDate,
+                compatibilityFlags: this.props.compatibilityFlags,
+              })
             : esbuildPluginCompatWarning(nodeCompat ?? null),
           ...(props.plugins ?? []),
           ...additionalPlugins,
