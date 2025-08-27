@@ -532,16 +532,26 @@ async function updateGitignore(context: InitContext) {
     }
 
     const lines = gitignoreContent.split("\n").map((line) => line.trim());
-    const hasAlchemy = lines.some(
-      (line) => line === ".alchemy" || line === ".alchemy/",
-    );
+    const hasDirectory = (dir: string) =>
+      lines.some((line) => line === dir || line === `${dir}/`);
 
-    if (!hasAlchemy) {
-      if (gitignoreContent && !gitignoreContent.endsWith("\n")) {
-        gitignoreContent += "\n";
-      }
-      await fs.appendFile(gitignorePath, ".alchemy\n", "utf-8");
+    if (!hasDirectory(".alchemy")) {
+      lines.push("# alchemy", ".alchemy", "");
     }
+
+    if (context.framework === "nextjs") {
+      if (!hasDirectory(".next")) {
+        lines.push("# next", ".next", "");
+      }
+      if (!hasDirectory(".open-next")) {
+        lines.push("# open-next", ".open-next", "");
+      }
+      if (!lines.some((line) => line === "wrangler.jsonc")) {
+        lines.push("# wrangler", "wrangler.jsonc", "");
+      }
+    }
+
+    await fs.writeFile(gitignorePath, `${lines.join("\n")}\n`, "utf-8");
   } catch (error) {
     throwWithContext(error, "Failed to update .gitignore");
   }
