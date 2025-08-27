@@ -309,7 +309,6 @@ export const Database = Resource(
         props.defaultBranch || "main",
         updateResponse.kind,
         clusterSize,
-        updateResponse.ready,
       );
 
       return this({
@@ -394,7 +393,6 @@ export const Database = Resource(
           props.defaultBranch || "main",
           data.kind,
           clusterSize,
-          false,
         );
 
         // Update database to use new branch as default

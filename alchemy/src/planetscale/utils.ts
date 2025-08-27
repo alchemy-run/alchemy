@@ -195,15 +195,10 @@ export async function ensureProductionBranchClusterSize(
   branch: string,
   kind: "mysql" | "postgresql",
   expectedClusterSize: PlanetScaleClusterSize,
-  isDBReady: boolean,
 ): Promise<void> {
-  if (!isDBReady) {
-    await waitForDatabaseReady(api, organization, database);
-  }
-
   switch (kind) {
     case "mysql": {
-      // For MySQL, we promote first then resize (otherwise you get an error)
+      // Vitess databases must be promoted before resizing
       await ensureProductionBranch(api, organization, database, branch);
       await ensureMySQLClusterSize(
         api,
@@ -215,7 +210,7 @@ export async function ensureProductionBranchClusterSize(
       break;
     }
     case "postgresql": {
-      // For Postgres, we resize first then promote
+      // Postgres databases must be resized first before promoting, otherwise 500 error
       await ensurePostgresClusterSize(
         api,
         organization,
@@ -344,8 +339,8 @@ async function waitForPendingPostgresChanges(
       return;
     }
 
+    // extra long timeout because postgres changes take forever
     if (Date.now() - startTime >= 1_000_000) {
-      // postgres changes take forever
       throw new Error(`Timeout waiting for changes for branch "${branch}"`);
     }
 

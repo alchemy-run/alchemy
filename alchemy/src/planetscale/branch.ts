@@ -272,16 +272,19 @@ export const Branch = Resource(
           })
         : undefined;
       if (clusterSize && data.cluster_name !== clusterSize) {
-        await api.organizations.databases.branches.cluster.patch({
-          path: {
-            organization: props.organizationId,
-            database: props.databaseName,
-            name: branchName,
-          },
-          body: {
-            cluster_size: clusterSize,
-          },
-        });
+        if (!props.isProduction) {
+          throw new Error(
+            `Cannot change cluster size of non-production branch ${branchName}`,
+          );
+        }
+        await ensureProductionBranchClusterSize(
+          api,
+          props.organizationId,
+          props.databaseName,
+          branchName,
+          data.kind,
+          clusterSize,
+        );
       }
 
       return this({
@@ -320,6 +323,7 @@ export const Branch = Resource(
         parent_branch: parentBranchName,
         backup_id: props.backupId,
         seed_data: props.seedData,
+        // This is ignored unless props.backupId is provided
         cluster_size: clusterSize,
       },
     });
@@ -346,7 +350,6 @@ export const Branch = Resource(
 
     // Handle cluster size update if specified
     if (clusterSize) {
-      // Wait for database to be ready before modifying cluster size
       await ensureProductionBranchClusterSize(
         api,
         props.organizationId,
@@ -354,7 +357,6 @@ export const Branch = Resource(
         branchName,
         data.kind,
         clusterSize,
-        true,
       );
     }
 

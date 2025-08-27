@@ -3,16 +3,16 @@ import { alchemy } from "../../src/alchemy.ts";
 import { destroy } from "../../src/destroy.ts";
 import { PlanetScaleClient } from "../../src/planetscale/api/client.gen.ts";
 import { Branch } from "../../src/planetscale/branch.ts";
-import { Database } from "../../src/planetscale/database.ts";
+import {
+  Database,
+  type DatabaseProps,
+} from "../../src/planetscale/database.ts";
 import { waitForDatabaseReady } from "../../src/planetscale/utils.ts";
 import { BRANCH_PREFIX } from "../util.ts";
 // must import this or else alchemy.test won't exist
 import type { Scope } from "../../src/scope.ts";
 import "../../src/test/vitest.ts";
 
-const test = alchemy.test(import.meta, {
-  prefix: BRANCH_PREFIX,
-});
 const kinds = [
   { kind: "mysql", ps10: "PS_10", ps20: "PS_20" },
   { kind: "postgresql", ps10: "PS_10_AWS_X86", ps20: "PS_20_AWS_X86" },
@@ -21,6 +21,10 @@ const kinds = [
 describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent.each(kinds)(
   "Branch Resource ($kind)",
   ({ kind, ...expectedClusterSizes }) => {
+    const test = alchemy.test(import.meta, {
+      prefix: `${BRANCH_PREFIX}-${kind}`,
+    });
+
     const api = new PlanetScaleClient();
     const organizationId = alchemy.env.PLANETSCALE_ORG_ID;
 
@@ -28,11 +32,12 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent.each(kinds)(
     let scope: Scope | undefined;
 
     test.beforeAll(async (_scope) => {
-      database = await Database("branch-test", {
+      const props = {
         organizationId,
         clusterSize: "PS_10",
         kind,
-      });
+      } as DatabaseProps;
+      database = await Database("branch-test", props);
       await waitForDatabaseReady(api, organizationId, database.name);
       scope = _scope;
     }, 240_000); // postgres takes a while to initialize
@@ -239,60 +244,65 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent.each(kinds)(
       }
     }, 300_000);
 
-    test(`can enable and disable safe migrations (${kind})`, async (scope) => {
-      const name = `${BRANCH_PREFIX}-test-${kind}-branch-safe-migrations`;
+    // TODO: (422 unprocessable): Safe migrations requires schema validation before it may be enabled
+    test.skipIf(kind === "postgresql")(
+      //
+      `can enable and disable safe migrations (${kind})`,
+      async (scope) => {
+        const name = `${BRANCH_PREFIX}-test-${kind}-branch-safe-migrations`;
 
-      try {
-        // Create branch with safe migrations enabled
-        let branch = await Branch("branch-safe-migrations", {
-          name,
-          organizationId,
-          databaseName: database.name,
-          parentBranch: "main",
-          safeMigrations: true,
-          isProduction: true,
-        });
-
-        expect(branch).toMatchObject({
-          name,
-        });
-
-        // Verify safe migrations were enabled
-        let response = await api.organizations.databases.branches.get({
-          path: {
-            organization: organizationId,
-            database: database.name,
+        try {
+          // Create branch with safe migrations enabled
+          let branch = await Branch("branch-safe-migrations", {
             name,
-          },
-        });
-        expect(response.safe_migrations).toBe(true);
+            organizationId,
+            databaseName: database.name,
+            parentBranch: "main",
+            safeMigrations: true,
+            isProduction: true,
+          });
 
-        // Update branch to disable safe migrations
-        branch = await Branch("branch-safe-migrations", {
-          name,
-          organizationId,
-          databaseName: database.name,
-          parentBranch: "main",
-          safeMigrations: false,
-          adopt: true,
-          isProduction: true,
-        });
-
-        response = await api.organizations.databases.branches.get({
-          path: {
-            organization: organizationId,
-            database: database.name,
+          expect(branch).toMatchObject({
             name,
-          },
-        });
-        expect(response.safe_migrations).toBe(false);
-      } catch (err) {
-        console.log(err);
-        throw err;
-      } finally {
-        await destroy(scope);
-      }
-    });
+          });
+
+          // Verify safe migrations were enabled
+          let response = await api.organizations.databases.branches.get({
+            path: {
+              organization: organizationId,
+              database: database.name,
+              name,
+            },
+          });
+          expect(response.safe_migrations).toBe(true);
+
+          // Update branch to disable safe migrations
+          branch = await Branch("branch-safe-migrations", {
+            name,
+            organizationId,
+            databaseName: database.name,
+            parentBranch: "main",
+            safeMigrations: false,
+            adopt: true,
+            isProduction: true,
+          });
+
+          response = await api.organizations.databases.branches.get({
+            path: {
+              organization: organizationId,
+              database: database.name,
+              name,
+            },
+          });
+          expect(response.safe_migrations).toBe(false);
+        } catch (err) {
+          console.log(err);
+          throw err;
+        } finally {
+          await destroy(scope);
+        }
+      },
+    );
 
     test(`can update cluster size (${kind})`, async (scope) => {
       const name = `${BRANCH_PREFIX}-test-${kind}-branch-cluster-size`;
@@ -347,7 +357,7 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent.each(kinds)(
       } finally {
         await destroy(scope);
       }
-    }, 600_000);
+    }, 1_200_000);
 
     test(`can create branch with Branch object as parent (${kind})`, async (scope) => {
       const parentBranchName = `${BRANCH_PREFIX}-test-${kind}-parent-branch`;
@@ -435,6 +445,6 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent.each(kinds)(
           });
         expect(getChildDeletedResponse.status).toEqual(404);
       }
-    });
+    }, 600_000);
   },
 );
