@@ -10,6 +10,7 @@ import {
   type Bindings,
   type WorkerBindingRateLimit,
 } from "./bindings.ts";
+import type { R2BucketJurisdiction } from "./bucket.ts";
 import type { DurableObjectNamespace } from "./durable-object-namespace.ts";
 import type { EventSource } from "./event-source.ts";
 import { isQueueEventSource } from "./event-source.ts";
@@ -531,6 +532,7 @@ function processBindings(
     binding: string;
     bucket_name: string;
     preview_bucket_name: string;
+    jurisdiction?: R2BucketJurisdiction;
   }[] = [];
   const services: { binding: string; service: string; environment?: string }[] =
     [];
@@ -677,6 +679,7 @@ function processBindings(
         binding: bindingName,
         bucket_name: name,
         preview_bucket_name: name,
+        jurisdiction: binding.jurisdiction,
         ...(binding.dev?.remote ? { experimental_remote: true } : {}),
       });
     } else if (binding.type === "secret") {

@@ -442,6 +442,7 @@ export async function prepareWorkerMetadata(
         type: "r2_bucket",
         name: bindingName,
         bucket_name: binding.name,
+        jurisdiction: binding.jurisdiction,
       });
     } else if (binding.type === "secrets_store_secret") {
       meta.bindings.push({
