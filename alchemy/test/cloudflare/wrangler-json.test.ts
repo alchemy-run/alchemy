@@ -149,10 +149,7 @@ describe("WranglerJson Resource", () => {
           adopt: true,
         });
 
-        const { spec } = await WranglerJson(
-          `${BRANCH_PREFIX}-test-wrangler-json-1`,
-          { worker },
-        );
+        const { spec } = await WranglerJson({ worker });
 
         expect(spec).toMatchObject({
           name,
@@ -177,10 +174,8 @@ describe("WranglerJson Resource", () => {
           adopt: true,
         });
 
-        const id = `${BRANCH_PREFIX}-test-wrangler-json-2`;
-
         await expect(
-          async () => await WranglerJson(id, { worker }),
+          async () => await WranglerJson({ worker }),
         ).rejects.toThrow(
           "Worker must have an entrypoint to generate a wrangler.json",
         );
@@ -210,10 +205,7 @@ describe("WranglerJson Resource", () => {
           adopt: true,
         });
 
-        const { spec } = await WranglerJson(
-          `${BRANCH_PREFIX}-test-wrangler-json-browser`,
-          { worker },
-        );
+        const { spec } = await WranglerJson({ worker });
 
         expect(spec).toMatchObject({
           name,
@@ -249,10 +241,7 @@ describe("WranglerJson Resource", () => {
           adopt: true,
         });
 
-        const { spec } = await WranglerJson(
-          `${BRANCH_PREFIX}-test-wrangler-json-ai`,
-          { worker },
-        );
+        const { spec } = await WranglerJson({ worker });
 
         expect(spec).toMatchObject({
           name,
@@ -305,10 +294,7 @@ describe("WranglerJson Resource", () => {
           adopt: true,
         });
 
-        const { spec } = await WranglerJson(
-          `${BRANCH_PREFIX}-test-wrangler-json-do`,
-          { worker },
-        );
+        const { spec } = await WranglerJson({ worker });
 
         // Verify the worker name and entrypoint
         expect(spec).toMatchObject({
@@ -381,10 +367,7 @@ describe("WranglerJson Resource", () => {
           adopt: true,
         });
 
-        const { spec } = await WranglerJson(
-          `${BRANCH_PREFIX}-test-wrangler-json-wf`,
-          { worker },
-        );
+        const { spec } = await WranglerJson({ worker });
 
         expect(spec.workflows).toHaveLength(1);
         expect(spec.workflows?.[0]).toMatchObject({
@@ -417,10 +400,7 @@ describe("WranglerJson Resource", () => {
           adopt: true,
         });
 
-        const { spec } = await WranglerJson(
-          `${BRANCH_PREFIX}-test-wrangler-json-cron`,
-          { worker },
-        );
+        const { spec } = await WranglerJson({ worker });
 
         expect(spec.triggers).toMatchObject({
           crons: worker.crons!,
@@ -456,10 +436,7 @@ describe("WranglerJson Resource", () => {
           adopt: true,
         });
 
-        const { spec } = await WranglerJson(
-          `${BRANCH_PREFIX}-test-wrangler-json-kv-preview`,
-          { worker },
-        );
+        const { spec } = await WranglerJson({ worker });
 
         expect(spec.kv_namespaces).toHaveLength(1);
         expect(spec.kv_namespaces?.[0]).toMatchObject({
@@ -497,10 +474,7 @@ describe("WranglerJson Resource", () => {
           adopt: true,
         });
 
-        const { spec } = await WranglerJson(
-          `${BRANCH_PREFIX}-test-wrangler-json-d1-preview`,
-          { worker },
-        );
+        const { spec } = await WranglerJson({ worker });
 
         expect(spec.d1_databases).toHaveLength(1);
         expect(spec.d1_databases?.[0]).toMatchObject({
@@ -540,10 +514,7 @@ describe("WranglerJson Resource", () => {
           adopt: true,
         });
 
-        const { spec } = await WranglerJson(
-          `${BRANCH_PREFIX}-test-wrangler-json-r2-preview`,
-          { worker },
-        );
+        const { spec } = await WranglerJson({ worker });
 
         expect(spec.r2_buckets).toHaveLength(1);
         expect(spec.r2_buckets?.[0]).toMatchObject({
@@ -585,10 +556,7 @@ describe("WranglerJson Resource", () => {
           },
         });
 
-        const { spec } = await WranglerJson(
-          `${BRANCH_PREFIX}-test-wrangler-json-cwd`,
-          { worker },
-        );
+        const { spec } = await WranglerJson({ worker });
 
         expect(spec.main).toBe("src/worker.ts");
         expect(spec.assets).toMatchObject({
@@ -639,10 +607,7 @@ describe("WranglerJson Resource", () => {
         adopt: true,
       });
 
-      const { spec } = await WranglerJson(
-        `${BRANCH_PREFIX}-test-wrangler-json-recommended-remote`,
-        { worker },
-      );
+      const { spec } = await WranglerJson({ worker });
 
       expect(spec).toMatchObject({
         name,
@@ -695,10 +660,7 @@ describe("WranglerJson Resource", () => {
         },
       });
 
-      const { spec } = await WranglerJson(
-        `${BRANCH_PREFIX}-test-wrangler-json-dev-remote`,
-        { worker },
-      );
+      const { spec } = await WranglerJson({ worker });
 
       expect(spec).toMatchObject({
         name,
@@ -723,22 +685,19 @@ describe("WranglerJson Resource", () => {
       await fs.mkdir(tempDir, { recursive: true });
       await fs.writeFile(entrypoint, esmWorkerScript);
 
-      const { spec } = await WranglerJson(
-        `${BRANCH_PREFIX}-test-wrangler-json-placement-limits`,
-        {
-          worker: {
-            name,
-            format: "esm",
-            entrypoint,
-            placement: {
-              mode: "smart",
-            },
-            limits: {
-              cpu_ms: 60000,
-            },
+      const { spec } = await WranglerJson({
+        worker: {
+          name,
+          format: "esm",
+          entrypoint,
+          placement: {
+            mode: "smart",
+          },
+          limits: {
+            cpu_ms: 60000,
           },
         },
-      );
+      });
 
       expect(spec).toMatchObject({
         name,
@@ -791,10 +750,7 @@ describe("WranglerJson Resource", () => {
         adopt: true,
       });
 
-      const { spec } = await WranglerJson(
-        `${BRANCH_PREFIX}-test-wrangler-json-queue-event-source`,
-        { worker },
-      );
+      const { spec } = await WranglerJson({ worker });
 
       expect(spec.queues?.consumers).toHaveLength(1);
       expect(spec.queues?.consumers[0]).toMatchObject({
@@ -836,10 +792,7 @@ describe("WranglerJson Resource", () => {
         adopt: true,
       });
 
-      const { spec } = await WranglerJson(
-        `${BRANCH_PREFIX}-test-wrangler-json-direct-queue`,
-        { worker },
-      );
+      const { spec } = await WranglerJson({ worker });
 
       expect(spec.queues?.consumers).toHaveLength(1);
       expect(spec.queues?.consumers[0]).toMatchObject({

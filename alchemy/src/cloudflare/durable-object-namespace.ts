@@ -19,6 +19,7 @@ export type DurableObjectNamespace<T = any> = {
   environment?: string;
   sqlite?: boolean;
   namespaceId?: string;
+  /** @internal */
   __service__: T;
 };
 

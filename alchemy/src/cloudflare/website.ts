@@ -1,7 +1,6 @@
 import assert from "node:assert";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { alchemy } from "../alchemy.ts";
 import { Exec } from "../os/index.ts";
 import { Scope } from "../scope.ts";
 import { isSecret } from "../secret.ts";
@@ -255,101 +254,101 @@ export async function Website<B extends Bindings>(
     entrypoint: path.relative(paths.cwd, paths.entrypoint),
   } as WorkerProps<B> & { name: string };
 
-  return await alchemy.run(id, { parent: Scope.current }, async (scope) => {
-    if (!workerProps.entrypoint) {
-      await fs.mkdir(path.dirname(paths.entrypoint), { recursive: true });
-      const content =
-        script ??
-        dedent`
-        export default {
-            async fetch(request, env) {
-                return new Response("Not Found", { status: 404 });
-            },
-        };`;
-      await fs.writeFile(paths.entrypoint, content);
-    }
+  if (!workerProps.entrypoint) {
+    await fs.mkdir(path.dirname(paths.entrypoint), { recursive: true });
+    const content =
+      script ??
+      dedent`
+      export default {
+          async fetch(request, env) {
+              return new Response("Not Found", { status: 404 });
+          },
+      };`;
+    await fs.writeFile(paths.entrypoint, content);
+  }
 
-    await writeMiniflareSymlink(paths.cwd);
+  await writeMiniflareSymlink(paths.cwd);
 
-    await WranglerJson("wrangler.jsonc", {
-      path: path.relative(paths.cwd, paths.wrangler.path),
-      worker,
-      assets: {
-        binding: "ASSETS",
-        directory: path.relative(paths.cwd, paths.assets),
+  await WranglerJson({
+    path: path.relative(paths.cwd, paths.wrangler.path),
+    worker,
+    assets: {
+      binding: "ASSETS",
+      directory: path.relative(paths.cwd, paths.assets),
+    },
+    main: path.relative(paths.cwd, paths.wrangler.main),
+    secrets,
+    transform: {
+      wrangler: props.wrangler?.transform,
+    },
+  });
+
+  const scope = Scope.current;
+
+  if (build && !scope.local) {
+    await Exec(`${id}-build`, {
+      cwd: path.relative(process.cwd(), paths.cwd),
+      command: build.command,
+      env: {
+        ...env,
+        ...(typeof build === "object" ? build.env : {}),
+        NODE_ENV: "production",
       },
-      main: path.relative(paths.cwd, paths.wrangler.main),
-      secrets,
-      transform: {
-        wrangler: props.wrangler?.transform,
+      memoize: typeof build === "object" ? build.memoize : undefined,
+    });
+  }
+
+  let url: string | undefined;
+  if (dev && scope.local) {
+    url = await scope.spawn(name, {
+      cmd: typeof dev === "string" ? dev : dev.command,
+      cwd: paths.cwd,
+      extract: (line) => {
+        const URL_REGEX =
+          /http:\/\/(localhost|0\.0\.0\.0|127\.0\.0\.1|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):\d+\/?/;
+        const match = line
+          .replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "")
+          .match(URL_REGEX);
+        if (match) {
+          return match[0];
+        }
+      },
+      env: {
+        ...Object.fromEntries(
+          Object.entries(env ?? {}).flatMap(([key, value]) => {
+            if (isSecret(value)) {
+              return [[key, value.unencrypted]];
+            }
+            if (typeof value === "string") {
+              return [[key, value]];
+            }
+            return [];
+          }),
+        ),
+        ...(typeof dev === "object" ? dev.env : {}),
+        FORCE_COLOR: "1",
+        ...process.env,
+        // NOTE: we must set this to ensure the user does not accidentally set `NODE_ENV=production`
+        // which breaks `vite dev` (it won't, for example, re-write `process.env.TSS_APP_BASE` in the `.js` client side bundle)
+        NODE_ENV: "development",
       },
     });
+  }
 
-    if (build && !scope.local) {
-      await Exec("build", {
-        cwd: path.relative(process.cwd(), paths.cwd),
-        command: build.command,
-        env: {
-          ...env,
-          ...(typeof build === "object" ? build.env : {}),
-          NODE_ENV: "production",
-        },
-        memoize: typeof build === "object" ? build.memoize : undefined,
-      });
-    }
-
-    let url: string | undefined;
-    if (dev && scope.local) {
-      url = await scope.spawn(name, {
-        cmd: typeof dev === "string" ? dev : dev.command,
-        cwd: paths.cwd,
-        extract: (line) => {
-          const URL_REGEX =
-            /http:\/\/(localhost|0\.0\.0\.0|127\.0\.0\.1|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):\d+\/?/;
-          const match = line
-            .replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "")
-            .match(URL_REGEX);
-          if (match) {
-            return match[0];
-          }
-        },
-        env: {
-          ...Object.fromEntries(
-            Object.entries(env ?? {}).flatMap(([key, value]) => {
-              if (isSecret(value)) {
-                return [[key, value.unencrypted]];
-              }
-              if (typeof value === "string") {
-                return [[key, value]];
-              }
-              return [];
+  return (await Worker(id, {
+    ...worker,
+    bindings: {
+      ...worker.bindings,
+      ...(!scope.local
+        ? {
+            ASSETS: await Assets("assets", {
+              path: path.relative(process.cwd(), paths.assets),
             }),
-          ),
-          ...(typeof dev === "object" ? dev.env : {}),
-          FORCE_COLOR: "1",
-          ...process.env,
-          // NOTE: we must set this to ensure the user does not accidentally set `NODE_ENV=production`
-          // which breaks `vite dev` (it won't, for example, re-write `process.env.TSS_APP_BASE` in the `.js` client side bundle)
-          NODE_ENV: "development",
-        },
-      });
-    }
-
-    return (await Worker("worker", {
-      ...worker,
-      bindings: {
-        ...worker.bindings,
-        ...(!scope.local
-          ? {
-              ASSETS: await Assets("assets", {
-                path: path.relative(process.cwd(), paths.assets),
-              }),
-            }
-          : {}),
-      },
-      dev: url ? { url } : undefined,
-    })) as Website<B>;
-  });
+          }
+        : {}),
+    },
+    dev: url ? { url } : undefined,
+  })) as Website<B>;
 }
 
 async function writeMiniflareSymlink(cwd: string) {

@@ -1,0 +1,36 @@
+{
+  "type": "module",
+  "name": "smoke-test-flatten-website",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "build": "vite build",
+    "deploy": "alchemy deploy",
+    "destroy": "alchemy destroy",
+    "dev": "alchemy dev",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "switch": "bun scripts/switch.ts"
+  },
+  "dependencies": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "alchemy": "workspace:*",
+    "@cloudflare/vite-plugin": "^1.7.4",
+    "@cloudflare/workers-types": "^4.20250805.0",
+    "miniflare": "^4.20250617.3",
+    "@eslint/js": "^9.25.0",
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
+    "@vitejs/plugin-react": "^4.4.1",
+    "eslint": "^9.25.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.19",
+    "globals": "^16.0.0",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.30.1",
+    "vite": "^6.3.5"
+  }
+}
