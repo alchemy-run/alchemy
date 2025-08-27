@@ -2,10 +2,11 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 export const GET = async (
   _: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) => {
   const { env } = await getCloudflareContext({ async: true });
-  const value = await env.KV.get(params.id);
+  const { id } = await params;
+  const value = await env.KV.get(id);
   if (!value) {
     return new Response(null, { status: 404 });
   }
@@ -14,19 +15,21 @@ export const GET = async (
 
 export const PUT = async (
   request: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) => {
   const { env } = await getCloudflareContext({ async: true });
+  const { id } = await params;
   const value = await request.text();
-  await env.KV.put(params.id, value);
+  await env.KV.put(id, value);
   return new Response(null, { status: 201 });
 };
 
 export const DELETE = async (
   _: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) => {
   const { env } = await getCloudflareContext({ async: true });
-  await env.KV.delete(params.id);
+  const { id } = await params;
+  await env.KV.delete(id);
   return new Response(null, { status: 204 });
 };
