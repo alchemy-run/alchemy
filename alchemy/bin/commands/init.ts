@@ -483,7 +483,7 @@ async function updatePackageJson(context: InitContext): Promise<void> {
   try {
     const devDependencies = FRAMEWORK_DEPENDENCIES[context.framework];
     await addPackageDependencies({
-      devDependencies,
+      devDependencies: [...devDependencies, "@cloudflare/workers-types"],
       projectDir: context.cwd,
     });
 
@@ -535,7 +535,7 @@ async function updateGitignore(context: InitContext) {
       }
     }
 
-    await fs.writeFile(gitignorePath, `${lines.join("\n")}\n`, "utf-8");
+    await fs.writeFile(gitignorePath, lines.join("\n"), "utf-8");
   } catch (error) {
     throwWithContext(error, "Failed to update .gitignore");
   }
@@ -727,25 +727,24 @@ export default defineCloudflareConfig({
   }
   await fs.writeFile(
     resolve(context.cwd, "env.d.ts"),
-    `
-    import type { website } from "./alchemy.run.ts";
+    `// Auto-generated Cloudflare binding types.
+// @see https://alchemy.run/concepts/bindings/#type-safe-bindings
 
-export type CloudflareEnv = typeof website.Env;
+import type { website } from "./alchemy.run.ts";
 
 declare global {
-  type Env = CloudflareEnv
+	type CloudflareEnv = typeof website.Env;
 }
 
 declare module "cloudflare:workers" {
-  namespace Cloudflare {
-    export interface Env extends CloudflareEnv {}
-  }
+	namespace Cloudflare {
+		export interface Env extends CloudflareEnv {}
+	}
 }`,
   );
 
   const tsConfigPath = resolve(context.cwd, "tsconfig.json");
   await updateTsConfig(tsConfigPath, {
-    include: ["alchemy.run.ts", "env.d.ts"],
     compilerOptions: {
       types: ["@cloudflare/workers-types", "env.d.ts"],
     },
