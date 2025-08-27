@@ -100,6 +100,8 @@ export async function waitForKeyspaceReady(
       }),
     predicate: (response) =>
       response.data.every((item) => item.state !== "resizing"),
+    initialDelay: 100,
+    maxDelay: 1000,
   });
 }
 
@@ -318,7 +320,7 @@ async function poll<T>(input: {
 
   /**
    * The maximum delay between polls.
-   * @default 5_000ms (5 seconds)
+   * @default 2_500ms (2.5 seconds)
    */
   maxDelay?: number;
 
