@@ -5,6 +5,7 @@ import type { Secret } from "../secret.ts";
 import { PlanetScaleClient, type PlanetScaleProps } from "./api/client.gen.ts";
 import type { Branch } from "./branch.ts";
 import type { Database } from "./database.ts";
+import { waitForBranchReady } from "./utils.ts";
 
 /**
  * Properties for creating or updating a PlanetScale PostgreSQL Role
@@ -37,7 +38,7 @@ export interface RoleProps extends PlanetScaleProps {
   /**
    * Roles to inherit from
    */
-  inherited_roles?: Array<
+  inheritedRoles?: Array<
     | "pg_checkpoint"
     | "pg_create_subscription"
     | "pg_maintain"
@@ -83,8 +84,64 @@ export interface Role extends Resource<"planetscale::Role">, RoleProps {
    * The encrypted password for database authentication
    */
   password: Secret<string>;
+
+  /**
+   * The database name
+   */
+  databaseName: string;
+
+  /**
+   * The direct connection URL for the database.
+   */
+  connectionUrl: Secret<string>;
+
+  /**
+   * The pooled connection URL for the database.
+   * Uses PSBouncer on port 6432. Recommended for production.
+   * @see https://planetscale.com/docs/postgres/connecting/psbouncer
+   */
+  connectionUrlPooled: Secret<string>;
 }
 
+/**
+ * Create and manage database roles for PlanetScale PostgreSQL branches. Database roles provide secure access to your database with specific roles and permissions.
+ *
+ * For MySQL, use [Passwords](./password.ts) instead.
+ *
+ * @example
+ * ## Basic Role
+ *
+ * Create a default role with all permissions:
+ *
+ * ```ts
+ * const role = await Role("my-role", {
+ *   database: "my-database",
+ *   inheritedRoles: ["postgres"],
+ * });
+ * ```
+ *
+ * ## Role with TTL
+ *
+ * Create a role with a TTL of 1 hour:
+ *
+ * ```ts
+ * const role = await Role("my-role", {
+ *   database: "my-database",
+ *   ttl: 3600,
+ * });
+ * ```
+ *
+ * ## Role with Inherited Permissions
+ *
+ * Create a role with read-only access to all data and settings:
+ *
+ * ```ts
+ * const role = await Role("my-role", {
+ *   database: "my-database",
+ *   inheritedRoles: ["pg_read_all_data", "pg_read_all_settings"],
+ * });
+ * ```
+ */
 export const Role = Resource(
   "planetscale::Role",
   async function (
@@ -121,6 +178,7 @@ export const Role = Resource(
             },
             result: "full",
           });
+          // TODO: (422 unprocessable): Role is still referenced and cannot be dropped
           if (res.error && res.error.status !== 404) {
             throw new Error("Failed to delete role", { cause: res.error });
           }
@@ -128,16 +186,21 @@ export const Role = Resource(
         return this.destroy();
       }
       case "create": {
-        const { kind } = await api.organizations.databases.get({
+        const { kind, ready } = await api.organizations.databases.branches.get({
           path: {
             organization,
-            name: database,
+            database,
+            name: branch,
           },
         });
         if (kind !== "postgresql") {
           throw new Error(
             `Cannot create a role on MySQL database "${database}". Roles are only supported on PostgreSQL databases. For MySQL databases, please use the Password resource instead.`,
           );
+        }
+        // Cannot create role until branch is ready
+        if (!ready) {
+          await waitForBranchReady(api, organization, database, branch);
         }
         const role = await api.organizations.databases.branches.roles.post({
           path: {
@@ -147,7 +210,7 @@ export const Role = Resource(
           },
           body: {
             ttl: props.ttl,
-            inherited_roles: props.inherited_roles,
+            inherited_roles: props.inheritedRoles,
           },
         });
         return this({
@@ -158,6 +221,13 @@ export const Role = Resource(
           username: role.username,
           password: alchemy.secret(role.password),
           expiresAt: role.expires_at,
+          databaseName: role.database_name,
+          connectionUrl: alchemy.secret(
+            `postgresql://${role.username}:${role.password}@${role.access_host_url}:5432/${role.database_name}?sslmode=verify-full`,
+          ),
+          connectionUrlPooled: alchemy.secret(
+            `postgresql://${role.username}:${role.password}@${role.access_host_url}:6432/${role.database_name}?sslmode=verify-full`,
+          ),
         });
       }
       case "update": {
