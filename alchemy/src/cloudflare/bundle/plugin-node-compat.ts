@@ -80,12 +80,12 @@ export const esbuildPluginNodeCompatImports = (
           errors: [
             {
               text: dedent`
-								Unexpected external import of ${paths}.
-								Your worker has no default export, which means it is assumed to be a Service Worker format Worker.
-								Did you mean to create a ES Module format Worker?
-								If so, try adding \`export default { ... }\` in your entry-point.
-								See https://developers.cloudflare.com/workers/reference/migrate-to-module-workers/.
-							`,
+                Unexpected external import of ${paths}.
+                Your worker has no default export, which means it is assumed to be a Service Worker format Worker.
+                Did you mean to create a ES Module format Worker?
+                If so, try adding \`export default { ... }\` in your entry-point.
+                See https://developers.cloudflare.com/workers/reference/migrate-to-module-workers/.
+              `,
             },
           ],
         };
@@ -99,9 +99,9 @@ export const esbuildPluginNodeCompatImports = (
         warnedPackages.forEach((importers: string[], path: string) => {
           logger.warn(
             dedent`
-						The package "${path}" wasn't found on the file system but is built into node.
-						Your Worker may throw errors at runtime unless you enable the "nodejs_compat" compatibility flag. Refer to https://developers.cloudflare.com/workers/runtime-apis/nodejs/ for more details. Imported from:
-						${toList(importers, pluginBuild.initialOptions.absWorkingDir)}`,
+            The package "${path}" wasn't found on the file system but is built into node.
+            Your Worker may throw errors at runtime unless you enable the "nodejs_compat" compatibility flag. Refer to https://developers.cloudflare.com/workers/runtime-apis/nodejs/ for more details. Imported from:
+            ${toList(importers, pluginBuild.initialOptions.absWorkingDir)}`,
           );
         });
       }

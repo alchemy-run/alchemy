@@ -116,8 +116,8 @@ function handleRequireCallsToNodeJSBuiltins(build: PluginBuild) {
     ({ path }) => {
       return {
         contents: dedent`
-					import libDefault from '${path}';
-					module.exports = libDefault;`,
+          import libDefault from '${path}';
+          module.exports = libDefault;`,
         loader: "js",
       };
     },
