@@ -1,3 +1,13 @@
+## v0.63.1
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **core**: Support importing find-process on plain node &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/912 [<samp>(6bfe9)</samp>](https://github.com/sam-goodwin/alchemy/commit/6bfe96c2)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.63.0...v0.63.1)
+
+---
+
 ## v0.63.0
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
