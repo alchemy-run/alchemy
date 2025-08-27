@@ -30,52 +30,24 @@ export async function waitForDatabaseReady(
   database: string,
   branch?: string,
 ): Promise<void> {
-  const startTime = Date.now();
-  let waitMs = 1000;
-  while (true) {
-    const response = branch
-      ? await api.organizations.databases.branches.get({
-          path: {
-            organization,
-            database,
-            name: branch,
-          },
-          result: "full",
-        })
-      : await api.organizations.databases.get({
-          path: {
-            organization,
-            name: database,
-          },
-          result: "full",
+  await poll({
+    description: `database "${database}" ${branch ? `branch "${branch}"` : ""} ready`,
+    fn: async () => {
+      if (branch) {
+        return await api.organizations.databases.branches.get({
+          path: { organization, database, name: branch },
         });
-
-    if (response.error) {
-      throw new Error(
-        `Failed to check state for database "${database}" ${branch ? `branch "${branch}"` : ""}`,
-        {
-          cause: response.error,
-        },
-      );
-    }
-
-    if (response.data.ready) {
-      return;
-    }
-
-    if (Date.now() - startTime >= 600_000) {
-      throw new Error(
-        `Timeout waiting for database "${database}" ${branch ? `branch "${branch}"` : ""} to be ready`,
-      );
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, waitMs));
-    waitMs = Math.min(waitMs * 2, 5_000); // Cap at 5s intervals, same as PlanetScale terraform provider
-  }
+      }
+      return await api.organizations.databases.get({
+        path: { organization, name: database },
+      });
+    },
+    predicate: (item) => item.ready,
+  });
 }
 
 /**
- * Wait for a keyspace to be ready
+ * Polls a keyspace until it is finished resizing.
  */
 export async function waitForKeyspaceReady(
   api: PlanetScaleClient,
@@ -84,31 +56,17 @@ export async function waitForKeyspaceReady(
   branch: string,
   keyspace: string,
 ): Promise<void> {
-  const start = Date.now();
-  let delay = 1000;
-
-  while (true) {
-    const res =
-      await api.organizations.databases.branches.keyspaces.resizes.list({
-        path: {
-          organization,
-          database,
-          branch,
-          name: keyspace,
-        },
-      });
-    // once it's fully ready, we can proceed
-    if (res.data.every((item) => item.state !== "resizing")) {
-      return;
-    }
-
-    if (Date.now() - start > 600_000) {
-      throw new Error(`Timeout waiting for keyspace "${keyspace}" to be ready`);
-    }
-
-    await new Promise((r) => setTimeout(r, delay));
-    delay = Math.min(delay * 2, 5_000);
-  }
+  await poll({
+    description: `keyspace "${keyspace}" ready`,
+    fn: () =>
+      api.organizations.databases.branches.keyspaces.resizes.list({
+        path: { organization, database, branch, name: keyspace },
+      }),
+    predicate: (response) =>
+      response.data.every((item) => item.state !== "resizing"),
+    initialDelay: 100,
+    maxDelay: 1000,
+  });
 }
 
 /**
@@ -190,5 +148,61 @@ export async function ensureProductionBranchClusterSize(
       branch,
       defaultKeyspace.name,
     );
+  }
+}
+
+/**
+ * Polls a function until it returns a result that satisfies the predicate.
+ */
+async function poll<T>(input: {
+  /**
+   * A description of the operation being polled.
+   */
+  description: string;
+
+  /**
+   * The function to poll.
+   */
+  fn: () => Promise<T>;
+
+  /**
+   * A predicate that determines if the operation has completed.
+   */
+  predicate: (result: T) => boolean;
+
+  /**
+   * The initial delay between polls.
+   * @default 250ms
+   */
+  initialDelay?: number;
+
+  /**
+   * The maximum delay between polls.
+   * @default 2_500ms (2.5 seconds)
+   */
+  maxDelay?: number;
+
+  /**
+   * The timeout for the poll in milliseconds.
+   * @default 1_000_000 (~16 minutes)
+   */
+  timeout?: number;
+}): Promise<T> {
+  const start = Date.now();
+  let delay = input.initialDelay ?? 250;
+  while (true) {
+    const result = await input.fn();
+    if (input.predicate(result)) {
+      return result;
+    }
+    if (Date.now() - start >= (input.timeout ?? 1_000_000)) {
+      throw new Error(
+        `Timed out waiting for ${input.description} after ${Math.round(
+          (input.timeout ?? 1_000_000) / 1000,
+        )}s`,
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    delay = Math.min(delay * 2, input.maxDelay ?? 5_000);
   }
 }
