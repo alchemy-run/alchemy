@@ -166,6 +166,7 @@ export abstract class CDPServer {
     this.wss = new WebSocketServer({
       noServer: true,
     });
+    this.internalMessageId = 0;
 
     this.wss.on("connection", async (clientWs) => {
       this.connectedClients.add(clientWs);
