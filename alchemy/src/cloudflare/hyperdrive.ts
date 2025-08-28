@@ -4,8 +4,16 @@ import { Resource } from "../resource.ts";
 import { Scope } from "../scope.ts";
 import { Secret } from "../secret.ts";
 import { logger } from "../util/logger.ts";
-import { handleApiError } from "./api-error.ts";
-import { createCloudflareApi, type CloudflareApiOptions } from "./api.ts";
+import { CloudflareApiError, handleApiError } from "./api-error.ts";
+import {
+  extractCloudflareResult,
+  type CloudflareApiErrorPayload,
+} from "./api-response.ts";
+import {
+  createCloudflareApi,
+  type CloudflareApi,
+  type CloudflareApiOptions,
+} from "./api.ts";
 
 /**
  * Origin configuration for a PostgreSQL or MySQL database connection
@@ -163,6 +171,12 @@ export interface HyperdriveProps extends CloudflareApiOptions {
    */
   hyperdriveId?: string;
 
+  /**
+   * Whether to adopt an existing hyperdrive config
+   * @default false
+   */
+  adopt?: boolean;
+
   dev?: {
     /**
      * The database connection origin configuration for local development
@@ -176,46 +190,45 @@ export interface HyperdriveProps extends CloudflareApiOptions {
  * Output returned after Cloudflare Hyperdrive creation/update.
  * IMPORTANT: The interface name MUST match the exported resource name.
  */
-export interface Hyperdrive
-  extends Resource<"cloudflare::Hyperdrive">,
-    Omit<HyperdriveProps, "origin" | "dev"> {
-  /**
-   * The ID of the resource
-   */
-  id: string;
-
-  /**
-   * Name of the Hyperdrive configuration
-   */
-  name: string;
-
-  /**
-   * The Cloudflare-generated UUID of the hyperdrive
-   */
-  hyperdriveId: string;
-
-  /**
-   * Database connection origin configuration
-   */
-  origin: HyperdrivePublicOrigin | HyperdriveOriginWithAccess;
-
-  /**
-   * Local development configuration
-   * @internal
-   */
-  dev: {
+export type Hyperdrive = Resource<"cloudflare::Hyperdrive"> &
+  Omit<HyperdriveProps, "origin" | "dev"> & {
     /**
-     * The connection string to use for local development
+     * The ID of the resource
      */
-    origin: Secret;
-  };
+    id: string;
 
-  /**
-   * Resource type identifier for binding.
-   * @internal
-   */
-  type: "hyperdrive";
-}
+    /**
+     * Name of the Hyperdrive configuration
+     */
+    name: string;
+
+    /**
+     * The Cloudflare-generated UUID of the hyperdrive
+     */
+    hyperdriveId: string;
+
+    /**
+     * Database connection origin configuration
+     */
+    origin: HyperdrivePublicOrigin | HyperdriveOriginWithAccess;
+
+    /**
+     * Local development configuration
+     * @internal
+     */
+    dev: {
+      /**
+       * The connection string to use for local development
+       */
+      origin: Secret;
+    };
+
+    /**
+     * Resource type identifier for binding.
+     * @internal
+     */
+    type: "hyperdrive";
+  };
 
 /**
  * Represents a Cloudflare Hyperdrive configuration.
@@ -327,6 +340,7 @@ interface InternalHyperdriveProps extends CloudflareApiOptions {
     origin: Secret;
     force?: boolean;
   };
+  adopt?: boolean;
 }
 
 const _Hyperdrive = Resource(
@@ -337,7 +351,7 @@ const _Hyperdrive = Resource(
     props: InternalHyperdriveProps,
   ): Promise<Hyperdrive> {
     const hyperdriveId = props.hyperdriveId || this.output?.hyperdriveId;
-
+    const adopt = props.adopt || this.scope.adopt;
     const name =
       props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
 
@@ -354,13 +368,6 @@ const _Hyperdrive = Resource(
       });
     }
     const api = await createCloudflareApi(props);
-    const configsPath = `/accounts/${api.accountId}/hyperdrive/configs`;
-
-    // For create operations, we don't have a hyperdriveId yet
-    // For update/delete operations, we need to use the hyperdriveId from props or output
-    const configPath = hyperdriveId
-      ? `${configsPath}/${hyperdriveId}`
-      : `${configsPath}`;
 
     if (this.phase === "delete") {
       if (!hyperdriveId) {
@@ -369,7 +376,9 @@ const _Hyperdrive = Resource(
       }
 
       try {
-        const deleteResponse = await api.delete(configPath);
+        const deleteResponse = await api.delete(
+          `/accounts/${api.accountId}/hyperdrive/configs/${hyperdriveId}`,
+        );
         // Only swallow 404 Not Found errors, all other errors should be handled
         if (!deleteResponse.ok && deleteResponse.status !== 404) {
           await handleApiError(deleteResponse, "delete", "hyperdrive", id);
@@ -381,74 +390,106 @@ const _Hyperdrive = Resource(
       return this.destroy();
     }
 
-    let response: Response | undefined;
-    let apiResource: any;
-
     // Prepare request body with unwrapped secrets
-    const requestBody = prepareRequestBody(props);
+    const requestBody = prepareRequestBody({ ...props, name });
+    let result: HyperdriveResponse;
 
-    try {
-      if (this.phase === "update" && hyperdriveId) {
-        // Update existing hyperdrive
-        response = await api.put(configPath, requestBody);
-      } else {
-        // Create new hyperdrive
-        if (hyperdriveId) {
-          // If we have a hyperdriveId but we're in create phase, it could be because
-          // the resource exists but wasn't in state. Do a GET to check.
-          const getResponse = await api.get(configPath);
-          if (getResponse.status === 200) {
-            // Hyperdrive exists, update it
-            logger.log(
-              `Hyperdrive '${id}' already exists. Updating existing resource.`,
+    if (hyperdriveId) {
+      result = await extractCloudflareResult<HyperdriveResponse>(
+        `update hyperdrive config "${hyperdriveId}"`,
+        api.put(
+          `/accounts/${api.accountId}/hyperdrive/configs/${hyperdriveId}`,
+          requestBody,
+        ),
+      );
+    } else {
+      try {
+        result = await extractCloudflareResult<HyperdriveResponse>(
+          `create hyperdrive config "${name}"`,
+          api.post(
+            `/accounts/${api.accountId}/hyperdrive/configs`,
+            requestBody,
+          ),
+        );
+      } catch (error) {
+        if (
+          error instanceof CloudflareApiError &&
+          (error.errorData as CloudflareApiErrorPayload[]).some(
+            (e) => e.code === 2017, // 2017 is the error code for name conflict
+          )
+        ) {
+          if (!adopt) {
+            throw new Error(
+              `Hyperdrive config "${name}" already exists. Use adopt: true to adopt it.`,
+              { cause: error },
             );
-            response = await api.put(configPath, requestBody);
-          } else if (getResponse.status === 404) {
-            // Hyperdrive doesn't exist, create new
-            response = await api.post(configsPath, {
-              ...requestBody,
-              // Ensure name is set correctly if not already set
-              name: props.name || id,
-            });
-          } else {
-            // Unexpected error during GET check
-            await handleApiError(getResponse, "get", "hyperdrive", id);
           }
+          const existing = await findHyperdriveConfigByName(api, name);
+          if (!existing) {
+            throw new Error(
+              `Hyperdrive config "${name}" failed to create due to name conflict and could not be found for adoption.`,
+              { cause: error },
+            );
+          }
+          result = await extractCloudflareResult<HyperdriveResponse>(
+            `adopt hyperdrive config "${name}"`,
+            api.put(
+              `/accounts/${api.accountId}/hyperdrive/configs/${existing.id}`,
+              requestBody,
+            ),
+          );
         } else {
-          // No hyperdriveId, create new
-          response = await api.post(configsPath, {
-            ...requestBody,
-            // Ensure name is set correctly if not already set
-            name: props.name || id,
-          });
+          throw error;
         }
       }
-
-      if (!response?.ok) {
-        const action = this.phase === "update" ? "update" : "create";
-        await handleApiError(response!, action, "hyperdrive", id);
-      }
-
-      const data: { result: Record<string, any> } = await response!.json();
-      apiResource = data.result;
-    } catch (error) {
-      logger.error(`Error ${this.phase} Hyperdrive '${id}':`, error);
-      throw error;
     }
 
     // Construct the output object from API response and props
     return this({
       id,
-      hyperdriveId: apiResource.id, // Store the Cloudflare-assigned UUID
-      name: apiResource.name,
+      hyperdriveId: result.id, // Store the Cloudflare-assigned UUID
+      name: result.name,
       origin: props.origin,
-      caching: apiResource.caching,
-      mtls: apiResource.mtls,
+      caching: result.caching,
+      mtls: result.mtls,
       dev: props.dev,
       type: "hyperdrive",
     });
   },
 );
+
+interface HyperdriveResponse {
+  id: string;
+  name: string;
+  origin: HyperdriveOrigin;
+  caching?: HyperdriveCaching;
+  created_on?: string;
+  modified_on?: string;
+  mtls?: HyperdriveMtls;
+  origin_connection_limit?: number;
+}
+
+async function findHyperdriveConfigByName(
+  api: CloudflareApi,
+  name: string,
+  page = 1,
+) {
+  const response = await api.get(
+    `/accounts/${api.accountId}/hyperdrive/configs?page=${page}`,
+  );
+  const data: {
+    result: HyperdriveResponse[];
+    result_info?: { total_pages?: number };
+  } = await response.json();
+  const found = data.result.find((config) => config.name === name);
+  if (found) {
+    return found;
+  }
+  if (data.result_info?.total_pages && page < data.result_info.total_pages) {
+    return await findHyperdriveConfigByName(api, name, page + 1);
+  }
+  return null;
+}
 
 /**
  * Prepare the request body by unwrapping secret values
