@@ -1,15 +1,7 @@
-import {
-  CreateQueueCommand,
-  DeleteQueueCommand,
-  GetQueueAttributesCommand,
-  GetQueueUrlCommand,
-  QueueDeletedRecently,
-  QueueDoesNotExist,
-  SQSClient,
-} from "@aws-sdk/client-sqs";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { logger } from "../util/logger.ts";
+import { importPeer } from "../util/peer.ts";
 import { retry } from "./retry.ts";
 
 /**
@@ -19,8 +11,10 @@ export interface QueueProps {
   /**
    * Name of the queue
    * For FIFO queues, the name must end with the .fifo suffix
+   *
+   * @default ${app}-${stage}-${id}?.fifo
    */
-  queueName: string;
+  queueName?: string;
 
   /**
    * Whether this is a FIFO queue.
@@ -92,6 +86,11 @@ export interface Queue extends Resource<"sqs::Queue">, QueueProps {
   arn: string;
 
   /**
+   * Name of the Queue
+   */
+  queueName: string;
+
+  /**
    * URL of the queue
    */
   url: string;
@@ -140,16 +139,32 @@ export const Queue = Resource(
   "sqs::Queue",
   async function (
     this: Context<Queue>,
-    _id: string,
+    id: string,
     props: QueueProps,
   ): Promise<Queue> {
+    const {
+      CreateQueueCommand,
+      DeleteQueueCommand,
+      GetQueueAttributesCommand,
+      GetQueueUrlCommand,
+      QueueDeletedRecently,
+      QueueDoesNotExist,
+      SQSClient,
+    } = await importPeer(import("@aws-sdk/client-sqs"), "sqs::Queue");
     const client = new SQSClient({});
     // Don't automatically add .fifo suffix - user must include it in queueName
-    const queueName = props.queueName;
+    const queueName =
+      props.queueName ??
+      this.output?.queueName ??
+      `${this.scope.createPhysicalName(id)}${props.fifo ? ".fifo" : ""}`;
 
-    // Validate that FIFO queues have .fifo suffix
     if (props.fifo && !queueName.endsWith(".fifo")) {
+      // Validate that FIFO queues have .fifo suffix
       throw new Error("FIFO queue names must end with .fifo suffix");
+    }
+
+    if (this.phase === "update" && this.output.queueName !== queueName) {
+      this.replace();
     }
 
     if (this.phase === "delete") {
@@ -271,6 +286,7 @@ export const Queue = Resource(
       return this({
         ...props,
         arn: attributesResponse.Attributes!.QueueArn!,
+        queueName,
         url: createResponse.QueueUrl!,
       });
     } catch (error: any) {
@@ -311,6 +327,7 @@ export const Queue = Resource(
             return this({
               ...props,
               arn: attributesResponse.Attributes!.QueueArn!,
+              queueName,
               url: createResponse.QueueUrl!,
             });
           } catch (retryError: any) {
@@ -326,21 +343,25 @@ export const Queue = Resource(
       }
       throw error;
     }
+
+    function isQueueDoesNotExist(
+      error: any,
+    ): error is typeof QueueDoesNotExist {
+      return (
+        error.name === "QueueDoesNotExist" ||
+        error.Code === "AWS.SimpleQueueService.NonExistentQueue" ||
+        error instanceof QueueDoesNotExist
+      );
+    }
+
+    function isQueueDeletedRecently(
+      error: any,
+    ): error is typeof QueueDeletedRecently {
+      return (
+        error instanceof QueueDeletedRecently ||
+        error.Code === "AWS.SimpleQueueService.QueueDeletedRecently" ||
+        error.name === "QueueDeletedRecently"
+      );
+    }
   },
 );
-
-function isQueueDoesNotExist(error: any): error is QueueDoesNotExist {
-  return (
-    error.name === "QueueDoesNotExist" ||
-    error.Code === "AWS.SimpleQueueService.NonExistentQueue" ||
-    error instanceof QueueDoesNotExist
-  );
-}
-
-function isQueueDeletedRecently(error: any): error is QueueDeletedRecently {
-  return (
-    error instanceof QueueDeletedRecently ||
-    error.Code === "AWS.SimpleQueueService.QueueDeletedRecently" ||
-    error.name === "QueueDeletedRecently"
-  );
-}

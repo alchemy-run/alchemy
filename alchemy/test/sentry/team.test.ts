@@ -13,95 +13,99 @@ const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });
 
-describe("Team Resource", { concurrent: false }, () => {
-  // Use BRANCH_PREFIX for deterministic, non-colliding resource names
-  const testId = `${BRANCH_PREFIX}-test-team`;
-  const organization = process.env.SENTRY_ORG;
-  if (!organization) {
-    throw new Error("SENTRY_ORG environment variable is required");
-  }
+describe.skipIf(!process.env.ALL_TESTS)(
+  "Team Resource",
+  { concurrent: false },
+  () => {
+    // Use BRANCH_PREFIX for deterministic, non-colliding resource names
+    const testId = `${BRANCH_PREFIX}-test-team`;
+    const organization = process.env.SENTRY_ORG;
+    if (!organization) {
+      throw new Error("SENTRY_ORG environment variable is required");
+    }
 
-  test("create, update, and delete team", async (scope) => {
-    let team: Team | undefined;
-    try {
-      // Create a test team
-      team = await Team(testId, {
-        name: `Test Team ${testId}`,
-        slug: testId,
-        organization,
-      });
+    test("create, update, and delete team", async (scope) => {
+      let team: Team | undefined;
+      try {
+        // Create a test team
+        team = await Team(testId, {
+          name: `Test Team ${testId}`,
+          slug: testId,
+          organization,
+        });
 
-      expect(team.id).toBeTruthy();
-      expect(team.name).toEqual(`Test Team ${testId}`);
+        expect(team.id).toBeTruthy();
+        expect(team.name).toEqual(`Test Team ${testId}`);
 
-      // Verify team was created by querying the API directly
-      const getResponse = await api.get(
-        `/teams/${team.organization}/${team.slug}/`,
-      );
-      expect(getResponse.status).toEqual(200);
-
-      const responseData: any = await getResponse.json();
-      expect(responseData.name).toEqual(`Test Team ${testId}`);
-
-      // Update the team
-      team = await Team(testId, {
-        name: `Updated Team ${testId}`,
-        slug: testId,
-        organization,
-      });
-
-      expect(team.id).toEqual(team.id);
-      expect(team.name).toEqual(`Updated Team ${testId}`);
-
-      // Verify team was updated
-      const getUpdatedResponse = await api.get(
-        `/teams/${team.organization}/${team.slug}/`,
-      );
-      const updatedData: any = await getUpdatedResponse.json();
-      expect(updatedData.name).toEqual(`Updated Team ${testId}`);
-    } catch (err) {
-      // log the error or else it's silently swallowed by destroy errors
-      console.log(err);
-      throw err;
-    } finally {
-      // Always clean up, even if test assertions fail
-      await destroy(scope);
-
-      // Verify team was deleted
-      if (team) {
-        const getDeletedResponse = await api.get(
+        // Verify team was created by querying the API directly
+        const getResponse = await api.get(
           `/teams/${team.organization}/${team.slug}/`,
         );
-        expect(getDeletedResponse.status).toEqual(404);
+        expect(getResponse.status).toEqual(200);
+
+        const responseData: any = await getResponse.json();
+        expect(responseData.name).toEqual(`Test Team ${testId}`);
+
+        // Update the team
+        team = await Team(testId, {
+          name: `Updated Team ${testId}`,
+          slug: testId,
+          organization,
+        });
+
+        expect(team.id).toEqual(team.id);
+        expect(team.name).toEqual(`Updated Team ${testId}`);
+
+        // Verify team was updated
+        const getUpdatedResponse = await api.get(
+          `/teams/${team.organization}/${team.slug}/`,
+        );
+        const updatedData: any = await getUpdatedResponse.json();
+        expect(updatedData.name).toEqual(`Updated Team ${testId}`);
+      } catch (err) {
+        // log the error or else it's silently swallowed by destroy errors
+        console.log(err);
+        throw err;
+      } finally {
+        // Always clean up, even if test assertions fail
+        await destroy(scope);
+
+        // Verify team was deleted
+        if (team) {
+          const getDeletedResponse = await api.get(
+            `/teams/${team.organization}/${team.slug}/`,
+          );
+          expect(getDeletedResponse.status).toEqual(404);
+        }
       }
-    }
-  });
+    });
 
-  test("adopt existing team", async (scope) => {
-    let team: Team | undefined;
-    try {
-      // Create a test team
-      team = await Team(testId, {
-        name: `Test Team ${testId}`,
-        slug: testId,
-        organization,
-      });
+    test("adopt existing team", async (scope) => {
+      let team: Team | undefined;
+      try {
+        // Create a test team
+        team = await Team(testId, {
+          name: `Test Team ${testId}`,
+          slug: testId,
+          organization,
+        });
 
-      // Try to create the same team with adopt=true
-      const adoptedTeam = await Team(testId, {
-        name: `Test Team ${testId}`,
-        slug: testId,
-        organization,
-        adopt: true,
-      });
+        // Try to create the same team with adopt=true
+        const adoptedTeam = await Team(testId, {
+          name: `Test Team ${testId}`,
+          slug: testId,
+          organization,
+          adopt: true,
+        });
 
-      // Should have the same ID as the original team
-      expect(adoptedTeam.id).toEqual(team.id);
-    } catch (err) {
-      console.log(err);
-      throw err;
-    } finally {
-      await destroy(scope);
-    }
-  });
-});
+        // Should have the same ID as the original team
+        expect(adoptedTeam.id).toEqual(team.id);
+      } catch (err) {
+        console.log(err);
+        throw err;
+      } finally {
+        await destroy(scope);
+      }
+    });
+  },
+);

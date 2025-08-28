@@ -16,7 +16,7 @@ function validateAwsClientProps(props: any): AwsClientProps | Error {
 }
 
 // Helper function to check if result is an error (ArkErrors)
-function isValidationError(
+function _isValidationError(
   result: any,
 ): result is { length: number; [key: string]: any } {
   return (

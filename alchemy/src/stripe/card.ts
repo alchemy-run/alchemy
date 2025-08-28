@@ -209,7 +209,7 @@ export const Card = Resource(
     _id: string,
     props: CardProps,
   ): Promise<Card> {
-    const stripe = createStripeClient({ apiKey: props.apiKey });
+    const stripe = await createStripeClient({ apiKey: props.apiKey });
 
     if (this.phase === "delete") {
       try {
@@ -279,7 +279,10 @@ export const Card = Resource(
             createParams,
           )) as Stripe.Card;
         } catch (error) {
-          if (isStripeConflictError(error) && props.adopt) {
+          if (
+            isStripeConflictError(error) &&
+            (props.adopt ?? this.scope.adopt)
+          ) {
             throw new Error(
               "Card adoption is not supported - cards cannot be uniquely identified for adoption",
             );

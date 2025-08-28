@@ -1,18 +1,10 @@
-import {
-  AddTagsToResourceCommand,
-  DeleteParameterCommand,
-  GetParameterCommand,
-  ParameterAlreadyExists,
-  ParameterNotFound,
-  PutParameterCommand,
-  SSMClient,
-  type Tag,
-} from "@aws-sdk/client-ssm";
+import type { Tag } from "@aws-sdk/client-ssm";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { type Secret, isSecret } from "../secret.ts";
 import { ignore } from "../util/ignore.ts";
 import { logger } from "../util/logger.ts";
+import { importPeer } from "../util/peer.ts";
 
 /**
  * Base properties shared by all SSM Parameter types
@@ -20,8 +12,10 @@ import { logger } from "../util/logger.ts";
 interface SSMParameterBaseProps {
   /**
    * Name of the parameter
+   *
+   * @default ${app}-${stage}-${id}
    */
-  name: string;
+  name?: string;
 
   /**
    * Description of the parameter's purpose
@@ -102,6 +96,11 @@ export type SSMParameter = Resource<"ssm::Parameter"> & {
   arn: string;
 
   /**
+   * Name of the SSM Parameter.
+   */
+  name: string;
+
+  /**
    * Version of the parameter
    */
   version: number;
@@ -176,17 +175,33 @@ export const SSMParameter = Resource(
   "ssm::Parameter",
   async function (
     this: Context<SSMParameter>,
-    _id: string,
+    id: string,
     props: SSMParameterProps,
   ): Promise<SSMParameter> {
+    const {
+      AddTagsToResourceCommand,
+      DeleteParameterCommand,
+      GetParameterCommand,
+      ParameterAlreadyExists,
+      ParameterNotFound,
+      PutParameterCommand,
+      SSMClient,
+    } = await importPeer(import("@aws-sdk/client-ssm"), "ssm::Parameter");
     const client = new SSMClient({});
+
+    const parameterName =
+      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
+
+    if (this.phase === "update" && this.output.name !== parameterName) {
+      this.replace();
+    }
 
     if (this.phase === "delete") {
       try {
         await ignore(ParameterNotFound.name, () =>
           client.send(
             new DeleteParameterCommand({
-              Name: props.name,
+              Name: parameterName,
             }),
           ),
         );
@@ -217,7 +232,7 @@ export const SSMParameter = Resource(
       try {
         await client.send(
           new PutParameterCommand({
-            Name: props.name,
+            Name: parameterName,
             Value: parameterValue,
             Type: parameterType,
             Description: props.description,
@@ -247,7 +262,7 @@ export const SSMParameter = Resource(
         if (error instanceof ParameterAlreadyExists) {
           await client.send(
             new PutParameterCommand({
-              Name: props.name,
+              Name: parameterName,
               Value: parameterValue,
               Type: parameterType,
               Description: props.description,
@@ -278,7 +293,7 @@ export const SSMParameter = Resource(
           await client.send(
             new AddTagsToResourceCommand({
               ResourceType: "Parameter",
-              ResourceId: props.name,
+              ResourceId: parameterName,
               Tags: tags,
             }),
           );
@@ -290,13 +305,15 @@ export const SSMParameter = Resource(
       // Get the updated parameter
       const parameter = await client.send(
         new GetParameterCommand({
-          Name: props.name,
+          Name: parameterName,
           WithDecryption: true,
         }),
       );
 
       if (!parameter?.Parameter) {
-        throw new Error(`Failed to create or update parameter ${props.name}`);
+        throw new Error(
+          `Failed to create or update parameter ${parameterName}`,
+        );
       }
 
       return this({
@@ -304,12 +321,15 @@ export const SSMParameter = Resource(
         arn: parameter.Parameter.ARN!,
         version: parameter.Parameter.Version!,
         lastModifiedDate: parameter.Parameter.LastModifiedDate!,
-        name: parameter.Parameter.Name ?? props.name,
+        name: parameter.Parameter.Name ?? parameterName,
         value: props.value,
         type: (parameter.Parameter.Type as any) ?? parameterType,
       } as SSMParameter);
     } catch (error: any) {
-      logger.error(`Error creating/updating parameter ${props.name}:`, error);
+      logger.error(
+        `Error creating/updating parameter ${parameterName}:`,
+        error,
+      );
       throw error;
     }
   },

@@ -16,6 +16,7 @@ describe("Container Resource", () => {
     try {
       const make = async (dockerfile?: string) =>
         Worker(`container-test-worker${BRANCH_PREFIX}`, {
+          name: `container-test-worker${BRANCH_PREFIX}`,
           adopt: true,
           entrypoint: path.join(import.meta.dirname, "container-handler.ts"),
           compatibilityFlags: ["nodejs_compat"],

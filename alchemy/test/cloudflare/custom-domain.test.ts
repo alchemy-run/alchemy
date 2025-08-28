@@ -24,6 +24,7 @@ describe("Custom Domain", () => {
     try {
       const domain = `${BRANCH_PREFIX}.${testDomain}`;
       const worker = await Worker(`${BRANCH_PREFIX}-worker-1`, {
+        name: `${BRANCH_PREFIX}-worker-1`,
         domains: [domain],
         script: `
           export default {

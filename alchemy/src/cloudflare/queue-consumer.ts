@@ -200,7 +200,7 @@ export const QueueConsumer = Resource(
           err instanceof CloudflareApiError &&
           err.status === 400 &&
           err.message.includes("already has a consumer") &&
-          props.adopt
+          (props.adopt ?? this.scope.adopt)
         ) {
           const consumerId = await findQueueConsumerId(
             api,

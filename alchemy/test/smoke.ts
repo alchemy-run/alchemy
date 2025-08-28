@@ -2,7 +2,7 @@ import { Listr } from "listr2";
 import { spawn } from "node:child_process";
 import { createWriteStream } from "node:fs";
 import { access, mkdir, readdir, stat, unlink } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import path, { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dim } from "picocolors";
 
@@ -11,6 +11,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const rootDir = join(__dirname, "..", "..");
 const examplesDir = join(rootDir, "examples");
+const testsDir = join(rootDir, "tests");
 const smokeDir = join(rootDir, ".smoke");
 
 // Check for --no-capture flag
@@ -23,36 +24,46 @@ interface ExampleProject {
   hasAlchemyRunFile: boolean;
   hasIndexFile: boolean;
   hasCheckCommand: boolean;
+  hasSmokeTestFile: boolean;
 }
 
 async function discoverExamples(): Promise<ExampleProject[]> {
   const examples: ExampleProject[] = [];
 
   try {
-    const entries = await readdir(examplesDir);
+    const ls = (dir: string) =>
+      readdir(dir).then((paths) => paths.map((p) => join(dir, p)));
+    const entries = (
+      await Promise.all([
+        ls(examplesDir),
+        process.argv.includes("--no-flatten") ? [] : ls(testsDir),
+      ])
+    ).flat();
 
-    for (const entry of entries) {
-      const examplePath = join(examplesDir, entry);
-      const stats = await stat(examplePath);
+    for (const p of entries) {
+      const stats = await stat(p);
 
       if (stats.isDirectory()) {
         // Check for various files
         const envFilePath = join(rootDir, ".env");
-        const alchemyRunPath = join(examplePath, "alchemy.run.ts");
-        const indexPath = join(examplePath, "index.ts");
-        const pkgJson = await import(join(examplePath, "package.json"));
+        const alchemyRunPath = join(p, "alchemy.run.ts");
+        const testPath = join(p, "smoke.test.ts");
+        const indexPath = join(p, "index.ts");
+        const pkgJson = await import(join(p, "package.json"));
 
         const hasEnvFile = await fileExists(envFilePath);
         const hasAlchemyRunFile = await fileExists(alchemyRunPath);
         const hasIndexFile = await fileExists(indexPath);
+        const hasSmokeTestFile = await fileExists(testPath);
 
         examples.push({
-          name: entry,
-          path: examplePath,
+          name: path.basename(p),
+          path: p,
           hasEnvFile,
           hasAlchemyRunFile,
           hasIndexFile,
           hasCheckCommand: !!pkgJson.scripts?.check,
+          hasSmokeTestFile,
         });
       }
     }
@@ -116,7 +127,7 @@ async function runCommand(
     } else {
       // Stream to file
       const outputPath = join(smokeDir, `${options.exampleName}.out`);
-      const outputStream = createWriteStream(outputPath, { flags: "a" });
+      const outputStream = createWriteStream(outputPath);
 
       proc.stdout?.on("data", (data) => {
         const cleanData = stripAnsiColors(data.toString());
@@ -177,7 +188,7 @@ const examples = (await discoverExamples()).filter(
   (e) => !skippedExamples.includes(e.name),
 );
 
-const testIndex = process.argv.findIndex((arg) => arg === "-t");
+const testIndex = process.argv.indexOf("-t");
 const testName = testIndex !== -1 ? process.argv[testIndex + 1] : undefined;
 
 // Filter examples based on test name if provided
@@ -199,24 +210,33 @@ const tasks = new Listr(
   filteredExamples.map((example) => ({
     title: `${example.name}`,
     task: async (_ctx, task) => {
+      if (example.hasSmokeTestFile) {
+        await runCommand("bun smoke.test.ts", {
+          cwd: example.path,
+          exampleName: noCaptureFlag ? undefined : example.name,
+          env: { DO_NOT_TRACK: "1" },
+        });
+        return;
+      }
+
       let devCommand: string;
       let deployCommand: string;
       let destroyCommand: string;
 
       if (example.hasEnvFile) {
         // Use npm scripts if .env file exists in root
-        devCommand = "bun run dev";
-        deployCommand = "bun run deploy";
+        devCommand = "bun run dev --adopt";
+        deployCommand = "bun run deploy --adopt";
         destroyCommand = "bun run destroy";
       } else if (example.hasAlchemyRunFile) {
         // Use alchemy.run.ts if it exists
-        devCommand = "bun tsx ./alchemy.run.ts --dev";
-        deployCommand = "bun tsx ./alchemy.run.ts";
+        devCommand = "bun tsx ./alchemy.run.ts --dev --adopt";
+        deployCommand = "bun tsx ./alchemy.run.ts --adopt";
         destroyCommand = "bun tsx ./alchemy.run.ts --destroy";
       } else {
         // Fallback to index.ts
-        devCommand = "bun ./index.ts --dev";
-        deployCommand = "bun ./index.ts";
+        devCommand = "bun ./index.ts --dev --adopt";
+        deployCommand = "bun ./index.ts --adopt";
         destroyCommand = "bun ./index.ts --destroy";
       }
 

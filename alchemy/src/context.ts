@@ -65,8 +65,10 @@ export interface BaseContext<Out extends Resource> {
    *
    * It is so that the resource lifecycle handler can "return never" instead of
    * "return undefined" so that `await MyResource()` always returns a value.
+   *
+   * @param retainChildren - Whether to retain the children of the resource.
    */
-  destroy(): never;
+  destroy(retainChildren?: boolean): never;
   /**
    * Register a cleanup function that will be called when the process exits.
    *
@@ -161,8 +163,8 @@ export function context<
       return value;
     },
     quiet: scope.quiet,
-    destroy: () => {
-      throw new DestroyedSignal();
+    destroy: (retainChildren = false) => {
+      throw new DestroyedSignal(retainChildren);
     },
     onCleanup: (fn: () => void | Promise<void>) => {
       // make the function idempotent so repeated calls don't cause the process to hang

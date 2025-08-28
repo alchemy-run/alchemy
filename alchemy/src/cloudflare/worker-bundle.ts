@@ -4,11 +4,12 @@ import { err, ok, type Result } from "neverthrow";
 import fs from "node:fs/promises";
 import path from "pathe";
 import { logger } from "../util/logger.ts";
-import { external, external_als } from "./bundle/externals.ts";
+import { cloudflareInternalPlugin } from "./bundle/cloudflare-internal.ts";
 import { esbuildPluginAlias } from "./bundle/plugin-alias.ts";
-import { esbuildPluginCompatWarning } from "./bundle/plugin-compat-warning.ts";
+import { esbuildPluginAsyncLocalStorage } from "./bundle/plugin-als-external.ts";
 import { createHotReloadPlugin } from "./bundle/plugin-hot-reload.ts";
 import { esbuildPluginHybridNodeCompat } from "./bundle/plugin-hybrid-node-compat.ts";
+import { esbuildPluginNodeCompatImports } from "./bundle/plugin-node-compat.ts";
 import { createWasmPlugin } from "./bundle/plugin-wasm.ts";
 import { validateNodeCompat } from "./bundle/validate-node-compat.ts";
 
@@ -76,6 +77,8 @@ export function normalizeWorkerBundle(props: {
             cwd: props.cwd,
             outdir: props.outdir,
             sourcemap: props.sourceMap !== false ? true : undefined,
+            compatibilityDate: props.compatibilityDate,
+            compatibilityFlags: props.compatibilityFlags,
             ...props.bundle,
           }),
     );
@@ -248,6 +251,8 @@ export namespace WorkerBundleSource {
     entrypoint: string;
     cwd: string;
     outdir: string;
+    compatibilityDate: string;
+    compatibilityFlags: string[];
   }
 
   export class ESBuild implements WorkerBundleSource {
@@ -328,6 +333,8 @@ export namespace WorkerBundleSource {
         nodeCompat,
         cwd,
         format,
+        compatibilityDate: _compatibilityDate,
+        compatibilityFlags: _compatibilityFlags,
         ...props
       } = this.props;
       return {
@@ -356,17 +363,47 @@ export namespace WorkerBundleSource {
         conditions: props.conditions ?? ["workerd", "worker", "browser"],
         plugins: [
           esbuildPluginAlias(props.alias ?? {}, this.props.cwd),
-          nodeCompat === "v2"
-            ? esbuildPluginHybridNodeCompat()
-            : esbuildPluginCompatWarning(nodeCompat ?? null),
+          cloudflareInternalPlugin,
+          ...this.getNodeJSCompatPlugins({
+            mode: nodeCompat,
+            compatibilityDate: this.props.compatibilityDate,
+            compatibilityFlags: this.props.compatibilityFlags,
+          }),
           ...(props.plugins ?? []),
           ...additionalPlugins,
         ],
-        external: [
-          ...(nodeCompat === "als" ? external_als : external),
-          ...(props.external ?? []),
-        ],
+        external: [...(props.external ?? [])],
       } satisfies esbuild.BuildOptions;
+    }
+
+    /**
+     * Returns the list of ESBuild plugins to use for a given compat mode.
+     */
+    private getNodeJSCompatPlugins({
+      mode,
+      compatibilityDate,
+      compatibilityFlags,
+    }: {
+      mode: "als" | "v2" | null;
+      compatibilityDate?: string;
+      compatibilityFlags?: string[];
+    }): esbuild.Plugin[] {
+      switch (mode) {
+        case "als":
+          return [
+            esbuildPluginAsyncLocalStorage,
+            esbuildPluginNodeCompatImports(mode),
+          ];
+        case "v2":
+          return [
+            esbuildPluginHybridNodeCompat({
+              compatibilityDate,
+              compatibilityFlags,
+            }),
+          ];
+        case null:
+          return [esbuildPluginNodeCompatImports(mode)];
+      }
     }
 
     private async formatBuildOutput(

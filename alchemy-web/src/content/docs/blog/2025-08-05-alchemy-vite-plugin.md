@@ -168,7 +168,9 @@ export default defineConfig({
 -    }),
 +    alchemy(),
     reactRouter(),
-    tsconfigPaths(),
+    tsconfigPaths({
+      root: "."
+    }),
   ],
 });
 ```

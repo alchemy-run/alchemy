@@ -7,7 +7,7 @@ export const TELEMETRY_DISABLED =
 
 // TODO(sam): replace with permanent URL
 export const POSTHOG_CLIENT_API_HOST =
-  process.env.POSTHOG_CLIENT_API_HOST ?? "https://ph.alchemy.run";
+  process.env.ALCHEMY_POSTHOG_CLIENT_API_HOST ?? "https://ph.alchemy.run";
 export const POSTHOG_PROJECT_ID =
-  process.env.POSTHOG_PROJECT_ID ??
+  process.env.ALCHEMY_POSTHOG_PROJECT_ID ??
   "phc_A51Mi7Q63TvnNrvRMgvBxE1il0DAL66rVg4LdWPRsfK";

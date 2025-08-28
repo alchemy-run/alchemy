@@ -13,7 +13,7 @@ import {
   type Resource,
   type ResourceProps,
 } from "./resource.ts";
-import { Scope, type PendingDeletions } from "./scope.ts";
+import type { PendingDeletions } from "./scope.ts";
 import { serialize } from "./serde.ts";
 import { formatFQN } from "./util/cli.ts";
 import { logger } from "./util/logger.ts";
@@ -22,7 +22,7 @@ import type { Telemetry } from "./util/telemetry/index.ts";
 export interface ApplyOptions {
   quiet?: boolean;
   alwaysUpdate?: boolean;
-  resolveInnerScope?: (scope: Scope) => void;
+  noop?: boolean;
 }
 
 export function apply<Out extends Resource>(
@@ -33,7 +33,12 @@ export function apply<Out extends Resource>(
   return _apply(resource, props, options);
 }
 
+export function isReplacedSignal(error: any): error is ReplacedSignal {
+  return error instanceof Error && (error as any).kind === "ReplacedSignal";
+}
+
 export class ReplacedSignal extends Error {
+  readonly kind = "ReplacedSignal";
   public force: boolean;
 
   constructor(force?: boolean) {
@@ -63,12 +68,6 @@ async function _apply<Out extends Resource>(
           `Resource "${resource[ResourceFQN]}" not found and running in 'read' phase.`,
         );
       }
-      options?.resolveInnerScope?.(
-        new Scope({
-          parent: scope,
-          scopeName: resource[ResourceID],
-        }),
-      );
       scope.telemetryClient.record({
         event: "resource.read",
         resource: resource[ResourceKind],
@@ -115,11 +114,6 @@ async function _apply<Out extends Resource>(
         alwaysUpdate !== true &&
         !scope.force
       ) {
-        const innerScope = new Scope({
-          parent: scope,
-          scopeName: resource[ResourceID],
-        });
-        innerScope.skip();
         if (!quiet) {
           logger.task(resource[ResourceFQN], {
             prefix: "skipped",
@@ -129,7 +123,6 @@ async function _apply<Out extends Resource>(
             status: "success",
           });
         }
-        options?.resolveInnerScope?.(innerScope);
         scope.telemetryClient.record({
           event: "resource.skip",
           resource: resource[ResourceKind],
@@ -198,11 +191,10 @@ async function _apply<Out extends Resource>(
           isResource: true,
           parent: scope,
           destroyStrategy: provider.options?.destroyStrategy ?? "sequential",
+          noop: options?.noop,
         },
-        async (scope) => {
-          options?.resolveInnerScope?.(scope);
-          return provider.handler.bind(ctx)(resource[ResourceID], props);
-        },
+        async () =>
+          await provider.handler.bind(ctx)(resource[ResourceID], props),
       );
     } catch (error) {
       if (error instanceof ReplacedSignal) {
@@ -214,9 +206,12 @@ async function _apply<Out extends Resource>(
               props: state.oldProps,
               output: oldOutput,
             },
+            noop: options?.noop,
           });
         } else {
-          if (scope.children.get(resource[ResourceID])?.children.size! > 0) {
+          if (
+            (scope.children.get(resource[ResourceID])?.children.size ?? 0) > 0
+          ) {
             throw new Error(
               `Resource ${resource[ResourceFQN]} has children and cannot be replaced.`,
             );
@@ -232,7 +227,11 @@ async function _apply<Out extends Resource>(
 
         output = await alchemy.run(
           resource[ResourceID],
-          { isResource: true, parent: scope },
+          {
+            isResource: true,
+            parent: scope,
+            noop: options?.noop,
+          },
           async () =>
             provider.handler.bind(
               context({

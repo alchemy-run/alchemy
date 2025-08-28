@@ -131,6 +131,7 @@ export function test(
     phase: "up",
     telemetryClient: new NoopTelemetryClient(),
     quiet: defaultOptions.quiet,
+    password: process.env.ALCHEMY_PASSWORD,
   });
 
   test.beforeAll = (fn: (scope: Scope) => Promise<void>) => {
