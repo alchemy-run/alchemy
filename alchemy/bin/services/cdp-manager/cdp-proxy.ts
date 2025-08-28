@@ -61,7 +61,7 @@ export class CDPProxy extends CDPServer {
       }
     };
 
-    this.inspectorWs.onclose = (ev) => {
+    this.inspectorWs.onclose = () => {
       console.warn(`[${this.name}:Debug] Inspector closed`);
     };
 
