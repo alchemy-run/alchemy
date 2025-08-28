@@ -214,7 +214,7 @@ export abstract class CDPServer {
             clientId: clientId,
           });
         }
-        await this.handleClientMessage(json);
+        await this.handleClientMessage(clientId, json);
       });
 
       clientWs.on("close", () => {
@@ -283,7 +283,10 @@ export abstract class CDPServer {
     }
   }
 
-  abstract handleClientMessage(data: ClientCDPMessage): Promise<void>;
+  abstract handleClientMessage(
+    clientId: string,
+    data: ClientCDPMessage,
+  ): Promise<void>;
 
   public handleUpgrade(request: any, socket: any, head: any): void {
     try {
@@ -308,6 +311,10 @@ export abstract class CDPServer {
       .join(", ");
     return `${this.connectedClients.size} clients: ${clientInfo}`;
   }
+
+  protected getClientById(clientId: string) {
+    return this.connectedClients.get(clientId)?.ws;
+  }
 }
 
 export type ClientCDPMessage = {
@@ -318,5 +325,6 @@ export type ClientCDPMessage = {
 
 export type ServerCDPMessage = {
   id?: number;
-  method: string;
+  result?: Record<string, any>;
+  method?: string;
 };

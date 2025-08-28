@@ -237,10 +237,10 @@ export async function execAlchemy(
       name: "alchemy.run.ts",
       server: cdpManager.server,
       connect: inspectWait || inspectBrk,
-      domains:
-        childRuntime === "bun"
-          ? ["Inspector", "Console", "Runtime", "Debugger", "Heap"]
-          : ["Runtime", "Debugger", "Profiler", "Log"],
+      // domains:
+      //   childRuntime === "bun"
+      //     ? ["Inspector", "Console", "Runtime", "Debugger", "Heap"]
+      //     : ["Runtime", "Debugger", "Profiler", "Log"],
     });
     await cdpManager.registerCDPServer(rootCDPProxy);
     if (inspectWait || inspectBrk) {

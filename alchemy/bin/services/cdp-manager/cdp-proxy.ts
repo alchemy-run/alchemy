@@ -10,6 +10,7 @@ export class CDPProxy extends CDPServer {
   private inspectorWs?: WebSocket;
   private onStartMessageQueue: Array<ClientCDPMessage>;
   private enabledDomains: Set<string> = new Set();
+  private debuggerId?: string;
 
   constructor(
     inspectorUrl: string,
@@ -44,7 +45,10 @@ export class CDPProxy extends CDPServer {
     });
 
     this.inspectorWs.onmessage = async (event) => {
-      console.log("==>", event.data.toString());
+      const json = JSON.parse(event.data.toString()) as ServerCDPMessage;
+      if (json.id != null && json?.result?.debuggerId != null) {
+        this.debuggerId = json?.result?.debuggerId;
+      }
       await this.handleInspectorMessage(
         JSON.parse(event.data.toString()) as ServerCDPMessage,
       );
@@ -53,7 +57,7 @@ export class CDPProxy extends CDPServer {
     this.inspectorWs.onopen = async () => {
       await new Promise((resolve) => setTimeout(resolve, 1000));
       for (const message of this.onStartMessageQueue) {
-        this.handleClientMessage(message);
+        this.handleClientMessage(undefined, message);
       }
     };
 
@@ -66,7 +70,10 @@ export class CDPProxy extends CDPServer {
     };
   }
 
-  async handleClientMessage(data: ClientCDPMessage): Promise<void> {
+  async handleClientMessage(
+    clientId: string | undefined,
+    data: ClientCDPMessage,
+  ): Promise<void> {
     if (
       this.inspectorWs == null ||
       this.inspectorWs.readyState !== WebSocket.OPEN
@@ -77,17 +84,48 @@ export class CDPProxy extends CDPServer {
       this.onStartMessageQueue.push(data);
       return;
     } else {
-      this.internalHandleClientMessage(data);
+      this.internalHandleClientMessage(clientId, data);
     }
   }
 
   private async internalHandleClientMessage(
+    clientId: string | undefined,
     data: ClientCDPMessage,
   ): Promise<void> {
     const messageDomain = data.method?.split(".")?.[0];
 
     if (data.method?.endsWith(".enable") && messageDomain) {
       if (this.enabledDomains.has(messageDomain)) {
+        if (clientId != null) {
+          const client = this.getClientById(clientId);
+          if (client != null) {
+            //* handle some special cases where enabling isn't properly reported
+            switch (data.method) {
+              case "Runtime.enable": {
+                client.send(
+                  JSON.stringify({
+                    id: data.id,
+                    result: {},
+                  }),
+                );
+                break;
+              }
+              case "Debugger.enable": {
+                if (this.debuggerId != null) {
+                  client.send(
+                    JSON.stringify({
+                      id: data.id,
+                      result: {
+                        debuggerId: this.debuggerId,
+                      },
+                    }),
+                  );
+                  break;
+                }
+              }
+            }
+          }
+        }
         return;
       }
       this.enabledDomains.add(messageDomain);
@@ -97,7 +135,6 @@ export class CDPProxy extends CDPServer {
       }
     }
 
-    console.log("<==", JSON.stringify(data));
     this.inspectorWs!.send(JSON.stringify(data));
   }
 }
