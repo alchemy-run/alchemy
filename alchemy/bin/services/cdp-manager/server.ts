@@ -1,5 +1,6 @@
-import fs from "node:fs";
+import fs, { createReadStream } from "node:fs";
 import { createServer, type Server } from "node:http";
+import { createInterface } from "node:readline";
 import path from "pathe";
 import { WebSocketServer, type WebSocket as WsWebSocket } from "ws";
 import { findOpenPort } from "../../../src/util/find-open-port.ts";
@@ -138,7 +139,6 @@ export class CDPManager {
 
 export abstract class CDPServer {
   protected logFile: string;
-  protected domains: Array<string>;
   public readonly name: string;
   private wss: WebSocketServer;
   private connectedClients: Map<
@@ -160,13 +160,7 @@ export abstract class CDPServer {
   > = new Map();
   protected internalMessageId: number;
 
-  constructor(options: {
-    name: string;
-    server: Server;
-    logFile?: string;
-    domains?: Array<string>;
-  }) {
-    this.domains = options.domains ?? ["Log", "Debugger"];
+  constructor(options: { name: string; server: Server; logFile?: string }) {
     this.name = options.name.replace(/[\\/:.]/g, "-");
     this.logFile =
       options.logFile ?? path.join(LOGS_DIRECTORY, `${this.name}.log`);
@@ -188,13 +182,30 @@ export abstract class CDPServer {
 
       clientWs.on("message", async (data) => {
         const json = JSON.parse(data.toString()) as ClientCDPMessage;
+        const isEnableMessage = json?.method?.endsWith(".enable");
 
-        if (json?.method?.endsWith(".enable")) {
+        if (isEnableMessage) {
           const domain = json.method.split(".")[0];
+          const isNewDomain = !client.allowedDomains.has(domain);
           client.allowedDomains.add(domain);
-        }
+          const enableId = json.id;
 
-        if (json.id != null) {
+          if (isNewDomain) {
+            let enableFound = false;
+            for await (const historicMessage of this.readHistoricServerMessages(
+              domain,
+            )) {
+              if (!enableFound) {
+                historicMessage.startsWith(`{"id":`);
+                const json = JSON.parse(historicMessage);
+                json.id = enableId;
+                client.ws.send(JSON.stringify(json));
+              } else {
+                client.ws.send(historicMessage);
+              }
+            }
+          }
+        } else if (json.id != null) {
           const clientMsgId = json.id;
           json.id = ++this.internalMessageId;
           this.pendingMessages.set(json.id, {
@@ -203,13 +214,28 @@ export abstract class CDPServer {
             clientId: clientId,
           });
         }
-        await this.handleClientMessage(clientWs, json);
+        await this.handleClientMessage(json);
       });
 
       clientWs.on("close", () => {
         this.removeClient(clientId);
       });
     });
+  }
+
+  async *readHistoricServerMessages(domain: string) {
+    const fileStream = createReadStream(this.logFile);
+    const rl = createInterface({ input: fileStream });
+
+    for await (const line of rl) {
+      //* Matches CDP messages starting with {"method":"domain. or {"id": number, "method":"domain.
+      const regex = new RegExp(
+        `^\\{"(?:id":\\s*\\d+,\\s*)?method":"${domain}\\.`,
+      );
+      if (regex.test(line)) {
+        yield line;
+      }
+    }
   }
 
   private removeClient(clientId: string): void {
@@ -228,8 +254,9 @@ export abstract class CDPServer {
   protected async handleInspectorMessage(data: ServerCDPMessage) {
     try {
       const messageDomain = data.method?.split(".")?.[0];
+      const isEnableResponse = data.method?.endsWith(".enable");
 
-      if (data.id == null) {
+      if (data.id == null || isEnableResponse) {
         await fs.promises.appendFile(this.logFile, `${JSON.stringify(data)}\n`);
 
         for (const [_clientId, client] of this.connectedClients) {
@@ -256,10 +283,7 @@ export abstract class CDPServer {
     }
   }
 
-  abstract handleClientMessage(
-    ws: WsWebSocket,
-    data: ClientCDPMessage,
-  ): Promise<void>;
+  abstract handleClientMessage(data: ClientCDPMessage): Promise<void>;
 
   public handleUpgrade(request: any, socket: any, head: any): void {
     try {

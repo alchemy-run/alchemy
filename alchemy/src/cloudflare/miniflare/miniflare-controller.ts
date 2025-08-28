@@ -67,7 +67,7 @@ export class MiniflareController {
           payload: {
             options: {
               name: scope.shortFqn(),
-              hotDomains: ["Runtime", "Console", "Debugger", "Network"],
+              hotDomains: ["Network", "Runtime", "Debugger", "Profiler"],
             },
             inspectorUrl: `ws://localhost:${this.inspectorPort}/${input.name}`,
           },

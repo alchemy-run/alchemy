@@ -9,6 +9,7 @@ export class CDPProxy extends CDPServer {
   private inspectorUrl: string;
   private inspectorWs?: WebSocket;
   private onStartMessageQueue: Array<ClientCDPMessage>;
+  private enabledDomains: Set<string> = new Set();
 
   constructor(
     inspectorUrl: string,
@@ -17,7 +18,7 @@ export class CDPProxy extends CDPServer {
       hotDomains?: Array<string>;
     },
   ) {
-    super({ ...options, domains: options.domains ?? options.hotDomains });
+    super(options);
     this.inspectorUrl = inspectorUrl;
     this.onStartMessageQueue = [];
     for (const domain of options.hotDomains ?? []) {
@@ -42,17 +43,18 @@ export class CDPProxy extends CDPServer {
       },
     });
 
-    this.inspectorWs.onopen = async () => {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      for (const message of this.onStartMessageQueue) {
-        this.internalHandleClientMessage(message);
-      }
-    };
-
     this.inspectorWs.onmessage = async (event) => {
+      console.log("==>", event.data.toString());
       await this.handleInspectorMessage(
         JSON.parse(event.data.toString()) as ServerCDPMessage,
       );
+    };
+
+    this.inspectorWs.onopen = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      for (const message of this.onStartMessageQueue) {
+        this.handleClientMessage(message);
+      }
     };
 
     this.inspectorWs.onclose = (ev) => {
@@ -64,10 +66,7 @@ export class CDPProxy extends CDPServer {
     };
   }
 
-  async handleClientMessage(
-    _ws: WebSocket,
-    data: ClientCDPMessage,
-  ): Promise<void> {
+  async handleClientMessage(data: ClientCDPMessage): Promise<void> {
     if (
       this.inspectorWs == null ||
       this.inspectorWs.readyState !== WebSocket.OPEN
@@ -86,9 +85,19 @@ export class CDPProxy extends CDPServer {
     data: ClientCDPMessage,
   ): Promise<void> {
     const messageDomain = data.method?.split(".")?.[0];
-    if (messageDomain != null && !this.domains.includes(messageDomain)) {
-      return;
+
+    if (data.method?.endsWith(".enable") && messageDomain) {
+      if (this.enabledDomains.has(messageDomain)) {
+        return;
+      }
+      this.enabledDomains.add(messageDomain);
+
+      if (data.id != null) {
+        data.id = ++this.internalMessageId;
+      }
     }
+
+    console.log("<==", JSON.stringify(data));
     this.inspectorWs!.send(JSON.stringify(data));
   }
 }
