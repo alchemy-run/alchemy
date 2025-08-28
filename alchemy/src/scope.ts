@@ -5,27 +5,26 @@ import pc from "picocolors";
 import type { Phase } from "./alchemy.ts";
 import { destroy, destroyAll, DestroyStrategy } from "./destroy.ts";
 import {
-  ResourceFQN,
-  ResourceID,
-  ResourceKind,
-  ResourceScope,
-  ResourceSeq,
-  type PendingResource,
-  type Resource,
-  type ResourceProps,
+	ResourceFQN,
+	ResourceID,
+	ResourceKind,
+	ResourceScope,
+	ResourceSeq,
+	type PendingResource,
+	type Resource,
+	type ResourceProps,
 } from "./resource.ts";
 import type { State, StateStore, StateStoreType } from "./state.ts";
-import { D1StateStore } from "./state/d1-state-store.ts";
 import { FileSystemStateStore } from "./state/file-system-state-store.ts";
 import { InstrumentedStateStore } from "./state/instrumented-state-store.ts";
 import {
-  createDummyLogger,
-  createLoggerInstance,
-  type LoggerApi,
+	createDummyLogger,
+	createLoggerInstance,
+	type LoggerApi,
 } from "./util/cli.ts";
 import {
-  idempotentSpawn,
-  type IdempotentSpawnOptions,
+	idempotentSpawn,
+	type IdempotentSpawnOptions,
 } from "./util/idempotent-spawn.ts";
 import { logger } from "./util/logger.ts";
 import { AsyncMutex } from "./util/mutex.ts";
@@ -85,6 +84,12 @@ export interface ScopeOptions extends ProviderCredentials {
    */
   dotAlchemy?: string;
   /**
+   * Whether to adopt resources if they already exist but are not yet managed by your Alchemy app.
+   *
+   * @default false
+   */
+  adopt?: boolean;
+  /**
    * The URL of the CDP manager to use for the scope.
    */
   cdpManagerUrl?: string;
@@ -127,7 +132,6 @@ export const DEFAULT_STAGE =
 
 declare global {
   var __ALCHEMY_STORAGE__: AsyncLocalStorage<Scope>;
-  var __ALCHEMY_GLOBALS__: Scope[];
 }
 
 const ScopeSymbol = Symbol.for("alchemy::Scope");
@@ -143,17 +147,9 @@ export class Scope {
 
   public static storage = (globalThis.__ALCHEMY_STORAGE__ ??=
     new AsyncLocalStorage<Scope>());
-  public static globals: Scope[] = (globalThis.__ALCHEMY_GLOBALS__ ??= []);
 
   public static getScope(): Scope | undefined {
-    const scope = Scope.storage.getStore();
-    if (!scope) {
-      if (Scope.globals.length > 0) {
-        return Scope.globals[Scope.globals.length - 1];
-      }
-      return undefined;
-    }
-    return scope;
+    return Scope.storage.getStore();
   }
 
   public static get root(): Scope {
@@ -180,11 +176,13 @@ export class Scope {
   public readonly local: boolean;
   public readonly watch: boolean;
   public readonly force: boolean;
+  public readonly adopt: boolean;
   public readonly destroyStrategy: DestroyStrategy;
   public readonly logger: LoggerApi;
   public readonly telemetryClient: ITelemetryClient;
   public readonly dataMutex: AsyncMutex;
   public readonly cdpManagerUrl: string | undefined;
+  public readonly dotAlchemy: string;
 
   // Provider credentials for scope-level credential overrides
   public readonly providerCredentials: ProviderCredentials;
@@ -203,8 +201,6 @@ export class Scope {
     return this.scopeName;
   }
 
-  public readonly dotAlchemy: string;
-
   constructor(options: ScopeOptions) {
     // Extract core scope options first
     const {
@@ -221,10 +217,16 @@ export class Scope {
       destroyStrategy,
       telemetryClient,
       logger,
+      adopt,
       dotAlchemy,
       cdpManagerUrl,
       ...providerCredentials
     } = options;
+
+    this.dotAlchemy =
+      dotAlchemy ??
+      this.parent?.dotAlchemy ??
+      path.join(process.cwd(), ".alchemy");
 
     this.scopeName = scopeName;
     this.name = this.scopeName;
@@ -274,6 +276,7 @@ export class Scope {
     this.local = local ?? this.parent?.local ?? false;
     this.watch = watch ?? this.parent?.watch ?? false;
     this.force = force ?? this.parent?.force ?? false;
+    this.adopt = adopt ?? this.parent?.adopt ?? false;
     this.destroyStrategy =
       destroyStrategy ?? this.parent?.destroyStrategy ?? "sequential";
     if (this.local) {
@@ -283,7 +286,9 @@ export class Scope {
     }
 
     this.stateStore =
-      stateStore ?? this.parent?.stateStore ?? defaultStateStore;
+      stateStore ??
+      this.parent?.stateStore ??
+      ((scope) => new FileSystemStateStore(scope));
     this.telemetryClient = telemetryClient ?? this.parent?.telemetryClient!;
     this.state = new InstrumentedStateStore(
       this.stateStore(this),
@@ -295,6 +300,19 @@ export class Scope {
     this.dataMutex = new AsyncMutex();
   }
 
+  public async has(id: string, type?: string): Promise<boolean> {
+    const state = await this.state.get(id);
+    return state !== undefined && (type === undefined || state.kind === type);
+  }
+
+  public createPhysicalName(id: string, delimiter = "-"): string {
+    const app = this.appName;
+    const stage = this.stage;
+    return [app, ...this.chain.slice(2), id, stage]
+      .map((s) => s.replaceAll(/[^a-z0-9_-]/gi, delimiter))
+      .join(delimiter);
+  }
+
   public async spawn<
     E extends ((line: string) => string | undefined) | undefined,
   >(
@@ -302,9 +320,8 @@ export class Scope {
     id: string,
     options: Omit<IdempotentSpawnOptions, "log" | "stateFile">,
   ): Promise<E extends undefined ? undefined : string> {
-    const dotAlchemy = path.join(process.cwd(), ".alchemy");
-    const logsDir = path.join(dotAlchemy, "logs");
-    const pidsDir = path.join(dotAlchemy, "pids");
+    const logsDir = path.join(this.dotAlchemy, "logs");
+    const pidsDir = path.join(this.dotAlchemy, "pids");
 
     const result = await idempotentSpawn({
       log: path.join(logsDir, `${id}.log`),
@@ -500,9 +517,9 @@ export class Scope {
     return null;
   }
 
-  public async finalize(force?: boolean) {
+  public async finalize(options?: { force?: boolean; noop?: boolean }) {
     const shouldForce =
-      force ||
+      options?.force ||
       this.parent === undefined ||
       this?.parent?.scopeName === this.root.scopeName;
     if (this.phase === "read") {
@@ -514,14 +531,6 @@ export class Scope {
     }
     if (this.finalized && !shouldForce) {
       return;
-    }
-    if (this.parent === undefined && Scope.globals.length > 0) {
-      const last = Scope.globals.pop();
-      if (last !== this) {
-        throw new Error(
-          "Running in AsyncLocaStorage.enterWith emulation mode and attempted to finalize a global Scope that wasn't top of the stack",
-        );
-      }
     }
     this.finalized = true;
     // trigger and await all deferred promises
@@ -539,7 +548,10 @@ export class Scope {
         await this.destroyPendingDeletions();
         await Promise.all(
           Array.from(this.children.values()).map((child) =>
-            child.finalize(shouldForce),
+            child.finalize({
+              force: shouldForce,
+              noop: options?.noop,
+            }),
           ),
         );
       }
@@ -560,6 +572,7 @@ export class Scope {
         quiet: this.quiet,
         strategy: this.destroyStrategy,
         force: shouldForce,
+        noop: options?.noop,
       });
       this.rootTelemetryClient?.record({
         event: "app.success",
@@ -685,15 +698,6 @@ export class Scope {
 )`;
   }
 }
-
-const defaultStateStore: StateStoreType = (scope: Scope) => {
-  switch (process.env.ALCHEMY_STATE_STORE) {
-    case "d1":
-      return new D1StateStore(scope);
-    default:
-      return new FileSystemStateStore(scope);
-  }
-};
 
 declare global {
   // for runtime

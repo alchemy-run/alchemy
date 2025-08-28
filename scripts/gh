@@ -1,6 +1,7 @@
 #!/bin/bash
 
 if [[ "$1" == "pr" && "$2" == "checkout" ]]; then
+  pr=$3
   git worktree add ../alchemy-$pr
   cd ../alchemy-$pr
   gh pr checkout $pr

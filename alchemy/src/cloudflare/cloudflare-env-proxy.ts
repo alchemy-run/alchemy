@@ -31,7 +31,7 @@ export const getPlatformProxyOptions = (
         };
   if (!persist) {
     const message =
-      "[Alchemy] Persistence for local bindings is disabled. Some bindings may not work as expected. To enable, remove the \`persist\` option from getPlatformProxyOptions.";
+      "[Alchemy] Persistence for local bindings is disabled. Some bindings may not work as expected. To enable, remove the `persist` option from getPlatformProxyOptions.";
     if (!warned.has(message)) {
       console.warn(message);
       warned.add(message);

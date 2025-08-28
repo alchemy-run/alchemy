@@ -79,12 +79,12 @@ export async function addGitHubWorkflowToAlchemy(
           },
         },
         concurrency: {
-          group: "pr-preview-\${{ github.event.pull_request.number }}",
+          group: "pr-preview-${{ github.event.pull_request.number }}",
           "cancel-in-progress": false,
         },
         jobs: {
           "deploy-preview": {
-            if: "\${{ github.event.action != 'closed' }}",
+            if: "${{ github.event.action != 'closed' }}",
             "runs-on": "ubuntu-latest",
             permissions: {
               contents: "read",

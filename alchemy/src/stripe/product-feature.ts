@@ -97,7 +97,7 @@ export const ProductFeature = Resource(
     _id: string,
     props: ProductFeatureProps,
   ): Promise<ProductFeature> {
-    const stripe = createStripeClient({ apiKey: props.apiKey });
+    const stripe = await createStripeClient({ apiKey: props.apiKey });
 
     if (this.phase === "delete") {
       try {
@@ -124,7 +124,10 @@ export const ProductFeature = Resource(
             entitlement_feature: props.entitlementFeature,
           });
         } catch (error) {
-          if (isStripeConflictError(error) && props.adopt) {
+          if (
+            isStripeConflictError(error) &&
+            (props.adopt ?? this.scope.adopt)
+          ) {
             throw new Error(
               "ProductFeature adoption is not supported - product features cannot be uniquely identified for adoption",
             );

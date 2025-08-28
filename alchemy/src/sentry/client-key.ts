@@ -10,6 +10,8 @@ import { SentryApi } from "./api.ts";
 export interface ClientKeyProps {
   /**
    * The name of the key
+   *
+   * @default ${app}-${stage}-${id}
    */
   name?: string;
 
@@ -67,6 +69,11 @@ export interface ClientKey
    * The ID of the key
    */
   id: string;
+
+  /**
+   * Name of the Client Key.
+   */
+  name: string;
 
   /**
    * The label of the key
@@ -180,10 +187,44 @@ export const ClientKey = Resource(
   "sentry::ClientKey",
   async function (
     this: Context<ClientKey>,
-    _id: string,
+    id: string,
     props: ClientKeyProps,
   ): Promise<ClientKey> {
     const api = new SentryApi({ authToken: props.authToken });
+
+    // it's possible that `this.output.name` is undefined because a previous version
+    // of alchemy had a bug where it didn't set the name on the output
+    // so, we try to find the key by ID and use the name from the API response
+    const lookupName = async () => {
+      if (!this.output?.id) {
+        // not running in the update phase
+        return undefined;
+      } else if (this.output.name) {
+        return this.output.name;
+      }
+      const name = (
+        await getClientKeyName(api, {
+          organization: props.organization,
+          project: props.project,
+          keyId: this.output.id,
+        })
+      )?.name;
+
+      if (name) {
+        this.output.name = name;
+      }
+
+      return name;
+    };
+
+    const clientKeyName =
+      props.name ?? (await lookupName()) ?? this.scope.createPhysicalName(id);
+
+    if (this.phase === "update") {
+      if (this.output.name !== clientKeyName) {
+        this.replace();
+      }
+    }
 
     if (this.phase === "delete") {
       try {
@@ -217,24 +258,24 @@ export const ClientKey = Resource(
           } catch (error) {
             // Check if this is a "key already exists" error and adopt is enabled
             if (
-              props.adopt &&
+              (props.adopt ?? this.scope.adopt) &&
               error instanceof Error &&
               error.message.includes("already exists") &&
-              props.name
+              clientKeyName
             ) {
               logger.log(
-                `Client key '${props.name}' already exists, adopting it`,
+                `Client key '${clientKeyName}' already exists, adopting it`,
               );
               // Find the existing key by name
               const existingKey = await findClientKeyByName(
                 api,
                 props.organization,
                 props.project,
-                props.name,
+                clientKeyName,
               );
               if (!existingKey) {
                 throw new Error(
-                  `Failed to find existing client key '${props.name}' for adoption`,
+                  `Failed to find existing client key '${clientKeyName}' for adoption`,
                 );
               }
               response = await api.get(
@@ -257,6 +298,7 @@ export const ClientKey = Resource(
         return this({
           ...props,
           id: data.id,
+          name: clientKeyName,
           label: data.label,
           public: data.public,
           secret: data.secret,
@@ -293,4 +335,30 @@ async function findClientKeyByName(
   const keys = (await response.json()) as Array<{ id: string; name: string }>;
   const key = keys.find((k) => k.name === name);
   return key ? { id: key.id } : null;
+}
+
+/**
+ * Find a client key by ID
+ */
+async function getClientKeyName(
+  api: SentryApi,
+  {
+    organization,
+    project,
+    keyId,
+  }: {
+    organization: string;
+    project: string;
+    keyId: string;
+  },
+): Promise<{ id: string; name: string } | null> {
+  const response = await api.get(
+    `/projects/${organization}/${project}/keys/${keyId}`,
+  );
+  if (!response.ok) {
+    throw new Error(`API error: ${response.statusText}`);
+  }
+
+  const key = (await response.json()) as { id: string; name: string };
+  return key ? { id: key.id, name: key.name } : null;
 }

@@ -23,8 +23,10 @@ export interface VolumeLabel {
 export interface VolumeProps {
   /**
    * Volume name
+   *
+   * @default ${app}-${stage}-${id}
    */
-  name: string;
+  name?: string;
 
   /**
    * Volume driver to use
@@ -51,6 +53,11 @@ export interface Volume extends Resource<"docker::Volume">, VolumeProps {
    * Volume ID (same as name for Docker volumes)
    */
   id: string;
+
+  /**
+   * Volume name
+   */
+  name: string;
 
   /**
    * Volume mountpoint path on the host
@@ -94,11 +101,14 @@ export const Volume = Resource(
   "docker::Volume",
   async function (
     this: Context<Volume>,
-    _id: string,
+    id: string,
     props: VolumeProps,
   ): Promise<Volume> {
     // Initialize Docker API client
     const api = new DockerApi();
+
+    const volumeName =
+      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
 
     // Process labels to ensure consistent format
     const processedLabels: Record<string, string> = {};
@@ -129,21 +139,22 @@ export const Volume = Resource(
       const driverOpts = props.driverOpts || {};
 
       // Create the volume
-      const volumeName = await api.createVolume(
-        props.name,
+      const volumeId = await api.createVolume(
+        volumeName,
         props.driver,
         driverOpts,
         processedLabels,
       );
 
       // Get volume details to retrieve mountpoint
-      const volumeInfos = await api.inspectVolume(volumeName);
+      const volumeInfos = await api.inspectVolume(volumeId);
       const mountpoint = volumeInfos[0].Mountpoint;
 
       // Return the resource using this() to construct output
       return this({
         ...props,
-        id: volumeName,
+        id: volumeId,
+        name: volumeName,
         mountpoint,
         createdAt: Date.now(),
         labels: Array.isArray(props.labels) ? props.labels : undefined,

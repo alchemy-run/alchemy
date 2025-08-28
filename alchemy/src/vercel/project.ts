@@ -47,8 +47,10 @@ export interface ProjectProps {
    *
    * Maximum length: `100`
    * Example: `a-project-name`
+   *
+   * @default ${app}-${stage}-${id}
    */
-  name: string;
+  name?: string;
 
   /**
    * Opt-in to preview toolbar on the project level
@@ -245,6 +247,11 @@ export interface Project extends Resource<"vercel::Project">, ProjectProps {
   id: string;
 
   /**
+   * The name for the project
+   */
+  name: string;
+
+  /**
    * The account ID that the project belongs to
    */
   accountId: string;
@@ -369,6 +376,31 @@ export const Project = Resource(
     id: string,
     { accessToken, ...props }: ProjectProps & { accessToken?: Secret },
   ): Promise<Project> {
+    // it's possible that `this.output.name` is undefined because a previous version
+    // of alchemy had a bug where it didn't set the name on the output
+    // so, we try to find the project by ID and use the name from the API response
+    const lookupName = async () => {
+      if (!this.output) {
+        return undefined;
+      } else if (this.output.name) {
+        return this.output.name;
+      }
+      const name = await getProjectName(
+        await createVercelApi({
+          baseUrl: "https://api.vercel.com/v9",
+          accessToken,
+        }),
+        this.output.id,
+      );
+      if (name) {
+        this.output.name = name;
+      }
+      return name;
+    };
+
+    const projectName =
+      props.name ?? (await lookupName()) ?? this.scope.createPhysicalName(id);
+
     switch (this.phase) {
       case "delete": {
         const api = await createVercelApi({
@@ -423,6 +455,7 @@ export const Project = Resource(
 
         return this({
           id: data.id,
+          name: projectName,
           accountId: data.accountId,
           createdAt: data.createdAt,
           updatedAt: data.updatedAt,
@@ -491,4 +524,16 @@ export async function updateEnvironmentVariables(
 
     await api.delete(`/projects/${output.id}/env/${previousEnv.id}`);
   }
+}
+
+async function getProjectName(
+  api: VercelApi,
+  id: string,
+): Promise<string | undefined> {
+  const response = await api.get(`/v9/projects/${id}`);
+  if (!response.ok) {
+    throw new Error(`API error: ${response.statusText}`);
+  }
+
+  return ((await response.json()) as { name: string }).name;
 }

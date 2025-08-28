@@ -1,7 +1,7 @@
 import z from "zod";
 
 export const TEMPLATE_DEFINITIONS = [
-  { name: "typescript", description: "TypeScript Worker" },
+  { name: "hono", description: "Hono" },
   { name: "vite", description: "React Vite" },
   { name: "astro", description: "Astro SSR" },
   { name: "react-router", description: "React Router" },
@@ -9,6 +9,7 @@ export const TEMPLATE_DEFINITIONS = [
   { name: "tanstack-start", description: "TanStack Start" },
   { name: "rwsdk", description: "Redwood SDK" },
   { name: "nuxt", description: "Nuxt.js" },
+  { name: "typescript", description: "TypeScript Worker" },
 ] as const;
 
 export type TemplateType = (typeof TEMPLATE_DEFINITIONS)[number]["name"];

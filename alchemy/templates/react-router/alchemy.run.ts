@@ -5,9 +5,7 @@ import { ReactRouter } from "alchemy/cloudflare";
 
 const app = await alchemy("{projectName}");
 
-export const worker = await ReactRouter("website", {
-  name: `${app.name}-${app.stage}-website`,
-});
+export const worker = await ReactRouter("website");
 
 console.log({
   url: worker.url,

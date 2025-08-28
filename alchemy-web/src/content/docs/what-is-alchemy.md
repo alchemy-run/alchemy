@@ -231,10 +231,15 @@ const bucket = await R2Bucket("my-bucket", {
 });
 ```
 
+You can also use `--adopt` to adopt all resources without changing code:
+```sh
+alchemy deploy --adopt
+```
+
 This is useful when you want to manage existing infrastructure with Alchemy.
 
 :::tip
-See the [Resource Adoption](/concepts/adoption) documentation for more information.
+See the [Resource Adoption](/concepts/resource#adoption) documentation for more information.
 :::
 
 ## Resource Replacement
@@ -256,7 +261,7 @@ const bucket = await R2Bucket("data", {
 The replacement happens seamlessly - downstream resources are updated to reference the new resource before the old one is deleted.
 
 :::tip
-See the [Resource Replacement](/concepts/replace) documentation for more information.
+See the [Resource Replacement](/concepts/resource#replacement) documentation for more information.
 :::
 
 ## Custom Resources

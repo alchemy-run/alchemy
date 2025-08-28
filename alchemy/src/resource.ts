@@ -59,7 +59,6 @@ export const ResourceFQN = Symbol.for("alchemy::ResourceFQN");
 export type ResourceKind = string;
 export const ResourceKind = Symbol.for("alchemy::ResourceKind");
 export const ResourceScope = Symbol.for("alchemy::ResourceScope");
-export const InnerResourceScope = Symbol.for("alchemy::InnerResourceScope");
 export const ResourceSeq = Symbol.for("alchemy::ResourceSeq");
 
 export interface ProviderOptions {
@@ -97,7 +96,6 @@ export interface PendingResource<Out = unknown> extends Promise<Out> {
   [ResourceScope]: Scope;
   [ResourceSeq]: number;
   [DestroyStrategy]: DestroyStrategy;
-  [InnerResourceScope]: Promise<Scope>;
 }
 
 export interface Resource<Kind extends ResourceKind = ResourceKind> {
@@ -187,7 +185,6 @@ export function Resource<
 
     // get a sequence number (unique within the scope) for the resource
     const seq = scope.seq();
-    let resolveInnerScope: ((scope: Scope) => void) | undefined;
     const meta = {
       [ResourceKind]: type,
       [ResourceID]: resourceID,
@@ -195,14 +192,8 @@ export function Resource<
       [ResourceSeq]: seq,
       [ResourceScope]: scope,
       [DestroyStrategy]: options?.destroyStrategy ?? "sequential",
-      [InnerResourceScope]: new Promise<Scope>((resolve) => {
-        resolveInnerScope = resolve;
-      }),
     } as any as PendingResource<Out>;
-    const promise = apply(meta, props, {
-      ...options,
-      resolveInnerScope,
-    });
+    const promise = apply(meta, props, options);
     const resource = Object.assign(promise, meta);
     scope.resources.set(resourceID, resource);
     return resource;

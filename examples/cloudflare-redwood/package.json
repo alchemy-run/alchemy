@@ -26,7 +26,7 @@
     "alchemy": "workspace:*",
     "dotenv": "^16.5.0",
     "drizzle-orm": "^0.44.2",
-    "rwsdk": "^0.1.35"
+    "rwsdk": "^0.1.36"
   },
   "devDependencies": {
     "@types/node": "^22.14.1",
@@ -34,7 +34,7 @@
     "@types/react-dom": "^19.1.2",
     "drizzle-kit": "^0.31.4",
     "tsx": "^4.19.3",
-    "vite": "^6.3.2",
+    "vite": "catalog:",
     "wrangler": "^4.12.1"
   }
 }

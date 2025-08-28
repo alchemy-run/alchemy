@@ -12,12 +12,15 @@
     "check": "nuxt prepare && nuxt build"
   },
   "dependencies": {
-    "@cloudflare/workers-types": "^4.20250805.0",
+    "@cloudflare/workers-types": "catalog:",
     "alchemy": "workspace:*",
     "cloudflare": "^4.2.0",
     "nuxt": "^4.0.1",
-    "vite": "^6.0.0",
+    "vite": "catalog:",
     "vue": "^3.5.13",
     "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "h3": "^1.15.4"
   }
 }

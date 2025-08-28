@@ -14,8 +14,10 @@ import {
 export interface VectorizeIndexProps extends CloudflareApiOptions {
   /**
    * Name of the index
+   *
+   * @default ${app}-${stage}-${id}
    */
-  name: string;
+  name?: string;
 
   /**
    * Optional description of the index
@@ -67,6 +69,11 @@ export interface VectorizeIndex
    * The unique identifier for the index (same as name)
    */
   id: string;
+
+  /**
+   * Name of the Vectorize Index.
+   */
+  name: string;
 
   /**
    * Time at which the index was created
@@ -121,7 +128,8 @@ export const VectorizeIndex = Resource(
     props: VectorizeIndexProps,
   ): Promise<VectorizeIndex> {
     const api = await createCloudflareApi(props);
-    const indexName = props.name || id;
+    const indexName =
+      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
 
     if (this.phase === "delete") {
       logger.log("Deleting Vectorize index:", indexName);
@@ -145,7 +153,7 @@ export const VectorizeIndex = Resource(
       } catch (error) {
         // Check if this is a "index already exists" error and adopt is enabled
         if (
-          props.adopt &&
+          (props.adopt ?? this.scope.adopt) &&
           error instanceof CloudflareApiError &&
           error.message.includes("vectorize.index.duplicate_name")
         ) {
@@ -158,6 +166,9 @@ export const VectorizeIndex = Resource(
         }
       }
     } else {
+      if (this.output.name !== indexName) {
+        return this.replace();
+      }
       if (props.delete !== this.props.delete) {
         // Only allow changing the delete property
         if (!this.quiet) {

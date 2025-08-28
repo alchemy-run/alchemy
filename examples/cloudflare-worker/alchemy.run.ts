@@ -5,7 +5,6 @@ import {
   R2Bucket,
   Worker,
   Workflow,
-  WranglerJson,
 } from "alchemy/cloudflare";
 import type { HelloWorldDO } from "./src/do.ts";
 import type MyRPC from "./src/rpc.ts";
@@ -24,6 +23,7 @@ export const rpc = await Worker("rpc", {
   name: `${app.name}-${app.stage}-rpc`,
   entrypoint: "./src/rpc.ts",
   rpc: type<MyRPC>,
+  adopt: true,
 });
 
 export const worker = await Worker("worker", {
@@ -53,10 +53,6 @@ export const worker = await Worker("worker", {
     target: "es2020",
   },
   adopt: true,
-});
-
-await WranglerJson("wrangler.jsonc", {
-  worker,
 });
 
 console.log(worker.url);

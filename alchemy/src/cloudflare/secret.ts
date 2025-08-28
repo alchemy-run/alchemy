@@ -13,41 +13,21 @@ import {
 import { findSecretsStoreByName, SecretsStore } from "./secrets-store.ts";
 
 /**
- * Properties for creating or updating a Secret in a Secrets Store (internal interface)
- */
-interface _SecretProps extends CloudflareApiOptions {
-  /**
-   * The secrets store to add this secret to
-   *
-   * @default - the default-secret-store
-   */
-  store?: SecretsStore<any>;
-
-  /**
-   * The secret value to store (must be an AlchemySecret for security)
-   */
-  value: AlchemySecret;
-
-  /**
-   * Whether to delete the secret.
-   * If set to false, the secret will remain but the resource will be removed from state
-   *
-   * @default true
-   */
-  delete?: boolean;
-}
-
-/**
  * Properties for creating or updating a Secret in a Secrets Store (public interface)
  */
 export interface SecretProps extends CloudflareApiOptions {
   /**
+   * Name for the Secret.
+   *
+   * @default ${app}-${stage}-${id}
+   */
+  name?: string;
+  /**
    * The secrets store to add this secret to
    *
    * @default - the default-secret-store
    */
   store?: SecretsStore<any>;
-
   /**
    * The secret value to store
    * Can be a string or an existing Secret instance
@@ -76,7 +56,7 @@ export function isSecret(resource: Resource): resource is Secret {
 }
 
 export type Secret = Resource<"cloudflare::Secret"> &
-  Omit<_SecretProps, "delete"> & {
+  Omit<SecretProps, "delete" | "value"> & {
     /**
      * The binding type for Cloudflare Workers
      */
@@ -177,10 +157,19 @@ const _Secret = Resource(
   "cloudflare::Secret",
   async function (
     this: Context<Secret>,
-    name: string,
-    props: _SecretProps,
+    id: string,
+    props: SecretProps & {
+      value: AlchemySecret;
+    },
   ): Promise<Secret> {
     const api = await createCloudflareApi(props);
+
+    const secretName =
+      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
+
+    if (this.phase === "update" && this.output.name !== secretName) {
+      this.replace();
+    }
 
     const storeId =
       props.store?.id ??
@@ -195,7 +184,7 @@ const _Secret = Resource(
 
     if (this.phase === "delete") {
       if (props.delete !== false) {
-        await deleteSecret(api, storeId, name);
+        await deleteSecret(api, storeId, secretName);
       }
       return this.destroy();
     }
@@ -206,11 +195,11 @@ const _Secret = Resource(
         : Date.now();
 
     // Insert or update the secret
-    await insertSecret(api, storeId, name, props.value);
+    await insertSecret(api, storeId, secretName, props.value);
 
     return this({
       type: "secrets_store_secret",
-      name,
+      name: secretName,
       storeId,
       store: props.store,
       value: props.value,

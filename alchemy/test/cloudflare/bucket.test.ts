@@ -4,6 +4,8 @@ import { alchemy } from "../../src/alchemy.ts";
 import { createCloudflareApi } from "../../src/cloudflare/api.ts";
 import {
   getBucket,
+  getBucketLifecycleRules,
+  getBucketLockRules,
   listBuckets,
   listObjects,
   R2Bucket,
@@ -72,6 +74,7 @@ describe("R2 Bucket Resource", async () => {
   test("bucket with jurisdiction", async (scope) => {
     const api = await createCloudflareApi();
     const euBucketName = `${testId}-eu`;
+    const workerName = `${BRANCH_PREFIX}-test-worker-eu-bucket-1`;
     let euBucket: R2Bucket | undefined;
     try {
       euBucket = await R2Bucket(euBucketName, {
@@ -88,6 +91,20 @@ describe("R2 Bucket Resource", async () => {
         jurisdiction: "eu",
       });
       expect(gotBucket.name).toEqual(euBucketName);
+
+      await Worker("worker", {
+        name: workerName,
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              return new Response(JSON.stringify(env.euBucket.name), { status: 200 });
+            }
+          }
+        `,
+        bindings: {
+          euBucket,
+        },
+      });
 
       // Note: S3 API doesn't expose jurisdiction info, so we can't verify that aspect
     } finally {
@@ -146,23 +163,33 @@ describe("R2 Bucket Resource", async () => {
     }
   });
 
-  test("should throw error when trying to change bucket name during update", async (_scope) => {
+  test("should replace when trying to change bucket name during update", async (scope) => {
     const nameChangeTestId = `${testId}-name-change`;
+    let originalBucket: R2Bucket | undefined;
+    let changedBucket: R2Bucket | undefined;
+    try {
+      originalBucket = await R2Bucket(nameChangeTestId, {
+        name: `${nameChangeTestId}-original`,
+        adopt: true,
+      });
 
-    const bucket = await R2Bucket(nameChangeTestId, {
-      name: `${nameChangeTestId}-original`,
-      adopt: true,
-    });
+      expect(originalBucket.name).toEqual(`${nameChangeTestId}-original`);
 
-    expect(bucket.name).toEqual(`${nameChangeTestId}-original`);
-
-    await expect(
-      R2Bucket(nameChangeTestId, {
+      changedBucket = await R2Bucket(nameChangeTestId, {
         name: `${nameChangeTestId}-changed`,
-      }),
-    ).rejects.toThrow(
-      "Cannot update R2Bucket name after creation. Bucket name is immutable.",
-    );
+        adopt: true,
+      });
+
+      expect(changedBucket.name).toEqual(`${nameChangeTestId}-changed`);
+
+      // should be replaced
+      await assertBucketDeleted(originalBucket);
+    } finally {
+      await destroy(scope);
+      if (changedBucket) {
+        await assertBucketDeleted(changedBucket);
+      }
+    }
   });
 
   test("create and delete worker with R2 bucket binding", async (scope) => {
@@ -286,6 +313,113 @@ describe("R2 Bucket Resource", async () => {
       expect(getResponse.headers.get("Access-Control-Allow-Methods")).toEqual(
         "GET",
       );
+    } finally {
+      await destroy(scope);
+    }
+  });
+
+  test("bucket with lifecycle rules", async (scope) => {
+    const bucketName = `${BRANCH_PREFIX.toLowerCase()}-test-bucket-with-lifecycle`;
+
+    try {
+      let bucket = await R2Bucket(bucketName, {
+        name: bucketName,
+        adopt: true,
+        lifecycle: [
+          {
+            id: "abort-mpu-7d",
+            conditions: { prefix: "" },
+            enabled: true,
+            abortMultipartUploadsTransition: {
+              condition: { type: "Age", maxAge: 7 * 24 * 60 * 60 },
+            },
+          },
+          {
+            id: "delete-30d",
+            conditions: { prefix: "archive/" },
+            deleteObjectsTransition: {
+              condition: { type: "Age", maxAge: 30 * 24 * 60 * 60 },
+            },
+          },
+          {
+            id: "ia-60d",
+            conditions: { prefix: "cold/" },
+            storageClassTransitions: [
+              {
+                condition: { type: "Age", maxAge: 60 * 24 * 60 * 60 },
+                storageClass: "InfrequentAccess",
+              },
+            ],
+          },
+        ],
+      });
+
+      await new Promise((r) => setTimeout(r, 1000));
+      const rules = await getBucketLifecycleRules(api, bucketName, bucket);
+
+      const ids = rules.map((r: any) => r.id).filter(Boolean);
+      expect(ids).toContain("abort-mpu-7d");
+      expect(ids).toContain("delete-30d");
+      expect(ids).toContain("ia-60d");
+
+      // Now clear lifecycle rules and verify removal
+      bucket = await R2Bucket(bucketName, {
+        name: bucketName,
+        adopt: true,
+        lifecycle: [],
+      });
+      await new Promise((r) => setTimeout(r, 1000));
+      const cleared = await getBucketLifecycleRules(api, bucketName, bucket);
+      expect(cleared.length).toEqual(0);
+    } finally {
+      await destroy(scope);
+    }
+  });
+
+  test("bucket with lock rules", async (scope) => {
+    const bucketName = `${BRANCH_PREFIX.toLowerCase()}-test-bucket-with-lock`;
+
+    try {
+      let bucket = await R2Bucket(bucketName, {
+        name: bucketName,
+        adopt: true,
+        lock: [
+          {
+            id: "retain-7d",
+            prefix: "",
+            enabled: true,
+            condition: { type: "Age", maxAgeSeconds: 7 * 24 * 60 * 60 },
+          },
+          {
+            id: "legal-indef",
+            prefix: "legal/",
+            condition: { type: "Indefinite" },
+          },
+          {
+            id: "retain-until-2025",
+            prefix: "exports/",
+            condition: { type: "Date", date: "2025-01-01T00:00:00Z" },
+          },
+        ],
+      });
+
+      await new Promise((r) => setTimeout(r, 1000));
+      const rules = await getBucketLockRules(api, bucketName, bucket);
+
+      const ids = rules.map((r: any) => r.id).filter(Boolean);
+      expect(ids).toContain("retain-7d");
+      expect(ids).toContain("legal-indef");
+      expect(ids).toContain("retain-until-2025");
+
+      // Now clear lock rules and verify removal
+      bucket = await R2Bucket(bucketName, {
+        name: bucketName,
+        adopt: true,
+        lock: [],
+      });
+      await new Promise((r) => setTimeout(r, 1000));
+      const cleared = await getBucketLockRules(api, bucketName, bucket);
+      expect(cleared.length).toEqual(0);
     } finally {
       await destroy(scope);
     }
