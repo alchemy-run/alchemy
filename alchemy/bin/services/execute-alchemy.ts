@@ -146,6 +146,13 @@ export async function execAlchemy(
     throw new ExitSignal(1);
   }
 
+  let cdpManager: CDPManager | undefined;
+  if (shouldInspect) {
+    cdpManager = new CDPManager();
+    await cdpManager.startServer();
+    args.push(`--cdp-manager-url ${cdpManager.getUrl()}`);
+  }
+
   // Detect package manager
   const packageManager = await detectPackageManager(cwd);
   const runtime = detectRuntime();
@@ -231,22 +238,20 @@ export async function execAlchemy(
     });
   }
 
-  if (shouldInspect) {
+  if (shouldInspect && cdpManager != null) {
     const inspectorUrl = await inspectorUrlPromise;
     //* we await to make sure bun has finished printing so we don't cut if off
     if (childRuntime === "bun") {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
-    const cdpManager = new CDPManager();
-    await cdpManager.startServer();
     const rootCDPProxy = new CDPProxy(inspectorUrl, {
       name: "alchemy.run.ts",
       server: cdpManager.server,
       connect: inspectWait || inspectBrk,
-      domains:
-        childRuntime === "bun"
-          ? new Set(["Inspector", "Console", "Runtime", "Debugger", "Heap"])
-          : new Set(["Runtime", "Debugger", "Profiler", "Log"]),
+      // domains:
+      //   childRuntime === "bun"
+      //     ? ["Inspector", "Console", "Runtime", "Debugger", "Heap"]
+      //     : ["Runtime", "Debugger", "Profiler", "Log"],
     });
     await cdpManager.registerCDPServer(rootCDPProxy);
     if (inspectWait || inspectBrk) {

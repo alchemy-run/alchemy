@@ -1,8 +1,10 @@
-import fs from "node:fs";
+import fs, { createReadStream } from "node:fs";
 import { createServer, type Server } from "node:http";
+import { createInterface } from "node:readline";
 import path from "pathe";
 import { WebSocketServer, type WebSocket as WsWebSocket } from "ws";
 import { findOpenPort } from "../../../src/util/find-open-port.ts";
+import { CDPProxy } from "./cdp-proxy.ts";
 
 export const LOGS_DIRECTORY = path.join(process.cwd(), ".alchemy", "logs");
 const DEBUGGER_URLS_FILE = path.join(
@@ -36,9 +38,9 @@ export class CDPManager {
 
   public async startServer(): Promise<void> {
     this.port = await findOpenPort(1336, 65535);
-    this.url = `http://localhost:${this.port}`;
+    this.url = `http://0.0.0.0:${this.port}`;
     await new Promise<void>((resolve) => {
-      this.server.listen(this.port, () => {
+      this.server.listen(this.port, "0.0.0.0", () => {
         console.log(`[CDP-Manager] Debug server started at ${this.url}`);
         resolve();
       });
@@ -52,9 +54,44 @@ export class CDPManager {
     return this.url;
   }
 
-  private handleRequest(_req: any, res: any): void {
-    res.writeHead(404, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "Not found" }));
+  private async handleRequest(req: any, res: any): Promise<void> {
+    const url = new URL(req.url, this.url);
+    if (url.pathname.match(/^\/servers$/) && req.method === "POST") {
+      let rawBody = "";
+      req.on("data", (chunk) => {
+        rawBody += chunk.toString(); // Accumulate data chunks
+      });
+
+      req.on("end", async () => {
+        const body = JSON.parse(rawBody);
+        if (body.type == null || body.payload == null) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Invalid server type" }));
+          return;
+        }
+        switch (body.type) {
+          case "proxy": {
+            await this.registerCDPServer(
+              new CDPProxy(body.payload.inspectorUrl, {
+                ...body.payload.options,
+                server: this.server,
+              }),
+            );
+            break;
+          }
+          default: {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Invalid server type" }));
+            return;
+          }
+        }
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ success: true }));
+      });
+    } else {
+      res.writeHead(404, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Not found" }));
+    }
   }
 
   private handleUpgrade(request: any, socket: any, head: any): void {
@@ -102,50 +139,141 @@ export class CDPManager {
 
 export abstract class CDPServer {
   protected logFile: string;
-  protected domains: Set<string>;
   public readonly name: string;
   private wss: WebSocketServer;
-  //todo(michael): support multiple clients
-  private lastClient: WsWebSocket | null = null;
+  private connectedClients: Map<
+    string,
+    {
+      id: string;
+      ws: WsWebSocket;
+      allowedDomains: Set<string>;
+    }
+  > = new Map();
+  private clientCounter = 0;
+  protected pendingMessages: Map<
+    number,
+    {
+      msg: ClientCDPMessage;
+      clientMsgId: number;
+      clientId: string;
+    }
+  > = new Map();
+  protected internalMessageId: number;
 
-  constructor(options: {
-    name: string;
-    server: Server;
-    logFile?: string;
-    domains?: Set<string>;
-  }) {
-    this.domains = options.domains ?? new Set(["Log", "Debugger"]);
+  constructor(options: { name: string; server: Server; logFile?: string }) {
+    this.name = options.name.replace(/[\\/:.]/g, "-");
     this.logFile =
-      options.logFile ?? path.join(LOGS_DIRECTORY, `${options.name}.log`);
-    this.name = options.name;
+      options.logFile ?? path.join(LOGS_DIRECTORY, `${this.name}.log`);
     fs.writeFileSync(this.logFile, "");
     this.wss = new WebSocketServer({
       noServer: true,
     });
+    this.internalMessageId = 0;
 
     this.wss.on("connection", async (clientWs) => {
-      this.lastClient = clientWs;
+      const clientId = `client-${++this.clientCounter}`;
+      const client = {
+        id: clientId,
+        ws: clientWs,
+        allowedDomains: new Set<string>(),
+      };
+
+      this.connectedClients.set(clientId, client);
+
       clientWs.on("message", async (data) => {
-        await this.handleClientMessage(clientWs, data.toString());
+        const json = JSON.parse(data.toString()) as ClientCDPMessage;
+        const isEnableMessage = json?.method?.endsWith(".enable");
+
+        if (isEnableMessage) {
+          const domain = json.method.split(".")[0];
+          const isNewDomain = !client.allowedDomains.has(domain);
+          client.allowedDomains.add(domain);
+          const enableId = json.id;
+
+          if (isNewDomain) {
+            let enableFound = false;
+            for await (const historicMessage of this.readHistoricServerMessages(
+              domain,
+            )) {
+              if (!enableFound) {
+                historicMessage.startsWith(`{"id":`);
+                const json = JSON.parse(historicMessage);
+                json.id = enableId;
+                client.ws.send(JSON.stringify(json));
+              } else {
+                client.ws.send(historicMessage);
+              }
+            }
+          }
+        } else if (json.id != null) {
+          const clientMsgId = json.id;
+          json.id = ++this.internalMessageId;
+          this.pendingMessages.set(json.id, {
+            msg: json,
+            clientMsgId,
+            clientId: clientId,
+          });
+        }
+        await this.handleClientMessage(clientId, json);
       });
 
-      clientWs.on("close", () => {});
+      clientWs.on("close", () => {
+        this.removeClient(clientId);
+      });
     });
   }
 
-  protected async handleInspectorMessage(data: string) {
-    try {
-      const message = JSON.parse(data);
-      const messageDomain = message.method?.split(".")?.[0];
-      if (messageDomain != null && !this.domains.has(messageDomain)) {
-        return;
-      }
+  async *readHistoricServerMessages(domain: string) {
+    const fileStream = createReadStream(this.logFile);
+    const rl = createInterface({ input: fileStream });
 
-      if (message.id == null) {
-        await fs.promises.appendFile(this.logFile, `${data}\n`);
+    for await (const line of rl) {
+      //* Matches CDP messages starting with {"method":"domain. or {"id": number, "method":"domain.
+      const regex = new RegExp(
+        `^\\{"(?:id":\\s*\\d+,\\s*)?method":"${domain}\\.`,
+      );
+      if (regex.test(line)) {
+        yield line;
       }
-      if (this.lastClient != null) {
-        this.lastClient.send(data);
+    }
+  }
+
+  private removeClient(clientId: string): void {
+    const client = this.connectedClients.get(clientId);
+    if (client) {
+      this.connectedClients.delete(clientId);
+    }
+
+    for (const [id, pendingMsg] of this.pendingMessages.entries()) {
+      if (pendingMsg.clientId === clientId) {
+        this.pendingMessages.delete(id);
+      }
+    }
+  }
+
+  protected async handleInspectorMessage(data: ServerCDPMessage) {
+    try {
+      const messageDomain = data.method?.split(".")?.[0];
+      const isEnableResponse = data.method?.endsWith(".enable");
+
+      if (data.id == null || isEnableResponse) {
+        await fs.promises.appendFile(this.logFile, `${JSON.stringify(data)}\n`);
+
+        for (const [_clientId, client] of this.connectedClients) {
+          if (messageDomain && client.allowedDomains.has(messageDomain)) {
+            client.ws.send(JSON.stringify(data));
+          }
+        }
+      } else {
+        const pendingMsg = this.pendingMessages.get(data.id);
+        if (pendingMsg) {
+          const client = this.connectedClients.get(pendingMsg.clientId);
+          if (client) {
+            data.id = pendingMsg.clientMsgId;
+            client.ws.send(JSON.stringify(data));
+            this.pendingMessages.delete(data.id);
+          }
+        }
       }
     } catch (error) {
       console.error(
@@ -155,7 +283,10 @@ export abstract class CDPServer {
     }
   }
 
-  abstract handleClientMessage(ws: WsWebSocket, data: string): Promise<void>;
+  abstract handleClientMessage(
+    clientId: string,
+    data: ClientCDPMessage,
+  ): Promise<void>;
 
   public handleUpgrade(request: any, socket: any, head: any): void {
     try {
@@ -170,4 +301,30 @@ export abstract class CDPServer {
       socket.destroy();
     }
   }
+
+  protected getConnectedClientsInfo(): string {
+    const clientInfo = Array.from(this.connectedClients.entries())
+      .map(
+        ([id, client]) =>
+          `${id}:[${Array.from(client.allowedDomains).join(",")}]`,
+      )
+      .join(", ");
+    return `${this.connectedClients.size} clients: ${clientInfo}`;
+  }
+
+  protected getClientById(clientId: string) {
+    return this.connectedClients.get(clientId)?.ws;
+  }
 }
+
+export type ClientCDPMessage = {
+  id: number;
+  method: string;
+  params?: Record<string, any>;
+};
+
+export type ServerCDPMessage = {
+  id?: number;
+  result?: Record<string, any>;
+  method?: string;
+};

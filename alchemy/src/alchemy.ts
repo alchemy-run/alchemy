@@ -4,12 +4,12 @@ import { isReplacedSignal } from "./apply.ts";
 import { DestroyStrategy, destroy, isDestroyedSignal } from "./destroy.ts";
 import { env } from "./env.ts";
 import {
-  ResourceFQN,
-  ResourceID,
-  ResourceKind,
-  ResourceScope,
-  ResourceSeq,
-  type PendingResource,
+	ResourceFQN,
+	ResourceID,
+	ResourceKind,
+	ResourceScope,
+	ResourceSeq,
+	type PendingResource,
 } from "./resource.ts";
 import { DEFAULT_STAGE, Scope, type ProviderCredentials } from "./scope.ts";
 import { secret } from "./secret.ts";
@@ -99,38 +99,43 @@ _alchemy.env = env;
 async function _alchemy(
   appName: string,
   options?: Omit<AlchemyOptions, "appName">,
-): Promise<Scope> {
+): Promise<Scope | string | never> {
   const cliArgs = process.argv.slice(2);
-  const cliOptions = {
-    phase: cliArgs.includes("--destroy")
-      ? "destroy"
-      : cliArgs.includes("--read")
-        ? "read"
-        : "up",
-    local: cliArgs.includes("--local") || cliArgs.includes("--dev"),
-    watch: cliArgs.includes("--watch") || execArgv.includes("--watch"),
-    quiet: cliArgs.includes("--quiet"),
-    force: cliArgs.includes("--force"),
-    // Parse stage argument (--stage my-stage) functionally and inline as a property declaration
-    stage: (function parseStage() {
-      const i = cliArgs.indexOf("--stage");
-      return i !== -1 && i + 1 < cliArgs.length
-        ? cliArgs[i + 1]
-        : process.env.STAGE;
-    })(),
-    password: process.env.ALCHEMY_PASSWORD,
-    adopt: cliArgs.includes("--adopt"),
-  } satisfies Partial<AlchemyOptions>;
-  const mergedOptions = {
-    ...cliOptions,
-    ...options,
-  };
-  if (
-    mergedOptions.stateStore === undefined &&
-    process.env.CI &&
-    process.env.ALCHEMY_CI_STATE_STORE_CHECK !== "false"
-  ) {
-    throw new Error(`You are running Alchemy in a CI environment with the default local state store. 
+	const cliOptions = {
+		phase: cliArgs.includes("--destroy")
+			? "destroy"
+			: cliArgs.includes("--read")
+				? "read"
+				: "up",
+		local: cliArgs.includes("--local") || cliArgs.includes("--dev"),
+		watch: cliArgs.includes("--watch") || execArgv.includes("--watch"),
+		quiet: cliArgs.includes("--quiet"),
+		force: cliArgs.includes("--force"),
+		// Parse stage argument (--stage my-stage) functionally and inline as a property declaration
+		stage: (function parseStage() {
+			const i = cliArgs.indexOf("--stage");
+			return i !== -1 && i + 1 < cliArgs.length
+				? cliArgs[i + 1]
+				: process.env.STAGE;
+		})(),
+		// Parse cdp-manager-url argument (--cdp-manager-url http://localhost:1336) functionally and inline as a property declaration
+		cdpManagerUrl: (function parseCdpManagerUrl() {
+			const i = cliArgs.indexOf("--cdp-manager-url");
+			return i !== -1 && i + 1 < cliArgs.length ? cliArgs[i + 1] : undefined;
+		})(),
+		password: process.env.ALCHEMY_PASSWORD,
+		adopt: cliArgs.includes("--adopt"),
+	} satisfies Partial<AlchemyOptions>;
+	const mergedOptions = {
+		...cliOptions,
+		...options,
+	};
+	if (
+		mergedOptions.stateStore === undefined &&
+		process.env.CI &&
+		process.env.ALCHEMY_CI_STATE_STORE_CHECK !== "false"
+	) {
+		throw new Error(`You are running Alchemy in a CI environment with the default local state store. 
 This can lead to orphaned infrastructure and is rarely what you want to do.
 
 Instead, you should choose a persistent state store:
@@ -272,6 +277,10 @@ export interface AlchemyOptions {
    * @default false
    */
   adopt?: boolean;
+  /**
+   * A custom CDP manager URL to use for this scope.
+   */
+  cdpManagerUrl?: string;
 }
 
 export interface ScopeOptions extends AlchemyOptions {

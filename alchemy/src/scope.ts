@@ -5,26 +5,26 @@ import pc from "picocolors";
 import type { Phase } from "./alchemy.ts";
 import { destroy, destroyAll, DestroyStrategy } from "./destroy.ts";
 import {
-  ResourceFQN,
-  ResourceID,
-  ResourceKind,
-  ResourceScope,
-  ResourceSeq,
-  type PendingResource,
-  type Resource,
-  type ResourceProps,
+	ResourceFQN,
+	ResourceID,
+	ResourceKind,
+	ResourceScope,
+	ResourceSeq,
+	type PendingResource,
+	type Resource,
+	type ResourceProps,
 } from "./resource.ts";
 import type { State, StateStore, StateStoreType } from "./state.ts";
 import { FileSystemStateStore } from "./state/file-system-state-store.ts";
 import { InstrumentedStateStore } from "./state/instrumented-state-store.ts";
 import {
-  createDummyLogger,
-  createLoggerInstance,
-  type LoggerApi,
+	createDummyLogger,
+	createLoggerInstance,
+	type LoggerApi,
 } from "./util/cli.ts";
 import {
-  idempotentSpawn,
-  type IdempotentSpawnOptions,
+	idempotentSpawn,
+	type IdempotentSpawnOptions,
 } from "./util/idempotent-spawn.ts";
 import { logger } from "./util/logger.ts";
 import { AsyncMutex } from "./util/mutex.ts";
@@ -89,6 +89,10 @@ export interface ScopeOptions extends ProviderCredentials {
    * @default false
    */
   adopt?: boolean;
+  /**
+   * The URL of the CDP manager to use for the scope.
+   */
+  cdpManagerUrl?: string;
 }
 
 /**
@@ -177,6 +181,7 @@ export class Scope {
   public readonly logger: LoggerApi;
   public readonly telemetryClient: ITelemetryClient;
   public readonly dataMutex: AsyncMutex;
+  public readonly cdpManagerUrl: string | undefined;
   public readonly dotAlchemy: string;
 
   // Provider credentials for scope-level credential overrides
@@ -214,6 +219,7 @@ export class Scope {
       logger,
       adopt,
       dotAlchemy,
+      cdpManagerUrl,
       ...providerCredentials
     } = options;
 
@@ -236,6 +242,12 @@ export class Scope {
         `Scope name "${this.scopeName}" cannot contain double colons`,
       );
     }
+    this.dotAlchemy =
+      options.dotAlchemy ??
+      this.parent?.dotAlchemy ??
+      path.join(process.cwd(), ".alchemy");
+
+    this.cdpManagerUrl = cdpManagerUrl ?? this.parent?.cdpManagerUrl;
 
     this.stage = stage ?? this.parent?.stage ?? DEFAULT_STAGE;
     this.parent?.children.set(this.scopeName!, this);
@@ -394,8 +406,19 @@ export class Scope {
     await this.state.deinit?.();
   }
 
-  public fqn(resourceID: ResourceID): string {
+  public fqn(resourceID?: ResourceID): string {
+    if (resourceID == null) {
+      return this.chain.join("/");
+    }
     return [...this.chain, resourceID].join("/");
+  }
+
+  public shortFqn(resourceID?: ResourceID): string {
+    const shortChain = this.chain.slice(2);
+    if (resourceID == null) {
+      return shortChain.join("/");
+    }
+    return [...shortChain, resourceID].join("/");
   }
 
   /**

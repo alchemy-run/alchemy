@@ -1,6 +1,7 @@
 import * as miniflare from "miniflare";
 import assert from "node:assert";
 import path from "node:path";
+import { Scope } from "../../scope.ts";
 import { findOpenPort } from "../../util/find-open-port.ts";
 import type { HTTPServer } from "../../util/http.ts";
 import { logger } from "../../util/logger.ts";
@@ -23,6 +24,7 @@ export class MiniflareController {
   localProxies = new Map<string, MiniflareWorkerProxy>();
   remoteProxies = new Map<string, HTTPServer>();
   mutex = new AsyncMutex();
+  inspectorPort: number | undefined;
 
   static get singleton() {
     globalThis.ALCHEMY_MINIFLARE_CONTROLLER ??= new MiniflareController();
@@ -53,6 +55,25 @@ export class MiniflareController {
       prefix: "dev",
       prefixColor: "cyanBright",
     });
+    const scope = Scope.getScope();
+    if (scope?.cdpManagerUrl != null) {
+      await fetch(`${scope.cdpManagerUrl}/servers`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          type: "proxy",
+          payload: {
+            options: {
+              name: scope.shortFqn(),
+              hotDomains: ["Network", "Runtime", "Debugger", "Profiler"],
+            },
+            inspectorUrl: `ws://localhost:${this.inspectorPort}/${input.name}`,
+          },
+        }),
+      });
+    }
     return proxy.url;
   }
 
@@ -75,6 +96,9 @@ export class MiniflareController {
 
   private async update() {
     return await this.mutex.lock(async () => {
+      if (this.inspectorPort == null) {
+        this.inspectorPort = await findOpenPort();
+      }
       const options: miniflare.MiniflareOptions = {
         workers: [],
         defaultPersistRoot: path.resolve(DEFAULT_PERSIST_PATH),
@@ -82,7 +106,7 @@ export class MiniflareController {
         log: process.env.DEBUG
           ? new miniflare.Log(miniflare.LogLevel.DEBUG)
           : undefined,
-
+        inspectorPort: this.inspectorPort,
         // This is required to allow websites and other separate processes
         // to detect Alchemy-managed Durable Objects via the Wrangler dev registry.
         unsafeDevRegistryDurableObjectProxy: true,
