@@ -57,20 +57,35 @@ export class MiniflareController {
     });
     const scope = Scope.getScope();
     if (scope?.cdpManagerUrl != null) {
-      const res = await fetch(`${scope.cdpManagerUrl}/servers`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          // type: "proxy",
-          // payload: {
-          //   name: scope.fqn(),
-          //   inspectorUrl: `ws://localhost:${this.inspectorPort}/${input.name}`,
-          // },
+      console.log(`ws://localhost:${this.inspectorPort}/${input.name}`);
+      console.log(
+        JSON.stringify({
+          type: "proxy",
+          payload: {
+            options: {
+              name: scope.fqn(),
+              hotDomains: ["Runtime", "Console", "Debugger", "Network"],
+            },
+            inspectorUrl: `ws://localhost:${this.inspectorPort}/${input.name}`,
+          },
         }),
-      });
-      console.log(res);
+      );
+      // await fetch(`${scope.cdpManagerUrl}/servers`, {
+      //   method: "POST",
+      //   headers: {
+      //     "Content-Type": "application/json",
+      //   },
+      //   body: JSON.stringify({
+      //     type: "proxy",
+      //     payload: {
+      //       options: {
+      //         name: scope.fqn(),
+      //         hotDomains: ["Runtime", "Console", "Debugger", "Network"],
+      //       },
+      //       inspectorUrl: `ws://localhost:${this.inspectorPort}/${input.name}`,
+      //     },
+      //   }),
+      // });
     }
     return proxy.url;
   }

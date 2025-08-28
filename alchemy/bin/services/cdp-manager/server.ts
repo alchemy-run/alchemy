@@ -37,9 +37,9 @@ export class CDPManager {
 
   public async startServer(): Promise<void> {
     this.port = await findOpenPort(1336, 65535);
-    this.url = `http://localhost:${this.port}`;
+    this.url = `http://0.0.0.0:${this.port}`;
     await new Promise<void>((resolve) => {
-      this.server.listen(this.port, () => {
+      this.server.listen(this.port, "0.0.0.0", () => {
         console.log(`[CDP-Manager] Debug server started at ${this.url}`);
         resolve();
       });
@@ -55,12 +55,7 @@ export class CDPManager {
 
   private async handleRequest(req: any, res: any): Promise<void> {
     const url = new URL(req.url, this.url);
-    console.log("================= A");
-    console.log(url.pathname, req.method);
     if (url.pathname.match(/^\/servers$/) && req.method === "POST") {
-      // console.log("================= B");
-      // console.log(url);
-
       let rawBody = "";
       req.on("data", (chunk) => {
         rawBody += chunk.toString(); // Accumulate data chunks
@@ -86,8 +81,11 @@ export class CDPManager {
           default: {
             res.writeHead(400, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ error: "Invalid server type" }));
+            return;
           }
         }
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ success: true }));
       });
     } else {
       res.writeHead(404, { "Content-Type": "application/json" });
@@ -191,6 +189,7 @@ export abstract class CDPServer {
 
   protected async handleInspectorMessage(data: ServerCDPMessage) {
     try {
+      console.log("<==", data);
       const messageDomain = data.method?.split(".")?.[0];
 
       if (data.id == null) {

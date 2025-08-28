@@ -142,15 +142,6 @@ export async function execAlchemy(
     args.push(`--cdp-manager-url ${cdpManager.getUrl()}`);
   }
 
-  // const res = await fetch(`${cdpManager?.getUrl()}/servers`, {
-  //   method: "POST",
-  //   headers: {
-  //     "Content-Type": "application/json",
-  //   },
-  //   body: JSON.stringify({}),
-  // });
-  // console.log(res);
-
   // Detect package manager
   const packageManager = await detectPackageManager(cwd);
   const runtime = detectRuntime();

@@ -1,9 +1,5 @@
 import type { WebSocket as WsWebSocket } from "ws";
-import {
-  CDPServer,
-  type ClientCDPMessage,
-  type ServerCDPMessage,
-} from "./server.ts";
+import { CDPServer, type ClientCDPMessage } from "./server.ts";
 
 export class CDPProxy extends CDPServer {
   private inspectorUrl: string;
@@ -17,7 +13,7 @@ export class CDPProxy extends CDPServer {
       hotDomains?: Array<string>;
     },
   ) {
-    super(options);
+    super({ ...options, domains: options.domains ?? options.hotDomains });
     this.inspectorUrl = inspectorUrl;
     this.onStartMessageQueue = [];
     for (const domain of options.hotDomains ?? []) {
@@ -33,22 +29,24 @@ export class CDPProxy extends CDPServer {
   }
 
   public async start(): Promise<void> {
+    console.log(this.inspectorUrl);
     this.inspectorWs = new WebSocket(this.inspectorUrl);
 
-    this.inspectorWs.addEventListener("open", async () => {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      for (const message of this.onStartMessageQueue) {
-        this.internalHandleClientMessage(message);
-      }
-    });
+    // this.inspectorWs.addEventListener("open", async () => {
+    // await new Promise((resolve) => setTimeout(resolve, 1000));
+    // for (const message of this.onStartMessageQueue) {
+    //   this.internalHandleClientMessage(message);
+    // }
+    // });
 
-    this.inspectorWs.onmessage = async (event) => {
-      await this.handleInspectorMessage(
-        JSON.parse(event.data.toString()) as ServerCDPMessage,
-      );
-    };
+    // this.inspectorWs.onmessage = async (event) => {
+    //   await this.handleInspectorMessage(
+    //     JSON.parse(event.data.toString()) as ServerCDPMessage,
+    //   );
+    // };
 
-    this.inspectorWs.onclose = () => {
+    this.inspectorWs.onclose = (ev) => {
+      console.log(ev);
       console.warn(`[${this.name}:Debug] Inspector closed`);
     };
 
@@ -82,6 +80,7 @@ export class CDPProxy extends CDPServer {
     if (messageDomain != null && !this.domains.includes(messageDomain)) {
       return;
     }
+    console.log("==>", JSON.stringify(data));
     this.inspectorWs!.send(JSON.stringify(data));
   }
 }
