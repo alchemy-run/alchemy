@@ -70,22 +70,22 @@ export class MiniflareController {
           },
         }),
       );
-      // await fetch(`${scope.cdpManagerUrl}/servers`, {
-      //   method: "POST",
-      //   headers: {
-      //     "Content-Type": "application/json",
-      //   },
-      //   body: JSON.stringify({
-      //     type: "proxy",
-      //     payload: {
-      //       options: {
-      //         name: scope.fqn(),
-      //         hotDomains: ["Runtime", "Console", "Debugger", "Network"],
-      //       },
-      //       inspectorUrl: `ws://localhost:${this.inspectorPort}/${input.name}`,
-      //     },
-      //   }),
-      // });
+      await fetch(`${scope.cdpManagerUrl}/servers`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          type: "proxy",
+          payload: {
+            options: {
+              name: scope.fqn(),
+              hotDomains: ["Runtime", "Console", "Debugger", "Network"],
+            },
+            inspectorUrl: `ws://localhost:${this.inspectorPort}/${input.name}`,
+          },
+        }),
+      });
     }
     return proxy.url;
   }

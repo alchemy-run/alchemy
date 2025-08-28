@@ -1,5 +1,9 @@
 import type { WebSocket as WsWebSocket } from "ws";
-import { CDPServer, type ClientCDPMessage } from "./server.ts";
+import {
+  CDPServer,
+  type ClientCDPMessage,
+  type ServerCDPMessage,
+} from "./server.ts";
 
 export class CDPProxy extends CDPServer {
   private inspectorUrl: string;
@@ -32,18 +36,21 @@ export class CDPProxy extends CDPServer {
     console.log(this.inspectorUrl);
     this.inspectorWs = new WebSocket(this.inspectorUrl);
 
-    // this.inspectorWs.addEventListener("open", async () => {
-    // await new Promise((resolve) => setTimeout(resolve, 1000));
-    // for (const message of this.onStartMessageQueue) {
-    //   this.internalHandleClientMessage(message);
-    // }
-    // });
+    console.log(this.inspectorUrl);
+    this.inspectorWs = new WebSocket(this.inspectorUrl);
 
-    // this.inspectorWs.onmessage = async (event) => {
-    //   await this.handleInspectorMessage(
-    //     JSON.parse(event.data.toString()) as ServerCDPMessage,
-    //   );
-    // };
+    this.inspectorWs.onopen = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      for (const message of this.onStartMessageQueue) {
+        this.internalHandleClientMessage(message);
+      }
+    };
+
+    this.inspectorWs.onmessage = async (event) => {
+      await this.handleInspectorMessage(
+        JSON.parse(event.data.toString()) as ServerCDPMessage,
+      );
+    };
 
     this.inspectorWs.onclose = (ev) => {
       console.log(ev);
