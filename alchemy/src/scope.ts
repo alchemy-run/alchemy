@@ -396,6 +396,14 @@ export class Scope {
     return [...this.chain, resourceID].join("/");
   }
 
+  public shortFqn(resourceID?: ResourceID): string {
+    const shortChain = this.chain.slice(2);
+    if (resourceID == null) {
+      return shortChain.join("/");
+    }
+    return [...shortChain, resourceID].join("/");
+  }
+
   /**
    * Centralizes the "lock → locate the right scope → hand the caller a live
    * ScopeState instance and a persist() helper".

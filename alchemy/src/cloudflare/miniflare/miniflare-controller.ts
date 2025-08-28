@@ -57,19 +57,6 @@ export class MiniflareController {
     });
     const scope = Scope.getScope();
     if (scope?.cdpManagerUrl != null) {
-      console.log(`ws://localhost:${this.inspectorPort}/${input.name}`);
-      console.log(
-        JSON.stringify({
-          type: "proxy",
-          payload: {
-            options: {
-              name: scope.fqn(),
-              hotDomains: ["Runtime", "Console", "Debugger", "Network"],
-            },
-            inspectorUrl: `ws://localhost:${this.inspectorPort}/${input.name}`,
-          },
-        }),
-      );
       await fetch(`${scope.cdpManagerUrl}/servers`, {
         method: "POST",
         headers: {
@@ -79,7 +66,7 @@ export class MiniflareController {
           type: "proxy",
           payload: {
             options: {
-              name: scope.fqn(),
+              name: scope.shortFqn(),
               hotDomains: ["Runtime", "Console", "Debugger", "Network"],
             },
             inspectorUrl: `ws://localhost:${this.inspectorPort}/${input.name}`,

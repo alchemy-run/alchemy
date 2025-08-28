@@ -89,7 +89,6 @@ export class CDPProxy extends CDPServer {
     if (messageDomain != null && !this.domains.includes(messageDomain)) {
       return;
     }
-    console.log("==>", JSON.stringify(data));
     this.inspectorWs!.send(JSON.stringify(data));
   }
 }

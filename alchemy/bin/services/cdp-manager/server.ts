@@ -141,7 +141,7 @@ export abstract class CDPServer {
   protected domains: Array<string>;
   public readonly name: string;
   private wss: WebSocketServer;
-  private connectedClients: Set<WsWebSocket> = new Set();
+  private connectedClients: Array<WsWebSocket> = [];
   protected pendingMessages: Map<
     number,
     {
@@ -169,7 +169,7 @@ export abstract class CDPServer {
     this.internalMessageId = 0;
 
     this.wss.on("connection", async (clientWs) => {
-      this.connectedClients.add(clientWs);
+      this.connectedClients.push(clientWs);
       clientWs.on("message", async (data) => {
         const json = JSON.parse(data.toString()) as ClientCDPMessage;
         if (json.id != null) {
@@ -190,7 +190,6 @@ export abstract class CDPServer {
 
   protected async handleInspectorMessage(data: ServerCDPMessage) {
     try {
-      console.log("<==", data);
       const messageDomain = data.method?.split(".")?.[0];
 
       if (data.id == null) {
