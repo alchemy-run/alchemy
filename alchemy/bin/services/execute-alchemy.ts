@@ -103,7 +103,12 @@ export async function execAlchemy(
 
   // Check for alchemy.run.ts or alchemy.run.js (if not provided)
   if (!main) {
-    const candidates = ["alchemy.run.ts", "alchemy.run.js"];
+    const candidates = [
+      "alchemy.run.ts",
+      "alchemy.run.js",
+      "alchemy.run.mts",
+      "alchemy.run.mjs",
+    ];
     for (const file of candidates) {
       const resolved = resolve(cwd, file);
       if (await exists(resolved)) {
