@@ -136,7 +136,7 @@ export async function execAlchemy(
   const execArgsString = execArgs.join(" ");
   // Determine the command to run based on package manager and file extension
   let command: string;
-  const isTypeScript = main.endsWith(".ts");
+  const isTypeScript = main.endsWith(".ts") || main.endsWith(".mts");
 
   switch (packageManager) {
     case "bun":
