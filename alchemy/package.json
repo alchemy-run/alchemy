@@ -15,6 +15,7 @@
     "alchemy": "bin/alchemy.js"
   },
   "scripts": {
+    "prepare": "ts-patch install -s",
     "build:cli": "tsdown",
     "dev:cli": "tsdown --watch",
     "build:workers": "bun ./scripts/build-workers.ts",
@@ -47,6 +48,10 @@
     "./aws/control": {
       "bun": "./src/aws/control/index.ts",
       "import": "./lib/aws/control/index.js"
+    },
+    "./aws/itty": {
+      "bun": "./src/aws/itty/index.ts",
+      "import": "./lib/aws/itty/index.js"
     },
     "./aws/oidc": {
       "bun": "./src/aws/oidc/index.ts",
@@ -151,6 +156,7 @@
     "@iarna/toml": "^2.2.5",
     "@smithy/node-config-provider": "^4.0.0",
     "aws4fetch": "^1.0.20",
+    "effect": "3.16.12",
     "env-paths": "^3.0.0",
     "esbuild": "^0.25.1",
     "execa": "^9.6.0",
@@ -158,6 +164,7 @@
     "fast-xml-parser": "^5.2.5",
     "find-process": "^2.0.0",
     "glob": "^10.0.0",
+    "itty-aws": "link:itty-aws",
     "jszip": "^3.0.0",
     "libsodium-wrappers": "^0.7.15",
     "miniflare": "^4.20250712.0",
@@ -259,6 +266,7 @@
     "@cloudflare/puppeteer": "^1.0.2",
     "@cloudflare/vite-plugin": "catalog:",
     "@cloudflare/workers-types": "catalog:",
+    "@effect/language-service": "^0.36.0",
     "@libsql/client": "^0.15.12",
     "@octokit/rest": "^21.1.1",
     "@sentry/cloudflare": "^9.43.0",
@@ -288,6 +296,7 @@
     "stripe": "^17.0.0",
     "trpc-cli": "^0.10.2",
     "ts-morph": "^26.0.0",
+    "ts-patch": "^3.3.0",
     "tsdown": "^0.14.2",
     "typescript": "catalog:",
     "undici": "^7.14.0",
