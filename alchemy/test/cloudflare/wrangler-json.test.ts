@@ -854,7 +854,9 @@ describe("WranglerJson Resource", () => {
       // Create a temporary directory for the entrypoint file
       await fs.rm(tempDir, { recursive: true, force: true });
       await fs.mkdir(tempDir, { recursive: true });
-      await fs.writeFile(entrypoint, `
+      await fs.writeFile(
+        entrypoint,
+        `
           export default {
             async fetch(request, env, ctx) {
               return Response.json({
@@ -863,8 +865,9 @@ describe("WranglerJson Resource", () => {
               });
             }
           };
-        `);
-      
+        `,
+      );
+
       worker = await Worker(workerName, {
         name: workerName,
         adopt: true,

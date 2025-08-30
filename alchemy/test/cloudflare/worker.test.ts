@@ -2235,7 +2235,10 @@ describe("Worker Resource", () => {
       });
 
       const response = await fetchAndExpectOK(worker.url!);
-      const { url, domain } = await response.json() as { url: string; domain: string };
+      const { url, domain } = (await response.json()) as {
+        url: string;
+        domain: string;
+      };
       expect(url).toEqual(worker.url);
       expect(`https://${domain}`).toEqual(worker.url);
     } finally {

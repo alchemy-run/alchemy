@@ -77,7 +77,6 @@ export type Binding =
   | BrowserRendering
   | VersionMetadata
   | Self
-  
   | Json;
 
 export type Self = typeof Self;

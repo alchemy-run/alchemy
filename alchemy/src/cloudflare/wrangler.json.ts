@@ -5,7 +5,11 @@ import { Resource } from "../resource.ts";
 import { Scope } from "../scope.ts";
 import { isSecret } from "../secret.ts";
 import { assertNever } from "../util/assert-never.ts";
-import { createCloudflareApi, type CloudflareApi, type CloudflareApiOptions } from "./api.ts";
+import {
+  createCloudflareApi,
+  type CloudflareApi,
+  type CloudflareApiOptions,
+} from "./api.ts";
 import {
   Self,
   type Bindings,
@@ -110,7 +114,7 @@ export type WranglerJson = WranglerJsonProps & {
    * `wrangler.json` spec
    */
   spec: WranglerJsonSpec;
-}
+};
 
 // we are deprecating the WranglerJson resource (it is now just a funciton)
 // but, a user may still have a resource that depends on it, so we register a no-op dummy resource so that it can be cleanly delted
@@ -640,7 +644,8 @@ async function processBindings(
       const subdomain = await getAccountSubdomain(api);
       // Subdomain binding
       spec.vars ??= {};
-      spec.vars[bindingName] = `${binding === Worker.DevUrl ? "https://" : ""}${workerName}.${subdomain}.workers.dev`;
+      spec.vars[bindingName] =
+        `${binding === Worker.DevUrl ? "https://" : ""}${workerName}.${subdomain}.workers.dev`;
     } else if (binding.type === "service") {
       // Service binding
       services.push({
