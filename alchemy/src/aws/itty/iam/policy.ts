@@ -160,10 +160,14 @@ export const Policy = Resource(
 
     // if a resource's immutable property is updated, it needs to trigger a replacement of the resource
     // https://alchemy.run/concepts/resource/#trigger-replacement
-    if (this.phase === "update" && this.output.name !== this.props.name) {
-      // calling this.replace() will terminate this run and re-invoke it 
+    // NOTE: in update phase, `this.props` are the OLD props; compare against incoming `props` instead.
+    if (
+      this.phase === "update" &&
+      (this.output.name !== props.name || this.output.path !== props.path)
+    ) {
+      // calling this.replace() will terminate this run and re-invoke it
       // with the "create" phase
-      this.replace();
+      return this.replace();
     }
 
     if (this.phase === "delete") {
@@ -203,14 +207,11 @@ export const Policy = Resource(
         });
 
         // FIXME: how should we be handling errors? this can fail for example if the policy is attached to a user or role
-        Effect.runPromise(deleteEffect);
-
-        // this.destroy() should really only be called if the deletePolicy call was successful
+        await Effect.runPromise(deleteEffect);
         return this.destroy();
     }
 
     if (this.phase === "create") {
-      //console.log("do create");
 
       const createEffect = Effect.gen(function* () {
         const tags = props.tags
@@ -241,37 +242,75 @@ export const Policy = Resource(
         return createResult;
       });
 
-      Effect.runPromise(createEffect).then((resultPolicy) => {
-        const p = resultPolicy!.Policy!;
-        return this({
-          ...props,
-          arn: p.Arn!,
-          defaultVersionId: p.DefaultVersionId!,
-          attachmentCount: p.AttachmentCount!,
-          createDate: p.CreateDate!.toString(),
-          updateDate: p.UpdateDate!.toString(),
-          isAttachable: p.IsAttachable!, 
-        });
+      const resultPolicy = await Effect.runPromise(createEffect);
+      const p = resultPolicy!.Policy!;
+      if (!this.quiet) {
+        console.log(`policy: ${JSON.stringify(p, null, 2)}`);
+      }
+      return this({
+        ...props,
+        arn: p.Arn!,
+        defaultVersionId: p.DefaultVersionId!,
+        attachmentCount: p.AttachmentCount!,
+        createDate: p.CreateDate!.toString(),
+        updateDate: p.UpdateDate!.toString(),
+        isAttachable: p.IsAttachable!,
       });
     }
 
     if (this.phase === "update") {
-      console.log("do update");
-      //policyArn = this.props.arn;
-        // ensure the input properties are consistent with the existing policy
-      // const policyArn = this.output?.arn;
+      // Update policy document by creating a new default version when content changes
+      const policyArn = this.output.arn;
+      const currentDefaultVersionId = this.output.defaultVersionId;
+
+      // If policy JSON changed, create a new version and set as default
+      const newDoc = props.policy;
+      // We can't easily diff normalized JSON reliably here; optimistically create a new version.
+      // Optionally, callers can avoid unnecessary updates by keeping props stable.
+      const updateEffect = Effect.gen(function* () {
+        const versionsResult = yield* iam.listPolicyVersions({ PolicyArn: policyArn });
+        const versions = versionsResult.Versions ?? [];
+
+        // Create a new version as default
+        const created = yield* iam.createPolicyVersion({
+          PolicyArn: policyArn,
+          PolicyDocument: newDoc,
+          SetAsDefault: true,
+        });
+
+        // If we exceed AWS limit (5), prune the oldest non-default version
+        const nonDefault = versions.filter((v) => !v.IsDefaultVersion && v.VersionId);
+        if (nonDefault.length >= 4) {
+          // Sort by CreateDate asc and delete the oldest
+          nonDefault.sort((a, b) =>
+            (new Date(a.CreateDate ?? 0).getTime()) - (new Date(b.CreateDate ?? 0).getTime()),
+          );
+          const oldest = nonDefault[0];
+          if (oldest?.VersionId) {
+            yield* iam.deletePolicyVersion({ PolicyArn: policyArn, VersionId: oldest.VersionId });
+          }
+        }
+
+        // Fetch updated policy metadata
+        const updatedPolicy = yield* iam.getPolicy({ PolicyArn: policyArn });
+        return updatedPolicy;
+      });
+
+      const updated = await Effect.runPromise(updateEffect);
+      const p = updated!.Policy!;
+      return this({
+        ...props,
+        arn: p.Arn!,
+        defaultVersionId: p.DefaultVersionId ?? currentDefaultVersionId,
+        attachmentCount: p.AttachmentCount!,
+        createDate: p.CreateDate!.toString(),
+        updateDate: p.UpdateDate!.toString(),
+        isAttachable: p.IsAttachable!,
+      });
     }
 
-    // this shouldn't ever return but we need to satisfy the return promise on this method.
-    // can this be improved??
-    return this({
-        ...props,
-        arn: "arn",
-        defaultVersionId: "default version",
-        attachmentCount: 0,
-        createDate: "some date",
-        updateDate: "some other date",
-        isAttachable: true, 
-      });
+    // Should never reach here; all phases handled above.
+    // If it does, consider it a logic error.
+    throw new Error("Unhandled resource phase");
   },
 );
