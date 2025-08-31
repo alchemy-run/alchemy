@@ -1,5 +1,4 @@
 import * as Effect from "effect/Effect";
-import * as Match from "effect/Match";
 import type { Context } from "../../../context.ts";
 import { Resource } from "../../../resource.ts";
 
@@ -49,9 +48,34 @@ export interface Policy extends Resource<"AWS::IAM::Policy">, PolicyProps {
   arn: string;
 
   /**
-   * The unique identifier of the policy
+   * Name of the Policy.
    */
-  policyId: string;
+  name: string;
+
+  /**
+   * ID of the default policy version
+   */
+  defaultVersionId: string;
+
+  /**
+   * Number of entities the policy is attached to
+   */
+  attachmentCount: number;
+
+  /**
+   * When the policy was created
+   */
+  createDate: Date;
+
+  /**
+   * When the policy was last updated
+   */
+  updateDate: Date;
+
+  /**
+   * Whether the policy can be attached to IAM users/roles
+   */
+  isAttachable: boolean;
 }
 
 /**
@@ -134,57 +158,16 @@ export const Policy = Resource(
   ): Promise<Policy> {
     const iam = new IAM({});
 
-    if (this.phase === "delete") {
-      
+    // if a resource's immutable property is updated, it needs to trigger a replacement of the resource
+    // https://alchemy.run/concepts/resource/#trigger-replacement
+    if (this.phase === "update" && this.output.name !== this.props.name) {
+      // calling this.replace() will terminate this run and re-invoke it 
+      // with the "create" phase
+      this.replace();
     }
 
-    Match.value(this.phase).pipe(
-      Match.when("create", () => {
-        console.log("do create");
-
-        const policyArn = this.output?.arn;
-
-        // if there's an existing ARN for this resource, we should do nothing on create
-        if (!policyArn) {
-          // no policy ARN in state means we haven't created it yet
-          const createEffect = Effect.gen(function* () {
-            const tags = props.tags
-              ? Object.entries(props.tags).map(([Key, Value]) => ({
-                  Key,
-                  Value,
-                }))
-              : undefined;
-
-            const createResult = yield* iam.createPolicy({
-              PolicyName: props.name,
-              PolicyDocument: props.policy,
-              Path: props.path,
-              Description: props.description,
-              Tags: tags,
-            });
-            // FIXME: what error handling / retry logic should we have here?
-            // no retry logic, that should be in itty
-            // this should return a policy if it succeeded -- what's in the return below should move up here (the data at least)
-            // and error if not
-            return createResult;
-          });
-
-          Effect.runPromise(createEffect).then((resultPolicy) => {
-            console.log("created iam policy!");
-            return this({
-              ...props,
-              arn: resultPolicy.Policy?.Arn || "",
-              policyId: resultPolicy.Policy?.PolicyId || "",
-            });
-          });
-        }
-      }),
-      Match.when("update", () => {
-        console.log("do update");
-        // ensure the input properties are consistent with the existing policy
-      }),
-      Match.when("delete", () => {
-        console.log("do delete");
+    if (this.phase === "delete") {
+      console.log("do delete");
 
         const policyArn = this.output?.arn;
 
@@ -231,13 +214,54 @@ export const Policy = Resource(
         );
 
         return this.destroy();
-      }),
-    );
+    }
 
-    // FIXME: adding this just to satisfy this promise
+    if (this.phase === "create") {
+      console.log("do create");
+
+      const createEffect = Effect.gen(function* () {
+        const tags = props.tags
+          ? Object.entries(props.tags).map(([Key, Value]) => ({
+              Key,
+              Value,
+            }))
+          : undefined;
+
+        const createResult = yield* iam.createPolicy({
+          PolicyName: props.name,
+          PolicyDocument: props.policy,
+          Path: props.path,
+          Description: props.description,
+          Tags: tags,
+        });
+        // FIXME: what error handling / retry logic should we have here?
+        // no retry logic, that should be in itty
+        // this should return a policy if it succeeded -- what's in the return below should move up here (the data at least)
+        // and error if not
+        return createResult;
+      });
+
+      Effect.runPromise(createEffect).then((resultPolicy) => {
+        console.log("created iam policy!");
+        return this({
+          ...props,
+          arn: resultPolicy.Policy?.Arn || "",
+          policyId: resultPolicy.Policy?.PolicyId || "",
+        });
+      });
+    }
+
+    if (this.phase === "update") {
+      console.log("do update");
+        // ensure the input properties are consistent with the existing policy
+      const policyArn = this.output?.arn;
+
+    }
+
     return this({
       ...props,
-      policy.
+      arn: policyArn!,
+      policyId: role.Role.RoleId!,
     });
   },
 );
