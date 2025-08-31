@@ -1,3 +1,4 @@
+import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import type { Context } from "../../../context.ts";
 import { Resource } from "../../../resource.ts";
@@ -65,12 +66,12 @@ export interface Policy extends Resource<"AWS::IAM::Policy">, PolicyProps {
   /**
    * When the policy was created
    */
-  createDate: Date;
+  createDate: string;
 
   /**
    * When the policy was last updated
    */
-  updateDate: Date;
+  updateDate: string;
 
   /**
    * Whether the policy can be attached to IAM users/roles
@@ -169,13 +170,13 @@ export const Policy = Resource(
     if (this.phase === "delete") {
       console.log("do delete");
 
-        const policyArn = this.output?.arn;
+        const policyArn = this.output.arn;
 
         // if there's no ARN, there's nothing to delete in AWS
         // just destroy the local state
-        if (!policyArn) {
-          return this.destroy();
-        }
+        // if (!policyArn) {
+        //   return this.destroy();
+        // }
 
         // Execute deletion with proper error handling
         const deleteEffect = Effect.gen(function* () {
@@ -213,13 +214,17 @@ export const Policy = Resource(
           console.log("deleted iam policy!"),
         );
 
+        // this.destroy() should really only be called if the deletePolicy call was successful
         return this.destroy();
     }
+
+    let policyArn: string = "";
 
     if (this.phase === "create") {
       console.log("do create");
 
       const createEffect = Effect.gen(function* () {
+        yield* Console.log("actually running the effect");
         const tags = props.tags
           ? Object.entries(props.tags).map(([Key, Value]) => ({
               Key,
@@ -233,7 +238,10 @@ export const Policy = Resource(
           Path: props.path,
           Description: props.description,
           Tags: tags,
-        });
+        }).pipe(
+          Effect.tap((response) => Console.log(`got successful response: ${response}`)),
+          Effect.catchAllCause((err) => Effect.fail(new Error(`failing from error: ${err}`))),
+        );
         // FIXME: what error handling / retry logic should we have here?
         // no retry logic, that should be in itty
         // this should return a policy if it succeeded -- what's in the return below should move up here (the data at least)
@@ -241,27 +249,46 @@ export const Policy = Resource(
         return createResult;
       });
 
+      console.log("running create promise");
+
       Effect.runPromise(createEffect).then((resultPolicy) => {
         console.log("created iam policy!");
-        return this({
-          ...props,
-          arn: resultPolicy.Policy?.Arn || "",
-          policyId: resultPolicy.Policy?.PolicyId || "",
-        });
-      });
+        const p = resultPolicy!.Policy!;
+        policyArn = p.Arn!;
+      }).catch(console.error).finally(() => console.log("finally on create"));
     }
 
     if (this.phase === "update") {
       console.log("do update");
+      policyArn = this.props.arn;
         // ensure the input properties are consistent with the existing policy
-      const policyArn = this.output?.arn;
-
+      // const policyArn = this.output?.arn;
     }
 
+    console.log(`policy arn: ${policyArn}`);
+
+    Effect.runPromise(iam.getPolicy({ PolicyArn: policyArn })).then((policy) => {
+      console.log("successfully retrieved policy");
+      const p = policy.Policy!;
+      return this({
+        ...props,
+        arn: p.Arn!,
+        defaultVersionId: p.DefaultVersionId!,
+        attachmentCount: p.AttachmentCount!,
+        createDate: p.CreateDate!.toString(),
+        updateDate: p.UpdateDate!.toString(),
+        isAttachable: p.IsAttachable!, 
+      });
+    }).catch(console.error);
+
     return this({
-      ...props,
-      arn: policyArn!,
-      policyId: role.Role.RoleId!,
-    });
+        ...props,
+        arn: "arn",
+        defaultVersionId: "default version",
+        attachmentCount: 0,
+        createDate: "some date",
+        updateDate: "some other date",
+        isAttachable: true, 
+      });
   },
 );
