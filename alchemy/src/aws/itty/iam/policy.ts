@@ -1,4 +1,3 @@
-import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import type { Context } from "../../../context.ts";
 import { Resource } from "../../../resource.ts";
@@ -168,15 +167,9 @@ export const Policy = Resource(
     }
 
     if (this.phase === "delete") {
-      console.log("do delete");
+      //console.log("do delete");
 
         const policyArn = this.output.arn;
-
-        // if there's no ARN, there's nothing to delete in AWS
-        // just destroy the local state
-        // if (!policyArn) {
-        //   return this.destroy();
-        // }
 
         // Execute deletion with proper error handling
         const deleteEffect = Effect.gen(function* () {
@@ -210,21 +203,16 @@ export const Policy = Resource(
         });
 
         // FIXME: how should we be handling errors? this can fail for example if the policy is attached to a user or role
-        Effect.runPromise(deleteEffect).then(() =>
-          console.log("deleted iam policy!"),
-        );
+        Effect.runPromise(deleteEffect);
 
         // this.destroy() should really only be called if the deletePolicy call was successful
         return this.destroy();
     }
 
-    let policyArn: string = "";
-
     if (this.phase === "create") {
-      console.log("do create");
+      //console.log("do create");
 
       const createEffect = Effect.gen(function* () {
-        yield* Console.log("actually running the effect");
         const tags = props.tags
           ? Object.entries(props.tags).map(([Key, Value]) => ({
               Key,
@@ -239,7 +227,11 @@ export const Policy = Resource(
           Description: props.description,
           Tags: tags,
         }).pipe(
-          Effect.tap((response) => Console.log(`got successful response: ${response}`)),
+          // Effect.tap((response) => Console.log(`got successful response: ${JSON.stringify(response, null, 2)}`)),
+          Effect.flatMap((createPolicyResponse) => {
+            return iam.getPolicy({ PolicyArn: createPolicyResponse!.Policy!.Arn!});
+          }),
+          // FIXME: too broad
           Effect.catchAllCause((err) => Effect.fail(new Error(`failing from error: ${err}`))),
         );
         // FIXME: what error handling / retry logic should we have here?
@@ -249,38 +241,29 @@ export const Policy = Resource(
         return createResult;
       });
 
-      console.log("running create promise");
-
       Effect.runPromise(createEffect).then((resultPolicy) => {
-        console.log("created iam policy!");
         const p = resultPolicy!.Policy!;
-        policyArn = p.Arn!;
-      }).catch(console.error).finally(() => console.log("finally on create"));
+        return this({
+          ...props,
+          arn: p.Arn!,
+          defaultVersionId: p.DefaultVersionId!,
+          attachmentCount: p.AttachmentCount!,
+          createDate: p.CreateDate!.toString(),
+          updateDate: p.UpdateDate!.toString(),
+          isAttachable: p.IsAttachable!, 
+        });
+      });
     }
 
     if (this.phase === "update") {
       console.log("do update");
-      policyArn = this.props.arn;
+      //policyArn = this.props.arn;
         // ensure the input properties are consistent with the existing policy
       // const policyArn = this.output?.arn;
     }
 
-    console.log(`policy arn: ${policyArn}`);
-
-    Effect.runPromise(iam.getPolicy({ PolicyArn: policyArn })).then((policy) => {
-      console.log("successfully retrieved policy");
-      const p = policy.Policy!;
-      return this({
-        ...props,
-        arn: p.Arn!,
-        defaultVersionId: p.DefaultVersionId!,
-        attachmentCount: p.AttachmentCount!,
-        createDate: p.CreateDate!.toString(),
-        updateDate: p.UpdateDate!.toString(),
-        isAttachable: p.IsAttachable!, 
-      });
-    }).catch(console.error);
-
+    // this shouldn't ever return but we need to satisfy the return promise on this method.
+    // can this be improved??
     return this({
         ...props,
         arn: "arn",
