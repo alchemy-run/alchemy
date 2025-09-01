@@ -14,7 +14,7 @@ export interface PolicyProps {
    * @default ${app}-${stage}-${id}
    *
    */
-  name: string;
+  name?: string;
 
   /**
    * The path for the policy
@@ -25,7 +25,7 @@ export interface PolicyProps {
   /**
    * The policy document as a JSON string
    */
-  policy: string;
+  policy: string | object;
 
   /**
    * Description of the policy
@@ -163,15 +163,15 @@ export const Policy = Resource(
     // NOTE: in update phase, `this.props` are the OLD props; compare against incoming `props` instead.
     if (
       this.phase === "update" &&
-      (this.output.name !== props.name || this.output.path !== props.path)
+      ((props.name !== undefined && this.output.name !== props.name) ||
+        (props.path !== undefined && this.output.path !== props.path))
     ) {
-      // calling this.replace() will terminate this run and re-invoke it
+      // calling this.replace() will terminate this run and re-invoke this method
       // with the "create" phase
       return this.replace();
     }
 
     if (this.phase === "delete") {
-      //console.log("do delete");
 
         const policyArn = this.output.arn;
 
@@ -194,7 +194,7 @@ export const Policy = Resource(
             }
           }
 
-          // // Delete the policy itself
+          // Delete the policy itself
           yield* iam
             .deletePolicy({
               PolicyArn: policyArn,
@@ -212,6 +212,11 @@ export const Policy = Resource(
     }
 
     if (this.phase === "create") {
+      // Resolve defaults
+      // FIXME: should this use scope.createPhysicalName()?
+      const resolvedName = props.name ?? `${this.scope.appName}-${this.stage}-${_id}`;
+      const resolvedPath = props.path ?? "/";
+      const policyDoc = typeof props.policy === "string" ? props.policy : JSON.stringify(props.policy);
 
       const createEffect = Effect.gen(function* () {
         const tags = props.tags
@@ -222,14 +227,16 @@ export const Policy = Resource(
           : undefined;
 
         const createResult = yield* iam.createPolicy({
-          PolicyName: props.name,
-          PolicyDocument: props.policy,
-          Path: props.path,
+          PolicyName: resolvedName,
+          PolicyDocument: policyDoc,
+          Path: resolvedPath,
           Description: props.description,
           Tags: tags,
         }).pipe(
           // Effect.tap((response) => Console.log(`got successful response: ${JSON.stringify(response, null, 2)}`)),
           Effect.flatMap((createPolicyResponse) => {
+
+            // FIXME: the policy response may have all the metadata we need 
             return iam.getPolicy({ PolicyArn: createPolicyResponse!.Policy!.Arn!});
           }),
           // FIXME: too broad
@@ -249,6 +256,8 @@ export const Policy = Resource(
       }
       return this({
         ...props,
+        name: resolvedName,
+        path: resolvedPath,
         arn: p.Arn!,
         defaultVersionId: p.DefaultVersionId!,
         attachmentCount: p.AttachmentCount!,
@@ -264,10 +273,11 @@ export const Policy = Resource(
       const currentDefaultVersionId = this.output.defaultVersionId;
 
       // If policy JSON changed, create a new version and set as default
-      const newDoc = props.policy;
+      const newDoc = typeof props.policy === "string" ? props.policy : JSON.stringify(props.policy);
       // We can't easily diff normalized JSON reliably here; optimistically create a new version.
       // Optionally, callers can avoid unnecessary updates by keeping props stable.
       const updateEffect = Effect.gen(function* () {
+        // Fetch updated policy metadata
         const versionsResult = yield* iam.listPolicyVersions({ PolicyArn: policyArn });
         const versions = versionsResult.Versions ?? [];
 
@@ -300,6 +310,8 @@ export const Policy = Resource(
       const p = updated!.Policy!;
       return this({
         ...props,
+        name: this.output.name,
+        path: this.output.path,
         arn: p.Arn!,
         defaultVersionId: p.DefaultVersionId ?? currentDefaultVersionId,
         attachmentCount: p.AttachmentCount!,
