@@ -118,6 +118,7 @@ export const Assets = Resource(
     // Create asset file objects
     const files: AssetFile[] = filesList.map((filePath) => {
       const relativePath = path.relative(props.path, filePath);
+
       return {
         path: path.normalize(relativePath),
         filePath: path.normalize(filePath),
