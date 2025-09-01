@@ -2,10 +2,9 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { AsyncQueue } from "../util/async-queue.ts";
-import { getContentType } from "../util/content-type.ts";
 import { CloudflareApiError } from "./api-error.ts";
 import type { CloudflareApi } from "./api.ts";
-import type { Assets } from "./assets.ts";
+import type { AssetFile, Assets } from "./assets.ts";
 import type { AssetsConfig, WorkerProps } from "./worker.ts";
 
 export interface AssetUploadResult {
@@ -73,7 +72,7 @@ export async function uploadAssets(
   // Process the assets configuration once at the beginning
   const processedConfig = createAssetConfig(assetConfig);
 
-  const { manifest, filePathsByHash } = await prepareAssetManifest(assets);
+  const { manifest, filesByHash } = await prepareAssetManifest(assets);
 
   // Start the upload session
   const uploadSessionResponse = await api.post(
@@ -130,7 +129,7 @@ export async function uploadAssets(
           api,
           sessionData.result.jwt,
           bucket,
-          filePathsByHash,
+          filesByHash,
         );
         if (jwt) {
           completionToken = jwt;
@@ -183,38 +182,38 @@ export function createAssetConfig(config?: AssetsConfig): AssetsConfig {
  * Prepares the asset manifest for the assets upload session
  *
  * @param assets Assets resource containing files to upload
- * @returns Asset manifest and file paths by hash
+ * @returns Asset manifest and files by hash
  */
 export async function prepareAssetManifest(assets: Assets) {
   const manifest: Record<string, FileMetadata> = {};
-  const filePathsByHash = new Map<string, string>();
+  const filesByHash = new Map<string, AssetFile>();
   await Promise.all(
     assets.files.map(async (file) => {
       const { hash, size } = await calculateFileMetadata(file.filePath);
       const key = file.path.startsWith("/") ? file.path : `/${file.path}`;
       manifest[key] = { hash, size };
-      filePathsByHash.set(hash, file.filePath);
+      filesByHash.set(hash, file);
     }),
   );
-  return { manifest, filePathsByHash };
+  return { manifest, filesByHash };
 }
 
 async function uploadBucket(
   api: CloudflareApi,
   jwt: string,
   bucket: string[],
-  files: Map<string, string>,
+  filesByHash: Map<string, AssetFile>,
 ) {
   const formData = new FormData();
   await Promise.all(
     bucket.map(async (fileHash) => {
-      const filePath = files.get(fileHash);
-      if (!filePath) {
+      const file = filesByHash.get(fileHash);
+      if (!file) {
         throw new Error(`Could not find file with hash ${fileHash}`);
       }
-      const fileContent = await fs.readFile(filePath);
+      const fileContent = await fs.readFile(file.filePath);
       const blob = new Blob([fileContent.toString("base64")], {
-        type: getContentType(filePath) ?? "application/null",
+        type: file.contentType,
       });
       formData.append(fileHash, blob, fileHash);
     }),
