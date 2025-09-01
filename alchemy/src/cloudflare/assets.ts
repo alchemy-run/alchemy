@@ -118,17 +118,10 @@ export const Assets = Resource(
     // Create asset file objects
     const files: AssetFile[] = filesList.map((filePath) => {
       const relativePath = path.relative(props.path, filePath);
-      let contentType = getContentType(filePath) ?? "application/null";
-      // The standard for browsers is text/javascript, but we have
-      // application/javascript(+module) for Cloudflare Workers.
-      // TODO(john): Use a better approach.
-      if (contentType.startsWith("application/javascript")) {
-        contentType = "text/javascript";
-      }
       return {
         path: path.normalize(relativePath),
         filePath: path.normalize(filePath),
-        contentType,
+        contentType: getContentType(filePath) ?? "application/null",
       };
     });
 
