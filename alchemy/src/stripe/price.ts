@@ -27,13 +27,6 @@ export interface PriceRecurring {
   usageType?: Stripe.PriceCreateParams.Recurring.UsageType;
 
   /**
-   * Specifies a usage aggregation strategy for prices of `usage_type=metered`. Allowed values are `sum` for summing up all usage during a period,
-   * `last_during_period` for picking the last usage record reported within a period,
-   * `last_ever` for picking the last usage record ever (across period bounds) or `max` which picks the usage record with the maximum reported usage during a period.
-   */
-  aggregateUsage?: Stripe.PriceCreateParams.Recurring.AggregateUsage;
-
-  /**
    * The ID of the billing meter this price is associated with.
    * Only applicable when usageType = 'metered'.
    */
@@ -262,19 +255,6 @@ export interface Price extends Resource<"stripe::Price">, PriceProps {
  * });
  *
  * @example
- * // Create a metered price for usage-based billing
- * const meteredPrice = await Price("storage", {
- *   currency: "usd",
- *   unitAmount: 25, // $0.25 per GB
- *   product: "prod_xyz",
- *   recurring: {
- *     interval: "month",
- *     usageType: "metered",
- *     aggregateUsage: "sum"
- *   }
- * });
- *
- * @example
  * // Create a graduated tiered price with usage-based billing
  * const tieredPrice = await Price("api-usage", {
  *   currency: "usd",
@@ -428,7 +408,6 @@ export const Price = Resource(
             interval: props.recurring.interval,
             interval_count: props.recurring.intervalCount,
             usage_type: props.recurring.usageType,
-            aggregate_usage: props.recurring.aggregateUsage,
           };
 
           // Add meter to recurring if present (only for metered usage type)
@@ -514,8 +493,6 @@ export const Price = Resource(
             intervalCount: price.recurring.interval_count,
             usageType: price.recurring
               .usage_type as Stripe.PriceCreateParams.Recurring.UsageType,
-            aggregateUsage: price.recurring
-              .aggregate_usage as Stripe.PriceCreateParams.Recurring.AggregateUsage,
             meter: (
               price.recurring as Stripe.Price.Recurring & { meter?: string }
             ).meter,
