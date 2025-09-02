@@ -2,7 +2,8 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { AsyncQueue } from "../util/async-queue.ts";
-import { CloudflareApiError } from "./api-error.ts";
+import { withExponentialBackoff } from "../util/retry.ts";
+import { extractCloudflareResult } from "./api-response.ts";
 import type { CloudflareApi } from "./api.ts";
 import type { AssetFile, Assets } from "./assets.ts";
 import type { AssetsConfig, WorkerProps } from "./worker.ts";
@@ -18,32 +19,6 @@ export interface AssetUploadResult {
 interface FileMetadata {
   hash: string;
   size: number;
-}
-
-/**
- * Response from the assets upload session API
- */
-interface UploadSessionResponse {
-  result: {
-    jwt: string;
-    buckets: string[][];
-  };
-  success: boolean;
-  errors: any[];
-  messages: any[];
-}
-
-/**
- * Response from the file upload API
- */
-interface UploadResponse {
-  result: {
-    jwt: string;
-    buckets?: string[][];
-  };
-  success: boolean;
-  errors: any[];
-  messages: any[];
 }
 
 /**
@@ -75,61 +50,38 @@ export async function uploadAssets(
   const { manifest, filesByHash } = await prepareAssetManifest(assets);
 
   // Start the upload session
-  const uploadSessionResponse = await api.post(
-    namespace
-      ? `/accounts/${api.accountId}/workers/dispatch/namespaces/${namespace}/scripts/${workerName}/assets-upload-session`
-      : `/accounts/${api.accountId}/workers/scripts/${workerName}/assets-upload-session`,
-    JSON.stringify({ manifest }),
-    {
-      headers: { "Content-Type": "application/json" },
-    },
+  const uploadSession = await extractCloudflareResult<{
+    jwt: string;
+    buckets: string[][];
+  }>(
+    `create assets upload session for worker "${workerName}"`,
+    api.post(
+      namespace
+        ? `/accounts/${api.accountId}/workers/dispatch/namespaces/${namespace}/scripts/${workerName}/assets-upload-session`
+        : `/accounts/${api.accountId}/workers/scripts/${workerName}/assets-upload-session`,
+      { manifest },
+    ),
   );
-
-  if (!uploadSessionResponse.ok) {
-    throw new Error(
-      `Failed to start assets upload session: ${uploadSessionResponse.status} ${uploadSessionResponse.statusText} - ${await uploadSessionResponse.text()}`,
-    );
-  }
-
-  const sessionData =
-    (await uploadSessionResponse.json()) as UploadSessionResponse;
-
-  if (!sessionData?.success) {
-    if (sessionData?.errors) {
-      throw new CloudflareApiError(
-        `Failed to start assets upload session:\n${sessionData.errors
-          .map((error) => `- ${error.code}: ${error.message}`)
-          .join("\n")}`,
-        uploadSessionResponse,
-      );
-    }
-    throw new CloudflareApiError(
-      `Failed to start assets upload session: ${uploadSessionResponse.statusText}`,
-      uploadSessionResponse,
-    );
-  }
-
   // If there are no buckets, assets are already uploaded or empty
-  if (!sessionData.result.buckets || sessionData.result.buckets.length === 0) {
+  if (!uploadSession.buckets || uploadSession.buckets.length === 0) {
     return {
-      completionToken: sessionData.result.jwt,
+      completionToken: uploadSession.jwt,
       assetConfig: processedConfig,
     };
   }
 
   // Upload the files in batches as specified by the API
-  let completionToken = sessionData.result.jwt;
-  const buckets = sessionData.result.buckets;
+  let completionToken = uploadSession.jwt;
+  const buckets = uploadSession.buckets;
 
   const queue = new AsyncQueue(3);
   await Promise.all(
     buckets.map((bucket) =>
       queue.add(async () => {
-        const jwt = await uploadBucket(
-          api,
-          sessionData.result.jwt,
-          bucket,
-          filesByHash,
+        const jwt = await withExponentialBackoff(
+          async () =>
+            await uploadBucket(api, uploadSession.jwt, bucket, filesByHash),
+          () => true,
         );
         if (jwt) {
           completionToken = jwt;
@@ -218,32 +170,19 @@ async function uploadBucket(
       formData.append(fileHash, blob, fileHash);
     }),
   );
-  const uploadResponse = await api.post(
-    `/accounts/${api.accountId}/workers/assets/upload?base64=true`,
-    formData,
-    {
-      headers: {
-        Authorization: `Bearer ${jwt}`,
-        "Content-Type": "multipart/form-data",
+  const uploadResult = await extractCloudflareResult<{ jwt?: string }>(
+    "upload asset files",
+    api.post(
+      `/accounts/${api.accountId}/workers/assets/upload?base64=true`,
+      formData,
+      {
+        headers: {
+          Authorization: `Bearer ${jwt}`,
+        },
       },
-    },
+    ),
   );
-
-  if (!uploadResponse.ok) {
-    throw new Error(
-      `Failed to upload asset files: ${uploadResponse.status} ${uploadResponse.statusText}`,
-    );
-  }
-
-  const uploadData = (await uploadResponse.json()) as UploadResponse;
-  if (!uploadData.success) {
-    const error = uploadData.errors[0];
-    const message = error.message;
-    const code = error.code;
-    throw new Error(`Failed to upload asset files: ${message} (Code: ${code})`);
-  }
-
-  return uploadData.result.jwt;
+  return uploadResult.jwt;
 }
 
 /**
