@@ -59,6 +59,7 @@ type BaseWorkerOptions = {
 };
 
 export const buildWorkerOptions = async (
+  url: string,
   input: MiniflareWorkerInput,
 ): Promise<{
   watch: (signal: AbortSignal) => AsyncGenerator<miniflare.WorkerOptions>;
@@ -97,7 +98,7 @@ export const buildWorkerOptions = async (
       continue;
     }
     if (binding === Worker.DevDomain || binding === Worker.DevUrl) {
-      (options.bindings ??= {})[key] = "TODO";
+      (options.bindings ??= {})[key] = binding === Worker.DevUrl ? url : url.replace("http://", "").replace("https://", "");
       continue;
     }
     switch (binding.type) {
