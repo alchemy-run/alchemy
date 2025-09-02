@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import type * as Layer from "effect/Layer";
 
 export interface Binding<ID extends string, Action extends string> {
   readonly resource: ID;
@@ -66,6 +67,11 @@ export declare namespace Bucket {
     bucket: Bucket<ID>,
     key?: Key,
   ): Get<ID, Key>;
+  export function get<ID extends string, Key extends string>(
+    bucket: Bucket<ID>,
+    key?: Key,
+  ): Layer.Layer<Get<ID, Key>>;
+
   export type Put<ID extends string, Key extends string> = Allow<
     ID,
     "Bucket::Put",
@@ -109,6 +115,12 @@ export declare namespace KVNamespace {
     Key extends string,
     Value extends string,
   >(kv: KVNamespace<ID, Key, Value>): Get<ID, Key, Value>;
+  export function get<
+    ID extends string,
+    Key extends string,
+    Value extends string,
+  >(kv: KVNamespace<ID, Key, Value>): Layer.Layer<Get<ID, Key, Value>>;
+
   export type Put<
     ID extends string,
     Key extends string,
@@ -119,11 +131,12 @@ export declare namespace KVNamespace {
     Key extends string,
     Value extends string,
   >(kv: KVNamespace<ID, Key, Value>): Put<ID, Key, Value>;
+  export function put<
+    ID extends string,
+    Key extends string,
+    Value extends string,
+  >(kv: KVNamespace<ID, Key, Value>): Layer.Layer<Put<ID, Key, Value>>;
 }
-
-const queue = Queue("queue")<string>();
-
-const kv = KVNamespace("kv")();
 
 type GetStatements<E> = E extends Effect.Effect<any, any, infer S>
   ? Extract<S, Statement>
@@ -138,7 +151,7 @@ declare namespace alchemy {
 
   function deploy<W extends Worker<string, any, any>>(
     worker: W,
-    policy: NoInfer<MinimalPolicy<W["requirements"]>>,
+    policy: NoInfer<MinimalPolicy<Worker.Requirements<W>>>,
   ): Effect.Effect<void, never, never>;
 
   function client<W extends Worker<string, any, any>>(
@@ -147,9 +160,13 @@ declare namespace alchemy {
     fetch(
       url: string,
       init?: RequestInit,
-    ): Effect.Effect<Response, W["error"], never>;
-    fetch(request: Request): Effect.Effect<Response, W["error"], never>;
+    ): Effect.Effect<Response, Worker.Error<W>, never>;
+    fetch(request: Request): Effect.Effect<Response, Worker.Error<W>, never>;
   };
+
+  function runtime<E extends Effect.Effect<Handler, any, never>>(
+    worker: E,
+  ): Handler;
 }
 
 export interface Allow<
@@ -184,38 +201,73 @@ export interface Policy<in out Statements extends Statement> {
   readonly statements: Statements;
 }
 
-export type Worker<ID extends string = string, Err = never, Req = any> = {
-  resource: ID;
-  /** @internal */
-  requirements: Req;
-  /** @internal  */
-  error: Err;
-  fetch: (request: Request) => Effect.Effect<Response, Err, Worker.Fetch<ID>>;
+export type Handler = {
+  fetch: (
+    request: Request,
+    env: any,
+    ctx: ExecutionContext,
+  ) => Promise<Response>;
 };
+
+export type Worker<ID extends string = string, Err = any, Req = any> = {
+  resource: ID;
+  fetch: (request: Request) => Effect.Effect<Response, Err, Worker.Fetch<ID>>;
+} & Effect.Effect<Handler, never, Req>;
 
 export declare function Worker<ID extends string, Err = never, Req = any>(
   id: ID,
   props: {
+    main: string;
     fetch: (request: Request) => Effect.Effect<Response, Err, Req>;
   },
 ): Worker<ID, Err, Req>;
 
 export declare namespace Worker {
+  export type Requirements<W extends Worker> = W extends Effect.Effect<
+    any,
+    any,
+    infer R
+  >
+    ? R
+    : never;
+
+  export type Error<W extends Worker> = W extends Effect.Effect<
+    any,
+    infer E,
+    any
+  >
+    ? E
+    : never;
+
   export type Fetch<ID extends string> = Allow<ID, "Worker::Fetch">;
   export function Fetch<ID extends string>(worker: Worker<ID>): Fetch<ID>;
 }
+const kv = KVNamespace("kv")();
 
-// src/backend.ts
+// THE HOLY TRINITY 🔱
+
+// 1. business logic & contract
 const bucket = Bucket("bucket");
 
 const backend = Worker("backend", {
+  main: import.meta.file,
   fetch: (request: Request) =>
     Effect.gen(function* () {
       return new Response(yield* bucket.get(request.url));
     }),
 });
 
-// src/frontent.tsx
+// 2. optimally tree-shaken handler
+export default Effect.provide(backend, Bucket.get(bucket)).pipe(
+  alchemy.runtime,
+);
+
+// 3. materialize infrastructure with least-privilege IAM policy
+const deployment = alchemy.deploy(backend, alchemy.bind(Bucket.Get(bucket)));
+
+await Effect.runPromise(deployment);
+
+// 4. client in the browser
 const client = alchemy.client<typeof backend>("https://api.example.com");
 
 Effect.gen(function* () {
@@ -225,6 +277,7 @@ Effect.gen(function* () {
 });
 
 const frontend = Worker("frontend", {
+  main: import.meta.file,
   fetch: (request: Request) =>
     Effect.gen(function* () {
       if (request.url.startsWith("/api/")) {
