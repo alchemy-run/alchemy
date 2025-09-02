@@ -6,9 +6,9 @@ import { Scope } from "../scope.ts";
 import { isSecret } from "../secret.ts";
 import { assertNever } from "../util/assert-never.ts";
 import {
-	Self,
-	type Bindings,
-	type WorkerBindingRateLimit,
+  Self,
+  type Bindings,
+  type WorkerBindingRateLimit,
 } from "./bindings.ts";
 import type { R2BucketJurisdiction } from "./bucket.ts";
 import type { DurableObjectNamespace } from "./durable-object-namespace.ts";
