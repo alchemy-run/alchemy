@@ -74,6 +74,12 @@ export class InstrumentedStateStore<T extends StateStore>
       this.stateStore.count.bind(this.stateStore),
     );
   }
+  async listStages(): Promise<string[]> {
+    return await this.callWithTelemetry(
+      "stateStore.listStages",
+      this.stateStore.listStages.bind(this.stateStore),
+    );
+  }
   async get(key: string) {
     return await this.callWithTelemetry(
       "stateStore.get",

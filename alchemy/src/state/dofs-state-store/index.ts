@@ -136,6 +136,17 @@ export class DOFSStateStore implements StateStore {
     return res;
   }
 
+  async listStages(): Promise<string[]> {
+    const client = await this.getClient();
+
+    const basePrefix = this.prefix.startsWith("alchemy/")
+      ? "alchemy/"
+      : `${this.prefix.split("/")[0]}/`;
+
+    const res = await client.rpc("listStages", { prefix: basePrefix });
+    return res.sort();
+  }
+
   async get(key: string): Promise<State | undefined> {
     const client = await this.getClient();
     const res = await client.rpc("get", { key: this.serializeKey(key) });

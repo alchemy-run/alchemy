@@ -40,4 +40,5 @@ export interface StateStore {
   all(): Promise<Record<string, State>>;
   set(key: string, value: State): Promise<void>;
   delete(key: string): Promise<void>;
+  listStages(): Promise<string[]>;
 }

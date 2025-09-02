@@ -83,6 +83,7 @@ export namespace Telemetry {
       | "stateStore.deinit"
       | "stateStore.list"
       | "stateStore.count"
+      | "stateStore.listStages"
       | "stateStore.get"
       | "stateStore.getBatch"
       | "stateStore.all"

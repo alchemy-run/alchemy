@@ -43,6 +43,10 @@ export abstract class StateStoreProxy implements StateStore {
     return this.run("count", []);
   }
 
+  listStages(): Promise<string[]> {
+    return this.run("listStages", []);
+  }
+
   async get(key: string): Promise<State | undefined> {
     const result = await this.run("get", [key]);
     if (result === undefined) {

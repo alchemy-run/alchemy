@@ -183,6 +183,68 @@ export class R2RestStateStore implements StateStore {
   }
 
   /**
+   * List all stages in the state store
+   */
+  async listStages(): Promise<string[]> {
+    await this.ensureInitialized();
+
+    const stages = new Set<string>();
+    let cursor: string | null = null;
+
+    const basePrefixSegments = this.prefix.split("/");
+    const basePrefix = `${basePrefixSegments.slice(0, -1).join("/")}/`;
+
+    do {
+      const params = new URLSearchParams({
+        prefix: basePrefix,
+        limit: "1000",
+        delimiter: "/",
+      });
+
+      if (cursor) {
+        params.append("cursor", cursor);
+      }
+
+      const listPath = `/accounts/${this.api.accountId}/r2/buckets/${this.bucketName}/objects?${params.toString()}`;
+
+      const response = await withExponentialBackoff(
+        async () => {
+          const response = await this.api.get(listPath);
+
+          if (!response.ok) {
+            await handleApiError(response, "list", "bucket", this.bucketName);
+          }
+
+          return response;
+        },
+        isRetryableError,
+        5,
+        1000,
+      );
+
+      const data = (await response.json()) as any;
+
+      const result = data.result || data;
+
+      if (result.delimited_prefixes) {
+        for (const prefix of result.delimited_prefixes) {
+          const stageName = prefix.slice(basePrefix.length).replace(/\/$/, "");
+          if (stageName) {
+            stages.add(stageName);
+          }
+        }
+      }
+
+      cursor =
+        result.truncated || result.cursor_pagination
+          ? result.cursor || null
+          : null;
+    } while (cursor);
+
+    return Array.from(stages).sort();
+  }
+
+  /**
    * Get a state by key
    *
    * @param key The key to look up

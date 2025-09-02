@@ -51,6 +51,8 @@ export default class extends WorkerEntrypoint<Env> {
         return await stub.getBatch(body.params.keys);
       case "list":
         return await stub.list(body.params.prefix);
+      case "listStages":
+        return await stub.listStages(body.params.prefix);
       case "set":
         return await stub.set(body.params.key, body.params.value);
       default: {
@@ -198,6 +200,25 @@ export class DOFSStateStore extends DurableObject<Env> {
     return files
       .filter((item) => item.endsWith(".json"))
       .map((item) => item.slice(0, -5));
+  }
+
+  listStages(prefix: string): string[] {
+    const path = prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
+    if (!this.isDirectory(path)) {
+      return [];
+    }
+
+    const stages = new Set<string>();
+    const items = this.fs.listDir(path);
+
+    for (const item of items) {
+      const itemPath = `${path}/${item}`;
+      if (this.isDirectory(itemPath)) {
+        stages.add(item);
+      }
+    }
+
+    return Array.from(stages).sort();
   }
 
   async set(key: string, value: State): Promise<void> {

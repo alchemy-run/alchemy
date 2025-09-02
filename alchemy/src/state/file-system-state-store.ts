@@ -127,6 +127,30 @@ export class FileSystemStateStore implements StateStore {
     );
   }
 
+  async listStages(): Promise<string[]> {
+    const stages = new Set<string>();
+
+    try {
+      const rootStateDir = path.join(process.cwd(), ".alchemy");
+      const entries = await fs.promises.readdir(rootStateDir, {
+        withFileTypes: true,
+      });
+
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          stages.add(entry.name);
+        }
+      }
+    } catch (error: any) {
+      if (error.code === "ENOENT") {
+        return [];
+      }
+      throw error;
+    }
+
+    return Array.from(stages).sort();
+  }
+
   private getPath(key: string): string {
     if (key.includes(":")) {
       throw new Error(`ID cannot include colons: ${key}`);

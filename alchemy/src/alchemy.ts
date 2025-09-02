@@ -16,6 +16,7 @@ import { secret } from "./secret.ts";
 import { deserialize, serialize } from "./serde.ts";
 import type { StateStoreType } from "./state.ts";
 import type { LoggerApi } from "./util/cli.ts";
+import { logger } from "./util/logger.ts";
 import { TelemetryClient } from "./util/telemetry/client.ts";
 
 /**
@@ -467,7 +468,6 @@ async function rotatePassword(
     throw new Error(`Could not find scope for FQN: ${fqn}`);
   }
 
-  let totalRotatedCount = 0;
   let totalErrorCount = 0;
 
   async function rotateInScope(scope: Scope): Promise<void> {
@@ -504,7 +504,13 @@ async function rotatePassword(
           continue;
         }
 
-        console.log(`Found secrets in ${key}, rotating...`);
+        logger.task(key, {
+          message: `Found secrets in ${key}, rotating...`,
+          status: "pending",
+          resource: key,
+          prefix: "Secret rotation",
+          prefixColor: "cyanBright",
+        });
 
         let stateToRotate = state;
 
@@ -522,10 +528,22 @@ async function rotatePassword(
 
         await scope.state.set(key, reencrypted);
 
-        totalRotatedCount++;
+        logger.task(key, {
+          message: `Rotated secrets in ${key}`,
+          status: "success",
+          resource: key,
+          prefix: "Secret rotation",
+          prefixColor: "cyanBright",
+        });
       } catch (error) {
         totalErrorCount++;
-        console.error(`✗ Failed to rotate secrets for ${key}:`, error);
+        logger.task(key, {
+          message: `Failed to rotate secrets for ${key}: ${error}`,
+          status: "failure",
+          resource: key,
+          prefix: "Secret rotation",
+          prefixColor: "cyanBright",
+        });
       }
     }
 
@@ -536,10 +554,7 @@ async function rotatePassword(
 
   await rotateInScope(startScope);
 
-  console.log("\nPassword rotation complete:");
-  console.log(`  - Secrets rotated: ${totalRotatedCount}`);
   if (totalErrorCount > 0) {
-    console.log(`  - Errors: ${totalErrorCount}`);
     throw new Error(
       `Password rotation completed with ${totalErrorCount} errors`,
     );
