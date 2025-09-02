@@ -151,6 +151,7 @@
   },
   "dependencies": {
     "@aws-sdk/credential-providers": "^3.0.0",
+    "@better-fetch/fetch": "^1.1.18",
     "@cloudflare/unenv-preset": "^2.6.3",
     "@iarna/toml": "^2.2.5",
     "@smithy/node-config-provider": "^4.0.0",
