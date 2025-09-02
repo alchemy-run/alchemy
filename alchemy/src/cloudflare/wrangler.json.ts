@@ -844,9 +844,7 @@ function processBindings(
     spec.d1_databases = d1Databases;
   }
 
-  if (queues.consumers.length > 0) {
-    spec.queues = queues;
-  }
+  spec.queues = queues;
 
   if (vectorizeIndexes.length > 0) {
     spec.vectorize = vectorizeIndexes;
