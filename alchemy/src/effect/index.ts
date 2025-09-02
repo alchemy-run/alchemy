@@ -1,47 +1,101 @@
+import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
-import type * as Layer from "effect/Layer";
-
-export interface Binding<ID extends string, Action extends string> {
-  readonly resource: ID;
-  readonly action: Action;
-}
+import * as Layer from "effect/Layer";
 
 // TODO(sam): are there errors?
 export type SendMessageError = never;
-
-export type Queue<ID extends string, Msg> = {
+// a declared Queue at runtime
+export type Queue<ID extends string = string, Msg = any> = {
+  id: ID;
   send(
     message: Msg,
   ): Effect.Effect<void, SendMessageError, Queue.Send<ID, Msg>>;
   sendBatch(
     ...message: Msg[]
   ): Effect.Effect<void, SendMessageError, Queue.SendBatch<ID, Msg>>;
+  /** @internal */
+  Batch: Queue.Batch<Msg>;
+  forBatch<Req = never>(
+    fn: Queue.Handler<ID, Msg, Req>,
+  ): Queue.Consumer<ID, Msg, Req>;
 };
 
 export declare namespace Queue {
-  // export interface Send<ID extends string> extends Binding<ID, "Queue::Send"> {}
+  // type of a batch of messages at runtime
+  export type Batch<Msg> = {
+    messages: Msg[];
+    ackAll: () => Effect.Effect<void, never, never>;
+  };
+
+  export type Handler<ID extends string = string, Msg = any, Req = never> = (
+    batch: Queue.Batch<Msg>,
+  ) => Effect.Effect<void, never, Queue.Consume<ID, Msg> | Req>;
+
+  export type Consumer<
+    ID extends string = string,
+    Msg = any,
+    Req = never,
+  > = Effect.Effect<Handler<ID, Msg, Req>, never, Queue.Consume<ID, Msg> | Req>;
+
+  export type Consume<ID extends string, Msg> = Allow<
+    ID,
+    "Queue::Consume",
+    { msg: Msg }
+  >;
+  export function Consume<ID extends string, Msg>(
+    queue: Queue<ID, Msg>,
+    fn: (batch: Queue.Batch<Msg>) => Effect.Effect<void, never, never>,
+  ): Consume<ID, Msg>;
+  //   export function consume<ID extends string, Msg>(
+  //     queue: Queue<ID, Msg>,
+  //     fn: (batch: Queue.Batch<Msg>) => Effect.Effect<void, never, never>,
+  //   ): Layer.Layer<Consume<ID, Msg>>;
+
+  // policy specification
   export type Send<ID extends string, Msg> = Allow<
     ID,
     "Queue::Send",
     { message: Msg }
   >;
+  // provide Infrastructure policy
   export function Send<ID extends string, Msg>(
     queue: Queue<ID, Msg>,
   ): Send<ID, Msg>;
+  // provide Runtime client
+  export function send<ID extends string, Msg>(
+    queue: Queue<ID, Msg>,
+  ): Layer.Layer<Send<ID, Msg>>;
+
+  // policy specification
   export type SendBatch<ID extends string, Msg> = Allow<
     ID,
     "Queue::SendBatch",
     { message: Msg[] }
   >;
+  // provide Infrastructure policy
   export function SendBatch<ID extends string, Msg>(
     queue: Queue<ID, Msg>,
   ): SendBatch<ID, Msg>;
+
+  // provide Runtime client
+  export function sendBatch<ID extends string, Msg>(
+    queue: Queue<ID, Msg>,
+  ): Layer.Layer<SendBatch<ID, Msg>>;
 }
 
 export function Queue<ID extends string>(id: ID) {
   return <T>(): Queue<ID, T> => ({
+    id,
+    // TODO
     send: (message: T) => Effect.succeed(void 0),
+    // TODO
     sendBatch: (...message: T[]) => Effect.succeed(void 0),
+    get Batch(): never {
+      throw new Error("Cannot access phantom property, Batch");
+    },
+    // TODO
+    forBatch: <Req = never>(fn: Queue.Handler<ID, T, Req>) =>
+      Effect.succeed(void 0) as any,
   });
 }
 
@@ -164,9 +218,9 @@ declare namespace alchemy {
     fetch(request: Request): Effect.Effect<Response, Worker.Error<W>, never>;
   };
 
-  function runtime<E extends Effect.Effect<Handler, any, never>>(
-    worker: E,
-  ): Handler;
+  function runtime(
+    meta: ImportMeta,
+  ): <E extends Effect.Effect<Handler, any, never>>(worker: E) => Handler;
 }
 
 export interface Allow<
@@ -202,11 +256,7 @@ export interface Policy<in out Statements extends Statement> {
 }
 
 export type Handler = {
-  fetch: (
-    request: Request,
-    env: any,
-    ctx: ExecutionContext,
-  ) => Promise<Response>;
+  fetch(request: Request, env: any, ctx: ExecutionContext): Promise<Response>;
 };
 
 export type Worker<ID extends string = string, Err = any, Req = any> = {
@@ -214,11 +264,16 @@ export type Worker<ID extends string = string, Err = any, Req = any> = {
   fetch: (request: Request) => Effect.Effect<Response, Err, Worker.Fetch<ID>>;
 } & Effect.Effect<Handler, never, Req>;
 
-export declare function Worker<ID extends string, Err = never, Req = any>(
+export declare function Worker<
+  ID extends string,
+  Err = never,
+  Req = any,
+  Queue extends Queue.Consumer<string, any, any> = never,
+>(
   id: ID,
   props: {
-    main: string;
     fetch: (request: Request) => Effect.Effect<Response, Err, Req>;
+    queue?: Queue;
   },
 ): Worker<ID, Err, Req>;
 
@@ -249,21 +304,38 @@ const kv = KVNamespace("kv")();
 // 1. business logic & contract
 const bucket = Bucket("bucket");
 
+const queue = Queue("queue")<string>();
+
+const processMessages = queue.forBatch(
+  Effect.fn(function* (batch) {
+    for (const message of batch.messages) {
+      yield* Console.log(message);
+      yield* bucket.put(message, "processed");
+    }
+  }),
+);
+
 const backend = Worker("backend", {
-  main: import.meta.file,
   fetch: (request: Request) =>
     Effect.gen(function* () {
+      const body = yield* Effect.promise(request.text);
+      yield* queue.send(body);
       return new Response(yield* bucket.get(request.url));
     }),
+  queue: processMessages,
 });
 
 // 2. optimally tree-shaken handler
-export default Effect.provide(backend, Bucket.get(bucket)).pipe(
-  alchemy.runtime,
-);
+export default Effect.provide(
+  backend,
+  Layer.mergeAll(Bucket.get(bucket), Queue.send(queue)),
+).pipe(alchemy.runtime(import.meta));
 
 // 3. materialize infrastructure with least-privilege IAM policy
-const deployment = alchemy.deploy(backend, alchemy.bind(Bucket.Get(bucket)));
+const deployment = alchemy.deploy(
+  backend,
+  alchemy.bind(Bucket.Get(bucket), Queue.Send(queue)),
+);
 
 await Effect.runPromise(deployment);
 
@@ -275,24 +347,3 @@ Effect.gen(function* () {
     method: "GET",
   });
 });
-
-const frontend = Worker("frontend", {
-  main: import.meta.file,
-  fetch: (request: Request) =>
-    Effect.gen(function* () {
-      if (request.url.startsWith("/api/")) {
-        return yield* Effect.fail(new Error("Not implemented"));
-      }
-      return yield* backend.fetch(request);
-    }),
-});
-
-const deployBackend = alchemy.deploy(backend, alchemy.bind(Bucket.Get(bucket)));
-
-const deployFrontend = alchemy.deploy(
-  frontend,
-  alchemy.bind(Worker.Fetch(backend)),
-);
-
-await Effect.runPromise(deployBackend);
-await Effect.runPromise(deployFrontend);
