@@ -6,9 +6,9 @@ import { Scope } from "../scope.ts";
 import { isSecret } from "../secret.ts";
 import { assertNever } from "../util/assert-never.ts";
 import {
-  Self,
-  type Bindings,
-  type WorkerBindingRateLimit,
+	Self,
+	type Bindings,
+	type WorkerBindingRateLimit,
 } from "./bindings.ts";
 import type { R2BucketJurisdiction } from "./bucket.ts";
 import type { DurableObjectNamespace } from "./durable-object-namespace.ts";
@@ -353,8 +353,8 @@ export interface WranglerJsonSpec {
    * Queue bindings
    */
   queues?: {
-    producers: { queue: string; binding: string }[];
-    consumers: {
+    producers?: { queue: string; binding: string }[];
+    consumers?: {
       queue: string;
       max_batch_size?: number;
       max_concurrency?: number;
@@ -844,7 +844,12 @@ function processBindings(
     spec.d1_databases = d1Databases;
   }
 
-  spec.queues = queues;
+  if (queues.consumers.length > 0) {
+    (spec.queues ??= {}).consumers = queues.consumers;
+  }
+  if (queues.producers.length > 0) {
+    (spec.queues ??= {}).producers = queues.producers;
+  }
 
   if (vectorizeIndexes.length > 0) {
     spec.vectorize = vectorizeIndexes;
