@@ -50,6 +50,8 @@ describe
         // Create a role
         let role = await Role(testId, {
           database,
+          // Empty array means no permissions, which is fine for testing.
+          inheritedRoles: [],
         });
 
         expect(role).toMatchObject({
@@ -88,6 +90,7 @@ describe
         // Create initial role
         let role = await Role(testId, {
           database,
+          inheritedRoles: [],
         });
 
         const originalId = role.id;
@@ -103,6 +106,7 @@ describe
         role = await Role(testId, {
           database,
           ttl: 3600,
+          inheritedRoles: [],
         });
 
         // Should have a new ID due to replacement

@@ -11,17 +11,26 @@ Roles are only available for PostgreSQL databases. For MySQL databases, use the 
 
 ## Minimal Example
 
-Create a basic role with postgres privileges:
+Create a basic role with full administrator privileges for the `main` branch:
 
 ```ts
-import { Role } from "alchemy/planetscale";
+import { Database, Role } from "alchemy/planetscale";
 
-const role = await Role("app-role", {
-  database: "my-database",
+const database = await Database("my-db", {
+  name: "my-database",
   organizationId: "my-org",
+  clusterSize: "PS_10",
+  kind: "postgresql",
+});
+const role = await Role("app-role", {
+  database,
   inheritedRoles: ["postgres"],
 });
 ```
+
+:::warning
+The `"postgres"` role provides full administrator access to the database. While this can be useful in development, we recommend following the [principle of least privilege](https://en.wikipedia.org/wiki/Principle_of_least_privilege) and creating roles with specific permissions instead, particularly for production environments.
+:::
 
 ## Role with Specific Branch
 
@@ -40,14 +49,53 @@ const database = await Database("my-db", {
 const branch = await Branch("dev-branch", {
   name: "development",
   organizationId: "my-org",
-  database: database,
+  database,
   parentBranch: "main",
 });
 
 const role = await Role("dev-role", {
-  database: database,
-  branch: branch,
+  database,
+  branch,
   inheritedRoles: ["pg_read_all_data", "pg_write_all_data"],
+});
+```
+
+## Role with Named Database and Branch
+
+You can pass in the database and branch names as strings instead of using the Database and Branch resources. This is useful if you've defined the database or branch outside of Alchemy:
+
+```ts
+import { Role } from "alchemy/planetscale";
+
+const role = await Role("dev-role", {
+  organizationId: "my-org", // Required when using string database and branch names
+  database: "my-database",
+  branch: "main",
+  inheritedRoles: ["pg_read_all_data", "pg_write_all_data"],
+});
+```
+
+:::warning
+If both the database and branch are provided as strings, you must provide your organization ID as well.
+:::
+
+## Role with Inherited Permissions
+
+Create a role with inherited permissions from another role:
+
+```ts
+import { Role } from "alchemy/planetscale";
+
+const role1 = await Role("role-1", {
+  database,
+  branch,
+  inheritedRoles: ["pg_read_all_data", "pg_write_all_data"],
+});
+
+const role2 = await Role("role-2", {
+  database,
+  branch,
+  inheritedRoles: role1, // ["pg_read_all_data", "pg_write_all_data"]
 });
 ```
 
@@ -59,9 +107,8 @@ Create a role with a 1-hour time-to-live:
 import { Role } from "alchemy/planetscale";
 
 const temporaryRole = await Role("temp-role", {
-  database: "my-database",
-  organizationId: "my-org",
-  branch: "main",
+  database,
+  branch,
   ttl: 3600, // 1 hour in seconds
   inheritedRoles: ["pg_read_all_data"],
 });
@@ -75,8 +122,7 @@ Create a role with read-only permissions:
 import { Role } from "alchemy/planetscale";
 
 const readOnlyRole = await Role("reader", {
-  database: "my-database",
-  organizationId: "my-org",
+  database,
   inheritedRoles: [
     "pg_read_all_data",
     "pg_read_all_settings",

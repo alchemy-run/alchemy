@@ -3,6 +3,7 @@ import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
 import { PlanetScaleClient, type PlanetScaleProps } from "./api/client.gen.ts";
+import type { CreateRoleData } from "./api/types.gen.ts";
 import type { Branch } from "./branch.ts";
 import type { Database } from "./database.ts";
 import { waitForBranchReady } from "./utils.ts";
@@ -36,25 +37,34 @@ export interface RoleProps extends PlanetScaleProps {
   ttl?: number;
 
   /**
-   * Roles to inherit from
+   * Roles to inherit from.
+   * The `"postgres"` role provides full administrator access to the database.
+   * You can also inherit from another Role resource.
    */
-  inheritedRoles?: Array<
-    | "pg_checkpoint"
-    | "pg_create_subscription"
-    | "pg_maintain"
-    | "pg_monitor"
-    | "pg_read_all_data"
-    | "pg_read_all_settings"
-    | "pg_read_all_stats"
-    | "pg_signal_backend"
-    | "pg_stat_scan_tables"
-    | "pg_use_reserved_connections"
-    | "pg_write_all_data"
-    | "postgres"
-  >;
+  inheritedRoles: InheritedRole[] | Role;
 }
 
-export interface Role extends Resource<"planetscale::Role">, RoleProps {
+/**
+ * Roles that can be inherited from.
+ */
+export type InheritedRole =
+  | "postgres"
+  | "pg_checkpoint"
+  | "pg_create_subscription"
+  | "pg_maintain"
+  | "pg_monitor"
+  | "pg_read_all_data"
+  | "pg_read_all_settings"
+  | "pg_read_all_stats"
+  | "pg_signal_backend"
+  | "pg_stat_scan_tables"
+  | "pg_use_reserved_connections"
+  | "pg_write_all_data"
+  | (string & {});
+
+export interface Role
+  extends Resource<"planetscale::Role">,
+    Omit<RoleProps, "inheritedRoles"> {
   /**
    * The unique identifier for the role
    */
@@ -101,6 +111,11 @@ export interface Role extends Resource<"planetscale::Role">, RoleProps {
    * @see https://planetscale.com/docs/postgres/connecting/psbouncer
    */
   connectionUrlPooled: Secret<string>;
+
+  /**
+   * The roles that this role inherits from.
+   */
+  inheritedRoles: InheritedRole[];
 }
 
 /**
@@ -162,6 +177,9 @@ export const Role = Resource(
       typeof props.branch === "string"
         ? props.branch
         : (props.branch?.name ?? "main");
+    const inheritedRoles = Array.isArray(props.inheritedRoles)
+      ? props.inheritedRoles
+      : props.inheritedRoles.inheritedRoles;
     if (!organization) {
       throw new Error("Organization ID is required");
     }
@@ -210,8 +228,8 @@ export const Role = Resource(
           },
           body: {
             ttl: props.ttl,
-            inherited_roles: props.inheritedRoles,
-          },
+            inherited_roles: inheritedRoles,
+          } as CreateRoleData["body"],
         });
         return this({
           ...props,
@@ -222,6 +240,7 @@ export const Role = Resource(
           password: alchemy.secret(role.password),
           expiresAt: role.expires_at,
           databaseName: role.database_name,
+          inheritedRoles,
           connectionUrl: alchemy.secret(
             `postgresql://${role.username}:${role.password}@${role.access_host_url}:5432/${role.database_name}?sslmode=verify-full`,
           ),
