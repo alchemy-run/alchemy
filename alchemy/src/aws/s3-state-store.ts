@@ -140,6 +140,46 @@ export class S3StateStore implements StateStore {
     return keys;
   }
 
+  async listStages(): Promise<string[]> {
+    await this.ensureInitialized();
+
+    const stages = new Set<string>();
+    let continuationToken: string | undefined;
+
+    const basePrefixSegments = this.prefix.split("/");
+    const basePrefix = `${basePrefixSegments.slice(0, -1).join("/")}/`;
+
+    do {
+      const response = await retry(() =>
+        this.client.send(
+          new ListObjectsV2Command({
+            Bucket: this.bucketName,
+            Prefix: basePrefix,
+            Delimiter: "/",
+            ContinuationToken: continuationToken,
+          }),
+        ),
+      );
+
+      if (response.CommonPrefixes) {
+        for (const commonPrefix of response.CommonPrefixes) {
+          if (commonPrefix.Prefix) {
+            const stageName = commonPrefix.Prefix.slice(
+              basePrefix.length,
+            ).replace(/\/$/, "");
+            if (stageName) {
+              stages.add(stageName);
+            }
+          }
+        }
+      }
+
+      continuationToken = response.NextContinuationToken;
+    } while (continuationToken);
+
+    return Array.from(stages).sort();
+  }
+
   /**
    * Count the number of items in the state store
    */

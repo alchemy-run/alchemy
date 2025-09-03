@@ -50,6 +50,8 @@ export class SQLiteStateStoreOperations implements StateStore {
         const [key] = params as StateStoreProxy.API["delete"]["params"];
         return this.delete(key);
       }
+      case "listStages":
+        return this.listStages();
       default:
         assertNever(method);
     }
@@ -148,5 +150,19 @@ export class SQLiteStateStoreOperations implements StateStore {
       };
     }
     return record;
+  }
+  async listStages(): Promise<string[]> {
+    const result = await this.db
+      .selectDistinct({ scope: schema.resources.scope })
+      .from(schema.resources);
+
+    const stages = new Set<string>();
+    for (const r of result) {
+      if (r.scope && Array.isArray(r.scope) && r.scope.length > 1) {
+        stages.add(r.scope[1]);
+      }
+    }
+
+    return Array.from(stages).sort();
   }
 }

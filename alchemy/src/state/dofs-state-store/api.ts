@@ -42,6 +42,11 @@ export namespace DOStateStoreAPI {
       params: { prefix: string };
       result: number;
     };
+    listStages: {
+      method: "listStages";
+      params: { prefix: string };
+      result: string[];
+    };
   };
 
   export interface Context {
