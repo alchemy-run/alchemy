@@ -1,6 +1,5 @@
-import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
+import type * as Layer from "effect/Layer";
 
 // TODO(sam): are there errors?
 export type SendMessageError = never;
@@ -16,9 +15,23 @@ export type Queue<ID extends string = string, Msg = any> = {
   /** @internal */
   Batch: Queue.Batch<Msg>;
   forBatch<Req = never>(
-    fn: Queue.Handler<ID, Msg, Req>,
-  ): Queue.Consumer<ID, Msg, Req>;
+    fn: (batch: Queue.Batch<Msg>) => Effect.Effect<void, never, Req>,
+  ): <T, E, R>(
+    effect: Effect.Effect<T, E, R>,
+  ) => Effect.Effect<
+    T & {
+      queue(batch: Queue.Batch<Msg>): Effect.Effect<void, never, never>;
+    },
+    never,
+    MergeReq<Policy<Queue.Consume<ID, Msg>>, Req>
+  >;
 };
+
+// TODO(sam): is sthere a cleaner way to do this?
+type MergeReq<A, B> =
+  | Policy<Extract<A, Policy>["statements"] | Extract<B, Policy>["statements"]>
+  | Exclude<A, Policy>
+  | Exclude<B, Policy>;
 
 export declare namespace Queue {
   // type of a batch of messages at runtime
@@ -27,16 +40,6 @@ export declare namespace Queue {
     ackAll: () => Effect.Effect<void, never, never>;
   };
 
-  export type Handler<ID extends string = string, Msg = any, Req = never> = (
-    batch: Queue.Batch<Msg>,
-  ) => Effect.Effect<void, never, Queue.Consume<ID, Msg> | Req>;
-
-  export type Consumer<
-    ID extends string = string,
-    Msg = any,
-    Req = never,
-  > = Effect.Effect<Handler<ID, Msg, Req>, never, Queue.Consume<ID, Msg> | Req>;
-
   export type Consume<ID extends string, Msg> = Allow<
     ID,
     "Queue::Consume",
@@ -44,12 +47,8 @@ export declare namespace Queue {
   >;
   export function Consume<ID extends string, Msg>(
     queue: Queue<ID, Msg>,
-    fn: (batch: Queue.Batch<Msg>) => Effect.Effect<void, never, never>,
-  ): Consume<ID, Msg>;
-  //   export function consume<ID extends string, Msg>(
-  //     queue: Queue<ID, Msg>,
-  //     fn: (batch: Queue.Batch<Msg>) => Effect.Effect<void, never, never>,
-  //   ): Layer.Layer<Consume<ID, Msg>>;
+    // fn: (batch: Queue.Batch<Msg>) => Effect.Effect<void, never, never>,
+  ): Policy<Consume<ID, Msg>>;
 
   // policy specification
   export type Send<ID extends string, Msg> = Allow<
@@ -60,7 +59,7 @@ export declare namespace Queue {
   // provide Infrastructure policy
   export function Send<ID extends string, Msg>(
     queue: Queue<ID, Msg>,
-  ): Send<ID, Msg>;
+  ): Policy<Send<ID, Msg>>;
   // provide Runtime client
   export function send<ID extends string, Msg>(
     queue: Queue<ID, Msg>,
@@ -75,7 +74,7 @@ export declare namespace Queue {
   // provide Infrastructure policy
   export function SendBatch<ID extends string, Msg>(
     queue: Queue<ID, Msg>,
-  ): SendBatch<ID, Msg>;
+  ): Policy<SendBatch<ID, Msg>>;
 
   // provide Runtime client
   export function sendBatch<ID extends string, Msg>(
@@ -94,19 +93,20 @@ export function Queue<ID extends string>(id: ID) {
       throw new Error("Cannot access phantom property, Batch");
     },
     // TODO
-    forBatch: <Req = never>(fn: Queue.Handler<ID, T, Req>) =>
-      Effect.succeed(void 0) as any,
+    forBatch: <Req = never>(
+      fn: (batch: Queue.Batch<T>) => Effect.Effect<void, never, Req>,
+    ) => Effect.succeed(void 0) as any,
   });
 }
 
 export type Bucket<ID extends string> = {
   get<const Key extends string = string>(
     key: Key,
-  ): Effect.Effect<string | undefined, never, Bucket.Get<ID, Key>>;
+  ): Effect.Effect<string | undefined, never, Policy<Bucket.Get<ID, Key>>>;
   put(
     key: string,
     value: string,
-  ): Effect.Effect<void, never, Bucket.Put<ID, string>>;
+  ): Effect.Effect<void, never, Policy<Bucket.Put<ID, string>>>;
 };
 
 export declare function Bucket<ID extends string>(id: ID): Bucket<ID>;
@@ -120,7 +120,7 @@ export declare namespace Bucket {
   export function Get<ID extends string, const Key extends string>(
     bucket: Bucket<ID>,
     key?: Key,
-  ): Get<ID, Key>;
+  ): Policy<Get<ID, Key>>;
   export function get<ID extends string, Key extends string>(
     bucket: Bucket<ID>,
     key?: Key,
@@ -133,7 +133,7 @@ export declare namespace Bucket {
   >;
   export function Put<ID extends string, Key extends string>(
     bucket: Bucket<ID>,
-  ): Put<ID, Key>;
+  ): Policy<Put<ID, Key>>;
 }
 
 export type KVNamespace<
@@ -143,11 +143,15 @@ export type KVNamespace<
 > = {
   get(
     key: Key,
-  ): Effect.Effect<Value | undefined, never, KVNamespace.Get<ID, Key, Value>>;
+  ): Effect.Effect<
+    Value | undefined,
+    never,
+    Policy<KVNamespace.Get<ID, Key, Value>>
+  >;
   put(
     key: Key,
     value: Value,
-  ): Effect.Effect<void, never, KVNamespace.Put<ID, Key, Value>>;
+  ): Effect.Effect<void, never, Policy<KVNamespace.Put<ID, Key, Value>>>;
 };
 export function KVNamespace<ID extends string>(id: ID) {
   return <
@@ -168,7 +172,7 @@ export declare namespace KVNamespace {
     ID extends string,
     Key extends string,
     Value extends string,
-  >(kv: KVNamespace<ID, Key, Value>): Get<ID, Key, Value>;
+  >(kv: KVNamespace<ID, Key, Value>): Policy<Get<ID, Key, Value>>;
   export function get<
     ID extends string,
     Key extends string,
@@ -184,45 +188,13 @@ export declare namespace KVNamespace {
     ID extends string,
     Key extends string,
     Value extends string,
-  >(kv: KVNamespace<ID, Key, Value>): Put<ID, Key, Value>;
+  >(kv: KVNamespace<ID, Key, Value>): Policy<Put<ID, Key, Value>>;
   export function put<
     ID extends string,
     Key extends string,
     Value extends string,
   >(kv: KVNamespace<ID, Key, Value>): Layer.Layer<Put<ID, Key, Value>>;
 }
-
-type GetStatements<E> = E extends Effect.Effect<any, any, infer S>
-  ? Extract<S, Statement>
-  : Extract<E, Statement>;
-
-type MinimalPolicy<E> = Policy<GetStatements<E>>;
-
-declare namespace alchemy {
-  function bind<S extends readonly Statement<any>[]>(
-    ...actions: S
-  ): Policy<S[number]>;
-
-  function deploy<W extends Worker<string, any, any>>(
-    worker: W,
-    policy: NoInfer<MinimalPolicy<Worker.Requirements<W>>>,
-  ): Effect.Effect<void, never, never>;
-
-  function client<W extends Worker<string, any, any>>(
-    baseUrl: string,
-  ): {
-    fetch(
-      url: string,
-      init?: RequestInit,
-    ): Effect.Effect<Response, Worker.Error<W>, never>;
-    fetch(request: Request): Effect.Effect<Response, Worker.Error<W>, never>;
-  };
-
-  function runtime(
-    meta: ImportMeta,
-  ): <E extends Effect.Effect<Handler, any, never>>(worker: E) => Handler;
-}
-
 export interface Allow<
   ID extends string,
   Action extends string,
@@ -251,7 +223,7 @@ export type Statement<
 > = Allow<ID, Action> | Deny<ID, Action>;
 
 // A policy is invariant over its allowed actions
-export interface Policy<in out Statements extends Statement> {
+export interface Policy<in out Statements extends Statement = any> {
   readonly statements: Statements;
 }
 
@@ -259,91 +231,94 @@ export type Handler = {
   fetch(request: Request, env: any, ctx: ExecutionContext): Promise<Response>;
 };
 
-export type Worker<ID extends string = string, Err = any, Req = any> = {
-  resource: ID;
-  fetch: (request: Request) => Effect.Effect<Response, Err, Worker.Fetch<ID>>;
-} & Effect.Effect<Handler, never, Req>;
-
-export declare function Worker<
-  ID extends string,
-  Err = never,
-  Req = any,
-  Queue extends Queue.Consumer<string, any, any> = never,
->(
-  id: ID,
-  props: {
-    fetch: (request: Request) => Effect.Effect<Response, Err, Req>;
-    queue?: Queue;
+export type Fetch<Req = never> = Effect.Effect<
+  {
+    fetch(request: Request): Effect.Effect<Response, never, Req>;
   },
-): Worker<ID, Err, Req>;
+  never,
+  Req
+>;
+export declare function Fetch<Req = never>(
+  fetch: (request: Request) => Effect.Effect<Response, never, Req>,
+): Fetch<Req>;
 
-export declare namespace Worker {
-  export type Requirements<W extends Worker> = W extends Effect.Effect<
-    any,
-    any,
-    infer R
-  >
-    ? R
-    : never;
+export declare function Worker<ID extends string, T, Req = never>(
+  id: ID,
+  effect: Effect.Effect<T, never, Req>,
+): Effect.Effect<Worker<ID, T>, never, Req>;
+export declare function Worker<ID extends string>(
+  id: ID,
+): <T, Req = never>(
+  effect: Effect.Effect<T, never, Req>,
+) => Effect.Effect<Worker<ID, T>, never, Req>;
 
-  export type Error<W extends Worker> = W extends Effect.Effect<
-    any,
-    infer E,
-    any
-  >
-    ? E
-    : never;
+export type Worker<ID extends string, Exports> = {
+  id: ID;
+  exports: Exports;
+};
 
-  export type Fetch<ID extends string> = Allow<ID, "Worker::Fetch">;
-  export function Fetch<ID extends string>(worker: Worker<ID>): Fetch<ID>;
+type Bind<S extends Statement> = <
+  E extends Effect.Effect<any, never, Policy<S>>,
+>(
+  effect: E,
+) => Effect.Effect<Effect.Effect.Success<E>, never, never>;
+
+declare namespace alchemy {
+  function bind<S extends readonly Policy[]>(
+    ...actions: S
+  ): Bind<S[number]["statements"]>;
+
+  function runtime(
+    meta: ImportMeta,
+  ): <E extends Effect.Effect<Handler, any, never>>(worker: E) => Handler;
 }
-const kv = KVNamespace("kv")();
 
 // THE HOLY TRINITY 🔱
 
 // 1. business logic & contract
 const bucket = Bucket("bucket");
 
-const queue = Queue("queue")<string>();
+const queue = Queue("queue")<{
+  key: string;
+  value: string;
+}>();
 
-const processMessages = queue.forBatch(
-  Effect.fn(function* (batch) {
-    for (const message of batch.messages) {
-      yield* Console.log(message);
-      yield* bucket.put(message, "processed");
-    }
+// compose a fetch (http) handler and a queue consumer into a single Worker
+const backend = Fetch((request: Request) =>
+  Effect.gen(function* () {
+    return new Response(yield* bucket.get(request.url));
   }),
-);
-
-const backend = Worker("backend", {
-  fetch: (request: Request) =>
-    Effect.gen(function* () {
-      const body = yield* Effect.promise(request.text);
-      yield* queue.send(body);
-      return new Response(yield* bucket.get(request.url));
+).pipe(
+  queue.forBatch(
+    Effect.fn(function* (batch) {
+      for (const message of batch.messages) {
+        yield* bucket.put(message.key, message.value);
+      }
     }),
-  queue: processMessages,
-});
-
-// 2. optimally tree-shaken handler
-export default Effect.provide(
-  backend,
-  Layer.mergeAll(Bucket.get(bucket), Queue.send(queue)),
-).pipe(alchemy.runtime(import.meta));
-
-// 3. materialize infrastructure with least-privilege IAM policy
-const deployment = alchemy.deploy(
-  backend,
-  alchemy.bind(Bucket.Get(bucket), Queue.Send(queue)),
+  ),
+  Worker("backend"),
 );
 
+// 2. materialize physical resourcew with least privilege policy
+const deployment = backend.pipe(
+  alchemy.bind(Queue.Consume(queue), Bucket.Put(bucket)),
+);
 await Effect.runPromise(deployment);
 
-// 4. client in the browser
-const client = alchemy.client<typeof backend>("https://api.example.com");
-
-Effect.gen(function* () {
-  yield* client.fetch("/api/data", {
-    method: "GET",
-  });
-});
+// // alternative syntax
+// const backend2 = Worker(
+//   "worker",
+//   Fetch((request: Request) =>
+//     Effect.gen(function* () {
+//       return new Response(yield* bucket.get(request.url));
+//     }),
+//   ).pipe(
+//     queue.forBatch(
+//       Effect.fn(function* (batch) {
+//         for (const message of batch.messages) {
+//           yield* bucket.put(message.key, message.value);
+//         }
+//       }),
+//     ),
+//   ),
+// );
