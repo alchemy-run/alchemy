@@ -67,14 +67,12 @@ export class FileSystemStateStore implements StateStore {
   }
 
   async get(key: string): Promise<State | undefined> {
-    console.log("here???");
     try {
       const content = await fs.promises.readFile(this.getPath(key), "utf8");
       const state = (await deserialize(
         this.scope,
         JSON.parse(content),
       )) as State;
-      console.log(state);
       if (state.output === undefined) {
         state.output = {} as any;
       }
