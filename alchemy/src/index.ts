@@ -2,6 +2,7 @@ export type { AlchemyOptions, Phase } from "./alchemy.ts";
 export type * from "./context.ts";
 
 export * from "./resource.ts";
+export * from "./rotate-password.ts";
 export * from "./scope.ts";
 export * from "./secret.ts";
 export * from "./serde.ts";

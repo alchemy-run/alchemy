@@ -1,7 +1,7 @@
 import { log } from "@clack/prompts";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { unlinkSync, writeFileSync } from "node:fs";
+import { promises as fs, unlinkSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import pc from "picocolors";
 import z from "zod";
@@ -62,29 +62,32 @@ export const rotatePassword = loggedProcedure
         throw new ExitSignal(1);
       }
 
-      log.step("Rotating password...");
-
       // Create a wrapper script that will load the alchemy file and call rotatePassword
       const wrapperScript = `
-import("${alchemyFile.replace(/\\/g, "/")}").then(async () => {
-  const { alchemy } = await import("alchemy");
-  const oldPassword = "${oldPassword.replace(/"/g, '\\"')}";
-  const newPassword = "${newPassword.replace(/"/g, '\\"')}";
-  const scope = ${options.scope ? `"${options.scope.replace(/"/g, '\\"')}"` : "undefined"};
+			${await fs.readFile(alchemyFile, "utf8")}
+
+			// =================
+			
+  const { rotatePassword: __ALCHEMY_ROTATE_PASSWORD } = await import("alchemy");
+  const __ALCHEMY_oldPassword = "${oldPassword.replace(/"/g, '\\"')}";
+  const __ALCHEMY_newPassword = "${newPassword.replace(/"/g, '\\"')}";
+  const __ALCHEMY_scope = ${options.scope ? `"${options.scope.replace(/"/g, '\\"')}"` : "undefined"};
   
   try {
-    await alchemy.rotatePassword(oldPassword, newPassword, scope);
+    await __ALCHEMY_ROTATE_PASSWORD(__ALCHEMY_oldPassword, __ALCHEMY_newPassword, __ALCHEMY_scope);
     console.log("\\n✅ Password rotation completed successfully");
     process.exit(0);
   } catch (error) {
     console.error("\\n❌ Password rotation failed:", error.message);
     process.exit(1);
   }
-});
 `;
 
       // Write the wrapper script to a temporary file
-      const tempScriptPath = resolve(cwd, `.alchemy-rotate-${Date.now()}.mjs`);
+      const tempScriptPath = resolve(
+        cwd,
+        `.alchemy-rotate-${Date.now()}.${alchemyFile.endsWith(".ts") ? "ts" : "mjs"}`,
+      );
       writeFileSync(tempScriptPath, wrapperScript);
 
       try {
