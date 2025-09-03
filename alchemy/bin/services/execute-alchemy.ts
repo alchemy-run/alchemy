@@ -4,9 +4,8 @@ import { once } from "node:events";
 import { resolve } from "node:path";
 import pc from "picocolors";
 import z from "zod";
-import { detectRuntime } from "../../src/util/detect-node-runtime.ts";
-import { detectPackageManager } from "../../src/util/detect-package-manager.ts";
 import { exists } from "../../src/util/exists.ts";
+import { getRunPrefix } from "../get-run-prefix.ts";
 import { ExitSignal } from "../trpc.ts";
 
 export const entrypoint = z
@@ -123,48 +122,13 @@ export async function execAlchemy(
     throw new ExitSignal(1);
   }
 
-  // Detect package manager
-  const packageManager = await detectPackageManager(cwd);
-  const runtime = detectRuntime();
-
   const argsString = args.join(" ");
   const execArgsString = execArgs.join(" ");
-  // Determine the command to run based on package manager and file extension
-  let command: string;
   const isTypeScript = main.endsWith(".ts");
+  const runPrefix = await getRunPrefix({ isTypeScript, cwd });
 
-  switch (packageManager) {
-    case "bun":
-      command = `bun ${execArgsString} ${main} ${argsString}`;
-      break;
-    case "deno":
-      command = `deno run -A ${execArgsString} ${main} ${argsString}`;
-      break;
-    case "pnpm":
-      command = isTypeScript
-        ? `pnpm dlx tsx ${execArgsString} ${main} ${argsString}`
-        : `pnpm node ${execArgsString} ${main} ${argsString}`;
-      break;
-    case "yarn":
-      command = isTypeScript
-        ? `yarn tsx ${execArgsString} ${main} ${argsString}`
-        : `yarn node ${execArgsString} ${main} ${argsString}`;
-      break;
-    default:
-      switch (runtime) {
-        case "bun":
-          command = `bun ${execArgsString} ${main} ${argsString}`;
-          break;
-        case "deno":
-          command = `deno run -A ${execArgsString} ${main} ${argsString}`;
-          break;
-        case "node":
-          command = isTypeScript
-            ? `npx tsx ${execArgsString} ${main} ${argsString}`
-            : `node ${execArgsString} ${main} ${argsString}`;
-          break;
-      }
-  }
+  const command = `${runPrefix} ${execArgsString} ${main} ${argsString}`;
+
   process.on("SIGINT", async () => {
     await exitPromise;
     process.exit(sanitizeExitCode(child.exitCode));

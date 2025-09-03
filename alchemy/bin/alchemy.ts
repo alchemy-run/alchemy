@@ -6,6 +6,7 @@ import { dev } from "./commands/dev.ts";
 import { login } from "./commands/login.ts";
 import { run } from "./commands/run.ts";
 import { init } from "./commands/init.ts";
+import { rotatePassword } from "./commands/rotate-password.ts";
 import { getPackageVersion } from "./services/get-package-version.ts";
 import { t } from "./trpc.ts";
 
@@ -17,6 +18,7 @@ const router = t.router({
   destroy,
   dev,
   run,
+  "rotate-password": rotatePassword,
 });
 
 export type AppRouter = typeof router;
