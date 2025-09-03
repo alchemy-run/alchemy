@@ -792,7 +792,7 @@ describe("WranglerJson Resource", () => {
       const { spec } = await WranglerJson({ worker });
 
       expect(spec.queues?.consumers).toHaveLength(1);
-      expect(spec.queues?.consumers[0]).toMatchObject({
+      expect(spec.queues?.consumers?.[0]).toMatchObject({
         queue: queue.name, // Should use queue name, not ID
         max_batch_size: 25,
         max_concurrency: 5,
@@ -834,7 +834,7 @@ describe("WranglerJson Resource", () => {
       const { spec } = await WranglerJson({ worker });
 
       expect(spec.queues?.consumers).toHaveLength(1);
-      expect(spec.queues?.consumers[0]).toMatchObject({
+      expect(spec.queues?.consumers?.[0]).toMatchObject({
         queue: queue.name, // Should use queue name, not ID
       });
     } finally {
