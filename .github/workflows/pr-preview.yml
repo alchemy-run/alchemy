@@ -18,6 +18,12 @@ jobs:
       contents: read
       pull-requests: write
     steps:
+      - name: Exit if Draft
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft
+        run: |
+          echo "PR is in draft. Skipping preview publish."
+          exit 0
+
       - uses: actions/checkout@v4
 
       - name: Setup Alchemy Environment
