@@ -2,6 +2,7 @@ import { alchemy } from "../alchemy.ts";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
+import { logger } from "../util/logger.ts";
 import { PlanetScaleClient, type PlanetScaleProps } from "./api/client.gen.ts";
 import type { CreateRoleData } from "./api/types.gen.ts";
 import type { Branch } from "./branch.ts";
@@ -161,7 +162,7 @@ export const Role = Resource(
   "planetscale::Role",
   async function (
     this: Context<Role, RoleProps>,
-    _id: string,
+    id: string,
     props: RoleProps,
   ): Promise<Role> {
     const api = new PlanetScaleClient(props);
@@ -196,9 +197,26 @@ export const Role = Resource(
             },
             result: "full",
           });
-          // TODO: (422 unprocessable): Role is still referenced and cannot be dropped
-          if (res.error && res.error.status !== 404) {
-            throw new Error("Failed to delete role", { cause: res.error });
+          if (res.error) {
+            switch (res.error.status) {
+              case 404:
+                break;
+              case 422:
+                // This is a workaround for 422 unprocessable: Role is still referenced and cannot be dropped.
+                // Essentially, the role is still linked to a branch, so we can't delete it here, but it'll be deleted when the branch is deleted.
+                logger.warn(
+                  [
+                    `Delete role "${id}" (name: "${this.output.name}") failed with status ${res.error.status} (${res.error.code}): ${res.error.message}`,
+                    `If you are deleting database "${database}" or branch "${branch}", the role will be deleted automatically.`,
+                    `Otherwise, consider manually deleting the role at: https://app.planetscale.com/${organization}/${database}/settings/roles`,
+                  ].join("\n"),
+                );
+                break;
+              default:
+                throw new Error(`Failed to delete role "${id}"`, {
+                  cause: res.error,
+                });
+            }
           }
         }
         return this.destroy();
