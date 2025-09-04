@@ -1,12 +1,10 @@
+import type { Credentials } from "../auth.ts";
 import type { Secret } from "../secret.ts";
+import { defaultKeyFn, memoize } from "../util/memoize.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
 import { safeFetch } from "../util/safe-fetch.ts";
-import {
-  getCloudflareAuthHeaders,
-  normalizeAuthOptions,
-  type CloudflareAuthOptions,
-} from "./auth.ts";
-import { getCloudflareAccountId } from "./user.ts";
+import { CloudflareAuth } from "./auth.ts";
+import { getCloudflareAccountId, getUserEmailFromApiKey } from "./user.ts";
 
 /**
  * Options for Cloudflare API requests
@@ -18,6 +16,11 @@ export interface CloudflareApiOptions {
    * @default https://api.cloudflare.com/client/v4
    */
   baseUrl?: string;
+
+  /**
+   * Profile to use
+   */
+  profile?: string;
 
   /**
    * API Key to use (overrides CLOUDFLARE_API_KEY env var)
@@ -42,72 +45,122 @@ export interface CloudflareApiOptions {
   email?: string;
 }
 
-/** Used to propagate normalized auth options from a parent resource to `createCloudflareApi` in a child resource */
-export type InternalCloudflareApiOptions = CloudflareAuthOptions & {
-  baseUrl?: string;
-  accountId: string;
-};
-
-function computeCacheKey(options: CloudflareApiOptions): string {
-  return `${options.baseUrl}|${options.accountId}|${options.apiKey?.unencrypted}|${options.apiToken?.unencrypted}|${options.email}`;
-}
-
-const cloudflareApiCache: Record<string, CloudflareApi> = {};
-
 /**
  * Creates a CloudflareApi instance with automatic account ID discovery if not provided
  *
  * @param options API options
  * @returns Promise resolving to a CloudflareApi instance
  */
-export async function createCloudflareApi(
-  options: Partial<CloudflareApiOptions> | InternalCloudflareApiOptions = {},
-): Promise<CloudflareApi> {
-  // TODO: Implement scope-level credential resolution similar to AWS
-  // This function should check for scope.providerCredentials.cloudflare
-  // and merge those credentials with the provided options, following
-  // the same three-tier resolution pattern: global → scope → resource
-  const cacheKey = computeCacheKey(options);
-  if (cloudflareApiCache[cacheKey]) {
-    return cloudflareApiCache[cacheKey];
-  }
+export const createCloudflareApi = memoize(
+  async (options: CloudflareApiOptions = {}) => {
+    // TODO: Implement scope-level credential resolution similar to AWS
+    // This function should check for scope.providerCredentials.cloudflare
+    // and merge those credentials with the provided options, following
+    // the same three-tier resolution pattern: global → scope → resource
 
-  const authOptions = await normalizeAuthOptions(options);
-  const accountId =
-    options.accountId ??
-    process.env.CLOUDFLARE_ACCOUNT_ID ??
-    process.env.CF_ACCOUNT_ID ??
-    (await getCloudflareAccountId(authOptions));
-  return (cloudflareApiCache[cacheKey] = new CloudflareApi({
-    baseUrl: options.baseUrl,
-    accountId,
-    authOptions,
-  }));
-}
+    const baseUrl = options.baseUrl ?? process.env.CLOUDFLARE_BASE_URL;
+    const profile = options.profile ?? process.env.CLOUDFLARE_PROFILE;
+
+    if (profile) {
+      const item = await CloudflareAuth.get(profile);
+      if (!item) {
+        throw new Error(`Profile "${profile}" not found`);
+      }
+      return new CloudflareApi({
+        baseUrl,
+        profile,
+        credentials: item.credentials,
+        accountId: item.metadata.id,
+      });
+    }
+
+    const apiToken =
+      options.apiToken?.unencrypted ?? process.env.CLOUDFLARE_API_TOKEN;
+    const accountId = async (headers: Record<string, string>) =>
+      options.accountId ??
+      process.env.CF_ACCOUNT_ID ??
+      process.env.CLOUDFLARE_ACCOUNT_ID ??
+      (await getCloudflareAccountId(headers));
+
+    if (apiToken) {
+      const credentials: Credentials.APIToken = {
+        type: "api-token",
+        apiToken,
+      };
+      return new CloudflareApi({
+        baseUrl,
+        credentials,
+        accountId: await accountId({
+          Authorization: `Bearer ${apiToken}`,
+        }),
+      });
+    }
+
+    const apiKey =
+      options.apiKey?.unencrypted ?? process.env.CLOUDFLARE_API_KEY;
+    if (apiKey) {
+      const apiEmail =
+        options.email ??
+        process.env.CLOUDFLARE_EMAIL ??
+        (await getUserEmailFromApiKey(apiKey));
+      const credentials: Credentials.APIKey = {
+        type: "api-key",
+        apiKey,
+        apiEmail,
+      };
+      return new CloudflareApi({
+        baseUrl,
+        credentials,
+        accountId: await accountId({
+          "X-Auth-Key": apiKey,
+          "X-Auth-Email": apiEmail,
+        }),
+      });
+    }
+
+    const defaultProfile = await CloudflareAuth.get("default");
+
+    if (defaultProfile) {
+      return new CloudflareApi({
+        baseUrl,
+        profile: "default",
+        credentials: defaultProfile.credentials,
+        accountId: defaultProfile.metadata.id,
+      });
+    }
+
+    throw new Error("No credentials found");
+  },
+  (options) =>
+    defaultKeyFn({
+      baseUrl: options?.baseUrl,
+      profile: options?.profile,
+      apiKey: options?.apiKey,
+      apiToken: options?.apiToken,
+      email: options?.email,
+      accountId: options?.accountId,
+    }),
+);
 
 /**
  * Cloudflare API client using raw fetch
  */
 export class CloudflareApi {
-  public readonly accountId: string;
   public readonly baseUrl: string;
-  public readonly authOptions: CloudflareAuthOptions;
+  public readonly credentials: Credentials;
+  public readonly accountId: string;
+  public readonly profile: string | undefined;
 
-  /**
-   * Create a new Cloudflare API client
-   * Use createCloudflareApi factory function instead of direct constructor
-   * for automatic account ID discovery.
-   *
-   * @param options API options
-   */
-  constructor(options: {
+  constructor(input: {
     baseUrl?: string;
+    profile?: string;
+    credentials: Credentials;
     accountId: string;
-    authOptions: CloudflareAuthOptions;
   }) {
-    this.accountId = options.accountId;
-    this.baseUrl = options.baseUrl ?? "https://api.cloudflare.com/client/v4";
-    this.authOptions = options.authOptions;
+    this.baseUrl = input.baseUrl ?? "https://api.cloudflare.com/client/v4";
+    this.credentials = input.credentials;
+    this.accountId = input.accountId;
+    this.profile = input.profile;
   }
 
   /**
@@ -133,7 +186,10 @@ export class CloudflareApi {
       headers = init.headers;
     }
     headers = {
-      ...(await getCloudflareAuthHeaders(this.authOptions)),
+      ...(await CloudflareAuth.toHeadersWithRefresh(
+        this.profile,
+        this.credentials,
+      )),
       ...headers,
     };
 
