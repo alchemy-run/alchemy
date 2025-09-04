@@ -168,6 +168,7 @@ export const Policy = Resource(
     ) {
       // calling this.replace() will terminate this run and re-invoke this method
       // with the "create" phase
+      // the "old" policy being replaced will be cleaned up by app.finalize()
       return this.replace();
     }
 
@@ -180,9 +181,11 @@ export const Policy = Resource(
           // List and delete all non-default versions first
           const versionsResult = yield* iam.listPolicyVersions({
             PolicyArn: policyArn,
-          });
+          }).pipe(
+            Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined))
+          );
 
-          const versions = versionsResult.Versions || [];
+          const versions = versionsResult?.Versions || [];
 
           // Delete non-default versions
           for (const version of versions) {
@@ -190,7 +193,9 @@ export const Policy = Resource(
               yield* iam.deletePolicyVersion({
                 PolicyArn: policyArn,
                 VersionId: version.VersionId,
-              });
+              }).pipe(
+                Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined))
+              );
             }
           }
 
@@ -201,14 +206,17 @@ export const Policy = Resource(
             })
             .pipe(
               Effect.catchTag("NoSuchEntityException", () =>
-                Effect.succeed("Policy doesn't exist"),
+                Effect.succeed(undefined),
               ),
             );
         });
 
-        // FIXME: how should we be handling errors? this can fail for example if the policy is attached to a user or role
-        await Effect.runPromise(deleteEffect);
-        return this.destroy();
+        try {
+          await Effect.runPromise(deleteEffect);
+          return this.destroy();
+        } catch (err) {
+          throw new Error(`Delete failed: ${String(err)}`);
+        }
     }
 
     if (this.phase === "create") {
