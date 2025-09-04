@@ -233,14 +233,8 @@ export const Policy = Resource(
           Description: props.description,
           Tags: tags,
         }).pipe(
-          // Effect.tap((response) => Console.log(`got successful response: ${JSON.stringify(response, null, 2)}`)),
-          Effect.flatMap((createPolicyResponse) => {
-
-            // FIXME: the policy response may have all the metadata we need 
-            return iam.getPolicy({ PolicyArn: createPolicyResponse!.Policy!.Arn!});
-          }),
-          // FIXME: too broad
-          Effect.catchAllCause((err) => Effect.fail(new Error(`failing from error: ${err}`))),
+          // FIXME: too broad?
+          Effect.catchAll((err) => Effect.fail(new Error(`failing from error: ${err}`))),
         );
         // FIXME: what error handling / retry logic should we have here?
         // no retry logic, that should be in itty
@@ -251,9 +245,6 @@ export const Policy = Resource(
 
       const resultPolicy = await Effect.runPromise(createEffect);
       const p = resultPolicy!.Policy!;
-      if (!this.quiet) {
-        console.log(`policy: ${JSON.stringify(p, null, 2)}`);
-      }
       return this({
         ...props,
         name: resolvedName,
