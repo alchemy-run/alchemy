@@ -9,6 +9,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Exit if Draft
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft
+        run: |
+          echo "::error::Cannot publish from draft PR"
+          exit 1
+
       - name: Checkout code
         uses: actions/checkout@v4
 
