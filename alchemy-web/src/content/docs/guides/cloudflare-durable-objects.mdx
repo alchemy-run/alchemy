@@ -36,7 +36,7 @@ This is a step-by-step guide to deploy a Durable Object, for a complete API refe
    ```ts
    export const worker = await Worker("Worker", {
      name: "my-worker",
-     entrypoint: "./index.ts"
+     entrypoint: "./index.ts",
      bindings: {
        // bind the Durable Object namespace to your Worker
        COUNTER: counter,
