@@ -206,7 +206,8 @@ export const Role = Resource(
                 // Essentially, the role is still linked to a branch, so we can't delete it here, but it'll be deleted when the branch is deleted.
                 logger.warn(
                   [
-                    `Delete role "${id}" (name: "${this.output.name}") failed with status ${res.error.status} (${res.error.code}): ${res.error.message}`,
+                    `Failed to delete role "${id}" (name: "${this.output.name}").`,
+                    `Error: ${res.error.message}`,
                     `If you are deleting database "${database}" or branch "${branch}", the role will be deleted automatically.`,
                     `Otherwise, consider manually deleting the role at: https://app.planetscale.com/${organization}/${database}/settings/roles`,
                   ].join("\n"),
