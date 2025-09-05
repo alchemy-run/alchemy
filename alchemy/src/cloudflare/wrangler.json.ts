@@ -352,8 +352,8 @@ export interface WranglerJsonSpec {
    * Queue bindings
    */
   queues?: {
-    producers: { queue: string; binding: string }[];
-    consumers: {
+    producers?: { queue: string; binding: string }[];
+    consumers?: {
       queue: string;
       max_batch_size?: number;
       max_concurrency?: number;
@@ -841,7 +841,10 @@ function processBindings(
   }
 
   if (queues.consumers.length > 0) {
-    spec.queues = queues;
+    (spec.queues ??= {}).consumers = queues.consumers;
+  }
+  if (queues.producers.length > 0) {
+    (spec.queues ??= {}).producers = queues.producers;
   }
 
   if (vectorizeIndexes.length > 0) {
