@@ -7,14 +7,6 @@ export declare namespace Policy {
   export type Flatten<T> =
     | Exclude<T, Policy>
     | Policy<Extract<T, Policy>["statements"][number]>;
-
-  export type Concat<A, B> =
-    | Policy<
-        | Extract<A, Policy>["statements"][number]
-        | Extract<B, Policy>["statements"][number]
-      >
-    | Exclude<A, Policy>
-    | Exclude<B, Policy>;
 }
 
 export type Statement<Resource = any, Action extends string = string> =

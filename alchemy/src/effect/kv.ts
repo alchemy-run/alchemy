@@ -1,65 +1,62 @@
-import * as Effect from "effect/Effect";
-import type * as Layer from "effect/Layer";
+import type * as Effect from "effect/Effect";
+import type * as Schema from "effect/Schema";
+import type { Instance } from "./ctor.ts";
 import type { Allow, Policy } from "./policy.ts";
 
 export type KVNamespace<
-  ID extends string,
-  Key extends string,
-  Value extends string,
+  ID extends string = string,
+  Key extends string = string,
+  Value extends string = string,
 > = {
+  type: "KVNamespace";
   id: ID;
-  get(
+  get<Self>(
+    this: Self,
     key: Key,
   ): Effect.Effect<
     Value | undefined,
     never,
-    Policy<KVNamespace.Get<ID, Key, Value>>
+    Policy<KVNamespace.Get<Instance<Self>>>
   >;
-  put(
+  put<Self>(
+    this: Self,
     key: Key,
     value: Value,
-  ): Effect.Effect<void, never, Policy<KVNamespace.Put<ID, Key, Value>>>;
+  ): Effect.Effect<void, never, Policy<KVNamespace.Put<Instance<Self>>>>;
+  new (
+    _: never,
+  ): {
+    type: "KVNamespace";
+    id: ID;
+  };
 };
-export function KVNamespace<ID extends string>(id: ID) {
-  return <
-    Key extends string = string,
-    Value extends string = string,
-  >(): KVNamespace<ID, Key, Value> => ({
-    id,
-    get: (_key: Key) => Effect.succeed(undefined),
-    put: (_key: Key, _value: Value) => Effect.succeed(void 0),
-  });
-}
-export declare namespace KVNamespace {
-  export type Get<
-    ID extends string,
-    Key extends string,
-    Value extends string,
-  > = Allow<ID, "KV::Get", { key: Key; value: Value }>;
-  export function Get<
-    ID extends string,
-    Key extends string,
-    Value extends string,
-  >(_kv: KVNamespace<ID, Key, Value>): Policy<Get<ID, Key, Value>>;
-  export function get<
-    ID extends string,
-    Key extends string,
-    Value extends string,
-  >(kv: KVNamespace<ID, Key, Value>): Layer.Layer<Get<ID, Key, Value>>;
 
-  export type Put<
-    ID extends string,
-    Key extends string,
-    Value extends string,
-  > = Allow<ID, "KV::Put", { key: Key; value: Value }>;
-  export function Put<
-    ID extends string,
-    Key extends string,
-    Value extends string,
-  >(kv: KVNamespace<ID, Key, Value>): Policy<Put<ID, Key, Value>>;
-  export function put<
-    ID extends string,
-    Key extends string,
-    Value extends string,
-  >(kv: KVNamespace<ID, Key, Value>): Layer.Layer<Put<ID, Key, Value>>;
+export declare function KVNamespace<ID extends string>(
+  id: ID,
+): <
+  Key extends string = string,
+  Value extends string = string,
+>() => KVNamespace<ID, Key, Value>;
+export declare function KVNamespace<
+  ID extends string,
+  Key extends string = string,
+  Value extends string = string,
+>(
+  id: ID,
+  options: {
+    key: Schema.Schema<Key>;
+    value: Schema.Schema<Value>;
+  },
+): KVNamespace<ID, Key, Value>;
+
+export declare namespace KVNamespace {
+  export type Get<KV> = Allow<KV, "KV::Get">;
+  export function Get<KV extends KVNamespace>(
+    _kv: KV,
+  ): Policy<Get<Instance<KV>>>;
+
+  export type Put<KV> = Allow<KV, "KV::Put">;
+  export function Put<KV extends KVNamespace>(
+    kv: KV,
+  ): Policy<Put<Instance<KV>>>;
 }

@@ -1,12 +1,16 @@
 import type * as Effect from "effect/Effect";
-import type * as Layer from "effect/Layer";
 import type { Instance } from "./ctor.ts";
 import type { Allow, Policy } from "./policy.ts";
 
 export type Bucket<ID extends string = any> = {
+  type: "Bucket";
   id: ID;
-  // InstanceType<Self> didn't work because (_: never)
-  new (_: never): {};
+  new (
+    _: never,
+  ): {
+    type: "Bucket";
+    id: ID;
+  };
   get<Self, const Key extends string = string>(
     this: Self,
     key: Key,
@@ -38,10 +42,6 @@ export declare namespace Bucket {
     bucket: B,
     key?: Key,
   ): Policy<Get<Instance<B>, Key>>;
-  export function get<B, Key extends string>(
-    bucket: B,
-    key?: Key,
-  ): Layer.Layer<Get<Instance<B>, Key>>;
 
   export type Put<B, Key extends string> = Allow<
     B,
@@ -52,8 +52,4 @@ export declare namespace Bucket {
     bucket: B,
     key?: Key,
   ): Policy<Put<Instance<B>, Key>>;
-  export function put<B, Key extends string>(
-    bucket: B,
-    key?: Key,
-  ): Layer.Layer<Put<Instance<B>, Key>>;
 }

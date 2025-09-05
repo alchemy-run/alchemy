@@ -21,7 +21,12 @@ export interface WorkerDecl<ID extends string = any> {
     fetch: (request: Request) => Effect<Response, Err, Req>,
   ): Effect<Worker<Instance<Self>>, never, Policy.Flatten<Req>>;
 
-  new (_: never): {};
+  new (
+    _: never,
+  ): {
+    type: "Worker";
+    id: ID;
+  };
 }
 
 export declare function Worker<ID extends string>(id: ID): WorkerDecl<ID>;

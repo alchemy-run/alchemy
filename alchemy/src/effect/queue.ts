@@ -1,5 +1,4 @@
 import type * as Effect from "effect/Effect";
-import type * as Layer from "effect/Layer";
 import type * as Schema from "effect/Schema";
 import type { Instance } from "./ctor.ts";
 import type { Allow, Policy } from "./policy.ts";
@@ -9,20 +8,30 @@ export type SendMessageError = never;
 
 // a declared Queue at runtime
 export type Queue<ID extends string = string, Msg = any> = {
+  type: "Queue";
   id: ID;
   send<Q>(
     this: Q,
     message: Msg,
-  ): Effect.Effect<void, SendMessageError, Queue.Send<Instance<Q>>>;
+  ): Effect.Effect<void, SendMessageError, Policy<Queue.Send<Instance<Q>>>>;
   sendBatch<Q>(
     this: Q,
     ...message: Msg[]
-  ): Effect.Effect<void, SendMessageError, Queue.SendBatch<Instance<Q>>>;
+  ): Effect.Effect<
+    void,
+    SendMessageError,
+    Policy<Queue.SendBatch<Instance<Q>>>
+  >;
   consume<Q, Req = never>(
     this: Q,
     fn: (batch: Queue.Batch<Msg>) => Effect.Effect<void, never, Req>,
-  ): Queue.Consumer<Instance<Q>, Req>;
-  new (_: never): {};
+  ): Queue.Consumer<Instance<Q>, Policy.Flatten<Req>>;
+  new (
+    _: never,
+  ): {
+    type: "Queue";
+    id: ID;
+  };
 };
 
 export declare function Queue<ID extends string>(id: ID): <T>() => Queue<ID, T>;
@@ -53,14 +62,9 @@ export declare namespace Queue {
   export type Send<Q> = Allow<Q, "Queue::Send">;
   // provide Infrastructure policy
   export function Send<Q>(queue: Q): Policy<Send<Q>>;
-  // provide Runtime client
-  export function send<Q>(queue: Q): Layer.Layer<Send<Q>>;
 
   // policy specification
   export type SendBatch<Q> = Allow<Q, "Queue::SendBatch">;
   // provide Infrastructure policy
   export function SendBatch<Q>(queue: Q): Policy<SendBatch<Q>>;
-
-  // provide Runtime client
-  export function sendBatch<Q>(queue: Q): Layer.Layer<SendBatch<Q>>;
 }

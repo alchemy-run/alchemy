@@ -21,4 +21,9 @@ const workerB = WorkerB.implement(
   }),
 );
 
-await Effect.runPromise(workerA.pipe(bind(Worker.Fetch(WorkerB))));
+await Effect.runPromise(
+  Effect.all([
+    workerA.pipe(bind(Worker.Fetch(WorkerB), Worker.Fetch(WorkerA))),
+    workerB.pipe(bind(Worker.Fetch(WorkerA))),
+  ]),
+);
