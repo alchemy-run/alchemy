@@ -1,4 +1,4 @@
-export type VercelEnvironment = "production" | "preview" | "development";
+export type VercelEnvironment = "development" | "preview" | "production";
 
 type UniqueTuples<
   T extends VercelEnvironment,
