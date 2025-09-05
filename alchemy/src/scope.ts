@@ -691,7 +691,7 @@ export class Scope {
   }
 
   public async tryClaim(key: string): Promise<boolean> {
-    // TODO(sam): do we need to release the lock?
+    // TODO(sam): do we need to release the lock? `bun --watch` should auto-release the lock AFAIK
     try {
       await this.acquireLock(key, {
         retries: 0, // what happens if the owner fails to release the lock?
