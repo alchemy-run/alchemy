@@ -691,20 +691,16 @@ export class Scope {
   }
 
   public async tryClaim(key: string): Promise<boolean> {
-    let release: (() => Promise<void>) | undefined;
+    // TODO(sam): do we need to release the lock?
     try {
-      try {
-        release = await this.acquireLock(key, {
-          retries: 0,
-        });
-      } catch {
-        console.log(`claim rejected: ${key}, pid: ${process.pid}`);
-        return false;
-      }
+      await this.acquireLock(key, {
+        retries: 0, // what happens if the owner fails to release the lock?
+      });
       console.log(`claim: ${key}, pid: ${process.pid}`);
       return true;
-    } finally {
-      await release?.();
+    } catch {
+      console.log(`claim rejected: ${key}, pid: ${process.pid}`);
+      return false;
     }
   }
 
