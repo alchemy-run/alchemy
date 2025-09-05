@@ -1,6 +1,11 @@
-export type VercelEnvironment = "development" | "preview" | "production";
+export type VercelEnvironment = "production" | "preview" | "development";
 
-export type VercelEnvironments = VercelEnvironment[];
+type UniqueTuples<
+  T extends VercelEnvironment,
+  Acc extends readonly VercelEnvironment[] = [],
+> = Acc | { [K in T]: UniqueTuples<Exclude<T, K>, readonly [...Acc, K]> }[T];
+
+export type VercelEnvironments = UniqueTuples<VercelEnvironment>;
 
 export type VercelRegions =
   | "cpt1" // Cape Town, South Africa
