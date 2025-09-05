@@ -1,3 +1,3 @@
 import { Bucket } from "../bucket.ts";
 
-export class Storage extends Bucket("storage")<Storage>() {}
+export class Storage extends Bucket("storage") {}

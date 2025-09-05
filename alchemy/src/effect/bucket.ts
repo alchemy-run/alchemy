@@ -1,24 +1,28 @@
 import type * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
+import type { Instance } from "./ctor.ts";
 import type { Allow, Policy } from "./policy.ts";
 
-export type Bucket<Self = any, ID extends string = any> = {
+export type Bucket<ID extends string = any> = {
   id: ID;
-  new (_: never): any;
-  get<const Key extends string = string>(
+  // InstanceType<Self> didn't work because (_: never)
+  new (_: never): {};
+  get<Self, const Key extends string = string>(
     this: Self,
     key: Key,
-  ): Effect.Effect<string | undefined, never, Policy<Bucket.Get<Self, Key>>>;
-  put<const Key extends string = string>(
+  ): Effect.Effect<
+    string | undefined,
+    never,
+    Policy<Bucket.Get<Instance<Self>, Key>>
+  >;
+  put<Self, const Key extends string = string>(
     this: Self,
     key: Key,
     value: string,
-  ): Effect.Effect<void, never, Policy<Bucket.Put<Self, Key>>>;
+  ): Effect.Effect<void, never, Policy<Bucket.Put<Instance<Self>, Key>>>;
 };
 
-export declare function Bucket<ID extends string>(
-  id: ID,
-): <Self>() => Bucket<Self, ID>;
+export declare function Bucket<ID extends string>(id: ID): Bucket<ID>;
 
 export declare namespace Bucket {
   export type Get<B, Key extends string> = Allow<
@@ -27,17 +31,17 @@ export declare namespace Bucket {
     { key: Key }
   >;
   export function Get<B, const Key extends string>(
-    bucket: Bucket<B>,
+    bucket: B,
     key?: Key,
-  ): Policy<Get<B, Key>>;
+  ): Policy<Get<Instance<B>, Key>>;
   export function Get<B, const Key extends string>(
     bucket: B,
     key?: Key,
-  ): Policy<Get<B, Key>>;
+  ): Policy<Get<Instance<B>, Key>>;
   export function get<B, Key extends string>(
     bucket: B,
     key?: Key,
-  ): Layer.Layer<Get<B, Key>>;
+  ): Layer.Layer<Get<Instance<B>, Key>>;
 
   export type Put<B, Key extends string> = Allow<
     B,
@@ -47,9 +51,9 @@ export declare namespace Bucket {
   export function Put<B, const Key extends string = string>(
     bucket: B,
     key?: Key,
-  ): Policy<Put<B, Key>>;
+  ): Policy<Put<Instance<B>, Key>>;
   export function put<B, Key extends string>(
     bucket: B,
     key?: Key,
-  ): Layer.Layer<Put<B, Key>>;
+  ): Layer.Layer<Put<Instance<B>, Key>>;
 }

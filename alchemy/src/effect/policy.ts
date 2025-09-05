@@ -1,12 +1,17 @@
 // A policy is invariant over its allowed actions
 export interface Policy<in out Statements extends Statement = any> {
-  readonly statements: Statements;
+  readonly statements: Statements[];
 }
 
 export declare namespace Policy {
+  export type Flatten<T> =
+    | Exclude<T, Policy>
+    | Policy<Extract<T, Policy>["statements"][number]>;
+
   export type Concat<A, B> =
     | Policy<
-        Extract<A, Policy>["statements"] | Extract<B, Policy>["statements"]
+        | Extract<A, Policy>["statements"][number]
+        | Extract<B, Policy>["statements"][number]
       >
     | Exclude<A, Policy>
     | Exclude<B, Policy>;

@@ -9,4 +9,4 @@ export type Bind<S extends Statement> = <
 
 export declare function bind<S extends readonly Policy[]>(
   ...actions: S
-): Bind<S[number]["statements"]>;
+): Bind<S[number]["statements"][number]>;
