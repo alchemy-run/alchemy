@@ -12,23 +12,33 @@ export function createWasmPlugin() {
       build.onStart(() => {
         modules.clear();
       });
+
       // Handle imports like `import "./foo.wasm"` and `import "./foo.wasm?module"`
       // TODO(john): Figure out why this suddenly became necessary
-      build.onResolve({ filter: /\.wasm(\?module)?$/ }, async (args) => {
+      build.onResolve({ filter: /\.wasm(\?.*)?$/ }, async (args) => {
         const resolved = modules.get(args.path);
         if (resolved) {
-          return { external: true, path: resolved.path };
+          return { path: resolved.path, external: true };
         }
 
         // Normalize path and remove the `?module` query param so we have the actual file name to copy
-        const name = path.normalize(args.path).replace(/\?module$/, "");
+        const name = path.normalize(args.path).replace(/\?.*$/, "");
+
+        // Resolve path to outdir (required for monorepos if the workdir is not the same as process.cwd())
+        assert(
+          build.initialOptions.absWorkingDir && build.initialOptions.outdir,
+          "Missing absWorkingDir or outdir from esbuild options",
+        );
+        const outdir = path.resolve(
+          build.initialOptions.absWorkingDir,
+          build.initialOptions.outdir,
+        );
 
         // Copy to outdir so it's included in the upload
-        assert(build.initialOptions.outdir, "outdir is required");
-        await fs.mkdir(build.initialOptions.outdir, { recursive: true });
+        await fs.mkdir(outdir, { recursive: true });
         await fs.copyFile(
           path.join(args.resolveDir, name),
-          path.join(build.initialOptions.outdir, name),
+          path.join(outdir, name),
         );
         modules.set(args.path, {
           type: "wasm",
@@ -36,7 +46,7 @@ export function createWasmPlugin() {
         });
 
         // Resolve to the normalized file name (the `?module` query param is not needed in workerd)
-        return { external: true, path: name };
+        return { path: name, external: true };
       });
     },
   };
