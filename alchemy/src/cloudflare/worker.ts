@@ -842,20 +842,26 @@ const _Worker = Resource(
         const { MiniflareController } = await import(
           "./miniflare/miniflare-controller.js"
         );
-        const controller = MiniflareController.get(path.resolve(getPersistPath(this.scope)));
-        url = await controller.add({
-          api,
-          id,
-          name: options.name,
-          compatibilityDate: options.compatibilityDate,
-          compatibilityFlags: options.compatibilityFlags,
-          bindings: props.bindings,
-          eventSources: props.eventSources,
-          assets: props.assets,
-          bundle,
-          port: (props.dev as { port?: number } | undefined)?.port,
-        });
-        this.onCleanup(() => controller.dispose());
+        const controller = MiniflareController.get(
+          path.resolve(getPersistPath(this.scope)),
+        );
+        if (await this.scope.tryClaim(`${workerName}.claim`)) {
+          url = await controller.add({
+            api,
+            id,
+            name: options.name,
+            compatibilityDate: options.compatibilityDate,
+            compatibilityFlags: options.compatibilityFlags,
+            bindings: props.bindings,
+            eventSources: props.eventSources,
+            assets: props.assets,
+            bundle,
+            port: (props.dev as { port?: number } | undefined)?.port,
+          });
+          this.onCleanup(() => controller.dispose());
+        } else {
+          // TODO(sam): remove? i don't think we need to do that ...
+        }
       }
       await provisionResources(
         {

@@ -21,8 +21,10 @@ export class MiniflareController {
 
   constructor(private readonly persistRoot: string) {}
 
-  static get(persistRoot: string) {
-    return (globalThis as any)[`ALCHEMY_MINIFLARE_CONTROLLER_${persistRoot}`] ??= new MiniflareController(persistRoot);
+  static get(persistRoot: string): MiniflareController {
+    return ((globalThis as any)[
+      `ALCHEMY_MINIFLARE_CONTROLLER_${persistRoot}`
+    ] ??= new MiniflareController(persistRoot));
   }
 
   async add(input: MiniflareWorkerInput) {

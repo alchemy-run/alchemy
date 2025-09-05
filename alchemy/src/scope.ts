@@ -690,16 +690,30 @@ export class Scope {
     this.cleanups.push(fn);
   }
 
+  public async tryClaim(key: string): Promise<boolean> {
+    let release: (() => Promise<void>) | undefined;
+    try {
+      try {
+        release = await this.acquireLock(key, {
+          retries: 0,
+        });
+      } catch {
+        console.log(`claim rejected: ${key}, pid: ${process.pid}`);
+        return false;
+      }
+      console.log(`claim: ${key}, pid: ${process.pid}`);
+      return true;
+    } finally {
+      await release?.();
+    }
+  }
+
   public async withLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
     let release: (() => Promise<void>) | undefined;
     const { promise, resolve, reject } = promiseWithResolvers<T>();
     try {
       try {
-        release = await lockfile.lock(this.lockDir, {
-          lockfilePath: path.join(
-            this.lockDir,
-            key.replaceAll(/[^a-z0-9_-]/gi, "-"),
-          ),
+        release = await this.acquireLock(key, {
           retries: 1000, // retry for a long time
           // defaults:
           // stale: 5000,
@@ -720,6 +734,19 @@ export class Scope {
         reject(error);
       }
     }
+  }
+
+  public async acquireLock(key: string, options: lockfile.LockOptions = {}) {
+    return lockfile.lock(this.lockDir, {
+      lockfilePath: path.join(
+        this.lockDir,
+        key.replaceAll(/[^a-z0-9_-]/gi, "-"),
+      ),
+      // defaults:
+      // stale: 5000,
+      // update: 2500, // stale/2, minimum 1000
+      ...options,
+    });
   }
 
   /**

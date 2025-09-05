@@ -17,7 +17,7 @@
   },
   "devDependencies": {
     "backend": "workspace:*",
-    "alchemy": "file:../../../alchemy",
+    "alchemy": "catalog:",
     "@cloudflare/vite-plugin": "^1.7.4",
     "@cloudflare/workers-types": "^4.20250805.0",
     "miniflare": "^4.20250617.3",
