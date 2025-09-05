@@ -4,7 +4,8 @@ export interface Policy<in out Statements extends Statement = any> {
 }
 
 export declare namespace Policy {
-  export type Flatten<T> =
+  // collapses Policy<A> | Policy<B> | Policy<C> into Policy<A | B | C>
+  export type Normalize<T> =
     | Exclude<T, Policy>
     | Policy<Extract<T, Policy>["statements"][number]>;
 }

@@ -11,7 +11,14 @@ export type Worker<Decl> = {
 type HttpError = never;
 
 export interface WorkerDecl<ID extends string = any> {
+  type: "Worker";
   id: ID;
+  new (
+    _: never,
+  ): {
+    type: "Worker";
+    id: ID;
+  };
   fetch<Self>(
     this: Self,
     request: Request,
@@ -19,14 +26,7 @@ export interface WorkerDecl<ID extends string = any> {
   implement<Self, Err = never, Req = never>(
     this: Self,
     fetch: (request: Request) => Effect<Response, Err, Req>,
-  ): Effect<Worker<Instance<Self>>, never, Policy.Flatten<Req>>;
-
-  new (
-    _: never,
-  ): {
-    type: "Worker";
-    id: ID;
-  };
+  ): Effect<Worker<Instance<Self>>, never, Policy.Normalize<Req>>;
 }
 
 export declare function Worker<ID extends string>(id: ID): WorkerDecl<ID>;

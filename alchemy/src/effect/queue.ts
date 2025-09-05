@@ -10,6 +10,12 @@ export type SendMessageError = never;
 export type Queue<ID extends string = string, Msg = any> = {
   type: "Queue";
   id: ID;
+  new (
+    _: never,
+  ): {
+    type: "Queue";
+    id: ID;
+  };
   send<Q>(
     this: Q,
     message: Msg,
@@ -25,13 +31,7 @@ export type Queue<ID extends string = string, Msg = any> = {
   consume<Q, Req = never>(
     this: Q,
     fn: (batch: Queue.Batch<Msg>) => Effect.Effect<void, never, Req>,
-  ): Queue.Consumer<Instance<Q>, Policy.Flatten<Req>>;
-  new (
-    _: never,
-  ): {
-    type: "Queue";
-    id: ID;
-  };
+  ): Queue.Consumer<Instance<Q>, Policy.Normalize<Req>>;
 };
 
 export declare function Queue<ID extends string>(id: ID): <T>() => Queue<ID, T>;
