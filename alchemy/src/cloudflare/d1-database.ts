@@ -302,7 +302,7 @@ const _D1Database = Resource(
 
     if (this.phase === "delete") {
       if (this.output.dev?.id) {
-        await deleteMiniflareBinding("d1", this.output.dev.id);
+        await deleteMiniflareBinding(this.scope, "d1", this.output.dev.id);
       }
       if (props.delete !== false && this.output?.id) {
         await deleteDatabase(api, this.output.id);
