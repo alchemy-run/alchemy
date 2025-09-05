@@ -1,28 +1,31 @@
-export type VercelEnvironments = ["development" | "preview" | "production"];
+export type VercelEnvironment = "development" | "preview" | "production";
+
+export type VercelEnvironments = VercelEnvironment[];
 
 export type VercelRegions =
-  | "cpt1"  // Cape Town, South Africa
-  | "cle1"  // Cleveland, USA
-  | "dxb1"  // Dubai, UAE
-  | "dub1"  // Dublin, Ireland
-  | "fra1"  // Frankfurt, Germany
-  | "hkg1"  // Hong Kong
-  | "lhr1"  // London, UK
-  | "bom1"  // Mumbai, India
-  | "kix1"  // Osaka, Japan
-  | "cdg1"  // Paris, France
-  | "pdx1"  // Portland, USA
-  | "sfo1"  // San Francisco, USA
-  | "gru1"  // São Paulo, Brazil
-  | "icn1"  // Seoul, South Korea
-  | "sin1"  // Singapore
-  | "arn1"  // Stockholm, Sweden
-  | "syd1"  // Sydney, Australia
-  | "hnd1"  // Tokyo, Japan
+  | "cpt1" // Cape Town, South Africa
+  | "cle1" // Cleveland, USA
+  | "dxb1" // Dubai, UAE
+  | "dub1" // Dublin, Ireland
+  | "fra1" // Frankfurt, Germany
+  | "hkg1" // Hong Kong
+  | "lhr1" // London, UK
+  | "bom1" // Mumbai, India
+  | "kix1" // Osaka, Japan
+  | "cdg1" // Paris, France
+  | "pdx1" // Portland, USA
+  | "sfo1" // San Francisco, USA
+  | "gru1" // São Paulo, Brazil
+  | "icn1" // Seoul, South Korea
+  | "sin1" // Singapore
+  | "arn1" // Stockholm, Sweden
+  | "syd1" // Sydney, Australia
+  | "hnd1" // Tokyo, Japan
   | "iad1" // Washington, D.C., USA
-  | (string & {}) // special rune to maintain auto-suggestions without closing the type to new regions or ones we missed
+  | (string & {}); // special rune to maintain auto-suggestions without closing the type to new regions or ones we missed
 
-export type VercelFrameworks = "blitzjs"
+export type VercelFrameworks =
+  | "blitzjs"
   | "nextjs"
   | "gatsby"
   | "remix"
@@ -71,7 +74,7 @@ export type VercelFrameworks = "blitzjs"
   | (string & {});
 
 export type VercelTeam = {
-  id: string
-  slug: string
-  name: string
-}
+  id: string;
+  slug: string;
+  name: string;
+};
