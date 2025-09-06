@@ -8,12 +8,12 @@ import { Messages } from "./messages.ts";
 // 1. resource declarations
 export class Videos extends Bucket.Resource("videos") {}
 export class Storage extends Bucket.Resource("storage") {}
-export class Backend extends Worker.Resource("backend") {}
-export class Backend2 extends Worker.Resource("backend2") {}
+export class Worker1 extends Worker.Resource("worker1") {}
+export class Worker2 extends Worker.Resource("worker2") {}
 export class Api extends Worker.Resource("api") {}
 
 // 2. business logic
-export const backend = Backend.serve(
+export const worker1 = Worker1.serve(
   Effect.fn(function* (request) {
     yield* Bucket.put(Videos, request.url, "");
     return new Response("");
@@ -22,37 +22,38 @@ export const backend = Backend.serve(
   Messages,
   Effect.fn(function* (batch) {
     for (const message of batch.messages) {
-      yield* Worker.fetch(Backend2, "http://example.com");
-      yield* Backend.fetch(new Request("https://example.com"));
+      yield* Worker.fetch(Worker2, "http://example.com");
+      yield* Worker1.fetch(new Request("https://example.com"));
       message.ack();
     }
   }),
 );
 
-export const backend2 = Backend2.consume(
+export const worker2 = Worker2.consume(
   Messages,
   Effect.fn(function* (batch) {
     for (const message of batch.messages) {
-      yield* Worker.fetch(Backend, "http://example.com");
-      yield* Backend.fetch(new Request("https://example.com"));
+      yield* Worker.fetch(Worker1, "http://example.com");
+      yield* Worker1.fetch(new Request("https://example.com"));
       message.ack();
     }
   }),
 );
 
-const backendStack = alchemy.stack(
-  backend.bind(
+const stack = alchemy.stack(
+  "my-app",
+  worker1.bind(
     alchemy.policy(
       Bucket.Put(Videos),
       Queue.Consume(Messages),
-      Worker.Fetch(Backend2),
-      Worker.Fetch(Backend),
+      Worker.Fetch(Worker2),
+      Worker.Fetch(Worker1),
     ),
   ),
-  backend2.bind(alchemy.policy(Worker.Fetch(Backend), Queue.Consume(Messages))),
+  worker2.bind(alchemy.policy(Worker.Fetch(Worker1), Queue.Consume(Messages))),
 );
 
-await backendStack.pipe(Effect.runPromise);
+await stack.pipe(Effect.runPromise);
 
 // Program <-> Infra
 // Program <-> Runtime
