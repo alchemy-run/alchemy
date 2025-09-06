@@ -1,9 +1,10 @@
 import { DurableObject } from "cloudflare:workers";
+import type { Env } from "./env.ts";
 
 /**
  * A simple Hello World Durable Object
  */
-export class HelloWorldDO extends DurableObject {
+export class HelloWorldDO extends DurableObject<Env> {
   async increment() {
     // Get the current count from storage or initialize to 0
     let count = (await this.ctx.storage.get("count")) || 0;

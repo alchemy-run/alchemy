@@ -1,30 +1,124 @@
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import { bind } from "../bind.ts";
 import { Bucket } from "../bucket.ts";
+import { alchemy } from "../index.ts";
+import { Queue } from "../queue.ts";
 import { Worker } from "../worker.ts";
+import { Messages } from "./messages.ts";
 
 // 1. resource declarations
-export class Storage extends Bucket("storage") {}
-export class Storage2 extends Bucket("storage2") {}
-export class Backend extends Worker("backend") {}
+export class Videos extends Bucket.Resource("videos") {}
+export class Storage extends Bucket.Resource("storage") {}
+export class Backend extends Worker.Resource("backend") {}
+export class Api extends Worker.Resource("api") {}
 
 // 2. business logic
-export const backend = Backend.implement(
+export const backend = Backend.serve(
   Effect.fn(function* (request) {
-    const object = yield* Storage.get(request.url);
-    yield* Storage.put(request.url, "hello");
-    yield* Storage2.put(request.url, "hello");
-    return new Response(object);
+    yield* Bucket.put(Videos, request.url, "");
+    return new Response("");
   }),
 );
 
-// 3. deploy infrastructure with least privilege policy
-await Effect.runPromise(
-  backend.pipe(
-    bind(Bucket.Get(Storage), Bucket.Put(Storage), Bucket.Put(Storage2)),
-  ),
+export const backend2 = Backend.consume(
+  Messages,
+  Effect.fn(function* (batch) {
+    for (const message of batch.messages) {
+      yield* Bucket.get(Videos, message.body.key);
+      // yield* Videos.put(message.body.key, message.body.value);
+      message.ack();
+    }
+  }),
 );
 
-// 4. provide layers to construct physical handler
-export default backend.pipe(Layer.provide(Storage, storage));
+const backendStack = alchemy.stack(
+  backend.bind(alchemy.policy(Bucket.Put(Videos))),
+  backend2.bind(alchemy.policy(Bucket.Get(Videos), Queue.Consume(Messages))),
+);
+
+await backendStack.pipe(Effect.runPromise);
+
+type AST = {
+  [id: string]: any;
+};
+
+// Program <-> Infra
+// Program <-> Runtime
+// Program <-> UI
+
+// Program -> Runnable
+// (Program -> Infra) -> Runnable
+// (Program -> Handler) -> Runnable
+// (Program -> UI) -> Runnable
+
+// Worker -> Handler
+
+// Api -> Worker<Api, Bindings>
+
+// type Stack<I, P> = {
+//   [id: string]: T;
+// };
+// type DeployReq = never;
+// type Infra<B> = I;
+
+// declare function plan(
+//   state: any,
+// ): <B, P>(
+//   effect: Effect.Effect<B, never, P>,
+// ) => Effect.Effect<Stack<Infra<B>, P>, never, never>;
+
+// const apiInfra = api.pipe(
+//   bind(
+//     Bucket.Get(Storage),
+//     Bucket.Put(Storage),
+//     Bucket.Put(Storage2),
+//     Queue.Send(Messages),
+//   ),
+// );
+
+// declare namespace Plan {
+//   function all<T extends { id: string }[]>(
+//     infras: T,
+//   ): {
+//     [id in T[number]["id"]]: any;
+//   };
+//   function approve(plan: any): void;
+//   function yes(plan: any): void;
+//   function lint(plan: any): void;
+//   function materialize(plan: any): void;
+// }
+// type Plan = {
+//   //
+// };
+
+// // 3. deploy infrastructure with least privilege policy
+// await Plan.all([backendInfra, apiInfra]).pipe(
+//   Effect.map(({ backend, api }) => ({
+//     backend,
+//     api,
+//   })),
+//   Plan.approve,
+//   Plan.yes,
+//   lint,
+//   materialize,
+//   Effect.runPromise,
+// );
+
+// // we need to derive a PLAN
+// // we need to derive a UI
+// // we need to execute the PLAN
+// export const app = stack(backendInfra, apiInfra);
+// // layers are stacks
+
+// app.pipe(alchemy.plan);
+// app.pipe(alchemy.deploy);
+// app.pipe(alchemy.ui);
+
+// // 4. provide layers to construct physical handler
+// export default backend.pipe(
+//   Layer.provide(
+//     // these are tree-shakable clients for specific methods
+//     Bucket.get(Storage),
+//     Bucket.put(Storage),
+//     Bucket.put(Storage2),
+//   ),
+// );

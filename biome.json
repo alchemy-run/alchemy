@@ -51,6 +51,7 @@
     "rules": {
       "recommended": true,
       "correctness": {
+        "useYield": "off",
         "useImportExtensions": {
           "level": "error",
           "options": {

@@ -30,7 +30,8 @@
     "bump": "bun ./scripts/bump.ts",
     "claude:yolo": "claude --dangerously-skip-permissions",
     "gh": "./scripts/gh",
-    "feat": "./scripts/feat"
+    "feat": "./scripts/feat",
+    "prepare": "effect-language-service patch"
   },
   "workspaces": {
     "catalog": {
@@ -51,6 +52,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.2.2",
     "@cloudflare/workers-types": "catalog:",
+    "@effect/language-service": "^0.38.1",
     "@redwoodjs/sdk": "^0.0.80",
     "@types/bun": "latest",
     "@types/node": "latest",

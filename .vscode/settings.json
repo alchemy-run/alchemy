@@ -39,6 +39,8 @@
     "editor.indentSize": 2,
     "editor.defaultFormatter": "biomejs.biome"
   },
+  "typescript.tsdk": "./node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
   "[javascript]": {
     "editor.indentSize": 2,
     "editor.defaultFormatter": "biomejs.biome"

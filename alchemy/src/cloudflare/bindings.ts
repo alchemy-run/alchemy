@@ -35,7 +35,7 @@ export type Bindings = {
 };
 
 export declare namespace Bindings {
-  export type Runtime<B extends Bindings> = {
+  export type Runtime<B extends Bindings = Bindings> = {
     [bindingName in keyof B]: Bound<B[bindingName]>;
   };
 }

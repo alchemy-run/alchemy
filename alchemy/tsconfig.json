@@ -15,6 +15,18 @@
     "target": "ESNext",
     "allowJs": true,
     "allowImportingTsExtensions": true,
-    "rewriteRelativeImportExtensions": true
+    "rewriteRelativeImportExtensions": true,
+    "verbatimModuleSyntax": true,
+    // effect
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "transform": "@effect/language-service/transform",
+        "namespaceImportPackages": ["effect"],
+        "diagnosticSeverity": {
+          "importFromBarrel": "error"
+        }
+      }
+    ]
   }
 }
