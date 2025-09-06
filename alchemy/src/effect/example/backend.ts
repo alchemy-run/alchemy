@@ -9,6 +9,7 @@ import { Messages } from "./messages.ts";
 export class Videos extends Bucket.Resource("videos") {}
 export class Storage extends Bucket.Resource("storage") {}
 export class Backend extends Worker.Resource("backend") {}
+export class Backend2 extends Worker.Resource("backend2") {}
 export class Api extends Worker.Resource("api") {}
 
 // 2. business logic
@@ -19,11 +20,13 @@ export const backend = Backend.serve(
   }),
 );
 
-export const backend2 = Backend.consume(
+export const backend2 = Backend2.consume(
   Messages,
   Effect.fn(function* (batch) {
     for (const message of batch.messages) {
-      yield* Bucket.get(Videos, message.body.key);
+      yield* Worker.fetch(Backend, "http://example.com");
+      yield* Backend.fetch(new Request("https://example.com"));
+      // yield* Bucket.get(Videos, message.body.key);
       // yield* Videos.put(message.body.key, message.body.value);
       message.ack();
     }
@@ -32,7 +35,7 @@ export const backend2 = Backend.consume(
 
 const backendStack = alchemy.stack(
   backend.bind(alchemy.policy(Bucket.Put(Videos))),
-  backend2.bind(alchemy.policy(Bucket.Get(Videos), Queue.Consume(Messages))),
+  backend2.bind(alchemy.policy(Worker.Fetch(Backend), Queue.Consume(Messages))),
 );
 
 await backendStack.pipe(Effect.runPromise);

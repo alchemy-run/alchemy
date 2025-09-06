@@ -1,5 +1,7 @@
 import type { MessageBatch, Service } from "@cloudflare/workers-types";
 import type { Effect } from "effect/Effect";
+import type { Simplify } from "./alchemy.ts";
+import type { Bound } from "./bind.ts";
 import { binding } from "./binding.ts";
 import type { Instance } from "./ctor.ts";
 import type { Allow, Policy, Statement } from "./policy.ts";
@@ -35,28 +37,20 @@ export type Worker<Self extends { id: string }, Err, Req> = Effect<
       Extract<Req, Policy>["statements"][number] | Extract<Req, Statement>
     >,
   ): Effect<
-    {
-      [id in Self["id"]]: Bound<
-        Self,
-        {
-          [id in Policy.Resources<Policy.Collect<Req>>["id"]]: Extract<
-            Policy.Resources<Policy.Collect<Req>>,
-            { id: id }
-          >;
-        }
-      >;
-    } & {
-      [id in Policy.Resources<Policy.Collect<Req>>["id"]]: Extract<
-        Policy.Resources<Policy.Collect<Req>>,
-        { id: id }
-      >;
-    }
+    Simplify<
+      {
+        [id in Self["id"]]: Bound<
+          Self,
+          Extract<Req, Policy>["statements"][number] | Extract<Req, Statement>
+        >;
+      } & {
+        [id in Policy.Resources<Policy.Collect<Req>>["id"]]: Extract<
+          Policy.Resources<Policy.Collect<Req>>,
+          { id: id }
+        >;
+      }
+    >
   >;
-};
-
-type Bound<Resource, Bindings> = {
-  resource: Resource;
-  bindings: Bindings;
 };
 
 export const fetch = <W extends _Worker>(

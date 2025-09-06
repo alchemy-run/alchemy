@@ -18,3 +18,9 @@ export declare function policy<S extends readonly Policy[]>(
   | Extract<S[number], Policy>["statements"][number]
   | Extract<S[number], Statement>
 >;
+
+export type Bound<Resource = any, Bindings = any> = {
+  type: "Bound";
+  resource: Resource;
+  bindings: Bindings;
+};
