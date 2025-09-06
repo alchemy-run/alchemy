@@ -26,8 +26,6 @@ export const backend2 = Backend2.consume(
     for (const message of batch.messages) {
       yield* Worker.fetch(Backend, "http://example.com");
       yield* Backend.fetch(new Request("https://example.com"));
-      // yield* Bucket.get(Videos, message.body.key);
-      // yield* Videos.put(message.body.key, message.body.value);
       message.ack();
     }
   }),
@@ -39,10 +37,6 @@ const backendStack = alchemy.stack(
 );
 
 await backendStack.pipe(Effect.runPromise);
-
-type AST = {
-  [id: string]: any;
-};
 
 // Program <-> Infra
 // Program <-> Runtime

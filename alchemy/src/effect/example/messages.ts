@@ -3,13 +3,13 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { Queue } from "../queue.ts";
 
-export class Messages extends Queue.Resource("Messages")<{
+export class Messages extends Queue.Resource("messages")<{
   key: string;
   value: string;
 }>() {}
 
 // alternative way to declare a queue with a schema
-export class Messages2 extends Queue.Resource("Messages2", {
+export class Messages2 extends Queue.Resource("messages2", {
   schema: Schema.Struct({
     key: Schema.String,
     value: Schema.String,
