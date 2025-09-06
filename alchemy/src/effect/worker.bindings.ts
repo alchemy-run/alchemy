@@ -25,7 +25,12 @@ export type Worker<Self extends { id: string }, Err, Req> = Effect<
   consume<Q extends Queue, Req2 = never>(
     queue: Q,
     fn: (batch: MessageBatch<Q["message"]>) => Effect<void, never, Req2>,
-  ): Effect<Instance<Q>, Err, Policy.Normalize<Req | Req2 | Queue.Consume<Q>>>;
+    // ): Effect<Instance<Q>, Err, Policy.Normalize<Req | Req2 | Queue.Consume<Q>>>;
+  ): Worker<
+    Self,
+    Err,
+    Policy.Normalize<Req | Req2 | Queue.Consume<Instance<Q>>>
+  >;
 
   consume<Q, Req2 = never>(
     consumer: Queue.Consumer<Q, Req2>,
@@ -44,10 +49,10 @@ export type Worker<Self extends { id: string }, Err, Req> = Effect<
           Extract<Req, Policy>["statements"][number] | Extract<Req, Statement>
         >;
       } & {
-        [id in Policy.Resources<Policy.Collect<Req>>["id"]]: Extract<
-          Policy.Resources<Policy.Collect<Req>>,
-          { id: id }
-        >;
+        [id in Exclude<
+          Policy.Resources<Policy.Collect<Req>>["id"],
+          Self["id"]
+        >]: Extract<Policy.Resources<Policy.Collect<Req>>, { id: id }>;
       }
     >
   >;

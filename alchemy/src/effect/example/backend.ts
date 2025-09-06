@@ -18,6 +18,15 @@ export const backend = Backend.serve(
     yield* Bucket.put(Videos, request.url, "");
     return new Response("");
   }),
+).consume(
+  Messages,
+  Effect.fn(function* (batch) {
+    for (const message of batch.messages) {
+      yield* Worker.fetch(Backend2, "http://example.com");
+      yield* Backend.fetch(new Request("https://example.com"));
+      message.ack();
+    }
+  }),
 );
 
 export const backend2 = Backend2.consume(
@@ -32,7 +41,14 @@ export const backend2 = Backend2.consume(
 );
 
 const backendStack = alchemy.stack(
-  backend.bind(alchemy.policy(Bucket.Put(Videos))),
+  backend.bind(
+    alchemy.policy(
+      Bucket.Put(Videos),
+      Queue.Consume(Messages),
+      Worker.Fetch(Backend2),
+      Worker.Fetch(Backend),
+    ),
+  ),
   backend2.bind(alchemy.policy(Worker.Fetch(Backend), Queue.Consume(Messages))),
 );
 
