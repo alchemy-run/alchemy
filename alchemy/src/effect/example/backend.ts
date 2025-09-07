@@ -1,8 +1,8 @@
 import * as Effect from "effect/Effect";
-import { Bucket } from "../bucket.ts";
+import { Bucket } from "../cloudflare/bucket.ts";
+import { Queue } from "../cloudflare/queue.ts";
+import { Worker } from "../cloudflare/worker.ts";
 import { alchemy } from "../index.ts";
-import { Queue } from "../queue.ts";
-import { Worker } from "../worker.ts";
 import { Messages } from "./messages.ts";
 
 // 1. resource declarations
@@ -40,18 +40,20 @@ export const worker2 = Worker2.consume(
   }),
 );
 
-const stack = alchemy.stack(
-  "my-app",
-  worker1.bind(
-    alchemy.policy(
-      Bucket.Put(Videos),
-      Queue.Consume(Messages),
-      Worker.Fetch(Worker2),
-      Worker.Fetch(Worker1),
-    ),
+const A = worker1.bind(
+  alchemy.policy(
+    Bucket.Put(Videos),
+    Queue.Consume(Messages),
+    Worker.Fetch(Worker2),
+    Worker.Fetch(Worker1),
   ),
-  worker2.bind(alchemy.policy(Worker.Fetch(Worker1), Queue.Consume(Messages))),
 );
+
+const B = worker2.bind(
+  alchemy.policy(Worker.Fetch(Worker1), Queue.Consume(Messages)),
+);
+
+const stack = alchemy.stack("my-app", A, B);
 
 await stack.pipe(Effect.runPromise);
 

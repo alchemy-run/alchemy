@@ -1,7 +1,7 @@
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { Queue } from "../queue.ts";
+import { Queue } from "../cloudflare/queue.ts";
 
 export class Messages extends Queue.Resource("messages")<{
   key: string;

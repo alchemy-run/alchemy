@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { Worker } from "../worker.ts";
+import { Worker } from "../cloudflare/worker.ts";
 
 export class WorkerA extends Worker.Resource("worker-a") {}
 export class WorkerB extends Worker.Resource("worker-b") {}

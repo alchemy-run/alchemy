@@ -1,7 +1,7 @@
 import type * as Effect from "effect/Effect";
 import type { Schema } from "effect/Schema";
-import type { Instance } from "./ctor.ts";
-import type { Allow, Policy } from "./policy.ts";
+import type { Instance } from "../ctor.ts";
+import type { Allow, Policy } from "../policy.ts";
 import type { Queue } from "./queue.ts";
 
 export type Resource<ID extends string, Message = any> = Queue<ID, Message>;

@@ -100,8 +100,13 @@ export function isQueue(eventSource: any): eventSource is Queue {
 /**
  * Output returned after Cloudflare Queue creation/update
  */
-export type Queue<Body = unknown> = Resource<"cloudflare::Queue"> &
+export type Queue<
+  ID extends string = string,
+  Body = unknown,
+> = Resource<"cloudflare::Queue"> &
   Omit<QueueProps, "dev"> & {
+    ID: ID;
+
     /**
      * Type identifier for Cloudflare Queue
      */
@@ -233,7 +238,7 @@ export type Queue<Body = unknown> = Resource<"cloudflare::Queue"> &
 export async function Queue<T = unknown>(
   id: string,
   props: QueueProps = {},
-): Promise<Queue<T>> {
+): Promise<Queue<string, T>> {
   return await _Queue(id, {
     ...props,
     dev: {
@@ -245,8 +250,8 @@ export async function Queue<T = unknown>(
 
 const _Queue = Resource("cloudflare::Queue", async function <
   T = unknown,
->(this: Context<Queue<T>>, id: string, props: QueueProps = {}): Promise<
-  Queue<T>
+>(this: Context<Queue<string, T>>, id: string, props: QueueProps = {}): Promise<
+  Queue<string, T>
 > {
   const queueName =
     props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
@@ -257,6 +262,7 @@ const _Queue = Resource("cloudflare::Queue", async function <
   };
   if (this.scope.local && !props.dev?.remote) {
     return this({
+      ID: id,
       type: "queue",
       id: this.output?.id ?? "",
       name: queueName,
@@ -321,6 +327,7 @@ const _Queue = Resource("cloudflare::Queue", async function <
   }
 
   return this({
+    ID: id,
     type: "queue",
     id: queueData.result.queue_id || "",
     name: queueName,

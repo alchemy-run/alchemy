@@ -430,6 +430,7 @@ export function isWorker(resource: Resource): resource is Worker<any> {
  * Output returned after Worker creation/update
  */
 export type Worker<
+  ID extends string = string,
   B extends Bindings | undefined = Bindings | undefined,
   RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
 > = Resource<"cloudflare::Worker"> &
@@ -442,7 +443,12 @@ export type Worker<
     /**
      * The ID of the worker
      */
-    id: string;
+    ID: ID;
+
+    /**
+     * The ID of the worker
+     */
+    id: ID;
 
     /**
      * The name of the worker
@@ -689,14 +695,15 @@ export type Worker<
  * // Output: Preview URL: https://pr-123-my-worker.subdomain.workers.dev
  */
 export function Worker<
+  ID extends string,
   const B extends Bindings,
   RPC extends Rpc.WorkerEntrypointBranded,
->(id: string, props: WorkerProps<B, RPC>): Promise<Worker<B, RPC>>;
+>(id: ID, props: WorkerProps<B, RPC>): Promise<Worker<ID, B, RPC>>;
 
-export function Worker<const B extends Bindings>(
-  id: string,
+export function Worker<ID extends string, const B extends Bindings>(
+  id: ID,
   props: WorkerProps<B>,
-): Promise<Worker<B>> {
+): Promise<Worker<ID, B>> {
   return _Worker(id, props as WorkerProps<B>);
 }
 
@@ -705,9 +712,9 @@ const _Worker = Resource(
   {
     alwaysUpdate: true,
   },
-  async function <const B extends Bindings>(
-    this: Context<Worker<NoInfer<B>>>,
-    id: string,
+  async function <const ID extends string, const B extends Bindings>(
+    this: Context<Worker<NoInfer<ID>, NoInfer<B>>>,
+    id: ID,
     props: WorkerProps<B>,
   ) {
     let adopt = props.adopt ?? this.scope.adopt;
@@ -842,7 +849,9 @@ const _Worker = Resource(
         const { MiniflareController } = await import(
           "./miniflare/miniflare-controller.js"
         );
-        const controller = MiniflareController.get(path.resolve(getPersistPath(this.scope)));
+        const controller = MiniflareController.get(
+          path.resolve(getPersistPath(this.scope)),
+        );
         url = await controller.add({
           api,
           id,
@@ -888,7 +897,7 @@ const _Worker = Resource(
           hasRemote: this.output?.dev?.hasRemote ?? false,
         },
         Env: undefined!,
-      } as unknown as Worker<B>);
+      } as unknown as Worker<ID, B>);
     }
 
     if (this.phase === "create" || this.output.dev?.hasRemote === false) {
@@ -1042,7 +1051,7 @@ const _Worker = Resource(
       dev: {
         hasRemote: true,
       },
-    } as unknown as Worker<B>);
+    } as unknown as Worker<ID, B>);
   },
 );
 

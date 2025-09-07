@@ -1,7 +1,7 @@
 export * from "./bind.ts";
-export * from "./bucket.ts";
-export * from "./queue.ts";
-export * from "./worker.ts";
+export * from "./cloudflare/bucket.ts";
+export * from "./cloudflare/queue.ts";
+export * from "./cloudflare/worker.ts";
 
 export * as alchemy from "./alchemy.ts";
 

@@ -1,11 +1,11 @@
 import type { R2Bucket } from "@cloudflare/workers-types";
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
-import { binding } from "./binding.ts";
+import { binding } from "../binding.ts";
+import type { Instance } from "../ctor.ts";
+import type { Env } from "../env.ts";
+import type { Allow, Policy } from "../policy.ts";
 import type { Bucket } from "./bucket.ts";
-import type { Instance } from "./ctor.ts";
-import type { Env } from "./env.ts";
-import type { Allow, Policy } from "./policy.ts";
 
 const Binding = binding<R2Bucket>();
 

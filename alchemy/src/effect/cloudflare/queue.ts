@@ -1,7 +1,8 @@
 import type { MessageBatch } from "@cloudflare/workers-types";
 import type * as Effect from "effect/Effect";
-import type { Instance } from "./ctor.ts";
-import type { Policy } from "./policy.ts";
+import type { Queue as QueueResource } from "../../cloudflare/queue.ts";
+import type { Instance } from "../ctor.ts";
+import type { Policy } from "../policy.ts";
 import type { Consumer, Send, SendBatch } from "./queue.bindings.ts";
 
 export * as Queue from "./queue.bindings.ts";
@@ -15,12 +16,7 @@ export type Queue<ID extends string = string, Msg = any> = {
   id: ID;
   message: Msg;
   Batch: MessageBatch<Msg>;
-  new (
-    _: never,
-  ): {
-    type: "Queue";
-    id: ID;
-  };
+  new (_: never): QueueResource<ID, Msg>;
   send<Q>(
     this: Q,
     message: Msg,
