@@ -1,6 +1,6 @@
 import * as fs from "node:fs/promises";
 import path from "node:path";
-import { bold, cyan } from "picocolors";
+import pc from "picocolors";
 import { getPackageManagerRunner } from "../util/detect-package-manager.ts";
 import { exists } from "../util/exists.ts";
 import ignore from "../util/ignore-matcher.ts";
@@ -25,8 +25,8 @@ export async function Nextjs<const B extends Bindings>(
   if (!isIgnored) {
     logger.warn(
       [
-        bold(
-          `The ${cyan("wrangler.jsonc")} file for Next.js ${cyan(`"${id}"`)} is not ignored.`,
+        pc.bold(
+          `The ${pc.cyan("wrangler.jsonc")} file for Next.js ${pc.cyan(`"${id}"`)} is not ignored.`,
         ),
         "This may cause unexpected behavior. Please add the file to your .gitignore.",
       ].join(" "),

@@ -1,7 +1,7 @@
 import type { Plugin } from "esbuild";
 import type { NodeJSCompatMode } from "miniflare";
 import { relative } from "node:path";
-import chalk from "picocolors";
+import pc from "picocolors";
 import { dedent } from "../../util/dedent.ts";
 import { logger } from "../../util/logger.ts";
 import { NODEJS_MODULES_RE } from "./nodejs-builtin-modules.ts";
@@ -109,6 +109,6 @@ export const esbuildPluginNodeCompatImports = (
 
 function toList(items: string[], absWorkingDir: string | undefined): string {
   return items
-    .map((i) => ` - ${chalk.blue(relative(absWorkingDir ?? "/", i))}`)
+    .map((i) => ` - ${pc.blue(relative(absWorkingDir ?? "/", i))}`)
     .join("\n");
 }

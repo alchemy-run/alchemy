@@ -4,7 +4,7 @@ import { createWriteStream } from "node:fs";
 import { access, mkdir, readdir, stat, unlink } from "node:fs/promises";
 import path, { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { dim } from "picocolors";
+import pc from "picocolors";
 
 // Get the root directory of the project
 const __filename = fileURLToPath(import.meta.url);
@@ -286,7 +286,7 @@ const tasks = new Listr(
 
         for (let i = 0; i < phases.length; i++) {
           const phase = phases[i];
-          task.title = `${example.name} - ${phase.title} ${dim(`(${i}/${phases.length - 1})`)}`;
+          task.title = `${example.name} - ${phase.title} ${pc.dim(`(${i}/${phases.length - 1})`)}`;
           await runCommand(phase.command, {
             cwd: example.path,
             exampleName: noCaptureFlag ? undefined : example.name,
