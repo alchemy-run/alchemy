@@ -99,7 +99,18 @@
         "useImportType": "error",
         "useExportType": "error",
         "noUselessElse": "off",
-        "useShorthandFunctionType": "error"
+        "useShorthandFunctionType": "error",
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "paths": {
+              "picocolors": {
+                "allowImportNames": ["default"],
+                "message": "picocolors is a CJS module, import default module as 'pc'"
+              }
+            }
+          }
+        }
       }
     }
   },
