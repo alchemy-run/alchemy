@@ -1,0 +1,10 @@
+{
+  "name": "@repo/infra",
+  "exports": {
+    "backend": "./backend.ts",
+    "frontend": "./frontend.ts"
+  },
+  "devDependencies": {
+    "alchemy": "file:../../../alchemy"
+  }
+}

@@ -11,7 +11,8 @@
   "packageManager": "bun@1.2.21",
   "workspaces": {
     "packages": [
-      "apps/*"
+      "apps/*",
+      "packages/*"
     ],
     "catalog": {
       "alchemy": "link:alchemy",
