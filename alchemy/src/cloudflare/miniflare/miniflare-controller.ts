@@ -13,11 +13,7 @@ import { MiniflareWorkerProxy } from "./miniflare-worker-proxy.ts";
 import { getDefaultPersistPath } from "./paths.ts";
 
 declare global {
-  var ALCHEMY_MINIFLARE_CONTROLLER:
-    | {
-        [scope: string]: MiniflareController;
-      }
-    | undefined;
+  var ALCHEMY_MINIFLARE_CONTROLLER: MiniflareController | undefined;
 }
 
 export class MiniflareController {
@@ -28,12 +24,10 @@ export class MiniflareController {
   remoteProxies = new Map<string, HTTPServer>();
   mutex = new AsyncMutex();
 
-  static get(rootDir: string) {
-    return ((globalThis.ALCHEMY_MINIFLARE_CONTROLLER ??= {})[rootDir] ??=
-      new MiniflareController(rootDir));
+  static get singleton() {
+    return (globalThis.ALCHEMY_MINIFLARE_CONTROLLER ??=
+      new MiniflareController());
   }
-
-  constructor(private readonly rootDir: string) {}
 
   async add(input: MiniflareWorkerInput) {
     const { watch, remoteProxy } = await buildWorkerOptions(input);
@@ -80,11 +74,10 @@ export class MiniflareController {
   }
 
   private async update() {
-    console.log("mf: ", path.resolve(getDefaultPersistPath(this.rootDir)));
     return await this.mutex.lock(async () => {
       const options: miniflare.MiniflareOptions = {
         workers: [],
-        defaultPersistRoot: path.resolve(getDefaultPersistPath(this.rootDir)),
+        defaultPersistRoot: path.resolve(getDefaultPersistPath()),
         unsafeDevRegistryPath: miniflare.getDefaultDevRegistryPath(),
         log: process.env.DEBUG
           ? new miniflare.Log(miniflare.LogLevel.DEBUG)
@@ -128,11 +121,13 @@ export class MiniflareController {
       if (this.miniflare) {
         await this.miniflare.setOptions(options);
       } else {
+        console.log("start miniflare", options);
         this.miniflare = new miniflare.Miniflare(options);
         await this.miniflare.ready;
       }
       return this.miniflare;
     } catch (error) {
+      console.log("failed to start miniflare");
       if (
         error instanceof miniflare.MiniflareCoreError &&
         error.code === "ERR_MODULE_STRING_SCRIPT"

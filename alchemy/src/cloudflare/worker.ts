@@ -58,6 +58,7 @@ import { Workflow, isWorkflow, upsertWorkflow } from "./workflow.ts";
 // Previous versions of `Worker` used the `Bundle` resource.
 // This import is here to avoid errors when destroying the `Bundle` resource.
 import "../esbuild/bundle.ts";
+import { writeMiniflareSymlink } from "./miniflare/symlink-miniflare-state.ts";
 
 /**
  * Configuration options for static assets
@@ -842,7 +843,8 @@ const _Worker = Resource(
         const { MiniflareController } = await import(
           "./miniflare/miniflare-controller.js"
         );
-        const controller = MiniflareController.get(this.scope.rootDir);
+        await writeMiniflareSymlink(this.scope.rootDir, options.cwd);
+        const controller = MiniflareController.singleton;
         url = await controller.add({
           api,
           id,

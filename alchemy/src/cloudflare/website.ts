@@ -10,7 +10,7 @@ import { Assets } from "./assets.ts";
 import type { Bindings } from "./bindings.ts";
 import { DEFAULT_COMPATIBILITY_DATE } from "./compatibility-date.gen.ts";
 import { unionCompatibilityFlags } from "./compatibility-presets.ts";
-import { getDefaultPersistPath } from "./miniflare/paths.ts";
+import { writeMiniflareSymlink } from "./miniflare/symlink-miniflare-state.ts";
 import { type AssetsConfig, Worker, type WorkerProps } from "./worker.ts";
 import { WranglerJson, type WranglerJsonSpec } from "./wrangler.json.ts";
 
@@ -267,7 +267,9 @@ export async function Website<B extends Bindings>(
     await fs.writeFile(paths.entrypoint, content);
   }
 
-  await writeMiniflareSymlink(paths.cwd);
+  if (Scope.current.local) {
+    await writeMiniflareSymlink(Scope.current.rootDir, paths.cwd);
+  }
 
   await WranglerJson({
     path: path.relative(paths.cwd, paths.wrangler.path),
@@ -350,21 +352,4 @@ export async function Website<B extends Bindings>(
     },
     dev: url ? { url } : undefined,
   })) as Website<B>;
-}
-
-async function writeMiniflareSymlink(cwd: string) {
-  const target = path.resolve(getDefaultPersistPath(cwd));
-  await fs.mkdir(target, { recursive: true });
-
-  if (cwd === process.cwd()) {
-    return;
-  }
-
-  const persistPath = path.resolve(cwd, getDefaultPersistPath(cwd));
-  await fs.mkdir(path.dirname(persistPath), { recursive: true });
-  await fs.symlink(target, persistPath).catch((e) => {
-    if (e.code !== "EEXIST") {
-      throw e;
-    }
-  });
 }
