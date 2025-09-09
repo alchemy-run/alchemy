@@ -71,6 +71,10 @@ export const execArgs = {
     .string()
     .optional()
     .describe("Select a specific application to target"),
+  rootDir: z
+    .string()
+    .optional()
+    .describe("Path to the root directory of the project"),
 } as const;
 
 export async function execAlchemy(
@@ -90,6 +94,7 @@ export async function execAlchemy(
     inspectWait,
     adopt,
     app,
+    rootDir,
   }: {
     cwd?: string;
     quiet?: boolean;
@@ -105,6 +110,7 @@ export async function execAlchemy(
     inspectBrk?: boolean;
     inspectWait?: boolean;
     app?: string;
+    rootDir?: string;
   },
 ) {
   const args: string[] = [];
@@ -130,6 +136,7 @@ export async function execAlchemy(
   if (inspectBrk) execArgs.push("--inspect-brk");
   if (adopt) args.push("--adopt");
   if (app) args.push(`--app ${app}`);
+  if (rootDir) args.push(`--root-dir ${rootDir}`);
 
   // Check for alchemy.run.ts or alchemy.run.js (if not provided)
   if (!main) {

@@ -10,10 +10,14 @@ import {
   type MiniflareWorkerInput,
 } from "./build-worker-options.ts";
 import { MiniflareWorkerProxy } from "./miniflare-worker-proxy.ts";
-import { DEFAULT_PERSIST_PATH } from "./paths.ts";
+import { getDefaultPersistPath } from "./paths.ts";
 
 declare global {
-  var ALCHEMY_MINIFLARE_CONTROLLER: MiniflareController | undefined;
+  var ALCHEMY_MINIFLARE_CONTROLLER:
+    | {
+        [scope: string]: MiniflareController;
+      }
+    | undefined;
 }
 
 export class MiniflareController {
@@ -24,10 +28,12 @@ export class MiniflareController {
   remoteProxies = new Map<string, HTTPServer>();
   mutex = new AsyncMutex();
 
-  static get singleton() {
-    globalThis.ALCHEMY_MINIFLARE_CONTROLLER ??= new MiniflareController();
-    return globalThis.ALCHEMY_MINIFLARE_CONTROLLER;
+  static get(rootDir: string) {
+    return ((globalThis.ALCHEMY_MINIFLARE_CONTROLLER ??= {})[rootDir] ??=
+      new MiniflareController(rootDir));
   }
+
+  constructor(private readonly rootDir: string) {}
 
   async add(input: MiniflareWorkerInput) {
     const { watch, remoteProxy } = await buildWorkerOptions(input);
@@ -74,10 +80,11 @@ export class MiniflareController {
   }
 
   private async update() {
+    console.log("mf: ", path.resolve(getDefaultPersistPath(this.rootDir)));
     return await this.mutex.lock(async () => {
       const options: miniflare.MiniflareOptions = {
         workers: [],
-        defaultPersistRoot: path.resolve(DEFAULT_PERSIST_PATH),
+        defaultPersistRoot: path.resolve(getDefaultPersistPath(this.rootDir)),
         unsafeDevRegistryPath: miniflare.getDefaultDevRegistryPath(),
         log: process.env.DEBUG
           ? new miniflare.Log(miniflare.LogLevel.DEBUG)

@@ -1,3 +1,4 @@
+import path from "node:path";
 import { execArgv } from "node:process";
 import { onExit } from "signal-exit";
 import { isReplacedSignal } from "./apply.ts";
@@ -15,6 +16,7 @@ import { DEFAULT_STAGE, Scope, type ProviderCredentials } from "./scope.ts";
 import { secret } from "./secret.ts";
 import type { StateStoreType } from "./state.ts";
 import type { LoggerApi } from "./util/cli.ts";
+import { ALCHEMY_ROOT } from "./util/root-dir.ts";
 import { TelemetryClient } from "./util/telemetry/client.ts";
 
 /**
@@ -103,9 +105,14 @@ async function _alchemy(
   const cliArgs = process.argv.slice(2);
   // user may select a specific app to auto-enable read mode for any other app
   const app = parseOption("--app");
-  function parseOption(option: string, defaultValue?: string) {
+  function parseOption<D extends string | undefined>(
+    option: string,
+    defaultValue?: D,
+  ): D {
     const i = cliArgs.indexOf(option);
-    return i !== -1 && i + 1 < cliArgs.length ? cliArgs[i + 1] : defaultValue;
+    return (
+      i !== -1 && i + 1 < cliArgs.length ? cliArgs[i + 1] : defaultValue
+    ) as D;
   }
   const cliOptions = {
     phase:
@@ -129,6 +136,7 @@ async function _alchemy(
     })(),
     password: process.env.ALCHEMY_PASSWORD,
     adopt: cliArgs.includes("--adopt"),
+    rootDir: path.resolve(parseOption("--root-dir", ALCHEMY_ROOT)),
   } satisfies Partial<AlchemyOptions>;
   const mergedOptions = {
     ...cliOptions,
@@ -281,6 +289,12 @@ export interface AlchemyOptions {
    * @default false
    */
   adopt?: boolean;
+  /**
+   * The root directory of the project.
+   *
+   * @default process.cwd()
+   */
+  rootDir?: string;
 }
 
 export interface ScopeOptions extends AlchemyOptions {

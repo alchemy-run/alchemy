@@ -112,7 +112,10 @@ export function test(
         return new D1StateStore(scope);
       default:
         return new SQLiteStateStore(scope, {
-          filename: `.alchemy/${path.relative(process.cwd(), meta.filename)}.sqlite`,
+          filename: path.join(
+            scope.dotAlchemy,
+            `${path.relative(process.cwd(), meta.filename)}.sqlite`,
+          ),
         });
     }
   };

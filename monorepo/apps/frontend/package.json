@@ -5,9 +5,9 @@
   "version": "0.0.0",
   "scripts": {
     "build": "tsc -b",
-    "dev": "alchemy dev --adopt --env-file ../../.env --app frontend",
-    "deploy": "alchemy deploy --adopt --env-file ../../.env --app frontend",
-    "destroy": "alchemy destroy --env-file ../../.env --app frontend",
+    "dev": "alchemy dev --adopt --env-file ../../.env --app frontend --root-dir ../../",
+    "deploy": "alchemy deploy --adopt --env-file ../../.env --app frontend --root-dir ../../",
+    "destroy": "alchemy destroy --env-file ../../.env --app frontend --root-dir ../../",
     "lint": "eslint .",
     "preview": "vite preview",
     "check": "tsc --noEmit"

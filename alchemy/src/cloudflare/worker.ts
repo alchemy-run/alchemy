@@ -755,7 +755,8 @@ const _Worker = Resource(
         compatibilityDate,
         compatibilityFlags,
         outdir:
-          props.bundle?.outdir ?? path.join(cwd, ".alchemy", "out", workerName),
+          props.bundle?.outdir ??
+          path.join(this.scope.dotAlchemy, "out", workerName),
         sourceMap: "sourceMap" in props ? props.sourceMap : undefined,
       });
 
@@ -812,7 +813,7 @@ const _Worker = Resource(
       if (options.bundle.isOk()) {
         await options.bundle.value.delete?.();
       }
-      await deleteMiniflareWorkerData(options.name, {
+      await deleteMiniflareWorkerData(this.scope, options.name, {
         durableObjects: options.durableObjects,
         workflows: options.workflows,
       });
@@ -841,7 +842,7 @@ const _Worker = Resource(
         const { MiniflareController } = await import(
           "./miniflare/miniflare-controller.js"
         );
-        const controller = MiniflareController.singleton;
+        const controller = MiniflareController.get(this.scope.rootDir);
         url = await controller.add({
           api,
           id,

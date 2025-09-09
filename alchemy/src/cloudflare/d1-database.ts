@@ -283,6 +283,7 @@ const _D1Database = Resource(
           databaseId: dev.id,
           migrationsTable: props.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE,
           migrations: props.migrationsFiles,
+          rootDir: this.scope.rootDir,
         });
       }
       return this({
@@ -301,7 +302,7 @@ const _D1Database = Resource(
 
     if (this.phase === "delete") {
       if (this.output.dev?.id) {
-        await deleteMiniflareBinding("d1", this.output.dev.id);
+        await deleteMiniflareBinding(this.scope, "d1", this.output.dev.id);
       }
       if (props.delete !== false && this.output?.id) {
         await deleteDatabase(api, this.output.id);
