@@ -14,6 +14,8 @@ export const backend = await Worker("worker", {
   },
 });
 
-console.log({ url: backend.url });
+if (import.meta.main) {
+  console.log({ url: backend.url });
+}
 
 await app.finalize();

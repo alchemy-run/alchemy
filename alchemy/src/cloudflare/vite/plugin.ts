@@ -14,7 +14,7 @@ const alchemy = (config?: PluginConfig): PluginOption => {
       typeof config?.persistState === "object"
         ? config.persistState.path
         : // persist path should default to the /.alchemy/miniflare/v3
-          getDefaultPersistPath(process.env.ALCHEMY_ROOT ?? process.cwd()),
+          getDefaultPersistPath(),
     ),
   };
   if (typeof persistState === "object" && persistState.path.endsWith("v3")) {
@@ -24,7 +24,7 @@ const alchemy = (config?: PluginConfig): PluginOption => {
     ...config,
     configPath: validateConfigPath(
       // config path doesn't need to be in the root, it can be in the app dir
-      config?.configPath ?? getDefaultConfigPath(process.cwd()),
+      config?.configPath ?? getDefaultConfigPath(),
     ),
     persistState,
     experimental: config?.experimental ?? {

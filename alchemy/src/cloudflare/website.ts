@@ -293,6 +293,7 @@ export async function Website<B extends Bindings>(
         ...env,
         ...(typeof build === "object" ? build.env : {}),
         NODE_ENV: "production",
+        ALCHEMY_ROOT: Scope.current.rootDir,
       },
       memoize: typeof build === "object" ? build.memoize : undefined,
     });
