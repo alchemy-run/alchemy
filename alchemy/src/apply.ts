@@ -64,9 +64,20 @@ async function _apply<Out extends Resource>(
     }
     if (scope.phase === "read") {
       if (state === undefined) {
+        // If the program was run with `--app someOtherApp` and this app is not `someOtherApp`,
+        // then instead of throwing, we should actually terminate the program because it means
+        // that another app (in a monorepo) is importing this app which is invalid.
+        if (scope.isSelected === false) {
+          // if we are in `---destroy`, then exit
+          // if we are in `--deploy`, then poll until state available
+          process.exit(0);
+        }
         throw new Error(
           `Resource "${resource[ResourceFQN]}" not found and running in 'read' phase.`,
         );
+      } else {
+        // 1. check if this update requires a change
+        // -> poll until it does not (i.e. when the owner process applies the change and updates the state store)
       }
       scope.telemetryClient.record({
         event: "resource.read",

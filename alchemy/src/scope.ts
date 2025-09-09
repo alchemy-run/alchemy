@@ -96,6 +96,14 @@ export interface ScopeOptions extends ProviderCredentials {
    * @default process.cwd()
    */
   rootDir?: string;
+  /**
+   * Whether this is the application that was selected with `--app`
+   *
+   * `true` if the application was selected with `--app`
+   * `false` if the application was not selected with `--app`
+   * `undefined` if the program was not run with `--app`
+   */
+  isSelected?: boolean;
 }
 
 /**
@@ -186,6 +194,7 @@ export class Scope {
   public readonly dataMutex: AsyncMutex;
   public readonly rootDir: string;
   public readonly dotAlchemy: string;
+  public readonly isSelected: boolean | undefined;
 
   // Provider credentials for scope-level credential overrides
   public readonly providerCredentials: ProviderCredentials;
@@ -223,6 +232,7 @@ export class Scope {
       adopt,
       dotAlchemy,
       rootDir,
+      isSelected,
       ...providerCredentials
     } = options;
 
@@ -230,6 +240,7 @@ export class Scope {
     this.name = this.scopeName;
     this.parent = parent ?? Scope.getScope();
     this.rootDir = rootDir ?? this.parent?.rootDir ?? ALCHEMY_ROOT;
+    this.isSelected = isSelected ?? this.parent?.isSelected;
 
     this.dotAlchemy =
       dotAlchemy ??

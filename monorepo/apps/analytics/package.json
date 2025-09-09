@@ -1,13 +1,13 @@
 {
-  "name": "backend",
+  "name": "analytics",
   "private": true,
   "type": "module",
   "module": "./lib/src/index.js",
   "scripts": {
     "build": "tsc -b",
-    "dev": "alchemy dev --adopt --env-file ../../.env --app backend --root-dir ../../",
-    "deploy": "alchemy deploy --adopt --env-file ../../.env --app backend --root-dir ../../",
-    "destroy": "alchemy destroy --env-file ../../.env --app backend --root-dir ../../",
+    "dev": "alchemy dev --adopt --env-file ../../.env --app analytics --root-dir ../../",
+    "deploy": "alchemy deploy --adopt --env-file ../../.env --app analytics --root-dir ../../",
+    "destroy": "alchemy destroy --env-file ../../.env --app analytics --root-dir ../../",
     "check": "tsc --noEmit"
   },
   "exports": {

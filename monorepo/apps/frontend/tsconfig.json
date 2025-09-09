@@ -6,8 +6,8 @@
     "alchemy.run.ts",
     "vite.config.ts"
   ],
-
   "compilerOptions": {
+    "outDir": "lib",
     "target": "es2021",
     "lib": ["es2021"],
     "jsx": "react-jsx",
@@ -16,7 +16,6 @@
     "resolveJsonModule": true,
     "allowJs": true,
     "checkJs": false,
-    "noEmit": true,
     "isolatedModules": true,
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,

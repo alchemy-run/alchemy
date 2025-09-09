@@ -175,6 +175,7 @@ If this is a mistake, you can disable this check by setting the ALCHEMY_CI_STATE
     phase,
     password: mergedOptions?.password ?? process.env.ALCHEMY_PASSWORD,
     telemetryClient,
+    isSelected: app === undefined ? undefined : app === appName,
   });
   onExit((code) => {
     root.cleanup().then(() => {
@@ -295,10 +296,14 @@ export interface AlchemyOptions {
    * @default process.cwd()
    */
   rootDir?: string;
-}
-
-export interface ScopeOptions extends AlchemyOptions {
-  enter: boolean;
+  /**
+   * Whether this is the application that was selected with `--app`
+   *
+   * `true` if the application was selected with `--app`
+   * `false` if the application was not selected with `--app`
+   * `undefined` if the program was not run with `--app`
+   */
+  isSelected?: boolean;
 }
 
 export interface RunOptions extends AlchemyOptions, ProviderCredentials {
