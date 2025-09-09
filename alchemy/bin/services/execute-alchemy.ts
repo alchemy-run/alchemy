@@ -67,6 +67,10 @@ export const execArgs = {
     .optional()
     .default(".env")
     .describe("Path to environment file to load"),
+  app: z
+    .string()
+    .optional()
+    .describe("Select a specific application to target"),
 } as const;
 
 export async function execAlchemy(
@@ -85,6 +89,7 @@ export async function execAlchemy(
     inspectBrk,
     inspectWait,
     adopt,
+    app,
   }: {
     cwd?: string;
     quiet?: boolean;
@@ -99,6 +104,7 @@ export async function execAlchemy(
     inspect?: boolean;
     inspectBrk?: boolean;
     inspectWait?: boolean;
+    app?: string;
   },
 ) {
   const args: string[] = [];
@@ -123,6 +129,7 @@ export async function execAlchemy(
   if (inspectWait) execArgs.push("--inspect-wait");
   if (inspectBrk) execArgs.push("--inspect-brk");
   if (adopt) args.push("--adopt");
+  if (app) args.push(`--app ${app}`);
 
   // Check for alchemy.run.ts or alchemy.run.js (if not provided)
   if (!main) {

@@ -101,12 +101,21 @@ async function _alchemy(
   options?: Omit<AlchemyOptions, "appName">,
 ): Promise<Scope> {
   const cliArgs = process.argv.slice(2);
+  // user may select a specific app to auto-enable read mode for any other app
+  const app = parseOption("--app");
+  function parseOption(option: string, defaultValue?: string) {
+    const i = cliArgs.indexOf(option);
+    return i !== -1 && i + 1 < cliArgs.length ? cliArgs[i + 1] : defaultValue;
+  }
   const cliOptions = {
-    phase: cliArgs.includes("--destroy")
-      ? "destroy"
-      : cliArgs.includes("--read")
+    phase:
+      app && app !== appName
         ? "read"
-        : "up",
+        : cliArgs.includes("--destroy")
+          ? "destroy"
+          : cliArgs.includes("--read")
+            ? "read"
+            : "up",
     local: cliArgs.includes("--local") || cliArgs.includes("--dev"),
     watch: cliArgs.includes("--watch") || execArgv.includes("--watch"),
     quiet: cliArgs.includes("--quiet"),

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "ui": "tui",
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"]
+    },
+    "check": {
+      "dependsOn": ["^check"]
+    },
+    "deploy": {
+      "dependsOn": ["^build", "^deploy"]
+    },
+    "dev": {
+      "dependsOn": ["^build"],
+      "persistent": true,
+      "cache": false
+    },
+    "backend#destroy": {
+      "dependsOn": ["frontend#destroy"]
+    },
+    "frontend#destroy": {}
+  }
+}

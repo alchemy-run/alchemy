@@ -1,0 +1,32 @@
+---
+title: Multiple Apps in a Turborepo
+description: Use Alchemy to deploy multiple interconnected applications in a single repository.
+sidebar:
+  order: 0
+---
+
+import { FileTree } from '@astrojs/starlight/components';
+
+
+Alchemy supports deploying multiple, inter-connected applications in a single monorepository.
+
+<FileTree>
+
+- apps
+  - frontend
+    - src
+      - App.tsx
+    - alchemy.run.ts
+    - package.json
+    - tsconfig.json
+    - vite.config.ts
+  - backend
+    - src
+      - worker.ts
+    - alchemy.run.ts
+    - package.json
+    - tsconfig.json
+package.json
+tsconfig.json
+turbo.json
+</FileTree>

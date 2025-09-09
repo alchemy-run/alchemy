@@ -1,0 +1,26 @@
+{
+  "name": "backend",
+  "private": true,
+  "type": "module",
+  "module": "./lib/src/index.js",
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "alchemy dev --adopt --env-file ../../.env --app backend",
+    "deploy": "alchemy deploy --adopt --env-file ../../.env --app backend",
+    "destroy": "alchemy destroy --env-file ../../.env --app backend",
+    "check": "tsc --noEmit"
+  },
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "import": "./lib/src/index.js"
+    },
+    "./alchemy": {
+      "bun": "./alchemy.run.ts",
+      "import": "./lib/alchemy.run.js"
+    }
+  },
+  "dependencies": {
+    "alchemy": "catalog:"
+  }
+}
