@@ -4,8 +4,8 @@
   "scripts": {
     "build": "tsc -b",
     "dev": "turbo run dev",
-    "deploy": "turbo run deploy",
-    "destroy": "turbo run destroy"
+    "deploy": "turbo run deploy --ui=stream",
+    "destroy": "turbo run destroy --ui=stream"
   },
   "type": "module",
   "packageManager": "bun@1.2.21",

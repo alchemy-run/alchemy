@@ -9,7 +9,8 @@
       "dependsOn": ["^check"]
     },
     "deploy": {
-      "dependsOn": ["^build", "^deploy"]
+      "dependsOn": ["^build", "^deploy"],
+      "cache": false
     },
     "dev": {
       "dependsOn": ["^build"],
@@ -17,8 +18,11 @@
       "cache": false
     },
     "backend#destroy": {
+      "cache": false,
       "dependsOn": ["frontend#destroy"]
     },
-    "frontend#destroy": {}
+    "frontend#destroy": {
+      "cache": false
+    }
   }
 }
