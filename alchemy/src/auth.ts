@@ -28,6 +28,9 @@ export namespace Credentials {
     apiToken: string;
   }
 
+  /**
+   * Returns true if the given credentials are OAuth and have expired.
+   */
   export const isOAuthExpired = (
     credentials: Credentials,
     leeway = 10 * 1000,
@@ -54,11 +57,17 @@ export namespace Profile {
     profile: string;
   }
 
+  /**
+   * Get a profile by provider and profile name.
+   */
   export const get = async (input: Input) => {
     const data = await list();
     return data[input.provider]?.[input.profile];
   };
 
+  /**
+   * Set a profile by provider and profile name.
+   */
   export const set = async (input: Input, profile: Profile) => {
     await update((data) => {
       data[input.provider] = {
@@ -68,6 +77,9 @@ export namespace Profile {
     });
   };
 
+  /**
+   * Delete a profile by provider and profile name.
+   */
   export const del = async (input: Input) => {
     await update((data) => {
       delete data[input.provider]?.[input.profile];
@@ -81,6 +93,9 @@ export namespace Profile {
     [provider: string]: Record<string, Profile>;
   }
 
+  /**
+   * List all profiles.
+   */
   export const list = async (): Promise<Data> => {
     try {
       const content = await fs.readFile(FILE_PATH, "utf-8");
@@ -91,6 +106,10 @@ export namespace Profile {
   };
 
   const mutex = new AsyncMutex(); // prevents race conditions when writing to the file
+
+  /**
+   * Update the profile data.
+   */
   const update = async (updater: (data: Data) => void) => {
     await mutex.lock(async () => {
       const data = await list();

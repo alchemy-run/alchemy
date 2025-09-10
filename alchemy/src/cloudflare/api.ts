@@ -1,4 +1,4 @@
-import type { Credentials } from "../auth.ts";
+import { Profile, type Credentials } from "../auth.ts";
 import type { Secret } from "../secret.ts";
 import { defaultKeyFn, memoize } from "../util/memoize.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
@@ -62,9 +62,9 @@ export const createCloudflareApi = memoize(
     const profile = options.profile ?? process.env.CLOUDFLARE_PROFILE;
 
     if (profile) {
-      const item = await CloudflareAuth.get(profile);
+      const item = await Profile.get({ provider: "cloudflare", profile });
       if (!item) {
-        throw new Error(`Profile "${profile}" not found`);
+        throw new Error(`The Cloudflare profile "${profile}" was not found.`);
       }
       return new CloudflareApi({
         baseUrl,
@@ -118,7 +118,10 @@ export const createCloudflareApi = memoize(
       });
     }
 
-    const defaultProfile = await CloudflareAuth.get("default");
+    const defaultProfile = await Profile.get({
+      provider: "cloudflare",
+      profile: "default",
+    });
 
     if (defaultProfile) {
       return new CloudflareApi({
@@ -129,7 +132,12 @@ export const createCloudflareApi = memoize(
       });
     }
 
-    throw new Error("No credentials found");
+    throw new Error(
+      [
+        "No credentials found. Please run `alchemy auth login`, or set either CLOUDFLARE_API_TOKEN or CLOUDFLARE_API_KEY in your environment.",
+        "Learn more: https://alchemy.run/guides/cloudflare/",
+      ].join("\n"),
+    );
   },
   (options) =>
     defaultKeyFn({
@@ -147,20 +155,27 @@ export const createCloudflareApi = memoize(
  */
 export class CloudflareApi {
   public readonly baseUrl: string;
-  public readonly credentials: Credentials;
   public readonly accountId: string;
+  public readonly credentials: Credentials;
   public readonly profile: string | undefined;
 
-  constructor(input: {
+  /**
+   * Create a new Cloudflare API client
+   * Use createCloudflareApi factory function instead of direct constructor
+   * for automatic account ID discovery.
+   *
+   * @param options API options
+   */
+  constructor(options: {
     baseUrl?: string;
-    profile?: string;
-    credentials: Credentials;
     accountId: string;
+    credentials: Credentials;
+    profile?: string;
   }) {
-    this.baseUrl = input.baseUrl ?? "https://api.cloudflare.com/client/v4";
-    this.credentials = input.credentials;
-    this.accountId = input.accountId;
-    this.profile = input.profile;
+    this.baseUrl = options.baseUrl ?? "https://api.cloudflare.com/client/v4";
+    this.accountId = options.accountId;
+    this.credentials = options.credentials;
+    this.profile = options.profile;
   }
 
   /**
@@ -186,10 +201,10 @@ export class CloudflareApi {
       headers = init.headers;
     }
     headers = {
-      ...(await CloudflareAuth.toHeadersWithRefresh(
-        this.profile,
-        this.credentials,
-      )),
+      ...(await CloudflareAuth.formatHeadersWithRefresh({
+        profile: this.profile,
+        credentials: this.credentials,
+      })),
       ...headers,
     };
 

@@ -289,7 +289,7 @@ const promptForCredentials = async (
  */
 const promptForCloudflareAccount = async (credentials: Credentials) => {
   const accounts = await listCloudflareAccounts(
-    CloudflareAuth.toHeaders(credentials),
+    CloudflareAuth.formatHeaders(credentials),
   );
   return await withCancel(
     select({
