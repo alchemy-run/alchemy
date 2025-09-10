@@ -44,6 +44,7 @@ function rewriteLoginArgs(args: string[]) {
       "login",
       ...args.slice(login + 1),
     ];
+    // TODO: should we warn?
     process.env.ALCHEMY_WARN_AUTH_LOGIN = "1";
     return newArgs;
   }

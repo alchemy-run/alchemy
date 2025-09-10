@@ -116,7 +116,7 @@ export namespace Profile {
       updater(data);
       await fs.mkdir(path.dirname(FILE_PATH), { recursive: true });
       await fs.writeFile(FILE_PATH, JSON.stringify(data, null, 2));
-      await fs.chmod(FILE_PATH, 0o600);
+      await fs.chmod(FILE_PATH, 0o600); // 0o600 means only the current user can read/write
     });
   };
 }
