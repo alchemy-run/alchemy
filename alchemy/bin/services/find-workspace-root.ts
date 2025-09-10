@@ -34,21 +34,15 @@ const anyExists = (base: string, ...files: string[]) =>
   );
 
 const rootFiles = [
-  "bun.lock",
-  "bun.lockb",
-  "pnpm-lock.yaml",
-  "pnpm-lock.yaml.gz",
-  "pnpm-lock.yaml.zst",
-  "package-lock.json",
-  "yarn.lock",
+  // pnpm
   "pnpm-workspace.yaml",
   "pnpm-workspace.yml",
+  // lerna
   "lerna.json",
+  // nx
+  "nx.json",
+  // turbo
   "turbo.json",
-  "turbo.yaml",
-  "turbo.yml",
-  "turbo.config.ts",
-  "turbo.config.js",
-  "turbo.config.mjs",
-  "turbo.config.cjs",
+  // rush
+  "rush.json",
 ];
