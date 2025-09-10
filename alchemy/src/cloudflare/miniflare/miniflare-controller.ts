@@ -76,8 +76,9 @@ export class MiniflareController {
 
   private async update() {
     return await this.mutex.lock(async () => {
-      console.log("mf.update", getDefaultPersistPath(Scope.current.rootDir));
-      const options: miniflare.MiniflareOptions = {
+      const options: miniflare.MiniflareOptions & {
+        workers: miniflare.WorkerOptions[];
+      } = {
         workers: [],
         defaultPersistRoot: path.resolve(
           getDefaultPersistPath(Scope.current.rootDir),
@@ -86,7 +87,6 @@ export class MiniflareController {
         log: process.env.DEBUG
           ? new miniflare.Log(miniflare.LogLevel.DEBUG)
           : undefined,
-
         // This is required to allow websites and other separate processes
         // to detect Alchemy-managed Durable Objects via the Wrangler dev registry.
         unsafeDevRegistryDurableObjectProxy: true,
@@ -125,13 +125,11 @@ export class MiniflareController {
       if (this.miniflare) {
         await this.miniflare.setOptions(options);
       } else {
-        console.log("start miniflare", options);
         this.miniflare = new miniflare.Miniflare(options);
         await this.miniflare.ready;
       }
       return this.miniflare;
     } catch (error) {
-      console.log("failed to start miniflare");
       if (
         error instanceof miniflare.MiniflareCoreError &&
         error.code === "ERR_MODULE_STRING_SCRIPT"

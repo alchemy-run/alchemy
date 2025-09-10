@@ -58,7 +58,6 @@ import { Workflow, isWorkflow, upsertWorkflow } from "./workflow.ts";
 // Previous versions of `Worker` used the `Bundle` resource.
 // This import is here to avoid errors when destroying the `Bundle` resource.
 import "../esbuild/bundle.ts";
-import { writeMiniflareSymlink } from "./miniflare/symlink-miniflare-state.ts";
 
 /**
  * Configuration options for static assets
@@ -757,7 +756,8 @@ const _Worker = Resource(
         compatibilityFlags,
         outdir:
           props.bundle?.outdir ??
-          path.join(this.scope.dotAlchemy, "out", workerName),
+          // the out folder can't be moved to the root of a monorepo, it must be ${cwd} or else miniflare throws a fit
+          path.join(process.cwd(), ".alchemy", "out", workerName),
         sourceMap: "sourceMap" in props ? props.sourceMap : undefined,
       });
 
@@ -843,7 +843,6 @@ const _Worker = Resource(
         const { MiniflareController } = await import(
           "./miniflare/miniflare-controller.js"
         );
-        await writeMiniflareSymlink(this.scope.rootDir, options.cwd);
         const controller = MiniflareController.singleton;
         url = await controller.add({
           api,
