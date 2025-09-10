@@ -4,7 +4,7 @@
   "compilerOptions": {
     "types": ["@cloudflare/workers-types"],
     "composite": true,
-    "noEmit": true,
+    "noEmit": false,
     "outDir": "./lib",
     "rootDir": "./src",
     "sourceMap": true,

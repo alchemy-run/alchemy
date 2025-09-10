@@ -3,9 +3,9 @@
   "private": true,
   "scripts": {
     "build": "tsc -b",
-    "dev": "turbo run dev",
-    "deploy": "turbo run deploy --ui=stream",
-    "destroy": "turbo run destroy --ui=stream"
+    "dev": "tsc -b && turbo run dev",
+    "deploy": "tsc -b && turbo run deploy --ui=stream",
+    "destroy": "tsc -b && turbo run destroy --ui=stream"
   },
   "type": "module",
   "packageManager": "bun@1.2.21",

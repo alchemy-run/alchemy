@@ -24,5 +24,13 @@
     "strict": true,
     "skipLibCheck": true,
     "types": ["@cloudflare/workers-types", "./types/env.d.ts"]
-  }
+  },
+  "references": [
+    {
+      "path": "../analytics"
+    },
+    {
+      "path": "../backend"
+    }
+  ]
 }

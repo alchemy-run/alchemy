@@ -65,23 +65,22 @@ async function _apply<Out extends Resource>(
     }
     if (scope.phase === "read") {
       if (state === undefined) {
-        // If the program was run with `--app someOtherApp` and this app is not `someOtherApp`,
-        // then instead of throwing, we should actually terminate the program because it means
-        // that another app (in a monorepo) is importing this app which is invalid.
         if (scope.isSelected === false) {
+          // we are running in a monorepo and are not the selected app
           if (process.argv.includes("--destroy")) {
-            // if we are in `---destroy`, then exit (can't proceed, program is invalid)
+            // if we are trying to destroy a downstream app and this (upstream) app does not have data, then exit
             process.exit(0);
           }
           // if we are in `--deploy`, then poll until state available
-          await waitForConsistentState();
+          state = await waitForConsistentState();
+        } else {
+          throw new Error(
+            `Resource "${resource[ResourceFQN]}" not found and running in 'read' phase. Selected(${scope.isSelected})`,
+          );
         }
-        throw new Error(
-          `Resource "${resource[ResourceFQN]}" not found and running in 'read' phase.`,
-        );
       } else if (scope.isSelected === false) {
-        // we are running in a monorepo, so we need to wait for the process to be consistent
-        await waitForConsistentState();
+        // we are running in a monorepo and are not the selected app, so we need to wait for the process to be consistent
+        state = await waitForConsistentState();
       }
       scope.telemetryClient.record({
         event: "resource.read",
@@ -108,7 +107,7 @@ async function _apply<Out extends Resource>(
             throw new Error("Resource is being deleted");
           } else if (await inputsAreEqual(state)) {
             // sweet, we've reached a stable state and read can progress
-            break;
+            return state;
           }
           // jitter between 100-300ms
           const jitter = 100 + Math.random() * 200;
@@ -128,6 +127,30 @@ async function _apply<Out extends Resource>(
         return JSON.stringify(oldProps) === JSON.stringify(newProps);
       }
     }
+
+    if (state === undefined) {
+      state = {
+        kind: resource[ResourceKind],
+        id: resource[ResourceID],
+        fqn: resource[ResourceFQN],
+        seq: resource[ResourceSeq],
+        status: "creating",
+        data: {},
+        output: {
+          [ResourceID]: resource[ResourceID],
+          [ResourceFQN]: resource[ResourceFQN],
+          [ResourceKind]: resource[ResourceKind],
+          [ResourceScope]: scope,
+          [ResourceSeq]: resource[ResourceSeq],
+          [DestroyStrategy]: provider.options?.destroyStrategy ?? "sequential",
+        },
+        // deps: [...deps],
+        // there are no "old props" on initialization
+        props: {},
+      };
+      await scope.state.set(resource[ResourceID], state);
+    }
+
     const oldOutput = state.output;
 
     const alwaysUpdate =

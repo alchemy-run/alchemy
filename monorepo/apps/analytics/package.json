@@ -2,20 +2,13 @@
   "name": "analytics",
   "private": true,
   "type": "module",
-  "module": "./lib/src/index.js",
   "scripts": {
-    "build": "tsc -b",
     "dev": "alchemy dev --adopt --env-file ../../.env --app analytics --root-dir ../../",
     "deploy": "alchemy deploy --adopt --env-file ../../.env --app analytics --root-dir ../../",
     "destroy": "alchemy destroy --env-file ../../.env --app analytics --root-dir ../../",
     "check": "tsc --noEmit"
   },
   "exports": {
-    ".": {
-      "bun": "./src/index.ts",
-      "import": "./lib/src/index.js",
-      "types": "./src/index.ts"
-    },
     "./alchemy": {
       "bun": "./alchemy.run.ts",
       "import": "./lib/alchemy.run.js",

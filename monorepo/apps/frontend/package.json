@@ -4,7 +4,6 @@
   "private": true,
   "version": "0.0.0",
   "scripts": {
-    "build": "tsc -b",
     "dev": "alchemy dev --adopt --env-file ../../.env --app frontend --root-dir ../../",
     "deploy": "alchemy deploy --adopt --env-file ../../.env --app frontend --root-dir ../../",
     "destroy": "alchemy destroy --env-file ../../.env --app frontend --root-dir ../../",
@@ -19,7 +18,7 @@
   "devDependencies": {
     "analytics": "workspace:*",
     "backend": "workspace:*",
-    "alchemy": "file:../../../alchemy",
+    "alchemy": "catalog:",
     "@cloudflare/vite-plugin": "^1.7.4",
     "@cloudflare/workers-types": "^4.20250805.0",
     "miniflare": "^4.20250617.3",
