@@ -73,7 +73,8 @@ export namespace CloudflareAuth {
     "url_scanner:write",
     "user:read",
     "vectorize:write",
-    "workers:write",
+    // "workers:write", TODO(john): add this when Cloudflare grants access
+    "workers:read",
     "workers_builds:read",
     "workers_builds:write",
     "workers_kv:write",
