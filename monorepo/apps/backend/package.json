@@ -4,9 +4,9 @@
   "type": "module",
   "module": "./lib/src/index.js",
   "scripts": {
-    "dev": "alchemy dev --adopt --env-file ../../.env --app backend --root-dir ../../",
-    "deploy": "alchemy deploy --adopt --env-file ../../.env --app backend --root-dir ../../",
-    "destroy": "alchemy destroy --env-file ../../.env --app backend --root-dir ../../",
+    "dev": "alchemy dev --adopt --app backend",
+    "deploy": "alchemy deploy --adopt --app backend",
+    "destroy": "alchemy destroy --app backend",
     "check": "tsc --noEmit"
   },
   "exports": {

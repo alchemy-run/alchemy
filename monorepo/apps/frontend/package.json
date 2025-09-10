@@ -4,9 +4,9 @@
   "private": true,
   "version": "0.0.0",
   "scripts": {
-    "dev": "alchemy dev --adopt --env-file ../../.env --app frontend --root-dir ../../",
-    "deploy": "alchemy deploy --adopt --env-file ../../.env --app frontend --root-dir ../../",
-    "destroy": "alchemy destroy --env-file ../../.env --app frontend --root-dir ../../",
+    "dev": "alchemy dev --adopt --app frontend",
+    "deploy": "alchemy deploy --adopt --app frontend",
+    "destroy": "alchemy destroy --app frontend",
     "lint": "eslint .",
     "preview": "vite preview",
     "check": "tsc --noEmit"

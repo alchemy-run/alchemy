@@ -29,13 +29,14 @@ alchemy deploy [script] [options]
 Deploy an Alchemy project by running `alchemy deploy`. 
 
 - `script` (optional): Path to the entrypoint file. Defaults to `./alchemy.run.ts` or `./alchemy.run.js`
-- `--cwd` - Path to the project directory (defaults to current directory)
+- `--app` - Specify which app to run in a multi-app monorepo (default: `undefined`)
+- `--root-dir` - Path to the root directory of the monorepo (defaults to current directory. If `--app` is provided, then the root of your monorepo will be automatically detected.)
 - `--quiet` - Suppress Create/Update/Delete messages (default: `false`) 
 - `--stage` - Specify which stage/environment to target. Defaults to your username (`$USER`, or `$USERNAME` on Windows)
-- `--env-file` - Path to environment file to load
-- `--watch` - Watch for changes to infrastructure and redeploy automatically (default: false)
-- `--force` - Apply updates to resources even if there are no changes (default: false)
-- `--adopt` - Adopt existing resources that are not yet managed by your Alchemy app (default: false)
+- `--env-file` - Path to environment file to load (defaults to `.env` in the CWD of your project. If `--app` is provided, then the monorepo's root `.env` will be used.)
+- `--watch` - Watch for changes to infrastructure and redeploy automatically (default: `false`)
+- `--force` - Apply updates to resources even if there are no changes (default: `false`)
+- `--adopt` - Adopt existing resources that are not yet managed by your Alchemy app (default: `false`)
 - `-h, --help` - Display help for command
 
 :::tip
@@ -48,6 +49,9 @@ alchemy deploy
 
 # specify a stage
 alchemy deploy --stage prod 
+
+# deploy the backend app (as part of a multi-app monorepo)
+alchemy deploy --app backend
 
 # adopt existing resources
 alchemy deploy --adopt 
@@ -115,9 +119,11 @@ Destroy all resources in an Alchemy project.
 
 - `script` (optional): Path to the entrypoint file. Defaults to `./alchemy.run.ts` or `./alchemy.run.js`
 - `--cwd` - Path to the project directory (defaults to current directory)
+- `--app` - Specify which app to run in a multi-app monorepo (default: `undefined`)
+- `--root-dir` - Path to the root directory of the monorepo (defaults to current directory. If `--app` is provided, then the root of your monorepo will be automatically detected.)
 - `--quiet` - Suppress Create/Update/Delete messages (default: `false`) 
 - `--stage` - Specify which stage/environment to target. Defaults to your username (`$USER`, or `$USERNAME` on Windows)
-- `--env-file` - Path to environment file to load
+- `--env-file` - Path to environment file to load (defaults to `.env` in the CWD of your project. If `--app` is provided, then the monorepo's root `.env` will be used.)
 - `-h, --help` - Display help for command
 
 :::tip
@@ -182,10 +188,12 @@ alchemy dev [script] [options]
 Run an Alchemy program in dev-mode with local simulation and hot reloading.
 
 - `script` (optional): Path to the entrypoint file. Defaults to `./alchemy.run.ts` or `./alchemy.run.js`
-- `--cwd` - Path to the project directory (defaults to current directory)
+- `--cwd` - Path to the application directory (defaults to current directory)
+- `--app` - Specify which app to run in a multi-app monorepo (default: `undefined`)
+- `--root-dir` - Path to the root directory of the monorepo (defaults to current directory. If `--app` is provided, then the root of your monorepo will be automatically detected.)
 - `--quiet` - Suppress Create/Update/Delete messages (default: `false`) 
 - `--stage` - Specify which stage/environment to target. Defaults to your username (`$USER`, or `$USERNAME` on Windows)
-- `--env-file` - Path to environment file to load
+- `--env-file` - Path to environment file to load (defaults to `.env` in the CWD of your project. If `--app` is provided, then the monorepo's root `.env` will be used.)
 - `--force` - Apply updates to resources even if there are no changes (default: false)
 - `--adopt` - Adopt existing resources that are not yet managed by your Alchemy app (default: false)
 - `-h, --help` - Display help for command
@@ -258,10 +266,12 @@ alchemy run [script] [options]
 Run an Alchemy program with read-only access to your infrastructure. No changes will be applied to your resources.
 
 - `script` (optional): Path to the entrypoint file. Defaults to `./alchemy.run.ts` or `./alchemy.run.js`
-- `--cwd` - Path to the project directory (defaults to current directory)
+- `--cwd` - Path to the application directory (defaults to current directory)
+- `--app` - Specify which app to run in a multi-app monorepo (default: `undefined`)
+- `--root-dir` - Path to the root directory of the monorepo (defaults to current directory. If `--app` is provided, then the root of your monorepo will be automatically detected.)
 - `--quiet` - Suppress Create/Update/Delete messages (default: `false`) 
 - `--stage` - Specify which stage/environment to target. Defaults to your username (`$USER`, or `$USERNAME` on Windows)
-- `--env-file` - Path to environment file to load
+- `--env-file` - Path to environment file to load (defaults to `.env` in the CWD of your project. If `--app` is provided, then the monorepo's root `.env` will be used.)
 - `--watch` - Watch for changes to infrastructure and redeploy automatically (default: `false`)
 - `-h, --help` - Display help for command
 

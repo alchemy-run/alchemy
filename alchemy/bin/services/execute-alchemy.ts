@@ -11,6 +11,7 @@ import { promiseWithResolvers } from "../../src/util/promise-with-resolvers.ts";
 import { ExitSignal } from "../trpc.ts";
 import { CDPProxy } from "./cdp-manager/cdp-proxy.ts";
 import { CDPManager } from "./cdp-manager/server.ts";
+import { findWorkspaceRoot } from "./find-workspace-root.ts";
 
 export const entrypoint = z
   .string()
@@ -62,11 +63,7 @@ export const execArgs = {
     .boolean()
     .optional()
     .describe("Enable inspector and wait for connection"),
-  envFile: z
-    .string()
-    .optional()
-    .default(".env")
-    .describe("Path to environment file to load"),
+  envFile: z.string().optional().describe("Path to environment file to load"),
   app: z
     .string()
     .optional()
@@ -136,7 +133,26 @@ export async function execAlchemy(
   if (inspectBrk) execArgs.push("--inspect-brk");
   if (adopt) args.push("--adopt");
   if (app) args.push(`--app ${app}`);
-  if (rootDir) args.push(`--root-dir ${rootDir}`);
+  if (rootDir) {
+    args.push(`--root-dir ${rootDir}`);
+  } else if (app) {
+    console.log("finding root dir");
+    try {
+      const rootDir = await findWorkspaceRoot(cwd);
+      // no root directory was provided but a specific app was provided, so we need to find the monorepo root
+      args.push(`--root-dir ${rootDir}`);
+      if (!envFile) {
+        // move the default --env-file to the root of the monorepo
+        const rootEnv = resolve(rootDir, ".env");
+        if (await exists(rootEnv)) {
+          execArgs.push(`--env-file ${rootEnv}`);
+        }
+      }
+    } catch (error) {
+      console.error("error finding monorepo root", error);
+      throw error;
+    }
+  }
 
   // Check for alchemy.run.ts or alchemy.run.js (if not provided)
   if (!main) {
@@ -208,6 +224,7 @@ export async function execAlchemy(
       }
   }
 
+  console.log(command);
   const childRuntime = command.split(" ")[0];
 
   const { promise: inspectorUrlPromise, resolve: resolveInspectorUrl } =

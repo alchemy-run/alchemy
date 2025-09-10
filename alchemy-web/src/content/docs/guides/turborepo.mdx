@@ -115,20 +115,15 @@ In this guide, we'll walk through how to:
       "type": "module",
       "scripts": {
         "build": "tsc -b",
-    +    "dev": "alchemy dev --app backend --env-file ../../.env --root-dir ../../",
-    +    "deploy": "alchemy deploy --app backend --env-file ../../.env --root-dir ../../",
-    +    "destroy": "alchemy destroy --app backend --env-file ../../.env --root-dir ../../"
+    +    "dev": "alchemy dev --app backend",
+    +    "deploy": "alchemy deploy --app backend",
+    +    "destroy": "alchemy destroy --app backend"
       },
       "dependencies": {
     +    "alchemy": "catalog:"
       }
     }
     ```
-
-    :::caution
-    Make sure to use `--root-dir ../../` and `--env-file ../../.env` in all of your apps so that state and `.env` is synchronized.
-    :::
-
 
 5. Export `backend/alchemy.run.ts` as `./alchemy`.
 
@@ -182,7 +177,7 @@ In this guide, we'll walk through how to:
     ```
 
 
-8. Use `--app frontend` and `--root-dir ../../` in your frontend's `dev`, `deploy` and `destroy` scripts:
+8. Use `--app frontend` in your frontend's `dev`, `deploy` and `destroy` scripts:
 
     ```diff lang="json" title="apps/frontend/package.json"
     {
@@ -191,9 +186,9 @@ In this guide, we'll walk through how to:
       "type": "module",
       "scripts": {
         "build": "tsc -b",
-    +    "dev": "alchemy dev --app frontend --root-dir ../../  --env-file ../../.env",
-    +    "deploy": "alchemy deploy --app frontend --root-dir ../../  --env-file ../../.env",
-    +    "destroy": "alchemy destroy --app frontend --root-dir ../../  --env-file ../../.env"
+    +    "dev": "alchemy dev --app frontend",
+    +    "deploy": "alchemy deploy --app frontend",
+    +    "destroy": "alchemy destroy --app frontend"
       },
       "dependencies": {
         "backend": "workspace:*",
