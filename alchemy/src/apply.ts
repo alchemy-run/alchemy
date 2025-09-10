@@ -69,58 +69,64 @@ async function _apply<Out extends Resource>(
         // then instead of throwing, we should actually terminate the program because it means
         // that another app (in a monorepo) is importing this app which is invalid.
         if (scope.isSelected === false) {
-          // if we are in `---destroy`, then exit
           if (process.argv.includes("--destroy")) {
+            // if we are in `---destroy`, then exit (can't proceed, program is invalid)
             process.exit(0);
-          } else {
-            // if we are in `--deploy`, then poll until state available
-            while (true) {
-              if (state === undefined) {
-                // state doesn't exist yet
-              } else if (
-                state.status === "creating" ||
-                state.status === "updating"
-              ) {
-                // no-op
-              } else if (
-                state.status === "deleted" ||
-                state.status === "deleting"
-              ) {
-                // ok something is wrong, the stack should not be being deleted
-              } else if (await inputsAreEqual(state)) {
-                // sweet, we've reached a stable state and read can progress
-                break;
-              }
-              // TODO(sam): how best to poll?
-              await new Promise((resolve) => setTimeout(resolve, 100));
-              state = await scope.state.get(resource[ResourceID]);
-            }
           }
-
-          async function inputsAreEqual(
-            state: State<string, ResourceProps | undefined, Resource<string>>,
-          ) {
-            const oldProps = await serialize(scope, state.props, {
-              encrypt: false,
-            });
-            const newProps = await serialize(scope, props, {
-              encrypt: false,
-            });
-            return JSON.stringify(oldProps) === JSON.stringify(newProps);
-          }
+          // if we are in `--deploy`, then poll until state available
+          await waitForConsistentState();
         }
         throw new Error(
           `Resource "${resource[ResourceFQN]}" not found and running in 'read' phase.`,
         );
       } else {
-        // 1. check if this update requires a change
         // -> poll until it does not (i.e. when the owner process applies the change and updates the state store)
+        await waitForConsistentState();
       }
       scope.telemetryClient.record({
         event: "resource.read",
         resource: resource[ResourceKind],
       });
       return state.output as Awaited<Out>;
+
+      async function waitForConsistentState() {
+        while (true) {
+          if (state === undefined) {
+            // state doesn't exist yet
+          } else if (
+            state.status === "creating" ||
+            state.status === "updating"
+          ) {
+            // no-op
+          } else if (
+            state.status === "deleted" ||
+            state.status === "deleting"
+          ) {
+            // ok something is wrong, the stack should not be being deleted
+            // TODO(sam): better error message
+            throw new Error("Resource is being deleted");
+          } else if (await inputsAreEqual(state)) {
+            // sweet, we've reached a stable state and read can progress
+            break;
+          }
+          // jitter between 100-300ms
+          const jitter = 100 + Math.random() * 200;
+          await new Promise((resolve) => setTimeout(resolve, jitter));
+          state = await scope.state.get(resource[ResourceID]);
+        }
+
+        async function inputsAreEqual(
+          state: State<string, ResourceProps | undefined, Resource<string>>,
+        ) {
+          const oldProps = await serialize(scope, state.props, {
+            encrypt: false,
+          });
+          const newProps = await serialize(scope, props, {
+            encrypt: false,
+          });
+          return JSON.stringify(oldProps) === JSON.stringify(newProps);
+        }
+      }
     }
     if (state === undefined) {
       state = {
