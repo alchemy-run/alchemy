@@ -229,7 +229,7 @@ const promptForCredentials = async (
   switch (method) {
     case "oauth": {
       // TODO(john): prompt for scopes and figure out sane defaults
-      const authorization = CloudflareAuth.client.generateAuthorizationURL(
+      const authorization = CloudflareAuth.client.authorize(
         CloudflareAuth.ALL_SCOPES,
       );
       log.step(

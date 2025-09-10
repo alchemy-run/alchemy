@@ -5,7 +5,11 @@ import { HTTPServer } from "./http.ts";
 
 export class OAuthError extends Error {
   readonly error: string;
-  constructor({ error, error_description, ...rest }: OAuthErrorResponse) {
+  constructor({
+    error,
+    error_description,
+    ...rest
+  }: OAuthClient.ErrorResponse) {
     super(error_description);
     this.error = error;
     this.name = "OAuthError";
@@ -13,6 +17,14 @@ export class OAuthError extends Error {
   }
 }
 
+/**
+ * Generic OAuth 2.0 client.
+ *
+ * Currently only handles the subset required for Cloudflare, but can be modified easily:
+ * - authorization and refresh code flow
+ * - S256 code challenge
+ * - no client secret
+ */
 export class OAuthClient {
   constructor(
     private readonly options: {
@@ -26,7 +38,10 @@ export class OAuthClient {
     },
   ) {}
 
-  generateAuthorizationURL(scopes: string[]): OAuthAuthorization {
+  /**
+   * Generate an authorization URL, state, and verifier for the given scopes.
+   */
+  authorize(scopes: string[]): OAuthClient.Authorization {
     const state = generateState();
     const pkce = generatePKCE();
     const url = new URL(this.options.endpoints.authorize);
@@ -40,55 +55,71 @@ export class OAuthClient {
     return { url: url.toString(), state, verifier: pkce.verifier };
   }
 
+  /**
+   * Exchange an authorization code for credentials.
+   */
   async exchange(code: string, verifier: string): Promise<Credentials.OAuth> {
-    const res = await this.fetch(this.options.endpoints.token, {
-      method: "POST",
-      body: new URLSearchParams({
-        grant_type: "authorization_code",
-        code,
-        code_verifier: verifier,
-        client_id: this.options.clientId,
-        redirect_uri: this.options.redirectUri,
-      }),
+    const res = await this.request(this.options.endpoints.token, {
+      grant_type: "authorization_code",
+      code,
+      code_verifier: verifier,
+      client_id: this.options.clientId,
+      redirect_uri: this.options.redirectUri,
     });
     return await extractCredentialsFromResponse(res);
   }
 
+  /**
+   * Refresh OAuth 2.0 credentials.
+   */
   async refresh(credentials: Credentials.OAuth): Promise<Credentials.OAuth> {
-    const res = await this.fetch(this.options.endpoints.token, {
-      method: "POST",
-      body: new URLSearchParams({
-        grant_type: "refresh_token",
-        refresh_token: credentials.refresh,
-        client_id: this.options.clientId,
-        redirect_uri: this.options.redirectUri,
-      }),
+    const res = await this.request(this.options.endpoints.token, {
+      grant_type: "refresh_token",
+      refresh_token: credentials.refresh,
+      client_id: this.options.clientId,
+      redirect_uri: this.options.redirectUri,
     });
     return await extractCredentialsFromResponse(res);
   }
 
+  /**
+   * Revoke OAuth 2.0 credentials.
+   */
   async revoke(credentials: Credentials.OAuth): Promise<void> {
-    await this.fetch(this.options.endpoints.revoke, {
-      method: "POST",
-      body: new URLSearchParams({
-        refresh_token: credentials.refresh,
-        client_id: this.options.clientId,
-        redirect_uri: this.options.redirectUri,
-      }),
+    await this.request(this.options.endpoints.revoke, {
+      refresh_token: credentials.refresh,
+      client_id: this.options.clientId,
+      redirect_uri: this.options.redirectUri,
     });
   }
 
-  private async fetch(url: string, init: RequestInit) {
-    const res = await fetch(url, init);
+  /**
+   * Make a POST request to the OAuth provider with the given urlencoded body.
+   */
+  private async request(url: string, body: Record<string, string>) {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams(body).toString(),
+    });
     if (!res.ok) {
       const json = await res.json();
-      throw new OAuthError(json as OAuthErrorResponse);
+      throw new OAuthError(json as OAuthClient.ErrorResponse);
     }
     return res;
   }
 
+  /**
+   * Listens for the callback from the provider by starting a local HTTP server and exchanges the authorization code for credentials.
+   * Should be called with the authorization object returned by {@link authorize}.
+   * Listens for the callback on the client's redirect URI.
+   * Throws if the request is invalid, the code exchange fails, or if no callback is received within 5 minutes.
+   */
   async callback(
-    authorization: OAuthAuthorization,
+    authorization: OAuthClient.Authorization,
   ): Promise<Credentials.OAuth> {
     const { pathname, port } = new URL(this.options.redirectUri);
     const promise = new DeferredPromise<Credentials.OAuth>();
@@ -159,29 +190,31 @@ export class OAuthClient {
   }
 }
 
-interface OAuthErrorResponse {
-  error: string;
-  error_description: string;
-}
+export declare namespace OAuthClient {
+  export interface ErrorResponse {
+    error: string;
+    error_description: string;
+  }
 
-interface OAuthSuccessResponse {
-  access_token: string;
-  refresh_token: string;
-  expires_in: number;
-  scope: string;
-  token_type: string;
-}
+  export interface SuccessResponse {
+    access_token: string;
+    refresh_token: string;
+    expires_in: number;
+    scope: string;
+    token_type: string;
+  }
 
-interface OAuthAuthorization {
-  url: string;
-  state: string;
-  verifier: string;
+  export interface Authorization {
+    url: string;
+    state: string;
+    verifier: string;
+  }
 }
 
 async function extractCredentialsFromResponse(
   response: Response,
 ): Promise<Credentials.OAuth> {
-  const json = (await response.json()) as OAuthSuccessResponse;
+  const json = (await response.json()) as OAuthClient.SuccessResponse;
   return {
     type: "oauth",
     access: json.access_token,
