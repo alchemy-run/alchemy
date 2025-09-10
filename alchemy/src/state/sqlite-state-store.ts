@@ -1,7 +1,8 @@
 import type { Config as LibSQLConfig } from "@libsql/client";
-import fs from "node:fs";
+import fs from "node:fs/promises";
 import path from "node:path";
 import type { Scope } from "../scope.ts";
+import { exists } from "../util/exists.ts";
 import { memoize } from "../util/memoize.ts";
 import { importPeer } from "../util/peer.ts";
 import { MIGRATIONS_DIRECTORY } from "./migrations.ts";
@@ -144,7 +145,7 @@ async function createBunSQLiteDatabase(
     options?.filename ??
     process.env.ALCHEMY_STATE_FILE ??
     path.join(options?.dotAlchemy ?? ".alchemy", "state.sqlite");
-  ensureDirectory(filename);
+  await ensureDirectory(filename);
   const { Database } = await import("bun:sqlite");
   const { drizzle } = await importPeer(
     import("drizzle-orm/bun-sqlite"),
@@ -156,7 +157,11 @@ async function createBunSQLiteDatabase(
   // options are passed in, so here's some ugly destructuring!
   const { engine: _engine, filename: _filename, ...rest } = options ?? {};
   const bunOptions = Object.keys(rest).length > 0 ? rest : undefined;
-  const client = new Database(filename, bunOptions);
+  const client = new Database(filename, {
+    readwrite: true,
+    create: true,
+    ...bunOptions,
+  });
   client.exec("PRAGMA journal_mode = WAL;");
   const db = drizzle(client, {
     schema,
@@ -171,9 +176,10 @@ async function createLibSQLDatabase(
   const url =
     options?.url ??
     `file:${options?.filename ?? process.env.ALCHEMY_STATE_FILE ?? path.join(options?.dotAlchemy ?? ".alchemy", "state.sqlite")}`;
+
   const filename = url.startsWith("file:") ? url.slice(5) : undefined;
   if (filename) {
-    ensureDirectory(filename);
+    await ensureDirectory(filename);
   }
   const { drizzle } = await importPeer(
     import("drizzle-orm/libsql"),
@@ -194,9 +200,9 @@ async function createLibSQLDatabase(
   return db;
 }
 
-const ensureDirectory = (filename: string) => {
+const ensureDirectory = async (filename: string) => {
   const dir = path.dirname(filename);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+  if (!(await exists(dir))) {
+    await fs.mkdir(dir, { recursive: true });
   }
 };
