@@ -15,6 +15,7 @@ import {
 } from "./resource.ts";
 import type { PendingDeletions } from "./scope.ts";
 import { serialize } from "./serde.ts";
+import type { State } from "./state.ts";
 import { formatFQN } from "./util/cli.ts";
 import { logger } from "./util/logger.ts";
 import type { Telemetry } from "./util/telemetry/index.ts";
@@ -69,8 +70,32 @@ async function _apply<Out extends Resource>(
         // that another app (in a monorepo) is importing this app which is invalid.
         if (scope.isSelected === false) {
           // if we are in `---destroy`, then exit
-          // if we are in `--deploy`, then poll until state available
           process.exit(0);
+          // if (process.argv.includes("--destroy")) {
+          // } else {
+          //   // if we are in `--deploy`, then poll until state available
+          //   while (true) {
+          //     if (state === undefined) {
+          //       // state doesn't exist yet
+          //     } else if (
+          //       state.status === "creating" ||
+          //       state.status === "updating"
+          //     ) {
+          //       // no-op
+          //     } else if (
+          //       state.status === "deleted" ||
+          //       state.status === "deleting"
+          //     ) {
+          //       // ok something is wrong, the stack should not be being deleted
+          //     } else if (await inputsAreEqual(state)) {
+          //       // sweet, we've reached a stable state and read can progress
+          //       break;
+          //     }
+          //     // TODO(sam): how best to poll?
+          //     await new Promise((resolve) => setTimeout(resolve, 100));
+          //     state = await scope.state.get(resource[ResourceID]);
+          //   }
+          // }
         }
         throw new Error(
           `Resource "${resource[ResourceFQN]}" not found and running in 'read' phase.`,
@@ -112,16 +137,22 @@ async function _apply<Out extends Resource>(
     const alwaysUpdate =
       options?.alwaysUpdate ?? provider.options?.alwaysUpdate ?? false;
 
-    // Skip update if inputs haven't changed and resource is in a stable state
-    if (state.status === "created" || state.status === "updated") {
+    async function inputsAreEqual(
+      state: State<string, ResourceProps | undefined, Resource<string>>,
+    ) {
       const oldProps = await serialize(scope, state.props, {
         encrypt: false,
       });
       const newProps = await serialize(scope, props, {
         encrypt: false,
       });
+      return JSON.stringify(oldProps) === JSON.stringify(newProps);
+    }
+
+    // Skip update if inputs haven't changed and resource is in a stable state
+    if (state.status === "created" || state.status === "updated") {
       if (
-        JSON.stringify(oldProps) === JSON.stringify(newProps) &&
+        (await inputsAreEqual(state)) &&
         alwaysUpdate !== true &&
         !scope.force
       ) {

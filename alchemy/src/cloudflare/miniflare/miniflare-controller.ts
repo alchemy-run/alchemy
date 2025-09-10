@@ -1,6 +1,7 @@
 import * as miniflare from "miniflare";
 import assert from "node:assert";
 import path from "node:path";
+import { Scope } from "../../scope.ts";
 import { findOpenPort } from "../../util/find-open-port.ts";
 import type { HTTPServer } from "../../util/http.ts";
 import { logger } from "../../util/logger.ts";
@@ -75,9 +76,12 @@ export class MiniflareController {
 
   private async update() {
     return await this.mutex.lock(async () => {
+      console.log("mf.update", getDefaultPersistPath(Scope.current.rootDir));
       const options: miniflare.MiniflareOptions = {
         workers: [],
-        defaultPersistRoot: path.resolve(getDefaultPersistPath()),
+        defaultPersistRoot: path.resolve(
+          getDefaultPersistPath(Scope.current.rootDir),
+        ),
         unsafeDevRegistryPath: miniflare.getDefaultDevRegistryPath(),
         log: process.env.DEBUG
           ? new miniflare.Log(miniflare.LogLevel.DEBUG)
