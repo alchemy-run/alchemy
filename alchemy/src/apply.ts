@@ -79,8 +79,8 @@ async function _apply<Out extends Resource>(
         throw new Error(
           `Resource "${resource[ResourceFQN]}" not found and running in 'read' phase.`,
         );
-      } else {
-        // -> poll until it does not (i.e. when the owner process applies the change and updates the state store)
+      } else if (scope.isSelected === false) {
+        // we are running in a monorepo, so we need to wait for the process to be consistent
         await waitForConsistentState();
       }
       scope.telemetryClient.record({
@@ -89,6 +89,7 @@ async function _apply<Out extends Resource>(
       });
       return state.output as Awaited<Out>;
 
+      // -> poll until it does not (i.e. when the owner process applies the change and updates the state store)
       async function waitForConsistentState() {
         while (true) {
           if (state === undefined) {
@@ -114,41 +115,18 @@ async function _apply<Out extends Resource>(
           await new Promise((resolve) => setTimeout(resolve, jitter));
           state = await scope.state.get(resource[ResourceID]);
         }
-
-        async function inputsAreEqual(
-          state: State<string, ResourceProps | undefined, Resource<string>>,
-        ) {
-          const oldProps = await serialize(scope, state.props, {
-            encrypt: false,
-          });
-          const newProps = await serialize(scope, props, {
-            encrypt: false,
-          });
-          return JSON.stringify(oldProps) === JSON.stringify(newProps);
-        }
       }
-    }
-    if (state === undefined) {
-      state = {
-        kind: resource[ResourceKind],
-        id: resource[ResourceID],
-        fqn: resource[ResourceFQN],
-        seq: resource[ResourceSeq],
-        status: "creating",
-        data: {},
-        output: {
-          [ResourceID]: resource[ResourceID],
-          [ResourceFQN]: resource[ResourceFQN],
-          [ResourceKind]: resource[ResourceKind],
-          [ResourceScope]: scope,
-          [ResourceSeq]: resource[ResourceSeq],
-          [DestroyStrategy]: provider.options?.destroyStrategy ?? "sequential",
-        },
-        // deps: [...deps],
-        // there are no "old props" on initialization
-        props: {},
-      };
-      await scope.state.set(resource[ResourceID], state);
+      async function inputsAreEqual(
+        state: State<string, ResourceProps | undefined, Resource<string>>,
+      ) {
+        const oldProps = await serialize(scope, state.props, {
+          encrypt: false,
+        });
+        const newProps = await serialize(scope, props, {
+          encrypt: false,
+        });
+        return JSON.stringify(oldProps) === JSON.stringify(newProps);
+      }
     }
     const oldOutput = state.output;
 

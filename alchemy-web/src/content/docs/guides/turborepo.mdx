@@ -43,15 +43,11 @@ In this guide, we'll walk through how to:
       "$schema": "https://turborepo.com/schema.json",
       "ui": "tui",
       "tasks": {
-    +   "build": {
-    +     "dependsOn": ["^build"]
-    +   },
     +   "deploy": {
-    +     "dependsOn": ["^build", "^deploy"],
+    +     "dependsOn": ["^deploy"],
     +     "cache": false
     +   },
     +   "dev": {
-    +     "dependsOn": ["^build"],
     +     "persistent": true,
     +     "cache": false
     +   },
@@ -119,15 +115,19 @@ In this guide, we'll walk through how to:
       "type": "module",
       "scripts": {
         "build": "tsc -b",
-    +    "dev": "alchemy dev --app backend --env-file ../../.env",
-    +    "deploy": "alchemy deploy --app backend --env-file ../../.env",
-    +    "destroy": "alchemy destroy --app backend --env-file ../../.env"
+    +    "dev": "alchemy dev --app backend --env-file ../../.env --root-dir ../../",
+    +    "deploy": "alchemy deploy --app backend --env-file ../../.env --root-dir ../../",
+    +    "destroy": "alchemy destroy --app backend --env-file ../../.env --root-dir ../../"
       },
       "dependencies": {
     +    "alchemy": "catalog:"
       }
     }
     ```
+
+    :::caution
+    Make sure to use `--root-dir ../../` and `--env-file ../../.env` in all of your apps so that state and `.env` is synchronized.
+    :::
 
 
 5. Export `backend/alchemy.run.ts` as `./alchemy`.
@@ -136,11 +136,12 @@ In this guide, we'll walk through how to:
     "exports": {
       ".": {
         "bun": "./src/index.ts",
-        "import": "./lib/src/index.js"
+        "import": "./lib/src/index.js",
       },
     +  "./alchemy": {
     +    "bun": "./alchemy.run.ts",
     +    "import": "./lib/alchemy.run.js"
+    +    "types": "./alchemy.run.ts"
     +  }
     },
     ```
@@ -181,7 +182,7 @@ In this guide, we'll walk through how to:
     ```
 
 
-8. Use `--app frontend` in your frontend's `dev`, `deploy` and `destroy` scripts:
+8. Use `--app frontend` and `--root-dir ../../` in your frontend's `dev`, `deploy` and `destroy` scripts:
 
     ```diff lang="json" title="apps/frontend/package.json"
     {
@@ -190,9 +191,9 @@ In this guide, we'll walk through how to:
       "type": "module",
       "scripts": {
         "build": "tsc -b",
-    +    "dev": "alchemy dev --app frontend --env-file ../../.env",
-    +    "deploy": "alchemy deploy --app frontend --env-file ../../.env",
-    +    "destroy": "alchemy destroy --app frontend --env-file ../../.env"
+    +    "dev": "alchemy dev --app frontend --root-dir ../../  --env-file ../../.env",
+    +    "deploy": "alchemy deploy --app frontend --root-dir ../../  --env-file ../../.env",
+    +    "destroy": "alchemy destroy --app frontend --root-dir ../../  --env-file ../../.env"
       },
       "dependencies": {
         "backend": "workspace:*",
