@@ -3,9 +3,10 @@
 # let's use the repo's alchemy version (but we can't use workspace:* so must use link)
 cd alchemy 
 bun link 
-# set up the monorepo
+# install deps and tsc -b
 cd ../example-monorepo 
 bun i 
+bun run build
 # deploy backend and then frontend
 bun run deploy 
 # destroy frontend and then backend
