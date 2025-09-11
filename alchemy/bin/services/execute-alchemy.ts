@@ -224,7 +224,6 @@ export async function execAlchemy(
       }
   }
 
-  console.log(command);
   const childRuntime = command.split(" ")[0];
 
   const { promise: inspectorUrlPromise, resolve: resolveInspectorUrl } =

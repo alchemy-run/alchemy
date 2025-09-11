@@ -21,8 +21,9 @@ export const applyLocalD1Migrations = async (
   });
   try {
     await miniflare.ready;
-    const db: D1Database = await miniflare.getD1Database("DB");
-    const session: D1DatabaseSession = db.withSession("first-primary");
+    // TODO(sam): don't use `any` once prisma is fixed upstream
+    const db: any = await miniflare.getD1Database("DB");
+    const session: any = db.withSession("first-primary");
     await session
       .prepare(
         `CREATE TABLE IF NOT EXISTS ${options.migrationsTable} (
@@ -32,11 +33,13 @@ export const applyLocalD1Migrations = async (
     )`,
       )
       .run();
-    const appliedMigrations = await session
+    const appliedMigrations: {
+      results: { name: string }[];
+    } = await session
       .prepare(
         `SELECT name FROM ${options.migrationsTable} ORDER BY applied_at ASC`,
       )
-      .all<{ name: string }>();
+      .all();
     const insertRecord = session.prepare(
       `INSERT INTO ${options.migrationsTable} (name) VALUES (?)`,
     );
