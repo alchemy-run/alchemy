@@ -41,8 +41,6 @@ export namespace CloudflareAuth {
     "dns_records:read",
     "dns_settings:read",
     "firstpartytags:write",
-    // "images:read",
-    // "images:write",
     "lb:edit",
     "lb:read",
     "logpush:read",
@@ -73,8 +71,7 @@ export namespace CloudflareAuth {
     "url_scanner:write",
     "user:read",
     "vectorize:write",
-    // "workers:write", TODO(john): add this when Cloudflare grants access
-    "workers:read",
+    "workers:write",
     "workers_builds:read",
     "workers_builds:write",
     "workers_kv:write",
