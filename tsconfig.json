@@ -17,6 +17,6 @@
     { "path": "./examples/cloudflare-worker-simple/tsconfig.json" },
     { "path": "./examples/cloudflare-worker/tsconfig.json" },
     { "path": "./examples/docker/tsconfig.json" },
-    { "path": "./monorepo/tsconfig.json" },
+    { "path": "./example-monorepo/tsconfig.json" },
   ]
 }
