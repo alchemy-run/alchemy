@@ -103,12 +103,6 @@ export const auth = t.router({
     .mutation(async (ctx) => {
       logIntroBreadcrumbs(["Auth", "Login"]);
 
-      if (process.env.ALCHEMY_WARN_AUTH_LOGIN) {
-        log.warn(
-          "`alchemy login` is deprecated, use `alchemy auth login` instead.",
-        );
-      }
-
       const input = {
         // TODO: handle other providers
         provider: ctx.input.provider ?? "cloudflare",

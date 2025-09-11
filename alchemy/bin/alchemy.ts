@@ -36,17 +36,19 @@ cli.run({
 // TODO: is there a better way to alias "alchemy login" to "alchemy auth login"?
 function rewriteLoginArgs(args: string[]) {
   const auth = args.indexOf("auth");
-  const login = args.indexOf("login");
-  if (auth === -1 && login !== -1) {
-    const newArgs = [
-      ...args.slice(0, login),
-      "auth",
-      "login",
-      ...args.slice(login + 1),
-    ];
-    // TODO: should we warn?
-    process.env.ALCHEMY_WARN_AUTH_LOGIN = "1";
-    return newArgs;
+  if (auth === -1) {
+    for (const alias of ["login", "logout"]) {
+      const index = args.indexOf(alias);
+      if (index !== -1) {
+        const newArgs = [
+          ...args.slice(0, index),
+          "auth",
+          alias,
+          ...args.slice(index + 1),
+        ];
+        return newArgs;
+      }
+    }
   }
   return args;
 }
