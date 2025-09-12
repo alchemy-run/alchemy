@@ -1,6 +1,7 @@
 import * as miniflare from "miniflare";
 import assert from "node:assert";
 import path from "node:path";
+import { Scope } from "../../scope.ts";
 import { findOpenPort } from "../../util/find-open-port.ts";
 import type { HTTPServer } from "../../util/http.ts";
 import { logger } from "../../util/logger.ts";
@@ -10,7 +11,7 @@ import {
   type MiniflareWorkerInput,
 } from "./build-worker-options.ts";
 import { MiniflareWorkerProxy } from "./miniflare-worker-proxy.ts";
-import { DEFAULT_PERSIST_PATH } from "./paths.ts";
+import { getDefaultPersistPath } from "./paths.ts";
 
 declare global {
   var ALCHEMY_MINIFLARE_CONTROLLER: MiniflareController | undefined;
@@ -25,8 +26,8 @@ export class MiniflareController {
   mutex = new AsyncMutex();
 
   static get singleton() {
-    globalThis.ALCHEMY_MINIFLARE_CONTROLLER ??= new MiniflareController();
-    return globalThis.ALCHEMY_MINIFLARE_CONTROLLER;
+    return (globalThis.ALCHEMY_MINIFLARE_CONTROLLER ??=
+      new MiniflareController());
   }
 
   async add(input: MiniflareWorkerInput) {
@@ -75,14 +76,17 @@ export class MiniflareController {
 
   private async update() {
     return await this.mutex.lock(async () => {
-      const options: miniflare.MiniflareOptions = {
+      const options: miniflare.MiniflareOptions & {
+        workers: miniflare.WorkerOptions[];
+      } = {
         workers: [],
-        defaultPersistRoot: path.resolve(DEFAULT_PERSIST_PATH),
+        defaultPersistRoot: path.resolve(
+          getDefaultPersistPath(Scope.current.rootDir),
+        ),
         unsafeDevRegistryPath: miniflare.getDefaultDevRegistryPath(),
         log: process.env.DEBUG
           ? new miniflare.Log(miniflare.LogLevel.DEBUG)
           : undefined,
-
         // This is required to allow websites and other separate processes
         // to detect Alchemy-managed Durable Objects via the Wrangler dev registry.
         unsafeDevRegistryDurableObjectProxy: true,

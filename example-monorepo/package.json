@@ -1,0 +1,30 @@
+{
+  "name": "monorepo",
+  "private": true,
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsc -b && turbo run dev",
+    "deploy": "tsc -b && turbo run deploy --ui=stream",
+    "destroy": "tsc -b && turbo run destroy --ui=stream"
+  },
+  "type": "module",
+  "packageManager": "bun@1.2.21",
+  "workspaces": {
+    "packages": [
+      "apps/*"
+    ],
+    "catalog": {
+      "alchemy": "link:alchemy",
+      "@cloudflare/workers-types": "^4.20250805.0",
+      "@cloudflare/vite-plugin": "^1.11.6",
+      "vite": "^6.3.5",
+      "typescript": "^5.8.3"
+    }
+  },
+  "devDependencies": {
+    "turbo": "^2.5.6"
+  },
+  "dependencies": {
+    "miniflare": "^4.20250906.0"
+  }
+}

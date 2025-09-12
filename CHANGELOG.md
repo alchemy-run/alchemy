@@ -1,3 +1,45 @@
+## v0.65.1
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Use default import for picocolors &nbsp;-&nbsp; by **Rahul Mishra** in https://github.com/sam-goodwin/alchemy/issues/950 [<samp>(c6c53)</samp>](https://github.com/sam-goodwin/alchemy/commit/c6c53c54)
+- **core**: Correct definition of memoize defaultKeyFn &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/952 [<samp>(d870a)</samp>](https://github.com/sam-goodwin/alchemy/commit/d870a5d3)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.65.0...v0.65.1)
+
+---
+
+## v0.65.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cli**:
+  - Allow Debugging via the CLI &nbsp;-&nbsp; by **Michael K** in https://github.com/sam-goodwin/alchemy/issues/895 [<samp>(78b6e)</samp>](https://github.com/sam-goodwin/alchemy/commit/78b6ecd6)
+- **cloudflare**:
+  - Adopt hyperdrive &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/923 [<samp>(380db)</samp>](https://github.com/sam-goodwin/alchemy/commit/380dbf63)
+  - Nextjs resource &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/884 [<samp>(37917)</samp>](https://github.com/sam-goodwin/alchemy/commit/379172ed)
+- **planetscale**:
+  - Postgres support &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/918 [<samp>(d6716)</samp>](https://github.com/sam-goodwin/alchemy/commit/d671649f)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cli**:
+  - Support alchemy.run.mts &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/925 [<samp>(eac8f)</samp>](https://github.com/sam-goodwin/alchemy/commit/eac8fb1b)
+- **cloudflare**:
+  - Enforce stateToken requirement in CloudflareStateStore &nbsp;-&nbsp; by **Matt ‘TK’ Taylor** in https://github.com/sam-goodwin/alchemy/issues/927 [<samp>(fbf23)</samp>](https://github.com/sam-goodwin/alchemy/commit/fbf23d2d)
+  - Use "text/javascript" mime type for assets &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/931 [<samp>(82284)</samp>](https://github.com/sam-goodwin/alchemy/commit/822847f7)
+  - Improve asset upload error handling and add retries &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/939 [<samp>(ac05f)</samp>](https://github.com/sam-goodwin/alchemy/commit/ac05f4ca)
+  - Fix support for producer only queue bindings for wranglerjson &nbsp;-&nbsp; by **Michael K** in https://github.com/sam-goodwin/alchemy/issues/934 [<samp>(80dd6)</samp>](https://github.com/sam-goodwin/alchemy/commit/80dd605a)
+  - Handle "?module" suffix in wasm imports &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/948 [<samp>(5bb7f)</samp>](https://github.com/sam-goodwin/alchemy/commit/5bb7f065)
+- **core**:
+  - Remove Symbol from Secret &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/922 [<samp>(9c3be)</samp>](https://github.com/sam-goodwin/alchemy/commit/9c3be8fb)
+  - Deterministic cache keys for function memoization &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/929 [<samp>(96b8f)</samp>](https://github.com/sam-goodwin/alchemy/commit/96b8f594)
+  - Pass dedent tests &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/940 [<samp>(2c1a5)</samp>](https://github.com/sam-goodwin/alchemy/commit/2c1a5fc8)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.64.0...v0.65.0)
+
+---
+
 ## v0.64.0
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features

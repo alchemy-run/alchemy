@@ -1,7 +1,7 @@
 import type { GetPlatformProxyOptions } from "wrangler";
 import {
-  DEFAULT_CONFIG_PATH,
-  DEFAULT_PERSIST_PATH,
+  getDefaultConfigPath,
+  getDefaultPersistPath,
   validateConfigPath,
   validatePersistPath,
 } from "./miniflare/paths.ts";
@@ -26,7 +26,7 @@ export const getPlatformProxyOptions = (
             typeof input.persist === "object" &&
               typeof input.persist.path === "string"
               ? input.persist.path
-              : DEFAULT_PERSIST_PATH,
+              : getDefaultPersistPath(),
           ),
         };
   if (!persist) {
@@ -39,12 +39,12 @@ export const getPlatformProxyOptions = (
   }
   return {
     ...input,
-    configPath: validateConfigPath(input.configPath ?? DEFAULT_CONFIG_PATH),
+    configPath: validateConfigPath(input.configPath ?? getDefaultConfigPath()),
     persist,
     experimental: (input as any).experimental ?? {
       remoteBindings: true,
     },
-  } as any;
+  };
 };
 
 const warned = new Set<string>();

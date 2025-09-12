@@ -2,11 +2,11 @@ import crypto from "node:crypto";
 import type { RmDirOptions } from "node:fs";
 import fs from "node:fs/promises";
 import path from "pathe";
+import type { Scope } from "../../scope.ts";
 import type { DurableObjectNamespace } from "../durable-object-namespace.ts";
 import type { Workflow } from "../workflow.ts";
-import { DEFAULT_PERSIST_PATH } from "./paths.ts";
+import { getDefaultPersistPath } from "./paths.ts";
 
-const PERSIST_ROOT = path.resolve(DEFAULT_PERSIST_PATH);
 const BINDING_TYPE_KEY = {
   d1: "miniflare-D1DatabaseObject",
   kv: "miniflare-KVNamespaceObject",
@@ -18,8 +18,14 @@ type BindingType = keyof typeof BINDING_TYPE_KEY;
 /**
  * Delete a binding from the miniflare directory.
  */
-export async function deleteMiniflareBinding(type: BindingType, id: string) {
-  const bindingPath = path.join(PERSIST_ROOT, type, BINDING_TYPE_KEY[type]);
+export async function deleteMiniflareBinding(
+  scope: Scope,
+  type: BindingType,
+  id: string,
+) {
+  const persistRoot = path.resolve(getDefaultPersistPath(scope.rootDir));
+
+  const bindingPath = path.join(persistRoot, type, BINDING_TYPE_KEY[type]);
 
   // delete durable object/sqlite files
   const namespaceId = durableObjectNamespaceIdFromName(
@@ -33,29 +39,31 @@ export async function deleteMiniflareBinding(type: BindingType, id: string) {
   await Promise.all(files.map((file) => fs.rm(path.join(bindingPath, file))));
 
   // delete data directory, if present
-  await removeDirectory(path.join(PERSIST_ROOT, type, id), {
+  await removeDirectory(path.join(persistRoot, type, id), {
     recursive: true,
   });
 
   // delete the miniflare directory if it is empty
-  await cleanMiniflareDirectory();
+  await cleanMiniflareDirectory(scope.dotAlchemy);
 }
 
 /**
  * Delete local durable object and workflow data for a given Worker script.
  */
 export async function deleteMiniflareWorkerData(
+  scope: Scope,
   scriptName: string,
   input: {
     durableObjects: DurableObjectNamespace[];
     workflows: Workflow[];
   },
 ) {
+  const persistRoot = path.resolve(getDefaultPersistPath(scope.rootDir));
   await Promise.all(
     input.durableObjects.map((durableObject) =>
       removeDirectory(
         path.join(
-          PERSIST_ROOT,
+          persistRoot,
           "do",
           `${scriptName}-${durableObject.className}`,
         ),
@@ -69,7 +77,7 @@ export async function deleteMiniflareWorkerData(
     input.workflows.map((workflow) =>
       removeDirectory(
         path.join(
-          PERSIST_ROOT,
+          persistRoot,
           "workflows",
           `miniflare-workflows-${workflow.workflowName}`,
         ),
@@ -79,14 +87,14 @@ export async function deleteMiniflareWorkerData(
       ),
     ),
   );
-  await cleanMiniflareDirectory();
+  await cleanMiniflareDirectory(persistRoot);
 }
 
 /**
  * Delete the miniflare directory iff it is empty.
  */
-async function cleanMiniflareDirectory() {
-  const directory = path.resolve(".alchemy/miniflare");
+async function cleanMiniflareDirectory(dotAlchemy: string) {
+  const directory = path.resolve(dotAlchemy, "miniflare");
   const files = await fs
     .readdir(directory, {
       recursive: true,

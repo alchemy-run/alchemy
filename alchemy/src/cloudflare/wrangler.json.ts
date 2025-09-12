@@ -816,6 +816,7 @@ function processBindings(
         class_name: binding.className,
       });
     } else {
+      console.log("binding", binding);
       // biome-ignore lint/correctness/noVoidTypeReturn: it returns never
       return assertNever(binding);
     }

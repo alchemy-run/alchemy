@@ -28,6 +28,7 @@ import {
 } from "./util/idempotent-spawn.ts";
 import { logger } from "./util/logger.ts";
 import { AsyncMutex } from "./util/mutex.ts";
+import { ALCHEMY_ROOT } from "./util/root-dir.ts";
 import type { ITelemetryClient } from "./util/telemetry/client.ts";
 
 export class RootScopeStateAttemptError extends Error {
@@ -89,6 +90,20 @@ export interface ScopeOptions extends ProviderCredentials {
    * @default false
    */
   adopt?: boolean;
+  /**
+   * The path to the root directory of the project.
+   *
+   * @default process.cwd()
+   */
+  rootDir?: string;
+  /**
+   * Whether this is the application that was selected with `--app`
+   *
+   * `true` if the application was selected with `--app`
+   * `false` if the application was not selected with `--app`
+   * `undefined` if the program was not run with `--app`
+   */
+  isSelected?: boolean;
 }
 
 /**
@@ -177,7 +192,9 @@ export class Scope {
   public readonly logger: LoggerApi;
   public readonly telemetryClient: ITelemetryClient;
   public readonly dataMutex: AsyncMutex;
+  public readonly rootDir: string;
   public readonly dotAlchemy: string;
+  public readonly isSelected: boolean | undefined;
 
   // Provider credentials for scope-level credential overrides
   public readonly providerCredentials: ProviderCredentials;
@@ -214,17 +231,21 @@ export class Scope {
       logger,
       adopt,
       dotAlchemy,
+      rootDir,
+      isSelected,
       ...providerCredentials
     } = options;
-
-    this.dotAlchemy =
-      dotAlchemy ??
-      this.parent?.dotAlchemy ??
-      path.join(process.cwd(), ".alchemy");
 
     this.scopeName = scopeName;
     this.name = this.scopeName;
     this.parent = parent ?? Scope.getScope();
+    this.rootDir = rootDir ?? this.parent?.rootDir ?? ALCHEMY_ROOT;
+    this.isSelected = isSelected ?? this.parent?.isSelected;
+
+    this.dotAlchemy =
+      dotAlchemy ??
+      this.parent?.dotAlchemy ??
+      path.resolve(this.rootDir, ".alchemy");
 
     // Store provider credentials (TypeScript ensures no conflicts with core options)
     this.providerCredentials = providerCredentials as ProviderCredentials;

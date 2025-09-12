@@ -3,10 +3,11 @@ import { createServer, type Server } from "node:http";
 import path from "pathe";
 import { WebSocketServer, type WebSocket as WsWebSocket } from "ws";
 import { findOpenPort } from "../../../src/util/find-open-port.ts";
+import { ALCHEMY_ROOT } from "../../../src/util/root-dir.ts";
 
-export const LOGS_DIRECTORY = path.join(process.cwd(), ".alchemy", "logs");
+export const LOGS_DIRECTORY = path.join(ALCHEMY_ROOT, ".alchemy", "logs");
 const DEBUGGER_URLS_FILE = path.join(
-  process.cwd(),
+  ALCHEMY_ROOT,
   ".alchemy",
   ".debugger-urls",
 );

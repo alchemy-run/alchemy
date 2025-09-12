@@ -755,7 +755,9 @@ const _Worker = Resource(
         compatibilityDate,
         compatibilityFlags,
         outdir:
-          props.bundle?.outdir ?? path.join(cwd, ".alchemy", "out", workerName),
+          props.bundle?.outdir ??
+          // the out folder can't be moved to the root of a monorepo, it must be ${cwd} or else miniflare throws a fit
+          path.join(process.cwd(), ".alchemy", "out", workerName),
         sourceMap: "sourceMap" in props ? props.sourceMap : undefined,
       });
 
@@ -812,7 +814,7 @@ const _Worker = Resource(
       if (options.bundle.isOk()) {
         await options.bundle.value.delete?.();
       }
-      await deleteMiniflareWorkerData(options.name, {
+      await deleteMiniflareWorkerData(this.scope, options.name, {
         durableObjects: options.durableObjects,
         workflows: options.workflows,
       });

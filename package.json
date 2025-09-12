@@ -10,6 +10,7 @@
     "url": "https://github.com/sam-goodwin/alchemy"
   },
   "scripts": {
+    "build:clean": "git clean -fqdx . && bun i && bun run build && cp ../.env . && bun i && cd ./example-monorepo && bun i && cp .env.example .env && cd ..",
     "build": "bun run --filter alchemy build",
     "build:cli": "bun run --filter alchemy build:cli",
     "check": "bun tsc -b && biome check",
@@ -27,6 +28,7 @@
     "test:smoke": "bun ./alchemy/test/smoke.ts",
     "test:create": "vitest run ./alchemy/test/create.test.ts",
     "test:init": "vitest run ./alchemy/test/init.test.ts",
+    "test:monorepo": "./scripts/test-monorepo.sh",
     "bump": "bun ./scripts/bump.ts",
     "claude:yolo": "claude --dangerously-skip-permissions",
     "gh": "./scripts/gh",

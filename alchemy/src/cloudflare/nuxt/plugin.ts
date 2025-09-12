@@ -1,5 +1,10 @@
 import type { CloudflareOptions } from "nitropack/presets/cloudflare/types";
-import { validateConfigPath, validatePersistPath } from "../miniflare/paths.ts";
+import {
+  getDefaultConfigPath,
+  getDefaultPersistPath,
+  validateConfigPath,
+  validatePersistPath,
+} from "../miniflare/paths.ts";
 
 const alchemy = (
   options: Partial<CloudflareOptions> = {},
@@ -7,8 +12,12 @@ const alchemy = (
   return {
     nodeCompat: true,
     dev: {
-      configPath: validateConfigPath(options.dev?.configPath),
-      persistDir: validatePersistPath(options.dev?.persistDir),
+      configPath: validateConfigPath(
+        options.dev?.configPath ?? getDefaultConfigPath(),
+      ),
+      persistDir: validatePersistPath(
+        options.dev?.persistDir ?? getDefaultPersistPath(),
+      ),
       ...options.dev,
     },
     ...options,

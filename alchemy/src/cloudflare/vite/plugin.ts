@@ -2,7 +2,8 @@ import { cloudflare, type PluginConfig } from "@cloudflare/vite-plugin";
 import path from "node:path";
 import type { PluginOption } from "vite";
 import {
-  DEFAULT_PERSIST_PATH,
+  getDefaultConfigPath,
+  getDefaultPersistPath,
   validateConfigPath,
   validatePersistPath,
 } from "../miniflare/paths.ts";
@@ -12,7 +13,8 @@ const alchemy = (config?: PluginConfig): PluginOption => {
     path: validatePersistPath(
       typeof config?.persistState === "object"
         ? config.persistState.path
-        : DEFAULT_PERSIST_PATH,
+        : // persist path should default to the /.alchemy/miniflare/v3
+          getDefaultPersistPath(),
     ),
   };
   if (typeof persistState === "object" && persistState.path.endsWith("v3")) {
@@ -20,7 +22,10 @@ const alchemy = (config?: PluginConfig): PluginOption => {
   }
   return cloudflare({
     ...config,
-    configPath: validateConfigPath(config?.configPath),
+    configPath: validateConfigPath(
+      // config path doesn't need to be in the root, it can be in the app dir
+      config?.configPath ?? getDefaultConfigPath(),
+    ),
     persistState,
     experimental: config?.experimental ?? {
       remoteBindings: true,

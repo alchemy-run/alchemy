@@ -1,3 +1,4 @@
+import path from "node:path";
 import { execArgv } from "node:process";
 import { onExit } from "signal-exit";
 import { isReplacedSignal } from "./apply.ts";
@@ -15,6 +16,7 @@ import { DEFAULT_STAGE, Scope, type ProviderCredentials } from "./scope.ts";
 import { secret } from "./secret.ts";
 import type { StateStoreType } from "./state.ts";
 import type { LoggerApi } from "./util/cli.ts";
+import { ALCHEMY_ROOT } from "./util/root-dir.ts";
 import { TelemetryClient } from "./util/telemetry/client.ts";
 
 /**
@@ -101,12 +103,26 @@ async function _alchemy(
   options?: Omit<AlchemyOptions, "appName">,
 ): Promise<Scope> {
   const cliArgs = process.argv.slice(2);
+  // user may select a specific app to auto-enable read mode for any other app
+  const app = parseOption("--app");
+  function parseOption<D extends string | undefined>(
+    option: string,
+    defaultValue?: D,
+  ): D {
+    const i = cliArgs.indexOf(option);
+    return (
+      i !== -1 && i + 1 < cliArgs.length ? cliArgs[i + 1] : defaultValue
+    ) as D;
+  }
   const cliOptions = {
-    phase: cliArgs.includes("--destroy")
-      ? "destroy"
-      : cliArgs.includes("--read")
+    phase:
+      app && app !== appName
         ? "read"
-        : "up",
+        : cliArgs.includes("--destroy")
+          ? "destroy"
+          : cliArgs.includes("--read")
+            ? "read"
+            : "up",
     local: cliArgs.includes("--local") || cliArgs.includes("--dev"),
     watch: cliArgs.includes("--watch") || execArgv.includes("--watch"),
     quiet: cliArgs.includes("--quiet"),
@@ -120,6 +136,7 @@ async function _alchemy(
     })(),
     password: process.env.ALCHEMY_PASSWORD,
     adopt: cliArgs.includes("--adopt"),
+    rootDir: path.resolve(parseOption("--root-dir", ALCHEMY_ROOT)),
   } satisfies Partial<AlchemyOptions>;
   const mergedOptions = {
     ...cliOptions,
@@ -158,6 +175,7 @@ If this is a mistake, you can disable this check by setting the ALCHEMY_CI_STATE
     phase,
     password: mergedOptions?.password ?? process.env.ALCHEMY_PASSWORD,
     telemetryClient,
+    isSelected: app === undefined ? undefined : app === appName,
   });
   onExit((code) => {
     root.cleanup().then(() => {
@@ -272,10 +290,20 @@ export interface AlchemyOptions {
    * @default false
    */
   adopt?: boolean;
-}
-
-export interface ScopeOptions extends AlchemyOptions {
-  enter: boolean;
+  /**
+   * The root directory of the project.
+   *
+   * @default process.cwd()
+   */
+  rootDir?: string;
+  /**
+   * Whether this is the application that was selected with `--app`
+   *
+   * `true` if the application was selected with `--app`
+   * `false` if the application was not selected with `--app`
+   * `undefined` if the program was not run with `--app`
+   */
+  isSelected?: boolean;
 }
 
 export interface RunOptions extends AlchemyOptions, ProviderCredentials {
