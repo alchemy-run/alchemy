@@ -108,31 +108,14 @@ export async function idempotentSpawn({
   async function spawnLoggedChild() {
     const out = await fsp.open(outPath, "a");
 
+    // shell:true, NO args — pass a single command string
     const child = spawn(cmd, {
       shell: true,
       cwd,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["ignore", out.fd, out.fd], // stdout/stderr -> files (OS-level)
       env,
       detached: false,
     });
-
-    // Tee stdout/stderr to both file and parent stdio
-    if (child.stdout) {
-      child.stdout.on("data", (chunk: Buffer) => {
-        if (!quiet) {
-          process.stdout.write(chunk);
-        }
-        out.write(chunk);
-      });
-    }
-    if (child.stderr) {
-      child.stderr.on("data", (chunk: Buffer) => {
-        if (!quiet) {
-          process.stderr.write(chunk);
-        }
-        out.write(chunk);
-      });
-    }
 
     // Child now owns dup'd fds; close our handles.
     await out.close();
@@ -178,7 +161,7 @@ export async function idempotentSpawn({
     {
       write,
       chunkSize = 64 * 1024,
-      // tickMs = 100,
+      tickMs = 100,
     }: {
       stateKey: string;
       write: (buf: Buffer) => boolean;
@@ -246,15 +229,14 @@ export async function idempotentSpawn({
       await drain();
     });
 
-    // TODO(sam): do we need this?
-    // const tick = setInterval(() => {
-    //   drain().catch(() => {});
-    // }, tickMs);
+    const tick = setInterval(() => {
+      drain().catch(() => {});
+    }, tickMs);
 
     return async function stop() {
       closed = true;
       watcher.close();
-      // clearInterval(tick);
+      clearInterval(tick);
       await fh.close().catch(() => {});
       await persist();
     };
