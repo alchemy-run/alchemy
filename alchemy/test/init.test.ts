@@ -62,7 +62,7 @@ const initVariants = {
 describe("Init CLI End-to-End Tests", { concurrent: false }, () => {
   for (const [variantName, config] of Object.entries(initVariants)) {
     test(`${variantName} - scaffold, init, deploy, and destroy`, async () => {
-      const smokeDir = path.join(rootDir, ".smoke");
+      const smokeDir = path.resolve(rootDir, "..", ".smoke");
       const projectPath = path.join(smokeDir, variantName);
 
       console.log(`--- Processing: ${variantName} ---`);
@@ -109,6 +109,10 @@ describe("Init CLI End-to-End Tests", { concurrent: false }, () => {
 
         console.log(`Installing dependencies for ${variantName} project...`);
         await patchCatalogAndInstall(projectPath);
+
+        await runCommand("bun run dev", projectPath, {
+          ALCHEMY_TEST_KILL_ON_FINALIZE: "true",
+        });
 
         console.log(`Deploying ${variantName} project...`);
         const deployResult = await runCommand("bun run deploy", projectPath);

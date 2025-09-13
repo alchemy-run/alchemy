@@ -591,6 +591,7 @@ export class Scope {
 
     if (!this.parent && process.env.ALCHEMY_TEST_KILL_ON_FINALIZE) {
       await this.cleanup();
+      console.log("Killing process");
       process.exit(0);
     }
   }

@@ -467,7 +467,7 @@ const FRAMEWORK_DEPENDENCIES: Record<TemplateType, DependencyVersionMap[]> = {
   sveltekit: ["alchemy", "@sveltejs/adapter-cloudflare"],
   typescript: ["alchemy"],
   vite: ["alchemy"],
-  astro: ["alchemy"],
+  astro: ["alchemy", "@astrojs/cloudflare"],
   "react-router": ["alchemy", "@cloudflare/vite-plugin"],
   "tanstack-start": ["alchemy"],
   rwsdk: ["alchemy"],
