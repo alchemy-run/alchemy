@@ -5,12 +5,12 @@ import { Nextjs } from "alchemy/cloudflare";
 
 const app = await alchemy("{projectName}");
 
-export const website = await Nextjs("website", {
+export const worker = await Nextjs("website", {
   name: `${app.name}-${app.stage}-website`,
 });
 
 console.log({
-  url: website.url,
+  url: worker.url,
 });
 
 await app.finalize();

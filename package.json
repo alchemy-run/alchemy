@@ -46,8 +46,7 @@
       "alchemy",
       "alchemy/templates/*",
       "examples/*",
-      "stacks",
-      "tests/*"
+      "stacks"
     ]
   },
   "devDependencies": {

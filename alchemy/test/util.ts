@@ -99,7 +99,14 @@ export async function waitFor<T>(
  * To avoid hacking the monorepo config for these temporary pacakges (which didn't work when tried),
  * this function just copies across the `catalog` definition from the monorepo to the temp package.
  */
-export async function patchCatalogAndInstall(projectPath: string) {
+export async function patchCatalogAndInstall(
+  projectPath: string,
+  options?: {
+    devDependencies?: {
+      [key: string]: string;
+    };
+  },
+) {
   const packageJson = JSON.parse(
     await fs.readFile(path.join(projectPath, "package.json"), "utf-8"),
   );
@@ -107,12 +114,16 @@ export async function patchCatalogAndInstall(projectPath: string) {
     catalog: JSON.parse(await fs.readFile("package.json", "utf-8")).workspaces
       .catalog,
   };
+  if (options?.devDependencies) {
+    packageJson.devDependencies = {
+      ...packageJson.devDependencies,
+      ...options.devDependencies,
+    };
+  }
   await fs.writeFile(
     path.join(projectPath, "package.json"),
     JSON.stringify(packageJson, null, 2),
   );
-
-  await runCommand("bun i", projectPath);
 }
 
 export async function runCommand(

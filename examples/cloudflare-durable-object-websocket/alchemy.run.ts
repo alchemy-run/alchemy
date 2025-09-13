@@ -24,6 +24,9 @@ export const client = await Vite("client", {
   env: {
     VITE_WEBSOCKET_URL: server.url!,
   },
+  dev: {
+    command: "vite dev --port 5001",
+  },
 });
 
 console.log("Client:", client.url);

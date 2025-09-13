@@ -5,8 +5,8 @@ import * as docker from "alchemy/docker";
 const app = await alchemy("docker");
 
 // Get configuration values (matching the provided Pulumi config)
-const frontendPort = 3001;
-const backendPort = 3000;
+const frontendPort = 3011;
+const backendPort = 3012;
 const mongoPort = 27017;
 const mongoHost = process.env.mongoHost!;
 const database = process.env.database!;

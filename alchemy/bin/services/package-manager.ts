@@ -84,6 +84,10 @@ export async function installDependencies(
     }
 
     if (devDependencies) {
+      console.log({
+        cwd: targetCwd,
+        cmd: `${commands.addDev} ${devDependencies.join(" ")}`,
+      });
       await execa(`${commands.addDev} ${devDependencies.join(" ")}`, {
         cwd: targetCwd,
         shell: true,

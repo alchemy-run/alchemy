@@ -23,3 +23,5 @@ smoke
 .claude/*.local.json
 .astro
 .wrangler
+
+*.tgz

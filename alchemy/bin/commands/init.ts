@@ -66,6 +66,8 @@ export const init = loggedProcedure
       console.error("Failed to initialize Alchemy:", _error);
       throw new ExitSignal(1);
     }
+    // TODO(sam): adding this seemed to stop the CLI from hanging after success (which happens sometimes, not clear why)
+    throw new ExitSignal(0);
   });
 
 function sanitizeProjectName(name: string): string {
