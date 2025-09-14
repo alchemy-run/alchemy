@@ -11,7 +11,7 @@ Email Routing resources do not work with `wrangler login` (OAuth tokens) due to 
 - **Zone:Read** - to read zone information
 - **Zone:Edit** - to manage email routing settings
 
-See the [Cloudflare guide](/guides/cloudflare-auth.md) for details on setting up API token authentication.
+See the [Cloudflare guide](/guides/cloudflare/) for details on setting up API token authentication.
 :::
 
 ## Minimal Example
