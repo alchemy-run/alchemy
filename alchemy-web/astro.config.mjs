@@ -3,25 +3,17 @@ import sitemap from "@astrojs/sitemap";
 import starlight from "@astrojs/starlight";
 import { defineConfig } from "astro/config";
 import starlightBlog from "starlight-blog";
-// import theme from "starlight-nextjs-theme";
-// import theme from 'starlight-theme-flexoki';
-// import theme from 'starlight-theme-rapide';
-// import theme from 'starlight-theme-obsidian';
 import starlightLinksValidator from "starlight-links-validator";
 import theme from "starlight-theme-nova";
-//@ts-expect-error
-import postHogScript from "./src/scripts/posthog.js?raw";
 
-// import { ion as theme } from "starlight-ion-theme";
+// @ts-expect-error
+import postHogScript from "./src/scripts/posthog.js?raw";
 
 // https://astro.build/config
 export default defineConfig({
   site: "https://alchemy.run",
-  // only needed if we use SSR
-  // adapter: cloudflare({
-  //   imageService: "passthrough",
-  // }),
   prefetch: true,
+  trailingSlash: "ignore",
   integrations: [
     sitemap({
       filter: (page) =>
@@ -29,9 +21,6 @@ export default defineConfig({
         !page.endsWith(".md") &&
         !page.endsWith(".mdx"),
     }),
-    // expressiveCode({
-    //   themes: [{}]
-    // }),
     starlight({
       title: "Alchemy",
       favicon: "/potion.png",
@@ -108,11 +97,7 @@ export default defineConfig({
         },
       ],
       expressiveCode: {
-        themes: [
-          // "github-light-high-contrast",
-          "github-light",
-          "github-dark-dimmed",
-        ],
+        themes: ["github-light", "github-dark-dimmed"],
       },
       plugins: [
         theme({
@@ -132,5 +117,4 @@ export default defineConfig({
       ],
     }),
   ],
-  trailingSlash: "ignore",
 });
