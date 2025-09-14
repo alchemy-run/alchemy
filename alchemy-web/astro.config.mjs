@@ -7,6 +7,7 @@ import starlightBlog from "starlight-blog";
 // import theme from 'starlight-theme-flexoki';
 // import theme from 'starlight-theme-rapide';
 // import theme from 'starlight-theme-obsidian';
+import starlightLinksValidator from "starlight-links-validator";
 import theme from "starlight-theme-nova";
 //@ts-expect-error
 import postHogScript from "./src/scripts/posthog.js?raw";
@@ -127,6 +128,7 @@ export default defineConfig({
           ],
         }),
         starlightBlog(),
+        starlightLinksValidator(),
       ],
     }),
   ],

@@ -18,6 +18,7 @@
     "alchemy": "workspace:*",
     "astro": "^5.12.8",
     "starlight-blog": "^0.24.0",
+    "starlight-links-validator": "^0.17.2",
     "starlight-nextjs-theme": "^0.2.0"
   },
   "devDependencies": {
