@@ -95,15 +95,19 @@ await Worker("chat-worker", {
 // src/worker.ts
 export default {
   async fetch(request, env) {
-    const { message } = await request.json();
+    const { prompt } = await request.json();
 
-    const response = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
-      messages: [{ role: "user", content: message }],
-      gateway: {
-        id: env.GATEWAY_ID,
-        skipCache: true,
+    const response = await env.AI.run(
+      "@cf/meta/llama-3.1-8b-instruct-fast",
+      {
+        prompt,
       },
-    });
+      {
+        gateway: {
+          id: env.GATEWAY_ID,
+        },
+      },
+    );
 
     return Response.json({ response: response.response });
   },
