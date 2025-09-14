@@ -29,7 +29,6 @@ export interface MiniflareWorkerInput {
 
 type RemoteOnlyBindingType =
   | "ai"
-  | "ai_gateway"
   | "browser"
   | "dispatch_namespace"
   | "mtls_certificate"
@@ -97,8 +96,13 @@ export const buildWorkerOptions = async (
       continue;
     }
     switch (binding.type) {
-      case "ai":
-      case "ai_gateway": {
+      case "ai": {
+        const existing = remoteBindings.find((b) => b.type === "ai");
+        if (existing) {
+          throw new Error(
+            `Workers cannot have multiple AI bindings. Binding "${key}" conflicts with "${existing.name}".`,
+          );
+        }
         remoteBindings.push({
           type: "ai",
           name: key,

@@ -491,12 +491,6 @@ export async function prepareWorkerMetadata(
         name: bindingName,
         index_name: binding.name,
       });
-    } else if (binding.type === "ai_gateway") {
-      // AI Gateway binding - just needs the name property
-      meta.bindings.push({
-        type: "ai",
-        name: bindingName,
-      });
     } else if (binding.type === "hyperdrive") {
       // Hyperdrive binding
       meta.bindings.push({
@@ -510,6 +504,12 @@ export async function prepareWorkerMetadata(
         name: bindingName,
       });
     } else if (binding.type === "ai") {
+      const existing = meta.bindings.find((b) => b.type === "ai");
+      if (existing) {
+        throw new Error(
+          `Workers cannot have multiple AI bindings. Binding "${bindingName}" conflicts with "${existing.name}".`,
+        );
+      }
       meta.bindings.push({
         type: "ai",
         name: bindingName,
