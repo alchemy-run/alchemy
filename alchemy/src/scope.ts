@@ -58,6 +58,12 @@ export interface ScopeOptions extends ProviderCredentials {
    */
   watch?: boolean;
   /**
+   * Whether to create a tunnel for supported resources.
+   *
+   * @default false
+   */
+  tunnel?: boolean;
+  /**
    * Apply updates to resources even if there are no changes.
    *
    * @default false
@@ -186,6 +192,7 @@ export class Scope {
   public readonly phase: Phase;
   public readonly local: boolean;
   public readonly watch: boolean;
+  public readonly tunnel: boolean;
   public readonly force: boolean;
   public readonly adopt: boolean;
   public readonly destroyStrategy: DestroyStrategy;
@@ -225,6 +232,7 @@ export class Scope {
       phase,
       local,
       watch,
+      tunnel,
       force,
       destroyStrategy,
       telemetryClient,
@@ -284,6 +292,7 @@ export class Scope {
 
     this.local = local ?? this.parent?.local ?? false;
     this.watch = watch ?? this.parent?.watch ?? false;
+    this.tunnel = tunnel ?? this.parent?.tunnel ?? false;
     this.force = force ?? this.parent?.force ?? false;
     this.adopt = adopt ?? this.parent?.adopt ?? false;
     this.destroyStrategy =

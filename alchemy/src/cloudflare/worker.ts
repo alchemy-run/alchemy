@@ -863,7 +863,7 @@ const _Worker = Resource(
           assets: props.assets,
           bundle,
           port: props.dev?.port,
-          tunnel: props.dev?.tunnel,
+          tunnel: props.dev?.tunnel ?? this.scope.tunnel,
         });
         this.onCleanup(() => controller.dispose());
       }

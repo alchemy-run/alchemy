@@ -127,6 +127,7 @@ async function _alchemy(
     watch: cliArgs.includes("--watch") || execArgv.includes("--watch"),
     quiet: cliArgs.includes("--quiet"),
     force: cliArgs.includes("--force"),
+    tunnel: cliArgs.includes("--tunnel"),
     // Parse stage argument (--stage my-stage) functionally and inline as a property declaration
     stage: (function parseStage() {
       const i = cliArgs.indexOf("--stage");
@@ -231,6 +232,12 @@ export interface AlchemyOptions {
    * @default false
    */
   force?: boolean;
+  /**
+   * Whether to create a tunnel for supported resources.
+   *
+   * @default false
+   */
+  tunnel?: boolean;
   /**
    * Name to scope the resource state under (e.g. `.alchemy/{stage}/..`).
    *
