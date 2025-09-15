@@ -61,7 +61,8 @@
           }
         },
         "noUnsafeFinally": "off",
-        "noChildrenProp": "off"
+        "noChildrenProp": "off",
+        "useYield": "off"
       },
       "a11y": {
         "useButtonType": "off",
