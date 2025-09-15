@@ -759,8 +759,6 @@ function processBindings(
         binding: bindingName,
         dataset: binding.dataset,
       });
-    } else if (binding.type === "ai_gateway") {
-      // no-op
     } else if (binding.type === "version_metadata") {
       if (spec.version_metadata) {
         throw new Error(
