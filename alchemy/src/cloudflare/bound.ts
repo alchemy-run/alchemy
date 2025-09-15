@@ -1,22 +1,22 @@
 import type {
-  Ai,
-  AnalyticsEngineDataset,
-  D1Database,
-  DispatchNamespace,
-  DurableObjectNamespace,
-  Fetcher,
-  Hyperdrive,
-  ImagesBinding,
-  KVNamespace,
-  Queue,
-  R2Bucket,
-  RateLimit,
-  Rpc,
-  SecretsStoreSecret,
-  Service,
-  VectorizeIndex,
-  WorkerVersionMetadata,
-  Workflow,
+    Ai,
+    AnalyticsEngineDataset,
+    D1Database,
+    DispatchNamespace,
+    DurableObjectNamespace,
+    Fetcher,
+    Hyperdrive,
+    ImagesBinding,
+    KVNamespace,
+    Queue,
+    R2Bucket,
+    RateLimit,
+    Rpc,
+    SecretsStoreSecret,
+    Service,
+    VectorizeIndex,
+    WorkerVersionMetadata,
+    Workflow,
 } from "@cloudflare/workers-types";
 import type { Pipeline } from "cloudflare:pipelines";
 import type { Secret } from "../secret.ts";
@@ -35,6 +35,7 @@ import type { Pipeline as _Pipeline } from "./pipeline.ts";
 import type { Queue as _Queue } from "./queue.ts";
 import type { RateLimit as _RateLimit } from "./rate-limit.ts";
 import type { SecretKey } from "./secret-key.ts";
+import type { SecretRef as CloudflareSecretRef } from "./secret-ref.ts";
 import type { Secret as CloudflareSecret } from "./secret.ts";
 import type { VectorizeIndex as _VectorizeIndex } from "./vectorize-index.ts";
 import type { VersionMetadata as _VersionMetadata } from "./version-metadata.ts";
@@ -72,7 +73,7 @@ export type Bound<T extends Binding> = T extends _DurableObjectNamespace<
               ? Hyperdrive
               : T extends Secret
                 ? string
-                : T extends CloudflareSecret
+                : T extends CloudflareSecret | CloudflareSecretRef
                   ? SecretsStoreSecret
                   : T extends SecretKey
                     ? CryptoKey

@@ -21,6 +21,7 @@ import type { Pipeline } from "./pipeline.ts";
 import type { Queue } from "./queue.ts";
 import type { RateLimit } from "./rate-limit.ts";
 import type { SecretKey } from "./secret-key.ts";
+import type { SecretRef as CloudflareSecretRef } from "./secret-ref.ts";
 import type { Secret as CloudflareSecret } from "./secret.ts";
 import type { VectorizeIndex } from "./vectorize-index.ts";
 import type { VersionMetadata } from "./version-metadata.ts";
@@ -47,6 +48,7 @@ export type Binding =
   | Assets
   | Container
   | CloudflareSecret
+  | CloudflareSecretRef
   | D1Database
   | DispatchNamespace
   | AnalyticsEngineDataset
