@@ -1,7 +1,13 @@
 import Dockerode from "dockerode";
 import os from "node:os";
+import type { DockerRegistry } from "./docker-registry.ts";
 
-export interface DockerHostProps {
+export interface DockerHostProps<
+  Registries extends Record<string, DockerRegistry> = Record<
+    string,
+    DockerRegistry
+  >,
+> {
   /**
    * The URL of the Docker daemon.
    * @example
@@ -28,26 +34,15 @@ export interface DockerHostProps {
   /**
    * Registries to authenticate to
    */
-  registries?: (RegistryUserAuth | IdentityTokenAuth)[];
+  registries?: Registries;
 }
 
-interface RegistryUserAuth {
-  // username: string;
-  // password: string;
-  // email: string;
-  serverAddress: string;
-}
-
-interface IdentityTokenAuth {
-  // identitytoken: string;
-  serverAddress: string;
-}
-
-class DockerHostClass {
+class _DockerHost<Registries extends Record<string, DockerRegistry>> {
   #dockerode: Dockerode;
   readonly url: string;
+  readonly registries: Registries;
 
-  constructor(props: DockerHostProps) {
+  constructor(props: DockerHostProps<Registries>) {
     const dockerodeOptions: Dockerode.DockerOptions = {};
     const url = new URL(
       props.url ||
@@ -62,10 +57,14 @@ class DockerHostClass {
     } else if (url.protocol === "tcp:") {
       dockerodeOptions.host = url.hostname;
       dockerodeOptions.port = url.port;
-      dockerodeOptions.protocol = props.ca ? "https" : "http";
-      dockerodeOptions.ca = props.ca;
-      dockerodeOptions.cert = props.cert;
-      dockerodeOptions.key = props.key;
+      const isHttps = props.ca && props.cert && props.key;
+      dockerodeOptions.protocol = "http";
+      if (isHttps) {
+        dockerodeOptions.protocol = "https";
+        dockerodeOptions.ca = props.ca;
+        dockerodeOptions.cert = props.cert;
+        dockerodeOptions.key = props.key;
+      }
     } else {
       // TODO: Add support and tests for ssh:// protocol
       throw new Error(`Invalid Docker protocol: ${url.protocol}`);
@@ -77,19 +76,28 @@ class DockerHostClass {
     this.#dockerode = new Dockerode(dockerodeOptions);
     this.url = url.toString();
     process.env.DOCKER_HOST = previousDockerHostEnvironment;
+
+    this.registries = props.registries || ({} as Registries);
   }
 
   get dockerode() {
     return this.#dockerode;
   }
 }
-Object.defineProperty(DockerHostClass, "name", { value: "DockerHost" });
+Object.defineProperty(_DockerHost, "name", { value: "DockerHost" });
 
-export async function DockerHost(props: DockerHostProps = {}) {
-  if (props instanceof DockerHostClass) {
+export async function DockerHost<
+  Registries extends Record<string, DockerRegistry>,
+>(props: DockerHostProps<Registries> = {}): Promise<DockerHost<Registries>> {
+  if (props instanceof _DockerHost) {
     return props;
   }
 
-  return new DockerHostClass(props);
+  return new _DockerHost(props);
 }
-export type DockerHost = InstanceType<typeof DockerHostClass>;
+export type DockerHost<
+  Registries extends Record<string, DockerRegistry> = Record<
+    string,
+    DockerRegistry
+  >,
+> = InstanceType<typeof _DockerHost<Registries>>;
