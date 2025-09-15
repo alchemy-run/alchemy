@@ -42,7 +42,7 @@ const rootFiles = [
   // nx
   "nx.json",
   // turbo
-  "turbo.json",
+  // "turbo.json",
   // rush
   "rush.json",
 ];
