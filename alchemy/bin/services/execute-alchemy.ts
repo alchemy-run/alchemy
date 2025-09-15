@@ -7,11 +7,11 @@ import z from "zod";
 import { detectRuntime } from "../../src/util/detect-node-runtime.ts";
 import { detectPackageManager } from "../../src/util/detect-package-manager.ts";
 import { exists } from "../../src/util/exists.ts";
+import { findWorkspaceRoot } from "../../src/util/find-workspace-root.ts";
 import { promiseWithResolvers } from "../../src/util/promise-with-resolvers.ts";
 import { ExitSignal } from "../trpc.ts";
 import { CDPProxy } from "./cdp-manager/cdp-proxy.ts";
 import { CDPManager } from "./cdp-manager/server.ts";
-import { findWorkspaceRoot } from "./find-workspace-root.ts";
 
 export const entrypoint = z
   .string()
@@ -91,7 +91,7 @@ export async function execAlchemy(
     inspectWait,
     adopt,
     app,
-    rootDir,
+    rootDir: maybeRootDir,
   }: {
     cwd?: string;
     quiet?: boolean;
@@ -112,6 +112,7 @@ export async function execAlchemy(
 ) {
   const args: string[] = [];
   const execArgs: string[] = [];
+  let rootDir: string | undefined = maybeRootDir;
 
   const shouldInspect = (inspect || inspectBrk || inspectWait) ?? false;
 
@@ -138,7 +139,7 @@ export async function execAlchemy(
   } else if (app) {
     console.log("finding root dir");
     try {
-      const rootDir = await findWorkspaceRoot(cwd);
+      rootDir = await findWorkspaceRoot(cwd);
       // no root directory was provided but a specific app was provided, so we need to find the monorepo root
       args.push(`--root-dir ${rootDir}`);
       if (!envFile) {
@@ -182,7 +183,7 @@ export async function execAlchemy(
   }
 
   // Detect package manager
-  const packageManager = await detectPackageManager(cwd);
+  const packageManager = await detectPackageManager(rootDir ?? cwd);
   const runtime = detectRuntime();
 
   const argsString = args.join(" ");

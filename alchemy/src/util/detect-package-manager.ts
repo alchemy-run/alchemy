@@ -1,39 +1,48 @@
 import { exists } from "./exists.ts";
+import { findWorkspaceRoot } from "./find-workspace-root.ts";
+import { memoize } from "./memoize.ts";
 
 export type PackageManager = "bun" | "pnpm" | "yarn" | "npm" | "deno";
 
-export async function detectPackageManager(
-  path: string = process.cwd(),
-): Promise<PackageManager> {
-  if (await exists(`${path}/deno.lock`)) return "deno";
-  if (
-    (await exists(`${path}/deno.json`)) ||
-    (await exists(`${path}/deno.jsonc`))
-  )
-    return "deno";
-  if (await exists(`${path}/bun.lockb`)) return "bun";
-  if (await exists(`${path}/pnpm-lock.yaml`)) return "pnpm";
-  if (await exists(`${path}/yarn.lock`)) return "yarn";
+const LOCKS: Record<string, PackageManager> = {
+  "bun.lock": "bun",
+  "bun.lockb": "bun",
+  "deno.lock": "deno",
+  "pnpm-lock.yaml": "pnpm",
+  "pnpm-workspace.yaml": "pnpm",
+  "yarn.lock": "yarn",
+  "package-lock.json": "npm",
+  "npm-shrinkwrap.json": "npm",
+};
 
-  if (process.env.npm_execpath?.includes("bun")) {
-    return "bun";
-  }
+export const detectPackageManager = memoize(
+  async (path: string = process.cwd()): Promise<PackageManager> => {
+    const root = await findWorkspaceRoot(path);
 
-  if (process.env.DENO) {
-    return "deno";
-  }
+    for (const [lockfile, packageManager] of Object.entries(LOCKS)) {
+      if (await exists(root, lockfile)) {
+        return packageManager;
+      }
+    }
 
-  const userAgent = process.env.npm_config_user_agent;
-  if (userAgent) {
-    if (userAgent.startsWith("deno")) return "deno";
-    if (userAgent.startsWith("bun")) return "bun";
-    if (userAgent.startsWith("pnpm")) return "pnpm";
-    if (userAgent.startsWith("yarn")) return "yarn";
-    if (userAgent.startsWith("npm")) return "npm";
-  }
+    if (process.env.npm_execpath?.includes("bun")) {
+      return "bun";
+    }
 
-  return "npm";
-}
+    if (process.env.DENO) {
+      return "deno";
+    }
+
+    const userAgent = process.env.npm_config_user_agent?.match(
+      /^(bun|deno|npm|pnpm|yarn)/,
+    );
+    if (userAgent) {
+      return userAgent[1] as PackageManager;
+    }
+
+    return "npm";
+  },
+);
 
 export async function getPackageManagerRunner(): Promise<string> {
   const packageManager = await detectPackageManager();
