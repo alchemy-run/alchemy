@@ -416,7 +416,8 @@ export async function prepareWorkerMetadata(
         type: "service",
         name: bindingName,
         service: "service" in binding ? binding.service : binding.name,
-        entrypoint: binding.__entrypoint__,
+        entrypoint:
+          "__entrypoint__" in binding ? binding.__entrypoint__ : undefined,
       });
     } else if (binding.type === "durable_object_namespace") {
       meta.bindings.push({
