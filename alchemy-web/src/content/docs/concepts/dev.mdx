@@ -137,6 +137,30 @@ const worker = await Worker("my-worker", {
 console.log(worker.url); // http://localhost:3000
 ```
 
+## Tunnel
+
+A Worker can be configured to use a Cloudflare Tunnel for local development:
+
+```ts
+const worker = await Worker("my-worker", {
+  entrypoint: "worker.ts",
+  dev: {
+    tunnel: true,
+  },
+});
+```
+
+In `dev` mode, a temporary Tunnel will be created and bound to the remote Worker to route requests from the public internet to your locally running Worker.
+
+:::tip
+You can enable this for all Workers in your project by passing the `--tunnel` flag to the `alchemy dev` command.
+
+```bash
+alchemy dev --tunnel
+```
+:::
+
+
 ## Bindings
 
 Most Cloudflare bindings are automatically emulated in development mode, such as [`D1Database`](/providers/cloudflare/d1-database/), [`KVNamespace`](/providers/cloudflare/kv-namespace/), and [`R2Bucket`](/providers/cloudflare/bucket/):
