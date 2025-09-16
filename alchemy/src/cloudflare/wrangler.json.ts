@@ -367,6 +367,7 @@ export interface WranglerJsonSpec {
     binding: string;
     service: string;
     environment?: string;
+    entrypoint?: string;
   }[];
 
   /**
@@ -530,8 +531,12 @@ function processBindings(
     preview_bucket_name: string;
     jurisdiction?: R2BucketJurisdiction;
   }[] = [];
-  const services: { binding: string; service: string; environment?: string }[] =
-    [];
+  const services: {
+    binding: string;
+    service: string;
+    environment?: string;
+    entrypoint?: string;
+  }[] = [];
   const secrets: string[] = [];
   const workflows: {
     name: string;
@@ -626,12 +631,14 @@ function processBindings(
       services.push({
         binding: bindingName,
         service: workerName,
+        entrypoint: binding.__entrypoint__,
       });
     } else if (binding.type === "service") {
       // Service binding
       services.push({
         binding: bindingName,
         service: "name" in binding ? binding.name : binding.service,
+        entrypoint: binding.__entrypoint__,
       });
     } else if (binding.type === "kv_namespace") {
       // KV Namespace binding
