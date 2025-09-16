@@ -29,6 +29,7 @@ import type { R2Bucket as _R2Bucket } from "./bucket.ts";
 import type { Container as _Container } from "./container.ts";
 import type { D1Database as _D1Database } from "./d1-database.ts";
 import type { DurableObjectNamespace as _DurableObjectNamespace } from "./durable-object-namespace.ts";
+import type { HyperdriveRef } from "./hyperdrive-ref.ts";
 import type { Hyperdrive as _Hyperdrive } from "./hyperdrive.ts";
 import type { Images as _Images } from "./images.ts";
 import type { Pipeline as _Pipeline } from "./pipeline.ts";
@@ -69,7 +70,7 @@ export type Bound<T extends Binding> = T extends _DurableObjectNamespace<
           ? Service
           : T extends _R2Bucket
             ? R2Bucket
-            : T extends _Hyperdrive
+            : T extends _Hyperdrive | HyperdriveRef
               ? Hyperdrive
               : T extends Secret
                 ? string

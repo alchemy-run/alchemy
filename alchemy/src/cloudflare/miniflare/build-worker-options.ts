@@ -185,7 +185,9 @@ export const buildWorkerOptions = async (
         break;
       }
       case "hyperdrive": {
-        (options.hyperdrives ??= {})[key] = binding.dev.origin.unencrypted;
+        if (binding.dev) {
+          (options.hyperdrives ??= {})[key] = binding.dev.origin.unencrypted;
+        }
         break;
       }
       case "images": {

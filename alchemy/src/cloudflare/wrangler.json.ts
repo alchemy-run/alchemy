@@ -773,7 +773,7 @@ function processBindings(
         binding: bindingName,
         id: binding.hyperdriveId,
         localConnectionString: writeSecrets
-          ? binding.dev.origin.unencrypted
+          ? binding.dev?.origin.unencrypted
           : undefined,
       });
     } else if (binding.type === "pipeline") {

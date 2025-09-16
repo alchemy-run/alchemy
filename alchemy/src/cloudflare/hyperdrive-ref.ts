@@ -1,3 +1,5 @@
+import { alchemy } from "../alchemy.ts";
+import type { Secret } from "../secret.ts";
 import { handleApiError } from "./api-error.ts";
 import {
   createCloudflareApi,
@@ -8,12 +10,18 @@ import {
 export interface HyperdriveRefProps extends CloudflareApiOptions {
   name?: string;
   id?: string;
+  dev?: {
+    origin: string | Secret;
+  };
 }
 
 export type HyperdriveRef = {
   type: "hyperdrive";
   name: string;
   hyperdriveId: string;
+  dev?: {
+    origin: Secret;
+  };
 };
 
 export async function HyperdriveRef(
@@ -42,6 +50,14 @@ export async function HyperdriveRef(
     type: "hyperdrive",
     name: hyperdriveName!,
     hyperdriveId: hyperdriveId!,
+    dev: props.dev
+      ? {
+          origin:
+            typeof props.dev.origin === "string"
+              ? alchemy.secret(props.dev.origin)
+              : props.dev.origin,
+        }
+      : undefined,
   };
 }
 
