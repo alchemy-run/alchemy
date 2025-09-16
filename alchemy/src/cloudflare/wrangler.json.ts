@@ -626,7 +626,7 @@ function processBindings(
     } else if (writeSecrets && isSecret(binding)) {
       spec.vars ??= {};
       spec.vars[bindingName] = binding as any;
-    } else if (binding.type === "_alchemy_self") {
+    } else if (binding.type === "cloudflare::Worker::Self") {
       // Self(service) binding
       services.push({
         binding: bindingName,

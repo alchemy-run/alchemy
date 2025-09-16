@@ -91,7 +91,7 @@ export const buildWorkerOptions = async (
       (options.bindings ??= {})[key] = binding;
       continue;
     }
-    if (binding.type === "_alchemy_self") {
+    if (binding.type === "cloudflare::Worker::Self") {
       (options.serviceBindings ??= {})[key] = miniflare.kCurrentWorker;
       continue;
     }
@@ -463,7 +463,10 @@ const normalizeBundle = (bundle: WorkerBundle) => {
 };
 
 const isRemoteBinding = (binding: Binding) => {
-  if (typeof binding === "string" || binding.type === "_alchemy_self") {
+  if (
+    typeof binding === "string" ||
+    binding.type === "cloudflare::Worker::Self"
+  ) {
     return false;
   }
   return (

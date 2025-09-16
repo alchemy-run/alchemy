@@ -80,12 +80,12 @@ export type Binding =
 export type Self<
   RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
 > = {
-  type: "_alchemy_self";
+  type: "cloudflare::Worker::Self";
   __entrypoint__?: string;
   __rpc__?: RPC;
 };
 export const Self = {
-  type: "_alchemy_self",
+  type: "cloudflare::Worker::Self",
 } as const;
 
 export type Json<T = any> = {

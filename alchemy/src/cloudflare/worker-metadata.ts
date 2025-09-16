@@ -391,7 +391,7 @@ export async function prepareWorkerMetadata(
         name: bindingName,
         text: binding,
       });
-    } else if (binding.type === "_alchemy_self") {
+    } else if (binding.type === "cloudflare::Worker::Self") {
       meta.bindings.push({
         type: "service",
         name: bindingName,
