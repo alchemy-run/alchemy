@@ -5,11 +5,7 @@ import { Resource } from "../resource.ts";
 import { Scope } from "../scope.ts";
 import { isSecret } from "../secret.ts";
 import { assertNever } from "../util/assert-never.ts";
-import {
-  Self,
-  type Bindings,
-  type WorkerBindingRateLimit,
-} from "./bindings.ts";
+import type { Bindings, WorkerBindingRateLimit } from "./bindings.ts";
 import type { R2BucketJurisdiction } from "./bucket.ts";
 import type { DurableObjectNamespace } from "./durable-object-namespace.ts";
 import type { EventSource } from "./event-source.ts";
@@ -625,7 +621,7 @@ function processBindings(
     } else if (writeSecrets && isSecret(binding)) {
       spec.vars ??= {};
       spec.vars[bindingName] = binding as any;
-    } else if (binding === Self) {
+    } else if (binding.type === "_alchemy_self") {
       // Self(service) binding
       services.push({
         binding: bindingName,

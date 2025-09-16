@@ -15,6 +15,7 @@ import {
 import type { Assets } from "./assets.ts";
 import type {
   Bindings,
+  Self,
   WorkerBindingDurableObjectNamespace,
   WorkerBindingSpec,
 } from "./bindings.ts";
@@ -59,7 +60,6 @@ import { Workflow, isWorkflow, upsertWorkflow } from "./workflow.ts";
 // This import is here to avoid errors when destroying the `Bundle` resource.
 import "../esbuild/bundle.ts";
 import type { WorkerRef } from "./worker-ref.ts";
-import type { WorkerStub } from "./worker-stub.ts";
 
 /**
  * Configuration options for static assets
@@ -710,14 +710,14 @@ export function Worker<const B extends Bindings>(
 }
 
 Worker.entrypoint = <RPC extends Rpc.WorkerEntrypointBranded>(
-  worker: Worker | WorkerRef | WorkerStub,
+  worker: Worker | WorkerRef | Self,
   entrypoint: string,
 ) => {
   return {
     ...worker,
     // we rename the entrypoint in order to prevent collisions with entrypoint on Worker
     __entrypoint__: entrypoint,
-  } as (Worker | WorkerRef | WorkerStub) & {
+  } as (Worker | WorkerRef) & {
     __entrypoint__?: string;
     __rpc__?: RPC;
   };

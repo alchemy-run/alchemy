@@ -2,12 +2,11 @@ import * as miniflare from "miniflare";
 import { assertNever } from "../../util/assert-never.ts";
 import type { HTTPServer } from "../../util/http.ts";
 import type { CloudflareApi } from "../api.ts";
-import {
-  Self,
-  type Binding,
-  type Bindings,
-  type WorkerBindingService,
-  type WorkerBindingSpec,
+import type {
+  Binding,
+  Bindings,
+  WorkerBindingService,
+  WorkerBindingSpec,
 } from "../bindings.ts";
 import { isQueueEventSource, type EventSource } from "../event-source.ts";
 import type { WorkerBundle, WorkerBundleSource } from "../worker-bundle.ts";
@@ -92,7 +91,7 @@ export const buildWorkerOptions = async (
       (options.bindings ??= {})[key] = binding;
       continue;
     }
-    if (binding === Self) {
+    if (binding.type === "_alchemy_self") {
       (options.serviceBindings ??= {})[key] = miniflare.kCurrentWorker;
       continue;
     }
@@ -464,7 +463,7 @@ const normalizeBundle = (bundle: WorkerBundle) => {
 };
 
 const isRemoteBinding = (binding: Binding) => {
-  if (typeof binding === "string" || binding === Self) {
+  if (typeof binding === "string" || binding.type === "_alchemy_self") {
     return false;
   }
   return (

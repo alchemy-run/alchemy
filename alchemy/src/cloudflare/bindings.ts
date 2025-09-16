@@ -77,8 +77,16 @@ export type Binding =
   | Self
   | Json;
 
-export type Self = typeof Self;
-export const Self = Symbol.for("Self");
+export type Self<
+  RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
+> = {
+  type: "_alchemy_self";
+  __entrypoint__?: string;
+  __rpc__?: RPC;
+};
+export const Self = {
+  type: "_alchemy_self",
+} as const;
 
 export type Json<T = any> = {
   type: "json";
