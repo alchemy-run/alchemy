@@ -1,4 +1,4 @@
-import { Profile, type Credentials } from "../auth.ts";
+import { type Credentials, getProviderCredentials } from "../auth.ts";
 import type { Secret } from "../secret.ts";
 import { defaultKeyFn, memoize } from "../util/memoize.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
@@ -18,7 +18,13 @@ export interface CloudflareApiOptions {
   baseUrl?: string;
 
   /**
-   * Profile to use
+   * The Alchemy profile to use for Cloudflare credentials. Defaults to:
+   * - `process.env.CLOUDFLARE_PROFILE`
+   * - `process.env.ALCHEMY_PROFILE`
+   * - `"default"`
+   *
+   * If an API key or token is provided in these options or in the environment,
+   * the profile will be ignored.
    */
   profile?: string;
 
@@ -59,18 +65,22 @@ export const createCloudflareApi = memoize(
     // the same three-tier resolution pattern: global → scope → resource
 
     const baseUrl = options.baseUrl ?? process.env.CLOUDFLARE_BASE_URL;
-    const profile = options.profile ?? process.env.CLOUDFLARE_PROFILE;
+    const profile =
+      options.profile ??
+      process.env.CLOUDFLARE_PROFILE ??
+      process.env.ALCHEMY_PROFILE;
 
     if (profile) {
-      const item = await Profile.get({ provider: "cloudflare", profile });
-      if (!item) {
-        throw new Error(`The Cloudflare profile "${profile}" was not found.`);
-      }
+      const { provider, credentials } =
+        await getProviderCredentials<CloudflareAuth.Metadata>({
+          provider: "cloudflare",
+          profile,
+        });
       return new CloudflareApi({
         baseUrl,
         profile,
-        credentials: item.credentials,
-        accountId: item.metadata.id,
+        credentials,
+        accountId: provider.metadata.id,
       });
     }
 
@@ -83,7 +93,7 @@ export const createCloudflareApi = memoize(
       (await getCloudflareAccountId(headers));
 
     if (apiToken) {
-      const credentials: Credentials.APIToken = {
+      const credentials: Credentials.ApiToken = {
         type: "api-token",
         apiToken,
       };
@@ -99,45 +109,46 @@ export const createCloudflareApi = memoize(
     const apiKey =
       options.apiKey?.unencrypted ?? process.env.CLOUDFLARE_API_KEY;
     if (apiKey) {
-      const apiEmail =
+      const email =
         options.email ??
         process.env.CLOUDFLARE_EMAIL ??
         (await getUserEmailFromApiKey(apiKey));
-      const credentials: Credentials.APIKey = {
+      const credentials: Credentials.ApiKey = {
         type: "api-key",
         apiKey,
-        apiEmail,
+        email,
       };
       return new CloudflareApi({
         baseUrl,
         credentials,
         accountId: await accountId({
           "X-Auth-Key": apiKey,
-          "X-Auth-Email": apiEmail,
+          "X-Auth-Email": email,
         }),
       });
     }
 
-    const defaultProfile = await Profile.get({
-      provider: "cloudflare",
-      profile: "default",
-    });
-
-    if (defaultProfile) {
+    try {
+      const { provider, credentials } =
+        await getProviderCredentials<CloudflareAuth.Metadata>({
+          provider: "cloudflare",
+          profile: "default",
+        });
       return new CloudflareApi({
         baseUrl,
         profile: "default",
-        credentials: defaultProfile.credentials,
-        accountId: defaultProfile.metadata.id,
+        credentials,
+        accountId: provider.metadata.id,
       });
+    } catch (error) {
+      throw new Error(
+        [
+          "No credentials found. Please run `alchemy login`, or set either CLOUDFLARE_API_TOKEN or CLOUDFLARE_API_KEY in your environment.",
+          "Learn more: https://alchemy.run/guides/cloudflare/",
+        ].join("\n"),
+        { cause: error },
+      );
     }
-
-    throw new Error(
-      [
-        "No credentials found. Please run `alchemy auth login`, or set either CLOUDFLARE_API_TOKEN or CLOUDFLARE_API_KEY in your environment.",
-        "Learn more: https://alchemy.run/guides/cloudflare/",
-      ].join("\n"),
-    );
   },
   (options) =>
     defaultKeyFn({

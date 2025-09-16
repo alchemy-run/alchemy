@@ -58,7 +58,10 @@ export class OAuthClient {
   /**
    * Exchange an authorization code for credentials.
    */
-  async exchange(code: string, verifier: string): Promise<Credentials.OAuth> {
+  async exchange(
+    code: string,
+    verifier: string,
+  ): Promise<OAuthClient.CredentialsResult> {
     const res = await this.request(this.options.endpoints.token, {
       grant_type: "authorization_code",
       code,
@@ -72,7 +75,9 @@ export class OAuthClient {
   /**
    * Refresh OAuth 2.0 credentials.
    */
-  async refresh(credentials: Credentials.OAuth): Promise<Credentials.OAuth> {
+  async refresh(
+    credentials: Credentials.OAuth,
+  ): Promise<OAuthClient.CredentialsResult> {
     const res = await this.request(this.options.endpoints.token, {
       grant_type: "refresh_token",
       refresh_token: credentials.refresh,
@@ -120,9 +125,9 @@ export class OAuthClient {
    */
   async callback(
     authorization: OAuthClient.Authorization,
-  ): Promise<Credentials.OAuth> {
+  ): Promise<OAuthClient.CredentialsResult> {
     const { pathname, port } = new URL(this.options.redirectUri);
-    const promise = new DeferredPromise<Credentials.OAuth>();
+    const promise = new DeferredPromise<OAuthClient.CredentialsResult>();
     const handle = async (request: Request) => {
       const url = new URL(request.url);
       if (url.pathname !== pathname) {
@@ -158,8 +163,8 @@ export class OAuthClient {
     const server = new HTTPServer({
       fetch: async (req) => {
         try {
-          const credentials = await handle(req);
-          promise.resolve(credentials);
+          const result = await handle(req);
+          promise.resolve(result);
           return Response.redirect("http://alchemy.run/auth/success");
         } catch (error) {
           promise.reject(error);
@@ -180,9 +185,9 @@ export class OAuthClient {
       1000 * 60 * 5,
     );
     try {
-      const credentials = await promise.value;
+      const result = await promise.value;
       clearTimeout(timeout);
-      return credentials;
+      return result;
     } finally {
       // Not awaited because the server can take a few seconds to close, don't want to block the login process from completing
       void server.close();
@@ -209,17 +214,24 @@ export declare namespace OAuthClient {
     state: string;
     verifier: string;
   }
+
+  export interface CredentialsResult {
+    credentials: Credentials.OAuth;
+    scopes: string[];
+  }
 }
 
 async function extractCredentialsFromResponse(
   response: Response,
-): Promise<Credentials.OAuth> {
+): Promise<OAuthClient.CredentialsResult> {
   const json = (await response.json()) as OAuthClient.SuccessResponse;
   return {
-    type: "oauth",
-    access: json.access_token,
-    refresh: json.refresh_token,
-    expires: Date.now() + json.expires_in * 1000,
+    credentials: {
+      type: "oauth",
+      access: json.access_token,
+      refresh: json.refresh_token,
+      expires: Date.now() + json.expires_in * 1000,
+    },
     scopes: json.scope.split(" "),
   };
 }

@@ -1,6 +1,9 @@
 import assert from "node:assert";
-import { Credentials, Profile } from "../auth.ts";
-import { singleFlight } from "../util/memoize.ts";
+import {
+  type Credentials,
+  getRefreshedCredentials,
+  isOAuthCredentialsExpired,
+} from "../auth.ts";
 import { OAuthClient } from "../util/oauth-client.ts";
 
 export namespace CloudflareAuth {
@@ -13,6 +16,12 @@ export namespace CloudflareAuth {
       revoke: "https://dash.cloudflare.com/oauth2/revoke",
     },
   });
+
+  export type Metadata = {
+    id: string;
+    name: string;
+  };
+
   export const ALL_SCOPES = [
     "access:read",
     "access:write",
@@ -84,39 +93,52 @@ export namespace CloudflareAuth {
     "zone:read",
     "offline_access",
   ];
+  export const DEFAULT_SCOPES = [
+    "account:read",
+    "user:read",
+    "workers:write",
+    "workers_kv:write",
+    "workers_routes:write",
+    "workers_scripts:write",
+    "workers_tail:read",
+    "d1:write",
+    "pages:write",
+    "zone:read",
+    "ssl_certs:write",
+    "ai:write",
+    "queues:write",
+    "pipelines:write",
+    "secrets_store:write",
+    "containers:write",
+    "cloudchamber:write",
+  ];
 
   /**
    * Format Cloudflare credentials as headers, refreshing OAuth credentials if expired.
    * Uses `singleFlight` to avoid making multiple concurrent requests to refresh credentials.
    * If the credentials are OAuth, the `profile` is required so we can read and write the updated credentials.
    */
-  export const formatHeadersWithRefresh = singleFlight(
-    async (input: {
-      profile: string | undefined;
-      credentials: Credentials;
-    }) => {
-      // if the credentials are not expired, return them as is
-      if (!Credentials.isOAuthExpired(input.credentials)) {
-        return formatHeaders(input.credentials);
-      }
-      assert(input.profile, "Profile is required");
-      // reload profile in case credentials have already been refreshed
-      const profile = await Profile.get({
+  export const formatHeadersWithRefresh = async (input: {
+    profile: string | undefined;
+    credentials: Credentials;
+  }) => {
+    // if the credentials are not expired, return them as is
+    if (!isOAuthCredentialsExpired(input.credentials)) {
+      return formatHeaders(input.credentials);
+    }
+    assert(input.profile, "Profile is required for OAuth credentials");
+    const credentials = await getRefreshedCredentials(
+      {
         provider: "cloudflare",
         profile: input.profile,
-      });
-      assert(profile, `Cloudflare profile "${input.profile}" not found`);
-      if (Credentials.isOAuthExpired(profile.credentials)) {
-        // refresh credentials and save
-        profile.credentials = await client.refresh(profile.credentials);
-        await Profile.set(
-          { provider: "cloudflare", profile: input.profile },
-          profile,
-        );
-      }
-      return formatHeaders(profile.credentials);
-    },
-  );
+      },
+      async (credentials) => {
+        const { credentials: refreshed } = await client.refresh(credentials);
+        return refreshed;
+      },
+    );
+    return formatHeaders(credentials);
+  };
 
   /**
    * Format Cloudflare credentials as headers.
@@ -128,7 +150,7 @@ export namespace CloudflareAuth {
       case "api-key":
         return {
           "X-Auth-Key": credentials.apiKey,
-          "X-Auth-Email": credentials.apiEmail,
+          "X-Auth-Email": credentials.email,
         };
       case "api-token":
         return { Authorization: `Bearer ${credentials.apiToken}` };
