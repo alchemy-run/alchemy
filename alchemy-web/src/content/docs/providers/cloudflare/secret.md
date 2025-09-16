@@ -97,7 +97,7 @@ const store = await SecretsStore("my-store", {
   adopt: true,
 });
 
-const apiKeyRef = await SecretRef("api-key-ref", {
+const apiKeyRef = await SecretRef({
   name: "API_KEY",
   store,
 });
