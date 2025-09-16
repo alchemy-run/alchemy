@@ -709,7 +709,7 @@ export function Worker<const B extends Bindings>(
   return _Worker(id, props as WorkerProps<B>);
 }
 
-Worker.entrypoint = <RPC extends Rpc.WorkerEntrypointBranded>(
+Worker.experimentalEntrypoint = <RPC extends Rpc.WorkerEntrypointBranded>(
   worker: Worker | WorkerRef | Self,
   entrypoint: string,
 ) => {
