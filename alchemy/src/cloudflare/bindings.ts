@@ -68,9 +68,9 @@ export type Binding =
   | SecretKey
   | string
   | VectorizeIndex
-  | Worker
-  | WorkerStub
-  | WorkerRef
+  | (Worker & { __entrypoint__?: string })
+  | (WorkerStub & { __entrypoint__?: string })
+  | (WorkerRef & { __entrypoint__?: string })
   | Workflow
   | BrowserRendering
   | VersionMetadata
@@ -401,6 +401,8 @@ export interface WorkerBindingService {
   environment?: string;
   /** Service namespace */
   namespace?: string;
+  /** Service entrypoint */
+  entrypoint?: string;
 }
 
 /**

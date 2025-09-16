@@ -58,6 +58,8 @@ import { Workflow, isWorkflow, upsertWorkflow } from "./workflow.ts";
 // Previous versions of `Worker` used the `Bundle` resource.
 // This import is here to avoid errors when destroying the `Bundle` resource.
 import "../esbuild/bundle.ts";
+import type { WorkerRef } from "./worker-ref.ts";
+import type { WorkerStub } from "./worker-stub.ts";
 
 /**
  * Configuration options for static assets
@@ -706,6 +708,20 @@ export function Worker<const B extends Bindings>(
 ): Promise<Worker<B>> {
   return _Worker(id, props as WorkerProps<B>);
 }
+
+Worker.entrypoint = <RPC extends Rpc.WorkerEntrypointBranded>(
+  worker: Worker | WorkerRef | WorkerStub,
+  entrypoint: string,
+) => {
+  return {
+    ...worker,
+    // we rename the entrypoint in order to prevent collisions with entrypoint on Worker
+    __entrypoint__: entrypoint,
+  } as (Worker | WorkerRef | WorkerStub) & {
+    __entrypoint__?: string;
+    __rpc__?: RPC;
+  };
+};
 
 const _Worker = Resource(
   "cloudflare::Worker",
