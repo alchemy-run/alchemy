@@ -32,7 +32,7 @@ describe("SecretRef Resource", () => {
       expect(createdSecret.name).toEqual(testId);
 
       // 2) Reference the existing secret (no value provided)
-      ref = await SecretRef(`${testId}-ref`, {
+      ref = await SecretRef({
         name: testId,
       });
 
@@ -82,5 +82,3 @@ describe("SecretRef Resource", () => {
     }
   });
 });
-
-

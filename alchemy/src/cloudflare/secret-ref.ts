@@ -1,20 +1,19 @@
-import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
-import { createCloudflareApi } from "./api.ts";
-import type { Secret as CloudflareSecret, SecretProps } from "./secret.ts";
+import { createCloudflareApi, type CloudflareApiOptions } from "./api.ts";
 import { findSecretsStoreByName, SecretsStore } from "./secrets-store.ts";
 
 /**
  * Properties for referencing an existing Secret in a Secrets Store (without managing its value)
  */
-export type SecretRefProps = Omit<SecretProps, "value" | "delete">;
+export interface SecretRefProps extends CloudflareApiOptions {
+  name: string;
+  store?: SecretsStore;
+}
 
-/**
- * Output for a Secret reference bound to a Worker. Matches the binding shape used by Cloudflare.
- */
-export interface SecretRef
-  extends Resource<"cloudflare::SecretRef">,
-    Omit<CloudflareSecret, "value"> {}
+export type SecretRef = {
+  type: "secrets_store_secret";
+  name: string;
+  storeId: string;
+};
 
 /**
  * SecretRef references an existing secret by name in a Secrets Store.
@@ -38,56 +37,20 @@ export interface SecretRef
  *   },
  * });
  */
-export function SecretRef(id: string, props: SecretRefProps): Promise<SecretRef> {
-  return _SecretRef(id, props);
+export async function SecretRef(props: SecretRefProps): Promise<SecretRef> {
+  const api = await createCloudflareApi(props);
+
+  const storeId =
+    props.store?.id ??
+    (await findSecretsStoreByName(api, SecretsStore.Default))?.id;
+
+  if (!storeId) {
+    throw new Error(`Secrets store ${SecretsStore.Default} not found`);
+  }
+
+  return {
+    type: "secrets_store_secret",
+    name: props.name,
+    storeId,
+  };
 }
-
-const _SecretRef = Resource(
-  "cloudflare::SecretRef",
-  async function (
-    this: Context<SecretRef>,
-    id: string,
-    props: SecretRefProps,
-  ): Promise<SecretRef> {
-    const api = await createCloudflareApi(props);
-
-    const secretName =
-      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
-
-    if (this.phase === "update" && this.output.name !== secretName) {
-      this.replace();
-    }
-
-    const storeId =
-      props.store?.id ??
-      (await findSecretsStoreByName(api, SecretsStore.Default))?.id ??
-      (
-        await SecretsStore("default-store", {
-          name: SecretsStore.Default,
-          adopt: true,
-          delete: false,
-        })
-      )?.id!;
-
-    if (this.phase === "delete") {
-      // Reference only – do not delete underlying secret
-      return this.destroy();
-    }
-
-    const createdAt =
-      this.phase === "update"
-        ? this.output?.createdAt || Date.now()
-        : Date.now();
-
-    return this({
-      type: "secrets_store_secret",
-      name: secretName,
-      storeId,
-      store: props.store,
-      createdAt,
-      modifiedAt: Date.now(),
-    });
-  },
-);
-
-
