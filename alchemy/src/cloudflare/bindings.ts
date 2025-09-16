@@ -14,6 +14,7 @@ import type { Container } from "./container.ts";
 import type { D1Database } from "./d1-database.ts";
 import type { DispatchNamespace } from "./dispatch-namespace.ts";
 import type { DurableObjectNamespace } from "./durable-object-namespace.ts";
+import type { HyperdriveRef } from "./hyperdrive-ref.ts";
 import type { Hyperdrive } from "./hyperdrive.ts";
 import type { Images } from "./images.ts";
 import type { KVNamespace } from "./kv-namespace.ts";
@@ -54,6 +55,7 @@ export type Binding =
   | AnalyticsEngineDataset
   | DurableObjectNamespace<any>
   | Hyperdrive
+  | HyperdriveRef
   | Images
   | KVNamespace
   | Pipeline
