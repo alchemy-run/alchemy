@@ -638,7 +638,8 @@ function processBindings(
       services.push({
         binding: bindingName,
         service: "name" in binding ? binding.name : binding.service,
-        entrypoint: binding.__entrypoint__,
+        entrypoint:
+          "__entrypoint__" in binding ? binding.__entrypoint__ : undefined,
       });
     } else if (binding.type === "kv_namespace") {
       // KV Namespace binding
