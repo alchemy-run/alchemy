@@ -59,6 +59,7 @@ import { Workflow, isWorkflow, upsertWorkflow } from "./workflow.ts";
 // Previous versions of `Worker` used the `Bundle` resource.
 // This import is here to avoid errors when destroying the `Bundle` resource.
 import "../esbuild/bundle.ts";
+import { Scope } from "../scope.ts";
 import type { WorkerRef } from "./worker-ref.ts";
 
 /**
@@ -713,6 +714,11 @@ Worker.experimentalEntrypoint = <RPC extends Rpc.WorkerEntrypointBranded>(
   worker: Worker | WorkerRef | Self,
   entrypoint: string,
 ) => {
+  if (Scope.getScope()?.local) {
+    logger.warn(
+      "Worker.experimentalEntrypoint is not supported in local development. See: https://github.com/cloudflare/workers-sdk/issues/10681",
+    );
+  }
   return {
     ...worker,
     // we rename the entrypoint in order to prevent collisions with entrypoint on Worker
