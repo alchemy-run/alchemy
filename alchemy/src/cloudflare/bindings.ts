@@ -68,9 +68,10 @@ export type Binding =
   | SecretKey
   | string
   | VectorizeIndex
-  | (Worker & { __entrypoint__?: string })
-  | (WorkerStub & { __entrypoint__?: string })
-  | (WorkerRef & { __entrypoint__?: string })
+  | Worker
+  | WorkerStub
+  | WorkerRef
+  | WorkerEntrypoint
   | Workflow
   | BrowserRendering
   | VersionMetadata
@@ -87,6 +88,10 @@ export type Self<
 export const Self = {
   type: "cloudflare::Worker::Self",
 } as const;
+
+export type WorkerEntrypoint = (Worker | WorkerRef) & {
+  __entrypoint__?: string;
+};
 
 export type Json<T = any> = {
   type: "json";
