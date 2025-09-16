@@ -50,7 +50,7 @@ Use `SecretRef` to bind an existing secret by name without creating or updating 
 ```ts
 import { SecretRef, Worker } from "alchemy/cloudflare";
 
-const apiKeyRef = await SecretRef("api-key-ref", { name: "API_KEY" });
+const apiKeyRef = await SecretRef({ name: "API_KEY" });
 
 const worker = await Worker("worker", {
   bindings: {
