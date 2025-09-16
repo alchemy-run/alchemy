@@ -33,6 +33,9 @@ export async function Nextjs<const B extends Bindings>(
     );
   }
   return await Website(id, {
+    bundle: {
+      minify: true,
+    },
     ...props,
     entrypoint: props.entrypoint ?? ".open-next/worker.js",
     wrangler: {
