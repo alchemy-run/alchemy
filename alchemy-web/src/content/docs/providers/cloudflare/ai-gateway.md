@@ -53,7 +53,7 @@ const loggingGateway = await AiGateway("logging-gateway", {
 Use the AI Gateway in a Cloudflare Worker:
 
 ```ts
-import { Worker, AiGateway } from "alchemy/cloudflare";
+import { Worker, Ai, AiGateway } from "alchemy/cloudflare";
 
 const gateway = await AiGateway("my-gateway", {
   name: "my-gateway",
@@ -63,7 +63,8 @@ await Worker("my-worker", {
   name: "my-worker",
   script: "console.log('Hello, world!')",
   bindings: {
-    AI: gateway,
+    AI: Ai(),
+    GATEWAY_ID: gateway.id,
   },
 });
 ```
@@ -73,7 +74,7 @@ await Worker("my-worker", {
 Here's a simple example showing how to use AI Gateway in a Cloudflare Worker:
 
 ```ts
-import { Worker, AiGateway } from "alchemy/cloudflare";
+import { Worker, Ai, AiGateway } from "alchemy/cloudflare";
 
 const aiGateway = await AiGateway("chat-gateway", {
   rateLimitingInterval: 60,
@@ -84,7 +85,8 @@ const aiGateway = await AiGateway("chat-gateway", {
 await Worker("chat-worker", {
   entrypoint: "./src/worker.ts",
   bindings: {
-    AI: aiGateway,
+    AI: Ai(),
+    GATEWAY_ID: aiGateway.id,
   },
 });
 ```
@@ -93,11 +95,19 @@ await Worker("chat-worker", {
 // src/worker.ts
 export default {
   async fetch(request, env) {
-    const { message } = await request.json();
+    const { prompt } = await request.json();
 
-    const response = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
-      messages: [{ role: "user", content: message }],
-    });
+    const response = await env.AI.run(
+      "@cf/meta/llama-3.1-8b-instruct-fast",
+      {
+        prompt,
+      },
+      {
+        gateway: {
+          id: env.GATEWAY_ID,
+        },
+      },
+    );
 
     return Response.json({ response: response.response });
   },

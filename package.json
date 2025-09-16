@@ -26,8 +26,9 @@
     "test:all": "ALL_TESTS=1 vitest run",
     "test:fast": "vitest run --exclude ./alchemy/test/create.test.ts --exclude ./alchemy/test/smoke.test.ts --exclude ./alchemy/test/init.test.ts",
     "test:smoke": "bun ./alchemy/test/smoke.ts",
-    "test:create": "vitest run ./alchemy/test/create.test.ts",
-    "test:init": "vitest run ./alchemy/test/init.test.ts",
+    "test:examples": "bun test:smoke -t cloudflare",
+    "test:create": "bun test:smoke -t template",
+    "test:init": "bun test:smoke -t init",
     "test:monorepo": "./scripts/test-monorepo.sh",
     "bump": "bun ./scripts/bump.ts",
     "claude:yolo": "claude --dangerously-skip-permissions",
@@ -46,8 +47,7 @@
       "alchemy",
       "alchemy/templates/*",
       "examples/*",
-      "stacks",
-      "tests/*"
+      "stacks"
     ]
   },
   "devDependencies": {

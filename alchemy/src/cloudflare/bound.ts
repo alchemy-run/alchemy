@@ -1,6 +1,5 @@
 import type {
   Ai,
-  AiGateway,
   AnalyticsEngineDataset,
   D1Database,
   DispatchNamespace,
@@ -21,7 +20,6 @@ import type {
 } from "@cloudflare/workers-types";
 import type { Pipeline } from "cloudflare:pipelines";
 import type { Secret } from "../secret.ts";
-import type { AiGateway as _AiGateway } from "./ai-gateway.ts";
 import type { Ai as _Ai } from "./ai.ts";
 import type { AnalyticsEngineDataset as _AnalyticsEngineDataset } from "./analytics-engine.ts";
 import type { Assets } from "./assets.ts";
@@ -70,53 +68,51 @@ export type Bound<T extends Binding> = T extends _DurableObjectNamespace<
           ? Service
           : T extends _R2Bucket
             ? R2Bucket
-            : T extends _AiGateway
-              ? AiGateway
-              : T extends _Hyperdrive
-                ? Hyperdrive
-                : T extends Secret
-                  ? string
-                  : T extends CloudflareSecret
-                    ? SecretsStoreSecret
-                    : T extends SecretKey
-                      ? CryptoKey
-                      : T extends Assets
-                        ? Service
-                        : T extends _Workflow<infer P>
-                          ? Workflow<P>
-                          : T extends _D1Database
-                            ? D1Database
-                            : T extends DispatchNamespace
-                              ? DispatchNamespace
-                              : T extends _VectorizeIndex
-                                ? VectorizeIndex
-                                : T extends _Queue<infer Body>
-                                  ? Queue<Body>
-                                  : T extends _AnalyticsEngineDataset
-                                    ? AnalyticsEngineDataset
-                                    : T extends _Pipeline<infer R>
-                                      ? Pipeline<R>
-                                      : T extends _RateLimit
-                                        ? RateLimit
-                                        : T extends string
-                                          ? string
-                                          : T extends BrowserRendering
-                                            ? Fetcher
-                                            : T extends _Ai<infer M>
-                                              ? Ai<M>
-                                              : T extends _Images
-                                                ? ImagesBinding
-                                                : T extends _VersionMetadata
-                                                  ? WorkerVersionMetadata
-                                                  : T extends Self
-                                                    ? Service
-                                                    : T extends Json<infer T>
-                                                      ? T
-                                                      : T extends _Container<
-                                                            infer Obj
-                                                          >
-                                                        ? DurableObjectNamespace<
-                                                            Obj &
-                                                              Rpc.DurableObjectBranded
-                                                          >
-                                                        : Service;
+            : T extends _Hyperdrive
+              ? Hyperdrive
+              : T extends Secret
+                ? string
+                : T extends CloudflareSecret
+                  ? SecretsStoreSecret
+                  : T extends SecretKey
+                    ? CryptoKey
+                    : T extends Assets
+                      ? Service
+                      : T extends _Workflow<infer P>
+                        ? Workflow<P>
+                        : T extends _D1Database
+                          ? D1Database
+                          : T extends DispatchNamespace
+                            ? DispatchNamespace
+                            : T extends _VectorizeIndex
+                              ? VectorizeIndex
+                              : T extends _Queue<infer Body>
+                                ? Queue<Body>
+                                : T extends _AnalyticsEngineDataset
+                                  ? AnalyticsEngineDataset
+                                  : T extends _Pipeline<infer R>
+                                    ? Pipeline<R>
+                                    : T extends _RateLimit
+                                      ? RateLimit
+                                      : T extends string
+                                        ? string
+                                        : T extends BrowserRendering
+                                          ? Fetcher
+                                          : T extends _Ai<infer M>
+                                            ? Ai<M>
+                                            : T extends _Images
+                                              ? ImagesBinding
+                                              : T extends _VersionMetadata
+                                                ? WorkerVersionMetadata
+                                                : T extends Self
+                                                  ? Service
+                                                  : T extends Json<infer T>
+                                                    ? T
+                                                    : T extends _Container<
+                                                          infer Obj
+                                                        >
+                                                      ? DurableObjectNamespace<
+                                                          Obj &
+                                                            Rpc.DurableObjectBranded
+                                                        >
+                                                      : Service;

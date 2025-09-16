@@ -66,6 +66,8 @@ export const init = loggedProcedure
       console.error("Failed to initialize Alchemy:", _error);
       throw new ExitSignal(1);
     }
+    // TODO(sam): adding this seemed to stop the CLI from hanging after success (which happens sometimes, not clear why)
+    throw new ExitSignal(0);
   });
 
 function sanitizeProjectName(name: string): string {
@@ -467,7 +469,7 @@ const FRAMEWORK_DEPENDENCIES: Record<TemplateType, DependencyVersionMap[]> = {
   sveltekit: ["alchemy", "@sveltejs/adapter-cloudflare"],
   typescript: ["alchemy"],
   vite: ["alchemy"],
-  astro: ["alchemy"],
+  astro: ["alchemy", "@astrojs/cloudflare"],
   "react-router": ["alchemy", "@cloudflare/vite-plugin"],
   "tanstack-start": ["alchemy"],
   rwsdk: ["alchemy"],
@@ -489,6 +491,7 @@ async function updatePackageJson(context: InitContext): Promise<void> {
 
     const packageJsonPath = resolve(context.cwd, "package.json");
     await safelyUpdateJson(packageJsonPath, (packageJson) => {
+      packageJson.type = "module";
       if (!packageJson.scripts) {
         packageJson.scripts = {};
       }
@@ -726,7 +729,7 @@ export default defineCloudflareConfig({
     );
   }
   await fs.writeFile(
-    resolve(context.cwd, "env.d.ts"),
+    resolve(context.cwd, "./env.d.ts"),
     `// Auto-generated Cloudflare binding types.
 // @see https://alchemy.run/concepts/bindings/#type-safe-bindings
 
@@ -746,7 +749,7 @@ declare module "cloudflare:workers" {
   const tsConfigPath = resolve(context.cwd, "tsconfig.json");
   await updateTsConfig(tsConfigPath, {
     compilerOptions: {
-      types: ["@cloudflare/workers-types", "env.d.ts"],
+      types: ["@cloudflare/workers-types", "./env.d.ts"],
     },
   });
 }

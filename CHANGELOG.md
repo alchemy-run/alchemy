@@ -1,3 +1,18 @@
+## v0.66.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **core**: Support multi-app, interconnected monorepos &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/953 [<samp>(8fdcf)</samp>](https://github.com/sam-goodwin/alchemy/commit/8fdcf883)
+- **stripe**: Bump stripe dependency, remove coupon from Customer &nbsp;-&nbsp; by **Michael K** in https://github.com/sam-goodwin/alchemy/issues/930 [<samp>(a1c0c)</samp>](https://github.com/sam-goodwin/alchemy/commit/a1c0c0e9)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cli**: Fix ./env.d.ts in next.js init script &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(fb401)</samp>](https://github.com/sam-goodwin/alchemy/commit/fb401175)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.65.1...v0.66.0)
+
+---
+
 ## v0.65.1
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes

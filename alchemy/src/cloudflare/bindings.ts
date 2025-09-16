@@ -4,7 +4,6 @@
  * https://developers.cloudflare.com/api/resources/workers/subresources/scripts/methods/update/
  */
 import type { Secret } from "../secret.ts";
-import type { AiGateway } from "./ai-gateway.ts";
 import type { Ai } from "./ai.ts";
 import type { AnalyticsEngineDataset } from "./analytics-engine.ts";
 import type { Assets } from "./assets.ts";
@@ -45,7 +44,6 @@ export declare namespace Bindings {
  */
 export type Binding =
   | Ai
-  | AiGateway
   | Assets
   | Container
   | CloudflareSecret
