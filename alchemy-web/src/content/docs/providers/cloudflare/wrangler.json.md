@@ -17,7 +17,7 @@ const worker = await Worker("api", {
   entrypoint: "./src/index.ts",
 });
 
-await WranglerJson("wrangler", {
+await WranglerJson({
   worker,
 });
 ```
@@ -27,7 +27,7 @@ await WranglerJson("wrangler", {
 Specify a custom path for the wrangler.json file:
 
 ```ts
-await WranglerJson("wrangler", {
+await WranglerJson({
   worker,
   path: "./config/wrangler.dev.json",
 });
@@ -55,7 +55,7 @@ const worker = await Worker("api", {
   },
 });
 
-await WranglerJson("wrangler", {
+await WranglerJson({
   worker,
 });
 ```
@@ -72,7 +72,7 @@ const worker = await Worker("cron", {
   crons: ["*/3 * * * *", "0 15 1 * *", "59 23 LW * *"],
 });
 
-await WranglerJson("wrangler", { worker });
+await WranglerJson({ worker });
 ```
 
 ## With Transform Hook
@@ -80,7 +80,7 @@ await WranglerJson("wrangler", { worker });
 The transform hook allows you to customize the wrangler.json configuration. For example, adding a custom environment variable:
 
 ```ts
-await WranglerJson("my-app", {
+await WranglerJson({
   transform: {
     wrangler: (spec) => ({
       ...spec,
