@@ -58,7 +58,7 @@ export interface CloudflareApiOptions {
  * @returns Promise resolving to a CloudflareApi instance
  */
 export const createCloudflareApi = memoize(
-  async (options: CloudflareApiOptions) => {
+  async (options: CloudflareApiOptions = {}) => {
     const baseUrl = options.baseUrl ?? process.env.CLOUDFLARE_BASE_URL;
     const profile =
       options.profile ??
