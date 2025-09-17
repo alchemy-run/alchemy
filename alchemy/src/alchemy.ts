@@ -85,7 +85,10 @@ export interface Alchemy {
    *   password: process.env.SECRET_PASSPHRASE
    * });
    */
-  (appName: string, options?: Omit<AlchemyOptions, "appName">): Promise<Scope>;
+  (
+    appName: string,
+    options?: Omit<AlchemyOptions, "appName"> & ProviderCredentials,
+  ): Promise<Scope>;
 }
 
 _alchemy.destroy = destroy;
@@ -98,7 +101,7 @@ _alchemy.env = env;
  */
 async function _alchemy(
   appName: string,
-  options?: Omit<AlchemyOptions, "appName">,
+  options?: Omit<AlchemyOptions, "appName"> & ProviderCredentials,
 ): Promise<Scope> {
   const cliArgs = process.argv.slice(2);
   const cliOptions = {
