@@ -18,76 +18,78 @@ export namespace CloudflareAuth {
     name: string;
   };
   export const ALL_SCOPES = {
-    "access:read": "",
-    "access:write": "",
+    // TODO: Verify descriptions marked with `//*`
+    "access:read": "Read Cloudflare Access", //*
+    "access:write": "Write Cloudflare Access", //*
     "account:read":
       "See your account info such as account details, analytics, and memberships.",
-    "agw:read": "",
-    "agw:run": "",
+    "agw:read": "Read API Gateway", //*
+    "agw:run": "Run API Gateway", //*
     "ai:read": "Read access to Workers AI catalog and assets",
     "ai:write": "See and change Workers AI catalog and assets",
-    "aiaudit:read": "",
-    "aiaudit:write": "",
-    "aig:read": "",
-    "aig:write": "",
-    "auditlogs:read": "",
-    "browser:read": "",
-    "browser:write": "",
-    "cfone:read": "",
-    "cfone:write": "",
+    "aiaudit:read": "Read AI Audit", //*
+    "aiaudit:write": "Write AI Audit", //*
+    "aig:read": "Read AI Gateway", //*
+    "aig:write": "Write AI Gateway", //*
+    "auditlogs:read": "Read audit logs", //*
+    "browser:read": "Read Browser", //*
+    "browser:write": "Write Browser", //*
+    "cfone:read": "Read Cloudflare One", //*
+    "cfone:write": "Write Cloudflare One", //*
     "cloudchamber:write": "Manage Cloudchamber",
-    "constellation:write": "",
+    "constellation:write": "Write Constellation", //*
     "containers:write": "Manage Workers Containers",
     "d1:write": "See and change D1 Databases.",
-    "dex:read": "",
-    "dex:write": "",
-    "dns_analytics:read": "",
-    "dns_records:edit": "",
-    "dns_records:read": "",
-    "dns_settings:read": "",
-    "firstpartytags:write": "",
-    "lb:edit": "",
-    "lb:read": "",
-    "logpush:read": "",
-    "logpush:write": "",
-    "notification:read": "",
-    "notification:write": "",
+    "dex:read": "Read DEX", //*
+    "dex:write": "Write DEX", //*
+    "dns_analytics:read": "Read DNS analytics",
+    "dns_records:edit": "Edit DNS records",
+    "dns_records:read": "Read DNS records",
+    "dns_settings:read": "Read DNS settings",
+    "firstpartytags:write": "Write First Party Tags", //*
+    "lb:edit": "Edit Load Balancer", //*
+    "lb:read": "Read Load Balancer", //*
+    "logpush:read": "Read Logpush", //*
+    "logpush:write": "Write Logpush", //*
+    "notification:read": "Read Notifications", //*
+    "notification:write": "Write Notifications", //*
     "pages:read": "Read access to Pages projects, settings, and deployments.",
     "pages:write": "See and change Pages projects, settings, and deployments.",
     "pipelines:read": "Read access to Pipelines configurations and data",
     "pipelines:setup": "Setup access to Pipelines configurations and data",
     "pipelines:write": "See and change Pipelines configurations and data",
-    "query_cache:write": "",
+    "query_cache:write": "Write Query Cache", //*
     "queues:write": "See and change Queues settings and data",
-    "r2_catalog:write": "",
-    "radar:read": "",
-    "rag:read": "",
-    "rag:write": "",
+    "r2_catalog:write": "Write R2 Catalog", //*
+    "radar:read": "Read Radar", //*
+    "rag:read": "Read RAG", //*
+    "rag:write": "Write RAG", //*
     "secrets_store:read":
       "Read access to secrets + stores within the Secrets Store",
     "secrets_store:write":
       "See and change secrets + stores within the Secrets Store",
-    "sso-connector:read": "",
-    "sso-connector:write": "",
+    "sso-connector:read": "Read SSO Connector", //*
+    "sso-connector:write": "Write SSO Connector", //*
     "ssl_certs:write": "See and manage mTLS certificates for your account",
-    "teams:pii": "",
-    "teams:read": "",
-    "teams:secure_location": "",
-    "teams:write": "",
-    "url_scanner:read": "",
-    "url_scanner:write": "",
+    "teams:pii": "Read Teams PII", //*
+    "teams:read": "Read Teams", //*
+    "teams:secure_location": "Read Secure Location", //*
+    "teams:write": "Write Teams", //*
+    "url_scanner:read": "Read URL Scanner", //*
+    "url_scanner:write": "Write URL Scanner", //*
     "user:read":
       "See your user info such as name, email address, and account memberships.",
-    "vectorize:write": "",
+    "vectorize:write": "Write Vectorize", //*
     "workers:write":
       "See and change Cloudflare Workers data such as zones, KV storage, namespaces, scripts, and routes.",
-    "workers_builds:read": "",
-    "workers_builds:write": "",
+    "workers_builds:read": "Read Workers Builds", //*
+    "workers_builds:write": "Write Workers Builds", //*
     "workers_kv:write":
       "See and change Cloudflare Workers KV Storage data such as keys and namespaces.",
-    "workers_observability:read": "",
-    "workers_observability:write": "",
-    "workers_observability_telemetry:write": "",
+    "workers_observability:read": "Read Workers Observability", //*
+    "workers_observability:write": "Write Workers Observability", //*
+    "workers_observability_telemetry:write":
+      "Write Workers Observability Telemetry", //*
     "workers_routes:write":
       "See and change Cloudflare Workers data such as filters and routes.",
     "workers_scripts:write":
