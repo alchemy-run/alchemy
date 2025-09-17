@@ -17,7 +17,7 @@ type Diff =
       deleteFirst?: boolean;
     };
 
-export type Provider<Input, Output> = {
+export type Provider<Input = any, Output = any> = {
   // drives alchemy sync/refresh/adopt
   read?(
     // "my-worker" -> arn:aws:lambda:us-east-1:123456789012:function:my-worker

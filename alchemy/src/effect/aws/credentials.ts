@@ -15,6 +15,7 @@ import {
   fromTokenFile as _fromTokenFile,
   fromWebToken as _fromWebToken,
 } from "@aws-sdk/credential-providers";
+
 import type {
   AwsCredentialIdentity,
   AwsCredentialIdentityProvider,

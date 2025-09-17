@@ -1,34 +1,32 @@
 import * as Effect from "effect/Effect";
+import type { Resource as _Resource } from "./resource.ts";
 
 // A policy is invariant over its allowed actions
 export interface Policy<in out Statements extends Statement = any> {
   readonly statements: Statements[];
 }
 
-export declare namespace Policy {
-  // collapses Policy<A> | Policy<B> | Policy<C> into Policy<A | B | C>
-  export type Normalize<T> = Exclude<T, Policy> | Collect<T>;
+export type Statement<
+  Action extends string = string,
+  Resource extends _Resource = _Resource,
+> = Allow<Action, Resource> | Deny<Action, Resource>;
 
-  // flters out non-Policy types and normalizes the final Policy
-  export type Collect<T> = Policy<
-    Extract<T, Policy>["statements"][number] | Extract<T, Statement>
-  >;
-
-  export type Resources<P extends Policy> = P["statements"][number]["resource"];
-}
-
-export type Statement<Action extends string = string, Resource = any> =
-  | Allow<Action, Resource>
-  | Deny<Action, Resource>;
-
-export interface Allow<Action extends string, Resource, Condition = any> {
+export interface Allow<
+  Action extends string,
+  Resource extends _Resource,
+  Condition = any,
+> {
   effect: "Allow";
   action: Action;
   resource: Resource;
   condition?: Condition;
 }
 
-export interface Deny<Action extends string, Resource, Condition = any> {
+export interface Deny<
+  Action extends string,
+  Resource extends _Resource,
+  Condition = any,
+> {
   effect: "Deny";
   action: Action;
   resource: Resource;

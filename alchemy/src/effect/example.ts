@@ -8,6 +8,7 @@ import * as Lambda from "./aws/function.ts";
 import * as AWS from "./aws/index.ts";
 import * as Queue from "./aws/queue.ts";
 import * as Region from "./aws/region.ts";
+import { plan } from "./plan.ts";
 import * as Policy from "./policy.ts";
 
 // TODO: Michael cares about nested naming
@@ -15,7 +16,7 @@ import * as Policy from "./policy.ts";
 // resource declarations (stateless)
 export class Api extends Lambda.Tag("api", {
   url: true,
-  main: "src/index.default",
+  main: import.meta.file,
 }) {}
 
 export const Message = S.Struct({
@@ -40,10 +41,7 @@ const api = Api.serve((req) =>
 );
 
 // lazy handler definition
-export const handler = api.pipe(
-  Effect.provide(Queue.clientFromEnv),
-  Lambda.toHandler,
-);
+export default api.pipe(Effect.provide(Queue.clientFromEnv), Lambda.toHandler);
 
 const app = App.of({ name: "my-iae-app", stage: "dev" });
 
@@ -56,8 +54,11 @@ export const infra = Lambda.make(
   Api,
   api,
   Policy.of(Queue.SendMessage(Messages)),
-).pipe(Effect.provide(aws), Effect.provide(app));
+);
 
+const updatePlan = plan(infra);
+
+const applied = updatePlan.pipe(Effect.provide(aws), Effect.provide(app));
 // console.log({
 //   url: plan.resources.worker2.url,
 // });

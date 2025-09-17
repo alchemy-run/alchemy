@@ -47,12 +47,26 @@ import { App } from "./app.ts";
 
 // Scrap the "key-value" store on State/Scope
 
+export type ResourceState = {
+  id: string;
+  type: string;
+  status:
+    | "creating"
+    | "created"
+    | "updating"
+    | "updated"
+    | "deleting"
+    | "deleted";
+  props: any;
+  output: any;
+};
+
 export class State extends Context.Tag("AWS::Lambda::State")<
   State,
   {
     listStages(): Effect.Effect<string[], never, never>;
     // stub
-    get(id: string): Effect.Effect<any, never, never>;
+    get(id: string): Effect.Effect<ResourceState | undefined, never, never>;
     set(id: string, value: any): Effect.Effect<void, never, never>;
     delete(id: string): Effect.Effect<void, never, never>;
     list(): Effect.Effect<string[], never, never>;
@@ -65,8 +79,11 @@ export const local = Layer.effect(
   Effect.gen(function* () {
     const app = yield* App;
     return {
+      listStages: Effect.fn(function* () {
+        return [];
+      }),
       get: Effect.fn(function* (id: string) {
-        return {};
+        return undefined;
       }),
       set: Effect.fn(function* (id: string, value: any) {
         return {};
@@ -87,6 +104,9 @@ export const inMemory = Layer.effect(
     const app = yield* App;
     const state = new Map<string, any>();
     return {
+      listStages: Effect.fn(function* () {
+        return [];
+      }),
       get: Effect.fn(function* (id: string) {
         return state.get(id);
       }),
