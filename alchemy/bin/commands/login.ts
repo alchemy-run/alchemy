@@ -109,9 +109,7 @@ export const cloudflareLogin = async (scopes: Set<string>) => {
  * Lists Cloudflare accounts and prompts the user to select one.
  */
 export const promptForCloudflareAccount = async (credentials: Credentials) => {
-  const accounts = await listCloudflareAccounts(
-    CloudflareAuth.formatHeaders(credentials),
-  );
+  const accounts = await listCloudflareAccounts(credentials);
   const account = await select({
     message: "Select an account",
     options: accounts.map((account) => ({

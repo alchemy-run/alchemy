@@ -51,105 +51,65 @@ export interface CloudflareApiOptions {
   email?: string;
 }
 
-declare module "../scope.ts" {
-  interface ProviderCredentials {
-    /**
-     * Cloudflare credentials configuration for this scope.
-     * All Cloudflare resources created within this scope will inherit these credentials
-     * unless overridden at the resource level.
-     */
-    cloudflare?: CloudflareApiOptions;
-  }
-}
-
 /**
  * Creates a CloudflareApi instance with automatic account ID discovery if not provided
  *
  * @param options API options
  * @returns Promise resolving to a CloudflareApi instance
  */
-export const createCloudflareApi = async (
-  options: CloudflareApiOptions = {},
-) => {
-  const scopeOptions = await import("../scope.js").then(
-    ({ Scope }) => Scope.getScope()?.providerCredentials.cloudflare,
-  );
-  return await createCloudflareApiInternal({
-    baseUrl:
-      options.baseUrl ??
-      scopeOptions?.baseUrl ??
-      process.env.CLOUDFLARE_BASE_URL,
-    profile:
+export const createCloudflareApi = memoize(
+  async (options: CloudflareApiOptions) => {
+    const baseUrl = options.baseUrl ?? process.env.CLOUDFLARE_BASE_URL;
+    const profile =
       options.profile ??
-      scopeOptions?.profile ??
       process.env.CLOUDFLARE_PROFILE ??
-      process.env.ALCHEMY_PROFILE,
-    apiKey:
-      (options.apiKey ?? scopeOptions?.apiKey)?.unencrypted ??
-      process.env.CLOUDFLARE_API_KEY,
-    apiToken:
-      (options.apiToken ?? scopeOptions?.apiToken)?.unencrypted ??
-      process.env.CLOUDFLARE_API_TOKEN,
-    accountId:
+      process.env.ALCHEMY_PROFILE;
+    const apiKey =
+      options.apiKey?.unencrypted ?? process.env.CLOUDFLARE_API_KEY;
+    const apiToken =
+      options.apiToken?.unencrypted ?? process.env.CLOUDFLARE_API_TOKEN;
+    const email = options.email ?? process.env.CLOUDFLARE_EMAIL;
+    const accountId =
       options.accountId ??
-      scopeOptions?.accountId ??
       process.env.CLOUDFLARE_ACCOUNT_ID ??
-      process.env.CF_ACCOUNT_ID,
-    email: options.email ?? scopeOptions?.email ?? process.env.CLOUDFLARE_EMAIL,
-  });
-};
+      process.env.CF_ACCOUNT_ID;
 
-const createCloudflareApiInternal = memoize(
-  async (options: {
-    baseUrl?: string;
-    profile?: string;
-    apiToken?: string;
-    apiKey?: string;
-    accountId?: string;
-    email?: string;
-  }) => {
-    if (options.profile) {
+    if (profile) {
       const { provider, credentials } =
         await Provider.getWithCredentials<CloudflareAuth.Metadata>({
           provider: "cloudflare",
-          profile: options.profile,
+          profile,
         });
       return new CloudflareApi({
-        baseUrl: options.baseUrl,
-        profile: options.profile,
+        baseUrl,
+        profile,
         credentials,
         accountId: provider.metadata.id,
       });
     }
 
-    const accountId = async (credentials: Credentials) =>
-      options.accountId ??
-      (await getCloudflareAccountId(CloudflareAuth.formatHeaders(credentials)));
-
-    if (options.apiToken) {
+    if (apiToken) {
       const credentials: Credentials.ApiToken = {
         type: "api-token",
-        apiToken: options.apiToken,
+        apiToken,
       };
       return new CloudflareApi({
-        baseUrl: options.baseUrl,
+        baseUrl,
         credentials,
-        accountId: await accountId(credentials),
+        accountId: accountId ?? (await getCloudflareAccountId(credentials)),
       });
     }
 
-    if (options.apiKey) {
-      const email =
-        options.email ?? (await getUserEmailFromApiKey(options.apiKey));
+    if (apiKey) {
       const credentials: Credentials.ApiKey = {
         type: "api-key",
-        apiKey: options.apiKey,
-        email,
+        apiKey,
+        email: email ?? (await getUserEmailFromApiKey(apiKey)),
       };
       return new CloudflareApi({
         baseUrl: options.baseUrl,
         credentials,
-        accountId: await accountId(credentials),
+        accountId: accountId ?? (await getCloudflareAccountId(credentials)),
       });
     }
 
@@ -160,7 +120,7 @@ const createCloudflareApiInternal = memoize(
           profile: "default",
         });
       return new CloudflareApi({
-        baseUrl: options.baseUrl,
+        baseUrl,
         profile: "default",
         credentials,
         accountId: provider.metadata.id,
@@ -175,6 +135,15 @@ const createCloudflareApiInternal = memoize(
       );
     }
   },
+  (options) =>
+    [
+      options.baseUrl,
+      options.profile,
+      options.apiKey?.unencrypted,
+      options.apiToken?.unencrypted,
+      options.accountId,
+      options.email,
+    ].join("|"),
 );
 
 /**

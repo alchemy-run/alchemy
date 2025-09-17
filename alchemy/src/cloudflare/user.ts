@@ -1,7 +1,9 @@
+import type { Credentials } from "../auth.ts";
 import type { Secret } from "../secret.ts";
 import { logger } from "../util/logger.ts";
 import { memoize } from "../util/memoize.ts";
 import { extractCloudflareResult } from "./api-response.ts";
+import { CloudflareAuth } from "./auth.ts";
 
 export interface CloudflareAccount {
   name: string;
@@ -53,19 +55,19 @@ export interface CloudflareOrganization {
 }
 
 export const listCloudflareAccounts = memoize(
-  async (headers: Record<string, string>): Promise<CloudflareAccount[]> => {
+  async (credentials: Credentials): Promise<CloudflareAccount[]> => {
     return await extractCloudflareResult<CloudflareAccount[]>(
       "get accounts for authorized user",
       fetch("https://api.cloudflare.com/client/v4/accounts", {
-        headers,
+        headers: CloudflareAuth.formatHeaders(credentials),
       }),
     );
   },
 );
 
 export const getCloudflareAccountId = memoize(
-  async (headers: Record<string, string>): Promise<string> => {
-    const accounts = await listCloudflareAccounts(headers);
+  async (credentials: Credentials): Promise<string> => {
+    const accounts = await listCloudflareAccounts(credentials);
     if (!accounts[0]) {
       throw new Error(
         "No accounts found for authorized user. Please make sure you're authenticated (see: https://alchemy.run/guides/cloudflare/) or explicitly set the Cloudflare Account ID (see: https://alchemy.run/guides/cloudflare/#account-id)",

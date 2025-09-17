@@ -1,7 +1,7 @@
-import fs from "node:fs";
-import fsp from "node:fs/promises";
+import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { singleFlight } from "./util/memoize.ts";
 
 namespace Path {
   export const rootDir = path.join(os.homedir(), ".alchemy");
@@ -154,35 +154,38 @@ export namespace Credentials {
   };
 
   export const del = async (props: Props) => {
-    await fsp.unlink(Path.credentialsFile(props.provider, props.profile));
+    await fs.unlink(Path.credentialsFile(props.provider, props.profile));
   };
 
-  export const getRefreshed = async (
-    props: Props,
-    refresh: (credentials: Credentials.OAuth) => Promise<Credentials.OAuth>,
-  ): Promise<Credentials> => {
-    const credentials = await Credentials.get(props);
-    if (!credentials) {
-      throw new Error(
-        `Credentials for provider "${props.provider}" not found in profile "${props.profile}"`,
-      );
-    }
-    if (!Credentials.isOAuthExpired(credentials)) {
-      return credentials;
-    }
-    const key = `${props.provider}-${props.profile}`;
-    if (await Lock.acquire(key)) {
-      try {
-        const refreshed = await refresh(credentials);
-        await Credentials.set(props, refreshed);
-        return refreshed;
-      } finally {
-        await Lock.release(key);
+  export const getRefreshed = singleFlight(
+    async (
+      props: Props,
+      refresh: (credentials: Credentials.OAuth) => Promise<Credentials.OAuth>,
+    ): Promise<Credentials> => {
+      const credentials = await Credentials.get(props);
+      if (!credentials) {
+        throw new Error(
+          `Credentials for provider "${props.provider}" not found in profile "${props.profile}"`,
+        );
       }
-    }
-    await Lock.wait(key);
-    return await Credentials.getRefreshed(props, refresh);
-  };
+      if (!Credentials.isOAuthExpired(credentials)) {
+        return credentials;
+      }
+      const key = `${props.provider}-${props.profile}`;
+      if (await Lock.acquire(key)) {
+        try {
+          const refreshed = await refresh(credentials);
+          await Credentials.set(props, refreshed);
+          return refreshed;
+        } finally {
+          await Lock.release(key);
+        }
+      }
+      await Lock.wait(key);
+      return await Credentials.getRefreshed(props, refresh);
+    },
+    (props) => `${props.provider}:${props.profile}`,
+  );
 
   export const isOAuthExpired = (
     credentials: Credentials,
@@ -198,7 +201,7 @@ export namespace Credentials {
 namespace FS {
   export const readJSON = async <T>(path: string): Promise<T | undefined> => {
     try {
-      const data = await fsp.readFile(path, "utf-8");
+      const data = await fs.readFile(path, "utf-8");
       return JSON.parse(data) as T;
     } catch {
       return undefined;
@@ -206,8 +209,8 @@ namespace FS {
   };
 
   export const writeJSON = async <T>(name: string, data: T) => {
-    await fsp.mkdir(path.dirname(name), { recursive: true });
-    await fsp.writeFile(name, JSON.stringify(data, null, 2), { mode: 0o600 });
+    await fs.mkdir(path.dirname(name), { recursive: true });
+    await fs.writeFile(name, JSON.stringify(data, null, 2), { mode: 0o600 });
   };
 }
 
@@ -224,34 +227,34 @@ namespace Lock {
     const path = Path.lockFile(name);
     const file = await FS.readJSON<File>(path);
     if (file?.pid === process.pid) {
-      await fsp.unlink(path);
+      await fs.unlink(path);
     }
   };
 
   export const acquire = async (name: string): Promise<boolean> => {
     try {
-      create(name);
+      await create(name);
       return true;
     } catch {
       if (await check(name)) {
         return false;
       }
-      await fsp.rm(Path.lockFile(name), { force: true });
+      await fs.rm(Path.lockFile(name), { force: true });
       return await acquire(name);
     }
   };
 
-  const create = (name: string) => {
-    const file: File = {
+  const create = async (name: string) => {
+    const content: File = {
       name,
       pid: process.pid,
       timestamp: Date.now(),
     };
 
-    fs.mkdirSync(Path.lockDir, { recursive: true });
-    const fd = fs.openSync(Path.lockFile(name), "wx");
-    fs.writeSync(fd, JSON.stringify(file));
-    fs.closeSync(fd);
+    await fs.mkdir(Path.lockDir, { recursive: true });
+    const file = await fs.open(Path.lockFile(name), "wx");
+    await file.write(JSON.stringify(content));
+    await file.close();
   };
 
   const check = async (name: string) => {
