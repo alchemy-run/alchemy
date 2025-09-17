@@ -1,10 +1,7 @@
 import { confirm, intro, log, outro } from "@clack/prompts";
 import pc from "picocolors";
 import z from "zod";
-import {
-  delProviderCredentials,
-  getProviderCredentials,
-} from "../../src/auth.ts";
+import { Credentials, Provider } from "../../src/auth.ts";
 import { CloudflareAuth } from "../../src/cloudflare/auth.ts";
 import { authProcedure, CancelSignal } from "../trpc.ts";
 
@@ -33,10 +30,9 @@ export const logout = authProcedure
   )
   .mutation(async ({ input }) => {
     intro(pc.cyan("🧪 Logout"));
-    const value = await getProviderCredentials<CloudflareAuth.Metadata>(
-      input,
-    ).catch(() => undefined);
-    if (!value) {
+    const provider = await Provider.get<CloudflareAuth.Metadata>(input);
+    const credentials = await Credentials.get(input);
+    if (!credentials) {
       outro(
         pc.red(
           `❌ Not logged in to ${input.provider} on profile "${input.profile}".`,
@@ -44,11 +40,12 @@ export const logout = authProcedure
       );
       return;
     }
-    const { provider, credentials } = value;
     log.step(
       [
         `Logging out from provider ${input.provider} on profile "${input.profile}"`,
-        `Account: ${provider.metadata.name} (${provider.metadata.id})`,
+        ...(provider
+          ? [`Account: ${provider.metadata.name} (${provider.metadata.id})`]
+          : []),
         `Credentials: ${credentials.type}`,
       ].join("\n"),
     );
@@ -64,6 +61,6 @@ export const logout = authProcedure
     if (credentials.type === "oauth") {
       await CloudflareAuth.client.revoke(credentials);
     }
-    await delProviderCredentials(input);
+    await Credentials.del(input);
     outro(`✅ Signed out from ${pc.bold(input.provider)}.`);
   });

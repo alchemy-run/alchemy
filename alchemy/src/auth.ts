@@ -13,8 +13,40 @@ namespace Path {
     path.join(credentialsDir, profile, `${provider}.json`);
 }
 
+interface Props {
+  profile: string;
+  provider: string;
+}
+
+interface Config {
+  version: 1;
+  profiles: {
+    [profile: string]: Profile;
+  };
+}
+
+namespace Config {
+  export const read = async () => {
+    const config = await FS.readJSON<Config>(Path.configFile);
+    return config ?? { version: 1, profiles: {} };
+  };
+
+  export const patch = async (updater: (config: Config) => Config) => {
+    const config = await read();
+    const updated = updater(config);
+    await FS.writeJSON<Config>(Path.configFile, updated);
+  };
+}
+
 export interface Profile {
   [provider: string]: Provider;
+}
+
+export namespace Profile {
+  export const get = async (name: string): Promise<Profile | undefined> => {
+    const config = await Config.read();
+    return config.profiles[name];
+  };
 }
 
 export interface Provider<
@@ -23,6 +55,64 @@ export interface Provider<
   metadata: Metadata;
   method: "api-key" | "api-token" | "oauth";
   scopes?: string[];
+}
+
+export namespace Provider {
+  export const get = async <
+    Metadata extends Record<string, string> = Record<string, string>,
+  >(
+    props: Props,
+  ) => {
+    const profile = await Profile.get(props.profile);
+    return profile?.[props.provider] as Provider<Metadata> | undefined;
+  };
+
+  export const getWithCredentials = async <
+    Metadata extends Record<string, string> = Record<string, string>,
+  >(
+    props: Props,
+  ) => {
+    const [provider, credentials] = await Promise.all([
+      Provider.get<Metadata>(props),
+      Credentials.get(props),
+    ]);
+    if (!provider) {
+      throw new Error(
+        `Provider "${props.provider}" not found in profile "${props.profile}". Please run \`alchemy configure -p ${props.profile}\` to configure this provider.`,
+      );
+    }
+    if (!credentials) {
+      throw new Error(
+        `Credentials not found for provider "${props.provider}" and profile "${props.profile}". Please run \`alchemy login ${props.provider}\` to login to this provider.`,
+      );
+    }
+    return { provider, credentials };
+  };
+
+  export const set = async <
+    Metadata extends Record<string, string> = Record<string, string>,
+  >(
+    props: Props,
+    provider: Provider<Metadata>,
+  ) => {
+    await Config.patch((config) => {
+      config.profiles[props.profile] ??= {};
+      config.profiles[props.profile][props.provider] = provider;
+      return config;
+    });
+  };
+
+  export const del = async (props: Props) => {
+    await Config.patch((config) => {
+      if (config.profiles[props.profile]) {
+        delete config.profiles[props.profile][props.provider];
+      }
+      if (Object.keys(config.profiles[props.profile]).length === 0) {
+        delete config.profiles[props.profile];
+      }
+      return config;
+    });
+  };
 }
 
 export type Credentials =
@@ -48,126 +138,61 @@ export namespace Credentials {
     refresh: string;
     expires: number;
   }
-}
 
-interface Props {
-  profile: string;
-  provider: string;
-}
-
-interface AllProfiles {
-  [profile: string]: Profile;
-}
-
-export const getAllProfiles = async () => {
-  const profiles = await FS.readJSON<AllProfiles>(Path.configFile);
-  return profiles ?? {};
-};
-
-export const getProfile = async (
-  name: string,
-): Promise<Profile | undefined> => {
-  const profiles = await getAllProfiles();
-  return profiles[name];
-};
-
-export const getProviderCredentials = async <
-  Metadata extends Record<string, string> = Record<string, string>,
->(
-  props: Props,
-) => {
-  const [profile, credentials] = await Promise.all([
-    getProfile(props.profile),
-    FS.readJSON<Credentials>(
+  export const get = async (props: Props) => {
+    return await FS.readJSON<Credentials>(
       Path.credentialsFile(props.provider, props.profile),
-    ),
-  ]);
-  if (!profile) {
-    throw new Error(`Profile "${props.profile}" not found`);
-  }
-  if (!profile[props.provider]) {
-    throw new Error(
-      `Provider "${props.provider}" not found in profile "${props.profile}"`,
     );
-  }
-  if (!credentials) {
-    throw new Error(
-      `Credentials not found for provider "${props.provider}" and profile "${props.profile}"`,
-    );
-  }
-  return {
-    provider: profile[props.provider] as Provider<Metadata>,
-    credentials,
   };
-};
 
-export const delProviderCredentials = async (props: Props) => {
-  const profiles = await getAllProfiles();
-  delete profiles[props.profile][props.provider];
-  await FS.writeJSON<AllProfiles>(Path.configFile, profiles);
-  await fsp.unlink(Path.credentialsFile(props.provider, props.profile));
-};
+  export const set = async (props: Props, credentials: Credentials) => {
+    await FS.writeJSON<Credentials>(
+      Path.credentialsFile(props.provider, props.profile),
+      credentials,
+    );
+  };
 
-export const getRefreshedCredentials = async (
-  props: Props,
-  refresh: (credentials: Credentials.OAuth) => Promise<Credentials.OAuth>,
-): Promise<Credentials> => {
-  const result = await getProviderCredentials(props);
-  if (!result) {
-    throw new Error("Credentials not found");
-  }
-  if (!isOAuthCredentialsExpired(result.credentials)) {
-    return result.credentials;
-  }
-  const key = `${props.provider}-${props.profile}`;
-  if (await Lock.acquire(key)) {
-    try {
-      const refreshed = await refresh(result.credentials);
-      await setCredentials(props, refreshed);
-      return refreshed;
-    } finally {
-      await Lock.release(key);
+  export const del = async (props: Props) => {
+    await fsp.unlink(Path.credentialsFile(props.provider, props.profile));
+  };
+
+  export const getRefreshed = async (
+    props: Props,
+    refresh: (credentials: Credentials.OAuth) => Promise<Credentials.OAuth>,
+  ): Promise<Credentials> => {
+    const credentials = await Credentials.get(props);
+    if (!credentials) {
+      throw new Error(
+        `Credentials for provider "${props.provider}" not found in profile "${props.profile}"`,
+      );
     }
-  }
-  await Lock.wait(key);
-  return await getRefreshedCredentials(props, refresh);
-};
-
-export const isOAuthCredentialsExpired = (
-  credentials: Credentials,
-  tolerance = 1000 * 10,
-): credentials is Credentials.OAuth => {
-  return (
-    credentials.type === "oauth" && credentials.expires < Date.now() + tolerance
-  );
-};
-
-export const setProviderCredentials = async <
-  Metadata extends Record<string, string> = Record<string, string>,
->(
-  props: Props,
-  data: {
-    credentials: Credentials;
-    provider: Provider<Metadata>;
-  },
-) => {
-  const profiles = await getAllProfiles();
-  profiles[props.profile] = {
-    ...profiles[props.profile],
-    [props.provider]: data.provider,
+    if (!Credentials.isOAuthExpired(credentials)) {
+      return credentials;
+    }
+    const key = `${props.provider}-${props.profile}`;
+    if (await Lock.acquire(key)) {
+      try {
+        const refreshed = await refresh(credentials);
+        await Credentials.set(props, refreshed);
+        return refreshed;
+      } finally {
+        await Lock.release(key);
+      }
+    }
+    await Lock.wait(key);
+    return await Credentials.getRefreshed(props, refresh);
   };
-  await Promise.all([
-    FS.writeJSON<AllProfiles>(Path.configFile, profiles),
-    setCredentials(props, data.credentials),
-  ]);
-};
 
-const setCredentials = async (props: Props, credentials: Credentials) => {
-  await FS.writeJSON<Credentials>(
-    Path.credentialsFile(props.provider, props.profile),
-    credentials,
-  );
-};
+  export const isOAuthExpired = (
+    credentials: Credentials,
+    tolerance = 1000 * 10,
+  ): credentials is Credentials.OAuth => {
+    return (
+      credentials.type === "oauth" &&
+      credentials.expires < Date.now() + tolerance
+    );
+  };
+}
 
 namespace FS {
   export const readJSON = async <T>(path: string): Promise<T | undefined> => {

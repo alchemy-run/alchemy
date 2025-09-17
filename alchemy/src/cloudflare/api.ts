@@ -1,4 +1,4 @@
-import { type Credentials, getProviderCredentials } from "../auth.ts";
+import { Provider, type Credentials } from "../auth.ts";
 import type { Secret } from "../secret.ts";
 import { defaultKeyFn, memoize } from "../util/memoize.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
@@ -72,7 +72,7 @@ export const createCloudflareApi = memoize(
 
     if (profile) {
       const { provider, credentials } =
-        await getProviderCredentials<CloudflareAuth.Metadata>({
+        await Provider.getWithCredentials<CloudflareAuth.Metadata>({
           provider: "cloudflare",
           profile,
         });
@@ -130,7 +130,7 @@ export const createCloudflareApi = memoize(
 
     try {
       const { provider, credentials } =
-        await getProviderCredentials<CloudflareAuth.Metadata>({
+        await Provider.getWithCredentials<CloudflareAuth.Metadata>({
           provider: "cloudflare",
           profile: "default",
         });

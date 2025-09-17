@@ -4,17 +4,14 @@ import {
   intro,
   isCancel,
   log,
+  multiselect,
   outro,
   select,
   text,
 } from "@clack/prompts";
 import pc from "picocolors";
 import z from "zod";
-import {
-  type Credentials,
-  getProfile,
-  setProviderCredentials,
-} from "../../src/auth.ts";
+import { Credentials, Profile, Provider } from "../../src/auth.ts";
 import { CloudflareAuth } from "../../src/cloudflare/auth.ts";
 import { authProcedure, CancelSignal } from "../trpc.ts";
 import { cloudflareLogin, promptForCloudflareAccount } from "./login.ts";
@@ -34,7 +31,7 @@ export const configure = authProcedure
   )
   .mutation(async ({ input }) => {
     intro(pc.cyan(`🧪 Configure profile "${pc.bold(input.profile)}"`));
-    const profile = await getProfile(input.profile);
+    const profile = await Profile.get(input.profile);
     if (profile) {
       log.info(`Profile: ${pc.bold(input.profile)}`);
       for (const [provider, providerProfile] of Object.entries(profile)) {
@@ -78,17 +75,14 @@ export const configure = authProcedure
       throw new CancelSignal();
     }
     const { credentials, scopes } = await promptForCredentials(method);
-    const account = await promptForCloudflareAccount(credentials);
-    await setProviderCredentials(
+    await Credentials.set(
       { profile: input.profile, provider: "cloudflare" },
-      {
-        credentials,
-        provider: {
-          method,
-          metadata: account,
-          scopes,
-        },
-      },
+      credentials,
+    );
+    const account = await promptForCloudflareAccount(credentials);
+    await Provider.set(
+      { profile: input.profile, provider: "cloudflare" },
+      { method, metadata: account, scopes },
     );
     outro(pc.green(`✅ Configured profile ${pc.bold(input.profile)}`));
   });
@@ -106,23 +100,21 @@ const promptForCredentials = async (
       });
       let scopes: string[];
       if (customizeScopes) {
-        const entry = await text({
-          message: "Enter a comma-separated list of scopes",
-          validate: (value) => {
-            const scopes = value.split(",").map((scope) => scope.trim());
-            const invalid = scopes.filter(
-              (scope) => !CloudflareAuth.ALL_SCOPES.includes(scope),
-            );
-            if (invalid.length > 0) {
-              return `Invalid scopes: ${invalid.join(", ")}`;
-            }
-            return undefined;
-          },
+        const entry = await multiselect({
+          message: "Select scopes",
+          options: Object.entries(CloudflareAuth.ALL_SCOPES).map(
+            ([scope, hint]) => ({
+              label: pc.bold(scope),
+              value: scope,
+              hint,
+            }),
+          ),
+          initialValues: CloudflareAuth.DEFAULT_SCOPES,
         });
         if (isCancel(entry)) {
           throw new CancelSignal();
         }
-        scopes = entry.split(",").map((scope) => scope.trim());
+        scopes = entry;
       } else {
         scopes = CloudflareAuth.DEFAULT_SCOPES;
       }

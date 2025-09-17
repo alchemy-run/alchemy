@@ -2,11 +2,7 @@ import { confirm, intro, isCancel, log, outro, select } from "@clack/prompts";
 import open from "open";
 import pc from "picocolors";
 import z from "zod";
-import {
-  type Credentials,
-  getProviderCredentials,
-  setProviderCredentials,
-} from "../../src/auth.ts";
+import { Credentials, Provider } from "../../src/auth.ts";
 import { CloudflareAuth } from "../../src/cloudflare/auth.ts";
 import { listCloudflareAccounts } from "../../src/cloudflare/user.ts";
 import { authProcedure, CancelSignal } from "../trpc.ts";
@@ -27,50 +23,49 @@ export const login = authProcedure
         .default("default")
         .meta({ alias: "p" })
         .describe("the profile to login to"),
-      scopes: z
-        .array(z.string())
-        .optional()
-        .meta({ alias: "s" })
-        .describe("the scopes to login with"),
-      excludeDefaultScopes: z
-        .boolean()
-        .default(false)
-        .meta({ alias: "e" })
-        .describe("exclude default scopes"),
     }),
   )
   .mutation(async ({ input }) => {
     intro(pc.cyan("🧪 Login"));
-    const invalidScopes =
-      input.scopes?.filter(
-        (scope) => !CloudflareAuth.ALL_SCOPES.includes(scope),
-      ) ?? [];
-    if (invalidScopes.length > 0) {
-      throw new Error(
-        `Invalid scopes: ${invalidScopes.join(", ")}. Please specify valid scopes.`,
+    const provider = await Provider.get<CloudflareAuth.Metadata>(input);
+    if (!provider) {
+      outro(
+        pc.red(
+          [
+            `❌ ${pc.bold(input.provider)} is not configured on profile "${pc.bold(input.profile)}".`,
+            "Please run `alchemy configure` to configure this provider.",
+          ].join("\n"),
+        ),
       );
+      return;
     }
-    const selectedScopes = input.excludeDefaultScopes
-      ? new Set(input.scopes ?? [])
-      : new Set([...CloudflareAuth.DEFAULT_SCOPES, ...(input.scopes ?? [])]);
-    if (selectedScopes.size === 0) {
-      throw new Error(
-        "No scopes selected. Please specify scopes with --scopes, or remove the --exclude-default-scopes flag.",
+    if (provider.method !== "oauth") {
+      outro(
+        pc.red(
+          [
+            `❌ ${pc.bold(input.provider)} is not configured to use OAuth.`,
+            "If you would like to use OAuth, please run `alchemy configure` to switch your login method.",
+          ].join("\n"),
+        ),
       );
+      return;
+    }
+    if (!provider.scopes || provider.scopes.length === 0) {
+      outro(
+        pc.red(
+          [
+            `❌ ${pc.bold(input.provider)} is not configured with any scopes.`,
+            "Please run `alchemy configure` to configure this provider.",
+          ].join("\n"),
+        ),
+      );
+      return;
     }
     await confirmIfOverwrite(input);
-    const { credentials, scopes } = await cloudflareLogin(selectedScopes);
-    const account = await promptForCloudflareAccount(credentials);
-    await setProviderCredentials<CloudflareAuth.Metadata>(input, {
-      credentials,
-      provider: {
-        metadata: account,
-        method: "oauth",
-        scopes,
-      },
-    });
+    const { credentials } = await cloudflareLogin(new Set(provider.scopes));
+    await Credentials.set(input, credentials);
     outro(
-      `✅ Signed in to ${input.provider} as ${pc.bold(account.name)} ${pc.dim(`(${account.id})`)}`,
+      `✅ Signed in to ${input.provider} as ${pc.bold(provider.metadata.name)} ${pc.dim(`(${provider.metadata.id})`)}`,
     );
   });
 
@@ -78,16 +73,10 @@ const confirmIfOverwrite = async (input: {
   provider: string;
   profile: string;
 }) => {
-  const existing = await getProviderCredentials<CloudflareAuth.Metadata>(
-    input,
-  ).catch(() => undefined);
+  const existing = await Credentials.get(input).catch(() => undefined);
   if (existing) {
     log.step(
-      [
-        `Profile "${input.profile}" already includes provider "${input.provider}".`,
-        `Account: ${existing.provider.metadata.name} (${existing.provider.metadata.id})`,
-        `Credentials: ${existing.credentials.type}`,
-      ].join("\n"),
+      `You are already logged in to ${pc.bold(input.provider)} on profile "${pc.bold(input.profile)}".`,
     );
     const overwrite = await confirm({
       message: "Would you like to overwrite?",
