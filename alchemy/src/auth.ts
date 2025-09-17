@@ -137,6 +137,7 @@ export namespace Credentials {
     access: string;
     refresh: string;
     expires: number;
+    scopes: string[];
   }
 
   export const get = async (props: Props) => {

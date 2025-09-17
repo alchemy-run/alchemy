@@ -74,7 +74,7 @@ export const configure = authProcedure
     if (isCancel(method)) {
       throw new CancelSignal();
     }
-    const { credentials, scopes } = await promptForCredentials(method);
+    const credentials = await promptForCredentials(method);
     await Credentials.set(
       { profile: input.profile, provider: "cloudflare" },
       credentials,
@@ -82,7 +82,11 @@ export const configure = authProcedure
     const account = await promptForCloudflareAccount(credentials);
     await Provider.set(
       { profile: input.profile, provider: "cloudflare" },
-      { method, metadata: account, scopes },
+      {
+        method,
+        metadata: account,
+        scopes: "scopes" in credentials ? credentials.scopes : undefined,
+      },
     );
     outro(pc.green(`✅ Configured profile ${pc.bold(input.profile)}`));
   });
@@ -91,7 +95,7 @@ export const configure = authProcedure
  */
 const promptForCredentials = async (
   method: "oauth" | "api-token" | "api-key",
-): Promise<{ credentials: Credentials; scopes?: string[] }> => {
+): Promise<Credentials> => {
   switch (method) {
     case "oauth": {
       const customizeScopes = await confirm({
@@ -128,10 +132,8 @@ const promptForCredentials = async (
         throw new CancelSignal();
       }
       return {
-        credentials: {
-          type: "api-token",
-          apiToken,
-        },
+        type: "api-token",
+        apiToken,
       };
     }
     case "api-key": {
@@ -153,11 +155,9 @@ const promptForCredentials = async (
         },
       );
       return {
-        credentials: {
-          type: "api-key",
-          apiKey,
-          email,
-        },
+        type: "api-key",
+        apiKey,
+        email,
       };
     }
   }

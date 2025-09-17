@@ -58,10 +58,7 @@ export class OAuthClient {
   /**
    * Exchange an authorization code for credentials.
    */
-  async exchange(
-    code: string,
-    verifier: string,
-  ): Promise<OAuthClient.CredentialsResult> {
+  async exchange(code: string, verifier: string): Promise<Credentials.OAuth> {
     const res = await this.request(this.options.endpoints.token, {
       grant_type: "authorization_code",
       code,
@@ -75,9 +72,7 @@ export class OAuthClient {
   /**
    * Refresh OAuth 2.0 credentials.
    */
-  async refresh(
-    credentials: Credentials.OAuth,
-  ): Promise<OAuthClient.CredentialsResult> {
+  async refresh(credentials: Credentials.OAuth): Promise<Credentials.OAuth> {
     const res = await this.request(this.options.endpoints.token, {
       grant_type: "refresh_token",
       refresh_token: credentials.refresh,
@@ -125,9 +120,9 @@ export class OAuthClient {
    */
   async callback(
     authorization: OAuthClient.Authorization,
-  ): Promise<OAuthClient.CredentialsResult> {
+  ): Promise<Credentials.OAuth> {
     const { pathname, port } = new URL(this.options.redirectUri);
-    const promise = new DeferredPromise<OAuthClient.CredentialsResult>();
+    const promise = new DeferredPromise<Credentials.OAuth>();
     const handle = async (request: Request) => {
       const url = new URL(request.url);
       if (url.pathname !== pathname) {
@@ -214,24 +209,17 @@ export declare namespace OAuthClient {
     state: string;
     verifier: string;
   }
-
-  export interface CredentialsResult {
-    credentials: Credentials.OAuth;
-    scopes: string[];
-  }
 }
 
 async function extractCredentialsFromResponse(
   response: Response,
-): Promise<OAuthClient.CredentialsResult> {
+): Promise<Credentials.OAuth> {
   const json = (await response.json()) as OAuthClient.SuccessResponse;
   return {
-    credentials: {
-      type: "oauth",
-      access: json.access_token,
-      refresh: json.refresh_token,
-      expires: Date.now() + json.expires_in * 1000,
-    },
+    type: "oauth",
+    access: json.access_token,
+    refresh: json.refresh_token,
+    expires: Date.now() + json.expires_in * 1000,
     scopes: json.scope.split(" "),
   };
 }

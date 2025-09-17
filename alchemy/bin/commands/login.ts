@@ -62,7 +62,7 @@ export const login = authProcedure
       return;
     }
     await confirmIfOverwrite(input);
-    const { credentials } = await cloudflareLogin(new Set(provider.scopes));
+    const credentials = await cloudflareLogin(new Set(provider.scopes));
     await Credentials.set(input, credentials);
     outro(
       `✅ Signed in to ${input.provider} as ${pc.bold(provider.metadata.name)} ${pc.dim(`(${provider.metadata.id})`)}`,

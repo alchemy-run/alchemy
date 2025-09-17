@@ -140,8 +140,7 @@ export namespace CloudflareAuth {
         profile: input.profile,
       },
       async (credentials) => {
-        const { credentials: refreshed } = await client.refresh(credentials);
-        return refreshed;
+        return await client.refresh(credentials);
       },
     );
     return formatHeaders(credentials);
