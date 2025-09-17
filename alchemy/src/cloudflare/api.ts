@@ -1,6 +1,6 @@
 import { Provider, type Credentials } from "../auth.ts";
 import type { Secret } from "../secret.ts";
-import { defaultKeyFn, memoize } from "../util/memoize.ts";
+import { memoize } from "../util/memoize.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
 import { safeFetch } from "../util/safe-fetch.ts";
 import { CloudflareAuth } from "./auth.ts";
@@ -51,80 +51,105 @@ export interface CloudflareApiOptions {
   email?: string;
 }
 
+declare module "../scope.ts" {
+  interface ProviderCredentials {
+    /**
+     * Cloudflare credentials configuration for this scope.
+     * All Cloudflare resources created within this scope will inherit these credentials
+     * unless overridden at the resource level.
+     */
+    cloudflare?: CloudflareApiOptions;
+  }
+}
+
 /**
  * Creates a CloudflareApi instance with automatic account ID discovery if not provided
  *
  * @param options API options
  * @returns Promise resolving to a CloudflareApi instance
  */
-export const createCloudflareApi = memoize(
-  async (options: CloudflareApiOptions = {}) => {
-    // TODO: Implement scope-level credential resolution similar to AWS
-    // This function should check for scope.providerCredentials.cloudflare
-    // and merge those credentials with the provided options, following
-    // the same three-tier resolution pattern: global → scope → resource
-
-    const baseUrl = options.baseUrl ?? process.env.CLOUDFLARE_BASE_URL;
-    const profile =
+export const createCloudflareApi = async (
+  options: CloudflareApiOptions = {},
+) => {
+  const scopeOptions = await import("../scope.js").then(
+    ({ Scope }) => Scope.getScope()?.providerCredentials.cloudflare,
+  );
+  return await createCloudflareApiInternal({
+    baseUrl:
+      options.baseUrl ??
+      scopeOptions?.baseUrl ??
+      process.env.CLOUDFLARE_BASE_URL,
+    profile:
       options.profile ??
+      scopeOptions?.profile ??
       process.env.CLOUDFLARE_PROFILE ??
-      process.env.ALCHEMY_PROFILE;
+      process.env.ALCHEMY_PROFILE,
+    apiKey:
+      (options.apiKey ?? scopeOptions?.apiKey)?.unencrypted ??
+      process.env.CLOUDFLARE_API_KEY,
+    apiToken:
+      (options.apiToken ?? scopeOptions?.apiToken)?.unencrypted ??
+      process.env.CLOUDFLARE_API_TOKEN,
+    accountId:
+      options.accountId ??
+      scopeOptions?.accountId ??
+      process.env.CLOUDFLARE_ACCOUNT_ID ??
+      process.env.CF_ACCOUNT_ID,
+    email: options.email ?? scopeOptions?.email ?? process.env.CLOUDFLARE_EMAIL,
+  });
+};
 
-    if (profile) {
+const createCloudflareApiInternal = memoize(
+  async (options: {
+    baseUrl?: string;
+    profile?: string;
+    apiToken?: string;
+    apiKey?: string;
+    accountId?: string;
+    email?: string;
+  }) => {
+    if (options.profile) {
       const { provider, credentials } =
         await Provider.getWithCredentials<CloudflareAuth.Metadata>({
           provider: "cloudflare",
-          profile,
+          profile: options.profile,
         });
       return new CloudflareApi({
-        baseUrl,
-        profile,
+        baseUrl: options.baseUrl,
+        profile: options.profile,
         credentials,
         accountId: provider.metadata.id,
       });
     }
 
-    const apiToken =
-      options.apiToken?.unencrypted ?? process.env.CLOUDFLARE_API_TOKEN;
-    const accountId = async (headers: Record<string, string>) =>
+    const accountId = async (credentials: Credentials) =>
       options.accountId ??
-      process.env.CF_ACCOUNT_ID ??
-      process.env.CLOUDFLARE_ACCOUNT_ID ??
-      (await getCloudflareAccountId(headers));
+      (await getCloudflareAccountId(CloudflareAuth.formatHeaders(credentials)));
 
-    if (apiToken) {
+    if (options.apiToken) {
       const credentials: Credentials.ApiToken = {
         type: "api-token",
-        apiToken,
+        apiToken: options.apiToken,
       };
       return new CloudflareApi({
-        baseUrl,
+        baseUrl: options.baseUrl,
         credentials,
-        accountId: await accountId({
-          Authorization: `Bearer ${apiToken}`,
-        }),
+        accountId: await accountId(credentials),
       });
     }
 
-    const apiKey =
-      options.apiKey?.unencrypted ?? process.env.CLOUDFLARE_API_KEY;
-    if (apiKey) {
+    if (options.apiKey) {
       const email =
-        options.email ??
-        process.env.CLOUDFLARE_EMAIL ??
-        (await getUserEmailFromApiKey(apiKey));
+        options.email ?? (await getUserEmailFromApiKey(options.apiKey));
       const credentials: Credentials.ApiKey = {
         type: "api-key",
-        apiKey,
+        apiKey: options.apiKey,
         email,
       };
       return new CloudflareApi({
-        baseUrl,
+        baseUrl: options.baseUrl,
         credentials,
-        accountId: await accountId({
-          "X-Auth-Key": apiKey,
-          "X-Auth-Email": email,
-        }),
+        accountId: await accountId(credentials),
       });
     }
 
@@ -135,7 +160,7 @@ export const createCloudflareApi = memoize(
           profile: "default",
         });
       return new CloudflareApi({
-        baseUrl,
+        baseUrl: options.baseUrl,
         profile: "default",
         credentials,
         accountId: provider.metadata.id,
@@ -150,15 +175,6 @@ export const createCloudflareApi = memoize(
       );
     }
   },
-  (options) =>
-    defaultKeyFn({
-      baseUrl: options?.baseUrl,
-      profile: options?.profile,
-      apiKey: options?.apiKey,
-      apiToken: options?.apiToken,
-      email: options?.email,
-      accountId: options?.accountId,
-    }),
 );
 
 /**
