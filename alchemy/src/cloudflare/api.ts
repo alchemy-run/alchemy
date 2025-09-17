@@ -135,7 +135,7 @@ export const createCloudflareApi = memoize(
       );
     }
   },
-  (options) =>
+  (options = {}) =>
     [
       options.baseUrl,
       options.profile,
