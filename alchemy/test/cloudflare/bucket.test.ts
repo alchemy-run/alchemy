@@ -355,7 +355,10 @@ describe("R2 Bucket Resource", async () => {
       });
 
       await new Promise((r) => setTimeout(r, 1000));
-      const rules = await getBucketLifecycleRules(api, bucketName, bucket);
+      const rules = await getBucketLifecycleRules(api, bucketName, {
+        ...bucket,
+        delete: true,
+      });
 
       const ids = rules.map((r: any) => r.id).filter(Boolean);
       expect(ids).toContain("abort-mpu-7d");
@@ -369,7 +372,10 @@ describe("R2 Bucket Resource", async () => {
         lifecycle: [],
       });
       await new Promise((r) => setTimeout(r, 1000));
-      const cleared = await getBucketLifecycleRules(api, bucketName, bucket);
+      const cleared = await getBucketLifecycleRules(api, bucketName, {
+        ...bucket,
+        delete: true,
+      });
       expect(cleared.length).toEqual(0);
     } finally {
       await destroy(scope);
@@ -404,7 +410,10 @@ describe("R2 Bucket Resource", async () => {
       });
 
       await new Promise((r) => setTimeout(r, 1000));
-      const rules = await getBucketLockRules(api, bucketName, bucket);
+      const rules = await getBucketLockRules(api, bucketName, {
+        ...bucket,
+        delete: true,
+      });
 
       const ids = rules.map((r: any) => r.id).filter(Boolean);
       expect(ids).toContain("retain-7d");
@@ -418,7 +427,10 @@ describe("R2 Bucket Resource", async () => {
         lock: [],
       });
       await new Promise((r) => setTimeout(r, 1000));
-      const cleared = await getBucketLockRules(api, bucketName, bucket);
+      const cleared = await getBucketLockRules(api, bucketName, {
+        ...bucket,
+        delete: true,
+      });
       expect(cleared.length).toEqual(0);
     } finally {
       await destroy(scope);
