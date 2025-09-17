@@ -122,7 +122,6 @@ export namespace CloudflareAuth {
 
   /**
    * Format Cloudflare credentials as headers, refreshing OAuth credentials if expired.
-   * Uses `singleFlight` to avoid making multiple concurrent requests to refresh credentials.
    * If the credentials are OAuth, the `profile` is required so we can read and write the updated credentials.
    */
   export const formatHeadersWithRefresh = async (input: {

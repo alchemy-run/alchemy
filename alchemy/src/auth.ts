@@ -140,12 +140,21 @@ export namespace Credentials {
     scopes: string[];
   }
 
+  /**
+   * Gets the credentials file.
+   * @param props The profile and provider of the credentials.
+   */
   export const get = async (props: Props) => {
     return await FS.readJSON<Credentials>(
       Path.credentialsFile(props.provider, props.profile),
     );
   };
 
+  /**
+   * Sets the credentials file.
+   * @param props The profile and provider of the credentials.
+   * @param credentials The credentials to set.
+   */
   export const set = async (props: Props, credentials: Credentials) => {
     await FS.writeJSON<Credentials>(
       Path.credentialsFile(props.provider, props.profile),
@@ -153,10 +162,21 @@ export namespace Credentials {
     );
   };
 
+  /**
+   * Deletes the credentials file.
+   * @param props The profile and provider of the credentials.
+   */
   export const del = async (props: Props) => {
     await fs.unlink(Path.credentialsFile(props.provider, props.profile));
   };
 
+  /**
+   * Gets refreshed OAuth credentials.
+   * Uses `singleFlight` and `Lock` to avoid making multiple concurrent requests to refresh credentials.
+   * @param props The properties of the credentials.
+   * @param refresh The function to refresh the credentials.
+   * @returns The refreshed credentials.
+   */
   export const getRefreshed = singleFlight(
     async (
       props: Props,
@@ -187,6 +207,9 @@ export namespace Credentials {
     (props) => `${props.provider}:${props.profile}`,
   );
 
+  /**
+   * Returns true if the given credentials are OAuth and expired.
+   */
   export const isOAuthExpired = (
     credentials: Credentials,
     tolerance = 1000 * 10,
@@ -223,14 +246,15 @@ namespace Lock {
     timestamp: number;
   }
 
-  export const release = async (name: string) => {
-    const path = Path.lockFile(name);
-    const file = await FS.readJSON<File>(path);
-    if (file?.pid === process.pid) {
-      await fs.unlink(path);
-    }
-  };
-
+  /**
+   * Acquires a lock on a resource.
+   *
+   * WARNING: This function uses async io, so it is not thread-safe within a single process.
+   * Use a `singleFlight` or mutex to ensure thread-safety.
+   *
+   * @param name The name of the resource to lock.
+   * @returns True if the lock was acquired, false if it was already held by another process.
+   */
   export const acquire = async (name: string): Promise<boolean> => {
     try {
       await create(name);
@@ -241,6 +265,32 @@ namespace Lock {
       }
       await fs.rm(Path.lockFile(name), { force: true });
       return await acquire(name);
+    }
+  };
+
+  /**
+   * Releases a lock on a resource if the lock is held by the current process.
+   * @param name The name of the resource to release.
+   */
+  export const release = async (name: string) => {
+    const path = Path.lockFile(name);
+    const file = await FS.readJSON<File>(path);
+    if (file?.pid === process.pid) {
+      await fs.unlink(path);
+    }
+  };
+
+  /**
+   * Waits for a lock on a resource to be released.
+   * @param name The name of the resource to wait for.
+   */
+  export const wait = async (name: string) => {
+    while (true) {
+      if (await check(name)) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      } else {
+        return;
+      }
     }
   };
 
@@ -261,17 +311,7 @@ namespace Lock {
     const file = await FS.readJSON<File>(Path.lockFile(name));
     if (!file) return false;
     if (!isPidActive(file.pid)) return false;
-    return file.timestamp > Date.now() - STALE;
-  };
-
-  export const wait = async (name: string) => {
-    while (true) {
-      if (await check(name)) {
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      } else {
-        return;
-      }
-    }
+    return Date.now() > file.timestamp + STALE;
   };
 
   const isPidActive = (pid: number) => {
