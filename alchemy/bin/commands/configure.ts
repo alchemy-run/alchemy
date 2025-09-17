@@ -6,6 +6,7 @@ import {
   log,
   multiselect,
   outro,
+  password,
   select,
   text,
 } from "@clack/prompts";
@@ -24,16 +25,17 @@ export const configure = authProcedure
     z.object({
       profile: z
         .string()
-        .default("default")
+        .optional()
         .meta({ alias: "p" })
         .describe("the profile to configure"),
     }),
   )
   .mutation(async ({ input }) => {
-    intro(pc.cyan(`🧪 Configure profile "${pc.bold(input.profile)}"`));
-    const profile = await Profile.get(input.profile);
+    intro(pc.cyan("🧪 Configure Profile"));
+    const name = await promptForProfileName(input);
+    const profile = await Profile.get(name);
     if (profile) {
-      log.info(`Profile: ${pc.bold(input.profile)}`);
+      log.info(`Profile: ${pc.bold(name)}`);
       for (const [provider, providerProfile] of Object.entries(profile)) {
         const description = [
           `- ${pc.bold(provider)}: ${providerProfile.metadata.name} (${pc.dim(providerProfile.metadata.id)})`,
@@ -46,17 +48,8 @@ export const configure = authProcedure
       }
       if (
         (await confirm({
-          message: `Update profile ${pc.bold(input.profile)}?`,
+          message: `Update profile ${pc.bold(name)}?`,
           initialValue: false,
-        })) !== true
-      ) {
-        throw new CancelSignal();
-      }
-    } else {
-      if (
-        (await confirm({
-          message: `Create profile ${pc.bold(input.profile)}?`,
-          initialValue: true,
         })) !== true
       ) {
         throw new CancelSignal();
@@ -66,7 +59,7 @@ export const configure = authProcedure
       message: `Select a login method for ${pc.bold("Cloudflare")}`,
       options: [
         { label: "OAuth", value: "oauth", hint: "Recommended" },
-        { label: "Token", value: "api-token" },
+        { label: "API Token", value: "api-token" },
         { label: "API Key", value: "api-key", hint: "Legacy" },
       ],
       initialValue: "oauth" as const,
@@ -76,20 +69,37 @@ export const configure = authProcedure
     }
     const credentials = await promptForCredentials(method);
     await Credentials.set(
-      { profile: input.profile, provider: "cloudflare" },
+      { profile: name, provider: "cloudflare" },
       credentials,
     );
     const account = await promptForCloudflareAccount(credentials);
     await Provider.set(
-      { profile: input.profile, provider: "cloudflare" },
+      { profile: name, provider: "cloudflare" },
       {
         method,
         metadata: account,
         scopes: "scopes" in credentials ? credentials.scopes : undefined,
       },
     );
-    outro(pc.green(`✅ Configured profile ${pc.bold(input.profile)}`));
+    outro(pc.green(`✅ Configured profile ${pc.bold(name)}`));
   });
+
+const promptForProfileName = async (input: { profile?: string }) => {
+  input.profile = input.profile?.trim();
+  if (input.profile) {
+    return input.profile;
+  }
+  const name = await text({
+    message: "Enter profile name",
+    defaultValue: "default",
+    placeholder: "default",
+  });
+  if (isCancel(name)) {
+    throw new CancelSignal();
+  }
+  return name.trim() || "default";
+};
+
 /**
  * Prompts the user to enter credentials for a given method.
  */
@@ -125,7 +135,7 @@ const promptForCredentials = async (
       return await cloudflareLogin(new Set(scopes));
     }
     case "api-token": {
-      const apiToken = await text({
+      const apiToken = await password({
         message: "Enter API token",
       });
       if (isCancel(apiToken)) {
@@ -140,7 +150,7 @@ const promptForCredentials = async (
       const { apiKey, email } = await group(
         {
           apiKey: () =>
-            text({
+            password({
               message: "Enter API key",
             }),
           email: () =>
