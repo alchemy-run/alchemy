@@ -1,10 +1,9 @@
-import { confirm, intro, isCancel, log, outro, select } from "@clack/prompts";
+import { confirm, intro, log, outro } from "@clack/prompts";
 import open from "open";
 import pc from "picocolors";
 import z from "zod";
 import { Credentials, Provider } from "../../src/auth.ts";
 import { CloudflareAuth } from "../../src/cloudflare/auth.ts";
-import { listCloudflareAccounts } from "../../src/cloudflare/user.ts";
 import { authProcedure, CancelSignal } from "../trpc.ts";
 
 export const login = authProcedure
@@ -62,7 +61,7 @@ export const login = authProcedure
       return;
     }
     await confirmIfOverwrite(input);
-    const credentials = await cloudflareLogin(new Set(provider.scopes));
+    const credentials = await cloudflareLogin(provider.scopes);
     await Credentials.set(input, credentials);
     outro(
       `✅ Signed in to ${input.provider} as ${pc.bold(provider.metadata.name)} ${pc.dim(`(${provider.metadata.id})`)}`,
@@ -88,9 +87,11 @@ const confirmIfOverwrite = async (input: {
   }
 };
 
-export const cloudflareLogin = async (scopes: Set<string>) => {
-  scopes.add("offline_access"); // required for refresh tokens
-  const authorization = CloudflareAuth.client.authorize(Array.from(scopes));
+export const cloudflareLogin = async (scopes: string[]) => {
+  const authorization = CloudflareAuth.client.authorize([
+    ...scopes,
+    "offline_access", // required for refresh tokens
+  ]);
   log.step(
     [
       "Opening browser to authorize with Cloudflare...",
@@ -103,23 +104,4 @@ export const cloudflareLogin = async (scopes: Set<string>) => {
   );
   await open(authorization.url);
   return await CloudflareAuth.client.callback(authorization);
-};
-
-/**
- * Lists Cloudflare accounts and prompts the user to select one.
- */
-export const promptForCloudflareAccount = async (credentials: Credentials) => {
-  const accounts = await listCloudflareAccounts(credentials);
-  const account = await select({
-    message: "Select an account",
-    options: accounts.map((account) => ({
-      label: account.name,
-      value: { id: account.id, name: account.name },
-      hint: account.id,
-    })),
-  });
-  if (isCancel(account)) {
-    throw new CancelSignal();
-  }
-  return account;
 };

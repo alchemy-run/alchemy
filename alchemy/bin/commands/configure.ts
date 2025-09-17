@@ -14,8 +14,9 @@ import pc from "picocolors";
 import z from "zod";
 import { Credentials, Profile, Provider } from "../../src/auth.ts";
 import { CloudflareAuth } from "../../src/cloudflare/auth.ts";
+import { listCloudflareAccounts } from "../../src/cloudflare/user.ts";
 import { authProcedure, CancelSignal } from "../trpc.ts";
-import { cloudflareLogin, promptForCloudflareAccount } from "./login.ts";
+import { cloudflareLogin } from "./login.ts";
 
 export const configure = authProcedure
   .meta({
@@ -114,7 +115,7 @@ const promptForCredentials = async (
       });
       let scopes: string[];
       if (customizeScopes) {
-        const entry = await multiselect({
+        const selection = await multiselect({
           message: "Select scopes",
           options: Object.entries(CloudflareAuth.ALL_SCOPES).map(
             ([scope, hint]) => ({
@@ -125,14 +126,14 @@ const promptForCredentials = async (
           ),
           initialValues: CloudflareAuth.DEFAULT_SCOPES,
         });
-        if (isCancel(entry)) {
+        if (isCancel(selection)) {
           throw new CancelSignal();
         }
-        scopes = entry;
+        scopes = selection;
       } else {
         scopes = CloudflareAuth.DEFAULT_SCOPES;
       }
-      return await cloudflareLogin(new Set(scopes));
+      return await cloudflareLogin(scopes);
     }
     case "api-token": {
       const apiToken = await password({
@@ -171,4 +172,23 @@ const promptForCredentials = async (
       };
     }
   }
+};
+
+/**
+ * Lists Cloudflare accounts and prompts the user to select one.
+ */
+export const promptForCloudflareAccount = async (credentials: Credentials) => {
+  const accounts = await listCloudflareAccounts(credentials);
+  const account = await select({
+    message: "Select an account",
+    options: accounts.map((account) => ({
+      label: account.name,
+      value: { id: account.id, name: account.name },
+      hint: account.id,
+    })),
+  });
+  if (isCancel(account)) {
+    throw new CancelSignal();
+  }
+  return account;
 };
