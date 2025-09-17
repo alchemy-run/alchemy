@@ -76,14 +76,15 @@ export namespace Provider {
       Provider.get<Metadata>(props),
       Credentials.get(props),
     ]);
+    const suffix = props.profile !== "default" ? ` -p ${props.profile}` : "";
     if (!provider) {
       throw new Error(
-        `Provider "${props.provider}" not found in profile "${props.profile}". Please run \`alchemy configure -p ${props.profile}\` to configure this provider.`,
+        `Provider "${props.provider}" not found in profile "${props.profile}". Please run \`alchemy configure${suffix}\` to configure this provider.`,
       );
     }
     if (!credentials) {
       throw new Error(
-        `Credentials not found for provider "${props.provider}" and profile "${props.profile}". Please run \`alchemy login ${props.provider}\` to login to this provider.`,
+        `Credentials not found for provider "${props.provider}" and profile "${props.profile}". Please run \`alchemy login ${props.provider}${suffix}\` to login to this provider.`,
       );
     }
     return { provider, credentials };
