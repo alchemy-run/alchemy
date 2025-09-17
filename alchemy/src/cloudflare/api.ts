@@ -60,10 +60,6 @@ export interface CloudflareApiOptions {
 export const createCloudflareApi = memoize(
   async (options: CloudflareApiOptions = {}) => {
     const baseUrl = options.baseUrl ?? process.env.CLOUDFLARE_BASE_URL;
-    const profile =
-      options.profile ??
-      process.env.CLOUDFLARE_PROFILE ??
-      process.env.ALCHEMY_PROFILE;
     const apiKey =
       options.apiKey?.unencrypted ?? process.env.CLOUDFLARE_API_KEY;
     const apiToken =
@@ -74,15 +70,15 @@ export const createCloudflareApi = memoize(
       process.env.CLOUDFLARE_ACCOUNT_ID ??
       process.env.CF_ACCOUNT_ID;
 
-    if (profile) {
+    if (options.profile) {
       const { provider, credentials } =
         await Provider.getWithCredentials<CloudflareAuth.Metadata>({
           provider: "cloudflare",
-          profile,
+          profile: options.profile,
         });
       return new CloudflareApi({
         baseUrl,
-        profile,
+        profile: options.profile,
         credentials,
         accountId: provider.metadata.id,
       });
@@ -114,14 +110,18 @@ export const createCloudflareApi = memoize(
     }
 
     try {
+      const profile =
+        process.env.CLOUDFLARE_PROFILE ??
+        process.env.ALCHEMY_PROFILE ??
+        "default";
       const { provider, credentials } =
         await Provider.getWithCredentials<CloudflareAuth.Metadata>({
           provider: "cloudflare",
-          profile: "default",
+          profile,
         });
       return new CloudflareApi({
         baseUrl,
-        profile: "default",
+        profile,
         credentials,
         accountId: provider.metadata.id,
       });
