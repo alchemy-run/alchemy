@@ -67,7 +67,7 @@ You can explicitly set an `apiToken` when creating a Cloudflare Resource, such a
 
 ```ts
 await Worker("my-worker", {
-  apiToken: alchemy.secret(process.env.MY_TOKEN).
+ apiToken: alchemy.secret(process.env.MY_TOKEN).
 	accountId: process.env.MY_ACCOUNT_ID
 });
 ```
