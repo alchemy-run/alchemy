@@ -365,3 +365,36 @@ alchemy create my-app --overwrite
 alchemy create my-app --no-install
 ```
 :::
+
+## `configure`
+
+```sh
+alchemy configure [options]
+```
+
+Configure the login method for a cloud provider.
+
+- `-p, --profile` - The profile to configure (default: `default`)
+- `-h, --help` - Display help for command
+
+## `login`
+
+```sh
+alchemy login [options]
+```
+
+Login to a configured cloud provider. Run `alchemy configure` to configure a provider.
+
+- `-p, --profile` - The profile to login to (default: `default`)
+- `-h, --help` - Display help for command
+
+## `logout`
+
+```sh
+alchemy logout [options]
+```
+
+Logout of a configured cloud provider.
+
+- `-p, --profile` - The profile to logout from (default: `default`)
+- `-h, --help` - Display help for command
