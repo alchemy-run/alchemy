@@ -25,6 +25,11 @@ export function memoize<F extends (...args: any[]) => Promise<any>>(
   };
 }
 
+/**
+ * Single flight memoization.
+ * Ensures only one instance of the function is executed at a time.
+ * If another instance is already executing, returns the in-flight promise.
+ */
 export function singleFlight<F extends (...args: any[]) => Promise<any>>(
   fn: F,
   keyFn: (...args: Parameters<F>) => string = defaultKeyFn,
