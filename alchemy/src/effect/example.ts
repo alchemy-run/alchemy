@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
 import * as App from "./app.ts";
+import { apply } from "./apply.ts";
 import * as Credentials from "./aws/credentials.ts";
 import * as Lambda from "./aws/function.ts";
 import * as AWS from "./aws/index.ts";
@@ -56,9 +57,16 @@ export const apiHandler = Lambda.make(
   Policy.of(Queue.SendMessage(Messages)),
 );
 
-const updatePlan = plan(apiHandler);
+const updatePlan = plan(apiHandler).pipe(
+  Effect.provide(aws),
+  Effect.provide(app),
+);
 
-const applied = updatePlan.pipe(Effect.provide(aws), Effect.provide(app));
+const applied = apply(updatePlan);
+
+const resources = await Effect.runPromise(applied);
+
+console.log(resources.messages.queueName);
 
 // console.log({
 //   url: plan.resources.worker2.url,

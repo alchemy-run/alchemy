@@ -9,7 +9,7 @@ import * as Layer from "effect/Layer";
 import { Lambda as LambdaClient } from "itty-aws/lambda";
 import { App } from "../app.ts";
 import type { Bound } from "../binding.ts";
-import type { AttachAction, BindingAction, Materialized } from "../plan.ts";
+import type { AttachAction, BindingAction } from "../plan.ts";
 import { allow, type Allow, type Policy, type Statement } from "../policy.ts";
 import type { Provider as ResourceProvider } from "../provider.ts";
 import type { Resource } from "../resource.ts";
@@ -57,10 +57,12 @@ export type Arn<Self> = ArnTag<Self, FunctionArn>;
 export type FunctionLike<
   ID extends string = string,
   P extends Props = Props,
-> = Resource<Type, ID, P> & {
+> = Resource<Type, ID, P, Attributes<ID, P>, typeof Provider> & {
   type: Type;
   arn<Self>(this: Self): Effect.Effect<FunctionArn, never, Arn<Self>>;
   provider: Provider;
+  /** @internal phantom type */
+  attributes: Attributes<ID, P>;
 };
 
 // TODO(sam): implement
@@ -100,6 +102,8 @@ export const Tag = <ID extends string, P extends Props>(
     id,
     props,
     provider: Provider,
+    // phantom
+    attributes: undefined! as Attributes<ID, P>,
   }) as any as Function<ID, P>;
 
 export class Client extends Context.Tag("AWS::Lambda")<
@@ -146,7 +150,7 @@ export const provider = Layer.effect(
       policyName: string;
       functionArn: string;
       functionName: string;
-      bindings: Materialized<BindingAction<Bindable>>[];
+      bindings: BindingAction.Materialized<BindingAction<Bindable>>[];
     }) {
       let env: Record<string, string> = {};
       const policyStatements: IAM.PolicyStatement[] = [];

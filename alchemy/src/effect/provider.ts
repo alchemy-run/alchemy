@@ -1,5 +1,5 @@
 import type * as Effect from "effect/Effect";
-import type { AttachAction, BindingAction, Materialized } from "./plan.ts";
+import type { AttachAction, BindingAction } from "./plan.ts";
 import type { Statement } from "./policy.ts";
 
 // local dev mode as a Layer?
@@ -46,19 +46,19 @@ export type Provider<
   create(input: {
     id: string;
     news: Input;
-    bindings: Materialized<AttachAction<Stmt>>[];
+    bindings: BindingAction.Materialized<AttachAction<Stmt>>[];
   }): Effect.Effect<Output, any, never>;
   update(input: {
     id: string;
     news: Input;
     olds: Input;
     output: Output;
-    bindings: Materialized<BindingAction<Stmt>>[];
+    bindings: BindingAction.Materialized<BindingAction<Stmt>>[];
   }): Effect.Effect<Output, any, never>;
   delete(input: {
     id: string;
     olds: Input;
     output: Output;
-    bindings: Materialized<BindingAction<Stmt>>[];
+    bindings: BindingAction.Materialized<BindingAction<Stmt>>[];
   }): Effect.Effect<void, any, never>;
 };

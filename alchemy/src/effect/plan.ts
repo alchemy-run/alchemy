@@ -19,64 +19,82 @@ export type DetachAction<Stmt extends Statement = Statement> = {
   stmt: Stmt;
 };
 
-export type Materialized<A extends BindingAction> = A & {
-  attributes: A["stmt"]["resource"]["attributes"];
-};
-
 export type BindingAction<Stmt extends Statement = Statement> =
   | AttachAction<Stmt>
   | DetachAction<Stmt>;
 
-export type CreateAction<Stmt extends Statement = Statement> = {
+export declare namespace BindingAction {
+  export type Materialized<A extends BindingAction> = A & {
+    attributes: A["stmt"]["resource"]["attributes"];
+  };
+}
+
+export type Create<R extends Resource> = {
   action: "create";
+  resource: R;
   news: any;
   provider: Provider;
-  bindings?: AttachAction<Stmt>[];
+  bindings?: AttachAction[];
+  attributes: R["attributes"];
 };
 
-export type UpdateAction<Stmt extends Statement = Statement> = {
+export type Update<R extends Resource> = {
   action: "update";
+  resource: R;
   olds: any;
   news: any;
   output: any;
   provider: Provider;
-  bindings?: BindingAction<Stmt>[];
+  bindings?: BindingAction[];
+  attributes: R["attributes"];
 };
 
-export type DeleteAction<Stmt extends Statement = Statement> = {
+export type Delete<R extends Resource> = {
   action: "delete";
+  resource: R;
   olds: any;
   output: any;
   provider: Provider;
-  bindings?: DetachAction<Stmt>[];
+  bindings?: DetachAction[];
+  attributes: R["attributes"];
 };
 
-export type NoopAction = {
+export type Noop<R extends Resource> = {
   action: "noop";
+  resource: R;
+  attributes: R["attributes"];
 };
 
-export type ReplaceAction<Stmt extends Statement = Statement> = {
+export type Replace<R extends Resource> = {
   action: "replace";
+  resource: R;
   olds: any;
   news: any;
   output: any;
   provider: Provider;
-  bindings?: BindingAction<Stmt>[];
+  bindings?: BindingAction[];
+  attributes: R["attributes"];
 };
 
-export type ResourceAction<Stmt extends Statement = Statement> =
-  | CreateAction<Stmt>
-  | UpdateAction<Stmt>
-  | DeleteAction<Stmt>
-  | NoopAction
-  | ReplaceAction<Stmt>;
+export type Materialize<R extends Resource = Resource> =
+  | Create<R>
+  | Update<R>
+  | Delete<R>
+  | Replace<R>
+  | Noop<R>;
+
+export type PhysicalPlan = {
+  [id in string]: Materialize & {
+    attributes: unknown;
+  };
+};
 
 export type Plan = {
-  [id in string]: ResourceAction;
+  [id in string]: Materialize;
 };
 
 export type DeleteOrphans<K extends string | number | symbol> = {
-  [k in Exclude<string, K>]: DeleteAction;
+  [k in Exclude<string, K>]: Delete<Resource>;
 };
 
 export const plan = <
@@ -88,8 +106,12 @@ export const plan = <
   resources: Effect.Effect<Resources, never, Req>,
 ): Effect.Effect<
   {
-    [id in keyof Resources]: ResourceAction;
-  } & DeleteOrphans<keyof Resources>,
+    [id in keyof Resources]: Resources[id] extends Bound<infer From, any>
+      ? Materialize<From>
+      : Resources[id] extends Resource
+        ? Materialize<Resources[id]>
+        : never;
+  }, // & DeleteOrphans<keyof Resources>,
   PlanError,
   | Req
   // extract the providers from the deeply nested resources
@@ -115,6 +137,7 @@ export const plan = <
           all.delete(id);
           const oldState = yield* state.get(id);
 
+          // TODO(sam): handle plain resources (no bindings)
           if (isBound(resource)) {
             const target = resource.target;
 
@@ -128,6 +151,9 @@ export const plan = <
                 action: "create",
                 news: target.props,
                 provider,
+                resource: target,
+                // phantom
+                attributes: undefined!,
               };
             } else if (provider.diff) {
               const diff = yield* provider.diff({
@@ -139,6 +165,9 @@ export const plan = <
               if (diff.action === "noop" && bindingActions.length === 0) {
                 plan[id] = {
                   action: "noop",
+                  resource: target,
+                  // phantom
+                  attributes: undefined!,
                 };
               } else if (diff.action === "replace") {
                 plan[id] = {
@@ -147,6 +176,9 @@ export const plan = <
                   news: target.props,
                   output: oldState.output,
                   provider,
+                  resource: target,
+                  // phantom
+                  attributes: undefined!,
                 };
               } else {
                 plan[id] = {
@@ -156,6 +188,9 @@ export const plan = <
                   output: oldState.output,
                   provider,
                   bindings: bindingActions,
+                  resource: target,
+                  // phantom
+                  attributes: undefined!,
                 };
               }
             } else if (
@@ -169,10 +204,16 @@ export const plan = <
                 output: oldState.output,
                 provider,
                 bindings: bindingActions,
+                resource: target,
+                // phantom
+                attributes: undefined!,
               };
             } else {
               plan[id] = {
                 action: "noop",
+                resource: target,
+                // phantom
+                attributes: undefined!,
               };
             }
           }
@@ -196,7 +237,7 @@ export const plan = <
         );
 
         return plan as {
-          [id in keyof Resources]: ResourceAction;
+          [id in keyof Resources]: any;
         } & DeleteOrphans<keyof Resources>;
       }),
     ),
