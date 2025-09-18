@@ -2,10 +2,12 @@ import { describe, expect } from "vitest";
 import { alchemy } from "../../../src/alchemy.ts";
 import { BRANCH_PREFIX } from "../../util.ts";
 // must import this or else alchemy.test won't exist
+import type { DockerRegistry } from "../../../src/docker/api/docker-registry.ts";
 import {
   parseImageRef,
   parsePullConfig,
   parsePushConfig,
+  type ImageProps,
 } from "../../../src/docker/api/image.ts";
 import "../../../src/test/vitest.ts";
 
@@ -13,31 +15,35 @@ const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });
 
+const base: ImageProps<Record<string, DockerRegistry>> = {
+  ref: "hello-world:latest",
+};
+
 describe("parsePullConfig", () => {
   test("true | 'missing'", async () => {
-    expect(parsePullConfig(true)).toMatchObject({
+    expect(parsePullConfig({ ...base, pull: true })).toMatchObject({
       enabled: true,
       force: false,
     });
-    expect(parsePullConfig("missing")).toMatchObject({
+    expect(parsePullConfig({ ...base, pull: "missing" })).toMatchObject({
       enabled: true,
       force: false,
     });
   });
 
   test("false | 'never'", async () => {
-    expect(parsePullConfig(false)).toMatchObject({
+    expect(parsePullConfig({ ...base, pull: false })).toMatchObject({
       enabled: false,
       force: false,
     });
-    expect(parsePullConfig("never")).toMatchObject({
+    expect(parsePullConfig({ ...base, pull: "never" })).toMatchObject({
       enabled: false,
       force: false,
     });
   });
 
   test("'always'", async () => {
-    expect(parsePullConfig("always")).toMatchObject({
+    expect(parsePullConfig({ ...base, pull: "always" })).toMatchObject({
       enabled: true,
       force: true,
     });
@@ -45,24 +51,27 @@ describe("parsePullConfig", () => {
 
   describe("object", async () => {
     test("enabled = true, force = false by default", async () => {
-      expect(parsePullConfig({})).toMatchObject({
+      expect(parsePullConfig({ ...base, pull: {} })).toMatchObject({
         enabled: true,
         force: false,
       });
     });
 
     test("`force` overrides `policy`", async () => {
-      expect(parsePullConfig({ policy: "always", force: false })).toMatchObject(
-        {
-          enabled: true,
-          force: false,
-        },
-      );
+      expect(
+        parsePullConfig({ ...base, pull: { policy: "always", force: false } }),
+      ).toMatchObject({
+        enabled: true,
+        force: false,
+      });
     });
 
     test("`enabled` overrides `policy`", async () => {
       expect(
-        parsePullConfig({ policy: "always", enabled: false }),
+        parsePullConfig({
+          ...base,
+          pull: { policy: "always", enabled: false },
+        }),
       ).toMatchObject({
         enabled: false,
         force: true,
@@ -73,29 +82,29 @@ describe("parsePullConfig", () => {
 
 describe("parsePushConfig", () => {
   test("true | 'missing'", async () => {
-    expect(parsePushConfig(true)).toMatchObject({
+    expect(parsePushConfig({ ...base, push: true })).toMatchObject({
       enabled: true,
       force: false,
     });
-    expect(parsePushConfig("missing")).toMatchObject({
+    expect(parsePushConfig({ ...base, push: "missing" })).toMatchObject({
       enabled: true,
       force: false,
     });
   });
 
   test("false | 'never'", async () => {
-    expect(parsePushConfig(false)).toMatchObject({
+    expect(parsePushConfig({ ...base, push: false })).toMatchObject({
       enabled: false,
       force: false,
     });
-    expect(parsePushConfig("never")).toMatchObject({
+    expect(parsePushConfig({ ...base, push: "never" })).toMatchObject({
       enabled: false,
       force: false,
     });
   });
 
   test("'always'", async () => {
-    expect(parsePushConfig("always")).toMatchObject({
+    expect(parsePushConfig({ ...base, push: "always" })).toMatchObject({
       enabled: true,
       force: true,
     });
@@ -103,24 +112,27 @@ describe("parsePushConfig", () => {
 
   describe("object", async () => {
     test("enabled = true, force = false by default", async () => {
-      expect(parsePushConfig({})).toMatchObject({
+      expect(parsePushConfig({ ...base, push: {} })).toMatchObject({
         enabled: true,
         force: false,
       });
     });
 
     test("`force` overrides `policy`", async () => {
-      expect(parsePushConfig({ policy: "always", force: false })).toMatchObject(
-        {
-          enabled: true,
-          force: false,
-        },
-      );
+      expect(
+        parsePushConfig({ ...base, push: { policy: "always", force: false } }),
+      ).toMatchObject({
+        enabled: true,
+        force: false,
+      });
     });
 
     test("`enabled` overrides `policy`", async () => {
       expect(
-        parsePushConfig({ policy: "always", enabled: false }),
+        parsePushConfig({
+          ...base,
+          push: { policy: "always", enabled: false },
+        }),
       ).toMatchObject({
         enabled: false,
         force: true,

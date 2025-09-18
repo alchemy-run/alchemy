@@ -152,6 +152,7 @@
   },
   "dependencies": {
     "@aws-sdk/credential-providers": "^3.0.0",
+    "@balena/dockerignore": "^1.0.2",
     "@cloudflare/unenv-preset": "^2.6.3",
     "@iarna/toml": "^2.2.5",
     "@smithy/node-config-provider": "^4.0.0",
@@ -175,6 +176,7 @@
     "pathe": "^2.0.3",
     "picocolors": "^1.1.1",
     "signal-exit": "^4.1.0",
+    "tar-fs": "^3.1.0",
     "unenv": "2.0.0-rc.19",
     "ws": "^8.18.3",
     "yaml": "^2.0.0"
@@ -278,6 +280,7 @@
     "@types/libsodium-wrappers": "^0.7.14",
     "@types/netmask": "^2.0.5",
     "@types/node": "latest",
+    "@types/tar-fs": "^2.0.4",
     "@types/ws": "^8.18.1",
     "@workos-inc/node": "^7.69.1",
     "arktype": "^2.1.16",

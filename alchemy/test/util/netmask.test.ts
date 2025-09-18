@@ -10,8 +10,6 @@ const test = alchemy.test(import.meta, {
 });
 
 describe("netmask", () => {
-  const testId = `${BRANCH_PREFIX}-test-network`;
-
   describe("sorting", () => {
     test("should sort by prefix length", async () => {
       const netmasks = ["192.168.1.0/25", "192.168.1.0/26", "192.168.1.0/24"];
