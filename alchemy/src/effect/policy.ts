@@ -16,6 +16,12 @@ export interface Allow<
   Resource extends _Resource,
   Condition = any,
 > {
+  /**
+   * ID uniquely identifying this statement
+   *
+   * @default ${effect}:${action}:${resource.id}
+   */
+  sid?: string;
   effect: "Allow";
   action: Action;
   resource: Resource;
@@ -27,6 +33,7 @@ export interface Deny<
   Resource extends _Resource,
   Condition = any,
 > {
+  sid?: string;
   effect: "Deny";
   action: Action;
   resource: Resource;

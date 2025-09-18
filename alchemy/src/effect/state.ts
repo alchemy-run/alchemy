@@ -2,6 +2,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { App } from "./app.ts";
+import type { Statement } from "./policy.ts";
 
 // SQL only?? no
 // DynamoDB is faster but bounded to 400KB (<10ms minimum latency)
@@ -59,6 +60,7 @@ export type ResourceState = {
     | "deleted";
   props: any;
   output: any;
+  bindings?: Statement[];
 };
 
 export class State extends Context.Tag("AWS::Lambda::State")<

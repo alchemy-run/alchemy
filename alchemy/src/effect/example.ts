@@ -33,7 +33,7 @@ export class Messages extends Queue.Tag("messages", {
 const api = Api.serve((req) =>
   Effect.gen(function* () {
     const msg = yield* S.validate(Message)(yield* req.json);
-    yield* Queue.send(Messages, msg);
+    yield* Queue.send(Messages, msg).pipe(Effect.catchAll(() => Effect.void));
     return yield* HttpServerResponse.json({
       sent: true,
     });
@@ -50,15 +50,16 @@ const aws = AWS.defaultProviders.pipe(
   Layer.provide(Credentials.fromChain),
 );
 
-export const infra = Lambda.make(
+export const apiHandler = Lambda.make(
   Api,
   api,
   Policy.of(Queue.SendMessage(Messages)),
 );
 
-const updatePlan = plan(infra);
+const updatePlan = plan(apiHandler);
 
 const applied = updatePlan.pipe(Effect.provide(aws), Effect.provide(app));
+
 // console.log({
 //   url: plan.resources.worker2.url,
 // });

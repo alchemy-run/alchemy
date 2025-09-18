@@ -1,4 +1,6 @@
 import type * as Effect from "effect/Effect";
+import type { AttachAction, BindingAction, Materialized } from "./plan.ts";
+import type { Statement } from "./policy.ts";
 
 // local dev mode as a Layer?
 
@@ -17,15 +19,21 @@ type Diff =
       deleteFirst?: boolean;
     };
 
-export type Provider<Input = any, Output = any> = {
+export type Provider<
+  Type extends string = string,
+  Input = any,
+  Output = any,
+  Stmt extends Statement = never,
+> = {
+  type: Type;
   // drives alchemy sync/refresh/adopt
-  read?(
+  read?(input: {
     // "my-worker" -> arn:aws:lambda:us-east-1:123456789012:function:my-worker
-    logicalId: string, // -> doesn't always map to a a physical ID
-    olds: Input | undefined,
+    id: string; // -> doesn't always map to a a physical ID
+    olds: Input | undefined;
     // what is the ARN?
-    output: Output | undefined, // current state -> synced state
-  ): Effect.Effect<Output | undefined, never, never>;
+    output: Output | undefined; // current state -> synced state
+  }): Effect.Effect<Output | undefined, any, never>;
   diff?(input: {
     id: string;
     olds: Input;
@@ -35,16 +43,22 @@ export type Provider<Input = any, Output = any> = {
   // tail();
   // watch();
   // replace(): Effect.Effect<void, never, never>;
-  create(input: { id: string; news: Input }): Effect.Effect<Output, any, never>;
+  create(input: {
+    id: string;
+    news: Input;
+    bindings: Materialized<AttachAction<Stmt>>[];
+  }): Effect.Effect<Output, any, never>;
   update(input: {
     id: string;
     news: Input;
     olds: Input;
     output: Output;
+    bindings: Materialized<BindingAction<Stmt>>[];
   }): Effect.Effect<Output, any, never>;
   delete(input: {
     id: string;
     olds: Input;
     output: Output;
+    bindings: Materialized<BindingAction<Stmt>>[];
   }): Effect.Effect<void, any, never>;
 };

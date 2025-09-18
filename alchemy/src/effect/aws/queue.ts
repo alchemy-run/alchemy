@@ -6,9 +6,14 @@ import { SQS as SQSClient } from "itty-aws/sqs";
 import { App } from "../app.ts";
 import { allow, type Allow } from "../policy.ts";
 import type { Provider as ResourceProvider } from "../provider.ts";
+import type { Resource } from "../resource.ts";
 import { createAWSServiceClientLayer } from "./client.ts";
 import * as Credentials from "./credentials.ts";
+import type * as Lambda from "./function.ts";
 import * as Region from "./region.ts";
+
+export type Type = typeof Type;
+export const Type = "AWS::SQS::Queue";
 
 type Props<Msg = any> = {
   message: S.Schema<Msg>;
@@ -66,39 +71,66 @@ type Props<Msg = any> = {
 );
 
 type Attributes<ID extends string, P extends Props> = {
-  type: "AWS::SQS::Queue";
+  type: typeof Type;
   id: ID;
   queueName: P["queueName"] extends string ? P["queueName"] : string;
   queueUrl: string;
 };
 
-type Queue<ID extends string = string, P extends Props = Props> = {
-  id: ID;
-  props: P;
-  provider: typeof Provider;
-};
+type Queue<ID extends string = string, P extends Props = Props> = Resource<
+  typeof Type,
+  ID,
+  P,
+  Attributes<ID, P>,
+  typeof Provider
+>;
 
 type Message<Q extends Queue> = Q["props"]["message"]["Type"];
 
 export const Tag = <ID extends string, P extends Props>(id: ID, props: P) =>
   Object.assign(Context.Tag(id)<P, Attributes<ID, P>>(), {
+    type: Type,
     id,
     props,
     provider: Provider,
-  });
+    // phantom
+    attributes: undefined! as Attributes<ID, P>,
+  } as const);
 
 export declare const url: <Q extends Queue>(
   queue: Q,
 ) => Effect.Effect<string, never, never>;
 
-export const consume = <Q extends Queue>(
-  queue: Q,
-  consumer: (batch: any) => Effect.Effect<any>,
-) => Effect.gen(function* () {});
+// export const consume = <Q extends Queue>(
+//   queue: Q,
+//   consumer: (batch: any) => Effect.Effect<any>,
+// ) => Effect.gen(function* () {});
 
-export type SendMessage<Q extends Queue> = Allow<"sqs:SendMessage", Q>;
+export type SendMessage<Q extends Queue = Queue> = Lambda.Bindable<
+  Allow<"sqs:SendMessage", Q>
+>;
 
-export declare const SendMessage: <Q extends Queue>(queue: Q) => SendMessage<Q>;
+export const SendMessage = <Q extends Queue>(queue: Q): SendMessage<Q> => ({
+  effect: "Allow",
+  action: "sqs:SendMessage",
+  resource: queue,
+  bind: Effect.fn(function* (_func, action, { queueUrl }) {
+    const key = `${queue.id.toUpperCase().replace(/-/g, "_")}_${queueUrl.toString()}`;
+    return {
+      env: {
+        [key]: queueUrl,
+      },
+      policyStatements: [
+        {
+          Sid: action.stmt.sid,
+          Effect: "Allow",
+          Action: ["sqs:SendMessage"],
+          Resource: [queueUrl],
+        },
+      ],
+    };
+  }),
+});
 
 export const send = <Q extends Queue<string, Props>>(
   queue: Q,
@@ -125,7 +157,7 @@ export const clientFromEnv = Layer.provide(
 
 export class Provider extends Context.Tag("AWS::Lambda::Lifecycle")<
   Provider,
-  ResourceProvider<Props, Attributes<string, Props>>
+  ResourceProvider<"AWS::SQS::Queue", Props, Attributes<string, Props>>
 >() {}
 
 export const provider = Layer.effect(
@@ -151,6 +183,7 @@ export const provider = Layer.effect(
       VisibilityTimeout: props.visibilityTimeout?.toString(),
     });
     return {
+      type: Type,
       diff: Effect.fn(function* ({ id, news, olds }) {
         const oldFifo = olds.fifo ?? false;
         const newFifo = news.fifo ?? false;
@@ -172,7 +205,7 @@ export const provider = Layer.effect(
         });
         return {
           id,
-          type: "AWS::SQS::Queue",
+          type: Type,
           queueName,
           queueUrl: response.QueueUrl!,
         };
@@ -191,6 +224,6 @@ export const provider = Layer.effect(
           })
           .pipe(Effect.catchTag("QueueDoesNotExist", () => Effect.void));
       }),
-    } satisfies ResourceProvider<Props, Attributes<string, Props>>;
+    } satisfies ResourceProvider<Type, Props, Attributes<string, Props>>;
   }),
 );

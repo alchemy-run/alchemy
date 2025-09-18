@@ -9,15 +9,21 @@ import * as Layer from "effect/Layer";
 import { Lambda as LambdaClient } from "itty-aws/lambda";
 import { App } from "../app.ts";
 import type { Bound } from "../binding.ts";
+import type { AttachAction, BindingAction, Materialized } from "../plan.ts";
 import { allow, type Allow, type Policy, type Statement } from "../policy.ts";
 import type { Provider as ResourceProvider } from "../provider.ts";
 import type { Resource } from "../resource.ts";
+import type { TagInstance } from "../util.ts";
+import { AccountID } from "./account-id.ts";
 import type { Tag as ArnTag } from "./arn.ts";
 import { Assets } from "./assets.ts";
 import { bundle } from "./bundle.ts";
 import { createAWSServiceClientLayer } from "./client.ts";
 import * as IAM from "./iam.ts";
 import { Region } from "./region.ts";
+
+export type Type = typeof Type;
+export const Type = "AWS::Lambda::Function";
 
 type Props = {
   url?: boolean;
@@ -33,11 +39,13 @@ type Props = {
 };
 
 type Attributes<ID extends string, P extends Props> = {
-  type: "AWS::Lambda::Function";
+  type: Type;
   id: ID;
   functionName: string;
   functionArn: string;
-  functionUrl: P["url"] extends true ? string : undefined;
+  functionUrl: string | undefined;
+  roleName: string;
+  roleArn: string;
 };
 
 export type Branded<T> = string & { __brand: T };
@@ -49,8 +57,8 @@ export type Arn<Self> = ArnTag<Self, FunctionArn>;
 export type FunctionLike<
   ID extends string = string,
   P extends Props = Props,
-> = Resource<ID, P> & {
-  type: "AWS::Lambda::Function";
+> = Resource<Type, ID, P> & {
+  type: Type;
   arn<Self>(this: Self): Effect.Effect<FunctionArn, never, Arn<Self>>;
   provider: Provider;
 };
@@ -107,7 +115,7 @@ export interface ProviderProps extends Props {
 
 export class Provider extends Context.Tag("AWS::Lambda::Function")<
   Provider,
-  ResourceProvider<ProviderProps, Attributes<string, Props>>
+  ResourceProvider<Type, ProviderProps, Attributes<string, Props>, Bindable>
 >() {}
 
 export const provider = Layer.effect(
@@ -115,6 +123,7 @@ export const provider = Layer.effect(
   Effect.gen(function* () {
     const lambda = yield* Client;
     const iam = yield* IAM.Client;
+    const accountId = yield* AccountID;
     const region = yield* Region;
     const app = yield* App;
     const assets = yield* Assets;
@@ -123,97 +132,367 @@ export const provider = Layer.effect(
       `${app.name}-${app.stage}-${id}-${region}`;
     const createRoleName = (id: string) =>
       `${app.name}-${app.stage}-${id}-${region}`;
-    return {
-      create: Effect.fn(function* ({ id, news }) {
-        const roleName = createRoleName(id);
-        const functionName = news.functionName ?? createFunctionName(id);
-        const role = yield* iam
-          .createRole({
-            RoleName: roleName,
-            AssumeRolePolicyDocument: JSON.stringify({
-              Version: "2012-10-17",
-              Statement: [
-                {
-                  Effect: "Allow",
-                  Principal: {
-                    Service: "lambda.amazonaws.com",
-                  },
-                  Action: "sts:AssumeRole",
-                },
-              ],
-            }),
-          })
-          .pipe(
-            Effect.catchTag("EntityAlreadyExistsException", () =>
-              iam.getRole({
-                RoleName: roleName,
-              }),
-            ),
+    const createPolicyName = (id: string) =>
+      `${app.name}-${app.stage}-${id}-${region}`;
+
+    const attachBindings = Effect.fn(function* ({
+      roleName,
+      policyName,
+      functionArn,
+      functionName,
+      bindings,
+    }: {
+      roleName: string;
+      policyName: string;
+      functionArn: string;
+      functionName: string;
+      bindings: Materialized<BindingAction<Bindable>>[];
+    }) {
+      let env: Record<string, string> = {};
+      const policyStatements: IAM.PolicyStatement[] = [];
+
+      for (const binding of bindings) {
+        const upstream = binding.attributes;
+        if (binding.action === "attach") {
+          const bound = yield* binding.stmt.bind(
+            {
+              functionArn,
+              functionName,
+              env,
+            },
+            binding,
+            upstream,
           );
-        yield* iam.attachRolePolicy({
+          env = { ...env, ...(bound?.env ?? {}) };
+          policyStatements.push(...(bound?.policyStatements ?? []));
+        } else if (binding.action === "detach") {
+          // no-op: PutRolePolicy will remove the removed statements
+        }
+      }
+
+      yield* iam.putRolePolicy({
+        RoleName: roleName,
+        PolicyName: policyName,
+        PolicyDocument: JSON.stringify({
+          Version: "2012-10-17",
+          Statement: policyStatements,
+        } satisfies IAM.PolicyDocument),
+      });
+
+      return env;
+    });
+
+    const createRole = Effect.fn(function* ({
+      id,
+      roleName,
+    }: {
+      id: string;
+      roleName: string;
+    }) {
+      const role = yield* iam
+        .createRole({
           RoleName: roleName,
-          PolicyArn:
-            "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
-        });
+          AssumeRolePolicyDocument: JSON.stringify({
+            Version: "2012-10-17",
+            Statement: [
+              {
+                Effect: "Allow",
+                Principal: {
+                  Service: "lambda.amazonaws.com",
+                },
+                Action: "sts:AssumeRole",
+              },
+            ],
+          }),
+          Tags: createTagsList(id),
+        })
+        .pipe(
+          Effect.catchTag("EntityAlreadyExistsException", () =>
+            iam
+              .getRole({
+                RoleName: roleName,
+              })
+              .pipe(
+                Effect.filterOrFail(
+                  (role) => validateTagList(tagged(id), role.Role?.Tags),
+                  () =>
+                    new Error(`Role ${roleName} exists but has incorrect tags`),
+                ),
+              ),
+          ),
+        );
 
-        const handler = news.handler ?? "default";
-        const code = yield* bundle({
-          entryPoints: [news.main],
-          // we use a virtual entry point so that
-          stdin: {
-            contents: `import { ${handler} as handler } from "${path.relative(process.cwd(), news.main)}";\nexport default handler;`,
-            resolveDir: ".",
-            loader: "ts",
-            sourcefile: "__index.ts",
+      yield* iam.attachRolePolicy({
+        RoleName: roleName,
+        PolicyArn:
+          "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+      });
+
+      return role;
+    });
+
+    const bundleCode = Effect.fn(function* (props: Props) {
+      const handler = props.handler ?? "default";
+      const code = yield* bundle({
+        entryPoints: [props.main],
+        // we use a virtual entry point so that
+        stdin: {
+          contents: `import { ${handler} as handler } from "${path.relative(process.cwd(), props.main)}";\nexport default handler;`,
+          resolveDir: ".",
+          loader: "ts",
+          sourcefile: "__index.ts",
+        },
+        bundle: true,
+        format: "esm",
+        platform: "node",
+        target: "node22",
+        sourcemap: true,
+        treeShaking: true,
+      });
+      return code;
+    });
+
+    const validateTagList = (
+      expectedTags: Record<string, string>,
+      tags: { Key: string; Value: string }[] | undefined,
+    ) => {
+      return Object.entries(expectedTags).every(([key, value]) =>
+        tags?.some((tag) => tag.Key === key && tag.Value === value),
+      );
+    };
+
+    const validateTags = (
+      expectedTags: Record<string, string>,
+      tags: Record<string, string> | undefined,
+    ) => {
+      return Object.entries(expectedTags).every(
+        ([key, value]) => tags?.[key] === value,
+      );
+    };
+
+    const createTagsList = (id: string) =>
+      Object.entries(tagged(id)).map(([Key, Value]) => ({
+        Key,
+        Value,
+      }));
+
+    const tagged = (id: string) => ({
+      "alchemy::app": app.name,
+      "alchemy::stage": app.stage,
+      "alchemy::id": id,
+    });
+
+    const createOrUpdateFunction = Effect.fn(function* ({
+      id,
+      news,
+      roleArn,
+      code,
+      env,
+      functionName,
+    }: {
+      id: string;
+      news: Props;
+      roleArn: string;
+      code: Uint8Array<ArrayBufferLike>;
+      env: Record<string, string>;
+      functionName: string;
+    }) {
+      yield* lambda
+        .createFunction({
+          FunctionName: functionName,
+          Handler: news.functionName,
+          Role: roleArn,
+          Code: {
+            // TODO(sam): upload to assets
+            ZipFile: code,
           },
-          bundle: true,
-          format: "esm",
-          platform: "node",
-          target: "node22",
-          sourcemap: true,
-          treeShaking: true,
+          Runtime: "nodejs22.x",
+          Environment: {
+            Variables: env,
+          },
+          Tags: tagged(id),
+        })
+        .pipe(
+          Effect.catchTag("ResourceConflictException", () =>
+            lambda
+              .getFunction({
+                FunctionName: functionName,
+              })
+              .pipe(
+                Effect.flatMap((f) =>
+                  // if it exists and contains these tags, we will assume it was created by alchemy
+                  // but state was lost, so if it exists, let's adopt it
+                  validateTags(tagged(id), f.Tags)
+                    ? Effect.succeed(f.Configuration!)
+                    : Effect.fail(
+                        new Error("Function tags do not match expected values"),
+                      ),
+                ),
+              ),
+          ),
+        );
+    });
+
+    const createOrUpdateFunctionUrl = Effect.fn(function* ({
+      functionName,
+      url,
+    }: {
+      functionName: string;
+      url: Props["url"];
+    }) {
+      if (url) {
+        const response = yield* lambda.createFunctionUrlConfig({
+          FunctionName: functionName,
+          AuthType: "NONE", // | AWS_IAM
+          // Cors: {
+          //   AllowCredentials: true,
+          //   AllowHeaders: ["*"],
+          //   AllowMethods: ["*"],
+          //   AllowOrigins: ["*"],
+          //   ExposeHeaders: ["*"],
+          //   MaxAge: 86400,
+          // },
+          InvokeMode: "BUFFERED", // | RESPONSE_STREAM
+          // Qualifier: "$LATEST"
+        });
+        return response.FunctionUrl;
+      }
+      return undefined;
+    });
+
+    return {
+      type: Type,
+      read: Effect.fn(function* ({ id, olds, output }) {
+        if (output) {
+          // example: refresh the function URL from the API
+          return {
+            ...output,
+            functionUrl: yield* lambda
+              .getFunctionUrlConfig({
+                FunctionName: output.functionName!,
+              })
+              .pipe(
+                Effect.map((f) => f.FunctionUrl),
+                Effect.catchTag("ResourceNotFoundException", () =>
+                  Effect.succeed(undefined),
+                ),
+              ),
+          } satisfies Attributes<string, Props>;
+        }
+        return output;
+      }),
+      diff: Effect.fn(function* ({ id, olds, news, output }) {
+        if (
+          output.functionName !== (news.functionName ?? createFunctionName(id))
+        ) {
+          // function name changed
+          return { action: "replace" };
+        }
+        if (olds.url !== news.url) {
+          // url changed
+          return { action: "replace" };
+        }
+        return { action: "noop" };
+      }),
+      create: Effect.fn(function* ({ id, news, bindings }) {
+        const roleName = createRoleName(id);
+        const policyName = createPolicyName(id);
+        // const policyArn = `arn:aws:iam::${accountId}:policy/${policyName}`;
+        const functionName = news.functionName ?? createFunctionName(id);
+        const functionArn = `arn:aws:lambda:${region}:${accountId}:function:${functionName}`;
+
+        const role = yield* createRole({ id, roleName });
+
+        const env = yield* attachBindings({
+          roleName,
+          policyName,
+          functionArn,
+          functionName,
+          bindings,
         });
 
-        const func = yield* lambda
-          .createFunction({
-            FunctionName: functionName,
-            Handler: news.functionName,
-            Role: role.Role.Arn,
-            Code: {},
-            Runtime: "nodejs22.x",
-          })
-          .pipe(
-            Effect.catchTag("ResourceConflictException", () =>
-              lambda
-                .getFunction({
-                  FunctionName: functionName,
-                })
-                .pipe(Effect.map((f) => f.Configuration!)),
-            ),
-          );
+        const code = yield* bundleCode(news);
+
+        yield* createOrUpdateFunction({
+          id,
+          news,
+          roleArn: role.Role.Arn,
+          // TODO(sam): upload to assets
+          code: code.outputFiles?.[0].contents!,
+          env,
+          functionName,
+        });
+
+        const functionUrl = yield* createOrUpdateFunctionUrl({
+          functionName,
+          url: news.url,
+        });
 
         return {
           id,
           type: "AWS::Lambda::Function",
-          functionArn: func.FunctionArn!,
+          functionArn,
           functionName,
-          functionUrl: undefined,
+          functionUrl: functionUrl as any,
+          roleName,
+          roleArn: role.Role.Arn,
         } satisfies Attributes<string, Props>;
       }),
-      update: Effect.fn(function* (input) {
-        // return lambda.updateFunctionConfiguration({
-        //   FunctionName: input.id,
-        //   Handler: "index.handler",
-        // });
+      update: Effect.fn(function* ({ id, news, bindings, output }) {
+        const roleName = createRoleName(id);
+        const policyName = createPolicyName(id);
+        const functionName = news.functionName ?? createFunctionName(id);
+        const functionArn = `arn:aws:lambda:${region}:${accountId}:function:${functionName}`;
+
+        const env = yield* attachBindings({
+          roleName,
+          policyName,
+          functionArn,
+          functionName,
+          bindings,
+        });
+
+        const code = yield* bundleCode(news);
+
+        yield* createOrUpdateFunction({
+          id,
+          news,
+          roleArn: output.roleArn,
+          // TODO(sam): upload to assets
+          code: code.outputFiles?.[0].contents!,
+          env,
+          functionName,
+        });
+
+        const functionUrl = yield* createOrUpdateFunctionUrl({
+          functionName,
+          url: news.url,
+        });
+
+        return {
+          ...output,
+          functionArn,
+          functionName,
+          functionUrl: functionUrl as any,
+          roleName,
+          roleArn: output.roleArn,
+        } satisfies Attributes<string, Props>;
+      }),
+      delete: Effect.fn(function* ({ output }) {
+        yield* lambda.deleteFunction({
+          FunctionName: output.functionName,
+        });
+        yield* iam.deleteRole({
+          RoleName: output.roleName,
+        });
         return null as any;
       }),
-      delete: Effect.fn(function* (input) {
-        // return lambda.deleteFunction({
-        //   FunctionName: input.id,
-        // });
-        return null as any;
-      }),
-    };
+    } satisfies ResourceProvider<
+      Type,
+      ProviderProps,
+      Attributes<string, Props>,
+      Bindable
+    >;
   }),
 );
 
@@ -256,16 +535,10 @@ export const make = <F extends FunctionLike, Req>(
     >;
   },
   never,
-  | Provider
-  | Extract<Extract<Req, Statement>["resource"], { provider: any }>["provider"]
+  Provider | TagInstance<Extract<Req, Statement>["resource"]["provider"]>
 > =>
   Effect.gen(function* () {
     return {
-      [self.id]: {
-        type: "bound",
-        target: self,
-        bindings: policy.statements,
-      } satisfies Bound<F, Extract<Req, Statement>>,
       ...(Object.fromEntries(
         policy.statements.map((statement) => [
           statement.resource.id,
@@ -277,5 +550,25 @@ export const make = <F extends FunctionLike, Req>(
           { id: id }
         >;
       }),
+      [self.id]: {
+        type: "bound",
+        target: self,
+        bindings: policy.statements,
+      } satisfies Bound<F, Extract<Req, Statement>>,
     };
   });
+
+export type Bindable<S extends Statement = Statement> = S & {
+  bind(
+    func: {
+      functionArn: string;
+      functionName: string;
+      env: Record<string, string>;
+    },
+    stmt: AttachAction<S>,
+    resource: S["resource"]["attributes"],
+  ): Effect.Effect<{
+    env?: Record<string, string>;
+    policyStatements?: IAM.PolicyStatement[];
+  } | void>;
+};
