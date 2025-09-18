@@ -61,7 +61,7 @@ export const configure = authProcedure
       options: [
         { label: "OAuth", value: "oauth", hint: "Recommended" },
         { label: "API Token", value: "api-token" },
-        { label: "API Key", value: "api-key", hint: "Legacy" },
+        { label: "Global API Key", value: "api-key", hint: "Legacy" },
       ],
       initialValue: "oauth" as const,
     });
