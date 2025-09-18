@@ -6,8 +6,6 @@ import { singleFlight } from "./util/memoize.ts";
 
 namespace Path {
   export const rootDir = path.join(os.homedir(), ".alchemy");
-  export const lockDir = path.join(rootDir, "lock");
-  export const lockFile = (name: string) => path.join(lockDir, `${name}.lock`);
   export const configFile = path.join(rootDir, "config.json");
   export const credentialsDir = path.join(rootDir, "credentials");
   export const credentialsFile = (provider: string, profile: string) =>
