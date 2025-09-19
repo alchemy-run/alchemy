@@ -43,6 +43,8 @@ export interface Deny<
 export const allow = <S extends Statement>() =>
   Effect.gen(function* () {}) as Effect.Effect<void, never, S>;
 
-export declare const of: <S extends Statement[]>(
+export const of = <S extends Statement[]>(
   ...statement: S
-) => Policy<S[number]>;
+): Policy<S[number]> => ({
+  statements: statement,
+});

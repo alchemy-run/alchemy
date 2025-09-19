@@ -102,12 +102,12 @@ export const make = <F extends Resource, Req>(
     main,
     handler,
   }: {
-    policy: Policy<Extract<Req, Statement>>;
+    policy: NoInfer<Policy<Extract<Req, Statement>>>;
     main: string;
     handler?: string;
   },
-) =>
-  Effect.gen(function* () {
+) => {
+  const eff = Effect.gen(function* () {
     const self = impl.self;
     return {
       ...(Object.fromEntries(
@@ -129,7 +129,12 @@ export const make = <F extends Resource, Req>(
         bindings: policy.statements,
       } satisfies Bound<F, Extract<Req, Statement>>,
     };
-  }) as any as Effect.Effect<
+  });
+
+  const clss: any = class {};
+  Object.assign(clss, eff);
+  clss.pipe = eff.pipe.bind(eff);
+  return clss as any as Effect.Effect<
     {
       [id in F["id"]]: F extends Function
         ? Bound<F, Extract<Req, Statement>>
@@ -146,6 +151,7 @@ export const make = <F extends Resource, Req>(
   > & {
     new (_: never): {};
   };
+};
 
 export class FunctionClient extends Context.Tag("AWS::Lambda::Function.Client")<
   FunctionClient,

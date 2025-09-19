@@ -84,9 +84,7 @@ export type Materialize<R extends Resource = Resource> =
   | Noop<R>;
 
 export type PhysicalPlan = {
-  [id in string]: Materialize & {
-    attributes: unknown;
-  };
+  [id in string]: Materialize;
 };
 
 export type Plan = {
@@ -136,7 +134,7 @@ export const planAll = <const Resources extends PlanItem[]>(
     // UnionToIntersection<Effect.Effect.Success<Resources[number]>>,
     Plan<Resources, {}>,
     never,
-    Req
+    Req | State
   >;
 };
 
@@ -146,7 +144,7 @@ export const plan = <
   },
   Req,
 >(
-  resources: Effect.Effect<Resources, never, Req>,
+  resource: Effect.Effect<Resources, never, Req>,
 ): Effect.Effect<
   {
     [id in keyof Resources]: Resources[id] extends Bound<infer From, any>
@@ -157,6 +155,7 @@ export const plan = <
   }, // & DeleteOrphans<keyof Resources>,
   PlanError,
   | Req
+  | State
   // extract the providers from the deeply nested resources
   | {
       [id in keyof Resources]: Resources[id] extends Bound
@@ -170,7 +169,7 @@ export const plan = <
           : never;
     }[keyof Resources]
 > =>
-  resources.pipe(
+  resource.pipe(
     Effect.flatMap((resources) =>
       Effect.gen(function* () {
         const state = yield* State;
@@ -338,3 +337,9 @@ const isBindingDiff = (oldBinding: Statement, newBinding: Statement) =>
   oldBinding.effect !== newBinding.effect ||
   oldBinding.action !== newBinding.action ||
   oldBinding.resource.id !== newBinding.resource.id;
+
+export const displayPlan = (plan: Plan) => {
+  return Object.entries(plan).forEach(([id, node]) => {
+    console.log(`[${node.action}] ${node.resource.type} ${id}`);
+  });
+};

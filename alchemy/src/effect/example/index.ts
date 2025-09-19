@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as AWS from "../aws/index.ts";
 import * as Alchemy from "../index.ts";
+import * as State from "../state.ts";
 
 import { ApiLambda } from "./api.ts";
 import { Consumer } from "./messages.ts";
@@ -19,6 +20,7 @@ const applied = Alchemy.apply(plan);
 
 const infrastructure = await applied.pipe(
   Effect.provide(aws),
+  Effect.provide(State.inMemory),
   Effect.provide(app),
   Effect.runPromise,
 );
