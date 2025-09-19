@@ -1,3 +1,8 @@
+import type {
+  Context as LambdaContext,
+  SQSBatchResponse,
+  SQSEvent,
+} from "aws-lambda";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -7,6 +12,8 @@ import { App } from "../app.ts";
 import { allow, type Allow } from "../policy.ts";
 import type { Provider as ResourceProvider } from "../provider.ts";
 import type { Resource } from "../resource.ts";
+import type { TagInstance } from "../util.ts";
+import * as Account from "./account.ts";
 import { createAWSServiceClientLayer } from "./client.ts";
 import * as Credentials from "./credentials.ts";
 import type * as Lambda from "./function.ts";
@@ -75,6 +82,7 @@ type Attributes<ID extends string, P extends Props> = {
   id: ID;
   queueName: P["queueName"] extends string ? P["queueName"] : string;
   queueUrl: string;
+  queueArn: string;
 };
 
 type Queue<ID extends string = string, P extends Props = Props> = Resource<
@@ -82,29 +90,82 @@ type Queue<ID extends string = string, P extends Props = Props> = Resource<
   ID,
   P,
   Attributes<ID, P>,
-  typeof Provider
->;
-
-type Message<Q extends Queue> = Q["props"]["message"]["Type"];
+  typeof QueueProvider
+> & {
+  new (_: never): TagInstance<Context.TagClass<P, ID, Attributes<ID, P>>>;
+};
 
 export const Tag = <ID extends string, P extends Props>(id: ID, props: P) =>
   Object.assign(Context.Tag(id)<P, Attributes<ID, P>>(), {
     type: Type,
     id,
     props,
-    provider: Provider,
+    provider: QueueProvider,
     // phantom
     attributes: undefined! as Attributes<ID, P>,
+    consume<Self, Err, Req>(
+      this: Self,
+      consumer: (
+        event: SQSEvent,
+        context: LambdaContext,
+      ) => Effect.Effect<SQSBatchResponse | void, Err, Req>,
+    ) {
+      return consume(this, consumer);
+    },
   } as const);
 
-export declare const url: <Q extends Queue>(
+export const consume = <Q, Err, Req>(
   queue: Q,
-) => Effect.Effect<string, never, never>;
+  handler: (
+    event: SQSEvent,
+    context: LambdaContext,
+  ) => Effect.Effect<SQSBatchResponse | void, Err, Req>,
+): Consumer<Q, Err, Req> => {
+  const iae = Effect.gen(function* () {
+    return handler;
+  });
+  return Object.assign(iae, {
+    self: queue,
+  });
+};
 
-// export const consume = <Q extends Queue>(
-//   queue: Q,
-//   consumer: (batch: any) => Effect.Effect<any>,
-// ) => Effect.gen(function* () {});
+export type Consumer<Self, Err, Req> = Effect.Effect<
+  (
+    request: SQSEvent,
+    context: LambdaContext,
+  ) => Effect.Effect<SQSBatchResponse | void, Err, Req>,
+  Err,
+  Req
+> & {
+  self: Self;
+};
+
+export type Consume<Q extends Queue = Queue> = Lambda.Bindable<
+  Allow<"sqs:Consume", Q>
+>;
+
+export const Consume = <Q extends Queue>(queue: Q): Consume<Q> => ({
+  effect: "Allow",
+  action: "sqs:Consume",
+  resource: queue,
+  bind: Effect.fn(function* (_func, action, { queueUrl, queueArn }) {
+    return {
+      policyStatements: [
+        {
+          Effect: "Allow",
+          Action: [
+            "sqs:ReceiveMessage",
+            "sqs:DeleteMessage",
+            "sqs:GetQueueAttributes",
+            "sqs:GetQueueUrl",
+            "sqs:ChangeMessageVisibility",
+          ],
+          Resource: queueArn,
+        },
+      ],
+    };
+  }),
+});
 
 export type SendMessage<Q extends Queue = Queue> = Lambda.Bindable<
   Allow<"sqs:SendMessage", Q>
@@ -115,7 +176,7 @@ export const SendMessage = <Q extends Queue>(queue: Q): SendMessage<Q> => ({
   action: "sqs:SendMessage",
   resource: queue,
   bind: Effect.fn(function* (_func, action, { queueUrl }) {
-    const key = `${queue.id.toUpperCase().replace(/-/g, "_")}_${queueUrl.toString()}`;
+    const key = `${queue.id.toUpperCase().replace(/-/g, "_")}_QUEUE_URL`;
     return {
       env: {
         [key]: queueUrl,
@@ -128,20 +189,25 @@ export const SendMessage = <Q extends Queue>(queue: Q): SendMessage<Q> => ({
           Resource: [queueUrl],
         },
       ],
+      bundle: {
+        plugins: [{}],
+      },
     };
   }),
 });
 
 export const send = <Q extends Queue<string, Props>>(
   queue: Q,
-  message: Message<Q>,
+  message: Q["props"]["message"]["Type"],
 ) =>
   Effect.gen(function* () {
     // TODO(sam): we want this to be a phantom and not explicitly in the Requirements
     yield* allow<SendMessage<Q>>();
     const sqs = yield* Client;
+    const url =
+      process.env[`${queue.id.toUpperCase().replace(/-/g, "_")}_QUEUE_URL`]!;
     return yield* sqs.sendMessage({
-      QueueUrl: yield* url(queue),
+      QueueUrl: url,
       MessageBody: JSON.stringify(message),
     });
   });
@@ -155,16 +221,18 @@ export const clientFromEnv = Layer.provide(
   Layer.merge(Credentials.fromEnv, Region.fromEnv),
 );
 
-export class Provider extends Context.Tag("AWS::Lambda::Lifecycle")<
-  Provider,
+export class QueueProvider extends Context.Tag("AWS::SQS::Queue")<
+  QueueProvider,
   ResourceProvider<"AWS::SQS::Queue", Props, Attributes<string, Props>>
 >() {}
 
 export const provider = Layer.effect(
-  Provider,
+  QueueProvider,
   Effect.gen(function* () {
     const sqs = yield* Client;
     const app = yield* App;
+    const region = yield* Region.Region;
+    const accountId = yield* Account.AccountID;
     const createQueueName = (id: string, props: Props) =>
       props.queueName ??
       `${app.name}-${id}-${app.stage}${props.fifo ? ".fifo" : ""}`;
@@ -203,11 +271,13 @@ export const provider = Layer.effect(
           QueueName: queueName,
           Attributes: createAttributes(news),
         });
+        const queueArn = `arn:aws:sqs:${region}:${accountId}:${queueName}`;
         return {
           id,
           type: Type,
           queueName,
           queueUrl: response.QueueUrl!,
+          queueArn: queueArn,
         };
       }),
       update: Effect.fn(function* ({ news, output }) {

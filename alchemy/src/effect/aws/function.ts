@@ -1,11 +1,14 @@
 import path from "node:path";
 
-import type { HttpServerRequest } from "@effect/platform/HttpServerRequest";
-import type { HttpServerResponse } from "@effect/platform/HttpServerResponse";
+import type {
+  LambdaFunctionURLEvent,
+  LambdaFunctionURLResult,
+} from "aws-lambda";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
+import type { Context as LambdaContext } from "aws-lambda";
 import { Lambda as LambdaClient } from "itty-aws/lambda";
 import { App } from "../app.ts";
 import type { Bound } from "../binding.ts";
@@ -14,9 +17,8 @@ import { allow, type Allow, type Policy, type Statement } from "../policy.ts";
 import type { Provider as ResourceProvider } from "../provider.ts";
 import type { Resource } from "../resource.ts";
 import type { TagInstance } from "../util.ts";
-import { AccountID } from "./account-id.ts";
+import { AccountID } from "./account.ts";
 import type { Tag as ArnTag } from "./arn.ts";
-import { Assets } from "./assets.ts";
 import { bundle } from "./bundle.ts";
 import { createAWSServiceClientLayer } from "./client.ts";
 import * as IAM from "./iam.ts";
@@ -28,14 +30,6 @@ export const Type = "AWS::Lambda::Function";
 type Props = {
   url?: boolean;
   functionName?: string;
-  /**
-   * The `main` module of the function (to be bundled and deployed)
-   */
-  main: string;
-  /**
-   * @default "default"
-   */
-  handler?: string;
 };
 
 type Attributes<ID extends string, P extends Props> = {
@@ -54,57 +48,103 @@ export type FunctionArn = Branded<"AWS::Lambda::Function.FunctionArn">;
 
 export type Arn<Self> = ArnTag<Self, FunctionArn>;
 
-export type FunctionLike<
-  ID extends string = string,
-  P extends Props = Props,
-> = Resource<Type, ID, P, Attributes<ID, P>, typeof Provider> & {
-  type: Type;
-  arn<Self>(this: Self): Effect.Effect<FunctionArn, never, Arn<Self>>;
-  provider: Provider;
-  /** @internal phantom type */
-  attributes: Attributes<ID, P>;
-};
-
-// TODO(sam): implement
-export declare const arn: <F extends FunctionLike>(
-  func: F,
-) => Layer.Layer<Arn<F>, never, never>;
-
-export type Handler<Self extends FunctionLike = FunctionLike> = {
-  self: Self;
-  (event: any, ctx: any): Promise<any>;
-};
-
 export type Function<
   ID extends string = string,
   P extends Props = Props,
-> = Context.TagClass<P, ID, Attributes<ID, P>> &
-  FunctionLike<ID, P> & {
-    serve: <Self extends FunctionLike<ID, P>, Err, Req>(
-      this: Self,
-      handler: (
-        event: HttpServerRequest,
-      ) => Effect.Effect<HttpServerResponse, Err, Req>,
-    ) => Effect.Effect<Handler<Self>, Err, Req> & {
-      consume: <Q>(
-        queue: Q,
-        consumer: (batch: any) => Effect.Effect<any>,
-      ) => Effect.Effect<any>;
-    };
-    consume: <Q>(queue: Q, consumer: Effect.Effect<any>) => Effect.Effect<any>;
-  };
+> = Resource<Type, ID, P, Attributes<ID, P>, typeof FunctionProvider>;
 
-export const Tag = <ID extends string, P extends Props>(
-  id: ID,
-  props: P,
-): Function<ID, P> =>
-  Object.assign(Context.Tag(id)(), {
-    id,
-    props,
-    provider: Provider,
-    // phantom
-    attributes: undefined! as Attributes<ID, P>,
-  }) as any as Function<ID, P>;
+export type Handler = (event: any, ctx: any) => Effect.Effect<any, any, any>;
+
+export const Tag = <ID extends string, P extends Props>(id: ID, props: P) =>
+  Object.assign(
+    Context.Tag(id)() as Context.TagClass<P, ID, Attributes<ID, P>>,
+    {
+      type: Type,
+      id,
+      props,
+      provider: FunctionProvider,
+      // phantom
+      attributes: undefined! as Attributes<ID, P>,
+      serve<Self, Err, Req>(
+        this: Self,
+        handler: (
+          event: LambdaFunctionURLEvent,
+          context: LambdaContext,
+        ) => Effect.Effect<LambdaFunctionURLResult, Err, Req>,
+      ) {
+        const iae = Effect.gen(function* () {
+          return handler;
+        });
+        return Object.assign(iae, {
+          self: this,
+        }) as Serve<Self, Err, Req>;
+      },
+    } as const,
+  );
+
+export type Serve<Self, Err, Req> = Effect.Effect<
+  (
+    request: LambdaFunctionURLEvent,
+    context: LambdaContext,
+  ) => Effect.Effect<LambdaFunctionURLResult, Err, Req>,
+  Err,
+  Req
+> & {
+  self: Self;
+};
+
+export const make = <F extends Resource, Req>(
+  impl: Effect.Effect<Handler, any, Req> & {
+    self: F;
+  },
+  {
+    policy,
+    main,
+    handler,
+  }: {
+    policy: Policy<Extract<Req, Statement>>;
+    main: string;
+    handler?: string;
+  },
+) =>
+  Effect.gen(function* () {
+    const self = impl.self;
+    return {
+      ...(Object.fromEntries(
+        policy.statements.map((statement) => [
+          statement.resource.id,
+          statement.resource,
+        ]),
+      ) as {
+        [id in Extract<Req, Statement>["resource"]["id"]]: Extract<
+          Extract<Req, Statement>["resource"],
+          { id: id }
+        >;
+      }),
+      [self.id]: {
+        type: "bound",
+        target: self,
+        main,
+        bindings: policy.statements,
+      } satisfies Bound<F, Extract<Req, Statement>>,
+    };
+  }) as any as Effect.Effect<
+    {
+      [id in F["id"]]: F extends Function
+        ? Bound<F, Extract<Req, Statement>>
+        : F;
+    } & {
+      [id in Exclude<
+        Extract<Req, Statement>["resource"]["id"],
+        F["id"]
+      >]: Extract<Extract<Req, Statement>["resource"], { id: id }>;
+    },
+    never,
+    | FunctionProvider
+    | TagInstance<Extract<Req, Statement>["resource"]["provider"]>
+  > & {
+    new (_: never): {};
+  };
 
 export class Client extends Context.Tag("AWS::Lambda")<
   Client,
@@ -113,24 +153,41 @@ export class Client extends Context.Tag("AWS::Lambda")<
 
 export const client = createAWSServiceClientLayer(Client, LambdaClient);
 
-export interface ProviderProps extends Props {
-  policy?: Policy;
+export interface FunctionProviderProps extends Props {
+  /**
+   * The main file to use for the function.
+   */
+  main: string;
+  /**
+   * The handler to use for the function.
+   * @default "default"
+   */
+  handler?: string;
+  /**
+   * The policy to use for the function.
+   */
+  policy: Policy;
 }
 
-export class Provider extends Context.Tag("AWS::Lambda::Function")<
-  Provider,
-  ResourceProvider<Type, ProviderProps, Attributes<string, Props>, Bindable>
+export class FunctionProvider extends Context.Tag("AWS::Lambda::Function")<
+  FunctionProvider,
+  ResourceProvider<
+    Type,
+    FunctionProviderProps,
+    Attributes<string, Props>,
+    Bindable
+  >
 >() {}
 
 export const provider = Layer.effect(
-  Provider,
+  FunctionProvider,
   Effect.gen(function* () {
     const lambda = yield* Client;
     const iam = yield* IAM.Client;
     const accountId = yield* AccountID;
     const region = yield* Region;
     const app = yield* App;
-    const assets = yield* Assets;
+    // const assets = yield* Assets;
 
     const createFunctionName = (id: string) =>
       `${app.name}-${app.stage}-${id}-${region}`;
@@ -235,7 +292,7 @@ export const provider = Layer.effect(
       return role;
     });
 
-    const bundleCode = Effect.fn(function* (props: Props) {
+    const bundleCode = Effect.fn(function* (props: FunctionProviderProps) {
       const handler = props.handler ?? "default";
       const code = yield* bundle({
         entryPoints: [props.main],
@@ -373,7 +430,7 @@ export const provider = Layer.effect(
             ...output,
             functionUrl: yield* lambda
               .getFunctionUrlConfig({
-                FunctionName: output.functionName!,
+                FunctionName: createFunctionName(id),
               })
               .pipe(
                 Effect.map((f) => f.FunctionUrl),
@@ -493,27 +550,27 @@ export const provider = Layer.effect(
       }),
     } satisfies ResourceProvider<
       Type,
-      ProviderProps,
+      FunctionProviderProps,
       Attributes<string, Props>,
       Bindable
     >;
   }),
 );
 
-export type InvokeFunction<F extends FunctionLike> = Allow<
+export type InvokeFunction<F extends Function> = Allow<
   "lambda:InvokeFunction",
   F
 >;
 
 // TODO(sam): implement
-export declare const InvokeFunction: <F extends FunctionLike>(
+export declare const InvokeFunction: <F extends Function>(
   func: F,
 ) => InvokeFunction<F>;
 
-export const invoke = <F extends FunctionLike>(func: F, input: any) =>
+export const invoke = <F extends Function>(func: F, input: any) =>
   Effect.gen(function* () {
     const lambda = yield* Client;
-    const functionArn = yield* func.arn();
+    const functionArn = process.env[`${func.id}-functionArn`]!;
     yield* allow<InvokeFunction<F>>();
     return yield* lambda.invoke({
       FunctionName: functionArn,
@@ -522,45 +579,7 @@ export const invoke = <F extends FunctionLike>(func: F, input: any) =>
     });
   });
 
-export const toHandler = (effect: Effect.Effect<Handler, any, Statement>) =>
-  null;
-
-export const make = <F extends FunctionLike, Req>(
-  self: F,
-  _impl: Effect.Effect<Handler<F>, any, Req>,
-  policy: Policy<Extract<Req, Statement>>,
-): Effect.Effect<
-  {
-    [id in F["id"]]: Bound<F, Extract<Req, Statement>>;
-  } & {
-    [id in Extract<Req, Statement>["resource"]["id"]]: Extract<
-      Extract<Req, Statement>["resource"],
-      { id: id }
-    >;
-  },
-  never,
-  Provider | TagInstance<Extract<Req, Statement>["resource"]["provider"]>
-> =>
-  Effect.gen(function* () {
-    return {
-      ...(Object.fromEntries(
-        policy.statements.map((statement) => [
-          statement.resource.id,
-          statement.resource,
-        ]),
-      ) as {
-        [id in Extract<Req, Statement>["resource"]["id"]]: Extract<
-          Extract<Req, Statement>["resource"],
-          { id: id }
-        >;
-      }),
-      [self.id]: {
-        type: "bound",
-        target: self,
-        bindings: policy.statements,
-      } satisfies Bound<F, Extract<Req, Statement>>,
-    };
-  });
+export const toHandler = (effect: Effect.Effect<Handler, any, never>) => null;
 
 export type Bindable<S extends Statement = Statement> = S & {
   bind(
@@ -576,3 +595,34 @@ export type Bindable<S extends Statement = Statement> = S & {
     policyStatements?: IAM.PolicyStatement[];
   } | void>;
 };
+
+function toWebRequest(event: LambdaFunctionURLEvent): Request {
+  // Reconstruct URL
+  const qs = event.rawQueryString ? `?${event.rawQueryString}` : "";
+  const url = `https://${event.requestContext.domainName}${event.rawPath}${qs}`;
+
+  // Headers
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(event.headers ?? {})) {
+    if (value) {
+      headers.set(key, value);
+    }
+  }
+  if (event.cookies && event.cookies.length > 0) {
+    headers.set("cookie", event.cookies.join("; "));
+  }
+
+  // Body
+  let body: BodyInit | null = null;
+  if (event.body) {
+    body = event.isBase64Encoded
+      ? Buffer.from(event.body, "base64")
+      : event.body;
+  }
+
+  return new Request(url, {
+    method: event.requestContext.http.method,
+    headers,
+    body,
+  });
+}

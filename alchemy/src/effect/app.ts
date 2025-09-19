@@ -39,5 +39,5 @@ export const fromArgs = Layer.effect(
   }),
 );
 
-export const of = (input: { name: string; stage: string }) =>
+export const app = (input: { name: string; stage: string }) =>
   Layer.succeed(App, App.of(input));

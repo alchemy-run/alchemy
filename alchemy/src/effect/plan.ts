@@ -97,6 +97,49 @@ export type DeleteOrphans<K extends string | number | symbol> = {
   [k in Exclude<string, K>]: Delete<Resource>;
 };
 
+type PlanItem = Effect.Effect<
+  {
+    [id in string]: Bound | Resource;
+  },
+  never,
+  any
+>;
+
+export const planAll = <const Resources extends PlanItem[]>(
+  ...resources: Resources
+) => {
+  type Req = Effect.Effect.Context<Resources[number]>;
+  type Plan<Items extends PlanItem[], Accum> = Items extends [
+    infer Head extends PlanItem,
+    ...infer Tail extends PlanItem[],
+  ]
+    ? Plan<
+        Tail,
+        Accum & {
+          [id in keyof Effect.Effect.Success<Head>]: Effect.Effect.Success<Head>[id] extends Bound<
+            infer From,
+            any
+          >
+            ? Materialize<From>
+            : Effect.Effect.Success<Head>[id] extends Resource
+              ? Materialize<Effect.Effect.Success<Head>[id]>
+              : never;
+        }
+      >
+    : Accum;
+
+  return Effect.all(resources.map(plan)).pipe(
+    Effect.map((plans) =>
+      plans.reduce((acc, plan) => ({ ...acc, ...plan }), {}),
+    ),
+  ) as Effect.Effect<
+    // UnionToIntersection<Effect.Effect.Success<Resources[number]>>,
+    Plan<Resources, {}>,
+    never,
+    Req
+  >;
+};
+
 export const plan = <
   Resources extends {
     [id in string]: Bound | Resource;
@@ -222,14 +265,23 @@ export const plan = <
           Array.from(all).map(
             Effect.fn(function* (id) {
               const oldState = yield* state.get(id);
+              const context = yield* Effect.context<never>();
               if (oldState) {
+                const provider = context.unsafeMap.get(oldState?.type);
+                if (!provider) {
+                  yield* Effect.die(
+                    new Error(`Provider not found for ${oldState?.type}`),
+                  );
+                }
                 plan[id] = {
                   action: "delete",
                   olds: oldState.props,
                   output: oldState.output,
                   // TODO(sam): how to get these?
-                  // provider,
+                  provider,
+                  attributes: oldState?.output,
                   // bindings,
+                  // resource,
                 };
               }
             }),

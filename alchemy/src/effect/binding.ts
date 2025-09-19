@@ -6,6 +6,7 @@ export type Bound<
   To extends Statement = Statement,
 > = {
   type: "bound";
+  main: string;
   target: From;
   bindings: To[];
 };

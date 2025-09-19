@@ -271,6 +271,7 @@
     "@octokit/rest": "^21.1.1",
     "@sentry/cloudflare": "^9.43.0",
     "@sveltejs/adapter-cloudflare": "^7.1.2",
+    "@types/aws-lambda": "^8.10.152",
     "@types/bun": "latest",
     "@types/debug": "^4.1.12",
     "@types/fs-extra": "^11.0.4",

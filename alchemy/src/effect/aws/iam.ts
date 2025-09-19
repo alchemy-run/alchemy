@@ -18,7 +18,7 @@ export interface PolicyStatement {
   Effect: "Allow" | "Deny";
   Sid?: string;
   Action: string[];
-  Resource: string[];
+  Resource: string | string[];
   Condition?: Record<string, Record<string, string | string[]>>;
   Principal?: Record<string, string | string[]>;
   NotPrincipal?: Record<string, string | string[]>;
