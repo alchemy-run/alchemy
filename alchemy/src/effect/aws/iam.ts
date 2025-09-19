@@ -1,13 +1,16 @@
 import * as Context from "effect/Context";
-import { IAM as IAMClient } from "itty-aws/iam";
+import { IAM } from "itty-aws/iam";
 import { createAWSServiceClientLayer } from "./client.ts";
 
-export class Client extends Context.Tag("AWS::IAM::Client")<
-  Client,
-  IAMClient
+export class IAMClient extends Context.Tag("AWS::IAM::Client")<
+  IAMClient,
+  IAM
 >() {}
 
-export const client = createAWSServiceClientLayer(Client, IAMClient);
+export const client = createAWSServiceClientLayer<typeof IAMClient, IAM>(
+  IAMClient,
+  IAM,
+);
 
 export interface PolicyDocument {
   Version: "2012-10-17";

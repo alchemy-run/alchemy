@@ -129,15 +129,15 @@ export const consume = <Q, Err, Req>(
   });
 };
 
-export type Consumer<Self, Err, Req> = Effect.Effect<
+export type Consumer<Q, Err, Req> = Effect.Effect<
   (
     request: SQSEvent,
     context: LambdaContext,
   ) => Effect.Effect<SQSBatchResponse | void, Err, Req>,
   Err,
-  Req
+  Req | Consume<Extract<Q, Queue>>
 > & {
-  self: Self;
+  self: Q;
 };
 
 export type Consume<Q extends Queue = Queue> = Lambda.Bindable<
@@ -203,7 +203,7 @@ export const send = <Q extends Queue<string, Props>>(
   Effect.gen(function* () {
     // TODO(sam): we want this to be a phantom and not explicitly in the Requirements
     yield* allow<SendMessage<Q>>();
-    const sqs = yield* Client;
+    const sqs = yield* QueueClient;
     const url =
       process.env[`${queue.id.toUpperCase().replace(/-/g, "_")}_QUEUE_URL`]!;
     return yield* sqs.sendMessage({
@@ -212,9 +212,15 @@ export const send = <Q extends Queue<string, Props>>(
     });
   });
 
-export class Client extends Context.Tag("AWS::Lambda")<Client, SQSClient>() {}
+export class QueueClient extends Context.Tag("AWS::SQS::Queue.Client")<
+  QueueClient,
+  SQSClient
+>() {}
 
-export const client = createAWSServiceClientLayer(Client, SQSClient);
+export const client = createAWSServiceClientLayer<
+  typeof QueueClient,
+  SQSClient
+>(QueueClient, SQSClient);
 
 export const clientFromEnv = Layer.provide(
   client,
@@ -229,7 +235,7 @@ export class QueueProvider extends Context.Tag("AWS::SQS::Queue")<
 export const provider = Layer.effect(
   QueueProvider,
   Effect.gen(function* () {
-    const sqs = yield* Client;
+    const sqs = yield* QueueClient;
     const app = yield* App;
     const region = yield* Region.Region;
     const accountId = yield* Account.AccountID;

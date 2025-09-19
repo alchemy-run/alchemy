@@ -3,17 +3,16 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import type { AWSClientConfig } from "itty-aws";
+import type { TagInstance } from "../util.ts";
 import * as Credentials from "./credentials.ts";
 import * as Region from "./region.ts";
 
 export const createAWSServiceClientLayer = <
   Tag extends Context.Tag<any, any>,
-  Client extends new (
-    config: AWSClientConfig,
-  ) => any,
+  Client,
 >(
   tag: Tag,
-  clss: Client,
+  clss: new (config: AWSClientConfig) => Client,
 ) =>
   Layer.effect(
     tag,
@@ -31,4 +30,8 @@ export const createAWSServiceClientLayer = <
         },
       });
     }),
-  );
+  ) as Layer.Layer<
+    TagInstance<Tag>,
+    never,
+    Region.Region | Credentials.Credentials
+  >;

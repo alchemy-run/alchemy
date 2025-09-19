@@ -6,9 +6,17 @@ export type Bound<
   To extends Statement = Statement,
 > = {
   type: "bound";
-  main: string;
   target: From;
   bindings: To[];
+  /**
+   * The main file to use for the function.
+   */
+  main: string;
+  /**
+   * The handler to use for the function.
+   * @default "default"
+   */
+  handler?: string;
 };
 
 export const isBound = (value: any): value is Bound =>

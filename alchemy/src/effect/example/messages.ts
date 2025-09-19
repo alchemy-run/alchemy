@@ -17,8 +17,8 @@ export class Messages extends Queue.Tag("messages", {
 }) {}
 
 // business logic
-export const consumer = Messages.consume((batch) =>
-  Effect.gen(function* () {
+export const consumer = Messages.consume(
+  Effect.fn(function* (batch) {
     for (const record of batch.Records) {
       console.log(record);
     }
@@ -26,7 +26,10 @@ export const consumer = Messages.consume((batch) =>
 );
 
 // runtime handler
-export default consumer.pipe(Effect.provide(Queue.clientFromEnv));
+export default consumer.pipe(
+  Effect.provide(Queue.clientFromEnv),
+  Lambda.toHandler,
+);
 
 // infrastructure
 export class Consumer extends Lambda.make(consumer, {

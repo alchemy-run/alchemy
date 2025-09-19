@@ -125,6 +125,7 @@ export const make = <F extends Resource, Req>(
         type: "bound",
         target: self,
         main,
+        handler,
         bindings: policy.statements,
       } satisfies Bound<F, Extract<Req, Statement>>,
     };
@@ -146,12 +147,15 @@ export const make = <F extends Resource, Req>(
     new (_: never): {};
   };
 
-export class Client extends Context.Tag("AWS::Lambda")<
-  Client,
+export class FunctionClient extends Context.Tag("AWS::Lambda::Function.Client")<
+  FunctionClient,
   LambdaClient
 >() {}
 
-export const client = createAWSServiceClientLayer(Client, LambdaClient);
+export const client = createAWSServiceClientLayer<
+  typeof FunctionClient,
+  LambdaClient
+>(FunctionClient, LambdaClient);
 
 export interface FunctionProviderProps extends Props {
   /**
@@ -182,8 +186,8 @@ export class FunctionProvider extends Context.Tag("AWS::Lambda::Function")<
 export const provider = Layer.effect(
   FunctionProvider,
   Effect.gen(function* () {
-    const lambda = yield* Client;
-    const iam = yield* IAM.Client;
+    const lambda = yield* FunctionClient;
+    const iam = yield* IAM.IAMClient;
     const accountId = yield* AccountID;
     const region = yield* Region;
     const app = yield* App;
@@ -569,7 +573,7 @@ export declare const InvokeFunction: <F extends Function>(
 
 export const invoke = <F extends Function>(func: F, input: any) =>
   Effect.gen(function* () {
-    const lambda = yield* Client;
+    const lambda = yield* FunctionClient;
     const functionArn = process.env[`${func.id}-functionArn`]!;
     yield* allow<InvokeFunction<F>>();
     return yield* lambda.invoke({
@@ -579,7 +583,8 @@ export const invoke = <F extends Function>(func: F, input: any) =>
     });
   });
 
-export const toHandler = (effect: Effect.Effect<Handler, any, never>) => null;
+export const toHandler = (effect: Effect.Effect<Handler, any, Statement>) =>
+  null;
 
 export type Bindable<S extends Statement = Statement> = S & {
   bind(
@@ -595,34 +600,3 @@ export type Bindable<S extends Statement = Statement> = S & {
     policyStatements?: IAM.PolicyStatement[];
   } | void>;
 };
-
-function toWebRequest(event: LambdaFunctionURLEvent): Request {
-  // Reconstruct URL
-  const qs = event.rawQueryString ? `?${event.rawQueryString}` : "";
-  const url = `https://${event.requestContext.domainName}${event.rawPath}${qs}`;
-
-  // Headers
-  const headers = new Headers();
-  for (const [key, value] of Object.entries(event.headers ?? {})) {
-    if (value) {
-      headers.set(key, value);
-    }
-  }
-  if (event.cookies && event.cookies.length > 0) {
-    headers.set("cookie", event.cookies.join("; "));
-  }
-
-  // Body
-  let body: BodyInit | null = null;
-  if (event.body) {
-    body = event.isBase64Encoded
-      ? Buffer.from(event.body, "base64")
-      : event.body;
-  }
-
-  return new Request(url, {
-    method: event.requestContext.http.method,
-    headers,
-    body,
-  });
-}
