@@ -60,10 +60,19 @@ export async function createRemoteProxyWorker(input: {
       const url = new URL(req.url);
       const targetUrl = new URL(url.pathname + url.search, proxyURL);
 
-      const headers = new Headers(req.headers);
-      headers.set("cf-workers-preview-token", token);
-      headers.set("host", new URL(proxyURL).hostname);
-      headers.delete("cf-connecting-ip");
+      const headers = new Headers({
+        "cf-workers-preview-token": token,
+        host: new URL(proxyURL).hostname,
+      });
+      req.headers.forEach((value, key) => {
+        // `mf-` headers (e.g. `mf-binding`) indicate which binding to use.
+        // Including other headers may cause unexpected behavior.
+        // TODO(john): On some runtimes, it seems to be trying to create a websocket connection.
+        // We should figure out why and handle it, but simply ignoring them seems to work for now.
+        if (key.match(/^mf-/i)) {
+          headers.append(key, value);
+        }
+      });
 
       const res = await fetch(targetUrl, {
         method: req.method,
