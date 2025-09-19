@@ -1,8 +1,10 @@
 import * as miniflare from "miniflare";
 import { once } from "node:events";
 import http from "node:http";
+import type { AddressInfo } from "node:net";
 import { Readable } from "node:stream";
 import { WebSocket, WebSocketServer } from "ws";
+import { logger } from "../../util/logger.ts";
 
 export interface MiniflareWorkerProxy {
   url: URL;
@@ -75,12 +77,10 @@ export async function createMiniflareWorkerProxy(options: {
     return server;
   };
 
-  server.listen(options.port);
-  await once(server, "listening");
-  const url = new URL(`http://localhost:${options.port}`);
+  await tryListen(server, options.port);
 
   return {
-    url,
+    url: formatAddress(server.address()),
     close: async () => {
       await Promise.all([
         new Promise((resolve) => server.close(resolve)),
@@ -89,6 +89,37 @@ export async function createMiniflareWorkerProxy(options: {
     },
   };
 }
+
+const tryListen = async (server: http.Server, port: number) => {
+  try {
+    server.listen(port);
+    await once(server, "listening");
+    return server;
+  } catch (error) {
+    if (isAddressInUse(error)) {
+      logger.warn(`Port ${port} is already in use, trying ${port + 1}...`);
+      return await tryListen(server, port + 1);
+    }
+    throw error;
+  }
+};
+
+const isAddressInUse = (error: unknown): boolean => {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "EADDRINUSE"
+  );
+};
+
+const formatAddress = (address: string | AddressInfo | null) => {
+  if (!address || typeof address === "string") {
+    throw new Error("Invalid address");
+  }
+  const host = address.address === "::" ? "localhost" : address.address;
+  return new URL(`http://${host}:${address.port}`);
+};
 
 interface RequestInfo {
   method: string;
