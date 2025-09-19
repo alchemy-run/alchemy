@@ -314,6 +314,14 @@ export const buildWorkerOptions = async (
           className: binding.className,
           scriptName: binding.scriptName,
         };
+        // Expose the workflow as an entrypoint.
+        // TODO(john): Identify all entrypoints using esbuild, like Wrangler does, and expose them all.
+        // See https://github.com/cloudflare/workers-sdk/blob/dc1d0d6f9c8ccb0714f4b3143f0d0caa8b43f753/packages/wrangler/src/dev/miniflare/index.ts#L1015
+        options.unsafeDirectSockets!.push({
+          entrypoint: binding.className,
+          serviceName: binding.scriptName,
+          proxy: true,
+        });
         break;
       }
       default: {
