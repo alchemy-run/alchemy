@@ -241,6 +241,7 @@ interface R2BucketCORSRule {
 }
 
 export type R2Bucket = _R2Bucket & {
+  head(key: string): Promise<Response | null>;
   get(key: string): Promise<Response | null>;
   put(
     key: string,
@@ -364,6 +365,11 @@ export async function R2Bucket(
   });
   return {
     ...bucket,
+    head: async (key: string) =>
+      headObject(api, {
+        bucketName: bucket.name,
+        key,
+      }),
     get: async (key: string) => {
       const response = await getObject(api, {
         bucketName: bucket.name,
@@ -923,27 +929,37 @@ export async function getBucketLockRules(
   return rules as R2BucketLockRule[];
 }
 
+export async function headObject(
+  api: CloudflareApi,
+  { bucketName, key }: { bucketName: string; key: string },
+) {
+  return await withRetries(
+    async () =>
+      await api.head(
+        `/accounts/${api.accountId}/r2/buckets/${bucketName}/objects/${key}`,
+      ),
+  );
+}
+
+const withRetries = (f: () => Promise<Response>) => {
+  return withExponentialBackoff(f, isRetryableError, 5, 1000);
+};
+
 export async function getObject(
   api: CloudflareApi,
   { bucketName, key }: { bucketName: string; key: string },
 ) {
-  return await withExponentialBackoff(
-    async () => {
-      const response = await api.get(
-        `/accounts/${api.accountId}/r2/buckets/${bucketName}/objects/${key}`,
-      );
+  return await withRetries(async () => {
+    const response = await api.get(
+      `/accounts/${api.accountId}/r2/buckets/${bucketName}/objects/${key}`,
+    );
 
-      if (!response.ok && response.status !== 404) {
-        await handleApiError(response, "get", "object", key);
-      }
+    if (!response.ok && response.status !== 404) {
+      await handleApiError(response, "get", "object", key);
+    }
 
-      return response;
-    },
-    // Retry on transient errors
-    isRetryableError,
-    5, // 5 retry attempts
-    1000, // Start with 1 second delay
-  );
+    return response;
+  });
 }
 
 export async function putObject(
@@ -959,48 +975,37 @@ export async function putObject(
   },
 ) {
   // Using withExponentialBackoff for reliability
-  return await withExponentialBackoff(
-    async () => {
-      const response = await api.put(
-        `/accounts/${api.accountId}/r2/buckets/${bucketName}/objects/${key}`,
-        object,
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
+  return await withRetries(async () => {
+    const response = await api.put(
+      `/accounts/${api.accountId}/r2/buckets/${bucketName}/objects/${key}`,
+      object,
+      {
+        headers: {
+          "Content-Type": "application/json",
         },
-      );
+      },
+    );
 
-      if (!response.ok) {
-        await handleApiError(response, "put", "object", key);
-      }
-      return response;
-    },
-    // Retry on transient errors
-    isRetryableError,
-    5, // 5 retry attempts
-    1000, // Start with 1 second delay
-  );
+    if (!response.ok) {
+      await handleApiError(response, "put", "object", key);
+    }
+    return response;
+  });
 }
 
 export async function deleteObject(
   api: CloudflareApi,
   { bucketName, key }: { bucketName: string; key: string },
 ) {
-  return await withExponentialBackoff(
-    async () => {
-      const response = await api.delete(
-        `/accounts/${api.accountId}/r2/buckets/${bucketName}/objects/${key}`,
-      );
+  return await withRetries(async () => {
+    const response = await api.delete(
+      `/accounts/${api.accountId}/r2/buckets/${bucketName}/objects/${key}`,
+    );
 
-      if (!response.ok && response.status !== 404) {
-        await handleApiError(response, "delete", "object", key);
-      }
+    if (!response.ok && response.status !== 404) {
+      await handleApiError(response, "delete", "object", key);
+    }
 
-      return response;
-    },
-    isRetryableError,
-    5, // 5 retry attempts
-    1000, // Start with 1 second delay
-  );
+    return response;
+  });
 }
