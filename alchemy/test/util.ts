@@ -6,6 +6,7 @@ import type { AlchemyOptions } from "../src/alchemy.ts";
 import { CloudflareStateStore } from "../src/state/cloudflare-state-store.ts";
 import { D1StateStore } from "../src/state/d1-state-store.ts";
 import { FileSystemStateStore } from "../src/state/file-system-state-store.ts";
+import { R2RestStateStore } from "../src/state/r2-rest-state-store.ts";
 import { SQLiteStateStore } from "../src/state/sqlite-state-store.ts";
 
 /**
@@ -41,7 +42,7 @@ export const BRANCH_PREFIX = sanitizeForAwsResourceName(
   process.env.BRANCH_PREFIX || os.userInfo().username,
 );
 
-export const STATE_STORE_TYPES = ["do", "fs", "d1", "sqlite"] as const;
+export const STATE_STORE_TYPES = ["do", "fs", "d1", "sqlite", "r2"] as const;
 
 export const createTestOptions = (
   storeType: (typeof STATE_STORE_TYPES)[number],
@@ -60,6 +61,8 @@ export const createTestOptions = (
           return new SQLiteStateStore(scope, {
             filename: `.alchemy/${namespace}.sqlite`,
           });
+        case "r2":
+          return new R2RestStateStore(scope);
       }
     },
   }) satisfies AlchemyOptions;
