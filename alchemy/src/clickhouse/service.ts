@@ -210,8 +210,6 @@ export const Service = Resource(
         : props.organization.id;
 
     if (this.phase === "delete") {
-      //todo(pr): `Only instance in one of the following states: 'provisioning','starting','awaking','idle','stopped','degraded','failed' can be terminated`
-      //todo(pr): this means we need to request it stops, wait, THEN delete.
       await api.v1
         .organizations(organizationId)
         .services(this.output.clickhouseId)
