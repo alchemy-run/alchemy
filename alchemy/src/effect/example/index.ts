@@ -28,6 +28,4 @@ const infrastructure = await applied.pipe(
   Effect.runPromise,
 );
 
-// console.log({
-//   url: infrastructure.api.functionUrl,
-// });
+console.log(infrastructure);

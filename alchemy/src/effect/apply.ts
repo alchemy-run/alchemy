@@ -108,12 +108,15 @@ export const apply = <P extends Plan, Err, Req>(
           node: Plan[keyof Plan] | BindingAction<Statement>[],
         ) => Effect.Effect<any, never, never>;
 
-        yield* Effect.all(Object.values(plan).map(apply));
-
-        return plan as {
-          [id in keyof P]: Simplify<P[id]["resource"]["attributes"]>;
-          // [id in keyof P]: P[id]["attributes"];
-        };
+        return Object.fromEntries(
+          yield* Effect.all(
+            Object.entries(plan).map(
+              Effect.fn(function* ([id, node]) {
+                return [id, yield* apply(node)];
+              }),
+            ),
+          ),
+        );
       }),
     ),
   ) as Effect.Effect<

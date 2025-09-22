@@ -9,7 +9,11 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 import type { Context as LambdaContext } from "aws-lambda";
-import { Lambda as LambdaClient } from "itty-aws/lambda";
+import {
+  Lambda as LambdaClient,
+  type CreateFunctionUrlConfigRequest,
+  type UpdateFunctionUrlConfigRequest,
+} from "itty-aws/lambda";
 import { App } from "../app.ts";
 import type { Bound } from "../binding.ts";
 import type { AttachAction, BindingAction } from "../plan.ts";
@@ -419,26 +423,27 @@ export const provider = Layer.effect(
       url: Props["url"];
     }) {
       if (url) {
+        const config = {
+          FunctionName: functionName,
+          AuthType: "NONE", // | AWS_IAM
+          // Cors: {
+          //   AllowCredentials: true,
+          //   AllowHeaders: ["*"],
+          //   AllowMethods: ["*"],
+          //   AllowOrigins: ["*"],
+          //   ExposeHeaders: ["*"],
+          //   MaxAge: 86400,
+          // },
+          InvokeMode: "BUFFERED", // | RESPONSE_STREAM
+          // Qualifier: "$LATEST"
+        } satisfies
+          | CreateFunctionUrlConfigRequest
+          | UpdateFunctionUrlConfigRequest;
         const response = yield* lambda
-          .createFunctionUrlConfig({
-            FunctionName: functionName,
-            AuthType: "NONE", // | AWS_IAM
-            // Cors: {
-            //   AllowCredentials: true,
-            //   AllowHeaders: ["*"],
-            //   AllowMethods: ["*"],
-            //   AllowOrigins: ["*"],
-            //   ExposeHeaders: ["*"],
-            //   MaxAge: 86400,
-            // },
-            InvokeMode: "BUFFERED", // | RESPONSE_STREAM
-            // Qualifier: "$LATEST"
-          })
+          .createFunctionUrlConfig(config)
           .pipe(
             Effect.catchTag("ResourceConflictException", () =>
-              lambda.getFunctionUrlConfig({
-                FunctionName: functionName,
-              }),
+              lambda.updateFunctionUrlConfig(config),
             ),
           );
         return response.FunctionUrl;
