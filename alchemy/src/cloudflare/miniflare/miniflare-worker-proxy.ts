@@ -3,6 +3,7 @@ import { once } from "node:events";
 import http from "node:http";
 import { Readable } from "node:stream";
 import { WebSocket, WebSocketServer } from "ws";
+import { coupleWebSocket } from "../../util/http.ts";
 
 export interface MiniflareWorkerProxy {
   url: URL;
@@ -22,13 +23,7 @@ export async function createMiniflareWorkerProxy(options: {
   server.on("upgrade", async (req, socket, head) => {
     try {
       const server = await createServerWebSocket(req);
-      wss.handleUpgrade(req, socket, head, (client) => {
-        client.on("message", (event, binary) => server.send(event, { binary }));
-        client.on("close", (code, reason) => server.close(code, reason));
-        server.on("message", (event, binary) => client.send(event, { binary }));
-        server.on("close", (code, reason) => client.close(code, reason));
-        wss.emit("connection", client, req);
-      });
+      coupleWebSocket(wss, req, socket, head, server);
     } catch (error) {
       console.error(error);
       socket.destroy();
