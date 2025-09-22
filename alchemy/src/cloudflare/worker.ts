@@ -34,6 +34,7 @@ import {
 } from "./durable-object-namespace.ts";
 import { type EventSource, isQueueEventSource } from "./event-source.ts";
 import { deleteMiniflareWorkerData } from "./miniflare/delete.ts";
+import { MiniflareController } from "./miniflare/miniflare-controller.ts";
 import {
   QueueConsumer,
   deleteQueueConsumer,
@@ -870,11 +871,7 @@ const _Worker = Resource(
       if (props.dev?.url) {
         url = props.dev.url;
       } else {
-        const { MiniflareController } = await import(
-          "./miniflare/miniflare-controller.js"
-        );
-        const controller = MiniflareController.singleton;
-        url = await controller.add({
+        url = await MiniflareController.singleton.add({
           api,
           id,
           name: options.name,
@@ -887,7 +884,7 @@ const _Worker = Resource(
           port: props.dev?.port,
           tunnel: props.dev?.tunnel ?? this.scope.tunnel,
         });
-        this.onCleanup(() => controller.dispose());
+        this.onCleanup(() => MiniflareController.singleton.dispose());
       }
       await provisionResources(
         {
