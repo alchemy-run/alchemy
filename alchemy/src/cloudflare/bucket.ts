@@ -240,9 +240,31 @@ interface R2BucketCORSRule {
   maxAgeSeconds?: number;
 }
 
+export type R2ObjectMetadata = {
+  key: string;
+  etag: string;
+  uploaded: Date;
+};
+
+export type R2Object = R2ObjectMetadata & {
+  arrayBuffer(): Promise<ArrayBuffer>;
+  bytes(): Promise<Uint8Array>;
+  text(): Promise<string>;
+  json<T>(): Promise<T>;
+  blob(): Promise<Blob>;
+};
+
+export type PutR2ObjectResponse = {
+  key: string;
+  etag: string;
+  uploaded: Date;
+  version: string;
+  size: number;
+};
+
 export type R2Bucket = _R2Bucket & {
-  head(key: string): Promise<Response | null>;
-  get(key: string): Promise<Response | null>;
+  head(key: string): Promise<R2ObjectMetadata | null>;
+  get(key: string): Promise<R2Object | null>;
   put(
     key: string,
     value:
@@ -252,7 +274,7 @@ export type R2Bucket = _R2Bucket & {
       | string
       | null
       | Blob,
-  ): Promise<Response>;
+  ): Promise<PutR2ObjectResponse>;
   delete(key: string): Promise<Response>;
 };
 
@@ -376,7 +398,7 @@ export async function R2Bucket(
         key,
       });
       if (response.ok) {
-        return response;
+        return parseR2Object(key, response);
       } else if (response.status === 404) {
         return null;
       } else {
@@ -385,19 +407,30 @@ export async function R2Bucket(
     },
     put: async (
       key: string,
-      value:
-        | ReadableStream
-        | ArrayBuffer
-        | ArrayBufferView
-        | string
-        | null
-        | Blob,
-    ) =>
-      putObject(api, {
+      value: PutObjectObject,
+    ): Promise<PutR2ObjectResponse> => {
+      const response = await putObject(api, {
         bucketName: bucket.name,
         key: key,
         object: value,
-      }),
+      });
+      const body = (await response.json()) as {
+        result: {
+          key: string;
+          etag: string;
+          uploaded: string;
+          version: string;
+          size: string;
+        };
+      };
+      return {
+        key: body.result.key,
+        etag: body.result.etag,
+        uploaded: new Date(body.result.uploaded),
+        version: body.result.version,
+        size: Number(body.result.size),
+      };
+    },
     delete: async (key: string) =>
       deleteObject(api, {
         bucketName: bucket.name,
@@ -405,6 +438,20 @@ export async function R2Bucket(
       }),
   };
 }
+
+const parseR2Object = (key: string, response: Response): R2Object => ({
+  etag: response.headers.get("ETag")!,
+  uploaded: parseDate(response.headers),
+  key,
+  arrayBuffer: () => response.arrayBuffer(),
+  bytes: () => response.bytes(),
+  text: () => response.text(),
+  json: () => response.json(),
+  blob: () => response.blob(),
+});
+
+const parseDate = (headers: Headers) =>
+  new Date(headers.get("Last-Modified") ?? headers.get("Date")!);
 
 const _R2Bucket = Resource(
   "cloudflare::R2Bucket",
@@ -932,13 +979,25 @@ export async function getBucketLockRules(
 export async function headObject(
   api: CloudflareApi,
   { bucketName, key }: { bucketName: string; key: string },
-) {
-  return await withRetries(
+): Promise<R2ObjectMetadata | null> {
+  const response = await withRetries(
     async () =>
-      await api.head(
+      await api.get(
         `/accounts/${api.accountId}/r2/buckets/${bucketName}/objects/${key}`,
       ),
   );
+  // for some reason HEAD returns 404 for keys that exist, this is the best we can do without using S3 API
+  response.body?.cancel();
+  if (response.status === 404) {
+    return null;
+  } else if (!response.ok) {
+    throw await handleApiError(response, "head", "object", key);
+  }
+  return {
+    key,
+    etag: response.headers.get("ETag")?.replace(/"/g, "")!,
+    uploaded: parseDate(response.headers),
+  };
 }
 
 const withRetries = (f: () => Promise<Response>) => {
@@ -952,15 +1011,26 @@ export async function getObject(
   return await withRetries(async () => {
     const response = await api.get(
       `/accounts/${api.accountId}/r2/buckets/${bucketName}/objects/${key}`,
+      {
+        headers: {
+          "Content-Type": "application/octet-stream",
+          Accept: "application/octet-stream",
+        },
+      },
     );
-
     if (!response.ok && response.status !== 404) {
-      await handleApiError(response, "get", "object", key);
+      throw await handleApiError(response, "get", "object", key);
     }
-
     return response;
   });
 }
+
+type PutObjectObject =
+  | ReadableStream
+  | ArrayBuffer
+  | ArrayBufferView
+  | string
+  | Blob;
 
 export async function putObject(
   api: CloudflareApi,
@@ -971,9 +1041,9 @@ export async function putObject(
   }: {
     bucketName: string;
     key: string;
-    object: any;
+    object: PutObjectObject;
   },
-) {
+): Promise<Response> {
   // Using withExponentialBackoff for reliability
   return await withRetries(async () => {
     const response = await api.put(
@@ -981,11 +1051,10 @@ export async function putObject(
       object,
       {
         headers: {
-          "Content-Type": "application/json",
+          "Content-Type": "application/octet-stream",
         },
       },
     );
-
     if (!response.ok) {
       await handleApiError(response, "put", "object", key);
     }
