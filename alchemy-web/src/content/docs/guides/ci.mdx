@@ -127,7 +127,7 @@ export function DeployWorkflow({ manager = "bun" }) {
               CLOUDFLARE_EMAIL: "${{ secrets.CLOUDFLARE_EMAIL }}",
               PULL_REQUEST: "${{ github.event.number }}",
               GITHUB_SHA: "${{ github.sha }}",
-              GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }},
+              GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}",
             },
           },
         ],
