@@ -193,13 +193,14 @@ export namespace Credentials {
     }
     // 3. Refresh credentials with lock for thread safety
     const lock = new Lock(`${props.provider}-${props.profile}`);
-    if (lock.acquire()) {
+    const release = await lock.acquire();
+    if (release) {
       try {
         const refreshed = await refresh(credentials);
         await Credentials.set(props, refreshed);
         return refreshed;
       } finally {
-        lock.release();
+        await release();
       }
     }
     // 4. Another process has the lock, so wait for it to be released

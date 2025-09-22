@@ -1,79 +1,48 @@
-import fs from "node:fs"; // synchronous IO used for thread safety
+import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-
-interface LockState {
-  pid: number;
-  timestamp: number;
-}
+import lockfile from "proper-lockfile";
 
 const LOCK_DIR = path.join(os.homedir(), ".alchemy", "lock");
 
 export class Lock {
   private path: string;
-
   constructor(key: string) {
-    this.path = path.join(LOCK_DIR, key);
+    this.path = path.join(LOCK_DIR, encodeURIComponent(key));
   }
 
   /**
    * Acquires the lock.
-   * @returns True if the lock was acquired successfully, false otherwise.
+   * @returns A function to release the lock, or null if the lock is already acquired.
    */
-  acquire(): boolean {
+  async acquire() {
     try {
-      fs.mkdirSync(LOCK_DIR, { recursive: true });
-      const fd = fs.openSync(this.path, "wx");
-      fs.writeSync(
-        fd,
-        JSON.stringify({ pid: process.pid, timestamp: Date.now() }),
-      );
-      fs.closeSync(fd);
-      return true;
+      await fs.mkdir(LOCK_DIR, { recursive: true });
+      return await lockfile.lock(LOCK_DIR, {
+        lockfilePath: this.path,
+      });
     } catch {
-      return false;
+      return null;
     }
   }
 
   /**
-   * Releases the lock if it is held by the current process.
+   * Checks if the lock is active.
+   * @returns True if the lock is active, false otherwise.
    */
-  release() {
-    const state = this.read();
-    if (!state || state.pid !== process.pid) {
-      return;
-    }
-    fs.unlinkSync(this.path);
-  }
-
-  /**
-   * Returns true if the lock is active.
-   */
-  check() {
-    const state = this.read();
-    if (!state) return false;
-    return state.timestamp > Date.now() - 1000 * 10;
+  async check() {
+    return await lockfile.check(LOCK_DIR, {
+      lockfilePath: this.path,
+    });
   }
 
   /**
    * Waits for the lock to be released.
+   * @param interval The interval to wait between checks.
    */
   async wait(interval = 100) {
-    while (true) {
-      if (!this.check()) {
-        fs.rmSync(this.path, { force: true });
-        return;
-      }
+    while (await this.check()) {
       await new Promise((resolve) => setTimeout(resolve, interval));
-    }
-  }
-
-  private read() {
-    try {
-      const file = fs.readFileSync(this.path, "utf-8");
-      return JSON.parse(file) as LockState;
-    } catch {
-      return undefined;
     }
   }
 }
