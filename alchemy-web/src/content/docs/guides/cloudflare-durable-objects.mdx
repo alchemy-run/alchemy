@@ -56,26 +56,24 @@ This is a step-by-step guide to deploy a Durable Object, for a complete API refe
      declare env: typeof worker.Env;
      private count: number;
 
-     constructor(state, env: typeof worker.Env) {
-       this.state = state;
-       this.count = 0;
+     constructor(ctx: DurableObjectState, env: typeof worker.Env) {
+       super(ctx, env);
+       // Initialize count from storage or 0
+       this.count = Number(this.ctx.storage.kv.get('count') || 0);
      }
 
-     async fetch(request) {
+     async fetch(request: Request) {
        const url = new URL(request.url);
        const path = url.pathname;
-
-       // Retrieve current count
-       this.count = (await this.state.storage.get("count")) || 0;
-
+       
        if (path === "/increment") {
          this.count++;
-         await this.state.storage.put("count", this.count);
        } else if (path === "/decrement") {
          this.count--;
-         await this.state.storage.put("count", this.count);
        }
 
+       // Update count in storage
+       this.ctx.storage.kv.put('count', this.count.toString());
        return Response.json({ count: this.count });
      }
    }
