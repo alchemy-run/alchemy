@@ -176,7 +176,7 @@ export const SendMessage = <Q extends Queue>(queue: Q): SendMessage<Q> => ({
   effect: "Allow",
   action: "sqs:SendMessage",
   resource: queue,
-  bind: Effect.fn(function* (_func, action, { queueUrl }) {
+  bind: Effect.fn(function* (_func, action, { queueUrl, queueArn }) {
     const key = `${queue.id.toUpperCase().replace(/-/g, "_")}_QUEUE_URL`;
     return {
       env: {
@@ -187,7 +187,7 @@ export const SendMessage = <Q extends Queue>(queue: Q): SendMessage<Q> => ({
           Sid: action.stmt.sid,
           Effect: "Allow",
           Action: ["sqs:SendMessage"],
-          Resource: [queueUrl],
+          Resource: [queueArn],
         },
       ],
       bundle: {
@@ -274,6 +274,7 @@ export const provider = Layer.effect(
       }),
       create: Effect.fn(function* ({ id, news }) {
         const queueName = createQueueName(id, news);
+        console.log("creating queue", queueName);
         const response = yield* sqs.createQueue({
           QueueName: queueName,
           Attributes: createAttributes(news),

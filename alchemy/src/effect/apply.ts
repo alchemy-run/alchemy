@@ -1,41 +1,113 @@
 import * as Effect from "effect/Effect";
 import type { Simplify } from "effect/Types";
-import type { PhysicalPlan } from "./plan.ts";
+import type { BindingAction, Plan } from "./plan.ts";
+import type { Statement } from "./policy.ts";
 
-export const apply = <P extends PhysicalPlan, Err, Req>(
+export const apply = <P extends Plan, Err, Req>(
   plan: Effect.Effect<P, Err, Req>,
 ) =>
   plan.pipe(
     Effect.flatMap((plan) =>
       Effect.gen(function* () {
-        const attributes = new Map<string, any>();
+        const outputs = {} as Record<string, Effect.Effect<any, any>>;
 
         const apply = Effect.fn(function* (
-          id: string,
-          node: PhysicalPlan[keyof PhysicalPlan],
+          node: BindingAction<Statement>[] | Plan[keyof Plan],
         ) {
-          if (attributes.has(node.resource.id)) {
-            return attributes.get(node.resource.id);
+          if (Array.isArray(node)) {
+            return yield* Effect.all(
+              node.map((binding) => {
+                const resource = plan[binding.stmt.resource.id];
+                return !resource
+                  ? Effect.dieMessage(
+                      `Resource ${binding.stmt.resource.id} not found`,
+                    )
+                  : apply(resource);
+              }),
+            );
           }
-
-          if (node.action === "create") {
-            if (node.bindings) {
-              for (const binding of node.bindings) {
-                yield* apply(binding.stmt.resource.id, binding.stmt);
+          const id = node.resource.id;
+          return yield* (outputs[id] ??= yield* Effect.cached(
+            Effect.gen(function* () {
+              console.log("pending", id);
+              const bindings = yield* apply(node.bindings);
+              if (node.action === "noop") {
+                console.log("noop", id);
+                return node.output;
+              } else if (node.action === "create") {
+                console.log("creating", id);
+                return yield* node.provider.create({
+                  id,
+                  news: node.news,
+                  bindings: node.bindings.map((binding, i) =>
+                    Object.assign(binding, {
+                      attributes: bindings[i],
+                    }),
+                  ),
+                });
+              } else if (node.action === "update") {
+                console.log("updating", id);
+                return yield* node.provider.update({
+                  id,
+                  news: node.news,
+                  olds: node.olds,
+                  output: node.output,
+                  bindings: node.bindings.map((binding, i) =>
+                    Object.assign(binding, {
+                      attributes: bindings[i],
+                    }),
+                  ),
+                });
+              } else if (node.action === "delete") {
+                console.log("deleting", id);
+                return yield* node.provider.delete({
+                  id,
+                  olds: node.olds,
+                  output: node.output,
+                  bindings: node.bindings.map((binding, i) =>
+                    Object.assign(binding, {
+                      attributes: bindings[i],
+                    }),
+                  ),
+                });
+              } else if (node.action === "replace") {
+                console.log("replacing", id);
+                const destroy = node.provider.delete({
+                  id,
+                  olds: node.olds,
+                  output: node.output,
+                  bindings: node.bindings.map((binding, i) =>
+                    Object.assign(binding, {
+                      attributes: bindings[i],
+                    }),
+                  ),
+                });
+                const create = node.provider.create({
+                  id,
+                  news: node.news,
+                  bindings: node.bindings.map((binding, i) =>
+                    Object.assign(binding, {
+                      attributes: bindings[i],
+                    }),
+                  ),
+                });
+                if (!node.deleteFirst) {
+                  const outputs = yield* create;
+                  yield* destroy;
+                  return outputs;
+                } else {
+                  yield* destroy;
+                  return yield* create;
+                }
               }
-            }
-            const response = yield* node.provider.create({
-              id,
-              news: node.news,
-              bindings: node.bindings ?? [],
-            });
-            attributes.set(node.resource.id);
-          }
-        });
+            }),
+          ));
+        }) as (
+          node: Plan[keyof Plan] | BindingAction<Statement>[],
+        ) => Effect.Effect<any, never, never>;
 
-        for (const [id, node] of Object.entries(plan)) {
-          yield* apply(id, node);
-        }
+        yield* Effect.all(Object.values(plan).map(apply));
+
         return plan as {
           [id in keyof P]: Simplify<P[id]["resource"]["attributes"]>;
           // [id in keyof P]: P[id]["attributes"];

@@ -23,8 +23,9 @@ export type Provider<
   Type extends string = string,
   Input = any,
   Output = any,
-  Stmt extends Statement = never,
+  Stmt extends Statement = Statement,
 > = {
+  props?: Input;
   type: Type;
   // drives alchemy sync/refresh/adopt
   read?(input: {

@@ -5,19 +5,20 @@ export type Bound<
   From extends Resource = Resource,
   To extends Statement = Statement,
 > = {
-  kind: "Bound";
-  target: From;
+  type: "bound";
+  resource: From;
   bindings: To[];
-  /**
-   * The main file to use for the function.
-   */
-  main: string;
-  /**
-   * The handler to use for the function.
-   * @default "default"
-   */
-  handler?: string;
+  props: Exclude<From["provider"]["Service"]["props"], undefined>;
+  // /**
+  //  * The main file to use for the function.
+  //  */
+  // main: string;
+  // /**
+  //  * The handler to use for the function.
+  //  * @default "default"
+  //  */
+  // handler?: string;
 };
 
 export const isBound = (value: any): value is Bound =>
-  value && typeof value === "object" && value.kind === "Bound";
+  value && typeof value === "object" && value.type === "bound";

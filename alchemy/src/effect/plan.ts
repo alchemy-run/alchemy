@@ -81,6 +81,7 @@ export type Replace<R extends Resource, B extends Statement = Statement> = {
   provider: Provider;
   bindings: BindingAction<B>[];
   attributes: R["attributes"];
+  deleteFirst?: boolean;
 };
 
 export type Materialized<
@@ -96,10 +97,6 @@ export type Materialize<T, Stmt extends Statement = never> = T extends Bound<
   : T extends Resource
     ? Materialized<T, Stmt>
     : never;
-
-export type PhysicalPlan = {
-  [id in string]: Materialized;
-};
 
 export type Plan = {
   [id in string]: Materialized;
@@ -171,7 +168,7 @@ export const plan = <
   | {
       [id in keyof Resources]: Resources[id] extends Bound
         ?
-            | TagInstance<Resources[id]["target"]["provider"]>
+            | TagInstance<Resources[id]["resource"]["provider"]>
             | TagInstance<
                 Resources[id]["bindings"][number]["resource"]["provider"]
               >
@@ -186,90 +183,87 @@ export const plan = <
         const state = yield* State;
         const plan: Plan = {};
         const all = new Set(yield* state.list());
-        for (const [id, resource] of Object.entries(resources)) {
+        for (const [id, node] of Object.entries(resources)) {
           all.delete(id);
+
+          const resource = isBound(node) ? node.resource : node;
+          const statements = isBound(node) ? node.bindings : [];
+          const news = isBound(node) ? node.props : resource.props;
+
           const oldState = yield* state.get(id);
+          const provider: Provider = yield* resource.provider;
+          const bindings = diffBindings(oldState, statements);
 
-          // TODO(sam): handle plain resources (no bindings)
-          if (isBound(resource)) {
-            const target = resource.target;
-
-            const bindings = diffBindings(oldState, resource.bindings);
-
-            // i need a way to dynamically resovle the tag for a resource
-            const provider: Provider = yield* target.provider;
-
-            if (oldState === undefined || oldState.status === "creating") {
-              plan[id] = {
-                action: "create",
-                news: target.props,
-                provider,
-                resource: target,
-                // phantom
-                attributes: undefined!,
-                bindings: bindings as AttachAction<Statement>[],
-              };
-            } else if (provider.diff) {
-              const diff = yield* provider.diff({
-                id,
-                olds: oldState.props,
-                news: target.props,
-                output: oldState.output,
-              });
-              if (diff.action === "noop" && bindings.length === 0) {
-                plan[id] = {
-                  action: "noop",
-                  resource: target,
-                  // phantom
-                  attributes: undefined!,
-                  bindings: bindings as NoopAction<Statement>[],
-                };
-              } else if (diff.action === "replace") {
-                plan[id] = {
-                  action: "replace",
-                  olds: oldState.props,
-                  news: target.props,
-                  output: oldState.output,
-                  provider,
-                  resource: target,
-                  // phantom
-                  attributes: undefined!,
-                  bindings: bindings,
-                };
-              } else {
-                plan[id] = {
-                  action: "update",
-                  olds: oldState.props,
-                  news: target.props,
-                  output: oldState.output,
-                  provider,
-                  resource: target,
-                  // phantom
-                  attributes: undefined!,
-                  bindings: bindings,
-                };
-              }
-            } else if (compare(oldState, target.props) || bindings.length > 0) {
-              plan[id] = {
-                action: "update",
-                olds: oldState.props,
-                news: target.props,
-                output: oldState.output,
-                provider,
-                bindings,
-                resource: target,
-                // phantom
-                attributes: undefined!,
-              };
-            } else {
+          if (oldState === undefined || oldState.status === "creating") {
+            plan[id] = {
+              action: "create",
+              news,
+              provider,
+              resource: resource,
+              // phantom
+              attributes: undefined!,
+              bindings: bindings as AttachAction<Statement>[],
+            };
+          } else if (provider.diff) {
+            const diff = yield* provider.diff({
+              id,
+              olds: oldState.props,
+              news,
+              output: oldState.output,
+            });
+            if (diff.action === "noop" && bindings.length === 0) {
               plan[id] = {
                 action: "noop",
-                resource: target,
+                resource: resource,
                 // phantom
                 attributes: undefined!,
                 bindings: bindings as NoopAction<Statement>[],
               };
+            } else if (diff.action === "replace") {
+              plan[id] = {
+                action: "replace",
+                olds: oldState.props,
+                news,
+                output: oldState.output,
+                provider,
+                resource: resource,
+                // phantom
+                attributes: undefined!,
+                bindings: bindings,
+              };
+            } else {
+              plan[id] = {
+                action: "update",
+                olds: oldState.props,
+                news,
+                output: oldState.output,
+                provider,
+                resource: resource,
+                // phantom
+                attributes: undefined!,
+                bindings: bindings,
+              };
             }
+          } else if (compare(oldState, resource.props) || bindings.length > 0) {
+            plan[id] = {
+              action: "update",
+              olds: oldState.props,
+              news,
+              output: oldState.output,
+              provider,
+              bindings,
+              resource: resource,
+              // phantom
+              attributes: undefined!,
+            };
+          } else {
+            plan[id] = {
+              action: "noop",
+              resource: resource,
+              // phantom
+              attributes: undefined!,
+              bindings: bindings as NoopAction<Statement>[],
+            };
           }
         }
         yield* Effect.all(

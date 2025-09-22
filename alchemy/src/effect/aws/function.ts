@@ -17,6 +17,7 @@ import { allow, type Allow, type Policy, type Statement } from "../policy.ts";
 import type { Provider as ResourceProvider } from "../provider.ts";
 import type { Resource } from "../resource.ts";
 import type { TagInstance } from "../util.ts";
+import { zipCode } from "../util/zip.ts";
 import { AccountID } from "./account.ts";
 import type { Tag as ArnTag } from "./arn.ts";
 import { bundle } from "./bundle.ts";
@@ -124,10 +125,14 @@ export const make = <F extends Resource, Req>(
       }),
       [self.id]: {
         type: "bound",
-        target: self,
-        main,
-        handler,
+        resource: self,
         bindings: policy.statements,
+        // TODO(sam): this should be passed to an Effect that interacts with the Provider
+        props: {
+          ...self.props,
+          main,
+          handler,
+        },
       } satisfies Bound<F, Extract<Req, Statement>>,
     };
   });
@@ -174,10 +179,6 @@ export interface FunctionProviderProps extends Props {
    * @default "default"
    */
   handler?: string;
-  /**
-   * The policy to use for the function.
-   */
-  policy: Policy;
 }
 
 export class FunctionProvider extends Context.Tag("AWS::Lambda::Function")<
@@ -305,12 +306,16 @@ export const provider = Layer.effect(
 
     const bundleCode = Effect.fn(function* (props: FunctionProviderProps) {
       const handler = props.handler ?? "default";
+      let file = path.relative(process.cwd(), props.main);
+      if (!file.startsWith(".")) {
+        file = `./${file}`;
+      }
       const code = yield* bundle({
-        entryPoints: [props.main],
+        // entryPoints: [props.main],
         // we use a virtual entry point so that
         stdin: {
-          contents: `import { ${handler} as handler } from "${path.relative(process.cwd(), props.main)}";\nexport default handler;`,
-          resolveDir: ".",
+          contents: `import { ${handler} as handler } from "${file}";\nexport default handler;`,
+          resolveDir: process.cwd(),
           loader: "ts",
           sourcefile: "__index.ts",
         },
@@ -320,6 +325,7 @@ export const provider = Layer.effect(
         target: "node22",
         sourcemap: true,
         treeShaking: true,
+        write: false,
       });
       return code;
     });
@@ -363,7 +369,7 @@ export const provider = Layer.effect(
       functionName,
     }: {
       id: string;
-      news: Props;
+      news: FunctionProviderProps;
       roleArn: string;
       code: Uint8Array<ArrayBufferLike>;
       env: Record<string, string>;
@@ -372,11 +378,11 @@ export const provider = Layer.effect(
       yield* lambda
         .createFunction({
           FunctionName: functionName,
-          Handler: news.functionName,
+          Handler: `index.${news.handler ?? "default"}`,
           Role: roleArn,
           Code: {
             // TODO(sam): upload to assets
-            ZipFile: code,
+            ZipFile: yield* zipCode(code),
           },
           Runtime: "nodejs22.x",
           Environment: {
