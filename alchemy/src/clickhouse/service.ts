@@ -9,36 +9,116 @@ import {
 } from "./api.ts";
 
 export interface ServiceProps {
+  /**
+   * The key ID for the Clickhouse API
+   */
   keyId?: string | Secret<string>;
+
+  /**
+   * The secret for the Clickhouse API
+   */
   secret?: string | Secret<string>;
+
+  /**
+   * The id of Clickhouse cloud organization to create the service in.
+   */
   organization: string | Organization;
+
+  /**
+   * The name of the Clickhouse service to create.
+   *
+   * @default ${app}-${stage}-${id}
+   */
   name?: string;
+
+  /**
+   * The underlying cloud provider to create the service on.
+   */
   provider: ApiService["provider"];
+
+  /**
+   * The region to create the service in.
+   */
   region: ApiService["region"];
+
+  /**
+   * The IP access list to create the service with.
+   *
+   * @default [{ description: "Anywhere", source: "0.0.0.0/0" }]
+   */
   ipAccessList?: ApiService["ipAccessList"];
-  //todo(pr): sane size/replica defaults?
-  minReplicaMemoryGb: ApiService["minReplicaMemoryGb"];
-  maxReplicaMemoryGb: ApiService["maxReplicaMemoryGb"];
-  numReplicas: ApiService["numReplicas"];
+
+  /**
+   * The minimum replica memory to create the service with.
+   *
+   * @default 8
+   */
+  minReplicaMemoryGb?: ApiService["minReplicaMemoryGb"];
+
+  /**
+   * The maximum replica memory to create the service with.
+   *
+   * @default 356
+   */
+  maxReplicaMemoryGb?: ApiService["maxReplicaMemoryGb"];
+
+  /**
+   * The number of replicas to create the service with.
+   *
+   * @default 3
+   */
+  numReplicas?: ApiService["numReplicas"];
+
+  /**
+   * Whether to enable idle scaling.
+   *
+   * @default true
+   */
   idleScaling?: ApiService["idleScaling"];
+
+  /**
+   * The timeout minutes for idle scaling.
+   *
+   * @default 15
+   */
   idleTimeoutMinutes?: ApiService["idleTimeoutMinutes"];
+
+  /**
+   * Whether to make the service readonly.
+   *
+   * @default false
+   */
   isReadonly?: ApiService["isReadonly"];
-  dataWarehouseId?: ApiService["dataWarehouseId"];
-  backupId?: string;
-  encryptionKey?: ApiService["encryptionKey"];
-  encryptionAssumedRoleIdentifier?: ApiService["encryptionAssumedRoleIdentifier"];
+
+  /**
+   * The release channel to create the service with.
+   *
+   * @default "default"
+   */
   releaseChannel?: ApiService["releaseChannel"];
+
+  /**
+   * The desired state of the service.
+   *
+   * @default "start"
+   */
+  stateTarget?: "start" | "stop";
+
+  //todo(pr): I need to understand more about what these properties do
   //todo(pr): support linking to BYOC infrastructure directly
   byocId?: ApiService["byocId"];
   hasTransparentDataEncryption?: ApiService["hasTransparentDataEncryption"];
-  //todo(pr): can this be any of the protocol types?
+  //todo(michael): can this be any of the protocol types? since their type fails to mention that
   endpoints?: Array<{
     protocol: "mysql";
     enabled: boolean;
   }>;
   profile?: ApiService["profile"];
   complianceType?: ApiService["complianceType"];
-  stateTarget?: "start" | "stop";
+  dataWarehouseId?: ApiService["dataWarehouseId"];
+  backupId?: string;
+  encryptionKey?: ApiService["encryptionKey"];
+  encryptionAssumedRoleIdentifier?: ApiService["encryptionAssumedRoleIdentifier"];
 }
 
 export interface Service extends Resource<"clickhouse::Service"> {
@@ -70,6 +150,29 @@ export interface Service extends Resource<"clickhouse::Service"> {
   state: ApiService["state"];
 }
 
+/**
+ * Create, manage and delete Clickhouse services
+ *
+ * @example
+ * // Create a basic Clickhouse service on aws
+ * const organization = await getOrganizationByName("Alchemy's Organization");
+ * const service = await Service("clickhouse", {
+ *   organization,
+ *   provider: "aws",
+ *   region: "us-east-1",
+ * });
+ *
+ * @example
+ * // Create a basic Clickhouse service on aws with custom scaling rules
+ * const service = await Service("clickhouse", {
+ *   organization,
+ *   provider: "aws",
+ *   region: "us-east-1",
+ *   minReplicaMemoryGb: 8,
+ *   maxReplicaMemoryGb: 356,
+ *   numReplicas: 3,
+ * });
+ */
 export const Service = Resource(
   "clickhouse::Service",
   async function (
@@ -87,6 +190,16 @@ export const Service = Resource(
     const releaseChannel = props.releaseChannel ?? "default";
     const endpoints = props.endpoints ?? [{ protocol: "mysql", enabled: true }];
     const stateTarget = props.stateTarget ?? "start";
+    const ipAccessList = props.ipAccessList ?? [
+      {
+        description: "Anywhere",
+        source: "0.0.0.0/0",
+      },
+    ];
+    const minReplicaMemoryGb = props.minReplicaMemoryGb ?? 8;
+    const maxReplicaMemoryGb = props.maxReplicaMemoryGb ?? 356;
+    const numReplicas = props.numReplicas ?? 3;
+    const idleTimeoutMinutes = props.idleTimeoutMinutes ?? 15;
 
     const name =
       props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
@@ -207,7 +320,7 @@ export const Service = Resource(
             maxReplicaMemoryGb: props.maxReplicaMemoryGb,
             numReplicas: props.numReplicas,
             idleScaling: props.idleScaling,
-            idleTimeoutMinutes: props.idleTimeoutMinutes,
+            idleTimeoutMinutes: idleTimeoutMinutes,
           });
 
         updates.minReplicaMemoryGb = response.minReplicaMemoryGb;
@@ -227,17 +340,12 @@ export const Service = Resource(
       name,
       provider: props.provider,
       region: props.region,
-      ipAccessList: props.ipAccessList ?? [
-        {
-          description: "Anywhere",
-          source: "0.0.0.0/0",
-        },
-      ],
-      minReplicaMemoryGb: props.minReplicaMemoryGb,
-      maxReplicaMemoryGb: props.maxReplicaMemoryGb,
-      numReplicas: props.numReplicas,
+      ipAccessList: ipAccessList,
+      minReplicaMemoryGb: minReplicaMemoryGb,
+      maxReplicaMemoryGb: maxReplicaMemoryGb,
+      numReplicas: numReplicas,
       idleScaling: idleScaling,
-      idleTimeoutMinutes: props.idleTimeoutMinutes,
+      idleTimeoutMinutes: idleTimeoutMinutes,
       isReadonly: isReadonly,
       dataWarehouseId: props.dataWarehouseId,
       backupId: props.backupId,

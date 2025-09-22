@@ -1,6 +1,16 @@
 import type { Secret } from "../secret.ts";
 import { createClickhouseApi } from "./api.ts";
 
+/**
+ * Get an organization by name.
+ *
+ * @example
+ * const organization = await getOrganizationByName("Alchemy's Organization");
+ *
+ * @param name The name of the organization to get.
+ * @param options The api credentials to use.
+ * @returns The organization.
+ */
 export async function getOrganizationByName(
   name: string,
   options?: {
