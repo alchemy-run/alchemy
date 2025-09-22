@@ -35,7 +35,7 @@ export const apply = <P extends Plan, Err, Req>(
               const bindings = yield* apply(node.bindings);
               if (node.action === "noop") {
                 yield* Console.log("noop", id);
-                return node.output;
+                return node.attributes;
               } else if (node.action === "create") {
                 yield* Console.log("creating", id);
                 return yield* node.provider.create({

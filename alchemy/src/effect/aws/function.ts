@@ -418,9 +418,11 @@ export const provider = Layer.effect(
     const createOrUpdateFunctionUrl = Effect.fn(function* ({
       functionName,
       url,
+      oldUrl,
     }: {
       functionName: string;
       url: Props["url"];
+      oldUrl?: Props["url"];
     }) {
       if (url) {
         const config = {
@@ -447,6 +449,14 @@ export const provider = Layer.effect(
             ),
           );
         return response.FunctionUrl;
+      } else if (oldUrl) {
+        yield* lambda
+          .deleteFunctionUrlConfig({
+            FunctionName: functionName,
+          })
+          .pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
       }
       return undefined;
     });
@@ -529,7 +539,7 @@ export const provider = Layer.effect(
           roleArn: role.Role.Arn,
         } satisfies Attributes<string, Props>;
       }),
-      update: Effect.fn(function* ({ id, news, bindings, output }) {
+      update: Effect.fn(function* ({ id, news, olds, bindings, output }) {
         const roleName = createRoleName(id);
         const policyName = createPolicyName(id);
         const functionName = news.functionName ?? createFunctionName(id);
@@ -558,6 +568,7 @@ export const provider = Layer.effect(
         const functionUrl = yield* createOrUpdateFunctionUrl({
           functionName,
           url: news.url,
+          oldUrl: olds.url,
         });
 
         return {
