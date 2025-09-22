@@ -1,8 +1,8 @@
-import { isDeepStrictEqual } from "node:util";
 import { alchemy } from "../alchemy.ts";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
+import { diff } from "../util/diff.ts";
 import { lowercaseId } from "../util/nanoid.ts";
 import { PlanetScaleClient, type PlanetScaleProps } from "./api/client.gen.ts";
 import type { Branch } from "./branch.ts";
@@ -361,16 +361,3 @@ export const Password = Resource(
     });
   },
 );
-
-/**
- * Returns an array of keys in `b` that are different from `a`.
- */
-const diff = <T>(a: T, b: NoInfer<T>) => {
-  const keys: (keyof T)[] = [];
-  for (const key in a) {
-    if (!isDeepStrictEqual(a[key], b[key])) {
-      keys.push(key);
-    }
-  }
-  return keys;
-};

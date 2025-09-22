@@ -19,7 +19,7 @@
   "[json]": {
     "editor.indentSize": 2,
     "editor.insertSpaces": true,
-    "editor.defaultFormatter": "biomejs.biome"
+    "editor.defaultFormatter": "vscode.json-language-features"
   },
   "[markdown]": {
     "editor.formatOnSave": false,

@@ -1,14 +1,32 @@
 {
   "name": "alchemy-mono",
   "version": "0.0.0",
-  "private": true,
-  "type": "module",
-  "module": "./lib/index.js",
-  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/sam-goodwin/alchemy"
   },
+  "module": "./lib/index.js",
+  "devDependencies": {
+    "@biomejs/biome": "^2.2.2",
+    "@cloudflare/workers-types": "catalog:",
+    "@redwoodjs/sdk": "^0.0.80",
+    "@types/bun": "latest",
+    "@types/node": "latest",
+    "@vitest/ui": "^3.1.4",
+    "alchemy": "workspace:*",
+    "aws4fetch": "^1.0.20",
+    "changelogithub": "^13.15.0",
+    "dotenv": "^17.2.1",
+    "glob": "^11.0.3",
+    "jsonc-parser": "^3.3.1",
+    "openai": "^4.103.0",
+    "typescript": "catalog:",
+    "vite": "^6.3.5",
+    "vitest": "^3.1.4",
+    "yaml": "^2.7.1"
+  },
+  "license": "Apache-2.0",
+  "private": true,
   "scripts": {
     "build:clean": "git clean -fqdx . && bun i && bun run build && cp ../.env . && bun i && cd ./example-monorepo && bun i && cp .env.example .env && cd ..",
     "build": "bun run --filter alchemy build",
@@ -35,6 +53,7 @@
     "gh": "./scripts/gh",
     "feat": "./scripts/feat"
   },
+  "type": "module",
   "workspaces": {
     "catalog": {
       "@cloudflare/workers-types": "^4.20250805.0",
@@ -49,24 +68,5 @@
       "examples/*",
       "stacks"
     ]
-  },
-  "devDependencies": {
-    "@biomejs/biome": "^2.2.2",
-    "@cloudflare/workers-types": "catalog:",
-    "@redwoodjs/sdk": "^0.0.80",
-    "@types/bun": "latest",
-    "@types/node": "latest",
-    "@vitest/ui": "^3.1.4",
-    "alchemy": "workspace:*",
-    "aws4fetch": "^1.0.20",
-    "changelogithub": "^13.15.0",
-    "dotenv": "^17.2.1",
-    "glob": "^11.0.3",
-    "jsonc-parser": "^3.3.1",
-    "openai": "^4.103.0",
-    "typescript": "catalog:",
-    "vite": "^6.3.5",
-    "vitest": "^3.1.4",
-    "yaml": "^2.7.1"
   }
 }
