@@ -6,8 +6,6 @@ import * as Queue from "../aws/queue.ts";
 import * as Policy from "../policy.ts";
 import { Message, Messages } from "./messages.ts";
 
-// TODO: Michael cares about nested naming
-
 // resource declarations (stateless)
 export class Api extends Lambda.Tag("api", {
   url: true,

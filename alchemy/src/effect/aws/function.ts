@@ -59,6 +59,7 @@ export const Tag = <ID extends string, P extends Props>(id: ID, props: P) =>
   Object.assign(
     Context.Tag(id)() as Context.TagClass<P, ID, Attributes<ID, P>>,
     {
+      kind: "Resource",
       type: Type,
       id,
       props,

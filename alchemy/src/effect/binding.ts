@@ -5,7 +5,7 @@ export type Bound<
   From extends Resource = Resource,
   To extends Statement = Statement,
 > = {
-  type: "bound";
+  kind: "Bound";
   target: From;
   bindings: To[];
   /**
@@ -20,4 +20,4 @@ export type Bound<
 };
 
 export const isBound = (value: any): value is Bound =>
-  value && typeof value === "object" && value.type === "bound";
+  value && typeof value === "object" && value.kind === "Bound";

@@ -19,9 +19,15 @@ export type DetachAction<Stmt extends Statement = Statement> = {
   stmt: Stmt;
 };
 
+export type NoopAction<Stmt extends Statement = Statement> = {
+  action: "noop";
+  stmt: Stmt;
+};
+
 export type BindingAction<Stmt extends Statement = Statement> =
   | AttachAction<Stmt>
-  | DetachAction<Stmt>;
+  | DetachAction<Stmt>
+  | NoopAction<Stmt>;
 
 export declare namespace BindingAction {
   export type Materialized<A extends BindingAction> = A & {
@@ -29,70 +35,114 @@ export declare namespace BindingAction {
   };
 }
 
-export type Create<R extends Resource> = {
+export type Create<R extends Resource, B extends Statement = Statement> = {
   action: "create";
   resource: R;
   news: any;
   provider: Provider;
-  bindings?: AttachAction[];
+  bindings: AttachAction<B>[];
   attributes: R["attributes"];
 };
 
-export type Update<R extends Resource> = {
+export type Update<R extends Resource, B extends Statement = Statement> = {
   action: "update";
   resource: R;
   olds: any;
   news: any;
   output: any;
   provider: Provider;
-  bindings?: BindingAction[];
+  bindings: BindingAction<B>[];
   attributes: R["attributes"];
 };
 
-export type Delete<R extends Resource> = {
+export type Delete<R extends Resource, B extends Statement = Statement> = {
   action: "delete";
   resource: R;
   olds: any;
   output: any;
   provider: Provider;
-  bindings?: DetachAction[];
+  bindings: DetachAction<B>[];
   attributes: R["attributes"];
 };
 
-export type Noop<R extends Resource> = {
+export type Noop<R extends Resource, B extends Statement = Statement> = {
   action: "noop";
   resource: R;
   attributes: R["attributes"];
+  bindings: NoopAction<B>[];
 };
 
-export type Replace<R extends Resource> = {
+export type Replace<R extends Resource, B extends Statement = Statement> = {
   action: "replace";
   resource: R;
   olds: any;
   news: any;
   output: any;
   provider: Provider;
-  bindings?: BindingAction[];
+  bindings: BindingAction<B>[];
   attributes: R["attributes"];
 };
 
-export type Materialize<R extends Resource = Resource> =
-  | Create<R>
-  | Update<R>
-  | Delete<R>
-  | Replace<R>
-  | Noop<R>;
+export type Materialized<
+  R extends Resource = Resource,
+  B extends Statement = Statement,
+> = Create<R, B> | Update<R, B> | Delete<R, B> | Replace<R, B> | Noop<R, B>;
+
+export type Materialize<T, Stmt extends Statement = never> = T extends Bound<
+  infer From,
+  infer Bindings extends Statement
+>
+  ? Materialized<From, Bindings | Stmt>
+  : T extends Resource
+    ? Materialized<T, Stmt>
+    : never;
 
 export type PhysicalPlan = {
-  [id in string]: Materialize;
+  [id in string]: Materialized;
 };
 
 export type Plan = {
-  [id in string]: Materialize;
+  [id in string]: Materialized;
 };
 
 export type DeleteOrphans<K extends string | number | symbol> = {
   [k in Exclude<string, K>]: Delete<Resource>;
+};
+
+export const planAll = <const Resources extends PlanItem[]>(
+  ...resources: Resources
+) => {
+  type Plan<
+    Items extends PlanItem[],
+    Accum extends Record<string, Materialized> = {},
+  > = Items extends [
+    infer Head extends PlanItem,
+    ...infer Tail extends PlanItem[],
+  ]
+    ? Plan<
+        Tail,
+        Accum & {
+          [id in keyof Effect.Effect.Success<Head>]: Materialize<
+            Effect.Effect.Success<Head>[id],
+            id extends keyof Accum
+              ? Accum[id]["bindings"][number]["stmt"]
+              : never
+          >;
+        }
+      >
+    : Accum;
+
+  return Effect.all(resources.map((resource) => plan(resource))).pipe(
+    Effect.map((plans) =>
+      plans.reduce((acc, plan) => ({ ...acc, ...plan }), {}),
+    ),
+  ) as Effect.Effect<
+    {
+      [k in keyof Plan<Resources>]: Plan<Resources>[k];
+    },
+    never,
+    Effect.Effect.Context<Resources[number]> | State
+  >;
 };
 
 type PlanItem = Effect.Effect<
@@ -103,41 +153,6 @@ type PlanItem = Effect.Effect<
   any
 >;
 
-export const planAll = <const Resources extends PlanItem[]>(
-  ...resources: Resources
-) => {
-  type Req = Effect.Effect.Context<Resources[number]>;
-  type Plan<Items extends PlanItem[], Accum> = Items extends [
-    infer Head extends PlanItem,
-    ...infer Tail extends PlanItem[],
-  ]
-    ? Plan<
-        Tail,
-        Accum & {
-          [id in keyof Effect.Effect.Success<Head>]: Effect.Effect.Success<Head>[id] extends Bound<
-            infer From,
-            any
-          >
-            ? Materialize<From>
-            : Effect.Effect.Success<Head>[id] extends Resource
-              ? Materialize<Effect.Effect.Success<Head>[id]>
-              : never;
-        }
-      >
-    : Accum;
-
-  return Effect.all(resources.map(plan)).pipe(
-    Effect.map((plans) =>
-      plans.reduce((acc, plan) => ({ ...acc, ...plan }), {}),
-    ),
-  ) as Effect.Effect<
-    // UnionToIntersection<Effect.Effect.Success<Resources[number]>>,
-    Plan<Resources, {}>,
-    never,
-    Req | State
-  >;
-};
-
 export const plan = <
   Resources extends {
     [id in string]: Bound | Resource;
@@ -147,11 +162,7 @@ export const plan = <
   resource: Effect.Effect<Resources, never, Req>,
 ): Effect.Effect<
   {
-    [id in keyof Resources]: Resources[id] extends Bound<infer From, any>
-      ? Materialize<From>
-      : Resources[id] extends Resource
-        ? Materialize<Resources[id]>
-        : never;
+    [id in keyof Resources]: Materialize<Resources[id]>;
   }, // & DeleteOrphans<keyof Resources>,
   PlanError,
   | Req
@@ -183,7 +194,7 @@ export const plan = <
           if (isBound(resource)) {
             const target = resource.target;
 
-            const bindingActions = diffBindings(oldState, resource.bindings);
+            const bindings = diffBindings(oldState, resource.bindings);
 
             // i need a way to dynamically resovle the tag for a resource
             const provider: Provider = yield* target.provider;
@@ -196,6 +207,7 @@ export const plan = <
                 resource: target,
                 // phantom
                 attributes: undefined!,
+                bindings: bindings as AttachAction<Statement>[],
               };
             } else if (provider.diff) {
               const diff = yield* provider.diff({
@@ -204,12 +216,13 @@ export const plan = <
                 news: target.props,
                 output: oldState.output,
               });
-              if (diff.action === "noop" && bindingActions.length === 0) {
+              if (diff.action === "noop" && bindings.length === 0) {
                 plan[id] = {
                   action: "noop",
                   resource: target,
                   // phantom
                   attributes: undefined!,
+                  bindings: bindings as NoopAction<Statement>[],
                 };
               } else if (diff.action === "replace") {
                 plan[id] = {
@@ -221,6 +234,7 @@ export const plan = <
                   resource: target,
                   // phantom
                   attributes: undefined!,
+                  bindings: bindings,
                 };
               } else {
                 plan[id] = {
@@ -229,23 +243,20 @@ export const plan = <
                   news: target.props,
                   output: oldState.output,
                   provider,
-                  bindings: bindingActions,
                   resource: target,
                   // phantom
                   attributes: undefined!,
+                  bindings: bindings,
                 };
               }
-            } else if (
-              compare(oldState, target.props) ||
-              bindingActions.length > 0
-            ) {
+            } else if (compare(oldState, target.props) || bindings.length > 0) {
               plan[id] = {
                 action: "update",
                 olds: oldState.props,
                 news: target.props,
                 output: oldState.output,
                 provider,
-                bindings: bindingActions,
+                bindings,
                 resource: target,
                 // phantom
                 attributes: undefined!,
@@ -256,6 +267,7 @@ export const plan = <
                 resource: target,
                 // phantom
                 attributes: undefined!,
+                bindings: bindings as NoopAction<Statement>[],
               };
             }
           }

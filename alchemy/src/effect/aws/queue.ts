@@ -97,6 +97,7 @@ type Queue<ID extends string = string, P extends Props = Props> = Resource<
 
 export const Tag = <ID extends string, P extends Props>(id: ID, props: P) =>
   Object.assign(Context.Tag(id)<P, Attributes<ID, P>>(), {
+    kind: "Resource",
     type: Type,
     id,
     props,
