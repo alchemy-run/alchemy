@@ -419,20 +419,28 @@ export const provider = Layer.effect(
       url: Props["url"];
     }) {
       if (url) {
-        const response = yield* lambda.createFunctionUrlConfig({
-          FunctionName: functionName,
-          AuthType: "NONE", // | AWS_IAM
-          // Cors: {
-          //   AllowCredentials: true,
-          //   AllowHeaders: ["*"],
-          //   AllowMethods: ["*"],
-          //   AllowOrigins: ["*"],
-          //   ExposeHeaders: ["*"],
-          //   MaxAge: 86400,
-          // },
-          InvokeMode: "BUFFERED", // | RESPONSE_STREAM
-          // Qualifier: "$LATEST"
-        });
+        const response = yield* lambda
+          .createFunctionUrlConfig({
+            FunctionName: functionName,
+            AuthType: "NONE", // | AWS_IAM
+            // Cors: {
+            //   AllowCredentials: true,
+            //   AllowHeaders: ["*"],
+            //   AllowMethods: ["*"],
+            //   AllowOrigins: ["*"],
+            //   ExposeHeaders: ["*"],
+            //   MaxAge: 86400,
+            // },
+            InvokeMode: "BUFFERED", // | RESPONSE_STREAM
+            // Qualifier: "$LATEST"
+          })
+          .pipe(
+            Effect.catchTag("ResourceConflictException", () =>
+              lambda.getFunctionUrlConfig({
+                FunctionName: functionName,
+              }),
+            ),
+          );
         return response.FunctionUrl;
       }
       return undefined;

@@ -1,3 +1,4 @@
+import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import type { Simplify } from "effect/Types";
 import type { BindingAction, Plan } from "./plan.ts";
@@ -29,13 +30,14 @@ export const apply = <P extends Plan, Err, Req>(
           const id = node.resource.id;
           return yield* (outputs[id] ??= yield* Effect.cached(
             Effect.gen(function* () {
-              console.log("pending", id);
+              // TODO(sam): replace with an event emitter to support different CLI plugins
+              yield* Console.log("pending", id);
               const bindings = yield* apply(node.bindings);
               if (node.action === "noop") {
-                console.log("noop", id);
+                yield* Console.log("noop", id);
                 return node.output;
               } else if (node.action === "create") {
-                console.log("creating", id);
+                yield* Console.log("creating", id);
                 return yield* node.provider.create({
                   id,
                   news: node.news,
@@ -46,7 +48,7 @@ export const apply = <P extends Plan, Err, Req>(
                   ),
                 });
               } else if (node.action === "update") {
-                console.log("updating", id);
+                yield* Console.log("updating", id);
                 return yield* node.provider.update({
                   id,
                   news: node.news,
@@ -59,7 +61,7 @@ export const apply = <P extends Plan, Err, Req>(
                   ),
                 });
               } else if (node.action === "delete") {
-                console.log("deleting", id);
+                yield* Console.log("deleting", id);
                 return yield* node.provider.delete({
                   id,
                   olds: node.olds,
@@ -71,7 +73,7 @@ export const apply = <P extends Plan, Err, Req>(
                   ),
                 });
               } else if (node.action === "replace") {
-                console.log("replacing", id);
+                yield* Console.log("replacing", id);
                 const destroy = node.provider.delete({
                   id,
                   olds: node.olds,
@@ -100,7 +102,7 @@ export const apply = <P extends Plan, Err, Req>(
                   return yield* create;
                 }
               }
-            }),
+            }).pipe(Effect.tap(() => Console.log(`${node.action}d ${id}`))),
           ));
         }) as (
           node: Plan[keyof Plan] | BindingAction<Statement>[],
