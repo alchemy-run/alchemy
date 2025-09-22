@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
-import path from "node:path";
+import path from "pathe";
 import { Resource } from "../resource.ts";
 import { getContentType } from "../util/content-type.ts";
 import ignore from "../util/ignore-matcher.ts";
@@ -90,6 +90,11 @@ export namespace Assets {
           if (stat.isDirectory()) {
             result.push(...(await readDirectory(absolutePath)));
           } else {
+            if (stat.size > 26214400) {
+              throw new Error(
+                `File "${absolutePath}" is too large to upload as an asset to Cloudflare (the file is ${(stat.size / 1024 / 1024).toFixed(2)} MB; the maximum size is 25MB).`,
+              );
+            }
             result.push({
               path: absolutePath,
               name: relativePath.startsWith("/")
