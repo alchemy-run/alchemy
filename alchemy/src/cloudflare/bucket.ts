@@ -244,6 +244,7 @@ export type R2ObjectMetadata = {
   key: string;
   etag: string;
   uploaded: Date;
+  size: number;
 };
 
 export type R2Object = R2ObjectMetadata & {
@@ -262,6 +263,19 @@ export type PutR2ObjectResponse = {
   size: number;
 };
 
+export type R2Objects = {
+  objects: R2ObjectMetadata[];
+} & (
+  | {
+      truncated: true;
+      cursor: string;
+    }
+  | {
+      truncated: false;
+      cursor?: never;
+    }
+);
+
 export type R2Bucket = _R2Bucket & {
   head(key: string): Promise<R2ObjectMetadata | null>;
   get(key: string): Promise<R2Object | null>;
@@ -276,6 +290,7 @@ export type R2Bucket = _R2Bucket & {
       | Blob,
   ): Promise<PutR2ObjectResponse>;
   delete(key: string): Promise<Response>;
+  list(options?: R2ListOptions): Promise<R2Objects>;
 };
 
 /**
@@ -405,6 +420,11 @@ export async function R2Bucket(
         throw await handleApiError(response, "get", "object", key);
       }
     },
+    list: async (options?: R2ListOptions): Promise<R2Objects> =>
+      listObjects(api, bucket.name, {
+        ...options,
+        jurisdiction: bucket.jurisdiction,
+      }),
     put: async (
       key: string,
       value: PutObjectObject,
@@ -443,6 +463,7 @@ const parseR2Object = (key: string, response: Response): R2Object => ({
   etag: response.headers.get("ETag")!,
   uploaded: parseDate(response.headers),
   key,
+  size: Number(response.headers.get("Content-Length")),
   arrayBuffer: () => response.arrayBuffer(),
   bytes: () => response.bytes(),
   text: () => response.text(),
@@ -719,17 +740,20 @@ async function emptyBucket(
 ) {
   let cursor: string | undefined;
   while (true) {
-    const result = await listObjects(api, bucketName, props, cursor);
-    if (result.keys.length) {
+    const result = await listObjects(api, bucketName, {
+      jurisdiction: props.jurisdiction,
+      cursor,
+    });
+    if (result.objects.length) {
       // Another undocumented API! But it lets us delete multiple objects at once instead of one by one.
       await extractCloudflareResult(
-        `delete ${result.keys.length} objects from bucket "${bucketName}"`,
+        `delete ${result.objects.length} objects from bucket "${bucketName}"`,
         api.delete(
           `/accounts/${api.accountId}/r2/buckets/${bucketName}/objects`,
           {
             headers: withJurisdiction(props),
             method: "DELETE",
-            body: JSON.stringify(result.keys),
+            body: JSON.stringify(result.objects.map((object) => object.key)),
           },
         ),
       );
@@ -748,21 +772,39 @@ async function emptyBucket(
 export async function listObjects(
   api: CloudflareApi,
   bucketName: string,
-  props: { jurisdiction?: string },
-  cursor?: string,
-) {
+  props: R2ListOptions & {
+    jurisdiction?: string;
+  },
+): Promise<R2Objects> {
   const params = new URLSearchParams({
     per_page: "1000",
   });
-  if (cursor) {
-    params.set("cursor", cursor);
+  if (props.cursor) {
+    params.set("cursor", props.cursor);
+  }
+  if (props.delimiter) {
+    params.set("delimiter", props.delimiter);
+  }
+  if (props.prefix) {
+    params.set("prefix", props.prefix);
+  }
+  if (props.startAfter) {
+    params.set("start_after", props.startAfter);
+  }
+  if (props.limit) {
+    params.set("limit", props.limit.toString());
   }
   const response = await api.get(
     `/accounts/${api.accountId}/r2/buckets/${bucketName}/objects?${params.toString()}`,
     { headers: withJurisdiction(props) },
   );
   const json: {
-    result: { key: string }[];
+    result: {
+      key: string;
+      etag: string;
+      last_modified: string;
+      size: number;
+    }[];
     result_info?: {
       cursor: string;
       is_truncated: boolean;
@@ -774,7 +816,11 @@ export async function listObjects(
   if (!json.success) {
     // 10006 indicates that the bucket does not exist, so there are no objects to list
     if (json.errors.some((e) => e.code === 10006)) {
-      return { keys: [], cursor: undefined };
+      return {
+        objects: [],
+        cursor: undefined,
+        truncated: false,
+      };
     }
     throw new CloudflareApiError(
       `Failed to list objects in bucket "${bucketName}": ${json.errors.map((e) => `- [${e.code}] ${e.message}${e.documentation_url ? ` (${e.documentation_url})` : ""}`).join("\n")}`,
@@ -783,9 +829,17 @@ export async function listObjects(
     );
   }
   return {
-    keys: json.result.map((object) => object.key),
+    // keys: json.result.map((object) => object.key),
+    objects: json.result.map((object) => ({
+      key: object.key,
+      etag: object.etag,
+      uploaded: new Date(object.last_modified),
+      size: object.size,
+    })),
+    delimitedPrefixes: [],
     cursor: json.result_info?.cursor,
-  };
+    truncated: json.result_info?.is_truncated ?? false,
+  } as R2Objects;
 }
 
 /**
@@ -997,6 +1051,7 @@ export async function headObject(
     key,
     etag: response.headers.get("ETag")?.replace(/"/g, "")!,
     uploaded: parseDate(response.headers),
+    size: Number(response.headers.get("Content-Length")),
   };
 }
 

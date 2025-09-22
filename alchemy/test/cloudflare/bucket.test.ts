@@ -140,7 +140,9 @@ describe("R2 Bucket Resource", async () => {
       expect(putResponse.status).toEqual(200);
 
       // Verify the file exists in the bucket
-      const { keys } = await listObjects(api, bucketName, bucket);
+      const keys = (await listObjects(api, bucketName, bucket)).objects.map(
+        (o) => o.key,
+      );
       expect(keys.length).toBeGreaterThan(0);
       expect(keys).toContain(testKey);
 
@@ -455,19 +457,43 @@ describe("R2 Bucket Resource", async () => {
       const updatedContent = "Updated content for testing";
       await bucket.delete(testKey);
       let putObj = await bucket.put(testKey, testContent);
+      expect(putObj.size).toBeTypeOf("number");
+      expect(putObj.size).toEqual(testContent.length);
       let obj = await bucket.head(testKey);
       expect(obj).toBeDefined();
       expect(obj?.etag).toEqual(putObj.etag);
+      expect(obj?.size).toEqual(putObj.size);
       putObj = await bucket.put(testKey, updatedContent);
       obj = await bucket.head(testKey);
       expect(obj?.etag).toEqual(putObj.etag);
       const getObj = await bucket.get(testKey);
       await expect(getObj?.text()).resolves.toEqual(updatedContent);
+
+      const listObj = await bucket.list();
+
+      // console.log(JSON.stringify(listObj, null, 2));
+      expect(listObj.objects.length).toEqual(1);
+      expect(listObj.objects[0].key).toEqual(testKey);
+      expect(listObj.truncated).toEqual(false);
+      expect(listObj.objects).toEqual([
+        {
+          key: testKey,
+          etag: putObj.etag,
+          uploaded: putObj.uploaded,
+          size: putObj.size,
+        },
+      ]);
+
       await bucket.delete(testKey);
       await expect(bucket.head(testKey)).resolves.toBeNull();
       await expect(bucket.get(testKey)).resolves.toBeNull();
+
+      expect(await bucket.list()).toMatchObject({
+        objects: [],
+        truncated: false,
+      });
     } finally {
-      await destroy(scope);
+      // await destroy(scope);
     }
   });
 });
