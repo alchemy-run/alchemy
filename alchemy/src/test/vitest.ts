@@ -135,6 +135,7 @@ export function test(
     telemetryClient: new NoopTelemetryClient(),
     quiet: defaultOptions.quiet,
     password: process.env.ALCHEMY_PASSWORD,
+    local: defaultOptions.local,
   });
 
   test.beforeAll = (fn: (scope: Scope) => Promise<void>, timeout?: number) => {
