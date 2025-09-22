@@ -342,13 +342,9 @@ export async function Website<B extends Bindings>(
     ...worker,
     bindings: {
       ...worker.bindings,
-      ...(!scope.local
-        ? {
-            ASSETS: await Assets("assets", {
-              path: path.relative(process.cwd(), paths.assets),
-            }),
-          }
-        : {}),
+      ASSETS: Assets({
+        path: paths.assets,
+      }),
     },
     dev: url ? { url } : undefined,
   })) as Website<B>;
