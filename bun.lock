@@ -86,6 +86,7 @@
         "astro": "^5.13.2",
         "braintrust": "^0.0.201",
         "capnweb": "^0.1.0",
+        "cojson-core-wasm": "^0.18.16",
         "cpx": "^1.5.0",
         "debug": "^4.4.1",
         "dofs": "^0.1.0",
@@ -2703,6 +2704,8 @@
     "cluster-key-slot": ["cluster-key-slot@1.1.2", "", {}, "sha512-RMr0FhtfXemyinomL4hrWcYJxmX6deFdCxpJzhDttxgO1+bcCnkk+9drydLVDmAMG7NE6aN/fl4F7ucU/90gAA=="],
 
     "code-block-writer": ["code-block-writer@13.0.3", "", {}, "sha512-Oofo0pq3IKnsFtuHqSF7TqBfr71aeyZDVJ0HpmqB7FBM2qEigL0iPONSCZSO9pE9dZTAxANe5XHG9Uy0YMv8cg=="],
+
+    "cojson-core-wasm": ["cojson-core-wasm@0.18.16", "", {}, "sha512-srcUXXKh06K5j5eBZaabsM2tP7tVjbzstqQmnwAQwybXM/PMarDw0LBF4xNo/zCtmoNpFnJlfUlyCPIVJ41tnw=="],
 
     "collapse-white-space": ["collapse-white-space@2.1.0", "", {}, "sha512-loKTxY1zCOuG4j9f6EPnuyyYkf58RnhhWTvRoZEokgB+WbdXehfjFviyOVYkqzEWz1Q5kRiZdBYS5SwxbQYwzw=="],
 
