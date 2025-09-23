@@ -1,10 +1,12 @@
-import { alchemy } from "../alchemy.ts";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
-import type { Secret } from "../secret.ts";
 import { logger } from "../util/logger.ts";
 import { handleApiError } from "./api-error.ts";
-import { createNeonApi, type NeonApiOptions } from "./api.ts";
+import { createNeonApi, type Neon, type NeonApiOptions } from "./api.ts";
+import {
+  formatConnectionUri,
+  type NeonConnectionUri,
+} from "./connection-uri.ts";
 
 /**
  * A Neon region where projects can be provisioned
@@ -66,368 +68,16 @@ export interface NeonProjectProps extends NeonApiOptions {
 }
 
 /**
- * A Neon database
- */
-export interface NeonDatabase {
-  /**
-   * Database ID
-   */
-  id: number;
-
-  /**
-   * ID of the branch this database belongs to
-   */
-  branch_id: string;
-
-  /**
-   * Database name
-   */
-  name: string;
-
-  /**
-   * Name of the database owner role
-   */
-  owner_name: string;
-
-  /**
-   * Time at which the database was created
-   */
-  created_at: string;
-
-  /**
-   * Time at which the database was last updated
-   */
-  updated_at: string;
-}
-
-/**
- * A Neon database role
- */
-export interface NeonRole {
-  /**
-   * ID of the branch this role belongs to
-   */
-  branch_id: string;
-
-  /**
-   * Role name
-   */
-  name: string;
-
-  /**
-   * Role password (only included during creation)
-   */
-  password?: string;
-
-  /**
-   * Whether this role is protected from deletion
-   */
-  protected: boolean;
-
-  /**
-   * Time at which the role was created
-   */
-  created_at: string;
-
-  /**
-   * Time at which the role was last updated
-   */
-  updated_at: string;
-}
-
-/**
- * A Neon branch
- */
-export interface NeonBranch {
-  /**
-   * Branch ID
-   */
-  id: string;
-
-  /**
-   * ID of the project this branch belongs to
-   */
-  project_id: string;
-
-  /**
-   * Branch name
-   */
-  name: string;
-
-  /**
-   * Current state of the branch
-   */
-  current_state: string;
-
-  /**
-   * Pending state of the branch
-   */
-  pending_state: string;
-
-  /**
-   * Time at which the branch was created
-   */
-  created_at: string;
-
-  /**
-   * Time at which the branch was last updated
-   */
-  updated_at: string;
-}
-
-/**
- * A Neon compute endpoint
- */
-export interface NeonEndpoint {
-  /**
-   * Endpoint ID
-   */
-  id: string;
-
-  /**
-   * Host for connecting to this endpoint
-   */
-  host: string;
-
-  /**
-   * ID of the project this endpoint belongs to
-   */
-  project_id: string;
-
-  /**
-   * ID of the branch this endpoint belongs to
-   */
-  branch_id: string;
-
-  /**
-   * Endpoint type (read_write, read_only)
-   */
-  type: string;
-
-  /**
-   * Current state of the endpoint
-   */
-  current_state: string;
-
-  /**
-   * Pending state of the endpoint
-   */
-  pending_state: string;
-
-  /**
-   * Region ID where this endpoint is provisioned
-   */
-  region_id: string;
-
-  /**
-   * Minimum compute units for autoscaling
-   */
-  autoscaling_limit_min_cu: number;
-
-  /**
-   * Maximum compute units for autoscaling
-   */
-  autoscaling_limit_max_cu: number;
-
-  /**
-   * Whether connection pooler is enabled
-   */
-  pooler_enabled: boolean;
-
-  /**
-   * Connection pooler mode
-   */
-  pooler_mode: string;
-
-  /**
-   * Whether this endpoint is disabled
-   */
-  disabled: boolean;
-
-  /**
-   * Whether passwordless access is enabled
-   */
-  passwordless_access: boolean;
-
-  /**
-   * Time at which the endpoint was created
-   */
-  created_at: string;
-
-  /**
-   * Time at which the endpoint was last updated
-   */
-  updated_at: string;
-
-  /**
-   * Proxy host for this endpoint
-   */
-  proxy_host: string;
-
-  /**
-   * Endpoint settings
-   */
-  settings: {
-    /**
-     * PostgreSQL settings
-     */
-    pg_settings: Record<string, any>;
-  };
-}
-
-/**
- * A Neon connection URI
- */
-export interface NeonConnectionUri {
-  /**
-   * Connection URI string
-   */
-  connection_uri: Secret;
-
-  /**
-   * Connection parameters
-   */
-  connection_parameters: {
-    database: string;
-    host: string;
-    port: number;
-    user: string;
-    password: Secret;
-  };
-}
-
-/**
- * A Neon operation
- */
-export interface NeonOperation {
-  /**
-   * Operation ID
-   */
-  id: string;
-
-  /**
-   * ID of the project this operation belongs to
-   */
-  project_id: string;
-
-  /**
-   * ID of the branch this operation affects, if applicable
-   */
-  branch_id?: string;
-
-  /**
-   * ID of the endpoint this operation affects, if applicable
-   */
-  endpoint_id?: string;
-
-  /**
-   * Action being performed
-   */
-  action: string;
-
-  /**
-   * Current status of the operation
-   */
-  status: string;
-
-  /**
-   * Number of failures encountered
-   */
-  failures_count: number;
-
-  /**
-   * Time at which the operation was created
-   */
-  created_at: string;
-
-  /**
-   * Time at which the operation was last updated
-   */
-  updated_at: string;
-}
-
-/**
  * API response structure for Neon projects
  */
 interface NeonApiResponse {
-  project: {
-    id: string;
-    name: string;
-    region_id: string;
-    pg_version: number;
-    created_at: string;
-    updated_at: string;
-    proxy_host?: string;
-    [key: string]: any;
-  };
-  connection_uris?: Array<{
-    connection_uri: string;
-    connection_parameters: {
-      database: string;
-      host: string;
-      port: number;
-      user: string;
-      password: string;
-    };
-  }>;
-  roles?: Array<{
-    branch_id: string;
-    name: string;
-    password?: string;
-    protected: boolean;
-    created_at: string;
-    updated_at: string;
-  }>;
-  databases?: Array<{
-    id: number;
-    branch_id: string;
-    name: string;
-    owner_name: string;
-    created_at: string;
-    updated_at: string;
-  }>;
-  operations?: Array<{
-    id: string;
-    project_id: string;
-    branch_id?: string;
-    endpoint_id?: string;
-    action: string;
-    status: string;
-    failures_count: number;
-    created_at: string;
-    updated_at: string;
-  }>;
-  branch?: {
-    id: string;
-    project_id: string;
-    name: string;
-    current_state: string;
-    pending_state: string;
-    created_at: string;
-    updated_at: string;
-  };
-  endpoints?: Array<{
-    id: string;
-    host: string;
-    project_id: string;
-    branch_id: string;
-    type: string;
-    current_state: string;
-    pending_state: string;
-    region_id: string;
-    autoscaling_limit_min_cu: number;
-    autoscaling_limit_max_cu: number;
-    pooler_enabled: boolean;
-    pooler_mode: string;
-    disabled: boolean;
-    passwordless_access: boolean;
-    created_at: string;
-    updated_at: string;
-    proxy_host: string;
-    settings: {
-      pg_settings: Record<string, any>;
-    };
-  }>;
+  project: Neon.Project;
+  connection_uris?: Array<Neon.ConnectionDetails>;
+  roles?: Array<Neon.Role>;
+  databases?: Array<Neon.Database>;
+  operations?: Array<Neon.Operation>;
+  branch?: Neon.Branch;
+  endpoints?: Array<Neon.Endpoint>;
 }
 
 /**
@@ -470,22 +120,22 @@ export interface NeonProject
   /**
    * Database roles created with the project
    */
-  roles: [NeonRole, ...NeonRole[]];
+  roles: [Neon.Role, ...Neon.Role[]];
 
   /**
    * Databases created with the project
    */
-  databases?: [NeonDatabase, ...NeonDatabase[]];
+  databases?: [Neon.Database, ...Neon.Database[]];
 
   /**
    * Default branch information
    */
-  branch?: NeonBranch;
+  branch?: Neon.Branch;
 
   /**
    * Compute endpoints for the project
    */
-  endpoints: [NeonEndpoint, ...NeonEndpoint[]];
+  endpoints: [Neon.Endpoint, ...Neon.Endpoint[]];
 }
 
 /**
@@ -719,16 +369,7 @@ async function getProject(
     ...responseData,
     connection_uris: (
       updatedData.connection_uris || responseData.connection_uris
-    )?.map((uri) => ({
-      connection_uri: alchemy.secret(uri.connection_uri),
-      connection_parameters: {
-        database: uri.connection_parameters.database,
-        host: uri.connection_parameters.host,
-        port: uri.connection_parameters.port ?? 5432,
-        user: uri.connection_parameters.user ?? "neondb_owner",
-        password: alchemy.secret(uri.connection_parameters.password),
-      },
-    })),
+    )?.map((uri) => formatConnectionUri(uri)),
     project: updatedData.project,
     branch: updatedData.branch || responseData.branch,
     endpoints: updatedData.endpoints || responseData.endpoints,
@@ -849,14 +490,14 @@ async function getBranchDetails(
   api: any,
   projectId: string,
   branchId: string,
-): Promise<{ branch: NeonBranch }> {
+): Promise<{ branch: Neon.Branch }> {
   const response = await api.get(`/projects/${projectId}/branches/${branchId}`);
 
   if (!response.ok) {
     throw new Error(`Failed to get branch details: HTTP ${response.status}`);
   }
 
-  return (await response.json()) as { branch: NeonBranch };
+  return (await response.json()) as { branch: Neon.Branch };
 }
 
 /**
@@ -872,7 +513,7 @@ async function getEndpointDetails(
   api: any,
   projectId: string,
   branchId: string,
-): Promise<{ endpoints: NeonEndpoint[] }> {
+): Promise<{ endpoints: Neon.Endpoint[] }> {
   const response = await api.get(
     `/projects/${projectId}/branches/${branchId}/endpoints`,
   );
@@ -881,5 +522,5 @@ async function getEndpointDetails(
     throw new Error(`Failed to get endpoint details: HTTP ${response.status}`);
   }
 
-  return (await response.json()) as { endpoints: NeonEndpoint[] };
+  return (await response.json()) as { endpoints: Neon.Endpoint[] };
 }
