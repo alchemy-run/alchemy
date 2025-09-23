@@ -342,7 +342,7 @@ export async function Website<B extends Bindings>(
     ...worker,
     bindings: {
       ...worker.bindings,
-      ASSETS: Assets({
+      ASSETS: await Assets({
         path: paths.assets,
       }),
     },
