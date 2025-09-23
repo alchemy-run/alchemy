@@ -5,8 +5,10 @@ import { handleApiError } from "./api-error.ts";
 import { createNeonApi, type Neon, type NeonApiOptions } from "./api.ts";
 import {
   formatConnectionUri,
+  formatRole,
   type NeonConnectionUri,
-} from "./connection-uri.ts";
+  type NeonRole,
+} from "./utils.ts";
 
 /**
  * A Neon region where projects can be provisioned
@@ -120,7 +122,7 @@ export interface NeonProject
   /**
    * Database roles created with the project
    */
-  roles: [Neon.Role, ...Neon.Role[]];
+  roles: [NeonRole, ...NeonRole[]];
 
   /**
    * Databases created with the project
@@ -283,7 +285,7 @@ export const NeonProject = Resource(
         // @ts-expect-error - api ensures they're non-empty
         connection_uris: response.connection_uris,
         // @ts-expect-error
-        roles: response.roles,
+        roles: response.roles?.map(formatRole),
         // @ts-expect-error
         databases: response.databases,
         branch: response.branch,

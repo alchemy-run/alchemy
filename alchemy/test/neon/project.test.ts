@@ -2,13 +2,7 @@ import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
 import { destroy } from "../../src/destroy.ts";
 import { createNeonApi } from "../../src/neon/api.ts";
-import {
-  type NeonBranch,
-  type NeonDatabase,
-  type NeonEndpoint,
-  NeonProject,
-  type NeonRole,
-} from "../../src/neon/project.ts";
+import { NeonProject } from "../../src/neon/project.ts";
 import { BRANCH_PREFIX } from "../util.ts";
 // must import this or else alchemy.test won't exist
 import "../../src/test/vitest.ts";
@@ -47,14 +41,14 @@ describe("NeonProject Resource", () => {
 
       // Verify the additional properties are included
       expect(project.branch).toBeTruthy();
-      const branch: NeonBranch = project.branch!;
+      const branch = project.branch!;
       expect(branch.name).toBeTruthy();
       expect(branch.id).toBeTruthy();
       expect(branch.project_id).toEqual(project.id);
       expect(branch.current_state).toBeTruthy();
 
       expect(project.endpoints).toBeTruthy();
-      const endpoint: NeonEndpoint = project.endpoints![0];
+      const endpoint = project.endpoints![0];
       expect(endpoint.type).toEqual("read_write");
       expect(endpoint.host).toBeTruthy();
       expect(endpoint.branch_id).toBeTruthy();
@@ -69,14 +63,14 @@ describe("NeonProject Resource", () => {
       );
 
       expect(project.databases).toBeTruthy();
-      const database: NeonDatabase = project.databases![0];
+      const database = project.databases![0];
       expect(database.name).toBeTruthy();
       expect(database.id).toBeTruthy();
       expect(database.branch_id).toBeTruthy();
       expect(database.owner_name).toBeTruthy();
 
       expect(project.roles).toBeTruthy();
-      const role: NeonRole = project.roles![0];
+      const role = project.roles![0];
       expect(role.name).toBeTruthy();
       expect(role.branch_id).toBeTruthy();
 

@@ -33,3 +33,37 @@ export function formatConnectionUri(
     },
   };
 }
+
+export interface NeonRole {
+  /**
+   * The ID of the branch to which the role belongs
+   */
+  branch_id: string;
+  /**
+   * The role name
+   */
+  name: string;
+  /**
+   * The role password
+   */
+  password?: Secret;
+  /**
+   * Whether or not the role is system-protected
+   */
+  protected?: boolean;
+  /**
+   * A timestamp indicating when the role was created
+   */
+  created_at: string;
+  /**
+   * A timestamp indicating when the role was last updated
+   */
+  updated_at: string;
+}
+
+export function formatRole(role: Neon.Role): NeonRole {
+  return {
+    ...role,
+    password: role.password ? new Secret(role.password) : undefined,
+  };
+}

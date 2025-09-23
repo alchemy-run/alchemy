@@ -2,11 +2,13 @@ import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { handleApiError } from "./api-error.ts";
 import { createNeonApi, type Neon, type NeonApiOptions } from "./api.ts";
+import type { NeonProject } from "./project.ts";
 import {
   formatConnectionUri,
+  formatRole,
   type NeonConnectionUri,
-} from "./connection-uri.ts";
-import type { NeonProject } from "./project.ts";
+  type NeonRole,
+} from "./utils.ts";
 
 export interface NeonBranchProps extends NeonApiOptions {
   /**
@@ -167,11 +169,11 @@ export interface NeonBranch extends Resource<"neon::Branch"> {
   /**
    * The roles for the branch.
    */
-  roles: Neon.Role[];
+  roles: NeonRole[];
   /**
    * The connection URIs for the branch.
    */
-  connectionUris: NeonConnectionUri[] | undefined;
+  connectionUris: NeonConnectionUri[];
 }
 
 export const NeonBranch = Resource(
@@ -225,7 +227,7 @@ export const NeonBranch = Resource(
           endpoints: Neon.Endpoint[];
           databases: Neon.Database[];
           roles: Neon.Role[];
-          connection_uris: Neon.ConnectionDetails[];
+          connection_uris?: Neon.ConnectionDetails[];
         };
         return this({
           id: data.branch.id,
@@ -247,17 +249,18 @@ export const NeonBranch = Resource(
             : undefined,
           endpoints: data.endpoints,
           databases: data.databases,
-          roles: data.roles,
-          connectionUris: data.connection_uris.map(formatConnectionUri),
+          roles: data.roles.map(formatRole),
+          connectionUris: data.connection_uris?.map(formatConnectionUri) ?? [],
         });
       }
       case "update": {
         if (
           this.output.projectId !== projectId ||
-          this.output.parentBranchId !== parentBranchId ||
-          this.output.parentLsn !== props.parentLsn ||
-          this.output.parentTimestamp !== props.parentTimestamp ||
-          this.output.initSource !== props.initSource
+          (parentBranchId && this.output.parentBranchId !== parentBranchId) ||
+          (props.parentLsn && this.output.parentLsn !== props.parentLsn) ||
+          (props.parentTimestamp &&
+            this.output.parentTimestamp !== props.parentTimestamp) ||
+          this.output.initSource !== (props.initSource ?? "parent-data")
         ) {
           this.replace();
         }
@@ -266,8 +269,8 @@ export const NeonBranch = Resource(
           {
             branch: {
               name: name !== this.output.name ? name : undefined, // prevents 400: cannot set branch to the same name
-              protected: props.protected,
-              expires_at: props.expiresAt,
+              protected: props.protected ?? false,
+              expires_at: props.expiresAt ?? null,
             },
           },
         );
