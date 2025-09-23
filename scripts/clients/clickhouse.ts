@@ -3,7 +3,7 @@ import type {
   OpenApiOperationObject,
   UserConfig,
 } from "@hey-api/openapi-ts";
-import { keys, toCamelCase } from "./utils";
+import { keys, toCamelCase } from "./utils.ts";
 
 const spec = await fetch("https://api.clickhouse.cloud/v1").then(
   (res) => res.json() as Promise<OpenApi.V3_0_X>,
