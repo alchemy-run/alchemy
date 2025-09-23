@@ -14,7 +14,6 @@ await esbuild.build({
   outdir: WORKERS_DIR,
   bundle: true,
   minify: true,
-  keepNames: true,
   format: "esm",
   target: "es2022",
   external: ["cloudflare:*", "node:crypto"],
