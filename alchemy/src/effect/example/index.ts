@@ -1,4 +1,3 @@
-import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as AWS from "../aws/index.ts";
@@ -11,7 +10,7 @@ const app = Alchemy.app({ name: "my-iae-app", stage: "dev" });
 
 const aws = AWS.defaultProviders.pipe(
   Layer.provide(AWS.Region.fromEnv),
-  Layer.provide(AWS.Credentials.fromChain.pipe(Layer.tap(Console.log))),
+  Layer.provide(AWS.Credentials.fromChain),
 );
 
 const plan = Alchemy.plan({

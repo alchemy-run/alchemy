@@ -89,6 +89,7 @@ export const apply = <const P extends AnyPlan, Err, Req>(
                   id,
                   news: node.news,
                   // TODO(sam): these need to only include attach actions
+                  // @ts-expect-error
                   bindings: node.bindings.map((binding, i) =>
                     Object.assign(binding, {
                       attributes: bindings[i],

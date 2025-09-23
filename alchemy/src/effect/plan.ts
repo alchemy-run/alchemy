@@ -324,6 +324,7 @@ export const plan = <
                   attributes: oldState?.output,
                   // bindings,
                   // resource,
+                  // @ts-expect-error
                 } satisfies Delete<Resource>,
               ] as const;
             }

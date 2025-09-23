@@ -132,6 +132,7 @@ export const make = <F extends Resource, Req>(
         resource: self,
         bindings: policy.statements,
         // TODO(sam): this should be passed to an Effect that interacts with the Provider
+        // @ts-expect-error
         props: {
           ...self.props,
           main,

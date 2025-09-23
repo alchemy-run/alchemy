@@ -8,7 +8,7 @@ export class Region extends Context.Tag("AWS::Region")<Region, string>() {}
 export const of = (region: string) => Layer.succeed(Region, region);
 
 export const fromEnvOrElse = (region: string) =>
-  Layer.succeed(Region, import.meta.env.AWS_REGION ?? region);
+  Layer.succeed(Region, process.env.AWS_REGION ?? region);
 
 export class EnvironmentVariableNotSet extends Data.TaggedError(
   "EnvironmentVariableNotSet",
@@ -20,9 +20,9 @@ export class EnvironmentVariableNotSet extends Data.TaggedError(
 export const fromEnv = Layer.effect(
   Region,
   Effect.gen(function* () {
-    const region = import.meta.env.AWS_REGION;
+    const region = process.env.AWS_REGION;
     if (!region) {
-      yield* Effect.fail(
+      return yield* Effect.fail(
         new EnvironmentVariableNotSet({
           message: "AWS_REGION is not set",
           variable: "AWS_REGION",
