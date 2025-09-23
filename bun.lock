@@ -45,7 +45,7 @@
         "fast-xml-parser": "^5.2.5",
         "find-process": "^2.0.0",
         "glob": "^10.0.0",
-        "itty-aws": "0.3.5",
+        "itty-aws": "^0.3.6",
         "jszip": "^3.0.0",
         "libsodium-wrappers": "^0.7.15",
         "miniflare": "^4.20250906.0",
@@ -3580,7 +3580,7 @@
 
     "iterator.prototype": ["iterator.prototype@1.1.5", "", { "dependencies": { "define-data-property": "^1.1.4", "es-object-atoms": "^1.0.0", "get-intrinsic": "^1.2.6", "get-proto": "^1.0.0", "has-symbols": "^1.1.0", "set-function-name": "^2.0.2" } }, "sha512-H0dkQoCa3b2VEeKQBOxFph+JAbcrQdE7KC0UkqwpLmv2EC4P41QXP+rqo9wYodACiG5/WM5s9oDApTU8utwj9g=="],
 
-    "itty-aws": ["itty-aws@0.3.5", "", { "dependencies": { "aws4fetch": "^1.0.20" }, "peerDependencies": { "@aws-sdk/credential-providers": "^3", "@effect/platform": "^0.87.12", "@effect/platform-node": "^0.89.5", "effect": "^3" } }, "sha512-HTMrPrtzhyTJv4yWk1sLm80u+EPVwbts1TLBjNlR5b5cNzPoXD2Gj3ELqxK7wN+aX+4dnVu203UV4fldtYACtg=="],
+    "itty-aws": ["itty-aws@0.3.6", "", { "dependencies": { "aws4fetch": "^1.0.20" }, "peerDependencies": { "@aws-sdk/credential-providers": "^3", "@effect/platform": "^0.87.12", "@effect/platform-node": "^0.89.5", "effect": "^3" } }, "sha512-gDYddNeFU3cqV/2Tx2hIDZV1qrD4f3hRS2CvjTFv78ukGgCZLCnw3KWE5BKNHN2bnNp2ezmjKk0WR+R7IvCYFA=="],
 
     "jackspeak": ["jackspeak@4.1.1", "", { "dependencies": { "@isaacs/cliui": "^8.0.2" } }, "sha512-zptv57P3GpL+O0I7VdMJNBZCu+BPHVQUk55Ft8/QCJjTVxrnJHuVuX/0Bl2A6/+2oyR/ZMEuFKwmzqqZ/U5nPQ=="],
 

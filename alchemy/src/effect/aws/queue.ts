@@ -274,7 +274,6 @@ export const provider = Layer.effect(
       }),
       create: Effect.fn(function* ({ id, news }) {
         const queueName = createQueueName(id, news);
-        console.log("creating queue", queueName);
         const response = yield* sqs.createQueue({
           QueueName: queueName,
           Attributes: createAttributes(news),

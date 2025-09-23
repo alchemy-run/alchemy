@@ -110,7 +110,7 @@ export const apply = <const P extends AnyPlan, Err, Req>(
           node: P[keyof P] | BindingAction<Statement>[],
         ) => Effect.Effect<any, never, never>;
 
-        return Object.fromEntries(
+        const resources: any = Object.fromEntries(
           yield* Effect.all(
             Object.entries(plan).map(
               Effect.fn(function* ([id, node]) {
@@ -119,6 +119,10 @@ export const apply = <const P extends AnyPlan, Err, Req>(
             ),
           ),
         );
+        if (Object.keys(resources).length === 0) {
+          return undefined;
+        }
+        return outputs;
       }),
     ),
   ) as Effect.Effect<

@@ -98,10 +98,6 @@ export type Materialize<T, Stmt extends Statement = never> = T extends Bound<
     ? Materialized<T, Stmt>
     : never;
 
-export type DeleteOrphans<K extends string | number | symbol> = {
-  [k in Exclude<string, K>]: Delete<Resource>;
-};
-
 type Apply<
   Items extends PlanItem[],
   Accum extends Record<string, Materialized> = {},
@@ -336,11 +332,9 @@ export const plan = <
       )).filter((v) => !!v),
     );
 
-    return Object.fromEntries(
-      [...updates, deletions].reduce(
-        (acc, plan) => ({ ...acc, ...plan }),
-        {} as any,
-      ),
+    return [...updates, deletions].reduce(
+      (acc, plan) => ({ ...acc, ...plan }),
+      {} as any,
     );
   }) as Effect.Effect<
     Plan<Phase, Resources>,
