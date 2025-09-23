@@ -24,7 +24,6 @@ export const generate = async () => {
   await $`rm -rf src/util/api`;
   await $`mkdir -p src/util/api`;
   await $`mv src/${clients[0]}/api/client/ src/${clients[0]}/api/core/ src/util/api/`;
-  await patchUtils();
   await $`biome check src/util/api --write`;
 
   // 3. Remove unused code
@@ -37,19 +36,6 @@ export const generate = async () => {
     await patchClientImports(client);
     await $`biome check src/${client}/api --write`;
   }
-};
-
-const patchUtils = async () => {
-  // header.entries() doesn't cooperate, probably because of @cloudflare/workers-types, so we add a ts-expect-error
-  const utils = Bun.file("alchemy/src/util/api/client/utils.gen.ts");
-  const lines = await utils.text().then((text) => text.split("\n"));
-  const index = lines.findIndex((line) =>
-    line.includes(
-      "header instanceof Headers ? header.entries() : Object.entries(header)",
-    ),
-  );
-  lines.splice(index, 0, "// @ts-expect-error");
-  await utils.write(lines.join("\n"));
 };
 
 const patchClientImports = async (client: string) => {
