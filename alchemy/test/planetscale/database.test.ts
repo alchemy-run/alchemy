@@ -1,7 +1,10 @@
 import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
 import { destroy } from "../../src/destroy.ts";
-import { PlanetScaleClient } from "../../src/planetscale/api/client.gen.ts";
+import {
+  createPlanetScaleClient,
+  type PlanetScaleClient,
+} from "../../src/planetscale/api.ts";
 import { Database } from "../../src/planetscale/database.ts";
 import {
   waitForBranchReady,
@@ -23,7 +26,7 @@ const kinds = [
 describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent.each(kinds)(
   "Database Resource ($kind)",
   ({ kind, ...expectedClusterSizes }) => {
-    const api = new PlanetScaleClient();
+    const api = createPlanetScaleClient();
     const organizationId = alchemy.env.PLANETSCALE_ORG_ID;
 
     test(`create database with minimal settings (${kind})`, async (scope) => {
@@ -54,18 +57,15 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent.each(kinds)(
         await waitForDatabaseReady(api, organizationId, name);
 
         // Verify main branch cluster size
-        const mainBranchResponse =
-          await api.organizations.databases.branches.get({
-            path: {
-              organization: organizationId,
-              database: name,
-              name: "main",
-            },
-          });
+        const { data: mainBranchData } = await api.getBranch({
+          path: {
+            organization: organizationId,
+            database: name,
+            name: "main",
+          },
+        });
 
-        expect(mainBranchResponse.cluster_name).toEqual(
-          expectedClusterSizes.ps10,
-        );
+        expect(mainBranchData.cluster_name).toEqual(expectedClusterSizes.ps10);
       } finally {
         await destroy(scope);
         // Verify database was deleted by checking API directly
@@ -149,17 +149,14 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent.each(kinds)(
         });
 
         // Verify main branch cluster size was updated
-        const mainBranchResponse =
-          await api.organizations.databases.branches.get({
-            path: {
-              organization: organizationId,
-              database: name,
-              name: "main",
-            },
-          });
-        expect(mainBranchResponse.cluster_name).toEqual(
-          expectedClusterSizes.ps20,
-        );
+        const { data: mainBranchData } = await api.getBranch({
+          path: {
+            organization: organizationId,
+            database: name,
+            name: "main",
+          },
+        });
+        expect(mainBranchData.cluster_name).toEqual(expectedClusterSizes.ps20);
       } catch (err) {
         console.error("Test error:", err);
         throw err;
@@ -195,15 +192,15 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent.each(kinds)(
           defaultBranch,
         );
         // Verify branch was created
-        const branchResponse = await api.organizations.databases.branches.get({
+        const { data: branchData } = await api.getBranch({
           path: {
             organization: organizationId,
             database: name,
             name: defaultBranch,
           },
         });
-        expect(branchResponse.parent_branch).toEqual("main");
-        expect(branchResponse.cluster_name).toEqual(expectedClusterSizes.ps10);
+        expect(branchData.parent_branch).toEqual("main");
+        expect(branchData.cluster_name).toEqual(expectedClusterSizes.ps10);
 
         // Update default branch on existing database
         await Database("create-branch", {
@@ -221,17 +218,14 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent.each(kinds)(
           database.name,
           defaultBranch,
         );
-        const newBranchResponse =
-          await api.organizations.databases.branches.get({
-            path: {
-              organization: organizationId,
-              database: name,
-              name: defaultBranch,
-            },
-          });
-        expect(newBranchResponse.cluster_name).toEqual(
-          expectedClusterSizes.ps20,
-        );
+        const { data: newBranchData } = await api.getBranch({
+          path: {
+            organization: organizationId,
+            database: name,
+            name: defaultBranch,
+          },
+        });
+        expect(newBranchData.cluster_name).toEqual(expectedClusterSizes.ps20);
       } catch (err) {
         console.error("Test error:", err);
         throw err;
@@ -262,15 +256,15 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent.each(kinds)(
             kind,
           });
           await waitForDatabaseReady(api, organizationId, name);
-          const branch = await api.organizations.databases.branches.get({
+          const { data: branchData } = await api.getBranch({
             path: {
               organization: organizationId,
               database: name,
               name: "main",
             },
           });
-          expect(branch.cluster_name).toEqual("PS_10_AWS_ARM");
-          expect(branch.cluster_architecture).toEqual("aarch64");
+          expect(branchData.cluster_name).toEqual("PS_10_AWS_ARM");
+          expect(branchData.cluster_architecture).toEqual("aarch64");
         } catch (err) {
           console.error("Test error:", err);
           throw err;
@@ -297,12 +291,12 @@ async function assertDatabaseDeleted(
   const startTime = Date.now();
 
   while (Date.now() - startTime < timeout) {
-    const response = await api.organizations.databases.get({
+    const { response } = await api.getDatabase({
       path: {
         organization: organizationId,
         name: databaseName,
       },
-      result: "full",
+      throwOnError: false,
     });
 
     console.log(

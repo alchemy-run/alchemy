@@ -4,7 +4,7 @@ import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
 import { lowercaseId } from "../util/nanoid.ts";
-import { PlanetScaleClient, type PlanetScaleProps } from "./api/client.gen.ts";
+import { createPlanetScaleClient, type PlanetScaleProps } from "./api.ts";
 import type { Branch } from "./branch.ts";
 import type { Database } from "./database.ts";
 
@@ -267,7 +267,7 @@ export const Password = Resource(
       : (this.output?.nameSlug ?? lowercaseId());
     const name = `${(props.name ?? this.output?.name ?? this.scope.createPhysicalName(id)).toLowerCase()}-${nameSlug}`;
 
-    const api = new PlanetScaleClient(props);
+    const api = createPlanetScaleClient(props);
     const database =
       typeof props.database === "string" ? props.database : props.database.name;
     const branch =
@@ -285,19 +285,17 @@ export const Password = Resource(
 
     if (this.phase === "delete") {
       if (this.output?.id) {
-        const res = await api.organizations.databases.branches.passwords.delete(
-          {
-            path: {
-              organization,
-              database,
-              branch,
-              id: this.output.id,
-            },
-            result: "full",
+        const res = await api.deletePassword({
+          path: {
+            organization,
+            database,
+            branch,
+            id: this.output.id,
           },
-        );
+          throwOnError: false,
+        });
 
-        if (res.error && res.error.status !== 404) {
+        if (res.error && res.response.status !== 404) {
           throw new Error(`Failed to delete branch "${branch}"`, {
             cause: res.error,
           });
@@ -314,7 +312,7 @@ export const Password = Resource(
       ) {
         return this.replace();
       }
-      await api.organizations.databases.branches.passwords.patch({
+      await api.updatePassword({
         path: {
           organization,
           database,
@@ -334,7 +332,7 @@ export const Password = Resource(
       });
     }
 
-    const data = await api.organizations.databases.branches.passwords.post({
+    const { data } = await api.createPassword({
       path: {
         organization,
         database,

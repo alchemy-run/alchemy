@@ -1,7 +1,6 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
-import type { PlanetScaleProps } from "./api/client.gen.ts";
-import { PlanetScaleClient } from "./api/client.gen.ts";
+import { createPlanetScaleClient, type PlanetScaleProps } from "./api.ts";
 import {
   ensureProductionBranchClusterSize,
   sanitizeClusterSize,
@@ -156,7 +155,7 @@ export const Branch = Resource(
   ): Promise<Branch> {
     const adopt = props.adopt ?? this.scope.adopt;
 
-    const api = new PlanetScaleClient(props);
+    const api = createPlanetScaleClient(props);
 
     const branchName =
       props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
@@ -173,16 +172,16 @@ export const Branch = Resource(
 
     if (this.phase === "delete") {
       if (this.output?.name) {
-        const response = await api.organizations.databases.branches.delete({
+        const response = await api.deleteBranch({
           path: {
             organization: props.organizationId,
             database: props.databaseName,
             name: this.output.name,
           },
-          result: "full",
+          throwOnError: false,
         });
 
-        if (response.error && response.error.status !== 404) {
+        if (response.error && response.response.status !== 404) {
           throw new Error(
             `Failed to delete branch: ${response.error.message}`,
             {
@@ -204,16 +203,16 @@ export const Branch = Resource(
     }
 
     // Check if branch exists
-    const getResponse = await api.organizations.databases.branches.get({
+    const getResponse = await api.getBranch({
       path: {
         organization: props.organizationId,
         database: props.databaseName,
         name: branchName,
       },
-      result: "full",
+      throwOnError: false,
     });
 
-    if (getResponse.error && getResponse.error.status !== 404) {
+    if (getResponse.error && getResponse.response.status !== 404) {
       // Error getting branch
       throw new Error(`Failed to get branch: ${getResponse.error.message}`, {
         cause: getResponse.error,
@@ -251,8 +250,10 @@ export const Branch = Resource(
 
       // Update mutable properties if they've changed
       if (props.safeMigrations !== undefined) {
-        await api.organizations.databases.branches.safeMigrations[
-          props.safeMigrations ? "post" : "delete"
+        await api[
+          props.safeMigrations
+            ? "enableSafeMigrations"
+            : "disableSafeMigrations"
         ]({
           path: {
             organization: props.organizationId,
@@ -312,7 +313,7 @@ export const Branch = Resource(
     }
 
     // Branch doesn't exist, create it
-    const data = await api.organizations.databases.branches.post({
+    const { data } = await api.createBranch({
       path: {
         organization: props.organizationId,
         database: props.databaseName,
@@ -336,8 +337,8 @@ export const Branch = Resource(
         props.databaseName,
         branchName,
       );
-      await api.organizations.databases.branches.safeMigrations[
-        props.safeMigrations ? "post" : "delete"
+      await api[
+        props.safeMigrations ? "enableSafeMigrations" : "disableSafeMigrations"
       ]({
         path: {
           organization: props.organizationId,
