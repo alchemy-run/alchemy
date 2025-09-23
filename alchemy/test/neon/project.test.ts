@@ -29,13 +29,13 @@ describe("NeonProject Resource", () => {
       project = await NeonProject(testId, {
         name: projectName,
         region_id: "aws-us-east-1",
-        pg_version: 15,
+        pg_version: 16,
       });
 
       expect(project.id).toBeTruthy();
       expect(project.name).toEqual(projectName);
       expect(project.region_id).toEqual("aws-us-east-1");
-      expect(project.pg_version).toEqual(15);
+      expect(project.pg_version).toEqual(16);
       expect(project.created_at).toBeTruthy();
       expect(project.updated_at).toBeTruthy();
 
@@ -78,11 +78,13 @@ describe("NeonProject Resource", () => {
       expect((project as any).operations).toBeUndefined();
 
       // Verify project was created by querying the API directly
-      const getResponse = await api.get(`/projects/${project.id}`);
-      expect(getResponse.status).toEqual(200);
+      const { data } = await api.getProject({
+        path: {
+          project_id: project.id,
+        },
+      });
 
-      const responseData: any = await getResponse.json();
-      expect(responseData.project.name).toEqual(projectName);
+      expect(data.project.name).toEqual(projectName);
 
       // Check if the branch is in ready state, confirming operations were waited for
       expect(project.branch!.current_state).toEqual("ready");
@@ -95,16 +97,18 @@ describe("NeonProject Resource", () => {
       project = await NeonProject(testId, {
         name: updatedName,
         region_id: "aws-us-east-1",
-        pg_version: 15,
-        existing_project_id: project.id,
+        pg_version: 16,
       });
 
       expect(project.id).toBeTruthy();
       expect(project.name).toEqual(updatedName);
 
       // Verify project was updated
-      const getUpdatedResponse = await api.get(`/projects/${project.id}`);
-      const updatedData: any = await getUpdatedResponse.json();
+      const { data: updatedData } = await api.getProject({
+        path: {
+          project_id: project.id,
+        },
+      });
       expect(updatedData.project.name).toEqual(updatedName);
     } finally {
       // Always clean up, even if test assertions fail
@@ -112,8 +116,13 @@ describe("NeonProject Resource", () => {
 
       // Verify project was deleted
       if (project?.id) {
-        const getDeletedResponse = await api.get(`/projects/${project.id}`);
-        expect(getDeletedResponse.status).toEqual(404);
+        const { response } = await api.getProject({
+          path: {
+            project_id: project.id,
+          },
+          throwOnError: false,
+        });
+        expect(response.status).toEqual(404);
       }
     }
   });

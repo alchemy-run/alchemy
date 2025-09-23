@@ -1,5 +1,7 @@
 import { Secret } from "../secret.ts";
-import type { Neon } from "./api.ts";
+import { poll } from "../util/poll.ts";
+import type { NeonClient } from "./api/sdk.gen.ts";
+import type * as neon from "./api/types.gen.ts";
 
 export interface NeonConnectionUri {
   /**
@@ -20,7 +22,7 @@ export interface NeonConnectionUri {
 }
 
 export function formatConnectionUri(
-  details: Neon.ConnectionDetails,
+  details: neon.ConnectionDetails,
 ): NeonConnectionUri {
   return {
     connection_uri: new Secret(details.connection_uri),
@@ -61,9 +63,43 @@ export interface NeonRole {
   updated_at: string;
 }
 
-export function formatRole(role: Neon.Role): NeonRole {
+export function formatRole(role: neon.Role): NeonRole {
   return {
     ...role,
     password: role.password ? new Secret(role.password) : undefined,
   };
 }
+
+export async function waitForOperations(
+  api: NeonClient,
+  operations: neon.Operation[],
+) {
+  for (const operation of operations) {
+    if (isOperationComplete(operation)) {
+      continue;
+    }
+    await poll({
+      description: `operation "${operation.id}"`,
+      fn: () =>
+        api.getProjectOperation({
+          path: {
+            project_id: operation.project_id,
+            operation_id: operation.id,
+          },
+        }),
+      predicate: ({ data }) => {
+        if (["error", "failed"].includes(data.operation.status)) {
+          throw new Error(
+            `Operation ${operation.id} (${operation.action}) failed: ${data.operation.error}`,
+          );
+        }
+        return isOperationComplete(data.operation);
+      },
+    });
+  }
+}
+
+const isOperationComplete = (operation: neon.Operation): boolean =>
+  ["finished", "failed", "error", "cancelled", "skipped"].includes(
+    operation.status,
+  );

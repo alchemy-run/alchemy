@@ -1,11 +1,11 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
-import { logger } from "../util/logger.ts";
-import { handleApiError } from "./api-error.ts";
-import { createNeonApi, type Neon, type NeonApiOptions } from "./api.ts";
+import { createNeonApi, type NeonApiOptions } from "./api.ts";
+import type * as neon from "./api/types.gen.ts";
 import {
   formatConnectionUri,
   formatRole,
+  waitForOperations,
   type NeonConnectionUri,
   type NeonRole,
 } from "./utils.ts";
@@ -25,6 +25,8 @@ export type NeonRegion =
   | "azure-eastus2"
   | "azure-westus3"
   | "azure-gwc";
+
+export type NeonPgVersion = 14 | 15 | 16 | 17 | 18;
 
 /**
  * Properties for creating or updating a Neon project
@@ -47,48 +49,20 @@ export interface NeonProjectProps extends NeonApiOptions {
    * PostgreSQL version to use
    * @default 16
    */
-  pg_version?: 14 | 15 | 16 | 17;
-
-  /**
-   * Whether to create a default branch and endpoint
-   * @default true
-   */
-  default_endpoint?: boolean;
+  pg_version?: NeonPgVersion;
 
   /**
    * Default branch name
    * @default "main"
    */
   default_branch_name?: string;
-
-  /**
-   * Existing project ID to update
-   * Used internally during update operations
-   * @internal
-   */
-  existing_project_id?: string;
-}
-
-/**
- * API response structure for Neon projects
- */
-interface NeonApiResponse {
-  project: Neon.Project;
-  connection_uris?: Array<Neon.ConnectionDetails>;
-  roles?: Array<Neon.Role>;
-  databases?: Array<Neon.Database>;
-  operations?: Array<Neon.Operation>;
-  branch?: Neon.Branch;
-  endpoints?: Array<Neon.Endpoint>;
 }
 
 /**
  * Output returned after Neon project creation/update
  * IMPORTANT: The interface name MUST match the exported resource name
  */
-export interface NeonProject
-  extends Resource<"neon::Project">,
-    Omit<NeonProjectProps, "apiKey" | "existing_project_id"> {
+export interface NeonProject extends Resource<"neon::Project"> {
   /**
    * The ID of the project
    */
@@ -112,7 +86,17 @@ export interface NeonProject
   /**
    * Hostname for proxy access
    */
-  proxy_host?: string;
+  proxy_host: string;
+
+  /**
+   * Region where the project is provisioned
+   */
+  region_id: NeonRegion;
+
+  /**
+   * PostgreSQL version used by the project
+   */
+  pg_version: NeonPgVersion;
 
   /**
    * Connection URIs for the databases
@@ -127,17 +111,17 @@ export interface NeonProject
   /**
    * Databases created with the project
    */
-  databases?: [Neon.Database, ...Neon.Database[]];
+  databases: [neon.Database, ...neon.Database[]];
 
   /**
    * Default branch information
    */
-  branch?: Neon.Branch;
+  branch: neon.Branch;
 
   /**
    * Compute endpoints for the project
    */
-  endpoints: [Neon.Endpoint, ...Neon.Endpoint[]];
+  endpoints: [neon.Endpoint, ...neon.Endpoint[]];
 }
 
 /**
@@ -171,358 +155,100 @@ export const NeonProject = Resource(
     this: Context<NeonProject>,
     id: string,
     props: NeonProjectProps,
-  ): Promise<NeonProject> {
+  ) {
     const api = createNeonApi(props);
-    const projectId = props.existing_project_id || this.output?.id;
-    const projectName =
+    const name =
       props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
 
-    if (this.phase === "update" && this.output.name !== projectName) {
-      this.replace();
-    }
-
-    if (this.phase === "delete") {
-      try {
-        // Check if the project exists before attempting to delete
-        if (projectId) {
-          const deleteResponse = await api.delete(`/projects/${projectId}`);
-          if (!deleteResponse.ok && deleteResponse.status !== 404) {
-            await handleApiError(deleteResponse, "delete", "project", id);
-          }
-        }
-      } catch (error) {
-        logger.error(`Error deleting Neon project ${id}:`, error);
-        throw error;
-      }
-      return this.destroy();
-    }
-
-    let response: NeonApiResponse;
-
-    try {
-      if (this.phase === "update" && projectId) {
-        // Update existing project
-        // Neon only allows updating the project name
-        const projectResponse = await api.patch(`/projects/${projectId}`, {
-          project: {
-            name: projectName,
+    switch (this.phase) {
+      case "create": {
+        const { data } = await api.createProject({
+          body: {
+            project: {
+              name,
+              region_id: props.region_id,
+              pg_version: props.pg_version,
+              branch: {
+                name: props.default_branch_name,
+              },
+            },
           },
         });
-
-        if (!projectResponse.ok) {
-          await handleApiError(projectResponse, "update", "project", id);
-        }
-
-        const initialData = await projectResponse.json();
-
-        // Reify project properties to get complete data
-        response = await getProject(
-          api,
-          projectId,
-          initialData as Partial<NeonApiResponse>,
-        );
-      } else {
-        // Check if a project with this ID already exists
-        if (projectId) {
-          const getResponse = await api.get(`/projects/${projectId}`);
-          if (getResponse.ok) {
-            // Project exists, update it
-            const projectResponse = await api.patch(`/projects/${projectId}`, {
-              project: {
-                name: projectName,
+        await waitForOperations(api, data.operations);
+        const [branch, endpoints] = await Promise.all([
+          api
+            .getProjectBranch({
+              path: {
+                project_id: data.project.id,
+                branch_id: data.branch.id,
               },
-            });
-
-            if (!projectResponse.ok) {
-              await handleApiError(projectResponse, "update", "project", id);
-            }
-
-            const initialData = await projectResponse.json();
-            // Reify project properties to get complete data
-            response = await getProject(
-              api,
-              projectId,
-              initialData as Partial<NeonApiResponse>,
+            })
+            .then((res) => res.data.branch),
+          api
+            .listProjectEndpoints({
+              path: {
+                project_id: data.project.id,
+              },
+            })
+            .then((res) => res.data.endpoints),
+        ]);
+        return this({
+          id: data.project.id,
+          name: data.project.name,
+          created_at: data.project.created_at,
+          updated_at: data.project.updated_at,
+          proxy_host: data.project.proxy_host,
+          region_id: data.project.region_id as NeonRegion,
+          pg_version: data.project.pg_version as NeonPgVersion,
+          connection_uris: data.connection_uris.map(formatConnectionUri) as [
+            NeonConnectionUri,
+            ...NeonConnectionUri[],
+          ],
+          roles: data.roles.map(formatRole) as [NeonRole, ...NeonRole[]],
+          databases: data.databases as [neon.Database, ...neon.Database[]],
+          branch,
+          endpoints: endpoints as [neon.Endpoint, ...neon.Endpoint[]],
+        });
+      }
+      case "update": {
+        const { data } = await api.updateProject({
+          path: {
+            project_id: this.output.id,
+          },
+          body: {
+            project: {
+              name,
+            },
+          },
+        });
+        return this({
+          ...this.output,
+          name: data.project.name,
+          updated_at: data.project.updated_at,
+          proxy_host: data.project.proxy_host,
+          region_id: data.project.region_id as NeonRegion,
+          pg_version: data.project.pg_version as NeonPgVersion,
+        });
+      }
+      case "delete": {
+        if (this.output?.id) {
+          const response = await api.deleteProject({
+            path: {
+              project_id: this.output.id,
+            },
+            throwOnError: false,
+          });
+          if (response.error && response.response.status !== 404) {
+            throw new Error(
+              `Failed to delete project: ${response.error.message}`,
+              {
+                cause: response.error,
+              },
             );
-          } else if (getResponse.status !== 404) {
-            // Unexpected error during GET check
-            await handleApiError(getResponse, "get", "project", id);
-            throw new Error("Failed to check if project exists");
-          } else {
-            // Project doesn't exist, create new
-            response = await createNewProject(api, projectName, props);
           }
-        } else {
-          // No output ID, create new project
-          response = await createNewProject(api, projectName, props);
         }
+        return this.destroy();
       }
-
-      // Wait for any pending operations to complete
-      if (response.operations && response.operations.length > 0) {
-        await waitForOperations(api, response.operations);
-      }
-
-      // Get the latest project state after operations complete
-      if (response.project?.id) {
-        // Reify project properties to get complete data
-        response = await getProject(api, response.project.id, response);
-      }
-
-      return this({
-        id: response.project.id,
-        name: response.project.name,
-        region_id: response.project.region_id as NeonRegion,
-        pg_version: response.project.pg_version as 14 | 15 | 16 | 17,
-        created_at: response.project.created_at,
-        updated_at: response.project.updated_at,
-        proxy_host: response.project.proxy_host,
-        // Pass through the provided props except apiKey (which is sensitive)
-        default_endpoint: props.default_endpoint,
-        default_branch_name: props.default_branch_name,
-        baseUrl: props.baseUrl,
-        // Add all available data
-        // @ts-expect-error - api ensures they're non-empty
-        connection_uris: response.connection_uris,
-        // @ts-expect-error
-        roles: response.roles?.map(formatRole),
-        // @ts-expect-error
-        databases: response.databases,
-        branch: response.branch,
-        // @ts-expect-error
-        endpoints: response.endpoints,
-      });
-    } catch (error) {
-      logger.error(`Error ${this.phase} Neon project '${id}':`, error);
-      throw error;
     }
   },
 );
-
-/**
- * Helper function to create a new Neon project
- */
-async function createNewProject(
-  api: any,
-  projectName: string,
-  props: NeonProjectProps,
-): Promise<NeonApiResponse> {
-  const defaultEndpoint = props.default_endpoint ?? true;
-  const projectResponse = await api.post("/projects", {
-    project: {
-      name: projectName,
-      region_id: props.region_id || "aws-us-east-1",
-      pg_version: props.pg_version || 16,
-      default_endpoint: defaultEndpoint,
-      branch: defaultEndpoint
-        ? { name: props.default_branch_name || "main" }
-        : undefined,
-    },
-  });
-
-  if (!projectResponse.ok) {
-    await handleApiError(projectResponse, "create", "project");
-  }
-
-  return (await projectResponse.json()) as NeonApiResponse;
-}
-
-/**
- * Helper function to get complete project details by fetching all related data
- *
- * @param api The Neon API client
- * @param projectId The project ID
- * @param initialData Initial project data (optional)
- * @returns Complete project data with all related resources
- */
-async function getProject(
-  api: any,
-  projectId: string,
-  initialData: Partial<NeonApiResponse> = {},
-): Promise<NeonApiResponse> {
-  // Get the latest project details
-  const updatedData = await getProjectDetails(api, projectId);
-
-  // Start with a copy of the initial data
-  const responseData = { ...initialData };
-
-  // Check if we have a branch ID from the initial data
-  const branchId = initialData.branch?.id;
-
-  if (branchId) {
-    // Get the branch details
-    const branchData = await getBranchDetails(api, projectId, branchId);
-
-    // Update with the latest branch data
-    responseData.branch = branchData.branch;
-
-    // Also fetch the latest endpoint details for this branch
-    const endpointData = await getEndpointDetails(api, projectId, branchId);
-
-    // Update with the latest endpoint data if available
-    if (endpointData.endpoints && endpointData.endpoints.length > 0) {
-      responseData.endpoints = endpointData.endpoints;
-    }
-  }
-
-  // Preserve all data from the original response
-  // Only update properties that might have changed during operations
-  return {
-    ...responseData,
-    connection_uris: (
-      updatedData.connection_uris || responseData.connection_uris
-    )?.map((uri) => formatConnectionUri(uri)),
-    project: updatedData.project,
-    branch: updatedData.branch || responseData.branch,
-    endpoints: updatedData.endpoints || responseData.endpoints,
-  } as NeonApiResponse;
-}
-
-/**
- * Wait for operations to complete
- *
- * @param api The Neon API client
- * @param operations Operations to wait for
- * @throws Error if an operation fails or times out
- * @returns Promise that resolves when all operations complete
- */
-async function waitForOperations(
-  api: any,
-  operations: Array<{
-    id: string;
-    project_id: string;
-    status: string;
-    action: string;
-  }>,
-): Promise<void> {
-  const pendingOperations = operations.filter(
-    (op) => op.status !== "finished" && op.status !== "failed",
-  );
-
-  if (pendingOperations.length === 0) {
-    return;
-  }
-
-  // Maximum wait time in milliseconds (5 minutes)
-  const maxWaitTime = 5 * 60 * 1000;
-  // Initial delay between retries in milliseconds
-  const initialRetryDelay = 500;
-  // Maximum delay between retries
-  const maxRetryDelay = 10000;
-  // Backoff factor for exponential backoff
-  const backoffFactor = 1.5;
-
-  for (const operation of pendingOperations) {
-    let totalWaitTime = 0;
-    let retryDelay = initialRetryDelay;
-    let operationStatus = operation.status;
-
-    while (
-      operationStatus !== "finished" &&
-      operationStatus !== "failed" &&
-      totalWaitTime < maxWaitTime
-    ) {
-      // Wait before checking again with exponential backoff
-      await new Promise((resolve) => setTimeout(resolve, retryDelay));
-      totalWaitTime += retryDelay;
-
-      // Increase delay for next retry with exponential backoff, up to max
-      retryDelay = Math.min(retryDelay * backoffFactor, maxRetryDelay);
-
-      // Check operation status
-      const operationResponse = await api.get(
-        `/projects/${operation.project_id}/operations/${operation.id}`,
-      );
-
-      if (operationResponse.ok) {
-        const operationData = await operationResponse.json();
-        operationStatus = operationData.operation?.status;
-      } else {
-        throw new Error(
-          `Failed to check operation ${operation.id} status: HTTP ${operationResponse.status}`,
-        );
-      }
-    }
-
-    if (operationStatus === "failed") {
-      throw new Error(`Operation ${operation.id} (${operation.action}) failed`);
-    }
-    if (totalWaitTime >= maxWaitTime) {
-      throw new Error(
-        `Timeout waiting for operation ${operation.id} (${operation.action}) to complete`,
-      );
-    }
-  }
-
-  // Explicitly return when all operations are complete
-  return;
-}
-
-/**
- * Get the latest project details
- *
- * @param api The Neon API client
- * @param projectId The project ID
- * @returns Project details including branch and endpoints
- * @throws Error if project details cannot be retrieved
- */
-async function getProjectDetails(
-  api: any,
-  projectId: string,
-): Promise<NeonApiResponse> {
-  const response = await api.get(`/projects/${projectId}`);
-
-  if (!response.ok) {
-    throw new Error(`Failed to get project details: HTTP ${response.status}`);
-  }
-
-  return (await response.json()) as NeonApiResponse;
-}
-
-/**
- * Get the latest branch details
- *
- * @param api The Neon API client
- * @param projectId The project ID
- * @param branchId The branch ID
- * @returns Branch details
- * @throws Error if branch details cannot be retrieved
- */
-async function getBranchDetails(
-  api: any,
-  projectId: string,
-  branchId: string,
-): Promise<{ branch: Neon.Branch }> {
-  const response = await api.get(`/projects/${projectId}/branches/${branchId}`);
-
-  if (!response.ok) {
-    throw new Error(`Failed to get branch details: HTTP ${response.status}`);
-  }
-
-  return (await response.json()) as { branch: Neon.Branch };
-}
-
-/**
- * Get the latest endpoint details for a branch
- *
- * @param api The Neon API client
- * @param projectId The project ID
- * @param branchId The branch ID
- * @returns Endpoint details for the branch
- * @throws Error if endpoint details cannot be retrieved
- */
-async function getEndpointDetails(
-  api: any,
-  projectId: string,
-  branchId: string,
-): Promise<{ endpoints: Neon.Endpoint[] }> {
-  const response = await api.get(
-    `/projects/${projectId}/branches/${branchId}/endpoints`,
-  );
-
-  if (!response.ok) {
-    throw new Error(`Failed to get endpoint details: HTTP ${response.status}`);
-  }
-
-  return (await response.json()) as { endpoints: Neon.Endpoint[] };
-}

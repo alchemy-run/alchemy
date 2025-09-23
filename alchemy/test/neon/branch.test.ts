@@ -70,9 +70,13 @@ describe("NeonBranch Resource", () => {
 
       // Verify branch was deleted
       if (branch) {
-        const response = await api.get(
-          `/projects/${branch.projectId}/branches/${branch.id}`,
-        );
+        const { response } = await api.getProjectBranch({
+          path: {
+            project_id: branch.projectId,
+            branch_id: branch.id,
+          },
+          throwOnError: false,
+        });
         expect(response.status).toEqual(404);
       }
     }

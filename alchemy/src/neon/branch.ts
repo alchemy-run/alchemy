@@ -1,11 +1,12 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
-import { handleApiError } from "./api-error.ts";
-import { createNeonApi, type Neon, type NeonApiOptions } from "./api.ts";
+import { createNeonApi, type NeonApiOptions } from "./api.ts";
+import type * as neon from "./api/types.gen.ts";
 import type { NeonProject } from "./project.ts";
 import {
   formatConnectionUri,
   formatRole,
+  waitForOperations,
   type NeonConnectionUri,
   type NeonRole,
 } from "./utils.ts";
@@ -30,7 +31,7 @@ export interface NeonBranchProps extends NeonApiOptions {
    * The parent branch to create the new branch from. Default is the project's default branch.
    * This can be a Branch object or an ID string beginning with `br-`.
    */
-  parentBranch?: string | NeonBranch | Neon.Branch;
+  parentBranch?: string | NeonBranch | neon.Branch;
   /**
    * A Log Sequence Number (LSN) on the parent branch. The branch will be created with data from this LSN.
    */
@@ -72,38 +73,7 @@ export interface NeonBranchProps extends NeonApiOptions {
    * ]
    * ```
    */
-  endpoints: NeonBranchEndpointProps[];
-}
-
-export interface NeonBranchEndpointProps {
-  /**
-   * The compute endpoint type. Either `read_write` or `read_only`.
-   */
-  type: Neon.Endpoint.Type;
-  settings?: Neon.Endpoint.Settings;
-  autoscaling_limit_min_cu?: number;
-  autoscaling_limit_max_cu?: number;
-  /**
-   * The Neon compute provisioner.
-   * Specify the `k8s-neonvm` provisioner to create a compute endpoint that supports Autoscaling.
-   *
-   * Provisioner can be one of the following values:
-   * * k8s-pod
-   * * k8s-neonvm
-   *
-   * Clients must expect, that any string value that is not documented in the description above should be treated as a error. UNKNOWN value if safe to treat as an error too.
-   */
-  provisioner?: string;
-  /**
-   * Duration of inactivity in seconds after which the compute endpoint is
-   * automatically suspended. The value `0` means use the default value.
-   * The value `-1` means never suspend. The default value is `300` seconds (5 minutes).
-   * The minimum value is `60` seconds (1 minute).
-   * The maximum value is `604800` seconds (1 week). For more information, see
-   * [Scale to zero configuration](https://neon.tech/docs/manage/endpoints#scale-to-zero-configuration).
-   * @default 300
-   */
-  suspend_timeout_seconds?: number;
+  endpoints: neon.BranchCreateRequestEndpointOptions[];
 }
 
 export interface NeonBranch extends Resource<"neon::Branch"> {
@@ -161,11 +131,11 @@ export interface NeonBranch extends Resource<"neon::Branch"> {
   /**
    * The endpoints for the branch.
    */
-  endpoints: Neon.Endpoint[];
+  endpoints: neon.Endpoint[];
   /**
    * The databases for the branch.
    */
-  databases: Neon.Database[];
+  databases: neon.Database[];
   /**
    * The roles for the branch.
    */
@@ -196,39 +166,52 @@ export const NeonBranch = Resource(
     switch (this.phase) {
       case "delete": {
         if (this.output?.id) {
-          const res = await api.delete(
-            `/projects/${this.output.projectId}/branches/${this.output.id}`,
-          );
-          if (!res.ok && res.status !== 404) {
-            await handleApiError(res, "delete", "branch", id);
+          const res = await api.deleteProjectBranch({
+            path: {
+              project_id: this.output.projectId,
+              branch_id: this.output.id,
+            },
+            throwOnError: false,
+          });
+          if (res.error && res.response.status !== 404) {
+            throw new Error(`Failed to delete branch: ${res.error.message}`, {
+              cause: res.error,
+            });
           }
         }
         return this.destroy();
       }
       case "create": {
-        const res = await api.post(`/projects/${projectId}/branches`, {
-          branch: {
-            name,
-            protected: props.protected,
-            parent_id: parentBranchId,
-            parent_lsn: props.parentLsn,
-            parent_timestamp: props.parentTimestamp,
-            expires_at: props.expiresAt,
-            init_source: props.initSource,
+        const { data } = await api.createProjectBranch({
+          path: {
+            project_id: projectId,
           },
-          endpoints: props.endpoints,
+          body: {
+            branch: {
+              name,
+              protected: props.protected,
+              parent_id: parentBranchId,
+              parent_lsn: props.parentLsn,
+              parent_timestamp: props.parentTimestamp,
+              expires_at: props.expiresAt,
+              init_source: props.initSource,
+            },
+            endpoints: props.endpoints,
+          },
         });
-        if (!res.ok) {
-          await handleApiError(res, "create", "branch", id);
-        }
-        const data = (await res.json()) as {
-          branch: Neon.Branch;
-          operations: Neon.Operation[];
-          endpoints: Neon.Endpoint[];
-          databases: Neon.Database[];
-          roles: Neon.Role[];
-          connection_uris?: Neon.ConnectionDetails[];
-        };
+        await waitForOperations(api, data.operations);
+        const endpoints = await Promise.all(
+          data.endpoints.map((endpoint) =>
+            api
+              .getProjectEndpoint({
+                path: {
+                  project_id: projectId,
+                  endpoint_id: endpoint.id,
+                },
+              })
+              .then((res) => res.data.endpoint),
+          ),
+        );
         return this({
           id: data.branch.id,
           name: data.branch.name,
@@ -247,7 +230,7 @@ export const NeonBranch = Resource(
           expiresAt: data.branch.expires_at
             ? new Date(data.branch.expires_at)
             : undefined,
-          endpoints: data.endpoints,
+          endpoints,
           databases: data.databases,
           roles: data.roles.map(formatRole),
           connectionUris: data.connection_uris?.map(formatConnectionUri) ?? [],
@@ -264,23 +247,19 @@ export const NeonBranch = Resource(
         ) {
           this.replace();
         }
-        const res = await api.patch(
-          `/projects/${this.output.projectId}/branches/${this.output.id}`,
-          {
+        const { data } = await api.updateProjectBranch({
+          path: {
+            project_id: projectId,
+            branch_id: this.output.id,
+          },
+          body: {
             branch: {
               name: name !== this.output.name ? name : undefined, // prevents 400: cannot set branch to the same name
               protected: props.protected ?? false,
               expires_at: props.expiresAt ?? null,
             },
           },
-        );
-        if (!res.ok) {
-          await handleApiError(res, "update", "branch", id);
-        }
-        const data = (await res.json()) as {
-          branch: Neon.Branch;
-          operations: Neon.Operation[];
-        };
+        });
         return this({
           ...this.output,
           name,
