@@ -4,8 +4,9 @@ import {
   type UserConfig,
 } from "@hey-api/openapi-ts";
 import path from "node:path";
+import { patchNeonResponseTypes } from "./neon.ts";
 
-export const clients = ["planetscale"] as const;
+export const clients = ["neon", "planetscale"] as const;
 
 export const generate = async () => {
   await patchBiomeConfig();
@@ -30,6 +31,8 @@ export const generate = async () => {
   for (const client of clients.slice(1)) {
     await $`rm -rf src/${client}/api/client/ src/${client}/api/core/`;
   }
+
+  await patchNeonResponseTypes();
 
   // 4. Update imports
   for (const client of clients) {
