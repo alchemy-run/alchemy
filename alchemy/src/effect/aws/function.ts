@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import path from "node:path";
 
 import type {
@@ -45,6 +46,9 @@ type Attributes<ID extends string, P extends Props> = {
   functionUrl: string | undefined;
   roleName: string;
   roleArn: string;
+  code: {
+    hash: string;
+  };
 };
 
 export type Branded<T> = string & { __brand: T };
@@ -335,6 +339,9 @@ export const provider = Layer.effect(
       return code;
     });
 
+    const hashCode = (code: Uint8Array<ArrayBufferLike>) =>
+      Effect.sync(() => crypto.createHash("sha256").update(code).digest("hex"));
+
     const validateTagList = (
       expectedTags: Record<string, string>,
       tags: { Key: string; Value: string }[] | undefined,
@@ -494,6 +501,12 @@ export const provider = Layer.effect(
           // url changed
           return { action: "replace" };
         }
+        const bundle = yield* bundleCode(news);
+        const code = bundle.outputFiles?.[0].contents!;
+        if (output.code.hash !== (yield* hashCode(code))) {
+          // code changed
+          return { action: "update" };
+        }
         return { action: "noop" };
       }),
       create: Effect.fn(function* ({ id, news, bindings }) {
@@ -513,14 +526,16 @@ export const provider = Layer.effect(
           bindings,
         });
 
-        const code = yield* bundleCode(news);
+        const bundle = yield* bundleCode(news);
+
+        const code = bundle.outputFiles?.[0].contents!;
 
         yield* createOrUpdateFunction({
           id,
           news,
           roleArn: role.Role.Arn,
           // TODO(sam): upload to assets
-          code: code.outputFiles?.[0].contents!,
+          code,
           env,
           functionName,
         });
@@ -538,6 +553,9 @@ export const provider = Layer.effect(
           functionUrl: functionUrl as any,
           roleName,
           roleArn: role.Role.Arn,
+          code: {
+            hash: yield* hashCode(code),
+          },
         } satisfies Attributes<string, Props>;
       }),
       update: Effect.fn(function* ({ id, news, olds, bindings, output }) {
@@ -579,6 +597,9 @@ export const provider = Layer.effect(
           functionUrl: functionUrl as any,
           roleName,
           roleArn: output.roleArn,
+          code: {
+            hash: yield* hashCode(code.outputFiles?.[0].contents!),
+          },
         } satisfies Attributes<string, Props>;
       }),
       delete: Effect.fn(function* ({ output }) {

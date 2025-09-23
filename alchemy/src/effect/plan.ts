@@ -206,11 +206,9 @@ export const plan = <
                               olds: oldState.props,
                               news,
                               output: oldState.output,
+                              bindings,
                             });
-                            if (
-                              diff.action === "noop" &&
-                              bindings.length === 0
-                            ) {
+                            if (diff.action === "noop") {
                               return {
                                 action: "noop",
                                 resource,
@@ -243,10 +241,7 @@ export const plan = <
                                 bindings: bindings,
                               };
                             }
-                          } else if (
-                            compare(oldState, resource.props) ||
-                            bindings.length > 0
-                          ) {
+                          } else if (compare(oldState, resource.props)) {
                             return {
                               action: "update",
                               olds: oldState.props,

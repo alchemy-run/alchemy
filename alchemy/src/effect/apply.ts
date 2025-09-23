@@ -127,6 +127,7 @@ export const apply = <const P extends AnyPlan, Err, Req>(
                       }),
                     ),
                   })
+                  // TODO(sam): delete and create will conflict here, we need to extend the state store for replace
                   .pipe(checkpoint);
                 if (!node.deleteFirst) {
                   const outputs = yield* create;

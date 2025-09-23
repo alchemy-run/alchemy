@@ -40,6 +40,7 @@ export type Provider<
     olds: Input;
     news: Input;
     output: Output;
+    bindings: BindingAction<Stmt>[];
   }): Effect.Effect<Diff, never, never>;
   // tail();
   // watch();
