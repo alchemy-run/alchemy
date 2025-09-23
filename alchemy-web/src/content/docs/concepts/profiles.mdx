@@ -5,39 +5,106 @@ sidebar:
   order: 0
 ---
 
-You can store your configuration settings and cloud provider credentials in organized profiles managed by the Alchemy CLI.
+Alchemy profiles provide a simple way to manage credentials for cloud providers without juggling multiple `.env` files or separate `login` CLI commands.
 
-Profiles allow you to maintain separate sets of credentials for different environments or projects. By default, Alchemy uses the `default` profile, but you can create and switch between multiple profiles as needed.
+:::note
+Profiles are stored locally in your `~/.alchemy` directory and behave similarly to [AWS profiles](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-profiles.html).
+:::
 
-Individual profile settings can be overridden using environment variables or command line flags.
+## Configure Profile
 
-You can use the `alchemy configure`, `alchemy login`, and `alchemy logout` commands with the `--profile` flag to create, login to, and logout from a profile.
+To create (or update) a profile, run the `alchemy configure` command:
 
-## Format of the configuration and credential files
+```bash
+alchemy configure
 
-The config and credentials files are organized into profiles. A profile is a named collection of settings for cloud providers. Multiple profiles can be stored in the configuration system.
+# or select a specific profile
+alchemy configure --profile prod
+```
 
-These files are JSON files that use the following format:
+:::tip
+Unless otherwise specified, Alchemy will use the `default` profile which is usually what you want unless you are managing multiple accounts.
+:::
 
-- Profile names are stored as object keys in the `profiles` object
-- All entries in a profile take the form of `"setting_name": "value"`
-- The configuration and credentials files contain profile and provider settings
+## Login
 
-The config and credentials files contain the following types:
+After configuring a profile, you can use the `alchemy login` command to refresh each provider's credentials.
 
-- **Configuration**: Provider metadata and authentication methods
-- **Credentials**: Sensitive authentication data stored separately
+```bash
+# log in to the default profile
+alchemy login
 
-### Configuration file format
+# log in to a named profile
+alchemy login --profile prod
+```
 
-The configuration file stores provider metadata and authentication methods:
+:::tip
+Depending on the Provider, credentials may expire, so a good habit is to start your day by logging in to your providers with `alchemy login`.
+:::
 
-**Config file** (`~/.alchemy/config.json`):
+## Logout
+
+To clear a profile's credentials, run the `alchemy logout` command:
+
+```bash
+alchemy logout
+
+# log out of a specific profile 
+alchemy logout --profile prod
+```
+
+## Select Profile
+
+The `alchemy deploy`, `dev`, `run` and `destroy` commands all support the `--profile` flag to specify which profile to use.
+
+```bash
+alchemy deploy --profile prod
+```
+
+You can override the profile using environment variables:
+
+```bash
+ALCHEMY_PROFILE=prod alchemy deploy
+```
+
+Or just a specific provider's default profile (e.g. Cloudflare):
+
+```bash
+CLOUDFLARE_PROFILE=prod alchemy deploy
+```
+
+Resources that support profiles can also be configured individually:  
+```ts
+import { Worker } from "alchemy/cloudflare";
+
+const worker = await Worker("my-worker", {
+  profile: "prod",
+});
+```
+
+## Configuration and Credential Files
+
+The profile configuration and credential files are stored in your `~/.alchemy` directory:
+
+```bash
+# Configuration file (no sensitive data)
+~/.alchemy/config.json 
+
+# Credentials file (sensitive data)
+~/.alchemy/credentials/default/cloudflare.json 
+```
+
+### `config.json`
+
+The `alchemy configure` command will create or update the `config.json` file with the profile configuration. No sensitive data is stored in this file.
+
+For example, the below `config.json` contains two profiles each with a Cloudflare provider configured to use OAuth:
 
 ```json
 {
   "version": 1,
   "profiles": {
+    // The default profile
     "default": {
       "cloudflare": {
         "method": "oauth",
@@ -52,7 +119,8 @@ The configuration file stores provider metadata and authentication methods:
         ]
       }
     },
-    "production": {
+    // A named profile (e.g. alchemy configure --profile prod)
+    "prod": {
       "cloudflare": {
         "method": "api-token",
         "metadata": {
@@ -65,31 +133,17 @@ The configuration file stores provider metadata and authentication methods:
 }
 ```
 
-### Credentials file format
+### `{profile}/{provider}.json`
 
-Sensitive credentials are stored separately in provider-specific files in `~/.alchemy/credentials/<profile>/<provider>.json`:
+The `alchemy login` command will create or update the `credentials/<profile>/<provider>.json` file with the provider's credentials.
 
+For example, the below `credentials/prod/cloudflare.json` contains the OAUth access and refresh tokens for the Cloudflare provider configured in the `prod` profile:
 
-## Using Profiles with Environment Variables
-
-You can reference profiles using environment variables instead of passing the `--profile` flag to alchemy commands:
-
-### ALCHEMY_PROFILE
-
-Set the `ALCHEMY_PROFILE` environment variable to specify which profile to use for all Alchemy operations:
-
-```bash
-export ALCHEMY_PROFILE=production
-alchemy deploy  # Uses the 'production' profile
+```json
+{
+  "type": "oauth",
+  "access": "<access token>",
+  "refresh": "<refresh token>",
+  "expires": 1758577621359
+}
 ```
-
-### CLOUDFLARE_PROFILE
-
-Set the `CLOUDFLARE_PROFILE` environment variable to specify which profile to use specifically for Cloudflare credentials:
-
-```bash
-export CLOUDFLARE_PROFILE=my-cloudflare-profile
-alchemy deploy  # Uses Cloudflare credentials from 'my-cloudflare-profile'
-```
-
-This is useful when you want to use different profiles for different cloud providers within the same deployment.
