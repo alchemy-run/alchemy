@@ -267,6 +267,7 @@
     "@cloudflare/puppeteer": "^1.0.2",
     "@cloudflare/vite-plugin": "catalog:",
     "@cloudflare/workers-types": "catalog:",
+    "@effect/platform-node": "^0.97.0",
     "@libsql/client": "^0.15.12",
     "@octokit/rest": "^21.1.1",
     "@sentry/cloudflare": "^9.43.0",

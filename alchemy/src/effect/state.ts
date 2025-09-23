@@ -1,6 +1,10 @@
+import { FileSystem } from "@effect/platform";
+import type { PlatformError } from "@effect/platform/Error";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import path from "node:path";
 import { App } from "./app.ts";
 import type { Statement } from "./policy.ts";
 
@@ -63,39 +67,89 @@ export type ResourceState = {
   bindings?: Statement[];
 };
 
+export class StateStoreError extends Data.TaggedError("StateStoreError")<{
+  message: string;
+}> {}
+
 export class State extends Context.Tag("AWS::Lambda::State")<
   State,
   {
-    listStages(): Effect.Effect<string[], never, never>;
+    listApps(): Effect.Effect<string[], StateStoreError, never>;
+    listStages(
+      appName?: string,
+    ): Effect.Effect<string[], StateStoreError, never>;
     // stub
-    get(id: string): Effect.Effect<ResourceState | undefined, never, never>;
-    set(id: string, value: any): Effect.Effect<void, never, never>;
-    delete(id: string): Effect.Effect<void, never, never>;
-    list(): Effect.Effect<string[], never, never>;
+    get(
+      id: string,
+    ): Effect.Effect<ResourceState | undefined, StateStoreError, never>;
+    set<V extends ResourceState>(
+      id: string,
+      value: V,
+    ): Effect.Effect<V, StateStoreError, never>;
+    delete(id: string): Effect.Effect<void, StateStoreError, never>;
+    list(): Effect.Effect<string[], StateStoreError, never>;
   }
 >() {}
 
 // TODO(sam): implement with SQLite3
-export const local = Layer.effect(
+export const localFs = Layer.effect(
   State,
   Effect.gen(function* () {
     const app = yield* App;
+    const fs = yield* FileSystem.FileSystem;
+    const dotAlchemy = path.join(process.cwd(), ".alchemy");
+    const stateDir = path.join(dotAlchemy, "state");
+    const appDir = path.join(stateDir, app.name);
+    const stageDir = path.join(appDir, app.stage);
+
+    const fail = (err: PlatformError) =>
+      Effect.fail(
+        new StateStoreError({
+          message: err.description ?? err.message,
+        }),
+      );
+
+    const recover = <T>(effect: Effect.Effect<T, PlatformError, never>) =>
+      effect.pipe(
+        Effect.catchTag("SystemError", (e) =>
+          e.reason === "NotFound" ? Effect.succeed(undefined) : fail(e),
+        ),
+        Effect.catchTag("BadArgument", (e) => fail(e)),
+      );
+
+    const resourceFile = (id: string) => path.join(stageDir, `${id}.json`);
+
+    yield* fs.makeDirectory(stageDir, { recursive: true });
+
     return {
-      listStages: Effect.fn(function* () {
-        return [];
-      }),
-      get: Effect.fn(function* (id: string) {
-        return undefined;
-      }),
-      set: Effect.fn(function* (id: string, value: any) {
-        return {};
-      }),
-      delete: Effect.fn(function* (id: string) {
-        return {};
-      }),
-      list: Effect.fn(function* () {
-        return [];
-      }),
+      listApps: () =>
+        fs.readDirectory(stateDir).pipe(
+          recover,
+          Effect.map((files) => files ?? []),
+        ),
+      listStages: (appName: string = app.name) =>
+        fs.readDirectory(path.join(stateDir, appName)).pipe(
+          recover,
+          Effect.map((files) => files ?? []),
+        ),
+      get: (id) =>
+        fs.readFile(resourceFile(id)).pipe(
+          Effect.map((file) => JSON.parse(file.toString())),
+          recover,
+        ),
+      set: <V extends ResourceState>(id: string, value: V) =>
+        fs
+          .writeFileString(resourceFile(id), JSON.stringify(value, null, 2))
+          .pipe(
+            recover,
+            Effect.map(() => value),
+          ),
+      delete: (id) => fs.remove(resourceFile(id)).pipe(recover),
+      list: () =>
+        fs.readDirectory(stageDir).pipe(
+          recover,
+          Effect.map((files) => files ?? []),
+        ),
     };
   }),
 );
@@ -103,17 +157,18 @@ export const local = Layer.effect(
 export const inMemory = Layer.effect(
   State,
   Effect.gen(function* () {
-    const app = yield* App;
     const state = new Map<string, any>();
     return {
+      listApps: () => Effect.succeed([]),
       listStages: Effect.fn(function* () {
         return [];
       }),
       get: Effect.fn(function* (id: string) {
         return state.get(id);
       }),
-      set: Effect.fn(function* (id: string, value: any) {
+      set: Effect.fn(function* <V>(id: string, value: V) {
         state.set(id, value);
+        return value;
       }),
       delete: Effect.fn(function* (id: string) {
         state.delete(id);

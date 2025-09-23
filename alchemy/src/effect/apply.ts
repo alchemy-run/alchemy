@@ -4,6 +4,7 @@ import type { Simplify } from "effect/Types";
 import type { AnyPlan, BindingAction, Delete } from "./plan.ts";
 import type { Statement } from "./policy.ts";
 import type { Resource } from "./resource.ts";
+import { State } from "./state.ts";
 
 export const apply = <const P extends AnyPlan, Err, Req>(
   plan: Effect.Effect<P, Err, Req>,
@@ -11,6 +12,7 @@ export const apply = <const P extends AnyPlan, Err, Req>(
   plan.pipe(
     Effect.flatMap((plan) =>
       Effect.gen(function* () {
+        const state = yield* State;
         const outputs = {} as Record<string, Effect.Effect<any, any>>;
 
         const apply = Effect.fn(function* (
@@ -28,6 +30,36 @@ export const apply = <const P extends AnyPlan, Err, Req>(
               }),
             );
           }
+
+          const checkpoint = <Out, Err>(
+            effect: Effect.Effect<Out, Err, never>,
+          ) =>
+            effect.pipe(
+              Effect.flatMap((output) =>
+                state
+                  .set(node.resource.id, {
+                    id: node.resource.id,
+                    type: node.resource.type,
+                    status: node.action === "create" ? "created" : "updated",
+                    props: node.resource.props,
+                    output,
+                  })
+                  .pipe(Effect.map(() => output)),
+              ),
+            );
+
+          const hydrate = <A extends BindingAction<Statement>>(
+            bindings: Statement[],
+          ) =>
+            node.bindings.map(
+              (binding, i) =>
+                Object.assign(binding, {
+                  attributes: bindings[i],
+                }) as A & {
+                  attributes: any;
+                },
+            );
+
           const id = node.resource.id;
           return yield* (outputs[id] ??= yield* Effect.cached(
             Effect.gen(function* () {
@@ -36,43 +68,41 @@ export const apply = <const P extends AnyPlan, Err, Req>(
               const bindings = yield* apply(node.bindings);
               if (node.action === "noop") {
                 yield* Console.log("noop", id);
-                return node.attributes;
+                return (yield* state.get(id))?.output;
               } else if (node.action === "create") {
                 yield* Console.log("creating", id);
-                return yield* node.provider.create({
-                  id,
-                  news: node.news,
-                  bindings: node.bindings.map((binding, i) =>
-                    Object.assign(binding, {
-                      attributes: bindings[i],
-                    }),
-                  ),
-                });
+                return yield* node.provider
+                  .create({
+                    id,
+                    news: node.news,
+                    bindings: hydrate(bindings),
+                  })
+                  .pipe(checkpoint);
               } else if (node.action === "update") {
                 yield* Console.log("updating", id);
-                return yield* node.provider.update({
-                  id,
-                  news: node.news,
-                  olds: node.olds,
-                  output: node.output,
-                  bindings: node.bindings.map((binding, i) =>
-                    Object.assign(binding, {
-                      attributes: bindings[i],
-                    }),
-                  ),
-                });
+                return yield* node.provider
+                  .update({
+                    id,
+                    news: node.news,
+                    olds: node.olds,
+                    output: node.output,
+                    bindings: hydrate(bindings),
+                  })
+                  .pipe(checkpoint);
               } else if (node.action === "delete") {
                 yield* Console.log("deleting", id);
-                return yield* node.provider.delete({
-                  id,
-                  olds: node.olds,
-                  output: node.output,
-                  bindings: node.bindings.map((binding, i) =>
-                    Object.assign(binding, {
-                      attributes: bindings[i],
-                    }),
-                  ),
-                });
+                return yield* node.provider
+                  .delete({
+                    id,
+                    olds: node.olds,
+                    output: node.output,
+                    bindings: node.bindings.map((binding, i) =>
+                      Object.assign(binding, {
+                        attributes: bindings[i],
+                      }),
+                    ),
+                  })
+                  .pipe(Effect.flatMap(() => state.delete(id)));
               } else if (node.action === "replace") {
                 yield* Console.log("replacing", id);
                 const destroy = node.provider.delete({
@@ -85,17 +115,19 @@ export const apply = <const P extends AnyPlan, Err, Req>(
                     }),
                   ),
                 });
-                const create = node.provider.create({
-                  id,
-                  news: node.news,
-                  // TODO(sam): these need to only include attach actions
-                  // @ts-expect-error
-                  bindings: node.bindings.map((binding, i) =>
-                    Object.assign(binding, {
-                      attributes: bindings[i],
-                    }),
-                  ),
-                });
+                const create = node.provider
+                  .create({
+                    id,
+                    news: node.news,
+                    // TODO(sam): these need to only include attach actions
+                    // @ts-expect-error
+                    bindings: node.bindings.map((binding, i) =>
+                      Object.assign(binding, {
+                        attributes: bindings[i],
+                      }),
+                    ),
+                  })
+                  .pipe(checkpoint);
                 if (!node.deleteFirst) {
                   const outputs = yield* create;
                   yield* destroy;
@@ -123,7 +155,7 @@ export const apply = <const P extends AnyPlan, Err, Req>(
         if (Object.keys(resources).length === 0) {
           return undefined;
         }
-        return outputs;
+        return resources;
       }),
     ),
   ) as Effect.Effect<

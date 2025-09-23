@@ -1,3 +1,4 @@
+import { NodeContext } from "@effect/platform-node";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as AWS from "../aws/index.ts";
@@ -25,7 +26,8 @@ const applied = Alchemy.apply(plan);
 
 const stack = await applied.pipe(
   Effect.provide(aws),
-  Effect.provide(State.inMemory),
+  Effect.provide(State.localFs),
+  Effect.provide(NodeContext.layer),
   Effect.provide(app),
   Effect.runPromise,
 );
