@@ -1,0 +1,21 @@
+{
+  "name": "analytics",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "alchemy dev --adopt --app analytics",
+    "deploy": "alchemy deploy --adopt --app analytics",
+    "destroy": "alchemy destroy --app analytics",
+    "check": "tsc --noEmit"
+  },
+  "exports": {
+    "./alchemy": {
+      "bun": "./alchemy.run.ts",
+      "import": "./lib/alchemy.run.js",
+      "types": "./alchemy.run.ts"
+    }
+  },
+  "dependencies": {
+    "alchemy": "catalog:"
+  }
+}

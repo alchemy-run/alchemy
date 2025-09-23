@@ -254,13 +254,11 @@ export class CloudflareApi {
     body: any,
     init: RequestInit = {},
   ): Promise<Response> {
-    const requestBody =
-      body instanceof FormData
-        ? body
-        : typeof body === "string"
-          ? body
-          : JSON.stringify(body);
-    return this.fetch(path, { ...init, method: "POST", body: requestBody });
+    return this.fetch(path, {
+      ...init,
+      method: "POST",
+      body: this.toBody(body),
+    });
   }
 
   /**
@@ -271,8 +269,21 @@ export class CloudflareApi {
     body: any,
     init: RequestInit = {},
   ): Promise<Response> {
-    const requestBody = body instanceof FormData ? body : JSON.stringify(body);
-    return this.fetch(path, { ...init, method: "PUT", body: requestBody });
+    return this.fetch(path, {
+      ...init,
+      method: "PUT",
+      body: this.toBody(body),
+    });
+  }
+
+  toBody(body: BodyInit): BodyInit {
+    return body instanceof FormData
+      ? body
+      : typeof body === "string"
+        ? body
+        : body instanceof ReadableStream
+          ? body
+          : JSON.stringify(body);
   }
 
   /**
@@ -286,7 +297,7 @@ export class CloudflareApi {
     return this.fetch(path, {
       ...init,
       method: "PATCH",
-      body: JSON.stringify(body),
+      body: this.toBody(body),
     });
   }
 

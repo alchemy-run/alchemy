@@ -102,7 +102,7 @@ By default, Alchemy tracks what it creates in `.alchemy/` directory:
       api.json
 ```
 
-You can also use a remote state store like Durable Objects, R2, S3, etc. See [State](../concepts/state) for more information.
+You can also use a remote state store like Durable Objects, R2, S3, etc. See [State](/concepts/state/) for more information.
 
 
 ## Phases

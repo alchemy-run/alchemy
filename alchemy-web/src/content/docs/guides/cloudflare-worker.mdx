@@ -273,6 +273,20 @@ const frontend = await Worker("frontend", {
 });
 ```
 
+:::tip
+Bind to a workers named entrypoint using `Worker.experimentalEntrypoint`
+
+```ts
+const frontend = await Worker("frontend", {
+  name: "frontend-worker",
+  entrypoint: "./src/frontend.ts",
+  bindings: {
+    API: Worker.experimentalEntrypoint<AdminEntrypoint>(api, "AdminEntrypoint"),
+  },
+});
+```
+:::
+
 ## Self-Binding
 
 A worker can bind to itself using `Self` or `WorkerRef`:

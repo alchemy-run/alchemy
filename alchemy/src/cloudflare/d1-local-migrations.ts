@@ -1,7 +1,8 @@
 import * as mf from "miniflare";
-import path from "node:path";
+import { getDefaultPersistPath } from "./miniflare/paths.ts";
 
 export interface D1LocalMigrationOptions {
+  rootDir: string;
   databaseId: string;
   migrationsTable: string;
   migrations: { id: string; sql: string }[];
@@ -13,15 +14,16 @@ export const applyLocalD1Migrations = async (
   const miniflare = new mf.Miniflare({
     script: "",
     modules: true,
-    defaultPersistRoot: path.join(process.cwd(), ".alchemy/miniflare/v3"), // vite plugin forces /v3 suffix
+    defaultPersistRoot: getDefaultPersistPath(options.rootDir),
     d1Persist: true,
     d1Databases: { DB: options.databaseId },
     log: process.env.DEBUG ? new mf.Log(mf.LogLevel.DEBUG) : undefined,
   });
   try {
     await miniflare.ready;
-    const db: D1Database = await miniflare.getD1Database("DB");
-    const session: D1DatabaseSession = db.withSession("first-primary");
+    // TODO(sam): don't use `any` once prisma is fixed upstream
+    const db: any = await miniflare.getD1Database("DB");
+    const session: any = db.withSession("first-primary");
     await session
       .prepare(
         `CREATE TABLE IF NOT EXISTS ${options.migrationsTable} (
@@ -31,11 +33,13 @@ export const applyLocalD1Migrations = async (
     )`,
       )
       .run();
-    const appliedMigrations = await session
+    const appliedMigrations: {
+      results: { name: string }[];
+    } = await session
       .prepare(
         `SELECT name FROM ${options.migrationsTable} ORDER BY applied_at ASC`,
       )
-      .all<{ name: string }>();
+      .all();
     const insertRecord = session.prepare(
       `INSERT INTO ${options.migrationsTable} (name) VALUES (?)`,
     );

@@ -144,3 +144,35 @@ await Worker("my-worker", {
   },
 });
 ```
+
+## Reference Existing Hyperdrive
+
+Use `HyperdriveRef` to reference an existing Hyperdrive configuration without managing its lifecycle.
+
+You can reference a Hyperdrive by its name or by its UUID:
+
+```ts
+import { Worker, HyperdriveRef } from "alchemy/cloudflare";
+
+// Reference by name (Alchemy will look it up using the API)
+const dbRefByName = await HyperdriveRef({
+  name: "existing-hyperdrive-config",
+});
+
+// Reference by UUID (direct reference)
+const dbRefById = await HyperdriveRef({
+  id: "asd83q1asd...",
+});
+
+await Worker("my-worker", {
+  name: "my-worker",
+  script: "console.log('Hello, world!')",
+  bindings: {
+    DB: dbRefByName, // or dbRefById
+  },
+});
+```
+
+:::tip
+`HyperdriveRef` is useful when you want to bind to a Hyperdrive configuration that was created outside of your current Alchemy deployment, or when you want to share a single Hyperdrive across multiple deployments without coupling their lifecycles.
+:::

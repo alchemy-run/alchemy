@@ -15,6 +15,7 @@ import {
 import type { Assets } from "./assets.ts";
 import type {
   Bindings,
+  Self,
   WorkerBindingDurableObjectNamespace,
   WorkerBindingSpec,
 } from "./bindings.ts";
@@ -58,6 +59,8 @@ import { Workflow, isWorkflow, upsertWorkflow } from "./workflow.ts";
 // Previous versions of `Worker` used the `Bundle` resource.
 // This import is here to avoid errors when destroying the `Bundle` resource.
 import "../esbuild/bundle.ts";
+import { Scope } from "../scope.ts";
+import type { WorkerRef } from "./worker-ref.ts";
 
 /**
  * Configuration options for static assets
@@ -330,11 +333,19 @@ export interface BaseWorkerProps<
          * @default false
          */
         remote?: boolean;
+        /**
+         * Whether to expose the worker via a Cloudflare Tunnel.
+         *
+         * @default false
+         */
+        tunnel?: boolean;
         url?: undefined;
       }
     | {
         url: string;
         remote?: undefined;
+        tunnel?: undefined;
+        port?: undefined;
       };
 
   /**
@@ -699,6 +710,25 @@ export function Worker<const B extends Bindings>(
   return _Worker(id, props as WorkerProps<B>);
 }
 
+Worker.experimentalEntrypoint = <RPC extends Rpc.WorkerEntrypointBranded>(
+  worker: Worker | WorkerRef | Self,
+  entrypoint: string,
+) => {
+  if (Scope.getScope()?.local) {
+    logger.warn(
+      "Worker.experimentalEntrypoint is not supported in local development. See: https://github.com/cloudflare/workers-sdk/issues/10681",
+    );
+  }
+  return {
+    ...worker,
+    // we rename the entrypoint in order to prevent collisions with entrypoint on Worker
+    __entrypoint__: entrypoint,
+  } as (Worker | WorkerRef) & {
+    __entrypoint__?: string;
+    __rpc__?: RPC;
+  };
+};
+
 const _Worker = Resource(
   "cloudflare::Worker",
   {
@@ -755,7 +785,9 @@ const _Worker = Resource(
         compatibilityDate,
         compatibilityFlags,
         outdir:
-          props.bundle?.outdir ?? path.join(cwd, ".alchemy", "out", workerName),
+          props.bundle?.outdir ??
+          // the out folder can't be moved to the root of a monorepo, it must be ${cwd} or else miniflare throws a fit
+          path.join(process.cwd(), ".alchemy", "out", workerName),
         sourceMap: "sourceMap" in props ? props.sourceMap : undefined,
       });
 
@@ -812,7 +844,7 @@ const _Worker = Resource(
       if (options.bundle.isOk()) {
         await options.bundle.value.delete?.();
       }
-      await deleteMiniflareWorkerData(options.name, {
+      await deleteMiniflareWorkerData(this.scope, options.name, {
         durableObjects: options.durableObjects,
         workflows: options.workflows,
       });
@@ -852,7 +884,8 @@ const _Worker = Resource(
           eventSources: props.eventSources,
           assets: props.assets,
           bundle,
-          port: (props.dev as { port?: number } | undefined)?.port,
+          port: props.dev?.port,
+          tunnel: props.dev?.tunnel ?? this.scope.tunnel,
         });
         this.onCleanup(() => controller.dispose());
       }

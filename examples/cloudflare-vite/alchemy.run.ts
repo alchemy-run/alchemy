@@ -18,6 +18,9 @@ export const website = await Vite("website", {
     KV: kv,
     ALCHEMY_TEST_VALUE: alchemy.secret("Hello from Alchemy!"),
   },
+  dev: {
+    command: "vite dev --port 5006",
+  },
 });
 
 console.log({

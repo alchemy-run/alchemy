@@ -1,7 +1,8 @@
 import type { Config as LibSQLConfig } from "@libsql/client";
-import fs from "node:fs";
+import fs from "node:fs/promises";
 import path from "node:path";
 import type { Scope } from "../scope.ts";
+import { exists } from "../util/exists.ts";
 import { memoize } from "../util/memoize.ts";
 import { importPeer } from "../util/peer.ts";
 import { MIGRATIONS_DIRECTORY } from "./migrations.ts";
@@ -27,6 +28,7 @@ interface BunSQLiteStateStoreOptions {
   readwrite?: boolean;
   safeIntegers?: boolean;
   strict?: boolean;
+  dotAlchemy?: string;
 }
 
 interface LibSQLStateStoreOptions extends Omit<LibSQLConfig, "url"> {
@@ -50,6 +52,11 @@ interface LibSQLStateStoreOptions extends Omit<LibSQLConfig, "url"> {
    * https://github.com/libsql/libsql-client-ts#supported-urls
    */
   url?: string;
+  /**
+   * The path to the .alchemy directory.
+   * @default "./.alchemy"
+   */
+  dotAlchemy?: string;
 }
 
 interface AutoSQLiteStateStoreOptions {
@@ -64,6 +71,12 @@ interface AutoSQLiteStateStoreOptions {
    * @default ".alchemy/state.sqlite"
    */
   filename?: string;
+
+  /**
+   * The path to the .alchemy directory.
+   * @default "./.alchemy"
+   */
+  dotAlchemy?: string;
 }
 
 type SQLiteStateStoreOptions =
@@ -80,7 +93,10 @@ export class SQLiteStateStore extends StateStoreProxy {
   }
 
   async provision(): Promise<StateStoreProxy.Dispatch> {
-    const db = await createDatabase(this.options);
+    const db = await createDatabase({
+      ...(this.options ?? {}),
+      dotAlchemy: this.scope.dotAlchemy,
+    });
     const { SQLiteStateStoreOperations } = await import("./operations.js");
     const operations = new SQLiteStateStoreOperations(db, {
       chain: this.scope.chain,
@@ -97,17 +113,23 @@ const createDatabase = memoize(
       case "libsql":
         return await createLibSQLDatabase(options);
       default: {
-        return await createDefaultDatabase(options?.filename);
+        return await createDefaultDatabase(
+          options?.filename,
+          options?.dotAlchemy,
+        );
       }
     }
   },
 );
 
-async function createDefaultDatabase(filename: string | undefined) {
+async function createDefaultDatabase(
+  filename: string | undefined,
+  dotAlchemy: string | undefined,
+) {
   if ("Bun" in globalThis) {
-    return createBunSQLiteDatabase({ engine: "bun", filename });
+    return createBunSQLiteDatabase({ engine: "bun", filename, dotAlchemy });
   }
-  return createLibSQLDatabase({ engine: "libsql", filename });
+  return createLibSQLDatabase({ engine: "libsql", filename, dotAlchemy });
 }
 
 async function createBunSQLiteDatabase(
@@ -122,8 +144,8 @@ async function createBunSQLiteDatabase(
   const filename =
     options?.filename ??
     process.env.ALCHEMY_STATE_FILE ??
-    ".alchemy/state.sqlite";
-  ensureDirectory(filename);
+    path.join(options?.dotAlchemy ?? ".alchemy", "state.sqlite");
+  await ensureDirectory(filename);
   const { Database } = await import("bun:sqlite");
   const { drizzle } = await importPeer(
     import("drizzle-orm/bun-sqlite"),
@@ -135,7 +157,11 @@ async function createBunSQLiteDatabase(
   // options are passed in, so here's some ugly destructuring!
   const { engine: _engine, filename: _filename, ...rest } = options ?? {};
   const bunOptions = Object.keys(rest).length > 0 ? rest : undefined;
-  const client = new Database(filename, bunOptions);
+  const client = new Database(filename, {
+    readwrite: true,
+    create: true,
+    ...bunOptions,
+  });
   client.exec("PRAGMA journal_mode = WAL;");
   const db = drizzle(client, {
     schema,
@@ -149,10 +175,11 @@ async function createLibSQLDatabase(
 ) {
   const url =
     options?.url ??
-    `file:${options?.filename ?? process.env.ALCHEMY_STATE_FILE ?? ".alchemy/state.sqlite"}`;
+    `file:${options?.filename ?? process.env.ALCHEMY_STATE_FILE ?? path.join(options?.dotAlchemy ?? ".alchemy", "state.sqlite")}`;
+
   const filename = url.startsWith("file:") ? url.slice(5) : undefined;
   if (filename) {
-    ensureDirectory(filename);
+    await ensureDirectory(filename);
   }
   const { drizzle } = await importPeer(
     import("drizzle-orm/libsql"),
@@ -173,9 +200,9 @@ async function createLibSQLDatabase(
   return db;
 }
 
-const ensureDirectory = (filename: string) => {
+const ensureDirectory = async (filename: string) => {
   const dir = path.dirname(filename);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+  if (!(await exists(dir))) {
+    await fs.mkdir(dir, { recursive: true });
   }
 };

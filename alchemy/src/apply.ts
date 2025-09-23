@@ -15,6 +15,7 @@ import {
 } from "./resource.ts";
 import type { PendingDeletions } from "./scope.ts";
 import { serialize } from "./serde.ts";
+import type { State } from "./state.ts";
 import { formatFQN } from "./util/cli.ts";
 import { logger } from "./util/logger.ts";
 import type { Telemetry } from "./util/telemetry/index.ts";
@@ -64,16 +65,69 @@ async function _apply<Out extends Resource>(
     }
     if (scope.phase === "read") {
       if (state === undefined) {
-        throw new Error(
-          `Resource "${resource[ResourceFQN]}" not found and running in 'read' phase.`,
-        );
+        if (scope.isSelected === false) {
+          // we are running in a monorepo and are not the selected app
+          if (process.argv.includes("--destroy")) {
+            // if we are trying to destroy a downstream app and this (upstream) app does not have data, then exit
+            process.exit(0);
+          }
+          // if we are in `--deploy`, then poll until state available
+          state = await waitForConsistentState();
+        } else {
+          throw new Error(
+            `Resource "${resource[ResourceFQN]}" not found and running in 'read' phase. Selected(${scope.isSelected})`,
+          );
+        }
+      } else if (scope.isSelected === false) {
+        // we are running in a monorepo and are not the selected app, so we need to wait for the process to be consistent
+        state = await waitForConsistentState();
       }
       scope.telemetryClient.record({
         event: "resource.read",
         resource: resource[ResourceKind],
       });
       return state.output as Awaited<Out>;
+
+      // -> poll until it does not (i.e. when the owner process applies the change and updates the state store)
+      async function waitForConsistentState() {
+        while (true) {
+          if (state === undefined) {
+            // state doesn't exist yet
+          } else if (
+            state.status === "creating" ||
+            state.status === "updating"
+          ) {
+            // no-op
+          } else if (
+            state.status === "deleted" ||
+            state.status === "deleting"
+          ) {
+            // ok something is wrong, the stack should not be being deleted
+            // TODO(sam): better error message
+            throw new Error("Resource is being deleted");
+          } else if (await inputsAreEqual(state)) {
+            // sweet, we've reached a stable state and read can progress
+            return state;
+          }
+          // jitter between 100-300ms
+          const jitter = 100 + Math.random() * 200;
+          await new Promise((resolve) => setTimeout(resolve, jitter));
+          state = await scope.state.get(resource[ResourceID]);
+        }
+      }
+      async function inputsAreEqual(
+        state: State<string, ResourceProps | undefined, Resource<string>>,
+      ) {
+        const oldProps = await serialize(scope, state.props, {
+          encrypt: false,
+        });
+        const newProps = await serialize(scope, props, {
+          encrypt: false,
+        });
+        return JSON.stringify(oldProps) === JSON.stringify(newProps);
+      }
     }
+
     if (state === undefined) {
       state = {
         kind: resource[ResourceKind],
@@ -96,6 +150,7 @@ async function _apply<Out extends Resource>(
       };
       await scope.state.set(resource[ResourceID], state);
     }
+
     const oldOutput = state.output;
 
     const alwaysUpdate =

@@ -5,11 +5,7 @@ import { Resource } from "../resource.ts";
 import { Scope } from "../scope.ts";
 import { isSecret } from "../secret.ts";
 import { assertNever } from "../util/assert-never.ts";
-import {
-  Self,
-  type Bindings,
-  type WorkerBindingRateLimit,
-} from "./bindings.ts";
+import type { Bindings, WorkerBindingRateLimit } from "./bindings.ts";
 import type { R2BucketJurisdiction } from "./bucket.ts";
 import type { DurableObjectNamespace } from "./durable-object-namespace.ts";
 import type { EventSource } from "./event-source.ts";
@@ -371,6 +367,7 @@ export interface WranglerJsonSpec {
     binding: string;
     service: string;
     environment?: string;
+    entrypoint?: string;
   }[];
 
   /**
@@ -534,8 +531,12 @@ function processBindings(
     preview_bucket_name: string;
     jurisdiction?: R2BucketJurisdiction;
   }[] = [];
-  const services: { binding: string; service: string; environment?: string }[] =
-    [];
+  const services: {
+    binding: string;
+    service: string;
+    environment?: string;
+    entrypoint?: string;
+  }[] = [];
   const secrets: string[] = [];
   const workflows: {
     name: string;
@@ -625,17 +626,20 @@ function processBindings(
     } else if (writeSecrets && isSecret(binding)) {
       spec.vars ??= {};
       spec.vars[bindingName] = binding as any;
-    } else if (binding === Self) {
+    } else if (binding.type === "cloudflare::Worker::Self") {
       // Self(service) binding
       services.push({
         binding: bindingName,
         service: workerName,
+        entrypoint: binding.__entrypoint__,
       });
     } else if (binding.type === "service") {
       // Service binding
       services.push({
         binding: bindingName,
         service: "name" in binding ? binding.name : binding.service,
+        entrypoint:
+          "__entrypoint__" in binding ? binding.__entrypoint__ : undefined,
       });
     } else if (binding.type === "kv_namespace") {
       // KV Namespace binding
@@ -759,8 +763,6 @@ function processBindings(
         binding: bindingName,
         dataset: binding.dataset,
       });
-    } else if (binding.type === "ai_gateway") {
-      // no-op
     } else if (binding.type === "version_metadata") {
       if (spec.version_metadata) {
         throw new Error(
@@ -775,7 +777,7 @@ function processBindings(
         binding: bindingName,
         id: binding.hyperdriveId,
         localConnectionString: writeSecrets
-          ? binding.dev.origin.unencrypted
+          ? binding.dev?.origin.unencrypted
           : undefined,
       });
     } else if (binding.type === "pipeline") {
@@ -816,6 +818,7 @@ function processBindings(
         class_name: binding.className,
       });
     } else {
+      console.log("binding", binding);
       // biome-ignore lint/correctness/noVoidTypeReturn: it returns never
       return assertNever(binding);
     }

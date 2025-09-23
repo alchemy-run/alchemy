@@ -14,6 +14,9 @@ export const website = await TanStackStart("website", {
     TEST_SECRET_VALUE: alchemy.secret("test-secret-value"),
   },
   adopt: true,
+  dev: {
+    command: "vite dev --port 5005",
+  },
 });
 
 console.log({

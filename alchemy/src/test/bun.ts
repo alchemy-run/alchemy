@@ -104,6 +104,7 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
     stateStore: defaultOptions?.stateStore,
     phase: "up",
     telemetryClient: new NoopTelemetryClient(),
+    local: defaultOptions.local,
   });
 
   test.beforeAll = (fn: (scope: Scope) => Promise<void>) => {

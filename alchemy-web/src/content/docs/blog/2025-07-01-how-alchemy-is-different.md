@@ -134,7 +134,7 @@ const app = await alchemy("my-app", {
 
 By default, Alchemy assumes you want to store state files locally for development purposes, but since Alchemy can run anywhere - you may want to store state in the the browser, or a Cloudflare Durable Object!
 
-[Learn more about custom state stores](./guides/custom-state-store.md)
+[Learn more about state](/concepts/state/)
 
 ## Direct API Integration
 
@@ -201,7 +201,7 @@ export const Database = Resource(
 );
 ```
 
-[Learn more about AI-generated resources](./guides/custom-resources.md)
+[Learn more about building custom resources](/guides/custom-resources/)
 
 ## Fast Deployments
 
@@ -303,4 +303,4 @@ const product = await Product("pro-plan", {
 
 ## Getting Started
 
-Ready to try Alchemy? Check out our [Getting Started guide](../getting-started) to build your first Alchemy app.
+Ready to try Alchemy? Check out our [Getting Started guide](/getting-started/) to build your first Alchemy app.

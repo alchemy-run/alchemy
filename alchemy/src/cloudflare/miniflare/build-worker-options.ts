@@ -2,12 +2,11 @@ import * as miniflare from "miniflare";
 import { assertNever } from "../../util/assert-never.ts";
 import type { HTTPServer } from "../../util/http.ts";
 import type { CloudflareApi } from "../api.ts";
-import {
-  Self,
-  type Binding,
-  type Bindings,
-  type WorkerBindingService,
-  type WorkerBindingSpec,
+import type {
+  Binding,
+  Bindings,
+  WorkerBindingService,
+  WorkerBindingSpec,
 } from "../bindings.ts";
 import { isQueueEventSource, type EventSource } from "../event-source.ts";
 import type { WorkerBundle, WorkerBundleSource } from "../worker-bundle.ts";
@@ -25,11 +24,11 @@ export interface MiniflareWorkerInput {
   assets: AssetsConfig | undefined;
   bundle: WorkerBundleSource;
   port: number | undefined;
+  tunnel: boolean | undefined;
 }
 
 type RemoteOnlyBindingType =
   | "ai"
-  | "ai_gateway"
   | "browser"
   | "dispatch_namespace"
   | "mtls_certificate"
@@ -92,13 +91,18 @@ export const buildWorkerOptions = async (
       (options.bindings ??= {})[key] = binding;
       continue;
     }
-    if (binding === Self) {
+    if (binding.type === "cloudflare::Worker::Self") {
       (options.serviceBindings ??= {})[key] = miniflare.kCurrentWorker;
       continue;
     }
     switch (binding.type) {
-      case "ai":
-      case "ai_gateway": {
+      case "ai": {
+        const existing = remoteBindings.find((b) => b.type === "ai");
+        if (existing) {
+          throw new Error(
+            `Workers cannot have multiple AI bindings. Binding "${key}" conflicts with "${existing.name}".`,
+          );
+        }
         remoteBindings.push({
           type: "ai",
           name: key,
@@ -180,7 +184,9 @@ export const buildWorkerOptions = async (
         break;
       }
       case "hyperdrive": {
-        (options.hyperdrives ??= {})[key] = binding.dev.origin.unencrypted;
+        if (binding.dev) {
+          (options.hyperdrives ??= {})[key] = binding.dev.origin.unencrypted;
+        }
         break;
       }
       case "images": {
@@ -459,7 +465,10 @@ const normalizeBundle = (bundle: WorkerBundle) => {
 };
 
 const isRemoteBinding = (binding: Binding) => {
-  if (typeof binding === "string" || binding === Self) {
+  if (
+    typeof binding === "string" ||
+    binding.type === "cloudflare::Worker::Self"
+  ) {
     return false;
   }
   return (

@@ -1,0 +1,22 @@
+{
+  "name": "backend",
+  "private": true,
+  "type": "module",
+  "module": "./lib/src/index.js",
+  "scripts": {
+    "dev": "alchemy dev --adopt --app backend",
+    "deploy": "alchemy deploy --adopt --app backend",
+    "destroy": "alchemy destroy --app backend",
+    "check": "tsc --noEmit"
+  },
+  "exports": {
+    "./alchemy": {
+      "bun": "./alchemy.run.ts",
+      "import": "./lib/alchemy.run.js",
+      "types": "./alchemy.run.ts"
+    }
+  },
+  "dependencies": {
+    "alchemy": "catalog:"
+  }
+}

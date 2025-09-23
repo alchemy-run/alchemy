@@ -3,11 +3,10 @@ import { logger } from "../util/logger.ts";
 import { memoize } from "../util/memoize.ts";
 import { extractCloudflareResult } from "./api-response.ts";
 import type { CloudflareApi } from "./api.ts";
-import {
-  Self,
-  type Bindings,
-  type WorkerBindingDurableObjectNamespace,
-  type WorkerBindingSpec,
+import type {
+  Bindings,
+  WorkerBindingDurableObjectNamespace,
+  WorkerBindingSpec,
 } from "./bindings.ts";
 import { isContainer, type Container } from "./container.ts";
 import {
@@ -392,11 +391,12 @@ export async function prepareWorkerMetadata(
         name: bindingName,
         text: binding,
       });
-    } else if (binding === Self) {
+    } else if (binding.type === "cloudflare::Worker::Self") {
       meta.bindings.push({
         type: "service",
         name: bindingName,
         service: props.workerName,
+        entrypoint: binding.__entrypoint__,
       });
     } else if (binding.type === "d1") {
       meta.bindings.push({
@@ -416,6 +416,8 @@ export async function prepareWorkerMetadata(
         type: "service",
         name: bindingName,
         service: "service" in binding ? binding.service : binding.name,
+        entrypoint:
+          "__entrypoint__" in binding ? binding.__entrypoint__ : undefined,
       });
     } else if (binding.type === "durable_object_namespace") {
       meta.bindings.push({
@@ -491,12 +493,6 @@ export async function prepareWorkerMetadata(
         name: bindingName,
         index_name: binding.name,
       });
-    } else if (binding.type === "ai_gateway") {
-      // AI Gateway binding - just needs the name property
-      meta.bindings.push({
-        type: "ai",
-        name: bindingName,
-      });
     } else if (binding.type === "hyperdrive") {
       // Hyperdrive binding
       meta.bindings.push({
@@ -510,6 +506,12 @@ export async function prepareWorkerMetadata(
         name: bindingName,
       });
     } else if (binding.type === "ai") {
+      const existing = meta.bindings.find((b) => b.type === "ai");
+      if (existing) {
+        throw new Error(
+          `Workers cannot have multiple AI bindings. Binding "${bindingName}" conflicts with "${existing.name}".`,
+        );
+      }
       meta.bindings.push({
         type: "ai",
         name: bindingName,

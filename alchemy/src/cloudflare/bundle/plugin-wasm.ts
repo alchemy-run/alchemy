@@ -35,11 +35,11 @@ export function createWasmPlugin() {
         );
 
         // Copy to outdir so it's included in the upload
-        await fs.mkdir(outdir, { recursive: true });
-        await fs.copyFile(
-          path.join(args.resolveDir, name),
-          path.join(outdir, name),
-        );
+        const copyFrom = path.join(args.resolveDir, name);
+        const copyTo = path.join(outdir, name);
+        await fs.mkdir(path.dirname(copyTo), { recursive: true });
+        await fs.copyFile(copyFrom, copyTo);
+
         modules.set(args.path, {
           type: "wasm",
           path: name,
