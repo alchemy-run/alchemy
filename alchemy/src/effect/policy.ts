@@ -6,6 +6,16 @@ export interface Policy<in out Statements extends Statement = any> {
   readonly statements: Statements[];
 }
 
+export type SerializedStatement<S extends Statement = Statement> = Omit<
+  S,
+  "resource"
+> & {
+  resource: {
+    type: string;
+    id: string;
+  };
+};
+
 export type Statement<
   Action extends string = string,
   Resource extends _Resource = _Resource,

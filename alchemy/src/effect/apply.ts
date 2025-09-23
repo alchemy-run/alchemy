@@ -43,6 +43,13 @@ export const apply = <const P extends AnyPlan, Err, Req>(
                     status: node.action === "create" ? "created" : "updated",
                     props: node.resource.props,
                     output,
+                    bindings: node.bindings.map((binding) => ({
+                      ...binding.stmt,
+                      resource: {
+                        type: node.resource.type,
+                        id: node.resource.id,
+                      },
+                    })),
                   })
                   .pipe(Effect.map(() => output)),
               ),
@@ -153,7 +160,9 @@ export const apply = <const P extends AnyPlan, Err, Req>(
             ),
           ),
         );
-        if (Object.keys(resources).length === 0) {
+        if (
+          Object.values(plan).every((resource) => resource.action === "delete")
+        ) {
           return undefined;
         }
         return resources;

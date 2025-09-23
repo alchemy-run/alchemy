@@ -8,6 +8,7 @@ import type {
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
 
 import type { Context as LambdaContext } from "aws-lambda";
 import {
@@ -403,6 +404,12 @@ export const provider = Layer.effect(
           Tags: tagged(id),
         })
         .pipe(
+          Effect.retry({
+            while: (e) =>
+              e.name === "InvalidParameterValueException" &&
+              e.message?.includes("cannot be assumed by Lambda"),
+            schedule: Schedule.exponential(10),
+          }),
           Effect.catchTag("ResourceConflictException", () =>
             lambda
               .getFunction({
@@ -603,12 +610,60 @@ export const provider = Layer.effect(
         } satisfies Attributes<string, Props>;
       }),
       delete: Effect.fn(function* ({ output }) {
-        yield* lambda.deleteFunction({
-          FunctionName: output.functionName,
-        });
-        yield* iam.deleteRole({
-          RoleName: output.roleName,
-        });
+        yield* iam
+          .listRolePolicies({
+            RoleName: output.roleName,
+          })
+          .pipe(
+            Effect.flatMap((policies) =>
+              Effect.all(
+                (policies.PolicyNames ?? []).map((policyName) =>
+                  iam.deleteRolePolicy({
+                    RoleName: output.roleName,
+                    PolicyName: policyName,
+                  }),
+                ),
+              ),
+            ),
+          );
+
+        yield* iam
+          .listAttachedRolePolicies({
+            RoleName: output.roleName,
+          })
+          .pipe(
+            Effect.flatMap((policies) =>
+              Effect.all(
+                (policies.AttachedPolicies ?? []).map((policy) =>
+                  iam
+                    .detachRolePolicy({
+                      RoleName: output.roleName,
+                      PolicyArn: policy.PolicyArn!,
+                    })
+                    .pipe(
+                      Effect.catchTag(
+                        "NoSuchEntityException",
+                        () => Effect.void,
+                      ),
+                    ),
+                ),
+              ),
+            ),
+          );
+
+        yield* lambda
+          .deleteFunction({
+            FunctionName: output.functionName,
+          })
+          .pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
+
+        yield* iam
+          .deleteRole({
+            RoleName: output.roleName,
+          })
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
         return null as any;
       }),
     } satisfies ResourceProvider<

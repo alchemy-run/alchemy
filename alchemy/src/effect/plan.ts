@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import { isBound, type Bound } from "./binding.ts";
-import type { Statement } from "./policy.ts";
+import type { SerializedStatement, Statement } from "./policy.ts";
 import type { Provider } from "./provider.ts";
 import type { Resource } from "./resource.ts";
 import { State, type ResourceState } from "./state.ts";
@@ -11,7 +11,7 @@ export type PlanError = never;
 export type AttachAction<Stmt extends Statement = Statement> = {
   action: "attach";
   stmt: Stmt;
-  olds?: Stmt;
+  olds?: SerializedStatement<Stmt>;
 };
 
 export type DetachAction<Stmt extends Statement = Statement> = {
@@ -317,9 +317,16 @@ export const plan = <
                   // TODO(sam): how to get these?
                   provider,
                   attributes: oldState?.output,
-                  // bindings,
-                  // resource,
-                  // @ts-expect-error
+                  // bindings: oldState?.bindings,
+                  // TODO(sam): Support Detach Bindings
+                  bindings: [],
+                  resource: {
+                    id,
+                    type: oldState.type,
+                    attributes: oldState.output,
+                    props: oldState.props,
+                    provider,
+                  },
                 } satisfies Delete<Resource>,
               ] as const;
             }
@@ -369,16 +376,19 @@ const diffBindings = (
       });
     }
   }
-  for (const sid of oldSids) {
-    actions.push({
-      action: "detach",
-      stmt: oldBindings?.find((binding) => binding.sid === sid)!,
-    });
-  }
+  // for (const sid of oldSids) {
+  //   actions.push({
+  //     action: "detach",
+  //     stmt: oldBindings?.find((binding) => binding.sid === sid)!,
+  //   });
+  // }
   return actions;
 };
 
-const isBindingDiff = (oldBinding: Statement, newBinding: Statement) =>
+const isBindingDiff = (
+  oldBinding: SerializedStatement,
+  newBinding: Statement,
+) =>
   oldBinding.effect !== newBinding.effect ||
   oldBinding.action !== newBinding.action ||
   oldBinding.resource.id !== newBinding.resource.id;

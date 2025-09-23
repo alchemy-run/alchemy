@@ -6,7 +6,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import path from "node:path";
 import { App } from "./app.ts";
-import type { Statement } from "./policy.ts";
+import type { SerializedStatement } from "./policy.ts";
 
 // SQL only?? no
 // DynamoDB is faster but bounded to 400KB (<10ms minimum latency)
@@ -64,7 +64,7 @@ export type ResourceState = {
     | "deleted";
   props: any;
   output: any;
-  bindings?: Statement[];
+  bindings?: SerializedStatement[];
 };
 
 export class StateStoreError extends Data.TaggedError("StateStoreError")<{
@@ -148,7 +148,9 @@ export const localFs = Layer.effect(
       list: () =>
         fs.readDirectory(stageDir).pipe(
           recover,
-          Effect.map((files) => files ?? []),
+          Effect.map(
+            (files) => files?.map((file) => file.replace(/\.json$/, "")) ?? [],
+          ),
         ),
     };
   }),

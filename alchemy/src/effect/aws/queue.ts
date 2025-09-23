@@ -6,6 +6,7 @@ import type {
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
 import type * as S from "effect/Schema";
 import { SQS as SQSClient } from "itty-aws/sqs";
 import { App } from "../app.ts";
@@ -274,10 +275,17 @@ export const provider = Layer.effect(
       }),
       create: Effect.fn(function* ({ id, news }) {
         const queueName = createQueueName(id, news);
-        const response = yield* sqs.createQueue({
-          QueueName: queueName,
-          Attributes: createAttributes(news),
-        });
+        const response = yield* sqs
+          .createQueue({
+            QueueName: queueName,
+            Attributes: createAttributes(news),
+          })
+          .pipe(
+            Effect.retry({
+              while: (e) => e.name === "QueueDeletedRecently",
+              schedule: Schedule.fixed(1000),
+            }),
+          );
         const queueArn = `arn:aws:sqs:${region}:${accountId}:${queueName}`;
         return {
           id,
