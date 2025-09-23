@@ -14,18 +14,25 @@ const aws = AWS.defaultProviders.pipe(
   Layer.provide(AWS.Credentials.fromChain.pipe(Layer.tap(Console.log))),
 );
 
-const plan = Alchemy.planAll(
-  ApiLambda,
-  // Consumer
-);
+const plan = Alchemy.plan({
+  phase: process.argv.includes("--destroy") ? "destroy" : "update",
+  resources: [
+    ApiLambda,
+    // Consumer
+  ],
+});
 
 const applied = Alchemy.apply(plan);
 
-const infrastructure = await applied.pipe(
+const stack = await applied.pipe(
   Effect.provide(aws),
   Effect.provide(State.inMemory),
   Effect.provide(app),
   Effect.runPromise,
 );
 
-console.log(infrastructure);
+if (stack) {
+  const { api, messages } = stack;
+  console.log(api.functionUrl);
+  console.log(messages.queueUrl);
+}

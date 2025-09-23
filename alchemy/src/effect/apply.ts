@@ -1,10 +1,11 @@
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import type { Simplify } from "effect/Types";
-import type { BindingAction, Plan } from "./plan.ts";
+import type { AnyPlan, BindingAction, Delete } from "./plan.ts";
 import type { Statement } from "./policy.ts";
+import type { Resource } from "./resource.ts";
 
-export const apply = <P extends Plan, Err, Req>(
+export const apply = <const P extends AnyPlan, Err, Req>(
   plan: Effect.Effect<P, Err, Req>,
 ) =>
   plan.pipe(
@@ -13,7 +14,7 @@ export const apply = <P extends Plan, Err, Req>(
         const outputs = {} as Record<string, Effect.Effect<any, any>>;
 
         const apply = Effect.fn(function* (
-          node: BindingAction<Statement>[] | Plan[keyof Plan],
+          node: BindingAction<Statement>[] | Exclude<P[keyof P], undefined>,
         ) {
           if (Array.isArray(node)) {
             return yield* Effect.all(
@@ -23,7 +24,7 @@ export const apply = <P extends Plan, Err, Req>(
                   ? Effect.dieMessage(
                       `Resource ${binding.stmt.resource.id} not found`,
                     )
-                  : apply(resource);
+                  : apply(resource as P[keyof P]);
               }),
             );
           }
@@ -87,6 +88,7 @@ export const apply = <P extends Plan, Err, Req>(
                 const create = node.provider.create({
                   id,
                   news: node.news,
+                  // TODO(sam): these need to only include attach actions
                   bindings: node.bindings.map((binding, i) =>
                     Object.assign(binding, {
                       attributes: bindings[i],
@@ -105,14 +107,14 @@ export const apply = <P extends Plan, Err, Req>(
             }).pipe(Effect.tap(() => Console.log(`${node.action}d ${id}`))),
           ));
         }) as (
-          node: Plan[keyof Plan] | BindingAction<Statement>[],
+          node: P[keyof P] | BindingAction<Statement>[],
         ) => Effect.Effect<any, never, never>;
 
         return Object.fromEntries(
           yield* Effect.all(
             Object.entries(plan).map(
               Effect.fn(function* ([id, node]) {
-                return [id, yield* apply(node)];
+                return [id, yield* apply(node as P[keyof P])];
               }),
             ),
           ),
@@ -121,8 +123,19 @@ export const apply = <P extends Plan, Err, Req>(
     ),
   ) as Effect.Effect<
     {
-      [id in keyof P]: Simplify<P[id]["resource"]["attributes"]>;
-    },
+      [id in keyof P]: P[id] extends
+        | Delete<Resource, Statement>
+        | undefined
+        | never
+        ? never
+        : Simplify<P[id]["resource"]["attributes"]>;
+    } extends infer O
+      ? O extends {
+          [key: string]: never;
+        }
+        ? undefined
+        : O
+      : never,
     Err,
     Req
   >;

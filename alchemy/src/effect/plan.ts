@@ -98,49 +98,52 @@ export type Materialize<T, Stmt extends Statement = never> = T extends Bound<
     ? Materialized<T, Stmt>
     : never;
 
-export type Plan = {
-  [id in string]: Materialized;
-};
-
 export type DeleteOrphans<K extends string | number | symbol> = {
   [k in Exclude<string, K>]: Delete<Resource>;
 };
 
-export const planAll = <const Resources extends PlanItem[]>(
-  ...resources: Resources
-) => {
-  type Plan<
-    Items extends PlanItem[],
-    Accum extends Record<string, Materialized> = {},
-  > = Items extends [
-    infer Head extends PlanItem,
-    ...infer Tail extends PlanItem[],
-  ]
-    ? Plan<
-        Tail,
-        Accum & {
-          [id in keyof Effect.Effect.Success<Head>]: Materialize<
-            Effect.Effect.Success<Head>[id],
-            id extends keyof Accum
-              ? Accum[id]["bindings"][number]["stmt"]
-              : never
+type Apply<
+  Items extends PlanItem[],
+  Accum extends Record<string, Materialized> = {},
+> = Items extends [
+  infer Head extends PlanItem,
+  ...infer Tail extends PlanItem[],
+]
+  ? Apply<
+      Tail,
+      Accum & {
+        [id in keyof Effect.Effect.Success<Head>]: Materialize<
+          Effect.Effect.Success<Head>[id],
+          id extends keyof Accum ? Accum[id]["bindings"][number]["stmt"] : never
+        >;
+      }
+    >
+  : Accum;
+
+export type AnyPlan = {
+  [id in string]: Materialized;
+};
+
+export type Plan<
+  Phase extends "update" | "destroy" = "update" | "destroy",
+  Resources extends PlanItem[] = PlanItem[],
+> = Phase extends "update"
+  ?
+      | {
+          [k in keyof Apply<Resources>]: Apply<Resources>[k];
+        }
+      | {
+          [k in Exclude<string, keyof Apply<Resources>>]: Delete<
+            Resource,
+            Statement
           >;
         }
-      >
-    : Accum;
-
-  return Effect.all(resources.map((resource) => plan(resource))).pipe(
-    Effect.map((plans) =>
-      plans.reduce((acc, plan) => ({ ...acc, ...plan }), {}),
-    ),
-  ) as Effect.Effect<
-    {
-      [k in keyof Plan<Resources>]: Plan<Resources>[k];
-    },
-    never,
-    Effect.Effect.Context<Resources[number]> | State
-  >;
-};
+  : {
+      [k in Exclude<string, keyof Apply<Resources>>]: Delete<
+        Resource,
+        Statement
+      >;
+    };
 
 type PlanItem = Effect.Effect<
   {
@@ -151,134 +154,172 @@ type PlanItem = Effect.Effect<
 >;
 
 export const plan = <
-  Resources extends {
-    [id in string]: Bound | Resource;
-  },
-  Req,
->(
-  resource: Effect.Effect<Resources, never, Req>,
-): Effect.Effect<
-  {
-    [id in keyof Resources]: Materialize<Resources[id]>;
-  }, // & DeleteOrphans<keyof Resources>,
-  PlanError,
-  | Req
-  | State
-  // extract the providers from the deeply nested resources
-  | {
-      [id in keyof Resources]: Resources[id] extends Bound
-        ?
-            | TagInstance<Resources[id]["resource"]["provider"]>
-            | TagInstance<
-                Resources[id]["bindings"][number]["resource"]["provider"]
-              >
-        : Resources[id] extends Resource
-          ? TagInstance<Resources[id]["provider"]>
-          : never;
-    }[keyof Resources]
-> =>
-  resource.pipe(
-    Effect.flatMap((resources) =>
-      Effect.gen(function* () {
-        const state = yield* State;
-        const plan: Plan = {};
-        const all = new Set(yield* state.list());
-        for (const [id, node] of Object.entries(resources)) {
-          all.delete(id);
+  const Phase extends "update" | "destroy",
+  const Resources extends PlanItem[],
+>({
+  phase,
+  resources,
+}: {
+  phase: Phase;
+  resources: Resources;
+}) => {
+  return Effect.gen(function* () {
+    const state = yield* State;
 
-          const resource = isBound(node) ? node.resource : node;
-          const statements = isBound(node) ? node.bindings : [];
-          const news = isBound(node) ? node.props : resource.props;
+    const updates =
+      phase === "update"
+        ? yield* Effect.all(
+            resources.map((resource) =>
+              Effect.flatMap(
+                resource,
+                Effect.fn(function* (subgraph: {
+                  [x: string]: Resource | Bound;
+                }) {
+                  const state = yield* State;
 
-          const oldState = yield* state.get(id);
-          const provider: Provider = yield* resource.provider;
-          const bindings = diffBindings(oldState, statements);
+                  return Object.fromEntries(
+                    (yield* Effect.all(
+                      Object.entries(subgraph).map(
+                        Effect.fn(function* ([id, node]) {
+                          const resource = isBound(node) ? node.resource : node;
+                          const statements = isBound(node) ? node.bindings : [];
+                          const news = isBound(node)
+                            ? node.props
+                            : resource.props;
 
-          if (oldState === undefined || oldState.status === "creating") {
-            plan[id] = {
-              action: "create",
-              news,
-              provider,
-              resource: resource,
-              // phantom
-              attributes: undefined!,
-              bindings: bindings as AttachAction<Statement>[],
-            };
-          } else if (provider.diff) {
-            const diff = yield* provider.diff({
-              id,
-              olds: oldState.props,
-              news,
-              output: oldState.output,
-            });
-            if (diff.action === "noop" && bindings.length === 0) {
-              plan[id] = {
-                action: "noop",
-                resource: resource,
-                // phantom
-                attributes: undefined!,
-                bindings: bindings as NoopAction<Statement>[],
-              };
-            } else if (diff.action === "replace") {
-              plan[id] = {
-                action: "replace",
-                olds: oldState.props,
-                news,
-                output: oldState.output,
-                provider,
-                resource: resource,
-                // phantom
-                attributes: undefined!,
-                bindings: bindings,
-              };
-            } else {
-              plan[id] = {
-                action: "update",
-                olds: oldState.props,
-                news,
-                output: oldState.output,
-                provider,
-                resource: resource,
-                // phantom
-                attributes: undefined!,
-                bindings: bindings,
-              };
+                          const oldState = yield* state.get(id);
+                          const provider: Provider = yield* resource.provider;
+                          const bindings = diffBindings(oldState, statements);
+
+                          if (
+                            oldState === undefined ||
+                            oldState.status === "creating"
+                          ) {
+                            return {
+                              action: "create",
+                              news,
+                              provider,
+                              resource,
+                              // phantom
+                              attributes: undefined!,
+                              bindings: bindings as AttachAction<Statement>[],
+                            } satisfies Create<Resource, Statement>;
+                          } else if (provider.diff) {
+                            const diff = yield* provider.diff({
+                              id,
+                              olds: oldState.props,
+                              news,
+                              output: oldState.output,
+                            });
+                            if (
+                              diff.action === "noop" &&
+                              bindings.length === 0
+                            ) {
+                              return {
+                                action: "noop",
+                                resource,
+                                // phantom
+                                attributes: undefined!,
+                                bindings: bindings as NoopAction<Statement>[],
+                              };
+                            } else if (diff.action === "replace") {
+                              return {
+                                action: "replace",
+                                olds: oldState.props,
+                                news,
+                                output: oldState.output,
+                                provider,
+                                resource,
+                                // phantom
+                                attributes: undefined!,
+                                bindings: bindings,
+                              };
+                            } else {
+                              return {
+                                action: "update",
+                                olds: oldState.props,
+                                news,
+                                output: oldState.output,
+                                provider,
+                                resource,
+                                // phantom
+                                attributes: undefined!,
+                                bindings: bindings,
+                              };
+                            }
+                          } else if (
+                            compare(oldState, resource.props) ||
+                            bindings.length > 0
+                          ) {
+                            return {
+                              action: "update",
+                              olds: oldState.props,
+                              news,
+                              output: oldState.output,
+                              provider,
+                              bindings,
+                              resource,
+                              // phantom
+                              attributes: undefined!,
+                            };
+                          } else {
+                            return {
+                              action: "noop",
+                              resource,
+                              // phantom
+                              attributes: undefined!,
+                              bindings: bindings as NoopAction<Statement>[],
+                            };
+                          }
+                        }),
+                      ),
+                    )).map((update) => [update.resource.id, update]),
+                  ) as AnyPlan;
+                }),
+              ),
+            ),
+          ) as Effect.Effect<
+            {
+              [id in keyof Resources]: Materialize<Resources[id]>;
+            }, // & DeleteOrphans<keyof Resources>,
+            PlanError,
+            // | Req
+            | State
+            // extract the providers from the deeply nested resources
+            | {
+                [id in keyof Resources]: Resources[id] extends Bound
+                  ?
+                      | TagInstance<Resources[id]["resource"]["provider"]>
+                      | TagInstance<
+                          Resources[id]["bindings"][number]["resource"]["provider"]
+                        >
+                  : Resources[id] extends Resource
+                    ? TagInstance<Resources[id]["provider"]>
+                    : never;
+              }[keyof Resources]
+          >
+        : [];
+
+    const deletions = Object.fromEntries(
+      (yield* Effect.all(
+        (yield* state.list()).map(
+          Effect.fn(function* (id) {
+            if (id in updates) {
+              return;
             }
-          } else if (compare(oldState, resource.props) || bindings.length > 0) {
-            plan[id] = {
-              action: "update",
-              olds: oldState.props,
-              news,
-              output: oldState.output,
-              provider,
-              bindings,
-              resource: resource,
-              // phantom
-              attributes: undefined!,
-            };
-          } else {
-            plan[id] = {
-              action: "noop",
-              resource: resource,
-              // phantom
-              attributes: undefined!,
-              bindings: bindings as NoopAction<Statement>[],
-            };
-          }
-        }
-        yield* Effect.all(
-          Array.from(all).map(
-            Effect.fn(function* (id) {
-              const oldState = yield* state.get(id);
-              const context = yield* Effect.context<never>();
-              if (oldState) {
-                const provider = context.unsafeMap.get(oldState?.type);
-                if (!provider) {
-                  yield* Effect.die(
-                    new Error(`Provider not found for ${oldState?.type}`),
-                  );
-                }
-                plan[id] = {
+            const oldState = yield* state.get(id);
+            const context = yield* Effect.context<never>();
+            if (oldState) {
+              const provider = context.unsafeMap.get(oldState?.type);
+              if (!provider) {
+                yield* Effect.die(
+                  new Error(`Provider not found for ${oldState?.type}`),
+                );
+              }
+              // TODO(sam): deletion ordering
+              return [
+                id,
+                {
                   action: "delete",
                   olds: oldState.props,
                   output: oldState.output,
@@ -287,18 +328,26 @@ export const plan = <
                   attributes: oldState?.output,
                   // bindings,
                   // resource,
-                };
-              }
-            }),
-          ),
-        );
+                } satisfies Delete<Resource>,
+              ] as const;
+            }
+          }),
+        ),
+      )).filter((v) => !!v),
+    );
 
-        return plan as {
-          [id in keyof Resources]: any;
-        } & DeleteOrphans<keyof Resources>;
-      }),
-    ),
-  );
+    return Object.fromEntries(
+      [...updates, deletions].reduce(
+        (acc, plan) => ({ ...acc, ...plan }),
+        {} as any,
+      ),
+    );
+  }) as Effect.Effect<
+    Plan<Phase, Resources>,
+    never,
+    Effect.Effect.Context<Resources[number]> | State
+  >;
+};
 
 const compare = <R extends Resource>(
   oldState: ResourceState | undefined,
@@ -344,7 +393,7 @@ const isBindingDiff = (oldBinding: Statement, newBinding: Statement) =>
   oldBinding.action !== newBinding.action ||
   oldBinding.resource.id !== newBinding.resource.id;
 
-export const displayPlan = (plan: Plan) => {
+export const displayPlan = (plan: AnyPlan) => {
   return Object.entries(plan).forEach(([id, node]) => {
     console.log(`[${node.action}] ${node.resource.type} ${id}`);
   });
