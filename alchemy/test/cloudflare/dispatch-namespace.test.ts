@@ -173,7 +173,7 @@ describe("Dispatch Namespace Resource", () => {
       ]);
 
       // 2. Create assets resource
-      const assets = Assets({
+      const assets = await Assets({
         path: tempDir,
       });
 

@@ -29,7 +29,7 @@ export type Assets = AssetsProps & {
  *
  * @example
  * // Create a basic assets bundle from a local directory
- * const staticAssets = Assets({
+ * const staticAssets = await Assets({
  *   path: "./src/assets"
  * });
  *
@@ -42,7 +42,7 @@ export type Assets = AssetsProps & {
  *   }
  * });
  */
-export function Assets(props: AssetsProps): Assets {
+export async function Assets(props: AssetsProps): Promise<Assets> {
   return {
     type: "assets",
     ...props,

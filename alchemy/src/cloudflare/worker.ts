@@ -614,7 +614,7 @@ export type Worker<
  *
  * @example
  * // Create a worker with static assets:
- * const staticAssets = Assets({
+ * const staticAssets = await Assets({
  *   path: "./src/assets"
  * });
  *
