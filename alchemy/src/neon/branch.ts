@@ -199,6 +199,8 @@ export const NeonBranch = Resource(
             endpoints: props.endpoints,
           },
         });
+
+        // Endpoints have fields that are updated after operations are complete.
         await waitForOperations(api, data.operations);
         const endpoints = await Promise.all(
           data.endpoints.map((endpoint) =>
@@ -212,6 +214,7 @@ export const NeonBranch = Resource(
               .then((res) => res.data.endpoint),
           ),
         );
+
         return this({
           id: data.branch.id,
           name: data.branch.name,

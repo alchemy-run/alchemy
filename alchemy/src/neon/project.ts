@@ -56,6 +56,22 @@ export interface NeonProjectProps extends NeonApiOptions {
    * @default "main"
    */
   default_branch_name?: string;
+
+  /**
+   * Settings for the project
+   */
+  settings?: neon.ProjectSettingsData;
+
+  /**
+   * Default endpoint settings for the project
+   */
+  default_endpoint_settings?: neon.DefaultEndpointSettings;
+
+  /**
+   * History retention seconds for the project
+   * @default 86400
+   */
+  history_retention_seconds?: number;
 }
 
 /**
@@ -92,6 +108,21 @@ export interface NeonProject extends Resource<"neon::Project"> {
    * Region where the project is provisioned
    */
   region_id: NeonRegion;
+
+  /**
+   * Settings for the project
+   */
+  settings: neon.ProjectSettingsData | undefined;
+
+  /**
+   * Default endpoint settings for the project
+   */
+  default_endpoint_settings: neon.DefaultEndpointSettings | undefined;
+
+  /**
+   * History retention seconds for the project
+   */
+  history_retention_seconds: number;
 
   /**
    * PostgreSQL version used by the project
@@ -168,12 +199,17 @@ export const NeonProject = Resource(
               name,
               region_id: props.region_id,
               pg_version: props.pg_version,
+              default_endpoint_settings: props.default_endpoint_settings,
               branch: {
                 name: props.default_branch_name,
               },
+              settings: props.settings,
+              history_retention_seconds: props.history_retention_seconds,
             },
           },
         });
+
+        // Branch and endpoints have fields that are updated after operations are complete.
         await waitForOperations(api, data.operations);
         const [branch, endpoints] = await Promise.all([
           api
@@ -192,6 +228,7 @@ export const NeonProject = Resource(
             })
             .then((res) => res.data.endpoints),
         ]);
+
         return this({
           id: data.project.id,
           name: data.project.name,
@@ -200,6 +237,9 @@ export const NeonProject = Resource(
           proxy_host: data.project.proxy_host,
           region_id: data.project.region_id as NeonRegion,
           pg_version: data.project.pg_version as NeonPgVersion,
+          settings: data.project.settings,
+          default_endpoint_settings: data.project.default_endpoint_settings,
+          history_retention_seconds: data.project.history_retention_seconds,
           connection_uris: data.connection_uris.map(formatConnectionUri) as [
             NeonConnectionUri,
             ...NeonConnectionUri[],
@@ -218,6 +258,9 @@ export const NeonProject = Resource(
           body: {
             project: {
               name,
+              settings: props.settings,
+              default_endpoint_settings: props.default_endpoint_settings,
+              history_retention_seconds: props.history_retention_seconds,
             },
           },
         });
@@ -228,6 +271,9 @@ export const NeonProject = Resource(
           proxy_host: data.project.proxy_host,
           region_id: data.project.region_id as NeonRegion,
           pg_version: data.project.pg_version as NeonPgVersion,
+          settings: data.project.settings,
+          default_endpoint_settings: data.project.default_endpoint_settings,
+          history_retention_seconds: data.project.history_retention_seconds,
         });
       }
       case "delete": {
