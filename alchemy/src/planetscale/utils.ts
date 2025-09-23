@@ -1,4 +1,4 @@
-import type { PlanetScaleClient } from "./api/client.gen.ts";
+import type { PlanetScaleClient } from "./api/sdk.gen.ts";
 import type { DatabaseBranch } from "./api/types.gen.ts";
 
 export type PlanetScaleClusterSize =
@@ -54,14 +54,15 @@ export async function waitForBranchReady(
   database: string,
   branch: string,
 ): Promise<DatabaseBranch> {
-  return await poll({
+  const { data } = await poll({
     description: `branch "${branch}" ready`,
     fn: () =>
-      api.organizations.databases.branches.get({
+      api.getBranch({
         path: { organization, database, name: branch },
       }),
-    predicate: (branch) => branch.ready,
+    predicate: ({ data }) => data.ready,
   });
+  return data;
 }
 
 /**
@@ -75,10 +76,10 @@ export async function waitForDatabaseReady(
   await poll({
     description: `database "${database}" ready`,
     fn: () =>
-      api.organizations.databases.get({
+      api.getDatabase({
         path: { organization, name: database },
       }),
-    predicate: (database) => database.ready,
+    predicate: ({ data }) => data.ready,
   });
 }
 
@@ -95,11 +96,11 @@ export async function waitForKeyspaceReady(
   await poll({
     description: `keyspace "${keyspace}" ready`,
     fn: () =>
-      api.organizations.databases.branches.keyspaces.resizes.list({
+      api.listKeyspaceResizes({
         path: { organization, database, branch, name: keyspace },
       }),
-    predicate: (response) =>
-      response.data.every((item) => item.state !== "resizing"),
+    predicate: ({ data }) =>
+      data.data.every((item) => item.state !== "resizing"),
     initialDelay: 100,
     maxDelay: 1000,
   });
@@ -155,7 +156,7 @@ async function ensureProductionBranch(
   database: string,
   name: string,
 ): Promise<void> {
-  const data = await api.organizations.databases.branches.get({
+  const { data } = await api.getBranch({
     path: {
       organization,
       database,
@@ -166,7 +167,7 @@ async function ensureProductionBranch(
     if (!data.ready) {
       await waitForBranchReady(api, organization, database, name);
     }
-    await api.organizations.databases.branches.promote.post({
+    await api.promoteBranch({
       path: { organization, database, name },
     });
   }
@@ -183,7 +184,7 @@ async function ensureMySQLClusterSize(
   expectedClusterSize: PlanetScaleClusterSize,
 ): Promise<void> {
   // 1. Load default keyspace
-  const keyspaces = await api.organizations.databases.branches.keyspaces.list({
+  const { data: keyspaces } = await api.listKeyspaces({
     path: {
       organization,
       database,
@@ -207,7 +208,7 @@ async function ensureMySQLClusterSize(
   // 3. If size mismatch, trigger resize and wait again
   // Ideally this would use the undocumented Keyspaces API, but there seems to be a missing oauth scope that we cannot add via the console yet
   if (defaultKeyspace.cluster_name !== expectedClusterSize) {
-    await api.organizations.databases.branches.cluster.patch({
+    await api.updateBranchClusterConfig({
       path: {
         organization,
         database,
@@ -237,7 +238,7 @@ async function ensurePostgresClusterSize(
   branch: string,
   expectedClusterSize: PlanetScaleClusterSize,
 ): Promise<void> {
-  const data = await api.organizations.databases.branches.get({
+  const { data } = await api.getBranch({
     path: {
       organization,
       database,
@@ -248,7 +249,7 @@ async function ensurePostgresClusterSize(
     return;
   }
   await waitForPendingPostgresChanges(api, organization, database, branch);
-  const change = await api.organizations.databases.branches.changes.patch({
+  const { data: change } = await api.updateBranchChangeRequest({
     path: {
       organization,
       database,
@@ -280,11 +281,11 @@ async function waitForPendingPostgresChanges(
   await poll({
     description: `changes for branch "${branch}"`,
     fn: () =>
-      api.organizations.databases.branches.changes.list({
+      api.listBranchChangeRequests({
         path: { organization, database, branch },
       }),
-    predicate: (response) =>
-      response.data.every(
+    predicate: ({ data }) =>
+      data.data.every(
         (change) =>
           change.state === "completed" ||
           change.state === "canceled" ||

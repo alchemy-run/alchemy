@@ -150,7 +150,7 @@ Serve static files from a directory:
 ```ts
 import { Worker, Assets } from "alchemy/cloudflare";
 
-const assets = await Assets("static", {
+const assets = await Assets({
   path: "./public",
 });
 

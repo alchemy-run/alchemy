@@ -1,18 +1,29 @@
 import http from "node:http";
 import type { AddressInfo } from "node:net";
-import { Readable } from "node:stream";
+import { Readable, type Duplex } from "node:stream";
+import { WebSocketServer, type WebSocket } from "ws";
 
 export class HTTPServer {
-  httpServer: http.Server;
+  httpServer = http.createServer();
+  webSocketServer?: WebSocketServer;
 
   constructor(options: {
+    websocket?: (request: Request) => Promise<WebSocket>;
     fetch: (request: Request) => Promise<Response>;
   }) {
-    this.httpServer = http.createServer();
     this.httpServer.on("request", async (req, res) => {
       const response = await options.fetch(toWebRequest(req));
       await writeNodeResponse(res, response);
     });
+    const websocket = options.websocket;
+    if (websocket) {
+      const webSocketServer = new WebSocketServer({ noServer: true });
+      this.webSocketServer = webSocketServer;
+      this.httpServer.on("upgrade", async (req, socket, head) => {
+        const ws = await websocket(toWebRequest(req));
+        coupleWebSocket(webSocketServer, req, socket, head, ws);
+      });
+    }
   }
 
   listen(port?: number) {
@@ -36,17 +47,33 @@ export class HTTPServer {
     return `http://${hostname}:${address.port}`;
   }
 
-  close() {
-    return new Promise((resolve, reject) => {
-      this.httpServer.close((err) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(undefined);
-        }
+  async close() {
+    const webSocketServer = this.webSocketServer;
+    if (webSocketServer) {
+      await new Promise<void>((resolve, reject) => {
+        webSocketServer.close((err) => (err ? reject(err) : resolve()));
       });
+    }
+    await new Promise<void>((resolve, reject) => {
+      this.httpServer.close((err) => (err ? reject(err) : resolve()));
     });
   }
+}
+
+export function coupleWebSocket(
+  wss: WebSocketServer,
+  req: http.IncomingMessage,
+  socket: Duplex,
+  head: Buffer,
+  server: WebSocket,
+) {
+  wss.handleUpgrade(req, socket, head, (client) => {
+    client.on("message", (event, binary) => server.send(event, { binary }));
+    server.on("close", (code, reason) => server.close(code, reason));
+    client.on("message", (event, binary) => server.send(event, { binary }));
+    client.on("close", (code, reason) => server.close(code, reason));
+    wss.emit("connection", client, req);
+  });
 }
 
 export function toWebRequest(

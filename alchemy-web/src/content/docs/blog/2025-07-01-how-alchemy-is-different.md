@@ -277,7 +277,7 @@ Alchemy works for a wide range of infrastructure use cases.
 
 ```typescript
 // Cloudflare Workers and Static Sites
-const assets = await Assets("Assets", {
+const assets = await Assets({
   path: "./dist",
 });
 

@@ -1,7 +1,10 @@
 import { afterAll, describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
 import { destroy } from "../../src/destroy.ts";
-import { PlanetScaleClient } from "../../src/planetscale/api/client.gen.ts";
+import {
+  createPlanetScaleClient,
+  type PlanetScaleClient,
+} from "../../src/planetscale/api.ts";
 import { Database } from "../../src/planetscale/database.ts";
 import { Role } from "../../src/planetscale/role.ts";
 import { waitForDatabaseReady } from "../../src/planetscale/utils.ts";
@@ -24,7 +27,7 @@ describe
     let scope: Scope | undefined;
 
     test.beforeAll(async (_scope) => {
-      api = new PlanetScaleClient();
+      api = createPlanetScaleClient();
 
       database = await Database("database", {
         name: "role-test-db",
@@ -63,7 +66,7 @@ describe
         });
 
         // Verify role was created by querying the API directly
-        const data = await api.organizations.databases.branches.roles.get({
+        const { data } = await api.getRole({
           path: {
             organization: database.organizationId,
             database: database.name,
@@ -117,19 +120,18 @@ describe
         await scope.destroyPendingDeletions();
 
         // Verify old password was deleted and new one created
-        const getOldResponse =
-          await api.organizations.databases.branches.roles.get({
-            path: {
-              organization: database.organizationId,
-              database: database.name,
-              branch: "main",
-              id: originalId,
-            },
-            result: "full",
-          });
+        const { response: getOldResponse } = await api.getRole({
+          path: {
+            organization: database.organizationId,
+            database: database.name,
+            branch: "main",
+            id: originalId,
+          },
+          throwOnError: false,
+        });
         expect(getOldResponse.status).toEqual(404);
 
-        const newRole = await api.organizations.databases.branches.roles.get({
+        const { data: newRole } = await api.getRole({
           path: {
             organization: database.organizationId,
             database: database.name,

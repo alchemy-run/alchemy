@@ -589,7 +589,7 @@ describe("WranglerJson Resource", () => {
           cwd: tempDir,
           adopt: true,
           bindings: {
-            ASSETS: await Assets(`${name}-assets`, {
+            ASSETS: await Assets({
               path: assetsDir,
             }),
           },
