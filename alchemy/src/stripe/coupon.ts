@@ -89,7 +89,7 @@ export interface CouponProps {
 /**
  * Output from the Stripe coupon
  */
-export interface Coupon extends Resource<"stripe::Coupon">, CouponProps {
+export interface Coupon extends CouponProps {
   /**
    * The ID of the coupon
    */
@@ -257,7 +257,7 @@ export const Coupon = Resource(
         }
       }
 
-      return this({
+      return {
         id: coupon.id,
         object: coupon.object,
         duration: coupon.duration as CouponDuration,
@@ -273,7 +273,7 @@ export const Coupon = Resource(
         metadata: coupon.metadata || undefined,
         created: coupon.created,
         livemode: coupon.livemode,
-      });
+      };
     } catch (error) {
       logger.error("Error creating/updating coupon:", error);
       throw error;

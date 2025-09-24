@@ -79,6 +79,10 @@ export type ResourceProps = {
   [key: string]: any;
 };
 
+export type ResourceAttributes = {
+  [key: string]: any;
+};
+
 export type Provider<
   Type extends string = string,
   F extends ResourceLifecycleHandler = ResourceLifecycleHandler,
@@ -116,7 +120,7 @@ type ResourceLifecycleHandler = (
   this: Context<any, any>,
   id: string,
   props: any,
-) => Promise<Resource<string>>;
+) => Promise<ResourceAttributes>;
 
 // see: https://x.com/samgoodwin89/status/1904640134097887653
 type Handler<F extends (...args: any[]) => any> =
@@ -157,7 +161,7 @@ export function Resource<
   const provider = (async (
     resourceID: string,
     props: ResourceProps,
-  ): Promise<Resource<string>> => {
+  ): Promise<ResourceAttributes> => {
     const scope = _Scope.current;
 
     if (resourceID.includes(":")) {

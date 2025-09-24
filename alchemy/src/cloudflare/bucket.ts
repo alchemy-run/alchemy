@@ -296,52 +296,51 @@ export type R2Bucket = _R2Bucket & {
 /**
  * Output returned after R2 Bucket creation/update
  */
-type _R2Bucket = Resource<"cloudflare::R2Bucket"> &
-  Omit<BucketProps, "delete" | "dev"> & {
+type _R2Bucket = Omit<BucketProps, "delete" | "dev"> & {
+  /**
+   * Resource type identifier
+   */
+  type: "r2_bucket";
+
+  /**
+   * The name of the bucket
+   */
+  name: string;
+
+  /**
+   * Location of the bucket
+   */
+  location: string;
+
+  /**
+   * Time at which the bucket was created
+   */
+  creationDate: Date;
+
+  /**
+   * The `r2.dev` subdomain for the bucket, if `allowPublicAccess` is true
+   */
+  domain: string | undefined;
+
+  /**
+   * Development mode properties
+   * @internal
+   */
+  dev: {
     /**
-     * Resource type identifier
+     * The ID of the bucket in development mode
      */
-    type: "r2_bucket";
+    id: string;
 
     /**
-     * The name of the bucket
+     * Whether the bucket is running remotely
      */
-    name: string;
-
-    /**
-     * Location of the bucket
-     */
-    location: string;
-
-    /**
-     * Time at which the bucket was created
-     */
-    creationDate: Date;
-
-    /**
-     * The `r2.dev` subdomain for the bucket, if `allowPublicAccess` is true
-     */
-    domain: string | undefined;
-
-    /**
-     * Development mode properties
-     * @internal
-     */
-    dev: {
-      /**
-       * The ID of the bucket in development mode
-       */
-      id: string;
-
-      /**
-       * Whether the bucket is running remotely
-       */
-      remote: boolean;
-    };
+    remote: boolean;
   };
+};
 
-export function isBucket(resource: Resource): resource is R2Bucket {
-  return resource[ResourceKind] === "cloudflare::R2Bucket";
+export function isBucket(resource: any): resource is R2Bucket {
+  return resource?.[ResourceKind] === "cloudflare::R2Bucket";
 }
 
 /**
@@ -496,7 +495,7 @@ const _R2Bucket = Resource(
     const adopt = props.adopt ?? this.scope.adopt;
 
     if (this.scope.local && !props.dev?.remote) {
-      return this({
+      return {
         name: this.output?.name ?? "",
         location: this.output?.location ?? "",
         creationDate: this.output?.creationDate ?? new Date(),
@@ -507,7 +506,7 @@ const _R2Bucket = Resource(
         accountId: this.output?.accountId ?? "",
         cors: props.cors,
         dev,
-      });
+      };
     }
 
     const api = await createCloudflareApi(props);
@@ -553,7 +552,7 @@ const _R2Bucket = Resource(
       if (props.lock?.length) {
         await putBucketLockRules(api, bucketName, props);
       }
-      return this({
+      return {
         name: bucketName,
         location: bucket.location,
         creationDate: new Date(bucket.creation_date),
@@ -566,7 +565,7 @@ const _R2Bucket = Resource(
         lock: props.lock,
         cors: props.cors,
         dev,
-      });
+      };
     } else {
       if (bucketName !== this.output.name) {
         throw new Error(
@@ -593,7 +592,7 @@ const _R2Bucket = Resource(
       if (!isDeepStrictEqual(this.output.lock ?? [], props.lock ?? [])) {
         await putBucketLockRules(api, bucketName, props);
       }
-      return this({
+      return {
         ...this.output,
         allowPublicAccess,
         dev,
@@ -601,7 +600,7 @@ const _R2Bucket = Resource(
         lifecycle: props.lifecycle,
         lock: props.lock,
         domain,
-      });
+      };
     }
   },
 );

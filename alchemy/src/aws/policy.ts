@@ -108,7 +108,7 @@ export interface PolicyProps {
 /**
  * Output returned after IAM policy creation/update
  */
-export interface Policy extends Resource<"iam::Policy">, PolicyProps {
+export interface Policy extends PolicyProps {
   /**
    * ARN of the policy
    */
@@ -364,7 +364,7 @@ export const Policy = Resource(
         ),
       );
 
-      return this({
+      return {
         ...props,
         arn: policy.Policy!.Arn!,
         policyName,
@@ -373,7 +373,7 @@ export const Policy = Resource(
         createDate: policy.Policy!.CreateDate!,
         updateDate: policy.Policy!.UpdateDate!,
         isAttachable: policy.Policy!.IsAttachable!,
-      });
+      };
     } catch (error: any) {
       if (error.name === "NoSuchEntity") {
         // Create new policy
@@ -394,7 +394,7 @@ export const Policy = Resource(
           ),
         );
 
-        return this({
+        return {
           ...props,
           arn: newPolicy.Policy!.Arn!,
           policyName,
@@ -403,7 +403,7 @@ export const Policy = Resource(
           createDate: newPolicy.Policy!.CreateDate!,
           updateDate: newPolicy.Policy!.UpdateDate!,
           isAttachable: newPolicy.Policy!.IsAttachable!,
-        });
+        };
       }
       throw error;
     }

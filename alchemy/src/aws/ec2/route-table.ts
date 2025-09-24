@@ -37,9 +37,7 @@ export interface RouteTableProps extends AwsClientProps {
 /**
  * Output returned after Route Table creation/update
  */
-export interface RouteTable
-  extends Resource<"aws::RouteTable">,
-    RouteTableProps {
+export interface RouteTable extends RouteTableProps {
   /**
    * The ID of the route table
    */
@@ -272,12 +270,12 @@ export const RouteTable = Resource(
       logger.log(`  ✅ Route Table ${routeTable.RouteTableId} created`);
     }
 
-    return this({
+    return {
       routeTableId: routeTable.RouteTableId!,
       vpcId: routeTable.VpcId!,
       ...props,
       vpc: vpcId,
-    });
+    };
   },
 );
 

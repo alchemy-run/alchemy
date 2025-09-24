@@ -1,5 +1,4 @@
 import jsonpatch from "fast-json-patch";
-const compare = jsonpatch.compare;
 import type { Context } from "../../context.ts";
 import {
   registerDynamicResource,
@@ -15,6 +14,7 @@ import {
   UpdateFailedError,
 } from "./error.ts";
 import readOnlyPropertiesMap from "./properties.ts";
+const compare = jsonpatch.compare;
 
 /**
  * Properties for creating or updating a Cloud Control resource
@@ -60,9 +60,7 @@ export interface CloudControlResourceProps {
 /**
  * Output returned after Cloud Control resource creation/update
  */
-export interface CloudControlResource
-  extends Resource<"aws::CloudControlResource">,
-    CloudControlResourceProps {
+export interface CloudControlResource extends CloudControlResourceProps {
   /**
    * The identifier of the resource
    */
@@ -337,12 +335,12 @@ async function CloudControlLifecycle(
     );
   }
 
-  return this({
+  return {
     ...props,
     id: response.Identifier!,
     createdAt: Date.now(),
     ...(await client.getResource(props.typeName, response.Identifier!)),
-  });
+  };
 }
 
 async function updateResourceWithPatch(

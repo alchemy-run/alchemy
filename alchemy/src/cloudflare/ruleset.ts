@@ -46,8 +46,7 @@ export interface RulesetProps<Phase extends RulePhase>
 /**
  * Output returned after Ruleset creation/update
  */
-export interface Ruleset<Phase extends RulePhase>
-  extends Resource<"cloudflare::Ruleset"> {
+export interface Ruleset<Phase extends RulePhase> {
   /**
    * The ID of the ruleset
    */
@@ -185,7 +184,7 @@ export const Ruleset = Resource("cloudflare::Ruleset", async function <
   });
 
   // Transform response back to our format
-  return this({
+  return {
     id: result.id,
     zoneId,
     phase: props.phase,
@@ -194,7 +193,7 @@ export const Ruleset = Resource("cloudflare::Ruleset", async function <
     rules: (result.rules as Array<Rule> | undefined) ?? [],
     lastUpdated: result.last_updated,
     version: result.version,
-  });
+  };
 });
 
 interface CloudflareApiRuleset {

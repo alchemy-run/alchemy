@@ -49,7 +49,7 @@ export interface FileProps {
 /**
  * Output from the Stripe file
  */
-export interface File extends Resource<"stripe::File"> {
+export interface File {
   /**
    * The ID of the file
    */
@@ -182,7 +182,7 @@ export const File = Resource(
         }
       }
 
-      return this({
+      return {
         id: file.id,
         object: file.object,
         created: file.created,
@@ -212,7 +212,7 @@ export const File = Resource(
         type: file.type || undefined,
         url: file.url || undefined,
         livemode: true,
-      });
+      };
     } catch (error) {
       logger.error("Error creating/retrieving file:", error);
       throw error;

@@ -25,9 +25,7 @@ export interface RemoteImageProps {
 /**
  * Docker Remote Image resource
  */
-export interface RemoteImage
-  extends Resource<"docker::RemoteImage">,
-    RemoteImageProps {
+export interface RemoteImage extends RemoteImageProps {
   /**
    * Full image reference (name:tag)
    */
@@ -72,12 +70,11 @@ export const RemoteImage = Resource(
       // Pull image
       await api.pullImage(imageRef);
 
-      // Return the resource using this() to construct output
-      return this({
+      return {
         ...props,
         imageRef,
         createdAt: Date.now(),
-      });
+      };
     }
   },
 );
