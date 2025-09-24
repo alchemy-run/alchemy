@@ -13,6 +13,7 @@ await esbuild.build({
     .map((worker) => path.join(WORKERS_DIR, worker)),
   outdir: WORKERS_DIR,
   bundle: true,
+  minify: true,
   format: "esm",
   target: "es2022",
   external: ["cloudflare:*", "node:crypto"],

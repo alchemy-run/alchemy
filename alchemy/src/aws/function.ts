@@ -136,7 +136,7 @@ export interface FunctionProps {
 /**
  * Output returned after Lambda function creation/update
  */
-export interface Function extends Resource<"lambda::Function">, FunctionProps {
+export interface Function extends FunctionProps {
   /**
    * ARN of the Lambda function
    */
@@ -745,7 +745,7 @@ export const Function = Resource(
       }
     }
 
-    return this({
+    return {
       ...props,
       arn: config.FunctionArn!,
       functionName,
@@ -769,7 +769,7 @@ export const Function = Resource(
       signingProfileVersionArn: config.SigningProfileVersionArn,
       signingJobArn: config.SigningJobArn,
       functionUrl: functionUrl,
-    });
+    };
   },
 );
 

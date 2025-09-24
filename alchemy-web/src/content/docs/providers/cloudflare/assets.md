@@ -12,7 +12,7 @@ Create a basic assets bundle from a local directory:
 ```ts
 import { Assets } from "alchemy/cloudflare";
 
-const staticAssets = await Assets("static", {
+const staticAssets = await Assets({
   path: "./src/assets",
 });
 ```
@@ -24,7 +24,7 @@ Bind the assets to a worker to serve them:
 ```ts
 import { Worker, Assets } from "alchemy/cloudflare";
 
-const staticAssets = await Assets("static", {
+const staticAssets = await Assets({
   path: "./src/assets",
 });
 

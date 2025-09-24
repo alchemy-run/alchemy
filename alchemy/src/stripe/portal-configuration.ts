@@ -202,9 +202,7 @@ export interface PortalConfigurationProps {
 /**
  * Output from the Stripe portal configuration
  */
-export interface PortalConfiguration
-  extends Resource<"stripe::PortalConfiguration">,
-    PortalConfigurationProps {
+export interface PortalConfiguration extends PortalConfigurationProps {
   /**
    * The ID of the configuration
    */
@@ -512,7 +510,7 @@ export const PortalConfiguration = Resource(
         }
       }
 
-      return this({
+      return {
         id: configuration.id,
         object: configuration.object,
         active: configuration.active,
@@ -604,7 +602,7 @@ export const PortalConfiguration = Resource(
         livemode: configuration.livemode,
         metadata: configuration.metadata || undefined,
         updated: configuration.updated,
-      });
+      };
     } catch (error) {
       logger.error("Error creating/updating portal configuration:", error);
       throw error;

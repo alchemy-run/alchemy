@@ -68,7 +68,7 @@ export interface DnsRecordsProps extends CloudflareApiOptions {
 /**
  * Output returned after DNS records creation/update
  */
-export interface DnsRecords extends Resource<"cloudflare::DnsRecords"> {
+export interface DnsRecords {
   /**
    * Zone ID where records are created
    */
@@ -219,10 +219,10 @@ export const DnsRecords = Resource(
         }),
       );
 
-      return this({
+      return {
         zoneId,
         records: updatedRecords,
-      });
+      };
     }
 
     // Create new records
@@ -270,10 +270,10 @@ export const DnsRecords = Resource(
       }),
     );
 
-    return this({
+    return {
       zoneId,
       records: createdRecords,
-    });
+    };
   },
 );
 

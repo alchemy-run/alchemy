@@ -43,7 +43,7 @@ export interface EmailRoutingProps extends CloudflareApiOptions {
 /**
  * Email routing configuration for a Cloudflare zone
  */
-export interface EmailRouting extends Resource<"cloudflare::EmailRouting"> {
+export interface EmailRouting {
   /**
    * Zone ID where email routing is configured
    */
@@ -173,14 +173,14 @@ export const EmailRouting = Resource(
       const result =
         (await getResponse.json()) as CloudflareResponse<CloudflareEmailRouting>;
 
-      return this({
+      return {
         zoneId,
         enabled: result.result.enabled,
         name: result.result.name,
         created: result.result.created,
         modified: result.result.modified,
         tag: result.result.tag,
-      });
+      };
     }
 
     // Create/Enable email routing
@@ -218,13 +218,13 @@ export const EmailRouting = Resource(
     const result =
       (await getResponse.json()) as CloudflareResponse<CloudflareEmailRouting>;
 
-    return this({
+    return {
       zoneId,
       enabled: result.result.enabled,
       name: result.result.name,
       created: result.result.created,
       modified: result.result.modified,
       tag: result.result.tag,
-    });
+    };
   },
 );

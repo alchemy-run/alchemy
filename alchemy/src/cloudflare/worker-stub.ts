@@ -43,7 +43,7 @@ export interface WorkerStubProps<
  */
 export interface WorkerStub<
   RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
-> extends Resource<"cloudflare::WorkerStub"> {
+> {
   type: "service";
   /**
    * The name of the worker
@@ -64,8 +64,8 @@ export interface WorkerStub<
   __rpc__?: RPC;
 }
 
-export function isWorkerStub(resource: Resource): resource is WorkerStub {
-  return resource[ResourceKind] === "cloudflare::WorkerStub";
+export function isWorkerStub(resource: any): resource is WorkerStub {
+  return resource?.[ResourceKind] === "cloudflare::WorkerStub";
 }
 
 /**
@@ -120,12 +120,12 @@ export const WorkerStub = Resource("cloudflare::WorkerStub", async function <
       : undefined;
 
   // Return the worker stub info
-  return this({
+  return {
     type: "service",
     __rpc__: props.rpc as unknown as RPC,
     ...props,
     url: subdomain?.url,
-  }) as WorkerStub<RPC>;
+  } as WorkerStub<RPC>;
 });
 
 async function exists(

@@ -79,7 +79,7 @@ export interface QueueProps {
 /**
  * Output returned after SQS queue creation/update
  */
-export interface Queue extends Resource<"sqs::Queue">, QueueProps {
+export interface Queue extends QueueProps {
   /**
    * ARN of the queue
    */
@@ -283,12 +283,12 @@ export const Queue = Resource(
         ),
       );
 
-      return this({
+      return {
         ...props,
         arn: attributesResponse.Attributes!.QueueArn!,
         queueName,
         url: createResponse.QueueUrl!,
-      });
+      };
     } catch (error: any) {
       if (isQueueDeletedRecently(error)) {
         logger.log(
@@ -324,12 +324,12 @@ export const Queue = Resource(
               ),
             );
 
-            return this({
+            return {
               ...props,
               arn: attributesResponse.Attributes!.QueueArn!,
               queueName,
               url: createResponse.QueueUrl!,
-            });
+            };
           } catch (retryError: any) {
             if (
               !isQueueDeletedRecently(retryError) ||

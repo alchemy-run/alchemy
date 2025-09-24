@@ -121,7 +121,7 @@ export interface ServiceProps {
   encryptionAssumedRoleIdentifier?: ApiService["encryptionAssumedRoleIdentifier"];
 }
 
-export interface Service extends Resource<"clickhouse::Service"> {
+export interface Service {
   organizationId: string;
   name: string;
   clickhouseId: string;
@@ -328,10 +328,10 @@ export const Service = Resource(
         updates.idleTimeoutMinutes = response.idleTimeoutMinutes;
       }
 
-      return this({
+      return {
         ...this.output,
         ...updates,
-      });
+      };
     }
 
     const service = await api.v1.organizations(organizationId).services.post({
@@ -358,7 +358,7 @@ export const Service = Resource(
       complianceType: props.complianceType,
     });
 
-    return this({
+    return {
       organizationId: organizationId,
       name: service.service.name,
       clickhouseId: service.service.id,
@@ -386,7 +386,7 @@ export const Service = Resource(
       complianceType: service.service.complianceType,
       stateTarget,
       state: service.service.state,
-    });
+    };
   },
 );
 

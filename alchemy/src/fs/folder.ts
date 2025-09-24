@@ -30,7 +30,7 @@ export interface FolderProps {
 /**
  * Base folder resource type
  */
-export interface Folder extends Resource<"fs::Folder"> {
+export interface Folder {
   path: string;
 }
 
@@ -76,8 +76,8 @@ export const Folder = Resource(
     await ignore("EEXIST", async () =>
       fs.promises.mkdir(dirPath, { recursive: props?.recursive ?? true }),
     );
-    return this({
+    return {
       path: dirPath,
-    });
+    };
   },
 );

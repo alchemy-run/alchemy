@@ -89,11 +89,11 @@ export const ApiKey = Resource(
           state,
         });
 
-      return this({
+      return {
         ...this.output,
         ...updatedKey,
         name,
-      });
+      };
     }
 
     const key = await api.v1.organizations(organizationId).keys.post({
@@ -110,9 +110,7 @@ export const ApiKey = Resource(
       state,
     });
 
-    console.log(key);
-
-    return this({
+    return {
       organizationId: organizationId,
       name: key.key.name,
       clickhouseId: key.key.id,
@@ -125,6 +123,6 @@ export const ApiKey = Resource(
       ipAccessList: key.key.ipAccessList,
       keyId: key.keyId,
       secret: secret(key.keySecret),
-    });
+    };
   },
 );

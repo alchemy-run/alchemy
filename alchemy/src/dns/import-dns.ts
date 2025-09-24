@@ -62,9 +62,7 @@ export interface ImportDnsRecordsProps {
 /**
  * Output returned after DNS records import
  */
-export interface ImportDnsRecords
-  extends Resource<"dns::ImportDnsRecords">,
-    ImportDnsRecordsProps {
+export interface ImportDnsRecords extends ImportDnsRecordsProps {
   /**
    * The DNS records as a flat array, directly compatible with DnsRecords function
    */
@@ -204,11 +202,11 @@ export const ImportDnsRecords = Resource(
     }
 
     // Return the resource with fetched records as a flat array
-    return this({
+    return {
       domain: props.domain,
       recordTypes: [...recordTypes],
       records: allRecords,
       importedAt: Date.now(),
-    });
+    };
   },
 );

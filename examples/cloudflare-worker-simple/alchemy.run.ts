@@ -8,10 +8,16 @@ import {
   R2Bucket,
   Worker,
 } from "alchemy/cloudflare";
+import { CloudflareStateStore } from "alchemy/state";
 import assert from "node:assert";
 import type { DO } from "./src/worker1.ts";
 
-const app = await alchemy("cloudflare-worker-simple");
+const app = await alchemy("cloudflare-worker-simple", {
+  stateStore: (scope) =>
+    new CloudflareStateStore(scope, {
+      forceUpdate: true,
+    }),
+});
 
 const [d1, kv, r2] = await Promise.all([
   D1Database("d1", {

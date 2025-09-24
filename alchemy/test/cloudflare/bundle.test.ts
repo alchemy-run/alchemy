@@ -173,4 +173,23 @@ describe("Bundle Worker Test", () => {
       await destroy(scope);
     }
   });
+
+  test("should bundle cojson-core-wasm/edge-lite", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-test-worker-cojson-wasm`;
+
+    try {
+      await Worker(workerName, {
+        name: workerName,
+        entrypoint: path.join(
+          import.meta.dirname,
+          "test-handlers/cojson-wasm.ts",
+        ),
+        compatibilityFlags: ["nodejs_compat"],
+        compatibilityDate: "2025-08-20",
+        adopt: true,
+      });
+    } finally {
+      await destroy(scope);
+    }
+  });
 });

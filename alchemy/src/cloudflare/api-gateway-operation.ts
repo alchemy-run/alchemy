@@ -56,8 +56,7 @@ export interface APIGatewayOperationProps extends CloudflareApiOptions {
 /**
  * API Operation output
  */
-export interface APIGatewayOperation
-  extends Resource<"cloudflare::APIGatewayOperation"> {
+export interface APIGatewayOperation {
   /**
    * Zone ID
    */
@@ -202,7 +201,7 @@ export const APIGatewayOperation = Resource(
       }
     }
 
-    return this({
+    return {
       zoneId,
       zoneName,
       operationId,
@@ -210,7 +209,7 @@ export const APIGatewayOperation = Resource(
       host: props.host,
       method: props.method.toUpperCase(),
       action: props.mitigation ?? null,
-    });
+    };
   },
 );
 

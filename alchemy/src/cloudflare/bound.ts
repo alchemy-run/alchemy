@@ -97,7 +97,7 @@ export type Bound<T extends Binding> = T extends _DurableObjectNamespace<
                                     : T extends _RateLimit
                                       ? RateLimit
                                       : T extends string
-                                        ? string
+                                        ? T
                                         : T extends BrowserRendering
                                           ? Fetcher
                                           : T extends _Ai<infer M>

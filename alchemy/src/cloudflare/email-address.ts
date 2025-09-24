@@ -36,7 +36,7 @@ export interface EmailAddressProps extends CloudflareApiOptions {
 /**
  * A destination email address for Cloudflare email routing
  */
-export interface EmailAddress extends Resource<"cloudflare::EmailAddress"> {
+export interface EmailAddress {
   /**
    * The email address
    */
@@ -145,13 +145,13 @@ export const EmailAddress = Resource(
           const result =
             (await getResponse.json()) as CloudflareResponse<CloudflareEmailAddress>;
 
-          return this({
+          return {
             email: result.result.email,
             verified: result.result.verified,
             created: result.result.created,
             modified: result.result.modified,
             tag: result.result.tag,
-          });
+          };
         }
       }
     }
@@ -166,13 +166,13 @@ export const EmailAddress = Resource(
       const result =
         (await getResponse.json()) as CloudflareResponse<CloudflareEmailAddress>;
 
-      return this({
+      return {
         email: result.result.email,
         verified: result.result.verified,
         created: result.result.created,
         modified: result.result.modified,
         tag: result.result.tag,
-      });
+      };
     }
 
     // Create new email address
@@ -192,12 +192,12 @@ export const EmailAddress = Resource(
     const result =
       (await createResponse.json()) as CloudflareResponse<CloudflareEmailAddress>;
 
-    return this({
+    return {
       email: result.result.email,
       verified: result.result.verified,
       created: result.result.created,
       modified: result.result.modified,
       tag: result.result.tag,
-    });
+    };
   },
 );

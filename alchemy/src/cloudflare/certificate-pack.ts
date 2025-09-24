@@ -127,8 +127,7 @@ export interface CertificatePackProps extends CloudflareApiOptions {
 /**
  * Output returned after Certificate Pack creation/update
  */
-export interface CertificatePack
-  extends Resource<"cloudflare::CertificatePack"> {
+export interface CertificatePack {
   /**
    * The unique ID of the certificate pack
    */
@@ -356,7 +355,7 @@ export const CertificatePack = Resource(
         `Adopting existing certificate pack ${existingPack.id} instead of creating a new one`,
       );
 
-      return this({
+      return {
         id: existingPack.id,
         certificateAuthority: existingPack.certificate_authority,
         cloudflareBranding: props.cloudflareBranding ?? false,
@@ -367,7 +366,7 @@ export const CertificatePack = Resource(
         validityDays: existingPack.validity_days,
         zoneId,
         zoneName: zoneName,
-      });
+      };
     }
 
     logger.log(
@@ -416,7 +415,7 @@ export const CertificatePack = Resource(
       `Certificate pack created with ID ${createdPack.id}. Status: ${createdPack.status}. Note: Certificate provisioning can take up to 10 minutes.`,
     );
 
-    return this({
+    return {
       id: createdPack.id,
       certificateAuthority: createdPack.certificate_authority,
       cloudflareBranding: props.cloudflareBranding ?? false,
@@ -427,7 +426,7 @@ export const CertificatePack = Resource(
       validityDays: createdPack.validity_days,
       zoneId,
       zoneName: zoneName,
-    });
+    };
   },
 );
 

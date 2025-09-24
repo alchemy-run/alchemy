@@ -92,9 +92,7 @@ export interface AiGatewayProps extends CloudflareApiOptions {
  * Output returned after Cloudflare AI Gateway creation/update.
  * IMPORTANT: The interface name MUST match the exported resource name.
  */
-export interface AiGateway
-  extends Resource<"cloudflare::AiGateway">,
-    AiGatewayProps {
+export interface AiGateway extends AiGatewayProps {
   /**
    * The ID (name) of the gateway.
    */
@@ -248,7 +246,7 @@ export const AiGateway = Resource(
     }
 
     // Construct the output object from API response and merged props
-    return this({
+    return {
       ...mergedProps, // Start with the input props (including defaults)
       id: apiResource.id,
       gatewayName,
@@ -270,7 +268,7 @@ export const AiGateway = Resource(
       logpush: apiResource.logpush,
       logpushPublicKey: apiResource.logpush_public_key,
       type: "ai_gateway",
-    });
+    };
   },
 );
 

@@ -84,7 +84,7 @@ export interface ImageProps {
 /**
  * Docker Image resource
  */
-export interface Image extends Resource<"docker::Image">, ImageProps {
+export interface Image extends ImageProps {
   /**
    * Image name
    */
@@ -135,16 +135,8 @@ export const Image = Resource(
     id: string,
     props: ImageProps,
   ): Promise<Image> {
-    // Create a temporary directory that will act as an isolated Docker config
-    // (credentials) directory. This prevents race-conditions when multiple
-    // concurrent tests perform `docker login` / `logout` by ensuring each
-    // Image operation has its own credential store.
-    const tempConfigDir = await fs.mkdtemp(
-      path.join(os.tmpdir(), "docker-config-"),
-    );
-
     // Initialize Docker API client with the isolated config directory
-    const api = new DockerApi({ configDir: tempConfigDir });
+    const api = new DockerApi();
 
     if (this.phase === "delete") {
       // No action needed for delete as Docker images aren't automatically removed
@@ -232,6 +224,15 @@ export const Image = Resource(
           : `${registryHost}/${imageRef}`;
 
         try {
+          // Create a temporary directory that will act as an isolated Docker config
+          // (credentials) directory. This prevents race-conditions when multiple
+          // concurrent tests perform `docker login` / `logout` by ensuring each
+          // Image operation has its own credential store.
+          const tempConfigDir = await fs.mkdtemp(
+            path.join(os.tmpdir(), "docker-config-"),
+          );
+          const api = new DockerApi({ configDir: tempConfigDir });
+
           // Authenticate to registry using the isolated config directory
           await api.login(registryHost, username, password.unencrypted);
 
@@ -265,15 +266,14 @@ export const Image = Resource(
         }
       }
 
-      // Return the resource using this() to construct output
-      return this({
+      return {
         ...props,
         name,
         imageRef: finalImageRef,
         imageId,
         repoDigest,
         builtAt: Date.now(),
-      });
+      };
     }
   },
 );

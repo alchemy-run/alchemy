@@ -81,7 +81,7 @@ export interface BranchProps extends PlanetScaleProps {
 /**
  * Represents a PlanetScale Branch
  */
-export interface Branch extends Resource<"planetscale::Branch">, BranchProps {
+export interface Branch extends BranchProps {
   /**
    * The name of the branch
    */
@@ -286,14 +286,14 @@ export const Branch = Resource(
         );
       }
 
-      return this({
+      return {
         ...props,
         name: branchName,
         parentBranch: currentParentBranch,
         createdAt: data.created_at,
         updatedAt: data.updated_at,
         htmlUrl: data.html_url,
-      });
+      };
     }
     let clusterSize: string | undefined;
     const parent = await waitForBranchReady(
@@ -359,13 +359,13 @@ export const Branch = Resource(
       );
     }
 
-    return this({
+    return {
       ...props,
       name: branchName,
       parentBranch: data.parent_branch,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
       htmlUrl: data.html_url,
-    });
+    };
   },
 );
