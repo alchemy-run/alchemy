@@ -503,7 +503,6 @@ if (import.meta.main) {
         id: item.id,
         type: item.type,
         status: "pending",
-        message: "queued",
       });
 
       // Initialize bindings if they exist
@@ -514,7 +513,6 @@ if (import.meta.main) {
             type: item.type,
             status: "pending",
             bindingId: binding.id,
-            message: "binding queued",
           });
         }
       }
@@ -528,14 +526,48 @@ if (import.meta.main) {
     initializeTasksFromPlan(emitter);
 
     function simulate(item: PlanItem, shouldFail = false) {
+      // Generate varied, informative messages for different resources
+      const getMessages = (id: string) => {
+        const messages: Record<string, Record<string, string | undefined>> = {
+          cache: {
+            pending: "waiting for region selection",
+            creating: "allocating storage in us-east-1",
+            created: "100GB allocated, ready for writes",
+          },
+          api: {
+            pending: "dependency check in progress",
+            updating: "deploying v2.1.3 (15.2MB bundle)",
+            updated: "deployed to 3 edge locations",
+          },
+          assets: {
+            pending: undefined, // No extra info needed
+            creating: "provisioning CDN endpoints",
+            created: "configured with 90d TTL",
+          },
+          database: {
+            pending: "checking capacity requirements",
+            deleting: "backing up 2.3GB of data first",
+          },
+          "old-worker": {
+            pending: undefined,
+            deleting: "draining 4 active connections",
+          },
+        };
+
+        return messages[id] || {};
+      };
+
+      const msgs = getMessages(item.id);
+
       const steps: { status: PlanStatus; delay: number; message?: string }[] =
         shouldFail
           ? [
-              { status: "pending", delay: 1000, message: "queued" },
+              { status: "pending", delay: 1000, message: msgs.pending },
               {
                 status: item.action === "delete" ? "deleting" : "creating",
-                delay: 2500,
-                message: "provisioning",
+                delay: 1000,
+                message:
+                  item.action === "delete" ? msgs.deleting : msgs.creating,
               },
               {
                 status: "fail",
@@ -544,7 +576,7 @@ if (import.meta.main) {
               },
             ]
           : [
-              { status: "pending", delay: 1000, message: "queued" },
+              { status: "pending", delay: 1000, message: msgs.pending },
               {
                 status:
                   item.action === "delete"
@@ -552,8 +584,13 @@ if (import.meta.main) {
                     : item.action === "update"
                       ? "updating"
                       : "creating",
-                delay: 2500,
-                message: "provisioning",
+                delay: 1000,
+                message:
+                  item.action === "delete"
+                    ? msgs.deleting
+                    : item.action === "update"
+                      ? msgs.updating
+                      : msgs.creating,
               },
               {
                 status:
@@ -563,9 +600,14 @@ if (import.meta.main) {
                       ? "updated"
                       : "created",
                 delay: 1500,
-                message: "ready",
+                message:
+                  item.action === "delete"
+                    ? msgs.deleted
+                    : item.action === "update"
+                      ? msgs.updated
+                      : msgs.created,
               },
-              { status: "success", delay: 500, message: "done" },
+              { status: "success", delay: 500 }, // No message for success
             ];
       let total = 0;
       for (const step of steps) {
