@@ -20,7 +20,7 @@ const plan = Alchemy.plan({
     ApiLambda,
     // Consumer
   ],
-}); //.pipe(Effect.tap(Console.log));
+}).pipe(Alchemy.approvePlan);
 
 const applied = Alchemy.apply(plan);
 
@@ -29,6 +29,7 @@ const outputs = await applied.pipe(
   Effect.provide(State.localFs),
   Effect.provide(NodeContext.layer),
   Effect.provide(app),
+  Effect.catchTag("PlanNotApproved", () => Effect.void),
   Effect.runPromise,
 );
 

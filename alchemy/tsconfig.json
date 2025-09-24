@@ -15,6 +15,9 @@
     "target": "ESNext",
     "allowJs": true,
     "allowImportingTsExtensions": true,
-    "rewriteRelativeImportExtensions": true
+    "rewriteRelativeImportExtensions": true,
+    // ink
+    "jsx": "react",
+    "lib": ["DOM", "DOM.Iterable", "ES2023"]
   }
 }
