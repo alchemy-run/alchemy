@@ -1,3 +1,4 @@
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { isBound, type Bound } from "./binding.ts";
 import type { SerializedStatement, Statement } from "./policy.ts";
@@ -61,8 +62,9 @@ export type Delete<R extends Resource, B extends Statement = Statement> = {
   olds: any;
   output: any;
   provider: Provider;
-  bindings: DetachAction<B>[];
+  bindings: [];
   attributes: R["attributes"];
+  downstream: string[];
 };
 
 export type Noop<R extends Resource, B extends Statement = Statement> = {
@@ -162,7 +164,31 @@ export const plan = <
   return Effect.gen(function* () {
     const state = yield* State;
 
-    const updates =
+    const resourceIds = yield* state.list();
+    const resourcesState = yield* Effect.all(
+      resourceIds.map((id) => state.get(id)),
+    );
+    // map of resource ID -> its downstream dependencies (resources that depend on it)
+    const downstream = resourcesState
+      .filter(
+        (
+          resource,
+        ): resource is ResourceState & {
+          bindings: SerializedStatement[];
+        } => !!resource?.bindings,
+      )
+      .flatMap((resource) =>
+        resource.bindings.map((binding) => [binding.resource.id, resource.id]),
+      )
+      .reduce(
+        (acc, [id, resourceId]) => ({
+          ...acc,
+          [id]: [...(acc[id] ?? []), resourceId],
+        }),
+        {} as Record<string, string[]>,
+      );
+
+    const updates = (
       phase === "update"
         ? yield* Effect.all(
             resources.map((resource) =>
@@ -171,8 +197,6 @@ export const plan = <
                 Effect.fn(function* (subgraph: {
                   [x: string]: Resource | Bound;
                 }) {
-                  const state = yield* State;
-
                   return Object.fromEntries(
                     (yield* Effect.all(
                       Object.entries(subgraph).map(
@@ -289,7 +313,8 @@ export const plan = <
                     : never;
               }[keyof Resources]
           >
-        : [];
+        : []
+    ).reduce((acc, update: any) => ({ ...acc, ...update }), {} as AnyPlan);
 
     const deletions = Object.fromEntries(
       (yield* Effect.all(
@@ -307,17 +332,14 @@ export const plan = <
                   new Error(`Provider not found for ${oldState?.type}`),
                 );
               }
-              // TODO(sam): deletion ordering
               return [
                 id,
                 {
                   action: "delete",
                   olds: oldState.props,
                   output: oldState.output,
-                  // TODO(sam): how to get these?
                   provider,
                   attributes: oldState?.output,
-                  // bindings: oldState?.bindings,
                   // TODO(sam): Support Detach Bindings
                   bindings: [],
                   resource: {
@@ -327,6 +349,7 @@ export const plan = <
                     props: oldState.props,
                     provider,
                   },
+                  downstream: downstream[id] ?? [],
                 } satisfies Delete<Resource>,
               ] as const;
             }
@@ -335,7 +358,20 @@ export const plan = <
       )).filter((v) => !!v),
     );
 
-    return [...updates, deletions].reduce(
+    for (const [resourceId, deletion] of Object.entries(deletions)) {
+      const dependencies = deletion.downstream.filter((d) => d in updates);
+      if (dependencies.length > 0) {
+        return yield* Effect.fail(
+          new DeleteResourceHasDownstreamDependencies({
+            message: `Resource ${resourceId} has downstream dependencies`,
+            resourceId,
+            dependencies,
+          }),
+        );
+      }
+    }
+
+    return [updates, deletions].reduce(
       (acc, plan) => ({ ...acc, ...plan }),
       {} as any,
     );
@@ -345,6 +381,14 @@ export const plan = <
     Effect.Effect.Context<Resources[number]> | State
   >;
 };
+
+class DeleteResourceHasDownstreamDependencies extends Data.TaggedError(
+  "DeleteResourceHasDownstreamDependencies",
+)<{
+  message: string;
+  resourceId: string;
+  dependencies: string[];
+}> {}
 
 const compare = <R extends Resource>(
   oldState: ResourceState | undefined,

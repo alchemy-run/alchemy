@@ -61,6 +61,5 @@ export type Provider<
     id: string;
     olds: Input;
     output: Output;
-    bindings: BindingAction.Materialized<BindingAction<Stmt>>[];
   }): Effect.Effect<void, any, never>;
 };

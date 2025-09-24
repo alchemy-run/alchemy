@@ -2,7 +2,7 @@ import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import type { Simplify } from "effect/Types";
 import type { AnyPlan, BindingAction, Delete } from "./plan.ts";
-import type { Statement } from "./policy.ts";
+import type { SerializedStatement, Statement } from "./policy.ts";
 import type { Resource } from "./resource.ts";
 import { State } from "./state.ts";
 
@@ -16,16 +16,20 @@ export const apply = <const P extends AnyPlan, Err, Req>(
         const outputs = {} as Record<string, Effect.Effect<any, any>>;
 
         const apply = Effect.fn(function* (
-          node: BindingAction<Statement>[] | Exclude<P[keyof P], undefined>,
+          node:
+            | (BindingAction<Statement> | SerializedStatement<Statement>)[]
+            | Exclude<P[keyof P], undefined>,
         ) {
           if (Array.isArray(node)) {
             return yield* Effect.all(
               node.map((binding) => {
-                const resource = plan[binding.stmt.resource.id];
+                const resourceId =
+                  "stmt" in binding
+                    ? binding.stmt.resource.id
+                    : binding.resource.id;
+                const resource = plan[resourceId];
                 return !resource
-                  ? Effect.dieMessage(
-                      `Resource ${binding.stmt.resource.id} not found`,
-                    )
+                  ? Effect.dieMessage(`Resource ${resourceId} not found`)
                   : apply(resource as P[keyof P]);
               }),
             );
@@ -46,8 +50,8 @@ export const apply = <const P extends AnyPlan, Err, Req>(
                     bindings: node.bindings.map((binding) => ({
                       ...binding.stmt,
                       resource: {
-                        type: node.resource.type,
-                        id: node.resource.id,
+                        type: binding.stmt.resource.type,
+                        id: binding.stmt.resource.id,
                       },
                     })),
                   })
@@ -71,12 +75,13 @@ export const apply = <const P extends AnyPlan, Err, Req>(
           return yield* (outputs[id] ??= yield* Effect.cached(
             Effect.gen(function* () {
               // TODO(sam): replace with an event emitter to support different CLI plugins
-              yield* Console.log("pending", id);
-              const bindings = yield* apply(node.bindings);
+              yield* Console.log("pending", node.action, id);
+
               if (node.action === "noop") {
                 yield* Console.log("noop", id);
                 return (yield* state.get(id))?.output;
               } else if (node.action === "create") {
+                const bindings = yield* apply(node.bindings);
                 yield* Console.log("creating", id);
                 return yield* node.provider
                   .create({
@@ -86,6 +91,7 @@ export const apply = <const P extends AnyPlan, Err, Req>(
                   })
                   .pipe(checkpoint);
               } else if (node.action === "update") {
+                const bindings = yield* apply(node.bindings);
                 yield* Console.log("updating", id);
                 return yield* node.provider
                   .update({
@@ -97,17 +103,18 @@ export const apply = <const P extends AnyPlan, Err, Req>(
                   })
                   .pipe(checkpoint);
               } else if (node.action === "delete") {
+                yield* Effect.all(
+                  node.downstream.map((dep) =>
+                    dep in plan ? apply(plan[dep] as P[keyof P]) : Effect.void,
+                  ),
+                );
                 yield* Console.log("deleting", id);
+
                 return yield* node.provider
                   .delete({
                     id,
                     olds: node.olds,
                     output: node.output,
-                    bindings: node.bindings.map((binding, i) =>
-                      Object.assign(binding, {
-                        attributes: bindings[i],
-                      }),
-                    ),
                   })
                   .pipe(Effect.flatMap(() => state.delete(id)));
               } else if (node.action === "replace") {
@@ -116,26 +123,18 @@ export const apply = <const P extends AnyPlan, Err, Req>(
                   id,
                   olds: node.olds,
                   output: node.output,
-                  bindings: node.bindings.map((binding, i) =>
-                    Object.assign(binding, {
-                      attributes: bindings[i],
-                    }),
-                  ),
                 });
-                const create = node.provider
-                  .create({
-                    id,
-                    news: node.news,
-                    // TODO(sam): these need to only include attach actions
-                    // @ts-expect-error
-                    bindings: node.bindings.map((binding, i) =>
-                      Object.assign(binding, {
-                        attributes: bindings[i],
-                      }),
-                    ),
-                  })
-                  // TODO(sam): delete and create will conflict here, we need to extend the state store for replace
-                  .pipe(checkpoint);
+                const create = Effect.gen(function* () {
+                  node.provider
+                    .create({
+                      id,
+                      news: node.news,
+                      // TODO(sam): these need to only include attach actions
+                      bindings: hydrate(yield* apply(node.bindings)),
+                    })
+                    // TODO(sam): delete and create will conflict here, we need to extend the state store for replace
+                    .pipe(checkpoint);
+                });
                 if (!node.deleteFirst) {
                   const outputs = yield* create;
                   yield* destroy;

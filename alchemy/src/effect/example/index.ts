@@ -20,11 +20,11 @@ const plan = Alchemy.plan({
     ApiLambda,
     // Consumer
   ],
-});
+}); //.pipe(Effect.tap(Console.log));
 
 const applied = Alchemy.apply(plan);
 
-const stack = await applied.pipe(
+const outputs = await applied.pipe(
   Effect.provide(aws),
   Effect.provide(State.localFs),
   Effect.provide(NodeContext.layer),
@@ -32,8 +32,8 @@ const stack = await applied.pipe(
   Effect.runPromise,
 );
 
-if (stack) {
-  const { api, messages } = stack;
+if (outputs) {
+  const { api, messages } = outputs;
   console.log(api.functionUrl);
   console.log(messages.queueUrl);
 }
