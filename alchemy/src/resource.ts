@@ -109,7 +109,7 @@ export interface ResourceInternal<Kind extends ResourceKind = ResourceKind> {
 
 export interface PendingResource<Out = unknown> extends Promise<Out> {}
 
-export interface Resource<Kind extends ResourceKind = ResourceKind> {}
+export interface Resource<_Kind extends ResourceKind = ResourceKind> {}
 
 // helper for semantic syntax highlighting (color as a type/class instead of function/value)
 type IsClass = {
