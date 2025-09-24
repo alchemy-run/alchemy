@@ -19,7 +19,7 @@ export interface ApiKeyProps {
   state?: ApiApiKey["state"];
 }
 
-export interface ApiKey extends Resource<"clickhouse::ApiKey"> {
+export interface ApiKey {
   organizationId: string;
   name: string;
   clickhouseId: ApiApiKey["id"];
