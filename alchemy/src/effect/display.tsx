@@ -256,7 +256,7 @@ export function PlanSummaryView(
                         <Text color={bindingColor}> {bindingIcon}</Text>
                       </Box>
                       <Box width={40}>
-                        <Text dimColor>{binding.id}</Text>
+                        <Text color="cyan">{binding.id}</Text>
                       </Box>
                     </Box>
                   );
