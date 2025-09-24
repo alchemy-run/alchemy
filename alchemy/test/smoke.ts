@@ -308,7 +308,8 @@ const tasks = new Listr(
 
                 if (phase.title === "Dev") {
                   task.title = `${example.name} - ${phase.title} (pending) ${pc.dim(`(${i}/${phases.length - 1})`)}`;
-                  await devMutex.lock(exec);
+                  // await devMutex.lock(exec);
+                  await exec();
                 } else {
                   await exec();
                 }
