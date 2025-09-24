@@ -37,7 +37,9 @@ jobs:
           aws-region: us-west-2
 
       - name: Check Types and Lint
-        run: bun run check
+        run: | 
+          bun run build
+          bun run check
 
       - name: Run tests
         if: github.event_name != 'pull_request'
