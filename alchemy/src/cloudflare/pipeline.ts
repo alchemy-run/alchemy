@@ -230,7 +230,9 @@ export interface PipelineRecord {
 }
 
 export function isPipeline(resource: Resource): resource is Pipeline {
-  return (resource as ResourceInternal)[ResourceKind] === "cloudflare::Pipeline";
+  return (
+    (resource as ResourceInternal)[ResourceKind] === "cloudflare::Pipeline"
+  );
 }
 
 /**

@@ -118,7 +118,9 @@ export interface D1DatabaseProps extends CloudflareApiOptions {
 }
 
 export function isD1Database(resource: Resource): resource is D1Database {
-  return (resource as ResourceInternal)[ResourceKind] === "cloudflare::D1Database";
+  return (
+    (resource as ResourceInternal)[ResourceKind] === "cloudflare::D1Database"
+  );
 }
 
 /**

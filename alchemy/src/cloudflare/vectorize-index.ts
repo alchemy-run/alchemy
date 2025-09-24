@@ -54,7 +54,10 @@ export interface VectorizeIndexProps extends CloudflareApiOptions {
 export function isVectorizeIndex(
   resource: Resource,
 ): resource is VectorizeIndex {
-  return (resource as ResourceInternal)[ResourceKind] === "cloudflare::VectorizeIndex";
+  return (
+    (resource as ResourceInternal)[ResourceKind] ===
+    "cloudflare::VectorizeIndex"
+  );
 }
 
 /**

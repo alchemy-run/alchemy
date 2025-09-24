@@ -32,7 +32,10 @@ export interface VectorizeMetadataIndexProps extends CloudflareApiOptions {
 export function isVectorizeMetadataIndex(
   resource: Resource,
 ): resource is VectorizeMetadataIndex {
-  return (resource as ResourceInternal)[ResourceKind] === "cloudflare::VectorizeMetadataIndex";
+  return (
+    (resource as ResourceInternal)[ResourceKind] ===
+    "cloudflare::VectorizeMetadataIndex"
+  );
 }
 
 /**

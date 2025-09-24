@@ -11,7 +11,7 @@ import {
   ResourceScope,
   ResourceSeq,
   type PendingResourceInternal,
-  type ResourceInternal
+  type ResourceInternal,
 } from "./resource.ts";
 import { DEFAULT_STAGE, Scope, type ProviderCredentials } from "./scope.ts";
 import { secret } from "./secret.ts";

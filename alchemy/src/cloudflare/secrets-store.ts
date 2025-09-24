@@ -57,7 +57,9 @@ export interface SecretsStoreProps<
 export function isSecretsStore(
   resource: Resource,
 ): resource is SecretsStore<any> {
-  return (resource as ResourceInternal)[ResourceKind] === "cloudflare::SecretsStore";
+  return (
+    (resource as ResourceInternal)[ResourceKind] === "cloudflare::SecretsStore"
+  );
 }
 
 export interface SecretsStore<

@@ -12,7 +12,7 @@ import {
   ResourceSeq,
   type PendingResourceInternal,
   type ResourceInternal,
-  type ResourceProps
+  type ResourceProps,
 } from "./resource.ts";
 import type { State, StateStore, StateStoreType } from "./state.ts";
 import { FileSystemStateStore } from "./state/file-system-state-store.ts";
@@ -442,7 +442,11 @@ export class Scope {
     fn: (
       state: State<string, ResourceProps | undefined, ResourceInternal<string>>, // current state for this.scopeName
       persist: (
-        next: State<string, ResourceProps | undefined, ResourceInternal<string>>,
+        next: State<
+          string,
+          ResourceProps | undefined,
+          ResourceInternal<string>
+        >,
       ) => Promise<void>, // helper to save changes
     ) => Promise<R>,
   ): Promise<R> {

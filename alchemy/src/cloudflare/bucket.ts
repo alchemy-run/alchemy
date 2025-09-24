@@ -341,7 +341,9 @@ type _R2Bucket = Resource<"cloudflare::R2Bucket"> &
   };
 
 export function isBucket(resource: Resource): resource is R2Bucket {
-  return (resource as ResourceInternal)[ResourceKind] === "cloudflare::R2Bucket";
+  return (
+    (resource as ResourceInternal)[ResourceKind] === "cloudflare::R2Bucket"
+  );
 }
 
 /**

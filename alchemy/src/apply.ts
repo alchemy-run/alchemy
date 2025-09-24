@@ -118,7 +118,11 @@ async function _apply<Out extends Resource>(
         }
       }
       async function inputsAreEqual(
-        state: State<string, ResourceProps | undefined, ResourceInternal<string>>,
+        state: State<
+          string,
+          ResourceProps | undefined,
+          ResourceInternal<string>
+        >,
       ) {
         const oldProps = await serialize(scope, state.props, {
           encrypt: false,
@@ -242,7 +246,7 @@ async function _apply<Out extends Resource>(
 
     let output: ResourceInternal<string>;
     try {
-      output = await alchemy.run(
+      output = (await alchemy.run(
         resource[ResourceID],
         {
           isResource: true,
@@ -252,7 +256,7 @@ async function _apply<Out extends Resource>(
         },
         async () =>
           await provider.handler.bind(ctx)(resource[ResourceID], props),
-      ) as ResourceInternal<string>;
+      )) as ResourceInternal<string>;
     } catch (error) {
       if (error instanceof ReplacedSignal) {
         if (error.force) {
@@ -282,7 +286,7 @@ async function _apply<Out extends Resource>(
           await scope.set("pendingDeletions", pendingDeletions);
         }
 
-        output = await alchemy.run(
+        output = (await alchemy.run(
           resource[ResourceID],
           {
             isResource: true,
@@ -308,7 +312,7 @@ async function _apply<Out extends Resource>(
                 },
               }),
             )(resource[ResourceID], props),
-        ) as ResourceInternal<string>;
+        )) as ResourceInternal<string>;
       } else {
         throw error;
       }

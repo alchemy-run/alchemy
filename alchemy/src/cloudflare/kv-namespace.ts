@@ -96,7 +96,9 @@ export interface KVPair {
 }
 
 export function isKVNamespace(resource: Resource): resource is KVNamespace {
-  return (resource as ResourceInternal)[ResourceKind] === "cloudflare::KVNamespace";
+  return (
+    (resource as ResourceInternal)[ResourceKind] === "cloudflare::KVNamespace"
+  );
 }
 
 /**

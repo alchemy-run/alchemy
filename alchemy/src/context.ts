@@ -15,9 +15,13 @@ import type { State } from "./state.ts";
 export type Context<
   Out extends Resource,
   Props extends ResourceProps = ResourceProps,
-> = CreateContext<Out & ResourceInternal> | UpdateContext<Out & ResourceInternal, Props> | DeleteContext<Out & ResourceInternal, Props>;
+> =
+  | CreateContext<Out & ResourceInternal>
+  | UpdateContext<Out & ResourceInternal, Props>
+  | DeleteContext<Out & ResourceInternal, Props>;
 
-export interface CreateContext<Out extends ResourceInternal> extends BaseContext<Out> {
+export interface CreateContext<Out extends ResourceInternal>
+  extends BaseContext<Out> {
   phase: "create";
   output?: undefined;
   props?: undefined;

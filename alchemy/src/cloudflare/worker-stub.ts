@@ -65,7 +65,9 @@ export interface WorkerStub<
 }
 
 export function isWorkerStub(resource: Resource): resource is WorkerStub {
-  return (resource as ResourceInternal)[ResourceKind] === "cloudflare::WorkerStub";
+  return (
+    (resource as ResourceInternal)[ResourceKind] === "cloudflare::WorkerStub"
+  );
 }
 
 /**

@@ -39,7 +39,10 @@ export interface DispatchNamespaceProps extends CloudflareApiOptions {
 export function isDispatchNamespace(
   resource: Resource,
 ): resource is DispatchNamespace {
-  return (resource as ResourceInternal)[ResourceKind] === "cloudflare::DispatchNamespace";
+  return (
+    (resource as ResourceInternal)[ResourceKind] ===
+    "cloudflare::DispatchNamespace"
+  );
 }
 
 /**

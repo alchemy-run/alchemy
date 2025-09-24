@@ -89,29 +89,27 @@ export type Provider<
     handler: F;
   };
 
-  export interface PendingResourceInternal<Out = unknown> extends Promise<Out> {
-    [ResourceKind]: ResourceKind;
-    [ResourceID]: ResourceID;
-    [ResourceFQN]: ResourceFQN;
-    [ResourceScope]: Scope;
-    [ResourceSeq]: number;
-    [DestroyStrategy]: DestroyStrategy;
-  }
-  
-  export interface ResourceInternal<Kind extends ResourceKind = ResourceKind> {
-    [ResourceKind]: Kind;
-    [ResourceID]: ResourceID;
-    [ResourceFQN]: ResourceFQN;
-    [ResourceScope]: Scope;
-    [ResourceSeq]: number;
-    [DestroyStrategy]: DestroyStrategy;
-  }
-
-export interface PendingResource<Out = unknown> extends Promise<Out> {
+export interface PendingResourceInternal<Out = unknown> extends Promise<Out> {
+  [ResourceKind]: ResourceKind;
+  [ResourceID]: ResourceID;
+  [ResourceFQN]: ResourceFQN;
+  [ResourceScope]: Scope;
+  [ResourceSeq]: number;
+  [DestroyStrategy]: DestroyStrategy;
 }
 
-export interface Resource<Kind extends ResourceKind = ResourceKind> {
+export interface ResourceInternal<Kind extends ResourceKind = ResourceKind> {
+  [ResourceKind]: Kind;
+  [ResourceID]: ResourceID;
+  [ResourceFQN]: ResourceFQN;
+  [ResourceScope]: Scope;
+  [ResourceSeq]: number;
+  [DestroyStrategy]: DestroyStrategy;
 }
+
+export interface PendingResource<Out = unknown> extends Promise<Out> {}
+
+export interface Resource<Kind extends ResourceKind = ResourceKind> {}
 
 // helper for semantic syntax highlighting (color as a type/class instead of function/value)
 type IsClass = {
@@ -123,7 +121,6 @@ type ResourceLifecycleHandler = (
   id: string,
   props: any,
 ) => Promise<Resource<string>>;
-
 
 // see: https://x.com/samgoodwin89/status/1904640134097887653
 type Handler<F extends (...args: any[]) => any> =

@@ -236,7 +236,9 @@ export async function destroyAll(
   options?: DestroyOptions & { force?: boolean },
 ) {
   if (options?.strategy !== "parallel") {
-    const sorted = (resources as ResourceInternal[]).sort((a, b) => b[ResourceSeq] - a[ResourceSeq]);
+    const sorted = (resources as ResourceInternal[]).sort(
+      (a, b) => b[ResourceSeq] - a[ResourceSeq],
+    );
     for (const resource of sorted) {
       if (isScope(resource)) {
         await resource.destroyPendingDeletions();
