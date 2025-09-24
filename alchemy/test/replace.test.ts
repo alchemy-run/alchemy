@@ -14,7 +14,7 @@ describe.sequential("Replace-Sequential", () => {
       const deleted: string[] = [];
       const failed = new Set();
 
-      interface Replacable extends Resource<`Replacable-sequential-${string}`> {
+      interface Replacable {
         name: string;
       }
 
@@ -53,9 +53,9 @@ describe.sequential("Replace-Sequential", () => {
               name: "child",
             });
           }
-          return this({
+          return {
             name: props.name,
-          });
+          };
         },
       );
 
@@ -117,7 +117,7 @@ describe.concurrent("Replace", () => {
       const deleted: string[] = [];
       const failed = new Set();
 
-      interface Replacable extends Resource<`Replacable-${string}`> {
+      interface Replacable {
         name: string;
       }
 
@@ -157,9 +157,9 @@ describe.concurrent("Replace", () => {
               name: "child",
             });
           }
-          return this({
+          return {
             name: props.name,
-          });
+          };
         },
       );
 
@@ -425,7 +425,7 @@ describe.concurrent("Replace", () => {
                 deleted.push(this.output.name);
                 return this.destroy();
               }
-              return this({ name: props.name });
+              return { name: props.name };
             },
           );
 
@@ -444,7 +444,7 @@ describe.concurrent("Replace", () => {
                 this.replace(true);
               }
               await Child("child", { name: `${props.name}-child` });
-              return this({ name: props.name });
+              return { name: props.name };
             },
           );
           try {
@@ -568,7 +568,7 @@ describe.concurrent("Replace", () => {
         options,
         async (scope) => {
           const deleted: { input: string; output: string }[] = [];
-          type MyResource = Resource<`MyResource-${string}`> & {
+          type MyResource = {
             name: string;
           };
           const MyResource = Resource(
@@ -587,7 +587,7 @@ describe.concurrent("Replace", () => {
               if (this.phase === "update") {
                 this.replace();
               }
-              return this({ name: `output-${props.name}` });
+              return { name: `output-${props.name}` };
             },
           );
           try {
@@ -610,7 +610,7 @@ describe.concurrent("Replace", () => {
         options,
         async (scope) => {
           const deleted: string[] = [];
-          interface Replacable extends Resource<`Replacable-${string}`> {
+          interface Replacable {
             name: string;
           }
           const Replacable = Resource(
@@ -628,7 +628,7 @@ describe.concurrent("Replace", () => {
               } else if (this.phase === "update") {
                 this.replace(true);
               }
-              return this({ name: props.name });
+              return { name: props.name };
             },
           );
           try {

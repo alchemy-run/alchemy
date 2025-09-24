@@ -42,7 +42,7 @@ export interface TeamProps {
 /**
  * Output returned after Team creation/update
  */
-export interface Team extends Resource<"sentry::Team">, TeamProps {
+export interface Team extends TeamProps {
   /**
    * The ID of the team
    */
@@ -230,7 +230,7 @@ export const Team = Resource(
         }
 
         const data = (await response.json()) as Omit<Team, keyof TeamProps>;
-        return this({
+        return {
           ...props,
           id: data.id,
           name: teamName,
@@ -243,7 +243,7 @@ export const Team = Resource(
           isPending: data.isPending,
           memberCount: data.memberCount,
           avatar: data.avatar,
-        });
+        };
       } catch (error) {
         logger.error("Error creating/updating team:", error);
         throw error;

@@ -229,41 +229,40 @@ export interface PipelineRecord {
   [key: string]: any;
 }
 
-export function isPipeline(resource: Resource): resource is Pipeline {
-  return resource[ResourceKind] === "cloudflare::Pipeline";
+export function isPipeline(resource: any): resource is Pipeline {
+  return resource?.[ResourceKind] === "cloudflare::Pipeline";
 }
 
 /**
  * Output returned after Pipeline creation/update
  */
 export type Pipeline<_T extends PipelineRecord = PipelineRecord> =
-  Resource<"cloudflare::Pipeline"> &
-    PipelineProps & {
-      /**
-       * Type identifier for the Pipeline resource
-       */
-      type: "pipeline";
+  PipelineProps & {
+    /**
+     * Type identifier for the Pipeline resource
+     */
+    type: "pipeline";
 
-      /**
-       * The unique ID of the pipeline
-       */
-      id: string;
+    /**
+     * The unique ID of the pipeline
+     */
+    id: string;
 
-      /**
-       * The name of the pipeline
-       */
-      name: string;
+    /**
+     * The name of the pipeline
+     */
+    name: string;
 
-      /**
-       * HTTP endpoint URL for the pipeline
-       */
-      endpoint: string;
+    /**
+     * HTTP endpoint URL for the pipeline
+     */
+    endpoint: string;
 
-      /**
-       * Version of the pipeline
-       */
-      version: number;
-    };
+    /**
+     * Version of the pipeline
+     */
+    version: number;
+  };
 
 /**
  * Creates and manages Cloudflare Pipelines.
@@ -341,7 +340,7 @@ export const Pipeline = Resource("cloudflare::Pipeline", async function <
     props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
 
   if (this.scope.local && !props.dev?.remote) {
-    return this({
+    return {
       type: "pipeline",
       id: this.output?.id ?? "",
       name: this.output?.name ?? pipelineName,
@@ -351,7 +350,7 @@ export const Pipeline = Resource("cloudflare::Pipeline", async function <
       destination: props.destination,
       compression: props.compression,
       accountId: this.output?.accountId ?? "",
-    });
+    };
   }
 
   if (this.phase === "update" && this.output?.name !== pipelineName) {
@@ -418,7 +417,7 @@ export const Pipeline = Resource("cloudflare::Pipeline", async function <
     }
   }
 
-  return this({
+  return {
     type: "pipeline",
     id: pipelineData.result.id,
     name: pipelineName,
@@ -433,7 +432,7 @@ export const Pipeline = Resource("cloudflare::Pipeline", async function <
     destination: props.destination, // Use the input destination, not the API response
     compression: props.compression,
     accountId: api.accountId,
-  });
+  };
 });
 
 interface CloudflarePipelineResponse {

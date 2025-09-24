@@ -71,9 +71,7 @@ export interface OIDCProviderProps {
 /**
  * Output returned after OIDC provider configuration
  */
-export interface OIDCProvider
-  extends Resource<"aws::OIDCProvider">,
-    OIDCProviderProps {
+export interface OIDCProvider extends OIDCProviderProps {
   /**
    * The ARN of the OIDC provider
    * Format: arn:aws:iam::account-id:oidc-provider/token.actions.githubusercontent.com
@@ -280,11 +278,11 @@ export const OIDCProvider = Resource(
         }),
       );
 
-      return this({
+      return {
         ...props,
         providerArn,
         createdAt: Date.now(),
-      });
+      };
     } catch (error) {
       logger.error("Error configuring OIDC provider:", error);
       throw error;

@@ -1,8 +1,8 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { type CloudflareApiOptions, createCloudflareApi } from "./api.ts";
-import type { CloudflareResponse } from "./response.ts";
 import type { EmailAction, EmailMatcher } from "./email-rule.ts";
+import type { CloudflareResponse } from "./response.ts";
 import type { Zone } from "./zone.ts";
 
 /**
@@ -54,7 +54,7 @@ export interface EmailCatchAllProps extends CloudflareApiOptions {
 /**
  * A catch-all email routing rule for a Cloudflare zone
  */
-export interface EmailCatchAll extends Resource<"cloudflare::EmailCatchAll"> {
+export interface EmailCatchAll {
   /**
    * Zone ID where the catch-all rule is configured
    */
@@ -203,14 +203,14 @@ export const EmailCatchAll = Resource(
       const result =
         (await response.json()) as CloudflareResponse<CloudflareEmailCatchAll>;
 
-      return this({
+      return {
         zoneId,
         enabled: result.result.enabled,
         name: result.result.name,
         matchers: result.result.matchers,
         actions: result.result.actions,
         tag: result.result.tag,
-      });
+      };
     }
 
     // Create or update catch-all rule
@@ -236,13 +236,13 @@ export const EmailCatchAll = Resource(
     const result =
       (await response.json()) as CloudflareResponse<CloudflareEmailCatchAll>;
 
-    return this({
+    return {
       zoneId,
       enabled: result.result.enabled,
       name: result.result.name,
       matchers: result.result.matchers,
       actions: result.result.actions,
       tag: result.result.tag,
-    });
+    };
   },
 );

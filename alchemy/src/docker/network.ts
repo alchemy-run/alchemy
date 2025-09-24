@@ -34,7 +34,7 @@ export interface NetworkProps {
 /**
  * Docker Network resource
  */
-export interface Network extends Resource<"docker::Network">, NetworkProps {
+export interface Network extends NetworkProps {
   /**
    * Network ID
    */
@@ -104,13 +104,12 @@ export const Network = Resource(
       props.driver = props.driver || "bridge";
       const networkId = await api.createNetwork(networkName, props.driver);
 
-      // Return the resource using this() to construct output
-      return this({
+      return {
         ...props,
         id: networkId,
         name: networkName,
         createdAt: Date.now(),
-      });
+      };
     }
   },
 );

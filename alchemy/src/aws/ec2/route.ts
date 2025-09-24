@@ -52,7 +52,7 @@ export interface RouteProps extends AwsClientProps {
 /**
  * Output returned after Route creation/update
  */
-export interface Route extends Resource<"aws::Route">, RouteProps {
+export interface Route extends RouteProps {
   /**
    * The ID of the route table
    */
@@ -333,7 +333,7 @@ export const Route = Resource(
       throw new Error("Failed to find created route");
     }
 
-    return this({
+    return {
       routeTableId,
       state: route.State as "active" | "blackhole",
       origin: route.Origin as
@@ -342,7 +342,7 @@ export const Route = Resource(
         | "EnableVgwRoutePropagation",
       ...props,
       routeTable: routeTableId,
-    });
+    };
   },
 );
 

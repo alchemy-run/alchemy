@@ -38,8 +38,7 @@ export interface InternetGatewayAttachmentProps extends AwsClientProps {
  * Output returned after Internet Gateway Attachment creation/update
  */
 export interface InternetGatewayAttachment
-  extends Resource<"aws::InternetGatewayAttachment">,
-    InternetGatewayAttachmentProps {
+  extends InternetGatewayAttachmentProps {
   /**
    * The ID of the Internet Gateway
    */
@@ -277,12 +276,12 @@ export const InternetGatewayAttachment = Resource(
       const attachment = igw?.Attachments?.find((att) => att.VpcId === vpcId);
 
       if (attachment) {
-        return this({
+        return {
           internetGatewayId,
           vpcId,
           state: "attached",
           ...props,
-        });
+        };
       }
     }
 
@@ -353,12 +352,12 @@ export const InternetGatewayAttachment = Resource(
       "to be attached",
     );
 
-    return this({
+    return {
       internetGatewayId,
       vpcId,
       state: "attached",
       ...props,
-    });
+    };
   },
 );
 

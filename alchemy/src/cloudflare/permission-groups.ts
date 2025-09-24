@@ -45,7 +45,7 @@ export type R2PermissionGroups =
  *
  * @see https://developers.cloudflare.com/r2/api/tokens/#permissions
  */
-export type PermissionGroups = Resource<"cloudflare::PermissionGroups"> & {
+export type PermissionGroups = {
   /**
    * Admin Read & Write - Allows create, list, delete buckets and edit bucket configurations
    * plus list, write, and read object access
@@ -140,10 +140,8 @@ export const PermissionGroups = Resource(
       );
     }
 
-    return this(
-      Object.fromEntries(
-        data.result.map((group) => [group.name, group]),
-      ) as PermissionGroups,
-    );
+    return Object.fromEntries(
+      data.result.map((group) => [group.name, group]),
+    ) as PermissionGroups;
   },
 );

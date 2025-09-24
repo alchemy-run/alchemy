@@ -89,7 +89,7 @@ export type SSMParameterProps =
 /**
  * Output returned after SSM Parameter creation/update
  */
-export type SSMParameter = Resource<"ssm::Parameter"> & {
+export type SSMParameter = {
   /**
    * ARN of the parameter
    */
@@ -316,7 +316,7 @@ export const SSMParameter = Resource(
         );
       }
 
-      return this({
+      return {
         ...props,
         arn: parameter.Parameter.ARN!,
         version: parameter.Parameter.Version!,
@@ -324,7 +324,7 @@ export const SSMParameter = Resource(
         name: parameter.Parameter.Name ?? parameterName,
         value: props.value,
         type: (parameter.Parameter.Type as any) ?? parameterType,
-      } as SSMParameter);
+      } as SSMParameter;
     } catch (error: any) {
       logger.error(
         `Error creating/updating parameter ${parameterName}:`,

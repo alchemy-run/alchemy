@@ -202,7 +202,7 @@ function generateReadOnlyPropertiesObject(
 function generateResourceType(
   resourceType: ResourceType,
   resourceName: string,
-  serviceName: string,
+  _serviceName: string,
 ): string {
   const lines: string[] = [];
 
@@ -211,9 +211,7 @@ function generateResourceType(
     lines.push(`/** ${resourceType.Documentation} */`);
   }
 
-  lines.push(
-    `type ${resourceName} = AlchemyResource<"AWS::${serviceName}::${resourceName}"> & ${resourceName}Props & {`,
-  );
+  lines.push(`type ${resourceName} = ${resourceName}Props & {`);
 
   // Track which properties we've already added from attributes
   const addedProperties = new Set<string>();

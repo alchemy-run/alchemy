@@ -71,11 +71,11 @@ export const WebApp = Resource(
     const database = await Database("db", {});
     const apiGateway = await ApiGateway("api", {});
     
-    return this({
+    return {
       id,
       url: apiGateway.url,
       dbConnectionString: database.connectionString
-    });
+    };
   }
 );
 

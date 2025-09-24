@@ -240,7 +240,7 @@ export interface ProjectProps {
 /**
  * Output returned after Project creation/update
  */
-export interface Project extends Resource<"vercel::Project">, ProjectProps {
+export interface Project extends ProjectProps {
   /**
    * The ID of the project
    */
@@ -453,7 +453,7 @@ export const Project = Resource(
           await updateEnvironmentVariables(envApi, this.output, props);
         }
 
-        return this({
+        return {
           id: data.id,
           name: projectName,
           accountId: data.accountId,
@@ -461,7 +461,7 @@ export const Project = Resource(
           updatedAt: data.updatedAt,
           latestDeployment: data.latestDeployment,
           ...props,
-        });
+        };
       }
 
       case "create": {

@@ -57,9 +57,7 @@ export interface ProjectProps {
 /**
  * Output returned after Project creation/update
  */
-export interface Project
-  extends Omit<Resource<"sentry::Project">, "team">,
-    Omit<ProjectProps, "team"> {
+export interface Project extends Omit<ProjectProps, "team"> {
   /**
    * The ID of the project
    */
@@ -393,7 +391,7 @@ export const Project = Resource(
           Project,
           keyof ProjectProps
         > & { team: Project["team"] };
-        return this({
+        return {
           ...props,
           id: data.id,
           name: projectName,
@@ -430,7 +428,7 @@ export const Project = Resource(
           latestRelease: data.latestRelease,
           hasUserReports: data.hasUserReports,
           latestDeploys: data.latestDeploys,
-        });
+        } satisfies Project;
       } catch (error) {
         logger.error("Error creating/updating project:", error);
         throw error;

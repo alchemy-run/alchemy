@@ -78,7 +78,7 @@ export interface NeonProjectProps extends NeonApiOptions {
  * Output returned after Neon project creation/update
  * IMPORTANT: The interface name MUST match the exported resource name
  */
-export interface NeonProject extends Resource<"neon::Project"> {
+export interface NeonProject {
   /**
    * The ID of the project
    */

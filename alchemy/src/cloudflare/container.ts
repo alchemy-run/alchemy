@@ -410,8 +410,7 @@ export type SchedulingPolicy =
  * This resource manages the lifecycle of containerized applications running on
  * Cloudflare's global network with automatic scaling and scheduling.
  */
-export interface ContainerApplication
-  extends Resource<"cloudflare::ContainerApplication"> {
+export interface ContainerApplication {
   /** Unique identifier for the container application */
   id: string;
 
@@ -514,10 +513,10 @@ export const ContainerApplication = Resource(
     const applicationName = props.name ?? this.scope.createPhysicalName(id);
 
     if (this.scope.local && props.dev) {
-      return this({
+      return {
         id: this.output?.id ?? "",
         name: applicationName,
-      });
+      };
     }
 
     const adopt = props.adopt ?? this.scope.adopt;
@@ -565,10 +564,10 @@ export const ContainerApplication = Resource(
         step_percentage: props.rollout?.stepPercentage ?? 25,
         target_configuration: configuration,
       });
-      return this({
+      return {
         id: application.id,
         name: application.name,
-      });
+      };
     } else {
       let application: ContainerApplicationData;
 
@@ -643,10 +642,10 @@ export const ContainerApplication = Resource(
         }
       }
 
-      return this({
+      return {
         id: application.id,
         name: application.name,
-      });
+      };
     }
   },
 );
