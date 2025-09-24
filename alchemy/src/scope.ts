@@ -10,9 +10,9 @@ import {
   ResourceKind,
   ResourceScope,
   ResourceSeq,
-  type PendingResource,
-  type Resource,
-  type ResourceProps,
+  type PendingResourceInternal,
+  type ResourceInternal,
+  type ResourceProps
 } from "./resource.ts";
 import type { State, StateStore, StateStoreType } from "./state.ts";
 import { FileSystemStateStore } from "./state/file-system-state-store.ts";
@@ -136,7 +136,7 @@ export interface ProviderCredentials extends Record<string, unknown> {
 }
 
 export type PendingDeletions = Array<{
-  resource: Resource<string>;
+  resource: ResourceInternal<string>;
   oldProps?: ResourceProps;
 }>;
 
@@ -179,7 +179,7 @@ export class Scope {
     return scope;
   }
 
-  public readonly resources = new Map<ResourceID, PendingResource>();
+  public readonly resources = new Map<ResourceID, PendingResourceInternal>();
   public readonly children: Map<ResourceID, Scope> = new Map();
   public readonly stage: string;
   public readonly name: string;
@@ -440,9 +440,9 @@ export class Scope {
    */
   private async withScopeState<R>(
     fn: (
-      state: State<string, ResourceProps | undefined, Resource<string>>, // current state for this.scopeName
+      state: State<string, ResourceProps | undefined, ResourceInternal<string>>, // current state for this.scopeName
       persist: (
-        next: State<string, ResourceProps | undefined, Resource<string>>,
+        next: State<string, ResourceProps | undefined, ResourceInternal<string>>,
       ) => Promise<void>, // helper to save changes
     ) => Promise<R>,
   ): Promise<R> {

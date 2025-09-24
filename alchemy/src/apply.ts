@@ -9,8 +9,10 @@ import {
   ResourceScope,
   ResourceSeq,
   type PendingResource,
+  type PendingResourceInternal,
   type Provider,
   type Resource,
+  type ResourceInternal,
   type ResourceProps,
 } from "./resource.ts";
 import type { PendingDeletions } from "./scope.ts";
@@ -31,7 +33,7 @@ export function apply<Out extends Resource>(
   props: ResourceProps | undefined,
   options?: ApplyOptions,
 ): Promise<Awaited<Out>> {
-  return _apply(resource, props, options);
+  return _apply(resource as PendingResourceInternal<Out>, props, options);
 }
 
 export function isReplacedSignal(error: any): error is ReplacedSignal {
@@ -49,7 +51,7 @@ export class ReplacedSignal extends Error {
 }
 
 async function _apply<Out extends Resource>(
-  resource: PendingResource<Out>,
+  resource: PendingResourceInternal<Out>,
   props: ResourceProps | undefined,
   options?: ApplyOptions,
 ): Promise<Awaited<Out>> {
@@ -116,7 +118,7 @@ async function _apply<Out extends Resource>(
         }
       }
       async function inputsAreEqual(
-        state: State<string, ResourceProps | undefined, Resource<string>>,
+        state: State<string, ResourceProps | undefined, ResourceInternal<string>>,
       ) {
         const oldProps = await serialize(scope, state.props, {
           encrypt: false,
@@ -238,7 +240,7 @@ async function _apply<Out extends Resource>(
       },
     });
 
-    let output: Resource<string>;
+    let output: ResourceInternal<string>;
     try {
       output = await alchemy.run(
         resource[ResourceID],
@@ -250,7 +252,7 @@ async function _apply<Out extends Resource>(
         },
         async () =>
           await provider.handler.bind(ctx)(resource[ResourceID], props),
-      );
+      ) as ResourceInternal<string>;
     } catch (error) {
       if (error instanceof ReplacedSignal) {
         if (error.force) {
@@ -306,7 +308,7 @@ async function _apply<Out extends Resource>(
                 },
               }),
             )(resource[ResourceID], props),
-        );
+        ) as ResourceInternal<string>;
       } else {
         throw error;
       }

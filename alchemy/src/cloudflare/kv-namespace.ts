@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource, ResourceKind } from "../resource.ts";
+import { Resource, ResourceKind, type ResourceInternal } from "../resource.ts";
 import { Scope } from "../scope.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
@@ -96,7 +96,7 @@ export interface KVPair {
 }
 
 export function isKVNamespace(resource: Resource): resource is KVNamespace {
-  return resource[ResourceKind] === "cloudflare::KVNamespace";
+  return (resource as ResourceInternal)[ResourceKind] === "cloudflare::KVNamespace";
 }
 
 /**

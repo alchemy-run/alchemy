@@ -1,10 +1,10 @@
-import type { Resource, ResourceProps } from "./resource.ts";
+import type { ResourceInternal, ResourceProps } from "./resource.ts";
 import type { Scope } from "./scope.ts";
 
 export type State<
   Kind extends string = string,
   Props extends ResourceProps | undefined = ResourceProps | undefined,
-  Out extends Resource = Resource,
+  Out extends ResourceInternal = ResourceInternal,
 > = {
   status:
     | `creating`

@@ -89,22 +89,28 @@ export type Provider<
     handler: F;
   };
 
+  export interface PendingResourceInternal<Out = unknown> extends Promise<Out> {
+    [ResourceKind]: ResourceKind;
+    [ResourceID]: ResourceID;
+    [ResourceFQN]: ResourceFQN;
+    [ResourceScope]: Scope;
+    [ResourceSeq]: number;
+    [DestroyStrategy]: DestroyStrategy;
+  }
+  
+  export interface ResourceInternal<Kind extends ResourceKind = ResourceKind> {
+    [ResourceKind]: Kind;
+    [ResourceID]: ResourceID;
+    [ResourceFQN]: ResourceFQN;
+    [ResourceScope]: Scope;
+    [ResourceSeq]: number;
+    [DestroyStrategy]: DestroyStrategy;
+  }
+
 export interface PendingResource<Out = unknown> extends Promise<Out> {
-  [ResourceKind]: ResourceKind;
-  [ResourceID]: ResourceID;
-  [ResourceFQN]: ResourceFQN;
-  [ResourceScope]: Scope;
-  [ResourceSeq]: number;
-  [DestroyStrategy]: DestroyStrategy;
 }
 
 export interface Resource<Kind extends ResourceKind = ResourceKind> {
-  [ResourceKind]: Kind;
-  [ResourceID]: ResourceID;
-  [ResourceFQN]: ResourceFQN;
-  [ResourceScope]: Scope;
-  [ResourceSeq]: number;
-  [DestroyStrategy]: DestroyStrategy;
 }
 
 // helper for semantic syntax highlighting (color as a type/class instead of function/value)
@@ -117,6 +123,7 @@ type ResourceLifecycleHandler = (
   id: string,
   props: any,
 ) => Promise<Resource<string>>;
+
 
 // see: https://x.com/samgoodwin89/status/1904640134097887653
 type Handler<F extends (...args: any[]) => any> =
@@ -192,7 +199,7 @@ export function Resource<
       [ResourceSeq]: seq,
       [ResourceScope]: scope,
       [DestroyStrategy]: options?.destroyStrategy ?? "sequential",
-    } as any as PendingResource<Out>;
+    } as any as PendingResourceInternal<Out>;
     const promise = apply(meta, props, options);
     const resource = Object.assign(promise, meta);
     scope.resources.set(resourceID, resource);

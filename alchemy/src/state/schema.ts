@@ -5,7 +5,7 @@ import {
   text,
 } from "drizzle-orm/sqlite-core";
 import type {
-  Resource as AlchemyResource,
+  ResourceInternal as AlchemyResource,
   ResourceProps,
 } from "../resource.ts";
 

@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource, ResourceKind } from "../resource.ts";
+import { Resource, ResourceKind, type ResourceInternal } from "../resource.ts";
 import { logger } from "../util/logger.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
@@ -32,7 +32,7 @@ export interface VectorizeMetadataIndexProps extends CloudflareApiOptions {
 export function isVectorizeMetadataIndex(
   resource: Resource,
 ): resource is VectorizeMetadataIndex {
-  return resource[ResourceKind] === "cloudflare::VectorizeMetadataIndex";
+  return (resource as ResourceInternal)[ResourceKind] === "cloudflare::VectorizeMetadataIndex";
 }
 
 /**

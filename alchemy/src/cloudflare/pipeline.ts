@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource, ResourceKind } from "../resource.ts";
+import { Resource, ResourceKind, type ResourceInternal } from "../resource.ts";
 import type { Secret } from "../secret.ts";
 import { logger } from "../util/logger.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
@@ -230,7 +230,7 @@ export interface PipelineRecord {
 }
 
 export function isPipeline(resource: Resource): resource is Pipeline {
-  return resource[ResourceKind] === "cloudflare::Pipeline";
+  return (resource as ResourceInternal)[ResourceKind] === "cloudflare::Pipeline";
 }
 
 /**

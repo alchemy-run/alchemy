@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource, ResourceKind } from "../resource.ts";
+import { Resource, ResourceKind, type ResourceInternal } from "../resource.ts";
 import { secret, type Secret } from "../secret.ts";
 import { handleApiError } from "./api-error.ts";
 import {
@@ -57,7 +57,7 @@ export interface SecretsStoreProps<
 export function isSecretsStore(
   resource: Resource,
 ): resource is SecretsStore<any> {
-  return resource[ResourceKind] === "cloudflare::SecretsStore";
+  return (resource as ResourceInternal)[ResourceKind] === "cloudflare::SecretsStore";
 }
 
 export interface SecretsStore<

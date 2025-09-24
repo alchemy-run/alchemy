@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import type { Context } from "../context.ts";
-import { Resource, ResourceKind } from "../resource.ts";
+import { Resource, ResourceKind, type ResourceInternal } from "../resource.ts";
 import { Scope } from "../scope.ts";
 import { isRetryableError } from "../state/r2-rest-state-store.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
@@ -341,7 +341,7 @@ type _R2Bucket = Resource<"cloudflare::R2Bucket"> &
   };
 
 export function isBucket(resource: Resource): resource is R2Bucket {
-  return resource[ResourceKind] === "cloudflare::R2Bucket";
+  return (resource as ResourceInternal)[ResourceKind] === "cloudflare::R2Bucket";
 }
 
 /**

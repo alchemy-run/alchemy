@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource, ResourceKind } from "../resource.ts";
+import { Resource, ResourceKind, type ResourceInternal } from "../resource.ts";
 import { logger } from "../util/logger.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
@@ -54,7 +54,7 @@ export interface VectorizeIndexProps extends CloudflareApiOptions {
 export function isVectorizeIndex(
   resource: Resource,
 ): resource is VectorizeIndex {
-  return resource[ResourceKind] === "cloudflare::VectorizeIndex";
+  return (resource as ResourceInternal)[ResourceKind] === "cloudflare::VectorizeIndex";
 }
 
 /**

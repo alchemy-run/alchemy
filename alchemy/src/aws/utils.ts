@@ -11,7 +11,7 @@ export const getRegion = loadConfig({
     env.AWS_REGION || env.AWS_DEFAULT_REGION,
   configFileSelector: (profile: any) => profile.region,
   default: "us-east-1",
-});
+}) as () => Promise<string>;
 
 /**
  * AWS Service Configuration

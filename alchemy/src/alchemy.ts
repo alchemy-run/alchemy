@@ -10,7 +10,8 @@ import {
   ResourceKind,
   ResourceScope,
   ResourceSeq,
-  type PendingResource,
+  type PendingResourceInternal,
+  type ResourceInternal
 } from "./resource.ts";
 import { DEFAULT_STAGE, Scope, type ProviderCredentials } from "./scope.ts";
 import { secret } from "./secret.ts";
@@ -371,7 +372,7 @@ async function run<T>(
     if (options?.isResource !== true && _scope.parent) {
       // TODO(sam): this is an awful hack to differentiate between naked scopes and resources
       const seq = _scope.parent.seq();
-      const output = {
+      const output: ResourceInternal = {
         [ResourceID]: id,
         [ResourceFQN]: "",
         [ResourceKind]: Scope.KIND,
@@ -399,7 +400,7 @@ async function run<T>(
       }
       _scope.parent!.resources.set(
         id,
-        Object.assign(Promise.resolve(resource), output) as PendingResource,
+        Object.assign(Promise.resolve(resource), output),
       );
     }
     return await _scope.run(async () => fn.bind(_scope)(_scope));

@@ -6,6 +6,7 @@ import {
   ResourceScope,
   ResourceSeq,
   type Resource,
+  type ResourceInternal,
   type ResourceProps,
 } from "./resource.ts";
 import type { Scope } from "./scope.ts";
@@ -14,16 +15,16 @@ import type { State } from "./state.ts";
 export type Context<
   Out extends Resource,
   Props extends ResourceProps = ResourceProps,
-> = CreateContext<Out> | UpdateContext<Out, Props> | DeleteContext<Out, Props>;
+> = CreateContext<Out & ResourceInternal> | UpdateContext<Out & ResourceInternal, Props> | DeleteContext<Out & ResourceInternal, Props>;
 
-export interface CreateContext<Out extends Resource> extends BaseContext<Out> {
+export interface CreateContext<Out extends ResourceInternal> extends BaseContext<Out> {
   phase: "create";
   output?: undefined;
   props?: undefined;
 }
 
 export interface UpdateContext<
-  Out extends Resource,
+  Out extends ResourceInternal,
   Props extends ResourceProps = ResourceProps,
 > extends BaseContext<Out> {
   phase: "update";
@@ -32,7 +33,7 @@ export interface UpdateContext<
 }
 
 export interface DeleteContext<
-  Out extends Resource,
+  Out extends ResourceInternal,
   Props extends ResourceProps = ResourceProps,
 > extends BaseContext<Out> {
   phase: "delete";
@@ -40,7 +41,7 @@ export interface DeleteContext<
   props: Props;
 }
 
-export interface BaseContext<Out extends Resource> {
+export interface BaseContext<Out extends ResourceInternal> {
   quiet: boolean;
   stage: string;
   id: ResourceID;
@@ -83,18 +84,18 @@ export interface BaseContext<Out extends Resource> {
   /**
    * Create the Resource envelope (with Alchemy + User properties)
    */
-  create(props: Omit<Out, keyof Resource>): Out;
+  create(props: Omit<Out, keyof ResourceInternal>): Out;
   /**
    * Create the Resource envelope (with Alchemy + User properties)
    */
-  (id: string, props: Omit<Out, keyof Resource>): Out;
-  (props: Omit<Out, keyof Resource>): Out;
+  (id: string, props: Omit<Out, keyof ResourceInternal>): Out;
+  (props: Omit<Out, keyof ResourceInternal>): Out;
 }
 
 export function context<
   Kind extends string,
   Props extends ResourceProps | undefined,
-  Out extends Resource,
+  Out extends ResourceInternal,
 >({
   scope,
   phase,

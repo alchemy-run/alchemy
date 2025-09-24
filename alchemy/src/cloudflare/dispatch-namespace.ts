@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource, ResourceKind } from "../resource.ts";
+import { Resource, ResourceKind, type ResourceInternal } from "../resource.ts";
 import { logger } from "../util/logger.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
@@ -39,7 +39,7 @@ export interface DispatchNamespaceProps extends CloudflareApiOptions {
 export function isDispatchNamespace(
   resource: Resource,
 ): resource is DispatchNamespace {
-  return resource[ResourceKind] === "cloudflare::DispatchNamespace";
+  return (resource as ResourceInternal)[ResourceKind] === "cloudflare::DispatchNamespace";
 }
 
 /**

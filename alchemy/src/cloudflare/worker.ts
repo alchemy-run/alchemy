@@ -1,7 +1,7 @@
 import path from "pathe";
 import type { Context } from "../context.ts";
 import type { BundleProps } from "../esbuild/bundle.ts";
-import { Resource, ResourceKind } from "../resource.ts";
+import { Resource, ResourceKind, type ResourceInternal } from "../resource.ts";
 import type { type } from "../type.ts";
 import { DeferredPromise } from "../util/deferred-promise.ts";
 import { logger } from "../util/logger.ts";
@@ -433,7 +433,7 @@ export type WorkerProps<
 > = InlineWorkerProps<B, RPC> | EntrypointWorkerProps<B, RPC>;
 
 export function isWorker(resource: Resource): resource is Worker<any> {
-  return resource[ResourceKind] === "cloudflare::Worker";
+  return (resource as ResourceInternal)[ResourceKind] === "cloudflare::Worker";
 }
 
 /**

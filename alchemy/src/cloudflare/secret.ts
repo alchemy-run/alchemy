@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource, ResourceKind } from "../resource.ts";
+import { Resource, ResourceKind, type ResourceInternal } from "../resource.ts";
 import {
   secret as alchemySecret,
   type Secret as AlchemySecret,
@@ -52,7 +52,7 @@ export interface SecretProps extends CloudflareApiOptions {
 }
 
 export function isSecret(resource: Resource): resource is Secret {
-  return resource[ResourceKind] === "cloudflare::Secret";
+  return (resource as ResourceInternal)[ResourceKind] === "cloudflare::Secret";
 }
 
 export type Secret = Resource<"cloudflare::Secret"> &

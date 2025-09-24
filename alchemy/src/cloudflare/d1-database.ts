@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource, ResourceKind } from "../resource.ts";
+import { Resource, ResourceKind, type ResourceInternal } from "../resource.ts";
 import { Scope } from "../scope.ts";
 import { logger } from "../util/logger.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
@@ -118,7 +118,7 @@ export interface D1DatabaseProps extends CloudflareApiOptions {
 }
 
 export function isD1Database(resource: Resource): resource is D1Database {
-  return resource[ResourceKind] === "cloudflare::D1Database";
+  return (resource as ResourceInternal)[ResourceKind] === "cloudflare::D1Database";
 }
 
 /**

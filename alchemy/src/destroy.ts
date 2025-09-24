@@ -5,6 +5,7 @@ import {
   type Resource,
   ResourceFQN,
   ResourceID,
+  type ResourceInternal,
   ResourceKind,
   type ResourceProps,
   ResourceScope,
@@ -83,7 +84,7 @@ export async function destroy<Type extends string>(
     return;
   }
 
-  const [instance, options] = args;
+  const [instance, options] = args as [ResourceInternal, DestroyOptions];
 
   if (!instance) {
     return;
@@ -127,7 +128,7 @@ export async function destroy<Type extends string>(
     if (options?.replace) {
       props = options.replace.props;
       state = {
-        output: options.replace.output!,
+        output: options.replace.output! as ResourceInternal,
         status: "deleting",
         oldProps: options.replace.props,
         data: {},
@@ -235,7 +236,7 @@ export async function destroyAll(
   options?: DestroyOptions & { force?: boolean },
 ) {
   if (options?.strategy !== "parallel") {
-    const sorted = resources.sort((a, b) => b[ResourceSeq] - a[ResourceSeq]);
+    const sorted = (resources as ResourceInternal[]).sort((a, b) => b[ResourceSeq] - a[ResourceSeq]);
     for (const resource of sorted) {
       if (isScope(resource)) {
         await resource.destroyPendingDeletions();

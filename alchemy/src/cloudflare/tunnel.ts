@@ -1,6 +1,6 @@
 import { alchemy } from "../alchemy.ts";
 import type { Context } from "../context.ts";
-import { Resource, ResourceKind } from "../resource.ts";
+import { Resource, ResourceKind, type ResourceInternal } from "../resource.ts";
 import type { Secret } from "../secret.ts";
 import { logger } from "../util/logger.ts";
 import { handleApiError } from "./api-error.ts";
@@ -265,7 +265,7 @@ export interface OriginRequestConfig {
 }
 
 export function isTunnel(resource: Resource): resource is Tunnel {
-  return resource[ResourceKind] === "cloudflare::Tunnel";
+  return (resource as ResourceInternal)[ResourceKind] === "cloudflare::Tunnel";
 }
 
 /**

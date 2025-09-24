@@ -1,6 +1,6 @@
 import type { Rpc } from "@cloudflare/workers-types";
 import type { Context } from "../context.ts";
-import { Resource, ResourceKind } from "../resource.ts";
+import { Resource, ResourceKind, type ResourceInternal } from "../resource.ts";
 import type { type } from "../type.ts";
 import { handleApiError } from "./api-error.ts";
 import { extractCloudflareResult } from "./api-response.ts";
@@ -65,7 +65,7 @@ export interface WorkerStub<
 }
 
 export function isWorkerStub(resource: Resource): resource is WorkerStub {
-  return resource[ResourceKind] === "cloudflare::WorkerStub";
+  return (resource as ResourceInternal)[ResourceKind] === "cloudflare::WorkerStub";
 }
 
 /**
