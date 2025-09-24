@@ -1,7 +1,7 @@
 import path from "pathe";
 import type { Context } from "../context.ts";
 import type { BundleProps } from "../esbuild/bundle.ts";
-import { Resource, ResourceKind } from "../resource.ts";
+import { type ExportedResource, Resource, ResourceKind } from "../resource.ts";
 import type { type } from "../type.ts";
 import { DeferredPromise } from "../util/deferred-promise.ts";
 import { logger } from "../util/logger.ts";
@@ -432,14 +432,21 @@ export type WorkerProps<
   RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
 > = InlineWorkerProps<B, RPC> | EntrypointWorkerProps<B, RPC>;
 
-export function isWorker(resource: Resource): resource is Worker<any> {
+export function isWorker(resource: Resource): resource is WorkerResource<any> {
   return resource[ResourceKind] === "cloudflare::Worker";
 }
-
 /**
- * Output returned after Worker creation/update
+ * Output returned after Worker creation/update (Public API type without internal Symbols)
  */
 export type Worker<
+  B extends Bindings | undefined = Bindings | undefined,
+  RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
+> = ExportedResource<WorkerResource<B, RPC>>;
+
+/**
+ * Resource (internal) returned after Worker creation/update
+ */
+type WorkerResource<
   B extends Bindings | undefined = Bindings | undefined,
   RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
 > = Resource<"cloudflare::Worker"> &
@@ -735,7 +742,7 @@ const _Worker = Resource(
     alwaysUpdate: true,
   },
   async function <const B extends Bindings>(
-    this: Context<Worker<NoInfer<B>>>,
+    this: Context<WorkerResource<NoInfer<B>>>,
     id: string,
     props: WorkerProps<B>,
   ) {
@@ -920,7 +927,7 @@ const _Worker = Resource(
           hasRemote: this.output?.dev?.hasRemote ?? false,
         },
         Env: undefined!,
-      } as unknown as Worker<B>);
+      } as unknown as WorkerResource<B>);
     }
 
     if (this.phase === "create" || this.output.dev?.hasRemote === false) {
@@ -1074,7 +1081,7 @@ const _Worker = Resource(
       dev: {
         hasRemote: true,
       },
-    } as unknown as Worker<B>);
+    } as unknown as WorkerResource<B>);
   },
 );
 

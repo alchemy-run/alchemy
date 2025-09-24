@@ -52,6 +52,13 @@ export function resolveDeletionHandler(typeName: string): Provider | undefined {
   return undefined;
 }
 
+// Used to remove all Symbol keys from a Resource so that Resources based on different
+// alchemy modules can play nicely together
+// Alternative approach would be to publish these symbols to a single alchemy module that never changes?
+type SymbolKeys<T> = Extract<keyof T, Symbol>;
+type WithoutResourceSymbols<T> = Omit<T, SymbolKeys<Resource>>;
+export type ExportedResource<T extends Resource> = WithoutResourceSymbols<T>;
+
 export type ResourceID = string;
 export const ResourceID = Symbol.for("alchemy::ResourceID");
 export type ResourceFQN = string;
