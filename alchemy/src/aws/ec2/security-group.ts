@@ -56,9 +56,7 @@ export interface SecurityGroupProps extends AwsClientProps {
 /**
  * Output returned after Security Group creation/update
  */
-export interface SecurityGroup
-  extends Resource<"aws::SecurityGroup">,
-    SecurityGroupProps {
+export interface SecurityGroup extends SecurityGroupProps {
   /**
    * The ID of the security group.
    */
@@ -322,14 +320,14 @@ export const SecurityGroup = Resource(
       securityGroup = sgResponse.SecurityGroups[0];
     }
 
-    return this({
+    return {
       groupId: securityGroup.GroupId,
       groupName,
       vpcId: securityGroup.VpcId,
       ownerId: securityGroup.OwnerId,
       ...props,
       vpc: vpcId,
-    });
+    };
   },
 );
 

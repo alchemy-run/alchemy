@@ -31,9 +31,7 @@ export interface InternetGatewayProps extends AwsClientProps {
 /**
  * Output returned after Internet Gateway creation/update
  */
-export interface InternetGateway
-  extends Resource<"aws::InternetGateway">,
-    InternetGatewayProps {
+export interface InternetGateway extends InternetGatewayProps {
   /**
    * The ID of the Internet Gateway
    */
@@ -358,7 +356,7 @@ export const InternetGateway = Resource(
       );
     }
 
-    return this({
+    return {
       internetGatewayId: internetGateway.InternetGatewayId!,
       state: "available",
       attachments: internetGateway.Attachments?.map((att) => ({
@@ -367,7 +365,7 @@ export const InternetGateway = Resource(
       })),
       ownerId: internetGateway.OwnerId,
       ...props,
-    });
+    };
   },
 );
 

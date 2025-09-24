@@ -62,9 +62,7 @@ export interface PasswordProps extends PlanetScaleProps {
 /**
  * Represents a PlanetScale Branch
  */
-export interface Password
-  extends Resource<"planetscale::Password">,
-    PasswordProps {
+export interface Password extends PasswordProps {
   /**
    * The unique identifier for the password
    */
@@ -327,11 +325,11 @@ export const Password = Resource(
         },
       });
 
-      return this({
+      return {
         ...this.output,
         ...props,
         name,
-      });
+      };
     }
 
     const data = await api.organizations.databases.branches.passwords.post({
@@ -349,7 +347,7 @@ export const Password = Resource(
       },
     });
 
-    return this({
+    return {
       id: data.id,
       expiresAt: data.expires_at,
       host: data.access_host_url,
@@ -358,7 +356,7 @@ export const Password = Resource(
       nameSlug,
       ...props,
       name: `${props.name}-${nameSlug}`,
-    });
+    };
   },
 );
 

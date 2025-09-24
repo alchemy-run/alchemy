@@ -51,18 +51,14 @@ export interface VectorizeIndexProps extends CloudflareApiOptions {
   adopt?: boolean;
 }
 
-export function isVectorizeIndex(
-  resource: Resource,
-): resource is VectorizeIndex {
-  return resource[ResourceKind] === "cloudflare::VectorizeIndex";
+export function isVectorizeIndex(resource: any): resource is VectorizeIndex {
+  return resource?.[ResourceKind] === "cloudflare::VectorizeIndex";
 }
 
 /**
  * Output returned after Vectorize Index creation/update
  */
-export interface VectorizeIndex
-  extends Resource<"cloudflare::VectorizeIndex">,
-    VectorizeIndexProps {
+export interface VectorizeIndex extends VectorizeIndexProps {
   type: "vectorize";
 
   /**
@@ -176,10 +172,10 @@ export const VectorizeIndex = Resource(
             `Attempted to update Vectorize index ${indexName} but only the delete property can be changed.`,
           );
         }
-        return this({
+        return {
           ...this.output,
           delete: props.delete,
-        });
+        };
       }
 
       // Check if this is a no-op update
@@ -194,7 +190,7 @@ export const VectorizeIndex = Resource(
             `Attempted to update Vectorize index ${indexName} but it was a no-op.`,
           );
         }
-        return this(this.output);
+        return this.output;
       }
 
       // Update operation is not supported by Vectorize API
@@ -204,7 +200,7 @@ export const VectorizeIndex = Resource(
       );
     }
 
-    return this({
+    return {
       type: "vectorize",
       id: indexName,
       name: indexName,
@@ -218,7 +214,7 @@ export const VectorizeIndex = Resource(
       createdAt: indexData.result.created_on
         ? new Date(indexData.result.created_on).getTime()
         : undefined,
-    });
+    };
   },
 );
 

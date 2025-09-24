@@ -84,7 +84,7 @@ export interface ImageProps {
 /**
  * Docker Image resource
  */
-export interface Image extends Resource<"docker::Image">, ImageProps {
+export interface Image extends ImageProps {
   /**
    * Image name
    */
@@ -266,15 +266,14 @@ export const Image = Resource(
         }
       }
 
-      // Return the resource using this() to construct output
-      return this({
+      return {
         ...props,
         name,
         imageRef: finalImageRef,
         imageId,
         repoDigest,
         builtAt: Date.now(),
-      });
+      };
     }
   },
 );

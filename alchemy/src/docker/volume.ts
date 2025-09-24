@@ -48,7 +48,7 @@ export interface VolumeProps {
 /**
  * Docker Volume resource
  */
-export interface Volume extends Resource<"docker::Volume">, VolumeProps {
+export interface Volume extends VolumeProps {
   /**
    * Volume ID (same as name for Docker volumes)
    */
@@ -150,8 +150,7 @@ export const Volume = Resource(
       const volumeInfos = await api.inspectVolume(volumeId);
       const mountpoint = volumeInfos[0].Mountpoint;
 
-      // Return the resource using this() to construct output
-      return this({
+      return {
         ...props,
         id: volumeId,
         name: volumeName,
@@ -159,7 +158,7 @@ export const Volume = Resource(
         createdAt: Date.now(),
         labels: Array.isArray(props.labels) ? props.labels : undefined,
         driverOpts: props.driverOpts,
-      });
+      };
     }
   },
 );

@@ -80,7 +80,7 @@ export interface ProductProps {
 /**
  * Output from the Stripe product
  */
-export interface Product extends Resource<"stripe::Product">, ProductProps {
+export interface Product extends ProductProps {
   /**
    * The ID of the product
    */
@@ -233,7 +233,7 @@ export const Product = Resource(
         }
       }
 
-      return this({
+      return {
         id: product.id,
         name: product.name,
         description: product.description || undefined,
@@ -251,7 +251,7 @@ export const Product = Resource(
         livemode: product.livemode,
         updatedAt: product.updated,
         packageDimensions: product.package_dimensions || undefined,
-      });
+      };
     } catch (error) {
       logger.error("Error creating/updating product:", error);
       throw error;

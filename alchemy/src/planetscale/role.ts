@@ -63,9 +63,7 @@ export type InheritedRole =
   | "pg_write_all_data"
   | (string & {});
 
-export interface Role
-  extends Resource<"planetscale::Role">,
-    Omit<RoleProps, "inheritedRoles"> {
+export interface Role extends Omit<RoleProps, "inheritedRoles"> {
   /**
    * The unique identifier for the role
    */
@@ -250,7 +248,7 @@ export const Role = Resource(
             inherited_roles: inheritedRoles,
           } as CreateRoleData["body"],
         });
-        return this({
+        return {
           ...props,
           id: role.id,
           name: role.name,
@@ -266,7 +264,7 @@ export const Role = Resource(
           connectionUrlPooled: alchemy.secret(
             `postgresql://${role.username}:${role.password}@${role.access_host_url}:6432/${role.database_name}?sslmode=verify-full`,
           ),
-        });
+        };
       }
       case "update": {
         // According to the types, the only property that can be updated is the name.

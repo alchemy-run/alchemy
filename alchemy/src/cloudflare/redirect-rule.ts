@@ -94,7 +94,7 @@ interface CloudflareRule {
 /**
  * Output returned after RedirectRule creation/update
  */
-export interface RedirectRule extends Resource<"cloudflare::RedirectRule"> {
+export interface RedirectRule {
   /**
    * The ID of the redirect rule
    */
@@ -263,7 +263,7 @@ export const RedirectRule = Resource(
         },
       );
 
-      return this({
+      return {
         ruleId: updatedRule.id,
         rulesetId: this.output.rulesetId,
         zoneId,
@@ -274,7 +274,7 @@ export const RedirectRule = Resource(
         preserveQueryString,
         enabled: updatedRule.enabled ?? true,
         lastUpdated: updatedRule.last_updated,
-      });
+      };
     }
 
     // Get or create the redirect ruleset for this zone
@@ -288,7 +288,7 @@ export const RedirectRule = Resource(
       preserveQueryString,
     });
 
-    return this({
+    return {
       ruleId: createdRule.id,
       rulesetId,
       zoneId,
@@ -299,7 +299,7 @@ export const RedirectRule = Resource(
       preserveQueryString,
       enabled: createdRule.enabled ?? true,
       lastUpdated: createdRule.last_updated,
-    });
+    };
   },
 );
 

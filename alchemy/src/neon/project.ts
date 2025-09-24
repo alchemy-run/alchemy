@@ -435,8 +435,7 @@ interface NeonApiResponse {
  * IMPORTANT: The interface name MUST match the exported resource name
  */
 export interface NeonProject
-  extends Resource<"neon::Project">,
-    Omit<NeonProjectProps, "apiKey" | "existing_project_id"> {
+  extends Omit<NeonProjectProps, "apiKey" | "existing_project_id"> {
   /**
    * The ID of the project
    */
@@ -617,7 +616,7 @@ export const NeonProject = Resource(
         response = await getProject(api, response.project.id, response);
       }
 
-      return this({
+      return {
         id: response.project.id,
         name: response.project.name,
         region_id: response.project.region_id as NeonRegion,
@@ -639,7 +638,7 @@ export const NeonProject = Resource(
         branch: response.branch,
         // @ts-expect-error
         endpoints: response.endpoints,
-      });
+      };
     } catch (error) {
       logger.error(`Error ${this.phase} Neon project '${id}':`, error);
       throw error;

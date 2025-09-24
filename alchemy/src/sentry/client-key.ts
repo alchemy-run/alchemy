@@ -62,9 +62,7 @@ export interface ClientKeyProps {
 /**
  * Output returned after ClientKey creation/update
  */
-export interface ClientKey
-  extends Resource<"sentry::ClientKey">,
-    ClientKeyProps {
+export interface ClientKey extends ClientKeyProps {
   /**
    * The ID of the key
    */
@@ -295,7 +293,7 @@ export const ClientKey = Resource(
           ClientKey,
           keyof ClientKeyProps
         >;
-        return this({
+        return {
           ...props,
           id: data.id,
           name: clientKeyName,
@@ -309,7 +307,7 @@ export const ClientKey = Resource(
           browserSdk: data.browserSdk,
           dateCreated: data.dateCreated,
           dynamicSdkLoaderOptions: data.dynamicSdkLoaderOptions,
-        });
+        };
       } catch (error) {
         logger.error("Error creating/updating client key:", error);
         throw error;

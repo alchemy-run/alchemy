@@ -117,48 +117,47 @@ export type DatabaseProps = BaseDatabaseProps &
 /**
  * Represents a PlanetScale Database
  */
-export type Database = Resource<"planetscale::Database"> &
-  DatabaseProps & {
-    /**
-     * The unique identifier of the database
-     */
-    id: string;
+export type Database = DatabaseProps & {
+  /**
+   * The unique identifier of the database
+   */
+  id: string;
 
-    /**
-     * The name of the database
-     */
-    name: string;
+  /**
+   * The name of the database
+   */
+  name: string;
 
-    /**
-     * The current state of the database
-     */
-    state: string;
+  /**
+   * The current state of the database
+   */
+  state: string;
 
-    /**
-     * The default branch name
-     */
-    defaultBranch: string;
+  /**
+   * The default branch name
+   */
+  defaultBranch: string;
 
-    /**
-     * The plan type
-     */
-    plan: string;
+  /**
+   * The plan type
+   */
+  plan: string;
 
-    /**
-     * Time at which the database was created
-     */
-    createdAt: string;
+  /**
+   * Time at which the database was created
+   */
+  createdAt: string;
 
-    /**
-     * Time at which the database was last updated
-     */
-    updatedAt: string;
+  /**
+   * Time at which the database was last updated
+   */
+  updatedAt: string;
 
-    /**
-     * HTML URL to access the database
-     */
-    htmlUrl: string;
-  };
+  /**
+   * HTML URL to access the database
+   */
+  htmlUrl: string;
+};
 
 /**
  * Create, manage and delete PlanetScale databases
@@ -311,7 +310,7 @@ export const Database = Resource(
         clusterSize,
       );
 
-      return this({
+      return {
         ...props,
         id: updateResponse.id,
         name: databaseName,
@@ -321,7 +320,7 @@ export const Database = Resource(
         createdAt: updateResponse.created_at,
         updatedAt: updateResponse.updated_at,
         htmlUrl: updateResponse.html_url,
-      });
+      };
     }
 
     if (getResponse.data) {
@@ -406,7 +405,7 @@ export const Database = Resource(
           },
         });
 
-        return this({
+        return {
           ...props,
           id: data.id,
           name: databaseName,
@@ -416,11 +415,11 @@ export const Database = Resource(
           createdAt: updatedData.created_at,
           updatedAt: updatedData.updated_at,
           htmlUrl: updatedData.html_url,
-        });
+        };
       }
     }
 
-    return this({
+    return {
       ...props,
       id: data.id,
       name: databaseName,
@@ -430,6 +429,6 @@ export const Database = Resource(
       createdAt: data.created_at,
       updatedAt: data.updated_at,
       htmlUrl: data.html_url,
-    });
+    };
   },
 );

@@ -62,7 +62,7 @@ export interface RouteProps extends CloudflareApiOptions {
 /**
  * Output returned after Route creation/update
  */
-export interface Route extends Resource<"cloudflare::Route">, RouteProps {
+export interface Route extends RouteProps {
   /**
    * The unique ID of the route
    */
@@ -166,12 +166,12 @@ export const Route = Resource(
         zoneId = this.output?.zoneId ?? "noop-zone";
       }
 
-      return this({
+      return {
         id: this.output?.id ?? "noop-route",
         pattern: props.pattern,
         script: scriptName,
         zoneId: zoneId,
-      });
+      };
     }
 
     // Get or infer zone ID (only needed for create/update phases)
@@ -247,12 +247,12 @@ export const Route = Resource(
     }
 
     // Return the route resource
-    return this({
+    return {
       id: routeData.result.id,
       pattern: routeData.result.pattern,
       script: routeData.result.script,
       zoneId,
-    });
+    };
   },
 );
 
