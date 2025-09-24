@@ -7,12 +7,12 @@ import tsConfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
   plugins: [
+    alchemy(),
     tailwindcss(),
     tsConfigPaths({
       projects: ["./tsconfig.json"],
     }),
     tanstackStart(),
-    alchemy(),
     viteReact(),
   ],
 });

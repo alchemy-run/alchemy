@@ -2,7 +2,6 @@ import { Await, createFileRoute } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { Suspense, useState } from "react";
 
-import { env } from "cloudflare:workers";
 const personServerFn = createServerFn({ method: "GET" })
   .inputValidator((d: string) => d)
   .handler(({ data: name }) => {
@@ -32,7 +31,7 @@ export const Route = createFileRoute("/deferred")({
 function Deferred() {
   const [count, setCount] = useState(0);
   const { deferredStuff, deferredPerson, person } = Route.useLoaderData();
-  console.log(env);
+  
   return (
     <div className="p-2">
       <div data-testid="regular-person">
