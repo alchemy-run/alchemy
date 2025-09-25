@@ -1,0 +1,23 @@
+{
+  "name": "@alchemy.run/effect-example",
+  "private": true,
+  "license": "Apache-2.0",
+  "author": "Sam Goodwin <sam@alchemy.run>",
+  "homepage": "https://alchemy.run",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sam-goodwin/alchemy.git",
+    "directory": "alchemy"
+  },
+  "type": "module",
+  "module": "./lib/index.js",
+  "scripts": {},
+  "dependencies": {
+    "effect": "latest",
+    "@effect/platform-node": "latest",
+    "@effect/platform": "latest",
+    "alchemy": "workspace:*",
+    "@alchemy.run/effect": "workspace:*",
+    "@alchemy.run/effect-cli": "workspace:*"
+  }
+}
