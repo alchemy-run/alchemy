@@ -74,7 +74,7 @@ export const buildWorkerOptions = async (
       // workerd/io/worker.c++:2164: info: uncaught exception; source = Uncaught (in promise); stack = TypeError: Invalid URL string.
       {
         entrypoint: "default",
-        proxy: false,
+        proxy: true,
       },
     ],
     containerEngine: {
