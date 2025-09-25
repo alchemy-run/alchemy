@@ -31,9 +31,22 @@ export async function createMiniflareWorkerProxy(options: {
   });
   server.on("request", async (req, res) => {
     try {
-      const request = toMiniflareRequest(req);
+      const { request, url } = toMiniflareRequest(req);
       const name = options.getWorkerName(request);
       const worker = await options.miniflare.getWorker(name);
+
+      // Handle scheduled events
+      // https://developers.cloudflare.com/workers/runtime-apis/handlers/scheduled/#background
+      // https://github.com/cloudflare/workers-sdk/blob/7d53b9ab6b370944b7934ad51ebef43160c3c775/packages/wrangler/templates/middleware/middleware-scheduled.ts#L6
+      if (url.pathname === "/__scheduled") {
+        await worker.scheduled({
+          scheduledTime: new Date(),
+          cron: url.searchParams.get("cron") ?? undefined,
+        });
+        writeMiniflareResponseToNode(new miniflare.Response("OK"), res);
+        return;
+      }
+
       const response = await worker.fetch(request);
       writeMiniflareResponseToNode(response, res);
     } catch (error) {
@@ -45,20 +58,26 @@ export async function createMiniflareWorkerProxy(options: {
     }
   });
 
-  const toMiniflareRequest = (req: http.IncomingMessage): miniflare.Request => {
+  const toMiniflareRequest = (
+    req: http.IncomingMessage,
+  ): { request: miniflare.Request; url: URL } => {
     const info = parseIncomingMessage(req);
     options.transformRequest?.(info);
-    return new miniflare.Request(info.url, {
-      method: info.method,
-      headers: info.headers,
-      body: info.body,
-      redirect: info.redirect,
-      duplex: info.duplex,
-    });
+    return {
+      request: new miniflare.Request(info.url, {
+        method: info.method,
+        headers: info.headers,
+        body: info.body,
+        redirect: info.redirect,
+        duplex: info.duplex,
+      }),
+      url: info.url,
+    };
   };
 
   const createServerWebSocket = async (req: http.IncomingMessage) => {
-    const name = options.getWorkerName(toMiniflareRequest(req));
+    const { request } = toMiniflareRequest(req);
+    const name = options.getWorkerName(request);
     const target = await options.miniflare.unsafeGetDirectURL(name);
     const url = new URL(req.url ?? "/", target);
     url.protocol = url.protocol.replace("http", "ws");
