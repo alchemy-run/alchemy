@@ -52,3 +52,9 @@ export interface Deny<
 
 export const allow = <S extends Statement>() =>
   Effect.gen(function* () {}) as Effect.Effect<void, never, S>;
+
+export const bound = <S extends Statement[]>(
+  ...statement: S
+): Policy<S[number]> => ({
+  statements: statement,
+});

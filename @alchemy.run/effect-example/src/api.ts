@@ -1,4 +1,4 @@
-import { Binding } from "@alchemy.run/effect";
+import * as Alchemy from "@alchemy.run/effect";
 import * as AWS from "@alchemy.run/effect/aws";
 import * as Effect from "effect/Effect";
 import * as S from "effect/Schema";
@@ -32,5 +32,5 @@ export default api.pipe(
 // infrastructure (as effect)
 export class ApiLambda extends AWS.Lambda.make(api, {
   main: import.meta.file,
-  policy: Binding.of(AWS.Queue.SendMessage(Messages)),
+  policy: Alchemy.bound(AWS.Queue.SendMessage(Messages)),
 }) {}

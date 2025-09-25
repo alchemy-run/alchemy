@@ -13,11 +13,11 @@
   "module": "./lib/index.js",
   "scripts": {},
   "dependencies": {
-    "effect": "latest",
+    "@alchemy.run/effect-cli": "workspace:*",
+    "@alchemy.run/effect": "workspace:*",
     "@effect/platform-node": "latest",
     "@effect/platform": "latest",
     "alchemy": "workspace:*",
-    "@alchemy.run/effect": "workspace:*",
-    "@alchemy.run/effect-cli": "workspace:*"
+    "effect": "latest"
   }
 }
