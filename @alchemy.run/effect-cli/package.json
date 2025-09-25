@@ -11,6 +11,7 @@
   },
   "type": "module",
   "module": "./lib/index.js",
+  "sideEffects": false,
   "bin": {
     "alchemy-effect": "bin/alchemy.js"
   },

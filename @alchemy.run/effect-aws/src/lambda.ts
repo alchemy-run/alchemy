@@ -71,7 +71,10 @@ export type Function<
 
 export type Handler = (event: any, ctx: any) => Effect.Effect<any, any, any>;
 
-export const Function = <ID extends string, P extends Props>(id: ID, props: P) =>
+export const Function = <ID extends string, P extends Props>(
+  id: ID,
+  props: P,
+) =>
   Object.assign(
     Context.Tag(id)() as Context.TagClass<P, ID, Attributes<ID, P>>,
     {

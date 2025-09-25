@@ -11,8 +11,7 @@
   },
   "type": "module",
   "module": "./lib/index.js",
-  "bin": {},
-  "scripts": {},
+  "sideEffects": false,
   "files": [
     "bin",
     "lib",

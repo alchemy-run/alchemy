@@ -12,7 +12,7 @@
   "type": "module",
   "module": "./lib/index.js",
   "scripts": {
-    "deploy": "AWS_REGION=us-west-2 bun ./src/index.ts"
+    "deploy": "AWS_REGION=us-west-2 bun ./alchemy.run.ts"
   },
   "dependencies": {
     "@alchemy.run/effect-cli": "workspace:*",

@@ -155,10 +155,13 @@ export type PlanItem = Effect.Effect<
 export const plan = <
   const Phase extends "update" | "destroy",
   const Resources extends PlanItem[],
->(
-  phase: Phase,
-  ...resources: Resources
-) => {
+>({
+  phase,
+  resources,
+}: {
+  phase: Phase;
+  resources: Resources;
+}) => {
   return Effect.gen(function* () {
     const state = yield* State;
 

@@ -30,7 +30,7 @@ export default api.pipe(
 );
 
 // infrastructure (as effect)
-export class ApiLambda extends AWS.Lambda.make(api, {
-  main: import.meta.file,
+export class ApiFunction extends AWS.Lambda.make(api, {
+  main: import.meta.path,
   policy: Alchemy.bound(AWS.SQS.SendMessage(Messages)),
 }) {}
