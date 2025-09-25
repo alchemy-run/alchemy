@@ -229,7 +229,7 @@ export const NeonProject = Resource(
             .then((res) => res.data.endpoints),
         ]);
 
-        return this({
+        return {
           id: data.project.id,
           name: data.project.name,
           created_at: data.project.created_at,
@@ -248,7 +248,7 @@ export const NeonProject = Resource(
           databases: data.databases as [neon.Database, ...neon.Database[]],
           branch,
           endpoints: endpoints as [neon.Endpoint, ...neon.Endpoint[]],
-        });
+        };
       }
       case "update": {
         const { data } = await api.updateProject({
@@ -264,7 +264,7 @@ export const NeonProject = Resource(
             },
           },
         });
-        return this({
+        return {
           ...this.output,
           name: data.project.name,
           updated_at: data.project.updated_at,
@@ -274,7 +274,7 @@ export const NeonProject = Resource(
           settings: data.project.settings,
           default_endpoint_settings: data.project.default_endpoint_settings,
           history_retention_seconds: data.project.history_retention_seconds,
-        });
+        };
       }
       case "delete": {
         if (this.output?.id) {
