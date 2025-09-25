@@ -1,6 +1,7 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { isBinding, type Binding } from "./binding.ts";
+import type { Phase } from "./phase.ts";
 import type { SerializedStatement, Statement } from "./policy.ts";
 import type { Provider } from "./provider.ts";
 import type { Resource } from "./resource.ts";
@@ -123,9 +124,9 @@ export type AnyPlan = {
 };
 
 export type Plan<
-  Phase extends "update" | "destroy" = "update" | "destroy",
+  P extends Phase = Phase,
   Resources extends PlanItem[] = PlanItem[],
-> = Phase extends "update"
+> = P extends "update"
   ?
       | {
           [k in keyof Apply<Resources>]: Apply<Resources>[k];
@@ -143,7 +144,7 @@ export type Plan<
       >;
     };
 
-type PlanItem = Effect.Effect<
+export type PlanItem = Effect.Effect<
   {
     [id in string]: Binding | Resource;
   },
@@ -154,13 +155,10 @@ type PlanItem = Effect.Effect<
 export const plan = <
   const Phase extends "update" | "destroy",
   const Resources extends PlanItem[],
->({
-  phase,
-  resources,
-}: {
-  phase: Phase;
-  resources: Resources;
-}) => {
+>(
+  phase: Phase,
+  ...resources: Resources
+) => {
   return Effect.gen(function* () {
     const state = yield* State;
 

@@ -1,6 +1,6 @@
 import * as Alchemy from "@alchemy.run/effect";
-import { State } from "@alchemy.run/effect";
-import * as AWS from "@alchemy.run/effect/aws";
+import * as AWS from "@alchemy.run/effect-aws";
+import * as AlchemyCLI from "@alchemy.run/effect-cli";
 import { NodeContext } from "@effect/platform-node";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -14,27 +14,24 @@ const aws = AWS.defaultProviders.pipe(
   Layer.provide(AWS.Credentials.fromChain),
 );
 
-const plan = Alchemy.plan({
-  phase: process.argv.includes("--destroy") ? "destroy" : "update",
-  resources: [
-    ApiLambda,
-    // Consumer
-  ],
-}).pipe(Alchemy.approvePlan);
-
-const applied = Alchemy.apply(plan);
-
-const outputs = await applied.pipe(
+const stack = await Alchemy.plan(
+  process.argv.includes("--destroy") ? "destroy" : "update",
+  ApiLambda,
+  // Consumer
+).pipe(
+  Alchemy.apply,
+  Effect.catchTag("PlanRejected", () => Effect.void),
+  Effect.provide(AlchemyCLI.review),
+  // Effect.provide(AlchemyCLI.reportProgress),
   Effect.provide(aws),
-  Effect.provide(State.localFs),
+  Effect.provide(Alchemy.State.localFs),
   Effect.provide(NodeContext.layer),
   Effect.provide(app),
-  Effect.catchTag("PlanNotApproved", () => Effect.void),
   Effect.runPromise,
 );
 
-if (outputs) {
-  const { api, messages } = outputs;
-  console.log(api.functionUrl);
-  console.log(messages.queueUrl);
+if (stack) {
+  console.log(stack.api.functionUrl);
 }
+
+export default stack;

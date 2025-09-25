@@ -1,8 +1,28 @@
-import type { AnyPlan } from "@alchemy.run/effect";
-import * as Data from "effect/Data";
+import { PlanRejected, ReviewPlan, type AnyPlan } from "@alchemy.run/effect";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import pc from "picocolors";
 import * as Clack from "./clack.ts";
+
+export const review = Layer.succeed(
+  ReviewPlan,
+  ReviewPlan.of({
+    review: <P extends AnyPlan>(plan: P) =>
+      Effect.gen(function* () {
+        yield* Clack.note(yield* renderPlan(plan), "Plan");
+
+        const approved = yield* Clack.confirm({
+          message: "Are you sure you want to apply these changes?",
+        });
+        if (Clack.isCancel(approved) || approved === false) {
+          yield* Clack.outro("Operation cancelled.");
+          yield* Effect.fail(new PlanRejected());
+        }
+
+        return plan;
+      }),
+  }),
+);
 
 export const renderPlan = Effect.fn(function* (plan: AnyPlan) {
   // First pass: compute optimal column widths
@@ -35,26 +55,3 @@ export const renderPlan = Effect.fn(function* (plan: AnyPlan) {
     })
     .join("\n");
 });
-
-export class PlanNotApproved extends Data.TaggedError("PlanNotApproved")<{}> {}
-
-export const approvePlan = <P extends AnyPlan, Err, Req>(
-  plan: Effect.Effect<P, Err, Req>,
-) =>
-  plan.pipe(
-    Effect.flatMap((plan) =>
-      Effect.gen(function* () {
-        yield* Clack.note(yield* renderPlan(plan), "Plan");
-
-        const approved = yield* Clack.confirm({
-          message: "Are you sure you want to apply these changes?",
-        });
-        if (Clack.isCancel(approved) || approved === false) {
-          yield* Clack.outro("Operation cancelled.");
-          yield* Effect.fail(new PlanNotApproved());
-        }
-
-        return plan;
-      }),
-    ),
-  );

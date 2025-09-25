@@ -11,6 +11,7 @@
       "**",
       "./**/biome.json",
       "./**/package.json",
+      "./@alchemy.run/**/*.ts",
       "./alchemy-web/**/*.js",
       "./alchemy-web/**/*.mjs",
       "./alchemy-web/**/*.ts",
@@ -44,7 +45,7 @@
       "!examples/cloudflare-nuxt-pipeline/.output/",
       "!examples/cloudflare-redwood/worker-configuration.d.ts",
       "!examples/cloudflare-tanstack-start/.output/",
-      "!examples/cloudflare-tanstack-start/src/routeTree.gen.ts",
+      "!examples/cloudflare-tanstack-start/src/routeTree.gen.ts"
     ],
     "experimentalScannerIgnores": ["!**/node_modules", "./alchemy/lib/**"]
   },

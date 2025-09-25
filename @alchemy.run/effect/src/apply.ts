@@ -1,9 +1,11 @@
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import type { Simplify } from "effect/Types";
 import type { AnyPlan, BindingAction, Delete } from "./plan.ts";
 import type { SerializedStatement, Statement } from "./policy.ts";
 import type { Resource } from "./resource.ts";
+import { type PlanRejected, ReviewPlan } from "./review.ts";
 import { State } from "./state.ts";
 
 export const apply = <const P extends AnyPlan, Err, Req>(
@@ -14,6 +16,11 @@ export const apply = <const P extends AnyPlan, Err, Req>(
       Effect.gen(function* () {
         const state = yield* State;
         const outputs = {} as Record<string, Effect.Effect<any, any>>;
+        const approve = yield* Effect.serviceOption(ReviewPlan);
+
+        if (Option.isSome(approve)) {
+          yield* approve.value.review(plan);
+        }
 
         const apply = Effect.fn(function* (
           node:
@@ -182,6 +189,6 @@ export const apply = <const P extends AnyPlan, Err, Req>(
         ? undefined
         : O
       : never,
-    Err,
+    Err | PlanRejected,
     Req
   >;

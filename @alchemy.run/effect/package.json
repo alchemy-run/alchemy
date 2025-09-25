@@ -22,12 +22,7 @@
     ".": {
       "bun": "./src/index.ts",
       "import": "./lib/index.js",
-      "types": "./lib/index.d.ts"
-    },
-    "./aws": {
-      "bun": "./src/aws/index.ts",
-      "import": "./lib/aws/index.js",
-      "types": "./lib/aws/index.d.ts"
+      "types": "./src/index.d.ts"
     }
   },
   "peerDependencies": {

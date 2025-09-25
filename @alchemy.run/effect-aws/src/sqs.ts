@@ -4,11 +4,7 @@ import type {
   TagInstance,
 } from "@alchemy.run/effect";
 import { App, allow, type Allow } from "@alchemy.run/effect";
-import type {
-  Context as LambdaContext,
-  SQSBatchResponse,
-  SQSEvent,
-} from "aws-lambda";
+import type * as lambda from "aws-lambda";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -20,6 +16,9 @@ import { createAWSServiceClientLayer } from "./client.ts";
 import * as Credentials from "./credentials.ts";
 import type * as Lambda from "./lambda.ts";
 import * as Region from "./region.ts";
+
+// required to avoid this error in consumers: "The inferred type of 'Messages' cannot be named without a reference to '../../effect-aws/node_modules/@types/aws-lambda'. This is likely not portable. A type annotation is necessary.ts(2742)"
+export type * as lambda from "aws-lambda";
 
 export type Type = typeof Type;
 export const Type = "AWS::SQS::Queue";
@@ -97,7 +96,7 @@ type Queue<ID extends string = string, P extends Props = Props> = Resource<
   new (_: never): TagInstance<Context.TagClass<P, ID, Attributes<ID, P>>>;
 };
 
-export const Tag = <ID extends string, P extends Props>(id: ID, props: P) =>
+export const Queue = <ID extends string, P extends Props>(id: ID, props: P) =>
   Object.assign(Context.Tag(id)<P, Attributes<ID, P>>(), {
     kind: "Resource",
     type: Type,
@@ -109,9 +108,9 @@ export const Tag = <ID extends string, P extends Props>(id: ID, props: P) =>
     consume<Self, Err, Req>(
       this: Self,
       consumer: (
-        event: SQSEvent,
-        context: LambdaContext,
-      ) => Effect.Effect<SQSBatchResponse | void, Err, Req>,
+        event: lambda.SQSEvent,
+        context: lambda.Context,
+      ) => Effect.Effect<lambda.SQSBatchResponse | void, Err, Req>,
     ) {
       return consume(this, consumer);
     },
@@ -120,9 +119,9 @@ export const Tag = <ID extends string, P extends Props>(id: ID, props: P) =>
 export const consume = <Q, Err, Req>(
   queue: Q,
   handler: (
-    event: SQSEvent,
-    context: LambdaContext,
-  ) => Effect.Effect<SQSBatchResponse | void, Err, Req>,
+    event: lambda.SQSEvent,
+    context: lambda.Context,
+  ) => Effect.Effect<lambda.SQSBatchResponse | void, Err, Req>,
 ): Consumer<Q, Err, Req> => {
   const iae = Effect.gen(function* () {
     return handler;
@@ -134,9 +133,9 @@ export const consume = <Q, Err, Req>(
 
 export type Consumer<Q, Err, Req> = Effect.Effect<
   (
-    request: SQSEvent,
-    context: LambdaContext,
-  ) => Effect.Effect<SQSBatchResponse | void, Err, Req>,
+    request: lambda.SQSEvent,
+    context: lambda.Context,
+  ) => Effect.Effect<lambda.SQSBatchResponse | void, Err, Req>,
   Err,
   Req | Consume<Extract<Q, Queue>>
 > & {
@@ -199,7 +198,7 @@ export const SendMessage = <Q extends Queue>(queue: Q): SendMessage<Q> => ({
   }),
 });
 
-export const send = <Q extends Queue<string, Props>>(
+export const sendMessage = <Q extends Queue<string, Props>>(
   queue: Q,
   message: Q["props"]["message"]["Type"],
 ) =>
