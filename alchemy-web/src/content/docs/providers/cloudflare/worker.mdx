@@ -150,7 +150,7 @@ Serve static files from a directory:
 ```ts
 import { Worker, Assets } from "alchemy/cloudflare";
 
-const assets = await Assets("static", {
+const assets = await Assets({
   path: "./public",
 });
 
@@ -591,7 +591,7 @@ const worker = await Worker("api", {
   entrypoint: "./src/index.ts",
 });
 
-await WranglerJson("wrangler", {
+await WranglerJson({
   worker,
   transform: {
     wrangler: (spec) => ({

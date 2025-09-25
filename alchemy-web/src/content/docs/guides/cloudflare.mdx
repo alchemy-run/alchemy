@@ -8,13 +8,98 @@ sidebar:
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 There are three supported ways of authorizing Alchemy with Cloudflare:
-1. API Token - a token you create once with limited scopes
-2. OAuth - a token created by `wrangler login`
-3. Global API Key (legacy) - the global, highly permissive API key
+1. **OAuth (recommended**) - short-lived access and refresh tokens
+2. **API Token** - a token you create once with limited scopes
+3. **Global API Key** (legacy) - the global, highly permissive API key
+
+:::tip
+We recommend using [Profiles](/concepts/profiles) to manage your credentials. 
+
+While API Tokens and Global API Keys can be set as environment variables, all three methods can be configured using Profiles and the `alchemy configure` CLI command.
+:::
+
+## OAuth
+
+To use OAuth with Cloudflare, create a [Profile](/concepts/profiles) with `alchemy configure` and select OAuth for Cloudflare.
+
+Once setup, you can refresh your OAuth tokens with Cloudflare using the `alchemy login` command:
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun">
+    ```sh
+    bun alchemy login [--profile <profile>]
+    ```
+  </TabItem>
+  <TabItem label="npm">
+    ```sh
+    npx alchemy login [--profile <profile>]
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```sh
+    pnpm alchemy login [--profile <profile>]
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```sh
+    yarn alchemy login [--profile <profile>]
+    ```
+  </TabItem>
+</Tabs>
+
+Then, deploy your app with `alchemy deploy` (or run another [CLI command](/concepts/cli)):
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun">
+    ```sh
+    bun alchemy deploy
+    ```
+  </TabItem>
+  <TabItem label="npm">
+    ```sh
+    npx alchemy deploy
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```sh
+    pnpm alchemy deploy
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```sh
+    yarn alchemy deploy
+    ```
+  </TabItem>
+</Tabs>
+
+To select a specific profile, use the `--profile` flag:
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun">
+    ```sh
+    bun alchemy deploy --profile <profile>
+    ```
+  </TabItem>
+  <TabItem label="npm">
+    ```sh
+    npx alchemy deploy --profile <profile>
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```sh
+    pnpm alchemy deploy --profile <profile>
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```sh
+    yarn alchemy deploy
+    ```
+  </TabItem>
+</Tabs>
 
 ## API Token
 
-First you need to [create an API Token](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/) and then use it in your Alchemy app.
+First, [create an API Token](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/) and then use it in your Alchemy app.
 
 By default, Alchemy will use the `CLOUDFLARE_API_TOKEN` environment variable if set.
 
@@ -59,60 +144,6 @@ await Worker("my-worker", {
 :::caution
 To use `alchemy.secret`, you must set a `password` when initializing your alchemy app. See [Encryption Password](/concepts/secret#encryption-password).
 :::
-
-## OAuth Token
-
-If you don't specify `CLOUDFLARE_API_KEY` or `CLOUDFLARE_API_TOKEN`, then Alchemy will use the OAuth Token and Refresh Token to authenticate with Cloudflare.
-
-First, make sure you've logged in with wrangler:
-
-<Tabs syncKey="pkgManager">
-  <TabItem label="bun">
-    ```sh
-    bun wrangler login
-    ```
-  </TabItem>
-  <TabItem label="npm">
-    ```sh
-    npx wrangler login
-    ```
-  </TabItem>
-  <TabItem label="pnpm">
-    ```sh
-    pnpm wrangler login
-    ```
-  </TabItem>
-  <TabItem label="yarn">
-    ```sh
-    yarn wrangler login
-    ```
-  </TabItem>
-</Tabs>
-
-Then, deploy your app (without `CLOUDFLARE_API_KEY` or `CLOUDFLARE_API_TOKEN` environment variables):
-
-<Tabs syncKey="pkgManager">
-  <TabItem label="bun">
-    ```sh
-    bun alchemy deploy
-    ```
-  </TabItem>
-  <TabItem label="npm">
-    ```sh
-    npx alchemy deploy
-    ```
-  </TabItem>
-  <TabItem label="pnpm">
-    ```sh
-    pnpm alchemy deploy
-    ```
-  </TabItem>
-  <TabItem label="yarn">
-    ```sh
-    yarn alchemy deploy
-    ```
-  </TabItem>
-</Tabs>
 
 ## Global API Key
 
@@ -212,7 +243,7 @@ To use `alchemy.secret`, you must set a `password` when initializing your alchem
 
 ## Account ID
 
-By default, Alchemy will resolve the account ID from the API or OAuth token.
+By default, Alchemy will resolve the account ID from the Profile or look it up using your API Key or Token.
 
 <Tabs syncKey="pkgManager">
   <TabItem label="bun">

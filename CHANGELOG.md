@@ -1,3 +1,51 @@
+## v0.68.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- Remove Resource symbols and this(..) syntax &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/1003 [<samp>(d967c)</samp>](https://github.com/sam-goodwin/alchemy/commit/d967c0dc)
+- **cli**: Alchemy auth command for cloudflare &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/956 [<samp>(f9fab)</samp>](https://github.com/sam-goodwin/alchemy/commit/f9fab978)
+- **cloudflare**: Add head, get, list, put and delete methods to R2Bucket &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/974 [<samp>(d5e96)</samp>](https://github.com/sam-goodwin/alchemy/commit/d5e96354)
+- **neon**: Branch resource & rewrite project &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/995 [<samp>(87555)</samp>](https://github.com/sam-goodwin/alchemy/commit/87555813)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Use fs.rm instead of fs.rmdir &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(1ad11)</samp>](https://github.com/sam-goodwin/alchemy/commit/1ad119e0)
+- **cloudflare**:
+  - Wasm bundling fails when imported from nested directory &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/982 [<samp>(454b9)</samp>](https://github.com/sam-goodwin/alchemy/commit/454b9624)
+  - Minify internal workers &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/992 [<samp>(097d0)</samp>](https://github.com/sam-goodwin/alchemy/commit/097d04da)
+  - Use capnweb for miniflare remote bindings &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/990 [<samp>(fda5a)</samp>](https://github.com/sam-goodwin/alchemy/commit/fda5ae74)
+  - Avoid storing assets in state &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/991 [<samp>(784fb)</samp>](https://github.com/sam-goodwin/alchemy/commit/784fb090)
+  - Preserve string literal types in bound.ts &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/1002 [<samp>(d2cc6)</samp>](https://github.com/sam-goodwin/alchemy/commit/d2cc61a8)
+- **core**:
+  - Correct websocket proxying &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/998 [<samp>(ae899)</samp>](https://github.com/sam-goodwin/alchemy/commit/ae899629)
+- **docker**:
+  - Enable buildkit &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/993 [<samp>(1d8aa)</samp>](https://github.com/sam-goodwin/alchemy/commit/1d8aa6f1)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.67.0...v0.68.0)
+
+---
+
+## v0.67.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**:
+  - Add SecretRef to reference existing secrets &nbsp;-&nbsp; by **Andrew Jefferson** in https://github.com/sam-goodwin/alchemy/issues/966 [<samp>(f0dc0)</samp>](https://github.com/sam-goodwin/alchemy/commit/f0dc083d)
+  - Tunnel &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/959 [<samp>(2b2b3)</samp>](https://github.com/sam-goodwin/alchemy/commit/2b2b3710)
+  - Minify nextjs to reduce likelihood of cloudflare limits &nbsp;-&nbsp; by **Michael K** in https://github.com/sam-goodwin/alchemy/issues/972 [<samp>(fad12)</samp>](https://github.com/sam-goodwin/alchemy/commit/fad1216f)
+  - HyperdriveRef &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/971 [<samp>(84dbe)</samp>](https://github.com/sam-goodwin/alchemy/commit/84dbe727)
+  - Service binding named entrypoints &nbsp;-&nbsp; by **Michael K** in https://github.com/sam-goodwin/alchemy/issues/969 [<samp>(36e73)</samp>](https://github.com/sam-goodwin/alchemy/commit/36e73f17)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cli**: Ignore turbo.json when finding workspace root &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/965 [<samp>(5020d)</samp>](https://github.com/sam-goodwin/alchemy/commit/5020d8ab)
+- **cloudflare**: Remove ai gateway binding type &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/963 [<samp>(261f7)</samp>](https://github.com/sam-goodwin/alchemy/commit/261f7d21)
+- **core**: Commands run by scope.spawn are properly mirrored to stdio &nbsp;-&nbsp; by **Michael K** in https://github.com/sam-goodwin/alchemy/issues/942 [<samp>(100fe)</samp>](https://github.com/sam-goodwin/alchemy/commit/100fe08d)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.66.0...v0.67.0)
+
+---
+
 ## v0.66.0
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features

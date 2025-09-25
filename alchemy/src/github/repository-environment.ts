@@ -98,9 +98,7 @@ export interface RepositoryEnvironmentProps {
 /**
  * Output returned after Repository Environment creation/update
  */
-export interface RepositoryEnvironment
-  extends Resource<"github::RepositoryEnvironment">,
-    RepositoryEnvironmentProps {
+export interface RepositoryEnvironment extends RepositoryEnvironmentProps {
   /**
    * The ID of the resource
    */
@@ -442,7 +440,7 @@ export const RepositoryEnvironment = Resource(
       });
 
       // Return environment details
-      return this({
+      return {
         id: `${props.owner}/${props.repository}/${environmentName}`,
         environmentId: environmentId || env.id,
         owner: props.owner,
@@ -456,7 +454,7 @@ export const RepositoryEnvironment = Resource(
         branchPatterns: props.branchPatterns,
         token: props.token,
         updatedAt: new Date().toISOString(),
-      });
+      };
     } catch (error: any) {
       if (
         error.status === 403 &&

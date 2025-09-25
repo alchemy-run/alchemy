@@ -524,7 +524,7 @@ describe("Worker Resource", () => {
       await fs.writeFile(path.join(subDir, "config.json"), jsonContent);
 
       // Create assets resource
-      const assets = await Assets("static-assets", {
+      const assets = await Assets({
         path: tempDir,
       });
 
@@ -650,7 +650,7 @@ describe("Worker Resource", () => {
       ]);
 
       // Create assets resource
-      const assets = await Assets("assets-with-config", {
+      const assets = await Assets({
         path: tempDir,
       });
 
@@ -1442,7 +1442,7 @@ describe("Worker Resource", () => {
       await fs.writeFile(path.join(tempDir, "test.txt"), testContent);
 
       // Create assets resource
-      const assets = await Assets("versioned-static-assets", {
+      const assets = await Assets({
         path: tempDir,
       });
 

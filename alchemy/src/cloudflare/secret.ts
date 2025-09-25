@@ -51,42 +51,41 @@ export interface SecretProps extends CloudflareApiOptions {
   delete?: boolean;
 }
 
-export function isSecret(resource: Resource): resource is Secret {
-  return resource[ResourceKind] === "cloudflare::Secret";
+export function isSecret(resource: any): resource is Secret {
+  return resource?.[ResourceKind] === "cloudflare::Secret";
 }
 
-export type Secret = Resource<"cloudflare::Secret"> &
-  Omit<SecretProps, "delete" | "value"> & {
-    /**
-     * The binding type for Cloudflare Workers
-     */
-    type: "secrets_store_secret";
+export type Secret = Omit<SecretProps, "delete" | "value"> & {
+  /**
+   * The binding type for Cloudflare Workers
+   */
+  type: "secrets_store_secret";
 
-    /**
-     * The name of the secret
-     */
-    name: string;
+  /**
+   * The name of the secret
+   */
+  name: string;
 
-    /**
-     * The unique identifier of the secrets store this secret belongs to
-     */
-    storeId: string;
+  /**
+   * The unique identifier of the secrets store this secret belongs to
+   */
+  storeId: string;
 
-    /**
-     * The secret value (as an alchemy Secret instance)
-     */
-    value: AlchemySecret;
+  /**
+   * The secret value (as an alchemy Secret instance)
+   */
+  value: AlchemySecret;
 
-    /**
-     * Timestamp when the secret was created
-     */
-    createdAt: number;
+  /**
+   * Timestamp when the secret was created
+   */
+  createdAt: number;
 
-    /**
-     * Timestamp when the secret was last modified
-     */
-    modifiedAt: number;
-  };
+  /**
+   * Timestamp when the secret was last modified
+   */
+  modifiedAt: number;
+};
 
 /**
  * A Cloudflare Secret represents an individual secret stored in a Secrets Store.
@@ -197,7 +196,7 @@ const _Secret = Resource(
     // Insert or update the secret
     await insertSecret(api, storeId, secretName, props.value);
 
-    return this({
+    return {
       type: "secrets_store_secret",
       name: secretName,
       storeId,
@@ -205,7 +204,7 @@ const _Secret = Resource(
       value: props.value,
       createdAt,
       modifiedAt: Date.now(),
-    });
+    };
   },
 );
 

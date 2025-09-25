@@ -1,3 +1,4 @@
+import { fetchAndExpectOK, fetchAndExpectStatus } from "alchemy/util";
 import assert from "node:assert";
 
 export async function test({ url }: { url: string | undefined }) {
@@ -10,22 +11,34 @@ export async function test({ url }: { url: string | undefined }) {
   const key = crypto.randomUUID();
   const value = crypto.randomUUID();
 
-  const putRes = await fetch(`${url}/api/kv/${key}`, {
-    method: "PUT",
-    body: value,
-  });
+  const putRes = await fetchAndExpectStatus(
+    `${url}/api/kv/${key}`,
+    {
+      method: "PUT",
+      body: value,
+    },
+    201,
+  );
   assert.equal(putRes.status, 201, "Failed to put key-value pair");
 
-  const getRes = await fetch(`${url}/api/kv/${key}`);
+  const getRes = await fetchAndExpectOK(`${url}/api/kv/${key}`);
   assert.equal(getRes.status, 200, "Failed to get key-value pair");
   assert.equal(await getRes.text(), value, "Value is not correct");
 
-  const deleteRes = await fetch(`${url}/api/kv/${key}`, {
-    method: "DELETE",
-  });
+  const deleteRes = await fetchAndExpectStatus(
+    `${url}/api/kv/${key}`,
+    {
+      method: "DELETE",
+    },
+    204,
+  );
   assert.equal(deleteRes.status, 204, "Failed to delete key-value pair");
 
-  const getRes2 = await fetch(`${url}/api/kv/${key}`);
+  const getRes2 = await fetchAndExpectStatus(
+    `${url}/api/kv/${key}`,
+    undefined,
+    404,
+  );
   assert.equal(getRes2.status, 404, "Key-value pair is not deleted");
 
   console.log("Next.js (😡) E2E test passed");

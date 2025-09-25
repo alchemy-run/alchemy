@@ -29,12 +29,14 @@ import type { R2Bucket as _R2Bucket } from "./bucket.ts";
 import type { Container as _Container } from "./container.ts";
 import type { D1Database as _D1Database } from "./d1-database.ts";
 import type { DurableObjectNamespace as _DurableObjectNamespace } from "./durable-object-namespace.ts";
+import type { HyperdriveRef } from "./hyperdrive-ref.ts";
 import type { Hyperdrive as _Hyperdrive } from "./hyperdrive.ts";
 import type { Images as _Images } from "./images.ts";
 import type { Pipeline as _Pipeline } from "./pipeline.ts";
 import type { Queue as _Queue } from "./queue.ts";
 import type { RateLimit as _RateLimit } from "./rate-limit.ts";
 import type { SecretKey } from "./secret-key.ts";
+import type { SecretRef as CloudflareSecretRef } from "./secret-ref.ts";
 import type { Secret as CloudflareSecret } from "./secret.ts";
 import type { VectorizeIndex as _VectorizeIndex } from "./vectorize-index.ts";
 import type { VersionMetadata as _VersionMetadata } from "./version-metadata.ts";
@@ -68,11 +70,11 @@ export type Bound<T extends Binding> = T extends _DurableObjectNamespace<
           ? Service
           : T extends _R2Bucket
             ? R2Bucket
-            : T extends _Hyperdrive
+            : T extends _Hyperdrive | HyperdriveRef
               ? Hyperdrive
               : T extends Secret
                 ? string
-                : T extends CloudflareSecret
+                : T extends CloudflareSecret | CloudflareSecretRef
                   ? SecretsStoreSecret
                   : T extends SecretKey
                     ? CryptoKey
@@ -95,7 +97,7 @@ export type Bound<T extends Binding> = T extends _DurableObjectNamespace<
                                     : T extends _RateLimit
                                       ? RateLimit
                                       : T extends string
-                                        ? string
+                                        ? T
                                         : T extends BrowserRendering
                                           ? Fetcher
                                           : T extends _Ai<infer M>

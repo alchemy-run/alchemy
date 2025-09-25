@@ -18,6 +18,7 @@ wrangler.jsonc
 !.husky/pre-commit
 
 .smoke
+.smoke.logs
 smoke
 .svelte-kit
 .claude/*.local.json

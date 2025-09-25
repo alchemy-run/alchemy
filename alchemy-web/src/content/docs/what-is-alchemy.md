@@ -277,10 +277,10 @@ export const MyResource = Resource(
       return this.destroy();
     } else if (this.phase === "update") {
       // Update logic
-      return this({ ...props, id: this.output.id });
+      return { ...props, id: this.output.id };
     } else {
       // Create logic
-      return this({ ...props, id: "new-id" });
+      return { ...props, id: "new-id" };
     }
   }
 );

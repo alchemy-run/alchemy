@@ -182,3 +182,61 @@ const bucket = await R2Bucket("legal-holds", {
 - **prefix**: Scope the lock rule to objects starting with the prefix. Omit or set to "" for all keys.
 - **enabled**: Defaults to `true` when omitted.
 - **Age condition fields**: lock uses `maxAgeSeconds` (seconds).
+
+## Object Operations
+
+Use the returned `R2Bucket` instance to work with objects directly from your scripts.
+
+```ts
+import { R2Bucket } from "alchemy/cloudflare";
+
+const bucket = await R2Bucket("my-bucket", {
+  name: "my-bucket",
+});
+```
+
+
+### `head`
+
+Retrieve metadata about an object.
+
+```ts
+const head = await bucket.head("example.txt");
+if (head) {
+  console.log(head.etag, head.size);
+}
+```
+
+### `get`
+
+Retrieve an object from the bucket.
+
+```ts
+const obj = await bucket.get("example.txt");
+const text = await obj?.text();
+```
+
+### `put`
+
+Upload an object to the bucket.
+
+```ts
+const putInfo = await bucket.put("example.txt", "Hello, R2!\n");
+```
+
+### `delete`
+
+Delete an object from the bucket.
+
+```ts
+await bucket.delete("example.txt");
+```
+
+### `list`  
+
+List objects in the bucket.
+
+```ts
+const list = await bucket.list();
+console.log(list.objects.length);
+```

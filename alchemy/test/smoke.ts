@@ -15,6 +15,10 @@ const alchemyDir = join(rootDir, "alchemy");
 const examplesDir = join(rootDir, "examples");
 const testsDir = join(rootDir, "tests");
 const smokeDir = join(rootDir, "..", ".smoke");
+const logsDir = join(rootDir, ".smoke.logs");
+
+await fs.mkdir(logsDir, { recursive: true });
+
 // Check for --no-capture flag
 const noCaptureFlag = process.argv.includes("--no-capture");
 
@@ -80,20 +84,31 @@ const examples = (await discoverExamples()).filter(
   (e) => !skippedExamples.includes(e.name),
 );
 
-const testIndex = process.argv.indexOf("-t");
-const testName = testIndex !== -1 ? process.argv[testIndex + 1] : undefined;
+const exclude: string[] = [];
+const include: string[] = [];
+const fitlerTest = (name: string) =>
+  (include.length === 0 || include.every((filter) => name.includes(filter))) &&
+  (exclude.length === 0 || exclude.every((filter) => !name.includes(filter)));
+
+for (let i = 0; i < process.argv.length; i++) {
+  if (process.argv[i] === "-t") {
+    include.push(process.argv[i + 1]);
+  } else if (process.argv[i] === "-x") {
+    exclude.push(process.argv[i + 1]);
+  }
+}
 
 // Filter examples based on test name if provided
 const filteredExamples = examples.filter((e) =>
-  testName ? `example:${e.name}`.includes(testName) : true,
+  fitlerTest(`example:${e.name}`),
 );
 
 const filteredInitVariants = Object.entries(initVariants).filter(([key]) =>
-  testName ? key.includes(testName) : true,
+  fitlerTest(key),
 );
 
 const filteredCreateVariants = Object.entries(createVariants).filter(([key]) =>
-  testName ? key.includes(testName) : true,
+  fitlerTest(key),
 );
 
 // Ensure smoke directory exists
@@ -276,7 +291,7 @@ const tasks = new Listr(
                 title: "Destroy",
                 command: destroyCommand,
               },
-            ];
+            ] as const;
 
             try {
               // Delete output file from previous run
@@ -284,12 +299,23 @@ const tasks = new Listr(
 
               for (let i = 0; i < phases.length; i++) {
                 const phase = phases[i];
-                task.title = `${example.name} - ${phase.title} ${pc.dim(`(${i}/${phases.length - 1})`)}`;
-                await run(phase.command, {
-                  cwd: example.path,
-                  exampleName: noCaptureFlag ? undefined : example.name,
-                  env: { DO_NOT_TRACK: "1", ...phase.env },
-                });
+                const exec = async () => {
+                  task.title = `${example.name} - ${phase.title} ${pc.dim(`(${i}/${phases.length - 1})`)}`;
+                  return run(phase.command, {
+                    cwd: example.path,
+                    exampleName: noCaptureFlag ? undefined : example.name,
+                    // @ts-expect-error
+                    env: { DO_NOT_TRACK: "1", ...phase.env },
+                  });
+                };
+
+                if (phase.title === "Dev") {
+                  task.title = `${example.name} - ${phase.title} (pending) ${pc.dim(`(${i}/${phases.length - 1})`)}`;
+                  // await devMutex.lock(exec);
+                  await exec();
+                } else {
+                  await exec();
+                }
                 await verifyNoLocalStateInCI(example.path);
               }
 
@@ -427,7 +453,7 @@ async function fileExists(path: string): Promise<boolean> {
 
 async function deleteOutputFile(exampleName: string): Promise<void> {
   if (!noCaptureFlag) {
-    const outputPath = join(smokeDir, `${exampleName}.out`);
+    const outputPath = join(logsDir, `${exampleName}.out`);
     try {
       await unlink(outputPath);
     } catch {
@@ -476,7 +502,7 @@ async function run(
     } else {
       // Stream to file
       if (!options.quiet) {
-        const outputPath = join(smokeDir, `${options.exampleName}.out`);
+        const outputPath = join(logsDir, `${options.exampleName}.out`);
         const outputStream = createWriteStream(
           outputPath,
           options.append ? { flags: "a" } : undefined,
@@ -521,7 +547,7 @@ async function run(
 }
 
 async function log(name: string, message: string) {
-  await fs.appendFile(join(smokeDir, `${name}.out`), message);
+  await fs.appendFile(join(logsDir, `${name}.out`), message);
 }
 
 async function install(projectPath: string) {
@@ -541,7 +567,7 @@ async function install(projectPath: string) {
 
 async function clearLog(variantName: string) {
   try {
-    await fs.rm(join(smokeDir, `${variantName}.out`), {
+    await fs.rm(join(logsDir, `${variantName}.out`), {
       recursive: true,
     });
   } catch (error: any) {

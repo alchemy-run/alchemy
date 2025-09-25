@@ -15,6 +15,7 @@ import {
 import type { Assets } from "./assets.ts";
 import type {
   Bindings,
+  Self,
   WorkerBindingDurableObjectNamespace,
   WorkerBindingSpec,
 } from "./bindings.ts";
@@ -58,6 +59,8 @@ import { Workflow, isWorkflow, upsertWorkflow } from "./workflow.ts";
 // Previous versions of `Worker` used the `Bundle` resource.
 // This import is here to avoid errors when destroying the `Bundle` resource.
 import "../esbuild/bundle.ts";
+import { Scope } from "../scope.ts";
+import type { WorkerRef } from "./worker-ref.ts";
 
 /**
  * Configuration options for static assets
@@ -330,11 +333,19 @@ export interface BaseWorkerProps<
          * @default false
          */
         remote?: boolean;
+        /**
+         * Whether to expose the worker via a Cloudflare Tunnel.
+         *
+         * @default false
+         */
+        tunnel?: boolean;
         url?: undefined;
       }
     | {
         url: string;
         remote?: undefined;
+        tunnel?: undefined;
+        port?: undefined;
       };
 
   /**
@@ -421,8 +432,8 @@ export type WorkerProps<
   RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
 > = InlineWorkerProps<B, RPC> | EntrypointWorkerProps<B, RPC>;
 
-export function isWorker(resource: Resource): resource is Worker<any> {
-  return resource[ResourceKind] === "cloudflare::Worker";
+export function isWorker(resource: any): resource is Worker<any> {
+  return resource?.[ResourceKind] === "cloudflare::Worker";
 }
 
 /**
@@ -431,109 +442,108 @@ export function isWorker(resource: Resource): resource is Worker<any> {
 export type Worker<
   B extends Bindings | undefined = Bindings | undefined,
   RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
-> = Resource<"cloudflare::Worker"> &
-  Omit<WorkerProps<B>, "url" | "script" | "routes" | "domains"> & {
-    /** @internal phantom property */
-    __rpc__?: RPC;
+> = Omit<WorkerProps<B>, "url" | "script" | "routes" | "domains"> & {
+  /** @internal phantom property */
+  __rpc__?: RPC;
 
-    type: "service";
+  type: "service";
 
-    /**
-     * The ID of the worker
-     */
-    id: string;
+  /**
+   * The ID of the worker
+   */
+  id: string;
 
-    /**
-     * The name of the worker
-     */
-    name: string;
+  /**
+   * The name of the worker
+   */
+  name: string;
 
-    /**
-     * The root directory of the project
-     * @default process.cwd()
-     */
-    cwd: string;
+  /**
+   * The root directory of the project
+   * @default process.cwd()
+   */
+  cwd: string;
 
-    /**
-     * Time at which the worker was created
-     */
-    createdAt: number;
+  /**
+   * Time at which the worker was created
+   */
+  createdAt: number;
 
-    /**
-     * Time at which the worker was last updated
-     */
-    updatedAt: number;
+  /**
+   * Time at which the worker was last updated
+   */
+  updatedAt: number;
 
-    /**
-     * The worker's URL if enabled
-     * Format: {name}.{subdomain}.workers.dev
-     *
-     * @default true
-     */
-    url?: string;
+  /**
+   * The worker's URL if enabled
+   * Format: {name}.{subdomain}.workers.dev
+   *
+   * @default true
+   */
+  url?: string;
 
-    /**
-     * The bindings that were created
-     */
-    bindings: B;
+  /**
+   * The bindings that were created
+   */
+  bindings: B;
 
-    /**
-     * Configuration for static assets
-     */
-    assets?: AssetsConfig;
+  /**
+   * Configuration for static assets
+   */
+  assets?: AssetsConfig;
 
-    /**
-     * The routes that were created for this worker
-     */
-    routes?: Route[];
+  /**
+   * The routes that were created for this worker
+   */
+  routes?: Route[];
 
-    /**
-     * The custom domains that were created for this worker
-     */
-    domains?: CustomDomain[];
+  /**
+   * The custom domains that were created for this worker
+   */
+  domains?: CustomDomain[];
 
-    // phantom property (for typeof myWorker.Env)
-    Env: B extends Bindings
-      ? {
-          [bindingName in keyof B]: Bound<B[bindingName]>;
-        }
-      : undefined;
+  // phantom property (for typeof myWorker.Env)
+  Env: B extends Bindings
+    ? {
+        [bindingName in keyof B]: Bound<B[bindingName]>;
+      }
+    : undefined;
 
-    /**
-     * The compatibility date for the worker
-     */
-    compatibilityDate: string;
+  /**
+   * The compatibility date for the worker
+   */
+  compatibilityDate: string;
 
-    /**
-     * The compatibility flags for the worker
-     */
-    compatibilityFlags: string[];
+  /**
+   * The compatibility flags for the worker
+   */
+  compatibilityFlags: string[];
 
-    /**
-     * The dispatch namespace this worker is deployed to
-     */
-    namespace?: string | DispatchNamespace;
+  /**
+   * The dispatch namespace this worker is deployed to
+   */
+  namespace?: string | DispatchNamespace;
 
-    /**
-     * Version label for this worker deployment
-     */
-    version?: string;
+  /**
+   * Version label for this worker deployment
+   */
+  version?: string;
 
-    /**
-     * Smart placement configuration for the worker
-     */
-    placement?: {
-      mode: "smart";
-    };
-
-    /**
-     * Whether the worker has a remote deployment
-     * @internal
-     */
-    dev?: {
-      hasRemote: boolean;
-    };
+  /**
+   * Smart placement configuration for the worker
+   */
+  placement?: {
+    mode: "smart";
   };
+
+  /**
+   * Whether the worker has a remote deployment
+   * @internal
+   */
+  dev?: {
+    hasRemote: boolean;
+  };
+};
 
 /**
  * A Cloudflare Worker is a serverless function that can be deployed to the Cloudflare network.
@@ -603,7 +613,7 @@ export type Worker<
  *
  * @example
  * // Create a worker with static assets:
- * const staticAssets = await Assets("static", {
+ * const staticAssets = await Assets({
  *   path: "./src/assets"
  * });
  *
@@ -698,6 +708,25 @@ export function Worker<const B extends Bindings>(
 ): Promise<Worker<B>> {
   return _Worker(id, props as WorkerProps<B>);
 }
+
+Worker.experimentalEntrypoint = <RPC extends Rpc.WorkerEntrypointBranded>(
+  worker: Worker | WorkerRef | Self,
+  entrypoint: string,
+) => {
+  if (Scope.getScope()?.local) {
+    logger.warn(
+      "Worker.experimentalEntrypoint is not supported in local development. See: https://github.com/cloudflare/workers-sdk/issues/10681",
+    );
+  }
+  return {
+    ...worker,
+    // we rename the entrypoint in order to prevent collisions with entrypoint on Worker
+    __entrypoint__: entrypoint,
+  } as (Worker | WorkerRef) & {
+    __entrypoint__?: string;
+    __rpc__?: RPC;
+  };
+};
 
 const _Worker = Resource(
   "cloudflare::Worker",
@@ -854,7 +883,8 @@ const _Worker = Resource(
           eventSources: props.eventSources,
           assets: props.assets,
           bundle,
-          port: (props.dev as { port?: number } | undefined)?.port,
+          port: props.dev?.port,
+          tunnel: props.dev?.tunnel ?? this.scope.tunnel,
         });
         this.onCleanup(() => controller.dispose());
       }
@@ -870,7 +900,7 @@ const _Worker = Resource(
           containers: options.containers,
         },
       );
-      return this({
+      return {
         ...props,
         type: "service",
         id,
@@ -889,7 +919,7 @@ const _Worker = Resource(
           hasRemote: this.output?.dev?.hasRemote ?? false,
         },
         Env: undefined!,
-      } as unknown as Worker<B>);
+      } as unknown as Worker<B>;
     }
 
     if (this.phase === "create" || this.output.dev?.hasRemote === false) {
@@ -1014,7 +1044,7 @@ const _Worker = Resource(
     );
 
     const now = new Date();
-    return this({
+    return {
       ...props,
       type: "service",
       id,
@@ -1043,7 +1073,7 @@ const _Worker = Resource(
       dev: {
         hasRemote: true,
       },
-    } as unknown as Worker<B>);
+    } as unknown as Worker<B>;
   },
 );
 
@@ -1159,6 +1189,7 @@ async function provisionResources<B extends Bindings>(
       apiToken: props.apiToken,
       email: props.email,
       baseUrl: props.baseUrl,
+      profile: props.profile,
     } satisfies CloudflareApiOptions,
   };
 

@@ -190,45 +190,44 @@ export interface HyperdriveProps extends CloudflareApiOptions {
  * Output returned after Cloudflare Hyperdrive creation/update.
  * IMPORTANT: The interface name MUST match the exported resource name.
  */
-export type Hyperdrive = Resource<"cloudflare::Hyperdrive"> &
-  Omit<HyperdriveProps, "origin" | "dev"> & {
-    /**
-     * The ID of the resource
-     */
-    id: string;
+export type Hyperdrive = Omit<HyperdriveProps, "origin" | "dev"> & {
+  /**
+   * The ID of the resource
+   */
+  id: string;
 
-    /**
-     * Name of the Hyperdrive configuration
-     */
-    name: string;
+  /**
+   * Name of the Hyperdrive configuration
+   */
+  name: string;
 
-    /**
-     * The Cloudflare-generated UUID of the hyperdrive
-     */
-    hyperdriveId: string;
+  /**
+   * The Cloudflare-generated UUID of the hyperdrive
+   */
+  hyperdriveId: string;
 
-    /**
-     * Database connection origin configuration
-     */
-    origin: HyperdrivePublicOrigin | HyperdriveOriginWithAccess;
+  /**
+   * Database connection origin configuration
+   */
+  origin: HyperdrivePublicOrigin | HyperdriveOriginWithAccess;
 
+  /**
+   * Local development configuration
+   * @internal
+   */
+  dev: {
     /**
-     * Local development configuration
-     * @internal
+     * The connection string to use for local development
      */
-    dev: {
-      /**
-       * The connection string to use for local development
-       */
-      origin: Secret;
-    };
-
-    /**
-     * Resource type identifier for binding.
-     * @internal
-     */
-    type: "hyperdrive";
+    origin: Secret;
   };
+
+  /**
+   * Resource type identifier for binding.
+   * @internal
+   */
+  type: "hyperdrive";
+};
 
 /**
  * Represents a Cloudflare Hyperdrive configuration.
@@ -356,7 +355,7 @@ const _Hyperdrive = Resource(
       props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
 
     if (this.scope.local) {
-      return this({
+      return {
         id,
         hyperdriveId: hyperdriveId || "",
         name,
@@ -365,7 +364,7 @@ const _Hyperdrive = Resource(
         mtls: props.mtls,
         dev: props.dev,
         type: "hyperdrive",
-      });
+      };
     }
     const api = await createCloudflareApi(props);
 
@@ -445,7 +444,7 @@ const _Hyperdrive = Resource(
     }
 
     // Construct the output object from API response and props
-    return this({
+    return {
       id,
       hyperdriveId: result.id, // Store the Cloudflare-assigned UUID
       name: result.name,
@@ -454,7 +453,7 @@ const _Hyperdrive = Resource(
       mtls: result.mtls,
       dev: props.dev,
       type: "hyperdrive",
-    });
+    };
   },
 );
 
