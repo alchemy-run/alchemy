@@ -496,6 +496,40 @@ describe("R2 Bucket Resource", async () => {
       await scope.finalize();
     }
   });
+
+  test("bucket with data catalog", async (scope) => {
+    const bucketName = `${BRANCH_PREFIX.toLowerCase()}-test-data-catalog`;
+    try {
+      let bucket = await R2Bucket(bucketName, {
+        name: bucketName,
+        adopt: true,
+        dataCatalog: true,
+      });
+      expect(bucket.catalog).toBeDefined();
+      expect(bucket.catalog?.id).toBeDefined();
+      expect(bucket.catalog?.name).toBeDefined();
+      expect(bucket.catalog?.host).toBeDefined();
+
+      bucket = await R2Bucket(bucketName, {
+        name: bucketName,
+        adopt: true,
+        dataCatalog: false,
+      });
+      expect(bucket.catalog).toBeUndefined();
+
+      bucket = await R2Bucket(bucketName, {
+        name: bucketName,
+        adopt: true,
+        dataCatalog: true,
+      });
+      expect(bucket.catalog).toBeDefined();
+      expect(bucket.catalog?.id).toBeDefined();
+      expect(bucket.catalog?.name).toBeDefined();
+      expect(bucket.catalog?.host).toBeDefined();
+    } finally {
+      await destroy(scope);
+    }
+  });
 });
 
 /**
