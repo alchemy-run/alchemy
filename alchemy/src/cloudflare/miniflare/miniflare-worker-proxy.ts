@@ -31,23 +31,7 @@ export async function createMiniflareWorkerProxy(options: {
   });
   server.on("request", async (req, res) => {
     try {
-      const { request, url } = toMiniflareRequest(req);
-      const name = options.getWorkerName(request);
-      const worker = await options.miniflare.getWorker(name);
-
-      // Handle scheduled events
-      // https://developers.cloudflare.com/workers/runtime-apis/handlers/scheduled/#background
-      // https://github.com/cloudflare/workers-sdk/blob/7d53b9ab6b370944b7934ad51ebef43160c3c775/packages/wrangler/templates/middleware/middleware-scheduled.ts#L6
-      if (url.pathname === "/__scheduled") {
-        await worker.scheduled({
-          scheduledTime: new Date(),
-          cron: url.searchParams.get("cron") ?? undefined,
-        });
-        writeMiniflareResponseToNode(new miniflare.Response("OK"), res);
-        return;
-      }
-
-      const response = await worker.fetch(request);
+      const response = await handleFetch(req);
       writeMiniflareResponseToNode(response, res);
     } catch (error) {
       console.error(error);
@@ -57,6 +41,45 @@ export async function createMiniflareWorkerProxy(options: {
       writeMiniflareResponseToNode(response, res);
     }
   });
+
+  const handleFetch = async (
+    req: http.IncomingMessage,
+  ): Promise<miniflare.Response> => {
+    const { request, url } = toMiniflareRequest(req);
+    const name = options.getWorkerName(request);
+    const worker = await options.miniflare.getWorker(name);
+
+    // Handle scheduled events
+    // https://developers.cloudflare.com/workers/runtime-apis/handlers/scheduled/#background
+    // https://github.com/cloudflare/workers-sdk/blob/7d53b9ab6b370944b7934ad51ebef43160c3c775/packages/wrangler/templates/middleware/middleware-scheduled.ts#L6
+    if (url.pathname === "/__scheduled") {
+      await worker.scheduled({
+        scheduledTime: new Date(),
+        cron: url.searchParams.get("cron") ?? undefined,
+      });
+      return new miniflare.Response("Ran scheduled function");
+    }
+
+    const res = await worker.fetch(request).catch((error) => {
+      console.error(error);
+      return MiniflareWorkerProxyError.fromUnknown(error).toResponse(
+        options.mode,
+      );
+    });
+
+    // If you open the `/__scheduled` page in a browser, the browser will automatically make a request to `/favicon.ico`.
+    // For scheduled Workers _without_ a fetch handler, this will result in a 500 response that clutters the log with unhelpful error messages.
+    // To avoid this, inject a 404 response to favicon.ico loads on the `/__scheduled` page
+    if (
+      request.headers.get("referer")?.endsWith("/__scheduled") &&
+      url.pathname === "/favicon.ico" &&
+      res.status === 500
+    ) {
+      return new miniflare.Response(null, { status: 404 });
+    }
+
+    return res;
+  };
 
   const toMiniflareRequest = (
     req: http.IncomingMessage,
