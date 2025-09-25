@@ -74,6 +74,11 @@ export const buildWorkerOptions = async (
       // workerd/io/worker.c++:2164: info: uncaught exception; source = Uncaught (in promise); stack = TypeError: Invalid URL string.
       {
         entrypoint: "default",
+        proxy: false,
+      },
+      // ...however, if we don't also have a `proxy: true` entry, then we get the same error when using service bindings. So we have both.
+      {
+        entrypoint: "default",
         proxy: true,
       },
     ],
