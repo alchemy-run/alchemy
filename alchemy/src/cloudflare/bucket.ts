@@ -343,9 +343,21 @@ type _R2Bucket = Omit<BucketProps, "delete" | "dev"> & {
     remote: boolean;
   };
 
+  /**
+   * Data catalog for the bucket
+   */
   catalog?: {
+    /**
+     * ID of the data catalog
+     */
     id: string;
+    /**
+     * Name of the data catalog
+     */
     name: string;
+    /**
+     * Host of the data catalog
+     */
     host: string;
   };
 };
