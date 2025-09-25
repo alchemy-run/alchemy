@@ -60,25 +60,27 @@ export async function createMiniflareWorkerProxy(options: {
       return new miniflare.Response("Ran scheduled function");
     }
 
-    const res = await worker.fetch(request).catch((error) => {
-      console.error(error);
-      return MiniflareWorkerProxyError.fromUnknown(error).toResponse(
-        options.mode,
-      );
-    });
+    const result = await worker
+      .fetch(request)
+      .then((response) => ({ success: true, response }) as const)
+      .catch((error) => ({ success: false, error }) as const);
 
     // If you open the `/__scheduled` page in a browser, the browser will automatically make a request to `/favicon.ico`.
-    // For scheduled Workers _without_ a fetch handler, this will result in a 500 response that clutters the log with unhelpful error messages.
+    // For scheduled Workers _without_ a fetch handler, this will result in an unhelpful error that we don't need to log.
     // To avoid this, inject a 404 response to favicon.ico loads on the `/__scheduled` page
     if (
       request.headers.get("referer")?.endsWith("/__scheduled") &&
       url.pathname === "/favicon.ico" &&
-      res.status === 500
+      !result.success
     ) {
       return new miniflare.Response(null, { status: 404 });
     }
 
-    return res;
+    if (!result.success) {
+      throw result.error;
+    }
+
+    return result.response;
   };
 
   const toMiniflareRequest = (
