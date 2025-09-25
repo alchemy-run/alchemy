@@ -563,36 +563,6 @@ async function getObject(
   });
 }
 
-async function _headObject(
-  bucket: R2Bucket,
-  props: {
-    key: string;
-  },
-) {
-  const url = new URL(
-    `https://${r2Client.accountId}.r2.cloudflarestorage.com/${bucket.name}/${props.key}`,
-  );
-  return await r2Client.fetch(url, {
-    method: "HEAD",
-    headers: withJurisdiction(bucket),
-  });
-}
-
-async function _deleteObject(
-  bucket: R2Bucket,
-  props: {
-    key: string;
-  },
-) {
-  const url = new URL(
-    `https://${r2Client.accountId}.r2.cloudflarestorage.com/${bucket.name}/${props.key}`,
-  );
-  return await r2Client.fetch(url, {
-    method: "DELETE",
-    headers: withJurisdiction(bucket),
-  });
-}
-
 async function assertBucketDeleted(bucket: R2Bucket, attempt = 0) {
   const api = await createCloudflareApi();
   try {
