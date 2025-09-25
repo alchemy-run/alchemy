@@ -439,7 +439,7 @@ describe("R2 Bucket Resource", async () => {
     }
   });
 
-  test("bucket operations head, get, put, and delete objects", async (scope) => {
+  test("bucket operations head, get, put, and delete objects", async () => {
     const bucketName = `${BRANCH_PREFIX.toLowerCase()}-test-bucket-ops`;
     let bucket: R2Bucket | undefined;
 
@@ -563,7 +563,7 @@ async function getObject(
   });
 }
 
-async function headObject(
+async function _headObject(
   bucket: R2Bucket,
   props: {
     key: string;
@@ -578,7 +578,7 @@ async function headObject(
   });
 }
 
-async function deleteObject(
+async function _deleteObject(
   bucket: R2Bucket,
   props: {
     key: string;
