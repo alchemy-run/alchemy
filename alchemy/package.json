@@ -44,6 +44,10 @@
       "bun": "./src/coinbase/index.ts",
       "import": "./lib/coinbase/index.js"
     },
+    "./coinbase/faucet": {
+      "bun": "./src/coinbase/faucet.ts",
+      "import": "./lib/coinbase/faucet.js"
+    },
     "./aws": {
       "bun": "./src/aws/index.ts",
       "import": "./lib/aws/index.js"

@@ -1,5 +1,2 @@
-export { EvmAccount, type EvmAccountProps } from "./evm-account.ts";
-export {
-  EvmSmartAccount,
-  type EvmSmartAccountProps,
-} from "./evm-smart-account.ts";
+export * from "./evm-account.ts";
+export * from "./evm-smart-account.ts";

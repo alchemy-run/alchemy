@@ -1,22 +1,24 @@
 import type { Context } from "../context.ts";
+import type { Secret } from "../index.ts";
 import { Resource } from "../resource.ts";
-import alchemy, { type Secret } from "../index.ts";
+import { createCdpClient, type CoinbaseClientOptions } from "./client.ts";
+
+/**
+ * Supported testnet networks for faucet requests
+ */
+export type FaucetNetwork = "base-sepolia" | "ethereum-sepolia";
+
+/**
+ * Supported tokens for faucet requests
+ */
+export type FaucetToken = "eth" | "usdc" | "eurc" | "cbbtc";
 
 /**
  * Faucet configuration for requesting testnet tokens
  */
-export interface FaucetConfig {
-  /**
-   * The network to request funds from
-   */
-  network: "base-sepolia" | "ethereum-sepolia";
-  /**
-   * The token to request
-   */
-  token: "eth" | "usdc" | "eurc" | "cbbtc";
-}
+export type FaucetConfig = Partial<Record<FaucetNetwork, FaucetToken[]>>;
 
-export interface EvmAccountProps {
+export interface EvmAccountProps extends CoinbaseClientOptions {
   /**
    * Name for the account.
    * Used for identification in CDP.
@@ -35,19 +37,19 @@ export interface EvmAccountProps {
    */
   adopt?: boolean;
   /**
-   * Optional faucet configuration to request testnet tokens after account creation.
-   * Each configuration will trigger a faucet request for the specified network and token.
-   * Only works on testnets: base-sepolia and ethereum-sepolia.
+   * Faucet configuration for development funding.
+   * Declares which tokens this account should have.
+   * Used by external funding scripts - not processed by the resource.
    *
    * @example
    * ```ts
-   * faucet: [
-   *   { network: "base-sepolia", token: "eth" },
-   *   { network: "base-sepolia", token: "usdc" }
-   * ]
+   * faucet: {
+   *   "base-sepolia": ["eth", "usdc"],
+   *   "ethereum-sepolia": ["eth"]
+   * }
    * ```
    */
-  faucet?: FaucetConfig[];
+  faucet?: FaucetConfig;
 }
 
 export interface EvmAccount extends Resource<"coinbase::evm-account"> {
@@ -58,15 +60,11 @@ export interface EvmAccount extends Resource<"coinbase::evm-account"> {
   /**
    * The EVM address (same across all EVM networks)
    */
-  address: string;
+  address: `0x${string}`;
   /**
-   * Faucet transaction hashes if faucet was requested
+   * Faucet configuration (passed through from props)
    */
-  faucetTransactions?: Array<{
-    network: string;
-    token: string;
-    transactionHash: string;
-  }>;
+  faucet?: FaucetConfig;
 }
 
 /**
@@ -95,20 +93,21 @@ export interface EvmAccount extends Resource<"coinbase::evm-account"> {
  * ```
  *
  * @example
- * ## Create account with testnet funds
+ * ## Create account with funding metadata
  *
- * Request testnet tokens automatically after account creation
+ * Declare what tokens this account needs for development
  *
  * ```ts
  * const account = await EvmAccount("test-account", {
  *   name: "Test Account",
- *   faucet: [
- *     { network: "base-sepolia", token: "eth" },
- *     { network: "base-sepolia", token: "usdc" }
- *   ]
+ *   faucet: {
+ *     "base-sepolia": ["eth", "usdc"],
+ *     "ethereum-sepolia": ["eth"]
+ *   }
  * });
  *
- * console.log("Faucet transactions:", account.faucetTransactions);
+ * // Use a funding script to actually request tokens
+ * // based on the faucet configuration
  * ```
  *
  * @example
@@ -138,21 +137,15 @@ export interface EvmAccount extends Resource<"coinbase::evm-account"> {
 export const EvmAccount = Resource(
   "coinbase::evm-account",
   async function (
-    this: Context,
-    id: string,
+    this: Context<EvmAccount>,
+    _id: string,
     props: EvmAccountProps,
   ): Promise<EvmAccount> {
-    const { CdpClient } = await import("@coinbase/cdp-sdk");
-
-    // Initialize CDP client
-    const apiKeyId = alchemy.secret("COINBASE_API_KEY_ID");
-    const apiKeySecret = alchemy.secret("COINBASE_API_KEY_SECRET");
-    const walletSecret = alchemy.secret("COINBASE_WALLET_SECRET");
-
-    const cdp = new CdpClient({
-      apiKeyId: apiKeyId.unencrypted,
-      apiKeySecret: apiKeySecret.unencrypted,
-      walletSecret: walletSecret.unencrypted,
+    // Initialize CDP client with credentials from props or environment
+    const cdp = await createCdpClient({
+      apiKeyId: props.apiKeyId,
+      apiKeySecret: props.apiKeySecret,
+      walletSecret: props.walletSecret,
     });
 
     // Handle update phase
@@ -166,72 +159,18 @@ export const EvmAccount = Resource(
             name: props.name,
           },
         });
-        const result: EvmAccount = {
+        return {
           ...this.output,
           name: updated.name || props.name,
         };
-        await this.save(result);
-        return result;
       }
 
-      // Check if faucet config changed (would need to request new tokens)
-      if (
-        props.faucet &&
-        JSON.stringify(props.faucet) !==
-          JSON.stringify(
-            this.output.faucetTransactions?.map((f: any) => ({
-              network: f.network,
-              token: f.token,
-            })),
-          )
-      ) {
-        // Request faucet for new configurations
-        const existingFaucets = this.output.faucetTransactions || [];
-        const newFaucetTransactions = [...existingFaucets];
-
-        for (const faucetConfig of props.faucet) {
-          // Check if this combination already exists
-          const exists = existingFaucets.some(
-            (f: any) =>
-              f.network === faucetConfig.network &&
-              f.token === faucetConfig.token,
-          );
-
-          if (!exists) {
-            console.log(
-              `💧 Requesting ${faucetConfig.token} on ${faucetConfig.network} from faucet...`,
-            );
-            try {
-              const faucetResp = await cdp.evm.requestFaucet({
-                address: this.output.address,
-                network: faucetConfig.network,
-                token: faucetConfig.token,
-              });
-
-              newFaucetTransactions.push({
-                network: faucetConfig.network,
-                token: faucetConfig.token,
-                transactionHash: faucetResp.transactionHash,
-              });
-
-              console.log(
-                `✅ Faucet request successful: ${faucetResp.transactionHash}`,
-              );
-            } catch (error) {
-              console.warn(
-                `⚠️ Faucet request failed for ${faucetConfig.token} on ${faucetConfig.network}:`,
-                error,
-              );
-            }
-          }
-        }
-
-        const result: EvmAccount = {
+      // Update faucet configuration if changed
+      if (JSON.stringify(props.faucet) !== JSON.stringify(this.output.faucet)) {
+        return {
           ...this.output,
-          faucetTransactions: newFaucetTransactions,
+          faucet: props.faucet,
         };
-        await this.save(result);
-        return result;
       }
 
       return this.output;
@@ -257,7 +196,7 @@ export const EvmAccount = Resource(
 
       // Import account - this is idempotent in CDP
       account = await cdp.evm.importAccount({
-        privateKey,
+        privateKey: privateKey as `0x${string}`,
         name: props.name,
       });
     } else {
@@ -301,49 +240,11 @@ export const EvmAccount = Resource(
       }
     }
 
-    // Request faucet if configured
-    let faucetTransactions: EvmAccount["faucetTransactions"];
-
-    if (props.faucet && props.faucet.length > 0) {
-      faucetTransactions = [];
-
-      for (const faucetConfig of props.faucet) {
-        console.log(
-          `💧 Requesting ${faucetConfig.token} on ${faucetConfig.network} from faucet...`,
-        );
-        try {
-          const faucetResp = await cdp.evm.requestFaucet({
-            address: account.address,
-            network: faucetConfig.network,
-            token: faucetConfig.token,
-          });
-
-          faucetTransactions.push({
-            network: faucetConfig.network,
-            token: faucetConfig.token,
-            transactionHash: faucetResp.transactionHash,
-          });
-
-          console.log(
-            `✅ Faucet request successful: ${faucetResp.transactionHash}`,
-          );
-        } catch (error) {
-          console.warn(
-            `⚠️ Faucet request failed for ${faucetConfig.token} on ${faucetConfig.network}:`,
-            error,
-          );
-        }
-      }
-    }
-
     // Return account details
-    const result: EvmAccount = {
+    return {
       name: account.name || props.name,
-      address: account.address,
-      ...(faucetTransactions && { faucetTransactions }),
+      address: account.address as `0x${string}`,
+      faucet: props.faucet,
     } as EvmAccount;
-
-    await this.save(result);
-    return result;
   },
 );

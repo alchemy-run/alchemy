@@ -125,18 +125,18 @@ describe("Coinbase", () => {
       }
     });
 
-    test("create account with faucet", async (scope) => {
+    test("create account with faucet metadata", async (scope) => {
       const accountId = `${BRANCH_PREFIX}-faucet-account`;
       let account: EvmAccount;
 
       try {
-        // Create account with faucet requests
+        // Create account with faucet metadata
         account = (await EvmAccount(accountId, {
           name: "Faucet Test Account",
-          faucet: [
-            { network: "base-sepolia", token: "eth" },
-            { network: "base-sepolia", token: "usdc" },
-          ],
+          faucet: {
+            "base-sepolia": ["eth", "usdc"],
+            "ethereum-sepolia": ["eth"],
+          },
         })) as EvmAccount;
 
         expect(account).toMatchObject({
@@ -146,65 +146,48 @@ describe("Coinbase", () => {
         });
         expect(account.address).toMatch(/^0x[a-fA-F0-9]{40}$/);
 
-        // Check faucet transactions were recorded
-        expect(account.faucetTransactions).toBeDefined();
-        expect(account.faucetTransactions).toHaveLength(2);
-        expect(account.faucetTransactions).toEqual(
-          expect.arrayContaining([
-            expect.objectContaining({
-              network: "base-sepolia",
-              token: "eth",
-              transactionHash: expect.stringMatching(/^0x[a-fA-F0-9]{64}$/),
-            }),
-            expect.objectContaining({
-              network: "base-sepolia",
-              token: "usdc",
-              transactionHash: expect.stringMatching(/^0x[a-fA-F0-9]{64}$/),
-            }),
-          ]),
-        );
+        // Check faucet metadata is preserved
+        expect(account.faucet).toEqual({
+          "base-sepolia": ["eth", "usdc"],
+          "ethereum-sepolia": ["eth"],
+        });
       } finally {
         await destroy(scope);
         console.log(`✅ Account ${account!.address} is no longer tracked`);
       }
     });
 
-    test("update account with additional faucet requests", async (scope) => {
+    test("update account with faucet metadata", async (scope) => {
       const accountId = `${BRANCH_PREFIX}-faucet-update`;
       let account: EvmAccount;
 
       try {
-        // Create account with initial faucet
+        // Create account with initial faucet metadata
         account = (await EvmAccount(accountId, {
           name: "Faucet Update Test",
-          faucet: [{ network: "base-sepolia", token: "eth" }],
+          faucet: {
+            "base-sepolia": ["eth"],
+          },
         })) as EvmAccount;
 
-        expect(account.faucetTransactions).toHaveLength(1);
+        expect(account.faucet).toEqual({
+          "base-sepolia": ["eth"],
+        });
 
-        // Update with additional faucet requests
+        // Update with different faucet metadata
         const updatedAccount = (await EvmAccount(accountId, {
           name: "Faucet Update Test",
-          faucet: [
-            { network: "base-sepolia", token: "eth" }, // Already exists, should skip
-            { network: "ethereum-sepolia", token: "usdc" }, // New request
-          ],
+          faucet: {
+            "base-sepolia": ["eth", "usdc"],
+            "ethereum-sepolia": ["eth"],
+          },
         })) as EvmAccount;
 
-        // Should have 2 transactions now (1 original + 1 new)
-        expect(updatedAccount.faucetTransactions).toHaveLength(2);
-        expect(updatedAccount.faucetTransactions).toEqual(
-          expect.arrayContaining([
-            expect.objectContaining({
-              network: "base-sepolia",
-              token: "eth",
-            }),
-            expect.objectContaining({
-              network: "ethereum-sepolia",
-              token: "usdc",
-            }),
-          ]),
-        );
+        // Should have updated metadata
+        expect(updatedAccount.faucet).toEqual({
+          "base-sepolia": ["eth", "usdc"],
+          "ethereum-sepolia": ["eth"],
+        });
       } finally {
         await destroy(scope);
         console.log(`✅ Account ${account!.address} is no longer tracked`);

@@ -6,15 +6,13 @@ This provider enables management of blockchain resources through the Coinbase De
 
 ### EVM Account (`coinbase::evm-account`)
 
-Manages standard Ethereum Virtual Machine (EVM) accounts that work across all EVM networks.
 
 **Features:**
-- Create new EVM accounts (network-agnostic)
+- Create new EVM EOA Accounts (Externally Owned Accounts)  
 - Import existing accounts via private key
 - Adopt existing accounts with the same name
 - Update account names
-- Request testnet tokens via faucet (base-sepolia, ethereum-sepolia)
-- Follows Alchemy's standard adoption pattern
+- Configure testnet tokens to be used with coinbase-faucet script
 
 **Documentation:** [EVM Account Resource](./evm-account.ts)
 
@@ -27,7 +25,6 @@ Manages ERC-4337 smart accounts that enable advanced features like gasless trans
 - Batch transaction support
 - Gasless transactions via paymasters (Base networks)
 - Owner replacement triggers resource replacement
-- Follows Alchemy's standard adoption pattern
 
 **Documentation:** [EVM Smart Account Resource](./evm-smart-account.ts)
 
@@ -35,37 +32,31 @@ Manages ERC-4337 smart accounts that enable advanced features like gasless trans
 
 1. **CDP API Keys**: Obtain API credentials from the [Coinbase Developer Platform Portal](https://portal.cdp.coinbase.com/)
 
-2. **Environment Variables**: Set the following secrets:
+2. **Authentication**: The CDP SDK automatically looks for credentials in environment variables. You can provide them via:
+
+   **Environment Variables** (recommended - CDP SDK standard):
    ```bash
-   COINBASE_API_KEY_ID=your-api-key-id
-   COINBASE_API_KEY_SECRET=your-api-key-secret
-   COINBASE_WALLET_SECRET=your-wallet-secret
+   CDP_API_KEY_ID=your-api-key-id
+   CDP_API_KEY_SECRET=your-api-key-secret
+   CDP_WALLET_SECRET=your-wallet-secret
    ```
 
+   **Or override with resource-specific credentials**:
+   ```typescript
+   import alchemy from "alchemy";
+   import { EvmAccount } from "alchemy/coinbase";
+
+   const account = await EvmAccount("my-account", {
+     name: "My Account",
+     apiKeyId: alchemy.secret("CUSTOM_API_KEY_ID"),
+     apiKeySecret: alchemy.secret("CUSTOM_API_KEY_SECRET"),
+     walletSecret: alchemy.secret("CUSTOM_WALLET_SECRET")
+   });
+   ```
+
+   > **Note**: If no credentials are provided in the resource props, the CDP SDK will automatically use the `CDP_*` environment variables.
+
 ## Key Concepts
-
-### Network-Agnostic Accounts
-
-EVM accounts in CDP have the same address across all EVM networks. You don't specify a network when creating an account - the network is only specified when performing operations like sending transactions:
-
-```typescript
-const account = await EvmAccount("my-account", {
-  name: "My Account"
-});
-
-// Use the same account on different networks:
-await cdp.evm.sendTransaction({
-  address: account.address,
-  network: "base-sepolia",
-  // ...
-});
-
-await cdp.evm.sendTransaction({
-  address: account.address,
-  network: "ethereum", 
-  // ...
-});
-```
 
 ### Resource Adoption
 
@@ -76,6 +67,42 @@ Following Alchemy's standard adoption pattern:
 
 This ensures explicit control over resource reuse and prevents accidental overwrites.
 
+## Faucet Script
+
+Request testnet tokens for accounts configured with faucet metadata.
+
+### Usage
+
+```bash
+bunx alchemy/coinbase/faucet
+```
+
+Or add to your `package.json` scripts:
+```json
+{
+  "scripts": {
+    "faucet": "bunx alchemy/coinbase/faucet"
+  }
+}
+```
+
+### How it works
+
+1. Reads all Coinbase accounts from Alchemy state
+2. Finds accounts with `faucet` metadata configuration
+3. Requests tokens from CDP faucet for each network/token pair
+4. Skips already funded combinations (idempotent)
+5. Handles rate limits with automatic delays
+
+### Requirements
+
+- CDP credentials must be set as environment variables:
+  - `CDP_API_KEY_ID`
+  - `CDP_API_KEY_SECRET`
+  - `CDP_WALLET_SECRET`
+- Accounts must have `faucet` metadata configured (see examples above)
+
+
 ## Usage Examples
 
 ### Standard Account Creation
@@ -84,7 +111,7 @@ This ensures explicit control over resource reuse and prevents accidental overwr
 import { EvmAccount } from "alchemy/coinbase";
 
 const account = await EvmAccount("my-account", {
-  name: "My Account"
+  name: "my-account"
 });
 
 console.log(`Account created: ${account.address}`);
@@ -96,7 +123,7 @@ console.log(`Account created: ${account.address}`);
 import { EvmAccount } from "alchemy/coinbase";
 
 const account = await EvmAccount("test-account", {
-  name: "Test Account",
+  name: "test-account",
   faucet: [
     { network: "base-sepolia", token: "eth" },
     { network: "base-sepolia", token: "usdc" },
@@ -112,10 +139,10 @@ console.log(`Faucet transactions:`, account.faucetTransactions);
 
 ```typescript
 import { EvmAccount } from "alchemy/coinbase";
-import { alchemy } from "alchemy";
+import alchemy from "alchemy";
 
 const account = await EvmAccount("imported", {
-  name: "Imported Account",
+  name: "imported-account",
   privateKey: alchemy.secret("PRIVATE_KEY")
 });
 ```
@@ -145,12 +172,12 @@ import { EvmAccount, EvmSmartAccount } from "alchemy/coinbase";
 
 // First create an owner account
 const owner = await EvmAccount("owner", {
-  name: "Owner Account"
+  name: "owner-account"
 });
 
 // Then create a smart account
 const smartAccount = await EvmSmartAccount("smart", {
-  name: "Smart Account",
+  name: "smart-account",
   owner: owner
 });
 
@@ -183,12 +210,12 @@ const smartAccount = await EvmSmartAccount("my-smart-account", {
 ```typescript
 // Initial account
 const account = await EvmAccount("my-account", {
-  name: "Original Name"
+  name: "0riginal-name"
 });
 
 // Update name (address remains the same)
 const updated = await EvmAccount("my-account", {
-  name: "New Name"
+  name: "new-name"
 });
 
 console.log(updated.address === account.address); // true
@@ -199,7 +226,7 @@ console.log(updated.address === account.address); // true
 ```typescript
 // Initial account with ETH on Base Sepolia
 const account = await EvmAccount("my-account", {
-  name: "Test Account",
+  name: "test-account",
   faucet: [
     { network: "base-sepolia", token: "eth" }
   ]
@@ -207,7 +234,7 @@ const account = await EvmAccount("my-account", {
 
 // Later, request additional tokens
 const updated = await EvmAccount("my-account", {
-  name: "Test Account",
+  name: "test-account",
   faucet: [
     { network: "base-sepolia", token: "eth" }, // Already exists, skipped
     { network: "base-sepolia", token: "usdc" }, // New request
@@ -228,13 +255,13 @@ const owner2 = await EvmAccount("owner2", { name: "Owner 2" });
 
 // Initial smart account
 const smart = await EvmSmartAccount("smart", {
-  name: "Smart Account",
+  name: "smart-account",
   owner: owner1
 });
 
 // Changing owner triggers replacement (new smart account)
 const replaced = await EvmSmartAccount("smart", {
-  name: "Smart Account",
+  name: "smart-account",
   owner: owner2 // Different owner
 });
 

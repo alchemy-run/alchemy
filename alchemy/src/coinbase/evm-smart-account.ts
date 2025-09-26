@@ -1,9 +1,9 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
-import alchemy from "../index.ts";
-import type { EvmAccount } from "./evm-account.ts";
+import type { EvmAccount, FaucetConfig } from "./evm-account.ts";
+import { createCdpClient, type CoinbaseClientOptions } from "./client.ts";
 
-export interface EvmSmartAccountProps {
+export interface EvmSmartAccountProps extends CoinbaseClientOptions {
   /**
    * Name for the smart account.
    * Used for identification in CDP.
@@ -21,6 +21,20 @@ export interface EvmSmartAccountProps {
    * @default false
    */
   adopt?: boolean;
+  /**
+   * Faucet configuration for development funding.
+   * Declares which tokens this smart account should have.
+   * Used by external funding scripts - not processed by the resource.
+   *
+   * @example
+   * ```ts
+   * faucet: {
+   *   "base-sepolia": ["eth", "usdc"],
+   *   "ethereum-sepolia": ["eth"]
+   * }
+   * ```
+   */
+  faucet?: FaucetConfig;
 }
 
 export interface EvmSmartAccount
@@ -32,11 +46,15 @@ export interface EvmSmartAccount
   /**
    * The smart account address (same across all EVM networks)
    */
-  address: string;
+  address: `0x${string}`;
   /**
    * The owner account address
    */
-  ownerAddress: string;
+  ownerAddress: `0x${string}`;
+  /**
+   * Faucet configuration (passed through from props)
+   */
+  faucet?: FaucetConfig;
 }
 
 /**
@@ -92,21 +110,15 @@ export interface EvmSmartAccount
 export const EvmSmartAccount = Resource(
   "coinbase::evm-smart-account",
   async function (
-    this: Context,
-    id: string,
+    this: Context<EvmSmartAccount>,
+    _id: string,
     props: EvmSmartAccountProps,
   ): Promise<EvmSmartAccount> {
-    const { CdpClient } = await import("@coinbase/cdp-sdk");
-
-    // Initialize CDP client
-    const apiKeyId = alchemy.secret("COINBASE_API_KEY_ID");
-    const apiKeySecret = alchemy.secret("COINBASE_API_KEY_SECRET");
-    const walletSecret = alchemy.secret("COINBASE_WALLET_SECRET");
-
-    const cdp = new CdpClient({
-      apiKeyId: apiKeyId.unencrypted,
-      apiKeySecret: apiKeySecret.unencrypted,
-      walletSecret: walletSecret.unencrypted,
+    // Initialize CDP client with credentials from props or environment
+    const cdp = await createCdpClient({
+      apiKeyId: props.apiKeyId,
+      apiKeySecret: props.apiKeySecret,
+      walletSecret: props.walletSecret,
     });
 
     // Get owner account
@@ -139,12 +151,18 @@ export const EvmSmartAccount = Resource(
       if (props.name !== this.output.name) {
         // Note: CDP SDK might not support updating smart account names directly
         // For now, we'll just update our tracking
-        const result: EvmSmartAccount = {
+        return {
           ...this.output,
           name: props.name,
+          faucet: props.faucet,
         };
-        await this.save(result);
-        return result;
+      }
+      // Update faucet configuration if changed
+      if (JSON.stringify(props.faucet) !== JSON.stringify(this.output.faucet)) {
+        return {
+          ...this.output,
+          faucet: props.faucet,
+        };
       }
       return this.output;
     }
@@ -200,13 +218,11 @@ export const EvmSmartAccount = Resource(
     }
 
     // Return smart account details
-    const result: EvmSmartAccount = {
+    return {
       name: smartAccount.name || props.name,
-      address: smartAccount.address,
-      ownerAddress,
+      address: smartAccount.address as `0x${string}`,
+      ownerAddress: ownerAddress as `0x${string}`,
+      faucet: props.faucet,
     } as EvmSmartAccount;
-
-    await this.save(result);
-    return result;
   },
 );
