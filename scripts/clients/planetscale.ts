@@ -1,4 +1,5 @@
 import type { OpenApi, UserConfig } from "@hey-api/openapi-ts";
+import { isMethod, keys } from "./utils.ts";
 
 type Patch = NonNullable<UserConfig["parser"]>["patch"];
 
@@ -182,6 +183,64 @@ export function patchMissingEndpoints(spec: OpenApi.V2_0_X) {
     ],
     additionalProperties: false,
   };
+  spec.definitions!.GeneralError = {
+    type: "object",
+    properties: {
+      code: { type: "string" },
+      message: { type: "string" },
+    },
+  };
+
+  for (const path of Object.keys(spec.paths) as `/${string}`[]) {
+    const methods = spec.paths[path];
+    for (const method of keys(methods)) {
+      if (!isMethod(method)) continue;
+      if (!spec.paths[path][method]) continue;
+      for (const code of keys(spec.paths[path][method].responses)) {
+        const response = spec.paths[path][method].responses[code]!;
+        if (String(code).match(/^[45]\d\d$/) && "description" in response) {
+          spec.paths[path][method].responses[code] = {
+            description: response.description,
+            schema: {
+              $ref: "#/definitions/GeneralError",
+            },
+          };
+        }
+      }
+    }
+  }
 
   return spec;
 }
+
+const spec = await fetch("https://api.planetscale.com/v1/openapi-spec")
+  .then((res) => res.json() as Promise<OpenApi.V2_0_X>)
+  .then(patchMissingEndpoints);
+
+export default {
+  input: spec as any,
+  output: {
+    path: "alchemy/src/planetscale/api",
+    format: "biome",
+  },
+  plugins: [
+    {
+      name: "@hey-api/typescript",
+      exportFromIndex: false,
+    },
+    {
+      name: "@hey-api/sdk",
+      instance: "PlanetScaleClient",
+      exportFromIndex: false,
+      auth: false,
+    },
+    {
+      name: "@hey-api/client-fetch",
+      throwOnError: true,
+      exportFromIndex: false,
+    },
+  ],
+  parser: {
+    patch: patchMissingProperties,
+  },
+} satisfies UserConfig;

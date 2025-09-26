@@ -22,7 +22,7 @@ export type CreateClientConfig<T extends ClientOptions = ClientOptions2> = (
 
 export const client = createClient(
   createConfig<ClientOptions2>({
-    baseUrl: "https://api.planetscale.com/v1",
+    baseUrl: "https://console.neon.tech/api/v2",
     throwOnError: true,
   }),
 );

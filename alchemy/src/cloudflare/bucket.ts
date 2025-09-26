@@ -90,6 +90,11 @@ export interface BucketProps extends CloudflareApiOptions {
   lock?: R2BucketLockRule[];
 
   /**
+   * Enable data catalog for bucket
+   */
+  dataCatalog?: boolean;
+
+  /**
    * Whether to emulate the bucket locally when Alchemy is running in watch mode.
    */
   dev?: {
@@ -337,6 +342,24 @@ type _R2Bucket = Omit<BucketProps, "delete" | "dev"> & {
      */
     remote: boolean;
   };
+
+  /**
+   * Data catalog for the bucket
+   */
+  catalog?: {
+    /**
+     * ID of the data catalog
+     */
+    id: string;
+    /**
+     * Name of the data catalog
+     */
+    name: string;
+    /**
+     * Host of the data catalog
+     */
+    host: string;
+  };
 };
 
 export function isBucket(resource: any): resource is R2Bucket {
@@ -513,6 +536,9 @@ const _R2Bucket = Resource(
 
     if (this.phase === "delete") {
       if (props.delete !== false) {
+        if (this.output?.catalog) {
+          await disableDataCatalog(api, bucketName);
+        }
         if (this.output.dev?.id) {
           await deleteMiniflareBinding(this.scope, "r2", this.output.dev.id);
         }
@@ -552,6 +578,16 @@ const _R2Bucket = Resource(
       if (props.lock?.length) {
         await putBucketLockRules(api, bucketName, props);
       }
+      let dataCatalog:
+        | {
+            id: string;
+            name: string;
+            host: string;
+          }
+        | undefined;
+      if (props.dataCatalog) {
+        dataCatalog = await enableDataCatalog(api, bucketName);
+      }
       return {
         name: bucketName,
         location: bucket.location,
@@ -565,12 +601,20 @@ const _R2Bucket = Resource(
         lock: props.lock,
         cors: props.cors,
         dev,
+        catalog: dataCatalog,
       };
     } else {
       if (bucketName !== this.output.name) {
         throw new Error(
           `Cannot update R2Bucket name after creation. Bucket name is immutable. Before: ${this.output.name}, After: ${bucketName}`,
         );
+      }
+      if (this.output?.catalog && !props.dataCatalog) {
+        await disableDataCatalog(api, bucketName);
+        this.output.catalog = undefined;
+      }
+      if (!this.output.catalog && props.dataCatalog) {
+        this.output.catalog = await enableDataCatalog(api, bucketName);
       }
       let domain = this.output.domain;
       if (!!domain !== allowPublicAccess) {
@@ -1131,4 +1175,32 @@ export async function deleteObject(
 
     return response;
   });
+}
+
+export async function enableDataCatalog(
+  api: CloudflareApi,
+  bucketName: string,
+) {
+  const response = await extractCloudflareResult<{
+    id: string;
+    name: string;
+  }>(
+    `enable data catalog for bucket "${bucketName}"`,
+    api.post(`/accounts/${api.accountId}/r2-catalog/${bucketName}/enable`, {}),
+  );
+  return {
+    id: response.id,
+    name: response.name,
+    host: `https://catalog.cloudflarestorage.com/${response.name.replace("_", "/")}`,
+  };
+}
+
+export async function disableDataCatalog(
+  api: CloudflareApi,
+  bucketName: string,
+) {
+  await api.post(
+    `/accounts/${api.accountId}/r2-catalog/${bucketName}/disable`,
+    {},
+  );
 }

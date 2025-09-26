@@ -3,7 +3,7 @@ import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
 import { logger } from "../util/logger.ts";
-import { PlanetScaleClient, type PlanetScaleProps } from "./api/client.gen.ts";
+import { createPlanetScaleClient, type PlanetScaleProps } from "./api.ts";
 import type { CreateRoleData } from "./api/types.gen.ts";
 import type { Branch } from "./branch.ts";
 import type { Database } from "./database.ts";
@@ -163,7 +163,7 @@ export const Role = Resource(
     id: string,
     props: RoleProps,
   ): Promise<Role> {
-    const api = new PlanetScaleClient(props);
+    const api = createPlanetScaleClient(props);
     const organization =
       typeof props.branch === "object"
         ? props.branch.organizationId
@@ -186,17 +186,17 @@ export const Role = Resource(
     switch (this.phase) {
       case "delete": {
         if (this.output?.id) {
-          const res = await api.organizations.databases.branches.roles.delete({
+          const res = await api.deleteRole({
             path: {
               organization,
               database,
               branch,
               id: this.output.id,
             },
-            result: "full",
+            throwOnError: false,
           });
           if (res.error) {
-            switch (res.error.status) {
+            switch (res.response.status) {
               case 404:
                 break;
               case 422:
@@ -221,7 +221,9 @@ export const Role = Resource(
         return this.destroy();
       }
       case "create": {
-        const { kind, ready } = await api.organizations.databases.branches.get({
+        const {
+          data: { kind, ready },
+        } = await api.getBranch({
           path: {
             organization,
             database,
@@ -237,7 +239,7 @@ export const Role = Resource(
         if (!ready) {
           await waitForBranchReady(api, organization, database, branch);
         }
-        const role = await api.organizations.databases.branches.roles.post({
+        const { data } = await api.createRole({
           path: {
             organization,
             database,
@@ -250,19 +252,19 @@ export const Role = Resource(
         });
         return {
           ...props,
-          id: role.id,
-          name: role.name,
-          host: role.access_host_url,
-          username: role.username,
-          password: alchemy.secret(role.password),
-          expiresAt: role.expires_at,
-          databaseName: role.database_name,
+          id: data.id,
+          name: data.name,
+          host: data.access_host_url,
+          username: data.username,
+          password: alchemy.secret(data.password),
+          expiresAt: data.expires_at,
+          databaseName: data.database_name,
           inheritedRoles,
           connectionUrl: alchemy.secret(
-            `postgresql://${role.username}:${role.password}@${role.access_host_url}:5432/${role.database_name}?sslmode=verify-full`,
+            `postgresql://${data.username}:${data.password}@${data.access_host_url}:5432/${data.database_name}?sslmode=verify-full`,
           ),
           connectionUrlPooled: alchemy.secret(
-            `postgresql://${role.username}:${role.password}@${role.access_host_url}:6432/${role.database_name}?sslmode=verify-full`,
+            `postgresql://${data.username}:${data.password}@${data.access_host_url}:6432/${data.database_name}?sslmode=verify-full`,
           ),
         };
       }

@@ -5,8 +5,6 @@ import { Worker } from "../../src/cloudflare/worker.ts";
 import { destroy } from "../../src/destroy.ts";
 import { BRANCH_PREFIX } from "../util.ts";
 
-import "@cloudflare/unenv-preset/node/process";
-
 import "../../src/test/vitest.ts";
 import { fetchAndExpectOK } from "../../src/util/safe-fetch.ts";
 

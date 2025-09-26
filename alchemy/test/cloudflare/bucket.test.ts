@@ -493,7 +493,41 @@ describe("R2 Bucket Resource", async () => {
         truncated: false,
       });
     } finally {
-      // await destroy(scope);
+      await scope.finalize();
+    }
+  });
+
+  test("bucket with data catalog", async (scope) => {
+    const bucketName = `${BRANCH_PREFIX.toLowerCase()}-test-data-catalog`;
+    try {
+      let bucket = await R2Bucket(bucketName, {
+        name: bucketName,
+        adopt: true,
+        dataCatalog: true,
+      });
+      expect(bucket.catalog).toBeDefined();
+      expect(bucket.catalog?.id).toBeDefined();
+      expect(bucket.catalog?.name).toBeDefined();
+      expect(bucket.catalog?.host).toBeDefined();
+
+      bucket = await R2Bucket(bucketName, {
+        name: bucketName,
+        adopt: true,
+        dataCatalog: false,
+      });
+      expect(bucket.catalog).toBeUndefined();
+
+      bucket = await R2Bucket(bucketName, {
+        name: bucketName,
+        adopt: true,
+        dataCatalog: true,
+      });
+      expect(bucket.catalog).toBeDefined();
+      expect(bucket.catalog?.id).toBeDefined();
+      expect(bucket.catalog?.name).toBeDefined();
+      expect(bucket.catalog?.host).toBeDefined();
+    } finally {
+      await destroy(scope);
     }
   });
 });
@@ -559,36 +593,6 @@ async function getObject(
     `https://${r2Client.accountId}.r2.cloudflarestorage.com/${bucket.name}/${props.key}`,
   );
   return await r2Client.fetch(url, {
-    headers: withJurisdiction(bucket),
-  });
-}
-
-async function headObject(
-  bucket: R2Bucket,
-  props: {
-    key: string;
-  },
-) {
-  const url = new URL(
-    `https://${r2Client.accountId}.r2.cloudflarestorage.com/${bucket.name}/${props.key}`,
-  );
-  return await r2Client.fetch(url, {
-    method: "HEAD",
-    headers: withJurisdiction(bucket),
-  });
-}
-
-async function deleteObject(
-  bucket: R2Bucket,
-  props: {
-    key: string;
-  },
-) {
-  const url = new URL(
-    `https://${r2Client.accountId}.r2.cloudflarestorage.com/${bucket.name}/${props.key}`,
-  );
-  return await r2Client.fetch(url, {
-    method: "DELETE",
     headers: withJurisdiction(bucket),
   });
 }
