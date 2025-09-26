@@ -124,7 +124,7 @@ The script:
 Due to the immutable nature of blockchain, `EvmAccount` and `EvmSmartAccount` resources persist in CDP even after running `alchemy destroy`. When destroyed, accounts are removed from Alchemy's state tracking but continue to exist in the Coinbase Developer Platform.
 
 ### Account Name Validation
-CDP requires account names to contain only letters, numbers, and hyphens, and be between 2 and 36 characters long. The provider automatically validates names before creation.
+The provider validates that account names contain only letters, numbers, and hyphens. CDP will provide detailed validation errors for any additional requirements like length restrictions.
 
 ### Smart Account Name Inheritance
 When creating a smart account without specifying a name, it inherits the owner account's name. This creates matching names in CDP for both EOA and smart account pairs. This pattern follows the [Base Account SDK's payment charge interface](https://github.com/base/account-sdk/blob/master/packages/account-sdk/src/interface/payment/charge.ts#L120), ensuring compatibility when using Coinbase's payment infrastructure
