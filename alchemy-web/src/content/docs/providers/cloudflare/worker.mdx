@@ -89,6 +89,7 @@ async function handleUsers(request: Request): Promise<Response> {
 Use bindings to attach KV, R2, Durable Objects, secrets, and other resources to the Worker. 
 Configure Worker properties for compatibility, observability, and runtime limits:
 ```ts
+import alchemy from 'alchemy';
 import { Worker, KVNamespace, R2Bucket } from "alchemy/cloudflare";
 
 const cache = await KVNamespace("cache", { title: "cache-store" });
@@ -97,8 +98,8 @@ const storage = await R2Bucket("storage", { name: "user-storage" });
 export const worker = await Worker("api", {
   name: "api-worker",                     // Worker name (defaults to ${app}-${stage}-${id})
   url: true,                              // Enable workers.dev preview URL (defaults to false; created unless using a dispatch namespace)
+  cwd: "./apps/my-api",                   // Project root directory (defaults to process.cwd())
   entrypoint: "./src/api.ts",             // Main entrypoint for bundling
-  cwd: "./src",                           // Project root directory (defaults to process.cwd())
   format: "esm",                          // Module format: 'esm' (default) or 'cjs'
   // compatibilityDate defaults to the SDK's pinned date; override only when you need a specific runtime
   compatibilityDate: "2025-09-13",        // Workers runtime version (uses DEFAULT_COMPATIBILITY_DATE when omitted)
@@ -108,7 +109,7 @@ export const worker = await Worker("api", {
   bindings: {
     CACHE: cache,                         // KV Namespace binding
     STORAGE: storage,                     // R2 bucket binding
-    API_KEY: "secret-value"               // Plain-text env binding (converted to plain_text)
+    API_KEY: alchemy.secret("secret-value")                // Plain-text env binding (converted to plain_text)
     // Other binding types include: DurableObjectNamespace, Queue, Secret, Assets, Container, Workflow
   },
   observability: {
@@ -131,7 +132,8 @@ export const worker = await Worker("api", {
   domains: ["example.com"],               // Custom domains to bind (can be objects with zoneId/adopt)
   version: "pr-123",                      // Publish as preview version with label
   dev: { port: 8787 },                    // Local development options (port, remote, tunnel)
-  namespace: "dispatch-namespace",        // Dispatch namespace for Workers for Platforms
+  tunnel: true,                           // Expose the worker via a Cloudflare Tunnel.
+  namespace: "dispatch-namespace",        // Dispatch namespace for Workers for Platforms or DispatchNamespace resource
   noBundle: false,                        // Disable bundling (deploy files as-is)
   rules: [{ globs: ["**/*.wasm"] }],      // Additional bundle rules
 });
