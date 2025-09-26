@@ -77,7 +77,7 @@ const smartAccount = await EvmSmartAccount("my-smart-account", {
 
 ### Smart Account with Inherited Name
 
-When name is omitted, the smart account inherits the owner's name:
+When name is omitted, the smart account inherits the owner's name. This pattern follows the [Base Account SDK's payment charge interface](https://github.com/base/account-sdk/blob/master/packages/account-sdk/src/interface/payment/charge.ts#L120):
 
 ```typescript
 import { EvmAccount, EvmSmartAccount } from "alchemy/coinbase";
