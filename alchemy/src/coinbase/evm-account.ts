@@ -82,12 +82,6 @@ export interface EvmAccount extends Resource<"coinbase::evm-account"> {
  * });
  *
  * console.log("Account address:", account.address);
- * // Use this account on any network:
- * // await cdp.evm.sendTransaction({
- * //   address: account.address,
- * //   network: "base-sepolia",
- * //   ...
- * // })
  * ```
  *
  * @example

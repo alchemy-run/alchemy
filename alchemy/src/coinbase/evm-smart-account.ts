@@ -86,12 +86,6 @@ export interface EvmSmartAccount
  * });
  *
  * console.log("Smart account address:", smartAccount.address);
- * // Use for gasless transactions on supported networks:
- * // await cdp.evm.sendUserOperation({
- * //   smartAccount: { address: smartAccount.address },
- * //   network: "base-sepolia",
- * //   ...
- * // })
  * ```
  *
  * @example
