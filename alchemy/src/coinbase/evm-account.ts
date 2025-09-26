@@ -148,7 +148,7 @@ export const EvmAccount = Resource(
       // Only name can be updated
       if (props.name !== this.output.name) {
         // CDP SDK supports updating account names via updateAccount
-        const updated = await cdp.evm.updateAccount({
+        await cdp.evm.updateAccount({
           address: this.output.address,
           update: {
             name: props.name,
@@ -156,7 +156,8 @@ export const EvmAccount = Resource(
         });
         return {
           ...this.output,
-          name: updated.name || props.name,
+          name: props.name, // Use the requested name
+          faucet: props.faucet,
         };
       }
 
@@ -175,7 +176,7 @@ export const EvmAccount = Resource(
     if (this.phase === "delete") {
       // CDP SDK doesn't support deleting accounts
       // Accounts remain in CDP but are no longer tracked by Alchemy
-      console.log(`🗑️ Untracking EVM Account: ${this.output?.address}`);
+      console.log(`🗑️ Untracking EVM Account: ${this.output.address}`);
       return {} as any;
     }
 
@@ -184,11 +185,9 @@ export const EvmAccount = Resource(
     // Handle account creation/retrieval
     if (props.privateKey) {
       // Import account with private key
-      const privateKey = props.privateKey.unencrypted;
-
-      // Import account - this is idempotent in CDP
+      // This is idempotent in CDP
       account = await cdp.evm.importAccount({
-        privateKey: privateKey,
+        privateKey: props.privateKey.unencrypted,
         name: props.name,
       });
     } else {
@@ -201,40 +200,20 @@ export const EvmAccount = Resource(
       } else {
         // Without adoption, need to check if account exists first
         try {
-          // Try to get existing account by name
-          // CDP SDK doesn't have a direct "getAccountByName" so we use getOrCreate
-          // and check if it's actually new or existing
-          const existingAccounts = await cdp.evm.listAccounts();
-          const existing = (existingAccounts as unknown as any[]).find(
-            (acc: any) => acc.name === props.name,
+          await cdp.evm.getAccount({ name: props.name });
+          throw new Error(
+            `Account with name '${props.name}' already exists. Use adopt: true to use the existing account.`,
           );
-
-          if (existing) {
-            throw new Error(
-              `Account with name '${props.name}' already exists. Use adopt: true to use the existing account.`,
-            );
-          }
-
-          // Create new account
-          account = await cdp.evm.createAccount({
-            name: props.name,
-          });
-        } catch (error: any) {
-          // If it's our "already exists" error, re-throw it
-          if (error.message?.includes("already exists")) {
-            throw error;
-          }
-          // Otherwise, fall back to getOrCreate
-          account = await cdp.evm.getOrCreateAccount({
-            name: props.name,
-          });
+        } catch (_error: any) {
+          // Account not found, create it
+          account = await cdp.evm.createAccount({ name: props.name });
         }
       }
     }
 
     // Return account details
     return {
-      name: account.name || props.name,
+      name: props.name, // Always use the name from props for consistency
       address: account.address,
       faucet: props.faucet,
     } as EvmAccount;

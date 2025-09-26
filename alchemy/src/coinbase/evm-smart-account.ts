@@ -9,12 +9,12 @@ export interface EvmSmartAccountProps extends CoinbaseClientOptions {
    * Name for the smart account.
    * Used for identification in CDP.
    */
-  name: string;
+  name?: string;
   /**
    * The owner account that controls this smart account.
-   * Can be either an EvmAccount resource or an account name string.
+   * Can be either an EvmAccount resource or an owner address.
    */
-  owner: EvmAccount | string;
+  owner: EvmAccount | Address;
   /**
    * Whether to adopt an existing smart account with the same name if it already exists.
    * Without adoption, creation will fail if a smart account with the same name exists.
@@ -93,7 +93,7 @@ export interface EvmSmartAccount
  * ```ts
  * const smartAccount = await EvmSmartAccount("my-smart-account", {
  *   name: "My Smart Account",
- *   owner: "existing-owner-name"
+ *   owner: "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb" // Owner address
  * });
  * ```
  *
@@ -103,7 +103,7 @@ export interface EvmSmartAccount
  * ```ts
  * const smartAccount = await EvmSmartAccount("my-smart-account", {
  *   name: "existing-smart-account",
- *   owner: "owner-account",
+ *   owner: ownerAccount, // or "0x..." address
  *   adopt: true // Uses existing smart account if it exists
  * });
  * ```
@@ -122,24 +122,25 @@ export const EvmSmartAccount = Resource(
       walletSecret: props.walletSecret,
     });
 
-    // Get owner account
-    let ownerAccount;
-    let ownerAddress: string;
+    // Get owner address
+    const ownerAddress =
+      typeof props.owner === "string" ? props.owner : props.owner.address;
 
-    if (typeof props.owner === "string") {
-      // Owner is a name string
-      // Get or create the owner account
-      ownerAccount = await cdp.evm.getOrCreateAccount({
-        name: props.owner,
-      });
-      ownerAddress = ownerAccount.address;
-    } else {
-      // Owner is an EvmAccount resource
-      ownerAddress = props.owner.address;
-      // Get or create the owner account in CDP
-      ownerAccount = await cdp.evm.getOrCreateAccount({
-        name: props.owner.name,
-      });
+    // Get owner account for CDP operations
+    // When owner is an address string, we use it to get the account
+    const ownerAccount =
+      typeof props.owner === "string"
+        ? await cdp.evm.getAccount({ address: props.owner })
+        : await cdp.evm.getAccount({ address: props.owner.address });
+
+    // If no name provided, inherit from owner
+    // this mean that if you pass only { owner } the created smartAccount will be same name as the EOA owner
+    // this to support https://github.com/base/account-sdk/blob/master/packages/account-sdk/src/interface/payment/charge.ts#L120
+    let accountName = props.name ? props.name : ownerAccount.name;
+    if (!accountName) {
+      throw new Error(
+        `Smart account requires a name. Either provide 'name' in props or ensure the owner account has a name. Owner address: ${ownerAddress}`
+      );
     }
 
     // Handle update phase
@@ -149,13 +150,19 @@ export const EvmSmartAccount = Resource(
         this.replace();
       }
       // Check if name changed
-      if (props.name !== this.output.name) {
-        // Note: CDP SDK might not support updating smart account names directly
-        // For now, we'll just update our tracking
+      if (accountName !== this.output.name) {
+        await cdp.evm.updateSmartAccount({
+          address: this.output.address,
+          owner: ownerAccount,
+          update: {
+            name: accountName,
+          },
+        });
+
         return {
           ...this.output,
-          name: props.name,
-          faucet: props.faucet,
+          name: accountName,
+          // faucet: props.faucet, not sure we need this?
         };
       }
       // Update faucet configuration if changed
@@ -182,37 +189,25 @@ export const EvmSmartAccount = Resource(
     if (props.adopt) {
       // With adoption, use getOrCreateSmartAccount which returns existing if it exists
       smartAccount = await cdp.evm.getOrCreateSmartAccount({
-        name: props.name,
+        name: accountName,
         owner: ownerAccount,
       });
     } else {
       // Without adoption, need to check if smart account exists first
       try {
         // List accounts and check if a smart account with this name exists
-        const accounts = await cdp.evm.listAccounts();
-        const existing = (accounts as unknown as any[]).find(
-          (acc: any) => acc.name === props.name && acc.type === "smart",
-        );
-
-        if (existing) {
-          throw new Error(
-            `Smart account with name '${props.name}' already exists. Use adopt: true to use the existing smart account.`,
-          );
-        }
-
-        // Create new smart account
-        smartAccount = await cdp.evm.createSmartAccount({
-          name: props.name,
+        await cdp.evm.getSmartAccount({
+          name: accountName,
           owner: ownerAccount,
         });
-      } catch (error: any) {
-        // If it's our "already exists" error, re-throw it
-        if (error.message?.includes("already exists")) {
-          throw error;
-        }
-        // Otherwise, fall back to getOrCreateSmartAccount
-        smartAccount = await cdp.evm.getOrCreateSmartAccount({
-          name: props.name,
+
+        throw new Error(
+          `Smart account with name '${accountName}' already exists. Use adopt: true to use the existing smart account.`,
+        );
+      } catch (_error: any) {
+        // It doesn't exist, we can create one
+        smartAccount = await cdp.evm.createSmartAccount({
+          name: accountName,
           owner: ownerAccount,
         });
       }
@@ -220,9 +215,9 @@ export const EvmSmartAccount = Resource(
 
     // Return smart account details
     return {
-      name: smartAccount.name || props.name,
+      name: accountName,
       address: smartAccount.address,
-      ownerAddress: ownerAddress,
+      ownerAddress,
       faucet: props.faucet,
     } as EvmSmartAccount;
   },
