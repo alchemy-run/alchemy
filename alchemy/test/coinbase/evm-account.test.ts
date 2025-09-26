@@ -23,11 +23,8 @@ describe("Coinbase", () => {
       expect(() => validateAccountName("UPPERCASE")).not.toThrow();
       expect(() => validateAccountName("lowercase")).not.toThrow();
       expect(() => validateAccountName("MixedCase123")).not.toThrow();
-      expect(() => validateAccountName("a")).not.toThrow();
-      expect(() => validateAccountName("1")).not.toThrow();
-      expect(() =>
-        validateAccountName("very-long-name-with-many-hyphens-123"),
-      ).not.toThrow();
+      expect(() => validateAccountName("ab")).not.toThrow(); // minimum 2 chars
+      expect(() => validateAccountName("123456789012345678901234567890123456")).not.toThrow(); // exactly 36 chars
     });
 
     test("rejects invalid names", () => {
@@ -52,9 +49,19 @@ describe("Coinbase", () => {
         /CDP only allows letters, numbers, and hyphens/,
       );
 
+      // Too short (less than 2 characters)
+      expect(() => validateAccountName("a")).toThrow(
+        /CDP requires names to be between 2 and 36 characters long/,
+      );
+
+      // Too long (more than 36 characters)
+      expect(() => validateAccountName("1234567890123456789012345678901234567")).toThrow(
+        /CDP requires names to be between 2 and 36 characters long/,
+      );
+
       // Empty name
       expect(() => validateAccountName("")).toThrow(
-        /CDP only allows letters, numbers, and hyphens/,
+        /CDP requires names to be between 2 and 36 characters long/,
       );
     });
   });

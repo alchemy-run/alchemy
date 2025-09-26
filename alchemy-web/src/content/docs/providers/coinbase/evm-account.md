@@ -19,7 +19,7 @@ const account = await EvmAccount("my-account", {
 
 | Name | Type | Required | Description |
 |------|------|----------|--------------|
-| `name` | `string` | Yes | Name for the account in CDP. Must contain only letters, numbers, and hyphens |
+| `name` | `string` | Yes | Name for the account in CDP. Must contain only letters, numbers, and hyphens (2-36 characters) |
 | `privateKey` | `Secret<PrivateKey>` | No | Private key to import an existing account. Must be encrypted using `alchemy.secret()` |
 | `adopt` | `boolean` | No | Use existing account with the same name if it exists. Default: `false` |
 | `faucet` | `FaucetConfig` | No | Testnet tokens to request automatically on creation/update |
@@ -163,7 +163,7 @@ type PrivateKey = `0x${string}`; // Private key hex format
 
 ## Notes
 
-- **Name Validation**: Account names must contain only letters, numbers, and hyphens
+- **Name Validation**: Account names must contain only letters, numbers, and hyphens (2-36 characters)
 - **Auto-Funding**: Faucet requests are non-blocking - failures don't prevent account creation
 - **Security**: Private keys must be encrypted using `alchemy.secret()` for security
 - **Idempotent**: Importing the same private key multiple times returns the same account

@@ -25,7 +25,7 @@ const smartAccount = await EvmSmartAccount("smart", {
 | Name | Type | Required | Description |
 |------|------|----------|--------------|
 | `owner` | `EvmAccount \| Address` | Yes | The owner account that controls this smart account |
-| `name` | `string` | No | Name for the smart account in CDP. If omitted, inherits from owner account name. Must contain only letters, numbers, and hyphens |
+| `name` | `string` | No | Name for the smart account in CDP. If omitted, inherits from owner account name. Must contain only letters, numbers, and hyphens (2-36 characters) |
 | `adopt` | `boolean` | No | Use existing smart account with the same name if it exists. Default: `false` |
 | `faucet` | `FaucetConfig` | No | Testnet tokens to request automatically on creation/update |
 | `apiKeyId` | `Secret` | No | CDP API key ID (overrides environment variable) |
@@ -205,7 +205,7 @@ type Address = `0x${string}`; // Ethereum address format
 
 ## Notes
 
-- **Name Validation**: Account names must contain only letters, numbers, and hyphens
+- **Name Validation**: Account names must contain only letters, numbers, and hyphens (2-36 characters)
 - **Name Inheritance**: When name is omitted, inherits from owner account name
 - **Owner Changes**: Changing the owner triggers replacement (new smart account created)
 - **Auto-Funding**: Faucet requests are non-blocking - failures don't prevent account creation
