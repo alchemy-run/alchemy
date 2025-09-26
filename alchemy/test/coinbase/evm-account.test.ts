@@ -3,11 +3,10 @@ import { destroy } from "../../src/destroy.ts";
 import { EvmAccount } from "../../src/coinbase/evm-account.ts";
 import { EvmSmartAccount } from "../../src/coinbase/evm-smart-account.ts";
 import { validateAccountName } from "../../src/coinbase/utils.ts";
+import { BRANCH_PREFIX } from "../util.ts";
 import { describe, expect } from "vitest";
 
 import "../../src/test/vitest.ts";
-
-const BRANCH_PREFIX = process.env.BRANCH_PREFIX || "test";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
