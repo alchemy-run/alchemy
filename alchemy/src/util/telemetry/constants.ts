@@ -5,9 +5,7 @@ export const CONFIG_DIR = envPaths("alchemy", { suffix: "" }).config;
 export const TELEMETRY_DISABLED =
   !!process.env.ALCHEMY_TELEMETRY_DISABLED || !!process.env.DO_NOT_TRACK;
 
-// TODO(sam): replace with permanent URL
-export const POSTHOG_CLIENT_API_HOST =
-  process.env.ALCHEMY_POSTHOG_CLIENT_API_HOST ?? "https://ph.alchemy.run";
-export const POSTHOG_PROJECT_ID =
-  process.env.ALCHEMY_POSTHOG_PROJECT_ID ??
-  "phc_A51Mi7Q63TvnNrvRMgvBxE1il0DAL66rVg4LdWPRsfK";
+export const TELEMETRY_API_URL =
+  process.env.ALCHEMY_TELEMETRY_API_URL ?? "https://telemetry.alchemy.run";
+export const SUPPRESS_TELEMETRY_ERRORS =
+  !!process.env.ALCHEMY_TELEMETRY_SUPPRESS_ERRORS;
