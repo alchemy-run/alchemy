@@ -58,6 +58,17 @@ Manages ERC-4337 smart accounts that enable advanced features like gasless trans
 
 ## Key Concepts
 
+### Automatic Faucet Funding
+
+When `faucet` configuration is provided, accounts automatically request testnet tokens:
+
+- **On Creation**: Accounts receive initial funding when created with `faucet` config
+- **On Update**: Adding new networks/tokens to `faucet` config automatically requests those funds
+- **Non-blocking**: Funding failures don't prevent account operations (warnings are logged)
+- **Smart Accounts**: Both regular and smart accounts support auto-funding
+
+This eliminates the need to manually run faucet scripts in most cases. The separate faucet script is still available for bulk operations or re-funding.
+
 ### Security: Encrypted Secrets
 
 Private keys **must** be encrypted using `alchemy.secret()` to ensure they are never exposed in state files:
@@ -156,7 +167,9 @@ const account = await EvmAccount("my-account", {
 console.log(`Account created: ${account.address}`);
 ```
 
-### Create Account with Testnet Funds
+### Create Account with Automatic Testnet Funding
+
+Accounts automatically request faucet funds when created with `faucet` configuration:
 
 ```typescript
 import { EvmAccount } from "alchemy/coinbase";
@@ -169,8 +182,11 @@ const account = await EvmAccount("test-account", {
   }
 });
 
-console.log(`Account created: ${account.address}`);
+console.log(`Account created and funded: ${account.address}`);
+// The account automatically receives ETH and USDC on Base Sepolia, and ETH on Ethereum Sepolia
 ```
+
+**Note**: Faucet requests are non-blocking. If funding fails (e.g., rate limits, network issues), the account is still created successfully with a warning logged.
 
 ### Import Existing Account
 
@@ -202,7 +218,9 @@ const account = await EvmAccount("my-account", {
 });
 ```
 
-### Smart Account (ERC-4337)
+### Smart Account (ERC-4337) with Auto-Funding
+
+Smart accounts also support automatic funding on creation and updates:
 
 ```typescript
 import { EvmAccount, EvmSmartAccount } from "alchemy/coinbase";
@@ -212,13 +230,16 @@ const owner = await EvmAccount("owner", {
   name: "owner-account"
 });
 
-// Then create a smart account with explicit name
+// Then create a smart account with explicit name and auto-funding
 const smartAccount = await EvmSmartAccount("smart", {
   name: "smart-account",
-  owner: owner
+  owner: owner,
+  faucet: {
+    "base-sepolia": ["eth", "usdc"]  // Automatically funded on creation
+  }
 });
 
-console.log(`Smart account: ${smartAccount.address}`);
+console.log(`Smart account created and funded: ${smartAccount.address}`);
 
 // Use for gasless transactions on Base networks:
 await cdp.evm.sendUserOperation({
@@ -268,7 +289,7 @@ const smartAccount = await EvmSmartAccount("my-smart-account", {
 ```typescript
 // Initial account
 const account = await EvmAccount("my-account", {
-  name: "0riginal-name"
+  name: "original-name"
 });
 
 // Update name (address remains the same)
@@ -279,7 +300,9 @@ const updated = await EvmAccount("my-account", {
 console.log(updated.address === account.address); // true
 ```
 
-### Update Faucet Configuration
+### Update Faucet Configuration with Auto-Funding
+
+When you update the `faucet` configuration, new tokens are automatically requested:
 
 ```typescript
 // Initial account with ETH on Base Sepolia
@@ -290,16 +313,16 @@ const account = await EvmAccount("my-account", {
   }
 });
 
-// Later, update faucet configuration
+// Later, update faucet configuration - automatically requests USDC and Ethereum Sepolia ETH
 const updated = await EvmAccount("my-account", {
   name: "test-account",
   faucet: {
-    "base-sepolia": ["eth", "usdc"],
-    "ethereum-sepolia": ["eth"]
+    "base-sepolia": ["eth", "usdc"],  // USDC will be automatically requested
+    "ethereum-sepolia": ["eth"]        // ETH on new network will be requested
   }
 });
 
-// Run `bunx alchemy/coinbase/faucet` to request the new tokens
+console.log("Account automatically funded with new tokens");
 ```
 
 ### Owner Changes and Replacement

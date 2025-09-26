@@ -2,7 +2,13 @@ import type { Context } from "../context.ts";
 import type { Secret } from "../index.ts";
 import { Resource } from "../resource.ts";
 import { createCdpClient, type CoinbaseClientOptions } from "./client.ts";
-import type { Address, FaucetConfig, PrivateKey } from "./types.ts";
+import type {
+  Address,
+  FaucetConfig,
+  FaucetNetwork,
+  FaucetToken,
+  PrivateKey,
+} from "./types.ts";
 
 // Re-export types for backward compatibility
 export type { FaucetConfig, FaucetNetwork, FaucetToken } from "./types.ts";
@@ -163,6 +169,60 @@ export const EvmAccount = Resource(
 
       // Update faucet configuration if changed
       if (JSON.stringify(props.faucet) !== JSON.stringify(this.output.faucet)) {
+        // Only fund NEW combinations that weren't in the previous config
+        try {
+          // Get all old combinations
+          const oldCombinations = new Set(
+            Object.entries(this.output.faucet ?? {}).flatMap(
+              ([network, tokens]) =>
+                tokens.map((token) => `${network}:${token}`),
+            ),
+          );
+
+          // Get all new combinations
+          const newCombinations = Object.entries(props.faucet ?? {}).flatMap(
+            ([network, tokens]) =>
+              tokens.map((token) => ({
+                network: network as FaucetNetwork,
+                token: token as FaucetToken,
+                key: `${network}:${token}`,
+              })),
+          );
+
+          // Filter to only combinations that are actually new
+          const toFund = newCombinations.filter(
+            ({ key }) => !oldCombinations.has(key),
+          );
+
+          if (toFund.length > 0) {
+            await Promise.all(
+              toFund.map(({ network, token }) =>
+                cdp.evm
+                  .requestFaucet({
+                    address: this.output.address,
+                    network,
+                    token,
+                  })
+                  .catch((err) => {
+                    console.warn(
+                      `⚠️ Failed to request ${token} on ${network} for ${this.output.address}: ${err.message}`,
+                    );
+                    return null;
+                  }),
+              ),
+            );
+
+            console.log(
+              `💧 Requested ${toFund.length} new faucet fund${toFund.length === 1 ? "" : "s"} for ${this.output.address}`,
+            );
+          }
+        } catch (error: any) {
+          console.warn(
+            `⚠️ Failed to request additional faucet funds for ${this.output.address}: ${error.message}`,
+          );
+          // Continue - don't break the update
+        }
+
         return {
           ...this.output,
           faucet: props.faucet,
@@ -208,6 +268,43 @@ export const EvmAccount = Resource(
           // Account not found, create it
           account = await cdp.evm.createAccount({ name: props.name });
         }
+      }
+    }
+
+    // Fund the account if faucet configuration is provided
+    if (props.faucet) {
+      try {
+        const combinations = Object.entries(props.faucet).flatMap(
+          ([network, tokens]) =>
+            tokens.map((token) => ({
+              network: network as FaucetNetwork,
+              token: token as FaucetToken,
+            })),
+        );
+
+        await Promise.all(
+          combinations.map(({ network, token }) =>
+            cdp.evm
+              .requestFaucet({
+                address: account.address,
+                network,
+                token,
+              })
+              .catch((err) => {
+                console.warn(
+                  `⚠️ Failed to request ${token} on ${network} for ${account.address}: ${err.message}`,
+                );
+                return null;
+              }),
+          ),
+        );
+
+        console.log(`💧 Requested faucet funds for ${account.address}`);
+      } catch (error: any) {
+        console.warn(
+          `⚠️ Failed to request faucet funds for ${account.address}: ${error.message}`,
+        );
+        // Continue - don't break account creation
       }
     }
 

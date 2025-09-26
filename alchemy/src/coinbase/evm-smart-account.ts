@@ -2,7 +2,12 @@ import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { createCdpClient, type CoinbaseClientOptions } from "./client.ts";
 import type { EvmAccount } from "./evm-account.ts";
-import type { Address, FaucetConfig } from "./types.ts";
+import type {
+  Address,
+  FaucetConfig,
+  FaucetNetwork,
+  FaucetToken,
+} from "./types.ts";
 
 export interface EvmSmartAccountProps extends CoinbaseClientOptions {
   /**
@@ -189,6 +194,60 @@ export const EvmSmartAccount = Resource(
       }
       // Update faucet configuration if changed
       if (JSON.stringify(props.faucet) !== JSON.stringify(this.output.faucet)) {
+        // Only fund NEW combinations that weren't in the previous config
+        try {
+          // Get all old combinations
+          const oldCombinations = new Set(
+            Object.entries(this.output.faucet ?? {}).flatMap(
+              ([network, tokens]) =>
+                tokens.map((token) => `${network}:${token}`),
+            ),
+          );
+
+          // Get all new combinations
+          const newCombinations = Object.entries(props.faucet ?? {}).flatMap(
+            ([network, tokens]) =>
+              tokens.map((token) => ({
+                network: network as FaucetNetwork,
+                token: token as FaucetToken,
+                key: `${network}:${token}`,
+              })),
+          );
+
+          // Filter to only combinations that are actually new
+          const toFund = newCombinations.filter(
+            ({ key }) => !oldCombinations.has(key),
+          );
+
+          if (toFund.length > 0) {
+            await Promise.all(
+              toFund.map(({ network, token }) =>
+                cdp.evm
+                  .requestFaucet({
+                    address: this.output.address,
+                    network,
+                    token,
+                  })
+                  .catch((err) => {
+                    console.warn(
+                      `⚠️ Failed to request ${token} on ${network} for smart account ${this.output.address}: ${err.message}`,
+                    );
+                    return null;
+                  }),
+              ),
+            );
+
+            console.log(
+              `💧 Requested ${toFund.length} new faucet fund${toFund.length === 1 ? "" : "s"} for smart account ${this.output.address}`,
+            );
+          }
+        } catch (error: any) {
+          console.warn(
+            `⚠️ Failed to request additional faucet funds for smart account ${this.output.address}: ${error.message}`,
+          );
+          // Continue - don't break the update
+        }
+
         return {
           ...this.output,
           faucet: props.faucet,
@@ -232,6 +291,45 @@ export const EvmSmartAccount = Resource(
           name: accountName,
           owner: ownerAccount,
         });
+      }
+    }
+
+    // Fund the smart account if faucet configuration is provided
+    if (props.faucet) {
+      try {
+        const combinations = Object.entries(props.faucet).flatMap(
+          ([network, tokens]) =>
+            tokens.map((token) => ({
+              network: network as FaucetNetwork,
+              token: token as FaucetToken,
+            })),
+        );
+
+        await Promise.all(
+          combinations.map(({ network, token }) =>
+            cdp.evm
+              .requestFaucet({
+                address: smartAccount.address,
+                network,
+                token,
+              })
+              .catch((err) => {
+                console.warn(
+                  `⚠️ Failed to request ${token} on ${network} for smart account ${smartAccount.address}: ${err.message}`,
+                );
+                return null;
+              }),
+          ),
+        );
+
+        console.log(
+          `💧 Requested faucet funds for smart account ${smartAccount.address}`,
+        );
+      } catch (error: any) {
+        console.warn(
+          `⚠️ Failed to request faucet funds for smart account ${smartAccount.address}: ${error.message}`,
+        );
+        // Continue - don't break account creation
       }
     }
 
