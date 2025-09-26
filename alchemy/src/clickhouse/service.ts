@@ -125,12 +125,16 @@ export interface ServiceProps {
    */
   enableNativesecureEndpoint?: true;
 
+  /**
+   * The compliance type to create the service with.
+   */
+  complianceType?: ApiService["complianceType"];
+
   //todo(michael): I need to understand more about what these properties do before documenting
   //todo(michael): support linking to BYOC infrastructure directly
   byocId?: ApiService["byocId"];
   hasTransparentDataEncryption?: ApiService["hasTransparentDataEncryption"];
   profile?: ApiService["profile"];
-  complianceType?: ApiService["complianceType"];
   dataWarehouseId?: ApiService["dataWarehouseId"];
   backupId?: string;
   encryptionKey?: ApiService["encryptionKey"];
