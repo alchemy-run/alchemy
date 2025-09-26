@@ -212,7 +212,7 @@ const owner = await EvmAccount("owner", {
   name: "owner-account"
 });
 
-// Then create a smart account
+// Then create a smart account with explicit name
 const smartAccount = await EvmSmartAccount("smart", {
   name: "smart-account",
   owner: owner
@@ -227,6 +227,27 @@ await cdp.evm.sendUserOperation({
   calls: [/* ... */],
   // Gasless by default on Base Sepolia
 });
+```
+
+### Smart Account with Inherited Name
+
+When `name` is omitted, the smart account inherits the owner's name. This creates matching names in CDP for both EOA and Smart Account:
+
+```typescript
+import { EvmAccount, EvmSmartAccount } from "alchemy/coinbase";
+
+const owner = await EvmAccount("owner", {
+  name: "my-app-wallet"
+});
+
+// Smart account inherits the name "my-app-wallet" from owner
+const smartAccount = await EvmSmartAccount("smart", {
+  owner: owner
+  // name is omitted - will be "my-app-wallet" in CDP
+});
+
+console.log(smartAccount.name); // "my-app-wallet"
+// Both EOA and Smart Account have the same name in CDP
 ```
 
 ### Adopt Existing Smart Account

@@ -7,7 +7,10 @@ import type { Address, FaucetConfig } from "./types.ts";
 export interface EvmSmartAccountProps extends CoinbaseClientOptions {
   /**
    * Name for the smart account.
+   * If not provided, inherits the name from the owner account.
+   * This allows EOA and Smart Account to have matching names in CDP.
    * Used for identification in CDP.
+   * @default Inherits from owner account name
    */
   name?: string;
   /**
@@ -95,6 +98,25 @@ export interface EvmSmartAccount
  *   name: "My Smart Account",
  *   owner: "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb" // Owner address
  * });
+ * ```
+ *
+ * @example
+ * ## Smart account with inherited name
+ *
+ * When name is omitted, the smart account inherits the owner's name
+ *
+ * ```ts
+ * const owner = await EvmAccount("owner", {
+ *   name: "my-app-wallet"
+ * });
+ *
+ * // Smart account will also be named "my-app-wallet" in CDP
+ * const smartAccount = await EvmSmartAccount("smart", {
+ *   owner: owner
+ *   // name is omitted, inherits "my-app-wallet" from owner
+ * });
+ *
+ * console.log(smartAccount.name); // "my-app-wallet"
  * ```
  *
  * @example

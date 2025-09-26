@@ -47,7 +47,9 @@ async function main() {
       });
 
       // Extract unique directory paths
-      const possibleScopes = [...new Set(allFiles.map(f => f.replace(/\/[^/]+\.json$/, '')))];
+      const possibleScopes = [
+        ...new Set(allFiles.map((f) => f.replace(/\/[^/]+\.json$/, ""))),
+      ];
 
       if (possibleScopes.length === 0) {
         console.error(`No scope found matching: ${scope}`);
