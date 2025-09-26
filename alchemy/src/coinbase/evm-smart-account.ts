@@ -72,15 +72,12 @@ export interface EvmSmartAccount
  * Manages ERC-4337 smart accounts on Coinbase Developer Platform.
  * Smart accounts enable gasless transactions and advanced features like batch operations.
  *
- * Note: Smart accounts have the same address across all EVM networks.
- * Currently supported on Base Sepolia and Base Mainnet.
- *
  * @example
  * ## Create a smart account with an EVM account owner
  *
  * ```ts
  * const owner = await EvmAccount("owner", {
- *   name: "Owner Account"
+ *   name: "owner-account"
  * });
  *
  * const smartAccount = await EvmSmartAccount("my-smart-account", {

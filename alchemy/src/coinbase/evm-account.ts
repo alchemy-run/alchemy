@@ -73,13 +73,8 @@ export interface EvmAccount extends Resource<"coinbase::evm-account"> {
 /**
  * Manages EVM accounts on Coinbase Developer Platform.
  *
- * Note: EVM accounts have the same address across all EVM networks.
- * The account is network-agnostic and can be used on any supported network.
- *
  * @example
  * ## Create a new EVM account
- *
- * Creates a new EVM account that works across all networks
  *
  * ```ts
  * const account = await EvmAccount("my-account", {
@@ -109,8 +104,8 @@ export interface EvmAccount extends Resource<"coinbase::evm-account"> {
  *   }
  * });
  *
- * // Use a funding script to actually request tokens
- * // based on the faucet configuration
+ * // Account automatically requests tokens on creation
+ * // The faucet script can be used for bulk funding operations
  * ```
  *
  * @example
