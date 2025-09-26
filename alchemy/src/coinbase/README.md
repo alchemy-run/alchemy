@@ -63,6 +63,8 @@ Manages ERC-4337 smart accounts that enable advanced features like gasless trans
 Private keys **must** be encrypted using `alchemy.secret()` to ensure they are never exposed in state files:
 
 ```typescript
+import type { PrivateKey } from "alchemy/coinbase";
+
 // ✅ CORRECT - Private key is encrypted in state
 const account = await EvmAccount("treasury", {
   name: "treasury",
@@ -72,7 +74,7 @@ const account = await EvmAccount("treasury", {
 // ❌ WRONG - Would expose private key in plain text (TypeScript will error)
 const account = await EvmAccount("treasury", {
   name: "treasury",
-  privateKey: process.env.TREASURY_KEY // Type error: must be Secret<string>
+  privateKey: process.env.TREASURY_KEY // Type error: must be Secret<PrivateKey>
 });
 ```
 
@@ -159,7 +161,7 @@ console.log(`Account created: ${account.address}`);
 ### Import Existing Account
 
 ```typescript
-import { EvmAccount } from "alchemy/coinbase";
+import { EvmAccount, type PrivateKey } from "alchemy/coinbase";
 import alchemy from "alchemy";
 
 const account = await EvmAccount("imported", {

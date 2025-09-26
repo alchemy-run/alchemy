@@ -1,7 +1,8 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
-import type { EvmAccount, FaucetConfig } from "./evm-account.ts";
 import { createCdpClient, type CoinbaseClientOptions } from "./client.ts";
+import type { EvmAccount } from "./evm-account.ts";
+import type { Address, FaucetConfig } from "./types.ts";
 
 export interface EvmSmartAccountProps extends CoinbaseClientOptions {
   /**
@@ -46,11 +47,11 @@ export interface EvmSmartAccount
   /**
    * The smart account address (same across all EVM networks)
    */
-  address: `0x${string}`;
+  address: Address;
   /**
    * The owner account address
    */
-  ownerAddress: `0x${string}`;
+  ownerAddress: Address;
   /**
    * Faucet configuration (passed through from props)
    */
@@ -220,8 +221,8 @@ export const EvmSmartAccount = Resource(
     // Return smart account details
     return {
       name: smartAccount.name || props.name,
-      address: smartAccount.address as `0x${string}`,
-      ownerAddress: ownerAddress as `0x${string}`,
+      address: smartAccount.address,
+      ownerAddress: ownerAddress,
       faucet: props.faucet,
     } as EvmSmartAccount;
   },

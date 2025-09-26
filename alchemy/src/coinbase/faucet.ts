@@ -6,10 +6,11 @@
  *   bunx alchemy/coinbase/faucet
  */
 
-import { createCdpClient } from "./client.ts";
-import type { EvmAccount, FaucetNetwork, FaucetToken } from "./evm-account.ts";
-import type { EvmSmartAccount } from "./evm-smart-account.ts";
 import alchemy from "../index.ts";
+import { createCdpClient } from "./client.ts";
+import type { EvmAccount } from "./evm-account.ts";
+import type { EvmSmartAccount } from "./evm-smart-account.ts";
+import type { FaucetNetwork, FaucetToken } from "./types.ts";
 
 // Track funded combinations to avoid duplicates within this run
 const funded = new Set<string>();

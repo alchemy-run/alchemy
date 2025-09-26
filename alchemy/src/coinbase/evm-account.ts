@@ -2,21 +2,10 @@ import type { Context } from "../context.ts";
 import type { Secret } from "../index.ts";
 import { Resource } from "../resource.ts";
 import { createCdpClient, type CoinbaseClientOptions } from "./client.ts";
+import type { Address, FaucetConfig, PrivateKey } from "./types.ts";
 
-/**
- * Supported testnet networks for faucet requests
- */
-export type FaucetNetwork = "base-sepolia" | "ethereum-sepolia";
-
-/**
- * Supported tokens for faucet requests
- */
-export type FaucetToken = "eth" | "usdc" | "eurc" | "cbbtc";
-
-/**
- * Faucet configuration for requesting testnet tokens
- */
-export type FaucetConfig = Partial<Record<FaucetNetwork, FaucetToken[]>>;
+// Re-export types for backward compatibility
+export type { FaucetConfig, FaucetNetwork, FaucetToken } from "./types.ts";
 
 export interface EvmAccountProps extends CoinbaseClientOptions {
   /**
@@ -26,7 +15,7 @@ export interface EvmAccountProps extends CoinbaseClientOptions {
   name: string;
   /**
    * Optional private key to import an existing account.
-   * Must be encrypted using alchemy.secret() for security.
+   * Must be a hex string (starting with 0x) encrypted using alchemy.secret().
    * If not provided, a new account will be created or existing one will be used.
    *
    * @example
@@ -34,7 +23,7 @@ export interface EvmAccountProps extends CoinbaseClientOptions {
    * privateKey: alchemy.secret(process.env.PRIVATE_KEY)
    * ```
    */
-  privateKey?: Secret<string>;
+  privateKey?: Secret<PrivateKey>;
   /**
    * Whether to adopt an existing account with the same name if it already exists.
    * Without adoption, creation will fail if an account with the same name exists.
@@ -66,7 +55,7 @@ export interface EvmAccount extends Resource<"coinbase::evm-account"> {
   /**
    * The EVM address (same across all EVM networks)
    */
-  address: `0x${string}`;
+  address: Address;
   /**
    * Faucet configuration (passed through from props)
    */
@@ -199,7 +188,7 @@ export const EvmAccount = Resource(
 
       // Import account - this is idempotent in CDP
       account = await cdp.evm.importAccount({
-        privateKey: privateKey as `0x${string}`,
+        privateKey: privateKey,
         name: props.name,
       });
     } else {
@@ -246,7 +235,7 @@ export const EvmAccount = Resource(
     // Return account details
     return {
       name: account.name || props.name,
-      address: account.address as `0x${string}`,
+      address: account.address,
       faucet: props.faucet,
     } as EvmAccount;
   },
