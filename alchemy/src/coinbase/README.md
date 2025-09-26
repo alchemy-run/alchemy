@@ -124,15 +124,13 @@ import { EvmAccount } from "alchemy/coinbase";
 
 const account = await EvmAccount("test-account", {
   name: "test-account",
-  faucet: [
-    { network: "base-sepolia", token: "eth" },
-    { network: "base-sepolia", token: "usdc" },
-    { network: "ethereum-sepolia", token: "usdc" }
-  ]
+  faucet: {
+    "base-sepolia": ["eth", "usdc"],
+    "ethereum-sepolia": ["eth"]
+  }
 });
 
 console.log(`Account created: ${account.address}`);
-console.log(`Faucet transactions:`, account.faucetTransactions);
 ```
 
 ### Import Existing Account
@@ -221,28 +219,27 @@ const updated = await EvmAccount("my-account", {
 console.log(updated.address === account.address); // true
 ```
 
-### Request Additional Testnet Tokens
+### Update Faucet Configuration
 
 ```typescript
 // Initial account with ETH on Base Sepolia
 const account = await EvmAccount("my-account", {
   name: "test-account",
-  faucet: [
-    { network: "base-sepolia", token: "eth" }
-  ]
+  faucet: {
+    "base-sepolia": ["eth"]
+  }
 });
 
-// Later, request additional tokens
+// Later, update faucet configuration
 const updated = await EvmAccount("my-account", {
   name: "test-account",
-  faucet: [
-    { network: "base-sepolia", token: "eth" }, // Already exists, skipped
-    { network: "base-sepolia", token: "usdc" }, // New request
-    { network: "ethereum-sepolia", token: "eth" } // New request
-  ]
+  faucet: {
+    "base-sepolia": ["eth", "usdc"],
+    "ethereum-sepolia": ["eth"]
+  }
 });
 
-// updated.faucetTransactions now contains all faucet requests
+// Run `bunx alchemy/coinbase/faucet` to request the new tokens
 ```
 
 ### Owner Changes and Replacement
