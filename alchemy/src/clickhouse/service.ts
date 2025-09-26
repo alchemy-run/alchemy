@@ -104,15 +104,31 @@ export interface ServiceProps {
    */
   stateTarget?: "start" | "stop";
 
-  //todo(pr): I need to understand more about what these properties do
-  //todo(pr): support linking to BYOC infrastructure directly
+  /**
+   * Whether to enable the mysql endpoint.
+   *
+   * @default true
+   */
+  enableMysqlEndpoint?: boolean;
+
+  /**
+   * Whether to enable the https endpoint. Cannot be disabled
+   *
+   * @default true
+   */
+  enableHttpsEndpoint?: true;
+
+  /**
+   * Whether to enable the nativesecure endpoint. Cannot be disabled
+   *
+   * @default true
+   */
+  enableNativesecureEndpoint?: true;
+
+  //todo(michael): I need to understand more about what these properties do before documenting
+  //todo(michael): support linking to BYOC infrastructure directly
   byocId?: ApiService["byocId"];
   hasTransparentDataEncryption?: ApiService["hasTransparentDataEncryption"];
-  //todo(michael): can this be any of the protocol types? since their type fails to mention that
-  endpoints?: Array<{
-    protocol: "mysql";
-    enabled: boolean;
-  }>;
   profile?: ApiService["profile"];
   complianceType?: ApiService["complianceType"];
   dataWarehouseId?: ApiService["dataWarehouseId"];
@@ -144,8 +160,25 @@ export interface Service {
   profile: ApiService["profile"];
   complianceType?: ApiService["complianceType"];
   backupId?: string;
-  //todo(pr): do we want to split this out into separate properties so we dont have to use find to access?
-  endpoints: ApiService["endpoints"];
+  enableMysqlEndpoint?: boolean;
+  enableHttpsEndpoint?: true;
+  enableNativesecureEndpoint?: true;
+  mysqlEndpoint?: {
+    protocol: "mysql";
+    host: string;
+    port: number;
+    username: string;
+  };
+  httpsEndpoint?: {
+    protocol: "https";
+    host: string;
+    port: number;
+  };
+  nativesecureEndpoint?: {
+    protocol: "nativesecure";
+    host: string;
+    port: number;
+  };
   stateTarget: "start" | "stop";
   state: ApiService["state"];
 }
@@ -188,7 +221,20 @@ export const Service = Resource(
     const idleScaling = props.idleScaling ?? true;
     const isReadonly = props.isReadonly ?? false;
     const releaseChannel = props.releaseChannel ?? "default";
-    const endpoints = props.endpoints ?? [{ protocol: "mysql", enabled: true }];
+    const endpoints: Array<{ protocol: "mysql"; enabled: boolean }> = [];
+    const enableMysqlEndpoint = props.enableMysqlEndpoint ?? true;
+    if (enableMysqlEndpoint) {
+      endpoints.push({ protocol: "mysql", enabled: true });
+    }
+    //todo(michael): comment these in when disabling is supported
+    // const enableHttpsEndpoint = props.enableHttpsEndpoint ?? true;
+    // if (enableHttpsEndpoint) {
+    // 	endpoints.push({ protocol: "https", enabled: true });
+    // }
+    // const enableNativesecureEndpoint = props.enableNativesecureEndpoint ?? true;
+    // if (enableNativesecureEndpoint) {
+    // 	endpoints.push({ protocol: "nativesecure", enabled: true });
+    // }
     const stateTarget = props.stateTarget ?? "start";
     const ipAccessList = props.ipAccessList ?? [
       {
@@ -233,20 +279,22 @@ export const Service = Resource(
       return this.destroy();
     }
     if (this.phase === "update") {
-      //todo(pr): check endpoint differences?
       const resourceDiff = diff(
         {
           ...props,
           idleScaling,
           isReadonly,
           releaseChannel,
-          endpoints,
           name,
         },
-        { ...this.output, endpoints, organization: props.organization },
+        {
+          ...this.output,
+          organization: props.organization,
+        },
       );
 
       const updates: Partial<Service> = {};
+      console.log(resourceDiff);
 
       if (
         resourceDiff.some(
@@ -254,6 +302,9 @@ export const Service = Resource(
             prop !== "name" &&
             prop !== "ipAccessList" &&
             prop !== "releaseChannel" &&
+            prop !== "enableMysqlEndpoint" &&
+            prop !== "enableHttpsEndpoint" &&
+            prop !== "enableNativesecureEndpoint" &&
             prop !== "minReplicaMemoryGb" &&
             prop !== "maxReplicaMemoryGb" &&
             prop !== "numReplicas" &&
@@ -266,13 +317,14 @@ export const Service = Resource(
       }
 
       if (
-        //todo(pr): check encryption key swap?
+        //todo(michael): check encryption key swap?
         resourceDiff.some(
           (prop) =>
             prop === "name" ||
             prop === "ipAccessList" ||
             prop === "releaseChannel",
-        )
+        ) ||
+        enableMysqlEndpoint !== this.output.enableMysqlEndpoint
       ) {
         const response = await api.v1
           .organizations(organizationId)
@@ -281,11 +333,21 @@ export const Service = Resource(
             name,
             ipAccessList: props.ipAccessList,
             releaseChannel,
+            endpoints,
           });
 
         updates.name = response.name;
         updates.ipAccessList = response.ipAccessList;
         updates.releaseChannel = response.releaseChannel;
+        updates.mysqlEndpoint = response.endpoints.find(
+          (endpoint) => endpoint.protocol === "mysql",
+        );
+        updates.httpsEndpoint = response.endpoints.find(
+          (endpoint) => endpoint.protocol === "https",
+        );
+        updates.nativesecureEndpoint = response.endpoints.find(
+          (endpoint) => endpoint.protocol === "nativesecure",
+        );
       }
 
       if (stateTarget !== this.output.stateTarget) {
@@ -381,16 +443,23 @@ export const Service = Resource(
       byocId: service.service.byocId,
       hasTransparentDataEncryption:
         service.service.hasTransparentDataEncryption,
-      endpoints: service.service.endpoints,
       profile: service.service.profile,
       complianceType: service.service.complianceType,
       stateTarget,
       state: service.service.state,
+      mysqlEndpoint: service.service.endpoints.find(
+        (endpoint) => endpoint.protocol === "mysql",
+      ),
+      httpsEndpoint: service.service.endpoints.find(
+        (endpoint) => endpoint.protocol === "https",
+      ),
+      nativesecureEndpoint: service.service.endpoints.find(
+        (endpoint) => endpoint.protocol === "nativesecure",
+      ),
     };
   },
 );
 
-//todo(pr): are we okay with this? it feels extremely stupid but its what the clickhouse tf provider does
 async function waitForServiceState(
   api: any,
   organizationId: string,

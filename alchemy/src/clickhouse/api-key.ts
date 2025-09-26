@@ -98,7 +98,6 @@ export const ApiKey = Resource(
 
     const key = await api.v1.organizations(organizationId).keys.post({
       name,
-      //todo(pr): this is the default for "never expires" that clickhouses uses in their dashboard. do we want to keep it?
       expireAt: props.expireAt ?? "2999-12-31T00:00:00.000Z",
       ipAccessList: props.ipAccessList ?? [
         {

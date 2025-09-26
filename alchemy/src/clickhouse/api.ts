@@ -70,11 +70,21 @@ export type IpAccess = {
   source: string;
   description: string;
 };
-export type ServiceEndpoint = {
-  protocol: "https" | "nativesecure" | "mysql";
+export type MysqlServiceEndpoint = {
+  protocol: "mysql";
   host: string;
   port: number;
-  username: string | null;
+  username: string;
+};
+export type HttpsServiceEndpoint = {
+  protocol: "https";
+  host: string;
+  port: number;
+};
+export type NativesecureServiceEndpoint = {
+  protocol: "nativesecure";
+  host: string;
+  port: number;
 };
 export type ServiceReplicaSize = 8 | 12 | 16 | 32 | 64 | 120 | 236 | 356;
 export type Service = {
@@ -84,7 +94,9 @@ export type Service = {
   region: Region;
   state: ServiceState;
   clickhouseVersion: string;
-  endpoints: Array<ServiceEndpoint>;
+  endpoints: Array<
+    MysqlServiceEndpoint | HttpsServiceEndpoint | NativesecureServiceEndpoint
+  >;
   minReplicaMemoryGb: ServiceReplicaSize;
   maxReplicaMemoryGb: ServiceReplicaSize;
   numReplicas: number;
