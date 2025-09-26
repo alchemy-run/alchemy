@@ -1,6 +1,6 @@
 # Coinbase Provider
 
-This provider enables management of blockchain resources through the Coinbase Developer Platform (CDP) SDK.
+This provider brings blockchain resources as first-class citizens to Infrastructure as Code. Just as you provision databases, servers, and CDNs, you can now declaratively manage blockchain accounts and smart contracts through Alchemy, powered by the Coinbase Developer Platform (CDP) SDK.
 
 ## Resources
 
