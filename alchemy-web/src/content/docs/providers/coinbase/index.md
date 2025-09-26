@@ -120,6 +120,9 @@ The script:
 
 ## Key Features
 
+### Resource Immutability
+Due to the immutable nature of blockchain, `EvmAccount` and `EvmSmartAccount` resources persist in CDP even after running `alchemy destroy`. When destroyed, accounts are removed from Alchemy's state tracking but continue to exist in the Coinbase Developer Platform.
+
 ### Account Name Validation
 CDP requires account names to contain only letters, numbers, and hyphens. The provider automatically validates names before creation.
 
