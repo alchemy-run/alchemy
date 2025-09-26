@@ -41,10 +41,13 @@ async function main() {
       });
     } else {
       // Try to find directories that end with the provided scope
-      const possibleScopes = await glob(`**/${scope}`, {
+      // We need to find directories, so we'll look for JSON files and extract the directory paths
+      const allFiles = await glob(`**/${scope}/*.json`, {
         cwd: ".alchemy",
-        onlyDirectories: true,
       });
+
+      // Extract unique directory paths
+      const possibleScopes = [...new Set(allFiles.map(f => f.replace(/\/[^/]+\.json$/, '')))];
 
       if (possibleScopes.length === 0) {
         console.error(`No scope found matching: ${scope}`);
