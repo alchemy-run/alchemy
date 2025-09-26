@@ -3,10 +3,14 @@
  * Request testnet tokens from Coinbase faucet for accounts with faucet metadata
  *
  * Usage:
- *   bunx alchemy/coinbase/faucet
+ *   bun node_modules/alchemy/src/coinbase/faucet.ts              # Fund all accounts with faucet config
+ *   bun node_modules/alchemy/src/coinbase/faucet.ts dev          # Fund only accounts in dev scope
+ *   bun node_modules/alchemy/src/coinbase/faucet.ts backend/dev  # Fund specific scope
  */
 
-import alchemy from "../index.ts";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { glob } from "glob";
 import { createCdpClient } from "./client.ts";
 import type { EvmAccount } from "./evm-account.ts";
 import type { EvmSmartAccount } from "./evm-smart-account.ts";
@@ -16,21 +20,89 @@ import type { FaucetNetwork, FaucetToken } from "./types.ts";
 const funded = new Set<string>();
 
 async function main() {
+  // Get optional scope argument
+  const scope = process.argv[2];
+
   // Initialize CDP client (uses CDP_* env vars automatically)
   const cdp = await createCdpClient();
 
-  // Initialize Alchemy scope to access state
-  const scope = await alchemy("coinbase-funding", {
-    phase: "read",
-  });
+  let stateFiles: string[];
 
-  // Get all states and filter for Coinbase EVM accounts with faucet metadata
-  const allStates = await scope.state.all();
+  if (scope) {
+    // If scope provided, find matching directories
+    const scopePath = join(".alchemy", scope);
 
-  const accounts = Object.values(allStates)
+    if (existsSync(scopePath)) {
+      // Exact match found
+      console.log(`Using scope: ${scope}`);
+      stateFiles = await glob("*.json", {
+        cwd: scopePath,
+        absolute: true,
+      });
+    } else {
+      // Try to find directories that end with the provided scope
+      const possibleScopes = await glob(`**/${scope}`, {
+        cwd: ".alchemy",
+        onlyDirectories: true,
+      });
+
+      if (possibleScopes.length === 0) {
+        console.error(`No scope found matching: ${scope}`);
+        process.exit(1);
+      } else if (possibleScopes.length === 1) {
+        // Found exactly one match
+        const foundScope = possibleScopes[0];
+        console.log(`Using scope: ${foundScope}`);
+        stateFiles = await glob("*.json", {
+          cwd: join(".alchemy", foundScope),
+          absolute: true,
+        });
+      } else {
+        // Multiple matches found - use all of them
+        console.log(
+          `Found ${possibleScopes.length} scopes matching '${scope}':`,
+        );
+        for (const s of possibleScopes) {
+          console.log(`  - ${s}`);
+        }
+
+        // Collect state files from all matching scopes
+        stateFiles = [];
+        for (const foundScope of possibleScopes) {
+          const files = await glob("*.json", {
+            cwd: join(".alchemy", foundScope),
+            absolute: true,
+          });
+          stateFiles.push(...files);
+        }
+      }
+    }
+  } else {
+    // No scope provided, search all .alchemy subdirectories
+    console.log(
+      "Searching all scopes for accounts with faucet configuration...",
+    );
+    stateFiles = await glob("**/*.json", {
+      cwd: ".alchemy",
+      absolute: true,
+    });
+  }
+
+  const allStates = stateFiles
+    .map((file) => {
+      try {
+        return JSON.parse(readFileSync(file, "utf-8"));
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+
+  const accounts = allStates
     .filter(
       (state) =>
-        state.kind.startsWith("coinbase::evm") &&
+        state?.kind?.startsWith("coinbase::evm") &&
+        state.output &&
         (state.output as EvmAccount | EvmSmartAccount).faucet,
     )
     .map((state) => {

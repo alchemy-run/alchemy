@@ -96,28 +96,42 @@ This ensures explicit control over resource reuse and prevents accidental overwr
 
 Request testnet tokens for accounts configured with faucet metadata.
 
-### Usage
+### Installation & Setup
 
-```bash
-bunx alchemy/coinbase/faucet
-```
-
-Or add to your `package.json` scripts:
+Add to your `package.json` scripts:
 ```json
 {
   "scripts": {
-    "faucet": "bunx alchemy/coinbase/faucet"
+    "faucet": "bun node_modules/alchemy/src/coinbase/faucet.ts"
   }
 }
 ```
 
+### Usage
+
+```bash
+# Fund all accounts with faucet configuration across all scopes
+bun run faucet
+
+# Fund only accounts in 'dev' stage scope
+bun run faucet dev
+```
+
+The script supports Alchemy's [Stage Scope](https://alchemy.run/concepts/scope/#stage-scope) pattern, allowing you to target specific environments by passing the stage name as an argument.
+
 ### How it works
 
-1. Reads all Coinbase accounts from Alchemy state
-2. Finds accounts with `faucet` metadata configuration
-3. Requests tokens from CDP faucet for each network/token pair
-4. Skips already funded combinations (idempotent)
-5. Handles rate limits with automatic delays
+1. **Scope Detection**:
+   - No argument: Searches all `.alchemy` subdirectories
+   - With stage argument: Finds all scopes matching that stage (e.g., `dev` matches `backend/dev`, `frontend/dev`)
+
+2. **Account Discovery**: Finds all Coinbase EVM accounts and smart accounts with `faucet` metadata
+
+3. **Token Requests**: For each account, requests tokens from CDP faucet for configured network/token pairs
+
+4. **Idempotency**: Tracks funded combinations to avoid duplicates within the same run
+
+5. **Rate Limiting**: Automatically handles CDP faucet rate limits
 
 ### Requirements
 

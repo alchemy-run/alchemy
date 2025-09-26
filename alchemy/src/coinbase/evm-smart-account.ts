@@ -139,7 +139,7 @@ export const EvmSmartAccount = Resource(
     let accountName = props.name ? props.name : ownerAccount.name;
     if (!accountName) {
       throw new Error(
-        `Smart account requires a name. Either provide 'name' in props or ensure the owner account has a name. Owner address: ${ownerAddress}`
+        `Smart account requires a name. Either provide 'name' in props or ensure the owner account has a name. Owner address: ${ownerAddress}`,
       );
     }
 
