@@ -147,6 +147,7 @@ export type Consume<Q extends Queue = Queue> = Lambda.Bindable<
 >;
 
 export const Consume = <Q extends Queue>(queue: Q): Consume<Q> => ({
+  label: `AWS.SQS.Consume(${queue.id})`,
   effect: "Allow",
   action: "sqs:Consume",
   resource: queue,
@@ -174,6 +175,7 @@ export type SendMessage<Q extends Queue = Queue> = Lambda.Bindable<
 >;
 
 export const SendMessage = <Q extends Queue>(queue: Q): SendMessage<Q> => ({
+  label: `AWS.SQS.SendMessage(${queue.id})`,
   effect: "Allow",
   action: "sqs:SendMessage",
   resource: queue,
@@ -191,9 +193,6 @@ export const SendMessage = <Q extends Queue>(queue: Q): SendMessage<Q> => ({
           Resource: [queueArn],
         },
       ],
-      bundle: {
-        plugins: [{}],
-      },
     };
   }),
 });

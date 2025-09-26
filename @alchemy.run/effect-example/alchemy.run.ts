@@ -18,8 +18,8 @@ const stack = await Alchemy.plan({
 }).pipe(
   Alchemy.apply,
   Effect.catchTag("PlanRejected", () => Effect.void),
-  Effect.provide(AlchemyCLI.review),
-  // Effect.provide(AlchemyCLI.reportProgress),
+  Effect.provide(AlchemyCLI.requireApproval),
+  Effect.provide(AlchemyCLI.reportProgress),
   Effect.provide(AWS.layer),
   Effect.provide(Alchemy.State.localFs),
   Effect.provide(NodeContext.layer),

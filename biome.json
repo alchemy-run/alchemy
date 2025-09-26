@@ -79,7 +79,8 @@
         "noAccumulatingSpread": "off"
       },
       "complexity": {
-        "noBannedTypes": "off"
+        "noBannedTypes": "off",
+        "noCommaOperator": "off"
       },
       "suspicious": {
         "noExplicitAny": "off",

@@ -32,6 +32,7 @@ export interface Allow<
    * @default ${effect}:${action}:${resource.id}
    */
   sid?: string;
+  label: string;
   effect: "Allow";
   action: Action;
   resource: Resource;
@@ -44,6 +45,7 @@ export interface Deny<
   Condition = any,
 > {
   sid?: string;
+  label: string;
   effect: "Deny";
   action: Action;
   resource: Resource;

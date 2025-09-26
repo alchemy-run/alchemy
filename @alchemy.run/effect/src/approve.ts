@@ -5,9 +5,9 @@ import type { AnyPlan } from "./plan.ts";
 
 export class PlanRejected extends Data.TaggedError("PlanRejected")<{}> {}
 
-export class ReviewPlan extends Context.Tag("ReviewPlan")<
-  ReviewPlan,
+export class PlanReviewer extends Context.Tag("PlanReviewer")<
+  PlanReviewer,
   {
-    review: <P extends AnyPlan>(plan: P) => Effect.Effect<void, PlanRejected>;
+    approve: <P extends AnyPlan>(plan: P) => Effect.Effect<void, PlanRejected>;
   }
 >() {}

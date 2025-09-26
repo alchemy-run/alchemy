@@ -1,12 +1,25 @@
-import * as Console from "effect/Console";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import type { Simplify } from "effect/Types";
+import { type PlanRejected, PlanReviewer } from "./approve.ts";
+import type { ApplyEvent, ApplyStatus } from "./event.ts";
 import type { AnyPlan, BindingAction, Delete } from "./plan.ts";
 import type { SerializedStatement, Statement } from "./policy.ts";
 import type { Resource } from "./resource.ts";
-import { type PlanRejected, ReviewPlan } from "./review.ts";
 import { State } from "./state.ts";
+
+export interface PlanStatusSession {
+  emit: (event: ApplyEvent) => Effect.Effect<void>;
+  done: () => Effect.Effect<void>;
+}
+
+export class PlanStatusReporter extends Context.Tag("PlanStatusReporter")<
+  PlanStatusReporter,
+  {
+    start(plan: AnyPlan): Effect.Effect<PlanStatusSession, never>;
+  }
+>() {}
 
 export const apply = <const P extends AnyPlan, Err, Req>(
   plan: Effect.Effect<P, Err, Req>,
@@ -16,11 +29,20 @@ export const apply = <const P extends AnyPlan, Err, Req>(
       Effect.gen(function* () {
         const state = yield* State;
         const outputs = {} as Record<string, Effect.Effect<any, any>>;
-        const approve = yield* Effect.serviceOption(ReviewPlan);
+        const reviewer = yield* Effect.serviceOption(PlanReviewer);
 
-        if (Option.isSome(approve)) {
-          yield* approve.value.review(plan);
+        if (Option.isSome(reviewer)) {
+          yield* reviewer.value.approve(plan);
         }
+
+        const events = yield* Effect.serviceOption(PlanStatusReporter);
+
+        const { emit, done } = Option.isSome(events)
+          ? yield* events.value.start(plan)
+          : ({
+              emit: () => Effect.void,
+              done: () => Effect.void,
+            } satisfies PlanStatusSession);
 
         const apply = Effect.fn(function* (
           node:
@@ -79,27 +101,43 @@ export const apply = <const P extends AnyPlan, Err, Req>(
             );
 
           const id = node.resource.id;
+
           return yield* (outputs[id] ??= yield* Effect.cached(
             Effect.gen(function* () {
-              // TODO(sam): replace with an event emitter to support different CLI plugins
-              yield* Console.log("pending", node.action, id);
+              const report = (status: ApplyStatus) =>
+                emit({
+                  id,
+                  type: node.resource.type,
+                  status,
+                });
 
               if (node.action === "noop") {
-                yield* Console.log("noop", id);
+                // emit({
+                //   id,
+                //   type: node.resource.type,
+                //   status: "noop",
+                // });
                 return (yield* state.get(id))?.output;
               } else if (node.action === "create") {
                 const bindings = yield* apply(node.bindings);
-                yield* Console.log("creating", id);
+                yield* report("creating");
                 return yield* node.provider
                   .create({
                     id,
                     news: node.news,
                     bindings: hydrate(bindings),
                   })
-                  .pipe(checkpoint);
+                  .pipe(
+                    checkpoint,
+                    Effect.tap(() => report("created")),
+                  );
               } else if (node.action === "update") {
                 const bindings = yield* apply(node.bindings);
-                yield* Console.log("updating", id);
+                yield* emit({
+                  id,
+                  type: node.resource.type,
+                  status: "updating",
+                });
                 return yield* node.provider
                   .update({
                     id,
@@ -108,14 +146,17 @@ export const apply = <const P extends AnyPlan, Err, Req>(
                     output: node.output,
                     bindings: hydrate(bindings),
                   })
-                  .pipe(checkpoint);
+                  .pipe(
+                    checkpoint,
+                    Effect.tap(() => report("updated")),
+                  );
               } else if (node.action === "delete") {
                 yield* Effect.all(
                   node.downstream.map((dep) =>
                     dep in plan ? apply(plan[dep] as P[keyof P]) : Effect.void,
                   ),
                 );
-                yield* Console.log("deleting", id);
+                yield* report("deleting");
 
                 return yield* node.provider
                   .delete({
@@ -123,16 +164,22 @@ export const apply = <const P extends AnyPlan, Err, Req>(
                     olds: node.olds,
                     output: node.output,
                   })
-                  .pipe(Effect.flatMap(() => state.delete(id)));
+                  .pipe(
+                    Effect.flatMap(() => state.delete(id)),
+                    Effect.tap(() => report("deleted")),
+                  );
               } else if (node.action === "replace") {
-                yield* Console.log("replacing", id);
-                const destroy = node.provider.delete({
-                  id,
-                  olds: node.olds,
-                  output: node.output,
+                const destroy = Effect.gen(function* () {
+                  yield* report("deleting");
+                  return yield* node.provider.delete({
+                    id,
+                    olds: node.olds,
+                    output: node.output,
+                  });
                 });
                 const create = Effect.gen(function* () {
-                  node.provider
+                  yield* report("creating");
+                  return yield* node.provider
                     .create({
                       id,
                       news: node.news,
@@ -140,7 +187,10 @@ export const apply = <const P extends AnyPlan, Err, Req>(
                       bindings: hydrate(yield* apply(node.bindings)),
                     })
                     // TODO(sam): delete and create will conflict here, we need to extend the state store for replace
-                    .pipe(checkpoint);
+                    .pipe(
+                      checkpoint,
+                      Effect.tap(() => report("created")),
+                    );
                 });
                 if (!node.deleteFirst) {
                   const outputs = yield* create;
@@ -151,7 +201,7 @@ export const apply = <const P extends AnyPlan, Err, Req>(
                   return yield* create;
                 }
               }
-            }).pipe(Effect.tap(() => Console.log(`${node.action}d ${id}`))),
+            }),
           ));
         }) as (
           node: P[keyof P] | BindingAction<Statement>[],
@@ -166,6 +216,7 @@ export const apply = <const P extends AnyPlan, Err, Req>(
             ),
           ),
         );
+        yield* done();
         if (
           Object.values(plan).every((resource) => resource.action === "delete")
         ) {
