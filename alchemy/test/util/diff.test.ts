@@ -1,5 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { exists } from "../../src/util/diff.ts";
+import { diff, exists } from "../../src/util/diff.ts";
+
+describe("diff()", () => {
+  describe("any()", () => {
+    it("if no prop specified, should check for any", () => {
+      const obj = { a: 1, b: 2 };
+      const changed = { a: 1, b: 2, c: 3 };
+      const changes = diff(obj, changed);
+      expect(changes.any()).toBe(true);
+      expect(changes.any([])).toBe(true);
+      expect(changes.any(["a"])).toBe(false);
+      expect(changes.any({ added: false })).toBe(false);
+      expect(changes.any([], { added: false })).toBe(false);
+    });
+  });
+});
 
 describe("exists function", () => {
   // TODO: Implement wildcard paths, dropped for now
@@ -20,7 +35,7 @@ describe("exists function", () => {
     });
 
     it.skip("should return false for empty arrays when path is '*'", () => {
-      const obj = [];
+      const obj: any[] = [];
       expect(exists(obj, "*")).toBe(false);
     });
   });
@@ -324,12 +339,11 @@ describe("exists function", () => {
       current.value = "deep";
 
       // Test deep path
-      const deepPath = Array(depth).fill("level").join(".") + ".value";
+      const deepPath = `${Array(depth).fill("level").join(".")}.value`;
       expect(exists(obj, deepPath)).toBe(true);
 
       // Test non-existent deep path
-      const nonExistentPath =
-        Array(depth).fill("level").join(".") + ".nonexistent";
+      const nonExistentPath = `${Array(depth).fill("level").join(".")}.nonexistent`;
       expect(exists(obj, nonExistentPath)).toBe(false);
     });
 

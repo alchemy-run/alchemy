@@ -12,7 +12,8 @@ import zlib from "node:zlib";
 import tar from "tar-fs";
 import type { Context } from "../../context.ts";
 import { Resource } from "../../resource.ts";
-import { formatBytes } from "../../util/format.ts";
+import { formatBytes, parseBytes } from "../../util/bytes.ts";
+import { diff } from "../../util/diff.ts";
 import { logger } from "../../util/logger.ts";
 import { DockerHost } from "./docker-host.ts";
 import type { DockerRegistry } from "./docker-registry.ts";
@@ -54,7 +55,7 @@ export const Image = Resource(
     alwaysUpdate: true,
   },
   async function <const Registries extends Record<string, DockerRegistry>>(
-    this: Context<Image>,
+    this: Context<Image, ImageProps<Registries>>,
     _id: string,
     props: ImageProps<Registries>,
   ): Promise<Image> {
@@ -69,6 +70,15 @@ export const Image = Resource(
     const pullConfig = parsePullConfig(props);
     const pushConfig = parsePushConfig(props);
     const buildConfig = parseBuildConfig(props);
+    const changes = diff(
+      {
+        ...(typeof this.props?.build === "object" ? this.props.build : {}),
+      },
+      {
+        ...(typeof props.build === "object" ? props.build : {}),
+      },
+    );
+    const buildRequired = changes.any();
 
     // shorthands
     const pull = () =>
@@ -102,10 +112,6 @@ export const Image = Resource(
         ref,
       });
 
-    console.log("pullConfig", pullConfig);
-    console.log("pushConfig", pushConfig);
-    console.log("buildConfig", buildConfig);
-
     // check if the image exists locally
     const image = await api
       .getImage(ref.fqn)
@@ -117,6 +123,13 @@ export const Image = Resource(
         }
         throw err;
       });
+
+    // build.force takes precedence over pull.force
+    if (buildConfig.enabled && (buildConfig.force || buildRequired)) {
+      const builtImage = await build();
+      if (pushConfig.enabled) await push();
+      return this(builtImage!);
+    }
 
     if (pullConfig.enabled && (pullConfig.force || !image)) {
       const pulledImage = await pull();
@@ -555,7 +568,7 @@ export interface ImageBuildProps {
   context?: string;
 
   /**
-   * Path to the Dockerfile, relative to context
+   * Path within the build context to the Dockerfile.
    * @default Dockerfile
    */
   dockerfile?: string;
@@ -567,16 +580,148 @@ export interface ImageBuildProps {
   args?: Record<string, string>;
 
   /**
-   * Target build platform (e.g., linux/amd64)
+   * Target build stage in multi-stage builds
+   * @default undefined
+   */
+  target?: string;
+
+  /**
+   * Platform in the format os[/arch[/variant]]
+   * @todo Only the first platform will be used, keeping array for future
+   * implementation.
    * @default []
    */
   platforms?: string[];
 
   /**
-   * Target build stage in multi-stage builds
-   * @default undefined
+   * Extra hosts to add to /etc/hosts
+   * @default {}
    */
-  target?: string;
+  extraHosts?: Record<string, string>;
+
+  /**
+   * Labels to add to the image
+   * @default {}
+   */
+  labels?: Record<string, string>;
+
+  /**
+   * Suppress verbose build output.
+   * @default false
+   */
+  quiet?: boolean;
+
+  /**
+   * Cache control.
+   * - `boolean`: Whether to use the cache or not.
+   * - `string[]`: Array of images used for build cache resolution.
+   * @default false
+   */
+  cache?: false | string[];
+
+  /**
+   * Attempt to pull the image even if an older image exists locally.
+   * @default false
+   */
+  alwaysPullBaseImage?: boolean;
+
+  /**
+   * Remove intermediate containers after a successful build.
+   * - `true`: Remove intermediate containers after a successful build.
+   * - `false`: Keep intermediate containers.
+   * - `'always'`: Always remove intermediate containers, even upon failure.
+   * @default true
+   */
+  removeIntermediateContainers?: boolean | "always";
+
+  /**
+   * Squash the resulting images layers into a single layer.
+   * (Only supported on experimental releases)
+   * @default false
+   */
+  squash?: boolean;
+
+  /**
+   * Sets the networking mode for the run commands during build.
+   * Supported standard values are: bridge, host, none, and container:<name|id>.
+   * Any other value is taken as a custom network's name or ID to which this container should connect to.
+   */
+  networkMode?: "host" | "none" | "bridge" | (string & {});
+
+  /**
+   * Configure memory limits for the build container.
+   */
+  memory?: {
+    /**
+     * Set memory limit for build can be a number or a string with a unit.
+     * @example "1gb", "1024mb", 1024 * 1024 * 1024
+     */
+    limit: number | string;
+
+    /**
+     * Amount of swap for the build.
+     * - `0` to disable swap.
+     * - `-1` to enable unlimited swap.
+     * @example "1gb", "1024mb", 1024 * 1024 * 1024
+     * @default -1
+     */
+    swap?: number | string;
+  };
+
+  cpu?: {
+    /**
+     * The length of a CPU period in microseconds.
+     *
+     * Docker CLI Equivalent: `--cpu-period`
+     * @default 100000 // (100ms)
+     */
+    period?: number;
+
+    /**
+     * The number of microseconds per `cpu.period` that the container is limited
+     * to before being throttled. As such acting as the effective ceiling.
+     *
+     * Docker CLI Equivalent: `--cpu-quota`
+     * @default -1 (unlimited)
+     */
+    quota?: number;
+
+    /**
+     * Set this flag to a value greater or less than the default of 1024 to increase
+     * or reduce the container's weight, and give it access to a greater or lesser
+     * proportion of the host machine's CPU cycles. This is only enforced when CPU
+     * cycles are constrained. When plenty of CPU cycles are available, all
+     * containers use as much CPU as they need.
+     *
+     * In that way, this is a soft limit. `cpu.shares` doesn't prevent containers
+     * from being scheduled in Swarm mode. It prioritizes container CPU resources
+     * for the available CPU cycles. It doesn't guarantee or reserve any specific
+     * CPU access.
+     *
+     * Docker CLI Equivalent: `--cpu-shares`
+     * @default 1024
+     */
+    shares?: number;
+
+    /**
+     * CPUs in which to allow execution.
+     * @example "0-3", "0,1"
+     * @default undefined
+     */
+    cpuset?: string;
+  };
+
+  /**
+   * IPC Configuration for the build container.
+   */
+  ipc?: {
+    /**
+     * Size of `/dev/shm` on the build container.
+     * @example "1gb", "1024mb", 1024 * 1024 * 1024
+     * @default "64mb"
+     */
+    shmSize?: number | string;
+  };
 }
 
 function parseBuildConfig<Registries extends Record<string, DockerRegistry>>(
@@ -598,6 +743,11 @@ function parseBuildConfig<Registries extends Record<string, DockerRegistry>>(
     ...(typeof props.build === "object" ? props.build : {}),
   } satisfies ImageBuildProps;
 
+  if (props.build === undefined) {
+    return config;
+  }
+
+  // Docker file resolution
   if (!config.dockerfile) {
     config.dockerfile = tryFiles([
       path.join(config.context, "Dockerfile"),
@@ -608,14 +758,29 @@ function parseBuildConfig<Registries extends Record<string, DockerRegistry>>(
         `Dockerfile not found in build context: ${config.context}`,
       );
     }
+    config.dockerfile = path.relative(config.context, config.dockerfile);
   } else if (
-    path.relative(config.context, config.dockerfile).startsWith("..")
+    path
+      .relative(config.context, path.join(config.context, config.dockerfile))
+      .startsWith("..")
   ) {
     // TODO: This should be supported somehow as docker build does support this.
     // Maybe with the `remote` option and a data url?
     throw new Error(
       `Dockerfile outside build context not supported: ${config.dockerfile}`,
     );
+  }
+
+  if (typeof config.memory?.limit === "string") {
+    config.memory.limit = parseBytes(config.memory.limit);
+  }
+
+  if (typeof config.memory?.swap === "string") {
+    config.memory.swap = parseBytes(config.memory.swap);
+  }
+
+  if (typeof config.ipc?.shmSize === "string") {
+    config.ipc.shmSize = parseBytes(config.ipc.shmSize);
   }
 
   return config;
@@ -632,8 +797,12 @@ async function buildImage<
   api: Dockerode;
   ref: ImageRef;
 }) {
-  const { id, fqn, api, ref, props, buildConfig } = opts;
+  const { id, fqn, api, ref, dockerHost, buildConfig } = opts;
   const context = buildConfig.context ?? ".";
+
+  const extraHosts = Object.entries(buildConfig.extraHosts ?? {}).map(
+    ([host, ip]) => `${host}:${ip}`,
+  );
 
   logger.task(fqn, {
     prefix: "building",
@@ -667,7 +836,7 @@ async function buildImage<
           prefix: "building",
           prefixColor: "yellowBright",
           resource: id,
-          message: `Generating build context (${formatBytes(size, "bytes")}, ${count} files)`,
+          message: `Generating build context (${formatBytes(size)}, ${count} files)`,
           status: "pending",
         });
         size += header.size ?? 0;
@@ -681,42 +850,72 @@ async function buildImage<
           prefix: "building",
           prefixColor: "yellowBright",
           resource: id,
-          message: `Generated build context (${formatBytes(size, "bytes")}, ${count} files)`,
+          message: `Generated build context (${formatBytes(size)}, ${count} files)`,
           status: "success",
         });
       },
     })
     .pipe(zlib.createGzip());
 
-  const buildStream = await api.buildImage(tarStream, {
+  const registryconfig: Dockerode.RegistryConfig = {};
+  for (const registry of Object.values(dockerHost.registries)) {
+    registryconfig[registry.server] = {
+      username: registry.username ?? "",
+      password: registry.password?.unencrypted ?? "",
+    };
+  }
+
+  const buildcfg: Dockerode.ImageBuildOptions = {
     t: ref.fqn,
-  });
+    dockerfile: buildConfig.dockerfile,
+    target: buildConfig.target,
+    labels: buildConfig.labels,
+    buildargs: buildConfig.args,
+    platform: buildConfig.platforms?.[0],
+    q: buildConfig.quiet,
+    nocache: buildConfig.cache === false,
+    pull: buildConfig.alwaysPullBaseImage,
+    registryconfig: registryconfig,
+    rm: buildConfig.removeIntermediateContainers !== false,
+    forcerm: buildConfig.removeIntermediateContainers === "always",
+    squash: buildConfig.squash,
+    networkmode: buildConfig.networkMode,
+    // @ts-expect-error dockerode types are incorrect, should be string
+    cpusetcpus: buildConfig.cpu?.cpuset as number,
+    cpuperiod: buildConfig.cpu?.period,
+    cpuquota: buildConfig.cpu?.quota,
+    cpushares: buildConfig.cpu?.shares,
+  };
+
+  if (extraHosts.length > 0) {
+    buildcfg.extrahosts =
+      extraHosts as any as string; /* dockerode types are incorrect */
+  }
+
+  if (typeof buildConfig.memory?.limit === "number") {
+    buildcfg.memory = buildConfig.memory.limit;
+    if (buildConfig.memory.swap === -1) {
+      buildcfg.memswap = -1;
+    } else if (Number(buildConfig.memory.swap) > -1) {
+      buildcfg.memswap =
+        buildConfig.memory.limit + Number(buildConfig.memory.swap);
+    }
+  }
+
+  if (typeof buildConfig.ipc?.shmSize === "number") {
+    buildcfg.shmsize = buildConfig.ipc.shmSize;
+  }
+
+  const buildStream = await api.buildImage(tarStream, buildcfg);
   await new Promise((resolve, reject) => {
-    const onFinished = async (err: any, response: any) => {
+    const onFinished = async (err: any) => {
       if (err) return reject(err);
       resolve(await api.getImage(ref.fqn).inspect());
     };
     const onProgress = (evt: any) => {
       // The stream sends JSON with fields like { id, status, stream, error, progress, aux }
       if (evt.error) {
-        logger.task(fqn, {
-          prefix: "building",
-          prefixColor: "redBright",
-          resource: id,
-          message: evt.error,
-          status: "failure",
-        });
-        return;
-      }
-      if (evt?.aux?.ID) {
-        // Final image ID or digest
-        logger.task(fqn, {
-          prefix: "building",
-          prefixColor: "yellowBright",
-          resource: id,
-          message: `Built image as ${evt.aux.ID}`,
-          status: "success",
-        });
+        reject(`Error building image: ${evt.error}`);
         return;
       }
 
@@ -881,11 +1080,4 @@ function tryFiles(filenames: string[]): string | undefined {
   }
 
   return undefined;
-}
-
-interface BuildProgressEvent {
-  stream?: string;
-  aux?: {
-    ID: string;
-  };
 }

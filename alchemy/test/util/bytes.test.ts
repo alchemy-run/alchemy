@@ -3,7 +3,7 @@ import { alchemy } from "../../src/alchemy.ts";
 import { BRANCH_PREFIX } from "../util.ts";
 // must import this or else alchemy.test won't exist
 import "../../src/test/vitest.ts";
-import { formatBytes } from "../../src/util/format.ts";
+import { formatBytes, parseBytes } from "../../src/util/bytes.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -73,4 +73,75 @@ describe("formatBytes", () => {
       "1024 PB",
     );
   });
+});
+
+describe("parseBytes", () => {
+  test("bytes", async () => {
+    expect(parseBytes("88 bytes")).toEqual(88);
+    expect(parseBytes("1000 B")).toEqual(1000);
+    expect(parseBytes("1000b")).toEqual(1000);
+    expect(parseBytes("200000bytes")).toEqual(200000);
+  });
+  test("KB", async () => {
+    expect(parseBytes("88 KB")).toEqual(88 * 1024);
+    expect(parseBytes("1000 kb")).toEqual(1000 * 1024);
+    expect(parseBytes("200000KB")).toEqual(200000 * 1024);
+  });
+  test("MB", async () => {
+    expect(parseBytes("88 MB")).toEqual(88 * 1024 * 1024);
+    expect(parseBytes("1000 mb")).toEqual(1000 * 1024 * 1024);
+    expect(parseBytes("200000MB")).toEqual(200000 * 1024 * 1024);
+  });
+  test("GB", async () => {
+    expect(parseBytes("88 GB")).toEqual(88 * 1024 * 1024 * 1024);
+    expect(parseBytes("1000 gb")).toEqual(1000 * 1024 * 1024 * 1024);
+    expect(parseBytes("200000GB")).toEqual(200000 * 1024 * 1024 * 1024);
+  });
+  test("TB", async () => {
+    expect(parseBytes("88 TB")).toEqual(88 * 1024 * 1024 * 1024 * 1024);
+    expect(parseBytes("1000 tb")).toEqual(1000 * 1024 * 1024 * 1024 * 1024);
+    expect(parseBytes("200000TB")).toEqual(200000 * 1024 * 1024 * 1024 * 1024);
+  });
+  test("PB", async () => {
+    expect(parseBytes("88 PB")).toEqual(88 * 1024 * 1024 * 1024 * 1024 * 1024);
+    expect(parseBytes("1000 pb")).toEqual(
+      1000 * 1024 * 1024 * 1024 * 1024 * 1024,
+    );
+    expect(parseBytes("200000PB")).toEqual(
+      200000 * 1024 * 1024 * 1024 * 1024 * 1024,
+    );
+  });
+  // test("EB", async () => {
+  //   expect(parseBytes("88 EB")).toEqual(
+  //     88 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024,
+  //   );
+  //   expect(parseBytes("1000 eb")).toEqual(
+  //     1000 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024,
+  //   );
+  //   expect(parseBytes("200000EB")).toEqual(
+  //     200000 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024,
+  //   );
+  // });
+  // test("ZB", async () => {
+  //   expect(parseBytes("88 ZB")).toEqual(
+  //     88 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024,
+  //   );
+  //   expect(parseBytes("1000 zb")).toEqual(
+  //     1000 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024,
+  //   );
+  //   expect(parseBytes("200000ZB")).toEqual(
+  //     200000 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024,
+  //   );
+  // });
+  // test("YB", async () => {
+  //   expect(parseBytes("88 YB")).toEqual(
+  //     88 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024,
+  //   );
+  //   expect(parseBytes("1000 YB")).toEqual(
+  //     1000 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024,
+  //   );
+  //   expect(parseBytes("200000YB")).toEqual(
+  //     200000 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024,
+  //   );
+  // });
 });

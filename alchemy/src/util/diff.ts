@@ -208,7 +208,46 @@ export function exists<O extends { returnValue?: boolean } = {}>(
   }
 }
 
-export function diff<T extends Record<string, any>>(original: T, changed: any) {
+interface DiffResult<T> {
+  changes: ReturnType<typeof detailedDiff>;
+  /**
+   * Check if any of the given paths have been added, deleted, or updated.
+   */
+  any(
+    path?: string[],
+    options?: {
+      added?: boolean;
+      deleted?: boolean;
+      updated?: boolean;
+    },
+  ): boolean;
+  any(options?: {
+    added?: boolean;
+    deleted?: boolean;
+    updated?: boolean;
+  }): boolean;
+
+  /**
+   * Check if the given path has been added, deleted, or updated.
+   */
+  check<
+    O extends { added?: boolean; deleted?: boolean; updated?: boolean } = {},
+  >(
+    path: string,
+    options?: O,
+  ): O extends { added: false }
+    ? never
+    : "added" | O extends { deleted: false }
+      ? never
+      : "deleted" | O extends { updated: false }
+        ? never
+        : "updated" | false;
+}
+
+export function diff<T extends Record<string, any>>(
+  original: T,
+  changed: any,
+): DiffResult<T> {
   const changes = detailedDiff(original, changed);
 
   return {
@@ -218,18 +257,38 @@ export function diff<T extends Record<string, any>>(original: T, changed: any) {
      * TODO: Make this type-safe without burning the CPU.
      */
     any(
-      path: string[],
+      path?:
+        | string[]
+        | {
+            added?: boolean;
+            deleted?: boolean;
+            updated?: boolean;
+          },
       options: {
         added?: boolean;
         deleted?: boolean;
         updated?: boolean;
       } = {},
     ) {
+      if (!Array.isArray(path)) {
+        options = path || {};
+        path = [];
+      }
+
+      if (path.length === 0) {
+        return (
+          (options.added !== false && Object.keys(changes.added).length > 0) ||
+          (options.deleted !== false &&
+            Object.keys(changes.deleted).length > 0) ||
+          (options.updated !== false && Object.keys(changes.updated).length > 0)
+        );
+      }
+
       for (const p of path) {
         if (
-          (exists(changes, `added.${p}`) && options.added !== false) ||
-          (exists(changes, `deleted.${p}`) && options.deleted !== false) ||
-          (exists(changes, `updated.${p}`) && options.updated !== false)
+          (options.added !== false && exists(changes, `added.${p}`)) ||
+          (options.deleted !== false && exists(changes, `deleted.${p}`)) ||
+          (options.updated !== false && exists(changes, `updated.${p}`))
         ) {
           return true;
         }
