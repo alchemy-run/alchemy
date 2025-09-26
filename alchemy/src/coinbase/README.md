@@ -13,6 +13,7 @@ Manages standard Ethereum Virtual Machine (EVM) accounts that work across all EV
 - Import existing accounts via private key
 - Adopt existing accounts with the same name
 - Update account names
+- Request testnet tokens via faucet (base-sepolia, ethereum-sepolia)
 - Follows Alchemy's standard adoption pattern
 
 **Documentation:** [EVM Account Resource](./evm-account.ts)
@@ -87,6 +88,24 @@ const account = await EvmAccount("my-account", {
 });
 
 console.log(`Account created: ${account.address}`);
+```
+
+### Create Account with Testnet Funds
+
+```typescript
+import { EvmAccount } from "alchemy/coinbase";
+
+const account = await EvmAccount("test-account", {
+  name: "Test Account",
+  faucet: [
+    { network: "base-sepolia", token: "eth" },
+    { network: "base-sepolia", token: "usdc" },
+    { network: "ethereum-sepolia", token: "usdc" }
+  ]
+});
+
+console.log(`Account created: ${account.address}`);
+console.log(`Faucet transactions:`, account.faucetTransactions);
 ```
 
 ### Import Existing Account
@@ -173,6 +192,30 @@ const updated = await EvmAccount("my-account", {
 });
 
 console.log(updated.address === account.address); // true
+```
+
+### Request Additional Testnet Tokens
+
+```typescript
+// Initial account with ETH on Base Sepolia
+const account = await EvmAccount("my-account", {
+  name: "Test Account",
+  faucet: [
+    { network: "base-sepolia", token: "eth" }
+  ]
+});
+
+// Later, request additional tokens
+const updated = await EvmAccount("my-account", {
+  name: "Test Account",
+  faucet: [
+    { network: "base-sepolia", token: "eth" }, // Already exists, skipped
+    { network: "base-sepolia", token: "usdc" }, // New request
+    { network: "ethereum-sepolia", token: "eth" } // New request
+  ]
+});
+
+// updated.faucetTransactions now contains all faucet requests
 ```
 
 ### Owner Changes and Replacement

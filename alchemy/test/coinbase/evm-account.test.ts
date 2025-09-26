@@ -1,4 +1,4 @@
-import { alchemy } from "../../src/index.ts";
+import alchemy from "../../src/index.ts";
 import { destroy } from "../../src/destroy.ts";
 import { EvmAccount } from "../../src/coinbase/evm-account.ts";
 import { EvmSmartAccount } from "../../src/coinbase/evm-smart-account.ts";
@@ -20,9 +20,9 @@ describe("Coinbase", () => {
 
       try {
         // Create account
-        account = await EvmAccount(accountId, {
+        account = (await EvmAccount(accountId, {
           name: "Test Standard Account",
-        });
+        })) as EvmAccount;
 
         expect(account).toMatchObject({
           id: accountId,
@@ -32,9 +32,9 @@ describe("Coinbase", () => {
         expect(account.address).toMatch(/^0x[a-fA-F0-9]{40}$/);
 
         // Update account (should return existing)
-        const updatedAccount = await EvmAccount(accountId, {
+        const updatedAccount = (await EvmAccount(accountId, {
           name: "Test Standard Account",
-        });
+        })) as EvmAccount;
 
         expect(updatedAccount).toMatchObject({
           id: accountId,
@@ -54,10 +54,10 @@ describe("Coinbase", () => {
 
       try {
         // Import account with private key
-        account = await EvmAccount(accountId, {
+        account = (await EvmAccount(accountId, {
           name: "Imported Account",
           privateKey: alchemy.secret("TEST_PRIVATE_KEY"),
-        });
+        })) as EvmAccount;
 
         expect(account).toMatchObject({
           id: accountId,
@@ -77,16 +77,16 @@ describe("Coinbase", () => {
 
       try {
         // Create account
-        account = await EvmAccount(accountId, {
+        account = (await EvmAccount(accountId, {
           name: "Original Name",
-        });
+        })) as EvmAccount;
 
         const originalAddress = account.address;
 
         // Update name
-        const updatedAccount = await EvmAccount(accountId, {
+        const updatedAccount = (await EvmAccount(accountId, {
           name: "Updated Name",
-        });
+        })) as EvmAccount;
 
         expect(updatedAccount.name).toBe("Updated Name");
         // Address should remain the same
@@ -103,15 +103,15 @@ describe("Coinbase", () => {
 
       try {
         // First create an account to adopt
-        const originalAccount = await EvmAccount(`${BRANCH_PREFIX}-original`, {
+        const originalAccount = (await EvmAccount(`${BRANCH_PREFIX}-original`, {
           name: accountName,
-        });
+        })) as EvmAccount;
 
         // Adopt it with adopt flag
-        const adoptedAccount = await EvmAccount(adopterId, {
+        const adoptedAccount = (await EvmAccount(adopterId, {
           name: accountName,
           adopt: true,
-        });
+        })) as EvmAccount;
 
         expect(adoptedAccount).toMatchObject({
           id: adopterId,
@@ -122,6 +122,92 @@ describe("Coinbase", () => {
         expect(adoptedAccount.address).toBe(originalAccount.address);
       } finally {
         await destroy(scope);
+      }
+    });
+
+    test("create account with faucet", async (scope) => {
+      const accountId = `${BRANCH_PREFIX}-faucet-account`;
+      let account: EvmAccount;
+
+      try {
+        // Create account with faucet requests
+        account = (await EvmAccount(accountId, {
+          name: "Faucet Test Account",
+          faucet: [
+            { network: "base-sepolia", token: "eth" },
+            { network: "base-sepolia", token: "usdc" },
+          ],
+        })) as EvmAccount;
+
+        expect(account).toMatchObject({
+          id: accountId,
+          type: "coinbase::evm-account",
+          name: "Faucet Test Account",
+        });
+        expect(account.address).toMatch(/^0x[a-fA-F0-9]{40}$/);
+
+        // Check faucet transactions were recorded
+        expect(account.faucetTransactions).toBeDefined();
+        expect(account.faucetTransactions).toHaveLength(2);
+        expect(account.faucetTransactions).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              network: "base-sepolia",
+              token: "eth",
+              transactionHash: expect.stringMatching(/^0x[a-fA-F0-9]{64}$/),
+            }),
+            expect.objectContaining({
+              network: "base-sepolia",
+              token: "usdc",
+              transactionHash: expect.stringMatching(/^0x[a-fA-F0-9]{64}$/),
+            }),
+          ]),
+        );
+      } finally {
+        await destroy(scope);
+        console.log(`✅ Account ${account!.address} is no longer tracked`);
+      }
+    });
+
+    test("update account with additional faucet requests", async (scope) => {
+      const accountId = `${BRANCH_PREFIX}-faucet-update`;
+      let account: EvmAccount;
+
+      try {
+        // Create account with initial faucet
+        account = (await EvmAccount(accountId, {
+          name: "Faucet Update Test",
+          faucet: [{ network: "base-sepolia", token: "eth" }],
+        })) as EvmAccount;
+
+        expect(account.faucetTransactions).toHaveLength(1);
+
+        // Update with additional faucet requests
+        const updatedAccount = (await EvmAccount(accountId, {
+          name: "Faucet Update Test",
+          faucet: [
+            { network: "base-sepolia", token: "eth" }, // Already exists, should skip
+            { network: "ethereum-sepolia", token: "usdc" }, // New request
+          ],
+        })) as EvmAccount;
+
+        // Should have 2 transactions now (1 original + 1 new)
+        expect(updatedAccount.faucetTransactions).toHaveLength(2);
+        expect(updatedAccount.faucetTransactions).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              network: "base-sepolia",
+              token: "eth",
+            }),
+            expect.objectContaining({
+              network: "ethereum-sepolia",
+              token: "usdc",
+            }),
+          ]),
+        );
+      } finally {
+        await destroy(scope);
+        console.log(`✅ Account ${account!.address} is no longer tracked`);
       }
     });
 
@@ -156,15 +242,15 @@ describe("Coinbase", () => {
 
       try {
         // Create owner account first
-        ownerAccount = await EvmAccount(ownerAccountId, {
+        ownerAccount = (await EvmAccount(ownerAccountId, {
           name: "Owner Account",
-        });
+        })) as EvmAccount;
 
         // Create smart account
-        smartAccount = await EvmSmartAccount(smartAccountId, {
+        smartAccount = (await EvmSmartAccount(smartAccountId, {
           name: "Smart Account",
           owner: ownerAccount,
-        });
+        })) as EvmSmartAccount;
 
         expect(smartAccount).toMatchObject({
           id: smartAccountId,
@@ -194,26 +280,26 @@ describe("Coinbase", () => {
 
       try {
         // Create two owner accounts
-        owner1 = await EvmAccount(owner1Id, {
+        owner1 = (await EvmAccount(owner1Id, {
           name: "Owner 1",
-        });
-        owner2 = await EvmAccount(owner2Id, {
+        })) as EvmAccount;
+        owner2 = (await EvmAccount(owner2Id, {
           name: "Owner 2",
-        });
+        })) as EvmAccount;
 
         // Create smart account with first owner
-        smartAccount = await EvmSmartAccount(smartAccountId, {
+        smartAccount = (await EvmSmartAccount(smartAccountId, {
           name: "Smart Account",
           owner: owner1,
-        });
+        })) as EvmSmartAccount;
 
         const originalAddress = smartAccount.address;
 
         // Change owner (should trigger replacement)
-        const replacedAccount = await EvmSmartAccount(smartAccountId, {
+        const replacedAccount = (await EvmSmartAccount(smartAccountId, {
           name: "Smart Account",
           owner: owner2,
-        });
+        })) as EvmSmartAccount;
 
         expect(replacedAccount.ownerAddress).toBe(owner2.address);
         // Address should be different after replacement
@@ -231,15 +317,15 @@ describe("Coinbase", () => {
 
       try {
         // Create owner first
-        const owner = await EvmAccount(`${smartAccountId}-owner`, {
+        const owner = (await EvmAccount(`${smartAccountId}-owner`, {
           name: ownerName,
-        });
+        })) as EvmAccount;
 
         // Create smart account with owner by name
-        smartAccount = await EvmSmartAccount(smartAccountId, {
+        smartAccount = (await EvmSmartAccount(smartAccountId, {
           name: `${BRANCH_PREFIX}-smart-account`,
           owner: ownerName,
-        });
+        })) as EvmSmartAccount;
 
         expect(smartAccount).toMatchObject({
           id: smartAccountId,
@@ -261,25 +347,25 @@ describe("Coinbase", () => {
 
       try {
         // Create owner
-        const owner = await EvmAccount(`${BRANCH_PREFIX}-owner-for-adopt`, {
+        const owner = (await EvmAccount(`${BRANCH_PREFIX}-owner-for-adopt`, {
           name: ownerName,
-        });
+        })) as EvmAccount;
 
         // Create original smart account
-        const original = await EvmSmartAccount(
+        const original = (await EvmSmartAccount(
           `${BRANCH_PREFIX}-original-smart`,
           {
             name: smartName,
             owner: owner,
           },
-        );
+        )) as EvmSmartAccount;
 
         // Adopt it with adopt flag
-        const adopted = await EvmSmartAccount(adopterId, {
+        const adopted = (await EvmSmartAccount(adopterId, {
           name: smartName,
           owner: owner,
           adopt: true,
-        });
+        })) as EvmSmartAccount;
 
         expect(adopted).toMatchObject({
           id: adopterId,

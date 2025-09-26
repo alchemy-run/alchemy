@@ -1,6 +1,6 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
-import { alchemy } from "../index.ts";
+import alchemy from "../index.ts";
 import type { EvmAccount } from "./evm-account.ts";
 
 export interface EvmSmartAccountProps {
@@ -104,9 +104,9 @@ export const EvmSmartAccount = Resource(
     const walletSecret = alchemy.secret("COINBASE_WALLET_SECRET");
 
     const cdp = new CdpClient({
-      apiKeyId: await apiKeyId.plainText(),
-      apiKeySecret: await apiKeySecret.plainText(),
-      walletSecret: await walletSecret.plainText(),
+      apiKeyId: apiKeyId.unencrypted,
+      apiKeySecret: apiKeySecret.unencrypted,
+      walletSecret: walletSecret.unencrypted,
     });
 
     // Get owner account
@@ -154,7 +154,7 @@ export const EvmSmartAccount = Resource(
       // CDP SDK doesn't support deleting accounts
       // Accounts remain in CDP but are no longer tracked by Alchemy
       console.log(`🗑️ Untracking Smart Account: ${this.output?.address}`);
-      return;
+      return {} as any;
     }
 
     let smartAccount;
@@ -171,8 +171,8 @@ export const EvmSmartAccount = Resource(
       try {
         // List accounts and check if a smart account with this name exists
         const accounts = await cdp.evm.listAccounts();
-        const existing = accounts.find(
-          (acc) => acc.name === props.name && acc.type === "smart",
+        const existing = (accounts as unknown as any[]).find(
+          (acc: any) => acc.name === props.name && acc.type === "smart",
         );
 
         if (existing) {
@@ -201,12 +201,10 @@ export const EvmSmartAccount = Resource(
 
     // Return smart account details
     const result: EvmSmartAccount = {
-      id,
-      type: "coinbase::evm-smart-account",
       name: smartAccount.name || props.name,
       address: smartAccount.address,
       ownerAddress,
-    };
+    } as EvmSmartAccount;
 
     await this.save(result);
     return result;
