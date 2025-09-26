@@ -71,7 +71,7 @@ export interface EvmAccount extends Resource<"coinbase::evm-account"> {
 }
 
 /**
- * Manages EVM accounts on Coinbase Developer Platform.
+ * Manages EVM EOA (Externally Owned Accounts) on Coinbase Developer Platform.
  *
  * @example
  * ## Create a new EVM account
