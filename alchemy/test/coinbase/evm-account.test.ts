@@ -214,6 +214,41 @@ describe("Coinbase", () => {
         await destroy(scope);
       }
     });
+
+    test("privateKey must be Secret type for security", async (scope) => {
+      const accountId = `${BRANCH_PREFIX}-type-safety-test`;
+
+      try {
+        // This should work - privateKey is properly encrypted with alchemy.secret
+        const validAccount = (await EvmAccount(accountId, {
+          name: "Type Safety Test",
+          privateKey: alchemy.secret(
+            "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+          ),
+        })) as EvmAccount;
+
+        expect(validAccount).toMatchObject({
+          id: accountId,
+          type: "coinbase::evm-account",
+          name: "Type Safety Test",
+        });
+
+        // TypeScript should prevent passing a plain string as privateKey
+        // This test verifies the type safety at compile time
+        // @ts-expect-error - privateKey must be Secret<PrivateKey>, not a plain string
+        const _invalidCall = () =>
+          EvmAccount(`${BRANCH_PREFIX}-invalid`, {
+            name: "Invalid Private Key Type",
+            privateKey:
+              "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef", // Plain string - should error
+          });
+
+        // The @ts-expect-error above ensures this code won't compile without proper type safety
+        // This is a compile-time check, not a runtime test
+      } finally {
+        await destroy(scope);
+      }
+    });
   });
 
   describe("EvmSmartAccount", () => {
@@ -359,6 +394,48 @@ describe("Coinbase", () => {
         });
       } finally {
         await destroy(scope);
+      }
+    });
+
+    test("smart account inherits owner name when name is omitted", async (scope) => {
+      const ownerName = `${BRANCH_PREFIX}-inherited-owner`;
+      const smartAccountId = `${BRANCH_PREFIX}-smart-inherited`;
+      let owner: EvmAccount;
+      let smartAccount: EvmSmartAccount;
+
+      try {
+        // Create owner account with a name
+        owner = (await EvmAccount(`${BRANCH_PREFIX}-owner-with-name`, {
+          name: ownerName,
+        })) as EvmAccount;
+
+        // Create smart account without specifying name - should inherit from owner
+        smartAccount = (await EvmSmartAccount(smartAccountId, {
+          owner: owner,
+          // name is intentionally omitted
+        })) as EvmSmartAccount;
+
+        expect(smartAccount).toMatchObject({
+          id: smartAccountId,
+          type: "coinbase::evm-smart-account",
+          name: ownerName, // Should inherit owner's name
+          ownerAddress: owner.address,
+        });
+        expect(smartAccount.address).toMatch(/^0x[a-fA-F0-9]{40}$/);
+
+        // Verify that updating still works with inherited name
+        const updated = (await EvmSmartAccount(smartAccountId, {
+          owner: owner,
+          // name still omitted
+        })) as EvmSmartAccount;
+
+        expect(updated.name).toBe(ownerName);
+        expect(updated.address).toBe(smartAccount.address);
+      } finally {
+        await destroy(scope);
+        console.log(
+          `✅ Smart account ${smartAccount!.address} with inherited name is no longer tracked`,
+        );
       }
     });
   });
