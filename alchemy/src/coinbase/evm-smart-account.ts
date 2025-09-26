@@ -8,6 +8,7 @@ import type {
   FaucetNetwork,
   FaucetToken,
 } from "./types.ts";
+import { validateAccountName } from "./utils.ts";
 
 export interface EvmSmartAccountProps extends CoinbaseClientOptions {
   /**
@@ -15,6 +16,7 @@ export interface EvmSmartAccountProps extends CoinbaseClientOptions {
    * If not provided, inherits the name from the owner account.
    * This allows EOA and Smart Account to have matching names in CDP.
    * Used for identification in CDP.
+   * Must contain only letters, numbers, and hyphens.
    * @default Inherits from owner account name
    */
   name?: string;
@@ -82,7 +84,7 @@ export interface EvmSmartAccount
  * });
  *
  * const smartAccount = await EvmSmartAccount("my-smart-account", {
- *   name: "My Smart Account",
+ *   name: "my-smart-account",
  *   owner: owner
  * });
  *
@@ -100,7 +102,7 @@ export interface EvmSmartAccount
  *
  * ```ts
  * const smartAccount = await EvmSmartAccount("my-smart-account", {
- *   name: "My Smart Account",
+ *   name: "my-smart-account",
  *   owner: "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb" // Owner address
  * });
  * ```
@@ -169,6 +171,9 @@ export const EvmSmartAccount = Resource(
         `Smart account requires a name. Either provide 'name' in props or ensure the owner account has a name. Owner address: ${ownerAddress}`,
       );
     }
+
+    // Validate account name format
+    validateAccountName(accountName);
 
     // Handle update phase
     if (this.phase === "update" && this.output) {

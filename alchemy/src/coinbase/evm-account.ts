@@ -9,6 +9,7 @@ import type {
   FaucetToken,
   PrivateKey,
 } from "./types.ts";
+import { validateAccountName } from "./utils.ts";
 
 // Re-export types for backward compatibility
 export type { FaucetConfig, FaucetNetwork, FaucetToken } from "./types.ts";
@@ -17,6 +18,7 @@ export interface EvmAccountProps extends CoinbaseClientOptions {
   /**
    * Name for the account.
    * Used for identification in CDP.
+   * Must contain only letters, numbers, and hyphens.
    */
   name: string;
   /**
@@ -81,7 +83,7 @@ export interface EvmAccount extends Resource<"coinbase::evm-account"> {
  *
  * ```ts
  * const account = await EvmAccount("my-account", {
- *   name: "My Account"
+ *   name: "my-account"
  * });
  *
  * console.log("Account address:", account.address);
@@ -100,7 +102,7 @@ export interface EvmAccount extends Resource<"coinbase::evm-account"> {
  *
  * ```ts
  * const account = await EvmAccount("test-account", {
- *   name: "Test Account",
+ *   name: "test-account",
  *   faucet: {
  *     "base-sepolia": ["eth", "usdc"],
  *     "ethereum-sepolia": ["eth"]
@@ -118,7 +120,7 @@ export interface EvmAccount extends Resource<"coinbase::evm-account"> {
  *
  * ```ts
  * const account = await EvmAccount("imported-account", {
- *   name: "Imported Account",
+ *   name: "imported-account",
  *   privateKey: alchemy.secret(process.env.COINBASE_PRIVATE_KEY)
  * });
  * ```
@@ -142,6 +144,9 @@ export const EvmAccount = Resource(
     _id: string,
     props: EvmAccountProps,
   ): Promise<EvmAccount> {
+    // Validate account name format
+    validateAccountName(props.name);
+
     // Initialize CDP client with credentials from props or environment
     const cdp = await createCdpClient({
       apiKeyId: props.apiKeyId,

@@ -2,6 +2,7 @@ import alchemy from "../../src/index.ts";
 import { destroy } from "../../src/destroy.ts";
 import { EvmAccount } from "../../src/coinbase/evm-account.ts";
 import { EvmSmartAccount } from "../../src/coinbase/evm-smart-account.ts";
+import { validateAccountName } from "../../src/coinbase/utils.ts";
 import { describe, expect } from "vitest";
 
 import "../../src/test/vitest.ts";
@@ -13,6 +14,52 @@ const test = alchemy.test(import.meta, {
 });
 
 describe("Coinbase", () => {
+  describe("validateAccountName", () => {
+    test("accepts valid names", () => {
+      // Valid names should not throw
+      expect(() => validateAccountName("valid-name")).not.toThrow();
+      expect(() => validateAccountName("name-with-hyphens")).not.toThrow();
+      expect(() => validateAccountName("name123")).not.toThrow();
+      expect(() => validateAccountName("123name")).not.toThrow();
+      expect(() => validateAccountName("UPPERCASE")).not.toThrow();
+      expect(() => validateAccountName("lowercase")).not.toThrow();
+      expect(() => validateAccountName("MixedCase123")).not.toThrow();
+      expect(() => validateAccountName("a")).not.toThrow();
+      expect(() => validateAccountName("1")).not.toThrow();
+      expect(() =>
+        validateAccountName("very-long-name-with-many-hyphens-123"),
+      ).not.toThrow();
+    });
+
+    test("rejects invalid names", () => {
+      // Names with spaces
+      expect(() => validateAccountName("name with spaces")).toThrow(
+        /CDP only allows letters, numbers, and hyphens/,
+      );
+
+      // Names with underscores
+      expect(() => validateAccountName("name_with_underscores")).toThrow(
+        /CDP only allows letters, numbers, and hyphens/,
+      );
+
+      // Names with special characters
+      expect(() => validateAccountName("name@special")).toThrow(
+        /CDP only allows letters, numbers, and hyphens/,
+      );
+      expect(() => validateAccountName("name.with.dots")).toThrow(
+        /CDP only allows letters, numbers, and hyphens/,
+      );
+      expect(() => validateAccountName("name!")).toThrow(
+        /CDP only allows letters, numbers, and hyphens/,
+      );
+
+      // Empty name
+      expect(() => validateAccountName("")).toThrow(
+        /CDP only allows letters, numbers, and hyphens/,
+      );
+    });
+  });
+
   describe("EvmAccount", () => {
     test("create standard EVM account", async (scope) => {
       const accountId = `${BRANCH_PREFIX}-standard-account`;
@@ -21,19 +68,19 @@ describe("Coinbase", () => {
       try {
         // Create account
         account = (await EvmAccount(accountId, {
-          name: "Test Standard Account",
+          name: "test-standard-account",
         })) as EvmAccount;
 
         expect(account).toMatchObject({
           id: accountId,
           type: "coinbase::evm-account",
-          name: "Test Standard Account",
+          name: "test-standard-account",
         });
         expect(account.address).toMatch(/^0x[a-fA-F0-9]{40}$/);
 
         // Update account (should return existing)
         const updatedAccount = (await EvmAccount(accountId, {
-          name: "Test Standard Account",
+          name: "test-standard-account",
         })) as EvmAccount;
 
         expect(updatedAccount).toMatchObject({
@@ -55,14 +102,14 @@ describe("Coinbase", () => {
       try {
         // Import account with private key
         account = (await EvmAccount(accountId, {
-          name: "Imported Account",
+          name: "imported-account",
           privateKey: alchemy.secret("TEST_PRIVATE_KEY"),
         })) as EvmAccount;
 
         expect(account).toMatchObject({
           id: accountId,
           type: "coinbase::evm-account",
-          name: "Imported Account",
+          name: "imported-account",
         });
         expect(account.address).toMatch(/^0x[a-fA-F0-9]{40}$/);
       } finally {
@@ -78,14 +125,14 @@ describe("Coinbase", () => {
       try {
         // Create account
         account = (await EvmAccount(accountId, {
-          name: "Original Name",
+          name: "original-name",
         })) as EvmAccount;
 
         const originalAddress = account.address;
 
         // Update name
         const updatedAccount = (await EvmAccount(accountId, {
-          name: "Updated Name",
+          name: "updated-name",
         })) as EvmAccount;
 
         expect(updatedAccount.name).toBe("Updated Name");
@@ -132,7 +179,7 @@ describe("Coinbase", () => {
       try {
         // Create account with faucet metadata
         account = (await EvmAccount(accountId, {
-          name: "Faucet Test Account",
+          name: "faucet-test-account",
           faucet: {
             "base-sepolia": ["eth", "usdc"],
             "ethereum-sepolia": ["eth"],
@@ -142,7 +189,7 @@ describe("Coinbase", () => {
         expect(account).toMatchObject({
           id: accountId,
           type: "coinbase::evm-account",
-          name: "Faucet Test Account",
+          name: "faucet-test-account",
         });
         expect(account.address).toMatch(/^0x[a-fA-F0-9]{40}$/);
 
@@ -164,7 +211,7 @@ describe("Coinbase", () => {
       try {
         // Create account with initial faucet metadata
         account = (await EvmAccount(accountId, {
-          name: "Faucet Update Test",
+          name: "faucet-update-test",
           faucet: {
             "base-sepolia": ["eth"],
           },
@@ -176,7 +223,7 @@ describe("Coinbase", () => {
 
         // Update with different faucet metadata
         const updatedAccount = (await EvmAccount(accountId, {
-          name: "Faucet Update Test",
+          name: "faucet-update-test",
           faucet: {
             "base-sepolia": ["eth", "usdc"],
             "ethereum-sepolia": ["eth"],
@@ -221,7 +268,7 @@ describe("Coinbase", () => {
       try {
         // This should work - privateKey is properly encrypted with alchemy.secret
         const validAccount = (await EvmAccount(accountId, {
-          name: "Type Safety Test",
+          name: "type-safety-test",
           privateKey: alchemy.secret(
             "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
           ),
@@ -230,7 +277,7 @@ describe("Coinbase", () => {
         expect(validAccount).toMatchObject({
           id: accountId,
           type: "coinbase::evm-account",
-          name: "Type Safety Test",
+          name: "type-safety-test",
         });
 
         // TypeScript should prevent passing a plain string as privateKey
@@ -238,7 +285,7 @@ describe("Coinbase", () => {
         // @ts-expect-error - privateKey must be Secret<PrivateKey>, not a plain string
         const _invalidCall = () =>
           EvmAccount(`${BRANCH_PREFIX}-invalid`, {
-            name: "Invalid Private Key Type",
+            name: "invalid-private-key-type",
             privateKey:
               "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef", // Plain string - should error
           });
@@ -261,19 +308,19 @@ describe("Coinbase", () => {
       try {
         // Create owner account first
         ownerAccount = (await EvmAccount(ownerAccountId, {
-          name: "Owner Account",
+          name: "owner-account",
         })) as EvmAccount;
 
         // Create smart account
         smartAccount = (await EvmSmartAccount(smartAccountId, {
-          name: "Smart Account",
+          name: "smart-account",
           owner: ownerAccount,
         })) as EvmSmartAccount;
 
         expect(smartAccount).toMatchObject({
           id: smartAccountId,
           type: "coinbase::evm-smart-account",
-          name: "Smart Account",
+          name: "smart-account",
           ownerAddress: ownerAccount.address,
         });
         expect(smartAccount.address).toMatch(/^0x[a-fA-F0-9]{40}$/);
@@ -299,15 +346,15 @@ describe("Coinbase", () => {
       try {
         // Create two owner accounts
         owner1 = (await EvmAccount(owner1Id, {
-          name: "Owner 1",
+          name: "owner-1",
         })) as EvmAccount;
         owner2 = (await EvmAccount(owner2Id, {
-          name: "Owner 2",
+          name: "owner-2",
         })) as EvmAccount;
 
         // Create smart account with first owner
         smartAccount = (await EvmSmartAccount(smartAccountId, {
-          name: "Smart Account",
+          name: "smart-account",
           owner: owner1,
         })) as EvmSmartAccount;
 
@@ -315,7 +362,7 @@ describe("Coinbase", () => {
 
         // Change owner (should trigger replacement)
         const replacedAccount = (await EvmSmartAccount(smartAccountId, {
-          name: "Smart Account",
+          name: "smart-account",
           owner: owner2,
         })) as EvmSmartAccount;
 

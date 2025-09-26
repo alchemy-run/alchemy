@@ -47,7 +47,7 @@ Manages ERC-4337 smart accounts that enable advanced features like gasless trans
    import { EvmAccount } from "alchemy/coinbase";
 
    const account = await EvmAccount("my-account", {
-     name: "My Account",
+     name: "my-account",
      apiKeyId: alchemy.secret("CUSTOM_API_KEY_ID"),
      apiKeySecret: alchemy.secret("CUSTOM_API_KEY_SECRET"),
      walletSecret: alchemy.secret("CUSTOM_WALLET_SECRET")
@@ -330,8 +330,8 @@ console.log("Account automatically funded with new tokens");
 For smart accounts, changing the owner triggers a replacement:
 
 ```typescript
-const owner1 = await EvmAccount("owner1", { name: "Owner 1" });
-const owner2 = await EvmAccount("owner2", { name: "Owner 2" });
+const owner1 = await EvmAccount("owner1", { name: "owner-1" });
+const owner2 = await EvmAccount("owner2", { name: "owner-2" });
 
 // Initial smart account
 const smart = await EvmSmartAccount("smart", {
