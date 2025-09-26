@@ -26,9 +26,15 @@ export interface EvmAccountProps extends CoinbaseClientOptions {
   name: string;
   /**
    * Optional private key to import an existing account.
+   * Must be encrypted using alchemy.secret() for security.
    * If not provided, a new account will be created or existing one will be used.
+   *
+   * @example
+   * ```ts
+   * privateKey: alchemy.secret(process.env.PRIVATE_KEY)
+   * ```
    */
-  privateKey?: string | Secret<string>;
+  privateKey?: Secret<string>;
   /**
    * Whether to adopt an existing account with the same name if it already exists.
    * Without adoption, creation will fail if an account with the same name exists.
@@ -118,7 +124,7 @@ export interface EvmAccount extends Resource<"coinbase::evm-account"> {
  * ```ts
  * const account = await EvmAccount("imported-account", {
  *   name: "Imported Account",
- *   privateKey: alchemy.secret("COINBASE_PRIVATE_KEY")
+ *   privateKey: alchemy.secret(process.env.COINBASE_PRIVATE_KEY)
  * });
  * ```
  *
@@ -189,10 +195,7 @@ export const EvmAccount = Resource(
     // Handle account creation/retrieval
     if (props.privateKey) {
       // Import account with private key
-      const privateKey =
-        typeof props.privateKey === "string"
-          ? props.privateKey
-          : (props.privateKey as Secret<string>).unencrypted;
+      const privateKey = props.privateKey.unencrypted;
 
       // Import account - this is idempotent in CDP
       account = await cdp.evm.importAccount({

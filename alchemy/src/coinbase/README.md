@@ -58,6 +58,29 @@ Manages ERC-4337 smart accounts that enable advanced features like gasless trans
 
 ## Key Concepts
 
+### Security: Encrypted Secrets
+
+Private keys **must** be encrypted using `alchemy.secret()` to ensure they are never exposed in state files:
+
+```typescript
+// ✅ CORRECT - Private key is encrypted in state
+const account = await EvmAccount("treasury", {
+  name: "treasury",
+  privateKey: alchemy.secret(process.env.TREASURY_KEY)
+});
+
+// ❌ WRONG - Would expose private key in plain text (TypeScript will error)
+const account = await EvmAccount("treasury", {
+  name: "treasury",
+  privateKey: process.env.TREASURY_KEY // Type error: must be Secret<string>
+});
+```
+
+This ensures that:
+- Private keys are encrypted before being stored in state
+- State files can be safely committed to version control
+- Only users with the Alchemy password can decrypt and use the accounts
+
 ### Resource Adoption
 
 Following Alchemy's standard adoption pattern:
@@ -141,7 +164,7 @@ import alchemy from "alchemy";
 
 const account = await EvmAccount("imported", {
   name: "imported-account",
-  privateKey: alchemy.secret("PRIVATE_KEY")
+  privateKey: alchemy.secret(process.env.PRIVATE_KEY)
 });
 ```
 
