@@ -27,10 +27,13 @@ export default {
 };
 ```
 
+:::tip
+Start with a simple Worker like this to verify your deployment pipeline works, then gradually add complexity. Use the local development server to test changes quickly.
+:::
+
 ## Handle requests (common tasks)
 
 Implement HTTP handlers for API endpoints, static content, and dynamic responses with proper error handling:
-
 ```ts
 export default {
   async fetch(request: Request): Promise<Response> {
@@ -85,7 +88,6 @@ async function handleUsers(request: Request): Promise<Response> {
 
 Use bindings to attach KV, R2, Durable Objects, secrets, and other resources to the Worker. 
 Configure Worker properties for compatibility, observability, and runtime limits:
-
 ```ts
 import { Worker, KVNamespace, R2Bucket } from "alchemy/cloudflare";
 
@@ -93,27 +95,51 @@ const cache = await KVNamespace("cache", { title: "cache-store" });
 const storage = await R2Bucket("storage", { name: "user-storage" });
 
 export const worker = await Worker("api", {
-  name: "api-worker",           // Worker name
-  entrypoint: "./src/api.ts",   // Main entry point
-  cwd: "./src",                    // Project root directory
-  format: "esm",                   // Module format (esm/cjs)
-  compatibilityDate: "2024-01-01", // Workers runtime version
-  compatibilityFlags: ["nodejs_compat"], // Feature flags
-  adopt: true,                 // Adopt existing Worker
+  name: "api-worker",                     // Worker name (defaults to ${app}-${stage}-${id})
+  url: true,                              // Enable workers.dev preview URL (defaults to false; created unless using a dispatch namespace)
+  entrypoint: "./src/api.ts",             // Main entrypoint for bundling
+  cwd: "./src",                           // Project root directory (defaults to process.cwd())
+  format: "esm",                          // Module format: 'esm' (default) or 'cjs'
+  // compatibilityDate defaults to the SDK's pinned date; override only when you need a specific runtime
+  compatibilityDate: "2025-09-13",        // Workers runtime version (uses DEFAULT_COMPATIBILITY_DATE when omitted)
+  compatibilityFlags: ["nodejs_compat"],  // Low-level runtime flags; consider using `compatibility` preset instead
+  compatibility: "node",                  // Compatibility preset (optional) — expands flags for common use-cases like Node.js compatibility
+  adopt: true,                            // Adopt existing Worker if present; falls back to scope.adopt when undefined
   bindings: {
-    CACHE: cache, 
-    STORAGE: storage,
-    API_KEY: "secret-value"    // Environment variables (plain_text binding)  
+    CACHE: cache,                         // KV Namespace binding
+    STORAGE: storage,                     // R2 bucket binding
+    API_KEY: "secret-value"               // Plain-text env binding (converted to plain_text)
+    // Other binding types include: DurableObjectNamespace, Queue, Secret, Assets, Container, Workflow
   },
   observability: {
-    enabled: true              // Enable logging (default: true)
+    enabled: true                         // Enable worker logs / observability (default: true)
   },
-  sourceMap: true,             // Enable source maps for debugging
-  limits: { 
-    cpu_ms: 50_000             // Max CPU time (default: 30_000) -> Changing this has potential cost implications
-  }
+  // Upload source maps to improve stack traces (set to false to disable)
+  sourceMap: true,
+  // Optional runtime limits — increase only when necessary after monitoring
+  limits: {
+    cpu_ms: 50_000                        // Max CPU time in ms (default: 30_000)
+  },
+  // Other Advanced 🧪 & commonly used options
+  placement: { mode: "smart" },          // Smart placement to optimize network placement for latency
+  assets: { path: "./public", run_worker_first: false }, // Static assets configuration
+  crons: ["0 0 * * *"],                  // Scheduled cron triggers (standard cron syntax)
+  eventSources: [                        // Background event sources (queues, streams)
+    { queue: taskQueue, settings: { batchSize: 15, maxConcurrency: 3 } }
+  ],
+  routes: ["api.example.com/*"],          // Route patterns to bind the worker
+  domains: ["example.com"],               // Custom domains to bind (can be objects with zoneId/adopt)
+  version: "pr-123",                      // Publish as preview version with label
+  dev: { port: 8787 },                    // Local development options (port, remote, tunnel)
+  namespace: "dispatch-namespace",        // Dispatch namespace for Workers for Platforms
+  noBundle: false,                        // Disable bundling (deploy files as-is)
+  rules: [{ globs: ["**/*.wasm"] }],      // Additional bundle rules
 });
 ```
+
+:::tip
+Monitor your CPU usage with Cloudflare Analytics to understand if increased limits are necessary. Start with default limits and scale up only when needed to optimize costs.
+:::
 
 Access bindings using modern `env` import or traditional parameter approach:
 ```ts
@@ -140,6 +166,10 @@ export default {
   },
 };
 ```
+
+:::tip
+Use global scope initialization for expensive operations like database connections or API client setup. Avoid initializing per-request to minimize cold start times and improve performance.
+:::
 Infer Worker Env Types (recommended):
 Binding types can be inferred from the Worker in your alchemy.run.ts script:
 ```ts
@@ -164,6 +194,10 @@ declare module "cloudflare:workers" {
   }
 }
 ```
+
+:::tip
+Type augmentation provides project-wide type safety for your Worker environments. This eliminates runtime errors and improves developer experience with full IntelliSense support.
+:::
 
 
 ## Queue Processing (event-driven Workers)
@@ -210,6 +244,10 @@ export const processor = await Worker("processor", {
 | `retryDelay` | Delay between retries (seconds) | 30 | `120` |
 | `deadLetterQueue` | Queue for permanently failed messages | undefined | `failedQueue` |
 
+:::tip
+Tune queue settings based on your workload: increase `batchSize` for high-throughput processing, adjust `maxRetries` based on failure tolerance, and always configure a `deadLetterQueue` for debugging failed messages.
+:::
+
 **Consumer implementation:**
 ```ts
 // ./src/processor.ts
@@ -252,6 +290,7 @@ export const optimizedWorker = await Worker("api", {
 - ✅ Seamless scaling across Cloudflare's network
 
 **When to use:** Global applications, latency-sensitive APIs, high-traffic workloads, applications with geographically distributed users.
+
 :::note
 You can learn more about [Smart Placement](https://developers.cloudflare.com/workers/configuration/smart-placement/) in the Cloudflare documentation.
 :::
@@ -373,7 +412,7 @@ const orderService = await Worker("orders", {
 
 **Benefits:**
 - ✅ Distributed system architecture
-- ✅ Service isolation and independent scaling  
+- ✅ Service isolation and independent scaling
 - ✅ Fault tolerance and graceful degradation
 - ✅ Clear separation of concerns
 
@@ -457,7 +496,8 @@ export const api = await Worker("api", {
 Preview URLs may be unavailable for Durable Objects or special bindings. See [Preview URL](https://developers.cloudflare.com/workers/configuration/previews/#limitations) for details.
 :::
 
-Generate `wrangler.json` only if absolutely needed, Alchemy highly encourages you to codify your Worker configuration in your `alchemy.run.ts` script:
+## Migrating from Wrangler to Alchemy:
+Generate `wrangler.json` is available with the `WranglerJson` resource:
 ```ts
 import { WranglerJson } from "alchemy/cloudflare";
 
@@ -471,6 +511,12 @@ await WranglerJson({
   },
 });
 ```
+
+:::tip
+Alchemy highly encourages you to codify your Worker configuration in your `alchemy.run.ts` script,
+only generate wrangler.json when you need to integrate with existing Wrangler-based tooling or CI/CD pipelines. 
+Alchemy's declarative approach eliminates the need for most wrangler.json configurations.
+:::
 
 ## Troubleshooting (common issues)
 
