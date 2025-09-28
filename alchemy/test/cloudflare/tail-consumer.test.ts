@@ -47,7 +47,7 @@ describe("Worker tail consumers", () => {
         adopt: true,
       });
 
-      // Create a producer worker and implement tail consumers
+      // Create a producer worker and directly reference the consumer worker
       const producerWorker = await Worker(`${testId}-producer`, {
         name: `${testId}-producer`,
         entrypoint: `${__dirname}/test-handlers/basic-fetch.ts`,
