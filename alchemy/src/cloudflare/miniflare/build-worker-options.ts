@@ -1,4 +1,7 @@
+import path from "node:path";
+
 import * as miniflare from "miniflare";
+
 import { assertNever } from "../../util/assert-never.ts";
 import type { HTTPServer } from "../../util/http.ts";
 import type { CloudflareApi } from "../api.ts";
@@ -124,7 +127,7 @@ export const buildWorkerOptions = async (
         }
         options.assets = {
           binding: key,
-          directory: binding.path,
+          directory: path.resolve(binding.path),
           assetConfig: {
             ...input.assets
           },
