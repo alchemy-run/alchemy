@@ -84,14 +84,17 @@ const examples = (await discoverExamples()).filter(
   (e) => !skippedExamples.includes(e.name),
 );
 
-const testFilters: string[] = [];
+const exclude: string[] = [];
+const include: string[] = [];
 const fitlerTest = (name: string) =>
-  testFilters.length === 0 ||
-  testFilters.every((filter) => name.includes(filter));
+  (include.length === 0 || include.every((filter) => name.includes(filter))) &&
+  (exclude.length === 0 || exclude.every((filter) => !name.includes(filter)));
 
 for (let i = 0; i < process.argv.length; i++) {
   if (process.argv[i] === "-t") {
-    testFilters.push(process.argv[i + 1]);
+    include.push(process.argv[i + 1]);
+  } else if (process.argv[i] === "-x") {
+    exclude.push(process.argv[i + 1]);
   }
 }
 
@@ -308,7 +311,8 @@ const tasks = new Listr(
 
                 if (phase.title === "Dev") {
                   task.title = `${example.name} - ${phase.title} (pending) ${pc.dim(`(${i}/${phases.length - 1})`)}`;
-                  await devMutex.lock(exec);
+                  // await devMutex.lock(exec);
+                  await exec();
                 } else {
                   await exec();
                 }

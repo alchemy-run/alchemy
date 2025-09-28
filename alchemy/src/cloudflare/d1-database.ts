@@ -117,48 +117,47 @@ export interface D1DatabaseProps extends CloudflareApiOptions {
   };
 }
 
-export function isD1Database(resource: Resource): resource is D1Database {
-  return resource[ResourceKind] === "cloudflare::D1Database";
+export function isD1Database(resource: any): resource is D1Database {
+  return resource?.[ResourceKind] === "cloudflare::D1Database";
 }
 
 /**
  * Output returned after D1 Database creation/update
  */
-export type D1Database = Resource<"cloudflare::D1Database"> &
-  Pick<
-    D1DatabaseProps,
-    | "migrationsDir"
-    | "migrationsTable"
-    | "primaryLocationHint"
-    | "readReplication"
-  > & {
-    type: "d1";
+export type D1Database = Pick<
+  D1DatabaseProps,
+  | "migrationsDir"
+  | "migrationsTable"
+  | "primaryLocationHint"
+  | "readReplication"
+> & {
+  type: "d1";
+  /**
+   * The unique ID of the database (UUID)
+   */
+  id: string;
+
+  /**
+   * The name of the database
+   */
+  name: string;
+
+  /**
+   * Development mode properties
+   * @internal
+   */
+  dev: {
     /**
-     * The unique ID of the database (UUID)
+     * The ID of the database in development mode
      */
     id: string;
 
     /**
-     * The name of the database
+     * Whether the database is running remotely
      */
-    name: string;
-
-    /**
-     * Development mode properties
-     * @internal
-     */
-    dev: {
-      /**
-       * The ID of the database in development mode
-       */
-      id: string;
-
-      /**
-       * Whether the database is running remotely
-       */
-      remote: boolean;
-    };
+    remote: boolean;
   };
+};
 
 /**
  * Creates and manages Cloudflare D1 Databases.
@@ -286,7 +285,7 @@ const _D1Database = Resource(
           rootDir: this.scope.rootDir,
         });
       }
-      return this({
+      return {
         type: "d1",
         id: this.output?.id ?? "",
         name: databaseName,
@@ -295,7 +294,7 @@ const _D1Database = Resource(
         migrationsDir: props.migrationsDir,
         migrationsTable: props.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE,
         dev,
-      });
+      };
     }
 
     const api = await createCloudflareApi(props);
@@ -414,7 +413,7 @@ const _D1Database = Resource(
       // TODO(sam): why would this ever happen?
       throw new Error("Database ID not found");
     }
-    return this({
+    return {
       type: "d1",
       id: dbData.result.uuid!,
       name: databaseName,
@@ -423,7 +422,7 @@ const _D1Database = Resource(
       dev,
       migrationsDir: props.migrationsDir,
       migrationsTable: props.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE,
-    });
+    };
   },
 );
 

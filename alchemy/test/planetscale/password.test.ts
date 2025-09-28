@@ -1,7 +1,7 @@
 import { afterAll, describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
 import { destroy } from "../../src/destroy.ts";
-import { PlanetScaleClient } from "../../src/planetscale/api/client.gen.ts";
+import { createPlanetScaleClient } from "../../src/planetscale/api.ts";
 import { Branch } from "../../src/planetscale/branch.ts";
 import { Database } from "../../src/planetscale/database.ts";
 import { Password } from "../../src/planetscale/password.ts";
@@ -16,7 +16,7 @@ const test = alchemy.test(import.meta, {
 });
 
 describe.skipIf(!process.env.PLANETSCALE_TEST)("Password Resource", () => {
-  const api = new PlanetScaleClient();
+  const api = createPlanetScaleClient();
   const organizationId = alchemy.env.PLANETSCALE_ORG_ID;
 
   let database: Database;
@@ -67,15 +67,14 @@ describe.skipIf(!process.env.PLANETSCALE_TEST)("Password Resource", () => {
       expect(password.password).toBeTruthy();
 
       // Verify password was created by querying the API directly
-      const getResponse =
-        await api.organizations.databases.branches.passwords.get({
-          path: {
-            organization: organizationId,
-            database: database.name,
-            branch: branch.name,
-            id: password.id,
-          },
-        });
+      const { data: getResponse } = await api.getPassword({
+        path: {
+          organization: organizationId,
+          database: database.name,
+          branch: branch.name,
+          id: password.id,
+        },
+      });
       expect(getResponse.name).toEqual(`${name}-${password.nameSlug}`);
       expect(getResponse.role).toEqual("reader");
 
@@ -91,15 +90,14 @@ describe.skipIf(!process.env.PLANETSCALE_TEST)("Password Resource", () => {
       expect(password.name).toEqual(`${name}-updated-${password.nameSlug}`);
 
       // Verify password was updated
-      const getUpdatedResponse =
-        await api.organizations.databases.branches.passwords.get({
-          path: {
-            organization: organizationId,
-            database: database.name,
-            branch: branch.name,
-            id: password.id,
-          },
-        });
+      const { data: getUpdatedResponse } = await api.getPassword({
+        path: {
+          organization: organizationId,
+          database: database.name,
+          branch: branch.name,
+          id: password.id,
+        },
+      });
 
       expect(getUpdatedResponse.name).toEqual(
         `${name}-updated-${password.nameSlug}`,
@@ -147,27 +145,25 @@ describe.skipIf(!process.env.PLANETSCALE_TEST)("Password Resource", () => {
       await scope.destroyPendingDeletions();
 
       // Verify old password was deleted and new one created
-      const getOldResponse =
-        await api.organizations.databases.branches.passwords.get({
-          path: {
-            organization: organizationId,
-            database: database.name,
-            branch: branch.name,
-            id: originalId,
-          },
-          result: "full",
-        });
+      const { response: getOldResponse } = await api.getPassword({
+        path: {
+          organization: organizationId,
+          database: database.name,
+          branch: branch.name,
+          id: originalId,
+        },
+        throwOnError: false,
+      });
       expect(getOldResponse.status).toEqual(404);
 
-      const getNewResponse =
-        await api.organizations.databases.branches.passwords.get({
-          path: {
-            organization: organizationId,
-            database: database.name,
-            branch: branch.name,
-            id: password.id,
-          },
-        });
+      const { data: getNewResponse } = await api.getPassword({
+        path: {
+          organization: organizationId,
+          database: database.name,
+          branch: branch.name,
+          id: password.id,
+        },
+      });
       expect(getNewResponse.role).toEqual("writer");
     } finally {
       await destroy(scope);

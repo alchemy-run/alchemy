@@ -67,7 +67,7 @@ export interface TaxRateProps {
 /**
  * Output from the Stripe tax rate
  */
-export interface TaxRate extends Resource<"stripe::TaxRate">, TaxRateProps {
+export interface TaxRate extends TaxRateProps {
   /**
    * The ID of the tax rate
    */
@@ -196,7 +196,7 @@ export const TaxRate = Resource(
         }
       }
 
-      return this({
+      return {
         id: taxRate.id,
         object: taxRate.object,
         displayName: taxRate.display_name,
@@ -211,7 +211,7 @@ export const TaxRate = Resource(
         taxType: taxRate.tax_type || undefined,
         created: taxRate.created,
         livemode: taxRate.livemode,
-      });
+      };
     } catch (error) {
       logger.error("Error creating/updating tax rate:", error);
       throw error;

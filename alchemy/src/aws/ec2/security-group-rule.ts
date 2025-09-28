@@ -56,9 +56,7 @@ export interface SecurityGroupRuleProps {
 /**
  * Output returned after Security Group Rule creation/update
  */
-export interface SecurityGroupRule
-  extends Resource<"aws::SecurityGroupRule">,
-    SecurityGroupRuleProps {
+export interface SecurityGroupRule extends SecurityGroupRuleProps {
   /**
    * A unique identifier for the rule resource.
    */
@@ -156,10 +154,10 @@ export const SecurityGroupRule = Resource(
       authorizeParams,
     );
 
-    return this({
+    return {
       ruleId,
       ...props,
-    });
+    };
   },
 );
 

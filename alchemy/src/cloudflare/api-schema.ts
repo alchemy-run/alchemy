@@ -48,33 +48,32 @@ export interface APISchemaProps<S extends OpenAPIV3.Document>
 /**
  * APISchema resource attributes.
  */
-export type APISchema<S extends OpenAPIV3.Document = OpenAPIV3.Document> =
-  Resource<"cloudflare::APISchema"> & {
-    /**
-     * Schema ID
-     */
-    id: string;
+export type APISchema<S extends OpenAPIV3.Document = OpenAPIV3.Document> = {
+  /**
+   * Schema ID
+   */
+  id: string;
 
-    /**
-     * Name for the schema
-     */
-    name: string;
+  /**
+   * Name for the schema
+   */
+  name: string;
 
-    /**
-     * The API Schema
-     */
-    schema: S;
+  /**
+   * The API Schema
+   */
+  schema: S;
 
-    /**
-     * Source of the schema
-     */
-    source: string;
+  /**
+   * Source of the schema
+   */
+  source: string;
 
-    /**
-     * Whether validation is enabled
-     */
-    enabled: boolean;
-  };
+  /**
+   * Whether validation is enabled
+   */
+  enabled: boolean;
+};
 
 /**
  * Cloudflare API Gateway Schema manages OpenAPI v3 schemas for API validation.
@@ -191,13 +190,13 @@ export const APISchema = Resource("cloudflare::APISchema", async function <
     });
   }
 
-  return this({
+  return {
     id: schemaDetails.id,
     name: schemaDetails.name,
     schema: parsedSchema as any,
     source: schemaDetails.source,
     enabled: schemaDetails.validationEnabled,
-  });
+  };
 });
 
 // API helper functions

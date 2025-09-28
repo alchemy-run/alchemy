@@ -104,7 +104,7 @@ export interface EmailRuleProps extends CloudflareApiOptions {
 /**
  * An email routing rule for a Cloudflare zone
  */
-export interface EmailRule extends Resource<"cloudflare::EmailRule"> {
+export interface EmailRule {
   /**
    * Zone ID where the rule is created
    */
@@ -274,7 +274,7 @@ export const EmailRule = Resource(
         const result =
           (await response.json()) as CloudflareResponse<CloudflareEmailRule>;
 
-        return this({
+        return {
           zoneId,
           ruleId: result.result.id,
           name: result.result.name,
@@ -283,7 +283,7 @@ export const EmailRule = Resource(
           matchers: result.result.matchers,
           actions: result.result.actions,
           tag: result.result.tag,
-        });
+        };
       }
     }
 
@@ -308,7 +308,7 @@ export const EmailRule = Resource(
     const result =
       (await createResponse.json()) as CloudflareResponse<CloudflareEmailRule>;
 
-    return this({
+    return {
       zoneId,
       ruleId: result.result.id,
       name: result.result.name,
@@ -317,6 +317,6 @@ export const EmailRule = Resource(
       matchers: result.result.matchers,
       actions: result.result.actions,
       tag: result.result.tag,
-    });
+    };
   },
 );

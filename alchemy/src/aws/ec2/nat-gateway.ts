@@ -48,9 +48,7 @@ export interface NatGatewayProps extends AwsClientProps {
 /**
  * Output returned after NAT Gateway creation/update
  */
-export interface NatGateway
-  extends Resource<"aws::NatGateway">,
-    NatGatewayProps {
+export interface NatGateway extends NatGatewayProps {
   /**
    * The ID of the NAT Gateway
    */
@@ -423,7 +421,7 @@ export const NatGateway = Resource(
       );
     }
 
-    const result = this({
+    const result = {
       natGatewayId: natGateway.NatGatewayId!,
       subnetId: natGateway.SubnetId!,
       vpcId: natGateway.VpcId!,
@@ -434,7 +432,7 @@ export const NatGateway = Resource(
       createdElasticIp,
       ...props,
       subnet: subnetId,
-    });
+    };
     return result;
   },
 );

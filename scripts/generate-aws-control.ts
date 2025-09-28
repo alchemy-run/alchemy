@@ -170,9 +170,7 @@ function generateResourceType(
     lines.push(`/** ${resourceType.Documentation} */`);
   }
 
-  lines.push(
-    `type ${resourceName} = Resource<"AWS::${resourceName}"> & ${resourceName}Props & {`,
-  );
+  lines.push(`type ${resourceName} = ${resourceName}Props & {`);
 
   // Track which properties we've already added from attributes
   const addedProperties = new Set<string>();

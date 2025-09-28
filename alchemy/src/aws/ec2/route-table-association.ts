@@ -44,9 +44,7 @@ export interface RouteTableAssociationProps {
 /**
  * Output returned after Route Table Association creation/update
  */
-export interface RouteTableAssociation
-  extends Resource<"aws::RouteTableAssociation">,
-    RouteTableAssociationProps {
+export interface RouteTableAssociation extends RouteTableAssociationProps {
   /**
    * The ID of the route table association
    */
@@ -418,7 +416,7 @@ export const RouteTableAssociation = Resource(
       }
     }
 
-    return this({
+    return {
       associationId,
       routeTableId,
       subnetId,
@@ -429,7 +427,7 @@ export const RouteTableAssociation = Resource(
       routeTable: routeTableId,
       subnet: subnetId,
       gateway: gatewayId,
-    });
+    };
   },
 );
 

@@ -67,7 +67,7 @@ export interface RoleProps {
 /**
  * Output returned after IAM role creation/update
  */
-export interface Role extends Resource<"iam::Role">, RoleProps {
+export interface Role extends RoleProps {
   /**
    * ARN of the role
    */
@@ -535,13 +535,13 @@ export const Role = Resource(
       throw new Error(`Failed to create or update role ${props.roleName}`);
     }
 
-    return this({
+    return {
       ...props,
       arn: role.Role.Arn!,
       uniqueId: role.Role.RoleId!,
       roleId: role.Role.RoleId!,
       roleName,
       createDate: role.Role.CreateDate!,
-    });
+    };
   },
 );

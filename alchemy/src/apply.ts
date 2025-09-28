@@ -11,6 +11,7 @@ import {
   type PendingResource,
   type Provider,
   type Resource,
+  type ResourceAttributes,
   type ResourceProps,
 } from "./resource.ts";
 import type { PendingDeletions } from "./scope.ts";
@@ -26,11 +27,11 @@ export interface ApplyOptions {
   noop?: boolean;
 }
 
-export function apply<Out extends Resource>(
+export function apply<Out extends ResourceAttributes>(
   resource: PendingResource<Out>,
   props: ResourceProps | undefined,
   options?: ApplyOptions,
-): Promise<Awaited<Out>> {
+): Promise<Awaited<Out> & Resource> {
   return _apply(resource, props, options);
 }
 
@@ -48,11 +49,11 @@ export class ReplacedSignal extends Error {
   }
 }
 
-async function _apply<Out extends Resource>(
+async function _apply<Out extends ResourceAttributes>(
   resource: PendingResource<Out>,
   props: ResourceProps | undefined,
   options?: ApplyOptions,
-): Promise<Awaited<Out>> {
+): Promise<Awaited<Out> & Resource> {
   const scope = resource[ResourceScope];
   const start = performance.now();
   try {
@@ -86,7 +87,7 @@ async function _apply<Out extends Resource>(
         event: "resource.read",
         resource: resource[ResourceKind],
       });
-      return state.output as Awaited<Out>;
+      return state.output as Awaited<Out> & Resource;
 
       // -> poll until it does not (i.e. when the owner process applies the change and updates the state store)
       async function waitForConsistentState() {
@@ -116,7 +117,7 @@ async function _apply<Out extends Resource>(
         }
       }
       async function inputsAreEqual(
-        state: State<string, ResourceProps | undefined, Resource<string>>,
+        state: State<string, ResourceProps | undefined, Resource>,
       ) {
         const oldProps = await serialize(scope, state.props, {
           encrypt: false,
@@ -183,7 +184,7 @@ async function _apply<Out extends Resource>(
           resource: resource[ResourceKind],
           status: state.status,
         });
-        return state.output as Awaited<Out>;
+        return state.output as Awaited<Out> & Resource;
       }
     }
 
@@ -238,7 +239,7 @@ async function _apply<Out extends Resource>(
       },
     });
 
-    let output: Resource<string>;
+    let output: any;
     try {
       output = await alchemy.run(
         resource[ResourceID],
@@ -249,7 +250,7 @@ async function _apply<Out extends Resource>(
           noop: options?.noop,
         },
         async () =>
-          await provider.handler.bind(ctx)(resource[ResourceID], props),
+          ctx(await provider.handler.bind(ctx)(resource[ResourceID], props)),
       );
     } catch (error) {
       if (error instanceof ReplacedSignal) {
@@ -287,25 +288,27 @@ async function _apply<Out extends Resource>(
             parent: scope,
             noop: options?.noop,
           },
-          async () =>
-            provider.handler.bind(
-              context({
-                scope,
-                phase: "create",
-                kind: resource[ResourceKind],
-                id: resource[ResourceID],
-                fqn: resource[ResourceFQN],
-                seq: resource[ResourceSeq],
-                props: state!.props,
-                state: state!,
-                isReplacement: true,
-                replace: () => {
-                  throw new Error(
-                    `Resource ${resource[ResourceKind]} ${resource[ResourceFQN]} cannot be replaced in create phase.`,
-                  );
-                },
-              }),
-            )(resource[ResourceID], props),
+          async () => {
+            const ctx = context({
+              scope,
+              phase: "create",
+              kind: resource[ResourceKind],
+              id: resource[ResourceID],
+              fqn: resource[ResourceFQN],
+              seq: resource[ResourceSeq],
+              props: state!.props,
+              state: state!,
+              isReplacement: true,
+              replace: () => {
+                throw new Error(
+                  `Resource ${resource[ResourceKind]} ${resource[ResourceFQN]} cannot be replaced in create phase.`,
+                );
+              },
+            });
+            return ctx(
+              await provider.handler.bind(ctx)(resource[ResourceID], props),
+            );
+          },
         );
       } else {
         throw error;
@@ -342,7 +345,7 @@ async function _apply<Out extends Resource>(
       output,
       props,
     });
-    return output as any;
+    return output as Awaited<Out> & Resource;
   } catch (error) {
     scope.telemetryClient.record({
       event: "resource.error",

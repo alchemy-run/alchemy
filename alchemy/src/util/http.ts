@@ -69,9 +69,9 @@ export function coupleWebSocket(
 ) {
   wss.handleUpgrade(req, socket, head, (client) => {
     client.on("message", (event, binary) => server.send(event, { binary }));
-    server.on("close", (code, reason) => server.close(code, reason));
-    client.on("message", (event, binary) => server.send(event, { binary }));
     client.on("close", (code, reason) => server.close(code, reason));
+    server.on("message", (event, binary) => client.send(event, { binary }));
+    server.on("close", (code, reason) => client.close(code, reason));
     wss.emit("connection", client, req);
   });
 }

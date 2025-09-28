@@ -74,7 +74,7 @@ export interface SESProps {
 /**
  * Output returned after SES resource creation/update
  */
-export interface SES extends Resource<"aws::SES">, SESProps {
+export interface SES extends SESProps {
   /**
    * ARN of the configuration set if created
    * Format: arn:aws:ses:region:account-id:configuration-set/name
@@ -404,12 +404,12 @@ export const SES = Resource(
     }
 
     // Return the resource output
-    return this({
+    return {
       ...props,
       configurationSetArn,
       emailIdentityArn,
       emailIdentityVerificationStatus,
       dkimVerificationStatus,
-    });
+    };
   },
 );

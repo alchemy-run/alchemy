@@ -1,7 +1,7 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
-import type { PlanetScaleProps } from "./api/client.gen.ts";
-import { PlanetScaleClient } from "./api/client.gen.ts";
+import type { PlanetScaleProps } from "./api.ts";
+import { createPlanetScaleClient } from "./api.ts";
 import {
   ensureProductionBranchClusterSize,
   type PlanetScaleClusterSize,
@@ -117,48 +117,47 @@ export type DatabaseProps = BaseDatabaseProps &
 /**
  * Represents a PlanetScale Database
  */
-export type Database = Resource<"planetscale::Database"> &
-  DatabaseProps & {
-    /**
-     * The unique identifier of the database
-     */
-    id: string;
+export type Database = DatabaseProps & {
+  /**
+   * The unique identifier of the database
+   */
+  id: string;
 
-    /**
-     * The name of the database
-     */
-    name: string;
+  /**
+   * The name of the database
+   */
+  name: string;
 
-    /**
-     * The current state of the database
-     */
-    state: string;
+  /**
+   * The current state of the database
+   */
+  state: string;
 
-    /**
-     * The default branch name
-     */
-    defaultBranch: string;
+  /**
+   * The default branch name
+   */
+  defaultBranch: string;
 
-    /**
-     * The plan type
-     */
-    plan: string;
+  /**
+   * The plan type
+   */
+  plan: string;
 
-    /**
-     * Time at which the database was created
-     */
-    createdAt: string;
+  /**
+   * Time at which the database was created
+   */
+  createdAt: string;
 
-    /**
-     * Time at which the database was last updated
-     */
-    updatedAt: string;
+  /**
+   * Time at which the database was last updated
+   */
+  updatedAt: string;
 
-    /**
-     * HTML URL to access the database
-     */
-    htmlUrl: string;
-  };
+  /**
+   * HTML URL to access the database
+   */
+  htmlUrl: string;
+};
 
 /**
  * Create, manage and delete PlanetScale databases
@@ -201,7 +200,7 @@ export const Database = Resource(
     id: string,
     props: DatabaseProps,
   ): Promise<Database> {
-    const api = new PlanetScaleClient(props);
+    const api = createPlanetScaleClient(props);
 
     const databaseName =
       props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
@@ -213,7 +212,7 @@ export const Database = Resource(
     });
 
     if (this.phase === "update" && this.output.name !== databaseName) {
-      await api.organizations.databases.patch({
+      await api.updateDatabaseSettings({
         path: {
           organization: props.organizationId,
           name: this.output.name,
@@ -224,15 +223,15 @@ export const Database = Resource(
 
     if (this.phase === "delete") {
       if (this.output?.name) {
-        const response = await api.organizations.databases.delete({
+        const response = await api.deleteDatabase({
           path: {
             organization: props.organizationId,
             name: this.output.name,
           },
-          result: "full",
+          throwOnError: false,
         });
 
-        if (response.error && response.error.status !== 404) {
+        if (response.error && response.response.status !== 404) {
           throw new Error(`Failed to delete database "${this.output.name}"`, {
             cause: response.error,
           });
@@ -242,12 +241,12 @@ export const Database = Resource(
     }
 
     // Check if database exists
-    const getResponse = await api.organizations.databases.get({
+    const getResponse = await api.getDatabase({
       path: {
         organization: props.organizationId,
         name: databaseName,
       },
-      result: "full",
+      throwOnError: false,
     });
     if (this.phase === "update" || (props.adopt && getResponse.data)) {
       if (!getResponse.data) {
@@ -258,20 +257,20 @@ export const Database = Resource(
       // Update database settings
       // If updating to a non-'main' default branch, create it first
       if (props.defaultBranch && props.defaultBranch !== "main") {
-        const branchResponse = await api.organizations.databases.branches.get({
+        const branchResponse = await api.getBranch({
           path: {
             organization: props.organizationId,
             database: databaseName,
             name: props.defaultBranch,
           },
-          result: "full",
+          throwOnError: false,
         });
         if (!branchResponse.data) {
           await waitForDatabaseReady(api, props.organizationId, databaseName);
         }
-        if (branchResponse.error && branchResponse.error.status === 404) {
+        if (branchResponse.error && branchResponse.response.status === 404) {
           // Create the branch
-          await api.organizations.databases.branches.post({
+          await api.createBranch({
             path: {
               organization: props.organizationId,
               database: databaseName,
@@ -284,7 +283,7 @@ export const Database = Resource(
         }
       }
 
-      const updateResponse = await api.organizations.databases.patch({
+      const { data } = await api.updateDatabaseSettings({
         path: {
           organization: props.organizationId,
           name: databaseName,
@@ -307,21 +306,21 @@ export const Database = Resource(
         props.organizationId,
         databaseName,
         props.defaultBranch || "main",
-        updateResponse.kind,
+        data.kind,
         clusterSize,
       );
 
-      return this({
+      return {
         ...props,
-        id: updateResponse.id,
+        id: data.id,
         name: databaseName,
-        state: updateResponse.state,
-        defaultBranch: updateResponse.default_branch,
-        plan: updateResponse.plan,
-        createdAt: updateResponse.created_at,
-        updatedAt: updateResponse.updated_at,
-        htmlUrl: updateResponse.html_url,
-      });
+        state: data.state,
+        defaultBranch: data.default_branch,
+        plan: data.plan,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+        htmlUrl: data.html_url,
+      };
     }
 
     if (getResponse.data) {
@@ -329,7 +328,7 @@ export const Database = Resource(
     }
 
     // Create new database
-    let data = await api.organizations.databases.post({
+    await api.createDatabase({
       path: {
         organization: props.organizationId,
       },
@@ -342,7 +341,7 @@ export const Database = Resource(
     });
 
     // These settings can't be set on creation, so we need to patch them after creation.
-    data = await api.organizations.databases.patch({
+    const { data } = await api.updateDatabaseSettings({
       path: {
         organization: props.organizationId,
         name: databaseName,
@@ -364,18 +363,18 @@ export const Database = Resource(
       await waitForDatabaseReady(api, props.organizationId, databaseName);
 
       // Check if branch exists
-      const branchResponse = await api.organizations.databases.branches.get({
+      const branchResponse = await api.getBranch({
         path: {
           organization: props.organizationId,
           database: databaseName,
           name: props.defaultBranch,
         },
-        result: "full",
+        throwOnError: false,
       });
 
-      if (branchResponse.error && branchResponse.error.status === 404) {
+      if (branchResponse.error && branchResponse.response.status === 404) {
         // Create the branch
-        await api.organizations.databases.branches.post({
+        await api.createBranch({
           path: {
             organization: props.organizationId,
             database: databaseName,
@@ -396,7 +395,7 @@ export const Database = Resource(
         );
 
         // Update database to use new branch as default
-        const updatedData = await api.organizations.databases.patch({
+        const { data: updatedData } = await api.updateDatabaseSettings({
           path: {
             organization: props.organizationId,
             name: databaseName,
@@ -406,7 +405,7 @@ export const Database = Resource(
           },
         });
 
-        return this({
+        return {
           ...props,
           id: data.id,
           name: databaseName,
@@ -416,11 +415,11 @@ export const Database = Resource(
           createdAt: updatedData.created_at,
           updatedAt: updatedData.updated_at,
           htmlUrl: updatedData.html_url,
-        });
+        };
       }
     }
 
-    return this({
+    return {
       ...props,
       id: data.id,
       name: databaseName,
@@ -430,6 +429,6 @@ export const Database = Resource(
       createdAt: data.created_at,
       updatedAt: data.updated_at,
       htmlUrl: data.html_url,
-    });
+    };
   },
 );

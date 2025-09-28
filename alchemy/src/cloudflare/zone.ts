@@ -263,7 +263,7 @@ export interface ZoneData {
 /**
  * Output returned after Zone creation/update
  */
-export interface Zone extends Resource<"cloudflare::Zone">, ZoneData {}
+export interface Zone extends ZoneData {}
 
 /**
  * A Cloudflare Zone represents a domain and its configuration settings on Cloudflare.
@@ -425,7 +425,7 @@ export const Zone = Resource(
       this.props?.botManagement,
     );
 
-    return this({
+    return {
       id: zoneData.id,
       name: zoneData.name,
       type: zoneData.type,
@@ -440,7 +440,7 @@ export const Zone = Resource(
         ? new Date(zoneData.activated_on).getTime()
         : null,
       settings: await getZoneSettings(api, zoneData.id),
-    });
+    };
   },
 );
 

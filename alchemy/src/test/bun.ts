@@ -115,7 +115,7 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
     return afterAll(() => scope.run(() => fn(scope)));
   };
 
-  return test as test;
+  return test as any;
 
   function test(
     ...args:

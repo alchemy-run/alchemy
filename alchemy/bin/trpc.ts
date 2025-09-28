@@ -1,7 +1,9 @@
-import { trpcServer } from "trpc-cli";
+import { cancel, log } from "@clack/prompts";
+import pc from "picocolors";
+import { trpcServer, type TrpcCliMeta } from "trpc-cli";
 import { TelemetryClient } from "../src/util/telemetry/client.ts";
 
-export const t = trpcServer.initTRPC.create();
+export const t = trpcServer.initTRPC.meta<TrpcCliMeta>().create();
 
 export class ExitSignal extends Error {
   constructor(public code: 0 | 1 = 0) {
@@ -9,6 +11,8 @@ export class ExitSignal extends Error {
     this.name = "ExitSignal";
   }
 }
+
+export class CancelSignal extends Error {}
 
 const loggingMiddleware = t.middleware(async ({ path, next }) => {
   const telemetry = TelemetryClient.create({
@@ -50,3 +54,24 @@ const loggingMiddleware = t.middleware(async ({ path, next }) => {
 });
 
 export const loggedProcedure = t.procedure.use(loggingMiddleware);
+
+// wrap procedure to improve error handling
+// TODO(john): use this pattern for other procedures
+export const authProcedure = loggedProcedure.use(async (opts) => {
+  const result = await opts.next();
+  if (result.ok) return result;
+  if (result.error.cause instanceof CancelSignal) {
+    cancel(pc.red("Operation cancelled."));
+    return result;
+  }
+  if (result.error.cause instanceof ExitSignal) return result;
+  log.error(pc.red("An unexpected error occurred."));
+  log.error(
+    result.error.message
+      .split("\n")
+      .map((line) => pc.gray(`  ${line}`))
+      .join("\n"),
+  );
+  cancel();
+  throw new ExitSignal(1);
+});
