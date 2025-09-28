@@ -95,7 +95,7 @@ describe("R2Object Resource", async () => {
 
       // Verify JSON content
       const result = await bucket.get("config/app.json");
-      const retrievedData = JSON.parse(await result?.text() || "{}");
+      const retrievedData = JSON.parse((await result?.text()) || "{}");
       expect(retrievedData).toEqual(configData);
     } catch (err) {
       console.log(err);

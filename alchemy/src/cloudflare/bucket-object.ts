@@ -1,7 +1,7 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { createCloudflareApi, type CloudflareApiOptions } from "./api.ts";
-import { R2Bucket, deleteObject, type PutObjectObject } from "./bucket.ts";
+import { type R2Bucket, deleteObject, type PutObjectObject } from "./bucket.ts";
 
 /**
  * Properties for creating or updating an R2 Object
@@ -85,10 +85,10 @@ export const R2Object = Resource(
   async function (
     this: Context<R2Object>,
     id: string,
-    props: R2ObjectProps
+    props: R2ObjectProps,
   ): Promise<R2Object> {
     if (this.phase === "delete") {
-        const api = await createCloudflareApi(props);
+      const api = await createCloudflareApi(props);
       // Delete the object from the bucket
       await deleteObject(api, {
         bucketName: props.bucket.name,
@@ -103,5 +103,5 @@ export const R2Object = Resource(
         key: props.key,
       };
     }
-  }
+  },
 );
