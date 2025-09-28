@@ -3,7 +3,7 @@ export const SCRIPT_MULTIWORKER_DISPATCHER = `
 var dispatcher_worker_default = {
   async fetch(request, env) {
     let headerName = env.HEADER_NAME || "MF-target-worker", targetWorker = request.headers.get(headerName);
-    if (console.log("fetch", request.headers, targetWorker), !targetWorker)
+    if (!targetWorker)
       return env.DEFAULT_WORKER.fetch(request);
     let forwardRequest = new Request(request);
     forwardRequest.headers.delete(headerName);
