@@ -803,7 +803,7 @@ describe("WranglerJson Resource", () => {
         max_batch_size: 25,
         max_concurrency: 5,
         max_retries: 3,
-        max_wait_time_ms: 1500,
+        max_batch_timeout: 1.5,
         retry_delay: 45,
       });
     } finally {
