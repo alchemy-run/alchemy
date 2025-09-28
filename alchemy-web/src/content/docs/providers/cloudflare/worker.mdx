@@ -2,6 +2,8 @@
 title: Worker
 description: Learn how to deploy, configure, and manage Cloudflare Workers using Alchemy for serverless functions at the edge.
 ---
+import { Code } from 'astro:components'
+import workerHandlerCode from '../../../../../../examples/cloudflare-worker-simple/src/worker1.ts?raw'
 
 A [Cloudflare Worker](https://developers.cloudflare.com/workers/) is a serverless function that runs on Cloudflare's global network.
 
@@ -27,6 +29,10 @@ export default {
   },
 };
 ```
+
+For a more complete example with error handling and different response types:
+
+<Code lang="ts" title="worker1.ts" code={workerHandlerCode} />
 
 ## Bindings
 
