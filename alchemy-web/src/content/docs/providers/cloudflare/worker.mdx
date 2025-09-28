@@ -109,7 +109,7 @@ export const worker = await Worker("api", {
   bindings: {
     CACHE: cache,                         // KV Namespace binding
     STORAGE: storage,                     // R2 bucket binding
-    API_KEY: alchemy.secret("secret-value")                // Plain-text env binding (converted to plain_text)
+    API_KEY: alchemy.secret("secret-value") // Plain-text env binding (converted to plain_text)
     // Other binding types include: DurableObjectNamespace, Queue, Secret, Assets, Container, Workflow
   },
   observability: {
