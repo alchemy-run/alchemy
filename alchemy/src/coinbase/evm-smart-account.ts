@@ -263,7 +263,8 @@ export const EvmSmartAccount = Resource(
     let smartAccount;
 
     // Check for adoption or use getOrCreate pattern
-    if (props.adopt) {
+    const adopt = props.adopt ?? this.scope.adopt;
+    if (adopt) {
       // With adoption, use getOrCreateSmartAccount which returns existing if it exists
       smartAccount = await cdp.evm.getOrCreateSmartAccount({
         name: accountName,
