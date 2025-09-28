@@ -14,7 +14,6 @@ import { writeMiniflareSymlink } from "./miniflare/symlink-miniflare-state.ts";
 import { type AssetsConfig, Worker, type WorkerProps } from "./worker.ts";
 import { WranglerJson, type WranglerJsonSpec } from "./wrangler.json.ts";
 
-
 export interface WebsiteProps<B extends Bindings>
   extends Omit<WorkerProps<B>, "assets" | "dev"> {
   /**
