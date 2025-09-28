@@ -1,15 +1,17 @@
+import type * as lambda from "aws-lambda";
+
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
+import type * as S from "effect/Schema";
+
 import type {
   Resource,
   Provider as ResourceProvider,
   TagInstance,
 } from "@alchemy.run/effect";
 import { App, allow, type Allow } from "@alchemy.run/effect";
-import type * as lambda from "aws-lambda";
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Schedule from "effect/Schedule";
-import type * as S from "effect/Schema";
 import { SQS as SQSClient } from "itty-aws/sqs";
 import * as Account from "./account.ts";
 import { createAWSServiceClientLayer } from "./client.ts";
@@ -223,91 +225,95 @@ export const client = createAWSServiceClientLayer<
   SQSClient
 >(QueueClient, SQSClient);
 
-export const clientFromEnv = Layer.provide(
-  client,
-  Layer.merge(Credentials.fromEnv, Region.fromEnv),
-);
+export const clientFromEnv = () =>
+  Effect.provide(
+    Layer.provide(
+      client(),
+      Layer.merge(Credentials.fromEnv(), Region.fromEnv()),
+    ),
+  );
 
 export class QueueProvider extends Context.Tag("AWS::SQS::Queue")<
   QueueProvider,
   ResourceProvider<"AWS::SQS::Queue", Props, Attributes<string, Props>>
 >() {}
 
-export const provider = Layer.effect(
-  QueueProvider,
-  Effect.gen(function* () {
-    const sqs = yield* QueueClient;
-    const app = yield* App;
-    const region = yield* Region.Region;
-    const accountId = yield* Account.AccountID;
-    const createQueueName = (id: string, props: Props) =>
-      props.queueName ??
-      `${app.name}-${id}-${app.stage}${props.fifo ? ".fifo" : ""}`;
-    const createAttributes = (props: Props) => ({
-      FifoQueue: props.fifo ? "true" : "false",
-      FifoThroughputLimit: props.fifoThroughputLimit,
-      ContentBasedDeduplication: props.contentBasedDeduplication
-        ? "true"
-        : "false",
-      DeduplicationScope: props.deduplicationScope,
-      DelaySeconds: props.delaySeconds?.toString(),
-      MaximumMessageSize: props.maximumMessageSize?.toString(),
-      MessageRetentionPeriod: props.messageRetentionPeriod?.toString(),
-      ReceiveMessageWaitTimeSeconds:
-        props.receiveMessageWaitTimeSeconds?.toString(),
-      VisibilityTimeout: props.visibilityTimeout?.toString(),
-    });
-    return {
-      type: Type,
-      diff: Effect.fn(function* ({ id, news, olds }) {
-        const oldFifo = olds.fifo ?? false;
-        const newFifo = news.fifo ?? false;
-        if (oldFifo !== newFifo) {
-          return { action: "replace" };
-        }
-        const oldQueueName = createQueueName(id, olds);
-        const newQueueName = createQueueName(id, news);
-        if (oldQueueName !== newQueueName) {
-          return { action: "replace" };
-        }
-        return { action: "noop" };
-      }),
-      create: Effect.fn(function* ({ id, news }) {
-        const queueName = createQueueName(id, news);
-        const response = yield* sqs
-          .createQueue({
-            QueueName: queueName,
+export const provider = () =>
+  Layer.effect(
+    QueueProvider,
+    Effect.gen(function* () {
+      const sqs = yield* QueueClient;
+      const app = yield* App;
+      const region = yield* Region.Region;
+      const accountId = yield* Account.AccountID;
+      const createQueueName = (id: string, props: Props) =>
+        props.queueName ??
+        `${app.name}-${id}-${app.stage}${props.fifo ? ".fifo" : ""}`;
+      const createAttributes = (props: Props) => ({
+        FifoQueue: props.fifo ? "true" : "false",
+        FifoThroughputLimit: props.fifoThroughputLimit,
+        ContentBasedDeduplication: props.contentBasedDeduplication
+          ? "true"
+          : "false",
+        DeduplicationScope: props.deduplicationScope,
+        DelaySeconds: props.delaySeconds?.toString(),
+        MaximumMessageSize: props.maximumMessageSize?.toString(),
+        MessageRetentionPeriod: props.messageRetentionPeriod?.toString(),
+        ReceiveMessageWaitTimeSeconds:
+          props.receiveMessageWaitTimeSeconds?.toString(),
+        VisibilityTimeout: props.visibilityTimeout?.toString(),
+      });
+      return {
+        type: Type,
+        diff: Effect.fn(function* ({ id, news, olds }) {
+          const oldFifo = olds.fifo ?? false;
+          const newFifo = news.fifo ?? false;
+          if (oldFifo !== newFifo) {
+            return { action: "replace" };
+          }
+          const oldQueueName = createQueueName(id, olds);
+          const newQueueName = createQueueName(id, news);
+          if (oldQueueName !== newQueueName) {
+            return { action: "replace" };
+          }
+          return { action: "noop" };
+        }),
+        create: Effect.fn(function* ({ id, news }) {
+          const queueName = createQueueName(id, news);
+          const response = yield* sqs
+            .createQueue({
+              QueueName: queueName,
+              Attributes: createAttributes(news),
+            })
+            .pipe(
+              Effect.retry({
+                while: (e) => e.name === "QueueDeletedRecently",
+                schedule: Schedule.fixed(1000),
+              }),
+            );
+          const queueArn = `arn:aws:sqs:${region}:${accountId}:${queueName}`;
+          return {
+            id,
+            type: Type,
+            queueName,
+            queueUrl: response.QueueUrl!,
+            queueArn: queueArn,
+          };
+        }),
+        update: Effect.fn(function* ({ news, output }) {
+          yield* sqs.setQueueAttributes({
+            QueueUrl: output.queueUrl,
             Attributes: createAttributes(news),
-          })
-          .pipe(
-            Effect.retry({
-              while: (e) => e.name === "QueueDeletedRecently",
-              schedule: Schedule.fixed(1000),
-            }),
-          );
-        const queueArn = `arn:aws:sqs:${region}:${accountId}:${queueName}`;
-        return {
-          id,
-          type: Type,
-          queueName,
-          queueUrl: response.QueueUrl!,
-          queueArn: queueArn,
-        };
-      }),
-      update: Effect.fn(function* ({ news, output }) {
-        yield* sqs.setQueueAttributes({
-          QueueUrl: output.queueUrl,
-          Attributes: createAttributes(news),
-        });
-        return output;
-      }),
-      delete: Effect.fn(function* (input) {
-        yield* sqs
-          .deleteQueue({
-            QueueUrl: input.output.queueUrl,
-          })
-          .pipe(Effect.catchTag("QueueDoesNotExist", () => Effect.void));
-      }),
-    } satisfies ResourceProvider<Type, Props, Attributes<string, Props>>;
-  }),
-);
+          });
+          return output;
+        }),
+        delete: Effect.fn(function* (input) {
+          yield* sqs
+            .deleteQueue({
+              QueueUrl: input.output.queueUrl,
+            })
+            .pipe(Effect.catchTag("QueueDoesNotExist", () => Effect.void));
+        }),
+      } satisfies ResourceProvider<Type, Props, Attributes<string, Props>>;
+    }),
+  );

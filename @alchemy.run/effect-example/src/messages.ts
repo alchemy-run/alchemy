@@ -1,5 +1,5 @@
-import * as Alchemy from "@alchemy.run/effect";
-import * as AWS from "@alchemy.run/effect-aws";
+import * as Lambda from "@alchemy.run/effect-aws/lambda";
+import * as SQS from "@alchemy.run/effect-aws/sqs";
 import * as Effect from "effect/Effect";
 import * as S from "effect/Schema";
 
@@ -10,7 +10,7 @@ export const Message = S.Struct({
 });
 
 // resource declaration
-export class Messages extends AWS.SQS.Queue("messages", {
+export class Messages extends SQS.Queue("messages", {
   fifo: true,
   message: Message,
 }) {}
@@ -25,13 +25,4 @@ export const consumer = Messages.consume(
 );
 
 // runtime handler
-export default consumer.pipe(
-  Effect.provide(AWS.SQS.clientFromEnv),
-  AWS.Lambda.toHandler,
-);
-
-// infrastructure
-export class Consumer extends AWS.Lambda.make(consumer, {
-  main: import.meta.file,
-  policy: Alchemy.bound(AWS.SQS.Consume(Messages)),
-}) {}
+export default consumer.pipe(SQS.clientFromEnv(), Lambda.toHandler);

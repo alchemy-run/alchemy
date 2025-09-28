@@ -17,18 +17,19 @@ export class EnvironmentVariableNotSet extends Data.TaggedError(
   variable: string;
 }> {}
 
-export const fromEnv = Layer.effect(
-  Region,
-  Effect.gen(function* () {
-    const region = process.env.AWS_REGION;
-    if (!region) {
-      return yield* Effect.fail(
-        new EnvironmentVariableNotSet({
-          message: "AWS_REGION is not set",
-          variable: "AWS_REGION",
-        }),
-      );
-    }
-    return region;
-  }),
-);
+export const fromEnv = () =>
+  Layer.effect(
+    Region,
+    Effect.gen(function* () {
+      const region = process.env.AWS_REGION;
+      if (!region) {
+        return yield* Effect.fail(
+          new EnvironmentVariableNotSet({
+            message: "AWS_REGION is not set",
+            variable: "AWS_REGION",
+          }),
+        );
+      }
+      return region;
+    }),
+  );

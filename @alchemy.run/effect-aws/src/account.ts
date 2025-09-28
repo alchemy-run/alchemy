@@ -16,19 +16,20 @@ export class AccountID extends Context.Tag("AWS::AccountID")<
   string
 >() {}
 
-export const fromIdentity = Layer.effect(
-  AccountID,
-  Effect.gen(function* () {
-    const sts = yield* STS.STSClient;
-    const identity = yield* sts.getCallerIdentity({}).pipe(
-      Effect.catchAll(
-        (err) =>
-          new FailedToGetAccount({
-            message: "Failed to look up account ID",
-            cause: err,
-          }),
-      ),
-    );
-    return identity.Account!;
-  }),
-);
+export const fromIdentity = () =>
+  Layer.effect(
+    AccountID,
+    Effect.gen(function* () {
+      const sts = yield* STS.STSClient;
+      const identity = yield* sts.getCallerIdentity({}).pipe(
+        Effect.catchAll(
+          (err) =>
+            new FailedToGetAccount({
+              message: "Failed to look up account ID",
+              cause: err,
+            }),
+        ),
+      );
+      return identity.Account!;
+    }),
+  );

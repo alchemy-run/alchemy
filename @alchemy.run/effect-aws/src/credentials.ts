@@ -3,6 +3,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 
+// TODO(sam): AWS does not publish ESM, so these do not tree shake
+// however, in Lambda we can mark them as external to avoid bundling them
 import {
   fromContainerMetadata as _fromContainerMetadata,
   fromEnv as _fromEnv,
@@ -47,25 +49,25 @@ const createLayer = (provider: (config: {}) => AwsCredentialIdentityProvider) =>
     }),
   );
 
-export const fromEnv = createLayer(_fromEnv);
+export const fromEnv = () => createLayer(_fromEnv);
 
-export const fromChain = createLayer(_fromNodeProviderChain);
+export const fromChain = () => createLayer(_fromNodeProviderChain);
 
-export const fromSSO = createLayer(_fromSSO);
+export const fromSSO = () => createLayer(_fromSSO);
 
-export const fromIni = createLayer(_fromIni);
+export const fromIni = () => createLayer(_fromIni);
 
-export const fromContainerMetadata = createLayer(_fromContainerMetadata);
+export const fromContainerMetadata = () => createLayer(_fromContainerMetadata);
 
-export const fromHttp = createLayer(_fromHttp);
+export const fromHttp = () => createLayer(_fromHttp);
 
 export const fromInstanceMetadata = (
   ...parameters: Parameters<typeof _fromInstanceMetadata>
 ) => createLayer(() => _fromInstanceMetadata(...parameters));
 
-export const fromProcess = createLayer(_fromProcess);
+export const fromProcess = () => createLayer(_fromProcess);
 
-export const fromTokenFile = createLayer(_fromTokenFile);
+export const fromTokenFile = () => createLayer(_fromTokenFile);
 
 export const fromWebToken = (...parameters: Parameters<typeof _fromWebToken>) =>
   createLayer(() => _fromWebToken(...parameters));

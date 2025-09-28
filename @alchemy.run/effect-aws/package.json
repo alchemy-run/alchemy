@@ -22,22 +22,51 @@
       "bun": "./src/index.ts",
       "import": "./lib/index.js",
       "types": "./lib/index.d.ts"
+    },
+    "./lambda": {
+      "bun": "./src/lambda.ts",
+      "import": "./lib/lambda.js",
+      "types": "./lib/lambda.d.ts"
+    },
+    "./function": {
+      "bun": "./src/function.ts",
+      "import": "./lib/function.js",
+      "types": "./lib/function.d.ts"
+    },
+    "./sqs": {
+      "bun": "./src/sqs.ts",
+      "import": "./lib/sqs.js",
+      "types": "./lib/sqs.d.ts"
+    },
+    "./sts": {
+      "bun": "./src/sts.ts",
+      "import": "./lib/sts.js",
+      "types": "./lib/sts.d.ts"
+    },
+    "./iam": {
+      "bun": "./src/iam.ts",
+      "import": "./lib/iam.js",
+      "types": "./lib/iam.d.ts"
+    },
+    "./credentials": {
+      "bun": "./src/credentials.ts",
+      "import": "./lib/credentials.js",
+      "types": "./lib/credentials.d.ts"
     }
   },
   "peerDependencies": {
     "@alchemy.run/effect": "workspace:*",
     "@effect/platform-node": "*",
-    "@effect/platform": "*",
-    "alchemy": "workspace:*"
+    "@effect/platform": "*"
   },
   "dependencies": {
     "@aws-sdk/credential-providers": "^3.0.0",
     "@clack/prompts": "^0.11.0",
+    "@rspack/core": "^1.5.7",
     "@smithy/node-config-provider": "^4.0.0",
     "@types/aws-lambda": "^8.10.152",
     "aws4fetch": "^1.0.20",
     "effect": "^3.17.14",
-    "esbuild": "^0.25.1",
     "fast-xml-parser": "^5.2.5",
     "itty-aws": "^0.3.6",
     "picocolors": "^1.1.1",

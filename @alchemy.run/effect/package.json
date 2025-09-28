@@ -10,7 +10,6 @@
     "directory": "alchemy"
   },
   "type": "module",
-  "module": "./lib/index.js",
   "sideEffects": false,
   "files": [
     "bin",
@@ -25,8 +24,7 @@
     }
   },
   "peerDependencies": {
-    "@effect/platform": "*",
-    "alchemy": "workspace:*"
+    "@effect/platform": "*"
   },
   "dependencies": {
     "effect": "^3.17.14"
