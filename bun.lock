@@ -55,6 +55,7 @@
         "unenv": "2.0.0-rc.19",
         "ws": "^8.18.3",
         "yaml": "^2.0.0",
+        "zod": "^4.0.10",
       },
       "devDependencies": {
         "@astrojs/cloudflare": "^12.6.4",
@@ -108,7 +109,6 @@
         "typescript": "catalog:",
         "undici": "^7.14.0",
         "wrangler": "^4.27.0",
-        "zod": "^4.0.10",
       },
       "peerDependencies": {
         "@astrojs/cloudflare": "^12.6.4",
