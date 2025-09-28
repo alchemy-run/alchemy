@@ -18,7 +18,7 @@ import type {
   MultiStepMigration,
   SingleStepMigration,
 } from "./worker-migration.ts";
-import type { AssetsConfig, WorkerProps } from "./worker.ts";
+import { isWorker, type AssetsConfig, type WorkerProps } from "./worker.ts";
 
 /**
  * Metadata returned by Cloudflare API for a worker script
@@ -203,6 +203,7 @@ export interface WorkerMetadata {
   limits?: {
     cpu_ms?: number;
   };
+  tail_consumers?: Array<Worker | { service: string }>;
 }
 
 export async function prepareWorkerMetadata(
@@ -317,6 +318,9 @@ export async function prepareWorkerMetadata(
   const meta: WorkerMetadata = {
     compatibility_date: props.compatibilityDate,
     compatibility_flags: props.compatibilityFlags,
+    tail_consumers: props.tailConsumers?.map((consumer) =>
+      isWorker(consumer) ? { service: consumer.name } : consumer,
+    ),
     bindings: [],
     observability: {
       enabled: props.observability?.enabled !== false,

@@ -379,10 +379,7 @@ export interface BaseWorkerProps<
   /**
    * Tail consumers that will receive execution logs from this worker
    */
-  tailConsumers?: Array<{
-    /** Name of the tail worker service */
-    service: string;
-  }>;
+  tailConsumers?: Array<Worker | { service: string }>;
 }
 
 export interface InlineWorkerProps<
@@ -1027,12 +1024,6 @@ const _Worker = Resource(
       );
     }
 
-    if (props.tailConsumers) {
-      await api.put(
-        `/accounts/${api.accountId}/workers/scripts/${options.name}/tail`,
-        props.tailConsumers,
-      );
-    }
     await Promise.all(
       options.workflows.map((workflow) =>
         upsertWorkflow(api, {

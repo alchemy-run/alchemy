@@ -11,7 +11,7 @@ import type { DurableObjectNamespace } from "./durable-object-namespace.ts";
 import type { EventSource } from "./event-source.ts";
 import { isQueueEventSource } from "./event-source.ts";
 import { isQueue } from "./queue.ts";
-import type { Worker, WorkerProps } from "./worker.ts";
+import { isWorker, type Worker, type WorkerProps } from "./worker.ts";
 
 type WranglerJsonRateLimit = Omit<WorkerBindingRateLimit, "type"> & {
   type: "rate_limit";
@@ -183,7 +183,12 @@ export async function WranglerJson(
   }
 
   if (worker.tailConsumers && worker.tailConsumers.length > 0) {
-    spec.tail_consumers = worker.tailConsumers;
+    spec.tail_consumers = worker.tailConsumers.map((consumer) => {
+      if (isWorker(consumer)) {
+        return { service: consumer.name };
+      }
+      return { service: consumer.service };
+    });
   }
 
   if (worker.crons && worker.crons.length > 0) {
