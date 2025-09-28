@@ -133,7 +133,9 @@ export const worker = await Worker("api", {
   version: "pr-123",                      // Publish as preview version with label
   dev: { port: 8787 },                    // Local development options (port, remote, tunnel)
   tunnel: true,                           // Expose the worker via a Cloudflare Tunnel.
-  namespace: "dispatch-namespace",        // Dispatch namespace for Workers for Platforms or DispatchNamespace resource
+  namespace: await DispatchNamespace("my-dispatch-ns", {
+    namespace: "production-dispatch"
+  }),                    // Deploy to dispatch namespace (string | DispatchNamespace)
   noBundle: false,                        // Disable bundling (deploy files as-is)
   rules: [{ globs: ["**/*.wasm"] }],      // Additional bundle rules
 });
