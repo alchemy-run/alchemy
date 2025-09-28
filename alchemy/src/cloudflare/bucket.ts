@@ -1,3 +1,4 @@
+import * as mf from "miniflare";
 import { isDeepStrictEqual } from "node:util";
 import type { Context } from "../context.ts";
 import { Resource, ResourceKind } from "../resource.ts";
@@ -15,6 +16,7 @@ import {
   type CloudflareApiOptions,
 } from "./api.ts";
 import { deleteMiniflareBinding } from "./miniflare/delete.ts";
+import { getDefaultPersistPath } from "./miniflare/paths.ts";
 
 export type R2BucketJurisdiction = "default" | "eu" | "fedramp";
 
@@ -414,6 +416,8 @@ export async function R2Bucket(
   id: string,
   props: BucketProps = {},
 ): Promise<R2Bucket> {
+  const scope = Scope.current;
+  const isLocal = scope.local && props.dev?.remote !== true;
   const api = await createCloudflareApi(props);
   const bucket = await _R2Bucket(id, {
     ...props,
@@ -422,14 +426,44 @@ export async function R2Bucket(
       force: Scope.current.local,
     },
   });
+
+  let _miniflare: mf.Miniflare | undefined;
+  const miniflare = () => {
+    if (_miniflare) {
+      return _miniflare;
+    }
+    _miniflare = new mf.Miniflare({
+      script: "",
+      modules: true,
+      defaultPersistRoot: getDefaultPersistPath(scope.rootDir),
+      r2Buckets: [bucket.name],
+      log: process.env.DEBUG ? new mf.Log(mf.LogLevel.DEBUG) : undefined,
+    });
+    scope.onCleanup(async () => _miniflare?.dispose());
+    return _miniflare;
+  };
+  const localBucket = () => miniflare().getR2Bucket(bucket.name);
+
   return {
     ...bucket,
-    head: async (key: string) =>
-      headObject(api, {
+    head: async (key: string) => {
+      if (isLocal) {
+        return (await localBucket()).head(key);
+      }
+      return headObject(api, {
         bucketName: bucket.name,
         key,
-      }),
+      });
+    },
     get: async (key: string) => {
+      if (isLocal) {
+        const result = await (await localBucket()).get(key);
+        if (result) {
+          // cast because workers vs node built-ins
+          return result as unknown as R2Object;
+        }
+        return null;
+      }
       const response = await getObject(api, {
         bucketName: bucket.name,
         key,
@@ -442,15 +476,23 @@ export async function R2Bucket(
         throw await handleApiError(response, "get", "object", key);
       }
     },
-    list: async (options?: R2ListOptions): Promise<R2Objects> =>
-      listObjects(api, bucket.name, {
+    list: async (options?: R2ListOptions): Promise<R2Objects> => {
+      if (isLocal) {
+        return (await localBucket()).list(options);
+      }
+      return listObjects(api, bucket.name, {
         ...options,
         jurisdiction: bucket.jurisdiction,
-      }),
+      });
+    },
     put: async (
       key: string,
       value: PutObjectObject,
     ): Promise<PutR2ObjectResponse> => {
+      if (isLocal) {
+        // @ts-expect-error - node built-ins vs cloudflare built-ins
+        return await (await localBucket()).put(key, value);
+      }
       const response = await putObject(api, {
         bucketName: bucket.name,
         key: key,
@@ -473,11 +515,15 @@ export async function R2Bucket(
         size: Number(body.result.size),
       };
     },
-    delete: async (key: string) =>
-      deleteObject(api, {
+    delete: async (key: string) => {
+      if (isLocal) {
+        await (await localBucket()).delete(key);
+      }
+      return deleteObject(api, {
         bucketName: bucket.name,
         key: key,
-      }),
+      });
+    },
   };
 }
 
