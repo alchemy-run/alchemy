@@ -182,6 +182,10 @@ export async function WranglerJson(
     spec.vars = { ...worker.env };
   }
 
+  if (worker.tailConsumers && worker.tailConsumers.length > 0) {
+    spec.tail_consumers = worker.tailConsumers;
+  }
+
   if (worker.crons && worker.crons.length > 0) {
     spec.triggers = { crons: worker.crons };
   }
@@ -484,6 +488,11 @@ export interface WranglerJsonSpec {
     namespace: string;
     experimental_remote?: boolean;
   }[];
+
+  /**
+   * Tail consumers that will receive execution logs from this worker
+   */
+  tail_consumers?: Array<{ service: string }>;
 
   /**
    * Unsafe bindings section for experimental features

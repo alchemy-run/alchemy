@@ -175,6 +175,7 @@ export interface WorkerDefaultEnvironment extends WorkerEnvironment {
   script: WorkerScriptInfo;
 }
 
+//? (jacob): why is this not using BaseWorkerProps?
 export interface WorkerMetadata {
   compatibility_date: string;
   compatibility_flags?: string[];
