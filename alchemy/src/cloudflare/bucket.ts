@@ -461,7 +461,7 @@ export async function R2Bucket(
         const result = await (await localBucket()).get(key);
         if (result) {
           // cast because workers vs node built-ins
-          return result as unknown as R2Object;
+          return result as unknown as R2ObjectContent;
         }
         return null;
       }
