@@ -950,14 +950,13 @@ export async function updateContainerApplication(
   );
   const result = (await response.json()) as {
     result: ContainerApplicationData;
-    errors: { message: string }[];
+    errors: { message: string; code: number }[];
   };
   if (response.ok) {
     return result.result;
   }
-
   throw Error(
-    `Failed to create container application: ${result.errors?.map((e: { message: string }) => e.message).join(", ") ?? "Unknown error"}`,
+    `Failed to create container application: ${result.errors?.map((e) => `[${e.code}] ${e.message}`).join(", ") ?? "Unknown error"}`,
   );
 }
 

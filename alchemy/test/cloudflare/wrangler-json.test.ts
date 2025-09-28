@@ -499,10 +499,13 @@ describe("WranglerJson Resource", () => {
         await fs.mkdir(tempDir, { recursive: true });
         await fs.writeFile(entrypoint, esmWorkerScript);
 
-        const r2Bucket = await R2Bucket(`${BRANCH_PREFIX}-test-r2-bucket`, {
-          name: `${BRANCH_PREFIX}-test-r2-bucket`,
-          adopt: true,
-        });
+        const r2Bucket = await R2Bucket(
+          `${BRANCH_PREFIX}-test-r2-bucket-preview`,
+          {
+            name: `${BRANCH_PREFIX}-test-r2-bucket-preview`,
+            adopt: true,
+          },
+        );
 
         const worker = await Worker(name, {
           name,
@@ -537,11 +540,14 @@ describe("WranglerJson Resource", () => {
         await fs.mkdir(tempDir, { recursive: true });
         await fs.writeFile(entrypoint, esmWorkerScript);
 
-        const r2Bucket = await R2Bucket(`${BRANCH_PREFIX}-test-r2-bucket`, {
-          name: `${BRANCH_PREFIX}-test-r2-bucket`,
-          jurisdiction: "eu",
-          adopt: true,
-        });
+        const r2Bucket = await R2Bucket(
+          `${BRANCH_PREFIX}-test-r2-bucket-jurisdiction`,
+          {
+            name: `${BRANCH_PREFIX}-test-r2-bucket-jurisdiction`,
+            jurisdiction: "eu",
+            adopt: true,
+          },
+        );
 
         const worker = await Worker(name, {
           name,
