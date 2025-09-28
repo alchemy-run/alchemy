@@ -1,8 +1,8 @@
 import { describe, expect } from "vitest";
-import { alchemy } from "../../src/alchemy";
-import { Worker } from "../../src/cloudflare";
-import { destroy } from "../../src/destroy";
-import "../../src/test/vitest";
+import { alchemy } from "../../src/alchemy.ts";
+import { Worker } from "../../src/cloudflare/index.ts";
+import { destroy } from "../../src/destroy.ts";
+import "../../src/test/vitest.ts";
 import { BRANCH_PREFIX } from "../util.ts";
 
 const test = alchemy.test(import.meta, {
