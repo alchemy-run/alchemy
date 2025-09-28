@@ -16,7 +16,6 @@ describe("R2Object Resource", async () => {
 
   test("create, update, and delete object", async (scope) => {
     let bucket: R2Bucket | undefined;
-    let textObject: R2Object | undefined;
 
     try {
       // Create a test bucket first
@@ -27,38 +26,30 @@ describe("R2Object Resource", async () => {
       });
 
       // Create a simple text object
-      textObject = await R2Object("test-object", {
-        bucket: bucket,
-        key: "test-file.txt",
-        content: "Hello, R2Object!",
-      });
+      await verify("test-file.txt", "Hello, R2Object!");
+      await verify("test-file.txt", "Updated content!");
+      await verify("new-test-file.txt", "New test file content!");
+      await scope.finalize(); // force replacements to flush
+      await expect(bucket.head("test-file.txt")).resolves.toBeNull();
 
-      expect(textObject.id).toEqual("test-object");
-      expect(textObject.key).toEqual("test-file.txt");
+      async function verify(key: string, content: string) {
+        const object = await R2Object("test-object", {
+          bucket: bucket!,
+          key,
+          content,
+        });
+        expect(object.id).toEqual("test-object");
+        expect(object.key).toEqual(key);
 
-      // Verify object exists in bucket
-      const headResult = await bucket.head("test-file.txt");
-      expect(headResult).toBeDefined();
-      expect(headResult?.size).toBeGreaterThan(0);
+        // Verify object exists in bucket
+        const headResult = await bucket!.head(key);
+        expect(headResult).toBeDefined();
+        expect(headResult?.size).toBeGreaterThan(0);
 
-      // Get and verify content
-      const getResult = await bucket.get("test-file.txt");
-      const content = await getResult?.text();
-      expect(content).toEqual("Hello, R2Object!");
-
-      // Update the object with new content
-      textObject = await R2Object("test-object", {
-        bucket: bucket,
-        key: "test-file.txt",
-        content: "Updated content!",
-      });
-
-      expect(textObject.key).toEqual("test-file.txt");
-
-      // Verify updated content
-      const updatedResult = await bucket.get("test-file.txt");
-      const updatedContent = await updatedResult?.text();
-      expect(updatedContent).toEqual("Updated content!");
+        // Get and verify content
+        const getResult = await bucket!.get(key);
+        expect(await getResult?.text()).toEqual(content);
+      }
     } catch (err) {
       console.log(err);
       throw err;
@@ -115,27 +106,26 @@ describe("R2Object Resource", async () => {
         empty: true,
       });
 
-      // Create binary content (ArrayBuffer)
-      const binaryData = new ArrayBuffer(1024);
-      const view = new Uint8Array(binaryData);
-      view.fill(42); // Fill with some test data
+      const key = "data/binary.bin2";
 
       const binaryObject = await R2Object("binary-file", {
-        bucket: bucket,
-        key: "data/binary.bin",
-        content: binaryData,
+        bucket,
+        key,
+        content: createBuf(42),
       });
 
-      expect(binaryObject.key).toEqual("data/binary.bin");
+      expect(binaryObject.key).toEqual(key);
 
       // Verify binary content
-      const result = await bucket.get("data/binary.bin");
-      const retrievedBuffer = await result?.arrayBuffer();
-      expect(retrievedBuffer?.byteLength).toEqual(1024);
+      await testBinary(bucket, key, 42);
 
-      const retrievedView = new Uint8Array(retrievedBuffer!);
-      expect(retrievedView[0]).toEqual(42);
-      expect(retrievedView[500]).toEqual(42);
+      await R2Object("binary-file", {
+        bucket,
+        key,
+        content: createBuf(24),
+      });
+
+      await testBinary(bucket, key, 24);
     } catch (err) {
       console.log(err);
       throw err;
@@ -144,3 +134,21 @@ describe("R2Object Resource", async () => {
     }
   });
 });
+
+function createBuf(value: number) {
+  const binaryData = new ArrayBuffer(1024);
+  const view = new Uint8Array(binaryData);
+  view.fill(Math.floor(value)); // Fill with some test data
+
+  return binaryData;
+}
+
+async function testBinary(bucket: R2Bucket, key: string, value: number) {
+  const result = await bucket.get(key);
+  const retrievedBuffer = await result?.arrayBuffer();
+  expect(retrievedBuffer?.byteLength).toEqual(1024);
+
+  const retrievedView = new Uint8Array(retrievedBuffer!);
+  expect(retrievedView[0]).toEqual(value);
+  expect(retrievedView[500]).toEqual(value);
+}

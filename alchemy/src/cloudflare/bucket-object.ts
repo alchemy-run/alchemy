@@ -1,7 +1,7 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { createCloudflareApi, type CloudflareApiOptions } from "./api.ts";
-import { type R2Bucket, deleteObject, type PutObjectObject } from "./bucket.ts";
+import { deleteObject, type PutObjectObject, type R2Bucket } from "./bucket.ts";
 
 /**
  * Properties for creating or updating an R2 Object
@@ -38,6 +38,11 @@ export interface R2Object {
    * The key (path/name) of the object within the bucket
    */
   key: string;
+
+  /**
+   * The etag of the object
+   */
+  etag: string;
 }
 
 /**
@@ -96,11 +101,16 @@ export const R2Object = Resource(
       });
       return this.destroy();
     } else {
+      if (this.phase === "update" && this.output?.key !== props.key) {
+        this.replace();
+      }
       // Create or update the object in the bucket
-      await props.bucket.put(props.key, props.content);
+      const response = await props.bucket.put(props.key, props.content);
+
       return {
         id,
         key: props.key,
+        etag: response.etag,
       };
     }
   },

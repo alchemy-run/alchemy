@@ -1127,7 +1127,9 @@ export type PutObjectObject =
   | ReadableStream
   | ArrayBuffer
   | ArrayBufferView
+  | Uint8Array
   | string
+  | Buffer
   | Blob;
 
 export async function putObject(
