@@ -436,13 +436,13 @@ export async function R2Bucket(
       script: "",
       modules: true,
       defaultPersistRoot: getDefaultPersistPath(scope.rootDir),
-      r2Buckets: [bucket.name],
+      r2Buckets: [bucket.dev.id],
       log: process.env.DEBUG ? new mf.Log(mf.LogLevel.DEBUG) : undefined,
     });
     scope.onCleanup(async () => _miniflare?.dispose());
     return _miniflare;
   };
-  const localBucket = () => miniflare().getR2Bucket(bucket.name);
+  const localBucket = () => miniflare().getR2Bucket(bucket.dev.id);
 
   return {
     ...bucket,
@@ -550,7 +550,7 @@ const _R2Bucket = Resource(
     props: BucketProps = {},
   ): Promise<_R2Bucket> {
     const bucketName =
-      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
+      props.name ?? (this.output?.name || this.scope.createPhysicalName(id));
 
     if (this.phase === "update" && this.output?.name !== bucketName) {
       this.replace();
