@@ -190,11 +190,21 @@ export default {
 Type augmentation example (project-wide types):
 ```ts
 // env.d.ts
-import type { worker } from "./alchemy.run";
+import type { worker } from "./alchemy.run.ts";
+
+export type WorkerEnv = typeof worker.Env;
 
 declare module "cloudflare:workers" {
   namespace Cloudflare {
-    interface Env extends typeof worker.Env {}
+    export interface Env extends WorkerEnv {}
+  }
+}
+```
+And register `env.d.ts` in your `tsconfig.json`'s types.
+```json
+{
+  "compilerOptions": {
+    "types": ["@cloudflare/workers-types", "./src/env.d.ts"]
   }
 }
 ```
