@@ -3,7 +3,7 @@ import { alchemy } from "../../src/alchemy";
 import { Worker } from "../../src/cloudflare";
 import { destroy } from "../../src/destroy";
 import "../../src/test/vitest";
-import { BRANCH_PREFIX } from "../util";
+import { BRANCH_PREFIX } from "../util.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
