@@ -350,14 +350,7 @@ export interface WranglerJsonSpec {
    */
   queues?: {
     producers?: { queue: string; binding: string }[];
-    consumers?: {
-      queue: string;
-      max_batch_size?: number;
-      max_concurrency?: number;
-      max_retries?: number;
-      max_batch_timeout?: number;
-      retry_delay?: number;
-    }[];
+    consumers?: QueueConsumerWranglerJson[];
   };
 
   /**
@@ -501,6 +494,18 @@ export interface WranglerJsonSpec {
 }
 
 /**
+ * Queue consumer bindings for wrangler.json
+ */
+interface QueueConsumerWranglerJson {
+  queue: string;
+  max_batch_size?: number;
+  max_concurrency?: number;
+  max_retries?: number;
+  max_batch_timeout?: number;
+  retry_delay?: number;
+}
+
+/**
  * Process worker bindings into wrangler.json format
  */
 function processBindings(
@@ -554,14 +559,7 @@ function processBindings(
   }[] = [];
   const queues: {
     producers: { queue: string; binding: string }[];
-    consumers: {
-      queue: string;
-      max_batch_size?: number;
-      max_concurrency?: number;
-      max_retries?: number;
-      max_batch_timeout?: number;
-      retry_delay?: number;
-    }[];
+    consumers: QueueConsumerWranglerJson[];
   } = {
     producers: [],
     consumers: [],
