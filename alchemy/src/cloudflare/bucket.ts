@@ -255,7 +255,7 @@ export type R2ObjectMetadata = {
   size: number;
 };
 
-export type R2Object = R2ObjectMetadata & {
+export type R2ObjectContent = R2ObjectMetadata & {
   arrayBuffer(): Promise<ArrayBuffer>;
   bytes(): Promise<Uint8Array>;
   text(): Promise<string>;
@@ -286,7 +286,7 @@ export type R2Objects = {
 
 export type R2Bucket = _R2Bucket & {
   head(key: string): Promise<R2ObjectMetadata | null>;
-  get(key: string): Promise<R2Object | null>;
+  get(key: string): Promise<R2ObjectContent | null>;
   put(
     key: string,
     value:
@@ -541,7 +541,7 @@ export async function R2Bucket(
   };
 }
 
-const parseR2Object = (key: string, response: Response): R2Object => ({
+const parseR2Object = (key: string, response: Response): R2ObjectContent => ({
   etag: response.headers.get("ETag")!,
   uploaded: parseDate(response.headers),
   key,
