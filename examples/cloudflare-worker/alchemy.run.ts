@@ -6,6 +6,7 @@ import {
   Worker,
   Workflow,
 } from "alchemy/cloudflare";
+import fs from "node:fs/promises";
 import type { HelloWorldDO } from "./src/do.ts";
 import type MyRPC from "./src/rpc.ts";
 
@@ -58,6 +59,16 @@ await bucket.put("test.txt", "Hello, world!");
 const content = await (await bucket.get("test.txt"))?.text();
 
 if (content !== "Hello, world!") {
+  throw new Error("Content is not correct");
+}
+
+const testFile = await fs.readFile("test-file.txt");
+
+await bucket.put("test-file.txt", testFile);
+
+const testFileContent = await (await bucket.get("test-file.txt"))?.text();
+
+if (testFileContent !== testFile.toString()) {
   throw new Error("Content is not correct");
 }
 

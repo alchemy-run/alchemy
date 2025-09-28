@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import type { Context } from "../context.ts";
 import { Resource, ResourceKind } from "../resource.ts";
 import { Scope } from "../scope.ts";
+import { streamToBuffer } from "../serde.ts";
 import { isRetryableError } from "../state/r2-rest-state-store.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
@@ -491,7 +492,20 @@ export async function R2Bucket(
     ): Promise<PutR2ObjectResponse> => {
       if (isLocal) {
         // @ts-expect-error - node built-ins vs cloudflare built-ins
-        return await (await localBucket()).put(key, value);
+        return await (await localBucket()).put(
+          key,
+          typeof value === "string"
+            ? value
+            : Buffer.isBuffer(value) ||
+                value instanceof Uint8Array ||
+                value instanceof ArrayBuffer
+              ? new Uint8Array(value)
+              : value instanceof Blob
+                ? new Uint8Array(await value.arrayBuffer())
+                : value instanceof ReadableStream
+                  ? new Uint8Array(await streamToBuffer(value))
+                  : value,
+        );
       }
       const response = await putObject(api, {
         bucketName: bucket.name,
