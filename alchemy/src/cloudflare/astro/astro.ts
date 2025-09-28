@@ -3,7 +3,12 @@ import { getPackageManagerRunner } from "../../util/detect-package-manager.ts";
 import type { Assets } from "../assets.ts";
 import type { Bindings } from "../bindings.ts";
 import { withSkipPathValidation } from "../miniflare/paths.ts";
-import { spreadBuildProps, spreadDevProps, Website, type WebsiteProps } from "../website.ts";
+import {
+  spreadBuildProps,
+  spreadDevProps,
+  Website,
+  type WebsiteProps,
+} from "../website.ts";
 import type { Worker } from "../worker.ts";
 
 /**
