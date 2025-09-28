@@ -119,6 +119,10 @@ export async function serialize(
         .filter((prop) => prop === "env")
         .map((prop) => [prop, (value as any)[prop]]),
     );
+  } else if (isBinary(value)) {
+    return {
+      "@buffer": await serializeBinary(value),
+    };
   } else if (value && typeof value === "object") {
     for (const symbol of Object.getOwnPropertySymbols(value)) {
       assertNotUniqueSymbol(symbol);
@@ -195,6 +199,8 @@ export async function deserialize(
       return parseSymbol(value["@symbol"]);
     } else if ("@scope" in value) {
       return scope;
+    } else if ("@buffer" in value) {
+      return Buffer.from(value["@buffer"], "base64");
     }
 
     return Object.fromEntries(
@@ -226,4 +232,48 @@ function assertNotUniqueSymbol(symbol: Symbol) {
   ) {
     throw new Error(`Cannot serialize unique symbol: ${symbol.description}`);
   }
+}
+
+export const isBinary = (
+  value: any,
+): value is Buffer | Uint8Array | ArrayBuffer | Blob | ReadableStream => {
+  return (
+    value instanceof Buffer ||
+    value instanceof Uint8Array ||
+    value instanceof ArrayBuffer ||
+    value instanceof Blob ||
+    value instanceof ReadableStream ||
+    ArrayBuffer.isView(value)
+  );
+};
+
+export const serializeBinary = async (
+  value: Buffer | Uint8Array | ArrayBuffer | Blob | ReadableStream,
+): Promise<string> => {
+  return value instanceof Buffer
+    ? value.toString("base64")
+    : value instanceof Uint8Array
+      ? value.toString("base64")
+      : value instanceof ArrayBuffer
+        ? serializeBinary(Buffer.from(value))
+        : value instanceof Blob
+          ? serializeBinary(await value.arrayBuffer())
+          : value instanceof ReadableStream
+            ? serializeBinary(await streamToBuffer(value))
+            : value;
+};
+
+async function streamToBuffer(
+  stream: ReadableStream<Uint8Array>,
+): Promise<Buffer> {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+
+  return Buffer.concat(chunks);
 }
