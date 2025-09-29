@@ -12,7 +12,13 @@ import * as fs from "fs-extra";
 import { parse as parseJsonc } from "jsonc-parse";
 import { dirname, relative, resolve } from "node:path";
 import pc from "picocolors";
-import { IndentationText, Node, Project, QuoteKind } from "ts-morph";
+import {
+  IndentationText,
+  Node,
+  Project,
+  QuoteKind,
+  type CallExpression,
+} from "ts-morph";
 import z from "zod";
 import { detectPackageManager } from "../../src/util/detect-package-manager.ts";
 import type { DependencyVersionMap } from "../constants.ts";
@@ -1283,14 +1289,40 @@ async function updateTanStackViteConfig(context: InitContext): Promise<void> {
     const exportAssignment = sourceFile.getExportAssignment(
       (d) => !d.isExportEquals(),
     );
-    if (!exportAssignment) return;
+    if (!exportAssignment) {
+      throw new Error("vite.config.ts does not contain a default export");
+    }
 
-    const defineConfigCall = exportAssignment.getExpression();
+    let defineConfigCall: CallExpression | undefined;
+    const exportExpression = exportAssignment.getExpression();
+
+    // Check if it's a direct defineConfig call
     if (
-      !Node.isCallExpression(defineConfigCall) ||
-      defineConfigCall.getExpression().getText() !== "defineConfig"
-    )
-      return;
+      Node.isCallExpression(exportExpression) &&
+      exportExpression.getExpression().getText() === "defineConfig"
+    ) {
+      defineConfigCall = exportExpression;
+    }
+    // Check if it's an alias (identifier) that references a defineConfig call
+    else if (Node.isIdentifier(exportExpression)) {
+      const variableName = exportExpression.getText();
+      const variableDeclaration =
+        sourceFile.getVariableDeclaration(variableName);
+
+      if (variableDeclaration) {
+        const initializer = variableDeclaration.getInitializer();
+        if (
+          Node.isCallExpression(initializer) &&
+          initializer.getExpression().getText() === "defineConfig"
+        ) {
+          defineConfigCall = initializer;
+        }
+      }
+    }
+
+    if (!defineConfigCall) {
+      throw new Error("vite.config.ts does not contain a defineConfig call");
+    }
 
     let configObject = defineConfigCall.getArguments()[0];
     if (!configObject) {
