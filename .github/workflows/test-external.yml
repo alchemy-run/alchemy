@@ -1,0 +1,45 @@
+name: External Check
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+
+# Ensure only one workflow runs at a time
+concurrency:
+  group: "tests-${{ github.ref }}"
+  cancel-in-progress: false
+
+jobs:
+  test:
+    if: github.event.pull_request.head.repo.fork == true
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # node is needed for vitest
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          bun install
+
+      - name: Check Types and Lint
+        run: |
+          bun run build
+          bun run check
+          cd example-monorepo
