@@ -550,17 +550,17 @@ describe("R2 Bucket Resource", async () => {
       const testKey = "test-object.txt";
       const testContent = "{ \"name\": \"test\" }";
       await bucket.put(testKey, testContent, {
-        headers: {
-          "Content-Type": "application/json",
+        httpMetadata: {
+          contentType: "application/json",
         },
       });
 
       let obj = await bucket.head(testKey);
-      expect(obj?.contentType).toEqual("application/json");
+      expect(obj?.httpMetadata?.contentType).toEqual("application/json");
 
       const getObj = await bucket.get(testKey);
       await expect(getObj?.text()).resolves.toEqual(testContent);
-      await expect(getObj?.contentType).toEqual(
+      expect(getObj?.httpMetadata?.contentType).toEqual(
         "application/json",
       );
     } finally {
