@@ -1,0 +1,13 @@
+{
+  "projectName": "cloudflare-tanstack-start",
+  "mode": "file-router",
+  "typescript": true,
+  "tailwind": true,
+  "packageManager": "bun",
+  "git": true,
+  "version": 1,
+  "framework": "react-cra",
+  "chosenAddOns": [
+    "start"
+  ]
+}

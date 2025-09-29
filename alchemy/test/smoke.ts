@@ -72,7 +72,6 @@ const initVariants = {
 
 const skippedExamples = [
   "aws-app",
-  "cloudflare-tanstack-start",
   // TODO(sam): re-enable. Right now it might be too slow and doesn't have dev mode
   "planetscale-drizzle",
   "planetscale-postgres",
