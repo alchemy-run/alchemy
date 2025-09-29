@@ -334,6 +334,7 @@ export async function Website<B extends Bindings>(
         // NOTE: we must set this to ensure the user does not accidentally set `NODE_ENV=production`
         // which breaks `vite dev` (it won't, for example, re-write `process.env.TSS_APP_BASE` in the `.js` client side bundle)
         NODE_ENV: "development",
+        ALCHEMY_ROOT: Scope.current.rootDir,
       },
     });
   }
