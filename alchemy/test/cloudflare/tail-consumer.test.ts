@@ -1,6 +1,7 @@
 import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
-import { Worker } from "../../src/cloudflare/index.ts";
+import { createCloudflareApi, Worker } from "../../src/cloudflare/index.ts";
+import { getWorkerSettings } from "../../src/cloudflare/worker-metadata.ts";
 import { destroy } from "../../src/destroy.ts";
 import "../../src/test/vitest.ts";
 import { BRANCH_PREFIX } from "../util.ts";
@@ -8,6 +9,8 @@ import { BRANCH_PREFIX } from "../util.ts";
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });
+
+const api = await createCloudflareApi();
 
 describe("Worker tail consumers", () => {
   const testId = `${BRANCH_PREFIX}-tail-consumer`;
@@ -33,6 +36,14 @@ describe("Worker tail consumers", () => {
         { service: consumerWorker.name },
       ]);
       expect(producerWorker.name).toBeTruthy();
+
+      const producerWorkerSettings = await getWorkerSettings(
+        api,
+        producerWorker.name,
+      );
+      expect(producerWorkerSettings).toMatchObject({
+        tail_consumers: [{ service: consumerWorker.name }],
+      });
     } finally {
       await destroy(scope);
     }
@@ -57,6 +68,14 @@ describe("Worker tail consumers", () => {
 
       expect(producerWorker.tailConsumers).toMatchObject([consumerWorker]);
       expect(producerWorker.name).toBeTruthy();
+
+      const producerWorkerSettings = await getWorkerSettings(
+        api,
+        producerWorker.name,
+      );
+      expect(producerWorkerSettings).toMatchObject({
+        tail_consumers: [{ service: consumerWorker.name }],
+      });
     } finally {
       await destroy(scope);
     }

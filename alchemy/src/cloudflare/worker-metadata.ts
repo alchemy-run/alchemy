@@ -670,6 +670,7 @@ interface WorkerSettings {
   compatibility_date: string;
   compatibility_flags: string[];
   migrations: SingleStepMigration | MultiStepMigration;
+  tail_consumers: { service: string }[];
   tags: string[];
   [key: string]: any;
 }
