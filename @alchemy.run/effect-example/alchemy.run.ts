@@ -1,4 +1,4 @@
-import path from "node:path";
+import { join } from "node:path";
 
 import * as AlchemyCLI from "@alchemy.run/effect-cli";
 import { NodeContext } from "@effect/platform-node";
@@ -9,25 +9,35 @@ import * as AWS from "@alchemy.run/effect-aws";
 import * as Lambda from "@alchemy.run/effect-aws/lambda";
 import * as SQS from "@alchemy.run/effect-aws/sqs";
 
-import { api, Messages } from "./src/index.ts";
+import { attach } from "@alchemy.run/effect";
+import { api, consumer, Messages } from "./src/index.ts";
 
 // TODO(sam): combine this with Alchemy.plan to do it all in one-line
 const app = Alchemy.app({ name: "my-iae-app", stage: "dev" });
 
-const src = path.join(import.meta.dirname, "src");
+const src = join(import.meta.dirname, "src");
+
+const f = Lambda.make(api, {
+  main: join(src, "api.ts"),
+  bindings: attach(SQS.SendMessage(Messages)),
+});
+
+const C = Lambda.make(consumer, {
+  main: join(src, "consumer-handler.ts"),
+  bindings: attach(SQS.Consume(Messages)),
+});
 
 const stack = await Alchemy.plan({
   phase: process.argv.includes("--destroy") ? "destroy" : "update",
   resources: [
     Lambda.make(api, {
-      main: path.join(src, "api.ts"),
-      policy: Alchemy.bound(SQS.SendMessage(Messages)),
+      main: join(src, "api.ts"),
+      bindings: attach(SQS.SendMessage(Messages)),
     }),
-    // Consumer
-    // Lambda.make(consumer, {
-    //   main: path.join(src, "consumer-handler.ts"),
-    //   policy: Alchemy.bound(SQS.Consume(Messages)),
-    // }),
+    Lambda.make(consumer, {
+      main: join(src, "consumer-handler.ts"),
+      bindings: attach(SQS.Consume(Messages)),
+    }),
   ],
 }).pipe(
   Alchemy.apply,
@@ -42,6 +52,7 @@ const stack = await Alchemy.plan({
 );
 
 if (stack) {
+  const { api, messages } = stack;
   console.log(stack.api.functionUrl);
 }
 

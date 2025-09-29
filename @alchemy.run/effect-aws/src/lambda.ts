@@ -10,6 +10,9 @@ import * as Schedule from "effect/Schedule";
 import crypto from "node:crypto";
 import path from "node:path";
 
+export type * from "./account.ts";
+export type * from "./region.ts";
+
 export type * as lambda from "aws-lambda";
 
 import {
@@ -17,9 +20,9 @@ import {
   App,
   DotAlchemy,
   type Allow,
-  type AttachAction,
+  type Attach,
   type Binding,
-  type BindingAction,
+  type BindNode,
   type Policy,
   type Resource,
   type Provider as ResourceProvider,
@@ -120,11 +123,11 @@ export const make = <F extends Resource, Req>(
     self: F;
   },
   {
-    policy,
+    bindings,
     main,
     handler,
   }: {
-    policy: NoInfer<Policy<Extract<Req, Statement>>>;
+    bindings: NoInfer<Policy<Extract<Req, Statement>>>;
     main: string;
     handler?: string;
   },
@@ -133,7 +136,7 @@ export const make = <F extends Resource, Req>(
     const self = impl.self;
     return {
       ...(Object.fromEntries(
-        policy.statements.map((statement) => [
+        bindings.statements.map((statement) => [
           statement.resource.id,
           statement.resource,
         ]),
@@ -146,7 +149,7 @@ export const make = <F extends Resource, Req>(
       [self.id]: {
         type: "bound",
         resource: self,
-        bindings: policy.statements,
+        bindings: bindings.statements,
         // TODO(sam): this should be passed to an Effect that interacts with the Provider
         // @ts-expect-error
         props: {
@@ -244,23 +247,22 @@ export const provider = () =>
         policyName: string;
         functionArn: string;
         functionName: string;
-        bindings: BindingAction.Materialized<BindingAction<Bindable>>[];
+        bindings: BindNode<Bindable>[];
       }) {
         let env: Record<string, string> = {};
         const policyStatements: IAM.PolicyStatement[] = [];
 
         for (const binding of bindings) {
-          const upstream = binding.attributes;
           if (binding.action === "attach") {
-            const bound = yield* binding.stmt.bind(
-              {
+            const bound = yield* binding.stmt.bind({
+              host: {
                 functionArn,
                 functionName,
                 env,
               },
               binding,
-              upstream,
-            );
+              resource: binding.attributes,
+            });
             env = { ...env, ...(bound?.env ?? {}) };
             policyStatements.push(...(bound?.policyStatements ?? []));
           } else if (binding.action === "detach") {
@@ -777,19 +779,27 @@ export const invoke = <F extends Function>(func: F, input: any) =>
     });
   });
 
-export type Bindable<S extends Statement = Statement> = S & {
-  bind(
-    func: {
+export type Bindable<
+  S extends Statement = Statement,
+  Err = never,
+  Req = never,
+> = S & {
+  bind(props: {
+    host: {
       functionArn: string;
       functionName: string;
       env: Record<string, string>;
-    },
-    stmt: AttachAction<S>,
-    resource: S["resource"]["attributes"],
-  ): Effect.Effect<{
-    env?: Record<string, string>;
-    policyStatements?: IAM.PolicyStatement[];
-  } | void>;
+    };
+    binding: Attach<S>;
+    resource: S["resource"]["attributes"];
+  }): Effect.Effect<
+    {
+      env?: Record<string, string>;
+      policyStatements?: IAM.PolicyStatement[];
+    } | void,
+    Err,
+    Req
+  >;
 };
 
 const memo = Symbol.for("alchemy::memo");

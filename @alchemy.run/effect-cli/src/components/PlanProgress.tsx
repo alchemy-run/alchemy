@@ -14,7 +14,7 @@ interface PlanTask
 
 export interface PlanProgressProps {
   source: ProgressEventSource;
-  plan: Alchemy.AnyPlan;
+  plan: Alchemy.Plan;
 }
 
 export function PlanProgress(props: PlanProgressProps): React.JSX.Element {

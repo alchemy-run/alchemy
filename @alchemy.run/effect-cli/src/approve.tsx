@@ -12,7 +12,7 @@ import { ApprovePlan } from "./components/ApprovePlan.tsx";
 export const requireApproval = Layer.succeed(
   Alchemy.PlanReviewer,
   Alchemy.PlanReviewer.of({
-    approve: <P extends Alchemy.AnyPlan>(plan: P) =>
+    approve: <P extends Alchemy.Plan>(plan: P) =>
       Effect.gen(function* () {
         let approved = false;
 

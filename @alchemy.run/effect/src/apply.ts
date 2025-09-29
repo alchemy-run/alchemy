@@ -4,7 +4,7 @@ import * as Option from "effect/Option";
 import type { Simplify } from "effect/Types";
 import { type PlanRejected, PlanReviewer } from "./approve.ts";
 import type { ApplyEvent, ApplyStatus } from "./event.ts";
-import type { AnyPlan, BindingAction, Delete, Materialized } from "./plan.ts";
+import type { BindNode, Delete, Plan, ResourceNode } from "./plan.ts";
 import type { SerializedStatement, Statement } from "./policy.ts";
 import type { Resource } from "./resource.ts";
 import { State } from "./state.ts";
@@ -21,11 +21,11 @@ export interface ScopedPlanStatusSession extends PlanStatusSession {
 export class PlanStatusReporter extends Context.Tag("PlanStatusReporter")<
   PlanStatusReporter,
   {
-    start(plan: AnyPlan): Effect.Effect<PlanStatusSession, never>;
+    start(plan: Plan): Effect.Effect<PlanStatusSession, never>;
   }
 >() {}
 
-export const apply = <const P extends AnyPlan, Err, Req>(
+export const apply = <const P extends Plan, Err, Req>(
   plan: Effect.Effect<P, Err, Req>,
 ) =>
   plan.pipe(
@@ -51,8 +51,8 @@ export const apply = <const P extends AnyPlan, Err, Req>(
 
         const apply: (
           node:
-            | (BindingAction<Statement> | SerializedStatement<Statement>)[]
-            | Materialized,
+            | (BindNode<Statement> | SerializedStatement<Statement>)[]
+            | ResourceNode,
         ) => Effect.Effect<any, never, never> = (node) =>
           Effect.gen(function* () {
             if (Array.isArray(node)) {
@@ -94,7 +94,7 @@ export const apply = <const P extends AnyPlan, Err, Req>(
                 ),
               );
 
-            const hydrate = <A extends BindingAction<Statement>>(
+            const hydrate = <A extends BindNode<Statement>>(
               bindings: Statement[],
             ) =>
               node.bindings.map(

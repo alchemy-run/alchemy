@@ -17,6 +17,7 @@ export class Messages extends SQS.Queue("messages", {
 
 // business logic
 export const consumer = Messages.consume(
+  "consumer",
   Effect.fn(function* (batch) {
     for (const record of batch.Records) {
       console.log(record);

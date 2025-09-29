@@ -16,7 +16,9 @@ import { SQS as SQSClient } from "itty-aws/sqs";
 import * as Account from "./account.ts";
 import { createAWSServiceClientLayer } from "./client.ts";
 import * as Credentials from "./credentials.ts";
+import type * as IAM from "./iam.ts";
 import type * as Lambda from "./lambda.ts";
+import { FunctionClient } from "./lambda.ts";
 import * as Region from "./region.ts";
 
 // required to avoid this error in consumers: "The inferred type of 'Messages' cannot be named without a reference to '../../effect-aws/node_modules/@types/aws-lambda'. This is likely not portable. A type annotation is necessary.ts(2742)"
@@ -107,33 +109,47 @@ export const Queue = <ID extends string, P extends Props>(id: ID, props: P) =>
     provider: QueueProvider,
     // phantom
     attributes: undefined! as Attributes<ID, P>,
-    consume<Self, Err, Req>(
+    consume<Self, const ID extends string, Err, Req>(
       this: Self,
+      id: ID,
       consumer: (
         event: lambda.SQSEvent,
         context: lambda.Context,
-      ) => Effect.Effect<lambda.SQSBatchResponse | void, Err, Req>,
+      ) => Effect.Effect<
+        lambda.SQSBatchResponse | void,
+        Err,
+        Req | Consume<Extract<Self, Queue>>
+      >,
     ) {
-      return consume(this, consumer);
+      return consume(id, this, consumer);
     },
   } as const);
 
-export const consume = <Q, Err, Req>(
+export const consume = <const ID extends string, Q, Err, Req>(
+  id: ID,
   queue: Q,
   handler: (
     event: lambda.SQSEvent,
     context: lambda.Context,
   ) => Effect.Effect<lambda.SQSBatchResponse | void, Err, Req>,
-): Consumer<Q, Err, Req> => {
+): Consumer<ID, Q, Err, Req> => {
   const iae = Effect.gen(function* () {
     return handler;
   });
   return Object.assign(iae, {
     self: queue,
-  });
+    id,
+    type: "AWS::SQS::Consumer" satisfies typeof ConsumerProvider.Identifier.Id,
+    props: {
+      // queue,
+    },
+    provider: ConsumerProvider,
+    // phantom
+    attributes: undefined!,
+  } as const);
 };
 
-export type Consumer<Q, Err, Req> = Effect.Effect<
+export type Consumer<ID extends string, Q, Err, Req> = Effect.Effect<
   (
     request: lambda.SQSEvent,
     context: lambda.Context,
@@ -142,10 +158,27 @@ export type Consumer<Q, Err, Req> = Effect.Effect<
   Req | Consume<Extract<Q, Queue>>
 > & {
   self: Q;
-};
+} & Resource<
+    ConsumerProvider["Id"],
+    ID,
+    {
+      // queue: Q;
+    },
+    {
+      eventSourceArn: string;
+    },
+    typeof ConsumerProvider
+  >;
+
+export class ConsumerProvider extends Context.Tag("AWS::SQS::Consumer")<
+  ConsumerProvider,
+  ResourceProvider<"AWS::SQS::Consumer", Props, Attributes<string, Props>>
+>() {}
 
 export type Consume<Q extends Queue = Queue> = Lambda.Bindable<
-  Allow<"sqs:Consume", Q>
+  Allow<"sqs:Consume", Q>,
+  Effect.Effect.Error<ReturnType<typeof bindConsumer>>,
+  Effect.Effect.Context<ReturnType<typeof bindConsumer>>
 >;
 
 export const Consume = <Q extends Queue>(queue: Q): Consume<Q> => ({
@@ -153,23 +186,65 @@ export const Consume = <Q extends Queue>(queue: Q): Consume<Q> => ({
   effect: "Allow",
   action: "sqs:Consume",
   resource: queue,
-  bind: Effect.fn(function* (_func, _action, { queueArn }) {
-    return {
-      policyStatements: [
-        {
-          Effect: "Allow",
-          Action: [
-            "sqs:ReceiveMessage",
-            "sqs:DeleteMessage",
-            "sqs:GetQueueAttributes",
-            "sqs:GetQueueUrl",
-            "sqs:ChangeMessageVisibility",
-          ],
-          Resource: queueArn,
-        },
-      ],
-    };
-  }),
+  bind: bindConsumer,
+});
+
+const bindConsumer = Effect.fn(function* ({
+  host: { functionName },
+  resource: { queueArn },
+}) {
+  const lambda = yield* FunctionClient;
+  const props = {
+    FunctionName: functionName,
+    EventSourceArn: queueArn,
+    Enabled: true,
+    // TODO(sam): support configuring lots of other options
+    Tags: {
+      // TODO
+    },
+  };
+  yield* lambda.createEventSourceMapping(props).pipe(
+    Effect.catchTag("ResourceConflictException", () =>
+      lambda
+        .listEventSourceMappings({
+          FunctionName: functionName,
+          EventSourceArn: queueArn,
+        })
+        .pipe(
+          Effect.flatMap((mappings) =>
+            !mappings.EventSourceMappings?.[0]?.UUID
+              ? Effect.die(
+                  new Error(
+                    `Event source mapping not found for function ${functionName} and queue ${queueArn}`,
+                  ),
+                )
+              : lambda.updateEventSourceMapping({
+                  UUID: mappings.EventSourceMappings?.[0]?.UUID!,
+                  ...props,
+                }),
+          ),
+        ),
+    ),
+    Effect.retry({
+      while: (e) => e.name === "ResourceNotFoundException",
+      schedule: Schedule.fixed(1000),
+    }),
+  );
+  return {
+    policyStatements: [
+      {
+        Effect: "Allow",
+        Action: [
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:GetQueueAttributes",
+          "sqs:GetQueueUrl",
+          "sqs:ChangeMessageVisibility",
+        ],
+        Resource: queueArn,
+      } as const satisfies IAM.PolicyStatement,
+    ],
+  };
 });
 
 export type SendMessage<Q extends Queue = Queue> = Lambda.Bindable<
@@ -181,11 +256,13 @@ export const SendMessage = <Q extends Queue>(queue: Q): SendMessage<Q> => ({
   effect: "Allow",
   action: "sqs:SendMessage",
   resource: queue,
-  bind: Effect.fn(function* (_func, action, { queueUrl, queueArn }) {
-    const key = `${queue.id.toUpperCase().replace(/-/g, "_")}_QUEUE_URL`;
+  bind: Effect.fn(function* ({
+    binding: action,
+    resource: { queueUrl, queueArn },
+  }) {
     return {
       env: {
-        [key]: queueUrl,
+        [`${queue.id.toUpperCase().replace(/-/g, "_")}_QUEUE_URL`]: queueUrl,
       },
       policyStatements: [
         {

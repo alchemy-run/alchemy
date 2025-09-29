@@ -1,6 +1,6 @@
 import type * as Effect from "effect/Effect";
 import type { ScopedPlanStatusSession } from "./apply.ts";
-import type { AttachAction, BindingAction } from "./plan.ts";
+import type { BindNode } from "./plan.ts";
 import type { Statement } from "./policy.ts";
 
 // local dev mode as a Layer?
@@ -42,8 +42,7 @@ export type Provider<
     olds: Input;
     news: Input;
     output: Output;
-    bindings: BindingAction<Stmt>[];
-    session: ScopedPlanStatusSession;
+    bindings: BindNode<Stmt>[];
   }): Effect.Effect<Diff, never, never>;
   // tail();
   // watch();
@@ -51,7 +50,7 @@ export type Provider<
   create(input: {
     id: string;
     news: Input;
-    bindings: BindingAction.Materialized<AttachAction<Stmt>>[];
+    bindings: BindNode<Stmt>[];
     session: ScopedPlanStatusSession;
   }): Effect.Effect<Output, any, never>;
   update(input: {
@@ -59,7 +58,7 @@ export type Provider<
     news: Input;
     olds: Input;
     output: Output;
-    bindings: BindingAction.Materialized<BindingAction<Stmt>>[];
+    bindings: BindNode<Stmt>[];
     session: ScopedPlanStatusSession;
   }): Effect.Effect<Output, any, never>;
   delete(input: {

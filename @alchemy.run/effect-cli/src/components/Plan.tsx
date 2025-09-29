@@ -1,11 +1,11 @@
 // biome-ignore lint/style/useImportType: UMD global
 import React, { useMemo } from "react";
 
-import type { AnyPlan, BindingAction, Materialized } from "@alchemy.run/effect";
+import type { BindNode, Plan, ResourceNode } from "@alchemy.run/effect";
 import { Box, Text } from "ink";
 
 export interface PlanProps {
-  plan: AnyPlan;
+  plan: Plan;
 }
 
 export function Plan({ plan }: PlanProps): React.JSX.Element {
@@ -110,7 +110,7 @@ export function Plan({ plan }: PlanProps): React.JSX.Element {
 
 type Color = Parameters<typeof Text>[0]["color"];
 
-const actionColor = (action: Materialized["action"]): Color =>
+const actionColor = (action: ResourceNode["action"]): Color =>
   ({
     noop: "gray",
     create: "green",
@@ -119,7 +119,7 @@ const actionColor = (action: Materialized["action"]): Color =>
     replace: "orange",
   })[action];
 
-const actionIcon = (action: Materialized["action"]): string =>
+const actionIcon = (action: ResourceNode["action"]): string =>
   ({
     create: "+",
     update: "~",
@@ -129,7 +129,7 @@ const actionIcon = (action: Materialized["action"]): string =>
   })[action];
 
 const bindingActionColor = (
-  action: BindingAction["action"],
+  action: BindNode["action"],
 ): Parameters<typeof Text>[0]["color"] =>
   ({
     attach: "green",
@@ -137,7 +137,7 @@ const bindingActionColor = (
     noop: "gray",
   })[action];
 
-const bindingActionIcon = (action: BindingAction["action"]): string =>
+const bindingActionIcon = (action: BindNode["action"]): string =>
   ({
     attach: "+",
     detach: "-",

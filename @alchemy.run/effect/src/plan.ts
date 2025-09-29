@@ -10,39 +10,52 @@ import type { TagInstance } from "./tag-instance.ts";
 
 export type PlanError = never;
 
-export type AttachAction<Stmt extends Statement = Statement> = {
+/**
+ * A node in the plan that represents a binding operation acting on a resource.
+ */
+export type BindNode<Stmt extends Statement = Statement> =
+  | Attach<Stmt>
+  | Detach<Stmt>
+  | NoopBind<Stmt>;
+
+export type Attach<Stmt extends Statement = Statement> = {
   action: "attach";
   stmt: Stmt;
   olds?: SerializedStatement<Stmt>;
+  attributes: Stmt["resource"]["attributes"];
 };
 
-export type DetachAction<Stmt extends Statement = Statement> = {
+export type Detach<Stmt extends Statement = Statement> = {
   action: "detach";
   stmt: Stmt;
+  attributes: Stmt["resource"]["attributes"];
 };
 
-export type NoopAction<Stmt extends Statement = Statement> = {
+export type NoopBind<Stmt extends Statement = Statement> = {
   action: "noop";
   stmt: Stmt;
+  attributes: Stmt["resource"]["attributes"];
 };
 
-export type BindingAction<Stmt extends Statement = Statement> =
-  | AttachAction<Stmt>
-  | DetachAction<Stmt>
-  | NoopAction<Stmt>;
-
-export declare namespace BindingAction {
-  export type Materialized<A extends BindingAction> = A & {
-    attributes: A["stmt"]["resource"]["attributes"];
-  };
-}
+/**
+ * A node in the plan that represents a resource CRUD operation.
+ */
+export type ResourceNode<
+  R extends Resource = Resource,
+  B extends Statement = Statement,
+> =
+  | Create<R, B>
+  | Update<R, B>
+  | Delete<R, B>
+  | Replace<R, B>
+  | NoopUpdate<R, B>;
 
 export type Create<R extends Resource, B extends Statement = Statement> = {
   action: "create";
   resource: R;
   news: any;
   provider: Provider;
-  bindings: AttachAction<B>[];
+  bindings: Attach<B>[];
   attributes: R["attributes"];
 };
 
@@ -53,11 +66,11 @@ export type Update<R extends Resource, B extends Statement = Statement> = {
   news: any;
   output: any;
   provider: Provider;
-  bindings: BindingAction<B>[];
+  bindings: BindNode<B>[];
   attributes: R["attributes"];
 };
 
-export type Delete<R extends Resource, B extends Statement = Statement> = {
+export type Delete<R extends Resource, _B extends Statement = Statement> = {
   action: "delete";
   resource: R;
   olds: any;
@@ -68,11 +81,11 @@ export type Delete<R extends Resource, B extends Statement = Statement> = {
   downstream: string[];
 };
 
-export type Noop<R extends Resource, B extends Statement = Statement> = {
+export type NoopUpdate<R extends Resource, B extends Statement = Statement> = {
   action: "noop";
   resource: R;
   attributes: R["attributes"];
-  bindings: NoopAction<B>[];
+  bindings: NoopBind<B>[];
 };
 
 export type Replace<R extends Resource, B extends Statement = Statement> = {
@@ -82,36 +95,30 @@ export type Replace<R extends Resource, B extends Statement = Statement> = {
   news: any;
   output: any;
   provider: Provider;
-  bindings: BindingAction<B>[];
+  bindings: BindNode<B>[];
   attributes: R["attributes"];
   deleteFirst?: boolean;
 };
 
-export type Materialized<
-  R extends Resource = Resource,
-  B extends Statement = Statement,
-> = Create<R, B> | Update<R, B> | Delete<R, B> | Replace<R, B> | Noop<R, B>;
+type PlanItem = Effect.Effect<
+  {
+    [id in string]: Binding | Resource;
+  },
+  never,
+  any
+>;
 
-export type Materialize<T, Stmt extends Statement = never> = T extends Binding<
-  infer From,
-  infer Bindings extends Statement
->
-  ? Materialized<From, Bindings | Stmt>
-  : T extends Resource
-    ? Materialized<T, Stmt>
-    : never;
-
-type Apply<
+type ApplyAll<
   Items extends PlanItem[],
-  Accum extends Record<string, Materialized> = {},
+  Accum extends Record<string, ResourceNode> = {},
 > = Items extends [
   infer Head extends PlanItem,
   ...infer Tail extends PlanItem[],
 ]
-  ? Apply<
+  ? ApplyAll<
       Tail,
       Accum & {
-        [id in keyof Effect.Effect.Success<Head>]: Materialize<
+        [id in keyof Effect.Effect.Success<Head>]: Apply<
           Effect.Effect.Success<Head>[id],
           id extends keyof Accum ? Accum[id]["bindings"][number]["stmt"] : never
         >;
@@ -119,38 +126,39 @@ type Apply<
     >
   : Accum;
 
-export type AnyPlan = {
-  [id in string]: Materialized;
-};
+type Apply<T, Stmt extends Statement = never> = T extends Binding<
+  infer From,
+  infer Bindings extends Statement
+>
+  ? ResourceNode<From, Bindings | Stmt>
+  : T extends Resource
+    ? ResourceNode<T, Stmt>
+    : never;
 
-export type Plan<
+type DerivePlan<
   P extends Phase = Phase,
   Resources extends PlanItem[] = PlanItem[],
 > = P extends "update"
   ?
       | {
-          [k in keyof Apply<Resources>]: Apply<Resources>[k];
+          [k in keyof ApplyAll<Resources>]: ApplyAll<Resources>[k];
         }
       | {
-          [k in Exclude<string, keyof Apply<Resources>>]: Delete<
+          [k in Exclude<string, keyof ApplyAll<Resources>>]: Delete<
             Resource,
             Statement
           >;
         }
   : {
-      [k in Exclude<string, keyof Apply<Resources>>]: Delete<
+      [k in Exclude<string, keyof ApplyAll<Resources>>]: Delete<
         Resource,
         Statement
       >;
     };
 
-export type PlanItem = Effect.Effect<
-  {
-    [id in string]: Binding | Resource;
-  },
-  never,
-  any
->;
+export type Plan = {
+  [id in string]: ResourceNode;
+};
 
 export const plan = <
   const Phase extends "update" | "destroy",
@@ -227,7 +235,7 @@ export const plan = <
                               resource,
                               // phantom
                               attributes: undefined!,
-                              bindings: bindings as AttachAction<Statement>[],
+                              bindings: bindings as Attach<Statement>[],
                             } satisfies Create<Resource, Statement>;
                           } else if (provider.diff) {
                             const diff = yield* provider.diff({
@@ -243,7 +251,7 @@ export const plan = <
                                 resource,
                                 // phantom
                                 attributes: undefined!,
-                                bindings: bindings as NoopAction<Statement>[],
+                                bindings: bindings as NoopBind<Statement>[],
                               };
                             } else if (diff.action === "replace") {
                               return {
@@ -288,19 +296,19 @@ export const plan = <
                               resource,
                               // phantom
                               attributes: undefined!,
-                              bindings: bindings as NoopAction<Statement>[],
+                              bindings: bindings as NoopBind<Statement>[],
                             };
                           }
                         }),
                       ),
                     )).map((update) => [update.resource.id, update]),
-                  ) as AnyPlan;
+                  ) as Plan;
                 }),
               ),
             ),
           ) as Effect.Effect<
             {
-              [id in keyof Resources]: Materialize<Resources[id]>;
+              [id in keyof Resources]: Apply<Resources[id]>;
             }, // & DeleteOrphans<keyof Resources>,
             PlanError,
             // | Req
@@ -319,7 +327,7 @@ export const plan = <
               }[keyof Resources]
           >
         : []
-    ).reduce((acc, update: any) => ({ ...acc, ...update }), {} as AnyPlan);
+    ).reduce((acc, update: any) => ({ ...acc, ...update }), {} as Plan);
 
     const deletions = Object.fromEntries(
       (yield* Effect.all(
@@ -381,7 +389,7 @@ export const plan = <
       {} as any,
     );
   }) as Effect.Effect<
-    Plan<Phase, Resources>,
+    DerivePlan<Phase, Resources>,
     never,
     Effect.Effect.Context<Resources[number]> | State
   >;
@@ -404,7 +412,7 @@ const diffBindings = (
   oldState: ResourceState | undefined,
   bindings: Statement[],
 ) => {
-  const actions: BindingAction[] = [];
+  const actions: BindNode[] = [];
   const oldBindings = oldState?.bindings;
   const oldSids = new Set(oldBindings?.map((binding) => binding.sid));
   for (const stmt of bindings) {
@@ -416,12 +424,16 @@ const diffBindings = (
       actions.push({
         action: "attach",
         stmt,
+        // phantom
+        attributes: stmt.resource.attributes,
       });
     } else if (isBindingDiff(oldBinding, stmt)) {
       actions.push({
         action: "attach",
         stmt,
         olds: oldBinding,
+        // phantom
+        attributes: stmt.resource.attributes,
       });
     }
   }
