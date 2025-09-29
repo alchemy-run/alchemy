@@ -14,8 +14,6 @@ concurrency:
 
 jobs:
   test:
-    if: github.event.pull_request.head.repo.fork == false
-
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -40,17 +38,17 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Setup Alchemy Environment
-        uses: ./.github/actions/setup-alchemy
-        if: github.event.pull_request.head.repo.fork == false
-        with:
-          aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: us-west-2
-
       - name: Check Types and Lint
         run: |
           bun run build
           bun run check
+
+      - name: Setup Alchemy Environment
+        uses: ./.github/actions/setup-alchemy
+        if: github.event_name != 'pull_request'
+        with:
+          aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-west-2
 
       - name: Run tests
         if: github.event_name != 'pull_request'
