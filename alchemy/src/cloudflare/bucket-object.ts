@@ -111,7 +111,11 @@ export const R2Object = Resource(
         this.replace();
       }
       // Create or update the object in the bucket
-      const response = await props.bucket.put(props.key, props.content, props.options);
+      const response = await props.bucket.put(
+        props.key,
+        props.content,
+        props.options,
+      );
 
       return {
         id,
