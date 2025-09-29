@@ -271,23 +271,21 @@ export const EvmSmartAccount = Resource(
         owner: ownerAccount,
       });
     } else {
-      // Without adoption, need to check if smart account exists first
+      // Without adoption, create a new smart account
       try {
-        // List accounts and check if a smart account with this name exists
-        await cdp.evm.getSmartAccount({
-          name: accountName,
-          owner: ownerAccount,
-        });
-
-        throw new Error(
-          `Smart account with name '${accountName}' already exists. Use adopt: true to use the existing smart account.`,
-        );
-      } catch (_error: any) {
-        // It doesn't exist, we can create one
         smartAccount = await cdp.evm.createSmartAccount({
           name: accountName,
           owner: ownerAccount,
         });
+      } catch (error: any) {
+        // Provide helpful error message if smart account already exists
+        if (error.errorType === "already_exists") {
+          throw new Error(
+            `Smart account with name '${accountName}' already exists. Use adopt: true to use the existing smart account.`,
+          );
+        }
+        // Rethrow other errors unchanged
+        throw error;
       }
     }
 
