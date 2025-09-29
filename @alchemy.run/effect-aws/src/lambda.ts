@@ -1,3 +1,4 @@
+import { FileSystem } from "@effect/platform";
 import type {
   LambdaFunctionURLEvent,
   LambdaFunctionURLResult,
@@ -14,6 +15,7 @@ export type * as lambda from "aws-lambda";
 import {
   allow,
   App,
+  DotAlchemy,
   type Allow,
   type AttachAction,
   type Binding,
@@ -219,6 +221,8 @@ export const provider = () =>
       const accountId = yield* AccountID;
       const region = yield* Region;
       const app = yield* App;
+      const dotAlchemy = yield* DotAlchemy;
+      const fs = yield* FileSystem.FileSystem;
 
       // const assets = yield* Assets;
 
@@ -327,14 +331,22 @@ export const provider = () =>
         return role;
       });
 
-      const bundleCode = Effect.fn(function* (props: FunctionProviderProps) {
+      const bundleCode = Effect.fn(function* (
+        id: string,
+        props: FunctionProviderProps,
+      ) {
         const handler = props.handler ?? "default";
         let file = path.relative(process.cwd(), props.main);
         if (!file.startsWith(".")) {
           file = `./${file}`;
         }
         const { bundle } = yield* Effect.promise(() => import("./bundle.js"));
-        const code = yield* bundle({
+        const outfile = path.join(
+          dotAlchemy,
+          "out",
+          `${app.name}-${app.stage}-${id}.js`,
+        );
+        yield* bundle({
           // entryPoints: [props.main],
           // we use a virtual entry point so that
           stdin: {
@@ -349,10 +361,18 @@ export const provider = () =>
           target: "node22",
           sourcemap: true,
           treeShaking: true,
-          write: false,
+          write: true,
+          outfile,
+          minify: true,
           external: ["@aws-sdk/*", "@smithy/*"],
         });
-        return code;
+        const code = yield* fs
+          .readFile(outfile)
+          .pipe(Effect.catchAll(Effect.die));
+        return {
+          code,
+          hash: yield* hashCode(code),
+        };
       });
 
       const hashCode = (code: Uint8Array<ArrayBufferLike>) =>
@@ -496,7 +516,7 @@ export const provider = () =>
       });
 
       const summary = ({ code }: { code: Uint8Array<ArrayBufferLike> }) =>
-        `bundle size: ${
+        `${
           code.length >= 1024 * 1024
             ? `${(code.length / (1024 * 1024)).toFixed(2)}MB`
             : code.length >= 1024
@@ -537,9 +557,8 @@ export const provider = () =>
             // url changed
             return { action: "replace" };
           }
-          const bundle = yield* bundleCode(news);
-          const code = bundle.outputFiles?.[0].contents!;
-          if (output.code.hash !== (yield* hashCode(code))) {
+          const { hash } = yield* bundleCode(id, news);
+          if (output.code.hash !== hash) {
             // code changed
             return { action: "update" };
           }
@@ -562,9 +581,7 @@ export const provider = () =>
             bindings,
           });
 
-          const bundle = yield* bundleCode(news);
-
-          const code = bundle.outputFiles?.[0].contents!;
+          const { code, hash } = yield* bundleCode(id, news);
 
           yield* createOrUpdateFunction({
             id,
@@ -592,7 +609,7 @@ export const provider = () =>
             roleName,
             roleArn: role.Role.Arn,
             code: {
-              hash: yield* hashCode(code),
+              hash,
             },
           } satisfies Attributes<string, Props>;
         }),
@@ -617,8 +634,7 @@ export const provider = () =>
             bindings,
           });
 
-          const bundle = yield* bundleCode(news);
-          const code = bundle.outputFiles?.[0].contents!;
+          const { code, hash } = yield* bundleCode(id, news);
 
           yield* createOrUpdateFunction({
             id,
@@ -646,7 +662,7 @@ export const provider = () =>
             roleName,
             roleArn: output.roleArn,
             code: {
-              hash: yield* hashCode(code),
+              hash,
             },
           } satisfies Attributes<string, Props>;
         }),
