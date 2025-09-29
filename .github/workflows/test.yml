@@ -9,12 +9,13 @@ on:
 
 # Ensure only one workflow runs at a time
 concurrency:
-  group: "tests-${{ github.ref }}"
+  group: "tests-${{ github.event.pull_request.number }}"
   cancel-in-progress: false
 
 jobs:
   test:
     if: github.event.pull_request.head.repo.fork == false
+
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -31,8 +32,17 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
       - name: Setup Alchemy Environment
         uses: ./.github/actions/setup-alchemy
+        if: github.event.pull_request.head.repo.fork == false
         with:
           aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: us-west-2
