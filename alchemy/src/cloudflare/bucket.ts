@@ -298,7 +298,7 @@ export type R2Bucket = _R2Bucket & {
       | string
       | null
       | Blob,
-    options?: Pick<R2PutOptions, 'httpMetadata'>,
+    options?: Pick<R2PutOptions, "httpMetadata">,
   ): Promise<PutR2ObjectResponse>;
   delete(key: string): Promise<Response>;
   list(options?: R2ListOptions): Promise<R2Objects>;
@@ -502,7 +502,7 @@ export async function R2Bucket(
     put: async (
       key: string,
       value: PutObjectObject,
-      options?: Pick<R2PutOptions, 'httpMetadata'>,
+      options?: Pick<R2PutOptions, "httpMetadata">,
     ): Promise<PutR2ObjectResponse> => {
       if (isLocal) {
         return await (await localBucket()).put(
@@ -1209,7 +1209,9 @@ export type PutObjectObject =
   | Buffer
   | Blob;
 
-function mapHttpMetadataToHeaders(httpMetadata: R2PutOptions['httpMetadata']): Record<string, string> {
+function mapHttpMetadataToHeaders(
+  httpMetadata: R2PutOptions["httpMetadata"],
+): Record<string, string> {
   const headers: Record<string, string> = {};
 
   if (httpMetadata instanceof Headers) {
@@ -1230,7 +1232,7 @@ function mapHttpMetadataToHeaders(httpMetadata: R2PutOptions['httpMetadata']): R
     if (contentDisposition) headers["Content-Disposition"] = contentDisposition;
     if (contentEncoding) headers["Content-Encoding"] = contentEncoding;
     if (cacheControl) headers["Cache-Control"] = cacheControl;
-    if (cacheExpiry) headers["Expires"] = cacheExpiry.toUTCString();
+    if (cacheExpiry) headers.Expires = cacheExpiry.toUTCString();
   }
 
   return headers;
@@ -1243,10 +1245,11 @@ function mapHeadersToHttpMetadata(headers: Headers): R2HTTPMetadata {
     contentDisposition: headers.get("Content-Disposition") ?? undefined,
     contentEncoding: headers.get("Content-Encoding") ?? undefined,
     cacheControl: headers.get("Cache-Control") ?? undefined,
-    cacheExpiry: headers.get("Expires") ? new Date(headers.get("Expires")!) : undefined,
+    cacheExpiry: headers.get("Expires")
+      ? new Date(headers.get("Expires")!)
+      : undefined,
   };
 }
-
 
 export async function putObject(
   api: CloudflareApi,
@@ -1259,14 +1262,16 @@ export async function putObject(
     bucketName: string;
     key: string;
     object: PutObjectObject;
-    options?: Pick<R2PutOptions, 'httpMetadata'>;
+    options?: Pick<R2PutOptions, "httpMetadata">;
   },
 ): Promise<Response> {
   // Using withExponentialBackoff for reliability
   return await withRetries(async () => {
     const headers: Record<string, string> = {
       "Content-Type": "application/octet-stream",
-      ...(options?.httpMetadata ? mapHttpMetadataToHeaders(options?.httpMetadata) : {}),
+      ...(options?.httpMetadata
+        ? mapHttpMetadataToHeaders(options?.httpMetadata)
+        : {}),
     };
 
     const response = await api.put(

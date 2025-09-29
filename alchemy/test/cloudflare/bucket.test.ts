@@ -548,7 +548,7 @@ describe("R2 Bucket Resource", async () => {
       expect(bucket.name).toEqual(bucketName);
 
       const testKey = "test-object.txt";
-      const testContent = "{ \"name\": \"test\" }";
+      const testContent = '{ "name": "test" }';
       await bucket.put(testKey, testContent, {
         httpMetadata: {
           contentType: "application/json",
@@ -560,9 +560,7 @@ describe("R2 Bucket Resource", async () => {
 
       const getObj = await bucket.get(testKey);
       await expect(getObj?.text()).resolves.toEqual(testContent);
-      expect(getObj?.httpMetadata?.contentType).toEqual(
-        "application/json",
-      );
+      expect(getObj?.httpMetadata?.contentType).toEqual("application/json");
     } finally {
       await scope.finalize();
     }
