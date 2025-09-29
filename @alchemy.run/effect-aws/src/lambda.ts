@@ -497,23 +497,25 @@ export const provider = () =>
           } satisfies
             | CreateFunctionUrlConfigRequest
             | UpdateFunctionUrlConfigRequest;
-          const response = yield* lambda
-            .createFunctionUrlConfig(config)
-            .pipe(
-              Effect.catchTag("ResourceConflictException", () =>
-                lambda.updateFunctionUrlConfig(config),
+          const [{ FunctionUrl }] = yield* Effect.all([
+            lambda
+              .createFunctionUrlConfig(config)
+              .pipe(
+                Effect.catchTag("ResourceConflictException", () =>
+                  lambda.updateFunctionUrlConfig(config),
+                ),
               ),
-            );
-          if (authType === "NONE") {
-            yield* lambda.addPermission({
-              FunctionName: functionName,
-              StatementId: "FunctionURLAllowPublicAccess",
-              Action: "lambda:InvokeFunctionUrl",
-              Principal: "*",
-              FunctionUrlAuthType: "NONE",
-            });
-          }
-          return response.FunctionUrl;
+            authType === "NONE"
+              ? lambda.addPermission({
+                  FunctionName: functionName,
+                  StatementId: "FunctionURLAllowPublicAccess",
+                  Action: "lambda:InvokeFunctionUrl",
+                  Principal: "*",
+                  FunctionUrlAuthType: "NONE",
+                })
+              : Effect.void,
+          ]);
+          return FunctionUrl;
         } else if (oldUrl) {
           yield* Effect.all([
             lambda
