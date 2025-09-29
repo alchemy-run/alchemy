@@ -62,6 +62,8 @@ describe("Pipeline Resource", () => {
       // Create an R2 bucket
       bucket = await R2Bucket("basic-bucket", {
         name: bucketName,
+        empty: true,
+        adopt: true,
       });
 
       expect(bucket.name).toEqual(bucketName);
@@ -125,6 +127,8 @@ describe("Pipeline Resource", () => {
       // Create an R2 bucket
       bucket = await R2Bucket("pipeline-bucket", {
         name: bucketName,
+        empty: true,
+        adopt: true,
       });
 
       expect(bucket.name).toEqual(bucketName);
@@ -195,6 +199,8 @@ describe("Pipeline Resource", () => {
       // Create an R2 bucket
       bucket = await R2Bucket("update-bucket", {
         name: bucketName,
+        adopt: true,
+        empty: true,
       });
 
       // Create a pipeline with initial settings
@@ -344,9 +350,8 @@ describe("Pipeline Resource", () => {
       // Create an R2 bucket
       bucket = await R2Bucket("worker-bucket", {
         name: bucketName,
-        adopt: true,
-        delete: true,
         empty: true,
+        adopt: true,
       });
 
       // Create a pipeline with the R2 bucket as destination

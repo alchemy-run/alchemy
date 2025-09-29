@@ -7,7 +7,6 @@ on:
 jobs:
   pkg-pr:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -22,7 +21,7 @@ jobs:
 
       - name: Build
         run: bun run --filter alchemy build
-    
+
       # pkr.pr.new relies on pnpm-workspace.yaml for the `--pnpm` flag
       # which we need to resolve `catalog:` dependencies prior to publishing
       - name: Prepare Publish

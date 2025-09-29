@@ -76,7 +76,7 @@ export interface NeonBranchProps extends NeonApiOptions {
   endpoints: neon.BranchCreateRequestEndpointOptions[];
 }
 
-export interface NeonBranch extends Resource<"neon::Branch"> {
+export interface NeonBranch {
   /**
    * The branch ID. This value is generated when a branch is created. A branch_id value has a br- prefix. For example: br-small-term-683261.
    */
@@ -215,7 +215,7 @@ export const NeonBranch = Resource(
           ),
         );
 
-        return this({
+        return {
           id: data.branch.id,
           name: data.branch.name,
           projectId: data.branch.project_id,
@@ -237,7 +237,7 @@ export const NeonBranch = Resource(
           databases: data.databases,
           roles: data.roles.map(formatRole),
           connectionUris: data.connection_uris?.map(formatConnectionUri) ?? [],
-        });
+        };
       }
       case "update": {
         if (
@@ -263,7 +263,8 @@ export const NeonBranch = Resource(
             },
           },
         });
-        return this({
+
+        return {
           ...this.output,
           name,
           protected: data.branch.protected,
@@ -271,7 +272,7 @@ export const NeonBranch = Resource(
           expiresAt: data.branch.expires_at
             ? new Date(data.branch.expires_at)
             : undefined,
-        });
+        };
       }
     }
   },

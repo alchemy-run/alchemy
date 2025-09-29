@@ -298,23 +298,29 @@ describe("R2 Bucket Resource", async () => {
       });
       expect(putResponse.status).toEqual(200);
 
-      await new Promise((resolve) => setTimeout(resolve, 1000)); // wait for CORS to propagate
-
-      const getResponse = await fetch(
-        `https://${bucket.domain}/test-file.txt`,
-        {
-          method: "OPTIONS",
-          headers: {
-            Origin: "https://example.com",
+      // Loop for up to 60s until CORS headers are properly propagated (eventually consistent)
+      for (let i = 0; i < 60; i++) {
+        const getResponse = await fetch(
+          `https://${bucket.domain}/test-file.txt`,
+          {
+            method: "OPTIONS",
+            headers: {
+              Origin: "https://example.com",
+            },
           },
-        },
-      );
-      expect(getResponse.headers.get("Access-Control-Allow-Origin")).toEqual(
-        "*",
-      );
-      expect(getResponse.headers.get("Access-Control-Allow-Methods")).toEqual(
-        "GET",
-      );
+        );
+        const allowOrigin = getResponse.headers.get(
+          "Access-Control-Allow-Origin",
+        );
+        const allowMethods = getResponse.headers.get(
+          "Access-Control-Allow-Methods",
+        );
+
+        if (allowOrigin === "*" && allowMethods === "GET") {
+          return; // success
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
     } finally {
       await destroy(scope);
     }
@@ -493,7 +499,41 @@ describe("R2 Bucket Resource", async () => {
         truncated: false,
       });
     } finally {
-      // await destroy(scope);
+      await scope.finalize();
+    }
+  });
+
+  test("bucket with data catalog", async (scope) => {
+    const bucketName = `${BRANCH_PREFIX.toLowerCase()}-test-data-catalog`;
+    try {
+      let bucket = await R2Bucket(bucketName, {
+        name: bucketName,
+        adopt: true,
+        dataCatalog: true,
+      });
+      expect(bucket.catalog).toBeDefined();
+      expect(bucket.catalog?.id).toBeDefined();
+      expect(bucket.catalog?.name).toBeDefined();
+      expect(bucket.catalog?.host).toBeDefined();
+
+      bucket = await R2Bucket(bucketName, {
+        name: bucketName,
+        adopt: true,
+        dataCatalog: false,
+      });
+      expect(bucket.catalog).toBeUndefined();
+
+      bucket = await R2Bucket(bucketName, {
+        name: bucketName,
+        adopt: true,
+        dataCatalog: true,
+      });
+      expect(bucket.catalog).toBeDefined();
+      expect(bucket.catalog?.id).toBeDefined();
+      expect(bucket.catalog?.name).toBeDefined();
+      expect(bucket.catalog?.host).toBeDefined();
+    } finally {
+      await destroy(scope);
     }
   });
 });
@@ -559,36 +599,6 @@ async function getObject(
     `https://${r2Client.accountId}.r2.cloudflarestorage.com/${bucket.name}/${props.key}`,
   );
   return await r2Client.fetch(url, {
-    headers: withJurisdiction(bucket),
-  });
-}
-
-async function headObject(
-  bucket: R2Bucket,
-  props: {
-    key: string;
-  },
-) {
-  const url = new URL(
-    `https://${r2Client.accountId}.r2.cloudflarestorage.com/${bucket.name}/${props.key}`,
-  );
-  return await r2Client.fetch(url, {
-    method: "HEAD",
-    headers: withJurisdiction(bucket),
-  });
-}
-
-async function deleteObject(
-  bucket: R2Bucket,
-  props: {
-    key: string;
-  },
-) {
-  const url = new URL(
-    `https://${r2Client.accountId}.r2.cloudflarestorage.com/${bucket.name}/${props.key}`,
-  );
-  return await r2Client.fetch(url, {
-    method: "DELETE",
     headers: withJurisdiction(bucket),
   });
 }

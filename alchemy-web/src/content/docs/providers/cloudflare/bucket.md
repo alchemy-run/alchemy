@@ -183,6 +183,21 @@ const bucket = await R2Bucket("legal-holds", {
 - **enabled**: Defaults to `true` when omitted.
 - **Age condition fields**: lock uses `maxAgeSeconds` (seconds).
 
+## With Data Catalog
+
+Enable data catalog for the bucket.
+
+```ts
+import { R2Bucket } from "alchemy/cloudflare";
+
+const bucket = await R2Bucket("my-bucket", {
+  name: "my-bucket",
+  dataCatalog: true,
+});
+
+console.log(bucket.catalog);
+```
+
 ## Object Operations
 
 Use the returned `R2Bucket` instance to work with objects directly from your scripts.
