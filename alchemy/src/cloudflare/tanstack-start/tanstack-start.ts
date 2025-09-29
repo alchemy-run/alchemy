@@ -23,12 +23,12 @@ export async function TanStackStart<B extends Bindings>(
     ...props,
     wrangler: {
       ...props?.wrangler,
-      transform: (spec) => {
-        const transformed = props?.wrangler?.transform?.(spec) ?? spec;
-        return {
-          ...transformed,
-          main: props?.wrangler?.main ?? "@tanstack/react-start/server-entry",
-        };
+      transform: async (spec) => {
+        const transformed = (await props?.wrangler?.transform?.(spec)) ?? spec;
+        if (!props?.wrangler?.main) {
+          transformed.main = "@tanstack/react-start/server-entry";
+        }
+        return transformed;
       },
     },
   });
