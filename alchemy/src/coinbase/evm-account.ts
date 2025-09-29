@@ -253,15 +253,19 @@ export const EvmAccount = Resource(
           name: props.name,
         });
       } else {
-        // Without adoption, need to check if account exists first
+        // Without adoption, we can attempt to create it.
+        // It will throw if already exist
         try {
-          await cdp.evm.getAccount({ name: props.name });
-          throw new Error(
-            `Account with name '${props.name}' already exists. Use adopt: true to use the existing account.`,
-          );
-        } catch (_error: any) {
-          // Account not found, create it
           account = await cdp.evm.createAccount({ name: props.name });
+        } catch (error: any) {
+          // Provide helpful error message if account already exists
+          if (error.errorType === "already_exists") {
+            throw new Error(
+              `Account with name '${props.name}' already exists. Use adopt: true to use the existing account.`,
+            );
+          }
+          // Rethrow other errors unchanged
+          throw error;
         }
       }
     }
