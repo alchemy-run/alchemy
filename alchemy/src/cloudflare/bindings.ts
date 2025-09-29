@@ -134,6 +134,7 @@ export type WorkerBindingSpec =
   | WorkerBindingSecretsStoreSecret
   | WorkerBindingService
   | WorkerBindingStaticContent
+  | WorkerBindingTailConsumer
   | WorkerBindingVectorize
   | WorkerBindingVersionMetadata
   | WorkerBindingWasmModule
@@ -417,6 +418,18 @@ export interface WorkerBindingService {
   namespace?: string;
   /** Service entrypoint */
   entrypoint?: string;
+}
+
+/**
+ * Tail Consumer binding type
+ */
+export interface WorkerBindingTailConsumer {
+  /** The name of the binding */
+  name: string;
+  /** Type identifier for Tail Consumer binding */
+  type: "tail_consumer";
+  /** Service name */
+  service: string;
 }
 
 /**
