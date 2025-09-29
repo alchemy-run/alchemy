@@ -157,18 +157,9 @@ async function main() {
           // Small delay to avoid rate limits
           await new Promise((resolve) => setTimeout(resolve, 1000));
         } catch (error: any) {
-          const errorMsg = error.message || "";
-
-          if (errorMsg.includes("rate limit")) {
-            console.log(`  ⚠️  Rate limited for ${token} on ${network}`);
-          } else if (errorMsg.includes("already funded")) {
-            console.log(`  ✓  Already funded with ${token} on ${network}`);
-            funded.add(key);
-          } else {
-            console.log(
-              `  ❌ Error funding ${token} on ${network}: ${errorMsg}`,
-            );
-          }
+          console.log(
+            `  ❌ Error funding ${token} on ${network}: ${error.message}`,
+          );
         }
       }
     }
