@@ -60,6 +60,51 @@ export interface NetworkMapping {
 }
 
 /**
+ * Healthcheck configuration
+ */
+export interface HealthcheckConfig {
+  /**
+   * Command to run to check health.
+   * Can be an array of command arguments or a shell command string.
+   * Examples:
+   * - ["curl", "-f", "http://localhost/"]
+   * - "curl -f http://localhost/ || exit 1"
+   */
+  cmd: string[] | string;
+
+  /**
+   * Time between running the check (in seconds)
+   * @default 0
+   */
+  interval?: number;
+
+  /**
+   * Maximum time to allow one check to run (in seconds)
+   * @default 0
+   */
+  timeout?: number;
+
+  /**
+   * Consecutive failures needed to report unhealthy
+   */
+  retries?: number;
+
+  /**
+   * Start period for the container to initialize before starting
+   * health-retries countdown (in seconds)
+   * @default 0
+   */
+  startPeriod?: number;
+
+  /**
+   * Time between running the check during the start period (in seconds)
+   * Requires Docker API 1.44+
+   * @default 0
+   */
+  startInterval?: number;
+}
+
+/**
  * Properties for creating a Docker container
  */
 export interface ContainerProps {
@@ -115,6 +160,11 @@ export interface ContainerProps {
    * Start the container after creation
    */
   start?: boolean;
+
+  /**
+   * Healthcheck configuration
+   */
+  healthcheck?: HealthcheckConfig;
 }
 
 /**
@@ -170,6 +220,23 @@ export interface Container extends ContainerProps {
  *     { external: 3000, internal: 3000 }
  *   ],
  *   restart: "always",
+ *   start: true
+ * });
+ *
+ * @example
+ * // Create a container with healthcheck
+ * const healthyContainer = await Container("api", {
+ *   image: "my-api:latest",
+ *   ports: [
+ *     { external: 3000, internal: 3000 }
+ *   ],
+ *   healthcheck: {
+ *     cmd: ["curl", "-f", "http://localhost:3000/health"],
+ *     interval: 30,
+ *     timeout: 10,
+ *     retries: 3,
+ *     startPeriod: 40
+ *   },
  *   start: true
  * });
  */
@@ -245,6 +312,7 @@ export const Container = Resource(
         env: props.environment,
         volumes: volumeMappings,
         cmd: props.command,
+        healthcheck: props.healthcheck,
       });
 
       // Connect to networks if specified

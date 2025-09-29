@@ -3,6 +3,7 @@ import { Buffer } from "node:buffer";
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
+import type { HealthcheckConfig } from "./container.ts";
 
 /**
  * Options for Docker API requests
@@ -177,6 +178,7 @@ export class DockerApi {
       env?: Record<string, string>;
       volumes?: Record<string, string>;
       cmd?: string[];
+      healthcheck?: HealthcheckConfig;
     } = {},
   ): Promise<string> {
     const args = ["create", "--name", name];
@@ -199,6 +201,40 @@ export class DockerApi {
     if (options.volumes) {
       for (const [hostPath, containerPath] of Object.entries(options.volumes)) {
         args.push("-v", `${hostPath}:${containerPath}`);
+      }
+    }
+
+    // Add healthcheck configuration
+    if (options.healthcheck) {
+      const hc = options.healthcheck;
+
+      // Format the cmd
+      const cmdStr = Array.isArray(hc.cmd) ? hc.cmd.join(" ") : hc.cmd;
+      args.push("--health-cmd", cmdStr);
+
+      // Add interval
+      if (hc.interval !== undefined) {
+        args.push("--health-interval", `${hc.interval}s`);
+      }
+
+      // Add timeout
+      if (hc.timeout !== undefined) {
+        args.push("--health-timeout", `${hc.timeout}s`);
+      }
+
+      // Add retries
+      if (hc.retries !== undefined) {
+        args.push("--health-retries", String(hc.retries));
+      }
+
+      // Add start period
+      if (hc.startPeriod !== undefined) {
+        args.push("--health-start-period", `${hc.startPeriod}s`);
+      }
+
+      // Add start interval (API 1.44+)
+      if (hc.startInterval !== undefined) {
+        args.push("--health-start-interval", `${hc.startInterval}s`);
       }
     }
 
