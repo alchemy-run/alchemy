@@ -253,6 +253,7 @@ export type R2ObjectMetadata = {
   etag: string;
   uploaded: Date;
   size: number;
+  contentType: string | null;
 };
 
 export type R2ObjectContent = R2ObjectMetadata & {
@@ -272,7 +273,7 @@ export type PutR2ObjectResponse = {
 };
 
 export type R2Objects = {
-  objects: R2ObjectMetadata[];
+  objects: Omit<R2ObjectMetadata, "contentType">[];
 } & (
   | {
       truncated: true;
@@ -553,6 +554,7 @@ const parseR2Object = (key: string, response: Response): R2ObjectContent => ({
   uploaded: parseDate(response.headers),
   key,
   size: Number(response.headers.get("Content-Length")),
+  contentType: response.headers.get("Content-Type"),
   arrayBuffer: () => response.arrayBuffer(),
   bytes: () => response.bytes(),
   text: () => response.text(),
@@ -1162,6 +1164,7 @@ export async function headObject(
     etag: response.headers.get("ETag")?.replace(/"/g, "")!,
     uploaded: parseDate(response.headers),
     size: Number(response.headers.get("Content-Length")),
+    contentType: response.headers.get("Content-Type"),
   };
 }
 
