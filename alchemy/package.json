@@ -178,6 +178,7 @@
     "signal-exit": "^4.1.0",
     "tar-fs": "^3.1.0",
     "unenv": "2.0.0-rc.19",
+    "which": "^5.0.0",
     "ws": "^8.18.3",
     "yaml": "^2.0.0"
   },
@@ -281,6 +282,7 @@
     "@types/netmask": "^2.0.5",
     "@types/node": "latest",
     "@types/tar-fs": "^2.0.4",
+    "@types/which": "^3.0.4",
     "@types/ws": "^8.18.1",
     "@workos-inc/node": "^7.69.1",
     "arktype": "^2.1.16",
