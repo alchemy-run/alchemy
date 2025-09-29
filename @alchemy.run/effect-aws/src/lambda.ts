@@ -478,10 +478,12 @@ export const provider = () =>
         url: Props["url"];
         oldUrl?: Props["url"];
       }) {
+        // TODO(sam): support AWS_IAM
+        const authType = "NONE";
         if (url) {
           const config = {
             FunctionName: functionName,
-            AuthType: "NONE", // | AWS_IAM
+            AuthType: authType, // | AWS_IAM
             // Cors: {
             //   AllowCredentials: true,
             //   AllowHeaders: ["*"],
@@ -502,15 +504,34 @@ export const provider = () =>
                 lambda.updateFunctionUrlConfig(config),
               ),
             );
+          if (authType === "NONE") {
+            yield* lambda.addPermission({
+              FunctionName: functionName,
+              StatementId: "FunctionURLAllowPublicAccess",
+              Action: "lambda:InvokeFunctionUrl",
+              Principal: "*",
+              FunctionUrlAuthType: "NONE",
+            });
+          }
           return response.FunctionUrl;
         } else if (oldUrl) {
-          yield* lambda
-            .deleteFunctionUrlConfig({
-              FunctionName: functionName,
-            })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+          yield* Effect.all([
+            lambda
+              .deleteFunctionUrlConfig({
+                FunctionName: functionName,
+              })
+              .pipe(
+                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              ),
+            lambda
+              .removePermission({
+                FunctionName: functionName,
+                StatementId: "FunctionURLAllowPublicAccess",
+              })
+              .pipe(
+                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              ),
+          ]);
         }
         return undefined;
       });
