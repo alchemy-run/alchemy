@@ -10,12 +10,14 @@ export interface CoinbaseClientOptions {
   apiKeyId?: Secret<string> | string;
   /**
    * CDP API Key Secret. If not provided, falls back to CDP_API_KEY_SECRET environment variable.
+   * Must be wrapped in alchemy.secret() for security.
    */
-  apiKeySecret?: Secret<string> | string;
+  apiKeySecret?: Secret<string>;
   /**
    * CDP Wallet Secret. If not provided, falls back to CDP_WALLET_SECRET environment variable.
+   * Must be wrapped in alchemy.secret() for security.
    */
-  walletSecret?: Secret<string> | string;
+  walletSecret?: Secret<string>;
 }
 
 /**
@@ -55,17 +57,11 @@ export async function createCdpClient(
   }
 
   if (options.apiKeySecret) {
-    clientOptions.apiKeySecret =
-      typeof options.apiKeySecret === "string"
-        ? options.apiKeySecret
-        : options.apiKeySecret.unencrypted;
+    clientOptions.apiKeySecret = options.apiKeySecret.unencrypted;
   }
 
   if (options.walletSecret) {
-    clientOptions.walletSecret =
-      typeof options.walletSecret === "string"
-        ? options.walletSecret
-        : options.walletSecret.unencrypted;
+    clientOptions.walletSecret = options.walletSecret.unencrypted;
   }
 
   // CDP SDK will automatically use environment variables if not provided:
