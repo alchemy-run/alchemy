@@ -170,7 +170,8 @@
     "signal-exit": "^4.1.0",
     "unenv": "2.0.0-rc.19",
     "ws": "^8.18.3",
-    "yaml": "^2.0.0"
+    "yaml": "^2.0.0",
+    "zod": "^4.0.10"
   },
   "peerDependencies": {
     "@astrojs/cloudflare": "^12.6.4",
@@ -299,7 +300,6 @@
     "tsdown": "^0.14.2",
     "typescript": "catalog:",
     "undici": "^7.14.0",
-    "wrangler": "^4.27.0",
-    "zod": "^4.0.10"
+    "wrangler": "^4.27.0"
   }
 }

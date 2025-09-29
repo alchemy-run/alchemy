@@ -15,6 +15,8 @@ import {
   type MiniflareWorkerProxy,
 } from "./miniflare-worker-proxy.ts";
 import { getDefaultPersistPath } from "./paths.ts";
+import { DISPATCH_WORKER } from "./plugin/dispatch-worker.ts";
+import { MULTIWORKER_PLUGIN } from "./plugin/multiworker-plugin.ts";
 import { createTunnel, type Tunnel } from "./tunnel.ts";
 
 declare global {
@@ -93,7 +95,7 @@ export class MiniflareController {
   private async update() {
     return await this.mutex.lock(async () => {
       const options: miniflare.MiniflareOptions = {
-        workers: [],
+        workers: [DISPATCH_WORKER],
         defaultPersistRoot: path.resolve(
           getDefaultPersistPath(Scope.current.rootDir),
         ),
@@ -139,6 +141,11 @@ export class MiniflareController {
       if (this.miniflare) {
         await this.miniflare.setOptions(options);
       } else {
+        // Add multiworker plugin to Miniflare before first use
+        miniflare.PLUGINS["alchemy" as keyof typeof miniflare.PLUGINS] =
+          MULTIWORKER_PLUGIN;
+        miniflare.PLUGIN_ENTRIES.push(["alchemy" as any, MULTIWORKER_PLUGIN]);
+
         this.miniflare = new miniflare.Miniflare(options);
         await this.miniflare.ready;
       }

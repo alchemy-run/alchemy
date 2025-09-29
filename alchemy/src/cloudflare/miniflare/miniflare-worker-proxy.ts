@@ -4,6 +4,7 @@ import http from "node:http";
 import { Readable } from "node:stream";
 import { WebSocket, WebSocketServer } from "ws";
 import { coupleWebSocket } from "../../util/http.ts";
+import { TARGET_WORKER_HEADER } from "./plugin/schema.ts";
 
 export interface MiniflareWorkerProxy {
   url: URL;
@@ -33,8 +34,12 @@ export async function createMiniflareWorkerProxy(options: {
     try {
       const request = toMiniflareRequest(req);
       const name = options.getWorkerName(request);
-      const worker = await options.miniflare.getWorker(name);
-      const response = await worker.fetch(request);
+      const response = await options.miniflare.dispatchFetch(request, {
+        headers: {
+          ...request.headers,
+          [TARGET_WORKER_HEADER]: name,
+        },
+      });
       writeMiniflareResponseToNode(response, res);
     } catch (error) {
       console.error(error);
