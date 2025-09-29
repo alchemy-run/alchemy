@@ -453,7 +453,17 @@ export async function R2Bucket(
     ...bucket,
     head: async (key: string) => {
       if (isLocal) {
-        return (await localBucket()).head(key);
+        const result = await (await localBucket()).head(key);
+        if (result) {
+          return {
+            key: result.key,
+            etag: result.etag,
+            uploaded: result.uploaded,
+            size: result.size,
+            contentType: result.httpMetadata?.contentType || null,
+          } as R2ObjectMetadata;
+        }
+        return null;
       }
       return headObject(api, {
         bucketName: bucket.name,
