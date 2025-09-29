@@ -117,11 +117,7 @@ export async function verifyCdpAuth(client: CdpClient): Promise<void> {
     // List accounts is a good test as it requires valid credentials
     await client.evm.listAccounts();
   } catch (error: any) {
-    if (
-      error.message?.includes("unauthorized") ||
-      error.message?.includes("authentication") ||
-      error.code === "UNAUTHENTICATED"
-    ) {
+    if (error.errorType === "unauthorized") {
       logger.error(
         "\n⚠️ Coinbase CDP authentication failed. Please check your credentials:",
       );
@@ -140,11 +136,7 @@ export async function verifyCdpAuth(client: CdpClient): Promise<void> {
       );
       throw new Error("CDP authentication failed");
     }
-    if (
-      error.message?.includes("permission") ||
-      error.message?.includes("forbidden") ||
-      error.code === "PERMISSION_DENIED"
-    ) {
+    if (error.errorType === "unauthorized") {
       logger.error(
         "\n⚠️ Insufficient permissions. Your API key needs account management permissions.",
       );
