@@ -131,12 +131,11 @@ export const worker = await Worker("api", {
   routes: ["api.example.com/*"],          // Route patterns to bind the worker
   domains: ["example.com"],               // Custom domains to bind (can be objects with zoneId/adopt)
   version: "pr-123",                      // Publish as preview version with label
-  dev: { port: 8787 },                    // Local development options (port, remote, tunnel)
-  tunnel: true,                           // Expose the worker via a Cloudflare Tunnel.
+  dev: { port: 8787 },                    // Local dev: { port?, remote?, tunnel? } OR { url } to connect to existing dev server
   namespace: await DispatchNamespace("my-dispatch-ns", {
     namespace: "production-dispatch"
   }),                    // Deploy to dispatch namespace (string | DispatchNamespace)
-  noBundle: false,                        // Disable bundling (deploy files as-is)
+  noBundle: true,                        // Disable bundling (default: false)
   rules: [{ globs: ["**/*.wasm"] }],      // Additional bundle rules
 });
 ```
@@ -157,27 +156,34 @@ export default {
 };
 ```
 
-Global scope initialization (when appropriate):
+Module scope initialization (when appropriate):
 ```ts
 import { env } from "cloudflare:workers";
 import ApiClient from "example-api-client";
 
-const apiClient = new ApiClient({ apiKey: env.API_KEY });
+// Initialize client at module scope
+const apiClient = new ApiClient();
 
 export default {
-  async fetch(request: Request) {
-    return new Response("Initialized with API key");
+  async fetch(request: Request, env: Env) {
+    // Configure with API key during request handling
+    apiClient.setApiKey(env.API_KEY);
+    return new Response("Configured with API key");
   },
 };
 ```
 
-:::tip
-Use global scope initialization for expensive operations like database connections or API client setup. Avoid initializing per-request to minimize cold start times and improve performance.
+:::caution
+**IO is not allowed at module scope** in Cloudflare Workers. You cannot access `env` bindings, make fetch requests, or perform any IO operations during module initialization. Only perform IO inside handler functions (`fetch`, `queue`, `scheduled`, etc.).
 :::
-Infer Worker Env Types (recommended):
+
+:::tip
+Use module scope for expensive setup like class instantiation or constant initialization. Configure with runtime values (like API keys from `env`) inside your handler functions to avoid cold start penalties while respecting the no-IO-at-module-scope constraint.
+:::
+
+## Infer Worker Env Types (recommended):
 Binding types can be inferred from the Worker in your alchemy.run.ts script:
 ```ts
-// alchemy.run.ts
 import type { worker } from "../alchemy.run.ts";
 
 export default {
@@ -284,31 +290,6 @@ export default {
 
 **When to use:** Background job processing, webhook handling, email processing, image optimization, data synchronization.
 
-## Smart Placement (performance optimization)
-
-Enable automatic network optimization by configuring smart placement to reduce latency and improve performance:
-
-```ts
-export const optimizedWorker = await Worker("api", {
-  entrypoint: "./src/api.ts",
-  placement: {
-    mode: "smart"  // Automatically optimize placement for performance
-  }
-});
-```
-
-**Benefits:**
-- ✅ Automatic network optimization based on performance metrics
-- ✅ Reduced latency for global users
-- ✅ No infrastructure management required
-- ✅ Seamless scaling across Cloudflare's network
-
-**When to use:** Global applications, latency-sensitive APIs, high-traffic workloads, applications with geographically distributed users.
-
-:::note
-You can learn more about [Smart Placement](https://developers.cloudflare.com/workers/configuration/smart-placement/) in the Cloudflare documentation.
-:::
-
 ## Local development & configuration
 
 Mirror production bindings in emulation, schedule tasks with cron, and serve static assets:
@@ -339,7 +320,8 @@ export const frontend = await Worker("frontend", {
 });
 ```
 
-**Scheduled handler implementation:**
+### Scheduled handler implementation
+
 ```ts
 // ./src/cron.ts
 import type { ScheduledEvent } from "@cloudflare/workers-types";
@@ -365,6 +347,31 @@ export default {
 - `"0 */12 * * *"` - Every 12 hours
 - `"0 9 * * MON-FRI"` - Weekdays at 9 AM UTC
 - `"*/15 * * * *"` - Every 15 minutes
+
+## Smart Placement (performance optimization)
+
+Enable automatic network optimization by configuring smart placement to reduce latency and improve performance:
+
+```ts
+export const optimizedWorker = await Worker("api", {
+  entrypoint: "./src/api.ts",
+  placement: {
+    mode: "smart"  // Automatically optimize placement for performance
+  }
+});
+```
+
+**Benefits:**
+- ✅ Automatic network optimization based on performance metrics
+- ✅ Reduced latency for global users
+- ✅ No infrastructure management required
+- ✅ Seamless scaling across Cloudflare's network
+
+**When to use:** Global applications, latency-sensitive APIs, high-traffic workloads, applications with geographically distributed users.
+
+:::note
+You can learn more about [Smart Placement](https://developers.cloudflare.com/workers/configuration/smart-placement/) in the Cloudflare documentation.
+:::
 
 ## Advanced patterns (Worker composition, RPC, Durable Objects)
 
