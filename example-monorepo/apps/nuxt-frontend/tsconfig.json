@@ -1,0 +1,17 @@
+{
+  // https://nuxt.com/docs/guide/concepts/typescript
+  "compilerOptions": {
+    "types": [
+      "@cloudflare/workers-types",
+      "./types/env.d.ts"
+    ],
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler"
+  },
+  "include": [
+    "alchemy.run.ts",
+    "types/**/*.ts",
+    "server/**/*.ts"
+  ]
+}

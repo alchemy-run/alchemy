@@ -1,0 +1,26 @@
+{
+  "type": "module",
+  "name": "nuxt-frontend",
+  "private": true,
+  "scripts": {
+    "build": "nuxt build",
+    "deploy": "alchemy deploy --app nuxt-frontend",
+    "destroy": "alchemy destroy --app nuxt-frontend",
+    "dev": "alchemy dev --app nuxt-frontend",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview"
+  },
+  "dependencies": {
+    "nuxt": "^4.1.2",
+    "vue": "^3.5.16",
+    "vue-router": "^4.5.1"
+  },
+  "devDependencies": {
+    "alchemy": "catalog:",
+    "backend": "workspace:*",
+    "@cloudflare/workers-types": "^4.20250805.0",
+    "miniflare": "^4.20250617.3",
+    "nitro-cloudflare-dev": "^0.2.2",
+    "typescript": "^5.8.3"
+  }
+}
