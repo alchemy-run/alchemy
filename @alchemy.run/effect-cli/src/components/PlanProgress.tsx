@@ -7,7 +7,7 @@ import type { ProgressEventSource } from "../progress.tsx";
 import { useGlobalSpinner } from "../spinner.ts";
 
 interface PlanTask
-  extends Required<Pick<Alchemy.ApplyEvent, "id" | "type" | "status">> {
+  extends Required<Pick<Alchemy.StatusChangeEvent, "id" | "type" | "status">> {
   message?: string;
   updatedAt: number;
 }
@@ -45,16 +45,24 @@ export function PlanProgress(props: PlanProgressProps): React.JSX.Element {
         const next = new Map(prev);
         const current = next.get(event.id);
 
-        // Only handle resource-level events, ignore binding events
-        if (!event.bindingId) {
-          const updated: PlanTask = {
-            id: event.id,
-            type: event.type,
-            status: event.status,
-            message: event.message ?? current?.message,
+        if (event.kind === "status-change") {
+          if (!event.bindingId) {
+            // Only handle resource-level events, ignore binding events
+            const updated: PlanTask = {
+              id: event.id,
+              type: event.type,
+              status: event.status,
+              message: event.message ?? current?.message,
+              updatedAt: Date.now(),
+            };
+            next.set(event.id, updated);
+          }
+        } else if (event.kind === "annotate" && current) {
+          next.set(event.id, {
+            ...current,
+            message: event.message,
             updatedAt: Date.now(),
-          };
-          next.set(event.id, updated);
+          });
         }
 
         return next;

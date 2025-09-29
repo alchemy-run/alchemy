@@ -278,7 +278,7 @@ export const provider = () =>
           }
           return { action: "noop" };
         }),
-        create: Effect.fn(function* ({ id, news }) {
+        create: Effect.fn(function* ({ id, news, session }) {
           const queueName = createQueueName(id, news);
           const response = yield* sqs
             .createQueue({
@@ -288,23 +288,32 @@ export const provider = () =>
             .pipe(
               Effect.retry({
                 while: (e) => e.name === "QueueDeletedRecently",
-                schedule: Schedule.fixed(1000),
+                schedule: Schedule.fixed(1000).pipe(
+                  Schedule.tapOutput((i) =>
+                    session.note(
+                      `Queue was deleted recently, retrying... ${i + 1}s`,
+                    ),
+                  ),
+                ),
               }),
             );
           const queueArn = `arn:aws:sqs:${region}:${accountId}:${queueName}`;
+          const queueUrl = response.QueueUrl!;
+          yield* session.note(queueUrl);
           return {
             id,
             type: Type,
             queueName,
-            queueUrl: response.QueueUrl!,
+            queueUrl,
             queueArn: queueArn,
           };
         }),
-        update: Effect.fn(function* ({ news, output }) {
+        update: Effect.fn(function* ({ news, output, session }) {
           yield* sqs.setQueueAttributes({
             QueueUrl: output.queueUrl,
             Attributes: createAttributes(news),
           });
+          yield* session.note(output.queueUrl);
           return output;
         }),
         delete: Effect.fn(function* (input) {

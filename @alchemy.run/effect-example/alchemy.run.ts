@@ -9,7 +9,7 @@ import * as AWS from "@alchemy.run/effect-aws";
 import * as Lambda from "@alchemy.run/effect-aws/lambda";
 import * as SQS from "@alchemy.run/effect-aws/sqs";
 
-import { api, consumer, Messages } from "./src/index.ts";
+import { api, Messages } from "./src/index.ts";
 
 // TODO(sam): combine this with Alchemy.plan to do it all in one-line
 const app = Alchemy.app({ name: "my-iae-app", stage: "dev" });
@@ -20,20 +20,19 @@ const stack = await Alchemy.plan({
   phase: process.argv.includes("--destroy") ? "destroy" : "update",
   resources: [
     Lambda.make(api, {
-      main: path.join(src, "api-handler.ts"),
+      main: path.join(src, "api.ts"),
       policy: Alchemy.bound(SQS.SendMessage(Messages)),
     }),
     // Consumer
-    Lambda.make(consumer, {
-      main: path.join(src, "consumer-handler.ts"),
-      policy: Alchemy.bound(SQS.Consume(Messages)),
-    }),
+    // Lambda.make(consumer, {
+    //   main: path.join(src, "consumer-handler.ts"),
+    //   policy: Alchemy.bound(SQS.Consume(Messages)),
+    // }),
   ],
 }).pipe(
   Alchemy.apply,
   Effect.catchTag("PlanRejected", () => Effect.void),
-  Effect.provide(AlchemyCLI.requireApproval),
-  Effect.provide(AlchemyCLI.reportProgress),
+  Effect.provide(AlchemyCLI.layer),
   Effect.provide(AWS.layer),
   Effect.provide(Alchemy.dotAlchemy),
   Effect.provide(Alchemy.State.localFs),

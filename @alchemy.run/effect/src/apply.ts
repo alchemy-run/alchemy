@@ -4,7 +4,7 @@ import * as Option from "effect/Option";
 import type { Simplify } from "effect/Types";
 import { type PlanRejected, PlanReviewer } from "./approve.ts";
 import type { ApplyEvent, ApplyStatus } from "./event.ts";
-import type { AnyPlan, BindingAction, Delete } from "./plan.ts";
+import type { AnyPlan, BindingAction, Delete, Materialized } from "./plan.ts";
 import type { SerializedStatement, Statement } from "./policy.ts";
 import type { Resource } from "./resource.ts";
 import { State } from "./state.ts";
@@ -12,6 +12,10 @@ import { State } from "./state.ts";
 export interface PlanStatusSession {
   emit: (event: ApplyEvent) => Effect.Effect<void>;
   done: () => Effect.Effect<void>;
+}
+
+export interface ScopedPlanStatusSession extends PlanStatusSession {
+  note: (note: string) => Effect.Effect<void>;
 }
 
 export class PlanStatusReporter extends Context.Tag("PlanStatusReporter")<
@@ -37,175 +41,184 @@ export const apply = <const P extends AnyPlan, Err, Req>(
 
         const events = yield* Effect.serviceOption(PlanStatusReporter);
 
-        const { emit, done } = Option.isSome(events)
+        const session = Option.isSome(events)
           ? yield* events.value.start(plan)
           : ({
               emit: () => Effect.void,
               done: () => Effect.void,
             } satisfies PlanStatusSession);
+        const { emit, done } = session;
 
-        const apply = Effect.fn(function* (
+        const apply: (
           node:
             | (BindingAction<Statement> | SerializedStatement<Statement>)[]
-            | Exclude<P[keyof P], undefined>,
-        ) {
-          if (Array.isArray(node)) {
-            return yield* Effect.all(
-              node.map((binding) => {
-                const resourceId =
-                  "stmt" in binding
-                    ? binding.stmt.resource.id
-                    : binding.resource.id;
-                const resource = plan[resourceId];
-                return !resource
-                  ? Effect.dieMessage(`Resource ${resourceId} not found`)
-                  : apply(resource as P[keyof P]);
-              }),
-            );
-          }
+            | Materialized,
+        ) => Effect.Effect<any, never, never> = (node) =>
+          Effect.gen(function* () {
+            if (Array.isArray(node)) {
+              return yield* Effect.all(
+                node.map((binding) => {
+                  const resourceId =
+                    "stmt" in binding
+                      ? binding.stmt.resource.id
+                      : binding.resource.id;
+                  const resource = plan[resourceId];
+                  return !resource
+                    ? Effect.dieMessage(`Resource ${resourceId} not found`)
+                    : apply(resource);
+                }),
+              );
+            }
 
-          const checkpoint = <Out, Err>(
-            effect: Effect.Effect<Out, Err, never>,
-          ) =>
-            effect.pipe(
-              Effect.flatMap((output) =>
-                state
-                  .set(node.resource.id, {
-                    id: node.resource.id,
+            const checkpoint = <Out, Err>(
+              effect: Effect.Effect<Out, Err, never>,
+            ) =>
+              effect.pipe(
+                Effect.flatMap((output) =>
+                  state
+                    .set(node.resource.id, {
+                      id: node.resource.id,
+                      type: node.resource.type,
+                      status: node.action === "create" ? "created" : "updated",
+                      props: node.resource.props,
+                      output,
+                      bindings: node.bindings.map((binding) => ({
+                        ...binding.stmt,
+                        resource: {
+                          type: binding.stmt.resource.type,
+                          id: binding.stmt.resource.id,
+                        },
+                      })),
+                    })
+                    .pipe(Effect.map(() => output)),
+                ),
+              );
+
+            const hydrate = <A extends BindingAction<Statement>>(
+              bindings: Statement[],
+            ) =>
+              node.bindings.map(
+                (binding, i) =>
+                  Object.assign(binding, {
+                    attributes: bindings[i],
+                  }) as A & {
+                    attributes: any;
+                  },
+              );
+
+            const id = node.resource.id;
+
+            const scopedSession = {
+              ...session,
+              note: (note: string) =>
+                session.emit({
+                  id,
+                  kind: "annotate",
+                  message: note,
+                }),
+            } satisfies ScopedPlanStatusSession;
+
+            return yield* (outputs[id] ??= yield* Effect.cached(
+              Effect.gen(function* () {
+                const report = (status: ApplyStatus) =>
+                  emit({
+                    kind: "status-change",
+                    id,
                     type: node.resource.type,
-                    status: node.action === "create" ? "created" : "updated",
-                    props: node.resource.props,
-                    output,
-                    bindings: node.bindings.map((binding) => ({
-                      ...binding.stmt,
-                      resource: {
-                        type: binding.stmt.resource.type,
-                        id: binding.stmt.resource.id,
-                      },
-                    })),
-                  })
-                  .pipe(Effect.map(() => output)),
-              ),
-            );
-
-          const hydrate = <A extends BindingAction<Statement>>(
-            bindings: Statement[],
-          ) =>
-            node.bindings.map(
-              (binding, i) =>
-                Object.assign(binding, {
-                  attributes: bindings[i],
-                }) as A & {
-                  attributes: any;
-                },
-            );
-
-          const id = node.resource.id;
-
-          return yield* (outputs[id] ??= yield* Effect.cached(
-            Effect.gen(function* () {
-              const report = (status: ApplyStatus) =>
-                emit({
-                  id,
-                  type: node.resource.type,
-                  status,
-                });
-
-              if (node.action === "noop") {
-                // emit({
-                //   id,
-                //   type: node.resource.type,
-                //   status: "noop",
-                // });
-                return (yield* state.get(id))?.output;
-              } else if (node.action === "create") {
-                const bindings = yield* apply(node.bindings);
-                yield* report("creating");
-                return yield* node.provider
-                  .create({
-                    id,
-                    news: node.news,
-                    bindings: hydrate(bindings),
-                  })
-                  .pipe(
-                    checkpoint,
-                    Effect.tap(() => report("created")),
-                  );
-              } else if (node.action === "update") {
-                const bindings = yield* apply(node.bindings);
-                yield* emit({
-                  id,
-                  type: node.resource.type,
-                  status: "updating",
-                });
-                return yield* node.provider
-                  .update({
-                    id,
-                    news: node.news,
-                    olds: node.olds,
-                    output: node.output,
-                    bindings: hydrate(bindings),
-                  })
-                  .pipe(
-                    checkpoint,
-                    Effect.tap(() => report("updated")),
-                  );
-              } else if (node.action === "delete") {
-                yield* Effect.all(
-                  node.downstream.map((dep) =>
-                    dep in plan ? apply(plan[dep] as P[keyof P]) : Effect.void,
-                  ),
-                );
-                yield* report("deleting");
-
-                return yield* node.provider
-                  .delete({
-                    id,
-                    olds: node.olds,
-                    output: node.output,
-                  })
-                  .pipe(
-                    Effect.flatMap(() => state.delete(id)),
-                    Effect.tap(() => report("deleted")),
-                  );
-              } else if (node.action === "replace") {
-                const destroy = Effect.gen(function* () {
-                  yield* report("deleting");
-                  return yield* node.provider.delete({
-                    id,
-                    olds: node.olds,
-                    output: node.output,
+                    status,
                   });
-                });
-                const create = Effect.gen(function* () {
+
+                if (node.action === "noop") {
+                  return (yield* state.get(id))?.output;
+                } else if (node.action === "create") {
+                  const bindings = yield* apply(node.bindings);
                   yield* report("creating");
                   return yield* node.provider
                     .create({
                       id,
                       news: node.news,
-                      // TODO(sam): these need to only include attach actions
-                      bindings: hydrate(yield* apply(node.bindings)),
+                      bindings: hydrate(bindings),
+                      session: scopedSession,
                     })
-                    // TODO(sam): delete and create will conflict here, we need to extend the state store for replace
                     .pipe(
                       checkpoint,
                       Effect.tap(() => report("created")),
                     );
-                });
-                if (!node.deleteFirst) {
-                  const outputs = yield* create;
-                  yield* destroy;
-                  return outputs;
-                } else {
-                  yield* destroy;
-                  return yield* create;
+                } else if (node.action === "update") {
+                  const bindings = yield* apply(node.bindings);
+                  yield* report("updating");
+                  return yield* node.provider
+                    .update({
+                      id,
+                      news: node.news,
+                      olds: node.olds,
+                      output: node.output,
+                      bindings: hydrate(bindings),
+                      session: scopedSession,
+                    })
+                    .pipe(
+                      checkpoint,
+                      Effect.tap(() => report("updated")),
+                    );
+                } else if (node.action === "delete") {
+                  yield* Effect.all(
+                    node.downstream.map((dep) =>
+                      dep in plan
+                        ? apply(plan[dep] as P[keyof P])
+                        : Effect.void,
+                    ),
+                  );
+                  yield* report("deleting");
+
+                  return yield* node.provider
+                    .delete({
+                      id,
+                      olds: node.olds,
+                      output: node.output,
+                      session: scopedSession,
+                    })
+                    .pipe(
+                      Effect.flatMap(() => state.delete(id)),
+                      Effect.tap(() => report("deleted")),
+                    );
+                } else if (node.action === "replace") {
+                  const destroy = Effect.gen(function* () {
+                    yield* report("deleting");
+                    return yield* node.provider.delete({
+                      id,
+                      olds: node.olds,
+                      output: node.output,
+                      session: scopedSession,
+                    });
+                  });
+                  const create = Effect.gen(function* () {
+                    yield* report("creating");
+                    return yield* node.provider
+                      .create({
+                        id,
+                        news: node.news,
+                        // TODO(sam): these need to only include attach actions
+                        bindings: hydrate(yield* apply(node.bindings)),
+                        session: scopedSession,
+                      })
+                      // TODO(sam): delete and create will conflict here, we need to extend the state store for replace
+                      .pipe(
+                        checkpoint,
+                        Effect.tap(() => report("created")),
+                      );
+                  });
+                  if (!node.deleteFirst) {
+                    const outputs = yield* create;
+                    yield* destroy;
+                    return outputs;
+                  } else {
+                    yield* destroy;
+                    return yield* create;
+                  }
                 }
-              }
-            }),
-          ));
-        }) as (
-          node: P[keyof P] | BindingAction<Statement>[],
-        ) => Effect.Effect<any, never, never>;
+              }),
+            ));
+          }) as Effect.Effect<any, never, never>;
 
         const resources: any = Object.fromEntries(
           yield* Effect.all(

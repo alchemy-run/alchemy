@@ -1,4 +1,5 @@
 import type * as Effect from "effect/Effect";
+import type { ScopedPlanStatusSession } from "./apply.ts";
 import type { AttachAction, BindingAction } from "./plan.ts";
 import type { Statement } from "./policy.ts";
 
@@ -34,6 +35,7 @@ export type Provider<
     olds: Input | undefined;
     // what is the ARN?
     output: Output | undefined; // current state -> synced state
+    session: ScopedPlanStatusSession;
   }): Effect.Effect<Output | undefined, any, never>;
   diff?(input: {
     id: string;
@@ -41,6 +43,7 @@ export type Provider<
     news: Input;
     output: Output;
     bindings: BindingAction<Stmt>[];
+    session: ScopedPlanStatusSession;
   }): Effect.Effect<Diff, never, never>;
   // tail();
   // watch();
@@ -49,6 +52,7 @@ export type Provider<
     id: string;
     news: Input;
     bindings: BindingAction.Materialized<AttachAction<Stmt>>[];
+    session: ScopedPlanStatusSession;
   }): Effect.Effect<Output, any, never>;
   update(input: {
     id: string;
@@ -56,10 +60,12 @@ export type Provider<
     olds: Input;
     output: Output;
     bindings: BindingAction.Materialized<BindingAction<Stmt>>[];
+    session: ScopedPlanStatusSession;
   }): Effect.Effect<Output, any, never>;
   delete(input: {
     id: string;
     olds: Input;
     output: Output;
+    session: ScopedPlanStatusSession;
   }): Effect.Effect<void, any, never>;
 };

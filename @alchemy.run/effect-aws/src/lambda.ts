@@ -219,6 +219,7 @@ export const provider = () =>
       const accountId = yield* AccountID;
       const region = yield* Region;
       const app = yield* App;
+
       // const assets = yield* Assets;
 
       const createFunctionName = (id: string) =>
@@ -494,6 +495,15 @@ export const provider = () =>
         return undefined;
       });
 
+      const summary = ({ code }: { code: Uint8Array<ArrayBufferLike> }) =>
+        `bundle size: ${
+          code.length >= 1024 * 1024
+            ? `${(code.length / (1024 * 1024)).toFixed(2)}MB`
+            : code.length >= 1024
+              ? `${(code.length / 1024).toFixed(2)}KB`
+              : `${code.length}B`
+        }`;
+
       return {
         type: Type,
         read: Effect.fn(function* ({ id, output }) {
@@ -535,7 +545,7 @@ export const provider = () =>
           }
           return { action: "noop" };
         }),
-        create: Effect.fn(function* ({ id, news, bindings }) {
+        create: Effect.fn(function* ({ id, news, bindings, session }) {
           const roleName = createRoleName(id);
           const policyName = createPolicyName(id);
           // const policyArn = `arn:aws:iam::${accountId}:policy/${policyName}`;
@@ -571,6 +581,8 @@ export const provider = () =>
             url: news.url,
           });
 
+          yield* session.note(summary({ code }));
+
           return {
             id,
             type: "AWS::Lambda::Function",
@@ -584,7 +596,14 @@ export const provider = () =>
             },
           } satisfies Attributes<string, Props>;
         }),
-        update: Effect.fn(function* ({ id, news, olds, bindings, output }) {
+        update: Effect.fn(function* ({
+          id,
+          news,
+          olds,
+          bindings,
+          output,
+          session,
+        }) {
           const roleName = createRoleName(id);
           const policyName = createPolicyName(id);
           const functionName = news.functionName ?? createFunctionName(id);
@@ -598,14 +617,15 @@ export const provider = () =>
             bindings,
           });
 
-          const code = yield* bundleCode(news);
+          const bundle = yield* bundleCode(news);
+          const code = bundle.outputFiles?.[0].contents!;
 
           yield* createOrUpdateFunction({
             id,
             news,
             roleArn: output.roleArn,
             // TODO(sam): upload to assets
-            code: code.outputFiles?.[0].contents!,
+            code,
             env,
             functionName,
           });
@@ -616,6 +636,8 @@ export const provider = () =>
             oldUrl: olds.url,
           });
 
+          yield* session.note(summary({ code }));
+
           return {
             ...output,
             functionArn,
@@ -624,7 +646,7 @@ export const provider = () =>
             roleName,
             roleArn: output.roleArn,
             code: {
-              hash: yield* hashCode(code.outputFiles?.[0].contents!),
+              hash: yield* hashCode(code),
             },
           } satisfies Attributes<string, Props>;
         }),
