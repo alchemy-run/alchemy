@@ -77,7 +77,7 @@ export interface TableProps {
 /**
  * Output returned after DynamoDB table creation/update
  */
-export interface Table extends Resource<"dynamo::Table">, TableProps {
+export interface Table extends TableProps {
   /**
    * ARN of the table
    * Format: arn:aws:dynamodb:region:account-id:table/table-name
@@ -323,12 +323,12 @@ export const Table = Resource(
       );
     }
 
-    return this({
+    return {
       ...props,
       arn: tableDescription!.TableArn!,
       tableName,
       streamArn: tableDescription!.LatestStreamArn,
       tableId: tableDescription!.TableId!,
-    });
+    };
   },
 );

@@ -80,7 +80,7 @@ export interface VpcProps extends AwsClientProps {
 /**
  * Output returned after VPC creation/update
  */
-export interface Vpc extends Resource<"aws::Vpc">, VpcProps {
+export interface Vpc extends VpcProps {
   /**
    * The ID of the VPC
    */
@@ -388,13 +388,13 @@ export const Vpc = Resource(
       }
     }
 
-    return this({
+    return {
       vpcId: vpc.VpcId!,
       state: vpc.State as "pending" | "available",
       isDefault: vpc.IsDefault || false,
       dhcpOptionsId: vpc.DhcpOptionsId!,
       ...props,
-    });
+    };
   },
 );
 

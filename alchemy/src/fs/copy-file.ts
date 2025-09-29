@@ -28,7 +28,7 @@ export interface CopyFileProps {
 /**
  * Output returned after CopyFile creation/update
  */
-export interface CopyFile extends Resource<"fs::CopyFile">, CopyFileProps {
+export interface CopyFile extends CopyFileProps {
   /**
    * Time at which the object was created
    */
@@ -100,13 +100,13 @@ export const CopyFile = Resource(
         await fs.promises.copyFile(src, dest);
       }
 
-      return this({
+      return {
         src,
         dest,
         overwrite,
         copied: true,
         createdAt: Date.now(),
-      });
+      };
     } catch (error) {
       logger.error("Error copying file:", error);
       throw error;

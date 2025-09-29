@@ -120,9 +120,7 @@ export interface ContainerProps {
 /**
  * Docker Container resource
  */
-export interface Container
-  extends Resource<"docker::Container">,
-    ContainerProps {
+export interface Container extends ContainerProps {
   /**
    * Container ID
    */
@@ -266,14 +264,13 @@ export const Container = Resource(
         containerState = "running";
       }
 
-      // Return the resource using this() to construct output
-      return this({
+      return {
         ...props,
         id: containerId,
         name: containerName,
         state: containerState,
         createdAt: Date.now(),
-      });
+      };
     }
   },
 );

@@ -113,7 +113,7 @@ async function cleanMiniflareDirectory(dotAlchemy: string) {
 
 const removeDirectory = async (path: string, options?: RmDirOptions) => {
   try {
-    await fs.rmdir(path, options);
+    await fs.rm(path, options);
   } catch (error) {
     if (!isENOENT(error)) {
       throw error;

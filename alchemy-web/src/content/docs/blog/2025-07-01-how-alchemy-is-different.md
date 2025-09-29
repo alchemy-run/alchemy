@@ -170,10 +170,10 @@ export const Database = Resource(
       return this.destroy();
     } else if (this.phase === "update") {
       // Update logic
-      return this({ id: "db-123", ...props });
+      return { id: "db-123", ...props };
     } else {
       // Create logic
-      return this({ id: "db-123", ...props });
+      return { id: "db-123", ...props };
     }
   }
 );

@@ -96,9 +96,7 @@ export interface QueueConsumerProps extends CloudflareApiOptions {
 /**
  * Output returned after Queue Consumer creation/update
  */
-export interface QueueConsumer
-  extends Resource<"cloudflare::QueueConsumer">,
-    QueueConsumerProps {
+export interface QueueConsumer extends QueueConsumerProps {
   /**
    * Unique ID for the consumer
    */
@@ -162,7 +160,7 @@ export const QueueConsumer = Resource(
       typeof props.queue === "string" ? props.queue : props.queue.id;
 
     if (this.scope.local && props.dev) {
-      return this({
+      return {
         id: this.output?.id ?? "",
         queueId,
         queue: props.queue,
@@ -170,7 +168,7 @@ export const QueueConsumer = Resource(
         scriptName: props.scriptName,
         settings: props.settings,
         accountId: this.output?.accountId ?? "",
-      });
+      };
     }
 
     const api = await createCloudflareApi(props);
@@ -231,7 +229,7 @@ export const QueueConsumer = Resource(
       );
     }
 
-    return this({
+    return {
       id: consumerData.result.consumer_id,
       queueId,
       queue: props.queue,
@@ -249,7 +247,7 @@ export const QueueConsumer = Resource(
         : undefined,
       createdOn: consumerData.result.created_on,
       accountId: api.accountId,
-    });
+    };
   },
 );
 

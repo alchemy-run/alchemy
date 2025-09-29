@@ -6,24 +6,26 @@ import {
   ResourceScope,
   ResourceSeq,
   type Resource,
+  type ResourceAttributes,
   type ResourceProps,
 } from "./resource.ts";
 import type { Scope } from "./scope.ts";
 import type { State } from "./state.ts";
 
 export type Context<
-  Out extends Resource,
+  Out extends ResourceAttributes,
   Props extends ResourceProps = ResourceProps,
 > = CreateContext<Out> | UpdateContext<Out, Props> | DeleteContext<Out, Props>;
 
-export interface CreateContext<Out extends Resource> extends BaseContext<Out> {
+export interface CreateContext<Out extends ResourceAttributes>
+  extends BaseContext<Out> {
   phase: "create";
   output?: undefined;
   props?: undefined;
 }
 
 export interface UpdateContext<
-  Out extends Resource,
+  Out extends ResourceAttributes,
   Props extends ResourceProps = ResourceProps,
 > extends BaseContext<Out> {
   phase: "update";
@@ -32,7 +34,7 @@ export interface UpdateContext<
 }
 
 export interface DeleteContext<
-  Out extends Resource,
+  Out extends ResourceAttributes,
   Props extends ResourceProps = ResourceProps,
 > extends BaseContext<Out> {
   phase: "delete";
@@ -40,7 +42,7 @@ export interface DeleteContext<
   props: Props;
 }
 
-export interface BaseContext<Out extends Resource> {
+export interface BaseContext<Out extends ResourceAttributes> {
   quiet: boolean;
   stage: string;
   id: ResourceID;
@@ -94,7 +96,7 @@ export interface BaseContext<Out extends Resource> {
 export function context<
   Kind extends string,
   Props extends ResourceProps | undefined,
-  Out extends Resource,
+  Out extends ResourceAttributes,
 >({
   scope,
   phase,
@@ -114,7 +116,7 @@ export function context<
   fqn: ResourceFQN;
   seq: number;
   props: Props;
-  state: State<Kind, Props, Out>;
+  state: State<Kind, Props, Out & Resource>;
   replace: (force?: boolean) => never;
   isReplacement?: boolean;
 }): Context<Out> {

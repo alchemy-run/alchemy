@@ -78,9 +78,7 @@ export interface PromotionCodeProps {
 /**
  * Output from the Stripe promotion code
  */
-export interface PromotionCode
-  extends Resource<"stripe::PromotionCode">,
-    PromotionCodeProps {
+export interface PromotionCode extends PromotionCodeProps {
   /**
    * The ID of the promotion code
    */
@@ -232,7 +230,7 @@ export const PromotionCode = Resource(
         }
       }
 
-      return this({
+      return {
         id: promotionCode.id,
         object: promotionCode.object,
         coupon:
@@ -261,7 +259,7 @@ export const PromotionCode = Resource(
         created: promotionCode.created,
         livemode: promotionCode.livemode,
         timesRedeemed: promotionCode.times_redeemed,
-      });
+      };
     } catch (error) {
       logger.error("Error creating/updating promotion code:", error);
       throw error;

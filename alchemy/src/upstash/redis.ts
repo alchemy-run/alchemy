@@ -65,9 +65,7 @@ export interface UpstashRedisProps {
 /**
  * Output returned after UpstashRedis creation/update
  */
-export interface UpstashRedis
-  extends Resource<"upstash::Redis">,
-    UpstashRedisProps {
+export interface UpstashRedis extends UpstashRedisProps {
   /**
    * ID of the database
    */

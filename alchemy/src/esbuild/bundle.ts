@@ -74,8 +74,7 @@ export interface BundleProps extends Partial<esbuild.BuildOptions> {
  * Output returned after bundle creation/update
  */
 export interface Bundle<P extends BundleProps = BundleProps>
-  extends Resource<"esbuild::Bundle">,
-    BundleProps {
+  extends BundleProps {
   /**
    * Path to the bundled file
    * Absolute or relative path to the generated bundle
@@ -161,21 +160,24 @@ export const Bundle = Resource(
     if (outputFile === undefined && bundlePath === undefined) {
       throw new Error("Failed to create bundle");
     }
+    type Path = Props extends { outdir: string } | { outfile: string }
+      ? string
+      : undefined;
     if (outputFile) {
-      return this({
+      return {
         ...props,
-        path: bundlePath,
+        path: bundlePath as Path,
         hash: outputFile.hash,
         content: outputFile.text,
-      });
+      };
     }
     const content = await fs.readFile(bundlePath!, "utf-8");
-    return this({
+    return {
       ...props,
-      path: bundlePath,
+      path: bundlePath as Path,
       hash: crypto.createHash("sha256").update(content).digest("hex"),
       content,
-    });
+    };
   },
 );
 

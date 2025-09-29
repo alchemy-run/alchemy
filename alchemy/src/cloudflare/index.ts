@@ -13,6 +13,7 @@ export * from "./astro/astro.ts";
 export * from "./bindings.ts";
 export * from "./bound.ts";
 export * from "./browser-rendering.ts";
+export * from "./bucket-object.ts";
 export * from "./bucket.ts";
 export * from "./certificate-pack.ts";
 export * from "./cloudflare-env-proxy.ts";

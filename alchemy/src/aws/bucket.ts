@@ -26,7 +26,7 @@ export interface BucketProps {
 /**
  * Output returned after S3 bucket creation/update
  */
-export interface Bucket extends Resource<"s3::Bucket">, BucketProps {
+export interface Bucket extends BucketProps {
   /**
    * The ARN (Amazon Resource Name) of the bucket
    * Format: arn:aws:s3:::bucket-name
@@ -244,7 +244,7 @@ export const Bucket = Resource(
       }
     }
 
-    return this({
+    return {
       bucketName: bucketName,
       arn: `arn:aws:s3:::${bucketName}`,
       bucketDomainName: `${bucketName}.s3.amazonaws.com`,
@@ -254,7 +254,7 @@ export const Bucket = Resource(
       versioningEnabled: versioningResponse.Status === "Enabled",
       acl: aclResponse.Grants?.[0]?.Permission?.toLowerCase(),
       ...(tags && { tags }),
-    });
+    };
   },
 );
 

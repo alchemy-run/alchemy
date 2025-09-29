@@ -60,7 +60,7 @@ export interface ExecProps {
 /**
  * Output returned after command execution
  */
-export interface Exec extends Resource<"os::Exec">, ExecProps {
+export interface Exec extends ExecProps {
   /**
    * Unique identifier for this execution
    */
@@ -268,7 +268,7 @@ export const Exec = Resource(
     }
 
     // Return the execution result
-    return this({
+    return {
       id,
       command: props.command,
       cwd: props.cwd,
@@ -281,7 +281,7 @@ export const Exec = Resource(
       executedAt: Date.now(),
       completed: true,
       hash,
-    });
+    };
   },
 );
 

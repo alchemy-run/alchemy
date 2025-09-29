@@ -54,16 +54,13 @@ export interface SecretsStoreProps<
   delete?: boolean;
 }
 
-export function isSecretsStore(
-  resource: Resource,
-): resource is SecretsStore<any> {
-  return resource[ResourceKind] === "cloudflare::SecretsStore";
+export function isSecretsStore(resource: any): resource is SecretsStore<any> {
+  return resource?.[ResourceKind] === "cloudflare::SecretsStore";
 }
 
 export interface SecretsStore<
   S extends Record<string, Secret> | undefined = undefined,
-> extends Resource<"cloudflare::SecretsStore">,
-    Omit<SecretsStoreProps<S>, "delete"> {
+> extends Omit<SecretsStoreProps<S>, "delete"> {
   /**
    * The unique identifier of the secrets store
    */
@@ -240,13 +237,13 @@ const _SecretsStore = Resource("cloudflare::SecretsStore", async function <
     await insertSecrets(api, storeId, props);
   }
 
-  return this({
+  return {
     id: storeId,
     name: name,
     secrets: props.secrets as S,
     createdAt: createdAt,
     modifiedAt: Date.now(),
-  });
+  };
 });
 
 export async function createSecretsStore<

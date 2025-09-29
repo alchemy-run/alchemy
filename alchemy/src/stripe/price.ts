@@ -210,7 +210,7 @@ export interface PriceProps {
 /**
  * Output from the Stripe price
  */
-export interface Price extends Resource<"stripe::Price">, PriceProps {
+export interface Price extends PriceProps {
   /**
    * The ID of the price
    */
@@ -545,7 +545,7 @@ export const Price = Resource(
         : undefined;
 
       // Map Stripe API response to our output format
-      return this({
+      return {
         id: price.id,
         product:
           typeof price.product === "string" ? price.product : price.product.id,
@@ -565,7 +565,7 @@ export const Price = Resource(
         tiers: tiers,
         tiersMode: price.tiers_mode ?? undefined,
         transformQuantity: transformQuantity,
-      });
+      };
     } catch (error) {
       logger.error("Error creating/updating price:", error);
       throw error;

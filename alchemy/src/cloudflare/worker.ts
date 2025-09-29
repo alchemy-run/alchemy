@@ -432,8 +432,8 @@ export type WorkerProps<
   RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
 > = InlineWorkerProps<B, RPC> | EntrypointWorkerProps<B, RPC>;
 
-export function isWorker(resource: Resource): resource is Worker<any> {
-  return resource[ResourceKind] === "cloudflare::Worker";
+export function isWorker(resource: any): resource is Worker<any> {
+  return resource?.[ResourceKind] === "cloudflare::Worker";
 }
 
 /**
@@ -442,109 +442,108 @@ export function isWorker(resource: Resource): resource is Worker<any> {
 export type Worker<
   B extends Bindings | undefined = Bindings | undefined,
   RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
-> = Resource<"cloudflare::Worker"> &
-  Omit<WorkerProps<B>, "url" | "script" | "routes" | "domains"> & {
-    /** @internal phantom property */
-    __rpc__?: RPC;
+> = Omit<WorkerProps<B>, "url" | "script" | "routes" | "domains"> & {
+  /** @internal phantom property */
+  __rpc__?: RPC;
 
-    type: "service";
+  type: "service";
 
-    /**
-     * The ID of the worker
-     */
-    id: string;
+  /**
+   * The ID of the worker
+   */
+  id: string;
 
-    /**
-     * The name of the worker
-     */
-    name: string;
+  /**
+   * The name of the worker
+   */
+  name: string;
 
-    /**
-     * The root directory of the project
-     * @default process.cwd()
-     */
-    cwd: string;
+  /**
+   * The root directory of the project
+   * @default process.cwd()
+   */
+  cwd: string;
 
-    /**
-     * Time at which the worker was created
-     */
-    createdAt: number;
+  /**
+   * Time at which the worker was created
+   */
+  createdAt: number;
 
-    /**
-     * Time at which the worker was last updated
-     */
-    updatedAt: number;
+  /**
+   * Time at which the worker was last updated
+   */
+  updatedAt: number;
 
-    /**
-     * The worker's URL if enabled
-     * Format: {name}.{subdomain}.workers.dev
-     *
-     * @default true
-     */
-    url?: string;
+  /**
+   * The worker's URL if enabled
+   * Format: {name}.{subdomain}.workers.dev
+   *
+   * @default true
+   */
+  url?: string;
 
-    /**
-     * The bindings that were created
-     */
-    bindings: B;
+  /**
+   * The bindings that were created
+   */
+  bindings: B;
 
-    /**
-     * Configuration for static assets
-     */
-    assets?: AssetsConfig;
+  /**
+   * Configuration for static assets
+   */
+  assets?: AssetsConfig;
 
-    /**
-     * The routes that were created for this worker
-     */
-    routes?: Route[];
+  /**
+   * The routes that were created for this worker
+   */
+  routes?: Route[];
 
-    /**
-     * The custom domains that were created for this worker
-     */
-    domains?: CustomDomain[];
+  /**
+   * The custom domains that were created for this worker
+   */
+  domains?: CustomDomain[];
 
-    // phantom property (for typeof myWorker.Env)
-    Env: B extends Bindings
-      ? {
-          [bindingName in keyof B]: Bound<B[bindingName]>;
-        }
-      : undefined;
+  // phantom property (for typeof myWorker.Env)
+  Env: B extends Bindings
+    ? {
+        [bindingName in keyof B]: Bound<B[bindingName]>;
+      }
+    : undefined;
 
-    /**
-     * The compatibility date for the worker
-     */
-    compatibilityDate: string;
+  /**
+   * The compatibility date for the worker
+   */
+  compatibilityDate: string;
 
-    /**
-     * The compatibility flags for the worker
-     */
-    compatibilityFlags: string[];
+  /**
+   * The compatibility flags for the worker
+   */
+  compatibilityFlags: string[];
 
-    /**
-     * The dispatch namespace this worker is deployed to
-     */
-    namespace?: string | DispatchNamespace;
+  /**
+   * The dispatch namespace this worker is deployed to
+   */
+  namespace?: string | DispatchNamespace;
 
-    /**
-     * Version label for this worker deployment
-     */
-    version?: string;
+  /**
+   * Version label for this worker deployment
+   */
+  version?: string;
 
-    /**
-     * Smart placement configuration for the worker
-     */
-    placement?: {
-      mode: "smart";
-    };
-
-    /**
-     * Whether the worker has a remote deployment
-     * @internal
-     */
-    dev?: {
-      hasRemote: boolean;
-    };
+  /**
+   * Smart placement configuration for the worker
+   */
+  placement?: {
+    mode: "smart";
   };
+
+  /**
+   * Whether the worker has a remote deployment
+   * @internal
+   */
+  dev?: {
+    hasRemote: boolean;
+  };
+};
 
 /**
  * A Cloudflare Worker is a serverless function that can be deployed to the Cloudflare network.
@@ -901,7 +900,7 @@ const _Worker = Resource(
           containers: options.containers,
         },
       );
-      return this({
+      return {
         ...props,
         type: "service",
         id,
@@ -920,7 +919,7 @@ const _Worker = Resource(
           hasRemote: this.output?.dev?.hasRemote ?? false,
         },
         Env: undefined!,
-      } as unknown as Worker<B>);
+      } as unknown as Worker<B>;
     }
 
     if (this.phase === "create" || this.output.dev?.hasRemote === false) {
@@ -1045,7 +1044,7 @@ const _Worker = Resource(
     );
 
     const now = new Date();
-    return this({
+    return {
       ...props,
       type: "service",
       id,
@@ -1074,7 +1073,7 @@ const _Worker = Resource(
       dev: {
         hasRemote: true,
       },
-    } as unknown as Worker<B>);
+    } as unknown as Worker<B>;
   },
 );
 
