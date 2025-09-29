@@ -1,13 +1,17 @@
 import type { WorkerOptions } from "miniflare";
-import { MULTIWORKER_BINDING, TARGET_WORKER_HEADER, type MultiWorkerOptions } from "./schema";
+import {
+  MULTIWORKER_BINDING,
+  TARGET_WORKER_HEADER,
+  type MultiWorkerOptions,
+} from "./schema.ts";
 
 export const DISPATCH_WORKER: WorkerOptions & MultiWorkerOptions = {
-    name: "alchemy-dispatcher",
-    modules: [
-        {
-        type: "ESModule",
-        path: "main.mjs",
-        contents: `export default {
+  name: "alchemy-dispatcher",
+  modules: [
+    {
+      type: "ESModule",
+      path: "main.mjs",
+      contents: `export default {
             async fetch(request, env) {
                 try {
                     const targetWorker = request.headers.get('${TARGET_WORKER_HEADER}');
@@ -21,10 +25,10 @@ export const DISPATCH_WORKER: WorkerOptions & MultiWorkerOptions = {
                 }
             }
         }`,
-        },
-    ],
-    multiworkerRouting: {
-        enabled: true,
-        dispatcherBinding: MULTIWORKER_BINDING,
     },
+  ],
+  multiworkerRouting: {
+    enabled: true,
+    dispatcherBinding: MULTIWORKER_BINDING,
+  },
 };

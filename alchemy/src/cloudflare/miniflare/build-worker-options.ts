@@ -120,20 +120,23 @@ export const buildWorkerOptions = async (
         break;
       }
       case "assets": {
-        if(Array.isArray(input.assets?.run_worker_first)) {
-          // To support this we need to parse the wrangler flavor config to miniflare flavor config like 
+        if (Array.isArray(input.assets?.run_worker_first)) {
+          // To support this we need to parse the wrangler flavor config to miniflare flavor config like
           // https://github.com/cloudflare/workers-sdk/blob/main/packages/workers-shared/utils/configuration/parseStaticRouting.ts
-          throw new Error("run_worker_first route arrays are not supported in alchemy dev mode");
+          throw new Error(
+            "run_worker_first route arrays are not supported in alchemy dev mode",
+          );
         }
         options.assets = {
           binding: key,
           directory: path.resolve(binding.path),
           assetConfig: {
-            ...input.assets
+            ...input.assets,
           },
           routerConfig: {
             has_user_worker: true, // with alchemy there is always a user worker
-            invoke_user_worker_ahead_of_assets: !!input.assets?.run_worker_first,
+            invoke_user_worker_ahead_of_assets:
+              !!input.assets?.run_worker_first,
           },
         };
         break;

@@ -95,9 +95,7 @@ export class MiniflareController {
   private async update() {
     return await this.mutex.lock(async () => {
       const options: miniflare.MiniflareOptions = {
-        workers: [
-         DISPATCH_WORKER,
-        ],
+        workers: [DISPATCH_WORKER],
         defaultPersistRoot: path.resolve(
           getDefaultPersistPath(Scope.current.rootDir),
         ),
@@ -144,7 +142,8 @@ export class MiniflareController {
         await this.miniflare.setOptions(options);
       } else {
         // Add multiworker plugin to Miniflare before first use
-        miniflare.PLUGINS["alchemy" as keyof typeof miniflare.PLUGINS] = MULTIWORKER_PLUGIN;
+        miniflare.PLUGINS["alchemy" as keyof typeof miniflare.PLUGINS] =
+          MULTIWORKER_PLUGIN;
         miniflare.PLUGIN_ENTRIES.push(["alchemy" as any, MULTIWORKER_PLUGIN]);
 
         this.miniflare = new miniflare.Miniflare(options);
