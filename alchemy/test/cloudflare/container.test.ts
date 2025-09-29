@@ -11,7 +11,7 @@ const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });
 
-describe("Container Resource", () => {
+describe.sequential("Container Resource", () => {
   test("create container", async (scope) => {
     try {
       const make = async (dockerfile?: string) =>

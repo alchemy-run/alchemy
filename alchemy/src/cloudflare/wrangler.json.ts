@@ -350,14 +350,7 @@ export interface WranglerJsonSpec {
    */
   queues?: {
     producers?: { queue: string; binding: string }[];
-    consumers?: {
-      queue: string;
-      max_batch_size?: number;
-      max_concurrency?: number;
-      max_retries?: number;
-      max_wait_time_ms?: number;
-      retry_delay?: number;
-    }[];
+    consumers?: QueueConsumerWranglerJson[];
   };
 
   /**
@@ -501,6 +494,33 @@ export interface WranglerJsonSpec {
 }
 
 /**
+ * Queue consumer bindings for wrangler.json
+ */
+interface QueueConsumerWranglerJson {
+  queue: string;
+  /**
+   * The maximum number of messages allowed in each batch.
+   */
+  max_batch_size?: number;
+  /**
+   * The maximum number of concurrent consumers allowed to run at once. Leaving this unset will mean that the number of invocations will scale to the currently supported maximum.
+   */
+  max_concurrency?: number;
+  /**
+   * The maximum number of retries for a message, if it fails or `retryAll()` is invoked.
+   */
+  max_retries?: number;
+  /**
+   * The maximum number of seconds to wait for messages to fill a batch before the batch is sent to the consumer Worker.
+   */
+  max_batch_timeout?: number;
+  /**
+   * The number of seconds to delay retried messages for by default, before they are re-delivered to the consumer. This can be overridden on a per-message or per-batch basis when retrying messages.
+   */
+  retry_delay?: number;
+}
+
+/**
  * Process worker bindings into wrangler.json format
  */
 function processBindings(
@@ -554,14 +574,7 @@ function processBindings(
   }[] = [];
   const queues: {
     producers: { queue: string; binding: string }[];
-    consumers: {
-      queue: string;
-      max_batch_size?: number;
-      max_concurrency?: number;
-      max_retries?: number;
-      max_wait_time_ms?: number;
-      retry_delay?: number;
-    }[];
+    consumers: QueueConsumerWranglerJson[];
   } = {
     producers: [],
     consumers: [],
@@ -604,7 +617,9 @@ function processBindings(
         max_batch_size: eventSource.settings?.batchSize,
         max_concurrency: eventSource.settings?.maxConcurrency,
         max_retries: eventSource.settings?.maxRetries,
-        max_wait_time_ms: eventSource.settings?.maxWaitTimeMs,
+        max_batch_timeout: eventSource.settings?.maxWaitTimeMs
+          ? eventSource.settings?.maxWaitTimeMs / 1000
+          : undefined,
         retry_delay: eventSource.settings?.retryDelay,
       });
     } else if (isQueue(eventSource)) {

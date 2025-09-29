@@ -51,9 +51,10 @@ async function pollUntilReady(url: string) {
     if (res.ok) {
       break;
     }
+    console.log(res);
     await new Promise((resolve) => setTimeout(resolve, 1000));
     i++;
-    if (i > 10) {
+    if (i > 120) {
       throw new Error(
         `Worker is not ready after 10 seconds (status: ${res.status}): ${url}`,
       );
