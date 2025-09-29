@@ -489,6 +489,9 @@ export async function R2Bucket(
     put: async (
       key: string,
       value: PutObjectObject,
+      options?: {
+        httpMetadata?: Record<string, string>;
+      },
     ): Promise<PutR2ObjectResponse> => {
       if (isLocal) {
         // @ts-expect-error - node built-ins vs cloudflare built-ins
@@ -511,6 +514,7 @@ export async function R2Bucket(
         bucketName: bucket.name,
         key: key,
         object: value,
+        httpMetadata: options?.httpMetadata,
       });
       const body = (await response.json()) as {
         result: {
@@ -1198,10 +1202,12 @@ export async function putObject(
     bucketName,
     key,
     object,
+    httpMetadata,
   }: {
     bucketName: string;
     key: string;
     object: PutObjectObject;
+    httpMetadata?: Record<string, string>;
   },
 ): Promise<Response> {
   // Using withExponentialBackoff for reliability
@@ -1212,6 +1218,7 @@ export async function putObject(
       {
         headers: {
           "Content-Type": "application/octet-stream",
+          ...httpMetadata,
         },
       },
     );
