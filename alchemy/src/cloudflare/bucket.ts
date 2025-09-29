@@ -505,7 +505,6 @@ export async function R2Bucket(
       options?: Pick<R2PutOptions, 'httpMetadata'>,
     ): Promise<PutR2ObjectResponse> => {
       if (isLocal) {
-        // @ts-expect-error - node built-ins vs cloudflare built-ins
         return await (await localBucket()).put(
           key,
           typeof value === "string"
