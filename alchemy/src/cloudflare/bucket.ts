@@ -296,6 +296,9 @@ export type R2Bucket = _R2Bucket & {
       | string
       | null
       | Blob,
+    options?: {
+      httpMetadata?: Record<string, string>;
+    },
   ): Promise<PutR2ObjectResponse>;
   delete(key: string): Promise<Response>;
   list(options?: R2ListOptions): Promise<R2Objects>;
