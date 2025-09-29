@@ -132,7 +132,7 @@ export const buildWorkerOptions = async (
             ...input.assets
           },
           routerConfig: {
-            has_user_worker: Array.isArray(options.modules) ? options.modules.length > 0 : !! options.modules,
+            has_user_worker: true, // with alchemy there is always a user worker
             invoke_user_worker_ahead_of_assets: !!input.assets?.run_worker_first,
           },
         };
