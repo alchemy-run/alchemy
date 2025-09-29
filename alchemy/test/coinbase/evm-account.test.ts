@@ -49,6 +49,24 @@ describe("Coinbase", () => {
         /CDP only allows letters, numbers, and hyphens/,
       );
 
+      // Names starting with hyphen
+      expect(() => validateAccountName("-name")).toThrow(
+        /cannot start or end with a hyphen/,
+      );
+      expect(() => validateAccountName("-")).toThrow(
+        /cannot start or end with a hyphen/,
+      );
+
+      // Names ending with hyphen
+      expect(() => validateAccountName("name-")).toThrow(
+        /cannot start or end with a hyphen/,
+      );
+
+      // Names both starting and ending with hyphen
+      expect(() => validateAccountName("-name-")).toThrow(
+        /cannot start or end with a hyphen/,
+      );
+
       // Empty name
       expect(() => validateAccountName("")).toThrow(
         /CDP only allows letters, numbers, and hyphens/,
