@@ -297,7 +297,7 @@ export type R2Bucket = _R2Bucket & {
       | null
       | Blob,
     options?: {
-      httpMetadata?: Record<string, string>;
+      headers?: Record<string, string>;
     },
   ): Promise<PutR2ObjectResponse>;
   delete(key: string): Promise<Response>;
@@ -493,7 +493,7 @@ export async function R2Bucket(
       key: string,
       value: PutObjectObject,
       options?: {
-        httpMetadata?: Record<string, string>;
+        headers?: Record<string, string>;
       },
     ): Promise<PutR2ObjectResponse> => {
       if (isLocal) {
@@ -517,7 +517,7 @@ export async function R2Bucket(
         bucketName: bucket.name,
         key: key,
         object: value,
-        httpMetadata: options?.httpMetadata,
+        headers: options?.headers,
       });
       const body = (await response.json()) as {
         result: {
@@ -1205,12 +1205,12 @@ export async function putObject(
     bucketName,
     key,
     object,
-    httpMetadata,
+    headers,
   }: {
     bucketName: string;
     key: string;
     object: PutObjectObject;
-    httpMetadata?: Record<string, string>;
+    headers?: Record<string, string>;
   },
 ): Promise<Response> {
   // Using withExponentialBackoff for reliability
@@ -1221,7 +1221,7 @@ export async function putObject(
       {
         headers: {
           "Content-Type": "application/octet-stream",
-          ...httpMetadata,
+          ...headers,
         },
       },
     );
