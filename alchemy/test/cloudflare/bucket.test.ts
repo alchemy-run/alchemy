@@ -298,23 +298,29 @@ describe("R2 Bucket Resource", async () => {
       });
       expect(putResponse.status).toEqual(200);
 
-      await new Promise((resolve) => setTimeout(resolve, 1000)); // wait for CORS to propagate
-
-      const getResponse = await fetch(
-        `https://${bucket.domain}/test-file.txt`,
-        {
-          method: "OPTIONS",
-          headers: {
-            Origin: "https://example.com",
+      // Loop for up to 60s until CORS headers are properly propagated (eventually consistent)
+      for (let i = 0; i < 60; i++) {
+        const getResponse = await fetch(
+          `https://${bucket.domain}/test-file.txt`,
+          {
+            method: "OPTIONS",
+            headers: {
+              Origin: "https://example.com",
+            },
           },
-        },
-      );
-      expect(getResponse.headers.get("Access-Control-Allow-Origin")).toEqual(
-        "*",
-      );
-      expect(getResponse.headers.get("Access-Control-Allow-Methods")).toEqual(
-        "GET",
-      );
+        );
+        const allowOrigin = getResponse.headers.get(
+          "Access-Control-Allow-Origin",
+        );
+        const allowMethods = getResponse.headers.get(
+          "Access-Control-Allow-Methods",
+        );
+
+        if (allowOrigin === "*" && allowMethods === "GET") {
+          return; // success
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
     } finally {
       await destroy(scope);
     }

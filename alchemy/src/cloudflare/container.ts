@@ -1044,13 +1044,13 @@ export async function createContainerApplicationRollout(
   );
   const result = (await response.json()) as {
     result: CreateRolloutApplicationResponse;
-    errors: { message: string }[];
+    errors: { message: string; code: number }[];
   };
   if (response.ok) {
     return result.result;
   }
   throw Error(
-    `Failed to create container application rollout: ${result.errors.map((e: { message: string }) => e.message).join(", ")}`,
+    `Failed to create container application rollout: ${result.errors.map((e) => `[${e.code}] ${e.message}`).join(", ")}`,
   );
 }
 

@@ -263,7 +263,7 @@ export const serializeBinary = async (
             : value;
 };
 
-async function streamToBuffer(
+export async function streamToBuffer(
   stream: ReadableStream<Uint8Array>,
 ): Promise<Buffer> {
   const reader = stream.getReader();

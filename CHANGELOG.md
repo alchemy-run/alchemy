@@ -1,3 +1,27 @@
+## v0.69.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **aws**:
+  - Trigger replace when changing an immutable property in Cloud Control &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/1006 [<samp>(2a376)</samp>](https://github.com/sam-goodwin/alchemy/commit/2a376419)
+- **cloudflare**:
+  - Support data catalog on buckets &nbsp;-&nbsp; by **Michael K** in https://github.com/sam-goodwin/alchemy/issues/1009 [<samp>(e008d)</samp>](https://github.com/sam-goodwin/alchemy/commit/e008d24f)
+  - Bucket object resource &nbsp;-&nbsp; by **Leonardo E. Dominguez** in https://github.com/sam-goodwin/alchemy/issues/1016 [<samp>(d8fdf)</samp>](https://github.com/sam-goodwin/alchemy/commit/d8fdf4db)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**:
+  - Set max_batch_timeout in wrangler.json &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/1019 [<samp>(43a6b)</samp>](https://github.com/sam-goodwin/alchemy/commit/43a6b3b3)
+  - Build.command and dev.command should be optional &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/1014 [<samp>(258e5)</samp>](https://github.com/sam-goodwin/alchemy/commit/258e509e)
+  - Export R2Object &nbsp;-&nbsp; by **Leonardo E. Dominguez** in https://github.com/sam-goodwin/alchemy/issues/1023 [<samp>(ff4ba)</samp>](https://github.com/sam-goodwin/alchemy/commit/ff4ba21c)
+  - Support R2 methods in dev mode &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/1022 [<samp>(6c102)</samp>](https://github.com/sam-goodwin/alchemy/commit/6c102be9)
+- **neon**:
+  - Remove this(..) syntax &nbsp;-&nbsp; by **utopy** in https://github.com/sam-goodwin/alchemy/issues/1007 [<samp>(4efaa)</samp>](https://github.com/sam-goodwin/alchemy/commit/4efaa959)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.68.0...v0.69.0)
+
+---
+
 ## v0.68.0
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
