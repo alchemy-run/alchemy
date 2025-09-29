@@ -1298,62 +1298,16 @@ async function updateTanStackViteConfig(context: InitContext): Promise<void> {
     }
 
     if (Node.isObjectLiteralExpression(configObject)) {
-      // Add build configuration
-      if (!configObject.getProperty("build")) {
-        configObject.addPropertyAssignment({
-          name: "build",
-          initializer: `{
-    target: "esnext",
-    rollupOptions: {
-      external: ["node:async_hooks", "cloudflare:workers"],
-    },
-  }`,
-        });
-      }
-
       const pluginsProperty = configObject.getProperty("plugins");
       if (pluginsProperty && Node.isPropertyAssignment(pluginsProperty)) {
         const initializer = pluginsProperty.getInitializer();
         if (Node.isArrayLiteralExpression(initializer)) {
-          const hasShim = initializer
+          const hasAlchemyPlugin = initializer
             .getElements()
             .some((el) => el.getText().includes("alchemy"));
-          if (!hasShim) {
+          if (!hasAlchemyPlugin) {
             initializer.addElement("alchemy()");
           }
-
-          const tanstackElements = initializer
-            .getElements()
-            .filter((el) => el.getText().includes("tanstackStart"));
-
-          tanstackElements.forEach((element) => {
-            if (Node.isCallExpression(element)) {
-              const args = element.getArguments();
-              if (args.length === 0) {
-                element.addArgument(`{
-      target: "cloudflare-module",
-      customViteReactPlugin: true,
-    }`);
-              } else if (
-                args.length === 1 &&
-                Node.isObjectLiteralExpression(args[0])
-              ) {
-                const configObj = args[0];
-                if (!configObj.getProperty("target")) {
-                  configObj.addPropertyAssignment({
-                    name: "target",
-                    initializer: '"cloudflare-module"',
-                  });
-                }
-                if (!configObj.getProperty("customViteReactPlugin")) {
-                  configObj.addPropertyAssignment({
-                    name: "customViteReactPlugin",
-                    initializer: "true",
-                  });
-                }
-              }
-            }
-          });
         }
       }
     }
