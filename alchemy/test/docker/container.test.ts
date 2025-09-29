@@ -79,7 +79,7 @@ describe("Container", () => {
       expect(healthcheckData.Timeout).toBe(5 * ONE_SECOND_IN_NANOSECONDS);
       expect(healthcheckData.Retries).toBe(3);
       expect(healthcheckData.StartPeriod).toBe(5 * ONE_SECOND_IN_NANOSECONDS);
-      expect(healthcheckData.StartInterval).toBe(4 * ONE_SECOND_IN_NANOSECONDS); // 4 seconds
+      expect(healthcheckData.StartInterval).toBe(4 * ONE_SECOND_IN_NANOSECONDS);
     } finally {
       await alchemy.destroy(scope);
     }
@@ -179,6 +179,112 @@ describe("Container", () => {
       expect(healthcheckData.Retries).toBe(3);
       expect(healthcheckData.StartPeriod).toBe(60 * ONE_SECOND_IN_NANOSECONDS);
       expect(healthcheckData.StartInterval).toBe(5 * ONE_SECOND_IN_NANOSECONDS);
+    } finally {
+      await alchemy.destroy(scope);
+    }
+  });
+
+  test("should create a container with string duration format healthcheck", async (scope) => {
+    try {
+      const api = new DockerApi();
+
+      // Create a container with healthcheck using string duration format
+      const container = await Container(
+        "test-string-duration-healthcheck-container",
+        {
+          image: "nginx:latest",
+          name: "alchemy-test-string-duration-healthcheck-container",
+          healthcheck: {
+            cmd: ["curl", "-f", "http://localhost/"],
+            interval: "30s",
+            timeout: "5s",
+            retries: 3,
+            startPeriod: "1m",
+            startInterval: "500ms",
+          },
+          start: false,
+        },
+      );
+
+      expect(container.name).toBe(
+        "alchemy-test-string-duration-healthcheck-container",
+      );
+      expect(container.healthcheck).toBeDefined();
+      expect(container.healthcheck?.interval).toBe("30s");
+      expect(container.healthcheck?.timeout).toBe("5s");
+      expect(container.healthcheck?.startPeriod).toBe("1m");
+      expect(container.healthcheck?.startInterval).toBe("500ms");
+
+      // Verify healthcheck was applied
+      const { stdout } = await api.exec([
+        "inspect",
+        container.id,
+        "--format",
+        "{{json .Config.Healthcheck}}",
+      ]);
+
+      const healthcheckData = JSON.parse(stdout.trim());
+      expect(healthcheckData).toBeDefined();
+      expect(healthcheckData.Test).toBeInstanceOf(Array);
+      expect(healthcheckData.Test[1]).toContain("curl");
+
+      // Verify all healthcheck parameters (in nanoseconds)
+      expect(healthcheckData.Interval).toBe(30 * ONE_SECOND_IN_NANOSECONDS);
+      expect(healthcheckData.Timeout).toBe(5 * ONE_SECOND_IN_NANOSECONDS);
+      expect(healthcheckData.Retries).toBe(3);
+      expect(healthcheckData.StartPeriod).toBe(60 * ONE_SECOND_IN_NANOSECONDS);
+      expect(healthcheckData.StartInterval).toBe((1 / 2) * ONE_SECOND_IN_NANOSECONDS);
+    } finally {
+      await alchemy.destroy(scope);
+    }
+  });
+
+  test("should create a container with mixed duration formats", async (scope) => {
+    try {
+      const api = new DockerApi();
+
+      // Create a container with healthcheck using mixed formats
+      const container = await Container(
+        "test-mixed-duration-healthcheck-container",
+        {
+          image: "nginx:latest",
+          name: "alchemy-test-mixed-duration-healthcheck-container",
+          healthcheck: {
+            cmd: "curl -f http://localhost/ || exit 1",
+            interval: "2m",
+            timeout: 10,
+            retries: 5,
+            startPeriod: "90s",
+          },
+          start: false,
+        },
+      );
+
+      expect(container.name).toBe(
+        "alchemy-test-mixed-duration-healthcheck-container",
+      );
+      expect(container.healthcheck).toBeDefined();
+      expect(container.healthcheck?.interval).toBe("2m");
+      expect(container.healthcheck?.timeout).toBe(10);
+      expect(container.healthcheck?.startPeriod).toBe("90s");
+
+      // Verify healthcheck was applied
+      const { stdout } = await api.exec([
+        "inspect",
+        container.id,
+        "--format",
+        "{{json .Config.Healthcheck}}",
+      ]);
+
+      const healthcheckData = JSON.parse(stdout.trim());
+      expect(healthcheckData).toBeDefined();
+      expect(healthcheckData.Test).toBeInstanceOf(Array);
+
+      // Verify all healthcheck parameters (in nanoseconds)
+      expect(healthcheckData.Interval).toBe(120 * ONE_SECOND_IN_NANOSECONDS);
+      expect(healthcheckData.Timeout).toBe(10 * ONE_SECOND_IN_NANOSECONDS);
+      expect(healthcheckData.Retries).toBe(5);
+      expect(healthcheckData.StartPeriod).toBe(90 * ONE_SECOND_IN_NANOSECONDS);
     } finally {
       await alchemy.destroy(scope);
     }
