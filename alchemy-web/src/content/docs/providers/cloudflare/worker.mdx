@@ -144,18 +144,6 @@ export const worker = await Worker("api", {
 Monitor your CPU usage with Cloudflare Analytics to understand if increased limits are necessary. Start with default limits and scale up only when needed to optimize costs.
 :::
 
-Access bindings using modern `env` import or traditional parameter approach:
-```ts
-import { env } from "cloudflare:workers";
-
-export default {
-  async fetch(request: Request, env: Env) {
-    await env.CACHE.get("key");
-    return new Response("OK");
-  },
-};
-```
-
 Module scope initialization (when appropriate):
 ```ts
 import { env } from "cloudflare:workers";
@@ -300,8 +288,13 @@ await Worker("api", {
   entrypoint: "./src/api.ts", 
   dev: { port: 8787 } 
 });
+```
 
-// Scheduled tasks with cron triggers
+## Cron Triggers
+
+Schedule tasks with cron expressions:
+
+```ts
 export const cronWorker = await Worker("cron-tasks", {
   entrypoint: "./src/cron.ts",
   crons: [
@@ -377,17 +370,26 @@ You can learn more about [Smart Placement](https://developers.cloudflare.com/wor
 
 Build distributed systems using Worker-to-Worker communication, RPC patterns, and Durable Object sharing:
 
-**Self-binding and circular dependencies:**
-```ts
-import { Worker, Self, WorkerStub } from "alchemy/cloudflare";
+## Self-Binding
 
-// Self-binding pattern
+Enable Workers to reference themselves:
+
+```ts
+import { Worker, Self } from "alchemy/cloudflare";
+
 export const service = await Worker("auth-service", {
   entrypoint: "./src/auth.ts",
   bindings: { SELF: Self }
 });
+```
 
-// Breaking circular dependencies with WorkerStub
+## Circular Dependencies
+
+Break circular dependencies with WorkerStub:
+
+```ts
+import { Worker, WorkerStub } from "alchemy/cloudflare";
+
 const authStub = WorkerStub("auth", { name: "auth-service" });
 
 export const apiWorker = await Worker("api", {
