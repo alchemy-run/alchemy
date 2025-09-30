@@ -6,6 +6,7 @@ import pkg from "../../../package.json" with { type: "json" };
 import type { Phase } from "../../alchemy.ts";
 import { Scope } from "../../scope.ts";
 import { logger } from "../logger.ts";
+import { memoize } from "../memoize.ts";
 import {
   CONFIG_DIR,
   SUPPRESS_TELEMETRY_ERRORS,
@@ -144,7 +145,7 @@ function getEnvironment() {
 
 let cachedTelemetryData: GenericTelemetryData | null = null;
 
-export async function collectData(): Promise<GenericTelemetryData> {
+export const collectData = memoize(async (): Promise<GenericTelemetryData> => {
   if (cachedTelemetryData) {
     return cachedTelemetryData;
   }
@@ -181,7 +182,7 @@ export async function collectData(): Promise<GenericTelemetryData> {
     alchemyVersion: pkg.version,
   };
   return cachedTelemetryData;
-}
+});
 
 export type GenericTelemetryData = {
   userId: string;
