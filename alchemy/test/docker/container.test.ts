@@ -233,7 +233,9 @@ describe("Container", () => {
       expect(healthcheckData.Timeout).toBe(5 * ONE_SECOND_IN_NANOSECONDS);
       expect(healthcheckData.Retries).toBe(3);
       expect(healthcheckData.StartPeriod).toBe(60 * ONE_SECOND_IN_NANOSECONDS);
-      expect(healthcheckData.StartInterval).toBe((1 / 2) * ONE_SECOND_IN_NANOSECONDS);
+      expect(healthcheckData.StartInterval).toBe(
+        (1 / 2) * ONE_SECOND_IN_NANOSECONDS,
+      );
     } finally {
       await alchemy.destroy(scope);
     }
