@@ -1,3 +1,4 @@
+import type { R2PutOptions } from "@cloudflare/workers-types/experimental/index.ts";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { createCloudflareApi, type CloudflareApiOptions } from "./api.ts";
@@ -23,6 +24,11 @@ export interface R2ObjectProps extends CloudflareApiOptions {
    * Supports various data types including streams, buffers, strings, and blobs
    */
   content: PutObjectObject;
+
+  /**
+   * The options to use for the object
+   */
+  options?: Pick<R2PutOptions, "httpMetadata">;
 }
 
 /**
@@ -105,7 +111,11 @@ export const R2Object = Resource(
         this.replace();
       }
       // Create or update the object in the bucket
-      const response = await props.bucket.put(props.key, props.content);
+      const response = await props.bucket.put(
+        props.key,
+        props.content,
+        props.options,
+      );
 
       return {
         id,

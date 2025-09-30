@@ -32,6 +32,7 @@ describe.sequential("Container Resource", () => {
                 dockerfile,
               },
               maxInstances: 1,
+              adopt: true,
             }),
           },
         });
@@ -94,6 +95,7 @@ describe.sequential("Container Resource", () => {
         build: {
           context: path.join(import.meta.dirname, "container"),
         },
+        adopt: true,
       },
     );
 

@@ -6,7 +6,7 @@ import {
 import path from "node:path";
 import { patchNeonResponseTypes } from "./neon.ts";
 
-export const clients = ["neon", "planetscale"] as const;
+export const clients = ["neon", "planetscale", "clickhouse"] as const;
 
 export const generate = async () => {
   await patchBiomeConfig();
@@ -25,7 +25,7 @@ export const generate = async () => {
   await $`rm -rf src/util/api`;
   await $`mkdir -p src/util/api`;
   await $`mv src/${clients[0]}/api/client/ src/${clients[0]}/api/core/ src/util/api/`;
-  await $`biome check src/util/api --write`;
+  await $`bunx biome check src/util/api --write`;
 
   // 3. Remove unused code
   for (const client of clients.slice(1)) {
@@ -37,7 +37,7 @@ export const generate = async () => {
   // 4. Update imports
   for (const client of clients) {
     await patchClientImports(client);
-    await $`biome check src/${client}/api --write`;
+    await $`bunx biome check src/${client}/api --write`;
   }
 };
 
@@ -60,7 +60,7 @@ const patchBiomeConfig = async () => {
   if (json.files.includes[index] === value) return;
   json.files.includes[index] = value;
   await file.write(`${JSON.stringify(json, null, 2)}\n`);
-  await Bun.$.cwd(root)`biome check biome.json --write`;
+  await Bun.$.cwd(root)`bunx biome check biome.json --write`;
 };
 
 if (import.meta.main) {

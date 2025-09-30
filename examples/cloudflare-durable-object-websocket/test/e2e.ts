@@ -6,30 +6,32 @@ export async function test({ url }: { url: string | undefined }) {
   console.log("Running Durable Object WebSocket E2E test...");
 
   assert(url, "URL is not set");
-
   await pollUntilReady(new URL("/status", url));
 
   const ws = new WebSocket(new URL("/websocket", url));
-  await once(ws, "open");
+  try {
+    await once(ws, "open");
 
-  const data = crypto.randomUUID();
-  ws.send(data);
-  const message = await new Promise<string>((resolve) => {
-    ws.addEventListener("message", (event) => {
-      resolve(event.data.toString());
+    const data = crypto.randomUUID();
+    ws.send(data);
+    const message = await new Promise<string>((resolve) => {
+      ws.addEventListener("message", (event) => {
+        resolve(event.data.toString());
+      });
     });
-  });
-  console.log("Received message", message);
-  assert.equal(
-    message,
-    `Received message: ${data}`,
-    "Received message is not correct",
-  );
+    console.log("Received message", message);
+    assert.equal(
+      message,
+      `Received message: ${data}`,
+      "Received message is not correct",
+    );
+  } finally {
+    console.log("Durable Object WebSocket E2E test passed");
+    ws.close(1000);
 
-  ws.close(1000);
-  await once(ws, "close");
-
-  console.log("Durable Object WebSocket E2E test passed");
+    // TODO(sam): what the actual fuck, why does WebSocket keep the process alive?
+    process.exit(0);
+  }
 }
 
 async function pollUntilReady(url: URL) {

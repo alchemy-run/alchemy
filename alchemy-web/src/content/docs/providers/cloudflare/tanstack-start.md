@@ -19,7 +19,7 @@ const app = await TanStackStart("my-app");
 import { TanStackStart } from "alchemy/cloudflare";
 
 const app = await TanStackStart("my-app", {
-  command: "bun run test && bun run build:production",
+  build: "bun run test && bun run build:production",
 });
 ```
 
@@ -60,13 +60,17 @@ const app = await TanStackStart("my-app", {
 ```ts
 import { Worker, TanStackStart } from "alchemy/cloudflare";
 
-const app = await TanStackStart("my-app");
-
-await Worker("my-worker", {
-  name: "my-worker",
-  script: "console.log('Hello, world!')",
+const api = await Worker("api", {
+  script: `export default {
+  async fetch(request, env) {
+    return new Response("Hello, world!");
+  },
+};
+`,
+});
+const app = await TanStackStart("my-app", {
   bindings: {
-    APP: app,
+    API: api,
   },
 });
 ```

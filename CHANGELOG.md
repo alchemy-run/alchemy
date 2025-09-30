@@ -1,3 +1,24 @@
+## v0.69.1
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**:
+  - Add Tail Consumers &nbsp;-&nbsp; by **Jacob M-G Evans** and **John Royal** in https://github.com/sam-goodwin/alchemy/issues/1021 [<samp>(e31c9)</samp>](https://github.com/sam-goodwin/alchemy/commit/e31c9ea1)
+  - Add httpMetadata prop to bucket put fn &nbsp;-&nbsp; by **Leonardo E. Dominguez** in https://github.com/sam-goodwin/alchemy/issues/1024 [<samp>(ac7b7)</samp>](https://github.com/sam-goodwin/alchemy/commit/ac7b7c99)
+  - Add scheduled event handler for local workers &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/1011 [<samp>(2ae06)</samp>](https://github.com/sam-goodwin/alchemy/commit/2ae068b7)
+- **docker**:
+  - Container health checks &nbsp;-&nbsp; by **João Victor** in https://github.com/sam-goodwin/alchemy/issues/1029 [<samp>(632dc)</samp>](https://github.com/sam-goodwin/alchemy/commit/632dcf3a)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**:
+  - Set ALCHEMY_ROOT for dev command in Website &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/1027 [<samp>(9b56f)</samp>](https://github.com/sam-goodwin/alchemy/commit/9b56fd22)
+  - Update tanstack start to support latest RC version &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/1028 [<samp>(809bf)</samp>](https://github.com/sam-goodwin/alchemy/commit/809bf2d3)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.69.0...v0.69.1)
+
+---
+
 ## v0.69.0
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features

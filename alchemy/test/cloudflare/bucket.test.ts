@@ -536,6 +536,35 @@ describe("R2 Bucket Resource", async () => {
       await destroy(scope);
     }
   });
+
+  test("bucket put operation with headers", async (scope) => {
+    const bucketName = `${BRANCH_PREFIX.toLowerCase()}-test-bucket-put-with-headers`;
+    try {
+      let bucket = await R2Bucket(bucketName, {
+        name: bucketName,
+        adopt: true,
+        empty: true,
+      });
+      expect(bucket.name).toEqual(bucketName);
+
+      const testKey = "test-object.txt";
+      const testContent = '{ "name": "test" }';
+      await bucket.put(testKey, testContent, {
+        httpMetadata: {
+          contentType: "application/json",
+        },
+      });
+
+      let obj = await bucket.head(testKey);
+      expect(obj?.httpMetadata?.contentType).toEqual("application/json");
+
+      const getObj = await bucket.get(testKey);
+      await expect(getObj?.text()).resolves.toEqual(testContent);
+      expect(getObj?.httpMetadata?.contentType).toEqual("application/json");
+    } finally {
+      await scope.finalize();
+    }
+  });
 });
 
 /**

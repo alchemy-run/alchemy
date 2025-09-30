@@ -1,6 +1,6 @@
 {
   "name": "alchemy",
-  "version": "0.69.0",
+  "version": "0.69.1",
   "license": "Apache-2.0",
   "author": "Sam Goodwin <sam@alchemy.run>",
   "homepage": "https://alchemy.run",
@@ -51,6 +51,10 @@
     "./aws/oidc": {
       "bun": "./src/aws/oidc/index.ts",
       "import": "./lib/aws/oidc/index.js"
+    },
+    "./clickhouse": {
+      "bun": "./src/clickhouse/index.ts",
+      "import": "./lib/clickhouse/index.js"
     },
     "./cloudflare": {
       "bun": "./src/cloudflare/index.ts",
@@ -150,6 +154,7 @@
     "@cloudflare/unenv-preset": "^2.6.3",
     "@iarna/toml": "^2.2.5",
     "@smithy/node-config-provider": "^4.0.0",
+    "@smithy/types": "^4.6.0",
     "aws4fetch": "^1.0.20",
     "env-paths": "^3.0.0",
     "esbuild": "^0.25.1",

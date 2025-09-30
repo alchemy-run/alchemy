@@ -60,6 +60,62 @@ export interface NetworkMapping {
 }
 
 /**
+ * Duration value supporting both number (seconds) and string format (value + unit)
+ * Units: ms (milliseconds), s (seconds), m (minutes), h (hours)
+ * Examples: 30, "30s", "1m", "500ms", "2h"
+ */
+export type Duration = number | `${number}${"ms" | "s" | "m" | "h"}`;
+
+/**
+ * Healthcheck configuration
+ */
+export interface HealthcheckConfig {
+  /**
+   * Command to run to check health.
+   * Can be an array of command arguments or a shell command string.
+   * Examples:
+   * - ["curl", "-f", "http://localhost/"]
+   * - "curl -f http://localhost/ || exit 1"
+   */
+  cmd: string[] | string;
+
+  /**
+   * Time between running the check
+   * Can be a number (in seconds) or string with unit (e.g., "30s", "1m")
+   * @default 0
+   */
+  interval?: Duration;
+
+  /**
+   * Maximum time to allow one check to run
+   * Can be a number (in seconds) or string with unit (e.g., "10s", "500ms")
+   * @default 0
+   */
+  timeout?: Duration;
+
+  /**
+   * Consecutive failures needed to report unhealthy
+   */
+  retries?: number;
+
+  /**
+   * Start period for the container to initialize before starting
+   * health-retries countdown
+   * Can be a number (in seconds) or string with unit (e.g., "40s", "1m")
+   * @default 0
+   */
+  startPeriod?: Duration;
+
+  /**
+   * Time between running the check during the start period
+   * Can be a number (in seconds) or string with unit (e.g., "5s", "500ms")
+   * Requires Docker API 1.44+
+   * @default 0
+   */
+  startInterval?: Duration;
+}
+
+/**
  * Properties for creating a Docker container
  */
 export interface ContainerProps {
@@ -115,6 +171,11 @@ export interface ContainerProps {
    * Start the container after creation
    */
   start?: boolean;
+
+  /**
+   * Healthcheck configuration
+   */
+  healthcheck?: HealthcheckConfig;
 }
 
 /**
@@ -170,6 +231,41 @@ export interface Container extends ContainerProps {
  *     { external: 3000, internal: 3000 }
  *   ],
  *   restart: "always",
+ *   start: true
+ * });
+ *
+ * @example
+ * // Create a container with healthcheck using numeric values (seconds)
+ * const healthyContainer = await Container("api", {
+ *   image: "my-api:latest",
+ *   ports: [
+ *     { external: 3000, internal: 3000 }
+ *   ],
+ *   healthcheck: {
+ *     cmd: ["curl", "-f", "http://localhost:3000/health"],
+ *     interval: 30,
+ *     timeout: 10,
+ *     retries: 3,
+ *     startPeriod: 40
+ *   },
+ *   start: true
+ * });
+ *
+ * @example
+ * // Create a container with healthcheck using string duration format
+ * const healthyContainer2 = await Container("api2", {
+ *   image: "my-api:latest",
+ *   ports: [
+ *     { external: 3001, internal: 3000 }
+ *   ],
+ *   healthcheck: {
+ *     cmd: ["curl", "-f", "http://localhost:3000/health"],
+ *     interval: "30s",
+ *     timeout: "10s",
+ *     retries: 3,
+ *     startPeriod: "1m",
+ *     startInterval: "500ms"
+ *   },
  *   start: true
  * });
  */
@@ -245,6 +341,7 @@ export const Container = Resource(
         env: props.environment,
         volumes: volumeMappings,
         cmd: props.command,
+        healthcheck: props.healthcheck,
       });
 
       // Connect to networks if specified
