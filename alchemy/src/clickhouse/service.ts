@@ -140,48 +140,168 @@ export interface ServiceProps {
 }
 
 export interface Service {
+  /**
+   * The id of Clickhouse cloud organization the service is in.
+   */
   organizationId: string;
+
+  /**
+   * The name of the Clickhouse service.
+   *
+   */
   name: string;
+
+  /**
+   * The clickhouse id of the Clickhouse service.
+   */
   clickhouseId: string;
+
+  /**
+   * The password for the Clickhouse service.
+   */
   password: Secret<string>;
+
+  /**
+   * The provider of the Clickhouse service.
+   */
   provider: NonNullable<ApiService["provider"]>;
+
+  /**
+   * The region of the Clickhouse service.
+   */
   region: NonNullable<ApiService["region"]>;
+
+  /**
+   * The IP access list of the Clickhouse service.
+   */
   ipAccessList: NonNullable<ApiService["ipAccessList"]>;
+
+  /**
+   * The minimum replica memory of the Clickhouse service.
+   */
   minReplicaMemoryGb: NonNullable<ApiService["minReplicaMemoryGb"]>;
+
+  /**
+   * The maximum replica memory of the Clickhouse service.
+   */
   maxReplicaMemoryGb: NonNullable<ApiService["maxReplicaMemoryGb"]>;
+
+  /**
+   * The number of replicas of the Clickhouse service.
+   */
   numReplicas: NonNullable<ApiService["numReplicas"]>;
+
+  /**
+   * Whether to enable idle scaling of the Clickhouse service.
+   */
   idleScaling: NonNullable<ApiService["idleScaling"]>;
+
+  /**
+   * The timeout minutes for idle scaling of the Clickhouse service.
+   */
   idleTimeoutMinutes: NonNullable<ApiService["idleTimeoutMinutes"]>;
+
+  /**
+   * Whether to make the Clickhouse service readonly.
+   */
   isReadonly: NonNullable<ApiService["isReadonly"]>;
+
+  /**
+   * The data warehouse id of the Clickhouse service.
+   */
   dataWarehouseId: NonNullable<ApiService["dataWarehouseId"]>;
+
+  /**
+   * The encryption key of the Clickhouse service.
+   */
   encryptionKey?: ApiService["encryptionKey"];
+
+  /**
+   * The encryption assumed role identifier of the Clickhouse service.
+   */
   encryptionAssumedRoleIdentifier?: ApiService["encryptionAssumedRoleIdentifier"];
+
+  /**
+   * The release channel of the Clickhouse service.
+   */
   releaseChannel: NonNullable<ApiService["releaseChannel"]>;
+
+  /**
+   * The byoc id of the Clickhouse service if it is using BYOC infrastructure.
+   */
   byocId?: ApiService["byocId"];
+
+  /**
+   * Whether to enable transparent data encryption of the Clickhouse service.
+   */
   hasTransparentDataEncryption?: ApiService["hasTransparentDataEncryption"];
+
+	/**
+	 * The profile the Clickhouse service was created using.
+	 */
   profile?: ApiService["profile"];
+
+  /**
+   * The compliance type of the Clickhouse service.
+   */
   complianceType?: ApiService["complianceType"];
+
+  /**
+   * The backup id of the Clickhouse service.
+   */
   backupId?: string;
+
+	/**
+	 * If the mysql endpoint is enabled.
+	 */
   enableMysqlEndpoint?: boolean;
+
+  /**
+   * If the https endpoint is enabled.
+   */
   enableHttpsEndpoint?: true;
+
+  /**
+   * If the nativesecure endpoint is enabled.
+   */
   enableNativesecureEndpoint?: true;
+
+  /**
+   * The mysql endpoint details of the Clickhouse service.
+   */
   mysqlEndpoint?: {
     protocol: "mysql";
     host: string;
     port: number;
     username: string;
   };
+
+  /**
+   * The https endpoint details of the Clickhouse service.
+   */
   httpsEndpoint?: {
     protocol: "https";
     host: string;
     port: number;
   };
+
+  /**
+   * The nativesecure endpoint details of the Clickhouse service.
+   */
   nativesecureEndpoint?: {
     protocol: "nativesecure";
     host: string;
     port: number;
   };
+
+  /**
+   * The desired state of the Clickhouse service.
+   */
   stateTarget: "start" | "stop";
+
+  /**
+   * The state of the Clickhouse service.
+   */
   state: ApiService["state"];
 }
 
