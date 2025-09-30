@@ -84,6 +84,60 @@ async function handleUsers(request: Request): Promise<Response> {
 - **Proxies**: Forward requests to backend services
 - **Static serving**: Serve HTML, CSS, JS files
 
+## Durable Objects
+
+Durable Objects enable stateful serverless applications with coordination capabilities:
+
+```ts
+import { Worker, DurableObjectNamespace } from "alchemy/cloudflare";
+
+const counter = DurableObjectNamespace("counter", {
+  className: "Counter",
+  sqlite: true, // Enable SQLite storage
+});
+
+export const worker = await Worker("api", {
+  entrypoint: "./src/worker.ts",
+  bindings: {
+    COUNTER: counter,
+  }
+});
+```
+
+```ts
+// ./src/worker.ts
+import { DurableObject } from "cloudflare:workers";
+
+export class Counter extends DurableObject {
+  async increment(): Promise<number> {
+    let count = (await this.ctx.storage.get("count")) || 0;
+    count++;
+    await this.ctx.storage.put("count", count);
+    return count;
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    const count = await this.increment();
+    return Response.json({ count });
+  }
+}
+
+export default {
+  async fetch(request: Request, env: typeof worker.Env) {
+    // Get a Durable Object instance
+    const id = env.COUNTER.idFromName("global-counter");
+    const obj = env.COUNTER.get(id);
+    
+    // Call the Durable Object
+    return obj.fetch(request);
+  }
+};
+```
+
+:::tip[Durable Objects Guide]
+For comprehensive Durable Objects documentation including WebSocket integration, alarms, and advanced patterns, see the [Durable Object Namespace guide](/providers/cloudflare/durable-object-namespace).
+:::
+
 ## Bindings & Types (access external resources)
 
 Use bindings to attach KV, R2, Durable Objects, secrets, and other resources to the Worker. 
@@ -204,7 +258,7 @@ And register `env.d.ts` in your `tsconfig.json`'s types.
 ```
 
 :::tip
-Type augmentation provides project-wide type safety for your Worker environments. This eliminates runtime errors and improves developer experience with full IntelliSense support.
+Type augmentation ensures your runtime code only accesses bindings defined in your infrastructure. This prevents undefined binding errors and provides full IntelliSense support across your project.
 :::
 
 
@@ -402,6 +456,11 @@ export const authWorker = await Worker("auth", {
   bindings: { API: apiWorker }
 });
 ```
+
+**Other alternatives:**
+- **Event-driven communication** via Queues or Durable Objects
+- **Shared state** using Durable Objects as coordination layer
+- **API Gateway pattern** with unidirectional data flow
 
 
 ### Service Mesh Pattern
