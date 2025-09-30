@@ -2,7 +2,7 @@ import type { State, StateStore } from "../state.ts";
 import {
   createAndSendEvent,
   type StateStoreTelemetryData,
-} from "../util/telemetry/events.ts";
+} from "../util/telemetry/telemetry.ts";
 
 //todo(michael): we should also handle serde here
 export class InstrumentedStateStore<T extends StateStore>

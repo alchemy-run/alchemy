@@ -29,7 +29,7 @@ import {
 import { logger } from "./util/logger.ts";
 import { AsyncMutex } from "./util/mutex.ts";
 import { ALCHEMY_ROOT } from "./util/root-dir.ts";
-import { createAndSendEvent } from "./util/telemetry/events.ts";
+import { createAndSendEvent } from "./util/telemetry/telemetry.ts";
 
 export class RootScopeStateAttemptError extends Error {
   constructor() {
