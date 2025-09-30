@@ -257,7 +257,7 @@ export const EvmSmartAccount = Resource(
       // CDP SDK doesn't support deleting accounts
       // Accounts remain in CDP but are no longer tracked by Alchemy
       console.log(`🗑️ Untracking Smart Account: ${this.output?.address}`);
-      return {} as any;
+      return this.destroy();
     }
 
     let smartAccount;
