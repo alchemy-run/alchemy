@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import type { CloudflareEnv } from "./env";
+import type { CloudflareEnv } from "./env.ts";
 
 export const api = new Hono<{ Bindings: CloudflareEnv }>();
 
@@ -15,7 +15,6 @@ api.use(
     credentials: true,
   }),
 );
-
 
 api.get("/api/test/env", (c) =>
   c.json({ ALCHEMY_TEST_VALUE: c.env.ALCHEMY_TEST_VALUE }),

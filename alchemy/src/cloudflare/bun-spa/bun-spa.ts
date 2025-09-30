@@ -1,6 +1,5 @@
 import { existsSync, statSync } from "node:fs";
 import path from "node:path";
-import { getPackageManagerRunner } from "../../util/detect-package-manager.ts";
 import type { Assets } from "../assets.ts";
 import type { Bindings } from "../bindings.ts";
 import {
@@ -32,25 +31,31 @@ export async function BunSPA<B extends Bindings>(
   }
   const outDir = path.resolve(props.outDir ?? "dist/client");
 
-  if(props.assets) {
-    throw new Error(`assets are not supported in BunSPA`);
+  if (props.assets) {
+    throw new Error("assets are not supported in BunSPA");
   }
 
+  console.log("creating website", outDir);
   const website = await Website(id, {
     spa: true,
     ...props,
     assets: {
       directory: path.resolve(outDir),
     },
-    build: spreadBuildProps(props, `bun build '${frontendPath}' --outdir ${outDir}`),
+    build: spreadBuildProps(
+      props,
+      `bun build '${frontendPath}' --outdir ${outDir}`,
+    ),
   });
 
   // in dev
   const scope = Scope.current;
   if (scope.local) {
-    
     const cwd = props.cwd ?? process.cwd();
-    const dev = spreadDevProps(props, `bun '${path.relative(cwd, frontendPath)}'`);
+    const dev = spreadDevProps(
+      props,
+      `bun '${path.relative(cwd, frontendPath)}'`,
+    );
     console.log("backend url", website.url);
     const secrets = props.wrangler?.secrets ?? !props.wrangler?.path;
     const env = {
