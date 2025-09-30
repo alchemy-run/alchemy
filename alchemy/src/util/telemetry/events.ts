@@ -126,7 +126,7 @@ const PROVIDERS = [
   { env: "TRAVIS", provider: "Travis CI", isCI: true },
   { env: "NOW_BUILDER", provider: "Vercel", isCI: true },
   { env: "VERCEL", provider: "Vercel", isCI: false },
-];
+] as const;
 
 function getEnvironment() {
   for (const provider of PROVIDERS) {
