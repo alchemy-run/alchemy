@@ -301,7 +301,6 @@ export const Service = Resource(
       );
 
       const updates: Partial<Service> = {};
-      console.log(resourceDiff);
 
       if (
         resourceDiff.some(
@@ -459,6 +458,14 @@ export const Service = Resource(
     ).data.result!;
     const password = response.password!;
     const service = response.service!;
+
+    await waitForServiceState(
+      api,
+      organizationId,
+      response.service!.id!,
+      (state) => state === "running" || state === "idle",
+      10 * 60,
+    );
 
     return {
       organizationId: organizationId,
