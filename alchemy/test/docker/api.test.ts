@@ -119,12 +119,17 @@ describe("normalizeDuration", () => {
 
   test("should throw error for invalid format", async (scope) => {
     try {
+      // @ts-expect-error
       expect(() => normalizeDuration("invalid")).toThrow(
         /Invalid duration format/,
       );
+      // @ts-expect-error
       expect(() => normalizeDuration("30")).toThrow(/Invalid duration format/);
+      // @ts-expect-error
       expect(() => normalizeDuration("s30")).toThrow(/Invalid duration format/);
+      // @ts-expect-error
       expect(() => normalizeDuration("30x")).toThrow(/Invalid duration format/);
+      // @ts-expect-error
       expect(() => normalizeDuration("")).toThrow(/Invalid duration format/);
     } finally {
       await alchemy.destroy(scope);
