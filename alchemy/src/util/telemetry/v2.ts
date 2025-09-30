@@ -297,9 +297,11 @@ export async function createAndSendEvent(
     | AlchemyTelemetryData,
   error?: Error,
 ) {
-  if (Scope.current.noTrack) {
-    return;
-  }
+  try {
+    if (Scope.current.noTrack) {
+      return;
+    }
+  } catch (error) {}
   try {
     const eventData = await createEventData(data, error);
     await sendEvent(eventData);
