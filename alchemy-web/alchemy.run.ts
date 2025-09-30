@@ -1,5 +1,6 @@
 import alchemy from "alchemy";
-import { Worker, Zone } from "alchemy/cloudflare";
+import { Astro, Worker, Zone } from "alchemy/cloudflare";
+import { GitHubComment } from "alchemy/github";
 import { CloudflareStateStore } from "alchemy/state";
 
 const POSTHOG_DESTINATION_HOST =
@@ -43,5 +44,39 @@ if (stage === "prod") {
   });
 }
 
+export const website = await Astro("website", {
+  name: "alchemy-website",
+  adopt: true,
+  version: stage === "prod" ? undefined : stage,
+  domains: domain ? [domain] : undefined,
+  env: {
+    POSTHOG_CLIENT_API_HOST: `https://${POSTHOG_PROXY_HOST}`,
+    POSTHOG_PROJECT_ID: POSTHOG_PROJECT_ID,
+    ENABLE_POSTHOG: stage === "prod" ? "true" : "false",
+  },
+});
+
+const url = domain ? `https://${domain}` : website.url;
+
+console.log(url);
+
+if (process.env.PULL_REQUEST) {
+  await GitHubComment("comment", {
+    owner: "sam-goodwin",
+    repository: "alchemy",
+    issueNumber: Number(process.env.PULL_REQUEST),
+    body: `
+## 🚀 Website Preview Deployed
+
+Your website preview is ready!
+
+**Preview URL:** ${url}
+
+This preview was built from commit ${process.env.GITHUB_SHA}
+
+---
+<sub>🤖 This comment will be updated automatically when you push new commits to this PR.</sub>`,
+  });
+}
 
 await app.finalize();
