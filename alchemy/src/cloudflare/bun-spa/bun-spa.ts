@@ -1,7 +1,11 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
+import fs from "node:fs/promises";
 import path from "node:path";
+import { exists } from "../../util/exists.ts";
 import { Scope } from "../../scope.ts";
-import { isSecret } from "../../secret.ts";
+import {
+  extractStringAndSecretBindings,
+  unencryptSecrets,
+} from "../util/filter-env-bindings.ts";
 import type { Assets } from "../assets.ts";
 import type { Bindings } from "../bindings.ts";
 import {
@@ -21,43 +25,18 @@ export type BunSPA<B extends Bindings> = B extends { ASSETS: any }
   ? never
   : Worker<B & { ASSETS: Assets }>;
 
-function validateBunfigToml(cwd: string): void {
-  const bunfigPath = path.join(cwd, "bunfig.toml");
-
-  if (!existsSync(bunfigPath)) {
-    throw new Error(
-      "bunfig.toml is required for BunSPA to work correctly.\n\n" +
-        `Create ${bunfigPath} with the following content:\n\n` +
-        "[serve.static]\n" +
-        `env='PUBLIC_*'\n\n` +
-        "This allows Bun to expose PUBLIC_* environment variables to the frontend during development.",
-    );
-  }
-
-  const content = readFileSync(bunfigPath, "utf-8");
-  const config = Bun.TOML.parse(content) as Record<string, any>;
-
-  const hasServeStatic = config.serve?.static;
-  const hasEnvConfig = hasServeStatic && config.serve.static.env === "PUBLIC_*";
-
-  if (!hasServeStatic || !hasEnvConfig) {
-    throw new Error(
-      "bunfig.toml is missing required configuration for BunSPA.\n\n" +
-        `Add the following section to ${bunfigPath}:\n\n` +
-        "[serve.static]\n" +
-        `env='PUBLIC_*'\n\n` +
-        "This allows Bun to expose PUBLIC_* environment variables to the frontend during development.",
-    );
-  }
-}
-
 export async function BunSPA<B extends Bindings>(
   id: string,
   props: BunSPAProps<B>,
 ): Promise<BunSPA<B>> {
   const frontendPath = path.resolve(props.frontend);
-  if (!existsSync(frontendPath) || !statSync(frontendPath).isFile()) {
+  if (!(await exists(frontendPath))) {
     throw new Error(`Frontend path ${frontendPath} does not exist`);
+  }
+
+  const stats = await fs.stat(frontendPath);
+  if (!stats.isFile()) {
+    throw new Error(`Frontend path ${frontendPath} is not a file`);
   }
   const outDir = path.resolve(props.outDir ?? "dist/client");
 
@@ -90,7 +69,7 @@ export async function BunSPA<B extends Bindings>(
   // in dev
   if (scope.local) {
     const cwd = props.cwd ?? process.cwd();
-    validateBunfigToml(cwd);
+    await validateBunfigToml(cwd);
     const dev = spreadDevProps(
       props,
       `bun '${path.relative(cwd, frontendPath)}'`,
@@ -100,14 +79,7 @@ export async function BunSPA<B extends Bindings>(
     const env = {
       ...(process.env ?? {}),
       ...(props.env ?? {}),
-      ...Object.fromEntries(
-        Object.entries(props.bindings ?? {}).flatMap(([key, value]) => {
-          if (typeof value === "string" || (isSecret(value) && secrets)) {
-            return [[key, value]];
-          }
-          return [];
-        }),
-      ),
+      ...extractStringAndSecretBindings(props.bindings ?? {}, secrets),
     };
     website.url = await scope.spawn(website.name, {
       cmd: typeof dev === "string" ? dev : dev.command,
@@ -123,17 +95,7 @@ export async function BunSPA<B extends Bindings>(
         }
       },
       env: {
-        ...Object.fromEntries(
-          Object.entries(env ?? {}).flatMap(([key, value]) => {
-            if (isSecret(value)) {
-              return [[key, value.unencrypted]];
-            }
-            if (typeof value === "string") {
-              return [[key, value]];
-            }
-            return [];
-          }),
-        ),
+        ...unencryptSecrets(env ?? {}),
         ...(typeof dev === "object" ? dev.env : {}),
         FORCE_COLOR: "1",
         ...process.env,
@@ -144,4 +106,34 @@ export async function BunSPA<B extends Bindings>(
     });
   }
   return website;
+}
+
+async function validateBunfigToml(cwd: string): Promise<void> {
+  const bunfigPath = path.join(cwd, "bunfig.toml");
+
+  if (!(await exists(bunfigPath))) {
+    throw new Error(
+      "bunfig.toml is required for BunSPA to work correctly.\n\n" +
+        `Create ${bunfigPath} with the following content:\n\n` +
+        "[serve.static]\n" +
+        `env='PUBLIC_*'\n\n` +
+        "This allows Bun to expose PUBLIC_* environment variables to the frontend during development.",
+    );
+  }
+
+  const content = await fs.readFile(bunfigPath, "utf-8");
+  const config = Bun.TOML.parse(content) as Record<string, any>;
+
+  const hasServeStatic = config.serve?.static;
+  const hasEnvConfig = hasServeStatic && config.serve.static.env === "PUBLIC_*";
+
+  if (!hasServeStatic || !hasEnvConfig) {
+    throw new Error(
+      "bunfig.toml is missing required configuration for BunSPA.\n\n" +
+        `Add the following section to ${bunfigPath}:\n\n` +
+        "[serve.static]\n" +
+        `env='PUBLIC_*'\n\n` +
+        "This allows Bun to expose PUBLIC_* environment variables to the frontend during development.",
+    );
+  }
 }
