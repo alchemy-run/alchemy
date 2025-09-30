@@ -20,8 +20,8 @@ export async function getOrganizationByName(
 ) {
   const api = createClickhouseApi(options);
 
-  const organizations = await api.v1.organizations.get();
-  const organization = organizations.find(
+  const organizations = await api.listAvailableOrganizations();
+  const organization = organizations.data.result?.find(
     (organization) => organization.name === name,
   );
   if (!organization) {

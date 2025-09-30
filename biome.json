@@ -35,12 +35,15 @@
       "!examples/cloudflare-nuxt-pipeline/.output/",
       "!./alchemy/lib/",
       "!**/*.gen.ts",
-      "alchemy/src/{neon,planetscale}/api/*.ts",
+      "alchemy/src/{neon,planetscale,clickhouse}/api/*.ts",
       "monorepo/**/*.ts",
       "monorepo/**/*.tsx",
       "monorepo/**/*.json"
     ],
-    "experimentalScannerIgnores": ["!**/node_modules", "./alchemy/lib/**"]
+    "experimentalScannerIgnores": [
+      "!**/node_modules",
+      "./alchemy/lib/**"
+    ]
   },
   "assist": {
     "actions": {
@@ -108,7 +111,9 @@
           "options": {
             "paths": {
               "picocolors": {
-                "allowImportNames": ["default"],
+                "allowImportNames": [
+                  "default"
+                ],
                 "message": "picocolors is a CJS module, import default module as 'pc'"
               }
             }
@@ -124,7 +129,12 @@
     "indentWidth": 2,
     "lineWidth": 80,
     "lineEnding": "lf",
-    "includes": ["**", "!**/node_modules/**", "!**/*.d.ts", "!**/*.mdx"]
+    "includes": [
+      "**",
+      "!**/node_modules/**",
+      "!**/*.d.ts",
+      "!**/*.mdx"
+    ]
   },
   "javascript": {
     "formatter": {

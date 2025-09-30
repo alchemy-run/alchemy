@@ -2,11 +2,8 @@ import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { secret, type Secret } from "../secret.ts";
 import { diff } from "../util/diff.ts";
-import {
-  createClickhouseApi,
-  type ApiKey as ApiApiKey,
-  type Organization,
-} from "./api.ts";
+import { createClickhouseApi } from "./api.ts";
+import type { ApiKey as ApiApiKey, Organization } from "./api/types.gen.ts";
 
 export interface ApiKeyProps {
   keyId?: string | Secret<string>;
@@ -22,13 +19,13 @@ export interface ApiKeyProps {
 export interface ApiKey {
   organizationId: string;
   name: string;
-  clickhouseId: ApiApiKey["id"];
+  clickhouseId: NonNullable<ApiApiKey["id"]>;
   keyId: string;
   secret: Secret<string>;
-  state: ApiApiKey["state"];
-  roles: ApiApiKey["roles"];
-  keySuffix: ApiApiKey["keySuffix"];
-  createdAt: ApiApiKey["createdAt"];
+  state: NonNullable<ApiApiKey["state"]>;
+  roles: NonNullable<ApiApiKey["roles"]>;
+  keySuffix: NonNullable<ApiApiKey["keySuffix"]>;
+  createdAt: NonNullable<ApiApiKey["createdAt"]>;
   expireAt?: ApiApiKey["expireAt"];
   usedAt?: ApiApiKey["usedAt"];
   ipAccessList: ApiApiKey["ipAccessList"];
@@ -53,13 +50,15 @@ export const ApiKey = Resource(
     const organizationId =
       typeof props.organization === "string"
         ? props.organization
-        : props.organization.id;
+        : props.organization.id!;
 
     if (this.phase === "delete") {
-      await api.v1
-        .organizations(organizationId)
-        .keys(this.output.clickhouseId)
-        .delete();
+      await api.deleteKey({
+        path: {
+          organizationId: organizationId,
+          keyId: this.output.clickhouseId,
+        },
+      });
       return this.destroy();
     }
     if (this.phase === "update") {
@@ -78,16 +77,19 @@ export const ApiKey = Resource(
       ) {
         return this.replace();
       }
-      const updatedKey = await api.v1
-        .organizations(organizationId)
-        .keys(this.output.clickhouseId)
-        .patch({
+      const updatedKey = await api.updateKey({
+        path: {
+          organizationId: organizationId!,
+          keyId: this.output.clickhouseId!,
+        },
+        body: {
           name,
           roles: props.roles,
           ipAccessList: props.ipAccessList,
           expireAt: props.expireAt,
           state,
-        });
+        },
+      });
 
       return {
         ...this.output,
@@ -96,31 +98,38 @@ export const ApiKey = Resource(
       };
     }
 
-    const key = await api.v1.organizations(organizationId).keys.post({
-      name,
-      expireAt: props.expireAt ?? "2999-12-31T00:00:00.000Z",
-      ipAccessList: props.ipAccessList ?? [
-        {
-          description: "Anywhere",
-          source: "0.0.0.0/0",
+    const key = (
+      await api.createKey({
+        path: {
+          organizationId: organizationId!,
         },
-      ],
-      roles: props.roles ?? ["admin"],
-      state,
-    });
+        body: {
+          name,
+          expireAt: props.expireAt ?? "2999-12-31T00:00:00.000Z",
+          ipAccessList: props.ipAccessList ?? [
+            {
+              description: "Anywhere",
+              source: "0.0.0.0/0",
+            },
+          ],
+          roles: props.roles ?? ["admin"],
+          state,
+        },
+      })
+    ).data.result!;
 
     return {
       organizationId: organizationId,
-      name: key.key.name,
-      clickhouseId: key.key.id,
-      state: key.key.state,
-      roles: key.key.roles,
-      keySuffix: key.key.keySuffix,
-      createdAt: key.key.createdAt,
-      expireAt: key.key.expireAt,
-      usedAt: key.key.usedAt,
-      ipAccessList: key.key.ipAccessList,
-      keyId: key.keyId,
+      name: key!.key!.name!,
+      clickhouseId: key!.key!.id!,
+      state: key!.key!.state!,
+      roles: key!.key!.roles!,
+      keySuffix: key!.key!.keySuffix!,
+      createdAt: key!.key!.createdAt!,
+      expireAt: key!.key!.expireAt!,
+      usedAt: key!.key!.usedAt,
+      ipAccessList: key!.key!.ipAccessList!,
+      keyId: key!.keyId!,
       secret: secret(key.keySecret),
     };
   },

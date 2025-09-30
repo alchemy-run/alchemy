@@ -2,11 +2,9 @@ import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { secret, type Secret } from "../secret.ts";
 import { diff } from "../util/diff.ts";
-import {
-  createClickhouseApi,
-  type Service as ApiService,
-  type Organization,
-} from "./api.ts";
+import { createClickhouseApi } from "./api.ts";
+import type { ClickhouseClient } from "./api/sdk.gen.ts";
+import type { Service as ApiService, Organization } from "./api/types.gen.ts";
 
 export interface ServiceProps {
   /**
@@ -146,22 +144,22 @@ export interface Service {
   name: string;
   clickhouseId: string;
   password: Secret<string>;
-  provider: ApiService["provider"];
-  region: ApiService["region"];
-  ipAccessList: ApiService["ipAccessList"];
-  minReplicaMemoryGb: ApiService["minReplicaMemoryGb"];
-  maxReplicaMemoryGb: ApiService["maxReplicaMemoryGb"];
-  numReplicas: ApiService["numReplicas"];
-  idleScaling: ApiService["idleScaling"];
-  idleTimeoutMinutes: ApiService["idleTimeoutMinutes"];
-  isReadonly: ApiService["isReadonly"];
-  dataWarehouseId: ApiService["dataWarehouseId"];
+  provider: NonNullable<ApiService["provider"]>;
+  region: NonNullable<ApiService["region"]>;
+  ipAccessList: NonNullable<ApiService["ipAccessList"]>;
+  minReplicaMemoryGb: NonNullable<ApiService["minReplicaMemoryGb"]>;
+  maxReplicaMemoryGb: NonNullable<ApiService["maxReplicaMemoryGb"]>;
+  numReplicas: NonNullable<ApiService["numReplicas"]>;
+  idleScaling: NonNullable<ApiService["idleScaling"]>;
+  idleTimeoutMinutes: NonNullable<ApiService["idleTimeoutMinutes"]>;
+  isReadonly: NonNullable<ApiService["isReadonly"]>;
+  dataWarehouseId: NonNullable<ApiService["dataWarehouseId"]>;
   encryptionKey?: ApiService["encryptionKey"];
   encryptionAssumedRoleIdentifier?: ApiService["encryptionAssumedRoleIdentifier"];
-  releaseChannel: ApiService["releaseChannel"];
+  releaseChannel: NonNullable<ApiService["releaseChannel"]>;
   byocId?: ApiService["byocId"];
-  hasTransparentDataEncryption: ApiService["hasTransparentDataEncryption"];
-  profile: ApiService["profile"];
+  hasTransparentDataEncryption?: ApiService["hasTransparentDataEncryption"];
+  profile?: ApiService["profile"];
   complianceType?: ApiService["complianceType"];
   backupId?: string;
   enableMysqlEndpoint?: boolean;
@@ -257,15 +255,18 @@ export const Service = Resource(
     const organizationId =
       typeof props.organization === "string"
         ? props.organization
-        : props.organization.id;
+        : props.organization.id!;
 
     if (this.phase === "delete") {
-      await api.v1
-        .organizations(organizationId)
-        .services(this.output.clickhouseId)
-        .state.patch({
+      await api.updateServiceState({
+        path: {
+          organizationId: organizationId,
+          serviceId: this.output.clickhouseId,
+        },
+        body: {
           command: "stop",
-        });
+        },
+      });
 
       await waitForServiceState(
         api,
@@ -275,10 +276,17 @@ export const Service = Resource(
         10 * 60,
       );
 
-      await api.v1
-        .organizations(organizationId)
-        .services(this.output.clickhouseId)
-        .delete();
+      // await api.v1
+      //   .organizations(organizationId)
+      //   .services(this.output.clickhouseId)
+      //   .delete();
+
+      await api.deleteService({
+        path: {
+          organizationId: organizationId,
+          serviceId: this.output.clickhouseId,
+        },
+      });
 
       return this.destroy();
     }
@@ -330,39 +338,56 @@ export const Service = Resource(
         ) ||
         enableMysqlEndpoint !== this.output.enableMysqlEndpoint
       ) {
-        const response = await api.v1
-          .organizations(organizationId)
-          .services(this.output.clickhouseId)
-          .patch({
-            name,
-            ipAccessList: props.ipAccessList,
-            releaseChannel,
-            endpoints,
-          });
+        const ipAccessListToRemove = this.output.ipAccessList.filter(
+          (ipAccessList) => !props.ipAccessList?.includes(ipAccessList),
+        );
+        const ipAccessListToAdd = props.ipAccessList?.filter(
+          (ipAccessList) => !this.output.ipAccessList.includes(ipAccessList),
+        );
+        const response = (
+          await api.updateServiceBasicDetails({
+            path: {
+              organizationId: organizationId,
+              serviceId: this.output.clickhouseId,
+            },
+            body: {
+              name,
+              ipAccessList: {
+                remove: ipAccessListToRemove,
+                add: ipAccessListToAdd,
+              },
+              releaseChannel,
+              endpoints,
+            },
+          })
+        ).data.result!;
 
-        updates.name = response.name;
-        updates.ipAccessList = response.ipAccessList;
-        updates.releaseChannel = response.releaseChannel;
-        updates.mysqlEndpoint = response.endpoints.find(
+        updates.name = response.name!;
+        updates.ipAccessList = response.ipAccessList!;
+        updates.releaseChannel = response.releaseChannel!;
+        updates.mysqlEndpoint = response!.endpoints!.find(
           (endpoint) => endpoint.protocol === "mysql",
-        );
-        updates.httpsEndpoint = response.endpoints.find(
+        ) as any;
+        updates.httpsEndpoint = response!.endpoints!.find(
           (endpoint) => endpoint.protocol === "https",
-        );
-        updates.nativesecureEndpoint = response.endpoints.find(
+        ) as any;
+        updates.nativesecureEndpoint = response!.endpoints!.find(
           (endpoint) => endpoint.protocol === "nativesecure",
-        );
+        ) as any;
       }
 
       if (stateTarget !== this.output.stateTarget) {
-        const response = await api.v1
-          .organizations(organizationId)
-          .services(this.output.clickhouseId)
-          .state.patch({
+        const response = await api.updateServiceState({
+          path: {
+            organizationId: organizationId,
+            serviceId: this.output.clickhouseId,
+          },
+          body: {
             command: stateTarget,
-          });
+          },
+        });
 
-        updates.state = response.state;
+        updates.state = response.data.result!.state!;
         updates.stateTarget = stateTarget;
       }
 
@@ -376,22 +401,27 @@ export const Service = Resource(
             prop === "idleTimeoutMinutes",
         )
       ) {
-        const response = await api.v1
-          .organizations(organizationId)
-          .services(this.output.clickhouseId)
-          .replicaScaling.patch({
-            minReplicaMemoryGb: props.minReplicaMemoryGb,
-            maxReplicaMemoryGb: props.maxReplicaMemoryGb,
-            numReplicas: props.numReplicas,
-            idleScaling: props.idleScaling,
-            idleTimeoutMinutes: idleTimeoutMinutes,
-          });
+        const response = (
+          await api.updateServiceAutoScalingSettings2({
+            path: {
+              organizationId: organizationId,
+              serviceId: this.output.clickhouseId,
+            },
+            body: {
+              minReplicaMemoryGb: props.minReplicaMemoryGb,
+              maxReplicaMemoryGb: props.maxReplicaMemoryGb,
+              numReplicas: props.numReplicas,
+              idleScaling: props.idleScaling,
+              idleTimeoutMinutes: idleTimeoutMinutes,
+            },
+          })
+        ).data.result!;
 
-        updates.minReplicaMemoryGb = response.minReplicaMemoryGb;
-        updates.maxReplicaMemoryGb = response.maxReplicaMemoryGb;
-        updates.numReplicas = response.numReplicas;
-        updates.idleScaling = response.idleScaling;
-        updates.idleTimeoutMinutes = response.idleTimeoutMinutes;
+        updates.minReplicaMemoryGb = response.minReplicaMemoryGb!;
+        updates.maxReplicaMemoryGb = response.maxReplicaMemoryGb!;
+        updates.numReplicas = response.numReplicas!;
+        updates.idleScaling = response.idleScaling!;
+        updates.idleTimeoutMinutes = response.idleTimeoutMinutes!;
       }
 
       return {
@@ -400,88 +430,100 @@ export const Service = Resource(
       };
     }
 
-    const service = await api.v1.organizations(organizationId).services.post({
-      name,
-      provider: props.provider,
-      region: props.region,
-      ipAccessList: ipAccessList,
-      minReplicaMemoryGb: minReplicaMemoryGb,
-      maxReplicaMemoryGb: maxReplicaMemoryGb,
-      numReplicas: numReplicas,
-      idleScaling: idleScaling,
-      idleTimeoutMinutes: idleTimeoutMinutes,
-      isReadonly: isReadonly,
-      dataWarehouseId: props.dataWarehouseId,
-      backupId: props.backupId,
-      encryptionKey: props.encryptionKey,
-      encryptionAssumedRoleIdentifier: props.encryptionAssumedRoleIdentifier,
-      privatePreviewTermsChecked: true,
-      releaseChannel: releaseChannel,
-      byocId: props.byocId,
-      hasTransparentDataEncryption: props.hasTransparentDataEncryption ?? false,
-      endpoints: endpoints,
-      profile: props.profile,
-      complianceType: props.complianceType,
-    });
+    const response = (
+      await api.createNewService({
+        path: {
+          organizationId: organizationId,
+        },
+        body: {
+          name,
+          provider: props.provider,
+          region: props.region,
+          ipAccessList: ipAccessList,
+          minReplicaMemoryGb: minReplicaMemoryGb,
+          maxReplicaMemoryGb: maxReplicaMemoryGb,
+          numReplicas: numReplicas,
+          idleScaling: idleScaling,
+          idleTimeoutMinutes: idleTimeoutMinutes,
+          isReadonly: isReadonly,
+          dataWarehouseId: props.dataWarehouseId,
+          backupId: props.backupId,
+          encryptionKey: props.encryptionKey,
+          encryptionAssumedRoleIdentifier:
+            props.encryptionAssumedRoleIdentifier,
+          privatePreviewTermsChecked: true,
+          releaseChannel: releaseChannel,
+          byocId: props.byocId,
+          hasTransparentDataEncryption:
+            props.hasTransparentDataEncryption ?? false,
+          endpoints: endpoints,
+          profile: props.profile,
+          complianceType: props.complianceType,
+        },
+      })
+    ).data.result!;
+    const password = response.password!;
+    const service = response.service!;
 
     return {
       organizationId: organizationId,
-      name: service.service.name,
-      clickhouseId: service.service.id,
-      password: secret(service.password),
-      provider: service.service.provider,
-      region: service.service.region,
-      ipAccessList: service.service.ipAccessList,
-      minReplicaMemoryGb: service.service.minReplicaMemoryGb,
-      maxReplicaMemoryGb: service.service.maxReplicaMemoryGb,
-      numReplicas: service.service.numReplicas,
-      idleScaling: service.service.idleScaling,
-      idleTimeoutMinutes: service.service.idleTimeoutMinutes,
-      isReadonly: service.service.isReadonly,
-      dataWarehouseId: service.service.dataWarehouseId,
+      name: service.name!,
+      clickhouseId: service.id!,
+      password: secret(password!),
+      provider: service.provider!,
+      region: service.region!,
+      ipAccessList: service.ipAccessList!,
+      minReplicaMemoryGb: service.minReplicaMemoryGb!,
+      maxReplicaMemoryGb: service.maxReplicaMemoryGb!,
+      numReplicas: service.numReplicas!,
+      idleScaling: service.idleScaling!,
+      idleTimeoutMinutes: service.idleTimeoutMinutes!,
+      isReadonly: service.isReadonly!,
+      dataWarehouseId: service.dataWarehouseId!,
       backupId: props.backupId,
-      encryptionKey: service.service.encryptionKey,
-      encryptionAssumedRoleIdentifier:
-        service.service.encryptionAssumedRoleIdentifier,
-      releaseChannel: service.service.releaseChannel,
-      byocId: service.service.byocId,
-      hasTransparentDataEncryption:
-        service.service.hasTransparentDataEncryption,
-      profile: service.service.profile,
-      complianceType: service.service.complianceType,
+      encryptionKey: service.encryptionKey,
+      encryptionAssumedRoleIdentifier: service.encryptionAssumedRoleIdentifier,
+      releaseChannel: service.releaseChannel!,
+      byocId: service.byocId,
+      hasTransparentDataEncryption: service.hasTransparentDataEncryption,
+      profile: service.profile,
+      complianceType: service.complianceType,
       stateTarget,
-      state: service.service.state,
-      mysqlEndpoint: service.service.endpoints.find(
+      state: service.state,
+      mysqlEndpoint: service.endpoints!.find(
         (endpoint) => endpoint.protocol === "mysql",
-      ),
-      httpsEndpoint: service.service.endpoints.find(
+      ) as any,
+      httpsEndpoint: service.endpoints!.find(
         (endpoint) => endpoint.protocol === "https",
-      ),
-      nativesecureEndpoint: service.service.endpoints.find(
+      ) as any,
+      nativesecureEndpoint: service.endpoints!.find(
         (endpoint) => endpoint.protocol === "nativesecure",
-      ),
+      ) as any,
     };
   },
 );
 
 async function waitForServiceState(
-  api: any,
+  api: ClickhouseClient,
   organizationId: string,
   serviceId: string,
   stateChecker: (state: string) => boolean,
   maxWaitSeconds: number,
 ) {
   const checkState = async (): Promise<void> => {
-    const service = await api.v1
-      .organizations(organizationId)
-      .services(serviceId)
-      .get();
+    const service = await api.getServiceDetails({
+      path: {
+        organizationId: organizationId,
+        serviceId: serviceId,
+      },
+    });
+    const serviceState = service.data.result!.state!;
 
-    if (stateChecker(service.state)) {
+    if (stateChecker(serviceState)) {
       return;
     }
 
-    throw new Error(`Service ${serviceId} is in state ${service.state}`);
+    throw new Error(`Service ${serviceId} is in state ${serviceState}`);
   };
 
   if (maxWaitSeconds < 5) {

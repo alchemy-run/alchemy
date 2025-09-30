@@ -515,6 +515,10 @@ export type PaginatedPostgresClusterResizeRequest = {
      */
     cluster_display_name: string;
     /**
+     * Whether or not this is a metal database
+     */
+    cluster_metal: boolean;
+    /**
      * The total number of replicas
      */
     replicas: number;
@@ -532,6 +536,10 @@ export type PaginatedPostgresClusterResizeRequest = {
      * The previous SKU representing the branch cluster for display
      */
     previous_cluster_display_name: string;
+    /**
+     * Whether or not the previous SKU was a metal database
+     */
+    previous_cluster_metal: boolean;
     /**
      * The previous total number of replicas
      */
@@ -653,6 +661,10 @@ export type PostgresClusterResizeRequest = {
    */
   cluster_display_name: string;
   /**
+   * Whether or not this is a metal database
+   */
+  cluster_metal: boolean;
+  /**
    * The total number of replicas
    */
   replicas: number;
@@ -670,6 +682,10 @@ export type PostgresClusterResizeRequest = {
    * The previous SKU representing the branch cluster for display
    */
   previous_cluster_display_name: string;
+  /**
+   * Whether or not the previous SKU was a metal database
+   */
+  previous_cluster_metal: boolean;
   /**
    * The previous total number of replicas
    */
@@ -1301,7 +1317,8 @@ export type PostgresClusterExtension = {
       | "milliseconds"
       | "seconds"
       | "select"
-      | "string";
+      | "string"
+      | "time";
     /**
      * The default value of the parameter
      */
@@ -1408,7 +1425,8 @@ export type PostgresClusterParameter = {
     | "milliseconds"
     | "seconds"
     | "select"
-    | "string";
+    | "string"
+    | "time";
   /**
    * The default value of the parameter
    */
@@ -6943,6 +6961,7 @@ export type PaginatedDatabaseWebhook = {
       | "branch.anomaly"
       | "branch.schema_recommendation"
       | "branch.sleeping"
+      | "branch.start_maintenance"
       | "cluster.storage"
       | "database.access_request"
       | "deploy_request.closed"
@@ -7004,6 +7023,7 @@ export type DatabaseWebhook = {
     | "branch.anomaly"
     | "branch.schema_recommendation"
     | "branch.sleeping"
+    | "branch.start_maintenance"
     | "cluster.storage"
     | "database.access_request"
     | "deploy_request.closed"
