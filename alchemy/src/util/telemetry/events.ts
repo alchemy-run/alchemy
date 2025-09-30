@@ -143,12 +143,7 @@ function getEnvironment() {
   };
 }
 
-let cachedTelemetryData: GenericTelemetryData | null = null;
-
 export const collectData = memoize(async (): Promise<GenericTelemetryData> => {
-  if (cachedTelemetryData) {
-    return cachedTelemetryData;
-  }
   const [
     userId,
     rootCommitHash,
@@ -164,7 +159,7 @@ export const collectData = memoize(async (): Promise<GenericTelemetryData> => {
     getRuntime(),
     getEnvironment(),
   ]);
-  cachedTelemetryData = {
+  return {
     userId: userId ?? "",
     sessionId: crypto.randomUUID(),
     platform: os.platform(),
@@ -181,7 +176,6 @@ export const collectData = memoize(async (): Promise<GenericTelemetryData> => {
     isCI: environment.isCI,
     alchemyVersion: pkg.version,
   };
-  return cachedTelemetryData;
 });
 
 export type GenericTelemetryData = {
