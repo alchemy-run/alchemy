@@ -19,7 +19,7 @@ import { serialize } from "./serde.ts";
 import type { State } from "./state.ts";
 import { formatFQN } from "./util/cli.ts";
 import { logger } from "./util/logger.ts";
-import { createAndSendEvent } from "./util/telemetry/telemetry.ts";
+import { createAndSendEvent } from "./util/telemetry.ts";
 
 export interface ApplyOptions {
   quiet?: boolean;
