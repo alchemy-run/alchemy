@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import "./App.css";
 
 import bunLogo from "./assets/logo.svg";
+import alchemyLogo from "./assets/potion.png";
 import reactLogo from "./assets/react.svg";
 
 const apiBaseUrl = process.env.PUBLIC_BACKEND_URL || window.location.protocol + '//' + window.location.host;
@@ -76,27 +77,33 @@ function App() {
     <>
       <div>
         <a href="https://bun.sh" target="_blank" rel="noopener">
-          <img src={bunLogo} className="logo" alt="Bun logo" />
+          <img src={bunLogo} className="logo bun" alt="Bun logo" />
         </a>
         <a href="https://react.dev" target="_blank" rel="noopener">
           <img src={reactLogo} className="logo react" alt="React logo" />
         </a>
+        <a href="https://alchemy.run" target="_blank" rel="noopener">
+          <img src={alchemyLogo} className="logo alchemy" alt="Alchemy logo" />
+        </a>
       </div>
-      <h1>Bun + React</h1>
+      <h1>Bun + React + Alchemy</h1>
       <div className="card">
         <button onClick={increment} disabled={loading}>
           {loading ? "Loading..." : `count is ${count}`}
         </button>
         {error && <p style={{ color: "red", fontSize: "0.9em" }}>{error}</p>}
         <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
+          Edit <code>src/App.tsx</code> and save to test HMR (frontend changes are applied in real time)
+        </p>
+        <p>
+          Edit <code>src/server.tsx</code> and save to test alchemy dev (backend changes are applied in real time)
         </p>
         <p style={{ fontSize: "0.9em", opacity: 0.7 }}>
           Counter persisted in Cloudflare KV
         </p>
       </div>
       <p className="read-the-docs">
-        Click on the Bun and React logos to learn more
+        Click on the Bun, React, and Alchemy logos to learn more
       </p>
     </>
   );
