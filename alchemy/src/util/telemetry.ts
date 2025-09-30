@@ -4,10 +4,10 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import { join } from "node:path";
 import pkg from "../../../package.json" with { type: "json" };
-import type { Phase } from "../../alchemy.ts";
-import { Scope } from "../../scope.ts";
-import { logger } from "../logger.ts";
-import { memoize } from "../memoize.ts";
+import type { Phase } from "../alchemy.ts";
+import { Scope } from "../scope.ts";
+import { logger } from "./logger.ts";
+import { memoize } from "./memoize.ts";
 
 export const CONFIG_DIR = envPaths("alchemy", { suffix: "" }).config;
 
