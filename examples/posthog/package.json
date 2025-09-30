@@ -1,0 +1,18 @@
+{
+  "name": "cloudflare-posthog",
+  "version": "0.0.0",
+  "description": "Alchemy Typescript Project",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b",
+    "deploy": "alchemy deploy --env-file ../../.env",
+    "destroy": "alchemy destroy --env-file ../../.env",
+    "dev": "alchemy dev --env-file ../../.env"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:",
+    "@types/node": "^24.0.1",
+    "alchemy": "workspace:*",
+    "typescript": "catalog:"
+  }
+}
