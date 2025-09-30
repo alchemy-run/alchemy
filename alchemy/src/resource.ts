@@ -186,6 +186,7 @@ export function Resource<
             phase: scope.phase,
             status: "unknown",
             duration: 0,
+            replaced: false,
           },
           error,
         );
