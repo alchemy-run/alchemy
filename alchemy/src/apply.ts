@@ -358,6 +358,7 @@ async function _apply<Out extends ResourceAttributes>(
     });
     return output as Awaited<Out> & Resource;
   } catch (error) {
+    let errorToSend = error instanceof Error ? error : new Error(String(error));
     createAndSendEvent(
       {
         event: "resource.error",
@@ -367,7 +368,7 @@ async function _apply<Out extends ResourceAttributes>(
         status: "unknown",
         replaced: false,
       },
-      error as Error | undefined,
+      errorToSend,
     );
     scope.fail();
     throw error;
