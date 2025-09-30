@@ -8,7 +8,7 @@
  *   bun node_modules/alchemy/src/coinbase/faucet.ts backend/dev  # Fund specific scope
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { readFile, access } from "node:fs/promises";
 import { join } from "node:path";
 import { glob } from "glob";
 import { createCdpClient } from "./client.ts";
@@ -32,7 +32,15 @@ async function main() {
     // If scope provided, find matching directories
     const scopePath = join(".alchemy", scope);
 
-    if (existsSync(scopePath)) {
+    let scopeExists = false;
+    try {
+      await access(scopePath);
+      scopeExists = true;
+    } catch {
+      scopeExists = false;
+    }
+
+    if (scopeExists) {
       // Exact match found
       console.log(`Using scope: ${scope}`);
       stateFiles = await glob("*.json", {
@@ -93,15 +101,18 @@ async function main() {
     });
   }
 
-  const allStates = stateFiles
-    .map((file) => {
-      try {
-        return JSON.parse(readFileSync(file, "utf-8"));
-      } catch {
-        return null;
-      }
-    })
-    .filter(Boolean);
+  const allStates = (
+    await Promise.all(
+      stateFiles.map(async (file) => {
+        try {
+          const content = await readFile(file, "utf-8");
+          return JSON.parse(content);
+        } catch {
+          return null;
+        }
+      }),
+    )
+  ).filter(Boolean);
 
   const accounts = allStates
     .filter(
