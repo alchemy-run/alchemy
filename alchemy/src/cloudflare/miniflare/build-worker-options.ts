@@ -52,7 +52,9 @@ type RemoteBinding =
   | WorkerBindingService;
 
 type BaseWorkerOptions = {
-  [K in keyof miniflare.WorkerOptions]: K extends "compatibilityFlags"
+  [K in keyof miniflare.WorkerOptions]: K extends
+    | "compatibilityFlags"
+    | "routes"
     ? miniflare.WorkerOptions[K]
     : Exclude<miniflare.WorkerOptions[K], string[]>;
 };
@@ -70,11 +72,9 @@ export const buildWorkerOptions = async (
     compatibilityFlags: input.compatibilityFlags,
     unsafeDirectSockets: [
       // This matches the Wrangler configuration by exposing the default handler (e.g. `export default { fetch }`).
-      // However, unlike Wrangler, we set `proxy: false` to avoid the following error when connecting via a websocket:
-      // workerd/io/worker.c++:2164: info: uncaught exception; source = Uncaught (in promise); stack = TypeError: Invalid URL string.
       {
         entrypoint: "default",
-        proxy: false,
+        proxy: true,
       },
     ],
     containerEngine: {
@@ -85,6 +85,8 @@ export const buildWorkerOptions = async (
             : "unix:///var/run/docker.sock",
       },
     },
+    // This exposes the worker as a route that can be accessed by setting the MF-Route-Override header.
+    routes: [input.name],
   };
   for (const [key, binding] of Object.entries(input.bindings ?? {})) {
     if (typeof binding === "string") {
