@@ -1,5 +1,7 @@
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import { Scope } from "../../scope.ts";
+import { isSecret } from "../../secret.ts";
 import type { Assets } from "../assets.ts";
 import type { Bindings } from "../bindings.ts";
 import {
@@ -8,9 +10,7 @@ import {
   Website,
   type WebsiteProps,
 } from "../website.ts";
-import { Scope } from "../../scope.ts";
 import type { Worker } from "../worker.ts";
-import { isSecret } from "../../secret.ts";
 
 export interface BunSPAProps<B extends Bindings> extends WebsiteProps<B> {
   frontend: string;
@@ -20,6 +20,36 @@ export interface BunSPAProps<B extends Bindings> extends WebsiteProps<B> {
 export type BunSPA<B extends Bindings> = B extends { ASSETS: any }
   ? never
   : Worker<B & { ASSETS: Assets }>;
+
+function validateBunfigToml(cwd: string): void {
+  const bunfigPath = path.join(cwd, "bunfig.toml");
+
+  if (!existsSync(bunfigPath)) {
+    throw new Error(
+      "bunfig.toml is required for BunSPA to work correctly.\n\n" +
+        `Create ${bunfigPath} with the following content:\n\n` +
+        "[serve.static]\n" +
+        `env='PUBLIC_*'\n\n` +
+        "This allows Bun to expose PUBLIC_* environment variables to the frontend during development.",
+    );
+  }
+
+  const content = readFileSync(bunfigPath, "utf-8");
+  const config = Bun.TOML.parse(content) as Record<string, any>;
+
+  const hasServeStatic = config.serve?.static;
+  const hasEnvConfig = hasServeStatic && config.serve.static.env === "PUBLIC_*";
+
+  if (!hasServeStatic || !hasEnvConfig) {
+    throw new Error(
+      "bunfig.toml is missing required configuration for BunSPA.\n\n" +
+        `Add the following section to ${bunfigPath}:\n\n` +
+        "[serve.static]\n" +
+        `env='PUBLIC_*'\n\n` +
+        "This allows Bun to expose PUBLIC_* environment variables to the frontend during development.",
+    );
+  }
+}
 
 export async function BunSPA<B extends Bindings>(
   id: string,
@@ -35,10 +65,19 @@ export async function BunSPA<B extends Bindings>(
     throw new Error("assets are not supported in BunSPA");
   }
 
+  const scope = Scope.current;
   console.log("creating website", outDir);
   const website = await Website(id, {
     spa: true,
     ...props,
+    bindings: {
+      ...props.bindings,
+      // set NODE_ENV in worker appropriately if not already set
+      NODE_ENV:
+        (props.bindings?.NODE_ENV ?? scope.local)
+          ? "development"
+          : "production",
+    } as unknown as B,
     assets: {
       directory: path.resolve(outDir),
     },
@@ -49,9 +88,9 @@ export async function BunSPA<B extends Bindings>(
   });
 
   // in dev
-  const scope = Scope.current;
   if (scope.local) {
     const cwd = props.cwd ?? process.cwd();
+    validateBunfigToml(cwd);
     const dev = spreadDevProps(
       props,
       `bun '${path.relative(cwd, frontendPath)}'`,
