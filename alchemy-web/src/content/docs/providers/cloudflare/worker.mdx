@@ -30,124 +30,16 @@ export default {
 ```
 
 :::tip
-Start with a simple Worker like this to verify your deployment pipeline works, then gradually add complexity. Use the local development server to test changes quickly.
+Start with a simple Worker like this to verify your deployment pipeline works, then gradually add complexity. Use the local development server to test changes quickly. 
+
+For common patterns, see the [Cloudflare Workers Examples](https://developers.cloudflare.com/workers/examples/) section.
 :::
 
-## Handle Requests (common tasks)
+## Local Development
 
-Implement HTTP handlers for API endpoints, static content, and dynamic responses with proper error handling:
-```ts
-// ./src/api.ts
-export default {
-  async fetch(request: Request): Promise<Response> {
-    const url = new URL(request.url);
-    const path = url.pathname;
-    
-    try {
-      // Route-based handling
-      switch (path) {
-        case "/api/users":
-          return await handleUsers(request);
-        case "/api/health":
-          return new Response(JSON.stringify({ status: "ok", timestamp: Date.now() }), {
-            headers: { "content-type": "application/json" }
-          });
-        default:
-          return new Response("Not Found", { status: 404 });
-      }
-    } catch (error) {
-      return new Response(JSON.stringify({ error: "Internal Server Error" }), {
-        status: 500,
-        headers: { "content-type": "application/json" }
-      });
-    }
-  }
-};
+See the [Local Development](/concepts/dev) documentation for more details.
 
-async function handleUsers(request: Request): Promise<Response> {
-  if (request.method === "POST") {
-    const userData = await request.json();
-    // Process user data
-    return new Response(JSON.stringify({ id: "123", ...userData }), {
-      status: 201,
-      headers: { "content-type": "application/json" }
-    });
-  }
-  
-  // GET request - return users list
-  return new Response(JSON.stringify({ users: [] }), {
-    headers: { "content-type": "application/json" }
-  });
-}
-```
-
-**Common patterns:**
-- **REST APIs**: Handle GET/POST/PUT/DELETE methods
-- **Webhooks**: Process incoming webhook payloads
-- **Proxies**: Forward requests to backend services
-- **Static serving**: Serve HTML, CSS, JS files
-
-## Durable Objects
-
-Durable Objects enable stateful serverless applications with coordination capabilities.
-
-Create a `DurableObjectNamespace` in your `alchemy.run.ts` script and bind it to your Worker:
-
-```ts
-// alchemy.run.ts
-import { Worker, DurableObjectNamespace } from "alchemy/cloudflare";
-
-const counter = DurableObjectNamespace("counter", {
-  className: "Counter",
-  sqlite: true, // Enable SQLite storage
-});
-
-export const worker = await Worker("api", {
-  entrypoint: "./src/worker.ts",
-  bindings: {
-    COUNTER: counter,
-  }
-});
-```
-
-Then export a class that extends `DurableObject` and has `"Counter"` as the class name to match the `DurableObjectNamespace` you created:
-
-```ts
-// ./src/worker.ts
-import { DurableObject } from "cloudflare:workers";
-
-export class Counter extends DurableObject {
-  async increment(): Promise<number> {
-    let count = (await this.ctx.storage.get("count")) || 0;
-    count++;
-    await this.ctx.storage.put("count", count);
-    return count;
-  }
-
-  async fetch(request: Request): Promise<Response> {
-    const count = await this.increment();
-    return Response.json({ count });
-  }
-}
-```
-
-Finally, in your `fetch` handler, you can get a Durable Object instance via the `COUNTER` binding:
-
-```ts
-export default {
-  async fetch(request: Request, env: typeof worker.Env) {
-    const id = env.COUNTER.idFromName("global-counter");
-    const obj = env.COUNTER.get(id);
-    return obj.fetch(request);
-  }
-}
-```
-
-:::tip[Durable Objects Guide]
-For comprehensive Durable Objects documentation including WebSocket integration, alarms, and advanced patterns, see the [Durable Object Namespace guide](/providers/cloudflare/durable-object-namespace).
-:::
-
-## Bindings & Types (access external resources)
+## Worker Configuration
 
 Use bindings to attach KV, R2, Durable Objects, secrets, and other resources to the Worker. 
 Configure Worker properties for compatibility, observability, and runtime limits:
@@ -210,39 +102,69 @@ export const worker = await Worker("api", {
 ```
 
 :::tip
-Monitor your CPU usage with Cloudflare Analytics to understand if increased limits are necessary. Start with default limits and scale up only when needed to optimize costs.
-:::
-
-
-Initialize clients at the top-level of your Worker script:
-```ts
-// src/worker.ts
-import { env } from "cloudflare:workers";
-import ApiClient from "example-api-client";
-
-// Initialize client at module scope
-const apiClient = new ApiClient();
-
-export default {
-  async fetch(request: Request, env: Env) {
-    // Configure with API key during request handling
-    apiClient.setApiKey(env.API_KEY);
-    return new Response("Configured with API key");
-  },
-};
-```
-
-
-:::tip
-Initializing clients at top-level can reduce cold start times because the Worker isolate is pre-warmed during the first request handshake.
+This reduces cold start times because the Worker isolate is pre-warmed during the first request handshake.
 :::
 
 :::caution
 I/O is not allowed at top-level in Cloudflare Workers.
 :::
 
+## Custom Domains
 
-## Infer Environment Types (recommended):
+Bind custom domains directly to your worker for a simpler routing setup:
+
+```ts
+import { Worker } from "alchemy/cloudflare";
+
+const worker = await Worker("api", {
+  name: "api-worker",
+  entrypoint: "./src/api.ts",
+  domains: ["api.example.com", "admin.example.com"],
+});
+
+// Access the created domains
+console.log(worker.domains); // Array of created CustomDomain resources
+```
+
+:::tip
+See the [Routes and Domains](https://developers.cloudflare.com/workers/configuration/routing/#what-is-best-for-me) Cloudflare docs to help decide between when to use a Route vs a Domain.
+:::
+
+## Routes
+
+Create a worker and its routes in a single declaration:
+
+```ts
+import { Worker, Zone } from "alchemy/cloudflare";
+
+const zone = await Zone("example-zone", {
+  name: "example.com",
+  type: "full",
+});
+
+const worker = await Worker("api", {
+  name: "api-worker",
+  entrypoint: "./src/api.ts",
+  routes: [
+    "backend.example.com/*",
+    {
+      pattern: "api.example.com/*",
+      zoneId: zone.id,
+    },
+    {
+      pattern: "admin.example.com/*",
+      // will be inferred from `admin.example.com/*` with an API lookup
+      // zoneId: zone.id,
+    },
+  ],
+});
+```
+
+:::tip
+See the [Route](/providers/cloudflare/route) for more information.
+:::
+
+## Environment (Binding) Types
 Alchemy doesn't use code-generation. Instead, your Worker's environment types can be inferred from the infrastructure configuration in your `alchemy.run.ts` script.
 
 There are two ways to infer the environment types:
@@ -278,7 +200,134 @@ import { Env } from "./env.ts";
 const myClient = new MyClient(Env.DB);
 ```
 
-## Queue Processing (event-driven Workers)
+## Durable Objects
+
+Durable Objects enable stateful serverless applications with coordination capabilities.
+
+Create a `DurableObjectNamespace` in your `alchemy.run.ts` script and bind it to your Worker:
+
+```ts
+// alchemy.run.ts
+import { Worker, DurableObjectNamespace } from "alchemy/cloudflare";
+
+const counter = DurableObjectNamespace("counter", {
+  className: "Counter",
+  sqlite: true, // Enable SQLite storage
+});
+
+export const worker = await Worker("api", {
+  entrypoint: "./src/worker.ts",
+  bindings: {
+    COUNTER: counter,
+  }
+});
+```
+
+Then export a class that extends `DurableObject` and has `"Counter"` as the class name to match the `DurableObjectNamespace` you created:
+
+```ts
+// ./src/worker.ts
+import { DurableObject } from "cloudflare:workers";
+
+export class Counter extends DurableObject {
+  async increment(): Promise<number> {
+    let count = (await this.ctx.storage.get("count")) || 0;
+    count++;
+    await this.ctx.storage.put("count", count);
+    return count;
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    const count = await this.increment();
+    return Response.json({ count });
+  }
+}
+```
+
+Finally, in your `fetch` handler, you can get a Durable Object instance via the `COUNTER` binding:
+
+```ts
+export default {
+  async fetch(request: Request, env: typeof worker.Env) {
+    const id = env.COUNTER.idFromName("global-counter");
+    const obj = env.COUNTER.get(id);
+    return obj.fetch(request);
+  }
+}
+```
+
+:::tip[Durable Objects Guide]
+For comprehensive Durable Objects documentation including WebSocket integration, alarms, and advanced patterns, see the [Durable Object Namespace guide](/providers/cloudflare/durable-object-namespace).
+:::
+
+## Workflows
+
+Workflows enable orchestration and automation of long-running tasks with built-in state management and retries.
+
+Create a `Workflow` in your `alchemy.run.ts` script and bind it to your Worker:
+
+```ts
+// alchemy.run.ts
+import { Worker, Workflow } from "alchemy/cloudflare";
+
+const orderProcessor = Workflow("order-processor", {
+  workflowName: "order-processing",
+  className: "OrderProcessor",
+});
+
+export const worker = await Worker("api", {
+  entrypoint: "./src/worker.ts",
+  bindings: {
+    ORDER_PROCESSOR: orderProcessor,
+  }
+});
+```
+
+Then define the workflow class in your Worker entrypoint:
+
+```ts
+// ./src/workflow.ts
+import { WorkflowEntrypoint } from "cloudflare:workers";
+
+export class OrderProcessor extends WorkflowEntrypoint {
+  async run(event, step) {
+    const order = await step.do("validate", async () => {
+      return validateOrder(event.payload);
+    });
+    
+    await step.do("charge", async () => {
+      return chargeCustomer(order);
+    });
+    
+    await step.do("fulfill", async () => {
+      return fulfillOrder(order);
+    });
+  }
+}
+```
+
+Access the workflow in your `fetch` handler:
+
+```ts
+// src/worker.ts
+
+// make sure the Workflow class is exported from the root of your Worker script
+export * from "./workflow.ts";
+
+export default {
+  async fetch(request: Request, env: typeof worker.Env) {
+    const instance = await env.ORDER_PROCESSOR.create();
+    return Response.json({ id: instance.id });
+  }
+}
+```
+
+:::tip[Workflows Guide]
+For comprehensive Workflows documentation including cross-script bindings and advanced patterns, see the [Workflow guide](/guides/cloudflare-workflows) and [Workflows Provider API Reference](/providers/cloudflare/workflow).
+:::
+
+
+## Queue Consumer
 
 Configure Workers to consume messages from queues with automatic retries, batching, and dead letter queues for reliable background processing:
 ```ts
@@ -311,21 +360,6 @@ export const processor = await Worker("processor", {
 });
 ```
 
-**Queue Consumer Settings:**
-
-| Setting | Purpose | Default | Example |
-|---------|---------|---------|----------|
-| `batchSize` | Messages processed per batch | 10 | `15` |
-| `maxConcurrency` | Concurrent Worker invocations | 2 | `3` |
-| `maxRetries` | Retry attempts for failed messages | 3 | `5` |
-| `maxWaitTimeMs` | Max wait time to fill a batch | 500 | `2500` |
-| `retryDelay` | Delay between retries (seconds) | 30 | `120` |
-| `deadLetterQueue` | Queue for permanently failed messages | undefined | `failedQueue` |
-
-:::tip
-Tune queue settings based on your workload: increase `batchSize` for high-throughput processing, adjust `maxRetries` based on failure tolerance, and always configure a `deadLetterQueue` for debugging failed messages.
-:::
-
 **Consumer implementation:**
 ```ts
 // ./src/processor.ts
@@ -346,18 +380,55 @@ export default {
 };
 ```
 
+**Queue Consumer Settings:**
+
+| Setting | Purpose | Default | Example |
+|---------|---------|---------|----------|
+| `batchSize` | Messages processed per batch | 10 | `15` |
+| `maxConcurrency` | Concurrent Worker invocations | 2 | `3` |
+| `maxRetries` | Retry attempts for failed messages | 3 | `5` |
+| `maxWaitTimeMs` | Max wait time to fill a batch | 500 | `2500` |
+| `retryDelay` | Delay between retries (seconds) | 30 | `120` |
+| `deadLetterQueue` | Queue for permanently failed messages | undefined | `failedQueue` |
+
+:::tip
+Tune queue settings based on your workload: increase `batchSize` for high-throughput processing, adjust `maxRetries` based on failure tolerance, and always configure a `deadLetterQueue` for debugging failed messages.
+:::
+
 **When to use:** Background job processing, webhook handling, email processing, image optimization, data synchronization.
 
-## Local development & configuration
+## Queue Producer
 
-Mirror production bindings in emulation, schedule tasks with cron, and serve static assets:
+To publish messages to a Queue from a Worker, bind it to the Worker:
 
 ```ts
 // alchemy.run.ts
-await Worker("api", { 
-  entrypoint: "./src/api.ts", 
-  dev: { port: 8787 } 
+import { Worker, Queue } from "alchemy/cloudflare";
+
+export const taskQueue = await Queue("task-queue");
+
+export const producer = await Worker("producer", {
+  entrypoint: "./src/producer.ts",
+  bindings: {
+    TASK_QUEUE: taskQueue,
+  }
 });
+```
+
+Then, in your producer worker, you can send messages to the queue:
+```ts
+// ./src/producer.ts
+import type { producer } from "../alchemy.run.ts";
+
+export default {
+  async fetch(request: Request, env: typeof producer.Env) {
+    await env.QUEUE.send({
+      name: "John Doe",
+      email: "john.doe@example.com",
+    });
+    return new Response("Ok");
+  }
+};
 ```
 
 ## Cron Triggers
@@ -383,8 +454,6 @@ export const frontend = await Worker("frontend", {
   bindings: { ASSETS: assets }
 });
 ```
-
-### Scheduled handler implementation
 
 ```ts
 // ./src/cron.ts
@@ -412,37 +481,53 @@ export default {
 - `"0 9 * * MON-FRI"` - Weekdays at 9 AM UTC
 - `"*/15 * * * *"` - Every 15 minutes
 
-## Smart Placement (performance optimization)
+## Preview Worker URLs
 
-Enable automatic network optimization by configuring smart placement to reduce latency and improve performance:
+Enable preview URLs for testing and configure production routing with domains and routes:
 
 ```ts
 // alchemy.run.ts
-export const optimizedWorker = await Worker("api", {
-  entrypoint: "./src/api.ts",
-  placement: {
-    mode: "smart"  // Automatically optimize placement for performance
-  }
+// Preview Worker for testing
+const preview = await Worker("preview", {
+  name: "my-worker",
+  entrypoint: "./src/worker.ts",
+  version: "pr-123",
+  url: true,
 });
+
+console.log(preview.url);
 ```
 
-**Benefits:**
-- ✅ Automatic network optimization based on performance metrics
-- ✅ Reduced latency for global users
-- ✅ No infrastructure management required
-- ✅ Seamless scaling across Cloudflare's network
-
-**When to use:** Global applications, latency-sensitive APIs, high-traffic workloads, applications with geographically distributed users.
-
-:::note
-You can learn more about [Smart Placement](https://developers.cloudflare.com/workers/configuration/smart-placement/) in the Cloudflare documentation.
+:::caution
+Preview URLs do not work with Durable Object bindings and should only be used to optimize CI/CD of large static websites. For stateful CI/CD applications, we recommend using `stage`s instead (see the [Continuous Integration Guide](/guides/ci) for information on how set this up).
 :::
 
-## Advanced patterns (Worker composition, RPC, Durable Objects)
+## Advanced Patterns
+
+### Optimize Cold Starts
+
+You should initialize clients at the top-level of your Worker script to reduce cold start times:
+
+```ts
+// src/worker.ts
+import { env } from "cloudflare:workers";
+import MyExpensiveApiClient from "example-api-client";
+
+// Initialize client at module scope
+const apiClient = new MyExpensiveApiClient();
+
+export default {
+  async fetch(request: Request, env: Env) {
+    // Configure with API key during request handling
+    apiClient.setApiKey(env.API_KEY);
+    return new Response("Configured with API key");
+  },
+};
+```
 
 Build distributed systems using Worker-to-Worker communication, RPC patterns, and Durable Object sharing:
 
-## Self-Binding
+### Self-Binding
 
 Enable Workers to reference themselves:
 
@@ -456,7 +541,7 @@ export const service = await Worker("auth-service", {
 });
 ```
 
-## Circular Dependencies
+### Circular Dependencies
 
 Break circular dependencies with WorkerStub:
 
@@ -482,7 +567,91 @@ export const authWorker = await Worker("auth", {
 - **Shared state** using Durable Objects as coordination layer
 - **API Gateway pattern** with unidirectional data flow
 
-## Service Mesh Pattern
+
+### Smart Placement (performance optimization)
+
+Enable automatic network optimization by configuring smart placement to reduce latency and improve performance:
+
+```ts
+// alchemy.run.ts
+export const optimizedWorker = await Worker("api", {
+  entrypoint: "./src/api.ts",
+  placement: {
+    mode: "smart"  // Automatically optimize placement for performance
+  }
+});
+```
+
+**Benefits:**
+- ✅ Automatic network optimization based on performance metrics
+- ✅ Reduced latency for global users
+- ✅ No infrastructure management required
+- ✅ Seamless scaling across Cloudflare's network
+
+**When to use:** Global applications, latency-sensitive APIs, high-traffic workloads, applications with geographically distributed users.
+
+:::note
+You can learn more about [Smart Placement](https://developers.cloudflare.com/workers/configuration/smart-placement/) in the Cloudflare documentation.
+:::
+
+### Workers for Platforms
+
+Deploy workers to dispatch namespaces for multi-tenant architectures using Cloudflare's Workers for Platforms:
+
+```ts
+import { Worker, DispatchNamespace } from "alchemy/cloudflare";
+
+// Create a dispatch namespace
+const tenants = await DispatchNamespace("tenants", {
+  namespace: "customer-workers",
+});
+
+// Deploy a worker to the dispatch namespace
+const tenantWorker = await Worker("tenant-app", {
+  name: "tenant-app-worker",
+  entrypoint: "./src/tenant.ts",
+  namespace: tenants,
+});
+
+// Create a router that binds to the dispatch namespace
+export const router = await Worker("platform-router", {
+  name: "main-router",
+  entrypoint: "./src/router.ts",
+  bindings: {
+    TENANT_WORKERS: tenants,
+  },
+});
+```
+
+In your `./src/router.ts`, you can dynamically route to tenant workers:
+
+```ts
+// src/router.ts
+import type { router } from "./alchemy.run.ts";
+
+export default {
+  async fetch(request: Request, env: typeof router.Env) {
+    const url = new URL(request.url);
+    const tenantId = url.hostname.split(".")[0];
+
+    // Get the tenant's worker from the dispatch namespace
+    const tenantWorker = env.TENANT_WORKERS.get(tenantId);
+
+    // Forward the request to the tenant's worker
+    return await tenantWorker.fetch(request);
+  },
+};
+```
+
+:::note
+Workers for Platforms enables multi-tenant architectures where each tenant can have isolated worker scripts with their own bindings and configuration.
+:::
+
+:::tip
+See the [Dispatch Namespace](/providers/cloudflare/dispatch-namespace) documentation for more details on Workers for Platforms.
+:::
+
+### Service Mesh Pattern
 
 ```ts
 // alchemy.run.ts
@@ -518,7 +687,7 @@ const orderService = await Worker("orders", {
 - ✅ Fault tolerance and graceful degradation
 - ✅ Clear separation of concerns
 
-**RPC pattern with WorkerEntrypoint:**
+### Remote Procedure Calls (RPC)
 
 If you're using Workers RPC, you can specify the `rpc` property on the worker to define its interface when inferring the environment types:
 
@@ -546,7 +715,6 @@ export default {
 };
 ```
 
-
 In your `alchemy.run.ts` script, import the `type MyRPC` and set it as the `rpc` property on the worker:
 
 ```diff lang='ts'
@@ -571,7 +739,7 @@ export default {
 };
 ```
 
-## Access Durable Object from another Worker
+### Cross-Worker Durable Object
 
 You can access a Durable Object from another Worker by using the `bindings` property:
 
@@ -597,22 +765,7 @@ await Worker("api", {
 });
 ```
 
-## Deploy, preview, and routing
 
-Enable preview URLs for testing and configure production routing with domains and routes:
-
-```ts
-// alchemy.run.ts
-// Preview Worker for testing
-const preview = await Worker("preview", {
-  name: "my-worker",
-  entrypoint: "./src/worker.ts",
-  version: "pr-123",
-  url: true,
-});
-
-console.log(preview.url);
-```
 
 **When to use `url: true`**
 
