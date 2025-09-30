@@ -1,8 +1,4 @@
 import { FileSystem } from "@effect/platform";
-import type {
-  LambdaFunctionURLEvent,
-  LambdaFunctionURLResult,
-} from "aws-lambda";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -10,190 +6,30 @@ import * as Schedule from "effect/Schedule";
 import crypto from "node:crypto";
 import path from "node:path";
 
-export type * from "./account.ts";
-export type * from "./region.ts";
-
-export type * as lambda from "aws-lambda";
-
 import {
-  allow,
   App,
   DotAlchemy,
-  type Allow,
-  type Attach,
-  type Binding,
+  type Binder,
   type BindNode,
-  type Policy,
-  type Resource,
-  type Provider as ResourceProvider,
+  type Provider,
   type Statement,
-  type TagInstance,
 } from "@alchemy.run/effect";
-import type { Context as LambdaContext } from "aws-lambda";
-import {
-  Lambda as LambdaClient,
-  type CreateFunctionUrlConfigRequest,
-  type UpdateFunctionUrlConfigRequest,
+import type {
+  CreateFunctionUrlConfigRequest,
+  UpdateFunctionUrlConfigRequest,
 } from "itty-aws/lambda";
-import { AccountID } from "./account.ts";
-import type { Tag as ArnTag } from "./arn.ts";
-import { createAWSServiceClientLayer } from "./client.ts";
-import * as IAM from "./iam.ts";
-import { Region } from "./region.ts";
-import { zipCode } from "./zip.ts";
+import { AccountID } from "../account.ts";
+import * as IAM from "../iam.ts";
+import { Region } from "../region.ts";
+import { zipCode } from "../zip.ts";
+import { FunctionClient } from "./function.client.ts";
+import {
+  FunctionType,
+  type FunctionAttributes,
+  type FunctionProps,
+} from "./function.ts";
 
-export type Type = typeof Type;
-export const Type = "AWS::Lambda::Function";
-
-type Props = {
-  url?: boolean;
-  functionName?: string;
-};
-
-type Attributes<ID extends string, _P extends Props> = {
-  type: Type;
-  id: ID;
-  functionName: string;
-  functionArn: string;
-  functionUrl: string | undefined;
-  roleName: string;
-  roleArn: string;
-  code: {
-    hash: string;
-  };
-};
-
-export type Branded<T> = string & { __brand: T };
-
-export type FunctionArn = Branded<"AWS::Lambda::Function.FunctionArn">;
-
-export type Arn<Self> = ArnTag<Self, FunctionArn>;
-
-export type Function<
-  ID extends string = string,
-  P extends Props = Props,
-> = Resource<Type, ID, P, Attributes<ID, P>, typeof FunctionProvider>;
-
-export type Handler = (event: any, ctx: any) => Effect.Effect<any, any, any>;
-
-export const Function = <ID extends string, P extends Props>(
-  id: ID,
-  props: P,
-) =>
-  Object.assign(
-    Context.Tag(id)() as Context.TagClass<P, ID, Attributes<ID, P>>,
-    {
-      kind: "Resource",
-      type: Type,
-      id,
-      props,
-      provider: FunctionProvider,
-      // phantom
-      attributes: undefined! as Attributes<ID, P>,
-      serve<Self, Err, Req>(
-        this: Self,
-        handler: (
-          event: LambdaFunctionURLEvent,
-          context: LambdaContext,
-        ) => Effect.Effect<LambdaFunctionURLResult, Err, Req>,
-      ) {
-        const iae = Effect.gen(function* () {
-          return handler;
-        });
-        return Object.assign(iae, {
-          self: this,
-        }) as Serve<Self, Err, Req>;
-      },
-    } as const,
-  );
-
-export type Serve<Self, Err, Req> = Effect.Effect<
-  (
-    request: LambdaFunctionURLEvent,
-    context: LambdaContext,
-  ) => Effect.Effect<LambdaFunctionURLResult, Err, Req>,
-  Err,
-  Req
-> & {
-  self: Self;
-};
-
-export const make = <F extends Resource, Req>(
-  impl: Effect.Effect<Handler, any, Req> & {
-    self: F;
-  },
-  {
-    bindings,
-    main,
-    handler,
-  }: {
-    bindings: NoInfer<Policy<Extract<Req, Statement>>>;
-    main: string;
-    handler?: string;
-  },
-) => {
-  const eff = Effect.gen(function* () {
-    const self = impl.self;
-    return {
-      ...(Object.fromEntries(
-        bindings.statements.map((statement) => [
-          statement.resource.id,
-          statement.resource,
-        ]),
-      ) as {
-        [id in Extract<Req, Statement>["resource"]["id"]]: Extract<
-          Extract<Req, Statement>["resource"],
-          { id: id }
-        >;
-      }),
-      [self.id]: {
-        type: "bound",
-        resource: self,
-        bindings: bindings.statements,
-        // TODO(sam): this should be passed to an Effect that interacts with the Provider
-        // @ts-expect-error
-        props: {
-          ...self.props,
-          main,
-          handler,
-        },
-      } satisfies Binding<F, Extract<Req, Statement>>,
-    };
-  });
-
-  const clss: any = class {};
-  Object.assign(clss, eff);
-  clss.pipe = eff.pipe.bind(eff);
-  return clss as any as Effect.Effect<
-    {
-      [id in F["id"]]: F extends Function
-        ? Binding<F, Extract<Req, Statement>>
-        : F;
-    } & {
-      [id in Exclude<
-        Extract<Req, Statement>["resource"]["id"],
-        F["id"]
-      >]: Extract<Extract<Req, Statement>["resource"], { id: id }>;
-    },
-    never,
-    | FunctionProvider
-    | TagInstance<Extract<Req, Statement>["resource"]["provider"]>
-  > & {
-    new (_: never): {};
-  };
-};
-
-export class FunctionClient extends Context.Tag("AWS::Lambda::Function.Client")<
-  FunctionClient,
-  LambdaClient
->() {}
-
-export const client = createAWSServiceClientLayer<
-  typeof FunctionClient,
-  LambdaClient
->(FunctionClient, LambdaClient);
-
-export interface FunctionProviderProps extends Props {
+export interface FunctionProviderProps extends FunctionProps {
   /**
    * The main file to use for the function.
    */
@@ -207,15 +43,15 @@ export interface FunctionProviderProps extends Props {
 
 export class FunctionProvider extends Context.Tag("AWS::Lambda::Function")<
   FunctionProvider,
-  ResourceProvider<
-    Type,
+  Provider<
+    FunctionType,
     FunctionProviderProps,
-    Attributes<string, Props>,
-    Bindable
+    FunctionAttributes<string, FunctionProps>,
+    Statement
   >
 >() {}
 
-export const provider = () =>
+export const functionProvider = () =>
   Layer.effect(
     FunctionProvider,
     Effect.gen(function* () {
@@ -247,18 +83,23 @@ export const provider = () =>
         policyName: string;
         functionArn: string;
         functionName: string;
-        bindings: BindNode<Bindable>[];
+        bindings: BindNode[];
       }) {
         let env: Record<string, string> = {};
         const policyStatements: IAM.PolicyStatement[] = [];
 
         for (const binding of bindings) {
           if (binding.action === "attach") {
-            const bound = yield* binding.stmt.bind({
+            const binder = yield* binding.stmt.binder as Context.Tag<
+              never,
+              Binder
+            >;
+            const bound = yield* binder.attach({
               host: {
                 functionArn,
                 functionName,
                 env,
+                policyStatements,
               },
               binding,
               resource: binding.attributes,
@@ -342,7 +183,7 @@ export const provider = () =>
         if (!file.startsWith(".")) {
           file = `./${file}`;
         }
-        const { bundle } = yield* Effect.promise(() => import("./bundle.js"));
+        const { bundle } = yield* Effect.promise(() => import("../bundle.js"));
         const outfile = path.join(
           dotAlchemy,
           "out",
@@ -477,8 +318,8 @@ export const provider = () =>
         oldUrl,
       }: {
         functionName: string;
-        url: Props["url"];
-        oldUrl?: Props["url"];
+        url: FunctionProps["url"];
+        oldUrl?: FunctionProps["url"];
       }) {
         // TODO(sam): support AWS_IAM
         const authType = "NONE";
@@ -550,7 +391,7 @@ export const provider = () =>
         }`;
 
       return {
-        type: Type,
+        type: FunctionType,
         read: Effect.fn(function* ({ id, output }) {
           if (output) {
             // example: refresh the function URL from the API
@@ -566,7 +407,7 @@ export const provider = () =>
                     Effect.succeed(undefined),
                   ),
                 ),
-            } satisfies Attributes<string, Props>;
+            } satisfies FunctionAttributes<string, FunctionProps>;
           }
           return output;
         }),
@@ -636,7 +477,7 @@ export const provider = () =>
             code: {
               hash,
             },
-          } satisfies Attributes<string, Props>;
+          } satisfies FunctionAttributes<string, FunctionProps>;
         }),
         update: Effect.fn(function* ({
           id,
@@ -689,7 +530,7 @@ export const provider = () =>
             code: {
               hash,
             },
-          } satisfies Attributes<string, Props>;
+          } satisfies FunctionAttributes<string, FunctionProps>;
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* iam
@@ -748,72 +589,10 @@ export const provider = () =>
             .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
           return null as any;
         }),
-      } satisfies ResourceProvider<
-        Type,
+      } satisfies Provider<
+        FunctionType,
         FunctionProviderProps,
-        Attributes<string, Props>,
-        Bindable
+        FunctionAttributes<string, FunctionProps>
       >;
     }),
   );
-
-export type InvokeFunction<F extends Function> = Allow<
-  "lambda:InvokeFunction",
-  F
->;
-
-// TODO(sam): implement
-export declare const InvokeFunction: <F extends Function>(
-  func: F,
-) => InvokeFunction<F>;
-
-export const invoke = <F extends Function>(func: F, input: any) =>
-  Effect.gen(function* () {
-    const lambda = yield* FunctionClient;
-    const functionArn = process.env[`${func.id}-functionArn`]!;
-    yield* allow<InvokeFunction<F>>();
-    return yield* lambda.invoke({
-      FunctionName: functionArn,
-      InvocationType: "RequestResponse",
-      Payload: JSON.stringify(input),
-    });
-  });
-
-export type Bindable<
-  S extends Statement = Statement,
-  Err = never,
-  Req = never,
-> = S & {
-  bind(props: {
-    host: {
-      functionArn: string;
-      functionName: string;
-      env: Record<string, string>;
-    };
-    binding: Attach<S>;
-    resource: S["resource"]["attributes"];
-  }): Effect.Effect<
-    {
-      env?: Record<string, string>;
-      policyStatements?: IAM.PolicyStatement[];
-    } | void,
-    Err,
-    Req
-  >;
-};
-
-const memo = Symbol.for("alchemy::memo");
-// TODO(sam): is there a better way to lazily evaluate the Effect and cache the result?
-const resolveHandler = async (
-  effect: Effect.Effect<Handler, any, Statement> & {
-    [memo]?: Handler;
-  },
-) =>
-  (effect[memo] ??= await Effect.runPromise(
-    effect as Effect.Effect<Handler, any, never>,
-  ));
-
-export const toHandler =
-  (effect: Effect.Effect<Handler, any, Statement>) =>
-  async (event: any, context: LambdaContext) =>
-    (await resolveHandler(effect))(event, context);

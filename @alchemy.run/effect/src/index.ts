@@ -5,6 +5,7 @@ export * from "./binding.ts";
 export * from "./destroy.ts";
 export * from "./dot-alchemy.ts";
 export * from "./event.ts";
+export * from "./handler.ts";
 export * from "./phase.ts";
 export * from "./plan.ts";
 export * from "./policy.ts";

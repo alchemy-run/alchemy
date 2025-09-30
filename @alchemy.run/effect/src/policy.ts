@@ -25,6 +25,7 @@ export interface Allow<
   Action extends string,
   Resource extends _Resource,
   Condition = any,
+  Binder = any,
 > {
   /**
    * ID uniquely identifying this statement
@@ -37,12 +38,14 @@ export interface Allow<
   action: Action;
   resource: Resource;
   condition?: Condition;
+  binder: Binder;
 }
 
 export interface Deny<
   Action extends string,
   Resource extends _Resource,
   Condition = any,
+  Binder = any,
 > {
   sid?: string;
   label: string;
@@ -50,6 +53,7 @@ export interface Deny<
   action: Action;
   resource: Resource;
   condition?: Condition;
+  binder: Binder;
 }
 
 export const allow = <S extends Statement>() =>

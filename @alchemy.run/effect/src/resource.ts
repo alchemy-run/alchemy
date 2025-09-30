@@ -1,20 +1,21 @@
 import type * as Context from "effect/Context";
 
 export type ResourceID = string;
-
-export type ResourceProps = Record<string, any>;
+export type Props = Record<string, any>;
+export type Attributes = Record<string, any>;
+export type ProviderTag = Context.Tag<any, any>;
 
 export type Resource<
   Type extends string = string,
   ID extends ResourceID = ResourceID,
-  Props extends ResourceProps = ResourceProps,
-  Attributes extends Record<string, any> = Record<string, any>,
-  Provider extends Context.Tag<any, any> = Context.Tag<any, any>,
+  P extends Props = Props,
+  A extends Attributes = Attributes,
+  Provider extends ProviderTag = ProviderTag,
 > = {
   type: Type;
   id: ID;
-  props: Props;
+  props: P;
   /** @internal phantom type */
-  attributes: Attributes;
+  attributes: A;
   provider: Provider;
 };

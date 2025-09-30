@@ -24,19 +24,14 @@
       "types": "./lib/index.d.ts"
     },
     "./lambda": {
-      "bun": "./src/lambda.ts",
-      "import": "./lib/lambda.js",
-      "types": "./lib/lambda.d.ts"
-    },
-    "./function": {
-      "bun": "./src/function.ts",
-      "import": "./lib/function.js",
-      "types": "./lib/function.d.ts"
+      "bun": "./src/lambda/index.ts",
+      "import": "./lib/lambda/index.js",
+      "types": "./lib/lambda/index.d.ts"
     },
     "./sqs": {
-      "bun": "./src/sqs.ts",
-      "import": "./lib/sqs.js",
-      "types": "./lib/sqs.d.ts"
+      "bun": "./src/sqs/index.ts",
+      "import": "./lib/sqs/index.js",
+      "types": "./lib/sqs/index.d.ts"
     },
     "./sts": {
       "bun": "./src/sts.ts",

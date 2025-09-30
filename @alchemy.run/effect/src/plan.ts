@@ -1,6 +1,7 @@
+import type * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import { isBinding, type Binding } from "./binding.ts";
+import { isBinding, type Binder, type Binding } from "./binding.ts";
 import type { Phase } from "./phase.ts";
 import type { SerializedStatement, Statement } from "./policy.ts";
 import type { Provider } from "./provider.ts";
@@ -35,6 +36,7 @@ export type NoopBind<Stmt extends Statement = Statement> = {
   action: "noop";
   stmt: Stmt;
   attributes: Stmt["resource"]["attributes"];
+  provider: Context.Tag<never, Binder>;
 };
 
 /**
