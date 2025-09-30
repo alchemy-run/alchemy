@@ -2,7 +2,7 @@ import { apply } from "./apply.ts";
 import type { Context } from "./context.ts";
 import { DestroyStrategy } from "./destroy.ts";
 import { Scope as _Scope, type Scope } from "./scope.ts";
-import { createAndSendEvent } from "./util/telemetry/v2.ts";
+import { createAndSendEvent } from "./util/telemetry/events.ts";
 
 declare global {
   var ALCHEMY_PROVIDERS: Map<ResourceKind, Provider<string, any>>;
