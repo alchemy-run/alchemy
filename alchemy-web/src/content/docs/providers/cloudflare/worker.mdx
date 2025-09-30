@@ -98,6 +98,7 @@ export const worker = await Worker("api", {
   }),                    
   noBundle: true,                         // Disable bundling (default: false)
   rules: [{ globs: ["**/*.wasm"] }],      // Additional bundle rules
+  logpush: true,                          // Enable Workers LogPush for trace event export.
 });
 ```
 
