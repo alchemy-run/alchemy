@@ -371,7 +371,7 @@ export const spreadBuildProps = (
 export const spreadDevProps = (
   props: { dev?: WebsiteProps<Bindings>["dev"] } | undefined,
   defaultCommand: string,
-): WebsiteProps<Bindings>["dev"] => {
+): Exclude<WebsiteProps<Bindings>["dev"], undefined> => {
   if (typeof props?.dev === "object") {
     return {
       ...props.dev,
