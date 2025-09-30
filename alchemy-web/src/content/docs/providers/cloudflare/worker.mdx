@@ -5,423 +5,130 @@ description: Learn how to deploy, configure, and manage Cloudflare Workers using
 
 A [Cloudflare Worker](https://developers.cloudflare.com/workers/) is a serverless function that runs on Cloudflare's global network.
 
-## Minimal Example
+## Quick Start
 
-Create a basic HTTP handler worker:
+Deploy a minimal Worker with a single HTTP handler:
 
 ```ts
 import { Worker } from "alchemy/cloudflare";
 
-const worker = await Worker("api", {
+export const worker = await Worker("api", {
   name: "api-worker",
   entrypoint: "./src/api.ts",
 });
 ```
 
-In your `./src/api.ts`
+The simplest possible Worker is just a function that returns a `Response`:
 
 ```ts
+// ./src/api.ts
 export default {
-  async fetch(request, env, ctx) {
+  async fetch(request: Request): Promise<Response> {
     return new Response("OK");
   },
 };
 ```
 
-## Bindings
+:::tip
+Start with a simple Worker like this to verify your deployment pipeline works, then gradually add complexity. Use the local development server to test changes quickly. 
 
-Attach resources like KV, R2, or Durable Objects:
+For common patterns, see the [Cloudflare Workers Examples](https://developers.cloudflare.com/workers/examples/) section.
+:::
 
+## Local Development
+
+See the [Local Development](/concepts/dev) documentation for more details.
+
+## Worker Configuration
+
+Use bindings to attach KV, R2, Durable Objects, secrets, and other resources to the Worker. 
+Configure Worker properties for compatibility, observability, and runtime limits:
 ```ts
-import {
-  Worker,
-  KVNamespace,
-  DurableObjectNamespace,
-} from "alchemy/cloudflare";
+// alchemy.run.ts
+import alchemy from 'alchemy';
+import { Worker, KVNamespace, R2Bucket } from "alchemy/cloudflare";
 
-const kv = await KVNamespace("cache", { title: "cache-store" });
-const users = DurableObjectNamespace("users", { className: "Users" });
+const cache = await KVNamespace("cache", { title: "cache-store" });
+const storage = await R2Bucket("storage", { name: "user-storage" });
 
 export const worker = await Worker("api", {
-  name: "api-worker",
-  entrypoint: "./src/api.ts",
+  name: "api-worker",                     // Worker name (defaults to ${app}-${stage}-${id})
+  url: true,                              // Enable workers.dev preview URL (defaults to false; created unless using a dispatch namespace)
+  cwd: "./apps/my-api",                   // Project root directory (defaults to process.cwd())
+  entrypoint: "./src/api.ts",             // Main entrypoint for bundling
+  format: "esm",                          // Module format: 'esm' (default) or 'cjs'
+  // compatibilityDate defaults to the SDK's pinned date; override only when you need a specific runtime
+  compatibilityDate: "2025-09-13",        // Workers runtime version (uses DEFAULT_COMPATIBILITY_DATE when omitted)
+  compatibilityFlags: ["nodejs_compat"],  // Low-level runtime flags; consider using `compatibility` preset instead
+  compatibility: "node",                  // Compatibility preset (optional) — expands flags for common use-cases like Node.js compatibility
+  adopt: true,                            // Adopt existing Worker if present; falls back to scope.adopt when undefined
   bindings: {
-    CACHE: kv,
-    USERS: users,
+    CACHE: cache,                         // KV Namespace binding
+    STORAGE: storage,                     // R2 bucket binding
+    API_KEY: alchemy.secret("secret-value") // Plain-text env binding (converted to plain_text)
+    // Other binding types include: DurableObjectNamespace, Queue, Secret, Assets, Container, Workflow
   },
-});
-```
-
-Access in `./src/api.ts` by importing `cloudflare:workers`:
-
-```ts
-import { env } from "cloudflare:workers";
-
-export default {
-  async fetch() {
-    await env.CACHE.get("key");
+  observability: {
+    enabled: true                         // Enable worker logs / observability (default: true)
   },
-};
-```
-
-Or via the `env` parameter:
-
-```ts
-export default {
-  async fetch(request, env) {
-    await env.CACHE.get("key");
-  },
-};
-```
-
-### Infer Worker Env Types
-
-Binding types can be inferred from the `worker` in your `alchemy.run.ts` script:
-
-```ts
-import type { worker } from "../alchemy.run.ts";
-
-export default {
-  async fetch(request, env: typeof worker.Env) {
-    await env.CACHE.get("key");
-  },
-};
-```
-
-### Augment types of `cloudflare:workers`
-
-To make the `env` in `cloudflare:workers` type-safe, create an `env.d.ts` file:
-
-```typescript
-import type { worker } from "./alchemy.run.ts";
-
-export type WorkerEnv = typeof worker.Env;
-
-declare module "cloudflare:workers" {
-  namespace Cloudflare {
-    export interface Env extends WorkerEnv {}
-  }
-}
-```
-
-And register `env.d.ts` in your `tsconfig.json`'s `types`.
-
-```json
-{
-  "compilerOptions": {
-    "types": ["@cloudflare/workers-types", "./src/env.d.ts"]
-  }
-}
-```
-
-:::tip
-See [Bindings](/concepts/bindings) for more information.
-:::
-
-## Source Maps
-
-Control whether source maps are uploaded with your worker for debugging:
-
-```ts
-import { Worker } from "alchemy/cloudflare";
-
-const worker = await Worker("api", {
-  name: "api-worker",
-  entrypoint: "./src/api.ts",
-  sourceMap: true, // Upload source maps (default: true)
-});
-
-// Disable source maps for production builds
-const prodWorker = await Worker("prod-api", {
-  name: "prod-api-worker",
-  entrypoint: "./src/api.ts",
-  sourceMap: false, // Don't upload source maps
-});
-```
-
-:::note
-Source maps are enabled by default (`sourceMap: true`) and help with debugging by mapping minified code back to your original source files in the Cloudflare dashboard.
-:::
-
-## Static Assets
-
-Serve static files from a directory:
-
-```ts
-import { Worker, Assets } from "alchemy/cloudflare";
-
-const assets = await Assets({
-  path: "./public",
-});
-
-const worker = await Worker("frontend", {
-  name: "frontend-worker",
-  entrypoint: "./src/worker.ts",
-  bindings: {
-    ASSETS: assets,
-  },
-});
-```
-
-## Compatibility Presets
-
-Compatibility presets provide common sets of compatibility flags to avoid having to remember which flags are needed for specific use cases:
-
-```ts
-import { Worker } from "alchemy/cloudflare";
-
-const worker = await Worker("nodejs-worker", {
-  name: "nodejs-worker",
-  entrypoint: "./src/api.ts",
-  compatibility: "node", // Automatically includes nodejs_compat flag
-});
-```
-
-### Available Presets
-
-- **`"node"`**: Enables Node.js compatibility by including the `nodejs_compat` flag
-
-### Combining with Custom Flags
-
-Preset flags are automatically combined with any custom `compatibilityFlags` you provide:
-
-```ts
-import { Worker } from "alchemy/cloudflare";
-
-const worker = await Worker("advanced-worker", {
-  name: "advanced-worker", 
-  entrypoint: "./src/api.ts",
-  compatibility: "node", // Adds nodejs_compat
-  compatibilityFlags: ["experimental_feature"], // Additional flags
-  // Result: ["nodejs_compat", "experimental_feature"]
-});
-```
-
-## Smart Placement
-
-Enable smart placement to automatically optimize your worker's placement across Cloudflare's global network:
-
-```ts
-import { Worker } from "alchemy/cloudflare";
-
-const worker = await Worker("optimized-worker", {
-  name: "optimized-worker",
-  entrypoint: "./src/api.ts",
-  placement: {
-    mode: "smart", // Enable smart placement
-  },
-});
-```
-
-:::note
-Learn more about [Smart Placement](https://developers.cloudflare.com/workers/configuration/smart-placement/) in the Cloudflare documentation.
-:::
-
-## CPU Time Limit
-
-Set the maximum CPU time in milliseconds that the worker can use:
-
-```ts
-
-const worker = await Worker("api", {
-  name: "api-worker",
-  entrypoint: "./src/api.ts",
+  // Upload source maps to improve stack traces (set to false to disable)
+  sourceMap: true,
+  // Optional runtime limits — increase only when necessary after monitoring
   limits: {
-    cpu_ms: 300_000,
+    cpu_ms: 50_000                        // Max CPU time in ms (default: 30_000)
   },
+  // Other Advanced 🧪 & commonly used options
+  placement: { mode: "smart" },          // Smart placement to optimize network placement for latency
+  assets: { path: "./public", run_worker_first: false }, // Static assets configuration
+  crons: ["0 0 * * *"],                  // Scheduled cron triggers (standard cron syntax)
+  eventSources: [                        // Background event sources (queues, streams)
+    { queue: taskQueue, settings: { batchSize: 15, maxConcurrency: 3 } }
+  ],
+  routes: ["api.example.com/*"],          // Route patterns to bind the worker
+  domains: ["example.com"],               // Custom domains to bind (can be objects with zoneId/adopt)
+  version: "pr-123",                      // Publish as preview version with label
+  dev: {
+    port: 8787, // Hard-code the port used by the local worker development server (default: one is derived)
+    tunnel: true, // Create a Cloudflare Tunnel and proxy requests to the local development server (default: false)
+    remote: true, // Run the worker in Cloudflare instead of locally (default: false)
+  },                    
+  // Deploy to dispatch namespace (string | DispatchNamespace)
+  namespace: await DispatchNamespace("my-dispatch-ns", {
+    namespace: "production-dispatch"
+  }),                    
+  noBundle: true,                         // Disable bundling (default: false)
+  rules: [{ globs: ["**/*.wasm"] }],      // Additional bundle rules
 });
 ```
-
-:::note
-Learn more about [CPU Time Limits](https://developers.cloudflare.com/workers/platform/limits/#cpu-time) in the Cloudflare documentation.
-:::
-
-## Cron Triggers
-
-Schedule recurring tasks:
-
-```ts
-import { Worker } from "alchemy/cloudflare";
-
-const worker = await Worker("cron", {
-  name: "cron-worker",
-  entrypoint: "./src/cron.ts",
-  crons: ["0 0 * * *"], // Run daily at midnight
-});
-```
-
-## Bind to a Worker
-
-Use a worker as a binding in another worker:
-
-```ts
-import { Worker } from "alchemy/cloudflare";
-
-const api = await Worker("api", {
-  name: "api-worker",
-  entrypoint: "./src/api.ts",
-});
-
-const frontend = await Worker("frontend", {
-  name: "frontend-worker",
-  entrypoint: "./src/frontend.ts",
-  bindings: {
-    API: api,
-  },
-});
-```
-
-## Self-Binding
-
-A worker can bind to itself using `Self` or `WorkerRef`:
-
-```ts
-import { Worker, Self, WorkerRef } from "alchemy/cloudflare";
-
-// Using Self
-const workerWithSelf = await Worker("my-worker", {
-  name: "my-worker",
-  entrypoint: "./src/worker.ts",
-  bindings: {
-    SELF: Self,
-  },
-});
-
-// Using WorkerRef with the worker's own ID
-const workerWithRef = await Worker("my-worker", {
-  name: "my-worker",
-  entrypoint: "./src/worker.ts",
-  bindings: {
-    SELF: WorkerRef("my-worker"),
-  },
-});
-```
-
-## Circular Worker Bindings
-
-When workers need to bind to each other (circular dependency), use `WorkerStub` to break the cycle:
-
-```ts
-import { Worker, WorkerStub } from "alchemy/cloudflare";
-import type { MyWorkerA } from "./src/worker-a.ts";
-import type { MyWorkerB } from "./src/worker-B.ts";
-
-// Create workerA that binds to workerB stub
-const workerA = await Worker("workerA", {
-  name: "worker-a",
-  entrypoint: "./src/workerA.ts",
-  rpc: type<MyWorkerA>,
-  bindings: {
-    // bind to a stub (empty worker)
-    WORKER_B: await WorkerStub<MyWorkerB>("workerB", {
-      name: "worker-b",
-      rpc: type<MyWorkerB>,
-    });,
-  },
-});
-
-// Create workerB that binds to workerA
-const workerB = await Worker("workerB", {
-  name: "worker-b",
-  entrypoint: "./src/workerB.ts",
-  bindings: {
-    WORKER_A: workerA,
-  },
-});
-```
-
-## RPC
-
-Create a Worker with RPC capabilities using WorkerEntrypoint and typed RPC interfaces:
-
-```ts
-import { Worker, type } from "alchemy/cloudflare";
-import type MyRPC from "./src/rpc.ts";
-
-// Create an RPC worker with typed interface
-const rpcWorker = await Worker("rpc-service", {
-  name: "rpc-service-worker",
-  entrypoint: "./src/rpc.ts",
-  rpc: type<MyRPC>,
-});
-
-// Use the RPC worker as a binding in another worker
-const mainWorker = await Worker("main", {
-  name: "main-worker",
-  entrypoint: "./src/worker.ts",
-  bindings: {
-    RPC: rpcWorker,
-  },
-});
-```
-
-The RPC worker's entrypoint should export a class extending `WorkerEntrypoint`:
-
-```ts
-// src/rpc.ts
-import { WorkerEntrypoint } from "cloudflare:workers";
-
-export default class MyRPC extends WorkerEntrypoint {
-  async getData(id: string): Promise<{ data: string }> {
-    return { data: `Data for ${id}` };
-  }
-
-  async processItem(item: { name: string; value: number }): Promise<boolean> {
-    // Process the item
-    return true;
-  }
-}
-```
-
-Then the main worker can call RPC methods with full type safety:
-
-```ts
-// src/worker.ts
-export default {
-  async fetch(request: Request, env: { RPC: MyRPC }): Promise<Response> {
-    // Type-safe RPC calls
-    const result = await env.RPC.getData("123");
-    const success = await env.RPC.processItem({ name: "test", value: 42 });
-
-    return new Response(JSON.stringify({ result, success }));
-  },
-};
-```
-
-## Durable Object
-
 
 :::tip
-See the [Durable Object Guide](/guides/cloudflare-durable-objects) for more information.
+This reduces cold start times because the Worker isolate is pre-warmed during the first request handshake.
 :::
 
-### Cross-Script Durable Object
+:::caution
+I/O is not allowed at top-level in Cloudflare Workers.
+:::
 
-Share durable objects between workers by defining them in one worker and accessing them from another:
+## Custom Domains
+
+Bind custom domains directly to your worker for a simpler routing setup:
 
 ```ts
-import { Worker, DurableObjectNamespace } from "alchemy/cloudflare";
+import { Worker } from "alchemy/cloudflare";
 
-// Worker that defines and owns the durable object
-const dataWorker = await Worker("data-worker", {
-  entrypoint: "./src/data.ts",
-  bindings: {
-    // Bind to its own durable object
-    STORAGE: DurableObjectNamespace("storage", {
-      className: "DataStorage",
-    }),
-  },
-});
-
-// Worker that accesses the durable object from another worker
-const apiWorker = await Worker("api-worker", {
+const worker = await Worker("api", {
+  name: "api-worker",
   entrypoint: "./src/api.ts",
-  bindings: {
-    // Cross-script binding to the data worker's durable object
-    SHARED_STORAGE: dataWorker.bindings.STORAGE,
-  },
+  domains: ["api.example.com", "admin.example.com"],
 });
+
+// Access the created domains
+console.log(worker.domains); // Array of created CustomDomain resources
 ```
+
+:::tip
+See the [Routes and Domains](https://developers.cloudflare.com/workers/configuration/routing/#what-is-best-for-me) Cloudflare docs to help decide between when to use a Route vs a Domain.
+:::
 
 ## Routes
 
@@ -457,28 +164,437 @@ const worker = await Worker("api", {
 See the [Route](/providers/cloudflare/route) for more information.
 :::
 
-## Custom Domains
+## Environment (Binding) Types
+Alchemy doesn't use code-generation. Instead, your Worker's environment types can be inferred from the infrastructure configuration in your `alchemy.run.ts` script.
 
-Bind custom domains directly to your worker for a simpler routing setup:
+There are two ways to infer the environment types:
 
+#### 1. Specify the type of `env` in your worker (simplest):
 ```ts
-import { Worker } from "alchemy/cloudflare";
+// src/worker.ts
+import type { worker } from "../alchemy.run.ts";
 
-const worker = await Worker("api", {
-  name: "api-worker",
-  entrypoint: "./src/api.ts",
-  domains: ["api.example.com", "admin.example.com"],
-});
-
-// Access the created domains
-console.log(worker.domains); // Array of created CustomDomain resources
+export default {
+  async fetch(request, env: typeof worker.Env) {
+    await env.CACHE.get("key");
+  },
+};
 ```
 
-:::tip
-See the [Routes and Domains](https://developers.cloudflare.com/workers/configuration/routing/#what-is-best-for-me) Cloudflare docs to help decide between when to use a Route vs a Domain.
+#### 2. Cast `env` from the `cloudflare:workers` module:
+
+If you need access to the env at the top level, create a file called `env.ts` re-export `env` casted to the worker's environment type:
+```ts 
+// ./src/env.ts
+import { env } from "cloudflare:workers";
+
+export type Env = typeof Env;
+export const Env = env as typeof worker.Env;
+```
+
+Then import and use the `Env` type in your worker and initialize your clients, etc.
+```ts
+// src/worker.ts
+import { Env } from "./env.ts";
+
+const myClient = new MyClient(Env.DB);
+```
+
+## Durable Objects
+
+Durable Objects enable stateful serverless applications with coordination capabilities.
+
+Create a `DurableObjectNamespace` in your `alchemy.run.ts` script and bind it to your Worker:
+
+```ts
+// alchemy.run.ts
+import { Worker, DurableObjectNamespace } from "alchemy/cloudflare";
+
+const counter = DurableObjectNamespace("counter", {
+  className: "Counter",
+  sqlite: true, // Enable SQLite storage
+});
+
+export const worker = await Worker("api", {
+  entrypoint: "./src/worker.ts",
+  bindings: {
+    COUNTER: counter,
+  }
+});
+```
+
+Then export a class that extends `DurableObject` and has `"Counter"` as the class name to match the `DurableObjectNamespace` you created:
+
+```ts
+// ./src/worker.ts
+import { DurableObject } from "cloudflare:workers";
+
+export class Counter extends DurableObject {
+  async increment(): Promise<number> {
+    let count = (await this.ctx.storage.get("count")) || 0;
+    count++;
+    await this.ctx.storage.put("count", count);
+    return count;
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    const count = await this.increment();
+    return Response.json({ count });
+  }
+}
+```
+
+Finally, in your `fetch` handler, you can get a Durable Object instance via the `COUNTER` binding:
+
+```ts
+export default {
+  async fetch(request: Request, env: typeof worker.Env) {
+    const id = env.COUNTER.idFromName("global-counter");
+    const obj = env.COUNTER.get(id);
+    return obj.fetch(request);
+  }
+}
+```
+
+:::tip[Durable Objects Guide]
+For comprehensive Durable Objects documentation including WebSocket integration, alarms, and advanced patterns, see the [Durable Object Namespace guide](/providers/cloudflare/durable-object-namespace).
 :::
 
-## Workers for Platforms
+## Workflows
+
+Workflows enable orchestration and automation of long-running tasks with built-in state management and retries.
+
+Create a `Workflow` in your `alchemy.run.ts` script and bind it to your Worker:
+
+```ts
+// alchemy.run.ts
+import { Worker, Workflow } from "alchemy/cloudflare";
+
+const orderProcessor = Workflow("order-processor", {
+  workflowName: "order-processing",
+  className: "OrderProcessor",
+});
+
+export const worker = await Worker("api", {
+  entrypoint: "./src/worker.ts",
+  bindings: {
+    ORDER_PROCESSOR: orderProcessor,
+  }
+});
+```
+
+Then define the workflow class in your Worker entrypoint:
+
+```ts
+// ./src/workflow.ts
+import { WorkflowEntrypoint } from "cloudflare:workers";
+
+export class OrderProcessor extends WorkflowEntrypoint {
+  async run(event, step) {
+    const order = await step.do("validate", async () => {
+      return validateOrder(event.payload);
+    });
+    
+    await step.do("charge", async () => {
+      return chargeCustomer(order);
+    });
+    
+    await step.do("fulfill", async () => {
+      return fulfillOrder(order);
+    });
+  }
+}
+```
+
+Access the workflow in your `fetch` handler:
+
+```ts
+// src/worker.ts
+
+// make sure the Workflow class is exported from the root of your Worker script
+export * from "./workflow.ts";
+
+export default {
+  async fetch(request: Request, env: typeof worker.Env) {
+    const instance = await env.ORDER_PROCESSOR.create();
+    return Response.json({ id: instance.id });
+  }
+}
+```
+
+:::tip[Workflows Guide]
+For comprehensive Workflows documentation including cross-script bindings and advanced patterns, see the [Workflow guide](/guides/cloudflare-workflows) and [Workflows Provider API Reference](/providers/cloudflare/workflow).
+:::
+
+
+## Queue Consumer
+
+Configure Workers to consume messages from queues with automatic retries, batching, and dead letter queues for reliable background processing:
+```ts
+import { Worker, Queue } from "alchemy/cloudflare";
+
+const taskQueue = await Queue("task-queue", {
+  name: "task-processing"
+});
+
+const failedQueue = await Queue("failed-tasks", {
+  name: "failed-tasks"
+});
+
+export const processor = await Worker("processor", {
+  entrypoint: "./src/processor.ts",
+  bindings: {
+    TASK_QUEUE: taskQueue  // Producer - bind queue for sending messages
+  },
+  eventSources: [{  // Consumer - configure processing settings
+    queue: taskQueue,
+    settings: {
+      batchSize: 15,           
+      maxConcurrency: 3,       
+      maxRetries: 5,           
+      maxWaitTimeMs: 2500,     
+      retryDelay: 60,          
+      deadLetterQueue: failedQueue  
+    }
+  }]
+});
+```
+
+**Consumer implementation:**
+```ts
+// ./src/processor.ts
+import type { MessageBatch } from "@cloudflare/workers-types";
+
+export default {
+  async queue(batch: MessageBatch, env: Env) {
+    for (const message of batch.messages) {
+      try {
+        const data = message.body;
+        await processTask(data);
+        message.ack(); // Acknowledge successful processing
+      } catch (error) {
+        message.retry(); // Retry on failure - respects maxRetries
+      }
+    }
+  }
+};
+```
+
+**Queue Consumer Settings:**
+
+| Setting | Purpose | Default | Example |
+|---------|---------|---------|----------|
+| `batchSize` | Messages processed per batch | 10 | `15` |
+| `maxConcurrency` | Concurrent Worker invocations | 2 | `3` |
+| `maxRetries` | Retry attempts for failed messages | 3 | `5` |
+| `maxWaitTimeMs` | Max wait time to fill a batch | 500 | `2500` |
+| `retryDelay` | Delay between retries (seconds) | 30 | `120` |
+| `deadLetterQueue` | Queue for permanently failed messages | undefined | `failedQueue` |
+
+:::tip
+Tune queue settings based on your workload: increase `batchSize` for high-throughput processing, adjust `maxRetries` based on failure tolerance, and always configure a `deadLetterQueue` for debugging failed messages.
+:::
+
+**When to use:** Background job processing, webhook handling, email processing, image optimization, data synchronization.
+
+## Queue Producer
+
+To publish messages to a Queue from a Worker, bind it to the Worker:
+
+```ts
+// alchemy.run.ts
+import { Worker, Queue } from "alchemy/cloudflare";
+
+export const taskQueue = await Queue("task-queue");
+
+export const producer = await Worker("producer", {
+  entrypoint: "./src/producer.ts",
+  bindings: {
+    TASK_QUEUE: taskQueue,
+  }
+});
+```
+
+Then, in your producer worker, you can send messages to the queue:
+```ts
+// ./src/producer.ts
+import type { producer } from "../alchemy.run.ts";
+
+export default {
+  async fetch(request: Request, env: typeof producer.Env) {
+    await env.QUEUE.send({
+      name: "John Doe",
+      email: "john.doe@example.com",
+    });
+    return new Response("Ok");
+  }
+};
+```
+
+## Cron Triggers
+
+Schedule tasks with cron expressions:
+
+```ts
+// alchemy.run.ts
+export const cronWorker = await Worker("cron-tasks", {
+  entrypoint: "./src/cron.ts",
+  crons: [
+    "0 0 * * *",     // Run daily at midnight UTC
+    "0 */6 * * *",   // Run every 6 hours
+    "0 12 * * MON"   // Run Mondays at noon UTC
+  ]
+});
+
+// Static assets serving
+const assets = await Assets({ path: "./public" });
+
+export const frontend = await Worker("frontend", {
+  entrypoint: "./src/worker.ts",
+  bindings: { ASSETS: assets }
+});
+```
+
+```ts
+// ./src/cron.ts
+import type { ScheduledEvent } from "@cloudflare/workers-types";
+
+export default {
+  async scheduled(event: ScheduledEvent, env: Env) {
+    const cron = event.cron;
+    
+    switch (cron) {
+      case "0 0 * * *":
+        await dailyCleanup(env);
+        break;
+      case "0 */6 * * *":
+        await syncData(env);
+        break;
+    }
+  }
+};
+```
+
+**Common cron patterns:**
+- `"0 0 * * *"` - Daily at midnight UTC
+- `"0 */12 * * *"` - Every 12 hours
+- `"0 9 * * MON-FRI"` - Weekdays at 9 AM UTC
+- `"*/15 * * * *"` - Every 15 minutes
+
+## Preview Worker URLs
+
+Enable preview URLs for testing and configure production routing with domains and routes:
+
+```ts
+// alchemy.run.ts
+// Preview Worker for testing
+const preview = await Worker("preview", {
+  name: "my-worker",
+  entrypoint: "./src/worker.ts",
+  version: "pr-123",
+  url: true,
+});
+
+console.log(preview.url);
+```
+
+:::caution
+Preview URLs do not work with Durable Object bindings and should only be used to optimize CI/CD of large static websites. For stateful CI/CD applications, we recommend using `stage`s instead (see the [Continuous Integration Guide](/guides/ci) for information on how set this up).
+:::
+
+## Advanced Patterns
+
+### Optimize Cold Starts
+
+You should initialize clients at the top-level of your Worker script to reduce cold start times:
+
+```ts
+// src/worker.ts
+import { env } from "cloudflare:workers";
+import MyExpensiveApiClient from "example-api-client";
+
+// Initialize client at module scope
+const apiClient = new MyExpensiveApiClient();
+
+export default {
+  async fetch(request: Request, env: Env) {
+    // Configure with API key during request handling
+    apiClient.setApiKey(env.API_KEY);
+    return new Response("Configured with API key");
+  },
+};
+```
+
+Build distributed systems using Worker-to-Worker communication, RPC patterns, and Durable Object sharing:
+
+### Self-Binding
+
+Enable Workers to reference themselves:
+
+```ts
+// alchemy.run.ts
+import { Worker, Self } from "alchemy/cloudflare";
+
+export const service = await Worker("auth-service", {
+  entrypoint: "./src/auth.ts",
+  bindings: { SELF: Self }
+});
+```
+
+### Circular Dependencies
+
+Break circular dependencies with WorkerStub:
+
+```ts
+// alchemy.run.ts
+import { Worker, WorkerStub } from "alchemy/cloudflare";
+
+const authStub = WorkerStub("auth", { name: "auth-service" });
+
+export const apiWorker = await Worker("api", {
+  entrypoint: "./src/api.ts",
+  bindings: { AUTH: authStub }
+});
+
+export const authWorker = await Worker("auth", {
+  entrypoint: "./src/auth.ts",
+  bindings: { API: apiWorker }
+});
+```
+
+**Other alternatives:**
+- **Event-driven communication** via Queues or Durable Objects
+- **Shared state** using Durable Objects as coordination layer
+- **API Gateway pattern** with unidirectional data flow
+
+
+### Smart Placement (performance optimization)
+
+Enable automatic network optimization by configuring smart placement to reduce latency and improve performance:
+
+```ts
+// alchemy.run.ts
+export const optimizedWorker = await Worker("api", {
+  entrypoint: "./src/api.ts",
+  placement: {
+    mode: "smart"  // Automatically optimize placement for performance
+  }
+});
+```
+
+**Benefits:**
+- ✅ Automatic network optimization based on performance metrics
+- ✅ Reduced latency for global users
+- ✅ No infrastructure management required
+- ✅ Seamless scaling across Cloudflare's network
+
+**When to use:** Global applications, latency-sensitive APIs, high-traffic workloads, applications with geographically distributed users.
+
+:::note
+You can learn more about [Smart Placement](https://developers.cloudflare.com/workers/configuration/smart-placement/) in the Cloudflare documentation.
+:::
+
+### Workers for Platforms
 
 Deploy workers to dispatch namespaces for multi-tenant architectures using Cloudflare's Workers for Platforms:
 
@@ -498,7 +614,7 @@ const tenantWorker = await Worker("tenant-app", {
 });
 
 // Create a router that binds to the dispatch namespace
-const router = await Worker("platform-router", {
+export const router = await Worker("platform-router", {
   name: "main-router",
   entrypoint: "./src/router.ts",
   bindings: {
@@ -535,96 +651,238 @@ Workers for Platforms enables multi-tenant architectures where each tenant can h
 See the [Dispatch Namespace](/providers/cloudflare/dispatch-namespace) documentation for more details on Workers for Platforms.
 :::
 
-## Worker Versions
-
-Deploy worker versions for testing and staging before promoting to production. Worker versions create isolated deployments with preview URLs that don't affect your live worker.
+### Service Mesh Pattern
 
 ```ts
-import { Worker } from "alchemy/cloudflare";
-
-// Create a versioned worker for testing
-const previewWorker = await Worker("my-worker", {
-  name: "my-worker",
-  entrypoint: "./src/worker.ts",
-  version: "pr-123", // Version label for display in the console
+// alchemy.run.ts
+// Gateway Worker coordinates requests
+export const gateway = await Worker("gateway", {
+  entrypoint: "./src/gateway.ts",
+  bindings: {
+    USER_SERVICE: userService,
+    ORDER_SERVICE: orderService,
+    PAYMENT_SERVICE: paymentService
+  },
+  routes: ["api.example.com/*"]
 });
 
-// Access the preview URL for testing
-console.log(`Preview URL: ${previewWorker.url}`);
-// Output: https://{version-hash}-my-worker.subdomain.workers.dev
+// Individual service Workers
+const userService = await Worker("users", {
+  entrypoint: "./src/users.ts",
+  bindings: { AUTH: authWorker }
+});
+
+const orderService = await Worker("orders", {
+  entrypoint: "./src/orders.ts", 
+  bindings: { 
+    USERS: userService,
+    PAYMENTS: paymentService
+  }
+});
 ```
 
-:::caution
-Preview URLs cannot be generated for Workers with Durable Objects, see the [Preview URL](https://developers.cloudflare.com/workers/configuration/previews/#limitations) documentation to learn more.
-:::
+**Benefits:**
+- ✅ Distributed system architecture
+- ✅ Service isolation and independent scaling
+- ✅ Fault tolerance and graceful degradation
+- ✅ Clear separation of concerns
 
-## Reference Worker by Name
+### Remote Procedure Calls (RPC)
 
-Use `WorkerRef` to reference an existing worker by its service name rather than by resource instance. This is useful for worker-to-worker bindings when you need to reference a worker that already exists.
+If you're using Workers RPC, you can specify the `rpc` property on the worker to define its interface when inferring the environment types:
+
+For example, say you have a RPC worker that exports a class extending `WorkerEntrypoint`:
 
 ```ts
-import { Worker, WorkerRef } from "alchemy/cloudflare";
+// ./src/rpc.ts
+import { WorkerEntrypoint } from "cloudflare:workers";
 
-const callerWorker = await Worker("caller", {
+export default class MyRPC extends WorkerEntrypoint {
+  async getData(id: string): Promise<{ id: string }> {
+    return { id };
+  }
+}
+```
+
+If you don't specify the `rpc` property, the environment type will be inferred from the worker's entrypoint.
+```ts
+// src/worker.ts
+export default {
+  async fetch(request: Request, env: typeof worker.Env) {
+    // ❌ Type error
+    await env.getData("123");
+  },
+};
+```
+
+In your `alchemy.run.ts` script, import the `type MyRPC` and set it as the `rpc` property on the worker:
+
+```diff lang='ts'
+// alchemy.run.ts
+import { Worker, type } from "alchemy/cloudflare";
+import type MyRPC from "./src/rpc.ts";
+
+export const rpcWorker = await Worker("rpc", {
+  entrypoint: "./src/rpc.ts",
++  rpc: type<MyRPC>,
+});
+```
+
+Now, when you access the `rpc` binding in your worker, it will have the correct types:
+
+```ts
+// src/worker.ts
+export default {
+  async fetch(request: Request, env: typeof rpcWorker.Env) {
+    const result = await env.RPC.getData("123");
+  },
+};
+```
+
+### Cross-Worker Durable Object
+
+You can access a Durable Object from another Worker by using the `bindings` property:
+
+```diff lang='ts'
+// alchemy.run.ts
+import { Worker, DurableObjectNamespace } from "alchemy/cloudflare";
+
+const data = await Worker("data", {
+  entrypoint: "./src/data.ts",
   bindings: {
-    TARGET_WORKER: WorkerRef({
-      // reference the worker by name (not created with Alchemy)
-      service: "target-worker",
+    STORAGE: DurableObjectNamespace("storage", { 
+      className: "DataStorage" 
     }),
+  },
+});
+
+await Worker("api", {
+  entrypoint: "./src/api.ts",
+  bindings: { 
++    // ✅ Access the STORAGE DO hosted in the `data` worker
++    STORAGE: data.bindings.STORAGE
   },
 });
 ```
 
-:::note
-Learn more in the [Route Documentation](/providers/cloudflare/route)
+
+
+**When to use `url: true`**
+
+- **Use for**: CI previews, demos, short-lived feature previews, and sharing a build with reviewers.  
+- **Do not use for production**: Route production traffic via `domains` or `routes` to ensure DNS/TLS control and SLAs.  
+
+Define routes and domains alongside the Worker to keep routing policies readable:
+```ts
+// alchemy.run.ts
+import { Worker, Zone } from "alchemy/cloudflare";
+
+const zone = await Zone("example", { name: "example.com", type: "full" });
+
+export const api = await Worker("api", {
+  entrypoint: "./src/api.ts",
+  routes: [
+    "backend.example.com/*",
+    { pattern: "api.example.com/*", zoneId: zone.id },
+  ],
+  domains: ["admin.example.com"],
+});
+```
+
+**When to use `url: true`:** CI previews, demos, short-lived feature previews. **Do not use for production** prefer `domains`/`routes` for DNS/TLS control.
+
+:::caution
+Preview URLs may be unavailable for Durable Objects or special bindings. See [Preview URL](https://developers.cloudflare.com/workers/configuration/previews/#limitations) for details.
 :::
 
-## Generating wrangler.json
-
-Generate a wrangler.json configuration file for your worker with the WranglerJson resource:
-
+## Migrating from Wrangler to Alchemy
+Generate `wrangler.json` is available with the `WranglerJson` resource:
 ```ts
-import { Worker, WranglerJson } from "alchemy/cloudflare";
-
-const worker = await Worker("api", {
-  name: "api-worker",
-  entrypoint: "./src/index.ts",
-});
+// alchemy.run.ts
+import { WranglerJson } from "alchemy/cloudflare";
 
 await WranglerJson({
-  worker,
+  worker: api,
   transform: {
     wrangler: (spec) => ({
       ...spec,
-      vars: {
-        ...spec.vars,
-        CUSTOM_VAR: "value",
-      },
+      vars: { ...spec.vars, CUSTOM_VAR: "value" },
     }),
   },
 });
 ```
 
 :::tip
-See the [WranglerJson](/providers/cloudflare/wranglerjson/) documentation for more details on configuration options.
+Alchemy highly encourages you to codify your Worker configuration in your `alchemy.run.ts` script,
+only generate wrangler.json when you need to integrate with existing Wrangler-based tooling or CI/CD pipelines. 
+Alchemy's declarative approach eliminates the need for most wrangler.json configurations.
 :::
 
-### RPC Type
+## Troubleshooting (common issues)
 
-If you're using a WorkerEntrypoint RPC, you can provide its type:
+**Binding Resolution Errors:** Ensure bindings are configured in Worker definition.
+```ts
+// alchemy.run.ts
+// ✅ created a KV namespace
+const cache = await KVNamespace("cache");
+
+// ❌ but, forget to bind it to the worker
+export const worker = await Worker("api");
+```
 
 ```ts
-import { Worker, WorkerRef } from "alchemy/cloudflare";
-import type { MyWorkerEntrypoint } from "./src/worker.ts";
+// src/worker.ts
+// ❌ Missing binding configuration
+await env.CACHE.get("key"); // ReferenceError
+```
 
-const callerWorker = await Worker("caller", {
-  name: "caller-worker",
-  bindings: {
-    TARGET_WORKER: WorkerRef<MyWorkerEntrypoint>({
-      service: "target-worker",
-      environment: "production", // Optional
-      namespace: "main", // Optional
-    }),
-  },
+```diff lang='ts'
+// alchemy.run.ts
+// ✅ Correctly configured
+const cache = await KVNamespace("cache");
+export const worker = await Worker("api", {
++  bindings: { CACHE: cache }
 });
 ```
+
+**Queue Consumer Failures:** Always acknowledge or retry messages.
+```ts
+// src/worker.ts
+// ❌ Missing acknowledgment
+export default {
+  async queue(batch: MessageBatch) {
+    for (const message of batch.messages) {
+      await processTask(message.body);
+      // Missing: message.ack() or message.retry()
+    }
+  }
+};
+```
+
+```diff lang='ts'
+// ✅ Proper message handling
+export default {
+  async queue(batch: MessageBatch) {
+    for (const message of batch.messages) {
+      try {
+        await processTask(message.body);
++        message.ack();
+      } catch (error) {
++        // not necessary, but use retry to set a delay
++        message.retry({ delaySeconds: 30 });
+      }
+    }
+  }
+};
+```
+
+**Preview URL Limitations:** Use routes/domains for Durable Objects and production traffic. See [Cloudflare Docs - Previews Limitations](https://developers.cloudflare.com/workers/configuration/previews/#limitations) for details.
+**Performance Issues:** Enable smart placement, increase CPU limits, use global scope initialization, cache data in KV, minimize cold starts.
+
+## Next steps
+
+- Static Assets: See [Assets](/providers/cloudflare/assets)
+- Durable Objects & RPC: See [Durable Object Namespace](/providers/cloudflare/durable-object-namespace)
+- Deploy & routing: See [Route](/providers/cloudflare/route), [Custom Domain](/providers/cloudflare/custom-domain), and [Zone](/providers/cloudflare/zone)
+
+

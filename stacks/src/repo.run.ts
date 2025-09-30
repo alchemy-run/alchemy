@@ -41,7 +41,7 @@ const githubRole = await Role("github-oidc-role", {
           },
           StringLike: {
             "token.actions.githubusercontent.com:sub":
-              "repo:sam-goodwin/alchemy:*",
+              "repo:alchemy-run/alchemy:*",
           },
         },
       },
@@ -57,11 +57,11 @@ const stateStore = await R2Bucket("state-store", {
 });
 
 const testEnvironment = await RepositoryEnvironment("test environment", {
-  owner: "sam-goodwin",
+  owner: "alchemy-run",
   repository: "alchemy",
   name: "test",
   reviewers: {
-    users: ["sam-goodwin"],
+    users: ["alchemy-run"],
   },
 });
 
@@ -106,7 +106,7 @@ const secrets = {
 
 await Promise.all([
   GitHubOIDCProvider("github-oidc", {
-    owner: "sam-goodwin",
+    owner: "alchemy-run",
     repository: "alchemy",
     roleArn: githubRole.arn,
   }),
@@ -126,7 +126,7 @@ await Promise.all([
   }),
   ...Object.entries(secrets).flatMap(async ([name, value]) => {
     const props = {
-      owner: "sam-goodwin",
+      owner: "alchemy-run",
       repository: "alchemy",
       name,
       value: typeof value === "string" ? alchemy.secret(value) : value!,

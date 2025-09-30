@@ -375,6 +375,11 @@ export interface BaseWorkerProps<
      */
     cpu_ms?: number;
   };
+
+  /**
+   * Tail consumers that will receive execution logs from this worker
+   */
+  tailConsumers?: Array<Worker | { service: string }>;
 }
 
 export interface InlineWorkerProps<
@@ -1018,6 +1023,7 @@ const _Worker = Resource(
         props.crons?.map((cron) => ({ cron })) ?? [],
       );
     }
+
     await Promise.all(
       options.workflows.map((workflow) =>
         upsertWorkflow(api, {
@@ -1063,6 +1069,7 @@ const _Worker = Resource(
       url: subdomain?.url,
       assets: props.assets,
       crons: props.crons,
+      tailConsumers: props.tailConsumers,
       routes,
       domains,
       namespace: props.namespace,

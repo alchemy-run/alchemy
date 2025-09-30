@@ -28,6 +28,7 @@
       "./tests/*/**/*.ts",
       "./examples/*/*.ts",
       "!**/node_modules",
+      "examples/cloudflare-tanstack-start/src/**/*.{ts,tsx}",
       "!examples/cloudflare-tanstack-start/src/routeTree.gen.ts",
       "!examples/cloudflare-redwood/worker-configuration.d.ts",
       "!./alchemy/src/aws/control/types.ts",
