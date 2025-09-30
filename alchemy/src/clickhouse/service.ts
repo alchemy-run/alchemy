@@ -236,9 +236,9 @@ export interface Service {
    */
   hasTransparentDataEncryption?: ApiService["hasTransparentDataEncryption"];
 
-	/**
-	 * The profile the Clickhouse service was created using.
-	 */
+  /**
+   * The profile the Clickhouse service was created using.
+   */
   profile?: ApiService["profile"];
 
   /**
@@ -251,9 +251,9 @@ export interface Service {
    */
   backupId?: string;
 
-	/**
-	 * If the mysql endpoint is enabled.
-	 */
+  /**
+   * If the mysql endpoint is enabled.
+   */
   enableMysqlEndpoint?: boolean;
 
   /**
