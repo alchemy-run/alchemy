@@ -25,7 +25,7 @@ import { Worker, KVNamespace } from "alchemy/cloudflare";
 const app = await alchemy("my-app");
 
 export const worker = await Worker("api", {
-  entrypoint: "./src/worker.ts",
+  main: "./src/worker.ts",
   bindings: {
     CACHE: await KVNamespace("cache", { title: "cache-store" })
   }
@@ -324,7 +324,7 @@ await alchemy.run("backend", async () => {
 });
 
 await alchemy.run("frontend", async () => {
-  await Vite("website", { main: "./src/worker.ts" });
+  await Vite("website", { entrypoint: "./src/worker.ts" });
 });
 ```
 
