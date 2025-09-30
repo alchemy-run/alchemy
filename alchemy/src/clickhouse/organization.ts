@@ -11,7 +11,7 @@ import { createClickhouseApi } from "./api.ts";
  * @param options The api credentials to use.
  * @returns The organization.
  */
-export async function getOrganizationByName(
+export async function OrganizationRef(
   name: string,
   options?: {
     keyId?: string | Secret<string>;
