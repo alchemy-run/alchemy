@@ -318,7 +318,13 @@ export type ClickPipeObjectStorageSource = {
   /**
    * Format of the files.
    */
-  format?: "JSONEachRow" | "CSV" | "CSVWithNames" | "Parquet" | "Avro";
+  format?:
+    | "JSONEachRow"
+    | "JSONAsObject"
+    | "CSV"
+    | "CSVWithNames"
+    | "Parquet"
+    | "Avro";
   /**
    * Provide a path to the file(s) you want to ingest. You can specify multiple files using bash-like wildcards. For more information, see the documentation on using wildcards in path: https://clickhouse.com/docs/en/integrations/clickpipes/object-storage#limitations
    */
@@ -373,7 +379,13 @@ export type ClickPipePostObjectStorageSource = {
   /**
    * Format of the files.
    */
-  format?: "JSONEachRow" | "CSV" | "CSVWithNames" | "Parquet" | "Avro";
+  format?:
+    | "JSONEachRow"
+    | "JSONAsObject"
+    | "CSV"
+    | "CSVWithNames"
+    | "Parquet"
+    | "Avro";
   /**
    * Provide a path to the file(s) you want to ingest. You can specify multiple files using bash-like wildcards. For more information, see the documentation on using wildcards in path: https://clickhouse.com/docs/en/integrations/clickpipes/object-storage#limitations
    */
@@ -720,6 +732,10 @@ export type ClickPipeSettings = {
    */
   streaming_max_insert_wait_ms?: number | null;
   /**
+   * Object storage concurrency. Number of concurrent file processing threads
+   */
+  object_storage_concurrency?: number | null;
+  /**
    * Object storage polling interval. Configures the refresh interval for querying continuous ingest for new object storage data
    */
   object_storage_polling_interval_ms?: number | null;
@@ -866,6 +882,10 @@ export type ClickPipeSettingsGetResponse = {
    */
   streaming_max_insert_wait_ms?: number | null;
   /**
+   * Object storage concurrency. Number of concurrent file processing threads
+   */
+  object_storage_concurrency?: number | null;
+  /**
    * Object storage polling interval. Configures the refresh interval for querying continuous ingest for new object storage data
    */
   object_storage_polling_interval_ms?: number | null;
@@ -912,6 +932,10 @@ export type ClickPipeSettingsPutRequest = {
    * Streaming max insert wait time. Configures the max wait period before inserting data into the ClickHouse.
    */
   streaming_max_insert_wait_ms?: number | null;
+  /**
+   * Object storage concurrency. Number of concurrent file processing threads
+   */
+  object_storage_concurrency?: number | null;
   /**
    * Object storage polling interval. Configures the refresh interval for querying continuous ingest for new object storage data
    */
@@ -1576,6 +1600,7 @@ export type Activity = {
     | "service_export_from_organization"
     | "service_maintenance_start"
     | "service_maintenance_end"
+    | "service_update_core_dump"
     | "backup_delete";
   /**
    * Type of the actor: 'user', 'support', 'system', 'api'.
