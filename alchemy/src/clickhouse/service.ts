@@ -276,11 +276,6 @@ export const Service = Resource(
         10 * 60,
       );
 
-      // await api.v1
-      //   .organizations(organizationId)
-      //   .services(this.output.clickhouseId)
-      //   .delete();
-
       await api.deleteService({
         path: {
           organizationId: organizationId,
