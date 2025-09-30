@@ -84,11 +84,14 @@ const RUNTIMES = [
   },
   {
     name: "deno",
+    //@ts-expect-error
     detect: () => !!globalThis.Deno,
+    //@ts-expect-error
     version: () => globalThis.Deno?.version?.deno,
   },
   {
     name: "workerd",
+    //@ts-expect-error
     detect: () => !!globalThis.EdgeRuntime,
     version: () => null,
   },
