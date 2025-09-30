@@ -180,6 +180,13 @@ export interface BaseWorkerProps<
   };
 
   /**
+   * Enable Workers LogPush for trace event export.
+   * Requires separate LogPush job configuration via Cloudflare API.
+   * @default false
+   */
+  logpush?: boolean;
+
+  /**
    * Whether to adopt the Worker if it already exists when creating
    */
   adopt?: boolean;

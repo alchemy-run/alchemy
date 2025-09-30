@@ -162,6 +162,7 @@ export async function WranglerJson(
       : undefined,
     placement: worker.placement,
     limits: worker.limits,
+    logpush: worker.logpush,
   };
 
   // Process bindings if they exist
@@ -274,6 +275,15 @@ export interface WranglerJsonSpec {
   limits?: {
     cpu_ms?: number;
   };
+
+  /**
+   * Send Trace Events from this Worker to Workers Logpush.
+   *
+   * This will not configure a corresponding Logpush job automatically.
+   *
+   * @default false
+   */
+  logpush?: boolean;
 
   /**
    * Whether to enable a workers.dev URL for this worker

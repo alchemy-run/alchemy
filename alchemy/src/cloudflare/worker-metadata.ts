@@ -183,6 +183,7 @@ export interface WorkerMetadata {
   observability: {
     enabled: boolean;
   };
+  logpush?: boolean;
   migrations?: SingleStepMigration;
   main_module?: string;
   body_part?: string;
@@ -325,6 +326,7 @@ export async function prepareWorkerMetadata(
     observability: {
       enabled: props.observability?.enabled !== false,
     },
+    logpush: props.logpush ?? false,
     // TODO(sam): base64 encode instead? 0 collision risk vs readability.
     tags: [
       // encode a mapping table of Durable Object stable ID -> binding name
