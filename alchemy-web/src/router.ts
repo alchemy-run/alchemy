@@ -21,7 +21,8 @@ export default {
 const handleRequest = async (request: Request, env: Env) => {
   const url = new URL(request.url);
 
-  if (acceptsMarkdown(request)) {
+  const accept = request.headers.get("accept");
+  if (accept && prefersMarkdown(accept)) {
     const rewrite = new URL(url.pathname.replace(/\/?$/, ".md"), url.origin);
     const markdownResponse = await env.ASSETS.fetch(rewrite);
     if (markdownResponse.ok) {
@@ -46,24 +47,57 @@ const handleRequest = async (request: Request, env: Env) => {
   });
 };
 
-const acceptsMarkdown = (request: Request) => {
-  const accept = request.headers.get("accept");
-  if (!accept || accept.includes("text/html")) return false;
-  return accept.includes("text/markdown") || accept.includes("text/plain");
+/**
+ * Returns true if the accept header prioritizes markdown or plain text over HTML.
+ *
+ * Examples:
+ * - opencode: text/markdown;q=1.0, text/x-markdown;q=0.9, text/plain;q=0.8, text/html;q=0.7, *\/*;q=0.1 > true
+ * - claude code: application/json, text/plain, *\/* > true
+ */
+const prefersMarkdown = (accept: string) => {
+  // parse accept header and sort by quality; highest quality first
+  const types = accept
+    .split(",")
+    .map((part) => {
+      const type = part.split(";")[0].trim();
+      const q = part.match(/q=([^,]+)/)?.[1];
+      return { type, q: q ? Number.parseFloat(q) : 1 };
+    })
+    .sort((a, b) => b.q - a.q)
+    .map((type) => type.type);
+
+  const markdown = types.indexOf("text/markdown");
+  const plain = types.indexOf("text/plain");
+  const html = types.indexOf("text/html");
+
+  // if no HTML is specified, and either markdown or plain text is specified, prefer markdown
+  if (html === -1) {
+    return markdown !== -1 || plain !== -1;
+  }
+
+  // prefer markdown if higher quality than HTML
+  if ((markdown !== -1 && markdown < html) || (plain !== -1 && plain < html)) {
+    return true;
+  }
+
+  // otherwise, prefer HTML
+  return false;
 };
 
+/**
+ * Adds a Vary: Accept header to the response if the content type is text/html or text/markdown.
+ */
 const withVary = (response: Response) => {
   const contentType = response.headers.get("content-type");
   if (
     contentType?.includes("text/html") ||
     contentType?.includes("text/markdown")
   ) {
+    const headers = new Headers(response.headers);
+    headers.append("vary", "accept");
     return new Response(response.body, {
       ...response,
-      headers: {
-        ...response.headers,
-        Vary: "Accept",
-      },
+      headers,
     });
   }
   return response;
