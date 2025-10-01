@@ -2,16 +2,18 @@ import envPaths from "env-paths";
 import { exec } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
-import { join } from "node:path";
 import path from "pathe";
-import pkg from "../../../package.json" with { type: "json" };
+import pkg from "../../package.json" with { type: "json" };
 import type { Phase } from "../alchemy.ts";
 import { Scope } from "../scope.ts";
 import { logger } from "./logger.ts";
 import { memoize } from "./memoize.ts";
 
-export const CONFIG_DIR = path.join(os.homedir(), ".alchemy");
-export const CONFIG_DIR_LEGACY = envPaths("alchemy", { suffix: "" }).config;
+export const CONFIG_PATH = path.join(os.homedir(), ".alchemy", "id");
+export const CONFIG_PATH_LEGACY = path.join(
+  envPaths("alchemy", { suffix: "" }).config,
+  "id",
+);
 
 export const TELEMETRY_DISABLED =
   !!process.env.ALCHEMY_TELEMETRY_DISABLED || !!process.env.DO_NOT_TRACK;
@@ -22,38 +24,37 @@ export const SUPPRESS_TELEMETRY_ERRORS =
   !!process.env.ALCHEMY_TELEMETRY_SUPPRESS_ERRORS;
 
 async function getOrCreateUserId() {
-  const path = join(CONFIG_DIR, "id");
+  async function readUserId(path: string) {
+    try {
+      return (await readFile(path, "utf-8")).trim();
+    } catch {
+      return null;
+    }
+  }
+
+  const id = await readUserId(CONFIG_PATH);
+  if (id) {
+    return id;
+  }
+
+  const legacyId = await readUserId(CONFIG_PATH_LEGACY);
 
   try {
-    return (await readFile(path, "utf-8")).trim();
-  } catch {}
-
-  const legacyPath = join(CONFIG_DIR_LEGACY, "id");
-
-  try {
-    const id = (await readFile(legacyPath, "utf-8")).trim();
-    await mkdir(CONFIG_DIR_LEGACY, { recursive: true });
-    await writeFile(path, id);
-  } catch {}
-
-  try {
-    await mkdir(CONFIG_DIR, { recursive: true });
-  } catch {}
-
-  const id = crypto.randomUUID();
-  try {
-    await writeFile(path, id);
-    console.warn(
-      [
-        "Attention: To help improve Alchemy, we now collect anonymous usage, performance, and error data.",
-        "You can opt out by setting the ALCHEMY_TELEMETRY_DISABLED or DO_NOT_TRACK environment variable to a truthy value.",
-      ].join("\n"),
-    );
+    const id = legacyId ?? crypto.randomUUID();
+    await mkdir(path.dirname(CONFIG_PATH), { recursive: true });
+    await writeFile(CONFIG_PATH, id);
+    if (!legacyId) {
+      console.warn(
+        [
+          "Attention: To help improve Alchemy, we collect anonymous usage, performance, and error data.",
+          "You can opt out by setting the ALCHEMY_TELEMETRY_DISABLED or DO_NOT_TRACK environment variable to a truthy value.",
+        ].join("\n"),
+      );
+    }
+    return id;
   } catch {
     return null;
   }
-
-  return id;
 }
 
 async function getRootCommitHash() {
@@ -94,11 +95,11 @@ async function getBranchName() {
 
 function getRuntime() {
   if (globalThis.Bun) return { name: "bun", version: Bun.version };
-  //@ts-expect-error
+  // @ts-expect-error
   if (globalThis.Deno)
-    //@ts-expect-error
+    // @ts-expect-error
     return { name: "deno", version: Deno.version?.deno ?? null };
-  //@ts-expect-error
+  // @ts-expect-error
   if (globalThis.EdgeRuntime) return { name: "workerd", version: null };
   if (globalThis.process?.versions?.node)
     return { name: "node", version: process.versions.node };
@@ -235,42 +236,6 @@ export type AlchemyTelemetryData = {
   duration: number;
 };
 
-export async function createEventData(
-  data:
-    | CliTelemetryData
-    | ResourceTelemetryData
-    | StateStoreTelemetryData
-    | AlchemyTelemetryData,
-  error?: Error,
-) {
-  return {
-    ...data,
-    ...("duration" in data
-      ? { duration: Math.round(data.duration * 1000) }
-      : {}),
-    ...(await collectData()),
-    ...serializeError(error),
-  };
-}
-
-export async function sendEvent(
-  data: (
-    | CliTelemetryData
-    | ResourceTelemetryData
-    | StateStoreTelemetryData
-    | AlchemyTelemetryData
-  ) &
-    ErrorData &
-    GenericTelemetryData,
-) {
-  if (!TELEMETRY_DISABLED) {
-    return fetch(TELEMETRY_API_URL, {
-      method: "POST",
-      body: JSON.stringify(data),
-    });
-  }
-}
-
 export async function createAndSendEvent(
   data:
     | CliTelemetryData
@@ -279,14 +244,25 @@ export async function createAndSendEvent(
     | AlchemyTelemetryData,
   error?: Error,
 ) {
+  if (Scope.getScope()?.noTrack || TELEMETRY_DISABLED) {
+    return;
+  }
   try {
-    if (Scope.current.noTrack) {
-      return;
-    }
-  } catch (error) {}
-  try {
-    const eventData = await createEventData(data, error);
-    await sendEvent(eventData);
+    const eventData = {
+      ...data,
+      ...("duration" in data
+        ? { duration: Math.round(data.duration * 1000) }
+        : {}),
+      ...(await collectData()),
+      ...serializeError(error),
+    };
+    await fetch(TELEMETRY_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(eventData),
+    });
   } catch (error) {
     if (!SUPPRESS_TELEMETRY_ERRORS) {
       logger.warn("Failed to send telemetry event:", error);
