@@ -35,7 +35,7 @@ const handleRequest = async (request: Request, env: Env) => {
   }
 
   const assetResponse = await env.ASSETS.fetch(url);
-  if (assetResponse.ok || assetResponse.redirected) {
+  if (assetResponse.status !== 404) {
     return withVary(assetResponse);
   }
 
