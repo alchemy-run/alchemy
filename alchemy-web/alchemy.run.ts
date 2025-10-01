@@ -1,5 +1,5 @@
 import alchemy from "alchemy";
-import { Astro, Worker, Zone } from "alchemy/cloudflare";
+import { Astro, VersionMetadata, Worker, Zone } from "alchemy/cloudflare";
 import { GitHubComment } from "alchemy/github";
 import { CloudflareStateStore } from "alchemy/state";
 
@@ -53,6 +53,16 @@ export const website = await Astro("website", {
     POSTHOG_CLIENT_API_HOST: `https://${POSTHOG_PROXY_HOST}`,
     POSTHOG_PROJECT_ID: POSTHOG_PROJECT_ID,
     ENABLE_POSTHOG: stage === "prod" ? "true" : "false",
+  },
+  entrypoint: "src/router.ts",
+  noBundle: false,
+  assets: {
+    directory: "dist",
+    run_worker_first: true,
+    html_handling: "auto-trailing-slash",
+  },
+  bindings: {
+    VERSION: VersionMetadata(),
   },
 });
 
