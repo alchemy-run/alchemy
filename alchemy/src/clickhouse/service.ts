@@ -6,6 +6,23 @@ import { createClickhouseApi } from "./api.ts";
 import type { ClickhouseClient } from "./api/sdk.gen.ts";
 import type { Service as ApiService, Organization } from "./api/types.gen.ts";
 
+type MysqlEndpoint = {
+  protocol: "mysql";
+  host: string;
+  port: number;
+  username: string;
+};
+type HttpsEndpoint = {
+  protocol: "https";
+  host: string;
+  port: number;
+};
+type NativesecureEndpoint = {
+  protocol: "nativesecure";
+  host: string;
+  port: number;
+};
+
 export interface ServiceProps {
   /**
    * The key ID for the Clickhouse API
@@ -276,30 +293,17 @@ export interface Service {
   /**
    * The mysql endpoint details of the Clickhouse service.
    */
-  mysqlEndpoint?: {
-    protocol: "mysql";
-    host: string;
-    port: number;
-    username: string;
-  };
+  mysqlEndpoint?: MysqlEndpoint;
 
   /**
    * The https endpoint details of the Clickhouse service.
    */
-  httpsEndpoint?: {
-    protocol: "https";
-    host: string;
-    port: number;
-  };
+  httpsEndpoint?: HttpsEndpoint;
 
   /**
    * The nativesecure endpoint details of the Clickhouse service.
    */
-  nativesecureEndpoint?: {
-    protocol: "nativesecure";
-    host: string;
-    port: number;
-  };
+  nativesecureEndpoint?: NativesecureEndpoint;
 
   /**
    * The desired state of the Clickhouse service.
@@ -494,13 +498,13 @@ export const Service = Resource(
         updates.releaseChannel = response.releaseChannel!;
         updates.mysqlEndpoint = response!.endpoints!.find(
           (endpoint) => endpoint.protocol === "mysql",
-        ) as any;
+        ) as MysqlEndpoint;
         updates.httpsEndpoint = response!.endpoints!.find(
           (endpoint) => endpoint.protocol === "https",
-        ) as any;
+        ) as HttpsEndpoint;
         updates.nativesecureEndpoint = response!.endpoints!.find(
           (endpoint) => endpoint.protocol === "nativesecure",
-        ) as any;
+        ) as NativesecureEndpoint;
       }
 
       if (stateTarget !== this.output.stateTarget) {
@@ -594,7 +598,7 @@ export const Service = Resource(
 
     const httpEndpoint = service.endpoints!.find(
       (endpoint) => endpoint.protocol === "https",
-    );
+    ) as HttpsEndpoint;
 
     await waitForServiceState(
       api,
@@ -604,7 +608,7 @@ export const Service = Resource(
     );
 
     if (waitForHttpEndpointReady && httpEndpoint) {
-      await waitForHttpServiceReady(httpEndpoint as any, {
+      await waitForHttpServiceReady(httpEndpoint as HttpsEndpoint, {
         password: password!,
         username: "default",
       });
@@ -637,11 +641,11 @@ export const Service = Resource(
       state: service.state,
       mysqlEndpoint: service.endpoints!.find(
         (endpoint) => endpoint.protocol === "mysql",
-      ) as any,
-      httpsEndpoint: httpEndpoint as any,
+      ) as MysqlEndpoint,
+      httpsEndpoint: httpEndpoint,
       nativesecureEndpoint: service.endpoints!.find(
         (endpoint) => endpoint.protocol === "nativesecure",
-      ) as any,
+      ) as NativesecureEndpoint,
     };
   },
 );

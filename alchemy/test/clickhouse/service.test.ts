@@ -39,9 +39,7 @@ describe.sequential("Clickhouse Service", async () => {
           .catch((error) => {
             return (error.status as number) ?? 500;
           });
-        if (status === 404) {
-          return;
-        }
+        expect(status).toBe(404);
       }
     }
   }, 0);

@@ -10,7 +10,7 @@ For ease of use we expose `OrganizationRef` to allow you to reference an organiz
 ## Minimal Example
 
 ```ts
-import { OrganizationRef } from "alchemy/clickhouse";
+import { OrganizationRef, Service } from "alchemy/clickhouse";
 
 const organization = await OrganizationRef("Alchemy");
 
