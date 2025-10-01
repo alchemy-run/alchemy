@@ -82,45 +82,17 @@ async function getBranchName() {
   });
 }
 
-const RUNTIMES = [
-  {
-    name: "bun",
-    detect: () => !!globalThis.Bun,
-    version: () => globalThis.Bun?.version,
-  },
-  {
-    name: "deno",
-    //@ts-expect-error
-    detect: () => !!globalThis.Deno,
-    //@ts-expect-error
-    version: () => globalThis.Deno?.version?.deno,
-  },
-  {
-    name: "workerd",
-    //@ts-expect-error
-    detect: () => !!globalThis.EdgeRuntime,
-    version: () => null,
-  },
-  {
-    name: "node",
-    detect: () => !!globalThis.process?.versions?.node,
-    version: () => process.versions.node,
-  },
-] as const;
-
 function getRuntime() {
-  for (const runtime of RUNTIMES) {
-    if (runtime.detect()) {
-      return {
-        name: runtime.name,
-        version: runtime.version() ?? null,
-      };
-    }
-  }
-  return {
-    name: null,
-    version: null,
-  };
+  if (globalThis.Bun) return { name: "bun", version: Bun.version };
+	//@ts-ignore
+  if (globalThis.Deno)
+	//@ts-ignore
+    return { name: "deno", version: Deno.version?.deno ?? null };
+	//@ts-ignore
+  if (globalThis.EdgeRuntime) return { name: "workerd", version: null };
+  if (globalThis.process?.versions?.node)
+    return { name: "node", version: process.versions.node };
+  return { name: null, version: null };
 }
 
 const PROVIDERS = [
