@@ -26,6 +26,17 @@ if (stage === "prod") {
   });
 }
 
+const markdownRoutes = [
+  "/advanced*",
+  "/blog*",
+  "/concepts*",
+  "/guides*",
+  "/providers*",
+  "/telemetry*",
+  "/getting-started*",
+  "/what-is-alchemy*",
+];
+
 export const website = await Astro("website", {
   name: "alchemy-website",
   adopt: true,
@@ -40,8 +51,10 @@ export const website = await Astro("website", {
   noBundle: false,
   assets: {
     directory: "dist",
-    run_worker_first: true,
-    html_handling: "auto-trailing-slash",
+    run_worker_first: markdownRoutes,
+    _headers: markdownRoutes
+      .flatMap((route) => [route, "  Vary: accept"])
+      .join("\n"),
   },
   bindings: {
     VERSION: VersionMetadata(),

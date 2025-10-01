@@ -21,27 +21,25 @@ export default {
 const handleRequest = async (request: Request, env: Env) => {
   const url = new URL(request.url);
 
-  if (prefersMarkdown(request)) {
-    const rewrite = new URL(url.pathname.replace(/\/?$/, ".md"), url.origin);
-    const markdownResponse = await env.ASSETS.fetch(rewrite);
+  if (prefersMarkdown(request) && !url.pathname.endsWith(".md")) {
+    const markdownResponse = await env.ASSETS.fetch(
+      new URL(url.pathname.replace(/\/?$/, ".md"), url.origin),
+    );
     if (markdownResponse.ok) {
-      // force trailing slash to match the HTML version
-      if (!url.pathname.endsWith("/")) {
-        url.pathname += "/";
-        return Response.redirect(url);
-      }
-      return withVary(markdownResponse);
+      return markdownResponse;
     }
   }
 
   const assetResponse = await env.ASSETS.fetch(url);
   if (assetResponse.status !== 404) {
-    return withVary(assetResponse);
+    return assetResponse;
   }
 
-  const response = await env.ASSETS.fetch(new URL("/404.html", url.origin));
-  return new Response(response.body, {
-    ...response,
+  const notFoundResponse = await env.ASSETS.fetch(
+    new URL("/404.html", url.origin),
+  );
+  return new Response(notFoundResponse.body, {
+    ...notFoundResponse,
     status: 404,
   });
 };
@@ -88,23 +86,4 @@ const prefersMarkdown = (request: Request) => {
 
   // otherwise, prefer HTML
   return false;
-};
-
-/**
- * Adds a Vary: Accept header to the response if the content type is text/html or text/markdown.
- */
-const withVary = (response: Response) => {
-  const contentType = response.headers.get("content-type");
-  if (
-    contentType?.includes("text/html") ||
-    contentType?.includes("text/markdown")
-  ) {
-    const headers = new Headers(response.headers);
-    headers.append("vary", "accept");
-    return new Response(response.body, {
-      ...response,
-      headers,
-    });
-  }
-  return response;
 };
