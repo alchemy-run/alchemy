@@ -236,42 +236,6 @@ export type AlchemyTelemetryData = {
   duration: number;
 };
 
-export async function createEventData(
-  data:
-    | CliTelemetryData
-    | ResourceTelemetryData
-    | StateStoreTelemetryData
-    | AlchemyTelemetryData,
-  error?: Error,
-) {
-  return {
-    ...data,
-    ...("duration" in data
-      ? { duration: Math.round(data.duration * 1000) }
-      : {}),
-    ...(await collectData()),
-    ...serializeError(error),
-  };
-}
-
-export async function sendEvent(
-  data: (
-    | CliTelemetryData
-    | ResourceTelemetryData
-    | StateStoreTelemetryData
-    | AlchemyTelemetryData
-  ) &
-    ErrorData &
-    GenericTelemetryData,
-) {
-  if (!TELEMETRY_DISABLED) {
-    return fetch(TELEMETRY_API_URL, {
-      method: "POST",
-      body: JSON.stringify(data),
-    });
-  }
-}
-
 export async function createAndSendEvent(
   data:
     | CliTelemetryData
@@ -280,12 +244,25 @@ export async function createAndSendEvent(
     | AlchemyTelemetryData,
   error?: Error,
 ) {
-  if (Scope.getScope()?.noTrack) {
+  if (Scope.getScope()?.noTrack || TELEMETRY_DISABLED) {
     return;
   }
   try {
-    const eventData = await createEventData(data, error);
-    await sendEvent(eventData);
+    const eventData = {
+      ...data,
+      ...("duration" in data
+        ? { duration: Math.round(data.duration * 1000) }
+        : {}),
+      ...(await collectData()),
+      ...serializeError(error),
+    };
+    await fetch(TELEMETRY_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(eventData),
+    });
   } catch (error) {
     if (!SUPPRESS_TELEMETRY_ERRORS) {
       logger.warn("Failed to send telemetry event:", error);
