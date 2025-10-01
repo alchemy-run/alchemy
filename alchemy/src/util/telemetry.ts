@@ -27,8 +27,9 @@ async function getOrCreateUserId() {
   async function readUserId(path: string) {
     try {
       return (await readFile(path, "utf-8")).trim();
-    } catch {}
-    return null;
+    } catch {
+      return null;
+    }
   }
 
   const id = await readUserId(CONFIG_PATH);
