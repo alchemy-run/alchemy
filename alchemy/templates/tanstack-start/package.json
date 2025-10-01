@@ -1,37 +1,42 @@
 {
-  "type": "module",
   "name": "@alchemy.run/tanstack-start-template",
   "private": true,
-  "sideEffects": false,
+  "type": "module",
   "scripts": {
     "build": "vite build",
     "deploy": "alchemy deploy",
     "destroy": "alchemy destroy",
     "dev": "alchemy dev",
-    "start": "node .output/server/index.mjs"
+    "serve": "vite preview",
+    "test": "vitest run"
   },
   "dependencies": {
-    "@tanstack/react-router": "^1.129.2",
-    "@tanstack/react-router-devtools": "^1.129.2",
-    "@tanstack/react-start": "^1.129.2",
+    "@tailwindcss/vite": "^4.0.6",
+    "@tanstack/react-devtools": "^0.2.2",
+    "@tanstack/react-router": "^1.132.0",
+    "@tanstack/react-router-devtools": "^1.132.0",
+    "@tanstack/react-router-ssr-query": "^1.131.7",
+    "@tanstack/react-start": "^1.132.0",
+    "@tanstack/router-plugin": "^1.132.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "tailwind-merge": "3",
-    "zod": "^3.24.2"
+    "tailwindcss": "^4.0.6",
+    "vite-tsconfig-paths": "^5.1.4"
   },
   "devDependencies": {
-    "alchemy": "workspace:*",
-    "@cloudflare/workers-types": "^4.20250805.0",
-    "@tailwindcss/vite": "^4.1.10",
-    "@types/node": "^22.5.4",
+    "@cloudflare/vite-plugin": "catalog:",
+    "@cloudflare/workers-types": "catalog:",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/react": "^16.2.0",
+    "@types/node": "^22.10.2",
     "@types/react": "^19.0.8",
     "@types/react-dom": "^19.0.3",
-    "autoprefixer": "^10.4.20",
-    "miniflare": "^4.20250617.3",
-    "postcss": "^8.5.6",
-    "tailwindcss": "4",
-    "typescript": "^5.8.3",
-    "vite": "^6.3.5",
-    "vite-tsconfig-paths": "^5.1.4"
+    "@vitejs/plugin-react": "^4.3.4",
+    "alchemy": "workspace:*",
+    "jsdom": "^26.0.0",
+    "typescript": "^5.7.2",
+    "vite": "^7.1.7",
+    "vitest": "^3.0.5",
+    "web-vitals": "^4.2.4"
   }
 }

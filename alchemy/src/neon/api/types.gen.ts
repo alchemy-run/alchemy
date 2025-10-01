@@ -1899,6 +1899,7 @@ export type BillingAccountState =
 export type BillingSubscriptionType =
   | "UNKNOWN"
   | "direct_sales"
+  | "direct_sales_v3"
   | "aws_marketplace"
   | "free_v2"
   | "free_v3"
@@ -2527,6 +2528,11 @@ export type NeonAuthCreateIntegrationRequest = {
   role_name?: string;
 };
 
+export type EnableNeonAuthIntegrationRequest = {
+  auth_provider: NeonAuthSupportedAuthProvider;
+  database_name?: string;
+};
+
 export type NeonAuthCreateIntegrationResponse = {
   auth_provider: NeonAuthSupportedAuthProvider;
   auth_provider_project_id: string;
@@ -2677,7 +2683,12 @@ export type RoleOperations = RoleResponse & OperationsResponse;
 
 export type JwksCreationOperation = JwksResponse & OperationsResponse;
 
-export type SupportTicketSeverity = "low" | "normal" | "high" | "critical";
+export type SupportTicketSeverity =
+  | "low"
+  | "normal"
+  | "high"
+  | "critical"
+  | "urgent";
 
 export type AnnotationData = {
   object: AnnotationObjectData;
@@ -2758,6 +2769,7 @@ export type Snapshot = {
   source_branch_id?: string;
   created_at: string;
   expires_at?: string;
+  manual?: boolean;
 };
 
 export type SnapshotUpdateRequest = {

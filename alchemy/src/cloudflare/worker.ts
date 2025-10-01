@@ -180,6 +180,17 @@ export interface BaseWorkerProps<
   };
 
   /**
+   * Enable Workers Logpush to export trace events (request/response metadata,
+   * console logs, and exceptions) to external destinations.
+   *
+   * Requires a separate Logpush job configuration via the Cloudflare API.
+   *
+   * @see https://developers.cloudflare.com/workers/observability/logging/logpush
+   * @default false
+   */
+  logpush?: boolean;
+
+  /**
    * Whether to adopt the Worker if it already exists when creating
    */
   adopt?: boolean;
@@ -375,6 +386,11 @@ export interface BaseWorkerProps<
      */
     cpu_ms?: number;
   };
+
+  /**
+   * Tail consumers that will receive execution logs from this worker
+   */
+  tailConsumers?: Array<Worker | { service: string }>;
 }
 
 export interface InlineWorkerProps<
@@ -1018,6 +1034,7 @@ const _Worker = Resource(
         props.crons?.map((cron) => ({ cron })) ?? [],
       );
     }
+
     await Promise.all(
       options.workflows.map((workflow) =>
         upsertWorkflow(api, {
@@ -1063,6 +1080,7 @@ const _Worker = Resource(
       url: subdomain?.url,
       assets: props.assets,
       crons: props.crons,
+      tailConsumers: props.tailConsumers,
       routes,
       domains,
       namespace: props.namespace,

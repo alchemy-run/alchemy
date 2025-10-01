@@ -11,7 +11,7 @@ const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });
 
-describe("Container Resource", () => {
+describe.sequential("Container Resource", () => {
   test("create container", async (scope) => {
     try {
       const make = async (dockerfile?: string) =>
@@ -32,6 +32,7 @@ describe("Container Resource", () => {
                 dockerfile,
               },
               maxInstances: 1,
+              adopt: true,
             }),
           },
         });
@@ -94,6 +95,7 @@ describe("Container Resource", () => {
         build: {
           context: path.join(import.meta.dirname, "container"),
         },
+        adopt: true,
       },
     );
 
