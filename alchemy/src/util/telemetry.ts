@@ -69,14 +69,14 @@ async function getRootCommitHash() {
   });
 }
 
-async function getGitOriginUrl() {
+async function getGitOriginUrlHash() {
   return new Promise<string | null>((resolve) => {
     exec("git config --get remote.origin.url", (err, stdout) => {
       if (err) {
         resolve(null);
         return;
       }
-      resolve(stdout.trim());
+      resolve(hashString(stdout.trim()));
     });
   });
 }
@@ -135,14 +135,14 @@ export const collectData = memoize(async (): Promise<GenericTelemetryData> => {
   const [
     userId,
     rootCommitHash,
-    gitOriginUrl,
+    gitOriginUrlHash,
     branchHash,
     runtime,
     environment,
   ] = await Promise.all([
     getOrCreateUserId(),
     getRootCommitHash(),
-    getGitOriginUrl(),
+    getGitOriginUrlHash(),
     getBranchName().then(hashString),
     getRuntime(),
     getEnvironment(),
@@ -156,7 +156,7 @@ export const collectData = memoize(async (): Promise<GenericTelemetryData> => {
     cpus: os.cpus().length,
     memory: Math.round(os.totalmem() / 1024 / 1024),
     rootCommitHash: rootCommitHash ?? "",
-    gitOriginUrl: gitOriginUrl ?? "",
+    gitOriginUrl: gitOriginUrlHash ?? "",
     gitBranchHash: branchHash ?? "",
     runtime: runtime.name ?? "",
     runtimeVersion: runtime.version ?? "",
