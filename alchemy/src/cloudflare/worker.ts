@@ -335,7 +335,7 @@ export interface BaseWorkerProps<
   dev?:
     | {
         /**
-         * Port to use for local development
+         * Port to use for local development.
          */
         port?: number;
         /**

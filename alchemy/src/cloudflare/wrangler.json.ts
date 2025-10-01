@@ -4,6 +4,7 @@ import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { Scope } from "../scope.ts";
 import { isSecret } from "../secret.ts";
+import { unencryptSecrets } from "./util/filter-env-bindings.ts";
 import { assertNever } from "../util/assert-never.ts";
 import type { Bindings, WorkerBindingRateLimit } from "./bindings.ts";
 import type { R2BucketJurisdiction } from "./bucket.ts";
@@ -211,14 +212,7 @@ export async function WranglerJson(
     // but do not modify `finalSpec` so that way secrets aren't written to state unencrypted.
     const withSecretsUnwrapped = {
       ...finalSpec,
-      vars: {
-        ...finalSpec.vars,
-        ...Object.fromEntries(
-          Object.entries(finalSpec.vars ?? {}).map(([key, value]) =>
-            isSecret(value) ? [key, value.unencrypted] : [key, value],
-          ),
-        ),
-      },
+      vars: unencryptSecrets(finalSpec.vars ?? {}),
     };
     await writeJSON(filePath, withSecretsUnwrapped);
   } else {

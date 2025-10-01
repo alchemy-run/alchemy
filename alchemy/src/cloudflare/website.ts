@@ -3,7 +3,10 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { Exec } from "../os/index.ts";
 import { Scope } from "../scope.ts";
-import { isSecret } from "../secret.ts";
+import {
+  extractStringAndSecretBindings,
+  unencryptSecrets,
+} from "./util/filter-env-bindings.ts";
 import { dedent } from "../util/dedent.ts";
 import { logger } from "../util/logger.ts";
 import { Assets } from "./assets.ts";
@@ -226,14 +229,7 @@ export async function Website<B extends Bindings>(
   const env = {
     ...(process.env ?? {}),
     ...(props.env ?? {}),
-    ...Object.fromEntries(
-      Object.entries(props.bindings ?? {}).flatMap(([key, value]) => {
-        if (typeof value === "string" || (isSecret(value) && secrets)) {
-          return [[key, value]];
-        }
-        return [];
-      }),
-    ),
+    ...extractStringAndSecretBindings(props.bindings ?? {}, secrets),
   };
   const worker = {
     ...workerProps,
@@ -317,17 +313,7 @@ export async function Website<B extends Bindings>(
         }
       },
       env: {
-        ...Object.fromEntries(
-          Object.entries(env ?? {}).flatMap(([key, value]) => {
-            if (isSecret(value)) {
-              return [[key, value.unencrypted]];
-            }
-            if (typeof value === "string") {
-              return [[key, value]];
-            }
-            return [];
-          }),
-        ),
+        ...unencryptSecrets(env ?? {}),
         ...(typeof dev === "object" ? dev.env : {}),
         FORCE_COLOR: "1",
         ...process.env,
@@ -371,7 +357,7 @@ export const spreadBuildProps = (
 export const spreadDevProps = (
   props: { dev?: WebsiteProps<Bindings>["dev"] } | undefined,
   defaultCommand: string,
-): WebsiteProps<Bindings>["dev"] => {
+): Exclude<WebsiteProps<Bindings>["dev"], undefined> => {
   if (typeof props?.dev === "object") {
     return {
       ...props.dev,
