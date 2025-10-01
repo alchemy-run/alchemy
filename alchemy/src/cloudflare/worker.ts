@@ -180,8 +180,12 @@ export interface BaseWorkerProps<
   };
 
   /**
-   * Enable Workers LogPush for trace event export.
-   * Requires separate LogPush job configuration via Cloudflare API.
+   * Enable Workers Logpush to export trace events (request/response metadata,
+   * console logs, and exceptions) to external destinations.
+   *
+   * Requires a separate Logpush job configuration via the Cloudflare API.
+   *
+   * @see https://developers.cloudflare.com/workers/observability/logging/logpush
    * @default false
    */
   logpush?: boolean;
