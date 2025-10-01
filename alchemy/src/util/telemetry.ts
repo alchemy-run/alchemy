@@ -3,13 +3,15 @@ import { exec } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import { join } from "node:path";
+import path from "pathe";
 import pkg from "../../../package.json" with { type: "json" };
 import type { Phase } from "../alchemy.ts";
 import { Scope } from "../scope.ts";
 import { logger } from "./logger.ts";
 import { memoize } from "./memoize.ts";
 
-export const CONFIG_DIR = envPaths("alchemy", { suffix: "" }).config;
+export const CONFIG_DIR = path.join(os.homedir(), ".alchemy");
+export const CONFIG_DIR_LEGACY = envPaths("alchemy", { suffix: "" }).config;
 
 export const TELEMETRY_DISABLED =
   !!process.env.ALCHEMY_TELEMETRY_DISABLED || !!process.env.DO_NOT_TRACK;
@@ -24,6 +26,14 @@ async function getOrCreateUserId() {
 
   try {
     return (await readFile(path, "utf-8")).trim();
+  } catch {}
+
+  const legacyPath = join(CONFIG_DIR_LEGACY, "id");
+
+  try {
+    const id = (await readFile(legacyPath, "utf-8")).trim();
+		await mkdir(CONFIG_DIR_LEGACY, { recursive: true });
+		await writeFile(path, id);
   } catch {}
 
   try {
