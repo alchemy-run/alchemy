@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import { join } from "node:path";
 import path from "pathe";
-import pkg from "../../../package.json" with { type: "json" };
+import pkg from "../../package.json" with { type: "json" };
 import type { Phase } from "../alchemy.ts";
 import { Scope } from "../scope.ts";
 import { logger } from "./logger.ts";
