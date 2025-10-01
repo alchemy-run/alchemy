@@ -21,8 +21,7 @@ export default {
 const handleRequest = async (request: Request, env: Env) => {
   const url = new URL(request.url);
 
-  const accept = request.headers.get("accept");
-  if (accept && prefersMarkdown(accept)) {
+  if (prefersMarkdown(request)) {
     const rewrite = new URL(url.pathname.replace(/\/?$/, ".md"), url.origin);
     const markdownResponse = await env.ASSETS.fetch(rewrite);
     if (markdownResponse.ok) {
@@ -48,13 +47,20 @@ const handleRequest = async (request: Request, env: Env) => {
 };
 
 /**
- * Returns true if the accept header prioritizes markdown or plain text over HTML.
+ * Returns true if the accept header prefers markdown or plain text over HTML.
  *
  * Examples:
- * - opencode: text/markdown;q=1.0, text/x-markdown;q=0.9, text/plain;q=0.8, text/html;q=0.7, *\/*;q=0.1 > true
- * - claude code: application/json, text/plain, *\/* > true
+ * - opencode - accept: text/markdown;q=1.0, text/x-markdown;q=0.9, text/plain;q=0.8, text/html;q=0.7, *\/*;q=0.1
+ * - claude code - accept: application/json, text/plain, *\/*
+ *
+ * Notes:
+ * - ChatGPT and Claude web don't set an accept header; maybe check the user agent instead?
+ * - Cursor's headers are too generic (accept: *, user-agent: https://github.com/sindresorhus/got)
  */
-const prefersMarkdown = (accept: string) => {
+const prefersMarkdown = (request: Request) => {
+  const accept = request.headers.get("accept");
+  if (!accept) return false;
+
   // parse accept header and sort by quality; highest quality first
   const types = accept
     .split(",")
