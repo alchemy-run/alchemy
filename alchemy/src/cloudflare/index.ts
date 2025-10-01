@@ -35,6 +35,7 @@ export * from "./hyperdrive-ref.ts";
 export * from "./hyperdrive.ts";
 export * from "./images.ts";
 export * from "./kv-namespace.ts";
+export * from "./logpush.ts";
 export * from "./next.ts";
 export * from "./nuxt/nuxt.ts";
 export * from "./orange.ts";
