@@ -32,8 +32,8 @@ async function getOrCreateUserId() {
 
   try {
     const id = (await readFile(legacyPath, "utf-8")).trim();
-		await mkdir(CONFIG_DIR_LEGACY, { recursive: true });
-		await writeFile(path, id);
+    await mkdir(CONFIG_DIR_LEGACY, { recursive: true });
+    await writeFile(path, id);
   } catch {}
 
   try {
@@ -94,11 +94,11 @@ async function getBranchName() {
 
 function getRuntime() {
   if (globalThis.Bun) return { name: "bun", version: Bun.version };
-	//@ts-ignore
+  //@ts-expect-error
   if (globalThis.Deno)
-	//@ts-ignore
+    //@ts-expect-error
     return { name: "deno", version: Deno.version?.deno ?? null };
-	//@ts-ignore
+  //@ts-expect-error
   if (globalThis.EdgeRuntime) return { name: "workerd", version: null };
   if (globalThis.process?.versions?.node)
     return { name: "node", version: process.versions.node };
