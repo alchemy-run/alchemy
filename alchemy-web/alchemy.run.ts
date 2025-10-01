@@ -34,14 +34,6 @@ if (stage === "prod") {
   await Zone("alchemy-run", {
     name: "alchemy.run",
   });
-
-  await Worker("posthog-proxy", {
-    adopt: true,
-    name: "alchemy-posthog-proxy",
-    entrypoint: "src/proxy.ts",
-    domains: [POSTHOG_PROXY_HOST],
-    bindings: proxyBindings,
-  });
 }
 
 export const website = await Astro("website", {
