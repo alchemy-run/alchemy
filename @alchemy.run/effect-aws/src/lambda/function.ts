@@ -3,16 +3,15 @@ import type {
   LambdaFunctionURLResult,
 } from "aws-lambda";
 import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
+import type * as Effect from "effect/Effect";
 
-export type * from "../account.ts";
-export type * from "../region.ts";
-
-export type * as lambda from "aws-lambda";
-
-import type { Binder, Resource, Statement } from "@alchemy.run/effect";
+import {
+  Service,
+  type Binder,
+  type Resource,
+  type Statement,
+} from "@alchemy.run/effect";
 import type { Context as LambdaContext } from "aws-lambda";
-import type { Tag as ArnTag } from "../arn.ts";
 import type * as IAM from "../iam.ts";
 import { FunctionProvider } from "./function.provider.ts";
 
@@ -37,12 +36,6 @@ export type FunctionAttributes<ID extends string, _P extends FunctionProps> = {
   };
 };
 
-export type Branded<T> = string & { __brand: T };
-
-export type FunctionArn = Branded<"AWS::Lambda::Function.FunctionArn">;
-
-export type Arn<Self> = ArnTag<Self, FunctionArn>;
-
 export type Function<
   ID extends string = string,
   P extends FunctionProps = FunctionProps,
@@ -61,7 +54,7 @@ export type FunctionHandler = (
 
 export const Function = <ID extends string, P extends FunctionProps>(
   id: ID,
-  props: P,
+  props: P = {} as P,
 ) =>
   Object.assign(
     Context.Tag(id)() as Context.TagClass<P, ID, FunctionAttributes<ID, P>>,
@@ -80,26 +73,10 @@ export const Function = <ID extends string, P extends FunctionProps>(
           context: LambdaContext,
         ) => Effect.Effect<LambdaFunctionURLResult, Err, Req>,
       ) {
-        const iae = Effect.gen(function* () {
-          return handler;
-        });
-        return Object.assign(iae, {
-          self: this,
-        }) as Serve<Self, Err, Req>;
+        return Service(id, handler);
       },
     } as const,
   );
-
-export type Serve<Self, Err, Req> = Effect.Effect<
-  (
-    request: LambdaFunctionURLEvent,
-    context: LambdaContext,
-  ) => Effect.Effect<LambdaFunctionURLResult, Err, Req>,
-  Err,
-  Req
-> & {
-  self: Self;
-};
 
 export type FunctionBinding<Stmt extends Statement = Statement> = Binder<
   {

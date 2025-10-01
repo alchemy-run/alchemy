@@ -6,13 +6,8 @@ import { Message, Messages } from "./messages.ts";
 
 export * from "./messages.ts";
 
-// resource declarations (stateless)
-export class Api extends Lambda.Function("api", {
-  url: true,
-}) {}
-
-// biz logic declaration
-export const api = Api.serve(
+export class Api extends Lambda.serve(
+  "api",
   Effect.fn(function* (req) {
     const msg = yield* S.validate(Message)(req.body);
     yield* SQS.sendMessage(Messages, msg).pipe(
@@ -23,7 +18,7 @@ export const api = Api.serve(
       body: JSON.stringify(null),
     };
   }),
-);
+) {}
 
 // runtime handler
-export default api.pipe(SQS.clientFromEnv(), Lambda.toHandler);
+export default Api.pipe(SQS.clientFromEnv(), Lambda.toHandler);

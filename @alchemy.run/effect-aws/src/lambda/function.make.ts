@@ -2,8 +2,8 @@ import * as Effect from "effect/Effect";
 
 import type {
   Binding,
-  Handler,
   Policy,
+  Service,
   Statement,
   TagInstance,
 } from "@alchemy.run/effect";
@@ -21,10 +21,11 @@ type MakeFunctionProps<Req> = (Extract<Req, Statement> extends never
   handler?: string;
 };
 
-export const make = <F extends Handler<Req, any, any> | Function, Req>(
-  self: F,
-  { bindings, main, handler }: MakeFunctionProps<Req>,
+export const make = <S extends Service>(
+  self: S,
+  { bindings, main, handler }: MakeFunctionProps<S["Req"]>,
 ) => {
+  type Req = S["Req"];
   const eff = Effect.gen(function* () {
     return {
       ...(Object.fromEntries(
@@ -48,7 +49,7 @@ export const make = <F extends Handler<Req, any, any> | Function, Req>(
           main,
           handler,
         },
-      } satisfies Binding<F, Extract<Req, Statement>>,
+      } satisfies Binding<S, Extract<Req, Statement>>,
     };
   });
 
@@ -57,13 +58,13 @@ export const make = <F extends Handler<Req, any, any> | Function, Req>(
   clss.pipe = eff.pipe.bind(eff);
   return clss as any as Effect.Effect<
     {
-      [id in F["id"]]: F extends Function
-        ? Binding<F, Extract<Req, Statement>>
-        : F;
+      [id in S["id"]]: S extends Function
+        ? Binding<S, Extract<Req, Statement>>
+        : S;
     } & {
       [id in Exclude<
         Extract<Req, Statement>["resource"]["id"],
-        F["id"]
+        S["id"]
       >]: Extract<Extract<Req, Statement>["resource"], { id: id }>;
     },
     never,

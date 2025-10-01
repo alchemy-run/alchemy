@@ -4,9 +4,9 @@ import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 import type * as S from "effect/Schema";
 
-import type { Resource, TagInstance } from "@alchemy.run/effect";
-import { consume, type Consume } from "./queue.consumer";
-import { QueueProvider } from "./queue.provider";
+import type { Resource } from "@alchemy.run/effect";
+import { consume, type Consume } from "./queue.consumer.ts";
+import { QueueProvider } from "./queue.provider.ts";
 
 // required to avoid this error in consumers: "The inferred type of 'Messages' cannot be named without a reference to '../../effect-aws/node_modules/@types/aws-lambda'. This is likely not portable. A type annotation is necessary.ts(2742)"
 export type * as lambda from "aws-lambda";
@@ -86,9 +86,7 @@ export type Queue<
   P,
   QueueAttributes<ID, P>,
   typeof QueueProvider
-> & {
-  new (_: never): TagInstance<Context.TagClass<P, ID, QueueAttributes<ID, P>>>;
-};
+>;
 
 export const Queue = <ID extends string, P extends QueueProps>(
   id: ID,
@@ -114,6 +112,6 @@ export const Queue = <ID extends string, P extends QueueProps>(
         Req | Consume<Extract<Self, Queue>>
       >,
     ) {
-      return consume(id, this as Extract<Self, Queue>, handler);
+      return consume(this as Extract<Self, Queue>, id, handler);
     },
   } as const);

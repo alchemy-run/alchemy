@@ -16,14 +16,14 @@ export class Messages extends SQS.Queue("messages", {
 }) {}
 
 // business logic
-export class Consumer extends Messages.consume(
+export const Consumer = Messages.consume(
   "consumer",
   Effect.fn(function* (batch) {
     for (const record of batch.Records) {
       console.log(record);
     }
   }),
-) {}
+);
 
 // runtime handler
 export default Consumer.pipe(SQS.clientFromEnv(), Lambda.toHandler);

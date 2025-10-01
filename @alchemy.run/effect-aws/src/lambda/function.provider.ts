@@ -90,7 +90,7 @@ export const functionProvider = () =>
 
         for (const binding of bindings) {
           if (binding.action === "attach") {
-            const binder = yield* binding.stmt.binder as Context.Tag<
+            const binder = yield* binding.stmt.bind as Context.Tag<
               never,
               Binder
             >;

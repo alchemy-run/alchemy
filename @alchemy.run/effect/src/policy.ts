@@ -19,13 +19,13 @@ export type SerializedStatement<S extends Statement = Statement> = Omit<
 export type Statement<
   Action extends string = string,
   Resource extends _Resource = _Resource,
-> = Allow<Action, Resource> | Deny<Action, Resource>;
+> = Allow<Action, Resource>; //| Deny<Action, Resource>;
 
 export interface Allow<
   Action extends string,
   Resource extends _Resource,
   Condition = any,
-  Binder = any,
+  Binding = any,
 > {
   /**
    * ID uniquely identifying this statement
@@ -38,23 +38,23 @@ export interface Allow<
   action: Action;
   resource: Resource;
   condition?: Condition;
-  binder: Binder;
+  binding: Binding;
 }
 
-export interface Deny<
-  Action extends string,
-  Resource extends _Resource,
-  Condition = any,
-  Binder = any,
-> {
-  sid?: string;
-  label: string;
-  effect: "Deny";
-  action: Action;
-  resource: Resource;
-  condition?: Condition;
-  binder: Binder;
-}
+// export interface Deny<
+//   Action extends string,
+//   Resource extends _Resource,
+//   Condition = any,
+//   Binding = any,
+// > {
+//   sid?: string;
+//   label: string;
+//   effect: "Deny";
+//   action: Action;
+//   resource: Resource;
+//   condition?: Condition;
+//   // binding: Binding;
+// }
 
 export const allow = <S extends Statement>() =>
   Effect.gen(function* () {}) as Effect.Effect<void, never, S>;

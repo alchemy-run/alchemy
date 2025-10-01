@@ -1,12 +1,12 @@
 import { join } from "node:path";
 
-import * as AlchemyCLI from "@alchemy.run/effect-cli";
 import { NodeContext } from "@effect/platform-node";
 import * as Effect from "effect/Effect";
 
 import * as Alchemy from "@alchemy.run/effect";
 import * as AWS from "@alchemy.run/effect-aws";
 import * as Lambda from "@alchemy.run/effect-aws/lambda";
+import * as AlchemyCLI from "@alchemy.run/effect-cli";
 
 import { Consumer, api } from "./src/index.ts";
 
