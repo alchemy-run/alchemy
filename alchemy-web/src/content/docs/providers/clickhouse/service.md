@@ -5,18 +5,14 @@ description: Learn how to create, configure, and manage Clickhouse databases usi
 
 The Service resource lets you create and manage [Clickhouse Services](https://clickhouse.com) using Alchemy.
 
-:::warning
-This resource is a work in progress and is not feature complete or fully tested.
-:::
-
 ## Minimal Example
 
 Create a basic Clickhouse Service with default settings.
 
 ```ts
-import { Service, getOrganizationByName } from "alchemy/clickhouse";
+import { Service, OrganizationRef } from "alchemy/clickhouse";
 
-const organization = await getOrganizationByName("MK's Organization");
+const organization = await OrganizationRef("Alchemy");
 
 const service = await Service("clickhouse", {
 	organization,
@@ -32,14 +28,14 @@ const service = await Service("clickhouse", {
 ```ts
 // alchemy.run.ts
 import alchemy from "alchemy";
-import { Service, getOrganizationByName } from "alchemy/clickhouse";
+import { Service, OrganizationRef } from "alchemy/clickhouse";
 import { Worker } from "alchemy/cloudflare";
 
 export const app = await alchemy("alchemy-test-clickhouse", {
 	telemetry: false,
 });
 
-const organization = await getOrganizationByName("MK's Organization");
+const organization = await OrganizationRef("Alchemy");
 
 const service = await Service("clickhouse", {
 	organization,

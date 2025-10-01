@@ -1,0 +1,75 @@
+---
+title: Clickhouse
+description: Set up a Clickhouse database using Alchemy.
+sidebar:
+  order: 21
+---
+
+import { Steps, Tabs, TabItem, Code } from "@astrojs/starlight/components";
+
+This guide walks you through setting up a Clickhouse database using Alchemy.
+
+<Steps>
+
+1. **Configure environment variables**
+
+   Add the required environment variables to your `.env` file:
+
+   ```bash
+   CLICKHOUSE_KEY_ID=your_clickhouse_url
+   CLICKHOUSE_KEY_SECRET=your_clickhouse_password
+   ```
+
+	 :::tip
+	 We also reccomend storing your organization name in an environment variable:
+
+	 ```bash
+	 CLICKHOUSE_ORG=your_clickhouse_organization
+	 ```
+
+	 and access it via `alchemy.env.CLICKHOUSE_ORG`
+	 :::
+
+2. **Reference your Organization**
+
+	Reference your organization in your Alchemy script:
+
+	 ```diff lang='ts'
+   import alchemy from "alchemy";
+	 + import { OrganizationRef } from "alchemy/clickhouse";
+
+	 const app = await alchemy("my-clickhouse-app");
+
+	 + const organization = await OrganizationRef("<YOUR_ORGANIZATION_NAME>");
+	 ```
+
+	 :::tip
+	 if you set up your organization name in an environment variable, you can do:
+
+	 ```diff lang='ts'
+	 - const organization = await OrganizationRef("<YOUR_ORGANIZATION_NAME>");
+	 + const organization = await OrganizationRef(alchemy.env.CLICKHOUSE_ORG);
+	 ```
+	 :::
+
+3. **Create a Clickhouse Service**
+
+	Create a Clickhouse Service on aws with the following configuration:
+
+	```ts
+   import alchemy from "alchemy";
+	 import { OrganizationRef } from "alchemy/clickhouse";
+
+	 const app = await alchemy("my-clickhouse-app");
+
+	 const organization = await OrganizationRef("<YOUR_ORGANIZATION_NAME>");
+
+	 + const service = await Service("clickhouse", {
+	 + 	 organization,
+	 + 	 provider: "aws",
+	 + 	 region: "us-east-1",
+	 + 	 minReplicaMemoryGb: 8,
+	 + 	 maxReplicaMemoryGb: 356,
+	 + 	 numReplicas: 3,
+	 + });
+	```
