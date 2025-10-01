@@ -1,5 +1,5 @@
-import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
+import { extractCloudflareResult } from "./api-response.ts";
 import { createCloudflareApi, type CloudflareApiOptions } from "./api.ts";
 
 /**
@@ -20,16 +20,6 @@ export interface PermissionGroup {
    * Scopes included in this permission group
    */
   scopes: string[];
-}
-
-/**
- * Response from the Cloudflare permission groups API
- */
-interface PermissionGroupsResponse {
-  result: PermissionGroup[];
-  success: boolean;
-  errors: any[];
-  messages: any[];
 }
 
 export type PermissionGroupName = R2PermissionGroups | (string & {});
@@ -86,7 +76,7 @@ export type PermissionGroups = {
  *
  * @example
  * // Get all permission groups including those for R2
- * const permissions = await PermissionGroups("cloudflare-permissions");
+ * const permissions = await PermissionGroups();
  *
  * // Use with AccountApiToken to create a token with proper permissions
  * const token = await AccountApiToken("r2-token", {
@@ -106,42 +96,24 @@ export type PermissionGroups = {
  *   ]
  * });
  */
-export const PermissionGroups = Resource(
-  "cloudflare::PermissionGroups",
-  async function (
-    this: Context<PermissionGroups>,
-    _id: string,
-    options: CloudflareApiOptions = {},
-  ): Promise<PermissionGroups> {
-    // Only create and update phases are supported
-    if (this.phase === "delete") {
-      return this.destroy();
-    }
+export async function PermissionGroups(
+  options: CloudflareApiOptions = {},
+): Promise<PermissionGroups> {
+  const api = await createCloudflareApi(options);
+  const result = await extractCloudflareResult<PermissionGroup[]>(
+    "fetch permission groups",
+    api.get(`/accounts/${api.accountId}/tokens/permission_groups`),
+  );
+  return Object.fromEntries(
+    result.map((group) => [group.name, group]),
+  ) as PermissionGroups;
+}
 
-    // Initialize API client
-    const api = await createCloudflareApi(options);
+// we are deprecating the PermissionGroups resource (it is now just a function)
+Resource("cloudflare::PermissionGroups", async function (this) {
+  if (this.phase === "delete") {
+    return this.destroy();
+  }
 
-    // Fetch permission groups from Cloudflare API
-    const response = await api.get(
-      `/accounts/${api.accountId}/tokens/permission_groups`,
-    );
-
-    if (!response.ok) {
-      throw new Error(
-        `Failed to fetch permission groups: ${response.statusText}`,
-      );
-    }
-
-    const data = (await response.json()) as PermissionGroupsResponse;
-
-    if (!data.success || !data.result) {
-      throw new Error(
-        `API returned error: ${data.errors?.[0]?.message || "Unknown error"}`,
-      );
-    }
-
-    return Object.fromEntries(
-      data.result.map((group) => [group.name, group]),
-    ) as PermissionGroups;
-  },
-);
+  throw new Error("Not implemented");
+});
