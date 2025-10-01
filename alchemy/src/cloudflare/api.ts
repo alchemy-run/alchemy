@@ -1,5 +1,6 @@
 import { Provider, type Credentials } from "../auth.ts";
 import type { Secret } from "../secret.ts";
+import { isBinary } from "../serde.ts";
 import { memoize } from "../util/memoize.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
 import { safeFetch } from "../util/safe-fetch.ts";
@@ -257,7 +258,7 @@ export class CloudflareApi {
     return this.fetch(path, {
       ...init,
       method: "POST",
-      body: this.toBody(body),
+      body: await this.toBody(body),
     });
   }
 
@@ -272,18 +273,16 @@ export class CloudflareApi {
     return this.fetch(path, {
       ...init,
       method: "PUT",
-      body: this.toBody(body),
+      body: await this.toBody(body),
     });
   }
 
-  toBody(body: BodyInit): BodyInit {
-    return body instanceof FormData
+  async toBody(body: BodyInit): Promise<BodyInit> {
+    return body instanceof FormData ||
+      typeof body === "string" ||
+      isBinary(body)
       ? body
-      : typeof body === "string"
-        ? body
-        : body instanceof ReadableStream
-          ? body
-          : JSON.stringify(body);
+      : JSON.stringify(body);
   }
 
   /**
@@ -297,7 +296,7 @@ export class CloudflareApi {
     return this.fetch(path, {
       ...init,
       method: "PATCH",
-      body: this.toBody(body),
+      body: await this.toBody(body),
     });
   }
 

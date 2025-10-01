@@ -189,22 +189,19 @@ export default defineConfig({
   server: {
     port: 3000,
   },
-  build: {
-    target: "esnext",
-    rollupOptions: {
-      external: ["node:async_hooks", "cloudflare:workers"],
-    },
-  },
+-  build: {
+-    target: "esnext",
+-    rollupOptions: {
+-      external: ["node:async_hooks", "cloudflare:workers"],
+-    },
+-  },
   plugins: [
 -    cloudflareWorkersDevEnvironmentShim(),
 +    alchemy(),
     tsConfigPaths({
       projects: ["./tsconfig.json"],
     }),
-    tanstackStart({
-      target: "cloudflare-module",
-      customViteReactPlugin: true,
-    }),
+    tanstackStart(),
     viteReact(),
   ],
 });

@@ -9,7 +9,7 @@ on:
 
 # Ensure only one workflow runs at a time
 concurrency:
-  group: "tests-${{ github.ref }}"
+  group: "tests-${{ github.event.pull_request.number }}"
   cancel-in-progress: false
 
 jobs:
@@ -30,16 +30,25 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Check Types and Lint
+        run: |
+          bun run build
+          bun run check
+
       - name: Setup Alchemy Environment
         uses: ./.github/actions/setup-alchemy
+        if: github.event_name != 'pull_request'
         with:
           aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: us-west-2
-
-      - name: Check Types and Lint
-        run: | 
-          bun run build
-          bun run check
 
       - name: Run tests
         if: github.event_name != 'pull_request'
@@ -70,4 +79,3 @@ jobs:
           UPSTASH_API_KEY: ${{ env.UPSTASH_API_KEY }}
           UPSTASH_EMAIL: sam@alchemy.run
           VERCEL_ACCESS_TOKEN: ${{ env.VERCEL_ACCESS_TOKEN }}
-

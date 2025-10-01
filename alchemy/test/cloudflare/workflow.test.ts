@@ -77,8 +77,10 @@ describe("Workflow", () => {
 
     // Sample worker script with workflow handler - updated to match Cloudflare Workflows pattern
     const workflowWorkerScript = `
+      import { WorkflowEntrypoint } from "cloudflare:workers";
+
       // Workflow definition for email notifications
-      export class EmailNotifier {
+      export class EmailNotifier extends WorkflowEntrypoint {
         constructor(state, env) {
           this.state = state;
           this.env = env;
@@ -100,7 +102,7 @@ describe("Workflow", () => {
       }
 
       // Workflow definition for order processing
-      export class OrderProcessor {
+      export class OrderProcessor extends WorkflowEntrypoint {
         constructor(state, env) {
           this.state = state;
           this.env = env;
@@ -228,7 +230,6 @@ describe("Workflow", () => {
         `${worker.url!}/trigger-email-workflow`,
       );
       const result: any = await response.json();
-      console.log("Email workflow response:", result);
 
       expect(response.status).toEqual(200);
       expect(result.success).toEqual(true);
@@ -271,7 +272,6 @@ describe("Workflow", () => {
         `${worker.url!}/trigger-order-workflow`,
       );
       const orderResult: any = await orderResponse.json();
-      console.log("Order workflow response:", orderResult);
 
       expect(orderResponse.status).toEqual(200);
       expect(orderResult.success).toEqual(true);
@@ -541,8 +541,10 @@ function createWorkflowProviderScript(
   resultFields: Record<string, any>,
 ) {
   return `
+      import { WorkflowEntrypoint } from "cloudflare:workers";
+
       // Shared workflow definition for ${stepName}
-      export class ${className} {
+      export class ${className} extends WorkflowEntrypoint {
         constructor(state, env) {
           this.state = state;
           this.env = env;

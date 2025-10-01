@@ -3,6 +3,41 @@ import { Buffer } from "node:buffer";
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
+import type { Duration, HealthcheckConfig } from "./container.ts";
+
+/**
+ * Normalize a duration value to Docker CLI format
+ * Accepts either a number (seconds) or a string with unit suffix (ms|s|m|h)
+ * Returns a string in Docker CLI format
+ *
+ * The Duration type provides compile-time type safety, ensuring only valid
+ * formats are accepted: number or string matching the pattern `${number}${unit}`
+ *
+ * @param duration Duration value (number in seconds or string with unit)
+ * @returns Normalized duration string for Docker CLI
+ *
+ * @example
+ * normalizeDuration(30) // "30s"
+ * normalizeDuration("30s") // "30s"
+ * normalizeDuration("1m") // "1m"
+ * normalizeDuration("500ms") // "500ms"
+ * normalizeDuration("1.5s") // "1.5s"
+ */
+export function normalizeDuration(duration: Duration): string {
+  if (typeof duration === "number") {
+    return `${duration}s`;
+  }
+
+  // Validate string format: must be a number followed by unit (ms|s|m|h)
+  const match = duration.match(/^(\d+(?:\.\d+)?)(ms|s|m|h)$/);
+  if (!match) {
+    throw new Error(
+      `Invalid duration format: "${duration}". Expected format: number followed by unit (ms|s|m|h), e.g., "30s", "1m", "500ms"`,
+    );
+  }
+
+  return duration;
+}
 
 /**
  * Options for Docker API requests
@@ -59,7 +94,10 @@ export class DockerApi {
    * @param args Command arguments to pass to Docker CLI
    * @returns Result of the command
    */
-  async exec(args: string[]): Promise<{ stdout: string; stderr: string }> {
+  async exec(
+    args: string[],
+    remainingAttempts = 3,
+  ): Promise<{ stdout: string; stderr: string }> {
     // If a custom config directory is provided, ensure all commands use it by
     // setting the DOCKER_CONFIG env variable for the spawned process.
     const env = this.configDir
@@ -94,8 +132,16 @@ export class DockerApi {
     try {
       await subprocess;
     } catch (error: any) {
+      const message = stderr || error.message || "Command failed";
+      if (
+        message.includes("unexpected status from HEAD request") &&
+        remainingAttempts > 0
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        return this.exec(args, remainingAttempts - 1);
+      }
       // Process failed, but we still have the output
-      throw new Error(stderr || error.message || "Command failed");
+      throw new Error(message);
     }
 
     return { stdout, stderr };
@@ -177,6 +223,7 @@ export class DockerApi {
       env?: Record<string, string>;
       volumes?: Record<string, string>;
       cmd?: string[];
+      healthcheck?: HealthcheckConfig;
     } = {},
   ): Promise<string> {
     const args = ["create", "--name", name];
@@ -199,6 +246,43 @@ export class DockerApi {
     if (options.volumes) {
       for (const [hostPath, containerPath] of Object.entries(options.volumes)) {
         args.push("-v", `${hostPath}:${containerPath}`);
+      }
+    }
+
+    // Add healthcheck configuration
+    if (options.healthcheck) {
+      const hc = options.healthcheck;
+
+      // Format the cmd
+      const cmdStr = Array.isArray(hc.cmd) ? hc.cmd.join(" ") : hc.cmd;
+      args.push("--health-cmd", cmdStr);
+
+      // Add interval
+      if (hc.interval !== undefined) {
+        args.push("--health-interval", normalizeDuration(hc.interval));
+      }
+
+      // Add timeout
+      if (hc.timeout !== undefined) {
+        args.push("--health-timeout", normalizeDuration(hc.timeout));
+      }
+
+      // Add retries
+      if (hc.retries !== undefined) {
+        args.push("--health-retries", String(hc.retries));
+      }
+
+      // Add start period
+      if (hc.startPeriod !== undefined) {
+        args.push("--health-start-period", normalizeDuration(hc.startPeriod));
+      }
+
+      // Add start interval (API 1.44+)
+      if (hc.startInterval !== undefined) {
+        args.push(
+          "--health-start-interval",
+          normalizeDuration(hc.startInterval),
+        );
       }
     }
 

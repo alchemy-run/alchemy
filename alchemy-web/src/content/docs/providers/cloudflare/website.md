@@ -1,9 +1,9 @@
 ---
 title: Website
-description: Learn how to deploy and manage Cloudflare Pages websites using Alchemy for static and dynamic site hosting.
+description: Learn how to deploy static and dynamic websites to Cloudflare Workers using Alchemy.
 ---
 
-The Website resource deploys a static website to Cloudflare Pages with an optional Worker for server-side functionality.
+The Website resource deploys a static website to Cloudflare Workers with an optional Worker for server-side functionality.
 
 ## Minimal Example
 
@@ -29,7 +29,7 @@ const site = await Website("my-site", {
   name: "my-site",
   build: "npm run build",
   assets: "./dist",
-  main: "./src/worker.ts",
+  entrypoint: "./src/worker.ts",
   bindings: {
     DB: database,
     API_KEY: alchemy.secret(process.env.API_KEY),
