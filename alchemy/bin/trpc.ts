@@ -1,7 +1,7 @@
 import { cancel, log } from "@clack/prompts";
 import pc from "picocolors";
 import { trpcServer, type TrpcCliMeta } from "trpc-cli";
-import { createAndSendEvent } from "../src/util/telemetry/events.ts";
+import { createAndSendEvent } from "../src/util/telemetry.ts";
 
 export const t = trpcServer.initTRPC.meta<TrpcCliMeta>().create();
 
