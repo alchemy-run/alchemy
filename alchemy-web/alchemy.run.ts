@@ -1,12 +1,8 @@
 import alchemy from "alchemy";
-import { Astro, VersionMetadata, Worker, Zone } from "alchemy/cloudflare";
+import { Astro, VersionMetadata, Zone } from "alchemy/cloudflare";
 import { GitHubComment } from "alchemy/github";
 import { CloudflareStateStore } from "alchemy/state";
 
-const POSTHOG_DESTINATION_HOST =
-  process.env.POSTHOG_DESTINATION_HOST ?? "us.i.posthog.com";
-const POSTHOT_ASSET_DESTINATION_HOST =
-  process.env.POSTHOG_ASSET_DESTINATION_HOST ?? "us.i.posthog.com";
 //* this is not a secret, its public
 const POSTHOG_PROJECT_ID =
   process.env.POSTHOG_PROJECT_ID ??
@@ -23,12 +19,6 @@ const app = await alchemy("alchemy:website", {
 
 const domain =
   stage === "prod" ? ZONE : stage === "dev" ? `dev.${ZONE}` : undefined;
-
-const proxyBindings = {
-  POSTHOG_DESTINATION_HOST: POSTHOG_DESTINATION_HOST,
-  POSTHOT_ASSET_DESTINATION_HOST: POSTHOT_ASSET_DESTINATION_HOST,
-};
-export type PosthogProxy = Worker<typeof proxyBindings>;
 
 if (stage === "prod") {
   await Zone("alchemy-run", {
