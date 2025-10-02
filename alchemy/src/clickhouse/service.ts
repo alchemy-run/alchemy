@@ -12,11 +12,13 @@ type MysqlEndpoint = {
   port: number;
   username: string;
 };
+
 type HttpsEndpoint = {
   protocol: "https";
   host: string;
   port: number;
 };
+
 type NativesecureEndpoint = {
   protocol: "nativesecure";
   host: string;
