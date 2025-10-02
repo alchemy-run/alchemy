@@ -167,8 +167,8 @@ export interface BaseWorkerProps<
 
   /**
    * Specify the observability behavior of the Worker.
-   * For reference, see [wrangler configuration](https://developers.cloudflare.com/workers/wrangler/configuration/#observability)
    *
+   * @see https://developers.cloudflare.com/workers/wrangler/configuration/#observability
    * @default { enabled: true, head_sampling_rate: 1 }
    */
   observability?: {
@@ -181,7 +181,7 @@ export interface BaseWorkerProps<
     /**
      * A number between 0 and 1, where 0 indicates zero out of one hundred requests are logged, and 1 indicates every request is logged.
      * If head_sampling_rate is unspecified, it is configured to a default value of 1 (100%).
-     * Read more about [head-based sampling](https://developers.cloudflare.com/workers/observability/logs/workers-logs/#head-based-sampling).
+     * @see https://developers.cloudflare.com/workers/observability/logs/workers-logs/#head-based-sampling
      * @default 1
      */
     head_sampling_rate?: number;
