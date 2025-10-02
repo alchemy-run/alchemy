@@ -166,17 +166,87 @@ export interface BaseWorkerProps<
   url?: boolean;
 
   /**
-   * Observability configuration for the worker
+   * Specify the observability behavior of the Worker.
+   * For reference, see [wrangler configuration](https://developers.cloudflare.com/workers/wrangler/configuration/#observability)
    *
-   * Controls whether worker logs are enabled
-   * @default { enabled: true }
+   * @default { enabled: true, head_sampling_rate: 1 }
    */
   observability?: {
     /**
-     * Whether to enable worker logs
+     * If observability is enabled for this Worker. Defaults to true for all new Workers.
      * @default true
      */
     enabled?: boolean;
+
+    /**
+     * A number between 0 and 1, where 0 indicates zero out of one hundred requests are logged, and 1 indicates every request is logged.
+     * If head_sampling_rate is unspecified, it is configured to a default value of 1 (100%).
+     * Read more about [head-based sampling](https://developers.cloudflare.com/workers/observability/logs/workers-logs/#head-based-sampling).
+     * @default 1
+     */
+    head_sampling_rate?: number;
+
+    /**
+     * Configuration for worker logs
+     */
+    logs?: {
+      /**
+       * Whether logs are enabled
+       * @default true
+       */
+      enabled?: boolean;
+
+      /**
+       * The sampling rate for logs
+       */
+      head_sampling_rate?: number;
+
+      /**
+       * Set to false to disable invocation logs
+       * @default true
+       */
+      invocation_logs?: boolean;
+
+      /**
+       * If logs should be persisted to the Cloudflare observability platform where they can be queried in the dashboard.
+       * @default true
+       */
+      persist?: boolean;
+
+      /**
+       * What destinations logs emitted from the Worker should be sent to.
+       * @default []
+       */
+      destinations?: string[];
+    };
+
+    /**
+     * Configuration for worker traces
+     */
+    traces?: {
+      /**
+       * Whether traces are enabled
+       * @default true
+       */
+      enabled?: boolean;
+
+      /**
+       * The sampling rate for traces
+       */
+      head_sampling_rate?: number;
+
+      /**
+       * If traces should be persisted to the Cloudflare observability platform where they can be queried in the dashboard.
+       * @default true
+       */
+      persist?: boolean;
+
+      /**
+       * What destinations traces emitted from the Worker should be sent to.
+       * @default []
+       */
+      destinations?: string[];
+    };
   };
 
   /**
