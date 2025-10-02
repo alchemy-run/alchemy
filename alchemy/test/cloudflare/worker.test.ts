@@ -2167,7 +2167,7 @@ describe("Worker Resource", () => {
 
     let worker: Worker | undefined;
     try {
-      // Create a worker with smart placement
+      // Create a worker with cpu_ms limit
       worker = await Worker(workerName, {
         name: workerName,
         adopt: true,
@@ -2188,7 +2188,7 @@ describe("Worker Resource", () => {
         cpu_ms: 300_000,
       });
 
-      // Update the worker to disable smart placement by omitting placement
+      // Update the worker to remove cpu_ms limit
       worker = await Worker(workerName, {
         name: workerName,
         adopt: true,
@@ -2204,6 +2204,76 @@ describe("Worker Resource", () => {
 
       // Verify the limits were disabled (undefined)
       expect(worker.limits).toBeUndefined();
+    } finally {
+      await destroy(scope);
+      await assertWorkerDoesNotExist(api, workerName);
+    }
+  });
+
+  test("create worker with observability", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-test-worker-observability`;
+
+    let worker: Worker | undefined;
+    try {
+      const baseObservability = {
+        enabled: true,
+        head_sampling_rate: 0.5,
+      };
+
+      // create a worker with no observability set (most things enabled by default)
+      worker = await Worker(workerName, {
+        name: workerName,
+        adopt: true,
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              console.log('Hellog from observability (see what I did there?)');
+              return new Response('Hello observability!', { status: 200 });
+            }
+          };
+        `,
+        observability: baseObservability,
+      });
+
+      expect(worker.observability).toEqual(baseObservability);
+      expect(worker.observability?.logs).toBeUndefined();
+
+      // update the worker with observability with:
+      // - invocation_logs disabled
+      // - traces.head_sampling_rate set to 0.1
+
+      const newObservability = {
+        enabled: true,
+        head_sampling_rate: 0.5,
+        logs: {
+          enabled: true,
+          invocation_logs: false,
+          persist: true,
+          destinations: [],
+        },
+        traces: {
+          enabled: true,
+          head_sampling_rate: 0.1,
+          persist: true,
+          destinations: [],
+        },
+      };
+
+      worker = await Worker(workerName, {
+        name: workerName,
+        adopt: true,
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              return new Response('Hello observability!', { status: 200 });
+            }
+          };
+        `,
+        observability: newObservability,
+      });
+
+      // verify the worker was updated successfully
+      expect(worker.observability).toEqual(newObservability);
     } finally {
       await destroy(scope);
       await assertWorkerDoesNotExist(api, workerName);
