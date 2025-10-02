@@ -84,8 +84,9 @@ export interface OutputOptions {
 
 /**
  * Raw Cloudflare API response for LogPush Job
+ * @internal
  */
-export interface CloudflareLogPushJob {
+interface LogPushJobResult {
   /**
    * Unique id of the job (minimum: 1)
    */
@@ -93,7 +94,7 @@ export interface CloudflareLogPushJob {
 
   /**
    * Name of the dataset. A list of supported datasets can be found on the
-   * Developer Docs (default: "http_requests")
+   * Developer Docs
    * @see https://developers.cloudflare.com/logs/logpush/logpush-job/datasets/
    */
   dataset?:
@@ -151,7 +152,8 @@ export interface CloudflareLogPushJob {
    * instead. The frequency at which Cloudflare sends batches of logs to your
    * destination. Setting frequency to high sends your logs in larger quantities
    * of smaller files. Setting frequency to low sends logs in smaller quantities
-   * of larger files (default: "high")
+   * of larger files
+   * @default "high"
    */
   frequency?: "high" | "low" | null;
 
@@ -258,7 +260,8 @@ export interface LogPushJobProps extends CloudflareApiOptions {
 
   /**
    * Name of the dataset. A list of supported datasets can be found on the
-   * Developer Docs (default: "http_requests")
+   * Developer Docs
+   * @default "http_requests"
    * @see https://developers.cloudflare.com/logs/reference/log-fields/
    */
   dataset: string;
@@ -306,7 +309,6 @@ export interface LogPushJobProps extends CloudflareApiOptions {
 
   /**
    * Sampling rate (0.01 to 1.0)
-   * @default 1.0 (no sampling)
    */
   sample?: number;
 
@@ -316,7 +318,6 @@ export interface LogPushJobProps extends CloudflareApiOptions {
    * which Cloudflare sends batches of logs to your destination. Setting
    * frequency to high sends your logs in larger quantities of smaller files.
    * Setting frequency to low sends logs in smaller quantities of larger files
-   * (default: "high")
    */
   frequency?: "high" | "low" | null;
 
@@ -438,9 +439,17 @@ export interface LogPushJobProps extends CloudflareApiOptions {
 }
 
 /**
- * LogPush Alchemy Resource for Cloudflare LogPush Jobs API
+ * Output returned after LogPush Job creation/update
  */
-export interface LogPushJob extends LogPushJobProps {
+export type LogPushJob = Omit<
+  LogPushJobProps,
+  "delete" | "ownershipChallenge" | "zone"
+> & {
+  /**
+   * Resource type identifier
+   */
+  type: "logpush_job";
+
   /**
    * Unique id of the job (minimum: 1)
    * Assigned by Cloudflare upon job creation
@@ -448,98 +457,15 @@ export interface LogPushJob extends LogPushJobProps {
   id?: number;
 
   /**
-   * Name of the dataset. A list of supported datasets can be found on the
-   * Developer Docs (default: "http_requests")
-   * @see https://developers.cloudflare.com/logs/reference/log-fields/
+   * The Cloudflare account ID
    */
-  dataset: LogPushJobProps["dataset"];
-
-  /**
-   * Uniquely identifies a resource (such as an s3 bucket) where data will be
-   * pushed. Additional configuration parameters supported by the destination
-   * may be included (format: uri, maxLength: 4096)
-   */
-  destinationConf: LogPushJobProps["destinationConf"];
-
-  /**
-   * Flag that indicates if the job is enabled
-   */
-  enabled?: LogPushJobProps["enabled"];
-
-  /**
-   * Optional human readable job name. Not unique. Cloudflare suggests that you
-   * set this to a meaningful string, like the domain name, to make it easier to
-   * identify your job (maxLength: 512)
-   */
-  name?: LogPushJobProps["name"];
-
-  /**
-   * @deprecated This field is deprecated. Please use maxUploadBytes,
-   * maxUploadIntervalSeconds, or maxUploadRecords instead. The frequency at
-   * which Cloudflare sends batches of logs to your destination. Setting
-   * frequency to high sends your logs in larger quantities of smaller files.
-   * Setting frequency to low sends logs in smaller quantities of larger files
-   * (default: "high")
-   */
-  frequency?: LogPushJobProps["frequency"];
-
-  /**
-   * @deprecated This field is deprecated. Use outputOptions instead.
-   * Configuration string. It specifies things like requested fields and
-   * timestamp formats. If migrating from the logpull api, copy the url (full
-   * url or just the query string) of your call here, and logpush will keep on
-   * making this call for you, setting start and end times appropriately
-   * (format: uri-reference, maxLength: 4096)
-   */
-  logpullOptions?: LogPushJobProps["logpullOptions"];
-
-  /**
-   * Filter to apply to logs (JSON string)
-   * @example '{"where":{"and":[{"key":"ClientCountry","operator":"neq","value":"ca"}]}}'
-   */
-  filter?: LogPushJobProps["filter"];
-
-  /**
-   * Sampling rate (0.01 to 1.0)
-   * @default 1.0 (no sampling)
-   */
-  sample?: LogPushJobProps["sample"];
-
-  /**
-   * The maximum uncompressed file size of a batch of logs. This setting value
-   * must be between 5 MB and 1 GB, or 0 to disable it. Note that you cannot
-   * set a minimum file size; this means that log files may be much smaller than
-   * this batch size
-   */
-  maxUploadBytes?: LogPushJobProps["maxUploadBytes"];
-
-  /**
-   * The maximum interval in seconds for log batches. This setting must be
-   * between 30 and 300 seconds (5 minutes), or 0 to disable it. Note that you
-   * cannot specify a minimum interval for log batches; this means that log
-   * files may be sent in shorter intervals than this
-   */
-  maxUploadIntervalSeconds?: LogPushJobProps["maxUploadIntervalSeconds"];
-
-  /**
-   * The maximum number of log lines per batch. This setting must be between
-   * 1000 and 1,000,000 lines, or 0 to disable it. Note that you cannot specify
-   * a minimum number of log lines per batch; this means that log files may
-   * contain many fewer lines than this
-   */
-  maxUploadRecords?: LogPushJobProps["maxUploadRecords"];
-
-  /**
-   * The structured replacement for logpull_options. When including this field,
-   * the logpull_option field will be ignored
-   */
-  outputOptions?: LogPushJobProps["outputOptions"];
+  accountId: string;
 
   /**
    * If not null, the job is currently failing. Failures are usually repetitive
    * (example: no permissions to write to destination bucket). Only the last
-   * failure is recorded. On successful execution of a job the error_message and
-   * last_error are set to null
+   * failure is recorded. On successful execution of a job the errorMessage and
+   * lastError are set to null
    */
   errorMessage?: string | null;
 
@@ -561,12 +487,6 @@ export interface LogPushJob extends LogPushJobProps {
   lastError?: string | null;
 
   /**
-   * The kind parameter (optional) is used to differentiate between Logpush and
-   * Edge Log Delivery jobs (when supported by the dataset)
-   */
-  kind?: "" | "edge";
-
-  /**
    * Time at which the job was created (Unix timestamp in ms)
    */
   createdAt: number;
@@ -575,22 +495,7 @@ export interface LogPushJob extends LogPushJobProps {
    * Time at which the job was last modified (Unix timestamp in ms)
    */
   modifiedAt: number;
-
-  /**
-   * Scope of the LogPush job (account or zone level)
-   */
-  scope: "account" | "zone";
-
-  /**
-   * Account ID (for account-level jobs)
-   */
-  accountId?: string;
-
-  /**
-   * Zone ID (for zone-level jobs)
-   */
-  zoneId?: string;
-}
+};
 
 /**
  * Check if a resource is a LogPushJob
@@ -676,7 +581,6 @@ export const LogPushJob = Resource(
   ): Promise<LogPushJob> {
     const api = await createCloudflareApi(props);
     const isZoneScoped = !!props.zone;
-    const scope = isZoneScoped ? "zone" : "account";
 
     let zoneId: string | undefined;
     let accountId: string | undefined;
@@ -709,7 +613,7 @@ export const LogPushJob = Resource(
       return this.destroy();
     }
 
-    const jobConfig: CloudflareLogPushJob = {
+    const jobConfig: LogPushJobResult = {
       dataset: props.dataset,
       destination_conf: props.destinationConf,
       ...(props.name && { name: props.name }),
@@ -774,25 +678,24 @@ export const LogPushJob = Resource(
       };
     }
 
-    let jobData: CloudflareLogPushJob;
+    let jobData: LogPushJobResult;
 
     if (this.phase === "update" && this.output?.id) {
-      jobData = await extractCloudflareResult<CloudflareLogPushJob>(
+      jobData = await extractCloudflareResult<LogPushJobResult>(
         `update logpush job ${this.output.id}`,
         api.put(`${basePath}/${this.output.id}`, jobConfig),
       );
     } else {
-      jobData = await extractCloudflareResult<CloudflareLogPushJob>(
+      jobData = await extractCloudflareResult<LogPushJobResult>(
         `create logpush job for dataset ${props.dataset}`,
         api.post(basePath, jobConfig),
       );
     }
 
     return {
+      type: "logpush_job",
       id: jobData.id,
-      scope,
-      ...(zoneId && { zoneId }),
-      ...(accountId && { accountId }),
+      accountId: api.accountId,
       dataset: jobData.dataset ?? props.dataset,
       destinationConf: jobData.destination_conf ?? props.destinationConf,
       name: jobData.name ?? undefined,
@@ -822,10 +725,10 @@ export const LogPushJob = Resource(
             recordTemplate: jobData.output_options.record_template ?? undefined,
           }
         : undefined,
+      kind: jobData.kind,
       errorMessage: jobData.error_message ?? undefined,
       lastComplete: jobData.last_complete ?? undefined,
       lastError: jobData.last_error ?? undefined,
-      kind: jobData.kind,
       createdAt: this.output?.createdAt ?? Date.now(),
       modifiedAt: Date.now(),
     };

@@ -1,13 +1,8 @@
 import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
-import type { CloudflareApiResponse } from "../../src/cloudflare/api-response.ts";
 import { createCloudflareApi } from "../../src/cloudflare/api.ts";
 import { R2Bucket } from "../../src/cloudflare/bucket.ts";
-import {
-  type CloudflareLogPushJob,
-  LogPushJob,
-  type LogPushJob as LogPushJobType,
-} from "../../src/cloudflare/logpush-job.ts";
+import { LogPushJob } from "../../src/cloudflare/logpush-job.ts";
 import { destroy } from "../../src/destroy.ts";
 import "../../src/test/vitest.ts";
 import { BRANCH_PREFIX } from "../util.ts";
@@ -99,21 +94,22 @@ describe("LogPushJob Resource Basic", () => {
   });
 
   test("LogPushJob interface has correct type structure", async () => {
-    const mockJob: LogPushJobType = {
+    const mockJob: Awaited<ReturnType<typeof LogPushJob>> = {
+      type: "logpush_job",
       id: 12345,
       dataset: "http_requests",
       destinationConf: "s3://test-bucket/logs",
       enabled: true,
       name: "Test Job",
-      scope: "account",
       accountId: "test-account",
       createdAt: Date.now(),
       modifiedAt: Date.now(),
     };
 
+    expect(mockJob.type).toBe("logpush_job");
     expect(mockJob.id).toBe(12345);
     expect(mockJob.dataset).toBe("http_requests");
-    expect(mockJob.scope).toBe("account");
+    expect(mockJob.accountId).toBe("test-account");
     expect(typeof mockJob.createdAt).toBe("number");
     expect(typeof mockJob.modifiedAt).toBe("number");
   });
@@ -123,7 +119,7 @@ describe.skipIf(!hasR2Credentials)("LogPushJob Resource - Integration", () => {
   const testId = `${BRANCH_PREFIX}-logpush`;
 
   test("create, update, and delete account-level LogPush job", async (scope) => {
-    let logPushJob: LogPushJobType | undefined;
+    let logPushJob: Awaited<ReturnType<typeof LogPushJob>> | undefined;
     const api = await createCloudflareApi();
 
     try {
@@ -143,7 +139,7 @@ describe.skipIf(!hasR2Credentials)("LogPushJob Resource - Integration", () => {
 
       expect(logPushJob.id).toBeTruthy();
       expect(logPushJob.dataset).toBe("http_requests");
-      expect(logPushJob.scope).toBe("account");
+      expect(logPushJob.type).toBe("logpush_job");
       expect(logPushJob.enabled).toBe(false);
       expect(logPushJob.accountId).toBe(api.accountId);
       expect(logPushJob.outputOptions?.outputType).toBe("ndjson");
@@ -170,8 +166,7 @@ describe.skipIf(!hasR2Credentials)("LogPushJob Resource - Integration", () => {
       const updatedResponse = await api.get(
         `/accounts/${api.accountId}/logpush/jobs/${logPushJob.id}`,
       );
-      const updatedData: CloudflareApiResponse<CloudflareLogPushJob> =
-        await updatedResponse.json();
+      const updatedData: any = await updatedResponse.json();
       expect(updatedData.result.enabled).toBe(true);
     } catch (err) {
       console.error("LogPush test error:", err);
@@ -186,7 +181,7 @@ describe.skipIf(!hasR2Credentials)("LogPushJob Resource - Integration", () => {
   }, 120000);
 
   test("create LogPush job with output options", async (scope) => {
-    let logPushJob: LogPushJobType | undefined;
+    let logPushJob: Awaited<ReturnType<typeof LogPushJob>> | undefined;
     const api = await createCloudflareApi();
 
     try {
@@ -219,7 +214,7 @@ describe.skipIf(!hasR2Credentials)("LogPushJob Resource - Integration", () => {
   }, 120000);
 
   test("create LogPush job with filter and sampling", async (scope) => {
-    let logPushJob: LogPushJobType | undefined;
+    let logPushJob: Awaited<ReturnType<typeof LogPushJob>> | undefined;
     const api = await createCloudflareApi();
 
     try {
@@ -253,7 +248,7 @@ describe.skipIf(!hasR2Credentials)("LogPushJob Resource - Integration", () => {
   }, 120000);
 
   test("create LogPush job with frequency and batch settings", async (scope) => {
-    let logPushJob: LogPushJobType | undefined;
+    let logPushJob: Awaited<ReturnType<typeof LogPushJob>> | undefined;
     const api = await createCloudflareApi();
 
     try {
@@ -275,8 +270,7 @@ describe.skipIf(!hasR2Credentials)("LogPushJob Resource - Integration", () => {
       const response = await api.get(
         `/accounts/${api.accountId}/logpush/jobs/${logPushJob.id}`,
       );
-      const data =
-        (await response.json()) as CloudflareApiResponse<CloudflareLogPushJob>;
+      const data: any = await response.json();
       expect(data.result.frequency).toBe("low");
       expect(data.result.max_upload_bytes).toBe(5000000);
     } finally {
