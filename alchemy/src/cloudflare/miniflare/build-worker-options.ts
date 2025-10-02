@@ -1,6 +1,7 @@
 import * as miniflare from "miniflare";
 import { assertNever } from "../../util/assert-never.ts";
 import type { HTTPServer } from "../../util/http.ts";
+import { logger } from "../../util/logger.ts";
 import type { CloudflareApi } from "../api.ts";
 import type {
   Binding,
@@ -79,10 +80,7 @@ export const buildWorkerOptions = async (
     ],
     containerEngine: {
       localDocker: {
-        socketPath:
-          process.platform === "win32"
-            ? "//./pipe/docker_engine"
-            : "unix:///var/run/docker.sock",
+        socketPath: await getDockerSocketPath(),
       },
     },
     // This exposes the worker as a route that can be accessed by setting the MF-Route-Override header.
@@ -480,3 +478,33 @@ const isRemoteBinding = (binding: Binding) => {
     !!binding.dev.remote
   );
 };
+
+/**
+ * DOCKER_HOST env is standardized
+ * docker has an option to expose on tcp://localhost:2375; so we check 2375 if the user has it enabled
+ * the pipe on windows doesn't work half the time(even though the pipe exists). This seems like a strange error on how miniflare parses the pipe
+ * @returns The Docker path
+ */
+async function getDockerSocketPath() {
+  if (process.env.DOCKER_HOST) {
+    return process.env.DOCKER_HOST;
+  }
+  // Check if docker is running on tcp://localhost:2375 using fetch
+  try {
+    const url = "http://localhost:2375/_ping";
+    const res = await fetch(url, { method: "GET" });
+    if (res.ok) {
+      const text = await res.text();
+      if (text.trim() === "OK") {
+        return "localhost:2375";
+      }
+    }
+  } catch {}
+  if (process.platform === "win32") {
+    logger.warn(
+      "Using the pipe on Windows is unstable. If you have issues, try setting DOCKER_HOST or enabling 'Expose daemon on tcp://localhost:2375 without TLS' in docker desktop",
+    );
+    return "//./pipe/docker_engine";
+  }
+  return "unix:///var/run/docker.sock";
+}
