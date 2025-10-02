@@ -4,44 +4,31 @@ interface Env {
 }
 
 export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
-    // namespace cache by version id to avoid cache invalidation issues
-    // TODO: this is probably too aggressive; we should probably namespace by asset hash
-    const cache = await caches.open(env.VERSION.id);
-    const cachedResponse = await cache.match(request);
-    if (cachedResponse) {
-      return cachedResponse;
+  async fetch(request: Request, env: Env) {
+    const url = new URL(request.url);
+
+    if (prefersMarkdown(request) && !url.pathname.endsWith(".md")) {
+      const markdownResponse = await env.ASSETS.fetch(
+        new URL(url.pathname.replace(/\/?$/, ".md"), url.origin),
+      );
+      if (markdownResponse.ok) {
+        return markdownResponse;
+      }
     }
-    const response = await handleRequest(request, env);
-    ctx.waitUntil(cache.put(request, response.clone()));
-    return response;
-  },
-};
 
-const handleRequest = async (request: Request, env: Env) => {
-  const url = new URL(request.url);
+    const assetResponse = await env.ASSETS.fetch(url);
+    if (assetResponse.status !== 404) {
+      return assetResponse;
+    }
 
-  if (prefersMarkdown(request) && !url.pathname.endsWith(".md")) {
-    const markdownResponse = await env.ASSETS.fetch(
-      new URL(url.pathname.replace(/\/?$/, ".md"), url.origin),
+    const notFoundResponse = await env.ASSETS.fetch(
+      new URL("/404.html", url.origin),
     );
-    if (markdownResponse.ok) {
-      return markdownResponse;
-    }
-  }
-
-  const assetResponse = await env.ASSETS.fetch(url);
-  if (assetResponse.status !== 404) {
-    return assetResponse;
-  }
-
-  const notFoundResponse = await env.ASSETS.fetch(
-    new URL("/404.html", url.origin),
-  );
-  return new Response(notFoundResponse.body, {
-    ...notFoundResponse,
-    status: 404,
-  });
+    return new Response(notFoundResponse.body, {
+      ...notFoundResponse,
+      status: 404,
+    });
+  },
 };
 
 /**
