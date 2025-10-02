@@ -53,7 +53,11 @@ export const website = await Astro("website", {
     directory: "dist",
     run_worker_first: markdownRoutes,
     _headers: markdownRoutes
-      .flatMap((route) => [route, "  Vary: accept"])
+      .flatMap((route) => [
+        route,
+        "  Vary: accept",
+        "  Cache-Control: public, max-age=3600, stale-while-revalidate=30",
+      ])
       .join("\n"),
   },
   bindings: {
