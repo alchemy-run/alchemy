@@ -1,4 +1,5 @@
 import { assertNever } from "../util/assert-never.ts";
+import { camelToSnakeObjectDeep } from "../util/camel-to-snake.ts";
 import { logger } from "../util/logger.ts";
 import { memoize } from "../util/memoize.ts";
 import { extractCloudflareResult } from "./api-response.ts";
@@ -180,8 +181,20 @@ export interface WorkerMetadata {
   compatibility_date: string;
   compatibility_flags?: string[];
   bindings: WorkerBindingSpec[];
-  observability: {
-    enabled: boolean;
+  observability?: {
+    enabled?: boolean;
+    head_sampling_rate?: number;
+    logs?: {
+      enabled?: boolean;
+      head_sampling_rate?: number;
+      invocation_logs?: boolean;
+    };
+    traces?: {
+      enabled?: boolean;
+      head_sampling_rate?: number;
+      persist?: boolean;
+      destinations?: string[];
+    };
   };
   logpush?: boolean;
   migrations?: SingleStepMigration;
@@ -235,6 +248,7 @@ export async function prepareWorkerMetadata(
       ...(oldSettings?.tags ?? []),
     ]),
   );
+
   const oldBindings = oldSettings?.bindings;
   // we use Cloudflare Worker tags to store a mapping between Alchemy's stable identifier and the binding name
   // e.g.
@@ -323,9 +337,7 @@ export async function prepareWorkerMetadata(
       isWorker(consumer) ? { service: consumer.name } : consumer,
     ),
     bindings: [],
-    observability: {
-      enabled: props.observability?.enabled !== false,
-    },
+    observability: camelToSnakeObjectDeep(props.observability),
     logpush: props.logpush ?? false,
     // TODO(sam): base64 encode instead? 0 collision risk vs readability.
     tags: [

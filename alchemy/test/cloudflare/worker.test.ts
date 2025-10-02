@@ -10,7 +10,12 @@ import { DurableObjectNamespace } from "../../src/cloudflare/durable-object-name
 import { KVNamespace } from "../../src/cloudflare/kv-namespace.ts";
 import type { SingleStepMigration } from "../../src/cloudflare/worker-migration.ts";
 import { WorkerRef } from "../../src/cloudflare/worker-ref.ts";
-import { deleteWorker, Worker } from "../../src/cloudflare/worker.ts";
+import {
+  deleteWorker,
+  getScriptMetadata,
+  Worker,
+  type WorkerObservability,
+} from "../../src/cloudflare/worker.ts";
 import { destroy } from "../../src/destroy.ts";
 import {
   fetchAndExpectOK,
@@ -2217,8 +2222,8 @@ describe("Worker Resource", () => {
     try {
       const baseObservability = {
         enabled: true,
-        head_sampling_rate: 0.5,
-      };
+        headSamplingRate: 0.5,
+      } satisfies WorkerObservability;
 
       // create a worker with no observability set (most things enabled by default)
       worker = await Worker(workerName, {
@@ -2235,6 +2240,13 @@ describe("Worker Resource", () => {
         observability: baseObservability,
       });
 
+      const metadata: any = await getScriptMetadata(api, workerName);
+
+      expect(metadata.default_environment.script.observability).toEqual({
+        enabled: true,
+        head_sampling_rate: 0.5,
+      });
+
       expect(worker.observability).toEqual(baseObservability);
       expect(worker.observability?.logs).toBeUndefined();
 
@@ -2244,20 +2256,21 @@ describe("Worker Resource", () => {
 
       const newObservability = {
         enabled: true,
-        head_sampling_rate: 0.5,
+        headSamplingRate: 0.5,
         logs: {
           enabled: true,
-          invocation_logs: false,
+          invocationLogs: false,
           persist: true,
           destinations: [],
         },
-        traces: {
-          enabled: true,
-          head_sampling_rate: 0.1,
-          persist: true,
-          destinations: [],
-        },
-      };
+        // TODO(sam): i don't have permission to set this in my account
+        // traces: {
+        //   enabled: true,
+        //   headSamplingRate: 0.1,
+        //   persist: true,
+        //   destinations: [],
+        // },
+      } satisfies WorkerObservability;
 
       worker = await Worker(workerName, {
         name: workerName,
