@@ -329,6 +329,8 @@ export async function prepareWorkerMetadata(
     return [];
   });
 
+  const observability = camelToSnakeObjectDeep(props.observability);
+
   // Prepare metadata with bindings
   const meta: WorkerMetadata = {
     compatibility_date: props.compatibilityDate,
@@ -337,7 +339,10 @@ export async function prepareWorkerMetadata(
       isWorker(consumer) ? { service: consumer.name } : consumer,
     ),
     bindings: [],
-    observability: camelToSnakeObjectDeep(props.observability),
+    observability: {
+      ...observability,
+      enabled: observability?.enabled !== false,
+    },
     logpush: props.logpush ?? false,
     // TODO(sam): base64 encode instead? 0 collision risk vs readability.
     tags: [
