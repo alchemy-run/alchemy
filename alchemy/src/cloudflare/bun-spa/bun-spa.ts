@@ -2,7 +2,6 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { Scope } from "../../scope.ts";
 import { exists } from "../../util/exists.ts";
-import type { Assets } from "../assets.ts";
 import type { Bindings } from "../bindings.ts";
 import {
   extractStringAndSecretBindings,
