@@ -1,5 +1,5 @@
 import alchemy from "alchemy";
-import { Astro, VersionMetadata, Worker, Zone } from "alchemy/cloudflare";
+import { Astro, VersionMetadata, type Worker, Zone } from "alchemy/cloudflare";
 import { GitHubComment } from "alchemy/github";
 import { CloudflareStateStore } from "alchemy/state";
 
