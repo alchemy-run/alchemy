@@ -59,7 +59,11 @@ async function getOrCreateUserId() {
 
 async function getRootCommitHash() {
   return new Promise<string | null>((resolve) => {
-    exec("git rev-list --max-parents=0 HEAD", (err, stdout) => {
+    const command =
+      process.platform === "win32"
+        ? `git rev-list --max-parents=0 HEAD | ForEach-Object { if (-not (git cat-file -p $_ | Select-String "^parent ")) { $_ } }`
+        : `git rev-list --max-parents=0 HEAD | xargs -r -I{} sh -c 'git cat-file -p {} | grep -q "^parent " || echo {}'`;
+    exec(command, (err, stdout) => {
       if (err) {
         resolve(null);
         return;
