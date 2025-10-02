@@ -5,7 +5,8 @@
     "build": "tsc -b",
     "dev": "tsc -b && turbo run dev",
     "deploy": "tsc -b && turbo run deploy --ui=stream",
-    "destroy": "tsc -b && turbo run destroy --ui=stream"
+    "destroy": "tsc -b && turbo run destroy --ui=stream",
+    "link:alchemy": "cd ../alchemy && bun tsc -b && bun link && cd ../example-monorepo && bun i && cp .env.example .env"
   },
   "type": "module",
   "packageManager": "bun@1.2.21",
@@ -22,6 +23,7 @@
     }
   },
   "devDependencies": {
+    "alchemy": "link:alchemy",
     "turbo": "^2.5.6"
   },
   "dependencies": {

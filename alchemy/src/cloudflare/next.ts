@@ -113,7 +113,7 @@ const normalizeCommand = (
     command: string;
     env: Record<string, string>;
   },
-): WebsiteProps<any>["build"] => {
+) => {
   return {
     command:
       typeof input === "string" ? input : (input?.command ?? defaults.command),
@@ -122,5 +122,5 @@ const normalizeCommand = (
       ...(typeof input === "object" ? (input?.env ?? {}) : {}),
     },
     memoize: typeof input === "object" ? input?.memoize : undefined,
-  };
+  } satisfies WebsiteProps<any>["build"];
 };

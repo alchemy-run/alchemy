@@ -1,30 +1,21 @@
-import tailwindcss from "@tailwindcss/vite";
-import { tanstackStart } from "@tanstack/react-start/plugin/vite";
-import viteReact from "@vitejs/plugin-react";
-import alchemy from "alchemy/cloudflare/tanstack-start";
-import { defineConfig, PluginOption } from "vite";
-import tsConfigPaths from "vite-tsconfig-paths";
+import tailwindcss from '@tailwindcss/vite'
+import { tanstackStart } from '@tanstack/react-start/plugin/vite'
+import viteReact from '@vitejs/plugin-react'
+import alchemy from 'alchemy/cloudflare/tanstack-start'
+import { defineConfig, type PluginOption } from 'vite'
+import viteTsConfigPaths from 'vite-tsconfig-paths'
 
-export default defineConfig({
-  server: {
-    port: 3000,
-  },
-  build: {
-    target: "esnext",
-    rollupOptions: {
-      external: ["node:async_hooks", "cloudflare:workers"],
-    },
-  },
+const config = defineConfig({
   plugins: [
-    tailwindcss() as PluginOption,
-    alchemy(),
-    tsConfigPaths({
-      projects: ["./tsconfig.json"],
+    // this is the plugin that enables path aliases
+    viteTsConfigPaths({
+      projects: ['./tsconfig.json'],
     }),
-    tanstackStart({
-      target: "cloudflare-module",
-      customViteReactPlugin: true,
-    }),
+    tailwindcss(),
+    alchemy() as PluginOption,
+    tanstackStart(),
     viteReact(),
   ],
-});
+})
+
+export default config

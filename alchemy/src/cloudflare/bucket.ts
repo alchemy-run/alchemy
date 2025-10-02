@@ -1,7 +1,10 @@
+import type { R2PutOptions } from "@cloudflare/workers-types/experimental/index.ts";
+import * as mf from "miniflare";
 import { isDeepStrictEqual } from "node:util";
 import type { Context } from "../context.ts";
 import { Resource, ResourceKind } from "../resource.ts";
 import { Scope } from "../scope.ts";
+import { streamToBuffer } from "../serde.ts";
 import { isRetryableError } from "../state/r2-rest-state-store.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
@@ -15,6 +18,7 @@ import {
   type CloudflareApiOptions,
 } from "./api.ts";
 import { deleteMiniflareBinding } from "./miniflare/delete.ts";
+import { getDefaultPersistPath } from "./miniflare/paths.ts";
 
 export type R2BucketJurisdiction = "default" | "eu" | "fedramp";
 
@@ -88,6 +92,11 @@ export interface BucketProps extends CloudflareApiOptions {
    * Lock rules for the bucket
    */
   lock?: R2BucketLockRule[];
+
+  /**
+   * Enable data catalog for bucket
+   */
+  dataCatalog?: boolean;
 
   /**
    * Whether to emulate the bucket locally when Alchemy is running in watch mode.
@@ -245,9 +254,10 @@ export type R2ObjectMetadata = {
   etag: string;
   uploaded: Date;
   size: number;
+  httpMetadata?: R2HTTPMetadata;
 };
 
-export type R2Object = R2ObjectMetadata & {
+export type R2ObjectContent = R2ObjectMetadata & {
   arrayBuffer(): Promise<ArrayBuffer>;
   bytes(): Promise<Uint8Array>;
   text(): Promise<string>;
@@ -264,7 +274,7 @@ export type PutR2ObjectResponse = {
 };
 
 export type R2Objects = {
-  objects: R2ObjectMetadata[];
+  objects: Omit<R2ObjectMetadata, "httpMetadata">[];
 } & (
   | {
       truncated: true;
@@ -278,7 +288,7 @@ export type R2Objects = {
 
 export type R2Bucket = _R2Bucket & {
   head(key: string): Promise<R2ObjectMetadata | null>;
-  get(key: string): Promise<R2Object | null>;
+  get(key: string): Promise<R2ObjectContent | null>;
   put(
     key: string,
     value:
@@ -288,6 +298,7 @@ export type R2Bucket = _R2Bucket & {
       | string
       | null
       | Blob,
+    options?: Pick<R2PutOptions, "httpMetadata">,
   ): Promise<PutR2ObjectResponse>;
   delete(key: string): Promise<Response>;
   list(options?: R2ListOptions): Promise<R2Objects>;
@@ -336,6 +347,24 @@ type _R2Bucket = Omit<BucketProps, "delete" | "dev"> & {
      * Whether the bucket is running remotely
      */
     remote: boolean;
+  };
+
+  /**
+   * Data catalog for the bucket
+   */
+  catalog?: {
+    /**
+     * ID of the data catalog
+     */
+    id: string;
+    /**
+     * Name of the data catalog
+     */
+    name: string;
+    /**
+     * Host of the data catalog
+     */
+    host: string;
   };
 };
 
@@ -391,6 +420,8 @@ export async function R2Bucket(
   id: string,
   props: BucketProps = {},
 ): Promise<R2Bucket> {
+  const scope = Scope.current;
+  const isLocal = scope.local && props.dev?.remote !== true;
   const api = await createCloudflareApi(props);
   const bucket = await _R2Bucket(id, {
     ...props,
@@ -399,14 +430,54 @@ export async function R2Bucket(
       force: Scope.current.local,
     },
   });
+
+  let _miniflare: mf.Miniflare | undefined;
+  const miniflare = () => {
+    if (_miniflare) {
+      return _miniflare;
+    }
+    _miniflare = new mf.Miniflare({
+      script: "",
+      modules: true,
+      defaultPersistRoot: getDefaultPersistPath(scope.rootDir),
+      r2Buckets: [bucket.dev.id],
+      log: process.env.DEBUG ? new mf.Log(mf.LogLevel.DEBUG) : undefined,
+    });
+    scope.onCleanup(async () => _miniflare?.dispose());
+    return _miniflare;
+  };
+  const localBucket = () => miniflare().getR2Bucket(bucket.dev.id);
+
   return {
     ...bucket,
-    head: async (key: string) =>
-      headObject(api, {
+    head: async (key: string) => {
+      if (isLocal) {
+        const result = await (await localBucket()).head(key);
+        if (result) {
+          return {
+            key: result.key,
+            etag: result.etag,
+            uploaded: result.uploaded,
+            size: result.size,
+            httpMetadata: result.httpMetadata,
+          } as R2ObjectMetadata;
+        }
+        return null;
+      }
+      return headObject(api, {
         bucketName: bucket.name,
         key,
-      }),
+      });
+    },
     get: async (key: string) => {
+      if (isLocal) {
+        const result = await (await localBucket()).get(key);
+        if (result) {
+          // cast because workers vs node built-ins
+          return result as unknown as R2ObjectContent;
+        }
+        return null;
+      }
       const response = await getObject(api, {
         bucketName: bucket.name,
         key,
@@ -419,19 +490,42 @@ export async function R2Bucket(
         throw await handleApiError(response, "get", "object", key);
       }
     },
-    list: async (options?: R2ListOptions): Promise<R2Objects> =>
-      listObjects(api, bucket.name, {
+    list: async (options?: R2ListOptions): Promise<R2Objects> => {
+      if (isLocal) {
+        return (await localBucket()).list(options);
+      }
+      return listObjects(api, bucket.name, {
         ...options,
         jurisdiction: bucket.jurisdiction,
-      }),
+      });
+    },
     put: async (
       key: string,
       value: PutObjectObject,
+      options?: Pick<R2PutOptions, "httpMetadata">,
     ): Promise<PutR2ObjectResponse> => {
+      if (isLocal) {
+        return await (await localBucket()).put(
+          key,
+          typeof value === "string"
+            ? value
+            : Buffer.isBuffer(value) ||
+                value instanceof Uint8Array ||
+                value instanceof ArrayBuffer
+              ? new Uint8Array(value)
+              : value instanceof Blob
+                ? new Uint8Array(await value.arrayBuffer())
+                : value instanceof ReadableStream
+                  ? new Uint8Array(await streamToBuffer(value))
+                  : value,
+          options,
+        );
+      }
       const response = await putObject(api, {
         bucketName: bucket.name,
         key: key,
         object: value,
+        options: options,
       });
       const body = (await response.json()) as {
         result: {
@@ -450,19 +544,24 @@ export async function R2Bucket(
         size: Number(body.result.size),
       };
     },
-    delete: async (key: string) =>
-      deleteObject(api, {
+    delete: async (key: string) => {
+      if (isLocal) {
+        await (await localBucket()).delete(key);
+      }
+      return deleteObject(api, {
         bucketName: bucket.name,
         key: key,
-      }),
+      });
+    },
   };
 }
 
-const parseR2Object = (key: string, response: Response): R2Object => ({
+const parseR2Object = (key: string, response: Response): R2ObjectContent => ({
   etag: response.headers.get("ETag")!,
   uploaded: parseDate(response.headers),
   key,
   size: Number(response.headers.get("Content-Length")),
+  httpMetadata: mapHeadersToHttpMetadata(response.headers),
   arrayBuffer: () => response.arrayBuffer(),
   bytes: () => response.bytes(),
   text: () => response.text(),
@@ -481,7 +580,7 @@ const _R2Bucket = Resource(
     props: BucketProps = {},
   ): Promise<_R2Bucket> {
     const bucketName =
-      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
+      props.name ?? (this.output?.name || this.scope.createPhysicalName(id));
 
     if (this.phase === "update" && this.output?.name !== bucketName) {
       this.replace();
@@ -513,6 +612,9 @@ const _R2Bucket = Resource(
 
     if (this.phase === "delete") {
       if (props.delete !== false) {
+        if (this.output?.catalog) {
+          await disableDataCatalog(api, bucketName);
+        }
         if (this.output.dev?.id) {
           await deleteMiniflareBinding(this.scope, "r2", this.output.dev.id);
         }
@@ -552,6 +654,16 @@ const _R2Bucket = Resource(
       if (props.lock?.length) {
         await putBucketLockRules(api, bucketName, props);
       }
+      let dataCatalog:
+        | {
+            id: string;
+            name: string;
+            host: string;
+          }
+        | undefined;
+      if (props.dataCatalog) {
+        dataCatalog = await enableDataCatalog(api, bucketName);
+      }
       return {
         name: bucketName,
         location: bucket.location,
@@ -565,12 +677,20 @@ const _R2Bucket = Resource(
         lock: props.lock,
         cors: props.cors,
         dev,
+        catalog: dataCatalog,
       };
     } else {
       if (bucketName !== this.output.name) {
         throw new Error(
           `Cannot update R2Bucket name after creation. Bucket name is immutable. Before: ${this.output.name}, After: ${bucketName}`,
         );
+      }
+      if (this.output?.catalog && !props.dataCatalog) {
+        await disableDataCatalog(api, bucketName);
+        this.output.catalog = undefined;
+      }
+      if (!this.output.catalog && props.dataCatalog) {
+        this.output.catalog = await enableDataCatalog(api, bucketName);
       }
       let domain = this.output.domain;
       if (!!domain !== allowPublicAccess) {
@@ -1051,6 +1171,7 @@ export async function headObject(
     etag: response.headers.get("ETag")?.replace(/"/g, "")!,
     uploaded: parseDate(response.headers),
     size: Number(response.headers.get("Content-Length")),
+    httpMetadata: mapHeadersToHttpMetadata(response.headers),
   };
 }
 
@@ -1079,12 +1200,56 @@ export async function getObject(
   });
 }
 
-type PutObjectObject =
+export type PutObjectObject =
   | ReadableStream
   | ArrayBuffer
   | ArrayBufferView
+  | Uint8Array
   | string
+  | Buffer
   | Blob;
+
+function mapHttpMetadataToHeaders(
+  httpMetadata: R2PutOptions["httpMetadata"],
+): Record<string, string> {
+  const headers: Record<string, string> = {};
+
+  if (httpMetadata instanceof Headers) {
+    httpMetadata.forEach((value, key) => {
+      headers[key] = value;
+    });
+  } else {
+    const {
+      contentType,
+      contentLanguage,
+      contentDisposition,
+      contentEncoding,
+      cacheControl,
+      cacheExpiry,
+    } = httpMetadata as R2HTTPMetadata;
+    if (contentType) headers["Content-Type"] = contentType;
+    if (contentLanguage) headers["Content-Language"] = contentLanguage;
+    if (contentDisposition) headers["Content-Disposition"] = contentDisposition;
+    if (contentEncoding) headers["Content-Encoding"] = contentEncoding;
+    if (cacheControl) headers["Cache-Control"] = cacheControl;
+    if (cacheExpiry) headers.Expires = cacheExpiry.toUTCString();
+  }
+
+  return headers;
+}
+
+function mapHeadersToHttpMetadata(headers: Headers): R2HTTPMetadata {
+  return {
+    contentType: headers.get("Content-Type") ?? undefined,
+    contentLanguage: headers.get("Content-Language") ?? undefined,
+    contentDisposition: headers.get("Content-Disposition") ?? undefined,
+    contentEncoding: headers.get("Content-Encoding") ?? undefined,
+    cacheControl: headers.get("Cache-Control") ?? undefined,
+    cacheExpiry: headers.get("Expires")
+      ? new Date(headers.get("Expires")!)
+      : undefined,
+  };
+}
 
 export async function putObject(
   api: CloudflareApi,
@@ -1092,21 +1257,28 @@ export async function putObject(
     bucketName,
     key,
     object,
+    options,
   }: {
     bucketName: string;
     key: string;
     object: PutObjectObject;
+    options?: Pick<R2PutOptions, "httpMetadata">;
   },
 ): Promise<Response> {
   // Using withExponentialBackoff for reliability
   return await withRetries(async () => {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/octet-stream",
+      ...(options?.httpMetadata
+        ? mapHttpMetadataToHeaders(options?.httpMetadata)
+        : {}),
+    };
+
     const response = await api.put(
       `/accounts/${api.accountId}/r2/buckets/${bucketName}/objects/${key}`,
       object,
       {
-        headers: {
-          "Content-Type": "application/octet-stream",
-        },
+        headers,
       },
     );
     if (!response.ok) {
@@ -1131,4 +1303,32 @@ export async function deleteObject(
 
     return response;
   });
+}
+
+export async function enableDataCatalog(
+  api: CloudflareApi,
+  bucketName: string,
+) {
+  const response = await extractCloudflareResult<{
+    id: string;
+    name: string;
+  }>(
+    `enable data catalog for bucket "${bucketName}"`,
+    api.post(`/accounts/${api.accountId}/r2-catalog/${bucketName}/enable`, {}),
+  );
+  return {
+    id: response.id,
+    name: response.name,
+    host: `https://catalog.cloudflarestorage.com/${response.name.replace("_", "/")}`,
+  };
+}
+
+export async function disableDataCatalog(
+  api: CloudflareApi,
+  bucketName: string,
+) {
+  await api.post(
+    `/accounts/${api.accountId}/r2-catalog/${bucketName}/disable`,
+    {},
+  );
 }

@@ -4,6 +4,7 @@ import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { Scope } from "../scope.ts";
 import { isSecret } from "../secret.ts";
+import { unencryptSecrets } from "./util/filter-env-bindings.ts";
 import { assertNever } from "../util/assert-never.ts";
 import type { Bindings, WorkerBindingRateLimit } from "./bindings.ts";
 import type { R2BucketJurisdiction } from "./bucket.ts";
@@ -11,7 +12,7 @@ import type { DurableObjectNamespace } from "./durable-object-namespace.ts";
 import type { EventSource } from "./event-source.ts";
 import { isQueueEventSource } from "./event-source.ts";
 import { isQueue } from "./queue.ts";
-import type { Worker, WorkerProps } from "./worker.ts";
+import { isWorker, type Worker, type WorkerProps } from "./worker.ts";
 
 type WranglerJsonRateLimit = Omit<WorkerBindingRateLimit, "type"> & {
   type: "rate_limit";
@@ -162,6 +163,7 @@ export async function WranglerJson(
       : undefined,
     placement: worker.placement,
     limits: worker.limits,
+    logpush: worker.logpush,
   };
 
   // Process bindings if they exist
@@ -180,6 +182,15 @@ export async function WranglerJson(
   // Add environment variables as vars
   if (worker.env) {
     spec.vars = { ...worker.env };
+  }
+
+  if (worker.tailConsumers && worker.tailConsumers.length > 0) {
+    spec.tail_consumers = worker.tailConsumers.map((consumer) => {
+      if (isWorker(consumer)) {
+        return { service: consumer.name };
+      }
+      return { service: consumer.service };
+    });
   }
 
   if (worker.crons && worker.crons.length > 0) {
@@ -201,14 +212,7 @@ export async function WranglerJson(
     // but do not modify `finalSpec` so that way secrets aren't written to state unencrypted.
     const withSecretsUnwrapped = {
       ...finalSpec,
-      vars: {
-        ...finalSpec.vars,
-        ...Object.fromEntries(
-          Object.entries(finalSpec.vars ?? {}).map(([key, value]) =>
-            isSecret(value) ? [key, value.unencrypted] : [key, value],
-          ),
-        ),
-      },
+      vars: unencryptSecrets(finalSpec.vars ?? {}),
     };
     await writeJSON(filePath, withSecretsUnwrapped);
   } else {
@@ -265,6 +269,15 @@ export interface WranglerJsonSpec {
   limits?: {
     cpu_ms?: number;
   };
+
+  /**
+   * Send Trace Events from this Worker to Workers Logpush.
+   *
+   * This will not configure a corresponding Logpush job automatically.
+   *
+   * @default false
+   */
+  logpush?: boolean;
 
   /**
    * Whether to enable a workers.dev URL for this worker
@@ -350,14 +363,7 @@ export interface WranglerJsonSpec {
    */
   queues?: {
     producers?: { queue: string; binding: string }[];
-    consumers?: {
-      queue: string;
-      max_batch_size?: number;
-      max_concurrency?: number;
-      max_retries?: number;
-      max_wait_time_ms?: number;
-      retry_delay?: number;
-    }[];
+    consumers?: QueueConsumerWranglerJson[];
   };
 
   /**
@@ -493,11 +499,43 @@ export interface WranglerJsonSpec {
   }[];
 
   /**
+   * Tail consumers that will receive execution logs from this worker
+   */
+  tail_consumers?: Array<{ service: string }>;
+
+  /**
    * Unsafe bindings section for experimental features
    */
   unsafe?: {
     bindings: WranglerJsonRateLimit[];
   };
+}
+
+/**
+ * Queue consumer bindings for wrangler.json
+ */
+interface QueueConsumerWranglerJson {
+  queue: string;
+  /**
+   * The maximum number of messages allowed in each batch.
+   */
+  max_batch_size?: number;
+  /**
+   * The maximum number of concurrent consumers allowed to run at once. Leaving this unset will mean that the number of invocations will scale to the currently supported maximum.
+   */
+  max_concurrency?: number;
+  /**
+   * The maximum number of retries for a message, if it fails or `retryAll()` is invoked.
+   */
+  max_retries?: number;
+  /**
+   * The maximum number of seconds to wait for messages to fill a batch before the batch is sent to the consumer Worker.
+   */
+  max_batch_timeout?: number;
+  /**
+   * The number of seconds to delay retried messages for by default, before they are re-delivered to the consumer. This can be overridden on a per-message or per-batch basis when retrying messages.
+   */
+  retry_delay?: number;
 }
 
 /**
@@ -554,14 +592,7 @@ function processBindings(
   }[] = [];
   const queues: {
     producers: { queue: string; binding: string }[];
-    consumers: {
-      queue: string;
-      max_batch_size?: number;
-      max_concurrency?: number;
-      max_retries?: number;
-      max_wait_time_ms?: number;
-      retry_delay?: number;
-    }[];
+    consumers: QueueConsumerWranglerJson[];
   } = {
     producers: [],
     consumers: [],
@@ -604,7 +635,9 @@ function processBindings(
         max_batch_size: eventSource.settings?.batchSize,
         max_concurrency: eventSource.settings?.maxConcurrency,
         max_retries: eventSource.settings?.maxRetries,
-        max_wait_time_ms: eventSource.settings?.maxWaitTimeMs,
+        max_batch_timeout: eventSource.settings?.maxWaitTimeMs
+          ? eventSource.settings?.maxWaitTimeMs / 1000
+          : undefined,
         retry_delay: eventSource.settings?.retryDelay,
       });
     } else if (isQueue(eventSource)) {

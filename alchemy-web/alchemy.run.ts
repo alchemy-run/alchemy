@@ -1,5 +1,5 @@
 import alchemy from "alchemy";
-import { Astro, Worker, Zone } from "alchemy/cloudflare";
+import { Astro, Zone } from "alchemy/cloudflare";
 import { GitHubComment } from "alchemy/github";
 import { CloudflareStateStore } from "alchemy/state";
 
@@ -33,14 +33,6 @@ export type PosthogProxy = Worker<typeof proxyBindings>;
 if (stage === "prod") {
   await Zone("alchemy-run", {
     name: "alchemy.run",
-  });
-
-  await Worker("posthog-proxy", {
-    adopt: true,
-    name: "alchemy-posthog-proxy",
-    entrypoint: "src/proxy.ts",
-    domains: [POSTHOG_PROXY_HOST],
-    bindings: proxyBindings,
   });
 }
 

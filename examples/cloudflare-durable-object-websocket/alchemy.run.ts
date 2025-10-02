@@ -15,7 +15,7 @@ export const server = await Worker("server", {
     }),
   },
   dev: {
-    tunnel: true,
+    tunnel: !process.env.ALCHEMY_E2E,
   },
 });
 
