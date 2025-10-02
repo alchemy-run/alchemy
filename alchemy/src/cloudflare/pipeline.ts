@@ -183,7 +183,7 @@ export interface PipelineProps extends CloudflareApiOptions {
   /**
    * Name of the pipeline
    *
-   * @default id
+   * @default ${app}-${stage}-${id}
    */
   name?: string;
 
@@ -229,41 +229,40 @@ export interface PipelineRecord {
   [key: string]: any;
 }
 
-export function isPipeline(resource: Resource): resource is Pipeline {
-  return resource[ResourceKind] === "cloudflare::Pipeline";
+export function isPipeline(resource: any): resource is Pipeline {
+  return resource?.[ResourceKind] === "cloudflare::Pipeline";
 }
 
 /**
  * Output returned after Pipeline creation/update
  */
-export interface Pipeline<_T extends PipelineRecord = PipelineRecord>
-  extends Resource<"cloudflare::Pipeline">,
-    PipelineProps {
-  /**
-   * Type identifier for the Pipeline resource
-   */
-  type: "pipeline";
+export type Pipeline<_T extends PipelineRecord = PipelineRecord> =
+  PipelineProps & {
+    /**
+     * Type identifier for the Pipeline resource
+     */
+    type: "pipeline";
 
-  /**
-   * The unique ID of the pipeline
-   */
-  id: string;
+    /**
+     * The unique ID of the pipeline
+     */
+    id: string;
 
-  /**
-   * The name of the pipeline
-   */
-  name: string;
+    /**
+     * The name of the pipeline
+     */
+    name: string;
 
-  /**
-   * HTTP endpoint URL for the pipeline
-   */
-  endpoint: string;
+    /**
+     * HTTP endpoint URL for the pipeline
+     */
+    endpoint: string;
 
-  /**
-   * Version of the pipeline
-   */
-  version: number;
-}
+    /**
+     * Version of the pipeline
+     */
+    version: number;
+  };
 
 /**
  * Creates and manages Cloudflare Pipelines.
@@ -337,10 +336,11 @@ export const Pipeline = Resource("cloudflare::Pipeline", async function <
   Pipeline<T>
 > {
   const api = await createCloudflareApi(props);
-  const pipelineName = props.name ?? id;
+  const pipelineName =
+    props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
 
   if (this.scope.local && !props.dev?.remote) {
-    return this({
+    return {
       type: "pipeline",
       id: this.output?.id ?? "",
       name: this.output?.name ?? pipelineName,
@@ -350,7 +350,11 @@ export const Pipeline = Resource("cloudflare::Pipeline", async function <
       destination: props.destination,
       compression: props.compression,
       accountId: this.output?.accountId ?? "",
-    });
+    };
+  }
+
+  if (this.phase === "update" && this.output?.name !== pipelineName) {
+    await renamePipeline(api, this.output.name, pipelineName);
   }
 
   if (this.phase === "delete") {
@@ -377,7 +381,7 @@ export const Pipeline = Resource("cloudflare::Pipeline", async function <
           (error.status === 400 &&
             error.message.includes("Pipeline with this name already exists")))
       ) {
-        if (props.adopt) {
+        if (props.adopt ?? this.scope.adopt) {
           console.warn(
             "Pipeline already exists, adopting existing Cloudflare Pipeline:",
             pipelineName,
@@ -413,7 +417,7 @@ export const Pipeline = Resource("cloudflare::Pipeline", async function <
     }
   }
 
-  return this({
+  return {
     type: "pipeline",
     id: pipelineData.result.id,
     name: pipelineName,
@@ -428,7 +432,7 @@ export const Pipeline = Resource("cloudflare::Pipeline", async function <
     destination: props.destination, // Use the input destination, not the API response
     compression: props.compression,
     accountId: api.accountId,
-  });
+  };
 });
 
 interface CloudflarePipelineResponse {
@@ -574,6 +578,49 @@ export async function updatePipeline(
       "updating",
       "Pipeline",
       pipelineName,
+    );
+  }
+
+  return (await updateResponse.json()) as CloudflarePipelineResponse;
+}
+
+/**
+ * Rename a pipeline
+ *
+ * @param api - Cloudflare API instance
+ * @param currentName - Current name of the pipeline
+ * @param newName - New name for the pipeline
+ * @returns Updated pipeline response with the new name
+ *
+ * @see https://developers.cloudflare.com/api/resources/pipelines/methods/update/
+ */
+export async function renamePipeline(
+  api: CloudflareApi,
+  currentName: string,
+  newName: string,
+): Promise<CloudflarePipelineResponse> {
+  // Get the current pipeline configuration
+  const currentPipeline = await getPipeline(api, currentName);
+
+  // Build the update payload with the new name
+  const updatePayload = {
+    name: newName,
+    source: currentPipeline.result.source,
+    destination: currentPipeline.result.destination,
+  };
+
+  // Use the update endpoint with the current name in the path and new name in the body
+  const updateResponse = await api.put(
+    `/accounts/${api.accountId}/pipelines/${currentName}`,
+    updatePayload,
+  );
+
+  if (!updateResponse.ok) {
+    return await handleApiError(
+      updateResponse,
+      "renaming",
+      "Pipeline",
+      `${currentName} -> ${newName}`,
     );
   }
 

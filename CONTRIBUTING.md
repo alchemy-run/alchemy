@@ -161,11 +161,11 @@ export const {Resource} = Resource(
       }
       
       const data = await response.json();
-      return this({
+      return {
         id: data.id,
         ...props,
         // other computed properties
-      });
+      };
     }
   }
 );
@@ -176,7 +176,7 @@ export const {Resource} = Resource(
 - **Validate immutable properties** during updates
 - **Use `this.phase`** to determine operation type ("create", "update", "delete")
 - **Return `this.destroy()`** for deletion
-- **Return `this({...})`** for creation/update with all required properties
+- **Return `{...}`** for creation/update with all required properties
 - **Check response status directly** instead of relying on exceptions
 - **Handle 404s gracefully** during deletion
 

@@ -38,9 +38,7 @@ export interface EntitlementsFeatureProps {
 /**
  * Output from the Stripe entitlements feature
  */
-export interface EntitlementsFeature
-  extends Resource<"stripe::EntitlementsFeature">,
-    EntitlementsFeatureProps {
+export interface EntitlementsFeature extends EntitlementsFeatureProps {
   /**
    * The ID of the feature
    */
@@ -130,7 +128,10 @@ export const EntitlementsFeature = Resource(
         try {
           feature = await stripe.entitlements.features.create(createParams);
         } catch (error) {
-          if (isStripeConflictError(error) && props.adopt) {
+          if (
+            isStripeConflictError(error) &&
+            (props.adopt ?? this.scope.adopt)
+          ) {
             const existingFeatures = await stripe.entitlements.features.list({
               lookup_key: props.lookupKey,
               limit: 1,
@@ -154,14 +155,14 @@ export const EntitlementsFeature = Resource(
         }
       }
 
-      return this({
+      return {
         id: feature.id,
         object: feature.object,
         name: feature.name,
         lookupKey: feature.lookup_key || undefined,
         metadata: feature.metadata || undefined,
         livemode: feature.livemode,
-      });
+      };
     } catch (error) {
       logger.error("Error creating/updating entitlements feature:", error);
       throw error;

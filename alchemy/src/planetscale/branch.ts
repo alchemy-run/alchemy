@@ -1,21 +1,23 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
-import type { Secret } from "../secret.ts";
-import { PlanetScaleApi } from "./api.ts";
+import { createPlanetScaleClient, type PlanetScaleProps } from "./api.ts";
 import {
-  fixClusterSize,
-  waitForDatabaseReady,
+  ensureProductionBranchClusterSize,
+  sanitizeClusterSize,
+  waitForBranchReady,
   type PlanetScaleClusterSize,
 } from "./utils.ts";
 
 /**
  * Properties for creating or updating a PlanetScale Branch
  */
-export interface BranchProps {
+export interface BranchProps extends PlanetScaleProps {
   /**
    * The name of the branch
+   *
+   * @default ${app}-${stage}-${id}
    */
-  name: string;
+  name?: string;
 
   /**
    * The organization ID
@@ -26,11 +28,6 @@ export interface BranchProps {
    * The database name
    */
   databaseName: string;
-
-  /**
-   * PlanetScale API token (overrides environment variable)
-   */
-  apiKey?: Secret;
 
   /**
    * Whether or not the branch should be set to a production branch or not.
@@ -47,6 +44,7 @@ export interface BranchProps {
 
   /**
    * The parent branch name or Branch object
+   * @default "main"
    */
   parentBranch?: string | Branch;
 
@@ -62,11 +60,11 @@ export interface BranchProps {
    * If provided, restores the last successful backup's schema and data to the new branch.
    * Must have restore_production_branch_backup(s) or restore_backup(s) access,
    * in addition to Data Branching being enabled for the branch.
-   * Use 'last_successful_backup' or empty string.
+   * Use 'last_successful_backup' or undefined.
    *
    * Ignored if the branch already exists.
    */
-  seedData?: string;
+  seedData?: "last_successful_backup";
 
   /**
    * The database cluster size is required if a backup_id is provided. If the branch is not a production branch, the cluster size MUST be "PS_DEV".
@@ -82,7 +80,7 @@ export interface BranchProps {
 /**
  * Represents a PlanetScale Branch
  */
-export interface Branch extends Resource<"planetscale::Branch">, BranchProps {
+export interface Branch extends BranchProps {
   /**
    * The name of the branch
    */
@@ -152,201 +150,223 @@ export const Branch = Resource(
   "planetscale::Branch",
   async function (
     this: Context<Branch>,
-    _id: string,
+    id: string,
     props: BranchProps,
   ): Promise<Branch> {
-    const apiKey =
-      props.apiKey?.unencrypted || process.env.PLANETSCALE_API_TOKEN;
-    if (!apiKey) {
-      throw new Error("PLANETSCALE_API_TOKEN environment variable is required");
+    const adopt = props.adopt ?? this.scope.adopt;
+
+    const api = createPlanetScaleClient(props);
+
+    const branchName =
+      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
+    const parentBranchName = !props.parentBranch
+      ? "main"
+      : typeof props.parentBranch === "string"
+        ? props.parentBranch
+        : props.parentBranch.name;
+
+    if (this.phase === "update" && this.output.name !== branchName) {
+      // TODO(sam): maybe we don't need to replace? just branch again? or rename?
+      this.replace();
     }
 
-    const api = new PlanetScaleApi({ apiKey });
-
     if (this.phase === "delete") {
-      try {
-        if (this.output?.name) {
-          const response = await api.delete(
-            `/organizations/${props.organizationId}/databases/${props.databaseName}/branches/${this.output.name}`,
-          );
+      if (this.output?.name) {
+        const response = await api.deleteBranch({
+          path: {
+            organization: props.organizationId,
+            database: props.databaseName,
+            name: this.output.name,
+          },
+          throwOnError: false,
+        });
 
-          if (!response.ok && response.status !== 404) {
-            throw new Error(
-              `Failed to delete branch: ${response.statusText} ${await response.text()}`,
-            );
-          }
+        if (response.error && response.response.status !== 404) {
+          throw new Error(
+            `Failed to delete branch: ${response.error.message}`,
+            {
+              cause: response.error,
+            },
+          );
         }
-      } catch (error) {
-        console.error("Error deleting branch:", error);
-        throw error;
       }
       return this.destroy();
     }
 
-    try {
-      const parentBranchName = !props.parentBranch
-        ? "main"
-        : typeof props.parentBranch === "string"
-          ? props.parentBranch
-          : props.parentBranch.name;
-
-      if (typeof props.parentBranch !== "string" && props.parentBranch) {
-        await waitForDatabaseReady(
-          api,
-          props.organizationId,
-          props.databaseName,
-          props.parentBranch.name,
-        );
-      }
-
-      // Check if branch exists
-      const getResponse = await api.get(
-        `/organizations/${props.organizationId}/databases/${props.databaseName}/branches/${props.name}`,
+    if (typeof props.parentBranch !== "string" && props.parentBranch) {
+      await waitForBranchReady(
+        api,
+        props.organizationId,
+        props.databaseName,
+        props.parentBranch.name,
       );
+    }
 
-      if (!getResponse.ok && getResponse.status !== 404) {
-        // Error getting branch
+    // Check if branch exists
+    const getResponse = await api.getBranch({
+      path: {
+        organization: props.organizationId,
+        database: props.databaseName,
+        name: branchName,
+      },
+      throwOnError: false,
+    });
+
+    if (getResponse.error && getResponse.response.status !== 404) {
+      // Error getting branch
+      throw new Error(`Failed to get branch: ${getResponse.error.message}`, {
+        cause: getResponse.error,
+      });
+    }
+
+    if (getResponse.data) {
+      // Branch exists
+      if (!adopt) {
         throw new Error(
-          `Failed to get branch: ${getResponse.statusText} ${await getResponse.text()}`,
+          `Branch ${branchName} already exists and adopt is false`,
         );
       }
 
-      if (getResponse.ok) {
-        // Branch exists
-        if (!props.adopt) {
-          throw new Error(
-            `Branch ${props.name} already exists and adopt is false`,
-          );
-        }
+      const data = getResponse.data;
+      const currentParentBranch = data.parent_branch || "main";
 
-        const data = await getResponse.json<any>();
-        const currentParentBranch = data.parent_branch || "main";
+      // Check immutable properties
+      if (props.parentBranch && parentBranchName !== currentParentBranch) {
+        throw new Error(
+          `Cannot change parent branch from ${currentParentBranch} to ${parentBranchName}`,
+        );
+      }
+      if (this.output?.backupId) {
+        console.warn(
+          "BackupID is set, but branch already exists, so it will be ignored",
+        );
+      }
 
-        // Check immutable properties
-        if (props.parentBranch && parentBranchName !== currentParentBranch) {
-          throw new Error(
-            `Cannot change parent branch from ${currentParentBranch} to ${parentBranchName}`,
-          );
-        }
-        if (this.output?.backupId) {
-          console.warn(
-            "BackupID is set, but branch already exists, so it will be ignored",
-          );
-        }
+      if (this.output?.seedData) {
+        console.warn(
+          "SeedData is set, but branch already exists, so it will be ignored",
+        );
+      }
 
-        if (this.output?.seedData) {
-          console.warn(
-            "SeedData is set, but branch already exists, so it will be ignored",
-          );
-        }
-
-        // Update mutable properties if they've changed
-        if (props.safeMigrations !== undefined) {
-          const safeMigrationsResponse = await api[
-            props.safeMigrations ? "post" : "delete"
-          ](
-            `/organizations/${props.organizationId}/databases/${props.databaseName}/branches/${props.name}/safe-migrations`,
-          );
-
-          if (!safeMigrationsResponse.ok) {
-            throw new Error(
-              `Failed to ${props.safeMigrations ? "enable" : "disable"} safe migrations: ${safeMigrationsResponse.statusText}`,
-            );
-          }
-        }
-
-        if (props.clusterSize && data.cluster_size !== props.clusterSize) {
-          const clusterResponse = await api.patch(
-            `/organizations/${props.organizationId}/databases/${props.databaseName}/branches/${props.name}/cluster`,
-            {
-              cluster_size: props.clusterSize,
-            },
-          );
-
-          if (!clusterResponse.ok) {
-            throw new Error(
-              `Failed to update cluster size: ${clusterResponse.statusText}`,
-            );
-          }
-        }
-
-        return this({
-          ...props,
-          name: props.name,
-          parentBranch: currentParentBranch,
-          createdAt: data.created_at,
-          updatedAt: data.updated_at,
-          htmlUrl: data.html_url,
+      // Update mutable properties if they've changed
+      if (props.safeMigrations !== undefined) {
+        await api[
+          props.safeMigrations
+            ? "enableSafeMigrations"
+            : "disableSafeMigrations"
+        ]({
+          path: {
+            organization: props.organizationId,
+            database: props.databaseName,
+            name: branchName,
+          },
         });
       }
-      await waitForDatabaseReady(api, props.organizationId, props.databaseName);
 
-      // Branch doesn't exist, create it
-      const createResponse = await api.post(
-        `/organizations/${props.organizationId}/databases/${props.databaseName}/branches`,
-        {
-          name: props.name,
-          parent_branch: parentBranchName,
-          backup_id: props.backupId,
-          seed_data: props.seedData,
-          cluster_size: props.clusterSize,
-        },
-      );
-
-      if (!createResponse.ok) {
-        throw new Error(
-          `Failed to create branch: ${createResponse.statusText} ${await createResponse.text()}`,
-        );
-      }
-
-      const data = await createResponse.json<any>();
-
-      // Handle safe migrations if specified
-      if (props.safeMigrations !== undefined) {
-        // We can't change the migrations mode if the database is not ready
-        await waitForDatabaseReady(
-          api,
-          props.organizationId,
-          props.databaseName,
-          props.name,
-        );
-        const safeMigrationsResponse = await api[
-          props.safeMigrations ? "post" : "delete"
-        ](
-          `/organizations/${props.organizationId}/databases/${props.databaseName}/branches/${props.name}/safe-migrations`,
-        );
-
-        if (!safeMigrationsResponse.ok) {
+      const clusterSize = props.clusterSize
+        ? sanitizeClusterSize({
+            size: props.clusterSize,
+            kind: data.kind,
+            arch: data.cluster_architecture === "aarch64" ? "arm" : "x86",
+            region: data.region.slug,
+          })
+        : undefined;
+      if (clusterSize && data.cluster_name !== clusterSize) {
+        if (!props.isProduction) {
           throw new Error(
-            `Failed to ${props.safeMigrations ? "enable" : "disable"} safe migrations: ${safeMigrationsResponse.statusText} : ${await safeMigrationsResponse.text()}`,
+            `Cannot change cluster size of non-production branch ${branchName}`,
           );
         }
-      }
-
-      // Handle cluster size update if specified
-      if (props.clusterSize) {
-        // Wait for database to be ready before modifying cluster size
-        await fixClusterSize(
+        await ensureProductionBranchClusterSize(
           api,
           props.organizationId,
           props.databaseName,
-          props.name,
-          props.clusterSize,
-          true,
+          branchName,
+          data.kind,
+          clusterSize,
         );
       }
 
-      return this({
+      return {
         ...props,
-        name: props.name,
-        parentBranch: data.parent_branch,
+        name: branchName,
+        parentBranch: currentParentBranch,
         createdAt: data.created_at,
         updatedAt: data.updated_at,
         htmlUrl: data.html_url,
-      });
-    } catch (error) {
-      console.error("Error managing branch:", error);
-      throw error;
+      };
     }
+    let clusterSize: string | undefined;
+    const parent = await waitForBranchReady(
+      api,
+      props.organizationId,
+      props.databaseName,
+      parentBranchName,
+    );
+    if (props.clusterSize) {
+      clusterSize = sanitizeClusterSize({
+        size: props.clusterSize,
+        kind: parent.kind,
+        arch: parent.cluster_architecture === "aarch64" ? "arm" : "x86",
+        region: parent.region.slug,
+      });
+    }
+
+    // Branch doesn't exist, create it
+    const { data } = await api.createBranch({
+      path: {
+        organization: props.organizationId,
+        database: props.databaseName,
+      },
+      body: {
+        name: branchName,
+        parent_branch: parentBranchName,
+        backup_id: props.backupId,
+        seed_data: props.seedData,
+        // This is ignored unless props.backupId is provided
+        cluster_size: clusterSize,
+      },
+    });
+
+    // Handle safe migrations if specified
+    if (props.safeMigrations !== undefined) {
+      // We can't change the migrations mode if the branch is not ready
+      await waitForBranchReady(
+        api,
+        props.organizationId,
+        props.databaseName,
+        branchName,
+      );
+      await api[
+        props.safeMigrations ? "enableSafeMigrations" : "disableSafeMigrations"
+      ]({
+        path: {
+          organization: props.organizationId,
+          database: props.databaseName,
+          name: branchName,
+        },
+      });
+    }
+
+    // Handle cluster size update if specified
+    if (clusterSize) {
+      await ensureProductionBranchClusterSize(
+        api,
+        props.organizationId,
+        props.databaseName,
+        branchName,
+        data.kind,
+        clusterSize,
+      );
+    }
+
+    return {
+      ...props,
+      name: branchName,
+      parentBranch: data.parent_branch,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+      htmlUrl: data.html_url,
+    };
   },
 );

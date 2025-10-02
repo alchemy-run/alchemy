@@ -2,24 +2,26 @@ import { alchemy } from "../alchemy.ts";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
-import { logger } from "../util/logger.ts";
+import { diff } from "../util/diff.ts";
 import { lowercaseId } from "../util/nanoid.ts";
-import { PlanetScaleApi } from "./api.ts";
+import { createPlanetScaleClient, type PlanetScaleProps } from "./api.ts";
 import type { Branch } from "./branch.ts";
 import type { Database } from "./database.ts";
 
 /**
  * Properties for creating or updating a PlanetScale Branch
  */
-export interface PasswordProps {
+export interface PasswordProps extends PlanetScaleProps {
   /**
    * The name of the password
+   *
+   * @default ${app}-${stage}-${id}
    */
-  name: string;
+  name?: string;
 
   /**
    * The organization ID where the password will be created
-   * Required when using string database name, optional when using Database resource
+   * Required when using string database name, optional when using Database or Branch resource
    */
   organizationId?: string;
 
@@ -32,14 +34,9 @@ export interface PasswordProps {
   /**
    * The branch where the password will be created
    * Can be either a branch name (string) or Branch resource
-   * Defaults to "main" if not provided
+   * @default "main"
    */
   branch?: string | Branch;
-
-  /**
-   * PlanetScale API token (overrides environment variable)
-   */
-  apiKey?: Secret;
 
   /**
    * The password
@@ -65,13 +62,16 @@ export interface PasswordProps {
 /**
  * Represents a PlanetScale Branch
  */
-export interface Password
-  extends Resource<"planetscale::Password">,
-    PasswordProps {
+export interface Password extends PasswordProps {
   /**
    * The unique identifier for the password
    */
   id: string;
+
+  /**
+   * Name of the Password.
+   */
+  name: string;
 
   /**
    * The timestamp when the password expires (ISO 8601 format)
@@ -100,7 +100,9 @@ export interface Password
 }
 
 /**
- * Create and manage database passwords for PlanetScale branches. Database passwords provide secure access to your database with specific roles and permissions.
+ * Create and manage database passwords for PlanetScale MySQL branches. Database passwords provide secure access to your database with specific roles and permissions.
+ *
+ * For Postgres, use [Roles](./role.ts) instead.
  *
  * @example
  * ## Basic Reader Password
@@ -255,112 +257,103 @@ export const Password = Resource(
   "planetscale::Password",
   async function (
     this: Context<Password>,
-    _id: string,
+    id: string,
     props: PasswordProps,
   ): Promise<Password> {
-    const apiKey =
-      props.apiKey?.unencrypted || process.env.PLANETSCALE_API_TOKEN;
-    if (!apiKey) {
-      throw new Error("PLANETSCALE_API_TOKEN environment variable is required");
-    }
     const nameSlug = this.isReplacement
       ? lowercaseId()
       : (this.output?.nameSlug ?? lowercaseId());
-    const name = `${props.name.toLowerCase()}-${nameSlug}`;
+    const name = `${(props.name ?? this.output?.name ?? this.scope.createPhysicalName(id)).toLowerCase()}-${nameSlug}`;
 
-    const api = new PlanetScaleApi({ apiKey });
-    const branchName =
-      props.branch == null
-        ? "main"
-        : typeof props.branch === "string"
-          ? props.branch
-          : props.branch.name;
-    const databaseName =
+    const api = createPlanetScaleClient(props);
+    const database =
       typeof props.database === "string" ? props.database : props.database.name;
+    const branch =
+      typeof props.branch === "string"
+        ? props.branch
+        : (props.branch?.name ?? "main");
+    const organization =
+      props.organizationId ??
+      ((typeof props.branch !== "string" && props.branch?.organizationId) ||
+        (typeof props.database !== "string" && props.database.organizationId));
+
+    if (!organization) {
+      throw new Error("Organization ID is required");
+    }
 
     if (this.phase === "delete") {
-      try {
-        if (this.output?.name) {
-          const response = await api.delete(
-            `/organizations/${props.organizationId}/databases/${databaseName}/branches/${branchName}/passwords/${this.output.id}`,
-          );
+      if (this.output?.id) {
+        const res = await api.deletePassword({
+          path: {
+            organization,
+            database,
+            branch,
+            id: this.output.id,
+          },
+          throwOnError: false,
+        });
 
-          if (!response.ok && response.status !== 404) {
-            throw new Error(
-              `Failed to delete branch: ${response.statusText} ${await response.text()}`,
-            );
-          }
+        if (res.error && res.response.status !== 404) {
+          throw new Error(`Failed to delete branch "${branch}"`, {
+            cause: res.error,
+          });
         }
-      } catch (error) {
-        logger.error("Error deleting password:", error);
-        throw error;
       }
       return this.destroy();
     }
     if (this.phase === "update") {
+      // Only name and cidrs can be updated in place; all other properties require replacement.
       if (
-        this.output?.name === name &&
-        ((this.output?.cidrs === undefined && props.cidrs === undefined) ||
-          (Array.isArray(this.output?.cidrs) &&
-            Array.isArray(props.cidrs) &&
-            this.output.cidrs.length === props.cidrs.length &&
-            this.output.cidrs.every((cidr, i) => cidr === props.cidrs![i])))
+        diff({ ...props, name }, this.output).some(
+          (prop) => prop !== "name" && prop !== "cidrs",
+        )
       ) {
         return this.replace();
       }
-      const updateResponse = await api.patch(
-        `/organizations/${props.organizationId}/databases/${databaseName}/branches/${branchName}/passwords/${this.output.id}`,
-        {
+      await api.updatePassword({
+        path: {
+          organization,
+          database,
+          branch,
+          id: this.output.id,
+        },
+        body: {
           name,
           cidrs: props.cidrs,
         },
-      );
+      });
 
-      if (!updateResponse.ok) {
-        throw new Error(
-          `Failed to update password: ${updateResponse.statusText} ${await updateResponse.text()}`,
-        );
-      }
-
-      return this({
+      return {
         ...this.output,
         ...props,
-      });
+        name,
+      };
     }
 
-    try {
-      const createResponse = await api.post(
-        `/organizations/${props.organizationId}/databases/${databaseName}/branches/${branchName}/passwords`,
-        {
-          name,
-          role: props.role,
-          replica: props.replica,
-          ttl: props.ttl,
-          cidrs: props.cidrs,
-        },
-      );
+    const { data } = await api.createPassword({
+      path: {
+        organization,
+        database,
+        branch,
+      },
+      body: {
+        name,
+        role: props.role,
+        replica: props.replica,
+        ttl: props.ttl,
+        cidrs: props.cidrs,
+      },
+    });
 
-      if (!createResponse.ok) {
-        throw new Error(
-          `Failed to create password: ${createResponse.statusText} ${await createResponse.text()}`,
-        );
-      }
-
-      const data = await createResponse.json<any>();
-
-      return this({
-        id: data.id,
-        expiresAt: data.expires_at,
-        host: data.access_host_url,
-        username: data.username,
-        password: alchemy.secret(data.plain_text),
-        nameSlug,
-        ...props,
-        name: `${props.name}-${nameSlug}`,
-      });
-    } catch (error) {
-      logger.error("Error managing password:", error);
-      throw error;
-    }
+    return {
+      id: data.id,
+      expiresAt: data.expires_at,
+      host: data.access_host_url,
+      username: data.username,
+      password: alchemy.secret(data.plain_text),
+      nameSlug,
+      ...props,
+      name: `${props.name}-${nameSlug}`,
+    };
   },
 );

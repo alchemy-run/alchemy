@@ -40,7 +40,7 @@ export interface QueueProps extends CloudflareApiOptions {
    * Required during creation
    * Cannot be changed after creation
    *
-   * @default id
+   * @default ${app}-${stage}-${id}
    */
   name?: string;
 
@@ -100,56 +100,55 @@ export function isQueue(eventSource: any): eventSource is Queue {
 /**
  * Output returned after Cloudflare Queue creation/update
  */
-export type Queue<Body = unknown> = Resource<"cloudflare::Queue"> &
-  Omit<QueueProps, "dev"> & {
-    /**
-     * Type identifier for Cloudflare Queue
-     */
-    type: "queue";
+export type Queue<Body = unknown> = Omit<QueueProps, "dev"> & {
+  /**
+   * Type identifier for Cloudflare Queue
+   */
+  type: "queue";
 
+  /**
+   * The unique ID of the queue
+   */
+  id: string;
+
+  /**
+   * The name of the queue
+   */
+  name: string;
+
+  /**
+   * Time when the queue was created
+   */
+  createdOn: string;
+
+  /**
+   * Modified timestamp
+   */
+  modifiedOn: string;
+
+  /**
+   * Phantom property to allow type inference
+   */
+  Body: Body;
+
+  Batch: MessageBatch<Body>;
+
+  /**
+   * Development mode properties
+   * @internal
+   */
+  dev: {
     /**
-     * The unique ID of the queue
+     * The ID of the queue in development mode
      */
     id: string;
 
     /**
-     * The name of the queue
+     * Whether the queue is running remotely
      */
-    name: string;
-
-    /**
-     * Time when the queue was created
-     */
-    createdOn: string;
-
-    /**
-     * Modified timestamp
-     */
-    modifiedOn: string;
-
-    /**
-     * Phantom property to allow type inference
-     */
-    Body: Body;
-
-    Batch: MessageBatch<Body>;
-
-    /**
-     * Development mode properties
-     * @internal
-     */
-    dev: {
-      /**
-       * The ID of the queue in development mode
-       */
-      id: string;
-
-      /**
-       * Whether the queue is running remotely
-       */
-      remote: boolean;
-    };
+    remote: boolean;
   };
+};
 
 /**
  * Creates and manages Cloudflare Queues.
@@ -248,13 +247,15 @@ const _Queue = Resource("cloudflare::Queue", async function <
 >(this: Context<Queue<T>>, id: string, props: QueueProps = {}): Promise<
   Queue<T>
 > {
-  const queueName = props.name ?? id;
+  const queueName =
+    props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
+
   const dev = {
     id: this.output?.dev?.id ?? this.output?.id ?? id,
     remote: props.dev?.remote ?? false,
   };
   if (this.scope.local && !props.dev?.remote) {
-    return this({
+    return {
       type: "queue",
       id: this.output?.id ?? "",
       name: queueName,
@@ -263,7 +264,7 @@ const _Queue = Resource("cloudflare::Queue", async function <
       modifiedOn: this.output?.modifiedOn ?? new Date().toISOString(),
       Body: undefined as T,
       Batch: undefined! as MessageBatch<T>,
-    });
+    };
   }
 
   const api = await createCloudflareApi(props);
@@ -285,7 +286,7 @@ const _Queue = Resource("cloudflare::Queue", async function <
       queueData = await createQueue(api, queueName, props);
     } catch (error) {
       if (error instanceof CloudflareApiError && error.status === 409) {
-        if (!props.adopt) {
+        if (!(props.adopt ?? this.scope.adopt)) {
           throw error;
         }
         // Queue already exists, try to find it by name
@@ -296,7 +297,10 @@ const _Queue = Resource("cloudflare::Queue", async function <
           );
         }
         queueData = existingQueue;
-        queueData = await updateQueue(api, queueData.result.queue_id!, props);
+        queueData = await updateQueue(api, queueData.result.queue_id!, {
+          ...props,
+          name: queueName,
+        });
       } else {
         throw error;
       }
@@ -304,22 +308,18 @@ const _Queue = Resource("cloudflare::Queue", async function <
   } else {
     // Update operation
     if (this.output?.id) {
-      // Check if name is being changed, which is not allowed
-      if (queueName !== this.output.name) {
-        throw new Error(
-          `Cannot update Queue name after creation. Queue name is immutable. Before: ${this.output.name}, After: ${queueName}`,
-        );
-      }
-
       // Update the queue with new settings
-      queueData = await updateQueue(api, this.output.id, props);
+      queueData = await updateQueue(api, this.output.id, {
+        ...props,
+        name: queueName,
+      });
     } else {
       // If no ID exists, fall back to creating a new queue
       queueData = await createQueue(api, queueName, props);
     }
   }
 
-  return this({
+  return {
     type: "queue",
     id: queueData.result.queue_id || "",
     name: queueName,
@@ -339,7 +339,7 @@ const _Queue = Resource("cloudflare::Queue", async function <
     // phantom properties
     Body: undefined as T,
     Batch: undefined! as MessageBatch<T>,
-  });
+  };
 });
 
 interface CloudflareQueueResponse {
@@ -452,10 +452,21 @@ export async function deleteQueue(
 export async function updateQueue(
   api: CloudflareApi,
   queueId: string,
-  props: QueueProps,
+  props: QueueProps & {
+    name: string;
+  },
 ): Promise<CloudflareQueueResponse> {
   // Prepare the update payload - only include settings
-  const updatePayload: any = {};
+  const updatePayload: {
+    queue_name?: string;
+    settings?: {
+      delivery_delay?: number;
+      delivery_paused?: boolean;
+      message_retention_period?: number;
+    };
+  } = {
+    queue_name: props.name,
+  };
 
   // Add settings if provided
   if (props.settings) {

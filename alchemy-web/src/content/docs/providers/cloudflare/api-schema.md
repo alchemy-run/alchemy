@@ -6,7 +6,7 @@ description: Manage OpenAPI v3 schemas for Cloudflare API Gateway validation
 Cloudflare's API Gateway Schema resource allows you to upload and manage OpenAPI v3 schemas for API validation. These schemas define the structure and validation rules for your API endpoints, enabling Cloudflare to validate incoming requests against your API specification.
 
 :::caution
-You should use [`APIShield`](/providers/cloudflare/api-shield.md) instead of `APISchema` for most use cases. It will create and manage the `APISchema` and [`APIGatewayOperation`](/providers/cloudflare/api-gateway-operation.md) resources for you.
+You should use [`APIShield`](/providers/cloudflare/api-shield/) instead of `APISchema` for most use cases. It will create and manage the `APISchema` and [`APIGatewayOperation`](/providers/cloudflare/api-gateway-operation/) resources for you.
 :::
 
 ## Basic Schema Upload

@@ -47,6 +47,7 @@ describe("Website Resource", () => {
 
       // Create website with url: false (disable workers.dev subdomain)
       const website = await Website(name, {
+        name,
         entrypoint,
         assets: distDir,
         url: false, // Explicitly disable workers.dev URL
@@ -120,6 +121,7 @@ describe("Website Resource", () => {
 
       // Create website with cwd pointing to subdirectory
       const website = await Website(name, {
+        name,
         cwd: subDir,
         entrypoint,
         assets: distDir, // Use absolute path for assets
@@ -190,6 +192,7 @@ describe("Website Resource", () => {
 
       // Create website with cwd and custom wrangler filename
       const website = await Website(name, {
+        name,
         cwd: subDir,
         entrypoint,
         assets: path.resolve(distDir), // Use absolute path for assets
@@ -244,6 +247,7 @@ describe("Website Resource", () => {
 
       // Create website without specifying cwd (should use process.cwd())
       const website = await Website(name, {
+        name,
         entrypoint,
         assets: path.join(tempDir, "dist"), // Use absolute path since no cwd specified
         adopt: true,
@@ -306,6 +310,7 @@ describe("Website Resource", () => {
 
       // Create website with transform.wrangler hook
       const website = await Website(name, {
+        name,
         cwd: tempDir,
         entrypoint,
         assets: distDir,

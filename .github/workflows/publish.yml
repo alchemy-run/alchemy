@@ -47,8 +47,10 @@ jobs:
             alchemy-web/.astro
           key: astro-cache-${{ steps.astro-version.outputs.version }}
 
-      - name: Check Types
-        run: bun run check
+      - name: Check Types and Lint
+        run: | 
+          bun run build
+          bun run check
 
       - name: Deploy Website
         id: deploy

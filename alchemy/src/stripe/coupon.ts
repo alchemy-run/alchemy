@@ -89,7 +89,7 @@ export interface CouponProps {
 /**
  * Output from the Stripe coupon
  */
-export interface Coupon extends Resource<"stripe::Coupon">, CouponProps {
+export interface Coupon extends CouponProps {
   /**
    * The ID of the coupon
    */
@@ -163,6 +163,7 @@ export const Coupon = Resource(
     _id: string,
     props: CouponProps,
   ): Promise<Coupon> {
+    const adopt = props.adopt ?? this.scope.adopt;
     const stripe = await createStripeClient({ apiKey: props.apiKey });
 
     if (this.phase === "delete") {
@@ -217,7 +218,7 @@ export const Coupon = Resource(
           try {
             coupon = await stripe.coupons.create(createParams);
           } catch (error) {
-            if (isStripeConflictError(error) && props.adopt) {
+            if (isStripeConflictError(error) && adopt) {
               if (props.id) {
                 const existingCoupon = await stripe.coupons.retrieve(props.id);
                 const updateParams: Stripe.CouponUpdateParams = {
@@ -236,7 +237,7 @@ export const Coupon = Resource(
             }
           }
         } catch (error) {
-          if (isStripeConflictError(error) && props.adopt) {
+          if (isStripeConflictError(error) && adopt) {
             if (props.id) {
               const existingCoupon = await stripe.coupons.retrieve(props.id);
               const updateParams: Stripe.CouponUpdateParams = {
@@ -256,7 +257,7 @@ export const Coupon = Resource(
         }
       }
 
-      return this({
+      return {
         id: coupon.id,
         object: coupon.object,
         duration: coupon.duration as CouponDuration,
@@ -272,7 +273,7 @@ export const Coupon = Resource(
         metadata: coupon.metadata || undefined,
         created: coupon.created,
         livemode: coupon.livemode,
-      });
+      };
     } catch (error) {
       logger.error("Error creating/updating coupon:", error);
       throw error;

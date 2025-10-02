@@ -36,6 +36,8 @@ export async function copyTemplate(
     const files = await globby("**/*", {
       cwd: templatePath,
       dot: true,
+      followSymbolicLinks: false,
+      gitignore: true,
     });
 
     for (const file of files) {

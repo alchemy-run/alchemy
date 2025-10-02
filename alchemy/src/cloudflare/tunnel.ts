@@ -49,7 +49,7 @@ export interface TunnelProps extends CloudflareApiOptions {
    * Note: Tunnel names are immutable and cannot be changed after creation.
    * When updating a tunnel, any name change will be ignored.
    *
-   * @default id
+   * @default ${app}-${stage}-${id}
    */
   name?: string;
 
@@ -264,16 +264,19 @@ export interface OriginRequestConfig {
   tcpKeepAliveInterval?: number;
 }
 
-export function isTunnel(resource: Resource): resource is Tunnel {
-  return resource[ResourceKind] === "cloudflare::Tunnel";
+export function isTunnel(resource: any): resource is Tunnel {
+  return resource?.[ResourceKind] === "cloudflare::Tunnel";
 }
 
 /**
  * Output returned after Tunnel creation/update
  */
-export interface Tunnel
-  extends Resource<"cloudflare::Tunnel">,
-    Omit<TunnelProps, "delete" | "tunnelSecret"> {
+export interface Tunnel extends Omit<TunnelProps, "delete" | "tunnelSecret"> {
+  /**
+   * The name of the tunnel
+   */
+  name: string;
+
   /**
    * The ID of the tunnel
    */
@@ -488,7 +491,13 @@ export const Tunnel = Resource(
     // Create Cloudflare API client with automatic account discovery
     const api = await createCloudflareApi(props);
 
-    const name = props.name ?? id;
+    const name =
+      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
+
+    if (this.phase === "update" && this.output.name !== name) {
+      console.log("replacing tunnel", this.output.name, name);
+      this.replace(true);
+    }
 
     if (this.phase === "delete") {
       // For delete operations, check if the tunnel ID exists in the output
@@ -656,7 +665,7 @@ export const Tunnel = Resource(
     }
 
     // Transform API response to our interface
-    return this({
+    return {
       tunnelId: tunnelData.id,
       accountTag: tunnelData.account_tag,
       name: tunnelData.name,
@@ -686,7 +695,7 @@ export const Tunnel = Resource(
       originRequest: props.originRequest,
       configSrc: props.configSrc,
       dnsRecords: Object.keys(dnsRecords).length > 0 ? dnsRecords : undefined,
-    });
+    };
   },
 );
 

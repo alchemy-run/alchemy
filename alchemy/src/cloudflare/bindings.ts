@@ -4,17 +4,17 @@
  * https://developers.cloudflare.com/api/resources/workers/subresources/scripts/methods/update/
  */
 import type { Secret } from "../secret.ts";
-import type { AiGateway } from "./ai-gateway.ts";
 import type { Ai } from "./ai.ts";
 import type { AnalyticsEngineDataset } from "./analytics-engine.ts";
 import type { Assets } from "./assets.ts";
 import type { Bound } from "./bound.ts";
 import type { BrowserRendering } from "./browser-rendering.ts";
-import type { R2Bucket } from "./bucket.ts";
+import type { R2Bucket, R2BucketJurisdiction } from "./bucket.ts";
 import type { Container } from "./container.ts";
 import type { D1Database } from "./d1-database.ts";
 import type { DispatchNamespace } from "./dispatch-namespace.ts";
 import type { DurableObjectNamespace } from "./durable-object-namespace.ts";
+import type { HyperdriveRef } from "./hyperdrive-ref.ts";
 import type { Hyperdrive } from "./hyperdrive.ts";
 import type { Images } from "./images.ts";
 import type { KVNamespace } from "./kv-namespace.ts";
@@ -22,6 +22,7 @@ import type { Pipeline } from "./pipeline.ts";
 import type { Queue } from "./queue.ts";
 import type { RateLimit } from "./rate-limit.ts";
 import type { SecretKey } from "./secret-key.ts";
+import type { SecretRef as CloudflareSecretRef } from "./secret-ref.ts";
 import type { Secret as CloudflareSecret } from "./secret.ts";
 import type { VectorizeIndex } from "./vectorize-index.ts";
 import type { VersionMetadata } from "./version-metadata.ts";
@@ -45,15 +46,16 @@ export declare namespace Bindings {
  */
 export type Binding =
   | Ai
-  | AiGateway
   | Assets
   | Container
   | CloudflareSecret
+  | CloudflareSecretRef
   | D1Database
   | DispatchNamespace
   | AnalyticsEngineDataset
   | DurableObjectNamespace<any>
   | Hyperdrive
+  | HyperdriveRef
   | Images
   | KVNamespace
   | Pipeline
@@ -71,14 +73,27 @@ export type Binding =
   | Worker
   | WorkerStub
   | WorkerRef
+  | WorkerEntrypoint
   | Workflow
   | BrowserRendering
   | VersionMetadata
   | Self
   | Json;
 
-export type Self = typeof Self;
-export const Self = Symbol.for("Self");
+export type Self<
+  RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
+> = {
+  type: "cloudflare::Worker::Self";
+  __entrypoint__?: string;
+  __rpc__?: RPC;
+};
+export const Self = {
+  type: "cloudflare::Worker::Self",
+} as const;
+
+export type WorkerEntrypoint = (Worker | WorkerRef) & {
+  __entrypoint__?: string;
+};
 
 export type Json<T = any> = {
   type: "json";
@@ -317,6 +332,8 @@ export interface WorkerBindingR2Bucket {
   type: "r2_bucket";
   /** Bucket name */
   bucket_name: string;
+  /** Jurisdiction */
+  jurisdiction?: R2BucketJurisdiction;
 }
 
 /**
@@ -399,6 +416,8 @@ export interface WorkerBindingService {
   environment?: string;
   /** Service namespace */
   namespace?: string;
+  /** Service entrypoint */
+  entrypoint?: string;
 }
 
 /**

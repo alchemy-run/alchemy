@@ -11,8 +11,10 @@ export interface QueueProps {
   /**
    * Name of the queue
    * For FIFO queues, the name must end with the .fifo suffix
+   *
+   * @default ${app}-${stage}-${id}?.fifo
    */
-  queueName: string;
+  queueName?: string;
 
   /**
    * Whether this is a FIFO queue.
@@ -77,11 +79,16 @@ export interface QueueProps {
 /**
  * Output returned after SQS queue creation/update
  */
-export interface Queue extends Resource<"sqs::Queue">, QueueProps {
+export interface Queue extends QueueProps {
   /**
    * ARN of the queue
    */
   arn: string;
+
+  /**
+   * Name of the Queue
+   */
+  queueName: string;
 
   /**
    * URL of the queue
@@ -132,7 +139,7 @@ export const Queue = Resource(
   "sqs::Queue",
   async function (
     this: Context<Queue>,
-    _id: string,
+    id: string,
     props: QueueProps,
   ): Promise<Queue> {
     const {
@@ -146,11 +153,18 @@ export const Queue = Resource(
     } = await importPeer(import("@aws-sdk/client-sqs"), "sqs::Queue");
     const client = new SQSClient({});
     // Don't automatically add .fifo suffix - user must include it in queueName
-    const queueName = props.queueName;
+    const queueName =
+      props.queueName ??
+      this.output?.queueName ??
+      `${this.scope.createPhysicalName(id)}${props.fifo ? ".fifo" : ""}`;
 
-    // Validate that FIFO queues have .fifo suffix
     if (props.fifo && !queueName.endsWith(".fifo")) {
+      // Validate that FIFO queues have .fifo suffix
       throw new Error("FIFO queue names must end with .fifo suffix");
+    }
+
+    if (this.phase === "update" && this.output.queueName !== queueName) {
+      this.replace();
     }
 
     if (this.phase === "delete") {
@@ -269,11 +283,12 @@ export const Queue = Resource(
         ),
       );
 
-      return this({
+      return {
         ...props,
         arn: attributesResponse.Attributes!.QueueArn!,
+        queueName,
         url: createResponse.QueueUrl!,
-      });
+      };
     } catch (error: any) {
       if (isQueueDeletedRecently(error)) {
         logger.log(
@@ -309,11 +324,12 @@ export const Queue = Resource(
               ),
             );
 
-            return this({
+            return {
               ...props,
               arn: attributesResponse.Attributes!.QueueArn!,
+              queueName,
               url: createResponse.QueueUrl!,
-            });
+            };
           } catch (retryError: any) {
             if (
               !isQueueDeletedRecently(retryError) ||

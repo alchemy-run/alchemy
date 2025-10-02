@@ -142,16 +142,14 @@ describe("WranglerJson Resource", () => {
         await fs.writeFile(entrypoint, esmWorkerScript);
 
         const worker = await Worker(name, {
+          name,
           format: "esm",
           entrypoint,
           compatibilityFlags: ["nodejs_compat"],
           adopt: true,
         });
 
-        const { spec } = await WranglerJson(
-          `${BRANCH_PREFIX}-test-wrangler-json-1`,
-          { worker },
-        );
+        const { spec } = await WranglerJson({ worker });
 
         expect(spec).toMatchObject({
           name,
@@ -170,15 +168,14 @@ describe("WranglerJson Resource", () => {
 
       try {
         const worker = await Worker(name, {
+          name,
           format: "esm",
           script: esmWorkerScript,
           adopt: true,
         });
 
-        const id = `${BRANCH_PREFIX}-test-wrangler-json-2`;
-
         await expect(
-          async () => await WranglerJson(id, { worker }),
+          async () => await WranglerJson({ worker }),
         ).rejects.toThrow(
           "Worker must have an entrypoint to generate a wrangler.json",
         );
@@ -199,6 +196,7 @@ describe("WranglerJson Resource", () => {
         await fs.writeFile(entrypoint, esmWorkerScript);
 
         const worker = await Worker(name, {
+          name,
           format: "esm",
           entrypoint,
           bindings: {
@@ -207,10 +205,7 @@ describe("WranglerJson Resource", () => {
           adopt: true,
         });
 
-        const { spec } = await WranglerJson(
-          `${BRANCH_PREFIX}-test-wrangler-json-browser`,
-          { worker },
-        );
+        const { spec } = await WranglerJson({ worker });
 
         expect(spec).toMatchObject({
           name,
@@ -237,6 +232,7 @@ describe("WranglerJson Resource", () => {
         await fs.writeFile(entrypoint, esmWorkerScript);
 
         const worker = await Worker(name, {
+          name,
           format: "esm",
           entrypoint,
           bindings: {
@@ -245,10 +241,7 @@ describe("WranglerJson Resource", () => {
           adopt: true,
         });
 
-        const { spec } = await WranglerJson(
-          `${BRANCH_PREFIX}-test-wrangler-json-ai`,
-          { worker },
-        );
+        const { spec } = await WranglerJson({ worker });
 
         expect(spec).toMatchObject({
           name,
@@ -291,6 +284,7 @@ describe("WranglerJson Resource", () => {
         );
 
         const worker = await Worker(name, {
+          name,
           format: "esm",
           entrypoint,
           bindings: {
@@ -300,10 +294,7 @@ describe("WranglerJson Resource", () => {
           adopt: true,
         });
 
-        const { spec } = await WranglerJson(
-          `${BRANCH_PREFIX}-test-wrangler-json-do`,
-          { worker },
-        );
+        const { spec } = await WranglerJson({ worker });
 
         // Verify the worker name and entrypoint
         expect(spec).toMatchObject({
@@ -367,6 +358,7 @@ describe("WranglerJson Resource", () => {
         });
 
         const worker = await Worker(name, {
+          name,
           format: "esm",
           entrypoint,
           bindings: {
@@ -375,10 +367,7 @@ describe("WranglerJson Resource", () => {
           adopt: true,
         });
 
-        const { spec } = await WranglerJson(
-          `${BRANCH_PREFIX}-test-wrangler-json-wf`,
-          { worker },
-        );
+        const { spec } = await WranglerJson({ worker });
 
         expect(spec.workflows).toHaveLength(1);
         expect(spec.workflows?.[0]).toMatchObject({
@@ -404,16 +393,14 @@ describe("WranglerJson Resource", () => {
         await fs.writeFile(entrypoint, esmWorkerScript);
 
         const worker = await Worker(name, {
+          name,
           format: "esm",
           entrypoint,
           crons: ["*/3 * * * *", "0 15 1 * *", "59 23 LW * *"],
           adopt: true,
         });
 
-        const { spec } = await WranglerJson(
-          `${BRANCH_PREFIX}-test-wrangler-json-cron`,
-          { worker },
-        );
+        const { spec } = await WranglerJson({ worker });
 
         expect(spec.triggers).toMatchObject({
           crons: worker.crons!,
@@ -440,6 +427,7 @@ describe("WranglerJson Resource", () => {
         });
 
         const worker = await Worker(name, {
+          name,
           format: "esm",
           entrypoint,
           bindings: {
@@ -448,10 +436,7 @@ describe("WranglerJson Resource", () => {
           adopt: true,
         });
 
-        const { spec } = await WranglerJson(
-          `${BRANCH_PREFIX}-test-wrangler-json-kv-preview`,
-          { worker },
-        );
+        const { spec } = await WranglerJson({ worker });
 
         expect(spec.kv_namespaces).toHaveLength(1);
         expect(spec.kv_namespaces?.[0]).toMatchObject({
@@ -475,9 +460,12 @@ describe("WranglerJson Resource", () => {
         await fs.mkdir(tempDir, { recursive: true });
         await fs.writeFile(entrypoint, esmWorkerScript);
 
-        const d1Database = await D1Database(`${BRANCH_PREFIX}-test-d1-db`);
+        const d1Database = await D1Database(`${BRANCH_PREFIX}-test-d1-db`, {
+          adopt: true,
+        });
 
         const worker = await Worker(name, {
+          name,
           format: "esm",
           entrypoint,
           bindings: {
@@ -486,10 +474,7 @@ describe("WranglerJson Resource", () => {
           adopt: true,
         });
 
-        const { spec } = await WranglerJson(
-          `${BRANCH_PREFIX}-test-wrangler-json-d1-preview`,
-          { worker },
-        );
+        const { spec } = await WranglerJson({ worker });
 
         expect(spec.d1_databases).toHaveLength(1);
         expect(spec.d1_databases?.[0]).toMatchObject({
@@ -514,11 +499,16 @@ describe("WranglerJson Resource", () => {
         await fs.mkdir(tempDir, { recursive: true });
         await fs.writeFile(entrypoint, esmWorkerScript);
 
-        const r2Bucket = await R2Bucket(`${BRANCH_PREFIX}-test-r2-bucket`, {
-          adopt: true,
-        });
+        const r2Bucket = await R2Bucket(
+          `${BRANCH_PREFIX}-test-r2-bucket-preview`,
+          {
+            name: `${BRANCH_PREFIX}-test-r2-bucket-preview`,
+            adopt: true,
+          },
+        );
 
         const worker = await Worker(name, {
+          name,
           format: "esm",
           entrypoint,
           bindings: {
@@ -527,16 +517,55 @@ describe("WranglerJson Resource", () => {
           adopt: true,
         });
 
-        const { spec } = await WranglerJson(
-          `${BRANCH_PREFIX}-test-wrangler-json-r2-preview`,
-          { worker },
-        );
+        const { spec } = await WranglerJson({ worker });
 
         expect(spec.r2_buckets).toHaveLength(1);
         expect(spec.r2_buckets?.[0]).toMatchObject({
           binding: "BUCKET",
           bucket_name: r2Bucket.name,
           preview_bucket_name: r2Bucket.name,
+        });
+      } finally {
+        await fs.rm(tempDir, { recursive: true, force: true });
+        await destroy(scope);
+      }
+    });
+    test("with R2 bucket - includes jurisdiction", async (scope) => {
+      const name = `${BRANCH_PREFIX}-test-worker-r2-jurisdiction`;
+      const tempDir = path.join(".out", "alchemy-r2-jurisdiction-test");
+      const entrypoint = path.join(tempDir, "worker.ts");
+
+      try {
+        await fs.rm(tempDir, { recursive: true, force: true });
+        await fs.mkdir(tempDir, { recursive: true });
+        await fs.writeFile(entrypoint, esmWorkerScript);
+
+        const r2Bucket = await R2Bucket(
+          `${BRANCH_PREFIX}-test-r2-bucket-jurisdiction`,
+          {
+            name: `${BRANCH_PREFIX}-test-r2-bucket-jurisdiction`,
+            jurisdiction: "eu",
+            adopt: true,
+          },
+        );
+
+        const worker = await Worker(name, {
+          name,
+          format: "esm",
+          entrypoint,
+          bindings: {
+            BUCKET: r2Bucket,
+          },
+          adopt: true,
+        });
+
+        const { spec } = await WranglerJson({ worker });
+
+        expect(spec.r2_buckets).toHaveLength(1);
+        expect(spec.r2_buckets?.[0]).toMatchObject({
+          binding: "BUCKET",
+          bucket_name: r2Bucket.name,
+          jurisdiction: "eu",
         });
       } finally {
         await fs.rm(tempDir, { recursive: true, force: true });
@@ -560,21 +589,19 @@ describe("WranglerJson Resource", () => {
         await fs.writeFile(indexHtml, "<html><body>Hello World</body></html>");
 
         const worker = await Worker(name, {
+          name,
           format: "esm",
           entrypoint: "src/worker.ts",
           cwd: tempDir,
           adopt: true,
           bindings: {
-            ASSETS: await Assets(`${name}-assets`, {
+            ASSETS: await Assets({
               path: assetsDir,
             }),
           },
         });
 
-        const { spec } = await WranglerJson(
-          `${BRANCH_PREFIX}-test-wrangler-json-cwd`,
-          { worker },
-        );
+        const { spec } = await WranglerJson({ worker });
 
         expect(spec.main).toBe("src/worker.ts");
         expect(spec.assets).toMatchObject({
@@ -605,12 +632,15 @@ describe("WranglerJson Resource", () => {
       await fs.writeFile(entrypoint, esmWorkerScript);
 
       const worker = await Worker(name, {
+        name,
         format: "esm",
         entrypoint,
         bindings: {
           AI: Ai(),
           BROWSER: BrowserRendering(),
-          DISPATCH: await DispatchNamespace("dispatch"),
+          DISPATCH: await DispatchNamespace("dispatch", {
+            adopt: true,
+          }),
           IMAGES: Images(),
           VECTORIZE: await VectorizeIndex("vector", {
             name: "vector",
@@ -622,10 +652,7 @@ describe("WranglerJson Resource", () => {
         adopt: true,
       });
 
-      const { spec } = await WranglerJson(
-        `${BRANCH_PREFIX}-test-wrangler-json-recommended-remote`,
-        { worker },
-      );
+      const { spec } = await WranglerJson({ worker });
 
       expect(spec).toMatchObject({
         name,
@@ -655,29 +682,30 @@ describe("WranglerJson Resource", () => {
       await fs.writeFile(entrypoint, esmWorkerScript);
 
       const worker = await Worker(name, {
+        name,
         format: "esm",
         entrypoint,
         adopt: true,
         bindings: {
           D1: await D1Database(`${BRANCH_PREFIX}-test-d1-db-dev-remote`, {
+            name: `${BRANCH_PREFIX}-test-d1-db-dev-remote`,
             adopt: true,
             dev: { remote: true },
           }),
           KV: await KVNamespace(`${BRANCH_PREFIX}-test-kv-ns-dev-remote`, {
+            title: `${BRANCH_PREFIX}-test-kv-ns-dev-remote`,
             adopt: true,
             dev: { remote: true },
           }),
           R2: await R2Bucket(`${BRANCH_PREFIX}-test-r2-bucket-dev-remote`, {
+            name: `${BRANCH_PREFIX}-test-r2-bucket-dev-remote`,
             adopt: true,
             dev: { remote: true },
           }),
         },
       });
 
-      const { spec } = await WranglerJson(
-        `${BRANCH_PREFIX}-test-wrangler-json-dev-remote`,
-        { worker },
-      );
+      const { spec } = await WranglerJson({ worker });
 
       expect(spec).toMatchObject({
         name,
@@ -702,22 +730,19 @@ describe("WranglerJson Resource", () => {
       await fs.mkdir(tempDir, { recursive: true });
       await fs.writeFile(entrypoint, esmWorkerScript);
 
-      const { spec } = await WranglerJson(
-        `${BRANCH_PREFIX}-test-wrangler-json-placement-limits`,
-        {
-          worker: {
-            name,
-            format: "esm",
-            entrypoint,
-            placement: {
-              mode: "smart",
-            },
-            limits: {
-              cpu_ms: 60000,
-            },
+      const { spec } = await WranglerJson({
+        worker: {
+          name,
+          format: "esm",
+          entrypoint,
+          placement: {
+            mode: "smart",
+          },
+          limits: {
+            cpu_ms: 60000,
           },
         },
-      );
+      });
 
       expect(spec).toMatchObject({
         name,
@@ -752,6 +777,7 @@ describe("WranglerJson Resource", () => {
       });
 
       const worker = await Worker(name, {
+        name,
         format: "esm",
         entrypoint,
         eventSources: [
@@ -769,18 +795,15 @@ describe("WranglerJson Resource", () => {
         adopt: true,
       });
 
-      const { spec } = await WranglerJson(
-        `${BRANCH_PREFIX}-test-wrangler-json-queue-event-source`,
-        { worker },
-      );
+      const { spec } = await WranglerJson({ worker });
 
       expect(spec.queues?.consumers).toHaveLength(1);
-      expect(spec.queues?.consumers[0]).toMatchObject({
+      expect(spec.queues?.consumers?.[0]).toMatchObject({
         queue: queue.name, // Should use queue name, not ID
         max_batch_size: 25,
         max_concurrency: 5,
         max_retries: 3,
-        max_wait_time_ms: 1500,
+        max_batch_timeout: 1.5,
         retry_delay: 45,
       });
     } finally {
@@ -807,19 +830,17 @@ describe("WranglerJson Resource", () => {
       });
 
       const worker = await Worker(name, {
+        name,
         format: "esm",
         entrypoint,
         eventSources: [queue], // Direct queue as event source
         adopt: true,
       });
 
-      const { spec } = await WranglerJson(
-        `${BRANCH_PREFIX}-test-wrangler-json-direct-queue`,
-        { worker },
-      );
+      const { spec } = await WranglerJson({ worker });
 
       expect(spec.queues?.consumers).toHaveLength(1);
-      expect(spec.queues?.consumers[0]).toMatchObject({
+      expect(spec.queues?.consumers?.[0]).toMatchObject({
         queue: queue.name, // Should use queue name, not ID
       });
     } finally {

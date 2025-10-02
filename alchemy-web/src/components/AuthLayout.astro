@@ -3,12 +3,12 @@ export interface Props {
   title: string;
   message: string;
   variant?: 'success' | 'error';
-  primaryAction: {
+  primaryAction?: {
     text: string;
     href?: string;
     onClick?: string;
   };
-  secondaryAction: {
+  secondaryAction?: {
     text: string;
     href?: string;
     onClick?: string;
@@ -41,16 +41,21 @@ const { title, message, variant = 'success', primaryAction, secondaryAction } = 
       <p class="message" set:html={message} />
       
       <div class="button-container">
-        {primaryAction.href ? (
-          <a href={primaryAction.href} class="primary-button">{primaryAction.text}</a>
-        ) : (
-          <button class="primary-button" onclick={primaryAction.onClick}>{primaryAction.text}</button>
+        {primaryAction && ( 
+          primaryAction.href ? (
+            <a href={primaryAction.href} class="primary-button">{primaryAction.text}</a>
+          ) : (
+            <button class="primary-button" onclick={primaryAction.onClick}>{primaryAction.text}</button>
+          )
         )}
-        
-        {secondaryAction.href ? (
-          <a href={secondaryAction.href} class="secondary-button">{secondaryAction.text}</a>
-        ) : (
-          <button class="secondary-button" onclick={secondaryAction.onClick}>{secondaryAction.text}</button>
+          
+
+        {secondaryAction && (
+            secondaryAction.href ? (
+            <a href={secondaryAction.href} class="secondary-button">{secondaryAction.text}</a>
+          ) : (
+            <button class="secondary-button" onclick={secondaryAction.onClick}>{secondaryAction.text}</button>
+          )
         )}
       </div>
     </div>

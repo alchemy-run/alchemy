@@ -21,6 +21,9 @@ export const server = await Vite("server", {
       className: "WebSocketServer",
     }),
   },
+  dev: {
+    command: "vite dev --port 5002",
+  },
 });
 
 console.log(`server.url: ${server.url}`);

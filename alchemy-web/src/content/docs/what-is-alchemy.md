@@ -102,7 +102,7 @@ By default, Alchemy tracks what it creates in `.alchemy/` directory:
       api.json
 ```
 
-You can also use a remote state store like Durable Objects, R2, S3, etc. See [State](../concepts/state) for more information.
+You can also use a remote state store like Durable Objects, R2, S3, etc. See [State](/concepts/state/) for more information.
 
 
 ## Phases
@@ -231,10 +231,15 @@ const bucket = await R2Bucket("my-bucket", {
 });
 ```
 
+You can also use `--adopt` to adopt all resources without changing code:
+```sh
+alchemy deploy --adopt
+```
+
 This is useful when you want to manage existing infrastructure with Alchemy.
 
 :::tip
-See the [Resource Adoption](/concepts/adoption) documentation for more information.
+See the [Resource Adoption](/concepts/resource#adoption) documentation for more information.
 :::
 
 ## Resource Replacement
@@ -256,7 +261,7 @@ const bucket = await R2Bucket("data", {
 The replacement happens seamlessly - downstream resources are updated to reference the new resource before the old one is deleted.
 
 :::tip
-See the [Resource Replacement](/concepts/replace) documentation for more information.
+See the [Resource Replacement](/concepts/resource#replacement) documentation for more information.
 :::
 
 ## Custom Resources
@@ -272,10 +277,10 @@ export const MyResource = Resource(
       return this.destroy();
     } else if (this.phase === "update") {
       // Update logic
-      return this({ ...props, id: this.output.id });
+      return { ...props, id: this.output.id };
     } else {
       // Create logic
-      return this({ ...props, id: "new-id" });
+      return { ...props, id: "new-id" };
     }
   }
 );

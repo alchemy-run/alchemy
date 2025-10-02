@@ -41,9 +41,7 @@ export interface ProjectDomainProps {
 /**
  * Output returned after ProjectDomain creation/update
  */
-export interface ProjectDomain
-  extends Resource<"vercel::ProjectDomain">,
-    ProjectDomainProps {
+export interface ProjectDomain extends ProjectDomainProps {
   apexName: string;
 
   /**

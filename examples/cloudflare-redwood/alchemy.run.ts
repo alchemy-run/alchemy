@@ -15,6 +15,9 @@ export const website = await Redwood("website", {
   bindings: {
     DB: database,
   },
+  dev: {
+    command: "vite dev --port 5004",
+  },
 });
 
 console.log({

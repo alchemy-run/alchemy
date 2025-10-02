@@ -5,8 +5,6 @@ import { Worker } from "../../src/cloudflare/worker.ts";
 import { destroy } from "../../src/destroy.ts";
 import { BRANCH_PREFIX } from "../util.ts";
 
-import "@cloudflare/unenv-preset/node/process";
-
 import "../../src/test/vitest.ts";
 import { fetchAndExpectOK } from "../../src/util/safe-fetch.ts";
 
@@ -20,6 +18,7 @@ describe("Worker Unenv Tests", () => {
       // Create a temporary directory for the files
       // Create the worker using the entrypoint file
       const worker = await Worker(`${BRANCH_PREFIX}-test-worker-unenv`, {
+        name: `${BRANCH_PREFIX}-test-worker-unenv`,
         adopt: true,
         entrypoint: path.join(import.meta.dirname, "unenv-handler.ts"),
         format: "esm",

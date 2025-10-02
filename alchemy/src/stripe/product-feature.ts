@@ -37,9 +37,7 @@ export interface ProductFeatureProps {
 /**
  * Output from the Stripe product feature
  */
-export interface ProductFeature
-  extends Resource<"stripe::ProductFeature">,
-    ProductFeatureProps {
+export interface ProductFeature extends ProductFeatureProps {
   /**
    * The ID of the product feature
    */
@@ -124,7 +122,10 @@ export const ProductFeature = Resource(
             entitlement_feature: props.entitlementFeature,
           });
         } catch (error) {
-          if (isStripeConflictError(error) && props.adopt) {
+          if (
+            isStripeConflictError(error) &&
+            (props.adopt ?? this.scope.adopt)
+          ) {
             throw new Error(
               "ProductFeature adoption is not supported - product features cannot be uniquely identified for adoption",
             );
@@ -134,7 +135,7 @@ export const ProductFeature = Resource(
         }
       }
 
-      return this({
+      return {
         id: productFeature.id,
         object: productFeature.object,
         product: props.product,
@@ -142,7 +143,7 @@ export const ProductFeature = Resource(
         entitlementFeatureObject:
           productFeature.entitlement_feature || undefined,
         livemode: productFeature.livemode,
-      });
+      };
     } catch (error) {
       logger.error("Error creating product feature:", error);
       throw error;

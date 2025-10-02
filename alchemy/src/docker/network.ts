@@ -8,8 +8,10 @@ import { DockerApi } from "./api.ts";
 export interface NetworkProps {
   /**
    * Network name
+   *
+   * @default ${app}-${stage}-${id}
    */
-  name: string;
+  name?: string;
 
   /**
    * Network driver to use
@@ -32,11 +34,16 @@ export interface NetworkProps {
 /**
  * Docker Network resource
  */
-export interface Network extends Resource<"docker::Network">, NetworkProps {
+export interface Network extends NetworkProps {
   /**
    * Network ID
    */
   id: string;
+
+  /**
+   * Network name
+   */
+  name: string;
 
   /**
    * Time when the network was created
@@ -70,11 +77,18 @@ export const Network = Resource(
   "docker::Network",
   async function (
     this: Context<Network>,
-    _id: string,
+    id: string,
     props: NetworkProps,
   ): Promise<Network> {
     // Initialize Docker API client
     const api = new DockerApi();
+
+    const networkName =
+      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
+
+    if (this.phase === "update" && this.output.name !== networkName) {
+      this.replace();
+    }
 
     // Handle delete phase
     if (this.phase === "delete") {
@@ -88,14 +102,14 @@ export const Network = Resource(
     } else {
       // Create the network
       props.driver = props.driver || "bridge";
-      const networkId = await api.createNetwork(props.name, props.driver);
+      const networkId = await api.createNetwork(networkName, props.driver);
 
-      // Return the resource using this() to construct output
-      return this({
+      return {
         ...props,
         id: networkId,
+        name: networkName,
         createdAt: Date.now(),
-      });
+      };
     }
   },
 );

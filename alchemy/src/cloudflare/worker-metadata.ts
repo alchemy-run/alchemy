@@ -1,13 +1,13 @@
 import { assertNever } from "../util/assert-never.ts";
+import { camelToSnakeObjectDeep } from "../util/camel-to-snake.ts";
 import { logger } from "../util/logger.ts";
 import { memoize } from "../util/memoize.ts";
 import { extractCloudflareResult } from "./api-response.ts";
 import type { CloudflareApi } from "./api.ts";
-import {
-  Self,
-  type Bindings,
-  type WorkerBindingDurableObjectNamespace,
-  type WorkerBindingSpec,
+import type {
+  Bindings,
+  WorkerBindingDurableObjectNamespace,
+  WorkerBindingSpec,
 } from "./bindings.ts";
 import { isContainer, type Container } from "./container.ts";
 import {
@@ -19,7 +19,7 @@ import type {
   MultiStepMigration,
   SingleStepMigration,
 } from "./worker-migration.ts";
-import type { AssetsConfig, WorkerProps } from "./worker.ts";
+import { isWorker, type AssetsConfig, type WorkerProps } from "./worker.ts";
 
 /**
  * Metadata returned by Cloudflare API for a worker script
@@ -176,13 +176,27 @@ export interface WorkerDefaultEnvironment extends WorkerEnvironment {
   script: WorkerScriptInfo;
 }
 
+//? (jacob): why is this not using BaseWorkerProps?
 export interface WorkerMetadata {
   compatibility_date: string;
   compatibility_flags?: string[];
   bindings: WorkerBindingSpec[];
-  observability: {
-    enabled: boolean;
+  observability?: {
+    enabled?: boolean;
+    head_sampling_rate?: number;
+    logs?: {
+      enabled?: boolean;
+      head_sampling_rate?: number;
+      invocation_logs?: boolean;
+    };
+    traces?: {
+      enabled?: boolean;
+      head_sampling_rate?: number;
+      persist?: boolean;
+      destinations?: string[];
+    };
   };
+  logpush?: boolean;
   migrations?: SingleStepMigration;
   main_module?: string;
   body_part?: string;
@@ -203,6 +217,7 @@ export interface WorkerMetadata {
   limits?: {
     cpu_ms?: number;
   };
+  tail_consumers?: Array<Worker | { service: string }>;
 }
 
 export async function prepareWorkerMetadata(
@@ -233,6 +248,7 @@ export async function prepareWorkerMetadata(
       ...(oldSettings?.tags ?? []),
     ]),
   );
+
   const oldBindings = oldSettings?.bindings;
   // we use Cloudflare Worker tags to store a mapping between Alchemy's stable identifier and the binding name
   // e.g.
@@ -313,14 +329,21 @@ export async function prepareWorkerMetadata(
     return [];
   });
 
+  const observability = camelToSnakeObjectDeep(props.observability);
+
   // Prepare metadata with bindings
   const meta: WorkerMetadata = {
     compatibility_date: props.compatibilityDate,
     compatibility_flags: props.compatibilityFlags,
+    tail_consumers: props.tailConsumers?.map((consumer) =>
+      isWorker(consumer) ? { service: consumer.name } : consumer,
+    ),
     bindings: [],
     observability: {
-      enabled: props.observability?.enabled !== false,
+      ...observability,
+      enabled: observability?.enabled !== false,
     },
+    logpush: props.logpush ?? false,
     // TODO(sam): base64 encode instead? 0 collision risk vs readability.
     tags: [
       // encode a mapping table of Durable Object stable ID -> binding name
@@ -392,11 +415,12 @@ export async function prepareWorkerMetadata(
         name: bindingName,
         text: binding,
       });
-    } else if (binding === Self) {
+    } else if (binding.type === "cloudflare::Worker::Self") {
       meta.bindings.push({
         type: "service",
         name: bindingName,
         service: props.workerName,
+        entrypoint: binding.__entrypoint__,
       });
     } else if (binding.type === "d1") {
       meta.bindings.push({
@@ -416,6 +440,8 @@ export async function prepareWorkerMetadata(
         type: "service",
         name: bindingName,
         service: "service" in binding ? binding.service : binding.name,
+        entrypoint:
+          "__entrypoint__" in binding ? binding.__entrypoint__ : undefined,
       });
     } else if (binding.type === "durable_object_namespace") {
       meta.bindings.push({
@@ -442,6 +468,8 @@ export async function prepareWorkerMetadata(
         type: "r2_bucket",
         name: bindingName,
         bucket_name: binding.name,
+        jurisdiction:
+          binding.jurisdiction === "default" ? undefined : binding.jurisdiction,
       });
     } else if (binding.type === "secrets_store_secret") {
       meta.bindings.push({
@@ -489,12 +517,6 @@ export async function prepareWorkerMetadata(
         name: bindingName,
         index_name: binding.name,
       });
-    } else if (binding.type === "ai_gateway") {
-      // AI Gateway binding - just needs the name property
-      meta.bindings.push({
-        type: "ai",
-        name: bindingName,
-      });
     } else if (binding.type === "hyperdrive") {
       // Hyperdrive binding
       meta.bindings.push({
@@ -508,6 +530,12 @@ export async function prepareWorkerMetadata(
         name: bindingName,
       });
     } else if (binding.type === "ai") {
+      const existing = meta.bindings.find((b) => b.type === "ai");
+      if (existing) {
+        throw new Error(
+          `Workers cannot have multiple AI bindings. Binding "${bindingName}" conflicts with "${existing.name}".`,
+        );
+      }
       meta.bindings.push({
         type: "ai",
         name: bindingName,
@@ -651,7 +679,7 @@ export function bumpMigrationTagVersion(tag?: string) {
     if (!tag.match(/^v\d+$/)) {
       throw new Error(`Invalid tag format: ${tag}. Expected format: v<number>`);
     }
-    return `v${Number.parseInt(tag.slice(1)) + 1}`;
+    return `v${Number.parseInt(tag.slice(1), 10) + 1}`;
   }
   return undefined;
 }

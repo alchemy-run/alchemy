@@ -4,7 +4,6 @@ import { afterAll, beforeAll, it } from "bun:test";
 import path from "node:path";
 import { alchemy } from "../alchemy.ts";
 import { Scope } from "../scope.ts";
-import { NoopTelemetryClient } from "../util/telemetry/index.ts";
 import type { TestOptions } from "./options.ts";
 
 /**
@@ -53,9 +52,9 @@ type test = {
    */
   skipIf(condition: boolean): test;
 
-  beforeAll(fn: (scope: Scope) => Promise<void>): void;
+  beforeAll(fn: (scope: Scope) => Promise<void>, timeout?: number): void;
 
-  afterAll(fn: (scope: Scope) => Promise<void>): void;
+  afterAll(fn: (scope: Scope) => Promise<void>, timeout?: number): void;
 
   /**
    * Current test scope
@@ -103,7 +102,8 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
     // parent: globalTestScope,
     stateStore: defaultOptions?.stateStore,
     phase: "up",
-    telemetryClient: new NoopTelemetryClient(),
+    noTrack: true,
+    local: defaultOptions.local,
   });
 
   test.beforeAll = (fn: (scope: Scope) => Promise<void>) => {
@@ -114,7 +114,7 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
     return afterAll(() => scope.run(() => fn(scope)));
   };
 
-  return test as test;
+  return test as any;
 
   function test(
     ...args:

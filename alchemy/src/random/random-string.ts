@@ -27,7 +27,7 @@ export interface RandomStringProps {
 /**
  * A cryptographically secure random string resource
  */
-export interface RandomString extends Resource<"random::String"> {
+export interface RandomString {
   /**
    * The generated random string value, stored as a secret
    */
@@ -110,10 +110,10 @@ export const RandomString = Resource(
       // this is an update (input props changed)
       // but the length and encoding did not change
       // so, we can just return the existing output (no-op)
-      return this(this.output);
+      return this.output;
     }
     const crypto = await import("node:crypto");
-    return this({
+    return {
       length,
       encoding,
       value: alchemy.secret(
@@ -121,6 +121,6 @@ export const RandomString = Resource(
           .randomBytes(props.length ?? 32)
           .toString(props.encoding ?? "hex"),
       ),
-    });
+    };
   },
 );

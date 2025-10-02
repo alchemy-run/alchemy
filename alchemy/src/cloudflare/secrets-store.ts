@@ -17,7 +17,7 @@ export interface SecretsStoreProps<
   /**
    * Name of the secrets store
    *
-   * @default id
+   * @default ${app}-${stage}-${id}
    */
   name?: string;
 
@@ -54,16 +54,13 @@ export interface SecretsStoreProps<
   delete?: boolean;
 }
 
-export function isSecretsStore(
-  resource: Resource,
-): resource is SecretsStore<any> {
-  return resource[ResourceKind] === "cloudflare::SecretsStore";
+export function isSecretsStore(resource: any): resource is SecretsStore<any> {
+  return resource?.[ResourceKind] === "cloudflare::SecretsStore";
 }
 
 export interface SecretsStore<
   S extends Record<string, Secret> | undefined = undefined,
-> extends Resource<"cloudflare::SecretsStore">,
-    Omit<SecretsStoreProps<S>, "delete"> {
+> extends Omit<SecretsStoreProps<S>, "delete"> {
   /**
    * The unique identifier of the secrets store
    */
@@ -179,7 +176,11 @@ const _SecretsStore = Resource("cloudflare::SecretsStore", async function <
 > {
   const api = await createCloudflareApi(props);
 
-  const name = props.name ?? id;
+  const name = props.name ?? this.scope.createPhysicalName(id);
+
+  if (this.phase === "update" && this.output.name !== name) {
+    this.replace();
+  }
 
   if (this.phase === "delete") {
     const storeId = this.output?.id;
@@ -209,7 +210,7 @@ const _SecretsStore = Resource("cloudflare::SecretsStore", async function <
     await insertSecrets(api, storeId, props);
   } else {
     // If adopt is true, first check if a store with this name already exists
-    if (props.adopt) {
+    if (props.adopt ?? this.scope.adopt) {
       const existingStore = await findSecretsStoreByName(api, name);
 
       if (existingStore) {
@@ -236,13 +237,13 @@ const _SecretsStore = Resource("cloudflare::SecretsStore", async function <
     await insertSecrets(api, storeId, props);
   }
 
-  return this({
+  return {
     id: storeId,
     name: name,
     secrets: props.secrets as S,
     createdAt: createdAt,
     modifiedAt: Date.now(),
-  });
+  };
 });
 
 export async function createSecretsStore<

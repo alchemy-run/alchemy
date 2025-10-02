@@ -80,7 +80,7 @@ export interface ProductProps {
 /**
  * Output from the Stripe product
  */
-export interface Product extends Resource<"stripe::Product">, ProductProps {
+export interface Product extends ProductProps {
   /**
    * The ID of the product
    */
@@ -157,6 +157,7 @@ export const Product = Resource(
     _id: string,
     props: ProductProps,
   ): Promise<Product> {
+    const adopt = props.adopt ?? this.scope.adopt;
     const stripe = await createStripeClient({ apiKey: props.apiKey });
 
     if (this.phase === "delete") {
@@ -202,7 +203,7 @@ export const Product = Resource(
           metadata: props.metadata,
           tax_code: props.taxCode,
         };
-        if (props.adopt) {
+        if (adopt) {
           const existingProducts = await stripe.products.list({
             limit: 100,
           });
@@ -232,7 +233,7 @@ export const Product = Resource(
         }
       }
 
-      return this({
+      return {
         id: product.id,
         name: product.name,
         description: product.description || undefined,
@@ -250,7 +251,7 @@ export const Product = Resource(
         livemode: product.livemode,
         updatedAt: product.updated,
         packageDimensions: product.package_dimensions || undefined,
-      });
+      };
     } catch (error) {
       logger.error("Error creating/updating product:", error);
       throw error;

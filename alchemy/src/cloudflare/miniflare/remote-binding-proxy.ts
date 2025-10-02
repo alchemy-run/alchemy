@@ -1,4 +1,5 @@
 import type { RemoteProxyConnectionString } from "miniflare";
+import { WebSocket } from "ws";
 import { HTTPServer } from "../../util/http.ts";
 import { extractCloudflareResult } from "../api-response.ts";
 import type { CloudflareApi } from "../api.ts";
@@ -54,18 +55,29 @@ export async function createRemoteProxyWorker(input: {
     getAccountSubdomain(input.api),
   ]);
 
-  const proxyURL = `https://${input.name}.${subdomain}.workers.dev`;
+  const host = `${input.name}.${subdomain}.workers.dev`;
+
   const server = new HTTPServer({
+    websocket: async (req) => {
+      const input = new URL(req.url);
+      const proxied = new URL(input.pathname + input.search, `https://${host}`);
+      return new WebSocket(proxied, {
+        headers: {
+          "cf-workers-preview-token": token,
+          host,
+        },
+      });
+    },
     fetch: async (req) => {
       const url = new URL(req.url);
-      const targetUrl = new URL(url.pathname + url.search, proxyURL);
+      const proxied = new URL(url.pathname + url.search, `https://${host}`);
 
       const headers = new Headers(req.headers);
       headers.set("cf-workers-preview-token", token);
-      headers.set("host", new URL(proxyURL).hostname);
+      headers.set("host", host);
       headers.delete("cf-connecting-ip");
 
-      const res = await fetch(targetUrl, {
+      const res = await fetch(proxied, {
         method: req.method,
         headers,
         body: req.body,

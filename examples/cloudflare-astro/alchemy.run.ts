@@ -5,6 +5,9 @@ const app = await alchemy("cloudflare-astro");
 
 export const website = await Astro("website", {
   name: `${app.name}-${app.stage}-website`,
+  dev: {
+    command: "astro dev --port 5000",
+  },
 });
 
 console.log({

@@ -13,8 +13,10 @@ import { retry } from "./retry.ts";
 export interface RoleProps {
   /**
    * Name of the IAM role
+   *
+   * @default ${app}-${stage}-${id}
    */
-  roleName: string;
+  roleName?: string;
 
   /**
    * Policy that defines which entities can assume this role
@@ -65,11 +67,16 @@ export interface RoleProps {
 /**
  * Output returned after IAM role creation/update
  */
-export interface Role extends Resource<"iam::Role">, RoleProps {
+export interface Role extends RoleProps {
   /**
    * ARN of the role
    */
   arn: string;
+
+  /**
+   * Name of the Role.
+   */
+  roleName: string;
 
   /**
    * Unique identifier for the role
@@ -205,7 +212,7 @@ export const Role = Resource(
   "iam::Role",
   async function (
     this: Context<Role>,
-    _id: string,
+    id: string,
     props: RoleProps,
   ): Promise<Role> {
     const {
@@ -225,6 +232,15 @@ export const Role = Resource(
       UpdateRoleCommand,
     } = await importPeer(import("@aws-sdk/client-iam"), "iam::Role");
     const client = new IAMClient({});
+
+    const roleName =
+      props.roleName ??
+      this.output?.roleName ??
+      this.scope.createPhysicalName(id);
+
+    if (this.phase === "update" && this.output.roleName !== roleName) {
+      this.replace();
+    }
 
     if (this.phase === "delete") {
       try {
@@ -519,13 +535,13 @@ export const Role = Resource(
       throw new Error(`Failed to create or update role ${props.roleName}`);
     }
 
-    return this({
+    return {
       ...props,
       arn: role.Role.Arn!,
       uniqueId: role.Role.RoleId!,
       roleId: role.Role.RoleId!,
-      roleName: role.Role.RoleName ?? props.roleName,
+      roleName,
       createDate: role.Role.CreateDate!,
-    });
+    };
   },
 );

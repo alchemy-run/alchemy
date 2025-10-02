@@ -64,9 +64,7 @@ export interface WebhookEndpointProps {
 /**
  * Output from the Stripe webhook endpoint
  */
-export interface WebhookEndpoint
-  extends Resource<"stripe::WebhookEndpoint">,
-    WebhookEndpointProps {
+export interface WebhookEndpoint extends WebhookEndpointProps {
   /**
    * The ID of the webhook
    */
@@ -155,6 +153,7 @@ export const WebhookEndpoint = Resource(
     _id: string,
     props: WebhookEndpointProps,
   ) {
+    const adopt = props.adopt ?? this.scope.adopt;
     const stripe = await createStripeClient({ apiKey: props.apiKey });
 
     if (this.phase === "delete") {
@@ -197,7 +196,7 @@ export const WebhookEndpoint = Resource(
           try {
             webhook = await stripe.webhookEndpoints.create(createParams);
           } catch (error) {
-            if (isStripeConflictError(error) && props.adopt) {
+            if (isStripeConflictError(error) && adopt) {
               const existingWebhooks = await stripe.webhookEndpoints.list({
                 limit: 100,
               });
@@ -223,7 +222,7 @@ export const WebhookEndpoint = Resource(
             }
           }
         } catch (error) {
-          if (isStripeConflictError(error) && props.adopt) {
+          if (isStripeConflictError(error) && adopt) {
             const existingWebhooks = await stripe.webhookEndpoints.list({
               limit: 100,
             });
@@ -266,7 +265,7 @@ export const WebhookEndpoint = Resource(
         secret = this.output.secret;
       }
 
-      return this({
+      return {
         id: webhook.id,
         url: webhook.url,
         enabledEvents: webhook.enabled_events as EnabledEvent[],
@@ -281,7 +280,7 @@ export const WebhookEndpoint = Resource(
         livemode: webhook.livemode,
         updatedAt: webhook.created, // Using created timestamp as updated
         status: webhook.status,
-      });
+      };
     } catch (error) {
       logger.error("Error creating/updating webhook:", error);
       throw error;

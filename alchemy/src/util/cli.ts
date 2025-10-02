@@ -55,16 +55,16 @@ interface AlchemyInfo {
   appName: string;
 }
 
-let loggerApi: LoggerApi | null = null;
+let loggers: {
+  [appName: string]: LoggerApi;
+} = {};
+
 export const createLoggerInstance = (
   alchemyInfo: AlchemyInfo,
   customLogger?: LoggerApi,
 ) => {
-  if (loggerApi) return loggerApi;
-
-  // Use custom logger if provided, otherwise use the basic fallback logger
-  loggerApi = customLogger ?? createFallbackLogger(alchemyInfo);
-  return loggerApi;
+  return (loggers[alchemyInfo.appName] ??=
+    customLogger ?? createFallbackLogger(alchemyInfo));
 };
 
 export const createDummyLogger = (): LoggerApi => {
@@ -79,13 +79,15 @@ export const createDummyLogger = (): LoggerApi => {
 };
 
 export const createFallbackLogger = (alchemyInfo: AlchemyInfo): LoggerApi => {
-  console.log(dedent`
-    ${colorize("Alchemy", "cyanBright")} (v${packageJson.version})
-    App: ${alchemyInfo.appName}
-    Phase: ${alchemyInfo.phase}
-    Stage: ${alchemyInfo.stage}
-    
-  `);
+  if (alchemyInfo.phase !== "read") {
+    console.log(dedent`
+      ${colorize("Alchemy", "cyanBright")} (v${packageJson.version})
+      App: ${alchemyInfo.appName}
+      Phase: ${alchemyInfo.phase}
+      Stage: ${alchemyInfo.stage}
+      
+    `);
+  }
 
   return {
     log: console.log,

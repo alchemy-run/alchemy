@@ -69,9 +69,7 @@ interface CloudflareDomain {
 /**
  * Output returned after CustomDomain creation/update
  */
-export interface CustomDomain
-  extends Resource<"cloudflare::CustomDomain">,
-    CustomDomainProps {
+export interface CustomDomain extends CustomDomainProps {
   /**
    * The unique identifier for the Cloudflare domain binding.
    */
@@ -125,14 +123,14 @@ export const CustomDomain = Resource(
   ): Promise<CustomDomain> {
     if (this.scope.local && props.dev) {
       const now = Date.now();
-      return this({
+      return {
         ...props,
         id: this.output?.id ?? "noop-domain",
         zoneId: props.zoneId ?? "noop-zone",
         environment: props.environment ?? "production",
         createdAt: this.output?.createdAt ?? now,
         updatedAt: now,
-      });
+      };
     }
 
     // Create Cloudflare API client with automatic account discovery
@@ -198,7 +196,7 @@ async function ensureCustomDomain(
 ): Promise<CustomDomain> {
   const environment = props.environment || "production";
   const domainHostname = props.name;
-
+  const adopt = props.adopt ?? context.scope.adopt;
   // Check if domain binding already exists for this account
   const listResponse = await api.get(
     `/accounts/${api.accountId}/workers/domains`,
@@ -239,7 +237,7 @@ async function ensureCustomDomain(
 
   // Handle the case where domain already exists during create phase
   if (context.phase === "create" && bindingExists) {
-    if (!props.adopt) {
+    if (!adopt) {
       throw new Error(
         `CustomDomain for ${domainHostname} already exists in zone ${props.zoneId}. ` +
           "Set adopt: true to take control of the existing domain binding.",

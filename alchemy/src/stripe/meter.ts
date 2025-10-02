@@ -38,7 +38,7 @@ export interface MeterProps {
 /**
  * Output returned after Stripe Meter creation/update.
  */
-export interface Meter extends Resource<"stripe::Meter"> {
+export interface Meter {
   id: string;
   object: "billing.meter";
   displayName: string;
@@ -180,7 +180,7 @@ export const Meter = Resource(
     // Helper to map Stripe API response (snake_case) to Meter output interface (camelCase)
     const mapStripeObjectToMeterOutput = (
       stripeMeter: Stripe.Billing.Meter,
-    ): Omit<Meter, keyof Resource<"stripe::Meter">> => ({
+    ): Meter => ({
       id: stripeMeter.id,
       object: stripeMeter.object,
       displayName: stripeMeter.display_name,
@@ -303,7 +303,7 @@ export const Meter = Resource(
         stripeAPIResponse = await stripe.billing.meters.create(createParams);
       } catch (error) {
         logger.warn("Error creating/updating meter:", error);
-        if (isStripeConflictError(error) && props.adopt) {
+        if (isStripeConflictError(error) && (props.adopt ?? this.scope.adopt)) {
           throw new Error(
             "Meter adoption is not supported - meters cannot be uniquely identified for adoption",
           );
@@ -327,6 +327,6 @@ export const Meter = Resource(
       }
     }
 
-    return this(mapStripeObjectToMeterOutput(stripeAPIResponse));
+    return mapStripeObjectToMeterOutput(stripeAPIResponse);
   },
 );

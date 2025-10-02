@@ -138,6 +138,5 @@ Some types are excluded or skipped during serialization:
 
 ## Related Concepts
 
-- [State Management](../concepts/state.md)
-- [Secrets Management](../concepts/secret.md)
-- [Custom State Stores](../guides/custom-state-store.md) 
+- [State Management](/concepts/state/)
+- [Secrets Management](/concepts/secret/)

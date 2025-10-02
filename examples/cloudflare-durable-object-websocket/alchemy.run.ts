@@ -14,6 +14,9 @@ export const server = await Worker("server", {
       sqlite: true,
     }),
   },
+  dev: {
+    tunnel: !process.env.ALCHEMY_E2E,
+  },
 });
 
 console.log("Server:", server.url);
@@ -23,6 +26,9 @@ export const client = await Vite("client", {
   adopt: true,
   env: {
     VITE_WEBSOCKET_URL: server.url!,
+  },
+  dev: {
+    command: "vite dev --port 5001",
   },
 });
 

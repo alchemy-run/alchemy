@@ -14,6 +14,8 @@ import {
 export interface DispatchNamespaceProps extends CloudflareApiOptions {
   /**
    * Name of the namespace
+   *
+   * @default ${app}-${stage}-${id}
    */
   namespace?: string;
 
@@ -35,17 +37,16 @@ export interface DispatchNamespaceProps extends CloudflareApiOptions {
 }
 
 export function isDispatchNamespace(
-  resource: Resource,
+  resource: any,
 ): resource is DispatchNamespace {
-  return resource[ResourceKind] === "cloudflare::DispatchNamespace";
+  return resource?.[ResourceKind] === "cloudflare::DispatchNamespace";
 }
 
 /**
  * Output returned after Dispatch Namespace creation/update
  */
 export interface DispatchNamespace
-  extends Resource<"cloudflare::DispatchNamespace">,
-    Omit<DispatchNamespaceProps, "delete"> {
+  extends Omit<DispatchNamespaceProps, "delete"> {
   type: "dispatch_namespace";
   /**
    * The name of the namespace
@@ -112,7 +113,11 @@ export const DispatchNamespace = Resource(
     // Create Cloudflare API client with automatic account discovery
     const api = await createCloudflareApi(props);
 
-    const namespace = props.namespace ?? id;
+    const namespace =
+      props.namespace ??
+      this.output?.namespace ??
+      this.scope.createPhysicalName(id);
+    const adopt = props.adopt ?? this.scope.adopt;
 
     if (this.phase === "delete") {
       // For delete operations, we need to check if the namespace exists in the output
@@ -132,11 +137,8 @@ export const DispatchNamespace = Resource(
         : Date.now();
 
     if (this.phase === "update") {
-      // Check that the namespace name hasn't changed
-      if (this.output?.namespace && this.output.namespace !== namespace) {
-        throw new Error(
-          `Cannot update dispatch namespace name after creation. Namespace name is immutable. Before: ${this.output.namespace}, After: ${namespace}`,
-        );
+      if (this.output.namespace !== namespace) {
+        this.replace();
       }
       // For updates, just refresh metadata
     } else {
@@ -150,7 +152,7 @@ export const DispatchNamespace = Resource(
       } catch (error) {
         // Check if this is a "namespace already exists" error and adopt is enabled
         if (
-          props.adopt &&
+          adopt &&
           error instanceof CloudflareApiError &&
           error.status === 400 &&
           (error.message.includes("already exists") ||
@@ -179,14 +181,14 @@ export const DispatchNamespace = Resource(
       throw new Error(`Failed to get namespace information for '${namespace}'`);
     }
 
-    return this({
+    return {
       type: "dispatch_namespace",
       namespace,
       namespaceName: namespaceInfo.namespaceName,
       namespaceId: namespaceInfo.namespaceId,
       createdAt: createdAt,
       modifiedAt: Date.now(),
-    });
+    };
   },
 );
 

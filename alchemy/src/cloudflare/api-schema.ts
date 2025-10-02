@@ -48,8 +48,7 @@ export interface APISchemaProps<S extends OpenAPIV3.Document>
 /**
  * APISchema resource attributes.
  */
-export interface APISchema<S extends OpenAPIV3.Document = OpenAPIV3.Document>
-  extends Resource<"cloudflare::APISchema"> {
+export type APISchema<S extends OpenAPIV3.Document = OpenAPIV3.Document> = {
   /**
    * Schema ID
    */
@@ -74,7 +73,7 @@ export interface APISchema<S extends OpenAPIV3.Document = OpenAPIV3.Document>
    * Whether validation is enabled
    */
   enabled: boolean;
-}
+};
 
 /**
  * Cloudflare API Gateway Schema manages OpenAPI v3 schemas for API validation.
@@ -160,10 +159,17 @@ export const APISchema = Resource("cloudflare::APISchema", async function <
 
   let schemaDetails: CloudflareSchemaDetails;
 
+  const schemaName =
+    props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
+
+  if (this.phase === "update" && this.output?.name !== schemaName) {
+    this.replace();
+  }
+
   if (this.phase === "update" && this.output?.id) {
     // Check if we need to replace due to name, schema content change, or disabling validation
     if (
-      props.name !== this.output.name ||
+      schemaName !== this.output.name ||
       JSON.stringify(parsedSchema) !== JSON.stringify(this.output.schema) ||
       (this.output.enabled === true && props.enabled === false)
     ) {
@@ -179,18 +185,18 @@ export const APISchema = Resource("cloudflare::APISchema", async function <
     // Create new schema
     schemaDetails = await uploadSchema(api, zoneId, {
       file: yaml.stringify(parsedSchema),
-      name: props.name || id,
+      name: schemaName,
       validation_enabled: props.enabled !== false,
     });
   }
 
-  return this({
+  return {
     id: schemaDetails.id,
     name: schemaDetails.name,
     schema: parsedSchema as any,
     source: schemaDetails.source,
     enabled: schemaDetails.validationEnabled,
-  });
+  };
 });
 
 // API helper functions

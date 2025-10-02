@@ -1,7 +1,8 @@
+import path from "node:path";
 import { execArgv } from "node:process";
 import { onExit } from "signal-exit";
-import { ReplacedSignal } from "./apply.ts";
-import { DestroyStrategy, DestroyedSignal, destroy } from "./destroy.ts";
+import { isReplacedSignal } from "./apply.ts";
+import { DestroyStrategy, destroy, isDestroyedSignal } from "./destroy.ts";
 import { env } from "./env.ts";
 import {
   ResourceFQN,
@@ -15,7 +16,7 @@ import { DEFAULT_STAGE, Scope, type ProviderCredentials } from "./scope.ts";
 import { secret } from "./secret.ts";
 import type { StateStoreType } from "./state.ts";
 import type { LoggerApi } from "./util/cli.ts";
-import { TelemetryClient } from "./util/telemetry/client.ts";
+import { ALCHEMY_ROOT } from "./util/root-dir.ts";
 
 /**
  * Type alias for semantic highlighting of `alchemy` as a type keyword
@@ -101,16 +102,31 @@ async function _alchemy(
   options?: Omit<AlchemyOptions, "appName">,
 ): Promise<Scope> {
   const cliArgs = process.argv.slice(2);
+  // user may select a specific app to auto-enable read mode for any other app
+  const app = parseOption("--app");
+  function parseOption<D extends string | undefined>(
+    option: string,
+    defaultValue?: D,
+  ): D {
+    const i = cliArgs.indexOf(option);
+    return (
+      i !== -1 && i + 1 < cliArgs.length ? cliArgs[i + 1] : defaultValue
+    ) as D;
+  }
   const cliOptions = {
-    phase: cliArgs.includes("--destroy")
-      ? "destroy"
-      : cliArgs.includes("--read")
+    phase:
+      app && app !== appName
         ? "read"
-        : "up",
+        : cliArgs.includes("--destroy")
+          ? "destroy"
+          : cliArgs.includes("--read")
+            ? "read"
+            : "up",
     local: cliArgs.includes("--local") || cliArgs.includes("--dev"),
     watch: cliArgs.includes("--watch") || execArgv.includes("--watch"),
     quiet: cliArgs.includes("--quiet"),
     force: cliArgs.includes("--force"),
+    tunnel: cliArgs.includes("--tunnel"),
     // Parse stage argument (--stage my-stage) functionally and inline as a property declaration
     stage: (function parseStage() {
       const i = cliArgs.indexOf("--stage");
@@ -119,6 +135,9 @@ async function _alchemy(
         : process.env.STAGE;
     })(),
     password: process.env.ALCHEMY_PASSWORD,
+    adopt: cliArgs.includes("--adopt"),
+    rootDir: path.resolve(parseOption("--root-dir", ALCHEMY_ROOT)),
+    profile: parseOption("--profile"),
   } satisfies Partial<AlchemyOptions>;
   const mergedOptions = {
     ...cliOptions,
@@ -143,20 +162,14 @@ If this is a mistake, you can disable this check by setting the ALCHEMY_CI_STATE
   }
 
   const phase = mergedOptions?.phase ?? "up";
-  const telemetryClient =
-    mergedOptions?.parent?.telemetryClient ??
-    TelemetryClient.create({
-      phase,
-      enabled: mergedOptions?.telemetry ?? true,
-      quiet: mergedOptions?.quiet ?? false,
-    });
   const root = new Scope({
     ...mergedOptions,
     parent: undefined,
     scopeName: appName,
     phase,
     password: mergedOptions?.password ?? process.env.ALCHEMY_PASSWORD,
-    telemetryClient,
+    noTrack: mergedOptions?.noTrack ?? false,
+    isSelected: app === undefined ? undefined : app === appName,
   });
   onExit((code) => {
     root.cleanup().then(() => {
@@ -213,6 +226,12 @@ export interface AlchemyOptions {
    */
   force?: boolean;
   /**
+   * Whether to create a tunnel for supported resources.
+   *
+   * @default false
+   */
+  tunnel?: boolean;
+  /**
    * Name to scope the resource state under (e.g. `.alchemy/{stage}/..`).
    *
    * @default - your POSIX username
@@ -239,6 +258,10 @@ export interface AlchemyOptions {
    */
   destroyStrategy?: DestroyStrategy;
   /**
+   * If true, children of the resource will not be destroyed (but their state will be deleted).
+   */
+  noop?: boolean;
+  /**
    * If true, will not print any Create/Update/Delete messages.
    *
    * @default false
@@ -250,21 +273,41 @@ export interface AlchemyOptions {
    */
   password?: string;
   /**
-   * Whether to send anonymous telemetry data to the Alchemy team.
+   * Whether to stop sending anonymous telemetry data to the Alchemy team.
    * You can also opt out by setting the `DO_NOT_TRACK` or `ALCHEMY_TELEMETRY_DISABLED` environment variables to a truthy value.
    *
-   * @default true
+   * @default false
    */
-  telemetry?: boolean;
+  noTrack?: boolean;
   /**
    * A custom logger instance to use for this scope.
    * If not provided, the default fallback logger will be used.
    */
   logger?: LoggerApi;
-}
-
-export interface ScopeOptions extends AlchemyOptions {
-  enter: boolean;
+  /**
+   * Whether to adopt resources if they already exist but are not yet managed by your Alchemy app.
+   *
+   * @default false
+   */
+  adopt?: boolean;
+  /**
+   * The root directory of the project.
+   *
+   * @default process.cwd()
+   */
+  rootDir?: string;
+  /**
+   * The Alchemy profile to use for authoriziing requests.
+   */
+  profile?: string;
+  /**
+   * Whether this is the application that was selected with `--app`
+   *
+   * `true` if the application was selected with `--app`
+   * `false` if the application was not selected with `--app`
+   * `undefined` if the program was not run with `--app`
+   */
+  isSelected?: boolean;
 }
 
 export interface RunOptions extends AlchemyOptions, ProviderCredentials {
@@ -307,19 +350,13 @@ async function run<T>(
           RunOptions,
           (this: Scope, scope: Scope) => Promise<T>,
         ]);
-  const telemetryClient =
-    options?.parent?.telemetryClient ??
-    TelemetryClient.create({
-      phase: options?.phase ?? "up",
-      enabled: options?.telemetry ?? true,
-      quiet: options?.quiet ?? false,
-    });
   const _scope = new Scope({
     ...options,
     parent: options?.parent,
     scopeName: id,
-    telemetryClient,
+    noTrack: options?.noTrack ?? false,
   });
+  let noop = options?.noop ?? false;
   try {
     if (options?.isResource !== true && _scope.parent) {
       // TODO(sam): this is an awful hack to differentiate between naked scopes and resources
@@ -357,13 +394,16 @@ async function run<T>(
     }
     return await _scope.run(async () => fn.bind(_scope)(_scope));
   } catch (error) {
-    if (
-      !(error instanceof DestroyedSignal || error instanceof ReplacedSignal)
-    ) {
+    if (!(isDestroyedSignal(error) || isReplacedSignal(error))) {
       _scope.fail();
+    }
+    if (isDestroyedSignal(error)) {
+      noop = noop || error.noop;
     }
     throw error;
   } finally {
-    await _scope.finalize();
+    await _scope.finalize({
+      noop,
+    });
   }
 }

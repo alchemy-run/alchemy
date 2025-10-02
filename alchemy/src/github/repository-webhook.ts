@@ -63,9 +63,7 @@ export interface RepositoryWebhookProps {
 /**
  * Output returned after Repository Webhook creation/update
  */
-export interface RepositoryWebhook
-  extends Resource<"github::RepositoryWebhook">,
-    RepositoryWebhookProps {
+export interface RepositoryWebhook extends RepositoryWebhookProps {
   /**
    * The ID of the resource
    */
@@ -227,7 +225,7 @@ export const RepositoryWebhook = Resource(
       }
 
       // Return webhook details
-      return this({
+      return {
         id: `${props.owner}/${props.repository}/webhook/${webhookId}`,
         webhookId,
         owner: props.owner,
@@ -243,7 +241,7 @@ export const RepositoryWebhook = Resource(
         updatedAt: webhookData.updated_at,
         pingUrl: webhookData.ping_url,
         testUrl: webhookData.test_url,
-      });
+      };
     } catch (error: any) {
       if (
         error.status === 403 &&

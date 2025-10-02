@@ -14,8 +14,10 @@ import {
 export interface VectorizeIndexProps extends CloudflareApiOptions {
   /**
    * Name of the index
+   *
+   * @default ${app}-${stage}-${id}
    */
-  name: string;
+  name?: string;
 
   /**
    * Optional description of the index
@@ -49,24 +51,25 @@ export interface VectorizeIndexProps extends CloudflareApiOptions {
   adopt?: boolean;
 }
 
-export function isVectorizeIndex(
-  resource: Resource,
-): resource is VectorizeIndex {
-  return resource[ResourceKind] === "cloudflare::VectorizeIndex";
+export function isVectorizeIndex(resource: any): resource is VectorizeIndex {
+  return resource?.[ResourceKind] === "cloudflare::VectorizeIndex";
 }
 
 /**
  * Output returned after Vectorize Index creation/update
  */
-export interface VectorizeIndex
-  extends Resource<"cloudflare::VectorizeIndex">,
-    VectorizeIndexProps {
+export interface VectorizeIndex extends VectorizeIndexProps {
   type: "vectorize";
 
   /**
    * The unique identifier for the index (same as name)
    */
   id: string;
+
+  /**
+   * Name of the Vectorize Index.
+   */
+  name: string;
 
   /**
    * Time at which the index was created
@@ -121,7 +124,8 @@ export const VectorizeIndex = Resource(
     props: VectorizeIndexProps,
   ): Promise<VectorizeIndex> {
     const api = await createCloudflareApi(props);
-    const indexName = props.name || id;
+    const indexName =
+      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
 
     if (this.phase === "delete") {
       logger.log("Deleting Vectorize index:", indexName);
@@ -145,7 +149,7 @@ export const VectorizeIndex = Resource(
       } catch (error) {
         // Check if this is a "index already exists" error and adopt is enabled
         if (
-          props.adopt &&
+          (props.adopt ?? this.scope.adopt) &&
           error instanceof CloudflareApiError &&
           error.message.includes("vectorize.index.duplicate_name")
         ) {
@@ -158,6 +162,9 @@ export const VectorizeIndex = Resource(
         }
       }
     } else {
+      if (this.output.name !== indexName) {
+        return this.replace();
+      }
       if (props.delete !== this.props.delete) {
         // Only allow changing the delete property
         if (!this.quiet) {
@@ -165,10 +172,10 @@ export const VectorizeIndex = Resource(
             `Attempted to update Vectorize index ${indexName} but only the delete property can be changed.`,
           );
         }
-        return this({
+        return {
           ...this.output,
           delete: props.delete,
-        });
+        };
       }
 
       // Check if this is a no-op update
@@ -183,7 +190,7 @@ export const VectorizeIndex = Resource(
             `Attempted to update Vectorize index ${indexName} but it was a no-op.`,
           );
         }
-        return this(this.output);
+        return this.output;
       }
 
       // Update operation is not supported by Vectorize API
@@ -193,7 +200,7 @@ export const VectorizeIndex = Resource(
       );
     }
 
-    return this({
+    return {
       type: "vectorize",
       id: indexName,
       name: indexName,
@@ -207,7 +214,7 @@ export const VectorizeIndex = Resource(
       createdAt: indexData.result.created_on
         ? new Date(indexData.result.created_on).getTime()
         : undefined,
-    });
+    };
   },
 );
 

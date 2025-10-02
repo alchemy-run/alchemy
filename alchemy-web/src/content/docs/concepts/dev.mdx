@@ -13,7 +13,7 @@ Alchemy's development mode provides a local development experience for Cloudflar
 Development mode is currently in beta. Some features may not work as expected.
 :::
 
-## Overview
+## Get Started
 
 To run Alchemy in development mode, use the [`alchemy dev`](/concepts/cli#dev) command to:
 
@@ -136,6 +136,29 @@ const worker = await Worker("my-worker", {
 });
 console.log(worker.url); // http://localhost:3000
 ```
+
+## Tunnel
+
+Route requests from the public internet to your locally running Worker via a Cloudflare Tunnel.
+
+```ts
+const worker = await Worker("my-worker", {
+  entrypoint: "worker.ts",
+  dev: {
+    tunnel: true,
+  },
+});
+```
+
+:::tip
+You must download and install `cloudflared` - see the [Cloudflare Tunnels documentation](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/).
+:::
+
+:::note
+**How it works**: a temporary ["Quick Tunnel"](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/) is created and bound to the remote Worker (e.g. `my-worker`) which proxies requests to your locally running Worker via the Tunnel.
+:::
+
+
 
 ## Bindings
 

@@ -93,10 +93,6 @@ export interface CustomerProps {
    */
   balance?: number;
   /**
-   * If you provide a coupon code, the customer will have a discount applied on all recurring charges
-   */
-  coupon?: string;
-  /**
    * An arbitrary string attached to the object
    */
   description?: string;
@@ -137,10 +133,6 @@ export interface CustomerProps {
    */
   preferredLocales?: string[];
   /**
-   * The ID of a promotion code to apply to the customer
-   */
-  promotionCode?: string;
-  /**
    * The customer's shipping information
    */
   shipping?: CustomerShipping;
@@ -171,7 +163,7 @@ export interface CustomerProps {
 /**
  * Output from the Stripe customer
  */
-export interface Customer extends Resource<"stripe::Customer">, CustomerProps {
+export interface Customer extends CustomerProps {
   /**
    * The ID of the customer
    */
@@ -311,7 +303,6 @@ export const Customer = Resource(
               }
             : undefined,
           balance: props.balance,
-          coupon: props.coupon,
           description: props.description,
           email: props.email,
           invoice_prefix: props.invoicePrefix,
@@ -320,7 +311,6 @@ export const Customer = Resource(
           next_invoice_sequence: props.nextInvoiceSequence,
           phone: props.phone,
           preferred_locales: props.preferredLocales,
-          promotion_code: props.promotionCode,
           shipping: props.shipping as any,
           source: props.source,
           tax_exempt: props.taxExempt,
@@ -354,7 +344,6 @@ export const Customer = Resource(
               }
             : undefined,
           balance: props.balance,
-          coupon: props.coupon,
           description: props.description,
           email: props.email,
           invoice_prefix: props.invoicePrefix,
@@ -364,7 +353,6 @@ export const Customer = Resource(
           payment_method: props.paymentMethod,
           phone: props.phone,
           preferred_locales: props.preferredLocales,
-          promotion_code: props.promotionCode,
           shipping: props.shipping as any,
           source: props.source,
           tax_exempt: props.taxExempt,
@@ -385,7 +373,7 @@ export const Customer = Resource(
           };
         }
 
-        if (props.adopt && props.email) {
+        if ((props.adopt ?? this.scope.adopt) && props.email) {
           const existingCustomers = await stripe.customers.list({
             email: props.email,
             limit: 1,
@@ -404,7 +392,6 @@ export const Customer = Resource(
                   }
                 : undefined,
               balance: props.balance,
-              coupon: props.coupon,
               description: props.description,
               email: props.email,
               invoice_prefix: props.invoicePrefix,
@@ -413,7 +400,6 @@ export const Customer = Resource(
               next_invoice_sequence: props.nextInvoiceSequence,
               phone: props.phone,
               preferred_locales: props.preferredLocales,
-              promotion_code: props.promotionCode,
               shipping: props.shipping as any,
               source: props.source,
               tax_exempt: props.taxExempt,
@@ -446,7 +432,7 @@ export const Customer = Resource(
         }
       }
 
-      return this({
+      return {
         id: customer.id,
         object: customer.object,
         address: customer.address
@@ -520,7 +506,7 @@ export const Customer = Resource(
         subscriptions: customer.subscriptions || undefined,
         taxExempt: customer.tax_exempt || undefined,
         taxIds: customer.tax_ids || undefined,
-      });
+      };
     } catch (error) {
       logger.error("Error creating/updating customer:", error);
       throw error;

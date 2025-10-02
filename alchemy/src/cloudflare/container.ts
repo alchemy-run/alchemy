@@ -93,9 +93,28 @@ export interface ContainerProps
  * - `basic`: Basic production instances with standard resources
  * - `standard`: Standard production instances with enhanced resources
  *
+ * | Instance Type  | vCPU | Memory (Min) | Memory (Max) |
+ * |---------------|------|--------------|--------------|
+ * | lite          | 1/16 | 256 MiB      | 2 GB         |
+ * | basic         | 1/4  | 1 GiB        | 4 GB         |
+ * | standard-1    | 1/2  | 4 GiB        | 8 GB         |
+ * | standard-2    | 1    | 6 GiB        | 12 GB        |
+ * | standard-3    | 2    | 8 GiB        | 16 GB        |
+ * | standard-4    | 4    | 12 GiB       | 20 GB        |
+ *
  * @see https://developers.cloudflare.com/containers/pricing/
+ * @see https://developers.cloudflare.com/changelog/2025-10-01-new-container-instance-types/
  */
-export type InstanceType = "dev" | "basic" | "standard" | (string & {});
+export type InstanceType =
+  | "lite"
+  | "dev"
+  | "basic"
+  | "standard"
+  | "standard-1"
+  | "standard-2"
+  | "standard-3"
+  | "standard-4"
+  | (string & {});
 
 /**
  * Type guard to check if a binding is a Container binding.
@@ -123,8 +142,12 @@ export type Container<T = any> = {
   /** Unique identifier for the container */
   id: string;
 
-  /** Optional human-readable name for the container */
-  name: string;
+  /**
+   * Optional human-readable name for the container
+   *
+   * @default ${app.name}-${app.stage}-${id}
+   */
+  name?: string;
 
   /** Class name used to identify the container in Worker bindings */
   className: string;
@@ -170,7 +193,8 @@ export async function Container<T>(
   id: string,
   props: ContainerProps,
 ): Promise<Container<T>> {
-  const name = props.name ?? id;
+  const scope = Scope.current;
+  const name = props.name ?? scope.createPhysicalName(id);
   const tag =
     props.tag === undefined || props.tag === "latest"
       ? `latest-${Date.now()}`
@@ -191,7 +215,7 @@ export async function Container<T>(
     adopt: props.adopt,
   };
 
-  const isDev = Scope.current.local && !props.dev?.remote;
+  const isDev = scope.local && !props.dev?.remote;
   if (isDev) {
     const image = await Image(id, {
       name: `cloudflare-dev/${name}`, // prefix used by Miniflare
@@ -291,8 +315,10 @@ export interface ContainerApplicationProps extends CloudflareApiOptions {
   /**
    * The name of the container application.
    * Must be unique within your Cloudflare account.
+   *
+   * @default ${app}-${stage}-${id}
    */
-  name: string;
+  name?: string;
 
   /**
    * Scheduling policy that controls where and how containers are deployed.
@@ -403,8 +429,7 @@ export type SchedulingPolicy =
  * This resource manages the lifecycle of containerized applications running on
  * Cloudflare's global network with automatic scaling and scheduling.
  */
-export interface ContainerApplication
-  extends Resource<"cloudflare::ContainerApplication"> {
+export interface ContainerApplication {
   /** Unique identifier for the container application */
   id: string;
 
@@ -501,15 +526,19 @@ export const ContainerApplication = Resource(
   "cloudflare::ContainerApplication",
   async function (
     this: Context<ContainerApplication, ContainerApplicationProps>,
-    _id: string,
+    id: string,
     props: ContainerApplicationProps,
   ): Promise<ContainerApplication> {
+    const applicationName = props.name ?? this.scope.createPhysicalName(id);
+
     if (this.scope.local && props.dev) {
-      return this({
+      return {
         id: this.output?.id ?? "",
-        name: props.name,
-      });
+        name: applicationName,
+      };
     }
+
+    const adopt = props.adopt ?? this.scope.adopt;
 
     const api = await createCloudflareApi(props);
     if (this.phase === "delete") {
@@ -554,16 +583,16 @@ export const ContainerApplication = Resource(
         step_percentage: props.rollout?.stepPercentage ?? 25,
         target_configuration: configuration,
       });
-      return this({
+      return {
         id: application.id,
         name: application.name,
-      });
+      };
     } else {
       let application: ContainerApplicationData;
 
       try {
-        application = await createContainerApplication(api, props.adopt, {
-          name: props.name,
+        application = await createContainerApplication(api, adopt, {
+          name: applicationName,
           scheduling_policy: props.schedulingPolicy ?? "default",
           instances: props.instances ?? 1,
           max_instances: props.maxInstances ?? 1,
@@ -588,19 +617,19 @@ export const ContainerApplication = Resource(
       } catch (error) {
         // Check if this is an "already exists" error and adopt is enabled
         if (
-          props.adopt &&
+          adopt &&
           error instanceof Error &&
           error.message.includes("already exists")
         ) {
           // Find the existing container application
           const existingApplication = await findContainerApplicationByName(
             api,
-            props.name,
+            applicationName,
           );
 
           if (!existingApplication) {
             throw new Error(
-              `Failed to find existing container application '${props.name}' for adoption`,
+              `Failed to find existing container application '${applicationName}' for adoption`,
             );
           }
 
@@ -632,10 +661,10 @@ export const ContainerApplication = Resource(
         }
       }
 
-      return this({
+      return {
         id: application.id,
         name: application.name,
-      });
+      };
     }
   },
 );
@@ -940,14 +969,13 @@ export async function updateContainerApplication(
   );
   const result = (await response.json()) as {
     result: ContainerApplicationData;
-    errors: { message: string }[];
+    errors: { message: string; code: number }[];
   };
   if (response.ok) {
     return result.result;
   }
-
   throw Error(
-    `Failed to create container application: ${result.errors?.map((e: { message: string }) => e.message).join(", ") ?? "Unknown error"}`,
+    `Failed to create container application: ${result.errors?.map((e) => `[${e.code}] ${e.message}`).join(", ") ?? "Unknown error"}`,
   );
 }
 
@@ -1035,13 +1063,13 @@ export async function createContainerApplicationRollout(
   );
   const result = (await response.json()) as {
     result: CreateRolloutApplicationResponse;
-    errors: { message: string }[];
+    errors: { message: string; code: number }[];
   };
   if (response.ok) {
     return result.result;
   }
   throw Error(
-    `Failed to create container application rollout: ${result.errors.map((e: { message: string }) => e.message).join(", ")}`,
+    `Failed to create container application rollout: ${result.errors.map((e) => `[${e.code}] ${e.message}`).join(", ")}`,
   );
 }
 

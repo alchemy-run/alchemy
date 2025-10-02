@@ -9,6 +9,12 @@ import { createCloudflareApi, type CloudflareApiOptions } from "./api.ts";
  */
 export interface AiGatewayProps extends CloudflareApiOptions {
   /**
+   * Name of the AI Gateway.
+   *
+   * @default ${app.name}-${app.stage}-${id}
+   */
+  gatewayName?: string;
+  /**
    * Invalidate cache on update.
    * @default true
    */
@@ -86,9 +92,7 @@ export interface AiGatewayProps extends CloudflareApiOptions {
  * Output returned after Cloudflare AI Gateway creation/update.
  * IMPORTANT: The interface name MUST match the exported resource name.
  */
-export interface AiGateway
-  extends Resource<"cloudflare::AiGateway">,
-    AiGatewayProps {
+export interface AiGateway extends AiGatewayProps {
   /**
    * The ID (name) of the gateway.
    */
@@ -158,7 +162,17 @@ export const AiGateway = Resource(
     props: AiGatewayProps = {},
   ): Promise<AiGateway> {
     const api = await createCloudflareApi(props);
-    const gatewayPath = `/accounts/${api.accountId}/ai-gateway/gateways/${id}`;
+    const gatewayName =
+      props.gatewayName ??
+      this.output?.gatewayName ??
+      this.output?.id ?? // name and ID are the same
+      this.scope.createPhysicalName(id);
+
+    if (this.phase === "update" && this.output?.id !== gatewayName) {
+      this.replace();
+    }
+
+    const gatewayPath = `/accounts/${api.accountId}/ai-gateway/gateways/${gatewayName}`;
     const gatewaysPath = `/accounts/${api.accountId}/ai-gateway/gateways`;
 
     if (this.phase === "delete") {
@@ -166,10 +180,15 @@ export const AiGateway = Resource(
         const deleteResponse = await api.delete(gatewayPath);
         // Only swallow 404 Not Found errors, all other errors should be handled
         if (!deleteResponse.ok && deleteResponse.status !== 404) {
-          await handleApiError(deleteResponse, "delete", "ai gateway", id);
+          await handleApiError(
+            deleteResponse,
+            "delete",
+            "ai gateway",
+            gatewayName,
+          );
         }
       } catch (error) {
-        logger.error(`Error deleting AI Gateway ${id}:`, error);
+        logger.error(`Error deleting AI Gateway ${gatewayName}:`, error);
         throw error;
       }
       return this.destroy();
@@ -192,44 +211,45 @@ export const AiGateway = Resource(
     try {
       if (this.phase === "update") {
         // Update existing gateway (PUT request)
-        const requestBody = mapPropsToApi(id, mergedProps, false);
+        const requestBody = mapPropsToApi(gatewayName, mergedProps, false);
         response = await api.put(gatewayPath, requestBody);
       } else {
-        // Check if gateway exists before creating (to avoid conflict)
+        // Check if gateway exists before creating (to avogatewayName conflict)
         const getResponse = await api.get(gatewayPath);
         if (getResponse.status === 200) {
           // Gateway exists, treat as update (PUT)
           logger.log(
-            `AI Gateway '${id}' already exists. Updating existing resource.`,
+            `AI Gateway '${gatewayName}' already exists. Updating existing resource.`,
           );
-          const requestBody = mapPropsToApi(id, mergedProps, false);
+          const requestBody = mapPropsToApi(gatewayName, mergedProps, false);
           response = await api.put(gatewayPath, requestBody);
         } else if (getResponse.status === 404) {
           // Gateway doesn't exist, create new (POST request)
-          const requestBody = mapPropsToApi(id, mergedProps, true); // Include 'id' in POST body
+          const requestBody = mapPropsToApi(gatewayName, mergedProps, true); // Include 'gatewayName' in POST body
           response = await api.post(gatewaysPath, requestBody);
         } else {
           // Unexpected error during GET check
-          await handleApiError(getResponse, "get", "ai gateway", id);
+          await handleApiError(getResponse, "get", "ai gateway", gatewayName);
         }
       }
 
       if (!response?.ok) {
         const action = this.phase === "update" ? "update" : "create";
-        await handleApiError(response!, action, "ai gateway", id);
+        await handleApiError(response!, action, "ai gateway", gatewayName);
       }
 
       const data: { result: Record<string, any> } = await response!.json();
       apiResource = data.result;
     } catch (error) {
-      logger.error(`Error ${this.phase} AI Gateway '${id}':`, error);
+      logger.error(`Error ${this.phase} AI Gateway '${gatewayName}':`, error);
       throw error; // Re-throw the error to fail the deployment
     }
 
     // Construct the output object from API response and merged props
-    return this({
+    return {
       ...mergedProps, // Start with the input props (including defaults)
       id: apiResource.id,
+      gatewayName,
       accountId: apiResource.account_id,
       accountTag: apiResource.account_tag,
       createdAt: apiResource.created_at,
@@ -248,7 +268,7 @@ export const AiGateway = Resource(
       logpush: apiResource.logpush,
       logpushPublicKey: apiResource.logpush_public_key,
       type: "ai_gateway",
-    });
+    };
   },
 );
 

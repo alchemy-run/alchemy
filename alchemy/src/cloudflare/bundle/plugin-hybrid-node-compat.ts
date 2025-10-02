@@ -4,9 +4,10 @@
 
 import type { Plugin, PluginBuild } from "esbuild";
 import assert from "node:assert";
-import module, { createRequire } from "node:module";
+import { createRequire } from "node:module";
 import nodePath from "node:path";
 import { dedent } from "../../util/dedent.ts";
+import { NODEJS_MODULES_RE } from "./nodejs-builtin-modules.ts";
 
 const _require =
   typeof require === "undefined" ? createRequire(import.meta.url) : require;
@@ -19,15 +20,34 @@ const REQUIRED_UNENV_ALIAS_NAMESPACE = "required-unenv-alias";
  *
  * @returns ESBuild plugin
  */
-export function esbuildPluginHybridNodeCompat(): Plugin {
+export function esbuildPluginHybridNodeCompat({
+  compatibilityDate,
+  compatibilityFlags,
+}: {
+  compatibilityDate?: string;
+  compatibilityFlags?: string[];
+}): Plugin {
   return {
     name: "hybrid-nodejs_compat",
-    setup: async (build) => {
+    async setup(build) {
       // `unenv` and `@cloudflare/unenv-preset` only publish esm
       const { defineEnv } = await import("unenv");
-      const { cloudflare } = await import("@cloudflare/unenv-preset");
+      const { getCloudflarePreset } = await import("@cloudflare/unenv-preset");
+
       const { alias, inject, external, polyfill } = defineEnv({
-        presets: [cloudflare],
+        presets: [
+          getCloudflarePreset({
+            compatibilityDate,
+            compatibilityFlags,
+          }),
+          {
+            alias: {
+              // Force esbuild to use the node implementation of debug instead of unenv's no-op stub.
+              // The alias is processed by handleUnenvAliasedPackages which uses require.resolve().
+              debug: "debug",
+            },
+          },
+        ],
         npmShims: true,
       }).env;
 
@@ -38,19 +58,6 @@ export function esbuildPluginHybridNodeCompat(): Plugin {
     },
   };
 }
-
-const NODEJS_MODULES_RE = new RegExp(
-  `^(node:)?(${module.builtinModules
-    .filter(
-      (m) =>
-        ![
-          // in some runtimes (like bun), `ws` is a built-in module but is not in `node`
-          // bundling for `nodejs_compat` should not polyfill these modules
-          "ws",
-        ].includes(m),
-    )
-    .join("|")})$`,
-);
 
 /**
  * If we are bundling a "Service Worker" formatted Worker, imports of external modules,
@@ -108,8 +115,8 @@ function handleRequireCallsToNodeJSBuiltins(build: PluginBuild) {
     ({ path }) => {
       return {
         contents: dedent`
-            import libDefault from '${path}';
-            module.exports = libDefault;`,
+          import libDefault from '${path}';
+          module.exports = libDefault;`,
         loader: "js",
       };
     },
@@ -133,7 +140,7 @@ function handleUnenvAliasedPackages(
   for (const [module, unresolvedAlias] of Object.entries(alias)) {
     try {
       aliasAbsolute[module] = _require.resolve(unresolvedAlias);
-    } catch (_e) {
+    } catch {
       // this is an alias for package that is not installed in the current app => ignore
     }
   }
@@ -144,17 +151,12 @@ function handleUnenvAliasedPackages(
 
   build.onResolve({ filter: UNENV_ALIAS_RE }, (args) => {
     const unresolvedAlias = alias[args.path];
-
     // Convert `require()` calls for NPM packages to a virtual ES Module that can be imported avoiding the require calls.
     // Note: Does not apply to Node.js packages that are handled in `handleRequireCallsToNodeJSBuiltins`
     if (
       args.kind === "require-call" &&
       (unresolvedAlias.startsWith("unenv/npm/") ||
-        unresolvedAlias.startsWith("unenv/mock/") ||
-        // this does not exist in the original wrangler code but does seem to resolve the problem
-        // TODO(sam): is this the right solution? Why does the same code work in wrangler?
-        unresolvedAlias.startsWith("@cloudflare/unenv-preset/npm/") ||
-        unresolvedAlias.startsWith("@cloudflare/unenv-preset/mock/"))
+        unresolvedAlias.startsWith("unenv/mock/"))
     ) {
       return {
         path: args.path,
@@ -200,7 +202,6 @@ function handleNodeJSGlobals(
 ) {
   const UNENV_VIRTUAL_MODULE_RE = /_virtual_unenv_global_polyfill-(.+)$/;
   const prefix = nodePath.resolve(
-    // getBasePath(),
     import.meta.dirname,
     "_virtual_unenv_global_polyfill-",
   );

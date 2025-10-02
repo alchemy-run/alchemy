@@ -54,7 +54,7 @@ export interface SubnetProps extends AwsClientProps {
 /**
  * Output returned after Subnet creation/update
  */
-export interface Subnet extends Resource<"aws::Subnet">, SubnetProps {
+export interface Subnet extends SubnetProps {
   /**
    * The ID of the subnet
    */
@@ -407,7 +407,7 @@ export const Subnet = Resource(
       await waitForSubnetAvailable(client, subnet.SubnetId, timeoutConfig);
     }
 
-    return this({
+    return {
       subnetId: subnet.SubnetId,
       vpcId: subnet.VpcId,
       state: subnet.State as "pending" | "available",
@@ -415,7 +415,7 @@ export const Subnet = Resource(
       defaultForAz: subnet.DefaultForAz,
       ...props,
       vpc: vpcId,
-    });
+    };
   },
 );
 

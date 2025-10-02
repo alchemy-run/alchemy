@@ -122,9 +122,7 @@ export interface ShippingRateProps {
 /**
  * Output from the Stripe shipping rate
  */
-export interface ShippingRate
-  extends Resource<"stripe::ShippingRate">,
-    ShippingRateProps {
+export interface ShippingRate extends ShippingRateProps {
   /**
    * The ID of the shipping rate
    */
@@ -209,6 +207,7 @@ export const ShippingRate = Resource(
     _id: string,
     props: ShippingRateProps,
   ): Promise<ShippingRate> {
+    const adopt = props.adopt ?? this.scope.adopt;
     const stripe = await createStripeClient({ apiKey: props.apiKey });
 
     if (this.phase === "delete") {
@@ -286,7 +285,7 @@ export const ShippingRate = Resource(
           try {
             shippingRate = await stripe.shippingRates.create(createParams);
           } catch (error) {
-            if (isStripeConflictError(error) && props.adopt) {
+            if (isStripeConflictError(error) && adopt) {
               throw new Error(
                 "ShippingRate adoption is not supported - shipping rates cannot be uniquely identified for adoption",
               );
@@ -295,7 +294,7 @@ export const ShippingRate = Resource(
             }
           }
         } catch (error) {
-          if (isStripeConflictError(error) && props.adopt) {
+          if (isStripeConflictError(error) && adopt) {
             throw new Error(
               "ShippingRate adoption is not supported - shipping rates cannot be uniquely identified for adoption",
             );
@@ -305,7 +304,7 @@ export const ShippingRate = Resource(
         }
       }
 
-      return this({
+      return {
         id: shippingRate.id,
         object: shippingRate.object,
         displayName: shippingRate.display_name || "",
@@ -354,7 +353,7 @@ export const ShippingRate = Resource(
         type: shippingRate.type || undefined,
         created: shippingRate.created,
         livemode: shippingRate.livemode,
-      });
+      };
     } catch (error) {
       logger.error("Error creating/updating shipping rate:", error);
       throw error;

@@ -1,115 +1,102 @@
-/**
- * Options for PlanetScale API requests
- */
-export interface PlanetScaleApiOptions {
-  /**
-   * PlanetScale API token (overrides environment variable)
-   */
-  apiKey?: string;
-}
+import type { Secret } from "../secret.ts";
+import {
+  createClient,
+  createConfig,
+  type ClientOptions,
+} from "../util/api/client/index.ts";
+import { PlanetScaleClient } from "./api/sdk.gen.ts";
+import type { GeneralError } from "./api/types.gen.ts";
 
 /**
- * Minimal API client for PlanetScale using raw fetch
+ * Properties for configuring the PlanetScale API.
  */
-export class PlanetScaleApi {
-  /** Base URL for API */
-  readonly baseUrl: string;
-
-  /** API token */
-  readonly apiToken: string;
-
+export interface PlanetScaleProps {
   /**
-   * Create a new API client
-   *
-   * @param options API options
+   * The base URL of the PlanetScale API. Defaults to https://api.planetscale.com/v1.
    */
-  constructor(options: PlanetScaleApiOptions = {}) {
-    this.baseUrl = "https://api.planetscale.com/v1";
-    this.apiToken = options.apiKey || process.env.PLANETSCALE_API_TOKEN || "";
-    if (!this.apiToken) {
-      throw new Error("PLANETSCALE_API_TOKEN environment variable is required");
-    }
-  }
-
+  baseUrl?: string;
   /**
-   * Make a request to the API
-   *
-   * @param path API path (without base URL)
-   * @param init Fetch init options
-   * @returns Raw Response object from fetch
+   * The ID of the service token to use for authentication. Defaults to the value of the PLANETSCALE_SERVICE_TOKEN_ID environment variable.
    */
-  private async fetch(path: string, init: RequestInit = {}): Promise<Response> {
-    const headers: Record<string, string> = {
-      Authorization: `${this.apiToken}`,
-      "Content-Type": "application/json",
-    };
-
-    if (init.headers) {
-      Object.assign(headers, init.headers);
-    }
-
-    return fetch(`${this.baseUrl}${path}`, {
-      ...init,
-      headers,
-    });
-  }
-
+  serviceTokenId?: Secret;
   /**
-   * Helper for GET requests
+   * The secret of the service token to use for authentication. Defaults to the value of the PLANETSCALE_SERVICE_TOKEN environment variable.
    */
-  async get(path: string, init: RequestInit = {}): Promise<Response> {
-    return this.fetch(path, { ...init, method: "GET" });
-  }
-
+  serviceToken?: Secret;
   /**
-   * Helper for POST requests
+   * The API key to use for authentication. Defaults to the value of the PLANETSCALE_API_TOKEN environment variable.
+   * @deprecated Use serviceTokenId and serviceToken instead.
    */
-  async post(
-    path: string,
-    body?: any,
-    init: RequestInit = {},
-  ): Promise<Response> {
-    return this.fetch(path, {
-      ...init,
-      method: "POST",
-      body: body ? JSON.stringify(body) : undefined,
-    });
-  }
-
+  apiKey?: Secret;
   /**
-   * Helper for PUT requests
+   * The organization to use for authentication. Defaults to the value of the PLANETSCALE_ORGANIZATION or PLANETSCALE_ORG_ID environment variable.
    */
-  async put(
-    path: string,
-    body?: any,
-    init: RequestInit = {},
-  ): Promise<Response> {
-    return this.fetch(path, {
-      ...init,
-      method: "PUT",
-      body: body ? JSON.stringify(body) : undefined,
-    });
-  }
+  organizationId?: string;
+}
 
-  /**
-   * Helper for PATCH requests
-   */
-  async patch(
-    path: string,
-    body?: any,
-    init: RequestInit = {},
-  ): Promise<Response> {
-    return this.fetch(path, {
-      ...init,
-      method: "PATCH",
-      body: body ? JSON.stringify(body) : undefined,
-    });
-  }
+export class PlanetScaleError extends Error {
+  status: number;
+  method: string;
+  url: string;
+  code: string | undefined;
 
-  /**
-   * Helper for DELETE requests
-   */
-  async delete(path: string, init: RequestInit = {}): Promise<Response> {
-    return this.fetch(path, { ...init, method: "DELETE" });
+  constructor(props: {
+    error: GeneralError;
+    request: Request;
+    response: Response;
+  }) {
+    super(
+      `A request to the PlanetScale API failed (${props.response.status}: ${props.error.message}`,
+    );
+    this.status = props.response.status;
+    this.method = props.request.method;
+    this.url = props.request.url;
+    this.code = props.error.code;
   }
 }
+
+export type { PlanetScaleClient };
+
+export function createPlanetScaleClient(
+  options: PlanetScaleProps = {},
+): PlanetScaleClient {
+  const token = extractToken(options);
+  const client = createClient(
+    createConfig<ClientOptions>({
+      baseUrl: options.baseUrl ?? "https://api.planetscale.com/v1",
+      headers: {
+        Authorization: token, // PlanetScale does not use the Bearer prefix
+      },
+      throwOnError: true,
+    }),
+  );
+  client.interceptors.error.use((error, response, request) => {
+    return new PlanetScaleError({
+      error: error as GeneralError,
+      request,
+      response,
+    });
+  });
+  return new PlanetScaleClient({
+    client,
+  });
+}
+
+const extractToken = (props: PlanetScaleProps) => {
+  if (props.apiKey) {
+    return props.apiKey.unencrypted;
+  } else if (props.serviceTokenId && props.serviceToken) {
+    return `${props.serviceTokenId.unencrypted}:${props.serviceToken.unencrypted}`;
+  } else if (process.env.PLANETSCALE_API_TOKEN) {
+    return process.env.PLANETSCALE_API_TOKEN;
+  } else if (
+    process.env.PLANETSCALE_SERVICE_TOKEN_ID &&
+    process.env.PLANETSCALE_SERVICE_TOKEN
+  ) {
+    return `${process.env.PLANETSCALE_SERVICE_TOKEN_ID}:${process.env.PLANETSCALE_SERVICE_TOKEN}`;
+  } else {
+    throw new Error(
+      "No authentication token provided for PlanetScale. Please provide an API key, service token ID and secret, or set the PLANETSCALE_SERVICE_TOKEN_ID and PLANETSCALE_SERVICE_TOKEN environment variables.",
+    );
+  }
+};

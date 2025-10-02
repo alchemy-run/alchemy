@@ -30,17 +30,15 @@ export interface VectorizeMetadataIndexProps extends CloudflareApiOptions {
 }
 
 export function isVectorizeMetadataIndex(
-  resource: Resource,
+  resource: any,
 ): resource is VectorizeMetadataIndex {
-  return resource[ResourceKind] === "cloudflare::VectorizeMetadataIndex";
+  return resource?.[ResourceKind] === "cloudflare::VectorizeMetadataIndex";
 }
 
 /**
  * Output returned after Vectorize Metadata Index creation/deletion
  */
-export interface VectorizeMetadataIndex
-  extends Resource<"cloudflare::VectorizeMetadataIndex">,
-    VectorizeMetadataIndexProps {
+export interface VectorizeMetadataIndex extends VectorizeMetadataIndexProps {
   /**
    * ID of this metadata index (derived from propertyName)
    */
@@ -126,7 +124,7 @@ export const VectorizeMetadataIndex = Resource(
             `Attempted to update Vectorize metadata index ${this.props.propertyName} but it was a no-op.`,
           );
         }
-        return this(this.output);
+        return this.output;
       }
       // Update operation is not supported
       throw new Error(
@@ -136,14 +134,14 @@ export const VectorizeMetadataIndex = Resource(
     }
     const indexData = await createMetadataIndex(api, indexName, props);
 
-    return this({
+    return {
       id: propertyName, // Use propertyName as ID
       index: props.index,
       propertyName: props.propertyName,
       indexType: props.indexType,
       accountId: api.accountId,
       mutationId: indexData.result.mutationId,
-    });
+    };
   },
 );
 

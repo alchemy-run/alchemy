@@ -1,17 +1,19 @@
 import assert from "node:assert";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { alchemy } from "../alchemy.ts";
 import { Exec } from "../os/index.ts";
 import { Scope } from "../scope.ts";
-import { isSecret } from "../secret.ts";
 import { dedent } from "../util/dedent.ts";
 import { logger } from "../util/logger.ts";
 import { Assets } from "./assets.ts";
 import type { Bindings } from "./bindings.ts";
 import { DEFAULT_COMPATIBILITY_DATE } from "./compatibility-date.gen.ts";
 import { unionCompatibilityFlags } from "./compatibility-presets.ts";
-import { DEFAULT_PERSIST_PATH } from "./miniflare/paths.ts";
+import { writeMiniflareSymlink } from "./miniflare/symlink-miniflare-state.ts";
+import {
+  extractStringAndSecretBindings,
+  unencryptSecrets,
+} from "./util/filter-env-bindings.ts";
 import { type AssetsConfig, Worker, type WorkerProps } from "./worker.ts";
 import { WranglerJson, type WranglerJsonSpec } from "./wrangler.json.ts";
 
@@ -28,7 +30,7 @@ export interface WebsiteProps<B extends Bindings>
         /**
          * The command to run to build the site
          */
-        command: string;
+        command?: string;
         /**
          * Additional environment variables to set when running the build command
          */
@@ -68,7 +70,7 @@ export interface WebsiteProps<B extends Bindings>
         /**
          * The command to run to start the dev server
          */
-        command: string;
+        command?: string;
         /**
          * Additional environment variables to set when running the dev command
          */
@@ -149,7 +151,7 @@ export async function Website<B extends Bindings>(
   props: WebsiteProps<B>,
 ) {
   const {
-    name = id,
+    name = Scope.current.createPhysicalName(id),
     build: buildProps,
     assets,
     dev,
@@ -227,14 +229,7 @@ export async function Website<B extends Bindings>(
   const env = {
     ...(process.env ?? {}),
     ...(props.env ?? {}),
-    ...Object.fromEntries(
-      Object.entries(props.bindings ?? {}).flatMap(([key, value]) => {
-        if (typeof value === "string" || (isSecret(value) && secrets)) {
-          return [[key, value]];
-        }
-        return [];
-      }),
-    ),
+    ...extractStringAndSecretBindings(props.bindings ?? {}, secrets),
   };
   const worker = {
     ...workerProps,
@@ -255,116 +250,120 @@ export async function Website<B extends Bindings>(
     entrypoint: path.relative(paths.cwd, paths.entrypoint),
   } as WorkerProps<B> & { name: string };
 
-  return await alchemy.run(id, { parent: Scope.current }, async (scope) => {
-    if (!workerProps.entrypoint) {
-      await fs.mkdir(path.dirname(paths.entrypoint), { recursive: true });
-      const content =
-        script ??
-        dedent`
-        export default {
-            async fetch(request, env) {
-                return new Response("Not Found", { status: 404 });
-            },
-        };`;
-      await fs.writeFile(paths.entrypoint, content);
-    }
-
-    await writeMiniflareSymlink(paths.cwd);
-
-    await WranglerJson("wrangler.jsonc", {
-      path: path.relative(paths.cwd, paths.wrangler.path),
-      worker,
-      assets: {
-        binding: "ASSETS",
-        directory: path.relative(paths.cwd, paths.assets),
-      },
-      main: path.relative(paths.cwd, paths.wrangler.main),
-      secrets,
-      transform: {
-        wrangler: props.wrangler?.transform,
-      },
-    });
-
-    if (build && !scope.local) {
-      await Exec("build", {
-        cwd: path.relative(process.cwd(), paths.cwd),
-        command: build.command,
-        env: {
-          ...env,
-          ...(typeof build === "object" ? build.env : {}),
-          NODE_ENV: "production",
-        },
-        memoize: typeof build === "object" ? build.memoize : undefined,
-      });
-    }
-
-    let url: string | undefined;
-    if (dev && scope.local) {
-      url = await scope.spawn(name, {
-        cmd: typeof dev === "string" ? dev : dev.command,
-        cwd: paths.cwd,
-        extract: (line) => {
-          const URL_REGEX =
-            /http:\/\/(localhost|0\.0\.0\.0|127\.0\.0\.1|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):\d+\/?/;
-          const match = line
-            .replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "")
-            .match(URL_REGEX);
-          if (match) {
-            return match[0];
-          }
-        },
-        env: {
-          ...Object.fromEntries(
-            Object.entries(env ?? {}).flatMap(([key, value]) => {
-              if (isSecret(value)) {
-                return [[key, value.unencrypted]];
-              }
-              if (typeof value === "string") {
-                return [[key, value]];
-              }
-              return [];
-            }),
-          ),
-          ...(typeof dev === "object" ? dev.env : {}),
-          FORCE_COLOR: "1",
-          ...process.env,
-          // NOTE: we must set this to ensure the user does not accidentally set `NODE_ENV=production`
-          // which breaks `vite dev` (it won't, for example, re-write `process.env.TSS_APP_BASE` in the `.js` client side bundle)
-          NODE_ENV: "development",
-        },
-      });
-    }
-
-    return (await Worker("worker", {
-      ...worker,
-      bindings: {
-        ...worker.bindings,
-        ...(!scope.local
-          ? {
-              ASSETS: await Assets("assets", {
-                path: path.relative(process.cwd(), paths.assets),
-              }),
-            }
-          : {}),
-      },
-      dev: url ? { url } : undefined,
-    })) as Website<B>;
-  });
-}
-
-async function writeMiniflareSymlink(cwd: string) {
-  const target = path.resolve(DEFAULT_PERSIST_PATH);
-  await fs.mkdir(target, { recursive: true });
-
-  if (cwd === process.cwd()) {
-    return;
+  if (!workerProps.entrypoint) {
+    await fs.mkdir(path.dirname(paths.entrypoint), { recursive: true });
+    const content =
+      script ??
+      dedent`
+      export default {
+          async fetch(request, env) {
+              return new Response("Not Found", { status: 404 });
+          },
+      };`;
+    await fs.writeFile(paths.entrypoint, content);
   }
 
-  const persistPath = path.resolve(cwd, DEFAULT_PERSIST_PATH);
-  await fs.mkdir(path.dirname(persistPath), { recursive: true });
-  await fs.symlink(target, persistPath).catch((e) => {
-    if (e.code !== "EEXIST") {
-      throw e;
-    }
+  if (Scope.current.local) {
+    await writeMiniflareSymlink(Scope.current.rootDir, paths.cwd);
+  }
+
+  await WranglerJson({
+    path: path.relative(paths.cwd, paths.wrangler.path),
+    worker,
+    assets: {
+      binding: "ASSETS",
+      directory: path.relative(paths.cwd, paths.assets),
+    },
+    main: path.relative(paths.cwd, paths.wrangler.main),
+    secrets,
+    transform: {
+      wrangler: props.wrangler?.transform,
+    },
   });
+
+  const scope = Scope.current;
+
+  if (build?.command && !scope.local) {
+    await Exec(`${id}-build`, {
+      cwd: path.relative(process.cwd(), paths.cwd),
+      command: build.command,
+      env: {
+        ...env,
+        ...(typeof build === "object" ? build.env : {}),
+        NODE_ENV: "production",
+        ALCHEMY_ROOT: Scope.current.rootDir,
+      },
+      memoize: typeof build === "object" ? build.memoize : undefined,
+    });
+  }
+
+  let url: string | undefined;
+  const devCommand = typeof dev === "string" ? dev : dev?.command;
+  if (devCommand && scope.local) {
+    url = await scope.spawn(name, {
+      cmd: devCommand,
+      cwd: paths.cwd,
+      extract: (line) => {
+        const URL_REGEX =
+          /http:\/\/(localhost|0\.0\.0\.0|127\.0\.0\.1|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):\d+\/?/;
+        const match = line
+          .replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "")
+          .match(URL_REGEX);
+        if (match) {
+          return match[0];
+        }
+      },
+      env: {
+        ...unencryptSecrets(env ?? {}),
+        ...(typeof dev === "object" ? dev.env : {}),
+        FORCE_COLOR: "1",
+        ...process.env,
+        // NOTE: we must set this to ensure the user does not accidentally set `NODE_ENV=production`
+        // which breaks `vite dev` (it won't, for example, re-write `process.env.TSS_APP_BASE` in the `.js` client side bundle)
+        NODE_ENV: "development",
+        ALCHEMY_ROOT: Scope.current.rootDir,
+      },
+    });
+  }
+
+  return (await Worker(id, {
+    ...worker,
+    bindings: {
+      ...worker.bindings,
+      ...(!scope.local
+        ? {
+            ASSETS: await Assets({
+              path: path.relative(process.cwd(), paths.assets),
+            }),
+          }
+        : {}),
+    },
+    dev: url ? { url } : undefined,
+  })) as Website<B>;
 }
+
+export const spreadBuildProps = (
+  props: { build?: WebsiteProps<Bindings>["build"] } | undefined,
+  defaultCommand: string,
+): WebsiteProps<Bindings>["build"] => {
+  if (typeof props?.build === "object") {
+    return {
+      ...props.build,
+      command: props.build.command ?? defaultCommand,
+    };
+  }
+  return props?.build ?? defaultCommand;
+};
+
+export const spreadDevProps = (
+  props: { dev?: WebsiteProps<Bindings>["dev"] } | undefined,
+  defaultCommand: string,
+): Exclude<WebsiteProps<Bindings>["dev"], undefined> => {
+  if (typeof props?.dev === "object") {
+    return {
+      ...props.dev,
+      command: props.dev.command ?? defaultCommand,
+    };
+  }
+  return props?.dev ?? defaultCommand;
+};

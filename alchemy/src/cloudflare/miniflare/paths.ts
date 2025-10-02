@@ -1,12 +1,26 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { existsSync, readlinkSync, statSync } from "node:fs";
+import path from "node:path";
+import { ALCHEMY_ROOT } from "../../util/root-dir.ts";
 
-export const DEFAULT_CONFIG_PATH = ".alchemy/local/wrangler.jsonc";
-export const DEFAULT_PERSIST_PATH = ".alchemy/miniflare/v3";
+const dynamicImportContext = new AsyncLocalStorage<boolean>();
 
-export const validateConfigPath = (
-  path = DEFAULT_CONFIG_PATH,
-  throws = true,
-) => {
+/**
+ * Used to disable path validation during dynamic imports.
+ */
+export const withSkipPathValidation = <T>(callback: () => T) => {
+  return dynamicImportContext.run(true, callback);
+};
+
+export const getDefaultConfigPath = (rootDir: string = process.cwd()) => {
+  return path.join(rootDir, ".alchemy", "local", "wrangler.jsonc");
+};
+
+export const getDefaultPersistPath = (rootDir: string = ALCHEMY_ROOT) => {
+  return path.join(rootDir, ".alchemy", "miniflare", "v3");
+};
+
+export const validateConfigPath = (path: string, throws = true) => {
   if (!existsSync(path)) {
     warnOrThrow(
       `The Wrangler config path, "${path}", could not be found. Please run \`alchemy dev\` or \`alchemy deploy\` to create it.`,
@@ -21,7 +35,7 @@ const DEFAULT_VALIDATE_PERSIST =
   !process.argv.some((arg) => ["build", "prepare", "typegen"].includes(arg));
 
 export const validatePersistPath = (
-  path = DEFAULT_PERSIST_PATH,
+  path: string,
   throws = DEFAULT_VALIDATE_PERSIST,
 ) => {
   try {
@@ -42,6 +56,9 @@ export const validatePersistPath = (
 const warned = new Set<string>();
 
 const warnOrThrow = (message: string, throws: boolean) => {
+  if (dynamicImportContext.getStore()) {
+    return;
+  }
   if (throws) {
     throw new Error(message);
   }

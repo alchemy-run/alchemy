@@ -78,9 +78,7 @@ export interface PromotionCodeProps {
 /**
  * Output from the Stripe promotion code
  */
-export interface PromotionCode
-  extends Resource<"stripe::PromotionCode">,
-    PromotionCodeProps {
+export interface PromotionCode extends PromotionCodeProps {
   /**
    * The ID of the promotion code
    */
@@ -156,6 +154,7 @@ export const PromotionCode = Resource(
     _id: string,
     props: PromotionCodeProps,
   ): Promise<PromotionCode> {
+    const adopt = props.adopt ?? this.scope.adopt;
     const stripe = await createStripeClient({ apiKey: props.apiKey });
 
     if (this.phase === "delete") {
@@ -203,7 +202,7 @@ export const PromotionCode = Resource(
         try {
           promotionCode = await stripe.promotionCodes.create(createParams);
         } catch (error) {
-          if (isStripeConflictError(error) && props.adopt) {
+          if (isStripeConflictError(error) && adopt) {
             if (props.code) {
               const existingPromotionCodes = await stripe.promotionCodes.list({
                 code: props.code,
@@ -231,7 +230,7 @@ export const PromotionCode = Resource(
         }
       }
 
-      return this({
+      return {
         id: promotionCode.id,
         object: promotionCode.object,
         coupon:
@@ -260,7 +259,7 @@ export const PromotionCode = Resource(
         created: promotionCode.created,
         livemode: promotionCode.livemode,
         timesRedeemed: promotionCode.times_redeemed,
-      });
+      };
     } catch (error) {
       logger.error("Error creating/updating promotion code:", error);
       throw error;

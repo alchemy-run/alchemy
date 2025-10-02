@@ -28,7 +28,8 @@ import {
 } from "./util/idempotent-spawn.ts";
 import { logger } from "./util/logger.ts";
 import { AsyncMutex } from "./util/mutex.ts";
-import type { ITelemetryClient } from "./util/telemetry/client.ts";
+import { ALCHEMY_ROOT } from "./util/root-dir.ts";
+import { createAndSendEvent } from "./util/telemetry.ts";
 
 export class RootScopeStateAttemptError extends Error {
   constructor() {
@@ -57,6 +58,12 @@ export interface ScopeOptions extends ProviderCredentials {
    */
   watch?: boolean;
   /**
+   * Whether to create a tunnel for supported resources.
+   *
+   * @default false
+   */
+  tunnel?: boolean;
+  /**
    * Apply updates to resources even if there are no changes.
    *
    * @default false
@@ -69,10 +76,11 @@ export interface ScopeOptions extends ProviderCredentials {
    */
   destroyStrategy?: DestroyStrategy;
   /**
-   * The telemetry client to use for the scope.
+   * Whether to disable telemetry for the scope.
    *
+   * @default false
    */
-  telemetryClient?: ITelemetryClient;
+  noTrack?: boolean;
   /**
    * The logger to use for the scope.
    */
@@ -83,6 +91,30 @@ export interface ScopeOptions extends ProviderCredentials {
    * @default "./.alchemy"
    */
   dotAlchemy?: string;
+  /**
+   * Whether to adopt resources if they already exist but are not yet managed by your Alchemy app.
+   *
+   * @default false
+   */
+  adopt?: boolean;
+  /**
+   * The path to the root directory of the project.
+   *
+   * @default process.cwd()
+   */
+  rootDir?: string;
+  /**
+   * The Alchemy profile to use for authoriziing requests.
+   */
+  profile?: string;
+  /**
+   * Whether this is the application that was selected with `--app`
+   *
+   * `true` if the application was selected with `--app`
+   * `false` if the application was not selected with `--app`
+   * `undefined` if the program was not run with `--app`
+   */
+  isSelected?: boolean;
 }
 
 /**
@@ -165,11 +197,17 @@ export class Scope {
   public readonly phase: Phase;
   public readonly local: boolean;
   public readonly watch: boolean;
+  public readonly tunnel: boolean;
   public readonly force: boolean;
+  public readonly adopt: boolean;
   public readonly destroyStrategy: DestroyStrategy;
   public readonly logger: LoggerApi;
-  public readonly telemetryClient: ITelemetryClient;
+  public readonly noTrack: boolean;
   public readonly dataMutex: AsyncMutex;
+  public readonly rootDir: string;
+  public readonly dotAlchemy: string;
+  public readonly isSelected: boolean | undefined;
+  public readonly profile: string | undefined;
 
   // Provider credentials for scope-level credential overrides
   public readonly providerCredentials: ProviderCredentials;
@@ -188,8 +226,6 @@ export class Scope {
     return this.scopeName;
   }
 
-  public readonly dotAlchemy: string;
-
   constructor(options: ScopeOptions) {
     // Extract core scope options first
     const {
@@ -202,17 +238,29 @@ export class Scope {
       phase,
       local,
       watch,
+      tunnel,
       force,
       destroyStrategy,
-      telemetryClient,
       logger,
+      adopt,
       dotAlchemy,
+      rootDir,
+      isSelected,
+      noTrack,
+      profile,
       ...providerCredentials
     } = options;
 
     this.scopeName = scopeName;
     this.name = this.scopeName;
     this.parent = parent ?? Scope.getScope();
+    this.rootDir = rootDir ?? this.parent?.rootDir ?? ALCHEMY_ROOT;
+    this.isSelected = isSelected ?? this.parent?.isSelected;
+
+    this.dotAlchemy =
+      dotAlchemy ??
+      this.parent?.dotAlchemy ??
+      path.resolve(this.rootDir, ".alchemy");
 
     // Store provider credentials (TypeScript ensures no conflicts with core options)
     this.providerCredentials = providerCredentials as ProviderCredentials;
@@ -224,18 +272,16 @@ export class Scope {
         `Scope name "${this.scopeName}" cannot contain double colons`,
       );
     }
-    this.dotAlchemy =
-      options.dotAlchemy ??
-      this.parent?.dotAlchemy ??
-      path.join(process.cwd(), ".alchemy");
 
     this.stage = stage ?? this.parent?.stage ?? DEFAULT_STAGE;
+    this.profile = profile ?? this.parent?.profile;
     this.parent?.children.set(this.scopeName!, this);
     this.quiet = quiet ?? this.parent?.quiet ?? false;
     if (this.parent && !this.scopeName) {
       throw new Error("Scope name is required when creating a child scope");
     }
     this.password = password ?? this.parent?.password;
+    this.noTrack = noTrack ?? this.parent?.noTrack ?? false;
     const resolvedPhase = phase ?? this.parent?.phase;
     if (resolvedPhase === undefined) {
       throw new Error("Phase is required");
@@ -255,7 +301,9 @@ export class Scope {
 
     this.local = local ?? this.parent?.local ?? false;
     this.watch = watch ?? this.parent?.watch ?? false;
+    this.tunnel = tunnel ?? this.parent?.tunnel ?? false;
     this.force = force ?? this.parent?.force ?? false;
+    this.adopt = adopt ?? this.parent?.adopt ?? false;
     this.destroyStrategy =
       destroyStrategy ?? this.parent?.destroyStrategy ?? "sequential";
     if (this.local) {
@@ -268,15 +316,21 @@ export class Scope {
       stateStore ??
       this.parent?.stateStore ??
       ((scope) => new FileSystemStateStore(scope));
-    this.telemetryClient = telemetryClient ?? this.parent?.telemetryClient!;
-    this.state = new InstrumentedStateStore(
-      this.stateStore(this),
-      this.telemetryClient,
-    );
-    if (!telemetryClient && !this.parent?.telemetryClient) {
-      throw new Error("Telemetry client is required");
-    }
+    this.state = new InstrumentedStateStore(this.stateStore(this));
     this.dataMutex = new AsyncMutex();
+  }
+
+  public async has(id: string, type?: string): Promise<boolean> {
+    const state = await this.state.get(id);
+    return state !== undefined && (type === undefined || state.kind === type);
+  }
+
+  public createPhysicalName(id: string, delimiter = "-"): string {
+    const app = this.appName;
+    const stage = this.stage;
+    return [app, ...this.chain.slice(2), id, stage]
+      .map((s) => s.replaceAll(/[^a-z0-9_-]/gi, delimiter))
+      .join(delimiter);
   }
 
   public async spawn<
@@ -284,11 +338,12 @@ export class Scope {
   >(
     // TODO(sam): validate uniqueness? Ensure a flat .logs/${id}.log dir? Or nest in scope dirs?
     id: string,
-    options: Omit<IdempotentSpawnOptions, "log" | "stateFile">,
+    options: Omit<IdempotentSpawnOptions, "log" | "stateFile"> & {
+      extract?: E;
+    },
   ): Promise<E extends undefined ? undefined : string> {
-    const dotAlchemy = path.join(process.cwd(), ".alchemy");
-    const logsDir = path.join(dotAlchemy, "logs");
-    const pidsDir = path.join(dotAlchemy, "pids");
+    const logsDir = path.join(this.dotAlchemy, "logs");
+    const pidsDir = path.join(this.dotAlchemy, "pids");
 
     const result = await idempotentSpawn({
       log: path.join(logsDir, `${id}.log`),
@@ -360,12 +415,7 @@ export class Scope {
   }
 
   public async init() {
-    await Promise.all([
-      this.state.init?.(),
-      this.telemetryClient.ready.catch((error) => {
-        this.logger.warn("Telemetry initialization failed:", error);
-      }),
-    ]);
+    await Promise.all([this.state.init?.()]);
   }
 
   public async deinit() {
@@ -462,26 +512,15 @@ export class Scope {
     return this.finalize();
   }
 
-  /**
-   * The telemetry client for the root scope.
-   * This is used so that app-level hooks are only called once.
-   */
-  private get rootTelemetryClient(): ITelemetryClient | null {
-    if (!this.parent) {
-      return this.telemetryClient;
-    }
-    return null;
-  }
-
-  public async finalize(force?: boolean) {
+  public async finalize(options?: { force?: boolean; noop?: boolean }) {
     const shouldForce =
-      force ||
+      options?.force ||
       this.parent === undefined ||
       this?.parent?.scopeName === this.root.scopeName;
     if (this.phase === "read") {
-      this.rootTelemetryClient?.record({
-        event: "app.success",
-        elapsed: performance.now() - this.startedAt,
+      createAndSendEvent({
+        event: "alchemy.success",
+        duration: performance.now() - this.startedAt,
       });
       return;
     }
@@ -504,7 +543,10 @@ export class Scope {
         await this.destroyPendingDeletions();
         await Promise.all(
           Array.from(this.children.values()).map((child) =>
-            child.finalize(shouldForce),
+            child.finalize({
+              force: shouldForce,
+              noop: options?.noop,
+            }),
           ),
         );
       }
@@ -525,23 +567,22 @@ export class Scope {
         quiet: this.quiet,
         strategy: this.destroyStrategy,
         force: shouldForce,
+        noop: options?.noop,
       });
-      this.rootTelemetryClient?.record({
-        event: "app.success",
-        elapsed: performance.now() - this.startedAt,
+      createAndSendEvent({
+        event: "alchemy.success",
+        duration: performance.now() - this.startedAt,
       });
     } else if (this.isErrored) {
       this.logger.warn("Scope is in error, skipping finalize");
-      this.rootTelemetryClient?.record({
-        event: "app.error",
-        error: new Error("Scope failed"),
-        elapsed: performance.now() - this.startedAt,
-      });
+      createAndSendEvent(
+        {
+          event: "alchemy.error",
+          duration: performance.now() - this.startedAt,
+        },
+        new Error("Scope failed"),
+      );
     }
-
-    await this.rootTelemetryClient?.finalize()?.catch((error) => {
-      this.logger.warn("Telemetry finalization failed:", error);
-    });
 
     if (!this.parent && process.env.ALCHEMY_TEST_KILL_ON_FINALIZE) {
       await this.cleanup();

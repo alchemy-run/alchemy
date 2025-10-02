@@ -1,12 +1,13 @@
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
 import { loadConfig } from "@smithy/node-config-provider";
+import type { Provider } from "@smithy/types";
 import { AwsClient } from "aws4fetch";
 import { flattenParams } from "../util/params.ts";
 
 /**
  * Get AWS region from configuration
  */
-export const getRegion = loadConfig({
+export const getRegion: Provider<string> = loadConfig({
   environmentVariableSelector: (env: any) =>
     env.AWS_REGION || env.AWS_DEFAULT_REGION,
   configFileSelector: (profile: any) => profile.region,

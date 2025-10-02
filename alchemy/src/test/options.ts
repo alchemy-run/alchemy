@@ -39,4 +39,10 @@ export interface TestOptions {
    * @default "sequential"
    */
   destroyStrategy?: DestroyStrategy;
+
+  /**
+   * Whether to run the resources in local mode.
+   * @default false
+   */
+  local?: boolean;
 }
