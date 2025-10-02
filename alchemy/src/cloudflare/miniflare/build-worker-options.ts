@@ -81,7 +81,7 @@ export const buildWorkerOptions = async (
       localDocker: {
         socketPath:
           process.platform === "win32"
-            ? "//./pipe/docker_engine"
+            ? "localhost:2375"
             : "unix:///var/run/docker.sock",
       },
     },
