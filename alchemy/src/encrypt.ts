@@ -141,6 +141,7 @@ export async function libsodiumEncrypt(
  * @param encryptedValue - The base64-encoded encrypted value with nonce
  * @param key - The decryption key
  * @returns The decrypted string
+ * @internal - Exposed for testing
  */
 export async function libsodiumDecrypt(
   encryptedValue: string,
