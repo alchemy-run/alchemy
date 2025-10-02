@@ -1,3 +1,100 @@
+import crypto from "node:crypto";
+
+const KEY_LEN = 32;
+const SCRYPT_N = 16384;
+const SCRYPT_R = 8;
+const SCRYPT_P = 1;
+const SALT_LEN = 16;
+const IV_LEN = 12;
+const ALGO = "aes-256-gcm";
+
+interface Encrypted {
+  ciphertext: string; // base64
+  iv: string; // base64
+  salt: string; // base64
+  tag: string; // base64
+}
+
+export function encrypt(value: string, key: string): Promise<Encrypted> {
+  return scryptEncrypt(value, key);
+}
+
+export function decryptWithKey(
+  value: string | Encrypted,
+  key: string,
+): Promise<string> {
+  if (typeof value === "string") {
+    return libsodiumDecrypt(value, key);
+  }
+  return scryptDecrypt(value, key);
+}
+
+async function scryptEncrypt(
+  value: string,
+  passphrase: string,
+): Promise<Encrypted> {
+  const salt = crypto.randomBytes(SALT_LEN);
+  const key = await deriveScryptKey(passphrase, salt);
+  const iv = crypto.randomBytes(IV_LEN);
+
+  const cipher = crypto.createCipheriv(ALGO, key, iv);
+  const ciphertext = Buffer.concat([
+    cipher.update(value, "utf8"),
+    cipher.final(),
+  ]);
+  const tag = cipher.getAuthTag();
+
+  return {
+    ciphertext: ciphertext.toString("base64"),
+    iv: iv.toString("base64"),
+    salt: salt.toString("base64"),
+    tag: tag.toString("base64"),
+  };
+}
+
+async function scryptDecrypt(
+  parts: Encrypted,
+  passphrase: string,
+): Promise<string> {
+  const salt = Buffer.from(parts.salt, "base64");
+  const iv = Buffer.from(parts.iv, "base64");
+  const ciphertext = Buffer.from(parts.ciphertext, "base64");
+  const tag = Buffer.from(parts.tag, "base64");
+
+  const key = await deriveScryptKey(passphrase, salt);
+
+  const decipher = crypto.createDecipheriv(ALGO, key, iv);
+  decipher.setAuthTag(tag);
+
+  const plaintext = Buffer.concat([
+    decipher.update(ciphertext),
+    decipher.final(),
+  ]);
+  return plaintext.toString("utf8");
+}
+
+async function deriveScryptKey(
+  passphrase: string,
+  salt: Buffer,
+): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    crypto.scrypt(
+      passphrase,
+      salt,
+      KEY_LEN,
+      {
+        N: SCRYPT_N,
+        r: SCRYPT_R,
+        p: SCRYPT_P,
+      },
+      (err, derivedKey) => {
+        if (err) reject(err);
+        else resolve(derivedKey);
+      },
+    );
+  });
+}
+
 /**
  * Encrypt a value with a symmetric key using libsodium
  *
@@ -5,7 +102,7 @@
  * @param key - The encryption key
  * @returns The base64-encoded encrypted value with nonce
  */
-export async function encrypt(value: string, key: string): Promise<string> {
+async function libsodiumEncrypt(value: string, key: string): Promise<string> {
   const sodium = (await import("libsodium-wrappers")).default;
   // Initialize libsodium
   await sodium.ready;
@@ -41,7 +138,7 @@ export async function encrypt(value: string, key: string): Promise<string> {
  * @param key - The decryption key
  * @returns The decrypted string
  */
-export async function decryptWithKey(
+async function libsodiumDecrypt(
   encryptedValue: string,
   key: string,
 ): Promise<string> {
