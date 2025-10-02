@@ -1,3 +1,31 @@
+## v0.70.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **clickhouse**:
+  - Clickhouse Service resource &nbsp;-&nbsp; by **Michael K** in https://github.com/sam-goodwin/alchemy/issues/989 [<samp>(40b6f)</samp>](https://github.com/sam-goodwin/alchemy/commit/40b6f634)
+- **cloudflare**:
+  - Add logpush support to worker metadata and configuration &nbsp;-&nbsp; by **Jacob M-G Evans** in https://github.com/sam-goodwin/alchemy/issues/1034 [<samp>(a2792)</samp>](https://github.com/sam-goodwin/alchemy/commit/a2792c0c)
+  - A bun SPA resource which uses bun HMR for dev and bun build for deploy &nbsp;-&nbsp; by **Andrew Jefferson** in https://github.com/sam-goodwin/alchemy/issues/1030 [<samp>(1641d)</samp>](https://github.com/sam-goodwin/alchemy/commit/1641da34)
+  - Add lite, standard-1,2,3,4 Container instance types &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/1048 [<samp>(6c7cf)</samp>](https://github.com/sam-goodwin/alchemy/commit/6c7cf810)
+- **coinbase**:
+  - Add Coinbase CDP provider - EVM account & smartAccount resources &nbsp;-&nbsp; by **Nick Balestra-Foster** in https://github.com/sam-goodwin/alchemy/issues/1012 [<samp>(2a170)</samp>](https://github.com/sam-goodwin/alchemy/commit/2a170217)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**:
+  - Use miniflare entry for proxy &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/1033 [<samp>(97107)</samp>](https://github.com/sam-goodwin/alchemy/commit/971072d2)
+  - Make Website dev command optional &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/1047 [<samp>(8a633)</samp>](https://github.com/sam-goodwin/alchemy/commit/8a63378a)
+- **planetscale**:
+  - Errors swallowed by hey-api &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/1035 [<samp>(0f54e)</samp>](https://github.com/sam-goodwin/alchemy/commit/0f54ec66)
+- **telemetry**:
+  - Migrate user id & avoid generating id if telemetry disabled &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/1039 [<samp>(35d9a)</samp>](https://github.com/sam-goodwin/alchemy/commit/35d9add9)
+  - Hash origin url &nbsp;-&nbsp; by **Michael K** in https://github.com/sam-goodwin/alchemy/issues/1044 [<samp>(289f6)</samp>](https://github.com/sam-goodwin/alchemy/commit/289f6527)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.69.1...v0.70.0)
+
+---
+
 ## v0.69.1
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
