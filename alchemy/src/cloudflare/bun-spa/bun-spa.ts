@@ -14,16 +14,13 @@ import {
   Website,
   type WebsiteProps,
 } from "../website.ts";
-import type { Worker } from "../worker.ts";
 
 export interface BunSPAProps<B extends Bindings> extends WebsiteProps<B> {
   frontend: string;
   outDir?: string;
 }
 
-export type BunSPA<B extends Bindings> = B extends { ASSETS: any }
-  ? never
-  : Worker<B & { ASSETS: Assets }>;
+export type BunSPA<B extends Bindings> = Website<B> & { apiUrl: string };
 
 export async function BunSPA<B extends Bindings>(
   id: string,
@@ -105,7 +102,7 @@ export async function BunSPA<B extends Bindings>(
       },
     });
   }
-  return { ...website, apiUrl };
+  return { ...website, apiUrl } as BunSPA<B>;
 }
 
 async function validateBunfigToml(cwd: string): Promise<void> {
