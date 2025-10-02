@@ -3,6 +3,7 @@
 import alchemy from "alchemy";
 import { Container, Worker } from "alchemy/cloudflare";
 import { SQLiteStateStore } from "alchemy/state";
+import { test } from "./e2e.ts";
 import type { MyContainer } from "./src/worker.ts";
 
 const app = await alchemy("cloudflare-container", {
@@ -27,5 +28,9 @@ export const worker = await Worker("test-worker", {
 });
 
 console.log(worker.url);
+
+if (process.env.ALCHEMY_E2E) {
+  await test({ url: worker.url });
+}
 
 await app.finalize();
