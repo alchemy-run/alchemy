@@ -15,10 +15,21 @@ export async function TanStackStart<B extends Bindings>(
   props?: Partial<TanStackStartProps<B>>,
 ): Promise<TanStackStart<B>> {
   return await Vite(id, {
-    ...props,
+    entrypoint: "dist/server/index.js",
+    assets: "dist/client",
+    compatibility: "node",
     noBundle: true,
-    entrypoint: props?.entrypoint ?? ".output/server/index.mjs",
-    compatibilityFlags: ["nodejs_compat", ...(props?.compatibilityFlags ?? [])],
-    assets: props?.assets ?? ".output/public",
+    spa: false,
+    ...props,
+    wrangler: {
+      ...props?.wrangler,
+      transform: async (spec) => {
+        const transformed = (await props?.wrangler?.transform?.(spec)) ?? spec;
+        if (!props?.wrangler?.main) {
+          transformed.main = "@tanstack/react-start/server-entry";
+        }
+        return transformed;
+      },
+    },
   });
 }

@@ -167,18 +167,23 @@ export interface BaseWorkerProps<
   url?: boolean;
 
   /**
-   * Observability configuration for the worker
+   * Specify the observability behavior of the Worker.
    *
-   * Controls whether worker logs are enabled
-   * @default { enabled: true }
+   * @see https://developers.cloudflare.com/workers/wrangler/configuration/#observability
+   * @default - `enabled: true`
    */
-  observability?: {
-    /**
-     * Whether to enable worker logs
-     * @default true
-     */
-    enabled?: boolean;
-  };
+  observability?: WorkerObservability;
+
+  /**
+   * Enable Workers Logpush to export trace events (request/response metadata,
+   * console logs, and exceptions) to external destinations.
+   *
+   * Requires a separate Logpush job configuration via the Cloudflare API.
+   *
+   * @see https://developers.cloudflare.com/workers/observability/logging/logpush
+   * @default false
+   */
+  logpush?: boolean;
 
   /**
    * Whether to adopt the Worker if it already exists when creating
@@ -325,7 +330,7 @@ export interface BaseWorkerProps<
   dev?:
     | {
         /**
-         * Port to use for local development
+         * Port to use for local development.
          */
         port?: number;
         /**
@@ -375,6 +380,90 @@ export interface BaseWorkerProps<
      * @default 30_000 (30 seconds)
      */
     cpu_ms?: number;
+  };
+
+  /**
+   * Tail consumers that will receive execution logs from this worker
+   */
+  tailConsumers?: Array<Worker | { service: string }>;
+}
+
+export interface WorkerObservability {
+  /**
+   * If observability is enabled for this Worker
+   *
+   * @default true
+   */
+  enabled?: boolean;
+
+  /**
+   * A number between 0 and 1, where 0 indicates zero out of one hundred requests are logged, and 1 indicates every request is logged.
+   * If head_sampling_rate is unspecified, it is configured to a default value of 1 (100%).
+   * @see https://developers.cloudflare.com/workers/observability/logs/workers-logs/#head-based-sampling
+   * @default 1
+   */
+  headSamplingRate?: number;
+
+  /**
+   * Configuration for worker logs
+   */
+  logs?: {
+    /**
+     * Whether logs are enabled
+     * @default true
+     */
+    enabled?: boolean;
+
+    /**
+     * The sampling rate for logs
+     */
+    headSamplingRate?: number;
+
+    /**
+     * Set to false to disable invocation logs
+     * @default true
+     */
+    invocationLogs?: boolean;
+
+    /**
+     * If logs should be persisted to the Cloudflare observability platform where they can be queried in the dashboard.
+     * @default true
+     */
+    persist?: boolean;
+
+    /**
+     * What destinations logs emitted from the Worker should be sent to.
+     * @default []
+     */
+    destinations?: string[];
+  };
+
+  /**
+   * Configuration for worker traces
+   */
+  traces?: {
+    /**
+     * Whether traces are enabled
+     * @default true
+     */
+    enabled?: boolean;
+
+    /**
+     * The sampling rate for traces
+     */
+    headSamplingRate?: number;
+
+    /**
+     * If traces should be persisted to the Cloudflare observability platform where they can be queried in the dashboard.
+     * @default true
+     */
+    persist?: boolean;
+
+    /**
+     * What destinations traces emitted from the Worker should be sent to.
+     * @default []
+     */
+    destinations?: string[];
   };
 }
 
@@ -433,8 +522,8 @@ export type WorkerProps<
   RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
 > = InlineWorkerProps<B, RPC> | EntrypointWorkerProps<B, RPC>;
 
-export function isWorker(resource: Resource): resource is Worker<any> {
-  return resource[ResourceKind] === "cloudflare::Worker";
+export function isWorker(resource: any): resource is Worker<any> {
+  return resource?.[ResourceKind] === "cloudflare::Worker";
 }
 
 /**
@@ -443,109 +532,108 @@ export function isWorker(resource: Resource): resource is Worker<any> {
 export type Worker<
   B extends Bindings | undefined = Bindings | undefined,
   RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
-> = Resource<"cloudflare::Worker"> &
-  Omit<WorkerProps<B>, "url" | "script" | "routes" | "domains"> & {
-    /** @internal phantom property */
-    __rpc__?: RPC;
+> = Omit<WorkerProps<B>, "url" | "script" | "routes" | "domains"> & {
+  /** @internal phantom property */
+  __rpc__?: RPC;
 
-    type: "service";
+  type: "service";
 
-    /**
-     * The ID of the worker
-     */
-    id: string;
+  /**
+   * The ID of the worker
+   */
+  id: string;
 
-    /**
-     * The name of the worker
-     */
-    name: string;
+  /**
+   * The name of the worker
+   */
+  name: string;
 
-    /**
-     * The root directory of the project
-     * @default process.cwd()
-     */
-    cwd: string;
+  /**
+   * The root directory of the project
+   * @default process.cwd()
+   */
+  cwd: string;
 
-    /**
-     * Time at which the worker was created
-     */
-    createdAt: number;
+  /**
+   * Time at which the worker was created
+   */
+  createdAt: number;
 
-    /**
-     * Time at which the worker was last updated
-     */
-    updatedAt: number;
+  /**
+   * Time at which the worker was last updated
+   */
+  updatedAt: number;
 
-    /**
-     * The worker's URL if enabled
-     * Format: {name}.{subdomain}.workers.dev
-     *
-     * @default true
-     */
-    url?: string;
+  /**
+   * The worker's URL if enabled
+   * Format: {name}.{subdomain}.workers.dev
+   *
+   * @default true
+   */
+  url?: string;
 
-    /**
-     * The bindings that were created
-     */
-    bindings: B;
+  /**
+   * The bindings that were created
+   */
+  bindings: B;
 
-    /**
-     * Configuration for static assets
-     */
-    assets?: AssetsConfig;
+  /**
+   * Configuration for static assets
+   */
+  assets?: AssetsConfig;
 
-    /**
-     * The routes that were created for this worker
-     */
-    routes?: Route[];
+  /**
+   * The routes that were created for this worker
+   */
+  routes?: Route[];
 
-    /**
-     * The custom domains that were created for this worker
-     */
-    domains?: CustomDomain[];
+  /**
+   * The custom domains that were created for this worker
+   */
+  domains?: CustomDomain[];
 
-    // phantom property (for typeof myWorker.Env)
-    Env: B extends Bindings
-      ? {
-          [bindingName in keyof B]: Bound<B[bindingName]>;
-        }
-      : undefined;
+  // phantom property (for typeof myWorker.Env)
+  Env: B extends Bindings
+    ? {
+        [bindingName in keyof B]: Bound<B[bindingName]>;
+      }
+    : undefined;
 
-    /**
-     * The compatibility date for the worker
-     */
-    compatibilityDate: string;
+  /**
+   * The compatibility date for the worker
+   */
+  compatibilityDate: string;
 
-    /**
-     * The compatibility flags for the worker
-     */
-    compatibilityFlags: string[];
+  /**
+   * The compatibility flags for the worker
+   */
+  compatibilityFlags: string[];
 
-    /**
-     * The dispatch namespace this worker is deployed to
-     */
-    namespace?: string | DispatchNamespace;
+  /**
+   * The dispatch namespace this worker is deployed to
+   */
+  namespace?: string | DispatchNamespace;
 
-    /**
-     * Version label for this worker deployment
-     */
-    version?: string;
+  /**
+   * Version label for this worker deployment
+   */
+  version?: string;
 
-    /**
-     * Smart placement configuration for the worker
-     */
-    placement?: {
-      mode: "smart";
-    };
-
-    /**
-     * Whether the worker has a remote deployment
-     * @internal
-     */
-    dev?: {
-      hasRemote: boolean;
-    };
+  /**
+   * Smart placement configuration for the worker
+   */
+  placement?: {
+    mode: "smart";
   };
+
+  /**
+   * Whether the worker has a remote deployment
+   * @internal
+   */
+  dev?: {
+    hasRemote: boolean;
+  };
+};
 
 /**
  * A Cloudflare Worker is a serverless function that can be deployed to the Cloudflare network.
@@ -615,7 +703,7 @@ export type Worker<
  *
  * @example
  * // Create a worker with static assets:
- * const staticAssets = await Assets("static", {
+ * const staticAssets = await Assets({
  *   path: "./src/assets"
  * });
  *
@@ -909,7 +997,7 @@ const _Worker = Resource(
           containers: options.containers,
         },
       );
-      return this({
+      return {
         ...props,
         type: "service",
         id,
@@ -928,7 +1016,7 @@ const _Worker = Resource(
           hasRemote: this.output?.dev?.hasRemote ?? false,
         },
         Env: undefined!,
-      } as unknown as Worker<B>);
+      } as unknown as Worker<B>;
     }
 
     if (this.phase === "create" || this.output.dev?.hasRemote === false) {
@@ -1027,6 +1115,7 @@ const _Worker = Resource(
         props.crons?.map((cron) => ({ cron })) ?? [],
       );
     }
+
     await Promise.all(
       options.workflows.map((workflow) =>
         upsertWorkflow(api, {
@@ -1053,7 +1142,7 @@ const _Worker = Resource(
     );
 
     const now = new Date();
-    return this({
+    return {
       ...props,
       type: "service",
       id,
@@ -1072,6 +1161,7 @@ const _Worker = Resource(
       url: subdomain?.url,
       assets: props.assets,
       crons: props.crons,
+      tailConsumers: props.tailConsumers,
       routes,
       domains,
       namespace: props.namespace,
@@ -1082,7 +1172,7 @@ const _Worker = Resource(
       dev: {
         hasRemote: true,
       },
-    } as unknown as Worker<B>);
+    } as unknown as Worker<B>;
   },
 );
 
@@ -1198,6 +1288,7 @@ async function provisionResources<B extends Bindings>(
       apiToken: props.apiToken,
       email: props.email,
       baseUrl: props.baseUrl,
+      profile: props.profile,
     } satisfies CloudflareApiOptions,
   };
 
@@ -1597,7 +1688,7 @@ async function assertWorkerDoesNotExist(
   );
 }
 
-async function getScriptMetadata(
+export async function getScriptMetadata(
   api: CloudflareApi,
   scriptName: string,
 ): Promise<WorkerScriptMetadata | undefined> {

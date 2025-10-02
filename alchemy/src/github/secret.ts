@@ -46,9 +46,7 @@ export interface GitHubSecretProps {
 /**
  * Output returned after Secret creation/update
  */
-export interface GitHubSecretOutput
-  extends Resource<"github::Secret">,
-    Omit<GitHubSecretProps, "value"> {
+export interface GitHubSecretOutput extends Omit<GitHubSecretProps, "value"> {
   /**
    * The ID of the resource
    */
@@ -280,7 +278,7 @@ export const GitHubSecret = Resource(
       }
       idParts.push(props.name);
 
-      return this({
+      return {
         id: idParts.join("/"),
         owner: props.owner,
         repository: props.repository,
@@ -288,7 +286,7 @@ export const GitHubSecret = Resource(
         environment: props.environment,
         token: props.token,
         updatedAt: new Date().toISOString(),
-      });
+      };
     } catch (error: any) {
       if (
         error.status === 403 &&

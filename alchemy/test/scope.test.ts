@@ -116,7 +116,7 @@ describe.concurrent("Scope", () => {
                 return this.destroy();
               }
               await Inner("inner", { fileName: "test-inner" });
-              return this({});
+              return {};
             },
           );
 
@@ -128,7 +128,7 @@ describe.concurrent("Scope", () => {
                 isDeleted = true;
                 return this.destroy();
               }
-              return this({});
+              return {};
             },
           );
           try {
@@ -140,7 +140,7 @@ describe.concurrent("Scope", () => {
             // @ts-expect-error - internal access to make sure we don't skip the outer scope
             expect(scope.isSkipped).toBe(false);
             // finalizing a scoped that was skipped should not delete nested resources
-            await outer[ResourceScope].finalize();
+            await (outer as any)[ResourceScope].finalize();
             expect(isDeleted).toBe(false);
           } finally {
             await destroy(scope);
@@ -163,7 +163,7 @@ describe.concurrent("Scope", () => {
               return this.destroy();
             }
             updates++;
-            return this(props);
+            return props;
           },
         );
         try {
@@ -196,7 +196,7 @@ describe.concurrent("Scope", () => {
               finished.add(id);
               return this.destroy();
             }
-            return this({});
+            return {};
           },
         );
         try {

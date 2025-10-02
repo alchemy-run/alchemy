@@ -122,9 +122,7 @@ export interface ShippingRateProps {
 /**
  * Output from the Stripe shipping rate
  */
-export interface ShippingRate
-  extends Resource<"stripe::ShippingRate">,
-    ShippingRateProps {
+export interface ShippingRate extends ShippingRateProps {
   /**
    * The ID of the shipping rate
    */
@@ -306,7 +304,7 @@ export const ShippingRate = Resource(
         }
       }
 
-      return this({
+      return {
         id: shippingRate.id,
         object: shippingRate.object,
         displayName: shippingRate.display_name || "",
@@ -355,7 +353,7 @@ export const ShippingRate = Resource(
         type: shippingRate.type || undefined,
         created: shippingRate.created,
         livemode: shippingRate.livemode,
-      });
+      };
     } catch (error) {
       logger.error("Error creating/updating shipping rate:", error);
       throw error;

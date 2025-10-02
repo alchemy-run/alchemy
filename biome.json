@@ -27,7 +27,9 @@
       "./examples/*/test/**/*.ts",
       "./tests/*/**/*.ts",
       "./examples/*/*.ts",
+      "!.worktrees",
       "!**/node_modules",
+      "examples/cloudflare-tanstack-start/src/**/*.{ts,tsx}",
       "!examples/cloudflare-tanstack-start/src/routeTree.gen.ts",
       "!examples/cloudflare-redwood/worker-configuration.d.ts",
       "!./alchemy/src/aws/control/types.ts",
@@ -35,7 +37,7 @@
       "!examples/cloudflare-nuxt-pipeline/.output/",
       "!./alchemy/lib/",
       "!**/*.gen.ts",
-      "alchemy/src/planetscale/api/*.ts",
+      "alchemy/src/{neon,planetscale,clickhouse}/api/*.ts",
       "monorepo/**/*.ts",
       "monorepo/**/*.tsx",
       "monorepo/**/*.json"

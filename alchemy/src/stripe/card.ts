@@ -107,7 +107,7 @@ export interface CardProps {
 /**
  * Output from the Stripe card
  */
-export interface Card extends Resource<"stripe::Card">, CardProps {
+export interface Card extends CardProps {
   /**
    * The ID of the card
    */
@@ -292,7 +292,7 @@ export const Card = Resource(
         }
       }
 
-      return this({
+      return {
         id: card.id,
         object: card.object,
         customer: props.customer,
@@ -315,7 +315,7 @@ export const Card = Resource(
         defaultForCurrency: card.default_for_currency || undefined,
         metadata: card.metadata || undefined,
         tokenizationMethod: card.tokenization_method || undefined,
-      });
+      };
     } catch (error) {
       logger.error("Error creating/updating card:", error);
       throw error;

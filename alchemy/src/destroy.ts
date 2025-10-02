@@ -50,10 +50,10 @@ function isScopeArgs(a: any): a is [scope: Scope, options?: DestroyOptions] {
 /**
  * Prune all resources from an Output and "down", i.e. that branches from it.
  */
-export async function destroy<Type extends string>(
+export async function destroy(
   ...args:
     | [scope: Scope, options?: DestroyOptions]
-    | [resource: Resource<Type> | undefined | null, options?: DestroyOptions]
+    | [resource: any | undefined | null, options?: DestroyOptions]
 ): Promise<void> {
   if (isScopeArgs(args)) {
     const [scope] = args;

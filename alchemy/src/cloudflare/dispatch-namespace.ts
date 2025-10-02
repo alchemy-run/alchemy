@@ -37,17 +37,16 @@ export interface DispatchNamespaceProps extends CloudflareApiOptions {
 }
 
 export function isDispatchNamespace(
-  resource: Resource,
+  resource: any,
 ): resource is DispatchNamespace {
-  return resource[ResourceKind] === "cloudflare::DispatchNamespace";
+  return resource?.[ResourceKind] === "cloudflare::DispatchNamespace";
 }
 
 /**
  * Output returned after Dispatch Namespace creation/update
  */
 export interface DispatchNamespace
-  extends Resource<"cloudflare::DispatchNamespace">,
-    Omit<DispatchNamespaceProps, "delete"> {
+  extends Omit<DispatchNamespaceProps, "delete"> {
   type: "dispatch_namespace";
   /**
    * The name of the namespace
@@ -182,14 +181,14 @@ export const DispatchNamespace = Resource(
       throw new Error(`Failed to get namespace information for '${namespace}'`);
     }
 
-    return this({
+    return {
       type: "dispatch_namespace",
       namespace,
       namespaceName: namespaceInfo.namespaceName,
       namespaceId: namespaceInfo.namespaceId,
       createdAt: createdAt,
       modifiedAt: Date.now(),
-    });
+    };
   },
 );
 

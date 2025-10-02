@@ -28,8 +28,5 @@ export default {
   // pass the password in (you can get it from anywhere, e.g. stdin)
   password: process.env.SECRET_PASSPHRASE,
   quiet: process.argv.includes("--quiet"),
-  stateStore:
-    process.env.ALCHEMY_STATE_STORE === "cloudflare"
-      ? (scope) => new CloudflareStateStore(scope)
-      : undefined,
+  stateStore: (scope) => new CloudflareStateStore(scope),
 } satisfies AlchemyOptions;

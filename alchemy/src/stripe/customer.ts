@@ -163,7 +163,7 @@ export interface CustomerProps {
 /**
  * Output from the Stripe customer
  */
-export interface Customer extends Resource<"stripe::Customer">, CustomerProps {
+export interface Customer extends CustomerProps {
   /**
    * The ID of the customer
    */
@@ -432,7 +432,7 @@ export const Customer = Resource(
         }
       }
 
-      return this({
+      return {
         id: customer.id,
         object: customer.object,
         address: customer.address
@@ -506,7 +506,7 @@ export const Customer = Resource(
         subscriptions: customer.subscriptions || undefined,
         taxExempt: customer.tax_exempt || undefined,
         taxIds: customer.tax_ids || undefined,
-      });
+      };
     } catch (error) {
       logger.error("Error creating/updating customer:", error);
       throw error;

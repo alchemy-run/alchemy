@@ -353,15 +353,14 @@ export const {{ResourceName}} = Resource(
         const data = await response.json();
         const resource = data.result || data;
 
-        // Return the resource using this() to construct output
-        return this({
+        return {
           id: resource.id,
           name: resource.name,
           description: resource.description,
           createdAt: resource.created_at || Date.now(),
           // Include all other required properties from the interface
           ...props // Include any additional properties from props
-        });
+        };
       } catch (error) {
         console.error("Error creating/updating resource:", error);
         throw error;
@@ -386,11 +385,11 @@ export const {{ResourceName}} = Resource(
 
    - Use `this.phase` to check the current operation phase ("create", "update", or "delete")
    - For deletion, return `this.destroy()`
-   - For creation/update, return `this({...})` with the resource properties
+   - For creation/update, return `{...}` with the resource properties
 
 4. **Output Construction**:
 
-   - Use `this({...})` to construct the resource output
+   - Use `{...}` to construct the resource output
    - Include all required properties from the interface
    - Spread the props object to include any additional properties
 
@@ -651,7 +650,7 @@ Alchemy resources follow an async/await pattern with a pseudo-class implementati
    - Access context through `this: Context<T>`
    - Use `this.phase` for operation type ("create", "update", "delete")
    - Use `this.output` for current resource state
-   - Use `this({...})` to construct resource output
+   - Use `{...}` to construct resource output
    - Use `this.destroy()` for deletion
 
 4. **Phase Handling**:
@@ -662,10 +661,10 @@ Alchemy resources follow an async/await pattern with a pseudo-class implementati
      return this.destroy();
    } else if (this.phase === "update") {
      // Handle update
-     return this({ ...updatedProps });
+     return { ...updatedProps };
    } else {
      // Handle create
-     return this({ ...newProps });
+     return { ...newProps };
    }
    ```
 
@@ -673,12 +672,12 @@ Alchemy resources follow an async/await pattern with a pseudo-class implementati
 
    ```typescript
    // Construct resource output
-   return this({
+   return {
      id: resourceId,
      ...props,
      // Add computed properties
      createdAt: Date.now(),
-   });
+   };
    ```
 
 6. **Error Handling**:

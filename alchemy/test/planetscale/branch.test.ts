@@ -1,7 +1,7 @@
 import { afterAll, describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
 import { destroy } from "../../src/destroy.ts";
-import { PlanetScaleClient } from "../../src/planetscale/api/client.gen.ts";
+import { createPlanetScaleClient } from "../../src/planetscale/api.ts";
 import { Branch } from "../../src/planetscale/branch.ts";
 import {
   Database,
@@ -25,7 +25,7 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent.each(kinds)(
       prefix: `${BRANCH_PREFIX}-${kind}`,
     });
 
-    const api = new PlanetScaleClient();
+    const api = createPlanetScaleClient();
     const organizationId = alchemy.env.PLANETSCALE_ORG_ID;
 
     let database: Database;
@@ -74,15 +74,15 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent.each(kinds)(
         });
 
         // Verify branch exists via API
-        const getResponse = await api.organizations.databases.branches.get({
+        const { response } = await api.getBranch({
           path: {
             organization: organizationId,
             database: database.name,
             name,
           },
-          result: "full",
+          throwOnError: false,
         });
-        expect(getResponse.status).toEqual(200);
+        expect(response.status).toEqual(200);
       } catch (err) {
         console.log(err);
         throw err;
@@ -90,16 +90,15 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent.each(kinds)(
         await destroy(scope);
 
         // Verify branch and all its resources were deleted
-        const getDeletedResponse =
-          await api.organizations.databases.branches.get({
-            path: {
-              organization: organizationId,
-              database: database.name,
-              name,
-            },
-            result: "full",
-          });
-        expect(getDeletedResponse.status).toEqual(404);
+        const { response } = await api.getBranch({
+          path: {
+            organization: organizationId,
+            database: database.name,
+            name,
+          },
+          throwOnError: false,
+        });
+        expect(response.status).toEqual(404);
       }
     });
 
@@ -129,15 +128,15 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent.each(kinds)(
         ).rejects.toThrow("Branch");
 
         // Verify original branch still exists
-        const getResponse = await api.organizations.databases.branches.get({
+        const { response } = await api.getBranch({
           path: {
             organization: organizationId,
             database: database.name,
             name,
           },
-          result: "full",
+          throwOnError: false,
         });
-        expect(getResponse.status).toEqual(200);
+        expect(response.status).toEqual(200);
       } catch (err) {
         console.log(err);
         throw err;
@@ -145,16 +144,15 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent.each(kinds)(
         await destroy(scope);
 
         // Verify branch and all its resources were deleted
-        const getDeletedResponse =
-          await api.organizations.databases.branches.get({
-            path: {
-              organization: organizationId,
-              database: database.name,
-              name,
-            },
-            result: "full",
-          });
-        expect(getDeletedResponse.status).toEqual(404);
+        const { response } = await api.getBranch({
+          path: {
+            organization: organizationId,
+            database: database.name,
+            name,
+          },
+          throwOnError: false,
+        });
+        expect(response.status).toEqual(404);
       }
     });
 
@@ -164,7 +162,7 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent.each(kinds)(
       try {
         // Create a unique backup name so we avoid collisions
         const backupName = `alchemy-test-backupReady-${crypto.randomUUID()}`;
-        const backup = await api.organizations.databases.branches.backups.post({
+        const { data: backup } = await api.createBackup({
           path: {
             organization: organizationId,
             database: database.name,
@@ -179,16 +177,14 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent.each(kinds)(
         // Wait for backup to be ready (up to 240 seconds). It takes a while...
         let backupReady = false;
         for (let i = 0; i < 48; i++) {
-          const status = await api.organizations.databases.branches.backups.get(
-            {
-              path: {
-                organization: organizationId,
-                database: database.name,
-                branch: "main",
-                id: backup.id,
-              },
+          const { data: status } = await api.getBackup({
+            path: {
+              organization: organizationId,
+              database: database.name,
+              branch: "main",
+              id: backup.id,
             },
-          );
+          });
           if (status.completed_at) {
             backupReady = true;
             break;
@@ -214,16 +210,15 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent.each(kinds)(
         expect(branch.isProduction).toEqual(true);
 
         // Verify branch exists
-        const getBranchResponse =
-          await api.organizations.databases.branches.get({
-            path: {
-              organization: organizationId,
-              database: database.name,
-              name,
-            },
-            result: "full",
-          });
-        expect(getBranchResponse.status).toEqual(200);
+        const { response } = await api.getBranch({
+          path: {
+            organization: organizationId,
+            database: database.name,
+            name,
+          },
+          throwOnError: false,
+        });
+        expect(response.status).toEqual(200);
       } catch (err) {
         console.log(err);
         throw err;
@@ -231,16 +226,15 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent.each(kinds)(
         await destroy(scope);
 
         // Verify branch was deleted
-        const getDeletedResponse =
-          await api.organizations.databases.branches.get({
-            path: {
-              organization: organizationId,
-              database: database.name,
-              name,
-            },
-            result: "full",
-          });
-        expect(getDeletedResponse.status).toEqual(404);
+        const { response } = await api.getBranch({
+          path: {
+            organization: organizationId,
+            database: database.name,
+            name,
+          },
+          throwOnError: false,
+        });
+        expect(response.status).toEqual(404);
       }
     }, 300_000);
 
@@ -267,14 +261,14 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent.each(kinds)(
           });
 
           // Verify safe migrations were enabled
-          let response = await api.organizations.databases.branches.get({
+          let response = await api.getBranch({
             path: {
               organization: organizationId,
               database: database.name,
               name,
             },
           });
-          expect(response.safe_migrations).toBe(true);
+          expect(response.data.safe_migrations).toBe(true);
 
           // Update branch to disable safe migrations
           branch = await Branch("branch-safe-migrations", {
@@ -287,14 +281,14 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent.each(kinds)(
             isProduction: true,
           });
 
-          response = await api.organizations.databases.branches.get({
+          response = await api.getBranch({
             path: {
               organization: organizationId,
               database: database.name,
               name,
             },
           });
-          expect(response.safe_migrations).toBe(false);
+          expect(response.data.safe_migrations).toBe(false);
         } catch (err) {
           console.log(err);
           throw err;
@@ -322,7 +316,7 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent.each(kinds)(
           name,
         });
 
-        const data1 = await api.organizations.databases.branches.get({
+        const { data: data1 } = await api.getBranch({
           path: {
             organization: organizationId,
             database: database.name,
@@ -343,7 +337,7 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent.each(kinds)(
         });
 
         // Verify cluster size was updated
-        const data2 = await api.organizations.databases.branches.get({
+        const { data: data2 } = await api.getBranch({
           path: {
             organization: organizationId,
             database: database.name,
@@ -393,29 +387,27 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent.each(kinds)(
         });
 
         // Verify both branches exist via API
-        const getParentResponse =
-          await api.organizations.databases.branches.get({
-            path: {
-              organization: organizationId,
-              database: database.name,
-              name: parentBranchName,
-            },
-            result: "full",
-          });
+        const { response: getParentResponse } = await api.getBranch({
+          path: {
+            organization: organizationId,
+            database: database.name,
+            name: parentBranchName,
+          },
+          throwOnError: false,
+        });
         expect(getParentResponse.status).toEqual(200);
 
-        const getChildResponse = await api.organizations.databases.branches.get(
-          {
+        const { response: getChildResponse, data: getChildData } =
+          await api.getBranch({
             path: {
               organization: organizationId,
               database: database.name,
               name: childBranchName,
             },
-            result: "full",
-          },
-        );
+            throwOnError: false,
+          });
         expect(getChildResponse.status).toEqual(200);
-        expect(getChildResponse.data?.parent_branch).toEqual(parentBranchName);
+        expect(getChildData?.parent_branch).toEqual(parentBranchName);
       } catch (err) {
         console.log(err);
         throw err;
@@ -423,26 +415,24 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent.each(kinds)(
         await destroy(scope);
 
         // Verify both branches were deleted
-        const getParentDeletedResponse =
-          await api.organizations.databases.branches.get({
-            path: {
-              organization: organizationId,
-              database: database.name,
-              name: parentBranchName,
-            },
-            result: "full",
-          });
+        const { response: getParentDeletedResponse } = await api.getBranch({
+          path: {
+            organization: organizationId,
+            database: database.name,
+            name: parentBranchName,
+          },
+          throwOnError: false,
+        });
         expect(getParentDeletedResponse.status).toEqual(404);
 
-        const getChildDeletedResponse =
-          await api.organizations.databases.branches.get({
-            path: {
-              organization: organizationId,
-              database: database.name,
-              name: childBranchName,
-            },
-            result: "full",
-          });
+        const { response: getChildDeletedResponse } = await api.getBranch({
+          path: {
+            organization: organizationId,
+            database: database.name,
+            name: childBranchName,
+          },
+          throwOnError: false,
+        });
         expect(getChildDeletedResponse.status).toEqual(404);
       }
     }, 600_000);

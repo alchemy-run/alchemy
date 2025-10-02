@@ -1,33 +1,40 @@
 {
   "name": "tanstack-start-example-basic",
   "private": true,
-  "sideEffects": false,
   "type": "module",
   "scripts": {
-    "build": "tsc -b && vite build",
     "deploy": "alchemy deploy --env-file ../../.env",
     "destroy": "alchemy destroy --env-file ../../.env",
     "dev": "alchemy dev --env-file ../../.env",
-    "start": "vite start"
+    "start": "node .output/server/index.mjs",
+    "build": "vite build",
+    "serve": "vite preview",
+    "test": "vitest run"
   },
   "dependencies": {
-    "@tanstack/react-router": "^1.128.3",
-    "@tanstack/react-router-devtools": "^1.128.3",
-    "@tanstack/react-start": "^1.128.3",
+    "@tailwindcss/vite": "^4.0.6",
+    "@tanstack/react-devtools": "^0.2.2",
+    "@tanstack/react-router": "^1.132.0",
+    "@tanstack/react-router-devtools": "^1.132.0",
+    "@tanstack/react-router-ssr-query": "^1.131.7",
+    "@tanstack/react-start": "^1.132.0",
+    "@tanstack/router-plugin": "^1.132.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "tailwind-merge": "^2.6.0"
+    "tailwindcss": "^4.0.6",
+    "vite-tsconfig-paths": "^5.1.4"
   },
   "devDependencies": {
-    "@types/node": "^22.5.4",
-    "@types/react-dom": "^19.0.3",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/react": "^16.2.0",
+    "@types/node": "^22.10.2",
     "@types/react": "^19.0.8",
-    "autoprefixer": "^10.4.20",
+    "@types/react-dom": "^19.0.3",
+    "@vitejs/plugin-react": "^4.3.4",
     "alchemy": "workspace:*",
-    "cloudflare": "^4.2.0",
-    "postcss": "^8.5.1",
-    "tailwindcss": "^3.4.17",
+    "jsdom": "^26.0.0",
     "typescript": "catalog:",
-    "vite-tsconfig-paths": "^5.1.4"
+    "vite": "catalog:",
+    "web-vitals": "^4.2.4"
   }
 }

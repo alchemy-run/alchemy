@@ -170,10 +170,10 @@ export const Database = Resource(
       return this.destroy();
     } else if (this.phase === "update") {
       // Update logic
-      return this({ id: "db-123", ...props });
+      return { id: "db-123", ...props };
     } else {
       // Create logic
-      return this({ id: "db-123", ...props });
+      return { id: "db-123", ...props };
     }
   }
 );
@@ -277,7 +277,7 @@ Alchemy works for a wide range of infrastructure use cases.
 
 ```typescript
 // Cloudflare Workers and Static Sites
-const assets = await Assets("Assets", {
+const assets = await Assets({
   path: "./dist",
 });
 

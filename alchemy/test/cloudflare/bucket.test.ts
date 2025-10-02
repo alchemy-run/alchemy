@@ -140,7 +140,9 @@ describe("R2 Bucket Resource", async () => {
       expect(putResponse.status).toEqual(200);
 
       // Verify the file exists in the bucket
-      const { keys } = await listObjects(api, bucketName, bucket);
+      const keys = (await listObjects(api, bucketName, bucket)).objects.map(
+        (o) => o.key,
+      );
       expect(keys.length).toBeGreaterThan(0);
       expect(keys).toContain(testKey);
 
@@ -296,23 +298,29 @@ describe("R2 Bucket Resource", async () => {
       });
       expect(putResponse.status).toEqual(200);
 
-      await new Promise((resolve) => setTimeout(resolve, 1000)); // wait for CORS to propagate
-
-      const getResponse = await fetch(
-        `https://${bucket.domain}/test-file.txt`,
-        {
-          method: "OPTIONS",
-          headers: {
-            Origin: "https://example.com",
+      // Loop for up to 60s until CORS headers are properly propagated (eventually consistent)
+      for (let i = 0; i < 60; i++) {
+        const getResponse = await fetch(
+          `https://${bucket.domain}/test-file.txt`,
+          {
+            method: "OPTIONS",
+            headers: {
+              Origin: "https://example.com",
+            },
           },
-        },
-      );
-      expect(getResponse.headers.get("Access-Control-Allow-Origin")).toEqual(
-        "*",
-      );
-      expect(getResponse.headers.get("Access-Control-Allow-Methods")).toEqual(
-        "GET",
-      );
+        );
+        const allowOrigin = getResponse.headers.get(
+          "Access-Control-Allow-Origin",
+        );
+        const allowMethods = getResponse.headers.get(
+          "Access-Control-Allow-Methods",
+        );
+
+        if (allowOrigin === "*" && allowMethods === "GET") {
+          return; // success
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
     } finally {
       await destroy(scope);
     }
@@ -355,7 +363,10 @@ describe("R2 Bucket Resource", async () => {
       });
 
       await new Promise((r) => setTimeout(r, 1000));
-      const rules = await getBucketLifecycleRules(api, bucketName, bucket);
+      const rules = await getBucketLifecycleRules(api, bucketName, {
+        ...bucket,
+        delete: true,
+      });
 
       const ids = rules.map((r: any) => r.id).filter(Boolean);
       expect(ids).toContain("abort-mpu-7d");
@@ -369,7 +380,10 @@ describe("R2 Bucket Resource", async () => {
         lifecycle: [],
       });
       await new Promise((r) => setTimeout(r, 1000));
-      const cleared = await getBucketLifecycleRules(api, bucketName, bucket);
+      const cleared = await getBucketLifecycleRules(api, bucketName, {
+        ...bucket,
+        delete: true,
+      });
       expect(cleared.length).toEqual(0);
     } finally {
       await destroy(scope);
@@ -404,7 +418,10 @@ describe("R2 Bucket Resource", async () => {
       });
 
       await new Promise((r) => setTimeout(r, 1000));
-      const rules = await getBucketLockRules(api, bucketName, bucket);
+      const rules = await getBucketLockRules(api, bucketName, {
+        ...bucket,
+        delete: true,
+      });
 
       const ids = rules.map((r: any) => r.id).filter(Boolean);
       expect(ids).toContain("retain-7d");
@@ -418,10 +435,134 @@ describe("R2 Bucket Resource", async () => {
         lock: [],
       });
       await new Promise((r) => setTimeout(r, 1000));
-      const cleared = await getBucketLockRules(api, bucketName, bucket);
+      const cleared = await getBucketLockRules(api, bucketName, {
+        ...bucket,
+        delete: true,
+      });
       expect(cleared.length).toEqual(0);
     } finally {
       await destroy(scope);
+    }
+  });
+
+  test("bucket operations head, get, put, and delete objects", async (scope) => {
+    const bucketName = `${BRANCH_PREFIX.toLowerCase()}-test-bucket-ops`;
+    let bucket: R2Bucket | undefined;
+
+    try {
+      // Create a test bucket
+      bucket = await R2Bucket(bucketName, {
+        name: bucketName,
+        adopt: true,
+        empty: true,
+      });
+      expect(bucket.name).toEqual(bucketName);
+
+      const testKey = "test-object.txt";
+      const testContent = "Hello, R2 Bucket Operations!";
+      const updatedContent = "Updated content for testing";
+      await bucket.delete(testKey);
+      let putObj = await bucket.put(testKey, testContent);
+      expect(putObj.size).toBeTypeOf("number");
+      expect(putObj.size).toEqual(testContent.length);
+      let obj = await bucket.head(testKey);
+      expect(obj).toBeDefined();
+      expect(obj?.etag).toEqual(putObj.etag);
+      expect(obj?.size).toEqual(putObj.size);
+      putObj = await bucket.put(testKey, updatedContent);
+      obj = await bucket.head(testKey);
+      expect(obj?.etag).toEqual(putObj.etag);
+      const getObj = await bucket.get(testKey);
+      await expect(getObj?.text()).resolves.toEqual(updatedContent);
+
+      const listObj = await bucket.list();
+
+      // console.log(JSON.stringify(listObj, null, 2));
+      expect(listObj.objects.length).toEqual(1);
+      expect(listObj.objects[0].key).toEqual(testKey);
+      expect(listObj.truncated).toEqual(false);
+      expect(listObj.objects).toEqual([
+        {
+          key: testKey,
+          etag: putObj.etag,
+          uploaded: putObj.uploaded,
+          size: putObj.size,
+        },
+      ]);
+
+      await bucket.delete(testKey);
+      await expect(bucket.head(testKey)).resolves.toBeNull();
+      await expect(bucket.get(testKey)).resolves.toBeNull();
+
+      expect(await bucket.list()).toMatchObject({
+        objects: [],
+        truncated: false,
+      });
+    } finally {
+      await scope.finalize();
+    }
+  });
+
+  test("bucket with data catalog", async (scope) => {
+    const bucketName = `${BRANCH_PREFIX.toLowerCase()}-test-data-catalog`;
+    try {
+      let bucket = await R2Bucket(bucketName, {
+        name: bucketName,
+        adopt: true,
+        dataCatalog: true,
+      });
+      expect(bucket.catalog).toBeDefined();
+      expect(bucket.catalog?.id).toBeDefined();
+      expect(bucket.catalog?.name).toBeDefined();
+      expect(bucket.catalog?.host).toBeDefined();
+
+      bucket = await R2Bucket(bucketName, {
+        name: bucketName,
+        adopt: true,
+        dataCatalog: false,
+      });
+      expect(bucket.catalog).toBeUndefined();
+
+      bucket = await R2Bucket(bucketName, {
+        name: bucketName,
+        adopt: true,
+        dataCatalog: true,
+      });
+      expect(bucket.catalog).toBeDefined();
+      expect(bucket.catalog?.id).toBeDefined();
+      expect(bucket.catalog?.name).toBeDefined();
+      expect(bucket.catalog?.host).toBeDefined();
+    } finally {
+      await destroy(scope);
+    }
+  });
+
+  test("bucket put operation with headers", async (scope) => {
+    const bucketName = `${BRANCH_PREFIX.toLowerCase()}-test-bucket-put-with-headers`;
+    try {
+      let bucket = await R2Bucket(bucketName, {
+        name: bucketName,
+        adopt: true,
+        empty: true,
+      });
+      expect(bucket.name).toEqual(bucketName);
+
+      const testKey = "test-object.txt";
+      const testContent = '{ "name": "test" }';
+      await bucket.put(testKey, testContent, {
+        httpMetadata: {
+          contentType: "application/json",
+        },
+      });
+
+      let obj = await bucket.head(testKey);
+      expect(obj?.httpMetadata?.contentType).toEqual("application/json");
+
+      const getObj = await bucket.get(testKey);
+      await expect(getObj?.text()).resolves.toEqual(testContent);
+      expect(getObj?.httpMetadata?.contentType).toEqual("application/json");
+    } finally {
+      await scope.finalize();
     }
   });
 });

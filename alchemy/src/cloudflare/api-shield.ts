@@ -163,8 +163,7 @@ export interface ValidationSettings {
 /**
  * Schema Validation output
  */
-export interface APIShield<S extends OpenAPIV3.Document = OpenAPIV3.Document>
-  extends Resource<"cloudflare::APIShield"> {
+export interface APIShield<S extends OpenAPIV3.Document = OpenAPIV3.Document> {
   /**
    * Name of the API Shield.
    */
@@ -440,7 +439,7 @@ const _APIShield = Resource(
       email: props.email,
     });
 
-    return this({
+    return {
       zoneId,
       schema,
       name: schemaName,
@@ -475,7 +474,7 @@ const _APIShield = Resource(
           );
         }),
       ),
-    });
+    };
   },
 );
 

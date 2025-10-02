@@ -42,7 +42,7 @@ export interface DatabaseProps {
 Each Resource has an interface for its "output attributes":
 
 ```typescript
-export interface Database extends Resource<"neon::Database">, DatabaseProps {
+export interface Database extends DatabaseProps {
   id: string;
   createdAt: number;
   // Additional properties...
@@ -92,11 +92,11 @@ export const Database = Resource(
     } else if (this.phase === "update") {
       // Update resource logic
       // ...
-      return this({/* updated resource */});
+      return {/* updated resource */};
     } else {
       // Create resource logic
       // ...
-      return this({/* new resource */});
+      return {/* new resource */};
     }
   }
 );
@@ -149,37 +149,21 @@ if (this.phase === "delete") {
 } else if (this.phase === "update") {
   // Update resource logic
   // ...
-  return this({/* updated properties */});
+  return {/* updated properties */};
 } else {
   // Create resource logic
   // ...
-  return this({/* initial properties */});
+  return {/* initial properties */};
 }
 ```
 
 ## Create
 
-To construct the resource (including your properites and Alchemy's intrinsic properties), call `this(props)` with your output properties:
+To construct the resource (including your properites and Alchemy's intrinsic properties), return `props` with your output properties:
 
 ```ts
-return this({/* updated properties */});
+return {/* updated properties */};
 ```
-
-What's going on here? `this` is a function? Huh?
-
-Alchemy resources are implemented with pure functions, but are designed to emulate classes (except with an async constructor that implements a CRUD lifecycle handler).
-
-`this` is analagous to `super` in a standard class:
-```ts
-return super({/* updated properties */});
-```
-
-:::tip
-If this syntax freaks you out too much, it is also aliased as `this.create`:
-```ts
-return this.create({/* updated properties */});
-```
-:::
 
 ## Destroy
 
@@ -308,10 +292,10 @@ if (this.phase === "update") {
   }
 }
 
-return this({
+return {
   ...props,
   name,
-});
+};
 ```
 ::: 
 

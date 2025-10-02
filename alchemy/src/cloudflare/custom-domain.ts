@@ -69,9 +69,7 @@ interface CloudflareDomain {
 /**
  * Output returned after CustomDomain creation/update
  */
-export interface CustomDomain
-  extends Resource<"cloudflare::CustomDomain">,
-    CustomDomainProps {
+export interface CustomDomain extends CustomDomainProps {
   /**
    * The unique identifier for the Cloudflare domain binding.
    */
@@ -125,14 +123,14 @@ export const CustomDomain = Resource(
   ): Promise<CustomDomain> {
     if (this.scope.local && props.dev) {
       const now = Date.now();
-      return this({
+      return {
         ...props,
         id: this.output?.id ?? "noop-domain",
         zoneId: props.zoneId ?? "noop-zone",
         environment: props.environment ?? "production",
         createdAt: this.output?.createdAt ?? now,
         updatedAt: now,
-      });
+      };
     }
 
     // Create Cloudflare API client with automatic account discovery

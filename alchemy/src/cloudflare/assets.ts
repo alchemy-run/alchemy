@@ -1,9 +1,9 @@
-import * as fs from "node:fs/promises";
-import * as path from "pathe";
-import type { Context } from "../context.ts";
+import crypto from "node:crypto";
+import fs from "node:fs/promises";
+import path from "pathe";
 import { Resource } from "../resource.ts";
 import { getContentType } from "../util/content-type.ts";
-import ignore from "../util/ignore-matcher.js";
+import ignore from "../util/ignore-matcher.ts";
 
 /**
  * Properties for creating or updating Assets
@@ -17,54 +17,11 @@ export interface AssetsProps {
 }
 
 /**
- * Output returned after Assets creation/update
+ * Assets binding type
  */
-export interface Assets extends Resource<"cloudflare::Asset">, AssetsProps {
-  /**
-   * The type of binding
-   */
+export type Assets = AssetsProps & {
   type: "assets";
-
-  /**
-   * The ID of the assets bundle
-   */
-  id: string;
-
-  /**
-   * Asset files that were found
-   */
-  files: AssetFile[];
-
-  /**
-   * Time at which the assets were created
-   */
-  createdAt: number;
-
-  /**
-   * Time at which the assets were last updated
-   */
-  updatedAt: number;
-}
-
-/**
- * Represents a single asset file
- */
-export interface AssetFile {
-  /**
-   * Path relative to the assets directory
-   */
-  path: string;
-
-  /**
-   * Full filesystem path to the file
-   */
-  filePath: string;
-
-  /**
-   * Content type of the file
-   */
-  contentType: string;
-}
+};
 
 /**
  * Cloudflare Assets represent a collection of static files that can be uploaded and served
@@ -72,7 +29,7 @@ export interface AssetFile {
  *
  * @example
  * // Create a basic assets bundle from a local directory
- * const staticAssets = await Assets("static", {
+ * const staticAssets = await Assets({
  *   path: "./src/assets"
  * });
  *
@@ -85,100 +42,102 @@ export interface AssetFile {
  *   }
  * });
  */
-export const Assets = Resource(
-  "cloudflare::Asset",
-  {
-    alwaysUpdate: true,
-  },
-  async function (
-    this: Context<Assets>,
-    id: string,
-    props: AssetsProps,
-  ): Promise<Assets> {
-    if (this.phase === "delete") {
-      return this.destroy();
-    }
+export async function Assets(props: AssetsProps): Promise<Assets> {
+  return {
+    type: "assets",
+    ...props,
+  };
+}
 
-    try {
-      // Check if the assets directory exists
-      const stats = await fs.stat(props.path);
-      if (!stats.isDirectory()) {
-        throw new Error(`Assets path ${props.path} is not a directory`);
-      }
-    } catch (_error) {
-      throw new Error(
-        `Assets directory ${props.path} does not exist or is not accessible`,
-      );
-    }
-
-    // Recursively get all files in the assets directory
-    const ignoreMatcher = await createIgnoreMatcher(props.path);
-    const filesList = await getFilesRecursively(props.path, ignoreMatcher);
-
-    // Create asset file objects
-    const files: AssetFile[] = filesList.map((filePath) => {
-      const relativePath = path.relative(props.path, filePath);
-
-      return {
-        path: path.normalize(relativePath),
-        filePath: path.normalize(filePath),
-        contentType: getContentType(filePath) ?? "application/null",
-      };
-    });
-
-    // Get current timestamp
-    const now = Date.now();
-
-    // Construct the output
-    return this({
-      id,
-      type: "assets",
-      path: props.path,
-      files,
-      createdAt: this.output?.createdAt || now,
-      updatedAt: now,
-    });
-  },
-);
-
-async function createIgnoreMatcher(
-  dir: string,
-): Promise<{ ignores: (path: string) => boolean }> {
-  const ignoreMatcher = ignore().add(".assetsignore");
-  const ignorePath = path.join(dir, ".assetsignore");
-  try {
-    const content = await fs.readFile(ignorePath, "utf-8");
-    ignoreMatcher.add(content.split("\n"));
-  } catch {
-    // ignore
+export namespace Assets {
+  export interface FileMetadata {
+    path: string;
+    name: string;
+    hash: string;
+    size: number;
+    type: string;
   }
-  return ignoreMatcher;
+
+  /**
+   * Recursively read the metadata for all assets in a directory, skipping files that are ignored by the .assetsignore file
+   *
+   * @param root Path to the directory
+   * @returns Metadata for all assets in the directory
+   */
+  export const read = async (root: string): Promise<FileMetadata[]> => {
+    const matcher = ignore().add(".assetsignore");
+    const ignorePath = path.join(root, ".assetsignore");
+    try {
+      const content = await fs.readFile(ignorePath, "utf-8");
+      matcher.add(content.split("\n"));
+    } catch {
+      // ignore
+    }
+
+    const readDirectory = async (
+      directory: string,
+    ): Promise<FileMetadata[]> => {
+      const files = await fs.readdir(directory);
+      const result: FileMetadata[] = [];
+      await Promise.all(
+        files.map(async (file) => {
+          const absolutePath = path.join(directory, file);
+          const relativePath = path.relative(root, absolutePath);
+          if (matcher.ignores(relativePath)) {
+            return;
+          }
+          const stat = await fs.stat(absolutePath);
+          if (stat.isDirectory()) {
+            result.push(...(await readDirectory(absolutePath)));
+          } else {
+            if (stat.size > 26214400) {
+              throw new Error(
+                `File "${absolutePath}" is too large to upload as an asset to Cloudflare (the file is ${(stat.size / 1024 / 1024).toFixed(2)} MB; the maximum size is 25MB).`,
+              );
+            }
+            result.push({
+              path: absolutePath,
+              name: relativePath.startsWith("/")
+                ? relativePath
+                : `/${relativePath}`,
+              hash: await computeHash(absolutePath),
+              size: stat.size,
+              type: getContentType(absolutePath) ?? "application/null",
+            });
+          }
+        }),
+      );
+      return result;
+    };
+
+    return await readDirectory(root);
+  };
+
+  /**
+   * Calculate the SHA-256 hash and size of a file
+   *
+   * @param filePath Path to the file
+   * @returns Hash (first 32 chars of SHA-256) and size of the file
+   */
+  const computeHash = async (filePath: string): Promise<string> => {
+    const contents = await fs.readFile(filePath);
+
+    const hash = crypto.createHash("sha256");
+    hash.update(contents);
+
+    const extension = path.extname(filePath).substring(1);
+    hash.update(extension);
+
+    return hash.digest("hex").slice(0, 32);
+  };
 }
 
-// Helper functions for file operations
-async function getFilesRecursively(
-  dir: string,
-  ignoreMatcher: { ignores: (path: string) => boolean },
-): Promise<string[]> {
-  const files = await fs.readdir(dir, { withFileTypes: true });
-  const result: string[] = [];
+// we are deprecating the Assets resource (it is now just a function)
+// but, a user may still have a resource that depends on it, so we register a no-op dummy resource so that it can be cleanly deleted
+Resource("cloudflare::Asset", async function (this) {
+  if (this.phase === "delete") {
+    return this.destroy();
+  }
 
-  await Promise.all(
-    files.map(async (file) => {
-      const filePath = path.join(dir, file.name);
-      if (ignoreMatcher.ignores(file.name)) {
-        return;
-      }
-      if (
-        file.isDirectory() ||
-        (file.isSymbolicLink() && (await fs.stat(filePath)).isDirectory())
-      ) {
-        result.push(...(await getFilesRecursively(filePath, ignoreMatcher)));
-      } else {
-        result.push(filePath);
-      }
-    }),
-  );
-
-  return result;
-}
+  throw new Error("Not implemented");
+});

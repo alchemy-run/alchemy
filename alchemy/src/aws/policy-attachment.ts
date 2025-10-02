@@ -22,9 +22,7 @@ export interface PolicyAttachmentProps {
 /**
  * Output returned after policy attachment creation/update
  */
-export interface PolicyAttachment
-  extends Resource<"iam::PolicyAttachment">,
-    PolicyAttachmentProps {}
+export interface PolicyAttachment extends PolicyAttachmentProps {}
 
 /**
  * AWS IAM Policy Attachment Resource
@@ -97,6 +95,6 @@ export const PolicyAttachment = Resource(
       ),
     );
 
-    return this(props);
+    return props;
   },
 );

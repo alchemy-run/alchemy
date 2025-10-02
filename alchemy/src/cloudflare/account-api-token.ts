@@ -140,8 +140,7 @@ interface CloudflareApiToken {
 /**
  * Output returned after Account API Token creation/update
  */
-export interface AccountApiToken
-  extends Resource<"cloudflare::AccountApiToken"> {
+export interface AccountApiToken {
   /**
    * The ID of the token
    *
@@ -283,10 +282,7 @@ export const AccountApiToken = Resource(
       return this.destroy();
     }
 
-    const permissionGroups = await PermissionGroups(
-      "cloudflare-permission-groups",
-      props,
-    );
+    const permissionGroups = await PermissionGroups();
 
     // Transform our properties to API format
     const apiPayload = {
@@ -385,7 +381,7 @@ export const AccountApiToken = Resource(
     }
 
     // Transform API response to our format
-    return this({
+    return {
       id: tokenData.id,
       name: tokenData.name,
       status: tokenData.status,
@@ -406,6 +402,6 @@ export const AccountApiToken = Resource(
       value: tokenValue,
       accessKeyId: alchemy.secret(tokenData.id),
       secretAccessKey: alchemy.secret(sha256(tokenValue.unencrypted)),
-    });
+    };
   },
 );

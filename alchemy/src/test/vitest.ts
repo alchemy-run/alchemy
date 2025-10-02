@@ -8,7 +8,6 @@ import {
   FileSystemStateStore,
   SQLiteStateStore,
 } from "../state/index.ts";
-import { NoopTelemetryClient } from "../util/telemetry/client.ts";
 import type { TestOptions } from "./options.ts";
 
 /**
@@ -132,9 +131,10 @@ export function test(
     scopeName: `${defaultOptions.prefix ? `${defaultOptions.prefix}-` : ""}${path.basename(meta.filename)}`,
     stateStore: defaultOptions?.stateStore,
     phase: "up",
-    telemetryClient: new NoopTelemetryClient(),
+    noTrack: true,
     quiet: defaultOptions.quiet,
     password: process.env.ALCHEMY_PASSWORD,
+    local: defaultOptions.local,
   });
 
   test.beforeAll = (fn: (scope: Scope) => Promise<void>, timeout?: number) => {

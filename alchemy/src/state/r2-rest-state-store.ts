@@ -4,6 +4,7 @@ import {
   type CloudflareApiOptions,
   createCloudflareApi,
 } from "../cloudflare/api.ts";
+import { deleteObject, getObject, putObject } from "../cloudflare/bucket.ts";
 import { ResourceScope } from "../resource.ts";
 import type { Scope } from "../scope.ts";
 import { deserialize, serialize } from "../serde.ts";
@@ -192,23 +193,10 @@ export class R2RestStateStore implements StateStore {
     await this.ensureInitialized();
 
     try {
-      const response = await withExponentialBackoff(
-        async () => {
-          const response = await this.api.get(
-            `/accounts/${this.api.accountId}/r2/buckets/${this.bucketName}/objects/${this.getObjectKey(key)}`,
-          );
-
-          if (!response.ok && response.status !== 404) {
-            await handleApiError(response, "get", "object", key);
-          }
-
-          return response;
-        },
-        // Retry on transient errors
-        isRetryableError,
-        5, // 5 retry attempts
-        1000, // Start with 1 second delay
-      );
+      const response = await getObject(this.api, {
+        bucketName: this.bucketName,
+        key: this.getObjectKey(key),
+      });
 
       if (response.status === 404) {
         return undefined;
@@ -281,29 +269,11 @@ export class R2RestStateStore implements StateStore {
     // Serialize the state to handle cyclic structures
     const serializedData = await serialize(this.scope, value);
 
-    // Using withExponentialBackoff for reliability
-    await withExponentialBackoff(
-      async () => {
-        const response = await this.api.put(
-          `/accounts/${this.api.accountId}/r2/buckets/${this.bucketName}/objects/${objectKey}`,
-          serializedData,
-          {
-            headers: {
-              "Content-Type": "application/json",
-            },
-          },
-        );
-
-        if (!response.ok) {
-          await handleApiError(response, "put", "object", objectKey);
-        }
-        return response;
-      },
-      // Retry on transient errors
-      isRetryableError,
-      5, // 5 retry attempts
-      1000, // Start with 1 second delay
-    );
+    await putObject(this.api, {
+      bucketName: this.bucketName,
+      key: objectKey,
+      object: serializedData,
+    });
   }
 
   /**
@@ -314,22 +284,10 @@ export class R2RestStateStore implements StateStore {
   async delete(key: string): Promise<void> {
     await this.ensureInitialized();
 
-    await withExponentialBackoff(
-      async () => {
-        const response = await this.api.delete(
-          `/accounts/${this.api.accountId}/r2/buckets/${this.bucketName}/objects/${this.getObjectKey(key)}`,
-        );
-
-        if (!response.ok && response.status !== 404) {
-          await handleApiError(response, "delete", "object", key);
-        }
-
-        return response;
-      },
-      isRetryableError,
-      5, // 5 retry attempts
-      1000, // Start with 1 second delay
-    );
+    await deleteObject(this.api, {
+      bucketName: this.bucketName,
+      key: this.getObjectKey(key),
+    });
   }
 
   /**
@@ -373,7 +331,7 @@ export class R2RestStateStore implements StateStore {
   }
 }
 
-function isRetryableError(error: any): boolean {
+export function isRetryableError(error: any): boolean {
   if (error instanceof CloudflareApiError) {
     return (
       error.status === 500 ||
