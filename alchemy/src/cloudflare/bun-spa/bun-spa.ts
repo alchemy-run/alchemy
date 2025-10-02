@@ -1,13 +1,13 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { exists } from "../../util/exists.ts";
 import { Scope } from "../../scope.ts";
+import { exists } from "../../util/exists.ts";
+import type { Assets } from "../assets.ts";
+import type { Bindings } from "../bindings.ts";
 import {
   extractStringAndSecretBindings,
   unencryptSecrets,
 } from "../util/filter-env-bindings.ts";
-import type { Assets } from "../assets.ts";
-import type { Bindings } from "../bindings.ts";
 import {
   spreadBuildProps,
   spreadDevProps,
@@ -82,7 +82,7 @@ export async function BunSPA<B extends Bindings>(
       ...extractStringAndSecretBindings(props.bindings ?? {}, secrets),
     };
     website.url = await scope.spawn(website.name, {
-      cmd: typeof dev === "string" ? dev : dev.command,
+      cmd: typeof dev === "string" ? dev : dev.command!,
       cwd,
       extract: (line) => {
         const URL_REGEX =
