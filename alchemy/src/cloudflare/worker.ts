@@ -169,7 +169,7 @@ export interface BaseWorkerProps<
    * Specify the observability behavior of the Worker.
    *
    * @see https://developers.cloudflare.com/workers/wrangler/configuration/#observability
-   * @default { enabled: true, head_sampling_rate: 1 }
+   * @default - `enabled: true`
    */
   observability?: WorkerObservability;
 
