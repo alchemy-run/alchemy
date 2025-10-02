@@ -11,24 +11,24 @@ export interface OutputOptions {
   /**
    * String to be prepended before each batch
    */
-  batch_prefix?: string | null;
+  batch_prefix?: string | undefined;
 
   /**
    * String to be appended after each batch
    */
-  batch_suffix?: string | null;
+  batch_suffix?: string | undefined;
 
   /**
    * If set to true, will cause all occurrences of ${ in the generated files to
    * be replaced with x{
    */
-  "CVE-2021-44228"?: boolean | null;
+  "CVE-2021-44228"?: boolean | undefined;
 
   /**
    * String to join fields. This field will be ignored when record_template is
    * set
    */
-  field_delimiter?: string | null;
+  field_delimiter?: string | undefined;
 
   /**
    * List of field names to be included in the Logpush output. For the moment,
@@ -47,17 +47,17 @@ export interface OutputOptions {
   /**
    * String to be inserted in-between the records as separator
    */
-  record_delimiter?: string | null;
+  record_delimiter?: string | undefined;
 
   /**
    * String to be prepended before each record
    */
-  record_prefix?: string | null;
+  record_prefix?: string | undefined;
 
   /**
    * String to be appended after each record
    */
-  record_suffix?: string | null;
+  record_suffix?: string | undefined;
 
   /**
    * String to use as template for each record instead of the default json key
@@ -66,14 +66,14 @@ export interface OutputOptions {
    * text/template without any standard functions, like conditionals, loops,
    * sub-templates, etc
    */
-  record_template?: string | null;
+  record_template?: string | undefined;
 
   /**
    * Floating number to specify sampling rate. Sampling is applied on top of
    * filtering, and regardless of the current sample_interval of the data
    * (minimum: 0, maximum: 1)
    */
-  sample_rate?: number | null;
+  sample_rate?: number | undefined;
 
   /**
    * String to specify the format for timestamps, such as unixnano, unix, or
@@ -126,7 +126,7 @@ interface LogPushJobResult {
         | "zero_trust_network_sessions"
       )
     | (string & {})
-    | null;
+    | undefined;
   /**
    * Uniquely identifies a resource (such as an s3 bucket) where data will be
    * pushed. Additional configuration parameters supported by the destination
@@ -145,7 +145,7 @@ interface LogPushJobResult {
    * failure is recorded. On successful execution of a job the error_message and
    * last_error are set to null
    */
-  error_message?: string | null;
+  error_message?: string | undefined;
 
   /**
    * @deprecated This field is deprecated. Please use max_upload_* parameters
@@ -155,7 +155,7 @@ interface LogPushJobResult {
    * of larger files
    * @default "high"
    */
-  frequency?: "high" | "low" | null;
+  frequency?: "high" | "low" | undefined;
 
   /**
    * The kind parameter (optional) is used to differentiate between Logpush and
@@ -170,7 +170,7 @@ interface LogPushJobResult {
    * 2018-07-23T10:01:00Z. If the job has never run or has just been enabled and
    * hasn't run yet then the field will be empty (format: date-time)
    */
-  last_complete?: string | null;
+  last_complete?: string | undefined;
 
   /**
    * Records the last time the job failed. If not null, the job is currently
@@ -178,7 +178,7 @@ interface LogPushJobResult {
    * at least once since last failure. See also the error_message field (format:
    * date-time)
    */
-  last_error?: string | null;
+  last_error?: string | undefined;
 
   /**
    * @deprecated This field is deprecated. Use output_options instead.
@@ -188,7 +188,7 @@ interface LogPushJobResult {
    * making this call for you, setting start and end times appropriately
    * (format: uri-reference, maxLength: 4096)
    */
-  logpull_options?: string | null;
+  logpull_options?: string | undefined;
 
   /**
    * The maximum uncompressed file size of a batch of logs. This setting value
@@ -196,7 +196,7 @@ interface LogPushJobResult {
    * set a minimum file size; this means that log files may be much smaller than
    * this batch size
    */
-  max_upload_bytes?: 0 | number | null;
+  max_upload_bytes?: 0 | number | undefined;
 
   /**
    * The maximum interval in seconds for log batches. This setting must be
@@ -204,7 +204,7 @@ interface LogPushJobResult {
    * cannot specify a minimum interval for log batches; this means that log
    * files may be sent in shorter intervals than this
    */
-  max_upload_interval_seconds?: 0 | number | null;
+  max_upload_interval_seconds?: 0 | number | undefined;
 
   /**
    * The maximum number of log lines per batch. This setting must be between
@@ -212,25 +212,25 @@ interface LogPushJobResult {
    * a minimum number of log lines per batch; this means that log files may
    * contain many fewer lines than this
    */
-  max_upload_records?: 0 | number | null;
+  max_upload_records?: 0 | number | undefined;
 
   /**
    * Optional human readable job name. Not unique. Cloudflare suggests that you
    * set this to a meaningful string, like the domain name, to make it easier to
    * identify your job (maxLength: 512)
    */
-  name?: string | null;
+  name?: string | undefined;
 
   /**
    * The structured replacement for logpull_options. When including this field,
    * the logpull_option field will be ignored
    */
-  output_options?: OutputOptions | null;
+  output_options?: OutputOptions | undefined;
 
   /**
    * Filter expression
    */
-  filter?: string | null;
+  filter?: string | undefined;
 
   /**
    * Sample rate
@@ -278,7 +278,7 @@ export interface LogPushJobProps extends CloudflareApiOptions {
    * set this to a meaningful string, like the domain name, to make it easier to
    * identify your job (maxLength: 512)
    */
-  name?: string | null;
+  name?: string | undefined;
 
   /**
    * Flag that indicates if the job is enabled
@@ -299,13 +299,13 @@ export interface LogPushJobProps extends CloudflareApiOptions {
    * making this call for you, setting start and end times appropriately
    * (format: uri-reference, maxLength: 4096)
    */
-  logpullOptions?: string | null;
+  logpullOptions?: string | undefined;
 
   /**
    * Filter to apply to logs (JSON string)
    * @example '{"where":{"and":[{"key":"ClientCountry","operator":"neq","value":"ca"}]}}'
    */
-  filter?: string | null;
+  filter?: string | undefined;
 
   /**
    * Sampling rate (0.01 to 1.0)
@@ -319,7 +319,7 @@ export interface LogPushJobProps extends CloudflareApiOptions {
    * frequency to high sends your logs in larger quantities of smaller files.
    * Setting frequency to low sends logs in smaller quantities of larger files
    */
-  frequency?: "high" | "low" | null;
+  frequency?: "high" | "low" | undefined;
 
   /**
    * The kind parameter (optional) is used to differentiate between Logpush and
@@ -333,7 +333,7 @@ export interface LogPushJobProps extends CloudflareApiOptions {
    * set a minimum file size; this means that log files may be much smaller than
    * this batch size
    */
-  maxUploadBytes?: 0 | number | null;
+  maxUploadBytes?: 0 | number | undefined;
 
   /**
    * The maximum interval in seconds for log batches. This setting must be
@@ -341,7 +341,7 @@ export interface LogPushJobProps extends CloudflareApiOptions {
    * cannot specify a minimum interval for log batches; this means that log
    * files may be sent in shorter intervals than this
    */
-  maxUploadIntervalSeconds?: 0 | number | null;
+  maxUploadIntervalSeconds?: 0 | number | undefined;
 
   /**
    * The maximum number of log lines per batch. This setting must be between
@@ -349,7 +349,7 @@ export interface LogPushJobProps extends CloudflareApiOptions {
    * a minimum number of log lines per batch; this means that log files may
    * contain many fewer lines than this
    */
-  maxUploadRecords?: 0 | number | null;
+  maxUploadRecords?: 0 | number | undefined;
 
   /**
    * The structured replacement for logpull_options. When including this field,
@@ -360,7 +360,7 @@ export interface LogPushJobProps extends CloudflareApiOptions {
      * String to join fields. This field will be ignored when recordTemplate is
      * set
      */
-    fieldDelimiter?: string | null;
+    fieldDelimiter?: string | undefined;
 
     /**
      * List of field names to be included in the Logpush output. For the moment,
@@ -388,38 +388,38 @@ export interface LogPushJobProps extends CloudflareApiOptions {
      * filtering, and regardless of the current sample_interval of the data
      * (minimum: 0, maximum: 1)
      */
-    sampleRate?: number | null;
+    sampleRate?: number | undefined;
 
     /**
      * Prepended before each batch
      */
-    batchPrefix?: string | null;
+    batchPrefix?: string | undefined;
 
     /**
      * Appended after each batch
      */
-    batchSuffix?: string | null;
+    batchSuffix?: string | undefined;
 
     /**
      * If set to true, will cause all occurrences of ${ in the generated files
      * to be replaced with x{
      */
-    cve202144228?: boolean | null;
+    cve202144228?: boolean | undefined;
 
     /**
      * Be inserted in-between the records as separator
      */
-    recordDelimiter?: string | null;
+    recordDelimiter?: string | undefined;
 
     /**
      * Prepended before each record
      */
-    recordPrefix?: string | null;
+    recordPrefix?: string | undefined;
 
     /**
      * After each record
      */
-    recordSuffix?: string | null;
+    recordSuffix?: string | undefined;
 
     /**
      * Use as template for each record instead of the default json key value
@@ -428,7 +428,7 @@ export interface LogPushJobProps extends CloudflareApiOptions {
      * without any standard functions, like conditionals, loops, sub-templates,
      * etc
      */
-    recordTemplate?: string | null;
+    recordTemplate?: string | undefined;
   };
 
   /**
@@ -467,7 +467,7 @@ export type LogPushJob = Omit<
    * failure is recorded. On successful execution of a job the errorMessage and
    * lastError are set to null
    */
-  errorMessage?: string | null;
+  errorMessage?: string | undefined;
 
   /**
    * Records the last time for which logs have been successfully pushed. If the
@@ -476,7 +476,7 @@ export type LogPushJob = Omit<
    * 2018-07-23T10:01:00Z. If the job has never run or has just been enabled and
    * hasn't run yet then the field will be empty (format: datetime)
    */
-  lastComplete?: string | null;
+  lastComplete?: string | undefined;
 
   /**
    * Records the last time the job failed. If not null, the job is currently
@@ -484,7 +484,7 @@ export type LogPushJob = Omit<
    * at least once since last failure. See also the errorMessage field (format:
    * datetime)
    */
-  lastError?: string | null;
+  lastError?: string | undefined;
 
   /**
    * Time at which the job was created (Unix timestamp in ms)
