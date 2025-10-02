@@ -150,13 +150,15 @@ export class PrismaPostgresApi {
 
   async createProject(params: {
     name: string;
-    region: PrismaPostgresRegion;
+    region?: PrismaPostgresRegion;
     createDatabase?: boolean;
   }): Promise<PrismaProject> {
     const body: Record<string, unknown> = {
       name: params.name,
-      region: params.region,
     };
+    if (params.region) {
+      body.region = params.region;
+    }
     if (params.createDatabase !== undefined) {
       body.createDatabase = params.createDatabase;
     }

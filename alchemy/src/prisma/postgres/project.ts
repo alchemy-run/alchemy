@@ -7,25 +7,44 @@ import type { PrismaPostgresAuthProps, PrismaProject } from "./types.ts";
 /**
  * Properties for managing a Prisma Postgres project
  */
-export interface ProjectProps extends PrismaPostgresAuthProps {
+type ProjectRegionProps =
+  | {
+      /**
+       * Whether to create the default database when provisioning the project.
+       * Some workspaces require enabling Prisma Postgres before automatic database
+       * creation succeeds, so this defaults to false.
+       *
+       * @default false
+       */
+      createDatabase?: false | undefined;
+
+      /**
+       * Region where the initial database will be created (if requested).
+       */
+      region?: PrismaPostgresRegion;
+    }
+  | {
+      /**
+       * Whether to create the default database when provisioning the project.
+       * Some workspaces require enabling Prisma Postgres before automatic database
+       * creation succeeds, so this defaults to false.
+       *
+       * @default false
+       */
+      createDatabase: true;
+
+      /**
+       * Region where the initial database will be created (required when createDatabase is true).
+       */
+      region: PrismaPostgresRegion;
+    };
+
+export type ProjectProps = PrismaPostgresAuthProps &
+  ProjectRegionProps & {
   /**
    * Project name. Must be unique per workspace.
    */
   name: string;
-
-  /**
-   * Region where the initial database will be created (if requested).
-   */
-  region: PrismaPostgresRegion;
-
-  /**
-   * Whether to create the default database when provisioning the project.
-   * Some workspaces require enabling Prisma Postgres before automatic database
-   * creation succeeds, so this defaults to false.
-   *
-   * @default false
-   */
-  createDatabase?: boolean;
 
   /**
    * Adopt (reuse) an existing project with the same name instead of creating a new one.
@@ -33,7 +52,7 @@ export interface ProjectProps extends PrismaPostgresAuthProps {
    * @default true
    */
   adopt?: boolean;
-}
+};
 
 /**
  * Prisma Postgres project representation
@@ -50,9 +69,9 @@ export interface Project {
   name: string;
 
   /**
-   * Region used when the project was created
+   * Region used when the project was created (if known)
    */
-  region: PrismaPostgresRegion;
+  region?: PrismaPostgresRegion;
 
   /**
    * Timestamp when the project was created
@@ -113,6 +132,13 @@ export const Project = Resource(
     const api = new PrismaPostgresApi(props);
     const createDatabase = props.createDatabase ?? false;
     const adopt = props.adopt ?? true;
+    const region = props.region;
+
+    if (createDatabase && !region) {
+      throw new Error(
+        "region is required when createDatabase is true for Prisma Postgres projects.",
+      );
+    }
 
     if (this.phase === "delete") {
       if (this.output?.id) {
@@ -122,7 +148,7 @@ export const Project = Resource(
     }
 
     if (this.phase === "update" && this.output) {
-      if (props.region !== this.output.region) {
+      if (region && this.output.region && region !== this.output.region) {
         throw new Error(
           "Updating Prisma Postgres project region is not supported. Create a new project instead.",
         );
@@ -147,7 +173,7 @@ export const Project = Resource(
     if (!project) {
       project = await api.createProject({
         name: props.name,
-        region: props.region,
+        ...(region ? { region } : {}),
         createDatabase,
       });
     }
@@ -161,7 +187,10 @@ export const Project = Resource(
     return {
       id: project.id,
       name: project.name,
-      region: props.region,
+      region:
+        region ??
+        this.output?.region ??
+        (project.database?.region?.id as PrismaPostgresRegion | undefined),
       createdAt: project.createdAt,
       workspace: project.workspace,
       database: summarizeDatabase(project.database),
