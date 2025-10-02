@@ -2239,7 +2239,7 @@ describe("Worker Resource", () => {
         observability: baseObservability,
       });
 
-      const metadata: any = await getScriptMetadata(api, workerName);
+      let metadata: any = await getScriptMetadata(api, workerName);
 
       expect(metadata.default_environment.script.observability).toEqual({
         enabled: true,
@@ -2278,6 +2278,20 @@ describe("Worker Resource", () => {
           };
         `,
         observability: newObservability,
+      });
+
+      metadata = await getScriptMetadata(api, workerName);
+
+      expect(metadata.default_environment.script.observability).toEqual({
+        enabled: true,
+        head_sampling_rate: 0.5,
+        logs: {
+          head_sampling_rate: null,
+          enabled: true,
+          invocation_logs: false,
+          persist: true,
+          destinations: [],
+        },
       });
 
       expect(worker.observability).toEqual(newObservability);
