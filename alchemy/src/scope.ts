@@ -104,6 +104,10 @@ export interface ScopeOptions extends ProviderCredentials {
    */
   rootDir?: string;
   /**
+   * The Alchemy profile to use for authoriziing requests.
+   */
+  profile?: string;
+  /**
    * Whether this is the application that was selected with `--app`
    *
    * `true` if the application was selected with `--app`
@@ -203,6 +207,7 @@ export class Scope {
   public readonly rootDir: string;
   public readonly dotAlchemy: string;
   public readonly isSelected: boolean | undefined;
+  public readonly profile: string | undefined;
 
   // Provider credentials for scope-level credential overrides
   public readonly providerCredentials: ProviderCredentials;
@@ -242,6 +247,7 @@ export class Scope {
       rootDir,
       isSelected,
       noTrack,
+      profile,
       ...providerCredentials
     } = options;
 
@@ -268,6 +274,7 @@ export class Scope {
     }
 
     this.stage = stage ?? this.parent?.stage ?? DEFAULT_STAGE;
+    this.profile = profile ?? this.parent?.profile;
     this.parent?.children.set(this.scopeName!, this);
     this.quiet = quiet ?? this.parent?.quiet ?? false;
     if (this.parent && !this.scopeName) {
