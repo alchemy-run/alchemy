@@ -1,3 +1,24 @@
+## v0.70.1
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cli**:
+  - Support selecting profile &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/1050 [<samp>(9a9dc)</samp>](https://github.com/sam-goodwin/alchemy/commit/9a9dca93)
+  - Globally disable telemetry &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/1046 [<samp>(0d66a)</samp>](https://github.com/sam-goodwin/alchemy/commit/0d66ab6a)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cli**:
+  - Remove catalog dependencies from tanstack template &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/1058 [<samp>(a06cd)</samp>](https://github.com/sam-goodwin/alchemy/commit/a06cd16e)
+- **cloudflare**:
+  - Better defaults for docker socket path for cf containers &nbsp;-&nbsp; by **Michael K** in https://github.com/sam-goodwin/alchemy/issues/1054 [<samp>(ba834)</samp>](https://github.com/sam-goodwin/alchemy/commit/ba83423f)
+  - Update the expectations in the Bun SPA test so it passes + some cosmetic improvments &nbsp;-&nbsp; by **Andrew Jefferson** in https://github.com/sam-goodwin/alchemy/issues/1051 [<samp>(b2934)</samp>](https://github.com/sam-goodwin/alchemy/commit/b29349fc)
+  - Vite dev server hangs &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/1060 [<samp>(774fa)</samp>](https://github.com/sam-goodwin/alchemy/commit/774faa68)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.70.0...v0.70.1)
+
+---
+
 ## v0.70.0
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features

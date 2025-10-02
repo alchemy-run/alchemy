@@ -26,7 +26,7 @@
     },
     "alchemy": {
       "name": "alchemy",
-      "version": "0.70.0",
+      "version": "0.70.1",
       "bin": {
         "alchemy": "bin/alchemy.js",
       },
@@ -324,8 +324,8 @@
         "vite-tsconfig-paths": "^5.1.4",
       },
       "devDependencies": {
-        "@cloudflare/vite-plugin": "catalog:",
-        "@cloudflare/workers-types": "catalog:",
+        "@cloudflare/vite-plugin": "^1.11.6",
+        "@cloudflare/workers-types": "^4.20250805.0",
         "@testing-library/dom": "^10.4.0",
         "@testing-library/react": "^16.2.0",
         "@types/node": "^22.10.2",
