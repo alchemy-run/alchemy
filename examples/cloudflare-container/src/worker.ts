@@ -68,7 +68,6 @@ app.get("/lb", async (c) => {
 // Get a single container instance (singleton pattern)
 app.get("/singleton", async (c) => {
   const container = getContainer(c.env.MY_CONTAINER);
-  await container.resolve;
   return await container.fetch(switchPort(c.req.raw, 8080));
 });
 
