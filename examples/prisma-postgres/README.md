@@ -11,11 +11,17 @@ This example provisions a Prisma Postgres project, database, and connection stri
    export PRISMA_SERVICE_TOKEN="sk_..."
    ```
 
+3. Choose an Alchemy state password and export it (used to encrypt secrets locally):
+
+   ```bash
+   export ALCHEMY_PASSWORD="dev-password"
+   ```
+
 ## Usage
 
 ```bash
 bun i
-bun run alchemy.run.ts
+ALCHEMY_PASSWORD=${ALCHEMY_PASSWORD:-dev-password} bun run alchemy.run.ts
 ```
 
 The script prints the generated database connection string to stdout.

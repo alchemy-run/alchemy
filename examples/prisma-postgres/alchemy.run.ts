@@ -1,7 +1,9 @@
 import alchemy from "alchemy";
 import { Project, Database, DatabaseConnection } from "alchemy/prisma/postgres";
 
-const app = await alchemy("prisma-postgres-example");
+const app = await alchemy("prisma-postgres-example", {
+  password: process.env.ALCHEMY_PASSWORD ?? "dev-password",
+});
 
 export const project = await Project("project", {
   name: "prisma-postgres-example",
