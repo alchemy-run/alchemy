@@ -11,15 +11,15 @@ import { KVNamespace } from "../../src/cloudflare/kv-namespace.ts";
 import type { SingleStepMigration } from "../../src/cloudflare/worker-migration.ts";
 import { WorkerRef } from "../../src/cloudflare/worker-ref.ts";
 import {
-	deleteWorker,
-	getScriptMetadata,
-	Worker,
-	type WorkerObservability,
+  deleteWorker,
+  getScriptMetadata,
+  Worker,
+  type WorkerObservability,
 } from "../../src/cloudflare/worker.ts";
 import { destroy } from "../../src/destroy.ts";
 import {
-	fetchAndExpectOK,
-	fetchAndExpectStatus,
+  fetchAndExpectOK,
+  fetchAndExpectStatus,
 } from "../../src/util/safe-fetch.ts";
 import { BRANCH_PREFIX, waitFor } from "../util.ts";
 import { fetchAndExpect } from "./fetch-utils.ts";
