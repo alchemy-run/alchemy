@@ -7,7 +7,7 @@ export default {
   async fetch(request: Request, env: Env) {
     const url = new URL(request.url);
 
-    if (prefersMarkdown(request) && !url.pathname.endsWith(".md")) {
+    if (!url.pathname.endsWith(".md") && prefersMarkdown(request)) {
       const markdownResponse = await env.ASSETS.fetch(
         new URL(url.pathname.replace(/\/?$/, ".md"), url.origin),
       );
