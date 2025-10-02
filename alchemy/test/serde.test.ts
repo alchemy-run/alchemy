@@ -66,7 +66,12 @@ describe("serde", async () => {
 
       const serialized = await serialize(scope, secret);
       expect(serialized).toHaveProperty("@secret");
-      expect(typeof serialized["@secret"]).toBe("string");
+      expect(serialized["@secret"]).toMatchObject({
+        ciphertext: expect.any(String),
+        iv: expect.any(String),
+        salt: expect.any(String),
+        tag: expect.any(String),
+      });
       expect(serialized["@secret"]).not.toContain("sensitive-data");
 
       const deserialized = await deserialize(scope, serialized);
@@ -91,9 +96,14 @@ describe("serde", async () => {
 
       const serialized = await serialize(scope, secret);
       expect(serialized).toHaveProperty("@secret");
-      expect(typeof serialized["@secret"]).toBe("object");
-      expect(serialized["@secret"]).toHaveProperty("data");
-      expect(typeof serialized["@secret"].data).toBe("string");
+      expect(serialized["@secret"]).toMatchObject({
+        data: {
+          ciphertext: expect.any(String),
+          iv: expect.any(String),
+          salt: expect.any(String),
+          tag: expect.any(String),
+        },
+      });
       expect(serialized["@secret"].data).not.toContain("sk-1234567890abcdef");
 
       const deserialized = await deserialize(scope, serialized);

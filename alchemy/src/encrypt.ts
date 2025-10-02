@@ -29,7 +29,7 @@ export function decryptWithKey(
   return scryptDecrypt(value, key);
 }
 
-async function scryptEncrypt(
+export async function scryptEncrypt(
   value: string,
   passphrase: string,
 ): Promise<Encrypted> {
@@ -52,7 +52,7 @@ async function scryptEncrypt(
   };
 }
 
-async function scryptDecrypt(
+export async function scryptDecrypt(
   parts: Encrypted,
   passphrase: string,
 ): Promise<string> {
@@ -101,8 +101,12 @@ async function deriveScryptKey(
  * @param value - The value to encrypt
  * @param key - The encryption key
  * @returns The base64-encoded encrypted value with nonce
+ * @internal - Exposed for testing
  */
-async function libsodiumEncrypt(value: string, key: string): Promise<string> {
+export async function libsodiumEncrypt(
+  value: string,
+  key: string,
+): Promise<string> {
   const sodium = (await import("libsodium-wrappers")).default;
   // Initialize libsodium
   await sodium.ready;
@@ -138,7 +142,7 @@ async function libsodiumEncrypt(value: string, key: string): Promise<string> {
  * @param key - The decryption key
  * @returns The decrypted string
  */
-async function libsodiumDecrypt(
+export async function libsodiumDecrypt(
   encryptedValue: string,
   key: string,
 ): Promise<string> {
