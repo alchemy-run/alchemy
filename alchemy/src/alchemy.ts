@@ -137,6 +137,7 @@ async function _alchemy(
     password: process.env.ALCHEMY_PASSWORD,
     adopt: cliArgs.includes("--adopt"),
     rootDir: path.resolve(parseOption("--root-dir", ALCHEMY_ROOT)),
+    profile: parseOption("--profile"),
   } satisfies Partial<AlchemyOptions>;
   const mergedOptions = {
     ...cliOptions,
@@ -295,6 +296,10 @@ export interface AlchemyOptions {
    * @default process.cwd()
    */
   rootDir?: string;
+  /**
+   * The Alchemy profile to use for authoriziing requests.
+   */
+  profile?: string;
   /**
    * Whether this is the application that was selected with `--app`
    *
