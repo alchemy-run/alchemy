@@ -6,6 +6,13 @@ describe("encrypt", () => {
     const passphrase = crypto.randomUUID();
     const value = "test-value";
     const encrypted = await encrypt(value, passphrase);
+    expect(encrypted).toMatchObject({
+      version: "v1",
+      ciphertext: expect.any(String),
+      iv: expect.any(String),
+      salt: expect.any(String),
+      tag: expect.any(String),
+    });
     const decrypted = await decryptWithKey(encrypted, passphrase);
     expect(decrypted).toBe(value);
   });
@@ -21,7 +28,7 @@ describe("encrypt", () => {
   it("fails to decrypt from libsodium with incorrect passphrase", async () => {
     const passphrase = crypto.randomUUID();
     const value = "test-value";
-    const encrypted = await encrypt(value, passphrase);
+    const encrypted = await libsodiumEncrypt(value, passphrase);
     await expect(
       decryptWithKey(encrypted, crypto.randomUUID()),
     ).rejects.toThrow();
@@ -31,6 +38,13 @@ describe("encrypt", () => {
     const passphrase = crypto.randomUUID();
     const value = "test-value";
     const encrypted = await encrypt(value, passphrase);
+    expect(encrypted).toMatchObject({
+      version: "v1",
+      ciphertext: expect.any(String),
+      iv: expect.any(String),
+      salt: expect.any(String),
+      tag: expect.any(String),
+    });
     await expect(
       decryptWithKey(encrypted, crypto.randomUUID()),
     ).rejects.toThrow();

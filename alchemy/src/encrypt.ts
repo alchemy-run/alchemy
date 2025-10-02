@@ -9,6 +9,7 @@ const IV_LEN = 12;
 const ALGO = "aes-256-gcm";
 
 interface Encrypted {
+  version: "v1";
   ciphertext: string; // base64
   iv: string; // base64
   salt: string; // base64
@@ -45,6 +46,7 @@ export async function scryptEncrypt(
   const tag = cipher.getAuthTag();
 
   return {
+    version: "v1",
     ciphertext: ciphertext.toString("base64"),
     iv: iv.toString("base64"),
     salt: salt.toString("base64"),

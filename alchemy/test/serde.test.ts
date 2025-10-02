@@ -67,6 +67,7 @@ describe("serde", async () => {
       const serialized = await serialize(scope, secret);
       expect(serialized).toHaveProperty("@secret");
       expect(serialized["@secret"]).toMatchObject({
+        version: "v1",
         ciphertext: expect.any(String),
         iv: expect.any(String),
         salt: expect.any(String),
@@ -98,6 +99,7 @@ describe("serde", async () => {
       expect(serialized).toHaveProperty("@secret");
       expect(serialized["@secret"]).toMatchObject({
         data: {
+          version: "v1",
           ciphertext: expect.any(String),
           iv: expect.any(String),
           salt: expect.any(String),
