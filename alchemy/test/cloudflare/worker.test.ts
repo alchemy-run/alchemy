@@ -2225,7 +2225,6 @@ describe("Worker Resource", () => {
         headSamplingRate: 0.5,
       } satisfies WorkerObservability;
 
-      // create a worker with no observability set (most things enabled by default)
       worker = await Worker(workerName, {
         name: workerName,
         adopt: true,
@@ -2249,10 +2248,6 @@ describe("Worker Resource", () => {
 
       expect(worker.observability).toEqual(baseObservability);
       expect(worker.observability?.logs).toBeUndefined();
-
-      // update the worker with observability with:
-      // - invocation_logs disabled
-      // - traces.head_sampling_rate set to 0.1
 
       const newObservability = {
         enabled: true,
@@ -2285,7 +2280,6 @@ describe("Worker Resource", () => {
         observability: newObservability,
       });
 
-      // verify the worker was updated successfully
       expect(worker.observability).toEqual(newObservability);
     } finally {
       await destroy(scope);
