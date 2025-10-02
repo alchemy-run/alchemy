@@ -1,5 +1,5 @@
 import alchemy from "alchemy";
-import { Astro, VersionMetadata, Zone } from "alchemy/cloudflare";
+import { Astro, Zone } from "alchemy/cloudflare";
 import { GitHubComment } from "alchemy/github";
 import { CloudflareStateStore } from "alchemy/state";
 
@@ -59,9 +59,6 @@ export const website = await Astro("website", {
         "  Cache-Control: public, max-age=3600, stale-while-revalidate=30",
       ])
       .join("\n"),
-  },
-  bindings: {
-    VERSION: VersionMetadata(),
   },
 });
 
