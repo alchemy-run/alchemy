@@ -3,14 +3,11 @@ import { Worker, WorkerLoader } from "alchemy/cloudflare";
 
 const app = await alchemy("cloudflare-worker-loader");
 
-export const loader = WorkerLoader();
-
 export const worker = await Worker("worker", {
   entrypoint: "./src/worker.ts",
   bindings: {
-    LOADER: loader,
+    LOADER: WorkerLoader(),
   },
-  url: true,
 });
 
 console.log(`Worker URL: ${worker.url}`);
