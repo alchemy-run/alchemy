@@ -1,34 +1,30 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { exists } from "../../util/exists.ts";
 import { Scope } from "../../scope.ts";
+import { exists } from "../../util/exists.ts";
+import type { Bindings } from "../bindings.ts";
 import {
   extractStringAndSecretBindings,
   unencryptSecrets,
 } from "../util/filter-env-bindings.ts";
-import type { Assets } from "../assets.ts";
-import type { Bindings } from "../bindings.ts";
 import {
   spreadBuildProps,
   spreadDevProps,
   Website,
   type WebsiteProps,
 } from "../website.ts";
-import type { Worker } from "../worker.ts";
 
 export interface BunSPAProps<B extends Bindings> extends WebsiteProps<B> {
   frontend: string;
   outDir?: string;
 }
 
-export type BunSPA<B extends Bindings> = B extends { ASSETS: any }
-  ? never
-  : Worker<B & { ASSETS: Assets }>;
+export type BunSPA<B extends Bindings> = Website<B> & { apiUrl: string };
 
 export async function BunSPA<B extends Bindings>(
   id: string,
   props: BunSPAProps<B>,
-): Promise<BunSPA<B>> {
+): Promise<BunSPA<B> & { apiUrl: string }> {
   const frontendPath = path.resolve(props.frontend);
   if (!(await exists(frontendPath))) {
     throw new Error(`Frontend path ${frontendPath} does not exist`);
@@ -66,6 +62,7 @@ export async function BunSPA<B extends Bindings>(
     ),
   });
 
+  let apiUrl = website.url!;
   // in dev
   if (scope.local) {
     const cwd = props.cwd ?? process.cwd();
@@ -74,7 +71,6 @@ export async function BunSPA<B extends Bindings>(
       props,
       `bun '${path.relative(cwd, frontendPath)}'`,
     );
-    console.log("backend url", website.url);
     const secrets = props.wrangler?.secrets ?? !props.wrangler?.path;
     const env = {
       ...(process.env ?? {}),
@@ -82,7 +78,7 @@ export async function BunSPA<B extends Bindings>(
       ...extractStringAndSecretBindings(props.bindings ?? {}, secrets),
     };
     website.url = await scope.spawn(website.name, {
-      cmd: typeof dev === "string" ? dev : dev.command,
+      cmd: typeof dev === "string" ? dev : dev.command!,
       cwd,
       extract: (line) => {
         const URL_REGEX =
@@ -101,11 +97,11 @@ export async function BunSPA<B extends Bindings>(
         ...process.env,
         NODE_ENV: "development",
         ALCHEMY_ROOT: Scope.current.rootDir,
-        PUBLIC_BACKEND_URL: website.url!,
+        PUBLIC_BACKEND_URL: apiUrl,
       },
     });
   }
-  return website;
+  return { ...website, apiUrl } as BunSPA<B>;
 }
 
 async function validateBunfigToml(cwd: string): Promise<void> {

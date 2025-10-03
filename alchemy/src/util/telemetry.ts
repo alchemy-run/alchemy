@@ -1,6 +1,6 @@
 import envPaths from "env-paths";
 import { exec } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import fs from "node:fs/promises";
 import os from "node:os";
 import path from "pathe";
 import pkg from "../../package.json" with { type: "json" };
@@ -9,11 +9,13 @@ import { Scope } from "../scope.ts";
 import { logger } from "./logger.ts";
 import { memoize } from "./memoize.ts";
 
-export const CONFIG_PATH = path.join(os.homedir(), ".alchemy", "id");
-export const CONFIG_PATH_LEGACY = path.join(
+const ALCHEMY_DIR = path.join(os.homedir(), ".alchemy");
+const ID_PATH = path.join(ALCHEMY_DIR, "id");
+const ID_PATH_LEGACY = path.join(
   envPaths("alchemy", { suffix: "" }).config,
   "id",
 );
+const DISABLED_PATH = path.join(ALCHEMY_DIR, "telemetry-disabled");
 
 export const TELEMETRY_DISABLED =
   !!process.env.ALCHEMY_TELEMETRY_DISABLED || !!process.env.DO_NOT_TRACK;
@@ -23,26 +25,43 @@ export const TELEMETRY_API_URL =
 export const SUPPRESS_TELEMETRY_ERRORS =
   !!process.env.ALCHEMY_TELEMETRY_SUPPRESS_ERRORS;
 
+export const getGlobalTelemetryDisabled = memoize(async () => {
+  const disabled = await fs
+    .readFile(DISABLED_PATH, "utf-8")
+    .then((data) => data.trim() === "true")
+    .catch(() => false);
+  return disabled;
+});
+
+export async function setGlobalTelemetryDisabled() {
+  await fs.mkdir(ALCHEMY_DIR, { recursive: true });
+  await fs.writeFile(DISABLED_PATH, "true");
+}
+
+export async function setGlobalTelemetryEnabled() {
+  await fs.rm(DISABLED_PATH, { force: true });
+}
+
 async function getOrCreateUserId() {
   async function readUserId(path: string) {
     try {
-      return (await readFile(path, "utf-8")).trim();
+      return (await fs.readFile(path, "utf-8")).trim();
     } catch {
       return null;
     }
   }
 
-  const id = await readUserId(CONFIG_PATH);
+  const id = await readUserId(ID_PATH);
   if (id) {
     return id;
   }
 
-  const legacyId = await readUserId(CONFIG_PATH_LEGACY);
+  const legacyId = await readUserId(ID_PATH_LEGACY);
 
   try {
     const id = legacyId ?? crypto.randomUUID();
-    await mkdir(path.dirname(CONFIG_PATH), { recursive: true });
-    await writeFile(CONFIG_PATH, id);
+    await fs.mkdir(ALCHEMY_DIR, { recursive: true });
+    await fs.writeFile(ID_PATH, id);
     if (!legacyId) {
       console.warn(
         [
@@ -59,7 +78,11 @@ async function getOrCreateUserId() {
 
 async function getRootCommitHash() {
   return new Promise<string | null>((resolve) => {
-    exec("git rev-list --max-parents=0 HEAD", (err, stdout) => {
+    const command =
+      process.platform === "win32"
+        ? `git rev-list --max-parents=0 HEAD | ForEach-Object { if (-not (git cat-file -p $_ | Select-String "^parent ")) { $_ } }`
+        : `git rev-list --max-parents=0 HEAD | xargs -r -I{} sh -c 'git cat-file -p {} | grep -q "^parent " || echo {}'`;
+    exec(command, (err, stdout) => {
       if (err) {
         resolve(null);
         return;
@@ -236,6 +259,14 @@ export type AlchemyTelemetryData = {
   duration: number;
 };
 
+async function isTelemetryDisabled() {
+  return (
+    Scope.getScope()?.noTrack ||
+    TELEMETRY_DISABLED ||
+    (await getGlobalTelemetryDisabled())
+  );
+}
+
 export async function createAndSendEvent(
   data:
     | CliTelemetryData
@@ -244,7 +275,7 @@ export async function createAndSendEvent(
     | AlchemyTelemetryData,
   error?: Error,
 ) {
-  if (Scope.getScope()?.noTrack || TELEMETRY_DISABLED) {
+  if (await isTelemetryDisabled()) {
     return;
   }
   try {
