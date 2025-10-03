@@ -35,6 +35,20 @@ export const website = await Astro("website", {
     POSTHOG_PROJECT_ID: POSTHOG_PROJECT_ID,
     ENABLE_POSTHOG: stage === "prod" ? "true" : "false",
   },
+  assets: {
+    _headers: [
+      "/advanced*",
+      "/blog*",
+      "/concepts*",
+      "/guides*",
+      "/providers*",
+      "/telemetry*",
+      "/getting-started*",
+      "/what-is-alchemy*",
+    ]
+      .flatMap((route) => [route, "  Vary: accept"])
+      .join("\n"),
+  },
 });
 
 export const router = await Worker("router", {
