@@ -44,7 +44,7 @@ export interface HTTPConfiguration {
   /**
    * The expected HTTP response codes (e.g. "200") or code ranges (e.g. "2xx" for all codes starting with 2)
    */
-  expectedCodes?: string[] | null;
+  expectedCodes?: string[];
 
   /**
    * Follow redirects if the origin returns a 3xx status code
@@ -57,7 +57,7 @@ export interface HTTPConfiguration {
    * It is recommended you set a Host header by default
    * The User-Agent header cannot be overridden
    */
-  header?: Record<string, string[]> | null;
+  header?: Record<string, string[]>;
 
   /**
    * The HTTP method to use for the health check
@@ -93,12 +93,9 @@ export interface TCPConfiguration {
   port?: number;
 }
 
-/**
- * Properties for creating or updating a Cloudflare Health Check
- */
 export interface HealthCheckProps extends CloudflareApiOptions {
   /**
-   * The Cloudflare Zone ID this health check belongs to
+   * Zone ID this health check belongs to
    */
   zoneId: string;
 
@@ -115,9 +112,9 @@ export interface HealthCheckProps extends CloudflareApiOptions {
 
   /**
    * A list of regions from which to run health checks
-   * Null means Cloudflare will pick a default region
+   * If not specified, Cloudflare will pick a default region
    */
-  checkRegions?: CheckRegion[] | null;
+  checkRegions?: CheckRegion[];
 
   /**
    * The number of consecutive fails required from a health check before changing the health to unhealthy
@@ -139,7 +136,7 @@ export interface HealthCheckProps extends CloudflareApiOptions {
   /**
    * Parameters specific to an HTTP or HTTPS health check
    */
-  httpConfig?: HTTPConfiguration | null;
+  httpConfig?: HTTPConfiguration;
 
   /**
    * The interval between each health check in seconds
@@ -165,7 +162,7 @@ export interface HealthCheckProps extends CloudflareApiOptions {
   /**
    * Parameters specific to TCP health check
    */
-  tcpConfig?: TCPConfiguration | null;
+  tcpConfig?: TCPConfiguration;
 
   /**
    * The timeout (in seconds) before marking the health check as failed
@@ -428,7 +425,7 @@ interface HealthCheckResponse {
   id?: string;
   address?: string;
   name?: string;
-  check_regions?: CheckRegion[] | null;
+  check_regions?: CheckRegion[];
   consecutive_fails?: number;
   consecutive_successes?: number;
   created_on?: string;
@@ -437,13 +434,13 @@ interface HealthCheckResponse {
   http_config?: {
     allow_insecure?: boolean;
     expected_body?: string;
-    expected_codes?: string[] | null;
+    expected_codes?: string[];
     follow_redirects?: boolean;
-    header?: Record<string, string[]> | null;
+    header?: Record<string, string[]>;
     method?: "GET" | "HEAD";
     path?: string;
     port?: number;
-  } | null;
+  };
   interval?: number;
   modified_on?: string;
   retries?: number;
@@ -452,7 +449,7 @@ interface HealthCheckResponse {
   tcp_config?: {
     method?: "connection_established";
     port?: number;
-  } | null;
+  };
   timeout?: number;
   type?: string;
 }
@@ -466,7 +463,7 @@ async function findHealthCheckByName(
   zoneId: string,
   name: string,
   page = 1,
-): Promise<HealthCheckResponse | null> {
+): Promise<HealthCheckResponse | undefined> {
   const response = await api.get(
     `/zones/${zoneId}/healthchecks?page=${page}&per_page=50`,
   );
@@ -481,7 +478,7 @@ async function findHealthCheckByName(
   if (data.result_info?.total_pages && page < data.result_info.total_pages) {
     return await findHealthCheckByName(api, zoneId, name, page + 1);
   }
-  return null;
+  return undefined;
 }
 
 /**
@@ -518,7 +515,7 @@ function prepareRequestBody(props: HealthCheckProps): any {
           path: props.httpConfig.path,
           port: props.httpConfig.port,
         }
-      : null;
+      : undefined;
   }
   if (props.interval !== undefined) {
     body.interval = props.interval;
@@ -535,7 +532,7 @@ function prepareRequestBody(props: HealthCheckProps): any {
           method: props.tcpConfig.method,
           port: props.tcpConfig.port,
         }
-      : null;
+      : undefined;
   }
   if (props.timeout !== undefined) {
     body.timeout = props.timeout;

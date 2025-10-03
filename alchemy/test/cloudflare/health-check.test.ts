@@ -100,12 +100,12 @@ const createHealthCheckWithErrorHandling = async (
   id: string,
   props: any,
   testName: string,
-): Promise<HealthCheck | null> => {
+): Promise<HealthCheck | undefined> => {
   try {
     return await HealthCheck(id, props);
   } catch (error) {
     if (skipIfUnavailable(error, testName)) {
-      return null;
+      return undefined;
     }
     throw error;
   }
@@ -134,7 +134,7 @@ const verifyHealthCheckDeleted = async (
 
 describe("HealthCheck Resource", () => {
   let testZone: Zone | undefined;
-  let testHealthCheck: HealthCheck | null | undefined;
+  let testHealthCheck: HealthCheck | undefined;
 
   beforeEach(async () => {
     testZone = undefined;
