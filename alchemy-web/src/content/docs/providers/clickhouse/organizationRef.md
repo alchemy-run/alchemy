@@ -1,5 +1,5 @@
 ---
-title: Organization
+title: OrganizationRef
 description: Learn how to manage Clickhouse Cloud Organizations using Alchemy.
 ---
 

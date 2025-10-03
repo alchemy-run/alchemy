@@ -5,6 +5,7 @@ import { diff } from "../util/diff.ts";
 import { createClickhouseApi } from "./api.ts";
 import type { ClickhouseClient } from "./api/sdk.gen.ts";
 import type { Service as ApiService, Organization } from "./api/types.gen.ts";
+import { OrganizationRef } from "./organization.ts";
 
 type MysqlEndpoint = {
   protocol: "mysql";
@@ -37,7 +38,7 @@ export interface ServiceProps {
   secret?: string | Secret<string>;
 
   /**
-   * The id of Clickhouse cloud organization to create the service in.
+   * The id, name, or OrganizationRef of Clickhouse cloud organization to create the service in.
    */
   organization: string | Organization;
 
@@ -323,7 +324,7 @@ export interface Service {
  *
  * @example
  * // Create a basic Clickhouse service on aws
- * const organization = await getOrganizationByName("Alchemy's Organization");
+ * const organization = await OrganizationRef("Alchemy's Organization");
  * const service = await Service("clickhouse", {
  *   organization,
  *   provider: "aws",
@@ -388,7 +389,9 @@ export const Service = Resource(
 
     const organizationId =
       typeof props.organization === "string"
-        ? props.organization
+        ? await OrganizationRef(props.organization)
+            .then((organization) => organization.id!)
+            .catch(() => props.organization as string)
         : props.organization.id!;
 
     if (this.phase === "delete") {

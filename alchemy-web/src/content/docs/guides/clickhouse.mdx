@@ -5,73 +5,172 @@ sidebar:
   order: 21
 ---
 
-import { Steps, Tabs, TabItem, Code } from "@astrojs/starlight/components";
+import { Steps, Tabs, TabItem } from "@astrojs/starlight/components";
 
 This guide walks you through setting up a Clickhouse database using Alchemy.
 
 <Steps>
+
+0. Install and setup Alchemy
+	
+	<Tabs syncKey="pkgManager">
+	<TabItem label="bun">
+
+	```bash
+	bun add alchemy @clickhouse/client-web
+	```
+
+	</TabItem>
+	<TabItem label="npm">
+
+	```bash
+	npm install alchemy @clickhouse/client-web
+	```
+
+	</TabItem>
+	<TabItem label="pnpm">
+
+	```bash
+	pnpm add alchemy @clickhouse/client-web
+	```
+
+	</TabItem>
+	<TabItem label="yarn">
+
+	```bash
+	yarn add alchemy @clickhouse/client-web
+	```
+
+	</TabItem>
+	</Tabs>
+
+	:::tip
+	If you're new to Alchemy, see the [Getting Started](/docs/getting-started) guide.
+	:::
 
 1. **Configure environment variables**
 
    Add the required environment variables to your `.env` file:
 
    ```bash
-   CLICKHOUSE_KEY_ID=your_clickhouse_url
-   CLICKHOUSE_KEY_SECRET=your_clickhouse_password
+   CLICKHOUSE_KEY_ID=your_clickhouse_key_id
+   CLICKHOUSE_KEY_SECRET=your_clickhouse_key_secret
+   CLICKHOUSE_ORG=your_clickhouse_organization
    ```
 
-	 :::tip
-	 We also reccomend storing your organization name in an environment variable:
+2. **Create your infrastructure**
 
-	 ```bash
-	 CLICKHOUSE_ORG=your_clickhouse_organization
-	 ```
+   Create `alchemy.run.ts` with your Clickhouse Service and bind it to your Worker:
 
-	 and access it via `alchemy.env.CLICKHOUSE_ORG`
-	 :::
-
-2. **Reference your Organization**
-
-	 Reference your organization in your Alchemy script:
-
-	 ```diff lang='ts'
+   ```diff lang="ts" title="alchemy.run.ts"
    import alchemy from "alchemy";
-	 + import { OrganizationRef } from "alchemy/clickhouse";
+   +import { Service } from "alchemy/clickhouse";
+   import { Worker } from "alchemy/cloudflare";
 
-	 const app = await alchemy("my-clickhouse-app");
+   const app = await alchemy("my-clickhouse-app");
 
-	 + const organization = await OrganizationRef("<YOUR_ORGANIZATION_NAME>");
-	 ```
+   +const service = await Service("clickhouse", {
+   +  organization: process.env.CLICKHOUSE_ORG,
+   +  provider: "aws",
+   +  region: "us-east-1",
+   +  minReplicaMemoryGb: 8,
+   +  maxReplicaMemoryGb: 356,
+   +  numReplicas: 3,
+   +});
 
-	 :::tip
-	 if you set up your organization name in an environment variable, you can do:
+   export const worker = await Worker("worker", {
+     entrypoint: "./src/worker.ts",
+     bindings: {
+   +    CLICKHOUSE_URL: `https://${service.mysqlEndpoint.host}:${service.mysqlEndpoint.port}`,
+   +    CLICKHOUSE_PASSWORD: service.password,
+     },
+   });
 
-	 ```diff lang='ts'
-	 - const organization = await OrganizationRef("<YOUR_ORGANIZATION_NAME>");
-	 + const organization = await OrganizationRef(alchemy.env.CLICKHOUSE_ORG);
-	 ```
-	 :::
+   await app.finalize();
+   ```
 
-3. **Create a Clickhouse Service**
+3. **Implement your worker**
 
-	 Create a Clickhouse Service on aws with the following configuration:
+   Create `src/worker.ts` to interact with Clickhouse:
 
-	 ```diff lang='ts'
-   import alchemy from "alchemy";
-	 import { OrganizationRef } from "alchemy/clickhouse";
+   ```diff lang="ts" title="src/worker.ts"
+   import type { worker } from "../alchemy.run.ts";
+   import { createClient } from "@clickhouse/client-web";
+   import workers from "cloudflare:workers";
 
-	 const app = await alchemy("my-clickhouse-app");
+   +// initialize clickhouse client
+   +const env = workers.env as typeof worker.Env;
+   +const clickhouseClient = createClient({
+   +  url: env.CLICKHOUSE_URL,
+   +  password: env.CLICKHOUSE_PASSWORD,
+   +});
 
-	 const organization = await OrganizationRef("<YOUR_ORGANIZATION_NAME>");
+   export default {
+     async fetch(req: Request, env: typeof worker.Env): Promise<Response> {
+   +    await clickhouseClient.insert({
+   +      table: "worker_log",
+   +      values: [{ id: crypto.randomUUID(), time: new Date().toISOString() }],
+   +      format: "JSONEachRow",
+   +    });
+       return Response.json({ success: true });
+     },
+   };
+   ```
 
-	 + const service = await Service("clickhouse", {
-	 + 	 organization,
-	 + 	 provider: "aws",
-	 + 	 region: "us-east-1",
-	 + 	 minReplicaMemoryGb: 8,
-	 + 	 maxReplicaMemoryGb: 356,
-	 + 	 numReplicas: 3,
-	 + });
-	 ```
+4. **Deploy your service**
+
+   Use the Alchemy CLI to deploy your Clickhouse service:
+
+   <Tabs syncKey="pkgManager">
+     <TabItem label="bun">
+       ```sh
+       bun alchemy deploy
+       ```
+     </TabItem>
+     <TabItem label="npm">
+       ```sh
+       npx alchemy deploy
+       ```
+     </TabItem>
+     <TabItem label="pnpm">
+       ```sh
+       pnpm alchemy deploy
+       ```
+     </TabItem>
+     <TabItem label="yarn">
+       ```sh
+       yarn alchemy deploy
+       ```
+     </TabItem>
+   </Tabs>
+
+   This will deploy your Clickhouse service and worker. Visit the worker URL to insert data into Clickhouse.
+
+5. **(Optional) Tear down**
+
+   Use the Alchemy CLI to delete all resources:
+
+   <Tabs syncKey="pkgManager">
+     <TabItem label="bun">
+       ```sh
+       bun alchemy destroy
+       ```
+     </TabItem>
+     <TabItem label="npm">
+       ```sh
+       npx alchemy destroy
+       ```
+     </TabItem>
+     <TabItem label="pnpm">
+       ```sh
+       pnpm alchemy destroy
+       ```
+     </TabItem>
+     <TabItem label="yarn">
+       ```sh
+       yarn alchemy destroy
+       ```
+     </TabItem>
+   </Tabs>
 
 </Steps>
