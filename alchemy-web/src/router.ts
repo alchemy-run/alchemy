@@ -1,34 +1,37 @@
 interface Env {
-  ASSETS: Fetcher;
-  VERSION: WorkerVersionMetadata;
+  WEBSITE: Fetcher;
 }
 
 export default {
   async fetch(request: Request, env: Env) {
-    const url = new URL(request.url);
-
-    if (!url.pathname.endsWith(".md") && prefersMarkdown(request)) {
-      const markdownResponse = await env.ASSETS.fetch(
-        new URL(url.pathname.replace(/\/?$/, ".md"), url.origin),
-      );
-      if (markdownResponse.ok) {
-        return markdownResponse;
-      }
-    }
-
-    const assetResponse = await env.ASSETS.fetch(url);
-    if (assetResponse.status !== 404) {
-      return assetResponse;
-    }
-
-    const notFoundResponse = await env.ASSETS.fetch(
-      new URL("/404.html", url.origin),
-    );
-    return new Response(notFoundResponse.body, {
-      ...notFoundResponse,
-      status: 404,
-    });
+    return handleRequest(request, env);
   },
+};
+
+const handleRequest = async (request: Request, env: Env) => {
+  const url = new URL(request.url);
+
+  if (prefersMarkdown(request) && !url.pathname.endsWith(".md")) {
+    const markdownResponse = await env.WEBSITE.fetch(
+      new URL(url.pathname.replace(/\/?$/, ".md"), url.origin),
+    );
+    if (markdownResponse.ok) {
+      return markdownResponse;
+    }
+  }
+
+  const assetResponse = await env.WEBSITE.fetch(url);
+  if (assetResponse.status !== 404) {
+    return assetResponse;
+  }
+
+  const notFoundResponse = await env.WEBSITE.fetch(
+    new URL("/404.html", url.origin),
+  );
+  return new Response(notFoundResponse.body, {
+    ...notFoundResponse,
+    status: 404,
+  });
 };
 
 /**

@@ -1,5 +1,5 @@
 import alchemy from "alchemy";
-import { Astro, Zone } from "alchemy/cloudflare";
+import { Astro, Worker, Zone } from "alchemy/cloudflare";
 import { GitHubComment } from "alchemy/github";
 import { CloudflareStateStore } from "alchemy/state";
 
@@ -26,43 +26,29 @@ if (stage === "prod") {
   });
 }
 
-const markdownRoutes = [
-  "/advanced*",
-  "/blog*",
-  "/concepts*",
-  "/guides*",
-  "/providers*",
-  "/telemetry*",
-  "/getting-started*",
-  "/what-is-alchemy*",
-];
-
 export const website = await Astro("website", {
   name: "alchemy-website",
   adopt: true,
   version: stage === "prod" ? undefined : stage,
-  domains: domain ? [domain] : undefined,
   env: {
     POSTHOG_CLIENT_API_HOST: `https://${POSTHOG_PROXY_HOST}`,
     POSTHOG_PROJECT_ID: POSTHOG_PROJECT_ID,
     ENABLE_POSTHOG: stage === "prod" ? "true" : "false",
   },
+});
+
+export const router = await Worker("router", {
+  name: "alchemy-website-router",
+  adopt: true,
   entrypoint: "src/router.ts",
-  noBundle: false,
-  assets: {
-    directory: "dist",
-    run_worker_first: markdownRoutes,
-    _headers: markdownRoutes
-      .flatMap((route) => [
-        route,
-        "  Vary: accept",
-        "  Cache-Control: public, max-age=3600, stale-while-revalidate=30",
-      ])
-      .join("\n"),
+  version: stage === "prod" ? undefined : stage,
+  domains: domain ? [domain] : undefined,
+  bindings: {
+    WEBSITE: website,
   },
 });
 
-const url = domain ? `https://${domain}` : website.url;
+const url = domain ? `https://${domain}` : router.url;
 
 console.log(url);
 
