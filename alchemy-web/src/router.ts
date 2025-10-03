@@ -45,9 +45,32 @@ export default {
 const prefersMarkdown = (request: Request) => {
   const accept = request.headers.get("accept");
   if (!accept) return false;
-  return (
-    accept === "application/json, text/plain, */*" ||
-    accept ===
-      "text/markdown;q=1.0, text/x-markdown;q=0.9, text/plain;q=0.8, text/html;q=0.7, */*;q=0.1"
-  );
+
+  // parse accept header and sort by quality; highest quality first
+  const types = accept
+    .split(",")
+    .map((part) => {
+      const type = part.split(";")[0].trim();
+      const q = part.match(/q=([^,]+)/)?.[1];
+      return { type, q: q ? Number.parseFloat(q) : 1 };
+    })
+    .sort((a, b) => b.q - a.q)
+    .map((type) => type.type);
+
+  const markdown = types.indexOf("text/markdown");
+  const plain = types.indexOf("text/plain");
+  const html = types.indexOf("text/html");
+
+  // if no HTML is specified, and either markdown or plain text is specified, prefer markdown
+  if (html === -1) {
+    return markdown !== -1 || plain !== -1;
+  }
+
+  // prefer markdown if higher quality than HTML
+  if ((markdown !== -1 && markdown < html) || (plain !== -1 && plain < html)) {
+    return true;
+  }
+
+  // otherwise, prefer HTML
+  return false;
 };
