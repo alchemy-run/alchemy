@@ -7,7 +7,7 @@ import type * as Effect from "effect/Effect";
 
 import {
   Service,
-  type Binder,
+  type BindingLifecycle,
   type Resource,
   type Statement,
 } from "@alchemy.run/effect";
@@ -78,12 +78,13 @@ export const Function = <ID extends string, P extends FunctionProps>(
     } as const,
   );
 
-export type FunctionBinding<Stmt extends Statement = Statement> = Binder<
-  {
-    functionArn: string;
-    functionName: string;
-    env: Record<string, string>;
-    policyStatements: IAM.PolicyStatement[];
-  },
-  Stmt
->;
+export type FunctionBinding<Stmt extends Statement = Statement> =
+  BindingLifecycle<
+    {
+      functionArn: string;
+      functionName: string;
+      env: Record<string, string>;
+      policyStatements: IAM.PolicyStatement[];
+    },
+    Stmt
+  >;

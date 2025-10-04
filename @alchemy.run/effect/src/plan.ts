@@ -1,15 +1,28 @@
 import type * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import { isBinding, type Binder, type Binding } from "./binding.ts";
 import type { Phase } from "./phase.ts";
 import type { SerializedStatement, Statement } from "./policy.ts";
 import type { Provider } from "./provider.ts";
 import type { Resource } from "./resource.ts";
+import type { Service } from "./service.ts";
 import { State, type ResourceState } from "./state.ts";
 import type { TagInstance } from "./tag-instance.ts";
 
 export type PlanError = never;
+
+export type BoundDecl<
+  Host extends Service = Service,
+  To extends Statement = Statement,
+> = {
+  type: "bound";
+  resource: Host;
+  bindings: To[];
+  props: any;
+};
+
+export const isBoundDecl = (value: any): value is BoundDecl =>
+  value && typeof value === "object" && value.type === "bound";
 
 /**
  * A node in the plan that represents a binding operation acting on a resource.
@@ -23,27 +36,27 @@ export type Attach<Stmt extends Statement = Statement> = {
   action: "attach";
   stmt: Stmt;
   olds?: SerializedStatement<Stmt>;
-  attributes: Stmt["resource"]["attributes"];
+  attributes: Stmt["resource"]["Attr"];
 };
 
 export type Detach<Stmt extends Statement = Statement> = {
   action: "detach";
   stmt: Stmt;
-  attributes: Stmt["resource"]["attributes"];
+  attributes: Stmt["resource"]["Attr"];
 };
 
 export type NoopBind<Stmt extends Statement = Statement> = {
   action: "noop";
   stmt: Stmt;
-  attributes: Stmt["resource"]["attributes"];
-  provider: Context.Tag<never, Binder>;
+  attributes: Stmt["resource"]["Attr"];
+  provider: Context.Tag<never, Binding>;
 };
 
 /**
  * A node in the plan that represents a resource CRUD operation.
  */
-export type ResourceNode<
-  R extends Resource = Resource,
+export type CrudNode<
+  R extends Resource | Service = Resource | Service,
   B extends Statement = Statement,
 > =
   | Create<R, B>
@@ -52,7 +65,10 @@ export type ResourceNode<
   | Replace<R, B>
   | NoopUpdate<R, B>;
 
-export type Create<R extends Resource, B extends Statement = Statement> = {
+export type Create<
+  R extends Resource | Service,
+  B extends Statement = Statement,
+> = {
   action: "create";
   resource: R;
   news: any;
@@ -61,7 +77,10 @@ export type Create<R extends Resource, B extends Statement = Statement> = {
   attributes: R["attributes"];
 };
 
-export type Update<R extends Resource, B extends Statement = Statement> = {
+export type Update<
+  R extends Resource | Service,
+  B extends Statement = Statement,
+> = {
   action: "update";
   resource: R;
   olds: any;
@@ -72,7 +91,10 @@ export type Update<R extends Resource, B extends Statement = Statement> = {
   attributes: R["attributes"];
 };
 
-export type Delete<R extends Resource, _B extends Statement = Statement> = {
+export type Delete<
+  R extends Resource | Service,
+  _B extends Statement = Statement,
+> = {
   action: "delete";
   resource: R;
   olds: any;
@@ -83,14 +105,20 @@ export type Delete<R extends Resource, _B extends Statement = Statement> = {
   downstream: string[];
 };
 
-export type NoopUpdate<R extends Resource, B extends Statement = Statement> = {
+export type NoopUpdate<
+  R extends Resource | Service,
+  B extends Statement = Statement,
+> = {
   action: "noop";
   resource: R;
   attributes: R["attributes"];
   bindings: NoopBind<B>[];
 };
 
-export type Replace<R extends Resource, B extends Statement = Statement> = {
+export type Replace<
+  R extends Resource | Service,
+  B extends Statement = Statement,
+> = {
   action: "replace";
   resource: R;
   olds: any;
@@ -104,7 +132,7 @@ export type Replace<R extends Resource, B extends Statement = Statement> = {
 
 type PlanItem = Effect.Effect<
   {
-    [id in string]: Binding | Resource;
+    [id in string]: BoundDecl | Resource | Service;
   },
   never,
   any
@@ -112,7 +140,7 @@ type PlanItem = Effect.Effect<
 
 type ApplyAll<
   Items extends PlanItem[],
-  Accum extends Record<string, ResourceNode> = {},
+  Accum extends Record<string, CrudNode> = {},
 > = Items extends [
   infer Head extends PlanItem,
   ...infer Tail extends PlanItem[],
@@ -128,13 +156,13 @@ type ApplyAll<
     >
   : Accum;
 
-type Apply<T, Stmt extends Statement = never> = T extends Binding<
+type Apply<T, Stmt extends Statement = never> = T extends BoundDecl<
   infer From,
   infer Bindings extends Statement
 >
-  ? ResourceNode<From, Bindings | Stmt>
+  ? CrudNode<From, Bindings | Stmt>
   : T extends Resource
-    ? ResourceNode<T, Stmt>
+    ? CrudNode<T, Stmt>
     : never;
 
 type DerivePlan<
@@ -159,7 +187,7 @@ type DerivePlan<
     };
 
 export type Plan = {
-  [id in string]: ResourceNode;
+  [id in string]: CrudNode;
 };
 
 export const plan = <
@@ -206,19 +234,19 @@ export const plan = <
               Effect.flatMap(
                 resource,
                 Effect.fn(function* (subgraph: {
-                  [x: string]: Resource | Binding;
+                  [x: string]: Resource | BoundDecl | Service;
                 }) {
                   return Object.fromEntries(
                     (yield* Effect.all(
                       Object.entries(subgraph).map(
                         Effect.fn(function* ([id, node]) {
-                          const resource = isBinding(node)
+                          const resource = isBoundDecl(node)
                             ? node.resource
                             : node;
-                          const statements = isBinding(node)
+                          const statements = isBoundDecl(node)
                             ? node.bindings
                             : [];
-                          const news = isBinding(node)
+                          const news = isBoundDecl(node)
                             ? node.props
                             : resource.props;
 
@@ -303,7 +331,7 @@ export const plan = <
                           }
                         }),
                       ),
-                    )).map((update) => [update.resource.id, update]),
+                    )).map((update) => [update.resource.ID, update]),
                   ) as Plan;
                 }),
               ),
@@ -317,7 +345,7 @@ export const plan = <
             | State
             // extract the providers from the deeply nested resources
             | {
-                [id in keyof Resources]: Resources[id] extends Binding
+                [id in keyof Resources]: Resources[id] extends BoundDecl
                   ?
                       | TagInstance<Resources[id]["resource"]["provider"]>
                       | TagInstance<
@@ -358,10 +386,10 @@ export const plan = <
                   // TODO(sam): Support Detach Bindings
                   bindings: [],
                   resource: {
-                    id,
-                    type: oldState.type,
-                    attributes: oldState.output,
-                    props: oldState.props,
+                    ID: id,
+                    Type: oldState.type,
+                    Attr: oldState.output,
+                    Props: oldState.props,
                     provider,
                   },
                   downstream: downstream[id] ?? [],
@@ -407,7 +435,7 @@ class DeleteResourceHasDownstreamDependencies extends Data.TaggedError(
 
 const compare = <R extends Resource>(
   oldState: ResourceState | undefined,
-  newState: R["props"],
+  newState: R["Props"],
 ) => JSON.stringify(oldState?.props) === JSON.stringify(newState);
 
 const diffBindings = (
@@ -418,7 +446,7 @@ const diffBindings = (
   const oldBindings = oldState?.bindings;
   const oldSids = new Set(oldBindings?.map((binding) => binding.sid));
   for (const stmt of bindings) {
-    const sid = stmt.sid ?? `${stmt.effect}:${stmt.action}:${stmt.resource.id}`;
+    const sid = stmt.sid ?? `${stmt.effect}:${stmt.action}:${stmt.resource.ID}`;
     oldSids.delete(sid);
 
     const oldBinding = oldBindings?.find((binding) => binding.sid === sid);
@@ -427,7 +455,7 @@ const diffBindings = (
         action: "attach",
         stmt,
         // phantom
-        attributes: stmt.resource.attributes,
+        attributes: stmt.resource.Attr,
       });
     } else if (isBindingDiff(oldBinding, stmt)) {
       actions.push({
@@ -435,7 +463,7 @@ const diffBindings = (
         stmt,
         olds: oldBinding,
         // phantom
-        attributes: stmt.resource.attributes,
+        attributes: stmt.resource.Attr,
       });
     }
   }
@@ -454,4 +482,4 @@ const isBindingDiff = (
 ) =>
   oldBinding.effect !== newBinding.effect ||
   oldBinding.action !== newBinding.action ||
-  oldBinding.resource.id !== newBinding.resource.id;
+  oldBinding.resource.id !== newBinding.resource.ID;

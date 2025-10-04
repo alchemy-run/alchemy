@@ -25,5 +25,7 @@ export const Consumer = Messages.consume(
   }),
 );
 
+const foo = Consumer.pipe();
+
 // runtime handler
 export default Consumer.pipe(SQS.clientFromEnv(), Lambda.toHandler);

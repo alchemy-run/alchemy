@@ -11,7 +11,7 @@ export type SendMessage<Q extends Queue = Queue> = Allow<"sqs:SendMessage", Q>;
 
 export const SendMessage = <Q extends Queue>(queue: Q) =>
   ({
-    label: `AWS.SQS.SendMessage(${queue.id})`,
+    label: `AWS.SQS.SendMessage(${queue.ID})`,
     effect: "Allow",
     action: "sqs:SendMessage",
     resource: queue,
@@ -27,7 +27,7 @@ export const sendMessage = <Q extends Queue<string, QueueProps>>(
     yield* allow<SendMessage<Q>>();
     const sqs = yield* QueueClient;
     const url =
-      process.env[`${queue.id.toUpperCase().replace(/-/g, "_")}_QUEUE_URL`]!;
+      process.env[`${queue.ID.toUpperCase().replace(/-/g, "_")}_QUEUE_URL`]!;
     return yield* sqs.sendMessage({
       QueueUrl: url,
       MessageBody: JSON.stringify(message),

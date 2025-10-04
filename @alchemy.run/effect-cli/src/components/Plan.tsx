@@ -1,7 +1,7 @@
 // biome-ignore lint/style/useImportType: UMD global
 import React, { useMemo } from "react";
 
-import type { BindNode, Plan, ResourceNode } from "@alchemy.run/effect";
+import type { BindNode, CrudNode, Plan } from "@alchemy.run/effect";
 import { Box, Text } from "ink";
 
 export interface PlanProps {
@@ -12,7 +12,7 @@ export function Plan({ plan }: PlanProps): React.JSX.Element {
   const items = useMemo(
     () =>
       Array.from(Object.values(plan)).sort((a, b) =>
-        a.resource.id.localeCompare(b.resource.id),
+        a.resource.ID.localeCompare(b.resource.ID),
       ),
     [plan],
   );
@@ -61,13 +61,13 @@ export function Plan({ plan }: PlanProps): React.JSX.Element {
           const hasBindings = item.bindings && item.bindings.length > 0;
 
           return (
-            <Box key={item.resource.id} flexDirection="column">
+            <Box key={item.resource.ID} flexDirection="column">
               <Box flexDirection="row">
                 <Box width={2}>
                   <Text color={color}>{icon} </Text>
                 </Box>
                 <Box width={12}>
-                  <Text bold>{item.resource.id}</Text>
+                  <Text bold>{item.resource.ID}</Text>
                 </Box>
                 <Box width={25}>
                   <Text color="blackBright">({item.resource.type})</Text>
@@ -90,7 +90,7 @@ export function Plan({ plan }: PlanProps): React.JSX.Element {
                   const bindingColor = bindingActionColor(binding.action);
                   const bindingIcon = bindingActionIcon(binding.action);
                   return (
-                    <Box key={binding.stmt.resource.id} flexDirection="row">
+                    <Box key={binding.stmt.resource.ID} flexDirection="row">
                       <Box width={4}>
                         <Text color={bindingColor}> {bindingIcon}</Text>
                       </Box>
@@ -110,7 +110,7 @@ export function Plan({ plan }: PlanProps): React.JSX.Element {
 
 type Color = Parameters<typeof Text>[0]["color"];
 
-const actionColor = (action: ResourceNode["action"]): Color =>
+const actionColor = (action: CrudNode["action"]): Color =>
   ({
     noop: "gray",
     create: "green",
@@ -119,7 +119,7 @@ const actionColor = (action: ResourceNode["action"]): Color =>
     replace: "orange",
   })[action];
 
-const actionIcon = (action: ResourceNode["action"]): string =>
+const actionIcon = (action: CrudNode["action"]): string =>
   ({
     create: "+",
     update: "~",

@@ -9,7 +9,7 @@ import path from "node:path";
 import {
   App,
   DotAlchemy,
-  type Binder,
+  type BindingLifecycle,
   type BindNode,
   type Provider,
   type Statement,
@@ -92,7 +92,7 @@ export const functionProvider = () =>
           if (binding.action === "attach") {
             const binder = yield* binding.stmt.bind as Context.Tag<
               never,
-              Binder
+              BindingLifecycle
             >;
             const bound = yield* binder.attach({
               host: {

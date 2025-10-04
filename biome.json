@@ -81,7 +81,8 @@
       },
       "complexity": {
         "noBannedTypes": "off",
-        "noCommaOperator": "off"
+        "noCommaOperator": "off",
+        "noStaticOnlyClass": "off"
       },
       "suspicious": {
         "noExplicitAny": "off",

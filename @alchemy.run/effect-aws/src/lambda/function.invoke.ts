@@ -17,7 +17,7 @@ export declare const InvokeFunction: <F extends Function>(
 export const invoke = <F extends Function>(func: F, input: any) =>
   Effect.gen(function* () {
     const lambda = yield* FunctionClient;
-    const functionArn = process.env[`${func.id}-functionArn`]!;
+    const functionArn = process.env[`${func.ID}-functionArn`]!;
     yield* allow<InvokeFunction<F>>();
     return yield* lambda.invoke({
       FunctionName: functionArn,

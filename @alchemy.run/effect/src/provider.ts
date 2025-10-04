@@ -1,16 +1,7 @@
 import type * as Effect from "effect/Effect";
-import type { ScopedPlanStatusSession } from "./apply.ts";
-import type { BindNode } from "./plan.ts";
-import type { Statement } from "./policy.ts";
+import type { Resource } from "./resource.ts";
 
-// local dev mode as a Layer?
-
-// watch? tail?
-// local dev as a adifferent provider??
-
-// drift detection: read + diff? or just read + generic comparison
-
-type Diff =
+export type Diff =
   | {
       action: "update" | "noop";
       deleteFirst?: undefined;
@@ -20,51 +11,41 @@ type Diff =
       deleteFirst?: boolean;
     };
 
-export type Provider<
-  Type extends string = string,
-  Input = any,
-  Output = any,
-  Stmt extends Statement = Statement,
-> = {
-  props?: Input;
-  type: Type;
-  // drives alchemy sync/refresh/adopt
-  read?(input: {
-    // "my-worker" -> arn:aws:lambda:us-east-1:123456789012:function:my-worker
-    id: string; // -> doesn't always map to a a physical ID
-    olds: Input | undefined;
-    // what is the ARN?
-    output: Output | undefined; // current state -> synced state
-    session: ScopedPlanStatusSession;
-  }): Effect.Effect<Output | undefined, any, never>;
-  diff?(input: {
-    id: string;
-    olds: Input;
-    news: Input;
-    output: Output;
-    bindings: BindNode<Stmt>[];
-  }): Effect.Effect<Diff, never, never>;
+export type Provider<Res extends Resource = Resource> = {
   // tail();
   // watch();
   // replace(): Effect.Effect<void, never, never>;
+  kind: "Provider";
+  type: Res["Type"];
+  read?(input: {
+    id: string;
+    olds: Res["Props"] | undefined;
+    // what is the ARN?
+    output: Res["Attr"] | undefined; // current state -> synced state
+  }): Effect.Effect<Res["Attr"] | undefined, any, never>;
+  diff?(input: {
+    id: string;
+    olds: Res["Props"];
+    news: Res["Props"];
+    output: Res["Attr"];
+  }): Effect.Effect<Diff, never, never>;
+  stub?(input: {
+    id: string;
+    news: Res["Props"];
+  }): Effect.Effect<Res["Attr"], any, never>;
   create(input: {
     id: string;
-    news: Input;
-    bindings: BindNode<Stmt>[];
-    session: ScopedPlanStatusSession;
-  }): Effect.Effect<Output, any, never>;
+    news: Res["Props"];
+  }): Effect.Effect<Res["Attr"], any, never>;
   update(input: {
     id: string;
-    news: Input;
-    olds: Input;
-    output: Output;
-    bindings: BindNode<Stmt>[];
-    session: ScopedPlanStatusSession;
-  }): Effect.Effect<Output, any, never>;
+    news: Res["Props"];
+    olds: Res["Props"];
+    output: Res["Attr"];
+  }): Effect.Effect<Res["Attr"], any, never>;
   delete(input: {
     id: string;
-    olds: Input;
-    output: Output;
-    session: ScopedPlanStatusSession;
+    olds: Res["Props"];
+    output: Res["Attr"];
   }): Effect.Effect<void, any, never>;
 };

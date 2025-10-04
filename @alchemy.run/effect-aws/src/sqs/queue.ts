@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 import type * as S from "effect/Schema";
 
 import type { Resource } from "@alchemy.run/effect";
-import { consume, type Consume } from "./queue.consumer.ts";
+import { consume } from "./queue.consumer.ts";
 import { QueueProvider } from "./queue.provider.ts";
 
 // required to avoid this error in consumers: "The inferred type of 'Messages' cannot be named without a reference to '../../effect-aws/node_modules/@types/aws-lambda'. This is likely not portable. A type annotation is necessary.ts(2742)"
@@ -15,7 +15,14 @@ export type QueueType = typeof QueueType;
 export const QueueType = "AWS::SQS::Queue";
 
 export type QueueProps<Msg = any> = {
+  /**
+   * Schema for the message body.
+   */
   message: S.Schema<Msg>;
+  /**
+   * Name of the queue.
+   * @default ${app}-${stage}-${id}?.fifo
+   */
   queueName?: string;
   /**
    * Delay in seconds for all messages in the queue (`0` - `900`).
@@ -106,11 +113,7 @@ export const Queue = <ID extends string, P extends QueueProps>(
       handler: (
         event: lambda.SQSEvent,
         context: lambda.Context,
-      ) => Effect.Effect<
-        lambda.SQSBatchResponse | void,
-        Err,
-        Req | Consume<Extract<Self, Queue>>
-      >,
+      ) => Effect.Effect<lambda.SQSBatchResponse | void, Err, Req>,
     ) {
       return consume(this as Extract<Self, Queue>, id, handler);
     },

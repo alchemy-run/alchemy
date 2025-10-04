@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 
 import type {
-  Binding,
+  BoundDecl,
   Policy,
   Service,
   Statement,
@@ -30,11 +30,11 @@ export const make = <S extends Service>(
     return {
       ...(Object.fromEntries(
         bindings?.statements.map((statement) => [
-          statement.resource.id,
+          statement.resource.ID,
           statement.resource,
         ]) ?? [],
       ) as {
-        [id in Extract<Req, Statement>["resource"]["id"]]: Extract<
+        [id in Extract<Req, Statement>["resource"]["ID"]]: Extract<
           Extract<Req, Statement>["resource"],
           { id: id }
         >;
@@ -49,7 +49,7 @@ export const make = <S extends Service>(
           main,
           handler,
         },
-      } satisfies Binding<S, Extract<Req, Statement>>,
+      } satisfies BoundDecl<S, Extract<Req, Statement>>,
     };
   });
 
@@ -59,11 +59,11 @@ export const make = <S extends Service>(
   return clss as any as Effect.Effect<
     {
       [id in S["id"]]: S extends Function
-        ? Binding<S, Extract<Req, Statement>>
+        ? BoundDecl<S, Extract<Req, Statement>>
         : S;
     } & {
       [id in Exclude<
-        Extract<Req, Statement>["resource"]["id"],
+        Extract<Req, Statement>["resource"]["ID"],
         S["id"]
       >]: Extract<Extract<Req, Statement>["resource"], { id: id }>;
     },

@@ -1,21 +1,65 @@
-import type * as Context from "effect/Context";
+export declare namespace Resource {
+  export type Kind = string;
+  export type ID = string;
+  export type Props = Record<string, any>;
+  export type Attr = Record<string, any>;
+  export type Platform = string;
 
-export type ResourceID = string;
-export type Props = Record<string, any>;
-export type Attributes = Record<string, any>;
-export type ProviderTag = Context.Tag<any, any>;
+  export type Type<
+    Type extends string = string,
+    Props extends Resource.Props = Resource.Props,
+    Attr extends Resource.Attr = Resource.Attr,
+  > = {
+    Kind: "Resource";
+    Type: Type;
+    Props: Props;
+    Attr: Attr;
+    // new (self: any): {};
+    <const ID extends string, const P extends Props>(
+      id: ID,
+      props: P,
+    ): Resource<Type, ID, P, Attr>;
+  };
+}
+
+export type InstanceOf<T extends { Kind: "Resource" }> = ReturnType<
+  Extract<T, (...args: any) => any>
+>;
+
+export const Resource =
+  <const Type extends string>(type: Type) =>
+  <F extends (props: any) => Resource.Attr>() => {
+    type Props = Parameters<F>[0];
+    type Attr = ReturnType<F>;
+    return Object.assign(
+      <const ID extends string, P extends Props>(id: ID, props: P) =>
+        Object.assign(class {}, {
+          type,
+          id,
+          props,
+          attr: undefined! as Attr,
+        }) as any as Resource<Type>,
+      {
+        Type: type,
+        Props: undefined! as Props,
+        Attr: undefined! as Attr,
+      },
+    ) as any as F;
+  };
 
 export type Resource<
-  Type extends string = string,
-  ID extends ResourceID = ResourceID,
-  P extends Props = Props,
-  A extends Attributes = Attributes,
-  Provider extends ProviderTag = ProviderTag,
+  Type extends Resource.Kind = Resource.Kind,
+  ID extends Resource.ID = Resource.ID,
+  Props extends Resource.Props = Resource.Props,
+  Attr extends Resource.Attr = Resource.Attr,
+  Platform extends Resource.Platform = Resource.Platform,
 > = {
-  type: Type;
-  id: ID;
-  props: P;
+  Kind: "Resource";
+  Type: Type;
+  ID: ID;
+  Props: Props;
   /** @internal phantom type */
-  attributes: A;
-  provider: Provider;
+  Attr: Attr;
+  Platform: Platform;
+  new (): {};
 };

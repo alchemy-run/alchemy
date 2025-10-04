@@ -4,7 +4,7 @@ import * as Option from "effect/Option";
 import type { Simplify } from "effect/Types";
 import { type PlanRejected, PlanReviewer } from "./approve.ts";
 import type { ApplyEvent, ApplyStatus } from "./event.ts";
-import type { BindNode, Delete, Plan, ResourceNode } from "./plan.ts";
+import type { BindNode, CrudNode, Delete, Plan } from "./plan.ts";
 import type { SerializedStatement, Statement } from "./policy.ts";
 import type { Resource } from "./resource.ts";
 import { State } from "./state.ts";
@@ -52,7 +52,7 @@ export const apply = <const P extends Plan, Err, Req>(
         const apply: (
           node:
             | (BindNode<Statement> | SerializedStatement<Statement>)[]
-            | ResourceNode,
+            | CrudNode,
         ) => Effect.Effect<any, never, never> = (node) =>
           Effect.gen(function* () {
             if (Array.isArray(node)) {
@@ -60,7 +60,7 @@ export const apply = <const P extends Plan, Err, Req>(
                 node.map((binding) => {
                   const resourceId =
                     "stmt" in binding
-                      ? binding.stmt.resource.id
+                      ? binding.stmt.resource.ID
                       : binding.resource.id;
                   const resource = plan[resourceId];
                   return !resource
@@ -76,8 +76,8 @@ export const apply = <const P extends Plan, Err, Req>(
               effect.pipe(
                 Effect.flatMap((output) =>
                   state
-                    .set(node.resource.id, {
-                      id: node.resource.id,
+                    .set(node.resource.ID, {
+                      id: node.resource.ID,
                       type: node.resource.type,
                       status: node.action === "create" ? "created" : "updated",
                       props: node.resource.props,
@@ -85,8 +85,8 @@ export const apply = <const P extends Plan, Err, Req>(
                       bindings: node.bindings.map((binding) => ({
                         ...binding.stmt,
                         resource: {
-                          type: binding.stmt.resource.type,
-                          id: binding.stmt.resource.id,
+                          type: binding.stmt.resource.Type,
+                          id: binding.stmt.resource.ID,
                         },
                       })),
                     })
@@ -106,7 +106,7 @@ export const apply = <const P extends Plan, Err, Req>(
                   },
               );
 
-            const id = node.resource.id;
+            const id = node.resource.ID;
 
             const scopedSession = {
               ...session,

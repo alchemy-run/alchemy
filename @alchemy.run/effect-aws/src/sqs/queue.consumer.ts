@@ -1,7 +1,6 @@
 import type * as lambda from "aws-lambda";
 
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as S from "effect/Schema";
 
@@ -11,7 +10,7 @@ import { FunctionClient } from "../lambda/function.client.ts";
 import type { Queue } from "./queue.ts";
 
 export type SQSRecord<Q extends Queue> = Omit<lambda.SQSRecord, "body"> & {
-  body: Q["props"]["message"]["Type"];
+  body: Q["Props"]["message"]["Type"];
   messageAttributes: lambda.SQSMessageAttributes;
 };
 
@@ -29,7 +28,7 @@ export class Consume<Q extends Queue> extends Alchemy.Service(
 >() {
   constructor(queue: Q) {
     super({
-      label: `AWS.SQS.Consume(${queue.id})`,
+      label: `AWS.SQS.Consume(${queue.ID})`,
       effect: "Allow",
       action: "sqs:Consume",
       resource: queue,
@@ -55,12 +54,12 @@ export const consume = <const ID extends string, Q extends Queue, Err, Req>(
           Records: yield* Effect.all(
             input.Records.map(
               Effect.fn(function* (record) {
-                const body = yield* S.validate(queue.props.message)(
+                const body = yield* S.validate(queue.Props.message)(
                   record.body,
                 );
                 return {
                   ...record,
-                  body: body as Q["props"]["message"]["Type"],
+                  body: body as Q["Props"]["message"]["Type"],
                 } satisfies SQSRecord<Q>;
               }),
             ),
@@ -69,10 +68,21 @@ export const consume = <const ID extends string, Q extends Queue, Err, Req>(
         context,
       );
     }),
-  );
+  )<Consumer<Q>>();
 
-export const bindConsumer = Layer.effect(
-  Consume,
+export type Consumer<Q extends Queue> = ReturnType<typeof Consumer<Q>>;
+
+export const Consumer = <Q extends Queue>(
+  queue: Q,
+  options?: {
+    batchSize?: number;
+    maxConcurrency?: number;
+    maxRetries?: number;
+    maxWaitTimeMs?: number;
+    retryDelay?: number;
+    deadLetterQueue?: Queue;
+  },
+) =>
   Effect.gen(function* () {
     const lambda = yield* FunctionClient;
     return {
@@ -155,5 +165,4 @@ export const bindConsumer = Layer.effect(
           );
       }),
     };
-  }),
-);
+  });
