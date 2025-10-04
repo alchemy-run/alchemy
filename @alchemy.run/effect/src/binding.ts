@@ -1,5 +1,5 @@
 import type * as Effect from "effect/Effect";
-import type { InstanceOf, Resource } from "./resource.ts";
+import type { InstanceOf, Resource, ResourceLike } from "./resource.ts";
 
 export type BindingLike = {
   Resource: Resource;
@@ -8,7 +8,7 @@ export type BindingLike = {
 
 export type Binding<
   Verb extends string = string,
-  Res extends Resource = Resource,
+  Res extends { Type: string } = Resource,
 > = {
   Kind: "Binding";
   Verb: Verb;
@@ -16,29 +16,25 @@ export type Binding<
   Type: Res["Type"];
 };
 
-export const Binding =
-  <const Verb extends string, const Res extends Resource.Type>(
-    verb: Verb,
-    resource: Res,
-  ) =>
-  <Self>() =>
-    Object.assign(
-      (resource: InstanceOf<Res>, props?: any) => ({
-        resource,
-        props,
-      }),
-      {
-        Kind: "Binding",
-        Verb: verb,
-        Resource: resource,
-        Type: resource.Type,
-      },
-    ) as Self & {
-      Kind: "Binding";
-      Verb: Verb;
-      Resource: Res;
-      Type: Res["Type"];
-    };
+export const Binding = <
+  const Verb extends string,
+  const Res extends ResourceLike,
+>(
+  verb: Verb,
+  resource: Res,
+) =>
+  Object.assign(
+    (resource: InstanceOf<Res>, props?: any) => ({
+      resource,
+      props,
+    }),
+    {
+      Kind: "Binding",
+      Verb: verb,
+      Resource: resource,
+      Type: resource.Type,
+    },
+  ) as Binding<Verb, Res>;
 // class {
 //   static readonly Kind = "Binding";
 //   static readonly Verb = verb;

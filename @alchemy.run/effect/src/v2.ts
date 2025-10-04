@@ -3,12 +3,9 @@ import type * as HKT from "effect/HKT";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
 import { Binding, type BindingLike } from "./binding.ts";
-import type { Class } from "./class.ts";
 import { Host } from "./host.ts";
-import { Resource } from "./resource.ts";
+import { Resource, type InstanceOf } from "./resource.ts";
 import { Service } from "./service.ts";
-
-// Consume (Binding)
 
 // AWS Lambda Function (Host)
 export type Lambda<Binding extends BindingLike> = Host<
@@ -19,9 +16,8 @@ export type Lambda<Binding extends BindingLike> = Host<
     policyStatements: any[];
   }
 >;
-export const Lambda = <B extends BindingLike>(
-  binding: B,
-): Lambda<B["Resource"]> => Host("AWS.Lambda.Function", binding);
+export const Lambda = <B extends BindingLike>(binding: B): Lambda<B> =>
+  Host("AWS.Lambda.Function", binding);
 
 // Cloudflare Worker (Host)
 export type Worker<Binding extends BindingLike> = Host<
@@ -39,33 +35,72 @@ export const Worker = <Binding extends BindingLike>(
 ): Worker<Binding> => Host("Cloudflare.Worker", binding);
 
 // SQS Queue (Resource)
-
 export declare namespace Queue {
   export type Props<Message = any> = {
     fifo?: boolean;
     schema: S.Schema<Message>;
   };
-  export type Attr<Props extends Queue.Props = Queue.Props> = {
+  export type Attr<
+    ID extends string,
+    Props extends Queue.Props = Queue.Props,
+  > = {
+    id: ID;
     queueUrl: Props["fifo"] extends true ? `${string}.fifo` : string;
   };
-  export type Class = Resource.Type<"AWS.SQS.Queue", Queue.Props> &
-    (<Props extends Queue.Props>(props: Props) => Queue<Props>);
+  export type Instance<
+    ID extends string = string,
+    Props extends Queue.Props = Queue.Props,
+  > = Resource<"AWS.SQS.Queue", ID, Props, Queue.Attr<ID, Props>>;
 }
-export type Queue<Props extends Queue.Props = Queue.Props> = Resource<
-  "AWS.SQS.Queue",
-  string,
-  Props,
-  Queue.Attr<Props>
->;
-export const Queue = Resource("AWS.SQS.Queue")<Class<Queue>>();
+export type Queue<
+  ID extends string = string,
+  Props extends Queue.Props = Queue.Props,
+> = Queue.Instance<ID, Props> &
+  (<const ID extends string, Props extends Queue.Props>(
+    id: ID,
+    props: Props,
+  ) => Queue<ID, Props>);
+export const Queue = Resource("AWS.SQS.Queue")<Queue>();
 
-export type Consume<Q extends Queue> = Binding<"AWS::SQS::Consume", Q> &
-  (<Q extends Queue>(queue: Q) => Consume<Q>);
-export const Consume: Consume<Queue> = Binding("AWS::SQS::Consume", Queue)<
-  Consume<Queue>
->();
+// Consume (Binding)
+export type Consume<Q = Queue.Instance> = Binding<
+  "AWS::SQS::Consume",
+  Extract<Q, Queue.Instance>
+> &
+  (<Q>(queue: Q) => Consume<InstanceOf<Q>>);
+export const Consume = ((queue: Queue.Instance) =>
+  Binding("AWS::SQS::Consume", queue)) as Consume<Queue>;
 
-const _LL = Lambda(Consume);
+// SendMessage (Binding)
+export type SendMessage<Q = Queue.Instance> = Binding<
+  "AWS::SQS::SendMessage",
+  Extract<Q, Queue.Instance>
+> &
+  (<Q>(queue: Q) => SendMessage<InstanceOf<Q>>);
+export const SendMessage = ((queue: Queue.Instance) =>
+  Binding("AWS::SQS::SendMessage", queue)) as SendMessage<Queue>;
+
+// example resource
+class Messages extends Queue("messages", {
+  fifo: true,
+  schema: S.Struct({
+    id: S.Int,
+    value: S.String,
+  }),
+}) {}
+
+const _Messages = Queue("messages", {
+  fifo: true,
+  schema: S.Struct({
+    id: S.Int,
+    value: S.String,
+  }),
+});
+
+const __L = Lambda(Consume);
+const __c = Consume(Messages);
+const _tag = SendMessage(Messages);
+const __tag = SendMessage(_Messages);
 
 export const queueProvider = Layer.effect(
   Provider(Queue),
@@ -77,10 +112,6 @@ export const queueProvider = Layer.effect(
     };
   }),
 );
-
-// export type Queue = Resource.Type<"AWS.SQS.Queue", Queue.Props> &
-//   (<Props extends Queue.Props>(props: Props) => QueueAttr<Props>);
-// export const Queue: Queue = Resource("AWS.SQS.Queue")<Queue>();
 
 // bind a Queue to an AWS Lambda function
 export const lambdaQueueEventSource = Layer.effect(
@@ -114,11 +145,6 @@ export const lambdaQueueCloudflareBinding = Layer.effect(
   }),
 );
 
-export type SendMessage<Q extends Queue> = Binding<"AWS::SQS::SendMessage", Q>;
-export const SendMessage = Binding("AWS::SQS::SendMessage", Queue)<
-  <Q extends Queue>(queue: Q) => SendMessage<Q>
->();
-
 export const lambdaSendMessage = Layer.effect(
   Lambda(SendMessage),
   Effect.gen(function* () {
@@ -150,18 +176,7 @@ const echo = serve(
   }),
 );
 
-class Messages extends Queue("messages", {
-  fifo: true,
-  schema: S.Struct({
-    id: S.Int,
-    value: S.String,
-  }),
-}) {}
-
-const tag = SendMessage(Messages);
 // const _tag: typeof tag = "AWS::SQS::SendMessage(messages)";
-
-const foo = Consume(Messages);
 
 export interface FlatMap<F extends HKT.TypeLambda> extends HKT.TypeClass<F> {
   readonly flatMap: {

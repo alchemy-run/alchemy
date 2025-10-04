@@ -1,3 +1,5 @@
+import type { Class } from "./class.ts";
+
 export declare namespace Resource {
   export type Kind = string;
   export type ID = string;
@@ -19,18 +21,28 @@ export declare namespace Resource {
       id: ID,
       props: P,
     ): Resource<Type, ID, P, Attr>;
+    // new <const ID extends string, const P extends Props>(
+    //   id: ID,
+    //   props: P,
+    // ): Resource<Type, ID, P, Attr>;
   };
 }
 
-export type InstanceOf<T extends { Kind: "Resource" }> = ReturnType<
-  Extract<T, (...args: any) => any>
->;
+export type InstanceOf<T> = T extends {
+  new (): infer R;
+}
+  ? R
+  : T extends {
+        new (_: never): infer R;
+      }
+    ? R
+    : ReturnType<Extract<T, (...args: any[]) => any>>;
 
 export const Resource =
   <const Type extends string>(type: Type) =>
-  <F extends (props: any) => Resource.Attr>() => {
-    type Props = Parameters<F>[0];
-    type Attr = ReturnType<F>;
+  <cls extends Class>() => {
+    type Props = ConstructorParameters<cls>[0];
+    type Attr = InstanceType<cls>;
     return Object.assign(
       <const ID extends string, P extends Props>(id: ID, props: P) =>
         Object.assign(class {}, {
@@ -44,8 +56,10 @@ export const Resource =
         Props: undefined! as Props,
         Attr: undefined! as Attr,
       },
-    ) as any as F;
+    ) as any as cls;
   };
+
+export type ResourceLike<Type extends string = string> = { Type: Type };
 
 export type Resource<
   Type extends Resource.Kind = Resource.Kind,
@@ -61,5 +75,5 @@ export type Resource<
   /** @internal phantom type */
   Attr: Attr;
   Platform: Platform;
-  new (): {};
+  new (_: never): Props;
 };
