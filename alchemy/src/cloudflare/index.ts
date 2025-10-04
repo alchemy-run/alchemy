@@ -69,5 +69,6 @@ export * from "./worker-stub.ts";
 export * from "./worker-subdomain.ts";
 export * from "./worker.ts";
 export { Workflow } from "./workflow.ts";
+export { WorkerLoader } from "./worker-loader.ts";
 export * from "./wrangler.json.ts";
 export * from "./zone.ts";
