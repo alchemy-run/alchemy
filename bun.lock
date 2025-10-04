@@ -714,6 +714,14 @@
         "typescript": "catalog:",
       },
     },
+    "examples/prisma-postgres": {
+      "name": "prisma-postgres-example",
+      "version": "0.0.0",
+      "devDependencies": {
+        "alchemy": "workspace:*",
+        "typescript": "catalog:",
+      },
+    },
     "stacks": {
       "name": "alchemy-stacks",
       "version": "0.0.1",
@@ -4360,6 +4368,8 @@
     "printable-characters": ["printable-characters@1.0.42", "", {}, "sha512-dKp+C4iXWK4vVYZmYSd0KBH5F/h1HoZRsbJ82AVKRO3PEo8L4lBS/vLwhVtpwwuYcoIsVY+1JYKR268yn480uQ=="],
 
     "prisma": ["prisma@6.16.3", "", { "dependencies": { "@prisma/config": "6.16.3", "@prisma/engines": "6.16.3" }, "peerDependencies": { "typescript": ">=5.1.0" }, "optionalPeers": ["typescript"], "bin": { "prisma": "build/index.js" } }, "sha512-4tJq3KB9WRshH5+QmzOLV54YMkNlKOtLKaSdvraI5kC/axF47HuOw6zDM8xrxJ6s9o2WodY654On4XKkrobQdQ=="],
+
+    "prisma-postgres-example": ["prisma-postgres-example@workspace:examples/prisma-postgres"],
 
     "prismjs": ["prismjs@1.30.0", "", {}, "sha512-DEvV2ZF2r2/63V+tK8hQvrR2ZGn10srHbXviTlcv7Kpzw8jWiNTqbVgjO3IY8RxrrOUF8VPMQQFysYYYv0YZxw=="],
 
