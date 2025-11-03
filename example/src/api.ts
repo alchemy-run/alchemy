@@ -22,7 +22,6 @@ export class Api extends Lambda.serve("Api", {
   bindings: $(SQS.SendMessage(Messages)),
 }) {}
 
-// coupled to physical infrastructure (actual SQS client)
 export default Api.handler.pipe(
   Effect.provide(SQS.clientFromEnv()),
   Lambda.toHandler,

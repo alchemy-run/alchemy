@@ -1,20 +1,71 @@
-> ⚠️ alchemy-effect is still experimental and not ready for production use (expect breaking changes). Come hang in our [Discord](https://discord.gg/jwKw8dBJdN) to participate in the early stages of development.
+> ⚠️ `alchemy-effect` is still experimental and not ready for production use (expect breaking changes). Come hang in our [Discord](https://discord.gg/jwKw8dBJdN) to participate in the early stages of development.
 
-# alchemy-effect
+# `alchemy-effect`
 
-`alchemy-effect` is an **Infrastructure-as-Effects (iae)** framework that unifies business logic and infrastructure config into a single, type-safe program.
+`alchemy-effect` is an **Infrastructure-as-Effects (IaE)** framework that unifies business logic and infrastructure config into a single, type-safe program with the following benefits:
+1. Type-Checked IAM Policies
+2. Optimally Tree-Shaken Bundles
+3. Testable Business Logic
+4. Re-usable Components
+5. Reviewable Deployment Plans 
 
-A program built with `alchemy-effect` is guaranteed to be configured correctly by the type system - e.g. type-checked Bindings ensure your IAM Policies are least-privilege 🔐.
+## Least-Privilege IAM Policies 🔐
 
-This example demonstrates the type errors you receive when attempting to grant excessive or missing permissions to a Lambda Function:
+Type-checked Bindings ensure your IAM Policies are least-privilege - you are never missing or granting excessive permissions:
 
-<img src="./images/alchemy-effect.gif" alt="alchemy-effect demo" width="600"/>
+<img src="./images/alchemy-effect.gif" alt="alchemy-effect type checked policies" width="600"/>
 
+You will receive a type error if you mess up your Bindings:
+<img src="./images/alchemy-effect-policy-error.png" alt="alchemy-effect type errors" width="600"/>
+
+> [!TIP]
+> This error means you are missing the `SendMessage<Messages>` binding (you provided `never` instead of `SendMessage<Messages>`).
+
+## Plan & Deploy
 An `alchemy-effect` program produces a Plan that can be reviewed prior to deployment:
 
-<img src="./images/alchemy-effect-plan.gif" alt="alchemy-effect demo" width="600"/>
+<img src="./images/alchemy-effect-plan.gif" alt="alchemy-effect plan video" width="600"/>
 
-# Resources
+## Type-Level Plan 
+All knowable information about the Plan is available at compile-time:
+
+<img src="./images/alchemy-effect-plan-type.png" alt="alchemy-effect plan type" width="600"/>
+
+> [!TIP]
+> These types can be used to implement type-level validation of infrastructure policies, e.g. disallowing publicly accessible S3 buckets.
+
+## Optimal Tree-Shaking
+
+Provide runtime clients as Layers and `export` a handler that can be optimally tree-shaken to only include necessary code.
+
+```ts
+export default Api.handler.pipe(
+  Effect.provide(SQS.clientFromEnv()),
+  Lambda.toHandler,
+);
+```
+
+## Pluggable Layers 
+Everything (including the CLI) is provided as Effect layers:
+
+<img src="./images/alchemy-effect-layers.png" alt="alchemy-effect layers" width="600"/>
+
+## Literally Typed Outputs
+The output of deploying a stack is totally known at compile-time, e.g. the `.fifo` suffix of a SQS FIFO Queue:
+
+<img src="./images/alchemy-effect-output.png" alt="alchemy-effect output" width="600"/>
+
+# Concepts 🔱 
+
+<img src="./images/alchemy-effect-triple.png" alt="alchemy-effect logo" width="600"/>
+
+Infrastructure-as-Effects has three main concepts: `Resources`, `Functions (as Effects)`, and `Bindings`:
+
+- `Resources` are the underlying infrastructure components, e.g. a SQS Queue or DynamoDB Table.
+- `Functions` contain the business logic as an Effect running in some runtime, e.g. a Lambda Function or a Cloudflare Worker.
+- `Bindings` connect `Functions` to `Resources`, e.g. `SQS.SendMessage(Messages)`
+
+## Resources
 
 Resources are declared along-side your business logic as classes, e.g. a FIFO SQS Queue:
 
@@ -25,7 +76,7 @@ class Messages extends SQS.Queue("Messages", {
 }) {} 
 ```
 
-# Functions
+## Functions
 
 Functions are a special kind of Resource that includes a runtime implementation function.
 
@@ -44,7 +95,7 @@ class Api extends Lambda.serve("Api", {
 }) {}
 ```
 
-# Bindings
+## Bindings
 
 A Binding is a connection between a **Resource** and a **Function** that satisfies a **Capability** (aka. runtime dependency, e.g. `SQS.SendMessage(to: Messages)`).
 
@@ -117,16 +168,7 @@ const Monitor = <const ID extends string, ReqAlarm, ReqResolved>(
 > [!TIP]
 > Components are very similar to React components, but for infrastructure. Instead of declaring state in your closure and returning a React element, you declare Resources and return a `Function`.
 
-# Type-Safe Plan
-
-All knowable information about the Plan is available at compile-time, for example the type of the Plan is:
-
-<img src="./images/alchemy-effect-plan-type.png" alt="alchemy-effect demo" width="600"/>
-
-> [!TIP]
-> These types can be used to implement type-level validation of infrastructure policies, e.g. disallowing publicly accessible S3 buckets.
-
 # Building your own Resources, Capabilities, and Bindings
 
 > [!CAUTION]
-> WIP - this is coming soon!
+> WIP - docs coming soon!

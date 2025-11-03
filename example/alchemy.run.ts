@@ -28,5 +28,5 @@ const stack = await plan.pipe(
 );
 
 if (stack) {
-  // Effect.log(stack?.Api.functionUrl);
+  console.log(stack.Api.functionUrl);
 }

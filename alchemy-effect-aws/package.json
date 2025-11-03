@@ -77,5 +77,8 @@
     "@effect/platform": "catalog:",
     "@types/bun": "latest",
     "@types/node": "latest"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

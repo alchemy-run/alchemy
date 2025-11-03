@@ -1,5 +1,5 @@
 {
-  "name": "@alchemy.run/core",
+  "name": "alchemy-effect",
   "version": "0.0.0",
   "license": "Apache-2.0",
   "author": "Sam Goodwin <sam@alchemy.run>",
@@ -42,5 +42,8 @@
     "@effect/platform-node": {
       "optional": true
     }
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
