@@ -9,9 +9,7 @@ import { Api } from "./src/index.ts";
 const phase = process.argv.includes("--destroy") ? "destroy" : "update";
 
 const plan = Alchemy.plan({
-  phase,
-  // phase: "update",
-  // phase: "destroy",
+  phase: process.argv.includes("--destroy") ? "destroy" : "update",
   services: [Api],
 });
 

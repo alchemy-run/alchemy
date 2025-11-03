@@ -147,16 +147,6 @@ export const localFs = Layer.effect(
             JSON.stringify(
               value,
               (k, v) => {
-                if (typeof v === "function") {
-                  if (k === "resource") {
-                    console.log({
-                      isResource: isResource(v),
-                      keys: Object.keys(v),
-                      values: Object.values(v),
-                    });
-                  }
-                }
-
                 if (isResource(v)) {
                   return {
                     id: v.id,
