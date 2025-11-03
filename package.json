@@ -36,6 +36,8 @@
     "@types/bun": "latest",
     "@types/node": "latest",
     "oxfmt": "^0.9.0",
-    "typescript": "catalog:"
+    "pkg-pr-new": "^0.0.60",
+    "typescript": "catalog:",
+    "yaml": "^2.8.1"
   }
 }

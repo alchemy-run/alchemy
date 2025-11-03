@@ -1,10 +1,4 @@
-import {
-  Binding,
-  Capability,
-  Provider,
-  Runtime,
-  Service,
-} from "@alchemy.run/core";
+import { Runtime } from "@alchemy.run/core";
 
 export const WorkerType = "AWS.Lambda.Worker";
 export type WorkerType = typeof WorkerType;
@@ -28,22 +22,13 @@ export type WorkerAttr<Props extends WorkerProps = WorkerProps> = {
   url: Props["url"] extends false ? undefined : string;
 };
 
-export interface Worker<svc = unknown, cap = unknown, props = WorkerProps>
-  extends Runtime<WorkerType, svc, cap, props> {
-  readonly Provider: WorkerProvider;
-  readonly Binding: WorkerBinding<this["capability"]>;
-  readonly Instance: Worker<this["service"], this["capability"], this["props"]>;
-  readonly attr: WorkerAttr<Extract<this["props"], WorkerProps>>;
+export interface Worker extends Runtime<WorkerType> {
+  props: WorkerProps;
+  attr: WorkerAttr<Extract<this["props"], WorkerProps>>;
+  binding: {
+    bindings: {
+      [key: string]: any;
+    };
+  };
 }
 export const Worker = Runtime(WorkerType)<Worker>();
-
-export type WorkerProvider = Provider<Worker<Service, Capability, WorkerProps>>;
-
-export interface WorkerBinding<Cap extends Capability>
-  extends Binding<
-    Worker,
-    Cap,
-    {
-      bindings: Record<string, any>;
-    }
-  > {}

@@ -6,7 +6,7 @@
   "homepage": "https://alchemy.run",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/sam-goodwin/alchemy.git",
+    "url": "git+https://github.com/alchemy-run/alchemy-effect.git",
     "directory": "alchemy"
   },
   "type": "module",
@@ -60,11 +60,15 @@
     "@clack/prompts": "^0.11.0",
     "@rspack/core": "^1.5.7",
     "@smithy/node-config-provider": "^4.0.0",
+    "@smithy/shared-ini-file-loader": "^4.3.4",
+    "@smithy/types": "^4.8.1",
     "@types/aws-lambda": "catalog:",
     "aws4fetch": "^1.0.20",
-    "effect": "^3.17.14",
+    "effect": "catalog:",
+    "esbuild": "^0.25.12",
     "fast-xml-parser": "^5.2.5",
     "itty-aws": "0.4.1",
+    "jszip": "^3.10.1",
     "yaml": "^2.0.0"
   },
   "devDependencies": {

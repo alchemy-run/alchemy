@@ -7,7 +7,7 @@
   "sideEffects": [],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/sam-goodwin/alchemy.git",
+    "url": "git+https://github.com/alchemy-run/alchemy-effect.git",
     "directory": "alchemy"
   },
   "type": "module",
