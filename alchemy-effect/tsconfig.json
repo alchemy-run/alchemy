@@ -1,6 +1,6 @@
 {
   "extends": "../tsconfig.base.json",
-  "include": ["package.json", "src/**/*.ts"],
+  "include": ["package.json", "src"],
   "compilerOptions": {
     "composite": true,
     "noEmit": false,
@@ -14,6 +14,9 @@
     "target": "ESNext",
     "allowJs": true,
     "allowImportingTsExtensions": true,
-    "rewriteRelativeImportExtensions": true
+    "rewriteRelativeImportExtensions": true,
+    // ink
+    "jsx": "react",
+    "lib": ["DOM", "DOM.Iterable", "ES2023"],
   }
 }

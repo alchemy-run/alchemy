@@ -23,4 +23,4 @@ jobs:
         run: bun run build
 
       - name: Publish
-        run: bun run scripts/pkg-pr.ts
+        run: bun pkg-pr-new publish --bun ./alchemy-effect

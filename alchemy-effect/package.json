@@ -16,19 +16,82 @@
     "lib",
     "src"
   ],
+  "bin": {
+    "alchemy-effect": "bin/alchemy-effect.js"
+  },
+  "scripts": {
+    "build": "bun bundle && bun pm pack",
+    "bundle": "tsdown",
+    "bundle:watch": "tsdown --watch"
+  },
   "exports": {
     ".": {
       "bun": "./src/index.ts",
       "import": "./lib/index.js",
       "types": "./src/index.d.ts"
+    },
+    "./aws": {
+      "bun": "./src/aws/index.ts",
+      "import": "./lib/aws/index.js",
+      "types": "./lib/aws/index.d.ts"
+    },
+    "./aws/lambda": {
+      "bun": "./src/aws/lambda/index.ts",
+      "import": "./lib/aws/lambda/index.js",
+      "types": "./lib/aws/lambda/index.d.ts"
+    },
+    "./aws/sqs": {
+      "bun": "./src/aws/sqs/index.ts",
+      "import": "./lib/aws/sqs/index.js",
+      "types": "./lib/sqs/aws/index.d.ts"
+    },
+    "./aws/sts": {
+      "bun": "./src/aws/sts.ts",
+      "import": "./lib/aws/sts.js",
+      "types": "./lib/sts.d.ts"
+    },
+    "./aws/iam": {
+      "bun": "./src/aws/iam.ts",
+      "import": "./lib/aws/iam.js",
+      "types": "./lib/iam.d.ts"
+    },
+    "./aws/credentials": {
+      "bun": "./src/aws/credentials.ts",
+      "import": "./lib/aws/credentials.js",
+      "types": "./lib/aws/credentials.d.ts"
+    },
+    "./cloudflare": {
+      "bun": "./src/cloudflare/index.ts",
+      "import": "./lib/cloudflare/index.js",
+      "types": "./lib/cloudflare/index.d.ts"
     }
   },
+  "dependencies": {
+    "@aws-sdk/credential-providers": "catalog:",
+    "@smithy/node-config-provider": "^4.0.0",
+    "@smithy/shared-ini-file-loader": "^4.3.4",
+    "@smithy/types": "^4.8.1",
+    "@types/aws-lambda": "catalog:",
+    "aws4fetch": "^1.0.20",
+    "cloudflare": "catalog:",
+    "esbuild": "^0.25.12",
+    "fast-xml-parser": "^5.2.5",
+    "itty-aws": "0.4.1",
+    "jszip": "^3.10.1",
+    "yaml": "^2.0.0"
+  },
   "devDependencies": {
+    "@clack/prompts": "^0.11.0",
     "@effect/platform-node": "catalog:",
     "@effect/platform": "catalog:",
-    "@types/bun": "latest",
-    "@types/node": "latest",
-    "effect": "catalog:"
+    "@types/aws-lambda": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "^19.2.2",
+    "effect": "catalog:",
+    "ink": "^6.3.1",
+    "react": "^19.2.0",
+    "tsdown": "^0.15.4"
   },
   "peerDependencies": {
     "@effect/platform": "*",
@@ -40,6 +103,9 @@
       "optional": true
     },
     "@effect/platform-node": {
+      "optional": true
+    },
+    "effect": {
       "optional": true
     }
   },

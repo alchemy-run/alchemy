@@ -15,3 +15,7 @@ export * from "./resource.ts";
 export * from "./runtime.ts";
 export * from "./service.ts";
 export * as State from "./state.ts";
+
+export * as AWS from "./aws/index.ts";
+export * as CLI from "./cli/index.ts";
+export * as Cloudflare from "./cloudflare/index.ts";

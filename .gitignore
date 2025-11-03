@@ -27,3 +27,6 @@ smoke
 .wrangler
 
 *.tgz
+*.js
+*.d.ts
+*.map

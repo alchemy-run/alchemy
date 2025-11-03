@@ -1,6 +1,6 @@
-import * as Lambda from "@alchemy.run/aws/lambda";
-import * as SQS from "@alchemy.run/aws/sqs";
-import { $ } from "@alchemy.run/core";
+import { $ } from "alchemy-effect";
+import * as Lambda from "alchemy-effect/aws/lambda";
+import * as SQS from "alchemy-effect/aws/sqs";
 import * as Effect from "effect/Effect";
 import * as S from "effect/Schema";
 import { Message, Messages } from "./messages.ts";

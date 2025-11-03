@@ -1,4 +1,4 @@
-import * as SQS from "@alchemy.run/aws/sqs";
+import * as SQS from "alchemy-effect/aws/sqs";
 import * as S from "effect/Schema";
 
 export class Message extends S.Class<Message>("Message")({

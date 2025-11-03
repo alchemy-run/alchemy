@@ -10,29 +10,33 @@
     "url": "https://github.com/alchemy-run/alchemy"
   },
   "scripts": {
-    "build": "bun tsc -b",
+    "build": "bun tsc -b && bun run --filter alchemy-effect build",
+    "build:clean": "git clean -fqdx . && bun i && bun run build",
     "format": "oxfmt '.' '!./alchemy-effect*/lib/' '!/**/*.mdx'",
     "format:check": "bun run format -- --check"
   },
   "workspaces": {
     "catalog": {
+      "@aws-sdk/credential-providers": "^3.0.0",
       "@cloudflare/vite-plugin": "^1.13.12",
       "@cloudflare/workers-types": "^4.20250805.0",
       "@effect/platform-node": "^0.98.3",
       "@effect/platform": "^0.92.1",
       "@types/aws-lambda": "^8.10.152",
+      "@types/bun": "latest",
+      "@types/node": "latest",
+      "cloudflare": "^5.2.0",
       "effect": "^3.18.4",
       "typescript": "^5.9.3",
       "vite": "^7.1.9",
       "wrangler": "^4.42.2"
     },
     "packages": [
-      "alchemy-effect*",
+      "alchemy-effect",
       "example"
     ]
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "catalog:",
     "@types/bun": "latest",
     "@types/node": "latest",
     "oxfmt": "^0.9.0",
