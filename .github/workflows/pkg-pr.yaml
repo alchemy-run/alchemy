@@ -1,4 +1,4 @@
-name: Publish Preview Package
+name: pkg.pr.new
 on:
   push:
     branches: [main]
