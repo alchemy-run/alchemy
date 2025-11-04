@@ -14,7 +14,8 @@
     "build:clean": "git clean -fqdx . && bun i && bun run build",
     "format": "oxfmt '.' '!./alchemy-effect*/lib/' '!/**/*.mdx'",
     "format:check": "bun run format -- --check",
-    "bump": "bun ./scripts/bump.ts"
+    "bump": "bun ./scripts/bump.ts",
+    "publish": "bun run build && bun run --filter alchemy-effect publish"
   },
   "workspaces": {
     "catalog": {
