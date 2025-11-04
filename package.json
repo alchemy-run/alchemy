@@ -1,5 +1,5 @@
 {
-  "name": "alchemy-effect",
+  "name": "alchemy-effect-monorepo",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -15,7 +15,7 @@
     "format": "oxfmt '.' '!./alchemy-effect*/lib/' '!/**/*.mdx'",
     "format:check": "bun run format -- --check",
     "bump": "bun ./scripts/bump.ts",
-    "publish": "bun run build && bun run --filter alchemy-effect publish"
+    "publish:npm": "bun run build && bun run --filter alchemy-effect publish:npm"
   },
   "workspaces": {
     "catalog": {

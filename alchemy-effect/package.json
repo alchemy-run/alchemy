@@ -23,7 +23,7 @@
     "build": "bun bundle && bun pm pack",
     "bundle": "tsdown",
     "bundle:watch": "tsdown --watch",
-    "publish": "cp ../README.md . && bun publish && rm README.md"
+    "publish:npm": "cp ../README.md . && bun publish && rm README.md"
   },
   "exports": {
     ".": {
