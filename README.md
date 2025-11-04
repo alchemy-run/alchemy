@@ -9,6 +9,11 @@
 4. Re-usable Components
 5. Reviewable Deployment Plans 
 
+## Install
+```bash
+bun add alchemy-effect
+```
+
 ## Least-Privilege IAM Policies 🔐
 
 Type-checked Bindings ensure your IAM Policies are least-privilege - you are never missing or granting excessive permissions:

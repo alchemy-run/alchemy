@@ -39,6 +39,7 @@
   "devDependencies": {
     "@types/bun": "latest",
     "@types/node": "latest",
+    "changelogithub": "^13.16.1",
     "oxfmt": "^0.9.0",
     "pkg-pr-new": "^0.0.60",
     "typescript": "catalog:",

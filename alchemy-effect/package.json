@@ -82,8 +82,8 @@
   },
   "devDependencies": {
     "@clack/prompts": "^0.11.0",
-    "@effect/platform-node": "catalog:",
     "@effect/platform": "catalog:",
+    "@effect/platform-node": "catalog:",
     "@types/aws-lambda": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
