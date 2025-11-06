@@ -37,13 +37,14 @@ export const Resource = <Ctor extends (id: string, props: any) => Resource>(
   type: ReturnType<Ctor>["type"],
 ) => {
   const Tag = Context.Tag(type)();
-  const provider = {
-    tag: Tag,
+  const provider: ResourceTags<ReturnType<Ctor>> = {
+    tag: Tag as any,
     effect: <Err, Req>(
       eff: Effect<ProviderService<ReturnType<Ctor>>, Err, Req>,
     ) => Layer.effect(Tag, eff),
     succeed: (service: ProviderService<ReturnType<Ctor>>) =>
       Layer.succeed(Tag, service),
+    of: (service) => service,
   };
   return Object.assign(
     function (id: string, props: any) {
