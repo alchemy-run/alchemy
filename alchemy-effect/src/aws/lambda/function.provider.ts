@@ -11,7 +11,13 @@ import type {
   CreateFunctionUrlConfigRequest,
   UpdateFunctionUrlConfigRequest,
 } from "itty-aws/lambda";
-import { AccountID } from "../account.ts";
+import {
+  createTagger,
+  createTagsList,
+  validateTagList,
+  validateTags,
+} from "../../tags.ts";
+import { Account } from "../account.ts";
 import * as IAM from "../iam.ts";
 import { Region } from "../region.ts";
 import { zipCode } from "../zip.ts";
@@ -23,7 +29,7 @@ export const functionProvider = () =>
     Effect.gen(function* () {
       const lambda = yield* FunctionClient;
       const iam = yield* IAM.IAMClient;
-      const accountId = yield* AccountID;
+      const accountId = yield* Account;
       const region = yield* Region;
       const app = yield* App;
       const dotAlchemy = yield* DotAlchemy;
@@ -105,7 +111,7 @@ export const functionProvider = () =>
                 },
               ],
             }),
-            Tags: createTagsList(id),
+            Tags: createTagsList(tagged(id)),
           })
           .pipe(
             Effect.catchTag("EntityAlreadyExistsException", () =>
@@ -151,7 +157,7 @@ export const functionProvider = () =>
         );
         yield* bundle({
           // entryPoints: [props.main],
-          // we use a virtual entry point so that
+          // we use a virtual entry point so that we can pluck out the user's handler closure and only its dependencies (not the whole module)
           stdin: {
             contents: `import { ${handler} as handler } from "${file}";\nexport default handler;`,
             resolveDir: process.cwd(),
@@ -183,35 +189,7 @@ export const functionProvider = () =>
           crypto.createHash("sha256").update(code).digest("hex"),
         );
 
-      const validateTagList = (
-        expectedTags: Record<string, string>,
-        tags: { Key: string; Value: string }[] | undefined,
-      ) => {
-        return Object.entries(expectedTags).every(([key, value]) =>
-          tags?.some((tag) => tag.Key === key && tag.Value === value),
-        );
-      };
-
-      const validateTags = (
-        expectedTags: Record<string, string>,
-        tags: Record<string, string> | undefined,
-      ) => {
-        return Object.entries(expectedTags).every(
-          ([key, value]) => tags?.[key] === value,
-        );
-      };
-
-      const createTagsList = (id: string) =>
-        Object.entries(tagged(id)).map(([Key, Value]) => ({
-          Key,
-          Value,
-        }));
-
-      const tagged = (id: string) => ({
-        "alchemy::app": app.name,
-        "alchemy::stage": app.stage,
-        "alchemy::id": id,
-      });
+      const tagged = yield* createTagger();
 
       const createOrUpdateFunction = Effect.fn(function* ({
         id,

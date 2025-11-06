@@ -3,13 +3,12 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-export class App extends Context.Tag("App")<
-  App,
-  {
-    name: string;
-    stage: string;
-  }
->() {}
+export interface AppProps {
+  name: string;
+  stage: string;
+}
+
+export class App extends Context.Tag("App")<App, AppProps>() {}
 
 export class FailedToParseArg extends Data.TaggedError("FailedToParseArg")<{
   message: string;

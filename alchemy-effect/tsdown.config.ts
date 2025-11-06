@@ -27,7 +27,7 @@ export default [
     outDir: "lib/cli",
     dts: true,
     sourcemap: true,
-    external: ["react-devtools-core"],
+    // external: ["react-devtools-core"],
     outputOptions: {
       inlineDynamicImports: true,
       banner: "#!/usr/bin/env node",

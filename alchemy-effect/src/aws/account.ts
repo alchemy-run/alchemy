@@ -11,14 +11,16 @@ export class FailedToGetAccount extends Data.TaggedError(
   cause: Error;
 }> {}
 
-export class AccountID extends Context.Tag("AWS::AccountID")<
-  AccountID,
-  string
+export type AccountID = string;
+
+export class Account extends Context.Tag("AWS::AccountID")<
+  Account,
+  AccountID
 >() {}
 
 export const fromIdentity = () =>
   Layer.effect(
-    AccountID,
+    Account,
     Effect.gen(function* () {
       const sts = yield* STS.STSClient;
       const identity = yield* sts.getCallerIdentity({}).pipe(

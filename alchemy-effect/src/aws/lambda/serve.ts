@@ -22,7 +22,7 @@ export const serve =
       ) => Effect.Effect<FunctionURLResult, never, Req>;
     },
   ) =>
-  <const Props extends Lambda.FunctionProps<Req>>(props: Props) =>
+  <const Props extends Lambda.FunctionProps.Simplified<Req>>(props: Props) =>
     Lambda.Function(id, { handle: fetch })({
       ...props,
       url: true,

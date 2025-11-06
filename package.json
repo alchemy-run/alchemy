@@ -15,7 +15,8 @@
     "format": "oxfmt '.' '!./alchemy-effect*/lib/' '!/**/*.mdx'",
     "format:check": "bun run format -- --check",
     "bump": "bun ./scripts/bump.ts",
-    "publish:npm": "bun run build && bun run --filter alchemy-effect publish:npm"
+    "publish:npm": "bun run build && bun run --filter alchemy-effect publish:npm",
+    "prepare": "effect-language-service patch"
   },
   "workspaces": {
     "catalog": {
@@ -39,6 +40,7 @@
     ]
   },
   "devDependencies": {
+    "@effect/language-service": "^0.55.2",
     "@types/bun": "latest",
     "@types/node": "latest",
     "changelogithub": "^13.16.1",

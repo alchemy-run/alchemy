@@ -1,9 +1,9 @@
-import { Policy, Runtime, type Capability } from "alchemy-effect";
+import { Runtime, type Capability, type RuntimeProps } from "alchemy-effect";
 import type * as IAM from "../iam.ts";
 
 export type { Context } from "aws-lambda";
 
-export interface FunctionProps<Req = any> {
+export interface FunctionProps<Req = any> extends RuntimeProps<Function, Req> {
   functionName?: string;
   functionArn?: string;
   main: string;
@@ -12,7 +12,11 @@ export interface FunctionProps<Req = any> {
   runtime?: "nodejs20x" | "nodejs22x";
   architecture?: "x86_64" | "arm64";
   url?: boolean;
-  bindings: Policy<Function, Extract<Req, Capability>>;
+}
+export declare namespace FunctionProps {
+  export type Simplified<Req> = FunctionProps<
+    Capability.Simplify<Extract<Req, Capability>>
+  >;
 }
 
 export type FunctionAttr<Props extends FunctionProps = FunctionProps> = {

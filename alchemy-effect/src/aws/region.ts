@@ -3,7 +3,9 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-export class Region extends Context.Tag("AWS::Region")<Region, string>() {}
+export type RegionID = string;
+
+export class Region extends Context.Tag("AWS::Region")<Region, RegionID>() {}
 
 export const of = (region: string) => Layer.succeed(Region, region);
 

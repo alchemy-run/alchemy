@@ -36,6 +36,11 @@
       "import": "./lib/aws/index.js",
       "types": "./lib/aws/index.d.ts"
     },
+    "./aws/dynamodb": {
+      "bun": "./src/aws/dynamodb/index.ts",
+      "import": "./lib/aws/dynamodb/index.js",
+      "types": "./lib/aws/dynamodb/index.d.ts"
+    },
     "./aws/lambda": {
       "bun": "./src/aws/lambda/index.ts",
       "import": "./lib/aws/lambda/index.js",
@@ -92,6 +97,7 @@
     "effect": "catalog:",
     "ink": "^6.3.1",
     "react": "^19.2.0",
+    "react-devtools-core": "^7.0.1",
     "tsdown": "^0.15.4"
   },
   "peerDependencies": {

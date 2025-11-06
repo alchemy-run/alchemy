@@ -1,5 +1,6 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as S from "effect/Schema";
 import { type AnyBinding, type Bind } from "./binding.ts";
 import type { Capability } from "./capability.ts";
 import type { Runtime } from "./runtime.ts";
@@ -55,6 +56,54 @@ export function Policy(...bindings: AnyBinding[]): any {
     // add the phantom property
     bindings: AnyBinding[];
   };
+}
+
+export namespace Policy {
+  export interface AnyOf<in out T> {
+    readonly anyOf: T[];
+  }
+  type Generalize<T> = T extends S.Schema<infer U> ? U : T;
+
+  export const anyOf = <const T>(...anyOf: T[]): AnyOf<Generalize<T>> => ({
+    anyOf: anyOf as Generalize<T>[],
+  });
+
+  export const join = <
+    const Strings extends readonly string[],
+    const Delimiter extends string,
+  >(
+    strings: Strings,
+    delimiter: Delimiter,
+  ) => strings.join(delimiter) as Join<Strings, Delimiter>;
+
+  type ___ = Join<string[], ",">;
+  type Join<
+    T extends readonly string[],
+    Delimiter extends string,
+  > = T extends readonly [infer First extends string]
+    ? First
+    : T extends readonly [
+          infer First extends string,
+          ...infer Rest extends readonly string[],
+        ]
+      ? `${First}${Delimiter}${Join<Rest, Delimiter>}`
+      : T extends string[]
+        ? string
+        : "";
+
+  export type Constraint<T> = Pick<
+    T,
+    {
+      [k in keyof T]: T[k] extends never
+        ? never
+        : T[k] extends AnyOf<never>
+          ? never
+          : k;
+    }[keyof T]
+  >;
+
+  // TODO(sam): one day we might infer policies using a compiler plugin, this is a placeholder
+  export const infer = <T>(): T => undefined!;
 }
 
 /** declare a Policy requiring Capabilities in some context */
