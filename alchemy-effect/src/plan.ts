@@ -1,13 +1,18 @@
+import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import type { AnyBinding } from "./binding.ts";
+import type {
+  AnyBinding,
+  BindingDiffProps,
+  BindingService,
+} from "./binding.ts";
 import type { Capability } from "./capability.ts";
 import type { Phase } from "./phase.ts";
 import type { Instance } from "./policy.ts";
-import { type ProviderService } from "./provider.ts";
+import { type Diff, type ProviderService } from "./provider.ts";
 import type { Resource, ResourceTags } from "./resource.ts";
 import { isService, type Service } from "./service.ts";
-import { State, type ResourceState } from "./state.ts";
+import { State, StateStoreError, type ResourceState } from "./state.ts";
 
 export type PlanError = never;
 
@@ -26,23 +31,34 @@ export const isBindNode = (node: any): node is BindNode => {
  */
 export type BindNode<B extends AnyBinding = AnyBinding> =
   | Attach<B>
+  | Reattach<B>
   | Detach<B>
   | NoopBind<B>;
 
 export type Attach<B extends AnyBinding = AnyBinding> = {
   action: "attach";
   binding: B;
-  olds?: BindNode;
+  olds: BindNode | undefined;
+  attr: B["attr"] | undefined;
+};
+
+export type Reattach<B extends AnyBinding = AnyBinding> = {
+  action: "reattach";
+  binding: B;
+  olds: BindNode;
+  attr: B["attr"];
 };
 
 export type Detach<B extends AnyBinding = AnyBinding> = {
   action: "detach";
   binding: B;
+  attr: B["attr"] | undefined;
 };
 
 export type NoopBind<B extends AnyBinding = AnyBinding> = {
   action: "noop";
   binding: B;
+  attr: B["attr"];
 };
 
 export const isCRUD = (node: any): node is CRUD => {
@@ -156,7 +172,6 @@ export const plan = <
   type ServiceHosts = {
     [ID in ServiceIDs]: Extract<Services[number], Service<Extract<ID, string>>>;
   };
-
   type UpstreamTags = {
     [ID in ServiceIDs]: ServiceHosts[ID]["props"]["bindings"]["tags"][number];
   }[ServiceIDs];
@@ -190,21 +205,10 @@ export const plan = <
           bindings: BindNode[];
         } => !!resource?.bindings,
       )
-      .flatMap(
-        (resource) =>
-          resource.bindings.flatMap(({ binding }) => [
-            [binding.capability.resource.id, binding.capability.resource],
-          ]),
-        // resource.bindings.flatMap(({ binding }) => {
-        //   const capability: Capability = binding.capability;
-        //   const resource = capability.resource;
-        //   if (!resource) {
-        //     return [];
-        //   }
-        //   return [
-        //     [binding.capability.resource.id, binding.capability.resource],
-        //   ];
-        // }),
+      .flatMap((resource) =>
+        resource.bindings.flatMap(({ binding }) => [
+          [binding.capability.resource.id, binding.capability.resource],
+        ]),
       )
       .reduce(
         (acc, [id, resourceId]) => ({
@@ -240,16 +244,22 @@ export const plan = <
                     const oldState = yield* state.get(id);
                     const provider = yield* resource.provider.tag;
 
-                    const bindings = diffBindings(
-                      oldState,
-                      isService(node)
-                        ? (
+                    const bindings = isService(node)
+                      ? yield* diffBindings({
+                          oldState,
+                          bindings: (
                             node.props.bindings as unknown as {
                               bindings: AnyBinding[];
                             }
-                          ).bindings
-                        : [],
-                    );
+                          ).bindings,
+                          target: {
+                            id: node.id,
+                            props: node.props,
+                            oldAttr: oldState?.output,
+                            oldProps: oldState?.props,
+                          },
+                        })
+                      : []; // TODO(sam): return undefined instead of empty array
 
                     if (
                       oldState === undefined ||
@@ -264,47 +274,42 @@ export const plan = <
                         // phantom
                         attributes: undefined!,
                       });
-                    } else if (provider.diff) {
-                      const diff = yield* provider.diff({
-                        id,
+                    }
+
+                    const diff = provider.diff
+                      ? yield* provider.diff({
+                          id,
+                          olds: oldState.props,
+                          news,
+                          output: oldState.output,
+                        })
+                      : undefined;
+
+                    if (!diff && compare(oldState, resource.props)) {
+                      return Node<Update<Resource>>({
+                        action: "update",
                         olds: oldState.props,
                         news,
                         output: oldState.output,
+                        provider,
+                        resource,
+                        bindings,
+                        // phantom
+                        attributes: undefined!,
                       });
-                      if (diff.action === "noop") {
-                        return Node<NoopUpdate<Resource>>({
-                          action: "noop",
-                          resource,
-                          bindings,
-                          // phantom
-                          attributes: undefined!,
-                        });
-                      } else if (diff.action === "replace") {
-                        return Node<Replace<Resource>>({
-                          action: "replace",
-                          olds: oldState.props,
-                          news,
-                          output: oldState.output,
-                          provider,
-                          resource,
-                          bindings,
-                          // phantom
-                          attributes: undefined!,
-                        });
-                      } else {
-                        return Node<Update<Resource>>({
-                          action: "update",
-                          olds: oldState.props,
-                          news,
-                          output: oldState.output,
-                          provider,
-                          resource,
-                          bindings,
-                          // phantom
-                          attributes: undefined!,
-                        });
-                      }
-                    } else if (compare(oldState, resource.props)) {
+                    } else if (diff?.action === "replace") {
+                      return Node<Replace<Resource>>({
+                        action: "replace",
+                        olds: oldState.props,
+                        news,
+                        output: oldState.output,
+                        provider,
+                        resource,
+                        bindings,
+                        // phantom
+                        attributes: undefined!,
+                      });
+                    } else if (diff?.action === "update") {
                       return Node<Update<Resource>>({
                         action: "update",
                         olds: oldState.props,
@@ -421,50 +426,142 @@ const compare = <R extends Resource>(
   newState: R["props"],
 ) => JSON.stringify(oldState?.props) === JSON.stringify(newState);
 
-const diffBindings = (
-  oldState: ResourceState | undefined,
-  bindings: AnyBinding[],
-) => {
-  const actions: BindNode[] = [];
+const diffBindings = Effect.fn(function* ({
+  oldState,
+  bindings,
+  target,
+}: {
+  oldState: ResourceState | undefined;
+  bindings: AnyBinding[];
+  target: BindingDiffProps["target"];
+}) {
+  // const actions: BindNode[] = [];
   const oldBindings = oldState?.bindings;
   const oldSids = new Set(
     oldBindings?.map(({ binding }) => binding.capability.sid),
   );
-  for (const binding of bindings) {
-    const cap = binding.capability;
-    const sid = cap.sid ?? `${cap.action}:${cap.resource.ID}`;
-    oldSids.delete(sid);
 
-    const oldBinding = oldBindings?.find(
-      ({ binding }) => binding.capability.sid === sid,
-    );
-    if (!oldBinding) {
-      actions.push({
-        action: "attach",
-        binding,
+  const diffBinding: (
+    binding: AnyBinding,
+  ) => Effect.Effect<BindNode, StateStoreError, State> = Effect.fn(
+    function* (binding) {
+      const cap = binding.capability;
+      const sid = cap.sid ?? `${cap.action}:${cap.resource.ID}`;
+      // Find potential oldBinding for this sid
+      const oldBinding = oldBindings?.find(
+        ({ binding }) => binding.capability.sid === sid,
+      );
+      if (!oldBinding) {
+        return {
+          action: "attach",
+          binding,
+          attr: undefined,
+          olds: undefined,
+        } satisfies Attach<AnyBinding>;
+      }
+
+      const diff = yield* isBindingDiff({
+        target,
+        oldBinding,
+        newBinding: binding,
       });
-    } else if (isBindingDiff(oldBinding, binding)) {
-      actions.push({
-        action: "attach",
+      // if (diff === false) {
+      // } else if (diff === true) {
+      //   return {
+      //     action: "attach",
+      //     binding,
+      //     olds: oldBinding,
+      //   } satisfies Attach<AnyBinding>;
+      // }
+      if (diff.action === "replace") {
+        return yield* Effect.die(
+          new Error("Replace binding not yet supported"),
+        );
+        // TODO(sam): implement support for replacing bindings
+        // return {
+        //   action: "replace",
+        //   binding,
+        //   olds: oldBinding,
+        // };
+      } else if (diff?.action === "update") {
+        return {
+          action: "reattach",
+          binding,
+          olds: oldBinding,
+          attr: oldBinding.attr,
+        } satisfies Reattach<AnyBinding>;
+      }
+      return {
+        action: "noop",
         binding,
-        olds: oldBinding,
-      });
+        attr: undefined,
+      } satisfies NoopBind<AnyBinding>;
+    },
+  );
+
+  return (yield* Effect.all(bindings.map(diffBinding))).filter(
+    (action): action is BindNode => action !== null,
+  );
+});
+
+const isBindingDiff = Effect.fn(function* ({
+  target,
+  oldBinding: { binding: oldBinding },
+  newBinding,
+}: {
+  // TODO(sam): support binding to other Resources
+  target: BindingDiffProps["target"];
+  oldBinding: BindNode;
+  newBinding: AnyBinding;
+}) {
+  const oldCap = oldBinding.capability;
+  const newCap = newBinding.capability;
+  if (
+    // if the binding provider has changed
+    oldBinding.tag !== newBinding.tag ||
+    // if it points to a totally different resource, we should replace
+    oldCap?.resource?.id !== newCap?.resource?.id ||
+    // if it is a different action
+    oldCap.action !== newCap.action
+  ) {
+    // then we must replace (we need to detach and attach with different bindings or to different resources)
+    return {
+      action: "replace",
+    } satisfies Diff;
+  }
+
+  const binding = newBinding as AnyBinding & {
+    // smuggled property (because it interacts poorly with inference)
+    Tag: Context.Tag<never, BindingService>;
+  };
+  const provider = yield* binding.Tag;
+  if (provider.diff) {
+    const state = yield* State;
+    const oldState = yield* state.get(oldCap.resource.id);
+    const diff = yield* provider.diff({
+      source: {
+        id: oldCap.resource.id,
+        props: newCap.resource.props,
+        oldProps: oldState?.props,
+        oldAttr: oldState?.output,
+      },
+      props: newBinding.props,
+      attr: oldBinding.attr,
+      target,
+    });
+
+    if (diff?.action === "update" || diff?.action === "replace") {
+      return diff;
     }
   }
-  // for (const sid of oldSids) {
-  //   actions.push({
-  //     action: "detach",
-  //     cap: oldBindings?.find((binding) => binding.sid === sid)!,
-  //   });
-  // }
-  return actions;
-};
-
-const isBindingDiff = (
-  { binding: oldBinding }: BindNode,
-  newBinding: AnyBinding,
-) =>
-  oldBinding.capability.action !== newBinding.capability.action ||
-  oldBinding.capability?.resource?.id !== newBinding.capability?.resource?.id;
+  return {
+    action:
+      oldBinding.capability.action !== newBinding.capability.action ||
+      oldBinding.capability?.resource?.id !==
+        newBinding.capability?.resource?.id
+        ? "update"
+        : "noop",
+  } as const;
+});
 // TODO(sam): compare props
 // oldBinding.props !== newBinding.props;

@@ -3,7 +3,7 @@ import * as Schedule from "effect/Schedule";
 
 import { App, type ProviderService } from "alchemy-effect";
 import type { TimeToLiveSpecification } from "itty-aws/dynamodb";
-import { createTagger, validateTags } from "../../tags.ts";
+import { createTagger, hasTags } from "../../tags.ts";
 import { Account } from "../account.ts";
 import { Region } from "../region.ts";
 import { isScalarAttributeType, toAttributeType } from "./attribute-value.ts";
@@ -76,7 +76,7 @@ export const tableProvider = () =>
               .pipe(
                 Effect.map((tags) => [r, tags.Tags] as const),
                 Effect.flatMap(([r, tags]) => {
-                  if (validateTags(tagged(id), tags)) {
+                  if (hasTags(tagged(id), tags)) {
                     return Effect.succeed(r.Table!);
                   }
                   return Effect.fail(

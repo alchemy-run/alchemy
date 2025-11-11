@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 
 import { $, Binding, type Capability, declare, toEnvKey } from "alchemy-effect";
-import { FunctionClient } from "./function.client.ts";
+import { LambdaClient } from "./client.ts";
 import { Function } from "./function.ts";
 
 export interface InvokeFunction<Resource = unknown>
@@ -13,7 +13,7 @@ export const InvokeFunction = Binding<
 
 export const invoke = <F extends Function>(func: F, input: any) =>
   Effect.gen(function* () {
-    const lambda = yield* FunctionClient;
+    const lambda = yield* LambdaClient;
     const functionArn = process.env[`${func.id}-functionArn`]!;
     yield* declare<InvokeFunction<F>>();
     return yield* lambda.invoke({

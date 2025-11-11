@@ -15,15 +15,12 @@ const normalizeTags = (tags: Tags) =>
       )
     : tags;
 
-export const validateTagList = (expectedTags: Tags, tags: Tags | undefined) => {
+export const hasTags = (expectedTags: Tags, tags: Tags | undefined) => {
   const actualTags = normalizeTags(tags ?? []);
   return Object.entries(normalizeTags(expectedTags)).every(
     ([key, value]) => actualTags[key] === value,
   );
 };
-
-export const validateTags = (expectedTags: Tags, tags: Tags | undefined) =>
-  validateTagList(expectedTags, tags);
 
 export const createTagsList = (tags: Tags) =>
   Object.entries(normalizeTags(tags)).map(([Key, Value]) => ({

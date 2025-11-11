@@ -4,13 +4,13 @@ import * as Schedule from "effect/Schedule";
 import { App, type ProviderService } from "alchemy-effect";
 import { Account } from "../account.ts";
 import { Region } from "../region.ts";
-import { QueueClient } from "./queue.client.ts";
+import { SQSClient } from "./client.ts";
 import { Queue, type QueueProps } from "./queue.ts";
 
 export const queueProvider = () =>
   Queue.provider.effect(
     Effect.gen(function* () {
-      const sqs = yield* QueueClient;
+      const sqs = yield* SQSClient;
       const app = yield* App;
       const region = yield* Region;
       const accountId = yield* Account;

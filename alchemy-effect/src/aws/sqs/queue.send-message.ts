@@ -8,7 +8,7 @@ import {
   type To,
 } from "alchemy-effect";
 import { Function } from "../lambda/index.ts";
-import { QueueClient } from "./queue.client.ts";
+import { SQSClient } from "./client.ts";
 import { Queue } from "./queue.ts";
 
 export interface SendMessage<Q = Queue>
@@ -24,7 +24,7 @@ export const sendMessage = <Q extends Queue>(
 ) =>
   Effect.gen(function* () {
     yield* declare<SendMessage<To<Q>>>();
-    const sqs = yield* QueueClient;
+    const sqs = yield* SQSClient;
     const url = process.env[toEnvKey(queue.id, "QUEUE_URL")]!;
     return yield* sqs.sendMessage({
       QueueUrl: url,

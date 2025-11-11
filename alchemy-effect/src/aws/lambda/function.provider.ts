@@ -5,29 +5,25 @@ import { FileSystem } from "@effect/platform";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
-import { App, DotAlchemy } from "alchemy-effect";
+import { App, DotAlchemy, type ProviderService } from "alchemy-effect";
 
 import type {
+  CreateFunctionRequest,
   CreateFunctionUrlConfigRequest,
   UpdateFunctionUrlConfigRequest,
 } from "itty-aws/lambda";
-import {
-  createTagger,
-  createTagsList,
-  validateTagList,
-  validateTags,
-} from "../../tags.ts";
+import { createTagger, createTagsList, hasTags } from "../../tags.ts";
 import { Account } from "../account.ts";
 import * as IAM from "../iam.ts";
 import { Region } from "../region.ts";
 import { zipCode } from "../zip.ts";
-import { FunctionClient } from "./function.client.ts";
+import { LambdaClient } from "./client.ts";
 import { Function, type FunctionAttr, type FunctionProps } from "./function.ts";
 
 export const functionProvider = () =>
   Function.provider.effect(
     Effect.gen(function* () {
-      const lambda = yield* FunctionClient;
+      const lambda = yield* LambdaClient;
       const iam = yield* IAM.IAMClient;
       const accountId = yield* Account;
       const region = yield* Region;
@@ -44,6 +40,19 @@ export const functionProvider = () =>
       const createPolicyName = (id: string) =>
         `${app.name}-${app.stage}-${id}-${region}`;
 
+      const createPhysicalNames = (id: string) => {
+        const roleName = createRoleName(id);
+        const policyName = createPolicyName(id);
+        const functionName = createFunctionName(id);
+        return {
+          roleName,
+          policyName,
+          functionName,
+          roleArn: `arn:aws:iam::${accountId}:role/${roleName}`,
+          functionArn: `arn:aws:lambda:${region}:${accountId}:function:${functionName}`,
+        };
+      };
+
       const attachBindings = Effect.fn(function* ({
         roleName,
         policyName,
@@ -57,15 +66,15 @@ export const functionProvider = () =>
         functionName: string;
         bindings: Function["binding"][];
       }) {
-        const env = bindings.reduce(
-          (acc, binding) => ({ ...acc, ...binding?.env }),
-          {},
-        );
-        const policyStatements = bindings.flatMap((binding) =>
-          binding?.policyStatements?.map((stmt: IAM.PolicyStatement) => ({
-            ...stmt,
-            Sid: stmt.Sid?.replace(/[^A-Za-z0-9]+/gi, ""),
-          })),
+        const env = bindings
+          .map((binding) => binding?.env)
+          .reduce((acc, env) => ({ ...acc, ...(env ?? {}) }), {});
+        const policyStatements = bindings.flatMap(
+          (binding) =>
+            binding?.policyStatements?.map((stmt: IAM.PolicyStatement) => ({
+              ...stmt,
+              Sid: stmt.Sid?.replace(/[^A-Za-z0-9]+/gi, ""),
+            })) ?? [],
         );
 
         if (policyStatements.length > 0) {
@@ -89,7 +98,7 @@ export const functionProvider = () =>
         return env;
       });
 
-      const createRole = Effect.fn(function* ({
+      const createRoleIfNotExists = Effect.fn(function* ({
         id,
         roleName,
       }: {
@@ -121,7 +130,7 @@ export const functionProvider = () =>
                 })
                 .pipe(
                   Effect.filterOrFail(
-                    (role) => validateTagList(tagged(id), role.Role?.Tags),
+                    (role) => hasTags(tagged(id), role.Role?.Tags),
                     () =>
                       new Error(
                         `Role ${roleName} exists but has incorrect tags`,
@@ -184,7 +193,7 @@ export const functionProvider = () =>
         };
       });
 
-      const hashCode = (code: Uint8Array<ArrayBufferLike>) =>
+      const hashCode = (code: string | Uint8Array<ArrayBufferLike>) =>
         Effect.sync(() =>
           crypto.createHash("sha256").update(code).digest("hex"),
         );
@@ -202,52 +211,93 @@ export const functionProvider = () =>
         id: string;
         news: FunctionProps;
         roleArn: string;
-        code: Uint8Array<ArrayBufferLike>;
-        env: Record<string, string>;
+        code: string | Uint8Array<ArrayBufferLike>;
+        env: Record<string, string> | undefined;
         functionName: string;
       }) {
-        yield* lambda
-          .createFunction({
-            FunctionName: functionName,
-            Handler: `index.${news.handler ?? "default"}`,
-            Role: roleArn,
-            Code: {
-              // TODO(sam): upload to assets
-              ZipFile: yield* zipCode(code),
-            },
-            Runtime: "nodejs22.x",
-            Environment: {
-              Variables: env,
-            },
-            Tags: tagged(id),
-          })
-          .pipe(
-            Effect.retry({
-              while: (e) =>
-                e.name === "InvalidParameterValueException" &&
-                e.message?.includes("cannot be assumed by Lambda"),
-              schedule: Schedule.exponential(10),
-            }),
-            Effect.catchTag("ResourceConflictException", () =>
+        const createFunctionRequest: CreateFunctionRequest = {
+          FunctionName: functionName,
+          Handler: `index.${news.handler ?? "default"}`,
+          Role: roleArn,
+          Code: {
+            // TODO(sam): upload to assets
+            ZipFile: yield* zipCode(code),
+          },
+          Runtime: news.runtime ?? "nodejs22.x",
+          Environment: env
+            ? {
+                Variables: env,
+              }
+            : undefined,
+          Tags: tagged(id),
+        };
+        yield* lambda.createFunction(createFunctionRequest).pipe(
+          Effect.retry({
+            while: (e) =>
+              e.name === "InvalidParameterValueException" &&
+              e.message?.includes("cannot be assumed by Lambda"),
+            schedule: Schedule.exponential(10),
+          }),
+          Effect.catchTags({
+            ResourceConflictException: () =>
               lambda
                 .getFunction({
                   FunctionName: functionName,
                 })
                 .pipe(
-                  Effect.flatMap((f) =>
+                  Effect.filterOrFail(
                     // if it exists and contains these tags, we will assume it was created by alchemy
                     // but state was lost, so if it exists, let's adopt it
-                    validateTags(tagged(id), f.Tags)
-                      ? Effect.succeed(f.Configuration!)
-                      : Effect.fail(
-                          new Error(
-                            "Function tags do not match expected values",
-                          ),
-                        ),
+                    (f) => hasTags(tagged(id), f.Tags),
+                    () =>
+                      // TODO(sam): add custom
+                      new Error("Function tags do not match expected values"),
+                  ),
+                  Effect.flatMap(() =>
+                    Effect.gen(function* () {
+                      yield* lambda.updateFunctionCode({
+                        FunctionName: createFunctionRequest.FunctionName,
+                        Architectures: createFunctionRequest.Architectures,
+                        ZipFile: createFunctionRequest.Code.ZipFile,
+                        // TODO(sam): support uploading via S3
+                      });
+                      yield* lambda
+                        .updateFunctionConfiguration({
+                          FunctionName: createFunctionRequest.FunctionName,
+                          DeadLetterConfig:
+                            createFunctionRequest.DeadLetterConfig,
+                          Description: createFunctionRequest.Description,
+                          Environment: createFunctionRequest.Environment,
+                          EphemeralStorage:
+                            createFunctionRequest.EphemeralStorage,
+                          FileSystemConfigs:
+                            createFunctionRequest.FileSystemConfigs,
+                          Handler: createFunctionRequest.Handler,
+                          ImageConfig: createFunctionRequest.ImageConfig,
+                          KMSKeyArn: createFunctionRequest.KMSKeyArn,
+                          Layers: createFunctionRequest.Layers,
+                          LoggingConfig: createFunctionRequest.LoggingConfig,
+                          MemorySize: createFunctionRequest.MemorySize,
+                          // RevisionId: "???"
+                          Role: createFunctionRequest.Role,
+                          Runtime: createFunctionRequest.Runtime,
+                          SnapStart: createFunctionRequest.SnapStart,
+                          Timeout: createFunctionRequest.Timeout,
+                          TracingConfig: createFunctionRequest.TracingConfig,
+                          VpcConfig: createFunctionRequest.VpcConfig,
+                        })
+                        .pipe(
+                          Effect.retry({
+                            while: (e) =>
+                              e.name === "ResourceConflictException",
+                            schedule: Schedule.exponential(100),
+                          }),
+                        );
+                    }),
                   ),
                 ),
-            ),
-          );
+          }),
+        );
       });
 
       const createOrUpdateFunctionUrl = Effect.fn(function* ({
@@ -340,9 +390,9 @@ export const functionProvider = () =>
         }`;
 
       return {
-        // type: "AWS.Lambda.Function",
         read: Effect.fn(function* ({ id, output }) {
           if (output) {
+            console.log("reading function", id);
             // example: refresh the function URL from the API
             return {
               ...output,
@@ -352,6 +402,12 @@ export const functionProvider = () =>
                 })
                 .pipe(
                   Effect.map((f) => f.FunctionUrl),
+                  Effect.retry({
+                    //   error: ResourceConflictException: The operation cannot be performed at this time.
+                    // An update is in progress for resource: arn:aws:lambda:us-west-2:084828582823:function:my-app-dev-Consumer-us-west-2
+                    while: (e) => e.name === "ResourceConflictException",
+                    schedule: Schedule.exponential(100),
+                  }),
                   Effect.catchTag("ResourceNotFoundException", () =>
                     Effect.succeed(undefined),
                   ),
@@ -362,22 +418,41 @@ export const functionProvider = () =>
         }),
         diff: Effect.fn(function* ({ id, olds, news, output }) {
           if (
-            output.functionName !==
-            (news.functionName ?? createFunctionName(id))
-          ) {
             // function name changed
-            return { action: "replace" };
-          }
-          if (olds.url !== news.url) {
+            output.functionName !==
+              (news.functionName ?? createFunctionName(id)) ||
             // url changed
+            olds.url !== news.url
+          ) {
             return { action: "replace" };
-          }
-          const { hash } = yield* bundleCode(id, news);
-          if (output.code.hash !== hash) {
+          } else if (output.code.hash !== (yield* bundleCode(id, news)).hash) {
             // code changed
             return { action: "update" };
           }
-          return { action: "noop" };
+        }),
+        precreate: Effect.fn(function* ({ id, news, session }) {
+          const { roleName, functionName, roleArn } = createPhysicalNames(id);
+          const role = yield* createRoleIfNotExists({ id, roleName });
+          // mock code
+          const code = "export default () => {}";
+          yield* createOrUpdateFunction({
+            id,
+            news,
+            roleArn: role.Role.Arn,
+            code,
+            functionName,
+            env: {},
+          });
+          return {
+            functionArn: `arn:aws:lambda:${region}:${accountId}:function:${functionName}`,
+            functionName,
+            functionUrl: undefined,
+            roleName: createRoleName(id),
+            code: {
+              hash: yield* hashCode(code),
+            },
+            roleArn,
+          } satisfies FunctionAttr<FunctionProps>;
         }),
         create: Effect.fn(function* ({ id, news, bindings, session }) {
           const roleName = createRoleName(id);
@@ -386,7 +461,7 @@ export const functionProvider = () =>
           const functionName = news.functionName ?? createFunctionName(id);
           const functionArn = `arn:aws:lambda:${region}:${accountId}:function:${functionName}`;
 
-          const role = yield* createRole({ id, roleName });
+          const role = yield* createRoleIfNotExists({ id, roleName });
 
           const env = yield* attachBindings({
             roleName,
@@ -536,6 +611,6 @@ export const functionProvider = () =>
             .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
           return null as any;
         }),
-      };
+      } satisfies ProviderService<Function>;
     }),
   );

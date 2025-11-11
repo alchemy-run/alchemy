@@ -33,7 +33,7 @@ export const providers = Layer.mergeAll(
 export const bindings = Layer.mergeAll(
   //
   SQS.sendMessageFromLambdaFunction(),
-  SQS.consumeFromLambdaFunction(),
+  SQS.queueEventSourceProvider(),
   DynamoDB.getItemFromLambdaFunction(),
 );
 

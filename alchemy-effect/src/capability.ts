@@ -26,10 +26,10 @@ export declare namespace Capability {
       Constructor: { Reduce: any };
     },
   ]
-    ? _Reduce<C>
+    ? _Simplify<C>
     : C;
 
-  type _Reduce<C> = [C] extends [
+  type _Simplify<C> = [C] extends [
     infer c extends { Constructor: any; resource: any; constraint: any },
   ]
     ? (c["Constructor"] & {

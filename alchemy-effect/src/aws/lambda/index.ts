@@ -1,4 +1,4 @@
-export * from "./function.client.ts";
+export * from "./client.ts";
 export * from "./function.handler.ts";
 export * from "./function.invoke.ts";
 export * from "./function.provider.ts";

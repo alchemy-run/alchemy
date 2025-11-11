@@ -19,7 +19,6 @@ export const consume =
     }: {
       queue: Q;
       handle: (
-        this: unknown,
         event: SQS.QueueEvent<Q["props"]["schema"]["Type"]>,
         context: LambdaContext,
       ) => Effect.Effect<SQSBatchResponse | void, never, Req>;

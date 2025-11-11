@@ -142,6 +142,7 @@ const bindingActionColor = (
     attach: "green",
     detach: "red",
     noop: "gray",
+    reattach: "orange",
   })[action];
 
 const bindingActionIcon = (action: BindNode["action"]): string =>
@@ -149,4 +150,5 @@ const bindingActionIcon = (action: BindNode["action"]): string =>
     attach: "+",
     detach: "-",
     noop: "•",
+    reattach: "~",
   })[action];

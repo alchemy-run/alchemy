@@ -24,7 +24,7 @@ export class Consumer extends Lambda.consume("Consumer", {
 }) {}
 
 // runtime handler
-// export default Consumer.pipe(
-//   Effect.provide(SQS.clientFromEnv()),
-//   Lambda.toHandler,
-// );
+export default Consumer.handler.pipe(
+  Effect.provide(SQS.clientFromEnv()),
+  Lambda.toHandler,
+);

@@ -10,7 +10,8 @@
     "url": "https://github.com/alchemy-run/alchemy"
   },
   "scripts": {
-    "build": "bun tsc -b && bun run --filter alchemy-effect build",
+    "clean:shallow": "rm -rf alchemy-effect/*.tgz && bun tsc -b --clean",
+    "build": "bun run clean:shallow && bun tsc -b && bun run --filter alchemy-effect build",
     "build:clean": "git clean -fqdx . && bun i && bun run build",
     "format": "oxfmt '.' '!./alchemy-effect*/lib/' '!/**/*.mdx'",
     "format:check": "bun run format -- --check",

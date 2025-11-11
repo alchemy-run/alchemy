@@ -9,7 +9,7 @@ export interface FunctionProps<Req = any> extends RuntimeProps<Function, Req> {
   main: string;
   handler?: string;
   memory?: number;
-  runtime?: "nodejs20x" | "nodejs22x";
+  runtime?: "nodejs20.x" | "nodejs22.x";
   architecture?: "x86_64" | "arm64";
   url?: boolean;
 }
@@ -30,14 +30,16 @@ export type FunctionAttr<Props extends FunctionProps = FunctionProps> = {
   };
 };
 
+export interface FunctionBinding {
+  env?: {
+    [key: string]: string;
+  };
+  policyStatements?: IAM.PolicyStatement[];
+}
+
 export interface Function extends Runtime<"AWS.Lambda.Function"> {
   props: FunctionProps;
   attr: FunctionAttr<Extract<this["props"], FunctionProps>>;
-  binding: {
-    env: {
-      [key: string]: string;
-    };
-    policyStatements: IAM.PolicyStatement[];
-  };
+  binding: FunctionBinding;
 }
 export const Function = Runtime("AWS.Lambda.Function")<Function>();

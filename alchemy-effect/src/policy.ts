@@ -27,7 +27,11 @@ export interface Policy<
   /** Add more Capabilities to a Policy */
   and<B extends AnyBinding[]>(
     ...bindings: B
-  ): Policy<F, B[number]["capability"] | Capabilities, Tags>;
+  ): Policy<
+    F,
+    B[number]["capability"] | Capabilities,
+    BindingTags<B[number]> | Exclude<Tags, unknown>
+  >;
 }
 
 export type $<T> = Instance<T>;
@@ -47,7 +51,7 @@ export function Policy<B extends AnyBinding[]>(
 >;
 export function Policy(...bindings: AnyBinding[]): any {
   return {
-    runtime: bindings[0]["runtime"],
+    runtime: bindings[0]?.["runtime"],
     capabilities: bindings.map((b) => b.capability),
     tags: bindings.map((b) => Context.Tag(b.tag as any)()),
     bindings,
