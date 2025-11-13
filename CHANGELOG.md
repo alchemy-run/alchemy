@@ -1,3 +1,25 @@
+## v0.2.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- Diff bindings + Queue Event Source &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/12 [<samp>(f0ba8)</samp>](https://github.com/alchemy-run/alchemy/commit/f0ba897)
+- **aws**:
+  - DynamoDB Table and getItem &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/10 [<samp>(877ba)</samp>](https://github.com/alchemy-run/alchemy/commit/877ba8f)
+  - VPC &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/16 [<samp>(cda86)</samp>](https://github.com/alchemy-run/alchemy/commit/cda86ce)
+- **cloudflare**:
+  - Worker, Assets, R2, KV &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy/issues/13 [<samp>(6e5b1)</samp>](https://github.com/alchemy-run/alchemy/commit/6e5b107)
+- **test**:
+  - Add test utility &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/15 [<samp>(7a9e1)</samp>](https://github.com/alchemy-run/alchemy/commit/7a9e10f)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Properly type the Resource Provider Layers and use Layer.merge &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(77d69)</samp>](https://github.com/alchemy-run/alchemy/commit/77d69be)
+- **core**: Exclude bindings from props diff and include attributes in no-op bind &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy/issues/17 [<samp>(6408d)</samp>](https://github.com/alchemy-run/alchemy/commit/6408d2b)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v0.1.0...v0.2.0)
+
+---
+
 ## v0.1.0
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
