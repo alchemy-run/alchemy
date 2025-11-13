@@ -24,6 +24,6 @@ export interface Namespace<
 export const Namespace = Resource<{
   <const ID extends string, const Props extends NamespaceProps>(
     id: ID,
-    props: Props,
+    props?: Props,
   ): Namespace<ID, Props>;
 }>("Cloudflare.KV.Namespace");

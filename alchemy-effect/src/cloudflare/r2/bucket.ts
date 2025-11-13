@@ -27,7 +27,7 @@ export interface Bucket<
 export const Bucket = Resource<{
   <const ID extends string, const Props extends BucketProps>(
     id: ID,
-    props: Props,
+    props?: Props,
   ): Bucket<ID, Props>;
 }>("Cloudflare.R2.Bucket");
 
