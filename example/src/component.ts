@@ -49,7 +49,6 @@ export class MySimpleMonitor extends MonitorSimple("MyMonitor", {
 }) {}
 
 // src/my-component.ts
-
 export interface MonitorComplexProps<ReqAlarm, ReqResolved>
   extends Lambda.FunctionProps {
   onAlarm: (

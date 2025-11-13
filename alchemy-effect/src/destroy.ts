@@ -1,4 +1,7 @@
-import type * as Effect from "effect/Effect";
-import type { App } from "./app.ts";
+import { apply } from "./apply.ts";
 
-export declare const destroy: () => Effect.Effect<void, never, App>;
+export const destroy = () =>
+  apply({
+    phase: "destroy",
+    resources: [],
+  });

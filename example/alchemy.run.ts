@@ -6,11 +6,6 @@ import { Layer } from "effect";
 import * as Effect from "effect/Effect";
 import { Api, Consumer } from "./src/index.ts";
 
-const plan = Alchemy.plan({
-  phase: process.argv.includes("--destroy") ? "destroy" : "update",
-  services: [Api, Consumer],
-});
-
 const app = Alchemy.app({ name: "my-app", stage: "dev" });
 
 const providers = Layer.provideMerge(
@@ -23,9 +18,10 @@ const layers = Layer.provideMerge(
   Layer.mergeAll(NodeContext.layer, FetchHttpClient.layer),
 );
 
-const stack = await plan.pipe(
-  // Effect.tap((plan) => Console.log(plan)),
-  Alchemy.apply,
+await Alchemy.apply({
+  phase: process.argv.includes("--destroy") ? "destroy" : "update",
+  resources: [Api, Consumer],
+}).pipe(
   Effect.provide(layers),
   Effect.tap((stack) =>
     Effect.log({
@@ -33,9 +29,5 @@ const stack = await plan.pipe(
       queueUrl: stack?.Messages.queueUrl,
     }),
   ),
-  Effect.runPromise,
+  Effect.runPromiseExit,
 );
-
-if (stack) {
-  console.log(stack);
-}

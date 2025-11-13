@@ -19,9 +19,9 @@ export interface TableProps<
   SSESpecification extends DynamoDB.SSESpecification | undefined =
     | DynamoDB.SSESpecification
     | undefined,
-  TimeToLiveSpecification extends DynamoDB.TimeToLiveSpecification | undefined =
+  TimeToLiveSpecification extends
     | DynamoDB.TimeToLiveSpecification
-    | undefined,
+    | undefined = DynamoDB.TimeToLiveSpecification | undefined,
   WarmThroughput extends DynamoDB.WarmThroughput | undefined =
     | DynamoDB.WarmThroughput
     | undefined,
@@ -135,6 +135,8 @@ export const Table = Resource<{
     >
   >;
 }>("AWS.DynamoDB.Table");
+
+export interface AnyTable extends Table<string, any> {}
 
 export interface Table<
   ID extends string = string,

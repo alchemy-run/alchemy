@@ -1,6 +1,8 @@
+import { LogLevel } from "effect";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
 import * as Redacted from "effect/Redacted";
 import type { AWSClientConfig } from "itty-aws";
 import { Credentials } from "./credentials.ts";
@@ -19,7 +21,8 @@ export const createAWSServiceClientLayer =
       Effect.gen(function* () {
         const region = yield* Region;
         const credentials = yield* Credentials;
-        return new clss({
+        //
+        const client = new clss({
           region,
           credentials: {
             accessKeyId: Redacted.value(credentials.accessKeyId),
@@ -28,6 +31,15 @@ export const createAWSServiceClientLayer =
               ? Redacted.value(credentials.sessionToken)
               : undefined,
           },
+        });
+        return new Proxy(client as any, {
+          get:
+            (target: any, prop) =>
+            (...args: any[]) =>
+              target[prop](...args).pipe(
+                // TODO(sam): make it easier to set log lever for a client
+                Logger.withMinimumLogLevel(LogLevel.Info),
+              ),
         });
       }),
     ) as Layer.Layer<TagInstance<Tag>, never, Region | Credentials>;

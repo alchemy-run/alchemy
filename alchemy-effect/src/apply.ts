@@ -6,6 +6,7 @@ import { PlanReviewer, type PlanRejected } from "./approve.ts";
 import type { AnyBinding, BindingService } from "./binding.ts";
 import type { ApplyEvent, ApplyStatus } from "./event.ts";
 import {
+  plan,
   type BindNode,
   type Create,
   type CRUD,
@@ -14,6 +15,7 @@ import {
   type Update,
 } from "./plan.ts";
 import type { Resource } from "./resource.ts";
+import type { Service } from "./service.ts";
 import { State } from "./state.ts";
 
 export interface PlanStatusSession {
@@ -32,7 +34,34 @@ export class PlanStatusReporter extends Context.Tag("PlanStatusReporter")<
   }
 >() {}
 
-export const apply = <P extends Plan, Err, Req>(
+export const apply: typeof applyPlan &
+  typeof applyResources &
+  typeof applyResourcesPhase = (...args: any[]): any =>
+  Effect.isEffect(args[0])
+    ? applyPlan(args[0] as any)
+    : args.length === 1 && "phase" in args[0]
+      ? applyResourcesPhase(args[0])
+      : applyResources(...args);
+
+export const applyResourcesPhase = <
+  const Phase extends "update" | "destroy",
+  const Resources extends (Service | Resource)[],
+>(props: {
+  resources: Resources;
+  phase: Phase;
+}) => applyPlan(plan(props));
+
+export const applyResources = <const Resources extends (Service | Resource)[]>(
+  ...resources: Resources
+) =>
+  applyPlan(
+    plan({
+      phase: "update",
+      resources,
+    }),
+  );
+
+export const applyPlan = <P extends Plan, Err, Req>(
   plan: Effect.Effect<P, Err, Req>,
 ) =>
   plan.pipe(
@@ -267,7 +296,14 @@ export const apply = <P extends Plan, Err, Req>(
                     news: node.news,
                     bindings: bindingOutputs,
                     session: scopedSession,
+                    ...(node.action === "update"
+                      ? {
+                          output: node.output,
+                          olds: node.olds,
+                        }
+                      : {}),
                   }).pipe(
+                    // TODO(sam): partial checkpoints
                     // checkpoint,
                     Effect.tap(() =>
                       report(phase === "create" ? "created" : "updated"),
@@ -301,6 +337,7 @@ export const apply = <P extends Plan, Err, Req>(
                 } else if (node.action === "create") {
                   let attr: any;
                   if (node.provider.precreate) {
+                    yield* Effect.logDebug("precreate", id);
                     // stub the resource prior to resolving upstream resources or bindings if a stub is available
                     attr = yield* node.provider.precreate({
                       id,
@@ -309,18 +346,21 @@ export const apply = <P extends Plan, Err, Req>(
                     });
                   }
 
+                  yield* Effect.logDebug("create", id);
                   return yield* createOrUpdate({
                     node,
                     attr,
                     phase: "create",
                   });
                 } else if (node.action === "update") {
+                  yield* Effect.logDebug("update", id);
                   return yield* createOrUpdate({
                     node,
                     attr: node.attributes,
                     phase: "update",
                   });
                 } else if (node.action === "delete") {
+                  yield* Effect.logDebug("delete", id);
                   yield* Effect.all(
                     node.downstream.map((dep) =>
                       dep in plan.resources

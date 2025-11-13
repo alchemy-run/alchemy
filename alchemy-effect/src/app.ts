@@ -40,3 +40,5 @@ export const fromArgs = Layer.effect(
 
 export const app = (input: { name: string; stage: string }) =>
   Layer.succeed(App, App.of(input));
+
+export const make = app;

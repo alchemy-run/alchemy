@@ -41,6 +41,11 @@
       "import": "./lib/aws/dynamodb/index.js",
       "types": "./lib/aws/dynamodb/index.d.ts"
     },
+    "./aws/ec2": {
+      "bun": "./src/aws/ec2/index.ts",
+      "import": "./lib/aws/ec2/index.js",
+      "types": "./lib/aws/ec2/index.d.ts"
+    },
     "./aws/lambda": {
       "bun": "./src/aws/lambda/index.ts",
       "import": "./lib/aws/lambda/index.js",
@@ -74,6 +79,7 @@
   },
   "dependencies": {
     "@aws-sdk/credential-providers": "catalog:",
+    "@effect/vitest": "^0.27.0",
     "@smithy/node-config-provider": "^4.0.0",
     "@smithy/shared-ini-file-loader": "^4.3.4",
     "@smithy/types": "^4.8.1",
@@ -82,7 +88,7 @@
     "cloudflare": "catalog:",
     "esbuild": "^0.25.12",
     "fast-xml-parser": "^5.2.5",
-    "itty-aws": "0.4.1",
+    "itty-aws": "catalog:",
     "jszip": "^3.10.1",
     "yaml": "^2.0.0"
   },
@@ -98,6 +104,7 @@
     "ink": "^6.3.1",
     "react": "^19.2.0",
     "react-devtools-core": "^7.0.1",
+    "tsconfig-paths": "^4.2.0",
     "tsdown": "^0.15.4"
   },
   "peerDependencies": {

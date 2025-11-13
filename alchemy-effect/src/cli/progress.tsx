@@ -16,6 +16,7 @@ export interface ProgressEventSource {
 export const reportProgress = Layer.succeed(
   Alchemy.PlanStatusReporter,
   Alchemy.PlanStatusReporter.of({
+    // oxlint-disable-next-line require-yield
     start: Effect.fn(function* (plan) {
       const listeners = new Set<(event: Alchemy.ApplyEvent) => void>();
       const { unmount } = render(

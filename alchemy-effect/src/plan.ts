@@ -11,7 +11,7 @@ import type { Phase } from "./phase.ts";
 import type { Instance } from "./policy.ts";
 import { type Diff, type ProviderService } from "./provider.ts";
 import type { Resource, ResourceTags } from "./resource.ts";
-import { isService, type Service } from "./service.ts";
+import { isService, type IService, type Service } from "./service.ts";
 import { State, StateStoreError, type ResourceState } from "./state.ts";
 
 export type PlanError = never;
@@ -160,14 +160,15 @@ export type Plan = {
 
 export const plan = <
   const Phase extends "update" | "destroy",
-  const Services extends Service[],
+  const Resources extends (Service | Resource)[],
 >({
   phase,
-  services,
+  resources,
 }: {
   phase: Phase;
-  services: Services;
+  resources: Resources;
 }) => {
+  type Services = Extract<Resources[number], IService>[];
   type ServiceIDs = Services[number]["id"];
   type ServiceHosts = {
     [ID in ServiceIDs]: Extract<Services[number], Service<Extract<ID, string>>>;
@@ -181,11 +182,16 @@ export const plan = <
       Resource
     >;
   }[ServiceIDs];
-  type Resources = {
+  type ExplicitResources = Exclude<Resources[number], { kind: "Service" }>;
+  type ResourceGraph = {
     [ID in ServiceIDs]: Apply<Extract<Instance<ServiceHosts[ID]>, Resource>>;
   } & {
     [ID in UpstreamResources["id"]]: Apply<
       Extract<UpstreamResources, { id: ID }>
+    >;
+  } & {
+    [ID in ExplicitResources["id"]]: Apply<
+      Extract<ExplicitResources, { id: ID }>
     >;
   };
 
@@ -218,16 +224,18 @@ export const plan = <
         {} as Record<string, string[]>,
       );
 
-    const resources =
+    const resourceGraph =
       phase === "update"
         ? (Object.fromEntries(
             (yield* Effect.all(
-              services
-                .flatMap((service) => [
-                  ...service.props.bindings.capabilities.map(
-                    (cap: Capability) => cap.resource as Resource,
-                  ),
-                  service,
+              resources
+                .flatMap((resource) => [
+                  ...(isService(resource)
+                    ? resource.props.bindings.capabilities.map(
+                        (cap: Capability) => cap.resource as Resource,
+                      )
+                    : []),
+                  resource,
                 ])
                 .filter(
                   (node, i, arr) =>
@@ -243,6 +251,7 @@ export const plan = <
 
                     const oldState = yield* state.get(id);
                     const provider = yield* resource.provider.tag;
+                    const context = yield* Effect.context<never>();
 
                     const bindings = isService(node)
                       ? yield* diffBindings({
@@ -340,7 +349,7 @@ export const plan = <
       (yield* Effect.all(
         (yield* state.list()).map(
           Effect.fn(function* (id) {
-            if (id in resources) {
+            if (id in resourceGraph) {
               return;
             }
             const oldState = yield* state.get(id);
@@ -381,7 +390,9 @@ export const plan = <
     );
 
     for (const [resourceId, deletion] of Object.entries(deletions)) {
-      const dependencies = deletion.downstream.filter((d) => d in resources);
+      const dependencies = deletion.downstream.filter(
+        (d) => d in resourceGraph,
+      );
       if (dependencies.length > 0) {
         return yield* Effect.fail(
           new DeleteResourceHasDownstreamDependencies({
@@ -395,17 +406,17 @@ export const plan = <
 
     return {
       phase,
-      resources,
+      resources: resourceGraph,
       deletions,
     } satisfies Plan as Plan;
   }) as Effect.Effect<
     {
       phase: Phase;
       resources: {
-        [ID in keyof Resources]: Resources[ID];
+        [ID in keyof ResourceGraph]: ResourceGraph[ID];
       };
       deletions: {
-        [id in Exclude<string, keyof Resources>]?: Delete<Resource>;
+        [id in Exclude<string, keyof ResourceGraph>]?: Delete<Resource>;
       };
     },
     never,

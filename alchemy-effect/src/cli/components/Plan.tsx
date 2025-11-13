@@ -1,7 +1,7 @@
 // biome-ignore lint/style/useImportType: UMD global
 import React, { useMemo } from "react";
 
-import type { BindNode, CRUD, Plan } from "alchemy-effect";
+import type { BindNode, Capability, CRUD, Plan } from "alchemy-effect";
 import { Box, Text } from "ink";
 
 export interface PlanProps {
@@ -93,7 +93,7 @@ export function Plan({ plan }: PlanProps): React.JSX.Element {
                   const bindingIcon = bindingActionIcon(node.action);
                   return (
                     <Box
-                      key={node.binding.capability.resource.id}
+                      key={`${item.resource.id}${(node.binding.capability as Capability).sid}`}
                       flexDirection="row"
                     >
                       <Box width={4}>
