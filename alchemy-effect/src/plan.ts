@@ -1,6 +1,7 @@
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import { omit } from "effect/Struct";
 import type {
   AnyBinding,
   BindingDiffProps,
@@ -433,8 +434,13 @@ class DeleteResourceHasDownstreamDependencies extends Data.TaggedError(
 
 const arePropsChanged = <R extends Resource>(
   oldState: ResourceState | undefined,
-  newState: R["props"],
-) => JSON.stringify(oldState?.props) !== JSON.stringify(newState);
+  newProps: R["props"],
+) => {
+  return (
+    JSON.stringify(omit(oldState?.props ?? {}, "bindings")) !==
+    JSON.stringify(omit((newProps ?? {}) as any, "bindings"))
+  );
+};
 
 const diffBindings = Effect.fn(function* ({
   oldState,
@@ -504,7 +510,7 @@ const diffBindings = Effect.fn(function* ({
       return {
         action: "noop",
         binding,
-        attr: undefined,
+        attr: oldBinding.attr,
       } satisfies NoopBind<AnyBinding>;
     },
   );
