@@ -42,7 +42,9 @@ export function test(
     () =>
       testCase.pipe(
         Effect.provide(layers),
-        Logger.withMinimumLogLevel(LogLevel.Info),
+        Logger.withMinimumLogLevel(
+          process.env.DEBUG ? LogLevel.Debug : LogLevel.Info,
+        ),
       ),
     timeout,
   );

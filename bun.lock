@@ -88,7 +88,7 @@
     "@types/node": "latest",
     "cloudflare": "^5.2.0",
     "effect": "^3.18.4",
-    "itty-aws": "^0.5.0",
+    "itty-aws": "^0.6.1",
     "typescript": "^5.9.3",
     "vite": "^7.1.9",
     "wrangler": "^4.42.2",
@@ -798,7 +798,7 @@
 
     "isexe": ["isexe@2.0.0", "", {}, "sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw=="],
 
-    "itty-aws": ["itty-aws@0.5.0", "", { "dependencies": { "aws4fetch": "^1.0.20", "pathe": "^2.0.3" }, "peerDependencies": { "@aws-sdk/credential-providers": "^3", "@effect/platform": "^0.87.12", "@effect/platform-node": "^0.89.5", "effect": "^3" } }, "sha512-mWLxh5wSx6zZJ5GU1VlT4QgYH7OXy74gZcHbPNYMmid4AcYgwiQ2nqLBBKT+nPNGMy5vwP0WHF5XEdBulH97tA=="],
+    "itty-aws": ["itty-aws@0.6.1", "", { "dependencies": { "aws4fetch": "^1.0.20", "pathe": "^2.0.3" }, "peerDependencies": { "@aws-sdk/credential-providers": "^3", "@effect/platform": "^0.87.12", "@effect/platform-node": "^0.89.5", "effect": "^3" } }, "sha512-wMm2/ECM6wgEOhTgqtpaYd6UePOUcAXc95LtQiMMXLVfrQnoGS4ZKz5DR4B9ypMJazz3UeQj0Dz11r9wRsQB+w=="],
 
     "jiti": ["jiti@2.6.1", "", { "bin": { "jiti": "lib/jiti-cli.mjs" } }, "sha512-ekilCSN1jwRvIbgeg/57YFh8qQDNbwDb9xT/qu2DAHbFFZUicIl4ygVaAvzveMhMVr3LnpSKTNnwt8PoOfmKhQ=="],
 

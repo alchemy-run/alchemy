@@ -251,7 +251,6 @@ export const plan = <
 
                     const oldState = yield* state.get(id);
                     const provider = yield* resource.provider.tag;
-                    const context = yield* Effect.context<never>();
 
                     const bindings = isService(node)
                       ? yield* diffBindings({
@@ -294,7 +293,7 @@ export const plan = <
                         })
                       : undefined;
 
-                    if (!diff && compare(oldState, resource.props)) {
+                    if (!diff && arePropsChanged(oldState, resource.props)) {
                       return Node<Update<Resource>>({
                         action: "update",
                         olds: oldState.props,
@@ -432,10 +431,10 @@ class DeleteResourceHasDownstreamDependencies extends Data.TaggedError(
   dependencies: string[];
 }> {}
 
-const compare = <R extends Resource>(
+const arePropsChanged = <R extends Resource>(
   oldState: ResourceState | undefined,
   newState: R["props"],
-) => JSON.stringify(oldState?.props) === JSON.stringify(newState);
+) => JSON.stringify(oldState?.props) !== JSON.stringify(newState);
 
 const diffBindings = Effect.fn(function* ({
   oldState,
