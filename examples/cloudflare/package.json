@@ -1,0 +1,28 @@
+{
+  "name": "example-cloudflare",
+  "private": true,
+  "license": "Apache-2.0",
+  "author": "Sam Goodwin <sam@alchemy.run>",
+  "homepage": "https://alchemy.run",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy-effect.git",
+    "directory": "alchemy"
+  },
+  "type": "module",
+  "scripts": {
+    "deploy": "bun ./alchemy.run.ts",
+    "destroy": "bun ./alchemy.run.ts --destroy"
+  },
+  "dependencies": {
+    "@effect/platform-node": "catalog:",
+    "@effect/platform": "catalog:",
+    "alchemy-effect": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:",
+    "@types/bun": "catalog:"
+  }
+}

@@ -1,72 +1,152 @@
-import * as cf from "cloudflare";
+import { APIConnectionError, Cloudflare, type APIError } from "cloudflare";
+import {
+  isRequestOptions,
+  type APIPromise,
+  type RequestOptions,
+} from "cloudflare/core";
+import type { ErrorData } from "cloudflare/resources";
+import { Layer } from "effect";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 
-export class CloudflareApi extends Context.Tag("CloudflareApi")<
-  CloudflareApi,
-  cf.Cloudflare
->() {}
-
-export class CloudflareAccountId extends Context.Tag("CloudflareAccountId")<
+export class CloudflareAccountId extends Context.Tag("cloudflare/account-id")<
   CloudflareAccountId,
   string
->() {}
+>() {
+  static readonly fromEnv = Layer.effect(
+    CloudflareAccountId,
+    Effect.gen(function* () {
+      const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+      if (!accountId) {
+        return yield* Effect.die("CLOUDFLARE_ACCOUNT_ID is not set");
+      }
+      return accountId;
+    }),
+  );
+}
 
-export class CloudflareEmail extends Context.Tag("CloudflareEmail")<
-  CloudflareEmail,
-  string
->() {}
+export class CloudflareApi extends Effect.Service<CloudflareApi>()(
+  "cloudflare/api",
+  {
+    effect: (options?: {
+      baseUrl?: string;
+      apiToken?: string;
+      apiKey?: string;
+      apiEmail?: string;
+    }) =>
+      Effect.succeed(
+        createRecursiveProxy(
+          new Cloudflare({
+            baseURL: options?.baseUrl ?? import.meta.env.CLOUDFLARE_BASE_URL,
+            apiToken: options?.apiToken ?? import.meta.env.CLOUDFLARE_API_TOKEN,
+            apiKey: options?.apiKey ?? import.meta.env.CLOUDFLARE_API_KEY,
+            apiEmail: options?.apiEmail ?? import.meta.env.CLOUDFLARE_API_EMAIL,
+          }),
+        ),
+      ),
+  },
+) {}
 
-export class CloudflareApiKey extends Context.Tag("CloudflareApiKey")<
-  CloudflareApiKey,
-  string
->() {}
-
-export class CloudflareApiToken extends Context.Tag("CloudflareApiToken")<
-  CloudflareApiToken,
-  string
->() {}
-
-export class CloudflareBaseUrl extends Context.Tag("CloudflareBaseUrl")<
-  CloudflareBaseUrl,
-  string
->() {}
-
-const tryGet = <Tag extends Context.Tag<any, any>>(
-  tag: Tag,
-  defaultValue: Tag["Service"] | undefined,
-) =>
-  Effect.gen(function* () {
-    const value = yield* Effect.serviceOption(tag);
-    return Option.getOrElse(value, () => defaultValue);
-  });
-
-export const cloudflareApi = Layer.effect(
-  CloudflareApi,
-  Effect.gen(function* () {
-    const email = yield* tryGet(
-      CloudflareEmail,
-      import.meta.env.CLOUDFLARE_EMAIL,
-    );
-    const apiKey = yield* tryGet(
-      CloudflareApiKey,
-      import.meta.env.CLOUDFLARE_API_KEY,
-    );
-    const apiToken = yield* tryGet(
-      CloudflareApiToken,
-      import.meta.env.CLOUDFLARE_API_TOKEN,
-    );
-    const baseURL = yield* tryGet(
-      CloudflareBaseUrl,
-      import.meta.env.CLOUDFLARE_BASE_URL,
-    );
-    return new cf.Cloudflare({
-      apiEmail: email,
-      apiKey: apiKey,
-      apiToken: apiToken,
-      baseURL: baseURL,
+export class CloudflareApiError extends Data.Error<{
+  _tag:
+    | "Connection"
+    | "BadRequest"
+    | "Authentication"
+    | "PermissionDenied"
+    | "NotFound"
+    | "Conflict"
+    | "UnprocessableEntity"
+    | "RateLimit"
+    | "InternalServerError"
+    | "Unknown";
+  message: string;
+  errors: ErrorData[];
+  cause: APIError;
+}> {
+  static from(cause: APIError): CloudflareApiError {
+    const error = new CloudflareApiError({
+      _tag: CloudflareApiError.getTag(cause),
+      message: cause.message,
+      errors: cause.errors,
+      cause: cause,
     });
-  }),
-);
+    return error;
+  }
+
+  private static getTag(error: APIError): CloudflareApiError["_tag"] {
+    if (error instanceof APIConnectionError) {
+      return "Connection";
+    }
+    switch (error.status) {
+      case 400:
+        return "BadRequest";
+      case 401:
+        return "Authentication";
+      case 403:
+        return "PermissionDenied";
+      case 404:
+        return "NotFound";
+      case 409:
+        return "Conflict";
+      case 422:
+        return "UnprocessableEntity";
+      case 429:
+        return "RateLimit";
+      case 500:
+        return "InternalServerError";
+      default:
+        return "Unknown";
+    }
+  }
+}
+
+type ToEffect<T> = {
+  [K in keyof T]: T[K] extends (...args: any[]) => any
+    ? (
+        ...args: Parameters<T[K]>
+      ) => Effect.Effect<UnwrapAPIPromise<ReturnType<T[K]>>, CloudflareApiError>
+    : T[K] extends Record<string, any>
+      ? ToEffect<T[K]>
+      : T[K];
+};
+
+type UnwrapAPIPromise<T> = T extends APIPromise<infer U> ? U : never;
+
+const createRecursiveProxy = <T extends object>(target: T): ToEffect<T> => {
+  return new Proxy(target as any, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver);
+      if (typeof value === "function") {
+        return Effect.fnUntraced(function* (...args: any[]) {
+          return yield* Effect.tryPromise({
+            try: async (signal) => {
+              let modifiedArgs: any[];
+              if (isRequestOptions(args[args.length - 1])) {
+                const options = args[args.length - 1] as RequestOptions;
+                modifiedArgs = [
+                  ...args.slice(0, -1),
+                  {
+                    ...options,
+                    signal: options?.signal
+                      ? AbortSignal.any([signal, options.signal])
+                      : signal,
+                  },
+                ];
+              } else {
+                modifiedArgs = [...args, { signal }];
+              }
+              const result = await value.apply(target, modifiedArgs);
+              return result;
+            },
+            catch: (cause) => {
+              const error = CloudflareApiError.from(cause as APIError);
+              return error;
+            },
+          });
+        });
+      }
+      return createRecursiveProxy(value);
+    },
+  });
+};

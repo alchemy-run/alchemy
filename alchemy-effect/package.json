@@ -71,10 +71,40 @@
       "import": "./lib/aws/credentials.js",
       "types": "./lib/aws/credentials.d.ts"
     },
+    "./cli": {
+      "bun": "./src/cli/index.ts",
+      "import": "./lib/cli/index.js",
+      "types": "./lib/cli/index.d.ts"
+    },
     "./cloudflare": {
       "bun": "./src/cloudflare/index.ts",
       "import": "./lib/cloudflare/index.js",
       "types": "./lib/cloudflare/index.d.ts"
+    },
+    "./cloudflare/live": {
+      "bun": "./src/cloudflare/live.ts",
+      "import": "./lib/cloudflare/live.js",
+      "types": "./lib/cloudflare/live.d.ts"
+    },
+    "./cloudflare/assets": {
+      "bun": "./src/cloudflare/worker/assets.fetch.ts",
+      "import": "./lib/cloudflare/worker/assets.fetch.js",
+      "types": "./lib/cloudflare/worker/assets.fetch.d.ts"
+    },
+    "./cloudflare/worker": {
+      "bun": "./src/cloudflare/worker/index.ts",
+      "import": "./lib/cloudflare/worker/index.js",
+      "types": "./lib/cloudflare/worker/index.d.ts"
+    },
+    "./cloudflare/kv": {
+      "bun": "./src/cloudflare/kv/index.ts",
+      "import": "./lib/cloudflare/kv/index.js",
+      "types": "./lib/cloudflare/kv/index.d.ts"
+    },
+    "./cloudflare/r2": {
+      "bun": "./src/cloudflare/r2/index.ts",
+      "import": "./lib/cloudflare/r2/index.js",
+      "types": "./lib/cloudflare/r2/index.d.ts"
     }
   },
   "dependencies": {
@@ -88,12 +118,14 @@
     "cloudflare": "catalog:",
     "esbuild": "^0.25.12",
     "fast-xml-parser": "^5.2.5",
+    "ignore": "^7.0.5",
     "itty-aws": "catalog:",
     "jszip": "^3.10.1",
     "yaml": "^2.0.0"
   },
   "devDependencies": {
     "@clack/prompts": "^0.11.0",
+    "@cloudflare/workers-types": "catalog:",
     "@effect/platform": "catalog:",
     "@effect/platform-node": "catalog:",
     "@types/aws-lambda": "catalog:",

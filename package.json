@@ -13,6 +13,7 @@
     "clean:shallow": "rm -rf alchemy-effect/*.tgz && bun tsc -b --clean",
     "build": "bun run clean:shallow && bun tsc -b && bun run --filter alchemy-effect build",
     "build:clean": "git clean -fqdx . && bun i && bun run build",
+    "download:env": "doppler secrets download --no-file --format env > .env",
     "format": "oxfmt '.' '!./alchemy-effect*/lib/' '!/**/*.mdx'",
     "format:check": "bun run format -- --check",
     "bump": "bun ./scripts/bump.ts",
@@ -38,7 +39,7 @@
     },
     "packages": [
       "alchemy-effect",
-      "example"
+      "examples/*"
     ]
   },
   "devDependencies": {
@@ -46,6 +47,7 @@
     "@types/bun": "latest",
     "@types/node": "latest",
     "changelogithub": "^13.16.1",
+    "dotenv": "^17.2.3",
     "oxfmt": "^0.9.0",
     "pkg-pr-new": "^0.0.60",
     "typescript": "catalog:",

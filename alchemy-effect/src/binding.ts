@@ -23,7 +23,7 @@ export type AnyBinding<F extends Runtime = any> = Binding<
 >;
 
 export interface Binding<
-  Run extends Runtime,
+  Run extends Runtime<any, any, any>,
   Cap extends Capability = Capability,
   Props = any,
   Attr extends Run["binding"] = any,

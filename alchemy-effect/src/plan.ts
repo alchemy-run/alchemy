@@ -183,7 +183,7 @@ export const plan = <
       Resource
     >;
   }[ServiceIDs];
-  type ExplicitResources = Exclude<Resources[number], { kind: "Service" }>;
+  type ExplicitResources = Resources[number];
   type ResourceGraph = {
     [ID in ServiceIDs]: Apply<Extract<Instance<ServiceHosts[ID]>, Resource>>;
   } & {

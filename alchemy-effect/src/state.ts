@@ -1,10 +1,10 @@
-import { FileSystem } from "@effect/platform";
 import type { PlatformError } from "@effect/platform/Error";
+import * as FileSystem from "@effect/platform/FileSystem";
+import * as Path from "@effect/platform/Path";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import path from "node:path";
 import { App } from "./app.ts";
 import type { BindNode } from "./plan.ts";
 import { isResource } from "./resource.ts";
@@ -100,6 +100,7 @@ export const localFs = Layer.effect(
   Effect.gen(function* () {
     const app = yield* App;
     const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
     const dotAlchemy = path.join(process.cwd(), ".alchemy");
     const stateDir = path.join(dotAlchemy, "state");
     const appDir = path.join(stateDir, app.name);

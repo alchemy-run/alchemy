@@ -1,5 +1,5 @@
 {
-  "extends": "../tsconfig.base.json",
+  "extends": "../../tsconfig.base.json",
   "include": ["package.json", "src/**/*.ts", "alchemy.run.ts"],
   "compilerOptions": {
     "composite": true,
@@ -11,9 +11,10 @@
     "declaration": true,
     "module": "Preserve",
     "moduleResolution": "Bundler",
-    "target": "ESNext"
+    "target": "ESNext",
+    "types": ["@cloudflare/workers-types"]
   },
   "references": [
-    { "path": "../alchemy-effect/tsconfig.json" },
+    { "path": "../../alchemy-effect/tsconfig.json" },
   ]
 }

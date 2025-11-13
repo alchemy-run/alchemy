@@ -3,10 +3,8 @@ import * as DynamoDB from "@/aws/dynamodb";
 import { apply, destroy, type } from "@/index";
 import { test } from "@/test";
 import { expect } from "@effect/vitest";
-import { LogLevel } from "effect";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Logger from "effect/Logger";
 import * as Schedule from "effect/Schedule";
 import * as S from "effect/Schema";
 
@@ -15,32 +13,29 @@ test(
   Effect.gen(function* () {
     const dynamodb = yield* DynamoDB.DynamoDBClient;
 
-    let stack;
-    {
-      class Table extends DynamoDB.Table("Table", {
-        tableName: "test",
-        items: type<{ id: string }>,
-        attributes: {
-          id: S.String,
-        },
-        partitionKey: "id",
-      }) {}
+    class Table extends DynamoDB.Table("Table", {
+      tableName: "test",
+      items: type<{ id: string }>,
+      attributes: {
+        id: S.String,
+      },
+      partitionKey: "id",
+    }) {}
 
-      stack = yield* apply(Table);
+    const stack = yield* apply(Table);
 
-      const actualTable = yield* dynamodb.describeTable({
-        TableName: stack.Table.tableName,
-      });
-      expect(actualTable.Table?.TableArn).toEqual(stack.Table.tableArn);
-    }
+    const actualTable = yield* dynamodb.describeTable({
+      TableName: stack.Table.tableName,
+    });
+    expect(actualTable.Table?.TableArn).toEqual(stack.Table.tableArn);
 
     yield* destroy();
 
-    yield* waitForTableToBeDeleted(stack.Table.tableName);
-  }).pipe(Effect.provide(AWS.live), Logger.withMinimumLogLevel(LogLevel.Info)),
+    yield* assertTableIsDeleted(stack.Table.tableName);
+  }).pipe(Effect.provide(AWS.live)),
 );
 
-const waitForTableToBeDeleted = Effect.fn(function* (tableName: string) {
+const assertTableIsDeleted = Effect.fn(function* (tableName: string) {
   const dynamodb = yield* DynamoDB.DynamoDBClient;
   dynamodb
     .describeTable({

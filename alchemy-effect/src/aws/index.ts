@@ -1,4 +1,5 @@
 import * as Layer from "effect/Layer";
+import * as ESBuild from "../esbuild.ts";
 import * as Account from "./account.ts";
 import * as Credentials from "./credentials.ts";
 import * as DynamoDB from "./dynamodb/index.ts";
@@ -13,7 +14,10 @@ import * as STS from "./sts.ts";
 export * from "./profile.ts";
 
 export const providers = Layer.mergeAll(
-  Layer.provide(Lambda.functionProvider(), Lambda.client()),
+  Layer.provide(
+    Layer.provideMerge(Lambda.functionProvider(), ESBuild.layer()),
+    Lambda.client(),
+  ),
   Layer.provide(SQS.queueProvider(), SQS.client()),
   Layer.provide(DynamoDB.tableProvider(), DynamoDB.client()),
   Layer.provide(EC2.vpcProvider(), EC2.client()),
