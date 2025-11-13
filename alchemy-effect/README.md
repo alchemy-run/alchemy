@@ -18,10 +18,10 @@ bun add alchemy-effect
 
 Type-checked Bindings ensure your IAM Policies are least-privilege - you are never missing or granting excessive permissions:
 
-<img src="./images/alchemy-effect.gif" alt="alchemy-effect type checked policies" width="600"/>
+<img src="../images/alchemy-effect.gif" alt="alchemy-effect type checked policies" width="600"/>
 
 You will receive a type error if you mess up your Bindings:
-<img src="./images/alchemy-effect-policy-error.png" alt="alchemy-effect type errors" width="600"/>
+<img src="../images/alchemy-effect-policy-error.png" alt="alchemy-effect type errors" width="600"/>
 
 > [!TIP]
 > This error means you are missing the `SendMessage<Messages>` binding (you provided `never` instead of `SendMessage<Messages>`).
@@ -29,12 +29,12 @@ You will receive a type error if you mess up your Bindings:
 ## Plan & Deploy
 An `alchemy-effect` program produces a Plan that can be reviewed prior to deployment:
 
-<img src="./images/alchemy-effect-plan.gif" alt="alchemy-effect plan video" width="600"/>
+<img src="../images/alchemy-effect-plan.gif" alt="alchemy-effect plan video" width="600"/>
 
 ## Type-Level Plan 
 All knowable information about the Plan is available at compile-time:
 
-<img src="./images/alchemy-effect-plan-type.png" alt="alchemy-effect plan type" width="600"/>
+<img src="../images/alchemy-effect-plan-type.png" alt="alchemy-effect plan type" width="600"/>
 
 > [!TIP]
 > These types can be used to implement type-level validation of infrastructure policies, e.g. disallowing publicly accessible S3 buckets.
@@ -53,16 +53,16 @@ export default Api.handler.pipe(
 ## Pluggable Layers 
 Everything (including the CLI) is provided as Effect layers:
 
-<img src="./images/alchemy-effect-layers.png" alt="alchemy-effect layers" width="600"/>
+<img src="../images/alchemy-effect-layers.png" alt="alchemy-effect layers" width="600"/>
 
 ## Literally Typed Outputs
 The output of deploying a stack is totally known at compile-time, e.g. the `.fifo` suffix of a SQS FIFO Queue:
 
-<img src="./images/alchemy-effect-output.png" alt="alchemy-effect output" width="600"/>
+<img src="../images/alchemy-effect-output.png" alt="alchemy-effect output" width="600"/>
 
 # Concepts 🔱 
 
-<img src="./images/alchemy-effect-triple.png" alt="alchemy-effect logo" width="600"/>
+<img src="../images/alchemy-effect-triple.png" alt="alchemy-effect logo" width="600"/>
 
 Infrastructure-as-Effects has three main concepts: `Resources`, `Functions (as Effects)`, and `Bindings`:
 
