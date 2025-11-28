@@ -1,20 +1,21 @@
 // biome-ignore lint/style/useImportType: UMD global
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
-import type * as Alchemy from "alchemy-effect";
 import { Box, Text } from "ink";
+import type { ApplyStatus, StatusChangeEvent } from "../../event.ts";
+import type { IPlan } from "../../plan.ts";
 import type { ProgressEventSource } from "../progress.tsx";
 import { useGlobalSpinner } from "../spinner.ts";
 
 interface PlanTask
-  extends Required<Pick<Alchemy.StatusChangeEvent, "id" | "type" | "status">> {
+  extends Required<Pick<StatusChangeEvent, "id" | "type" | "status">> {
   message?: string;
   updatedAt: number;
 }
 
 export interface PlanProgressProps {
   source: ProgressEventSource;
-  plan: Alchemy.Plan;
+  plan: IPlan;
 }
 
 export function PlanProgress(props: PlanProgressProps): React.JSX.Element {
@@ -29,7 +30,7 @@ export function PlanProgress(props: PlanProgressProps): React.JSX.Element {
     ];
     for (const [id, item] of nodes) {
       const planItem = item!;
-      const status: Alchemy.ApplyStatus =
+      const status: ApplyStatus =
         planItem.action === "noop" ? "success" : "pending";
       initialTasks.set(id, {
         id,
@@ -89,7 +90,7 @@ export function PlanProgress(props: PlanProgressProps): React.JSX.Element {
       ];
       for (const [id, item] of nodes) {
         const planItem = item!;
-        const status: Alchemy.ApplyStatus =
+        const status: ApplyStatus =
           planItem.action === "noop" ? "success" : "pending";
         initialTasks.set(id, {
           id,
@@ -146,7 +147,7 @@ export function PlanProgress(props: PlanProgressProps): React.JSX.Element {
   );
 }
 
-function statusPriority(status: Alchemy.ApplyStatus): number {
+function statusPriority(status: ApplyStatus): number {
   switch (status) {
     case "success":
     case "created":
@@ -166,9 +167,7 @@ function statusPriority(status: Alchemy.ApplyStatus): number {
   }
 }
 
-function statusColor(
-  status: Alchemy.ApplyStatus,
-): Parameters<typeof Text>[0]["color"] {
+function statusColor(status: ApplyStatus): Parameters<typeof Text>[0]["color"] {
   switch (status) {
     case "pending":
       return "gray";
@@ -190,13 +189,13 @@ function statusColor(
   }
 }
 
-function statusIcon(status: Alchemy.ApplyStatus, spinnerChar: string): string {
+function statusIcon(status: ApplyStatus, spinnerChar: string): string {
   if (isInProgress(status)) return spinnerChar;
   if (status === "fail") return "✗";
   return "✓"; // created/updated/deleted/success
 }
 
-function isInProgress(status: Alchemy.ApplyStatus): boolean {
+function isInProgress(status: ApplyStatus): boolean {
   return (
     status === "pending" ||
     status === "creating" ||

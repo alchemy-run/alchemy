@@ -1,6 +1,10 @@
 import * as Effect from "effect/Effect";
 
-import { $, Binding, type Capability, declare, toEnvKey } from "alchemy-effect";
+import { Binding } from "../../binding.ts";
+import type { Capability } from "../../capability.ts";
+import { toEnvKey } from "../../env.ts";
+import { declare, type On } from "../../policy.ts";
+import type { $ } from "../../$.ts";
 import { LambdaClient } from "./client.ts";
 import { Function } from "./function.ts";
 
@@ -8,7 +12,7 @@ export interface InvokeFunction<Resource = unknown>
   extends Capability<"AWS.Lambda.InvokeFunction", Resource> {}
 
 export const InvokeFunction = Binding<
-  <F extends Function>(func: F) => Binding<Function, InvokeFunction<$<F>>>
+  <F extends Function>(func: F) => Binding<Function, InvokeFunction<On<F>>>
 >(Function, "AWS.Lambda.InvokeFunction");
 
 export const invoke = <F extends Function>(func: F, input: any) =>

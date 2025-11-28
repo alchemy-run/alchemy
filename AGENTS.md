@@ -16,3 +16,7 @@ Conduct each engagement with the user as follows:
   - Compiling the AWS.live layer (see [aws/index.ts](alchemy-effect/src/aws/index.ts))
   - Using resources (see [example/src/api.ts](example/src/api.ts) and [example/src/consumer.ts](example/src/consumer.ts))
 3. When implementing a Resource Provider, make sure to read the [itty-aws](./alchemy-effect/node_modules/itty-aws/dist/services/*/types.d.ts)  type defnitions for that service and come up with a plan for which errors to retry, which to consider fatal, and design the overall create, update, delete flow for each of the resource lifecycle handlers. We are using effect, so we gain the benefit of type-safe errors, delcarative retry behavior (declarative flow control).
+
+Restrictions:
+1. Never use `Effect.catchAll`, always use `Effect.catchTag` or `Effect.catchTags`
+1. Always use `bun` (never npm, pnpm, yarn, etc.)

@@ -20,6 +20,8 @@ test(
     const api = yield* CloudflareApi;
     const accountId = yield* CloudflareAccountId;
 
+    yield* destroy();
+
     {
       class TestNamespace extends KV.Namespace("TestNamespace", {
         title: "test-namespace-initial",

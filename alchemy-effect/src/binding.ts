@@ -2,7 +2,7 @@ import * as Context from "effect/Context";
 import type { Effect } from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type { Capability, ICapability } from "./capability.ts";
-import type { Diff } from "./provider.ts";
+import type { Diff } from "./diff.ts";
 import type { Resource } from "./resource.ts";
 import type { Runtime } from "./runtime.ts";
 
@@ -47,7 +47,7 @@ export interface Bind<
     `${F["type"]}(${Cap["type"]}, ${Tag})`,
     BindingService<
       F,
-      Extract<Extract<Cap["resource"], Resource>["parent"], Resource>,
+      Extract<Extract<Cap["resource"], Resource>["base"], Resource>,
       F["props"]
     >
   > {

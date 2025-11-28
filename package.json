@@ -18,7 +18,8 @@
     "format:check": "bun run format -- --check",
     "bump": "bun ./scripts/bump.ts",
     "publish:npm": "bun run build && bun run --filter alchemy-effect publish:npm",
-    "prepare": "effect-language-service patch"
+    "prepare": "effect-language-service patch",
+    "test:benchmark": "bun run --filter alchemy-effect test:benchmark"
   },
   "workspaces": {
     "catalog": {
@@ -27,12 +28,13 @@
       "@cloudflare/workers-types": "^4.20250805.0",
       "@effect/platform-node": "^0.98.3",
       "@effect/platform": "^0.92.1",
+      "@effect/typeclass": "^0.38.0",
       "@types/aws-lambda": "^8.10.152",
       "@types/bun": "latest",
       "@types/node": "latest",
       "cloudflare": "^5.2.0",
       "effect": "^3.18.4",
-      "itty-aws": "^0.6.1",
+      "itty-aws": "^0.7.1",
       "typescript": "^5.9.3",
       "vite": "^7.1.9",
       "wrangler": "^4.42.2"
@@ -43,9 +45,11 @@
     ]
   },
   "devDependencies": {
+    "@ark/attest": "^0.55.0",
     "@effect/language-service": "^0.55.2",
     "@types/bun": "latest",
     "@types/node": "latest",
+    "@typescript/native-preview": "^7.0.0-dev.20251113.1",
     "changelogithub": "^13.16.1",
     "dotenv": "^17.2.3",
     "oxfmt": "^0.9.0",

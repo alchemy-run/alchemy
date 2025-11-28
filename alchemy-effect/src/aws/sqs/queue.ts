@@ -1,7 +1,6 @@
 import type * as S from "effect/Schema";
-
-import { Resource } from "alchemy-effect";
-
+import type { Input } from "../../input.ts";
+import { Resource } from "../../resource.ts";
 // required to avoid this error in consumers: "The inferred type of 'Messages' cannot be named without a reference to '../../effect-aws/node_modules/@types/aws-lambda'. This is likely not portable. A type annotation is necessary.ts(2742)"
 export type * as lambda from "aws-lambda";
 
@@ -15,7 +14,13 @@ export const Queue = Resource<{
 export interface Queue<
   ID extends string = string,
   Props extends QueueProps = QueueProps,
-> extends Resource<"AWS.SQS.Queue", ID, Props, QueueAttrs<Props>> {}
+> extends Resource<
+    "AWS.SQS.Queue",
+    ID,
+    Props,
+    QueueAttrs<Extract<Input.Resolve<Props>, QueueProps>>,
+    Queue
+  > {}
 
 export type QueueAttrs<Props extends QueueProps> = {
   queueName: Props["queueName"] extends string ? Props["queueName"] : string;

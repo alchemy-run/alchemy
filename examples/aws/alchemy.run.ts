@@ -33,10 +33,7 @@ const layers = Layer.provideMerge(
   Layer.mergeAll(platform, app),
 );
 
-await Alchemy.apply({
-  phase: process.argv.includes("--destroy") ? "destroy" : "update",
-  resources: [Api, Consumer],
-}).pipe(
+await Alchemy.apply(Api, Consumer).pipe(
   Effect.provide(layers),
   Effect.tap((stack) =>
     Effect.log({

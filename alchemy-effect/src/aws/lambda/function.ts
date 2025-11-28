@@ -1,9 +1,11 @@
-import { Runtime, type Capability, type RuntimeProps } from "alchemy-effect";
+import type { Capability } from "../../capability.ts";
+import { Runtime, type RuntimeProps } from "../../runtime.ts";
 import type * as IAM from "../iam.ts";
 
 export type { Context } from "aws-lambda";
 
-export interface FunctionProps<Req = any> extends RuntimeProps<Function, Req> {
+export interface FunctionProps<Req = unknown>
+  extends RuntimeProps<Function, Req> {
   functionName?: string;
   functionArn?: string;
   main: string;
@@ -38,8 +40,9 @@ export interface FunctionBinding {
 }
 
 export interface Function extends Runtime<"AWS.Lambda.Function"> {
-  props: FunctionProps;
-  attr: FunctionAttr<Extract<this["props"], FunctionProps>>;
+  props: FunctionProps<any>;
+  attr: FunctionAttr<Extract<this["props"], FunctionProps<any>>>;
   binding: FunctionBinding;
+  base: Function;
 }
 export const Function = Runtime("AWS.Lambda.Function")<Function>();

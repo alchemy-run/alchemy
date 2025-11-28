@@ -1,6 +1,15 @@
+import {
+  apply,
+  destroy,
+  type,
+  plan,
+  type ResourceGraph,
+  type TraverseResources,
+  type TransitiveResources,
+} from "@/index";
+
 import * as AWS from "@/aws";
 import * as DynamoDB from "@/aws/dynamodb";
-import { apply, destroy, type } from "@/index";
 import { test } from "@/test";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";

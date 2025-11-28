@@ -1,7 +1,9 @@
 {
-  "typescript.experimental.useTsgo": false,
+  "typescript.experimental.useTsgo": true,
   "typescript.tsdk": "node_modules/typescript/lib",
   "typescript.enablePromptUseWorkspaceTsdk": true,
+  "typescript.preferences.importModuleSpecifier": "relative",
+  "typescript.preferences.importModuleSpecifierEnding": "js",
   "oxc.fmt.experimental": true, 
   "oxc.enable": true,
   "editor.defaultFormatter": "oxc.oxc-vscode",

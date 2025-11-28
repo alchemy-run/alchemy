@@ -1,13 +1,9 @@
-import {
-  Binding,
-  declare,
-  Policy,
-  toEnvKey,
-  type Capability,
-  type From,
-} from "alchemy-effect";
 import { Effect } from "effect";
 import type { ReturnConsumedCapacity } from "itty-aws/dynamodb";
+import { Binding } from "../../binding.ts";
+import type { Capability } from "../../capability.ts";
+import { toEnvKey } from "../../env.ts";
+import { declare, type From, type Policy } from "../../policy.ts";
 import { Function } from "../lambda/index.ts";
 import { fromAttributeValue } from "./attribute-value.ts";
 import { DynamoDBClient } from "./client.ts";

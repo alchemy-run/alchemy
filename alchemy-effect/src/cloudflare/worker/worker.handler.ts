@@ -1,7 +1,7 @@
 import type * as runtime from "@cloudflare/workers-types";
-import type { Capability } from "alchemy-effect";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type { Capability } from "../../capability.ts";
 import { CloudflareContext } from "../context.ts";
 
 type Handler = (

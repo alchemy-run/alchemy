@@ -46,8 +46,8 @@ export const workerProvider = () =>
         yield* Effect.logDebug("setWorkerSubdomain", subdomain);
       });
 
-      const createWorkerName = (id: string, props: WorkerProps | undefined) =>
-        props?.name ?? `${app.name}-${id}-${app.stage}`.toLowerCase();
+      const createWorkerName = (id: string, name: string | undefined) =>
+        name ?? `${app.name}-${id}-${app.stage}`.toLowerCase();
 
       const prepareAssets = Effect.fnUntraced(function* (
         assets: WorkerProps["assets"],
@@ -83,7 +83,9 @@ export const workerProvider = () =>
         };
       });
 
-      const prepareMetadata = Effect.fnUntraced(function* (props: WorkerProps) {
+      const prepareMetadata = Effect.fnUntraced(function* (
+        props: WorkerProps<any>,
+      ) {
         const metadata: Workers.ScriptUpdateParams.Metadata = {
           assets: undefined,
           bindings: [],
@@ -113,13 +115,13 @@ export const workerProvider = () =>
 
       const putWorker = Effect.fnUntraced(function* (
         id: string,
-        news: WorkerProps,
+        news: WorkerProps<any>,
         bindings: Worker["binding"][],
-        olds: WorkerProps | undefined,
-        output: WorkerAttr<WorkerProps> | undefined,
+        olds: WorkerProps<any> | undefined,
+        output: WorkerAttr<WorkerProps<any>> | undefined,
         session: ScopedPlanStatusSession,
       ) {
-        const name = createWorkerName(id, news);
+        const name = createWorkerName(id, news.name);
         const [assets, bundle, metadata] = yield* Effect.all([
           prepareAssets(news.assets),
           prepareBundle(id, news.main),
@@ -180,7 +182,7 @@ export const workerProvider = () =>
             assets: assets?.hash,
             bundle: bundle.hash,
           },
-        } as WorkerAttr<WorkerProps>;
+        } as WorkerAttr<WorkerProps<any>>;
       });
 
       return {
@@ -188,7 +190,7 @@ export const workerProvider = () =>
           if (output.accountId !== accountId) {
             return { action: "replace" };
           }
-          const workerName = createWorkerName(id, news);
+          const workerName = createWorkerName(id, news.name);
           if (workerName !== output.name) {
             return { action: "replace" };
           }
@@ -204,7 +206,7 @@ export const workerProvider = () =>
           }
         }),
         create: Effect.fnUntraced(function* ({ id, news, bindings, session }) {
-          const name = createWorkerName(id, news);
+          const name = createWorkerName(id, news.name);
           const existing = yield* api.workers.beta.workers
             .get(name, {
               account_id: accountId,

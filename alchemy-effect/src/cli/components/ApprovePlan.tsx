@@ -1,13 +1,13 @@
 // biome-ignore lint/style/useImportType: UMD global
 import React, { useState } from "react";
 
-import type * as Alchemy from "alchemy-effect";
 import { Box, Text, useApp, useInput } from "ink";
+import type { IPlan as AlchemyPlan } from "../../plan.ts";
 
 import { Plan } from "./Plan.tsx";
 
 export interface ApprovePlanProps {
-  plan: Alchemy.Plan;
+  plan: AlchemyPlan;
   approve: (result: boolean) => void;
 }
 

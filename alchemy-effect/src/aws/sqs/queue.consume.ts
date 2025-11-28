@@ -1,5 +1,5 @@
-import { type Capability } from "alchemy-effect";
 import type * as lambda from "aws-lambda";
+import type { Capability } from "../../capability.ts";
 import { Queue } from "./queue.ts";
 
 export type QueueRecord<Data> = Omit<lambda.SQSRecord, "body"> & {

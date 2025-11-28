@@ -1,7 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
-import { App, type ProviderService } from "alchemy-effect";
+import { App } from "../../app.ts";
+import type { ProviderService } from "../../provider.ts";
 import { Account } from "../account.ts";
 import { Region } from "../region.ts";
 import { SQSClient } from "./client.ts";
@@ -14,7 +15,13 @@ export const queueProvider = () =>
       const app = yield* App;
       const region = yield* Region;
       const accountId = yield* Account;
-      const createQueueName = (id: string, props: QueueProps) =>
+      const createQueueName = (
+        id: string,
+        props: {
+          queueName?: string | undefined;
+          fifo?: boolean;
+        },
+      ) =>
         props.queueName ??
         `${app.name}-${id}-${app.stage}${props.fifo ? ".fifo" : ""}`;
       const createAttributes = (props: QueueProps) => ({

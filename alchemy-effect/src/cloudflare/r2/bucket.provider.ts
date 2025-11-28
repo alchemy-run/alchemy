@@ -11,8 +11,8 @@ export const bucketProvider = () =>
       const accountId = yield* CloudflareAccountId;
       const app = yield* App;
 
-      const createName = (id: string, props: BucketProps) =>
-        props.name ?? `${app.name}-${id}-${app.stage}`.toLowerCase();
+      const createName = (id: string, name: string | undefined) =>
+        name ?? `${app.name}-${id}-${app.stage}`.toLowerCase();
 
       const mapResult = <Props extends BucketProps>(
         bucket: R2.Bucket,
@@ -30,7 +30,7 @@ export const bucketProvider = () =>
           Effect.sync(() => {
             if (
               output.accountId !== accountId ||
-              output.name !== createName(id, news) ||
+              output.name !== createName(id, news.name) ||
               output.jurisdiction !== (news.jurisdiction ?? "default") ||
               olds.locationHint !== news.locationHint
             ) {
@@ -44,7 +44,7 @@ export const bucketProvider = () =>
         create: Effect.fnUntraced(function* ({ id, news }) {
           const bucket = yield* api.r2.buckets.create({
             account_id: accountId,
-            name: createName(id, news),
+            name: createName(id, news.name),
             storageClass: news.storageClass,
             jurisdiction: news.jurisdiction,
             locationHint: news.locationHint,
@@ -69,7 +69,7 @@ export const bucketProvider = () =>
         read: Effect.fnUntraced(function* ({ id, output, olds }) {
           const params = {
             account_id: output?.accountId ?? accountId,
-            name: output?.name ?? createName(id, olds ?? {}),
+            name: output?.name ?? createName(id, olds?.name),
           };
           return yield* api.r2.buckets
             .get(params.name, { account_id: params.account_id })

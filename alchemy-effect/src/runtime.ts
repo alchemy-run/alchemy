@@ -7,6 +7,7 @@ import type { Policy } from "./policy.ts";
 import type { ProviderService } from "./provider.ts";
 import type { Resource, ResourceTags } from "./resource.ts";
 import type { IService, Service } from "./service.ts";
+import type { Input } from "./input.ts";
 
 export type RuntimeHandler<
   Inputs extends any[] = any[],
@@ -45,7 +46,7 @@ export interface Runtime<
   Type extends string = string,
   Handler = unknown,
   Props = unknown,
-> extends Resource<Type, string, Props, unknown> {
+> extends Resource<Type, string, Props> {
   type: Type;
   props: Props;
   handler: Handler;

@@ -1,11 +1,12 @@
 // biome-ignore lint/style/useImportType: UMD global
 import React, { useMemo } from "react";
 
-import type { BindNode, Capability, CRUD, Plan } from "alchemy-effect";
 import { Box, Text } from "ink";
+import type { Capability } from "../../capability.ts";
+import type { IPlan as AlchemyPlan, BindNode, CRUD } from "../../plan.ts";
 
 export interface PlanProps {
-  plan: Plan;
+  plan: AlchemyPlan;
 }
 export function Plan({ plan }: PlanProps): React.JSX.Element {
   const items = useMemo(

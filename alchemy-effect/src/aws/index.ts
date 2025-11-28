@@ -18,9 +18,10 @@ export const providers = Layer.mergeAll(
     Layer.provideMerge(Lambda.functionProvider(), ESBuild.layer()),
     Lambda.client(),
   ),
-  Layer.provide(SQS.queueProvider(), SQS.client()),
-  Layer.provide(DynamoDB.tableProvider(), DynamoDB.client()),
-  Layer.provide(EC2.vpcProvider(), EC2.client()),
+  Layer.provideMerge(SQS.queueProvider(), SQS.client()),
+  Layer.provideMerge(DynamoDB.tableProvider(), DynamoDB.client()),
+  Layer.provideMerge(EC2.vpcProvider(), EC2.client()),
+  Layer.provideMerge(EC2.subnetProvider(), EC2.client()),
 );
 
 export const bindings = Layer.mergeAll(

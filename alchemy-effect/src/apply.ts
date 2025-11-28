@@ -5,17 +5,22 @@ import type { Simplify } from "effect/Types";
 import { PlanReviewer, type PlanRejected } from "./approve.ts";
 import type { AnyBinding, BindingService } from "./binding.ts";
 import type { ApplyEvent, ApplyStatus } from "./event.ts";
+import * as Output from "./output.ts";
 import {
   plan,
   type BindNode,
   type Create,
   type CRUD,
   type Delete,
+  type IPlan,
   type Plan,
   type Update,
+  type DerivePlan,
+  type BindingTags,
 } from "./plan.ts";
-import type { Resource } from "./resource.ts";
-import type { Service } from "./service.ts";
+import type { Instance } from "./policy.ts";
+import type { AnyResource, Resource } from "./resource.ts";
+import type { AnyService, Service } from "./service.ts";
 import { State } from "./state.ts";
 
 export interface PlanStatusSession {
@@ -30,40 +35,45 @@ export interface ScopedPlanStatusSession extends PlanStatusSession {
 export class PlanStatusReporter extends Context.Tag("PlanStatusReporter")<
   PlanStatusReporter,
   {
-    start(plan: Plan): Effect.Effect<PlanStatusSession, never>;
+    start(plan: IPlan): Effect.Effect<PlanStatusSession, never>;
   }
 >() {}
 
-export const apply: typeof applyPlan &
-  typeof applyResources &
-  typeof applyResourcesPhase = (...args: any[]): any =>
-  Effect.isEffect(args[0])
-    ? applyPlan(args[0] as any)
-    : args.length === 1 && "phase" in args[0]
-      ? applyResourcesPhase(args[0])
-      : applyResources(...args);
+export type ApplyEffect<
+  P extends IPlan,
+  Err = never,
+  Req = never,
+> = Effect.Effect<
+  {
+    [k in keyof AppliedPlan<P>]: AppliedPlan<P>[k];
+  },
+  Err | PlanRejected,
+  Req
+>;
 
-export const applyResourcesPhase = <
-  const Phase extends "update" | "destroy",
-  const Resources extends (Service | Resource)[],
->(props: {
-  resources: Resources;
-  phase: Phase;
-}) => applyPlan(plan(props));
+export type AppliedPlan<P extends IPlan> = {
+  [id in keyof P["resources"]]: P["resources"][id] extends
+    | Delete<Resource>
+    | undefined
+    | never
+    ? never
+    : Simplify<P["resources"][id]["resource"]["attr"]>;
+};
 
-export const applyResources = <const Resources extends (Service | Resource)[]>(
+export const apply = <
+  const Resources extends (AnyService | AnyResource)[] = never,
+>(
   ...resources: Resources
-) =>
-  applyPlan(
-    plan({
-      phase: "update",
-      resources,
-    }),
-  );
+): ApplyEffect<
+  DerivePlan<Instance<Resources[number]>>,
+  never,
+  State | BindingTags<Instance<Resources[number]>>
+  // TODO(sam): don't cast to any
+> => applyPlan(plan(...resources)) as any;
 
-export const applyPlan = <P extends Plan, Err, Req>(
+export const applyPlan = <P extends IPlan, Err = never, Req = never>(
   plan: Effect.Effect<P, Err, Req>,
-) =>
+): ApplyEffect<P, Err, Req> =>
   plan.pipe(
     Effect.flatMap((plan) =>
       Effect.gen(function* () {
@@ -90,6 +100,18 @@ export const applyPlan = <P extends Plan, Err, Req>(
         ): Effect.Effect<T, Err, Req> =>
           Effect.isEffect(effect) ? effect : Effect.succeed(effect);
 
+        const resolveUpstream = Effect.fn(function* (resourceId: string) {
+          const upstreamNode = plan.resources[resourceId];
+          const upstreamAttr = upstreamNode
+            ? yield* apply(upstreamNode)
+            : yield* Effect.dieMessage(`Resource ${resourceId} not found`);
+          return {
+            resourceId,
+            upstreamAttr,
+            upstreamNode,
+          };
+        });
+
         const resolveBindingUpstream = Effect.fn(function* ({
           node,
           resource,
@@ -104,10 +126,8 @@ export const applyPlan = <P extends Plan, Err, Req>(
           const provider = yield* binding.Tag;
 
           const resourceId: string = node.binding.capability.resource.id;
-          const upstreamNode = plan.resources[resourceId];
-          const upstreamAttr = resource
-            ? yield* apply(upstreamNode)
-            : yield* Effect.dieMessage(`Resource ${resourceId} not found`);
+          const { upstreamAttr, upstreamNode } =
+            yield* resolveUpstream(resourceId);
 
           return {
             resourceId,
@@ -221,23 +241,21 @@ export const applyPlan = <P extends Plan, Err, Req>(
           node,
         ) =>
           Effect.gen(function* () {
-            const checkpoint = <Out, Err>(
-              effect: Effect.Effect<Out, Err, never>,
-            ) => effect.pipe(Effect.flatMap((output) => saveState({ output })));
-
             const saveState = <Output>({
               output,
               bindings = node.bindings,
+              news,
             }: {
               output: Output;
               bindings?: BindNode[];
+              news: any;
             }) =>
               state
                 .set(node.resource.id, {
                   id: node.resource.id,
                   type: node.resource.type,
                   status: node.action === "create" ? "created" : "updated",
-                  props: node.resource.props,
+                  props: news,
                   output,
                   bindings,
                 })
@@ -271,10 +289,25 @@ export const applyPlan = <P extends Plan, Err, Req>(
                   attr,
                   phase,
                 }: {
-                  node: Create<Resource> | Update<Resource>;
+                  node: Create | Update;
                   attr: any;
                   phase: "create" | "update";
                 }) {
+                  const upstream = Object.fromEntries(
+                    yield* Effect.all(
+                      Object.entries(Output.resolveUpstream(node.news)).map(
+                        ([id, resource]) =>
+                          resolveUpstream(id).pipe(
+                            Effect.map(({ upstreamAttr }) => [
+                              id,
+                              upstreamAttr,
+                            ]),
+                          ),
+                      ),
+                    ),
+                  );
+                  const news = yield* Output.evaluate(node.news, upstream);
+
                   yield* report(phase === "create" ? "creating" : "updating");
 
                   let bindingOutputs = yield* attachBindings({
@@ -282,7 +315,7 @@ export const applyPlan = <P extends Plan, Err, Req>(
                     bindings: node.bindings,
                     target: {
                       id,
-                      props: node.news,
+                      props: news,
                       attr,
                     },
                   });
@@ -293,7 +326,7 @@ export const applyPlan = <P extends Plan, Err, Req>(
                       : node.provider.update
                   )({
                     id,
-                    news: node.news,
+                    news,
                     bindings: bindingOutputs,
                     session: scopedSession,
                     ...(node.action === "update"
@@ -316,12 +349,13 @@ export const applyPlan = <P extends Plan, Err, Req>(
                     bindingOutputs,
                     target: {
                       id,
-                      props: node.news,
+                      props: news,
                       attr,
                     },
                   });
 
                   yield* saveState({
+                    news,
                     output,
                     bindings: node.bindings.map((binding, i) => ({
                       ...binding,
@@ -364,11 +398,7 @@ export const applyPlan = <P extends Plan, Err, Req>(
                   yield* Effect.all(
                     node.downstream.map((dep) =>
                       dep in plan.resources
-                        ? apply(
-                            plan.resources[
-                              dep
-                            ] as P["resources"][keyof P["resources"]],
-                          )
+                        ? apply(plan.resources[dep] as any)
                         : Effect.void,
                     ),
                   );
@@ -399,29 +429,30 @@ export const applyPlan = <P extends Plan, Err, Req>(
                   });
                   const create = Effect.gen(function* () {
                     yield* report("creating");
-                    return yield* (
-                      node.provider
-                        .create({
-                          id,
-                          news: node.news,
-                          // TODO(sam): these need to only include attach actions
-                          bindings: yield* attachBindings({
-                            resource,
-                            bindings: node.bindings,
-                            target: {
-                              id,
-                              props: node.news,
-                              attr: node.attributes,
-                            },
-                          }),
-                          session: scopedSession,
-                        })
-                        // TODO(sam): delete and create will conflict here, we need to extend the state store for replace
-                        .pipe(
-                          checkpoint,
-                          Effect.tap(() => report("created")),
-                        )
-                    );
+
+                    // TODO(sam): delete and create will conflict here, we need to extend the state store for replace
+                    return yield* node.provider
+                      .create({
+                        id,
+                        news: node.news,
+                        // TODO(sam): these need to only include attach actions
+                        bindings: yield* attachBindings({
+                          resource,
+                          bindings: node.bindings,
+                          target: {
+                            id,
+                            // TODO(sam): resolve the news
+                            props: node.news,
+                            attr: node.attributes,
+                          },
+                        }),
+                        session: scopedSession,
+                      })
+                      .pipe(
+                        Effect.tap((output) =>
+                          saveState({ news: node.news, output }),
+                        ),
+                      );
                   });
                   if (!node.deleteFirst) {
                     yield* destroy;
@@ -457,20 +488,4 @@ export const applyPlan = <P extends Plan, Err, Req>(
         return resources;
       }),
     ),
-  ) as Effect.Effect<
-    "update" extends P["phase"]
-      ?
-          | {
-              [id in keyof P["resources"]]: P["resources"][id] extends
-                | Delete<Resource>
-                | undefined
-                | never
-                ? never
-                : Simplify<P["resources"][id]["resource"]["attr"]>;
-            }
-          // union distribution isn't happening, so we gotta add this additional void here just in case
-          | ("destroy" extends P["phase"] ? void : never)
-      : void,
-    Err | PlanRejected,
-    Req
-  >;
+  ) as ApplyEffect<P>;

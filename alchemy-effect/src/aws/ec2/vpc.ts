@@ -1,4 +1,5 @@
 import type * as EC2 from "itty-aws/ec2";
+import type { Input } from "../../input.ts";
 import { Resource } from "../../resource.ts";
 import type { AccountID } from "../account.ts";
 import type { RegionID } from "../region.ts";
@@ -13,7 +14,17 @@ export const Vpc = Resource<{
 export interface Vpc<
   ID extends string = string,
   Props extends VpcProps = VpcProps,
-> extends Resource<"AWS.EC2.VPC", ID, Props, VpcAttrs<Props>> {}
+> extends Resource<
+    "AWS.EC2.VPC",
+    ID,
+    Props,
+    VpcAttrs<Input.Resolve<Props>>,
+    Vpc
+  > {}
+
+export type VpcId = `vpc-${string}`;
+export const VpcId = <const S extends string>(value: S): S & VpcId =>
+  value as S & VpcId;
 
 export interface VpcProps {
   /**
@@ -26,7 +37,7 @@ export interface VpcProps {
   /**
    * The ID of an IPv4 IPAM pool you want to use for allocating this VPC's CIDR.
    */
-  ipv4IpamPoolId?: string;
+  ipv4IpamPoolId?: Input<string>;
 
   /**
    * The netmask length of the IPv4 CIDR you want to allocate to this VPC from an IPAM pool.
@@ -36,7 +47,7 @@ export interface VpcProps {
   /**
    * The ID of an IPv6 IPAM pool which will be used to allocate this VPC an IPv6 CIDR.
    */
-  ipv6IpamPoolId?: string;
+  ipv6IpamPoolId?: Input<string>;
 
   /**
    * The netmask length of the IPv6 CIDR you want to allocate to this VPC from an IPAM pool.
@@ -51,12 +62,12 @@ export interface VpcProps {
   /**
    * The ID of an IPv6 address pool from which to allocate the IPv6 CIDR block.
    */
-  ipv6Pool?: string;
+  ipv6Pool?: Input<string>;
 
   /**
    * The Availability Zone or Local Zone Group name for the IPv6 CIDR block.
    */
-  ipv6CidrBlockNetworkBorderGroup?: string;
+  ipv6CidrBlockNetworkBorderGroup?: Input<string>;
 
   /**
    * The tenancy options for instances launched into the VPC.
@@ -85,14 +96,14 @@ export interface VpcProps {
    * Tags to assign to the VPC.
    * These will be merged with alchemy auto-tags (alchemy::app, alchemy::stage, alchemy::id).
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, Input<string>>;
 }
 
-export interface VpcAttrs<Props extends VpcProps> {
+export interface VpcAttrs<Props extends VpcProps = VpcProps> {
   /**
    * The ID of the VPC.
    */
-  vpcId: string;
+  vpcId: VpcId;
 
   /**
    * The Amazon Resource Name (ARN) of the VPC.

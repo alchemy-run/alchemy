@@ -177,8 +177,8 @@ export const localFs = Layer.effect(
   }),
 );
 
-export const inMemory = () => {
-  const state = new Map<string, any>();
+export const inMemory = (initialState: Record<string, any> = {}) => {
+  const state = new Map<string, any>(Object.entries(initialState));
   return Layer.succeed(State, {
     listApps: () => Effect.succeed([]),
     // oxlint-disable-next-line require-yield

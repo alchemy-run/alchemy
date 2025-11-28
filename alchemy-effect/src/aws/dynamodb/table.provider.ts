@@ -3,8 +3,10 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 
-import { App, type Provider, type ProviderService } from "alchemy-effect";
 import type { TimeToLiveSpecification } from "itty-aws/dynamodb";
+import { App } from "../../app.ts";
+import type { Input } from "../../input.ts";
+import type { Provider, ProviderService } from "../../provider.ts";
 import { createTagger, hasTags } from "../../tags.ts";
 import { Account } from "../account.ts";
 import { Region } from "../region.ts";
@@ -13,6 +15,7 @@ import { DynamoDBClient } from "./client.ts";
 import {
   Table,
   type AnyTable,
+  type AttributesSchema,
   type TableAttrs,
   type TableProps,
 } from "./table.ts";
@@ -20,23 +23,24 @@ import {
 // we add an explict type to simplify the Layer type errors because the Table interface has a lot of type args
 export const tableProvider = (): Layer.Layer<
   Provider<AnyTable>,
-  any,
+  never,
   App | DynamoDBClient | Region | Account
 > =>
   Table.provider.effect(
-    // @ts-expect-error
     Effect.gen(function* () {
       const dynamodb = yield* DynamoDBClient;
       const app = yield* App;
       const region = yield* Region;
       const accountId = yield* Account;
 
-      const createTableName = (id: string, props: TableProps) =>
-        props.tableName ?? `${app.name}-${id}-${app.stage}`;
+      const createTableName = (
+        id: string,
+        props: Input.ResolveProps<TableProps>,
+      ) => props.tableName ?? `${app.name}-${id}-${app.stage}`;
 
       const tagged = yield* createTagger();
 
-      const toKeySchema = (props: TableProps) => [
+      const toKeySchema = (props: Input.ResolveProps<TableProps>) => [
         {
           AttributeName: props.partitionKey as string,
           KeyType: "HASH" as const,
@@ -51,8 +55,10 @@ export const tableProvider = (): Layer.Layer<
           : []),
       ];
 
-      const toAttributeDefinitions = (props: TableProps) =>
-        Object.entries(props.attributes)
+      const toAttributeDefinitions = (
+        attributes: AttributesSchema<any, any, any>,
+      ) =>
+        Object.entries(attributes)
           .flatMap(([name, schema]) => {
             const type = toAttributeType(schema);
             if (isScalarAttributeType(type)) {
@@ -69,9 +75,11 @@ export const tableProvider = (): Layer.Layer<
           })
           .sort((a, b) => a.AttributeName.localeCompare(b.AttributeName));
 
-      const toAttributeDefinitionsMap = (props: TableProps) =>
+      const toAttributeDefinitionsMap = (
+        attributes: AttributesSchema<any, any, any>,
+      ) =>
         Object.fromEntries(
-          toAttributeDefinitions(props).map(
+          toAttributeDefinitions(attributes).map(
             (def) => [def.AttributeName, def.AttributeType] as const,
           ),
         );
@@ -116,34 +124,26 @@ export const tableProvider = (): Layer.Layer<
           );
 
       return {
-        diff: Effect.fn(function* ({ id, news, olds }) {
-          const oldTableName = createTableName(id, olds);
-          const newTableName = createTableName(id, news);
-          if (oldTableName !== newTableName) {
-            // TODO(sam): if the name is hard-coded, REPLACE is impossible - we need a suffix
-            return { action: "replace" } as const;
-          }
-
+        diff: Effect.fn(function* ({ news, olds }) {
           if (
+            // TODO(sam): if the name is hard-coded, REPLACE is impossible - we need a suffix
+            news.tableName !== olds.tableName ||
             olds.partitionKey !== news.partitionKey ||
             olds.sortKey !== news.sortKey
           ) {
             return { action: "replace" } as const;
           }
-          const oldAttributeDefinitions = toAttributeDefinitionsMap(olds);
-          const newAttributeDefinitions = toAttributeDefinitionsMap(news);
-          for (const [name, type] of Object.entries(oldAttributeDefinitions)) {
+          const oldAttrs = toAttributeDefinitionsMap(olds.attributes);
+          const newAttrs = toAttributeDefinitionsMap(news.attributes);
+          for (const [name, type] of Object.entries(oldAttrs)) {
             // CloudFormation requires that editing an existing AttributeDefinition is a replace
-            if (newAttributeDefinitions[name] !== type) {
+            if (newAttrs[name] !== type) {
               return { action: "replace" } as const;
             }
           }
-
           // TODO(sam):
           // Replacements:
           // 1. if you change ImportSourceSpecification
-
-          return { action: "noop" } as const;
         }),
 
         create: Effect.fn(function* ({ id, news, session }) {
@@ -154,7 +154,7 @@ export const tableProvider = (): Layer.Layer<
               TableName: tableName,
               TableClass: news.tableClass,
               KeySchema: toKeySchema(news),
-              AttributeDefinitions: toAttributeDefinitions(news),
+              AttributeDefinitions: toAttributeDefinitions(news.attributes),
               BillingMode: news.billingMode ?? "PAY_PER_REQUEST",
               SSESpecification: news.sseSpecification,
               WarmThroughput: news.warmThroughput,
@@ -194,17 +194,19 @@ export const tableProvider = (): Layer.Layer<
           return {
             tableName,
             tableId: response.TableId!,
-            tableArn: response.TableArn! as TableAttrs<TableProps>["tableArn"],
+            tableArn: response.TableArn! as TableAttrs<
+              Input.Resolve<TableProps>
+            >["tableArn"],
             partitionKey: news.partitionKey,
             sortKey: news.sortKey,
-          } satisfies TableAttrs<TableProps> as TableAttrs<any>;
+          } satisfies TableAttrs<Input.Resolve<TableProps>> as TableAttrs<any>;
         }),
 
         update: Effect.fn(function* ({ output, news, olds }) {
           yield* dynamodb.updateTable({
             TableName: output.tableName,
             TableClass: news.tableClass,
-            AttributeDefinitions: toAttributeDefinitions(news),
+            AttributeDefinitions: toAttributeDefinitions(news.attributes),
             BillingMode: news.billingMode ?? "PAY_PER_REQUEST",
             SSESpecification: news.sseSpecification,
             WarmThroughput: news.warmThroughput,
@@ -255,7 +257,7 @@ export const tableProvider = (): Layer.Layer<
                   e._tag === "ResourceInUseException" ||
                   e._tag === "InternalServerError" ||
                   e._tag === "TimeoutException",
-                schedule: Schedule.fixed(100),
+                schedule: Schedule.exponential(100),
               }),
             );
 
@@ -275,6 +277,6 @@ export const tableProvider = (): Layer.Layer<
             }
           }
         }),
-      } satisfies ProviderService<Table<string, TableProps>>;
+      } satisfies ProviderService<Table<string, TableProps<unknown>>>;
     }),
   );

@@ -23,13 +23,20 @@
     "build": "bun bundle && bun pm pack",
     "bundle": "tsdown",
     "bundle:watch": "tsdown --watch",
-    "publish:npm": "cp ../README.md . && bun publish && rm README.md"
+    "publish:npm": "cp ../README.md . && bun publish && rm README.md",
+    "test": "vitest run",
+    "test:benchmark": "tsx --tsconfig tsconfig.test.json test/types.benchmark.ts"
   },
   "exports": {
     ".": {
       "bun": "./src/index.ts",
       "import": "./lib/index.js",
       "types": "./src/index.d.ts"
+    },
+    "./Output": {
+      "bun": "./src/output.ts",
+      "import": "./lib/output.js",
+      "types": "./lib/output.d.ts"
     },
     "./aws": {
       "bun": "./src/aws/index.ts",
@@ -128,6 +135,7 @@
     "@cloudflare/workers-types": "catalog:",
     "@effect/platform": "catalog:",
     "@effect/platform-node": "catalog:",
+    "@effect/typeclass": "catalog:",
     "@types/aws-lambda": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
@@ -137,7 +145,9 @@
     "react": "^19.2.0",
     "react-devtools-core": "^7.0.1",
     "tsconfig-paths": "^4.2.0",
-    "tsdown": "^0.15.4"
+    "tsdown": "^0.15.4",
+    "tsx": "^4.20.6",
+    "typescript": "catalog:"
   },
   "peerDependencies": {
     "@effect/platform": "*",

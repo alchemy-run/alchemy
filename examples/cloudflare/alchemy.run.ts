@@ -37,15 +37,10 @@ const layers = Layer.provideMerge(
   Layer.mergeAll(platform, app),
 );
 
-const stack = await Alchemy.apply({
-  phase: process.argv.includes("--destroy") ? "destroy" : "update",
-  resources: [Api],
-}).pipe(
+const stack = await Alchemy.apply(Api).pipe(
   Effect.provide(layers),
   Effect.tap((stack) => Effect.log(stack?.Api.url)),
   Effect.runPromise,
 );
 
-if (stack) {
-  console.log(stack.Api.url);
-}
+console.log(stack.Api.url);

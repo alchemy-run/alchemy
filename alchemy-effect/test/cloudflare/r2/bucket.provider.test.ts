@@ -20,6 +20,8 @@ test(
     const api = yield* CloudflareApi;
     const accountId = yield* CloudflareAccountId;
 
+    yield* destroy();
+
     {
       class TestBucket extends R2.Bucket("TestBucket", {
         name: "test-bucket-initial",

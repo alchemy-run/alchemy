@@ -1,6 +1,7 @@
 import type { Workers } from "cloudflare/resources";
 import { Runtime, type RuntimeProps } from "../../runtime.ts";
 import type * as Assets from "./assets.fetch.ts";
+import type { Input } from "../../input.ts";
 
 export const WorkerType = "Cloudflare.Worker" as const;
 export type WorkerType = typeof WorkerType;
@@ -29,7 +30,7 @@ export type WorkerProps<Req = any> = RuntimeProps<
         assets: string | Worker.AssetsProps;
       });
 
-export type WorkerAttr<Props extends WorkerProps> = {
+export type WorkerAttr<Props extends WorkerProps<any>> = {
   id: string;
   name: Props["name"] extends string ? Props["name"] : string;
   logpush: Props["logpush"] extends boolean ? Props["logpush"] : boolean;
@@ -48,8 +49,9 @@ export type WorkerAttr<Props extends WorkerProps> = {
 };
 
 export interface Worker extends Runtime<WorkerType> {
-  props: WorkerProps;
-  attr: WorkerAttr<Extract<this["props"], WorkerProps>>;
+  base: Worker;
+  props: WorkerProps<any>;
+  attr: WorkerAttr<Extract<this["props"], WorkerProps<any>>>;
   binding: {
     bindings: Worker.Binding[];
   };

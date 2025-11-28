@@ -1,6 +1,8 @@
 import type * as runtime from "@cloudflare/workers-types";
-import { Binding, declare, type Capability } from "alchemy-effect";
 import * as Effect from "effect/Effect";
+import { Binding } from "../../binding.ts";
+import type { Capability } from "../../capability.ts";
+import { declare } from "../../policy.ts";
 import { getCloudflareEnvKey } from "../context.ts";
 import { Worker } from "./worker.ts";
 

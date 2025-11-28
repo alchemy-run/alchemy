@@ -19,6 +19,7 @@ export interface Policy<
   in out Capabilities,
   Tags = unknown,
 > {
+  readonly kind: "alchemy/Policy";
   readonly runtime: F;
   readonly tags: Tags[];
   readonly capabilities: Capabilities[];
@@ -33,9 +34,6 @@ export interface Policy<
     BindingTags<B[number]> | Exclude<Tags, unknown>
   >;
 }
-
-export type $<T> = Instance<T>;
-export const $ = Policy;
 
 type BindingTags<B extends AnyBinding> = B extends any
   ? Bind<B["runtime"], B["capability"], Extract<B["tag"], string>>

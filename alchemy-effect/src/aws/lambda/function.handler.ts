@@ -1,6 +1,6 @@
-import type { Capability } from "alchemy-effect";
 import type { Context as LambdaContext } from "aws-lambda";
 import * as Effect from "effect/Effect";
+import type { Capability } from "../../capability.ts";
 
 type Handler = (
   event: any,

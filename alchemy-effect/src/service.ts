@@ -1,6 +1,6 @@
 import type { Effect } from "effect/Effect";
 import type { Capability } from "./capability.ts";
-import type { Resource } from "./resource.ts";
+import type { IResource } from "./resource.ts";
 import type { Runtime, RuntimeHandler, RuntimeProps } from "./runtime.ts";
 
 export interface IService<
@@ -9,7 +9,8 @@ export interface IService<
   Handler extends RuntimeHandler = RuntimeHandler,
   Props extends RuntimeProps<F, any> = RuntimeProps<F, any>,
   Attr = (F & { props: Props })["attr"],
-> extends Resource<F["type"], ID, Props, Attr> {
+  Base = unknown,
+> extends IResource<F["type"], ID, Props, Attr, Base> {
   kind: "Service";
   type: F["type"];
   id: ID;
@@ -39,7 +40,10 @@ export interface IService<
   attr: Attr;
   /** @internal phantom type of this resource's parent */
   parent: unknown;
+  new (): Service<ID, F, Handler, Props, Attr, Base>;
 }
+
+export interface AnyService extends IService {}
 
 export interface Service<
   ID extends string = string,
@@ -47,8 +51,8 @@ export interface Service<
   Handler extends RuntimeHandler = RuntimeHandler,
   Props extends RuntimeProps<F, any> = RuntimeProps<F, any>,
   Attr = (F & { props: Props })["attr"],
-> extends IService<ID, F, Handler, Props, Attr>,
-    Resource<F["type"], ID, Props, Attr> {}
+  Base = unknown,
+> extends IService<ID, F, Handler, Props, Attr, Base> {}
 
 export const isService = (resource: any): resource is IService => {
   return resource && resource.kind === "Service";

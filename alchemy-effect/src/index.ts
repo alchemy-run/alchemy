@@ -1,3 +1,4 @@
+export * from "./$.ts";
 export * from "./app.ts";
 export * from "./apply.ts";
 export * from "./approve.ts";
@@ -7,6 +8,8 @@ export * from "./destroy.ts";
 export * from "./dot-alchemy.ts";
 export * from "./env.ts";
 export * from "./event.ts";
+export * from "./input.ts";
+export type { Output } from "./output.ts";
 export * from "./phase.ts";
 export * from "./plan.ts";
 export * from "./policy.ts";
@@ -15,6 +18,7 @@ export * from "./resource.ts";
 export * from "./runtime.ts";
 export * from "./service.ts";
 export * from "./type.ts";
+export * from "./unknown.ts";
 
 // export * as AWS from "./aws/index.ts";
 // export * as CLI from "./cli/index.ts";

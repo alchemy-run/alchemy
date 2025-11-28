@@ -1,4 +1,6 @@
-import { Binding, type Capability, type To } from "alchemy-effect";
+import { Binding } from "../../binding.ts";
+import type { Capability } from "../../capability.ts";
+import type { To } from "../../policy.ts";
 import { Worker } from "../worker/worker.ts";
 import type { Bucket } from "./bucket.ts";
 

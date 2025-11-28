@@ -22,7 +22,13 @@ export type BucketAttr<Props extends BucketProps> = {
 export interface Bucket<
   ID extends string = string,
   Props extends BucketProps = BucketProps,
-> extends Resource<"Cloudflare.R2.Bucket", ID, Props, BucketAttr<Props>> {}
+> extends Resource<
+    "Cloudflare.R2.Bucket",
+    ID,
+    Props,
+    BucketAttr<Props>,
+    Bucket
+  > {}
 
 export const Bucket = Resource<{
   <const ID extends string, const Props extends BucketProps>(

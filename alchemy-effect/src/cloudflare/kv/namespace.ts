@@ -18,7 +18,8 @@ export interface Namespace<
     "Cloudflare.KV.Namespace",
     ID,
     Props,
-    NamespaceAttr<Props>
+    NamespaceAttr<Props>,
+    Namespace
   > {}
 
 export const Namespace = Resource<{

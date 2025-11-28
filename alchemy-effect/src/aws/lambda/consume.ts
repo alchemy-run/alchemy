@@ -1,5 +1,3 @@
-import type { From } from "alchemy-effect";
-import { declare } from "alchemy-effect";
 import type {
   Context as LambdaContext,
   SQSBatchResponse,
@@ -7,6 +5,7 @@ import type {
 } from "aws-lambda";
 import * as Effect from "effect/Effect";
 import * as S from "effect/Schema";
+import { declare, type From } from "../../policy.ts";
 import * as SQS from "../sqs/index.ts";
 import * as Lambda from "./function.ts";
 

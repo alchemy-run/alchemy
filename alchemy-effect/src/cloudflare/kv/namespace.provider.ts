@@ -15,8 +15,8 @@ export const namespaceProvider = () =>
       const api = yield* CloudflareApi;
       const accountId = yield* CloudflareAccountId;
 
-      const createTitle = (id: string, news: NamespaceProps) =>
-        news.title ?? `${app.name}-${id}-${app.stage}`;
+      const createTitle = (id: string, title: string | undefined) =>
+        title ?? `${app.name}-${id}-${app.stage}`;
 
       const mapResult = <Props extends NamespaceProps>(
         result: KV.Namespace,
@@ -33,7 +33,7 @@ export const namespaceProvider = () =>
             if (output.accountId !== accountId) {
               return { action: "replace" };
             }
-            const title = createTitle(id, news);
+            const title = createTitle(id, news.title);
             if (title !== output.title) {
               return { action: "update" };
             }
@@ -42,7 +42,7 @@ export const namespaceProvider = () =>
           return yield* api.kv.namespaces
             .create({
               account_id: accountId,
-              title: createTitle(id, news),
+              title: createTitle(id, news.title),
             })
             .pipe(Effect.map(mapResult<NamespaceProps>));
         }),
@@ -50,7 +50,7 @@ export const namespaceProvider = () =>
           return yield* api.kv.namespaces
             .update(output.namespaceId, {
               account_id: accountId,
-              title: createTitle(id, news),
+              title: createTitle(id, news.title),
             })
             .pipe(Effect.map(mapResult<NamespaceProps>));
         }),
@@ -72,7 +72,7 @@ export const namespaceProvider = () =>
                 Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
               );
           }
-          const title = createTitle(id, olds ?? {}); // why is olds optional?
+          const title = createTitle(id, olds?.title); // why is olds optional? because read can be called before the resource exists (sync)
           let page = 1;
           while (true) {
             // todo: abstract pagination

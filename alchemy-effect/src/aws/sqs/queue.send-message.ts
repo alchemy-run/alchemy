@@ -1,12 +1,9 @@
 import * as Effect from "effect/Effect";
 
-import {
-  Binding,
-  declare,
-  toEnvKey,
-  type Capability,
-  type To,
-} from "alchemy-effect";
+import { Binding } from "../../binding.ts";
+import type { Capability } from "../../capability.ts";
+import { toEnvKey } from "../../env.ts";
+import { declare, type To } from "../../policy.ts";
 import { Function } from "../lambda/index.ts";
 import { SQSClient } from "./client.ts";
 import { Queue } from "./queue.ts";

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
 import * as Effect from "effect/Effect";
 import * as S from "effect/Schema";
@@ -10,7 +10,7 @@ import {
   isStringSetSchema,
   toAttributeType,
   toAttributeValue,
-} from "../../../src/aws/dynamodb/attribute-value.ts";
+} from "@/aws/dynamodb/attribute-value";
 
 describe("toAttributeValue", () => {
   test("undefined -> NULL false", async () => {

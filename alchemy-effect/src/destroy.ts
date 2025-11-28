@@ -1,7 +1,3 @@
 import { apply } from "./apply.ts";
 
-export const destroy = () =>
-  apply({
-    phase: "destroy",
-    resources: [],
-  });
+export const destroy = () => apply();

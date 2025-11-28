@@ -3,22 +3,23 @@ import React from "react";
 
 import { render } from "ink";
 
-import * as Alchemy from "alchemy-effect";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
+import { PlanStatusReporter } from "../apply.ts";
+import type { ApplyEvent } from "../event.ts";
 import { PlanProgress } from "./components/PlanProgress.tsx";
 
 export interface ProgressEventSource {
-  subscribe(listener: (event: Alchemy.ApplyEvent) => void): () => void;
+  subscribe(listener: (event: ApplyEvent) => void): () => void;
 }
 
 export const reportProgress = Layer.succeed(
-  Alchemy.PlanStatusReporter,
-  Alchemy.PlanStatusReporter.of({
+  PlanStatusReporter,
+  PlanStatusReporter.of({
     // oxlint-disable-next-line require-yield
     start: Effect.fn(function* (plan) {
-      const listeners = new Set<(event: Alchemy.ApplyEvent) => void>();
+      const listeners = new Set<(event: ApplyEvent) => void>();
       const { unmount } = render(
         <PlanProgress
           plan={plan}
