@@ -18,14 +18,9 @@ export class Api extends Worker.serve("Api", {
     switch (pathname) {
       case "/": {
         return new Response(
-          [
-            "Available endpoints:",
-            "/kv/get",
-            "/kv/put",
-            "/r2/get",
-            "/r2/put",
-            "/<asset>",
-          ].join("\n"),
+          ["Available endpoints:", "/kv/get", "/kv/put", "/r2/get", "/r2/put", "/<asset>"].join(
+            "\n",
+          ),
           { status: 200 },
         );
       }

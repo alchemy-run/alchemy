@@ -1,9 +1,5 @@
 import { APIConnectionError, Cloudflare, type APIError } from "cloudflare";
-import {
-  isRequestOptions,
-  type APIPromise,
-  type RequestOptions,
-} from "cloudflare/core";
+import { isRequestOptions, type APIPromise, type RequestOptions } from "cloudflare/core";
 import type { ErrorData } from "cloudflare/resources";
 import { Layer } from "effect";
 import * as Context from "effect/Context";
@@ -26,27 +22,19 @@ export class CloudflareAccountId extends Context.Tag("cloudflare/account-id")<
   );
 }
 
-export class CloudflareApi extends Effect.Service<CloudflareApi>()(
-  "cloudflare/api",
-  {
-    effect: (options?: {
-      baseUrl?: string;
-      apiToken?: string;
-      apiKey?: string;
-      apiEmail?: string;
-    }) =>
-      Effect.succeed(
-        createRecursiveProxy(
-          new Cloudflare({
-            baseURL: options?.baseUrl ?? import.meta.env.CLOUDFLARE_BASE_URL,
-            apiToken: options?.apiToken ?? import.meta.env.CLOUDFLARE_API_TOKEN,
-            apiKey: options?.apiKey ?? import.meta.env.CLOUDFLARE_API_KEY,
-            apiEmail: options?.apiEmail ?? import.meta.env.CLOUDFLARE_API_EMAIL,
-          }),
-        ),
+export class CloudflareApi extends Effect.Service<CloudflareApi>()("cloudflare/api", {
+  effect: (options?: { baseUrl?: string; apiToken?: string; apiKey?: string; apiEmail?: string }) =>
+    Effect.succeed(
+      createRecursiveProxy(
+        new Cloudflare({
+          baseURL: options?.baseUrl ?? import.meta.env.CLOUDFLARE_BASE_URL,
+          apiToken: options?.apiToken ?? import.meta.env.CLOUDFLARE_API_TOKEN,
+          apiKey: options?.apiKey ?? import.meta.env.CLOUDFLARE_API_KEY,
+          apiEmail: options?.apiEmail ?? import.meta.env.CLOUDFLARE_API_EMAIL,
+        }),
       ),
-  },
-) {}
+    ),
+}) {}
 
 export class CloudflareApiError extends Data.Error<{
   _tag:
@@ -128,9 +116,7 @@ const createRecursiveProxy = <T extends object>(target: T): ToEffect<T> => {
                   ...args.slice(0, -1),
                   {
                     ...options,
-                    signal: options?.signal
-                      ? AbortSignal.any([signal, options.signal])
-                      : signal,
+                    signal: options?.signal ? AbortSignal.any([signal, options.signal]) : signal,
                   },
                 ];
               } else {

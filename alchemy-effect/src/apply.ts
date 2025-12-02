@@ -12,15 +12,14 @@ import {
   type Create,
   type CRUD,
   type Delete,
-  type IPlan,
-  type Plan,
-  type Update,
   type DerivePlan,
-  type BindingTags,
+  type IPlan,
+  type Providers,
+  type Update,
 } from "./plan.ts";
 import type { Instance } from "./policy.ts";
 import type { AnyResource, Resource } from "./resource.ts";
-import type { AnyService, Service } from "./service.ts";
+import type { AnyService } from "./service.ts";
 import { State } from "./state.ts";
 
 export interface PlanStatusSession {
@@ -39,11 +38,7 @@ export class PlanStatusReporter extends Context.Tag("PlanStatusReporter")<
   }
 >() {}
 
-export type ApplyEffect<
-  P extends IPlan,
-  Err = never,
-  Req = never,
-> = Effect.Effect<
+export type ApplyEffect<P extends IPlan, Err = never, Req = never> = Effect.Effect<
   {
     [k in keyof AppliedPlan<P>]: AppliedPlan<P>[k];
   },
@@ -52,22 +47,17 @@ export type ApplyEffect<
 >;
 
 export type AppliedPlan<P extends IPlan> = {
-  [id in keyof P["resources"]]: P["resources"][id] extends
-    | Delete<Resource>
-    | undefined
-    | never
+  [id in keyof P["resources"]]: P["resources"][id] extends Delete<Resource> | undefined | never
     ? never
     : Simplify<P["resources"][id]["resource"]["attr"]>;
 };
 
-export const apply = <
-  const Resources extends (AnyService | AnyResource)[] = never,
->(
+export const apply = <const Resources extends (AnyService | AnyResource)[] = never>(
   ...resources: Resources
 ): ApplyEffect<
   DerivePlan<Instance<Resources[number]>>,
   never,
-  State | BindingTags<Instance<Resources[number]>>
+  State | Providers<Instance<Resources[number]>>
   // TODO(sam): don't cast to any
 > => applyPlan(plan(...resources)) as any;
 
@@ -126,8 +116,7 @@ export const applyPlan = <P extends IPlan, Err = never, Req = never>(
           const provider = yield* binding.Tag;
 
           const resourceId: string = node.binding.capability.resource.id;
-          const { upstreamAttr, upstreamNode } =
-            yield* resolveUpstream(resourceId);
+          const { upstreamAttr, upstreamNode } = yield* resolveUpstream(resourceId);
 
           return {
             resourceId,
@@ -171,9 +160,7 @@ export const applyPlan = <P extends IPlan, Err = never, Req = never>(
                 } else if (node.action === "reattach") {
                   // reattach is optional, we fall back to attach if it's not available
                   return yield* constOrEffect(
-                    (provider.reattach ? provider.reattach : provider.attach)(
-                      input,
-                    ),
+                    (provider.reattach ? provider.reattach : provider.attach)(input),
                   );
                 } else if (node.action === "detach" && provider.detach) {
                   return yield* constOrEffect(
@@ -237,9 +224,7 @@ export const applyPlan = <P extends IPlan, Err = never, Req = never>(
             ),
           );
 
-        const apply: (node: CRUD) => Effect.Effect<any, never, never> = (
-          node,
-        ) =>
+        const apply: (node: CRUD) => Effect.Effect<any, never, never> = (node) =>
           Effect.gen(function* () {
             const saveState = <Output>({
               output,
@@ -295,14 +280,10 @@ export const applyPlan = <P extends IPlan, Err = never, Req = never>(
                 }) {
                   const upstream = Object.fromEntries(
                     yield* Effect.all(
-                      Object.entries(Output.resolveUpstream(node.news)).map(
-                        ([id, resource]) =>
-                          resolveUpstream(id).pipe(
-                            Effect.map(({ upstreamAttr }) => [
-                              id,
-                              upstreamAttr,
-                            ]),
-                          ),
+                      Object.entries(Output.resolveUpstream(node.news)).map(([id, resource]) =>
+                        resolveUpstream(id).pipe(
+                          Effect.map(({ upstreamAttr }) => [id, upstreamAttr]),
+                        ),
                       ),
                     ),
                   );
@@ -321,9 +302,7 @@ export const applyPlan = <P extends IPlan, Err = never, Req = never>(
                   });
 
                   const output: any = yield* (
-                    phase === "create"
-                      ? node.provider.create
-                      : node.provider.update
+                    phase === "create" ? node.provider.create : node.provider.update
                   )({
                     id,
                     news,
@@ -338,9 +317,7 @@ export const applyPlan = <P extends IPlan, Err = never, Req = never>(
                   }).pipe(
                     // TODO(sam): partial checkpoints
                     // checkpoint,
-                    Effect.tap(() =>
-                      report(phase === "create" ? "created" : "updated"),
-                    ),
+                    Effect.tap(() => report(phase === "create" ? "created" : "updated")),
                   );
 
                   bindingOutputs = yield* postAttachBindings({
@@ -397,9 +374,7 @@ export const applyPlan = <P extends IPlan, Err = never, Req = never>(
                   yield* Effect.logDebug("delete", id);
                   yield* Effect.all(
                     node.downstream.map((dep) =>
-                      dep in plan.resources
-                        ? apply(plan.resources[dep] as any)
-                        : Effect.void,
+                      dep in plan.resources ? apply(plan.resources[dep] as any) : Effect.void,
                     ),
                   );
                   yield* report("deleting");
@@ -448,11 +423,7 @@ export const applyPlan = <P extends IPlan, Err = never, Req = never>(
                         }),
                         session: scopedSession,
                       })
-                      .pipe(
-                        Effect.tap((output) =>
-                          saveState({ news: node.news, output }),
-                        ),
-                      );
+                      .pipe(Effect.tap((output) => saveState({ news: node.news, output })));
                   });
                   if (!node.deleteFirst) {
                     yield* destroy;
@@ -466,10 +437,7 @@ export const applyPlan = <P extends IPlan, Err = never, Req = never>(
             ));
           }) as Effect.Effect<any, never, never>;
 
-        const nodes = [
-          ...Object.entries(plan.resources),
-          ...Object.entries(plan.deletions),
-        ];
+        const nodes = [...Object.entries(plan.resources), ...Object.entries(plan.deletions)];
 
         const resources: any = Object.fromEntries(
           yield* Effect.all(

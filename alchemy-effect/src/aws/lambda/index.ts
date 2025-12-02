@@ -7,3 +7,5 @@ export * from "./serve.ts";
 export * from "./consume.ts";
 
 // export type * as lambda from "aws-lambda";
+
+import "../config.ts";

@@ -8,26 +8,28 @@ import * as R2 from "./r2/index.ts";
 import { assetsProvider } from "./worker/assets.provider.ts";
 import { workerProvider } from "./worker/worker.provider.ts";
 
+import "./config.ts";
+
 export const providers = () =>
   Layer.mergeAll(
-    Layer.provideMerge(
-      workerProvider(),
-      Layer.mergeAll(ESBuild.layer(), assetsProvider()),
-    ),
+    Layer.provideMerge(workerProvider(), Layer.mergeAll(ESBuild.layer(), assetsProvider())),
     namespaceProvider(),
     bucketProvider(),
   );
 
-export const bindings = () =>
-  Layer.mergeAll(KV.bindFromWorker(), R2.bindFromWorker());
+export const bindings = () => Layer.mergeAll(KV.bindFromWorker(), R2.bindFromWorker());
 
-export const defaultProviders = () =>
-  providers().pipe(Layer.provideMerge(bindings()));
+export const defaultProviders = () => providers().pipe(Layer.provideMerge(bindings()));
 
-export const live = () =>
+export const live = (config?: { account?: string }) =>
   defaultProviders().pipe(
     Layer.provideMerge(
-      Layer.mergeAll(CloudflareAccountId.fromEnv, CloudflareApi.Default()),
+      Layer.mergeAll(
+        config?.account
+          ? Layer.succeed(CloudflareAccountId, config.account)
+          : CloudflareAccountId.fromEnv,
+        CloudflareApi.Default(),
+      ),
     ),
   );
 

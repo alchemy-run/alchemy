@@ -1,15 +1,11 @@
 import type { Workers } from "cloudflare/resources";
 import { Runtime, type RuntimeProps } from "../../runtime.ts";
 import type * as Assets from "./assets.fetch.ts";
-import type { Input } from "../../input.ts";
 
 export const WorkerType = "Cloudflare.Worker" as const;
 export type WorkerType = typeof WorkerType;
 
-export type WorkerProps<Req = any> = RuntimeProps<
-  Worker,
-  Exclude<Req, Assets.Fetch>
-> & {
+export type WorkerProps<Req = any> = RuntimeProps<Worker, Exclude<Req, Assets.Fetch>> & {
   name?: string;
   logpush?: boolean;
   observability?: Worker.Observability;
@@ -62,9 +58,7 @@ export const Worker = Runtime(WorkerType)<Worker>();
 export declare namespace Worker {
   export type Observability = Workers.ScriptUpdateParams.Metadata.Observability;
   export type Subdomain = Workers.Beta.Worker.Subdomain;
-  export type Binding = NonNullable<
-    Workers.Beta.Workers.VersionCreateParams["bindings"]
-  >[number];
+  export type Binding = NonNullable<Workers.Beta.Workers.VersionCreateParams["bindings"]>[number];
   export type Limits = Workers.Beta.Workers.Version.Limits;
   export type Placement = Workers.Beta.Workers.Version.Placement;
   export type Assets = Workers.Beta.Workers.Version.Assets;

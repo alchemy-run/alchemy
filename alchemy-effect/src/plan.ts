@@ -2,11 +2,7 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { omit } from "effect/Struct";
-import type {
-  AnyBinding,
-  BindingDiffProps,
-  BindingService,
-} from "./binding.ts";
+import type { AnyBinding, BindingDiffProps, BindingService } from "./binding.ts";
 import type { Capability } from "./capability.ts";
 import type { Diff } from "./diff.ts";
 import * as Output from "./output.ts";
@@ -23,9 +19,7 @@ export const isBindNode = (node: any): node is BindNode => {
   return (
     node &&
     typeof node === "object" &&
-    (node.action === "attach" ||
-      node.action === "detach" ||
-      node.action === "noop")
+    (node.action === "attach" || node.action === "detach" || node.action === "noop")
   );
 };
 
@@ -165,10 +159,7 @@ type ToGraph<Resources extends Service | Resource> = {
 };
 
 export type BoundResources<Resources extends Service | Resource> = NeverUnknown<
-  Extract<
-    Resources,
-    IService
-  >["props"]["bindings"]["capabilities"][number]["resource"]
+  Extract<Resources, IService>["props"]["bindings"]["capabilities"][number]["resource"]
 >;
 
 // finds transitive dependencies at most two levels deep
@@ -179,30 +170,34 @@ export type TransitiveResources<
 > = Extract<
   | Found
   | {
-      [prop in keyof Resources["props"]]: Resources["props"][prop] extends Output.Output<
-        any,
-        infer Src,
-        any
-      >
-        ? Src extends Found
+      [prop in keyof Resources["props"]]: IsAny<Resources["props"][prop]> extends true
+        ? Found
+        : Resources["props"][prop] extends { kind: "alchemy/Policy" }
           ? Found
-          : TransitiveResources<Src, Src | Found>
-        : {
-            [p in keyof Resources["props"][prop]]: Resources["props"][prop][p] extends Output.Output<
-              any,
-              infer Src,
-              any
-            >
-              ? Src extends Found
-                ? Found
-                : TransitiveResources<Src, Src | Found>
-              : Found;
-          }[keyof Resources["props"][prop]];
+          : Resources["props"][prop] extends Output.Output<any, infer Src, any>
+            ? Src extends Found
+              ? Found
+              : TransitiveResources<Src, Src | Found>
+            : {
+                [p in keyof Resources["props"][prop]]: IsAny<
+                  Resources["props"][prop][p]
+                > extends true
+                  ? Found
+                  : Resources["props"][prop][p] extends Output.Output<any, infer Src, any>
+                    ? Src extends Found
+                      ? Found
+                      : TransitiveResources<Src, Src | Found>
+                    : Found;
+              }[keyof Resources["props"][prop]];
     }[keyof Resources["props"]],
   Service | Resource
 >;
 
-export type Providers<Res extends Service | Resource> = Res extends any
+export type Providers<Resources extends Service | Resource> =
+  | ResourceProviders<Resources>
+  | BindingTags<Resources>;
+
+export type ResourceProviders<Res extends Service | Resource> = Res extends any
   ? Provider<Extract<Res["base"], Service | Resource>>
   : never;
 
@@ -211,6 +206,8 @@ export type BindingTags<Resources extends Service | Resource> = NeverUnknown<
 >;
 
 type NeverUnknown<T> = unknown extends T ? never : T;
+
+type IsAny<T> = 0 extends 1 & T ? true : false;
 
 export type DerivePlan<Resources extends Service | Resource> = {
   resources: {
@@ -233,7 +230,7 @@ export type IPlan = {
 export type Plan<Resources extends Service | Resource> = Effect.Effect<
   DerivePlan<Resources>,
   never,
-  BindingTags<Resources> | Providers<Resources> | State
+  Providers<Resources> | State
 >;
 
 export const plan = <const Resources extends (Service | Resource)[]>(
@@ -243,9 +240,7 @@ export const plan = <const Resources extends (Service | Resource)[]>(
     const state = yield* State;
 
     const resourceIds = yield* state.list();
-    const resourcesState = yield* Effect.all(
-      resourceIds.map((id) => state.get(id)),
-    );
+    const resourcesState = yield* Effect.all(resourceIds.map((id) => state.get(id)));
     // map of resource ID -> its downstream dependencies (resources that depend on it)
     const downstream = resourcesState
       .filter(
@@ -285,57 +280,52 @@ export const plan = <const Resources extends (Service | Resource)[]>(
       }>
     > = {};
 
-    const resolveResource = (
-      resourceExpr: Output.ResourceExpr<any, any, any>,
-    ) =>
+    const resolveResource = (resourceExpr: Output.ResourceExpr<any, any, any>) =>
       Effect.gen(function* () {
-        return yield* (resolvedResources[resourceExpr.src.id] ??=
-          yield* Effect.cached(
-            Effect.gen(function* () {
-              const resource = resourceExpr.src as Resource & {
-                provider: ResourceTags<Resource<string, string, any, any>>;
-              };
-              const provider = yield* resource.provider.tag;
-              const props = yield* resolveInput(resource.props);
-              const oldState = yield* state.get(resource.id);
+        return yield* (resolvedResources[resourceExpr.src.id] ??= yield* Effect.cached(
+          Effect.gen(function* () {
+            const resource = resourceExpr.src as Resource & {
+              provider: ResourceTags<Resource<string, string, any, any>>;
+            };
+            const provider = yield* resource.provider.tag;
+            const props = yield* resolveInput(resource.props);
+            const oldState = yield* state.get(resource.id);
 
-              if (!oldState) {
+            if (!oldState) {
+              return resourceExpr;
+            }
+
+            const diff = yield* provider.diff
+              ? provider.diff({
+                  id: resource.id,
+                  olds: oldState.props,
+                  news: props,
+                  output: oldState.output,
+                })
+              : Effect.succeed(undefined);
+
+            if (diff == null) {
+              if (arePropsChanged(oldState, props)) {
+                // the props have changed but the provider did not provide any hints as to what is stable
+                // so we must assume everything has changed
                 return resourceExpr;
               }
-
-              const diff = yield* provider.diff
-                ? provider.diff({
-                    id: resource.id,
-                    olds: oldState.props,
-                    news: props,
-                    output: oldState.output,
-                  })
-                : Effect.succeed(undefined);
-
-              if (diff == null) {
-                if (arePropsChanged(oldState, props)) {
-                  // the props have changed but the provider did not provide any hints as to what is stable
-                  // so we must assume everything has changed
-                  return resourceExpr;
-                }
-              } else if (diff.action === "update") {
-                const output = oldState?.output;
-                if (diff.stables) {
-                  return new Output.ResourceExpr(
-                    resourceExpr.src,
-                    Object.fromEntries(
-                      diff.stables.map((stable) => [stable, output?.[stable]]),
-                    ),
-                  );
-                } else {
-                  // if there are no stable properties, treat every property as changed
-                  return resourceExpr;
-                }
-              } else if (diff.action === "replace") {
+            } else if (diff.action === "update") {
+              const output = oldState?.output;
+              if (diff.stables) {
+                return new Output.ResourceExpr(
+                  resourceExpr.src,
+                  Object.fromEntries(diff.stables.map((stable) => [stable, output?.[stable]])),
+                );
+              } else {
+                // if there are no stable properties, treat every property as changed
+                return resourceExpr;
               }
-              return oldState?.output;
-            }),
-          ));
+            } else if (diff.action === "replace") {
+            }
+            return oldState?.output;
+          }),
+        ));
       });
 
     const resolveInput = (input: any): ResolveEffect<any> =>
@@ -386,14 +376,8 @@ export const plan = <const Resources extends (Service | Resource)[]>(
         return Output.upstream(value);
       } else if (Array.isArray(value)) {
         return Object.assign({}, ...value.map(resolveUpstream));
-      } else if (
-        value &&
-        (typeof value === "object" || typeof value === "function")
-      ) {
-        return Object.assign(
-          {},
-          ...Object.values(value).map((value) => resolveUpstream(value)),
-        );
+      } else if (value && (typeof value === "object" || typeof value === "function")) {
+        return Object.assign({}, ...Object.values(value).map((value) => resolveUpstream(value)));
       }
       return {};
     };
@@ -410,9 +394,7 @@ export const plan = <const Resources extends (Service | Resource)[]>(
             ...Object.values(resolveUpstream(resource.props)),
             resource,
           ])
-          .filter(
-            (node, i, arr) => arr.findIndex((n) => n.id === node.id) === i,
-          )
+          .filter((node, i, arr) => arr.findIndex((n) => n.id === node.id) === i)
           .map(
             Effect.fn(function* (node) {
               const id = node.id;
@@ -525,13 +507,9 @@ export const plan = <const Resources extends (Service | Resource)[]>(
             const oldState = yield* state.get(id);
             const context = yield* Effect.context<never>();
             if (oldState) {
-              const provider: ProviderService = context.unsafeMap.get(
-                oldState?.type,
-              );
+              const provider: ProviderService = context.unsafeMap.get(oldState?.type);
               if (!provider) {
-                yield* Effect.die(
-                  new Error(`Provider not found for ${oldState?.type}`),
-                );
+                yield* Effect.die(new Error(`Provider not found for ${oldState?.type}`));
               }
               return [
                 id,
@@ -559,9 +537,7 @@ export const plan = <const Resources extends (Service | Resource)[]>(
     );
 
     for (const [resourceId, deletion] of Object.entries(deletions)) {
-      const dependencies = deletion.downstream.filter(
-        (d) => d in resourceGraph,
-      );
+      const dependencies = deletion.downstream.filter((d) => d in resourceGraph);
       if (dependencies.length > 0) {
         return yield* Effect.fail(
           new DeleteResourceHasDownstreamDependencies({
@@ -608,20 +584,14 @@ const diffBindings = Effect.fn(function* ({
 }) {
   // const actions: BindNode[] = [];
   const oldBindings = oldState?.bindings;
-  const oldSids = new Set(
-    oldBindings?.map(({ binding }) => binding.capability.sid),
-  );
+  const oldSids = new Set(oldBindings?.map(({ binding }) => binding.capability.sid));
 
-  const diffBinding: (
-    binding: AnyBinding,
-  ) => Effect.Effect<BindNode, StateStoreError, State> = Effect.fn(
-    function* (binding) {
+  const diffBinding: (binding: AnyBinding) => Effect.Effect<BindNode, StateStoreError, State> =
+    Effect.fn(function* (binding) {
       const cap = binding.capability;
       const sid = cap.sid ?? `${cap.action}:${cap.resource.ID}`;
       // Find potential oldBinding for this sid
-      const oldBinding = oldBindings?.find(
-        ({ binding }) => binding.capability.sid === sid,
-      );
+      const oldBinding = oldBindings?.find(({ binding }) => binding.capability.sid === sid);
       if (!oldBinding) {
         return {
           action: "attach",
@@ -645,9 +615,7 @@ const diffBindings = Effect.fn(function* ({
       //   } satisfies Attach<AnyBinding>;
       // }
       if (diff.action === "replace") {
-        return yield* Effect.die(
-          new Error("Replace binding not yet supported"),
-        );
+        return yield* Effect.die(new Error("Replace binding not yet supported"));
         // TODO(sam): implement support for replacing bindings
         // return {
         //   action: "replace",
@@ -667,8 +635,7 @@ const diffBindings = Effect.fn(function* ({
         binding,
         attr: oldBinding.attr,
       } satisfies NoopBind<AnyBinding>;
-    },
-  );
+    });
 
   return (yield* Effect.all(bindings.map(diffBinding))).filter(
     (action): action is BindNode => action !== null,
@@ -728,8 +695,7 @@ const isBindingDiff = Effect.fn(function* ({
   return {
     action:
       oldBinding.capability.action !== newBinding.capability.action ||
-      oldBinding.capability?.resource?.id !==
-        newBinding.capability?.resource?.id
+      oldBinding.capability?.resource?.id !== newBinding.capability?.resource?.id
         ? "update"
         : "noop",
   } as const;

@@ -12,7 +12,6 @@
     "module": "Preserve",
     "moduleResolution": "Bundler",
     "target": "ESNext",
-    "types": ["@cloudflare/workers-types"]
   },
   "references": [
     { "path": "../../alchemy-effect/tsconfig.json" },

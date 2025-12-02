@@ -77,6 +77,10 @@ export class StateStoreError extends Data.TaggedError("StateStoreError")<{
 export interface StateService {
   listApps(): Effect.Effect<string[], StateStoreError, never>;
   listStages(appName?: string): Effect.Effect<string[], StateStoreError, never>;
+  getConfig(
+    appName: string,
+    stage: string,
+  ): Effect.Effect<Record<string, any>, StateStoreError, never>;
   // stub
   get(
     id: string,

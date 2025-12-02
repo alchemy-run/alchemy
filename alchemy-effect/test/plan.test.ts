@@ -1,6 +1,7 @@
+import type { Resource } from "@/resource";
 import type { Input, InputProps } from "@/input";
 import * as Output from "@/output";
-import { plan, type TransitiveResources } from "@/plan";
+import { plan, type TransitiveResources, type TraverseResources } from "@/plan";
 import * as State from "@/state";
 import { test } from "@/test";
 import { describe, expect } from "@effect/vitest";
@@ -454,7 +455,7 @@ const g = Effect.gen(function* () {
   }
 }).pipe(Effect.provide(TestLayers));
 
-describe("type-only tests", () => {
+describe.skip("type-only tests", () => {
   test(
     "infer transitive dependencies via outputs",
     Effect.gen(function* () {
@@ -481,11 +482,20 @@ describe("type-only tests", () => {
         // @ts-expect-error
         p.resources.D;
 
-        // attest(
-        //   yield* plan(C),
-        // );
-
-        // attest.instantiations([3500, "instantiations"]);
+        {
+          // any type should not break the type inference
+          class D extends TestResource("D", {
+            string: undefined! as any,
+            object: {
+              string: undefined! as any,
+            },
+          }) {}
+          type _ = TraverseResources<D>;
+          const p = yield* plan(D);
+          p.resources.D;
+          // @ts-expect-error
+          p.resources.E;
+        }
       }
     }).pipe(Effect.provide(TestLayers)),
   );

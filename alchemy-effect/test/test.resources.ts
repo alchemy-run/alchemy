@@ -132,6 +132,9 @@ export const functionProvider = Function.provider.succeed({
 export type TestResourceProps = {
   string?: string;
   stringArray?: string[];
+  object?: {
+    string: string;
+  };
 };
 
 export type TestResourceAttr<Props extends TestResourceProps> = {
