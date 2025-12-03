@@ -7,34 +7,27 @@ import { bucketProvider } from "./r2/bucket.provider.ts";
 import * as R2 from "./r2/index.ts";
 import { assetsProvider } from "./worker/assets.provider.ts";
 import { workerProvider } from "./worker/worker.provider.ts";
+import type { StageConfig } from "../stage.ts";
 
 import "./config.ts";
 
-export const providers = () =>
+export const bindings = () => Layer.mergeAll(KV.bindFromWorker(), R2.bindFromWorker());
+
+export const defaultProviders = () =>
   Layer.mergeAll(
     Layer.provideMerge(workerProvider(), Layer.mergeAll(ESBuild.layer(), assetsProvider())),
     namespaceProvider(),
     bucketProvider(),
-  );
+  ).pipe(Layer.provideMerge(bindings()));
 
-export const bindings = () => Layer.mergeAll(KV.bindFromWorker(), R2.bindFromWorker());
-
-export const defaultProviders = () => providers().pipe(Layer.provideMerge(bindings()));
-
-export const live = (config?: { account?: string }) =>
+export const providers = (config?: StageConfig) =>
   defaultProviders().pipe(
     Layer.provideMerge(
       Layer.mergeAll(
-        config?.account
-          ? Layer.succeed(CloudflareAccountId, config.account)
+        config?.cloudflare?.account
+          ? Layer.succeed(CloudflareAccountId, config.cloudflare.account)
           : CloudflareAccountId.fromEnv,
         CloudflareApi.Default(),
       ),
     ),
   );
-
-export default live;
-
-// Layer.mergeAll
-// Layer.provide
-// Layer.provideMerge

@@ -107,7 +107,6 @@ export const applyPlan = <P extends IPlan, Err = never, Req = never>(
 
         const resolveBindingUpstream = Effect.fn(function* ({
           node,
-          resource,
         }: {
           node: BindNode;
           resource: Resource;
@@ -288,7 +287,7 @@ export const applyPlan = <P extends IPlan, Err = never, Req = never>(
                 }) {
                   const upstream = Object.fromEntries(
                     yield* Effect.all(
-                      Object.entries(Output.resolveUpstream(node.news)).map(([id, resource]) =>
+                      Object.entries(Output.resolveUpstream(node.news)).map(([id]) =>
                         resolveUpstream(id).pipe(
                           Effect.map(({ upstreamAttr }) => [id, upstreamAttr]),
                         ),

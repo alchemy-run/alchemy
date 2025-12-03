@@ -31,12 +31,38 @@ export namespace Stage {
     resourceId,
     stage: stage ?? current,
   });
+
+  type Parse<Stages extends string, Components extends string[] = []> = Stages extends ""
+    ? Components
+    : Stages extends `${infer Root}-${infer Rest}`
+      ? string extends Rest
+        ? [...Components, Root, ...string[]]
+        : Parse<Rest, [...Components, Root]>
+      : [...Components, Stages];
+
+  export const config = <Stage extends string>(
+    config: (components: Parse<Stage>, stage: Stage) => StageConfig,
+  ) => {
+    const _config = (stage: Stage) => {
+      const stages = stage.split("-");
+      if (stages.length === 0) {
+        throw new Error(`Stage '${stage}' is not valid`);
+      }
+      return config(stages as Parse<Stage>, stage);
+    };
+    return Object.assign(_config, {
+      of: <S extends Stack<any>>(stackName: Stack.Name<S>) => Stages.of(stackName, _config),
+      current: _config(Stage.current as Stage),
+      parent: Stage.parent ? _config(Stage.parent as Stage) : undefined,
+      root: _config(Stage.root as Stage),
+    });
+  };
 }
 
 export namespace Stages {
-  export const of = <S extends Stack<any>>(
+  export const of = <S extends Stack<any>, Stages extends string>(
     stackName: Stack.Name<S>,
-    config: (stage: string) => StageConfig,
+    config: (stage: Stages) => StageConfig,
   ) => {
     const ref = (stage: string = Stage.current, suffix?: string) =>
       Stack.ref<S>({
@@ -53,20 +79,4 @@ export namespace Stages {
       root: ref(Stage.root),
     };
   };
-
-  export const config =
-    (config: { [stagePrefix: string]: StageConfig }) =>
-    (stage: string = Stage.current) => {
-      while (stage.includes("-")) {
-        stage = stage.slice(0, -1);
-        if (config[stage]) {
-          return config[stage];
-        }
-      }
-      const c = config[stage];
-      if (!c) {
-        throw new Error(`Config for stage ${stage} not found`);
-      }
-      return c;
-    };
 }

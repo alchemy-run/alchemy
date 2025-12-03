@@ -21,6 +21,8 @@ import * as State from "./state.ts";
 export interface StackConfig<
   Resources extends (AnyResource | AnyService)[] = (AnyResource | AnyService)[],
 > extends StageConfig {
+  // TODO(sam): type this properly
+  stages: Stages;
   resources: Resources;
   providers: Layer.Layer<
     Providers<Instance<Resources[number]>>,
@@ -51,9 +53,16 @@ export const defineStack = <
   Resources extends (AnyResource | AnyService)[],
 >(
   stackName: Name,
-  config: StackConfig<Resources>,
+  stackConfig:
+    | StackConfig<Resources>
+    | ((options: { stage: string; local?: boolean; watch?: boolean }) => StackConfig<Resources>),
 ): Stack<Name, Instance<Resources[number]>> =>
   Effect.gen(function* () {
+    // TODO(sam): implement local and watch
+    const config =
+      typeof stackConfig === "function"
+        ? stackConfig({ stage: Stage.current, local: false, watch: false })
+        : stackConfig;
     const platform = Layer.mergeAll(NodeContext.layer, FetchHttpClient.layer, Logger.pretty);
 
     // select your providers
