@@ -5,3 +5,10 @@ export type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) ex
 ) => void
   ? I
   : never;
+
+export const assertDefined = <T>(value: T | undefined, message: string): T => {
+  if (!value) {
+    throw new Error(message);
+  }
+  return value;
+};

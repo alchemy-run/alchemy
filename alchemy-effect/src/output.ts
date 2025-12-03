@@ -7,7 +7,7 @@ import type { From } from "./policy.ts";
 import type { AnyResource, Resource } from "./resource.ts";
 import type { IsAny, UnionToIntersection } from "./util.ts";
 import * as State from "./state.ts";
-import { isStageRef, type StageRef } from "./stage.ts";
+import { isRef, type Ref } from "./stage.ts";
 
 // a special symbol only used at runtime to probe the Output proxy
 const ExprSymbol = Symbol.for("alchemy/Expr");
@@ -15,8 +15,8 @@ const ExprSymbol = Symbol.for("alchemy/Expr");
 export const isOutput = (value: any): value is Output<any> =>
   value && (typeof value === "object" || typeof value === "function") && ExprSymbol in value;
 
-export const of = <R extends Resource>(resource: StageRef<R> | R): Output.Of<R["attr"], From<R>> =>
-  isStageRef(resource)
+export const of = <R extends Resource>(resource: Ref<R> | R): Output.Of<R["attr"], From<R>> =>
+  isRef(resource)
     ? (new RefExpr(resource.stack, resource.stage, resource.resourceId) as any)
     : (new ResourceExpr(resource) as any);
 

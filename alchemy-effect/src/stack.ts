@@ -8,23 +8,19 @@ import { Logger } from "effect";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as App from "./app.ts";
-import type { ApplyEffect } from "./apply.ts";
-import { apply } from "./apply.ts";
+import { apply, type AppliedPlan } from "./apply.ts";
 import { DotAlchemy } from "./dot-alchemy.ts";
 import type { Output } from "./output.ts";
 import type { DerivePlan, Providers, TraverseResources } from "./plan.ts";
 import type { Instance } from "./policy.ts";
 import type { AnyResource } from "./resource.ts";
 import type { AnyService } from "./service.ts";
-import type { StageConfig } from "./stage.ts";
-import { $stage } from "./stage.ts";
+import { Stage, type StageConfig } from "./stage.ts";
 import * as State from "./state.ts";
 
-export interface Stack<
-  Name extends string = string,
+export interface StackConfig<
   Resources extends (AnyResource | AnyService)[] = (AnyResource | AnyService)[],
 > extends StageConfig {
-  name: Name;
   resources: Resources;
   providers: Layer.Layer<
     Providers<Instance<Resources[number]>>,
@@ -34,12 +30,29 @@ export interface Stack<
   state?: Layer.Layer<State.State>;
 }
 
+export interface StackOutput<Name extends string, Resources extends AnyResource | AnyService> {
+  /** @internal */
+  stack: Name;
+  resources: AppliedPlan<DerivePlan<Resources>>;
+}
+
+export type Stack<
+  Name extends string = string,
+  Resources extends AnyResource | AnyService = AnyResource | AnyService,
+> = Effect.Effect<
+  {
+    [k in keyof StackOutput<Name, Resources>]: StackOutput<Name, Resources>[k];
+  },
+  Alchemy.PlanRejected
+>;
+
 export const defineStack = <
   const Name extends string,
   Resources extends (AnyResource | AnyService)[],
 >(
-  config: Stack<Name, Resources>,
-): ApplyEffect<DerivePlan<Instance<Resources[number]>>> =>
+  stackName: Name,
+  config: StackConfig<Resources>,
+): Stack<Name, Instance<Resources[number]>> =>
   Effect.gen(function* () {
     const platform = Layer.mergeAll(NodeContext.layer, FetchHttpClient.layer, Logger.pretty);
 
@@ -54,27 +67,35 @@ export const defineStack = <
       Alchemy.dotAlchemy,
     );
 
-    const stack = App.make({ name: config.name, stage: $stage });
+    const stack = App.make({ name: stackName, stage: Stage.current });
 
     const layers = Layer.provideMerge(
       Layer.provideMerge(providers, alchemy),
       Layer.mergeAll(platform, stack),
     );
 
-    return yield* apply(...config.resources).pipe(Effect.provide(layers));
-  }) as ApplyEffect<DerivePlan<Instance<Resources[number]>>>;
+    return yield* apply(...config.resources).pipe(
+      Effect.provide(layers),
+      Effect.map((resources) => ({
+        stack: stackName,
+        resources,
+      })),
+    );
+  }) as Stack<Name, Instance<Resources[number]>>;
 
 export interface StackRefConfig<S extends Stack> extends StageConfig {
-  name: S["name"];
+  stack: S extends Stack<infer Name, any> ? Name : never;
   stage?: string;
-  parent?: string;
 }
 
 export namespace Stack {
-  export function ref<S extends Stack>(
-    options: StackRefConfig<S>,
-  ): StackRef<Instance<S["resources"][number]>> {
-    return new Proxy(
+  export type Name<S extends Stack> = S extends Stack<infer Name, infer _> ? Name : never;
+
+  export type Outputs<S extends Stack> =
+    S extends Stack<infer _, infer Resources> ? Resources : never;
+
+  export const ref = <S extends Stack>(options: StackRefConfig<S>): StackRef<Stack.Outputs<S>> =>
+    new Proxy(
       {},
       {
         get: (_, prop) => {
@@ -82,7 +103,6 @@ export namespace Stack {
         },
       },
     ) as any;
-  }
 }
 
 export type StackRef<Resources extends AnyResource | AnyService> = {

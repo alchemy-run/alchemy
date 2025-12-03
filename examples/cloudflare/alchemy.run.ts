@@ -1,29 +1,29 @@
-import { $stage, defineStack, Stack } from "alchemy-effect";
+import { defineStack, Stages, assertDefined } from "alchemy-effect";
 import * as Cloudflare from "alchemy-effect/cloudflare/live";
 import * as Effect from "effect/Effect";
 import { Api } from "./src/api.ts";
 
-const cloudflare = {
-  account: import.meta.env.CLOUDFLARE_ACCOUNT_ID!,
-};
+const createConfig = (account?: string) => ({
+  cloudflare: {
+    account: assertDefined(account, "CLOUDFLARE_ACCOUNT_ID is not set"),
+  },
+});
 
-const name = "my-cloudflare-app";
+const config = Stages.config({
+  prod: createConfig(import.meta.env.CLOUDFLARE_ACCOUNT_ID_PROD),
+  staging: createConfig(import.meta.env.CLOUDFLARE_ACCOUNT_ID!),
+  dev: createConfig(import.meta.env.CLOUDFLARE_ACCOUNT_ID!),
+});
 
-export type App = typeof App;
-export const App = defineStack({
-  name,
+const stackName = "my-cloudflare-app";
+
+export type App = typeof stack;
+
+export const App = Stages.of<App>(stackName, config);
+
+const stack = defineStack(stackName, {
   resources: [Api],
-  providers: Cloudflare.live(cloudflare),
-}).pipe(Effect.tap((stack) => Effect.log(stack?.Api.url)));
+  providers: Cloudflare.live(config().cloudflare),
+}).pipe(Effect.tap(({ resources }) => Effect.log(resources.Api.url)));
 
-const ref = (stage: string = $stage, suffix?: string) =>
-  Stack.ref<App>({
-    name,
-    parent: suffix ? stage : undefined,
-    stage: suffix ? `${stage}-${suffix}` : stage,
-    cloudflare,
-  });
-
-export const prod = ref("prod");
-export const staging = (pr?: number) => ref("staging", pr?.toString());
-export const dev = (user: string = import.meta.env.USER!) => ref("dev", user);
+export default stack;

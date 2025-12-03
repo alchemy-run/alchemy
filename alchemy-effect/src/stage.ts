@@ -1,4 +1,7 @@
-import type { Resource, AnyResource } from "./resource.ts";
+import type { Resource } from "./resource.ts";
+import type { Ref } from "./ref.ts";
+import { Stack } from "./stack.ts";
+
 const args = typeof process !== "undefined" ? process.argv.slice(2) : [];
 
 const parseOption = (argName: string) => {
@@ -6,44 +9,64 @@ const parseOption = (argName: string) => {
   return i !== -1 && i + 1 < args.length ? args[i + 1] : undefined;
 };
 
-export const $stage =
-  import.meta.env.STAGE ?? parseOption("--stage") ?? `dev-${import.meta.env.USER ?? "unknown"}`;
-
 export interface StageConfig {}
 
-export const isStageRef = (s: any): s is StageRef<any> => s && s.kind === "StageRef";
+export namespace Stage {
+  export const current =
+    import.meta.env.STAGE ??
+    parseOption("--stage") ??
+    `dev-${import.meta.env.USER ?? import.meta.env.USERNAME ?? "unknown"}`;
 
-export interface StageRef<R extends Resource<string, string, any, any> = AnyResource> {
-  kind: "StageRef";
-  stack?: string;
-  stage: string;
-  resourceId: R["id"];
-  /** @internal phantom */
-  R: R;
+  export const parent = current.includes("-")
+    ? current.split("-").slice(0, -1).join("-")
+    : undefined;
+
+  export const root = current.includes("-") ? current.split("-")[0] : current;
+
+  export const ref = <R extends Resource<string, string, any, any>>(
+    resourceId: R["id"],
+    stage?: string,
+  ): Ref<R> => ({
+    kind: "Ref",
+    resourceId,
+    stage: stage ?? current,
+  });
 }
 
-export namespace Stage {
-  export function ref<R extends Resource<string, string, any, any>>(resource: R["id"]): StageRef<R>;
-  export function ref<R extends Resource<string, string, any, any>>(
-    resource: R["id"],
-    stage: string,
-  ): StageRef<R>;
-  export function ref(resourceId: any, stage: any = $stage): StageRef<any> {
+export namespace Stages {
+  export const of = <S extends Stack<any>>(
+    stackName: Stack.Name<S>,
+    config: (stage: string) => StageConfig,
+  ) => {
+    const ref = (stage: string = Stage.current, suffix?: string) =>
+      Stack.ref<S>({
+        stack: stackName,
+        stage: suffix ? `${stage}-${suffix}` : stage,
+        ...config,
+      });
     return {
-      kind: "StageRef",
-      resourceId,
-      stage,
-      R: undefined!,
+      ref,
+      prod: ref("prod"),
+      staging: (pr?: number) => ref("staging", pr?.toString()),
+      dev: (user: string = import.meta.env.USER!) => ref("dev", user),
+      parent: Stage.parent ? ref(Stage.parent) : undefined,
+      root: ref(Stage.root),
     };
-  }
-  export namespace current {
-    export const ref = <R extends Resource<string, string, any, any>>(
-      resourceId: R["id"],
-    ): StageRef<R> => ({
-      kind: "StageRef",
-      resourceId,
-      stage: $stage,
-      R: undefined!,
-    });
-  }
+  };
+
+  export const config =
+    (config: { [stagePrefix: string]: StageConfig }) =>
+    (stage: string = Stage.current) => {
+      while (stage.includes("-")) {
+        stage = stage.slice(0, -1);
+        if (config[stage]) {
+          return config[stage];
+        }
+      }
+      const c = config[stage];
+      if (!c) {
+        throw new Error(`Config for stage ${stage} not found`);
+      }
+      return c;
+    };
 }

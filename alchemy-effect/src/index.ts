@@ -21,5 +21,6 @@ export * from "./stack.ts";
 export * from "./type.ts";
 export * from "./unknown.ts";
 export * from "./stage.ts";
+export { assertDefined } from "./util.ts";
 
 export * as State from "./state.ts";
