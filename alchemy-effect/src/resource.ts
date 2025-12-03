@@ -1,9 +1,7 @@
 import * as Context from "effect/Context";
 import type { Effect } from "effect/Effect";
 import * as Layer from "effect/Layer";
-import type { Output } from "./output.ts";
 import type { Provider, ProviderService } from "./provider.ts";
-import type { IsAny } from "./util.ts";
 
 export const isResource = (r: any): r is Resource => {
   return r && typeof r === "function" && "id" in r && "type" in r && "props" in r;
@@ -35,34 +33,6 @@ export interface Resource<
   Base = unknown,
 > extends IResource<Type, ID, Props, Attrs, Base> {
   new (): Resource<Type, ID, Props, Attrs, Base>;
-
-  import(stage: string): true extends IsAny<Attrs>
-    ? {
-        [attr in string | number | symbol]: Output<any>;
-      }
-    : unknown extends Attrs
-      ? {
-          [attr in string | number | symbol]: Output<any>;
-        }
-      : {
-          [attr in keyof Attrs]: Output.Of<Attrs[attr]>;
-        };
-
-  /** @internal phantom */
-  // dependencies: Input.Dependencies<Props>;
-
-  // TODO(sam): figure out how to add this back in because people preferred it
-  // ... but, it breaks resource types (e.g. class Table extends DynamoDB.Table("Table", { ... }) is not assignable to DynamoDB.Table<"Table", { ... }>)
-  // out<Self extends Resource>(
-  //   this: Self,
-  // ): Output<
-  //   {
-  //     [k in keyof Attrs]: Attrs[k];
-  //   },
-  //   InstanceType<Self>
-  // >;
-  // parent: unknown;
-  // oxlint-disable-next-line no-misused-new
 }
 
 export interface ResourceTags<R extends Resource<string, string, any, any>> {

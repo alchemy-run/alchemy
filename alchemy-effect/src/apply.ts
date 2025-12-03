@@ -21,6 +21,7 @@ import type { Instance } from "./policy.ts";
 import type { AnyResource, Resource } from "./resource.ts";
 import type { AnyService } from "./service.ts";
 import { State } from "./state.ts";
+import { App } from "./app.ts";
 
 export interface PlanStatusSession {
   emit: (event: ApplyEvent) => Effect.Effect<void>;
@@ -68,7 +69,9 @@ export const applyPlan = <P extends IPlan, Err = never, Req = never>(
     Effect.flatMap((plan) =>
       Effect.gen(function* () {
         const state = yield* State;
-        const outputs = {} as Record<string, Effect.Effect<any, any>>;
+        // TODO(sam): rename terminology to Stack
+        const app = yield* App;
+        const outputs = {} as Record<string, Effect.Effect<any, any, State>>;
         const reviewer = yield* Effect.serviceOption(PlanReviewer);
 
         if (Option.isSome(reviewer)) {
@@ -236,13 +239,18 @@ export const applyPlan = <P extends IPlan, Err = never, Req = never>(
               news: any;
             }) =>
               state
-                .set(node.resource.id, {
-                  id: node.resource.id,
-                  type: node.resource.type,
-                  status: node.action === "create" ? "created" : "updated",
-                  props: news,
-                  output,
-                  bindings,
+                .set({
+                  stack: app.name,
+                  stage: app.stage,
+                  resourceId: node.resource.id,
+                  value: {
+                    id: node.resource.id,
+                    type: node.resource.type,
+                    status: node.action === "create" ? "created" : "updated",
+                    props: news,
+                    output,
+                    bindings,
+                  },
                 })
                 .pipe(Effect.map(() => output));
 
@@ -344,7 +352,8 @@ export const applyPlan = <P extends IPlan, Err = never, Req = never>(
                 });
 
                 if (node.action === "noop") {
-                  return (yield* state.get(id))?.output;
+                  return (yield* state.get({ stack: app.name, stage: app.stage, resourceId: id }))
+                    ?.output;
                 } else if (node.action === "create") {
                   let attr: any;
                   if (node.provider.precreate) {
@@ -388,7 +397,9 @@ export const applyPlan = <P extends IPlan, Err = never, Req = never>(
                       bindings: [],
                     })
                     .pipe(
-                      Effect.flatMap(() => state.delete(id)),
+                      Effect.flatMap(() =>
+                        state.delete({ stack: app.name, stage: app.stage, resourceId: id }),
+                      ),
                       Effect.tap(() => report("deleted")),
                     );
                 } else if (node.action === "replace") {

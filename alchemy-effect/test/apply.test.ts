@@ -8,6 +8,18 @@ import { test } from "@/test";
 import { expect } from "@effect/vitest";
 import { TestLayers, TestResource } from "./test.resources.ts";
 
+const testStack = "test";
+const testStage = "test";
+
+const getState = Effect.fn(function* (resourceId: string) {
+  const state = yield* State;
+  return yield* state.get({ stack: testStack, stage: testStage, resourceId });
+});
+const listState = Effect.fn(function* () {
+  const state = yield* State;
+  return yield* state.list({ stack: testStack, stage: testStage });
+});
+
 test(
   "apply should create when non-existent and update when props change",
   Effect.gen(function* () {
@@ -33,10 +45,8 @@ test(
 
     const state = yield* State;
 
-    yield* state.get("A");
-    expect(yield* state.get("A")).toBeUndefined();
-
-    expect(yield* state.list()).toEqual([]);
+    expect(yield* getState("A")).toBeUndefined();
+    expect(yield* listState()).toEqual([]);
   }).pipe(Effect.provide(TestLayers)),
 );
 
@@ -107,9 +117,7 @@ test(
 
     {
       class B extends TestResource("B", {
-        string: Output.of(A).stringArray[0].apply((string) =>
-          string.toUpperCase(),
-        ),
+        string: Output.of(A).stringArray[0].apply((string) => string.toUpperCase()),
       }) {}
 
       const stack = yield* apply(B);
@@ -135,10 +143,7 @@ test(
       }) {}
 
       const stack = yield* apply(B);
-      expect(stack.B.stringArray).toEqual([
-        "test-string-array",
-        "test-string-array",
-      ]);
+      expect(stack.B.stringArray).toEqual(["test-string-array", "test-string-array"]);
     }
   }).pipe(Effect.provide(TestLayers)),
 );

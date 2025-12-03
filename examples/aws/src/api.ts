@@ -1,4 +1,4 @@
-import { $, type } from "alchemy-effect";
+import { $, Stage, type } from "alchemy-effect";
 import * as DynamoDB from "alchemy-effect/aws/dynamodb";
 import * as Lambda from "alchemy-effect/aws/lambda";
 import * as SQS from "alchemy-effect/aws/sqs";
@@ -29,7 +29,7 @@ export class SingleTable extends DynamoDB.Table("Users", {
 }) {}
 
 export class Api extends Lambda.serve("Api", {
-  fetch: Effect.fn(function* (event) {
+  fetch: Effect.fn(function* (request) {
     const id = "USER#123";
 
     const item = yield* DynamoDB.getItem({
@@ -58,6 +58,9 @@ export class Api extends Lambda.serve("Api", {
     }),
   ),
 }) {}
+
+Stage.parent.ref<Api>("Api");
+Stage.current.ref<Api>("Api");
 
 export default Api.handler.pipe(
   Effect.provide(Layer.mergeAll(SQS.clientFromEnv(), DynamoDB.clientFromEnv())),

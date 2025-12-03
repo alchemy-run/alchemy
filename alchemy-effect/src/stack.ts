@@ -73,9 +73,7 @@ export interface StackRefConfig<S extends Stack> extends StageConfig {
 export namespace Stack {
   export function ref<S extends Stack>(
     options: StackRefConfig<S>,
-  ): StackRef<Instance<S["resources"][number]>>;
-
-  export function ref<S extends Stack>(name: S["name"], stage?: string) {
+  ): StackRef<Instance<S["resources"][number]>> {
     return new Proxy(
       {},
       {

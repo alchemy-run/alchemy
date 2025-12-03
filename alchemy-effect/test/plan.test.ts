@@ -6,6 +6,7 @@ import * as State from "@/state";
 import { test } from "@/test";
 import { describe, expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import {
   Bucket,
   Function,
@@ -14,6 +15,7 @@ import {
   TestResource,
   type TestResourceProps,
 } from "./test.resources";
+import * as App from "@/app";
 
 const _test = test;
 
@@ -35,7 +37,7 @@ class MyFunction extends Function("MyFunction", {
 test(
   "create all resources when plan is empty",
   {
-    state: State.inMemory({}),
+    state: test.state(),
   },
   Effect.gen(function* () {
     expect(yield* plan(MyBucket, MyQueue)).toMatchObject({
@@ -67,7 +69,7 @@ test(
 test(
   "update the changed resources and no-op un-changed resources",
   {
-    state: State.inMemory({
+    state: test.state({
       MyBucket: {
         id: "MyBucket",
         type: "Test.Bucket",
@@ -109,7 +111,7 @@ test(
 test(
   "delete oprhaned resources",
   {
-    state: State.inMemory({
+    state: test.state({
       MyBucket: {
         id: "MyBucket",
         type: "Test.Bucket",
@@ -192,7 +194,7 @@ test(
 test(
   "detect that queueUrl will change and pass through the PropExpr instead of old output",
   {
-    state: State.inMemory({
+    state: test.state({
       MyQueue: {
         id: "MyQueue",
         type: "Test.Queue",
@@ -228,7 +230,7 @@ test(
 );
 
 describe("Outputs should resolve to old values", () => {
-  const state = State.inMemory({
+  const state = _test.state({
     A: {
       id: "A",
       type: "Test.TestResource",
@@ -315,9 +317,7 @@ describe("Outputs should resolve to old values", () => {
   test(
     "stringArray[0].toUpperCase()",
     {
-      string: Output.of(A).stringArray[0].apply((string) =>
-        string.toUpperCase(),
-      ),
+      string: Output.of(A).stringArray[0].apply((string) => string.toUpperCase()),
     },
     {
       string: "TEST-STRING",
@@ -336,7 +336,7 @@ describe("stable properties should not cause downstream changes", () => {
     _test(
       description,
       {
-        state: State.inMemory({
+        state: _test.state({
           A: {
             id: "A",
             type: "Test.TestResource",
@@ -393,14 +393,9 @@ describe("stable properties should not cause downstream changes", () => {
     string: Output.of(A).stableString.apply((string) => string.toUpperCase()),
   });
 
-  test(
-    "A.stableString.effect((string) => Effect.succeed(string.toUpperCase()))",
-    {
-      string: Output.of(A).stableString.effect((string) =>
-        Effect.succeed(string.toUpperCase()),
-      ),
-    },
-  );
+  test("A.stableString.effect((string) => Effect.succeed(string.toUpperCase()))", {
+    string: Output.of(A).stableString.effect((string) => Effect.succeed(string.toUpperCase())),
+  });
 
   test("A.stableArray", {
     stringArray: Output.of(A).stableArray,
@@ -414,14 +409,9 @@ describe("stable properties should not cause downstream changes", () => {
     string: Output.of(A).stableArray[0].apply((string) => string.toUpperCase()),
   });
 
-  test(
-    "A.stableArray[0].effect((string) => Effect.succeed(string.toUpperCase()))",
-    {
-      string: Output.of(A).stableArray[0].effect((string) =>
-        Effect.succeed(string.toUpperCase()),
-      ),
-    },
-  );
+  test("A.stableArray[0].effect((string) => Effect.succeed(string.toUpperCase()))", {
+    string: Output.of(A).stableArray[0].effect((string) => Effect.succeed(string.toUpperCase())),
+  });
 });
 
 const g = Effect.gen(function* () {

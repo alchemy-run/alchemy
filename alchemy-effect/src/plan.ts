@@ -1,4 +1,5 @@
 import * as Context from "effect/Context";
+import { App } from "./app.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { omit } from "effect/Struct";
@@ -239,8 +240,13 @@ export const plan = <const Resources extends (Service | Resource)[]>(
   Effect.gen(function* () {
     const state = yield* State;
 
-    const resourceIds = yield* state.list();
-    const resourcesState = yield* Effect.all(resourceIds.map((id) => state.get(id)));
+    // TODO(sam): rename terminology to Stack
+    const app = yield* App;
+
+    const resourceIds = yield* state.list({ stack: app.name, stage: app.stage });
+    const resourcesState = yield* Effect.all(
+      resourceIds.map((id) => state.get({ stack: app.name, stage: app.stage, resourceId: id })),
+    );
     // map of resource ID -> its downstream dependencies (resources that depend on it)
     const downstream = resourcesState
       .filter(
@@ -289,7 +295,11 @@ export const plan = <const Resources extends (Service | Resource)[]>(
             };
             const provider = yield* resource.provider.tag;
             const props = yield* resolveInput(resource.props);
-            const oldState = yield* state.get(resource.id);
+            const oldState = yield* state.get({
+              stack: app.name,
+              stage: app.stage,
+              resourceId: resource.id,
+            });
 
             if (!oldState) {
               return resourceExpr;
@@ -403,7 +413,11 @@ export const plan = <const Resources extends (Service | Resource)[]>(
               };
               const news = yield* resolveInput(resource.props);
 
-              const oldState = yield* state.get(id);
+              const oldState = yield* state.get({
+                stack: app.name,
+                stage: app.stage,
+                resourceId: id,
+              });
               const provider = yield* resource.provider.tag;
 
               const bindings = isService(node)
@@ -499,12 +513,16 @@ export const plan = <const Resources extends (Service | Resource)[]>(
 
     const deletions = Object.fromEntries(
       (yield* Effect.all(
-        (yield* state.list()).map(
+        (yield* state.list({ stack: app.name, stage: app.stage })).map(
           Effect.fn(function* (id) {
             if (id in resourceGraph) {
               return;
             }
-            const oldState = yield* state.get(id);
+            const oldState = yield* state.get({
+              stack: app.name,
+              stage: app.stage,
+              resourceId: id,
+            });
             const context = yield* Effect.context<never>();
             if (oldState) {
               const provider: ProviderService = context.unsafeMap.get(oldState?.type);

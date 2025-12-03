@@ -49,7 +49,7 @@
     "@effect/language-service": "^0.55.2",
     "@types/bun": "latest",
     "@types/node": "latest",
-    "@typescript/native-preview": "^7.0.0-dev.20251113.1",
+    "@typescript/native-preview": "^7.0.0-dev.20251202.1",
     "changelogithub": "^13.16.1",
     "dotenv": "^17.2.3",
     "oxfmt": "^0.9.0",

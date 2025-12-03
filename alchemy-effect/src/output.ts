@@ -1,10 +1,13 @@
 import { pipe } from "effect";
+import * as App from "./app.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { isPrimitive } from "./data.ts";
 import type { From } from "./policy.ts";
 import type { AnyResource, Resource } from "./resource.ts";
 import type { IsAny, UnionToIntersection } from "./util.ts";
+import * as State from "./state.ts";
+import { isStageRef, type StageRef } from "./stage.ts";
 
 // a special symbol only used at runtime to probe the Output proxy
 const ExprSymbol = Symbol.for("alchemy/Expr");
@@ -12,8 +15,10 @@ const ExprSymbol = Symbol.for("alchemy/Expr");
 export const isOutput = (value: any): value is Output<any> =>
   value && (typeof value === "object" || typeof value === "function") && ExprSymbol in value;
 
-export const of = <R extends Resource>(resource: R): Output.Of<R["attr"], From<R>> =>
-  new ResourceExpr(resource) as unknown as Output.Of<R["attr"], From<R>>;
+export const of = <R extends Resource>(resource: StageRef<R> | R): Output.Of<R["attr"], From<R>> =>
+  isStageRef(resource)
+    ? (new RefExpr(resource.stack, resource.stage, resource.resourceId) as any)
+    : (new ResourceExpr(resource) as any);
 
 export interface Output<A = any, Src extends Resource = any, Req = any> {
   readonly kind: string;
@@ -62,7 +67,8 @@ export type Expr<A = any, Src extends AnyResource = AnyResource, Req = any> =
   | EffectExpr<any, A, Src, Req>
   | LiteralExpr<A>
   | PropExpr<A, keyof A, Src, Req>
-  | ResourceExpr<A, Src, Req>;
+  | ResourceExpr<A, Src, Req>
+  | RefExpr<A>;
 
 const proxy = (self: any): any => {
   const proxy = new Proxy(
@@ -78,7 +84,7 @@ const proxy = (self: any): any => {
               ? self.stables[prop as keyof typeof self.stables]
               : prop === "apply"
                 ? self[prop]
-                : self[prop as keyof typeof self]
+                : prop in self
                   ? typeof self[prop as keyof typeof self] === "function" && !("kind" in self)
                     ? new PropExpr(proxy, prop as never)
                     : self[prop as keyof typeof self]
@@ -234,14 +240,30 @@ export class AllExpr<Outs extends Expr[]> extends BaseExpr<Outs> {
   }
 }
 
+export const isRefExpr = <A = any>(node: any): node is RefExpr<A> => node?.kind === "RefExpr";
+
+export class RefExpr<A> extends BaseExpr<A, never, never> {
+  readonly kind = "RefExpr";
+  constructor(
+    public readonly stack: string | undefined,
+    public readonly stage: string | undefined,
+    public readonly resourceId: string,
+  ) {
+    super();
+    return proxy(this);
+  }
+}
+
 export class MissingSourceError extends Data.TaggedError("MissingSourceError")<{
   message: string;
   srcId: string;
 }> {}
 
-export class UnexpectedExprError extends Data.TaggedError("UnexpectedExprError")<{
+export class InvalidReferenceError extends Data.TaggedError("InvalidReferenceError")<{
   message: string;
-  expr: Output<any, any, any>;
+  stack: string;
+  stage: string;
+  resourceId: string;
 }> {}
 
 export const evaluate: <A, Upstream extends AnyResource, Req>(
@@ -249,14 +271,14 @@ export const evaluate: <A, Upstream extends AnyResource, Req>(
   upstream: {
     [Id in Upstream["id"]]: Extract<Upstream, { id: Id }>["attr"];
   },
-) => Effect.Effect<A> = (expr, upstream) =>
+) => Effect.Effect<A, InvalidReferenceError | MissingSourceError, State.State> = (expr, upstream) =>
   Effect.gen(function* () {
     if (isResourceExpr(expr)) {
       const srcId = expr.src.id;
       const src = upstream[srcId as keyof typeof upstream];
       if (!src) {
         // type-safety should prevent this but let the caller decide how to handle it
-        return yield* Effect.die(
+        return yield* Effect.fail(
           new MissingSourceError({
             message: `Source ${srcId} not found`,
             srcId,
@@ -275,6 +297,27 @@ export const evaluate: <A, Upstream extends AnyResource, Req>(
       return yield* Effect.all(expr.outs.map((out) => evaluate(out, upstream)));
     } else if (isPropExpr(expr)) {
       return (yield* evaluate(expr.expr, upstream))?.[expr.identifier];
+    } else if (isRefExpr(expr)) {
+      const state = yield* State.State;
+      const app = yield* App.App;
+      const stack = expr.stack ?? app.name;
+      const stage = expr.stage ?? app.stage;
+      const resource = yield* state.get({
+        stack,
+        stage,
+        resourceId: expr.resourceId,
+      });
+      if (!resource) {
+        return yield* Effect.fail(
+          new InvalidReferenceError({
+            message: `Reference to '${expr.resourceId}' in stack '${stack}' and stage '${stage}' not found. Have you deployed '${stage}' or '${stack}'?`,
+            stack,
+            stage,
+            resourceId: expr.resourceId,
+          }),
+        );
+      }
+      return resource.output;
     } else if (Array.isArray(expr)) {
       return yield* Effect.all(expr.map((item) => evaluate(item, upstream)));
     } else if (typeof expr === "object" && expr !== null) {
