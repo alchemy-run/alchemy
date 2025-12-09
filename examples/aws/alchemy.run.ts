@@ -2,26 +2,36 @@ import { defineStack, defineStages } from "alchemy-effect";
 import { Api } from "./src/api.ts";
 import { Consumer } from "./src/consumer.ts";
 import * as AWS from "alchemy-effect/aws";
-import * as Cloudflare from "alchemy-effect/cloudflare";
 import * as Layer from "effect/Layer";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 
 const AWS_REGION = Config.string("AWS_REGION").pipe(Config.withDefault("us-west-2"));
-const AWS_PROFILE = Config.string("AWS_PROFILE");
-const AWS_ACCOUNT = Config.string("AWS_ACCOUNT");
-const CLOUDFLARE_ACCOUNT_ID = Config.string("CLOUDFLARE_ACCOUNT_ID");
+const AWS_PROFILE = Config.string("AWS_PROFILE").pipe(Config.withDefault("default"));
 
 const stages = defineStages(
-  Effect.fn(function* () {
+  Effect.fn(function* (stage) {
+    if (stage === "prod") {
+      return {
+        aws: {
+          profile: "prod",
+          account: "1234567890",
+          region: "us-west-2",
+        },
+      };
+    }
+    const profileName = yield* AWS_PROFILE;
+    const profile = yield* AWS.loadProfile(profileName);
+    if (!profile.sso_account_id) {
+      return yield* Effect.dieMessage(
+        `AWS SSO Profile '${profileName}' is missing sso_account_id configuration`,
+      );
+    }
     return {
       aws: {
-        profile: yield* AWS_PROFILE,
-        account: yield* AWS_ACCOUNT,
-        region: yield* AWS_REGION,
-      },
-      cloudflare: {
-        account: yield* CLOUDFLARE_ACCOUNT_ID,
+        profile: profileName,
+        account: profile.sso_account_id,
+        region: profile.region ?? (yield* AWS_REGION),
       },
     };
   }),
@@ -33,7 +43,7 @@ const stack = defineStack({
   name: "my-aws-app",
   stages,
   resources: [Api, Consumer],
-  providers: Layer.mergeAll(AWS.providers(), Cloudflare.providers()),
+  providers: Layer.mergeAll(AWS.providers()),
 });
 
 export default stack;

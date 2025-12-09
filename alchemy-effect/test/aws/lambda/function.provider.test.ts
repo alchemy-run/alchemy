@@ -32,5 +32,5 @@ test(
     const stack = yield* apply(MyFunction);
 
     yield* destroy();
-  }).pipe(Effect.provide(AWS.live)),
+  }).pipe(Effect.provide(AWS.providers())),
 );

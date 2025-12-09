@@ -37,7 +37,10 @@ export interface StackConfig<
   state?: Layer.Layer<State.State>;
 }
 
-export interface StackOutput<Name extends string, Resources extends AnyResource | AnyService> {
+export interface StackOutput<
+  Name extends string,
+  Resources extends AnyResource | AnyService,
+> {
   /** @internal */
   stack: Name;
   resources: AppliedPlan<DerivePlan<Resources>>;
@@ -67,7 +70,11 @@ export const defineStack = <
     const _stageConfig = yield* asEffect(stack.stages.config(stage));
 
     // TODO(sam): implement local and watch
-    const platform = Layer.mergeAll(NodeContext.layer, FetchHttpClient.layer, Logger.pretty);
+    const platform = Layer.mergeAll(
+      NodeContext.layer,
+      FetchHttpClient.layer,
+      Logger.pretty,
+    );
 
     // select your providers
     const providers = stack.providers;
@@ -103,12 +110,15 @@ export interface StackRefConfig<S extends Stack> extends StageConfig {
 }
 
 export namespace Stack {
-  export type Name<S extends Stack> = S extends Stack<infer Name, infer _> ? Name : never;
+  export type Name<S extends Stack> =
+    S extends Stack<infer Name, infer _> ? Name : never;
 
   export type Resources<S extends Stack> =
     S extends Stack<infer _, infer Resources> ? Resources : never;
 
-  export const ref = <S extends Stack>(options: StackRefConfig<S>): StackRef<Stack.Resources<S>> =>
+  export const ref = <S extends Stack>(
+    options: StackRefConfig<S>,
+  ): StackRef<Stack.Resources<S>> =>
     new Proxy(
       {},
       {
@@ -132,5 +142,8 @@ type Outputs<Resources extends AnyResource | AnyService> = {
 };
 
 type AsRecord<Resources extends AnyResource | AnyService> = {
-  [Id in TraverseResources<Resources>["id"]]: Extract<TraverseResources<Resources>, { id: Id }>;
+  [Id in TraverseResources<Resources>["id"]]: Extract<
+    TraverseResources<Resources>,
+    { id: Id }
+  >;
 };

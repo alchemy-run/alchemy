@@ -55,9 +55,6 @@ export const defaultProviders = () =>
   );
 
 export const providers = () =>
-  defaultProviders().pipe(
-    Layer.provide(config.region ? Region.of(config.region) : Region.fromEnv()),
-    Layer.provide(Credentials.fromSSO()),
-  );
+  defaultProviders().pipe(Layer.provide(Region.fromEnv()), Layer.provide(Credentials.fromSSO()));
 
 export default providers;

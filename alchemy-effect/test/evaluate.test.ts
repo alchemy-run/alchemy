@@ -1,6 +1,6 @@
 import * as EC2 from "@/aws/ec2";
 import * as R2 from "@/cloudflare/r2";
-import { $, App } from "@/index";
+import { $, App, ref } from "@/index";
 import { Stage } from "@/stage";
 import * as Output from "@/output";
 import { expect, it } from "@effect/vitest";
@@ -81,8 +81,7 @@ it.live("TestVpc.cidrBlockAssociationSet[0].associationId", () =>
 
 it.live("TestVpc.cidrBlockAssociationSet.apply(c => c)[0].associationId", () =>
   Effect.gen(function* () {
-    const output = $(TestVpc).cidrBlockAssociationSet.apply((c) => c)[0]
-      .associationId;
+    const output = $(TestVpc).cidrBlockAssociationSet.apply((c) => c)[0].associationId;
     const upstream = Output.upstream(output);
     const result = yield* Output.evaluate(output, resources);
 
@@ -109,8 +108,7 @@ it.live("TestVpc.cidrBlockAssociationSet[1].associationId", () =>
 
 it.live("TestVpc.cidrBlockAssociationSet.apply(c => c)[1].associationId", () =>
   Effect.gen(function* () {
-    const output = $(TestVpc).cidrBlockAssociationSet.apply((c) => c)[1]
-      .associationId;
+    const output = $(TestVpc).cidrBlockAssociationSet.apply((c) => c)[1].associationId;
     const upstream = Output.upstream(output);
     const result = yield* Output.evaluate(output, resources);
 
@@ -140,9 +138,7 @@ it.live("TestVpc.vpcArn.apply(replace)", () =>
     );
     const upstream = Output.upstream(output);
     const result = yield* Output.evaluate(output, resources);
-    expect(result).toEqual(
-      vpcAttrs.vpcArn.replace("arn:aws:ec2:", "arn:aws:ec2:us-east-1:"),
-    );
+    expect(result).toEqual(vpcAttrs.vpcArn.replace("arn:aws:ec2:", "arn:aws:ec2:us-east-1:"));
     expect(upstream).toEqual({
       TestVpc,
     });
@@ -207,13 +203,12 @@ it.live("TestVpc.vpcId.effect(Console.log)", () =>
   }).pipe(Effect.provide(test.defaultState())),
 );
 
-it.live("Output.of(Stage.ref<TestVpc>('TestVpc')).vpcId", () =>
+it.live("Output.ref<TestVpc>('TestVpc', 'other-stage').vpcId", () =>
   Effect.gen(function* () {
-    const otherVpc = Stage.ref<TestVpc>("TestVpc", "other");
-    const output = Output.of(otherVpc).vpcId;
-    const result = yield* Output.evaluate(output, resources);
+    const vpcIdRef = Output.ref<TestVpc>("TestVpc", "other-stage").vpcId;
+    const result = yield* Output.evaluate(vpcIdRef, resources);
     expect(result).toEqual("vpc-0987654321");
-    const upstream = Output.upstream(output);
+    const upstream = Output.upstream(vpcIdRef);
     expect(upstream).toEqual({});
   }).pipe(
     Effect.provide(
@@ -223,7 +218,7 @@ it.live("Output.of(Stage.ref<TestVpc>('TestVpc')).vpcId", () =>
           {},
           {
             "test-app": {
-              other: {
+              "other-stage": {
                 TestVpc: {
                   type: "Test.TestVpc",
                   id: "TestVpc",
@@ -242,21 +237,17 @@ it.live("Output.of(Stage.ref<TestVpc>('TestVpc')).vpcId", () =>
   ),
 );
 
-it.live(
-  "Output.interpolate`VPC: ${$(TestVpc).vpcArn} -- Bucket: ${$(Bucket).name}`",
-  () =>
-    Effect.gen(function* () {
-      const output = Output.interpolate`VPC: ${vpc.vpcArn} -- Bucket: ${bucket.name}`;
-      const upstream = Output.upstream(output);
-      const result = yield* Output.evaluate(output, resources);
-      expect(result).toEqual(
-        `VPC: ${vpcAttrs.vpcArn} -- Bucket: ${bucketAttrs.name}`,
-      );
-      expect(upstream).toEqual({
-        TestVpc,
-        Bucket,
-      });
-    }).pipe(Effect.provide(test.defaultState())),
+it.live("Output.interpolate`VPC: ${$(TestVpc).vpcArn} -- Bucket: ${$(Bucket).name}`", () =>
+  Effect.gen(function* () {
+    const output = Output.interpolate`VPC: ${vpc.vpcArn} -- Bucket: ${bucket.name}`;
+    const upstream = Output.upstream(output);
+    const result = yield* Output.evaluate(output, resources);
+    expect(result).toEqual(`VPC: ${vpcAttrs.vpcArn} -- Bucket: ${bucketAttrs.name}`);
+    expect(upstream).toEqual({
+      TestVpc,
+      Bucket,
+    });
+  }).pipe(Effect.provide(test.defaultState())),
 );
 
 it.live("Output.resolveUpstream({})", () =>
@@ -275,16 +266,14 @@ it.live("Output.resolveUpstream({ vpcId: $(TestVpc).vpcId })", () =>
   }),
 );
 
-it.live(
-  "Output.resolveUpstream({ vpcArn: [$(TestVpc).vpcArn, $(Bucket).name] })",
-  () =>
-    Effect.gen(function* () {
-      const upstream = Output.resolveUpstream({
-        vpcArn: [$(TestVpc).vpcArn, $(Bucket).name],
-      });
-      expect(upstream).toEqual({
-        TestVpc,
-        Bucket,
-      });
-    }).pipe(Effect.provide(test.defaultState())),
+it.live("Output.resolveUpstream({ vpcArn: [$(TestVpc).vpcArn, $(Bucket).name] })", () =>
+  Effect.gen(function* () {
+    const upstream = Output.resolveUpstream({
+      vpcArn: [$(TestVpc).vpcArn, $(Bucket).name],
+    });
+    expect(upstream).toEqual({
+      TestVpc,
+      Bucket,
+    });
+  }).pipe(Effect.provide(test.defaultState())),
 );

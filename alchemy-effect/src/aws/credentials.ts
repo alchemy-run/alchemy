@@ -12,10 +12,7 @@ import {
 
 import { FileSystem, HttpClient } from "@effect/platform";
 import * as ini from "@smithy/shared-ini-file-loader";
-import {
-  type AwsCredentialIdentity,
-  type AwsCredentialIdentityProvider,
-} from "@smithy/types";
+import { type AwsCredentialIdentity, type AwsCredentialIdentityProvider } from "@smithy/types";
 import * as Console from "effect/Console";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
@@ -26,7 +23,7 @@ import * as Redacted from "effect/Redacted";
 import { createHash } from "node:crypto";
 import * as path from "node:path";
 import { parseIni, parseSSOSessionData } from "./parse-ini.ts";
-import { AwsProfile } from "./profile.ts";
+import { Profile } from "./profile.ts";
 
 export class Credentials extends Context.Tag("AWS::Credentials")<
   Credentials,
@@ -42,9 +39,7 @@ export const fromAwsCredentialIdentity = (identity: AwsCredentialIdentity) =>
   Credentials.of({
     accessKeyId: Redacted.make(identity.accessKeyId),
     secretAccessKey: Redacted.make(identity.secretAccessKey),
-    sessionToken: identity.sessionToken
-      ? Redacted.make(identity.sessionToken)
-      : undefined,
+    sessionToken: identity.sessionToken ? Redacted.make(identity.sessionToken) : undefined,
     expiration: identity.expiration?.getTime(),
   });
 
@@ -52,9 +47,7 @@ const createLayer = (provider: (config: {}) => AwsCredentialIdentityProvider) =>
   Layer.effect(
     Credentials,
     Effect.gen(function* () {
-      return fromAwsCredentialIdentity(
-        yield* Effect.promise(() => provider({})()),
-      );
+      return fromAwsCredentialIdentity(yield* Effect.promise(() => provider({})()));
     }),
   );
 
@@ -73,9 +66,8 @@ export const fromContainerMetadata = () => createLayer(_fromContainerMetadata);
 
 export const fromHttp = () => createLayer(_fromHttp);
 
-export const fromInstanceMetadata = (
-  ...parameters: Parameters<typeof _fromInstanceMetadata>
-) => createLayer(() => _fromInstanceMetadata(...parameters));
+export const fromInstanceMetadata = (...parameters: Parameters<typeof _fromInstanceMetadata>) =>
+  createLayer(() => _fromInstanceMetadata(...parameters));
 
 export const fromProcess = () => createLayer(_fromProcess);
 
@@ -94,25 +86,15 @@ const EXPIRE_WINDOW_MS = 5 * 60 * 1000;
 
 const REFRESH_MESSAGE = `To refresh this SSO session run 'aws sso login' with the corresponding profile.`;
 
-export class SsoRegion extends Context.Tag("AWS::SsoRegion")<
-  SsoRegion,
-  string
->() {}
-export class SsoStartUrl extends Context.Tag("AWS::SsoStartUrl")<
-  SsoStartUrl,
-  string
->() {}
+export class SsoRegion extends Context.Tag("AWS::SsoRegion")<SsoRegion, string>() {}
+export class SsoStartUrl extends Context.Tag("AWS::SsoStartUrl")<SsoStartUrl, string>() {}
 
-export class ProfileNotFound extends Data.TaggedError(
-  "Alchemy::AWS::ProfileNotFound",
-)<{
+export class ProfileNotFound extends Data.TaggedError("Alchemy::AWS::ProfileNotFound")<{
   message: string;
   profile: string;
 }> {}
 
-export class ConflictingSSORegion extends Data.TaggedError(
-  "Alchemy::AWS::ConflictingSSORegion",
-)<{
+export class ConflictingSSORegion extends Data.TaggedError("Alchemy::AWS::ConflictingSSORegion")<{
   message: string;
   ssoRegion: string;
   profile: string;
@@ -126,24 +108,18 @@ export class ConflictingSSOStartUrl extends Data.TaggedError(
   profile: string;
 }> {}
 
-export class InvalidSSOProfile extends Data.TaggedError(
-  "Alchemy::AWS::InvalidSSOProfile",
-)<{
+export class InvalidSSOProfile extends Data.TaggedError("Alchemy::AWS::InvalidSSOProfile")<{
   message: string;
   profile: string;
   missingFields: string[];
 }> {}
 
-export class InvalidSSOToken extends Data.TaggedError(
-  "Alchemy::AWS::InvalidSSOToken",
-)<{
+export class InvalidSSOToken extends Data.TaggedError("Alchemy::AWS::InvalidSSOToken")<{
   message: string;
   sso_session: string;
 }> {}
 
-export class ExpiredSSOToken extends Data.TaggedError(
-  "Alchemy::AWS::ExpiredSSOToken",
-)<{
+export class ExpiredSSOToken extends Data.TaggedError("Alchemy::AWS::ExpiredSSOToken")<{
   message: string;
   profile: string;
 }> {}
@@ -170,99 +146,17 @@ export const fromSSO = () =>
     Effect.gen(function* () {
       const client = yield* HttpClient.HttpClient;
       const fs = yield* FileSystem.FileSystem;
-      const profileName = Option.getOrElse(
-        yield* Effect.serviceOption(AwsProfile),
-        () => "default",
-      );
-
-      const profiles: {
-        [profileName: string]: AwsProfileConfig;
-      } = yield* Effect.promise(() =>
-        ini.parseKnownFiles({ profile: profileName }),
-      );
-
-      const profile = profiles[profileName];
-
-      if (!profile) {
-        yield* Effect.fail(
-          new ProfileNotFound({
-            message: `Profile ${profileName} not found`,
-            profile: profileName,
-          }),
-        );
-      }
-
+      const profileName = Option.getOrElse(yield* Effect.serviceOption(Profile), () => "default");
       const awsDir = path.join(ini.getHomeDir(), ".aws");
-      const configPath = path.join(awsDir, "config");
       const cachePath = path.join(awsDir, "sso", "cache");
 
+      const profile = yield* loadProfile(profileName);
+
       if (profile.sso_session) {
-        const ssoRegion = Option.getOrUndefined(
-          yield* Effect.serviceOption(SsoRegion),
-        );
-        const ssoStartUrl = Option.getOrElse(
-          yield* Effect.serviceOption(SsoStartUrl),
-          () => profile.sso_start_url,
-        );
-
-        const ssoSessions = yield* fs.readFileString(configPath).pipe(
-          Effect.flatMap((config) =>
-            Effect.promise(async () => parseIni(config)),
-          ),
-          Effect.map(parseSSOSessionData),
-        );
-        const session = ssoSessions[profile.sso_session];
-        if (ssoRegion && ssoRegion !== session.sso_region) {
-          yield* Effect.fail(
-            new ConflictingSSORegion({
-              message: `Conflicting SSO region`,
-              ssoRegion: ssoRegion,
-              profile: profile.sso_session,
-            }),
-          );
-        }
-        if (ssoStartUrl && ssoStartUrl !== session.sso_start_url) {
-          yield* Effect.fail(
-            new ConflictingSSOStartUrl({
-              message: `Conflicting SSO start url`,
-              ssoStartUrl: ssoStartUrl,
-              profile: profile.sso_session,
-            }),
-          );
-        }
-        profile.sso_region = session.sso_region;
-        profile.sso_start_url = session.sso_start_url;
-
-        const ssoFields = [
-          "sso_start_url",
-          "sso_account_id",
-          "sso_region",
-          "sso_role_name",
-        ] as const satisfies (keyof SsoProfileConfig)[];
-        const missingFields = ssoFields.filter((field) => !profile[field]);
-        if (missingFields.length > 0) {
-          yield* Effect.fail(
-            new InvalidSSOProfile({
-              profile: profileName,
-              missingFields,
-              message:
-                `Profile is configured with invalid SSO credentials. Required parameters "sso_account_id", ` +
-                `"sso_region", "sso_role_name", "sso_start_url". Got ${Object.keys(
-                  profile,
-                ).join(
-                  ", ",
-                )}\nReference: https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sso.html`,
-            }),
-          );
-        }
-
         const hasher = createHash("sha1");
         const cacheName = hasher.update(profile.sso_session).digest("hex");
         const ssoTokenFilepath = path.join(cachePath, `${cacheName}.json`);
-        const cachedCredsFilePath = path.join(
-          cachePath,
-          `${cacheName}.credentials.json`,
-        );
+        const cachedCredsFilePath = path.join(cachePath, `${cacheName}.credentials.json`);
 
         const cachedCreds = yield* fs.readFileString(cachedCredsFilePath).pipe(
           Effect.map((text) => JSON.parse(text)),
@@ -271,8 +165,7 @@ export const fromSSO = () =>
 
         const isExpired = (expiry: number | string | undefined) => {
           return (
-            expiry === undefined ||
-            new Date(expiry).getTime() - Date.now() <= EXPIRE_WINDOW_MS
+            expiry === undefined || new Date(expiry).getTime() - Date.now() <= EXPIRE_WINDOW_MS
           );
         };
 
@@ -359,6 +252,90 @@ export const fromSSO = () =>
       );
     }),
   );
+
+export const loadProfile = Effect.fn(function* (profileName: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const profiles: {
+    [profileName: string]: AwsProfileConfig;
+  } = yield* Effect.promise(() => ini.parseKnownFiles({ profile: profileName }));
+
+  const profile = profiles[profileName];
+
+  if (!profile) {
+    yield* Effect.fail(
+      new ProfileNotFound({
+        message: `Profile ${profileName} not found`,
+        profile: profileName,
+      }),
+    );
+  }
+
+  const awsDir = path.join(ini.getHomeDir(), ".aws");
+  const configPath = path.join(awsDir, "config");
+
+  if (profile.sso_session) {
+    const ssoRegion = Option.getOrUndefined(yield* Effect.serviceOption(SsoRegion));
+    const ssoStartUrl = Option.getOrElse(
+      yield* Effect.serviceOption(SsoStartUrl),
+      () => profile.sso_start_url,
+    );
+
+    const ssoSessions = yield* fs.readFileString(configPath).pipe(
+      Effect.flatMap((config) => Effect.promise(async () => parseIni(config))),
+      Effect.map(parseSSOSessionData),
+    );
+    const session = ssoSessions[profile.sso_session];
+    if (ssoRegion && ssoRegion !== session.sso_region) {
+      yield* Effect.fail(
+        new ConflictingSSORegion({
+          message: `Conflicting SSO region`,
+          ssoRegion: ssoRegion,
+          profile: profile.sso_session,
+        }),
+      );
+    }
+    if (ssoStartUrl && ssoStartUrl !== session.sso_start_url) {
+      yield* Effect.fail(
+        new ConflictingSSOStartUrl({
+          message: `Conflicting SSO start url`,
+          ssoStartUrl: ssoStartUrl,
+          profile: profile.sso_session,
+        }),
+      );
+    }
+    profile.sso_region = session.sso_region;
+    profile.sso_start_url = session.sso_start_url;
+
+    const ssoFields = [
+      "sso_start_url",
+      "sso_account_id",
+      "sso_region",
+      "sso_role_name",
+    ] as const satisfies (keyof SsoProfileConfig)[];
+    const missingFields = ssoFields.filter((field) => !profile[field]);
+    if (missingFields.length > 0) {
+      yield* Effect.fail(
+        new InvalidSSOProfile({
+          profile: profileName,
+          missingFields,
+          message:
+            `Profile is configured with invalid SSO credentials. Required parameters "sso_account_id", ` +
+            `"sso_region", "sso_role_name", "sso_start_url". Got ${Object.keys(profile).join(
+              ", ",
+            )}\nReference: https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sso.html`,
+        }),
+      );
+    }
+    return profile;
+  }
+
+  return yield* Effect.fail(
+    new ProfileNotFound({
+      message: `Profile ${profileName} not found`,
+      profile: profileName,
+    }),
+  );
+});
 
 /**
  * Cached SSO token retrieved from SSO login flow.

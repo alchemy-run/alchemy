@@ -40,7 +40,11 @@ export class PlanStatusReporter extends Context.Tag("PlanStatusReporter")<
   }
 >() {}
 
-export type ApplyEffect<P extends IPlan, Err = never, Req = never> = Effect.Effect<
+export type ApplyEffect<
+  P extends IPlan,
+  Err = never,
+  Req = never,
+> = Effect.Effect<
   {
     [k in keyof AppliedPlan<P>]: AppliedPlan<P>[k];
   },
@@ -49,12 +53,17 @@ export type ApplyEffect<P extends IPlan, Err = never, Req = never> = Effect.Effe
 >;
 
 export type AppliedPlan<P extends IPlan> = {
-  [id in keyof P["resources"]]: P["resources"][id] extends Delete<Resource> | undefined | never
+  [id in keyof P["resources"]]: P["resources"][id] extends
+    | Delete<Resource>
+    | undefined
+    | never
     ? never
     : Simplify<P["resources"][id]["resource"]["attr"]>;
 };
 
-export const apply = <const Resources extends (AnyService | AnyResource)[] = never>(
+export const apply = <
+  const Resources extends (AnyService | AnyResource)[] = never,
+>(
   ...resources: Resources
 ): ApplyEffect<
   DerivePlan<Instance<Resources[number]>>,
@@ -114,7 +123,8 @@ export const applyPlan = <P extends IPlan, Err = never, Req = never>(
           const provider = yield* binding.Tag;
 
           const resourceId: string = node.binding.capability.resource.id;
-          const { upstreamAttr, upstreamNode } = yield* resolveUpstream(resourceId);
+          const { upstreamAttr, upstreamNode } =
+            yield* resolveUpstream(resourceId);
 
           return {
             resourceId,
@@ -158,7 +168,9 @@ export const applyPlan = <P extends IPlan, Err = never, Req = never>(
                 } else if (node.action === "reattach") {
                   // reattach is optional, we fall back to attach if it's not available
                   return yield* asEffect(
-                    (provider.reattach ? provider.reattach : provider.attach)(input),
+                    (provider.reattach ? provider.reattach : provider.attach)(
+                      input,
+                    ),
                   );
                 } else if (node.action === "detach" && provider.detach) {
                   return yield* asEffect(
@@ -222,7 +234,9 @@ export const applyPlan = <P extends IPlan, Err = never, Req = never>(
             ),
           );
 
-        const apply: (node: CRUD) => Effect.Effect<any, never, never> = (node) =>
+        const apply: (node: CRUD) => Effect.Effect<any, never, never> = (
+          node,
+        ) =>
           Effect.gen(function* () {
             const saveState = <Output>({
               output,
@@ -283,10 +297,14 @@ export const applyPlan = <P extends IPlan, Err = never, Req = never>(
                 }) {
                   const upstream = Object.fromEntries(
                     yield* Effect.all(
-                      Object.entries(Output.resolveUpstream(node.news)).map(([id]) =>
-                        resolveUpstream(id).pipe(
-                          Effect.map(({ upstreamAttr }) => [id, upstreamAttr]),
-                        ),
+                      Object.entries(Output.resolveUpstream(node.news)).map(
+                        ([id]) =>
+                          resolveUpstream(id).pipe(
+                            Effect.map(({ upstreamAttr }) => [
+                              id,
+                              upstreamAttr,
+                            ]),
+                          ),
                       ),
                     ),
                   );
@@ -305,7 +323,9 @@ export const applyPlan = <P extends IPlan, Err = never, Req = never>(
                   });
 
                   const output: any = yield* (
-                    phase === "create" ? node.provider.create : node.provider.update
+                    phase === "create"
+                      ? node.provider.create
+                      : node.provider.update
                   )({
                     id,
                     news,
@@ -320,7 +340,9 @@ export const applyPlan = <P extends IPlan, Err = never, Req = never>(
                   }).pipe(
                     // TODO(sam): partial checkpoints
                     // checkpoint,
-                    Effect.tap(() => report(phase === "create" ? "created" : "updated")),
+                    Effect.tap(() =>
+                      report(phase === "create" ? "created" : "updated"),
+                    ),
                   );
 
                   bindingOutputs = yield* postAttachBindings({
@@ -381,7 +403,9 @@ export const applyPlan = <P extends IPlan, Err = never, Req = never>(
                   yield* Effect.logDebug("delete", id);
                   yield* Effect.all(
                     node.downstream.map((dep) =>
-                      dep in plan.resources ? apply(plan.resources[dep] as any) : Effect.void,
+                      dep in plan.resources
+                        ? apply(plan.resources[dep] as any)
+                        : Effect.void,
                     ),
                   );
                   yield* report("deleting");
@@ -436,7 +460,11 @@ export const applyPlan = <P extends IPlan, Err = never, Req = never>(
                         }),
                         session: scopedSession,
                       })
-                      .pipe(Effect.tap((output) => saveState({ news: node.news, output })));
+                      .pipe(
+                        Effect.tap((output) =>
+                          saveState({ news: node.news, output }),
+                        ),
+                      );
                   });
                   if (!node.deleteFirst) {
                     yield* destroy;
@@ -450,7 +478,10 @@ export const applyPlan = <P extends IPlan, Err = never, Req = never>(
             ));
           }) as Effect.Effect<any, never, never>;
 
-        const nodes = [...Object.entries(plan.resources), ...Object.entries(plan.deletions)];
+        const nodes = [
+          ...Object.entries(plan.resources),
+          ...Object.entries(plan.deletions),
+        ];
 
         const resources: any = Object.fromEntries(
           yield* Effect.all(

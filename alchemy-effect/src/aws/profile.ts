@@ -1,6 +1,3 @@
 import * as Context from "effect/Context";
 
-export class AwsProfile extends Context.Tag("AWS::Profile")<
-  AwsProfile,
-  string
->() {}
+export class Profile extends Context.Tag("AWS::Profile")<Profile, string>() {}

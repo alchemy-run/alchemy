@@ -1,30 +1,20 @@
 import type * as EC2 from "itty-aws/ec2";
 import type { Input } from "../../input.ts";
 import { Resource } from "../../resource.ts";
-import type { AccountID } from "../account.ts";
-import type { RegionID } from "../region.ts";
+import type { Account } from "../account.ts";
+import type { Region } from "../region.ts";
 
 export const Vpc = Resource<{
-  <const ID extends string, const Props extends VpcProps>(
-    id: ID,
-    props: Props,
-  ): Vpc<ID, Props>;
+  <const ID extends string, const Props extends VpcProps>(id: ID, props: Props): Vpc<ID, Props>;
 }>("AWS.EC2.VPC");
 
 export interface Vpc<
   ID extends string = string,
   Props extends VpcProps = VpcProps,
-> extends Resource<
-    "AWS.EC2.VPC",
-    ID,
-    Props,
-    VpcAttrs<Input.Resolve<Props>>,
-    Vpc
-  > {}
+> extends Resource<"AWS.EC2.VPC", ID, Props, VpcAttrs<Input.Resolve<Props>>, Vpc> {}
 
 export type VpcId = `vpc-${string}`;
-export const VpcId = <const S extends string>(value: S): S & VpcId =>
-  value as S & VpcId;
+export const VpcId = <const S extends string>(value: S): S & VpcId => value as S & VpcId;
 
 export interface VpcProps {
   /**
@@ -99,7 +89,7 @@ export interface VpcProps {
   tags?: Record<string, Input<string>>;
 }
 
-export interface VpcAttrs<Props extends VpcProps = VpcProps> {
+export interface VpcAttrs<_Props extends VpcProps = VpcProps> {
   /**
    * The ID of the VPC.
    */
@@ -108,7 +98,7 @@ export interface VpcAttrs<Props extends VpcProps = VpcProps> {
   /**
    * The Amazon Resource Name (ARN) of the VPC.
    */
-  vpcArn: `arn:aws:ec2:${RegionID}:${AccountID}:vpc/${this["vpcId"]}`;
+  vpcArn: `arn:aws:ec2:${Region.ID}:${Account.ID}:vpc/${this["vpcId"]}`;
 
   /**
    * The primary IPv4 CIDR block for the VPC.

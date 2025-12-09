@@ -33,9 +33,7 @@ bench("Lambda.serve with a SQS.Queue binding", () => {
   }) {}
   class Api extends Lambda.serve("Api", {
     fetch: Effect.fn(function* (event) {
-      yield* SQS.sendMessage(Queue, "hello").pipe(
-        Effect.catchAll(() => Effect.void),
-      );
+      yield* SQS.sendMessage(Queue, "hello").pipe(Effect.catchAll(() => Effect.void));
       return {
         body: JSON.stringify({ message: "Hello, world!" }),
       };
@@ -81,11 +79,7 @@ bench("Lambda.serve with a DynamoDB.Table binding", () => {
 }).types([19, "instantiations"]);
 
 bench("plan apply a Lambda.serve with a DynamoDB.Table binding", () => {
-  const platform = Layer.mergeAll(
-    NodeContext.layer,
-    FetchHttpClient.layer,
-    Logger.pretty,
-  );
+  const platform = Layer.mergeAll(NodeContext.layer, FetchHttpClient.layer, Logger.pretty);
 
   class Table extends DynamoDB.Table("Table", {
     partitionKey: "id",
@@ -135,14 +129,10 @@ bench("AWS.providers", () => {
 }).types([40419, "instantiations"]);
 
 bench("platform and provider layers", () => {
-  const platform = Layer.mergeAll(
-    NodeContext.layer,
-    FetchHttpClient.layer,
-    Logger.pretty,
-  );
+  const platform = Layer.mergeAll(NodeContext.layer, FetchHttpClient.layer, Logger.pretty);
 
   // select your providers
-  const providers = Layer.mergeAll(AWS.live);
+  const providers = Layer.mergeAll(AWS.providers());
 
   const alchemy = Layer.mergeAll(
     Alchemy.State.localFs,

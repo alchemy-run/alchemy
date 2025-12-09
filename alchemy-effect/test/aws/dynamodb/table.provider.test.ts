@@ -41,7 +41,7 @@ test(
     yield* destroy();
 
     yield* assertTableIsDeleted(stack.Table.tableName);
-  }).pipe(Effect.provide(AWS.live)),
+  }).pipe(Effect.provide(AWS.providers())),
 );
 
 const assertTableIsDeleted = Effect.fn(function* (tableName: string) {

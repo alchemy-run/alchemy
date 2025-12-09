@@ -10,9 +10,7 @@ import * as Logger from "effect/Logger";
 import * as Schedule from "effect/Schedule";
 import * as ec2 from "itty-aws/ec2";
 
-const logLevel = Logger.withMinimumLogLevel(
-  process.env.DEBUG ? LogLevel.Debug : LogLevel.Info,
-);
+const logLevel = Logger.withMinimumLogLevel(process.env.DEBUG ? LogLevel.Debug : LogLevel.Info);
 
 test(
   "create, update, delete vpc",
@@ -71,7 +69,7 @@ test(
     yield* destroy();
 
     yield* assertVpcDeleted(stack.TestVpc.vpcId);
-  }).pipe(Effect.provide(AWS.live), logLevel),
+  }).pipe(Effect.provide(AWS.providers()), logLevel),
 );
 
 const expectVpcAttribute = Effect.fn(function* (props: {
@@ -88,8 +86,8 @@ const expectVpcAttribute = Effect.fn(function* (props: {
     .pipe(
       Effect.tap(Effect.logDebug),
       Effect.flatMap((result: any) =>
-        result[`${props.Attribute[0].toUpperCase()}${props.Attribute.slice(1)}`]
-          ?.Value === props.Value
+        result[`${props.Attribute[0].toUpperCase()}${props.Attribute.slice(1)}`]?.Value ===
+        props.Value
           ? Effect.succeed(result)
           : Effect.fail(new VpcAttributeStale()),
       ),

@@ -1,8 +1,8 @@
 import type * as EC2 from "itty-aws/ec2";
 import type { Input } from "../../input.ts";
 import { Resource } from "../../resource.ts";
-import type { AccountID } from "../account.ts";
-import type { RegionID } from "../region.ts";
+import type { Account } from "../account.ts";
+import type { Region } from "../region.ts";
 import type { VpcId } from "./index.ts";
 
 export const Subnet = Resource<{
@@ -15,13 +15,7 @@ export const Subnet = Resource<{
 export interface Subnet<
   ID extends string = string,
   Props extends SubnetProps = SubnetProps,
-> extends Resource<
-    "AWS.EC2.Subnet",
-    ID,
-    Props,
-    SubnetAttrs<Input.Resolve<Props>>,
-    Subnet
-  > {}
+> extends Resource<"AWS.EC2.Subnet", ID, Props, SubnetAttrs<Input.Resolve<Props>>, Subnet> {}
 
 export interface SubnetProps {
   /**
@@ -133,7 +127,7 @@ export interface SubnetAttrs<Props extends SubnetProps> {
   /**
    * The Amazon Resource Name (ARN) of the subnet.
    */
-  subnetArn: `arn:aws:ec2:${RegionID}:${AccountID}:subnet/${this["subnetId"]}`;
+  subnetArn: `arn:aws:ec2:${Region.ID}:${Account.ID}:subnet/${this["subnetId"]}`;
 
   /**
    * The IPv4 CIDR block for the subnet.
