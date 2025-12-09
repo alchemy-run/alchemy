@@ -5,14 +5,11 @@ import { Binding } from "../../binding.ts";
 import type { From } from "../../policy.ts";
 import { createTagger, hasTags } from "../../tags.ts";
 import { Account } from "../account.ts";
-import {
-  Function,
-  LambdaClient,
-  type FunctionBinding,
-} from "../lambda/index.ts";
 import { Region } from "../region.ts";
 import type { Consume } from "./queue.consume.ts";
 import { Queue, type QueueAttrs, type QueueProps } from "./queue.ts";
+import { Function, type FunctionBinding } from "../lambda/function.ts";
+import { LambdaClient } from "../lambda/client.ts";
 
 export interface QueueEventSourceProps {
   batchSize?: number;
@@ -113,24 +110,6 @@ export const queueEventSourceProvider = () =>
           return undefined;
         });
 
-      const createFunctionBinding = (queue: {
-        attr: { queueArn: string };
-      }) => ({
-        // we need the policies to be present before the event source mapping is created
-        policyStatements: [
-          {
-            Sid: "AWS.SQS.Consume",
-            Effect: "Allow" as const,
-            Action: [
-              "sqs:ReceiveMessage",
-              "sqs:DeleteMessage",
-              "sqs:ChangeMessageVisibility",
-            ],
-            Resource: [queue.attr.queueArn],
-          },
-        ],
-      });
-
       return {
         attach: ({ source: queue, attr }) => ({
           // TODO(sam): bit of a broken model here - we can't know the UUID until post-attach
@@ -230,7 +209,7 @@ export const queueEventSourceProvider = () =>
         }) {
           const uuid =
             attr?.uuid ??
-            (yield* findEventSourceMapping(queue, functionName))?.UUID!;
+            (yield* findEventSourceMapping(queue, functionName))?.UUID;
           if (uuid) {
             // we found (or were aware of) the event source mapping, so we can delete it
             yield* (

@@ -3,7 +3,7 @@ import type { Input } from "../../input.ts";
 import { Resource } from "../../resource.ts";
 import type { Account } from "../account.ts";
 import type { Region } from "../region.ts";
-import type { VpcId } from "./index.ts";
+import type { VpcId } from "./vpc.ts";
 
 export const Subnet = Resource<{
   <const ID extends string, const Props extends SubnetProps>(
@@ -15,7 +15,13 @@ export const Subnet = Resource<{
 export interface Subnet<
   ID extends string = string,
   Props extends SubnetProps = SubnetProps,
-> extends Resource<"AWS.EC2.Subnet", ID, Props, SubnetAttrs<Input.Resolve<Props>>, Subnet> {}
+> extends Resource<
+    "AWS.EC2.Subnet",
+    ID,
+    Props,
+    SubnetAttrs<Input.Resolve<Props>>,
+    Subnet
+  > {}
 
 export interface SubnetProps {
   /**

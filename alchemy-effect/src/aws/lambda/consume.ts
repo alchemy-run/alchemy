@@ -6,11 +6,13 @@ import type {
 import * as Effect from "effect/Effect";
 import * as S from "effect/Schema";
 import { declare, type From } from "../../policy.ts";
-import * as SQS from "../sqs/index.ts";
 import * as Lambda from "./function.ts";
+import type { Queue } from "../sqs/queue.ts";
+import type { Consume, QueueEvent } from "../sqs/queue.consume.ts";
+import { QueueEventSource } from "../sqs/queue.event-source.ts";
 
 export const consume =
-  <Q extends SQS.Queue, ID extends string, Req>(
+  <Q extends Queue, ID extends string, Req>(
     id: ID,
     {
       queue,
@@ -18,7 +20,7 @@ export const consume =
     }: {
       queue: Q;
       handle: (
-        event: SQS.QueueEvent<Q["props"]["schema"]["Type"]>,
+        event: QueueEvent<Q["props"]["schema"]["Type"]>,
         context: LambdaContext,
       ) => Effect.Effect<SQSBatchResponse | void, never, Req>;
     },
@@ -29,7 +31,7 @@ export const consume =
   }: Props) =>
     Lambda.Function(id, {
       handle: Effect.fn(function* (event: SQSEvent, context: LambdaContext) {
-        yield* declare<SQS.Consume<From<Q>>>();
+        yield* declare<Consume<From<Q>>>();
         const records = yield* Effect.all(
           event.Records.map(
             Effect.fn(function* (record) {
@@ -59,4 +61,4 @@ export const consume =
           ],
         } satisfies SQSBatchResponse;
       }),
-    })({ ...props, bindings: bindings.and(SQS.QueueEventSource(queue)) });
+    })({ ...props, bindings: bindings.and(QueueEventSource(queue)) });

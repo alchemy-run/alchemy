@@ -6,8 +6,12 @@ import * as Layer from "effect/Layer";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 
-const AWS_REGION = Config.string("AWS_REGION").pipe(Config.withDefault("us-west-2"));
-const AWS_PROFILE = Config.string("AWS_PROFILE").pipe(Config.withDefault("default"));
+const AWS_REGION = Config.string("AWS_REGION").pipe(
+  Config.withDefault("us-west-2"),
+);
+const AWS_PROFILE = Config.string("AWS_PROFILE").pipe(
+  Config.withDefault("default"),
+);
 
 const stages = defineStages(
   Effect.fn(function* (stage) {

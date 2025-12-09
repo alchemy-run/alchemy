@@ -21,7 +21,10 @@ import "./config.ts";
 
 export const resources = () =>
   Layer.mergeAll(
-    Layer.provide(Layer.provideMerge(Lambda.functionProvider(), ESBuild.layer()), Lambda.client()),
+    Layer.provide(
+      Layer.provideMerge(Lambda.functionProvider(), ESBuild.layer()),
+      Lambda.client(),
+    ),
     Layer.provideMerge(SQS.queueProvider(), SQS.client()),
     Layer.provideMerge(DynamoDB.tableProvider(), DynamoDB.client()),
     Layer.provideMerge(EC2.vpcProvider(), EC2.client()),
@@ -55,6 +58,9 @@ export const defaultProviders = () =>
   );
 
 export const providers = () =>
-  defaultProviders().pipe(Layer.provide(Region.fromEnv()), Layer.provide(Credentials.fromSSO()));
+  defaultProviders().pipe(
+    Layer.provide(Region.fromEnv()),
+    Layer.provide(Credentials.fromSSO()),
+  );
 
 export default providers;

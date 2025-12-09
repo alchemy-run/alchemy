@@ -11,7 +11,9 @@ import * as Logger from "effect/Logger";
 import * as Schedule from "effect/Schedule";
 import * as Output from "@/output";
 
-const logLevel = Logger.withMinimumLogLevel(process.env.DEBUG ? LogLevel.Debug : LogLevel.Info);
+const logLevel = Logger.withMinimumLogLevel(
+  process.env.DEBUG ? LogLevel.Debug : LogLevel.Info,
+);
 
 test(
   "create, update, delete subnet",
@@ -36,7 +38,9 @@ test(
         SubnetIds: [stack.TestSubnet.subnetId],
       });
 
-      expect(actualSubnet.Subnets?.[0]?.SubnetId).toEqual(stack.TestSubnet.subnetId);
+      expect(actualSubnet.Subnets?.[0]?.SubnetId).toEqual(
+        stack.TestSubnet.subnetId,
+      );
       expect(actualSubnet.Subnets?.[0]?.CidrBlock).toEqual("10.0.1.0/24");
       expect(actualSubnet.Subnets?.[0]?.VpcId).toEqual(stack.TestVpc.vpcId);
       expect(actualSubnet.Subnets?.[0]?.State).toEqual("available");
