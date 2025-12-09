@@ -27,7 +27,11 @@ export interface IService<
   handler: Effect<
     (
       ...inputs: Parameters<Handler>
-    ) => Effect<Effect.Success<ReturnType<Handler>>, Effect.Error<ReturnType<Handler>>, never>,
+    ) => Effect<
+      Effect.Success<ReturnType<Handler>>,
+      Effect.Error<ReturnType<Handler>>,
+      never
+    >,
     never,
     Exclude<Effect.Context<ReturnType<Handler>>, Capability>
   >;

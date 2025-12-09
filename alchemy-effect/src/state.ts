@@ -93,10 +93,16 @@ export interface StateService {
     stage: string;
     resourceId: string;
   }): Effect.Effect<void, StateStoreError, never>;
-  list(request: { stack: string; stage: string }): Effect.Effect<string[], StateStoreError, never>;
+  list(request: {
+    stack: string;
+    stage: string;
+  }): Effect.Effect<string[], StateStoreError, never>;
 }
 
-export class State extends Context.Tag("AWS::Lambda::State")<State, StateService>() {}
+export class State extends Context.Tag("AWS::Lambda::State")<
+  State,
+  StateService
+>() {}
 
 // TODO(sam): implement with SQLite3
 export const localFs = Layer.effect(
@@ -185,7 +191,9 @@ export const localFs = Layer.effect(
       list: (request) =>
         fs.readDirectory(stage(request)).pipe(
           recover,
-          Effect.map((files) => files?.map((file) => file.replace(/\.json$/, "")) ?? []),
+          Effect.map(
+            (files) => files?.map((file) => file.replace(/\.json$/, "")) ?? [],
+          ),
         ),
     };
   }),
@@ -196,11 +204,22 @@ type StageId = string;
 type ResourceId = string;
 
 export const inMemory = (
-  initialState: Record<StackId, Record<StageId, Record<ResourceId, ResourceState>>> = {},
-) => Layer.succeed(State, inMemoryService(initialState)) as Layer.Layer<State, never, never>;
+  initialState: Record<
+    StackId,
+    Record<StageId, Record<ResourceId, ResourceState>>
+  > = {},
+) =>
+  Layer.succeed(State, inMemoryService(initialState)) as Layer.Layer<
+    State,
+    never,
+    never
+  >;
 
 export const inMemoryService = (
-  initialState: Record<StackId, Record<StageId, Record<ResourceId, ResourceState>>> = {},
+  initialState: Record<
+    StackId,
+    Record<StageId, Record<ResourceId, ResourceState>>
+  > = {},
 ) => {
   const state = new Map<StackId, Map<StageId, Map<ResourceId, ResourceState>>>(
     Object.entries(initialState).map(([stack, stages]) => [
@@ -216,9 +235,17 @@ export const inMemoryService = (
   return {
     listStacks: () => Effect.succeed(Array.from(state.keys())),
     // oxlint-disable-next-line require-yield
-    listStages: (stack: string) => Effect.succeed(Array.from(state.get(stack)?.keys() ?? [])),
-    get: ({ stack, stage, resourceId }: { stack: string; stage: string; resourceId: string }) =>
-      Effect.succeed(state.get(stack)?.get(stage)?.get(resourceId)),
+    listStages: (stack: string) =>
+      Effect.succeed(Array.from(state.get(stack)?.keys() ?? [])),
+    get: ({
+      stack,
+      stage,
+      resourceId,
+    }: {
+      stack: string;
+      stage: string;
+      resourceId: string;
+    }) => Effect.succeed(state.get(stack)?.get(stage)?.get(resourceId)),
     set: <V extends ResourceState>({
       stack,
       stage,
@@ -233,8 +260,15 @@ export const inMemoryService = (
       state.get(stack)?.get(stage)?.set(resourceId, value);
       return Effect.succeed(value);
     },
-    delete: ({ stack, stage, resourceId }: { stack: string; stage: string; resourceId: string }) =>
-      Effect.succeed(state.get(stack)?.get(stage)?.delete(resourceId)),
+    delete: ({
+      stack,
+      stage,
+      resourceId,
+    }: {
+      stack: string;
+      stage: string;
+      resourceId: string;
+    }) => Effect.succeed(state.get(stack)?.get(stage)?.delete(resourceId)),
     list: ({ stack, stage }: { stack: string; stage: string }) =>
       Effect.succeed(Array.from(state.get(stack)?.get(stage)?.keys() ?? [])),
   };

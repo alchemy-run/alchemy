@@ -1,7 +1,8 @@
 import type { KV } from "cloudflare/resources";
 import * as Effect from "effect/Effect";
 import { App } from "../../app.ts";
-import { CloudflareAccountId, CloudflareApi } from "../api.ts";
+import { Account } from "../account.ts";
+import { CloudflareApi } from "../api.ts";
 import {
   Namespace,
   type NamespaceAttr,
@@ -13,7 +14,7 @@ export const namespaceProvider = () =>
     Effect.gen(function* () {
       const app = yield* App;
       const api = yield* CloudflareApi;
-      const accountId = yield* CloudflareAccountId;
+      const accountId = yield* Account;
 
       const createTitle = (id: string, title: string | undefined) =>
         title ?? `${app.name}-${id}-${app.stage}`;

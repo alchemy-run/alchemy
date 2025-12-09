@@ -8,9 +8,12 @@ import type { ProviderService } from "./provider.ts";
 import type { IResource, Resource, ResourceTags } from "./resource.ts";
 import type { IService, Service } from "./service.ts";
 
-export type RuntimeHandler<Inputs extends any[] = any[], Output = any, Err = any, Req = any> = (
-  ...inputs: Inputs
-) => Effect.Effect<Output, Err, Req>;
+export type RuntimeHandler<
+  Inputs extends any[] = any[],
+  Output = any,
+  Err = any,
+  Req = any,
+> = (...inputs: Inputs) => Effect.Effect<Output, Err, Req>;
 
 export declare namespace RuntimeHandler {
   export type Caps<H extends RuntimeHandler | unknown> = Extract<
@@ -51,8 +54,12 @@ export interface IRuntime<
   capability: unknown;
 }
 
-export interface Runtime<Type extends string = string, Handler = unknown, Props = unknown>
-  extends IRuntime<Type, Handler, Props>, Resource<Type, string, Props> {
+export interface Runtime<
+  Type extends string = string,
+  Handler = unknown,
+  Props = unknown,
+> extends IRuntime<Type, Handler, Props>,
+    Resource<Type, string, Props> {
   provider: ResourceTags<this>;
   <
     const ID extends string,
@@ -81,14 +88,18 @@ export const Runtime =
     const Tag = Context.Tag(type)();
     const provider = {
       tag: Tag,
-      effect: (eff: Effect.Effect<ProviderService<Self>, any, any>) => Layer.effect(Tag, eff),
+      effect: (eff: Effect.Effect<ProviderService<Self>, any, any>) =>
+        Layer.effect(Tag, eff),
       succeed: (service: ProviderService<Self>) => Layer.succeed(Tag, service),
     };
     const self = Object.assign(
       (
         ...args:
           | [cap: Capability]
-          | [id: string, { handle: (...args: any[]) => Effect.Effect<any, never, any> }]
+          | [
+              id: string,
+              { handle: (...args: any[]) => Effect.Effect<any, never, any> },
+            ]
       ) => {
         if (args.length === 1) {
           const [cap] = args;
@@ -130,7 +141,9 @@ export const Runtime =
         provider,
         toString() {
           return `${this.type}(${this.id}${
-            this.capability?.length ? `, ${this.capability.map((c) => `${c}`).join(", ")}` : ""
+            this.capability?.length
+              ? `, ${this.capability.map((c) => `${c}`).join(", ")}`
+              : ""
           })`;
         },
       },

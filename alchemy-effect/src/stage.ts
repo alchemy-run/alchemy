@@ -1,82 +1,62 @@
-import type { Resource } from "./resource.ts";
-import type { Ref } from "./ref.ts";
-import { Stack } from "./stack.ts";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import { type StackRef, Stack } from "./stack.ts";
 
-const args = typeof process !== "undefined" ? process.argv.slice(2) : [];
+export interface StageConfig {
+  /**
+   * Whether to retain the stage when destroying the stack.
+   *
+   * @default Stage.current.startsWith("prod")
+   */
+  retain?: boolean;
+}
 
-const parseOption = (argName: string) => {
-  const i = args.indexOf(argName);
-  return i !== -1 && i + 1 < args.length ? args[i + 1] : undefined;
+export class Stage extends Context.Tag("Stage")<Stage, string>() {}
+
+export type Stages<Req = never, Err = never> = {
+  config: (stage: string) => StageConfig | Effect.Effect<StageConfig, Err, Req>;
+  ref<S extends Stack>(name: Stack.Name<S>): StackRefs<S>;
 };
 
-export interface StageConfig {}
+export const defineStages = <Req = never, Err = never>(
+  config: (stage: string) => StageConfig | Effect.Effect<StageConfig, Err, Req>,
+): Stages<Req, Err> => ({
+  config,
+  ref: <S extends Stack>(name: Stack.Name<NoInfer<S>>): StackRefs<S> =>
+    new Proxy(() => {}, {
+      get: (_, prop) => {
+        return undefined!;
+      },
+      apply: (_, thisArg, args) => {
+        return undefined!;
+      },
+    }) as StackRefs<S>,
+});
 
-export namespace Stage {
-  export const current =
-    import.meta.env.STAGE ??
-    parseOption("--stage") ??
-    `dev-${import.meta.env.USER ?? import.meta.env.USERNAME ?? "unknown"}`;
-
-  export const parent = current.includes("-")
-    ? current.split("-").slice(0, -1).join("-")
-    : undefined;
-
-  export const root = current.includes("-") ? current.split("-")[0] : current;
-
-  export const ref = <R extends Resource<string, string, any, any>>(
-    resourceId: R["id"],
-    stage?: string,
-  ): Ref<R> => ({
-    kind: "Ref",
-    resourceId,
-    stage: stage ?? current,
-  });
-
-  type Parse<Stages extends string, Components extends string[] = []> = Stages extends ""
-    ? Components
-    : Stages extends `${infer Root}-${infer Rest}`
-      ? string extends Rest
-        ? [...Components, Root, ...string[]]
-        : Parse<Rest, [...Components, Root]>
-      : [...Components, Stages];
-
-  export const config = <Stage extends string>(
-    config: (components: Parse<Stage>, stage: Stage) => StageConfig,
-  ) => {
-    const _config = (stage: Stage) => {
-      const stages = stage.split("-");
-      if (stages.length === 0) {
-        throw new Error(`Stage '${stage}' is not valid`);
-      }
-      return config(stages as Parse<Stage>, stage);
-    };
-    return Object.assign(_config, {
-      of: <S extends Stack<any>>(stackName: Stack.Name<S>) => Stages.of(stackName, _config),
-      current: _config(Stage.current as Stage),
-      parent: Stage.parent ? _config(Stage.parent as Stage) : undefined,
-      root: _config(Stage.root as Stage),
-    });
+type StackRefs<S extends Stack> = {
+  [stage in string]: StackRef<Stack.Resources<S>>;
+} & {
+  <
+    Builders extends {
+      [stage in string]: string | ((...args: any[]) => string);
+    },
+  >(
+    stages?: Builders,
+  ): {
+    [stage in Exclude<string, keyof Builders>]: StackRef<Stack.Resources<S>>;
+  } & {
+    [builder in keyof Builders]: Builders[builder] extends string
+      ? StackRef<Stack.Resources<S>>
+      : Builders[builder] extends (...args: infer Args) => any
+        ? (...args: Args) => StackRef<Stack.Resources<S>>
+        : never;
   };
-}
+};
 
-export namespace Stages {
-  export const of = <S extends Stack<any>, Stages extends string>(
-    stackName: Stack.Name<S>,
-    config: (stage: Stages) => StageConfig,
-  ) => {
-    const ref = (stage: string = Stage.current, suffix?: string) =>
-      Stack.ref<S>({
-        stack: stackName,
-        stage: suffix ? `${stage}-${suffix}` : stage,
-        ...config,
-      });
-    return {
-      ref,
-      prod: ref("prod"),
-      staging: (pr?: number) => ref("staging", pr?.toString()),
-      dev: (user: string = import.meta.env.USER!) => ref("dev", user),
-      parent: Stage.parent ? ref(Stage.parent) : undefined,
-      root: ref(Stage.root),
-    };
-  };
-}
+export const validateStage = (stage: string) => {
+  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(stage)) {
+    throw new Error(
+      `Stage '${stage}' is invalid. It can only contain lowercase letters, numbers, and hyphens.`,
+    );
+  }
+};

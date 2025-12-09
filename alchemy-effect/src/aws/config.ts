@@ -1,11 +1,12 @@
-import type { AccountID } from "./account.ts";
-import type { RegionID } from "./region.ts";
+import type { Account } from "./account.ts";
+import type { Region } from "./region.ts";
 
 declare module "../stage.ts" {
   interface StageConfig {
     aws?: {
-      account: AccountID;
-      region: RegionID;
+      profile?: string;
+      account: Account.ID;
+      region: Region.ID;
     };
   }
 }

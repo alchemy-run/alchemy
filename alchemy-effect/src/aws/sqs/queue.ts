@@ -15,12 +15,12 @@ export interface Queue<
   ID extends string = string,
   Props extends QueueProps = QueueProps,
 > extends Resource<
-  "AWS.SQS.Queue",
-  ID,
-  Props,
-  QueueAttrs<Extract<Input.Resolve<Props>, QueueProps>>,
-  Queue
-> {}
+    "AWS.SQS.Queue",
+    ID,
+    Props,
+    QueueAttrs<Extract<Input.Resolve<Props>, QueueProps>>,
+    Queue
+  > {}
 
 export type QueueAttrs<Props extends QueueProps> = {
   queueName: Props["queueName"] extends string ? Props["queueName"] : string;

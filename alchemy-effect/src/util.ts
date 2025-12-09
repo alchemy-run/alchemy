@@ -1,3 +1,5 @@
+import * as Effect from "effect/Effect";
+
 export type IsAny<T> = 0 extends 1 & T ? true : false;
 
 export type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (
@@ -12,3 +14,7 @@ export const assertDefined = <T>(value: T | undefined, message: string): T => {
   }
   return value;
 };
+
+export const asEffect = <T, Err = never, Req = never>(
+  effect: T | Effect.Effect<T, Err, Req>,
+): Effect.Effect<T, Err, Req> => (Effect.isEffect(effect) ? effect : Effect.succeed(effect));

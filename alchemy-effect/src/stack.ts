@@ -1,4 +1,5 @@
-import { FetchHttpClient } from "@effect/platform";
+import * as ConfigProvider from "effect/ConfigProvider";
+import { FetchHttpClient, type HttpClient } from "@effect/platform";
 import { NodeContext } from "@effect/platform-node";
 import { FileSystem } from "@effect/platform/FileSystem";
 import { Path } from "@effect/platform/Path";
@@ -15,19 +16,23 @@ import type { DerivePlan, Providers, TraverseResources } from "./plan.ts";
 import type { Instance } from "./policy.ts";
 import type { AnyResource } from "./resource.ts";
 import type { AnyService } from "./service.ts";
-import { Stage, type StageConfig } from "./stage.ts";
+import { Stage, type StageConfig, type Stages } from "./stage.ts";
 import * as State from "./state.ts";
+import { asEffect } from "./util.ts";
 
 export interface StackConfig<
+  Name extends string,
   Resources extends (AnyResource | AnyService)[] = (AnyResource | AnyService)[],
-> extends StageConfig {
-  // TODO(sam): type this properly
-  stages: Stages;
+  Req = never,
+  Err = never,
+> {
+  name: Name;
+  stages: Stages<Req, Err>;
   resources: Resources;
   providers: Layer.Layer<
     Providers<Instance<Resources[number]>>,
-    never,
-    App.App | FileSystem | Path | DotAlchemy
+    any,
+    App.App | FileSystem | Path | DotAlchemy | HttpClient.HttpClient
   >;
   state?: Layer.Layer<State.State>;
 }
@@ -51,46 +56,46 @@ export type Stack<
 export const defineStack = <
   const Name extends string,
   Resources extends (AnyResource | AnyService)[],
+  Req = never,
+  Err = never,
 >(
-  stackName: Name,
-  stackConfig:
-    | StackConfig<Resources>
-    | ((options: { stage: string; local?: boolean; watch?: boolean }) => StackConfig<Resources>),
+  stack: StackConfig<Name, Resources, Req, Err>,
 ): Stack<Name, Instance<Resources[number]>> =>
   Effect.gen(function* () {
+    const stackName = stack.name;
+    const stage = yield* Stage;
+    const _stageConfig = yield* asEffect(stack.stages.config(stage));
+
     // TODO(sam): implement local and watch
-    const config =
-      typeof stackConfig === "function"
-        ? stackConfig({ stage: Stage.current, local: false, watch: false })
-        : stackConfig;
     const platform = Layer.mergeAll(NodeContext.layer, FetchHttpClient.layer, Logger.pretty);
 
     // select your providers
-    const providers = config.providers;
+    const providers = stack.providers;
 
     // override alchemy state store, CLI/reporting and dotAlchemy
     const alchemy = Layer.mergeAll(
-      config.state ?? State.localFs,
+      stack.state ?? State.localFs,
       CLI.layer,
       // optional
       Alchemy.dotAlchemy,
     );
 
-    const stack = App.make({ name: stackName, stage: Stage.current });
-
     const layers = Layer.provideMerge(
       Layer.provideMerge(providers, alchemy),
-      Layer.mergeAll(platform, stack),
+      Layer.mergeAll(platform, App.make({ name: stackName, stage })),
     );
 
-    return yield* apply(...config.resources).pipe(
+    return yield* apply(...stack.resources).pipe(
       Effect.provide(layers),
       Effect.map((resources) => ({
         stack: stackName,
         resources,
       })),
     );
-  }) as Stack<Name, Instance<Resources[number]>>;
+  }).pipe(Effect.withConfigProvider(ConfigProvider.fromEnv())) as Stack<
+    Name,
+    Instance<Resources[number]>
+  >;
 
 export interface StackRefConfig<S extends Stack> extends StageConfig {
   stack: S extends Stack<infer Name, any> ? Name : never;
@@ -100,10 +105,10 @@ export interface StackRefConfig<S extends Stack> extends StageConfig {
 export namespace Stack {
   export type Name<S extends Stack> = S extends Stack<infer Name, infer _> ? Name : never;
 
-  export type Outputs<S extends Stack> =
+  export type Resources<S extends Stack> =
     S extends Stack<infer _, infer Resources> ? Resources : never;
 
-  export const ref = <S extends Stack>(options: StackRefConfig<S>): StackRef<Stack.Outputs<S>> =>
+  export const ref = <S extends Stack>(options: StackRefConfig<S>): StackRef<Stack.Resources<S>> =>
     new Proxy(
       {},
       {

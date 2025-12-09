@@ -1,6 +1,7 @@
 import * as Layer from "effect/Layer";
 import * as ESBuild from "../esbuild.ts";
-import { CloudflareAccountId, CloudflareApi } from "./api.ts";
+import { CloudflareApi } from "./api.ts";
+import { Account } from "./account.ts";
 import * as KV from "./kv/index.ts";
 import { namespaceProvider } from "./kv/namespace.provider.ts";
 import { bucketProvider } from "./r2/bucket.provider.ts";
@@ -11,11 +12,15 @@ import type { StageConfig } from "../stage.ts";
 
 import "./config.ts";
 
-export const bindings = () => Layer.mergeAll(KV.bindFromWorker(), R2.bindFromWorker());
+export const bindings = () =>
+  Layer.mergeAll(KV.bindFromWorker(), R2.bindFromWorker());
 
 export const defaultProviders = () =>
   Layer.mergeAll(
-    Layer.provideMerge(workerProvider(), Layer.mergeAll(ESBuild.layer(), assetsProvider())),
+    Layer.provideMerge(
+      workerProvider(),
+      Layer.mergeAll(ESBuild.layer(), assetsProvider()),
+    ),
     namespaceProvider(),
     bucketProvider(),
   ).pipe(Layer.provideMerge(bindings()));
@@ -25,8 +30,8 @@ export const providers = (config?: StageConfig) =>
     Layer.provideMerge(
       Layer.mergeAll(
         config?.cloudflare?.account
-          ? Layer.succeed(CloudflareAccountId, config.cloudflare.account)
-          : CloudflareAccountId.fromEnv,
+          ? Layer.succeed(Account, config.cloudflare.account)
+          : Account.fromEnv,
         CloudflareApi.Default(),
       ),
     ),

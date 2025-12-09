@@ -317,7 +317,9 @@ describe("Outputs should resolve to old values", () => {
   test(
     "stringArray[0].toUpperCase()",
     {
-      string: Output.of(A).stringArray[0].apply((string) => string.toUpperCase()),
+      string: Output.of(A).stringArray[0].apply((string) =>
+        string.toUpperCase(),
+      ),
     },
     {
       string: "TEST-STRING",
@@ -393,9 +395,14 @@ describe("stable properties should not cause downstream changes", () => {
     string: Output.of(A).stableString.apply((string) => string.toUpperCase()),
   });
 
-  test("A.stableString.effect((string) => Effect.succeed(string.toUpperCase()))", {
-    string: Output.of(A).stableString.effect((string) => Effect.succeed(string.toUpperCase())),
-  });
+  test(
+    "A.stableString.effect((string) => Effect.succeed(string.toUpperCase()))",
+    {
+      string: Output.of(A).stableString.effect((string) =>
+        Effect.succeed(string.toUpperCase()),
+      ),
+    },
+  );
 
   test("A.stableArray", {
     stringArray: Output.of(A).stableArray,
@@ -409,9 +416,14 @@ describe("stable properties should not cause downstream changes", () => {
     string: Output.of(A).stableArray[0].apply((string) => string.toUpperCase()),
   });
 
-  test("A.stableArray[0].effect((string) => Effect.succeed(string.toUpperCase()))", {
-    string: Output.of(A).stableArray[0].effect((string) => Effect.succeed(string.toUpperCase())),
-  });
+  test(
+    "A.stableArray[0].effect((string) => Effect.succeed(string.toUpperCase()))",
+    {
+      string: Output.of(A).stableArray[0].effect((string) =>
+        Effect.succeed(string.toUpperCase()),
+      ),
+    },
+  );
 });
 
 const g = Effect.gen(function* () {

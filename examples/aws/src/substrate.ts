@@ -1,37 +1,37 @@
+import { defineStack, defineStages, USER } from "alchemy-effect";
 import * as Effect from "effect/Effect";
-import { defineStack, Stack, Resource, $stage } from "alchemy-effect";
+import * as Config from "effect/Config";
 import * as EC2 from "alchemy-effect/aws/ec2";
 import * as AWS from "alchemy-effect/aws";
 
-// substrate.ts
+export const AWS_REGION = Config.string("AWS_REGION").pipe(Config.withDefault("us-west-2"));
+
 export class Vpc extends EC2.Vpc("Vpc", {
   cidrBlock: "10.0.0.0/16",
 }) {}
 
-const aws = (stage: string = $stage, region: string = "us-west-2") => ({
-  account: stage === "prod" ? "0123" : stage === "staging" ? "4567" : "7890",
-  region,
+const stages = defineStages(
+  Effect.fn(function* (stage) {
+    return {
+      aws: {
+        account: stage === "prod" ? "0123" : stage === "staging" ? "4567" : "7890",
+        region: yield* AWS_REGION,
+      },
+    };
+  }),
+);
+
+export const Substrate = stages.ref<typeof stack>("substrate")({
+  prod: "prod",
+  preview: (pr: number) => `preview_${pr.toString()}`,
+  dev: (user: USER = USER) => `dev_${user}`,
 });
 
-export type Substrate = typeof Substrate;
-
-export const Substrate = defineStack({
+export const stack = defineStack({
   name: "substrate",
+  stages,
   resources: [Vpc],
-  providers: AWS.live(aws()),
+  providers: AWS.providers(),
 });
 
-export default Substrate;
-
-export const substrate = (stage: string = $stage, suffix?: string) =>
-  Stack.ref<Substrate>({
-    name: "substrate",
-    stage: suffix ? `${stage}-${suffix}` : stage,
-    aws: aws(stage),
-  });
-
-export const prod = substrate("prod");
-
-export const staging = (pr?: number) => substrate("staging", pr?.toString());
-
-export const dev = (user: string = import.meta.env.USER!) => substrate("dev", user);
+export default stack;

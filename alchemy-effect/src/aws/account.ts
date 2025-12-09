@@ -11,12 +11,14 @@ export class FailedToGetAccount extends Data.TaggedError(
   cause: Error;
 }> {}
 
-export type AccountID = string;
-
 export class Account extends Context.Tag("AWS::AccountID")<
   Account,
-  AccountID
+  Account.ID
 >() {}
+
+export declare namespace Account {
+  export type ID = string;
+}
 
 export const fromIdentity = () =>
   Layer.effect(

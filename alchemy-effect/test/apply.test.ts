@@ -117,7 +117,9 @@ test(
 
     {
       class B extends TestResource("B", {
-        string: Output.of(A).stringArray[0].apply((string) => string.toUpperCase()),
+        string: Output.of(A).stringArray[0].apply((string) =>
+          string.toUpperCase(),
+        ),
       }) {}
 
       const stack = yield* apply(B);
@@ -143,7 +145,10 @@ test(
       }) {}
 
       const stack = yield* apply(B);
-      expect(stack.B.stringArray).toEqual(["test-string-array", "test-string-array"]);
+      expect(stack.B.stringArray).toEqual([
+        "test-string-array",
+        "test-string-array",
+      ]);
     }
   }).pipe(Effect.provide(TestLayers)),
 );

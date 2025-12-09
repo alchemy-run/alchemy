@@ -1,8 +1,8 @@
 export * from "./credentials.ts";
 export * from "./profile.ts";
 
-export { Account, type AccountID } from "./account.ts";
-export { Region, type RegionID } from "./region.ts";
+export { Account } from "./account.ts";
+export { Region } from "./region.ts";
 
 import * as Layer from "effect/Layer";
 import * as ESBuild from "../esbuild.ts";
@@ -19,7 +19,7 @@ import * as STS from "./sts.ts";
 
 import "./config.ts";
 
-export const providers = () =>
+export const resources = () =>
   Layer.mergeAll(
     Layer.provide(Layer.provideMerge(Lambda.functionProvider(), ESBuild.layer()), Lambda.client()),
     Layer.provideMerge(SQS.queueProvider(), SQS.client()),
@@ -48,18 +48,16 @@ export const clients = () =>
   );
 
 export const defaultProviders = () =>
-  providers().pipe(
+  resources().pipe(
     Layer.provideMerge(bindings()),
     Layer.provideMerge(Account.fromIdentity()),
     Layer.provideMerge(clients()),
   );
 
-export const live = (
-  config: { account: Account.AccountID; region: Region.RegionID } = {
-    // TODO(sam): error if not set
-    account: import.meta.env.AWS_ACCOUNT!,
-    region: import.meta.env.AWS_REGION!,
-  },
-) => defaultProviders().pipe(Layer.provide(Region.fromEnv()), Layer.provide(Credentials.fromSSO()));
+export const providers = () =>
+  defaultProviders().pipe(
+    Layer.provide(config.region ? Region.of(config.region) : Region.fromEnv()),
+    Layer.provide(Credentials.fromSSO()),
+  );
 
-export default live;
+export default providers;

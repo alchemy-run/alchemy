@@ -13,7 +13,14 @@ export interface BindingProps {
 export const isBinding = (b: any): b is AnyBinding =>
   "runtime" in b && "capability" in b && "tag" in b && "output" in b;
 
-export type AnyBinding<F extends IRuntime = any> = Binding<F, any, any, any, string, boolean>;
+export type AnyBinding<F extends IRuntime = any> = Binding<
+  F,
+  any,
+  any,
+  any,
+  string,
+  boolean
+>;
 
 export interface Binding<
   Run extends IRuntime<any, any, any>,
@@ -37,9 +44,13 @@ export interface Bind<
   Cap extends Capability,
   Tag extends string,
 > extends Context.Tag<
-  `${F["type"]}(${Cap["type"]}, ${Tag})`,
-  BindingService<F, Extract<Extract<Cap["resource"], Resource>["base"], Resource>, F["props"]>
-> {
+    `${F["type"]}(${Cap["type"]}, ${Tag})`,
+    BindingService<
+      F,
+      Extract<Extract<Cap["resource"], Resource>["base"], Resource>,
+      F["props"]
+    >
+  > {
   /** @internal phantom */
   name: Tag;
 }
@@ -93,13 +104,23 @@ export interface BindingDeclaration<
   provider: {
     effect<Err, Req>(
       eff: Effect<
-        BindingService<Run, Parameters<F>[0], Parameters<F>[1], ReturnType<F>["attr"]>,
+        BindingService<
+          Run,
+          Parameters<F>[0],
+          Parameters<F>[1],
+          ReturnType<F>["attr"]
+        >,
         Err,
         Req
       >,
     ): Layer.Layer<Bind<Run, Cap, Tag>, Err, Req>;
     succeed(
-      service: BindingService<Run, Parameters<F>[0], Parameters<F>[1], ReturnType<F>["attr"]>,
+      service: BindingService<
+        Run,
+        Parameters<F>[0],
+        Parameters<F>[1],
+        ReturnType<F>["attr"]
+      >,
     ): Layer.Layer<Bind<Run, Cap, Tag>>;
   };
 }
@@ -198,7 +219,9 @@ export type BindingService<
   DetachReq = never,
   PostAttachReq = never,
 > = {
-  diff?: (props: BindingDiffProps<Source, Target, Props>) => Effect<Diff, never, DiffReq>;
+  diff?: (
+    props: BindingDiffProps<Source, Target, Props>,
+  ) => Effect<Diff, never, DiffReq>;
   preattach?: (
     props: BindingAttachProps<Source, Target, Props, Attr>,
   ) => Effect<Partial<Target["attr"]>, never, PreReattachReq>;

@@ -21,7 +21,10 @@ export const env: Env = new Proxy(
   {},
   {
     get: (target, prop) =>
-      assertDefined(_env[prop as string], `Environment variable '${prop as string}' is not set`),
+      assertDefined(
+        _env[prop as string],
+        `Environment variable '${prop as string}' is not set`,
+      ),
   },
 );
 
@@ -33,7 +36,8 @@ export const toEnvKey = <const ID extends string, const Suffix extends string>(
 export const toUpper = <const S extends string>(str: S) =>
   str.toUpperCase() as string extends S ? S : Uppercase<S>;
 
-const replace = <const S extends string>(str: S) => str.replace(/-/g, "_") as Replace<S>;
+const replace = <const S extends string>(str: S) =>
+  str.replace(/-/g, "_") as Replace<S>;
 
 type Replace<S extends string, Accum extends string = ""> = string extends S
   ? S

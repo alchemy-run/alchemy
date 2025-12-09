@@ -1,16 +1,7 @@
-import { CloudflareAccountId, CloudflareApi } from "@/cloudflare/api";
-import * as CloudflareLive from "@/cloudflare/live";
 import * as R2 from "@/cloudflare/r2";
 import * as Worker from "@/cloudflare/worker";
-import * as Assets from "@/cloudflare/worker/assets.fetch";
-import { $, apply, destroy } from "@/index";
-import { test } from "@/test";
-import { expect } from "@effect/vitest";
-import { LogLevel } from "effect";
-import * as Data from "effect/Data";
+import { $ } from "@/index";
 import * as Effect from "effect/Effect";
-import * as Logger from "effect/Logger";
-import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 
 const main = pathe.resolve(import.meta.dirname, "worker.ts");

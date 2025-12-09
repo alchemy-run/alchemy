@@ -88,11 +88,6 @@
       "import": "./lib/cloudflare/index.js",
       "types": "./lib/cloudflare/index.d.ts"
     },
-    "./cloudflare/live": {
-      "bun": "./src/cloudflare/live.ts",
-      "import": "./lib/cloudflare/live.js",
-      "types": "./lib/cloudflare/live.d.ts"
-    },
     "./cloudflare/assets": {
       "bun": "./src/cloudflare/worker/assets.fetch.ts",
       "import": "./lib/cloudflare/worker/assets.fetch.js",

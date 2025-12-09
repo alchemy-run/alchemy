@@ -22,6 +22,7 @@ import type { AnyResource, Resource } from "./resource.ts";
 import type { AnyService } from "./service.ts";
 import { State } from "./state.ts";
 import { App } from "./app.ts";
+import { asEffect } from "./util.ts";
 
 export interface PlanStatusSession {
   emit: (event: ApplyEvent) => Effect.Effect<void>;
@@ -88,11 +89,6 @@ export const applyPlan = <P extends IPlan, Err = never, Req = never>(
             } satisfies PlanStatusSession);
         const { emit, done } = session;
 
-        const constOrEffect = <T, Err = never, Req = never>(
-          effect: T | Effect.Effect<T>,
-        ): Effect.Effect<T, Err, Req> =>
-          Effect.isEffect(effect) ? effect : Effect.succeed(effect);
-
         const resolveUpstream = Effect.fn(function* (resourceId: string) {
           const upstreamNode = plan.resources[resourceId];
           const upstreamAttr = upstreamNode
@@ -158,14 +154,14 @@ export const applyPlan = <P extends IPlan, Err = never, Req = never>(
                   target,
                 } as const;
                 if (node.action === "attach") {
-                  return yield* constOrEffect(provider.attach(input));
+                  return yield* asEffect(provider.attach(input));
                 } else if (node.action === "reattach") {
                   // reattach is optional, we fall back to attach if it's not available
-                  return yield* constOrEffect(
+                  return yield* asEffect(
                     (provider.reattach ? provider.reattach : provider.attach)(input),
                   );
                 } else if (node.action === "detach" && provider.detach) {
-                  return yield* constOrEffect(
+                  return yield* asEffect(
                     provider.detach({
                       ...input,
                       target,
@@ -204,7 +200,7 @@ export const applyPlan = <P extends IPlan, Err = never, Req = never>(
                   provider.postattach &&
                   (node.action === "attach" || node.action === "reattach")
                 ) {
-                  const bindingOutput = yield* constOrEffect(
+                  const bindingOutput = yield* asEffect(
                     provider.postattach({
                       source: {
                         id: resourceId,
@@ -351,8 +347,11 @@ export const applyPlan = <P extends IPlan, Err = never, Req = never>(
                 });
 
                 if (node.action === "noop") {
-                  return (yield* state.get({ stack: app.name, stage: app.stage, resourceId: id }))
-                    ?.output;
+                  return (yield* state.get({
+                    stack: app.name,
+                    stage: app.stage,
+                    resourceId: id,
+                  }))?.output;
                 } else if (node.action === "create") {
                   let attr: any;
                   if (node.provider.precreate) {
@@ -397,7 +396,11 @@ export const applyPlan = <P extends IPlan, Err = never, Req = never>(
                     })
                     .pipe(
                       Effect.flatMap(() =>
-                        state.delete({ stack: app.name, stage: app.stage, resourceId: id }),
+                        state.delete({
+                          stack: app.name,
+                          stage: app.stage,
+                          resourceId: id,
+                        }),
                       ),
                       Effect.tap(() => report("deleted")),
                     );

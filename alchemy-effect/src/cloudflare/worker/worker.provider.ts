@@ -7,7 +7,8 @@ import type { ScopedPlanStatusSession } from "../../apply.ts";
 import { DotAlchemy } from "../../dot-alchemy.ts";
 import { ESBuild } from "../../esbuild.ts";
 import { sha256 } from "../../sha256.ts";
-import { CloudflareAccountId, CloudflareApi } from "../api.ts";
+import { CloudflareApi } from "../api.ts";
+import { Account } from "../account.ts";
 import { Assets } from "./assets.provider.ts";
 import { Worker, type WorkerAttr, type WorkerProps } from "./worker.ts";
 
@@ -16,7 +17,7 @@ export const workerProvider = () =>
     Effect.gen(function* () {
       const app = yield* App;
       const api = yield* CloudflareApi;
-      const accountId = yield* CloudflareAccountId;
+      const accountId = yield* Account;
       const { read, upload } = yield* Assets;
       const { build } = yield* ESBuild;
       const fs = yield* FileSystem.FileSystem;

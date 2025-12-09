@@ -14,7 +14,11 @@ import type { IRuntime, Runtime } from "./runtime.ts";
  *
  * A Policy is invariant over the set of Capabilities to ensure least-privilege.
  */
-export interface Policy<F extends IRuntime, in out Capabilities, Tags = unknown> {
+export interface Policy<
+  F extends IRuntime,
+  in out Capabilities,
+  Tags = unknown,
+> {
   readonly kind: "alchemy/Policy";
   readonly runtime: F;
   readonly tags: Tags[];
@@ -38,7 +42,11 @@ type BindingTags<B extends AnyBinding> = B extends any
 export function Policy<F extends Runtime>(): Policy<F, never, never>;
 export function Policy<B extends AnyBinding[]>(
   ...capabilities: B
-): Policy<B[number]["runtime"], B[number]["capability"], BindingTags<B[number]>>;
+): Policy<
+  B[number]["runtime"],
+  B[number]["capability"],
+  BindingTags<B[number]>
+>;
 export function Policy(...bindings: AnyBinding[]): any {
   return {
     runtime: bindings[0]?.["runtime"],
@@ -62,17 +70,24 @@ export namespace Policy {
     anyOf: anyOf as Generalize<T>[],
   });
 
-  export const join = <const Strings extends readonly string[], const Delimiter extends string>(
+  export const join = <
+    const Strings extends readonly string[],
+    const Delimiter extends string,
+  >(
     strings: Strings,
     delimiter: Delimiter,
   ) => strings.join(delimiter) as Join<Strings, Delimiter>;
 
   type ___ = Join<string[], ",">;
-  type Join<T extends readonly string[], Delimiter extends string> = T extends readonly [
-    infer First extends string,
-  ]
+  type Join<
+    T extends readonly string[],
+    Delimiter extends string,
+  > = T extends readonly [infer First extends string]
     ? First
-    : T extends readonly [infer First extends string, ...infer Rest extends readonly string[]]
+    : T extends readonly [
+          infer First extends string,
+          ...infer Rest extends readonly string[],
+        ]
       ? `${First}${Delimiter}${Join<Rest, Delimiter>}`
       : T extends string[]
         ? string
@@ -81,7 +96,11 @@ export namespace Policy {
   export type Constraint<T> = Pick<
     T,
     {
-      [k in keyof T]: T[k] extends never ? never : T[k] extends AnyOf<never> ? never : k;
+      [k in keyof T]: T[k] extends never
+        ? never
+        : T[k] extends AnyOf<never>
+          ? never
+          : k;
     }[keyof T]
   >;
 

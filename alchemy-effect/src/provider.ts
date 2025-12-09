@@ -7,18 +7,17 @@ import type { Resource } from "./resource.ts";
 import type { Runtime } from "./runtime.ts";
 import type { Service } from "./service.ts";
 
-export interface Provider<
-  R extends Resource | Service,
-> extends Context.TagClass<
-  Provider<R>,
-  R["type"],
-  ProviderService<any>
-  // TODO(sam): we are using any here because the R["type"] is enough and gaining access to the sub type (e.g. SQS.Queue)
-  // is currently not possible in the current approach
+export interface Provider<R extends Resource | Service>
+  extends Context.TagClass<
+    Provider<R>,
+    R["type"],
+    ProviderService<any>
+    // TODO(sam): we are using any here because the R["type"] is enough and gaining access to the sub type (e.g. SQS.Queue)
+    // is currently not possible in the current approach
 
-  // preferred:
-  // ProviderService<R>
-> {}
+    // preferred:
+    // ProviderService<R>
+  > {}
 
 type BindingData<Res extends Resource> = [Res] extends [Runtime]
   ? Res["binding"][]

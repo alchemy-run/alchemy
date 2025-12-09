@@ -21,7 +21,10 @@ declare module "@effect/vitest" {
 }
 
 expect.emptyObject = () =>
-  expect.toSatisfy((deletions) => Object.keys(deletions).length === 0, "empty object");
+  expect.toSatisfy(
+    (deletions) => Object.keys(deletions).length === 0,
+    "empty object",
+  );
 
 expect.propExpr = (identifier: string, src: Resource) =>
   expect.objectContaining({
@@ -51,7 +54,10 @@ export function test(
   testCase: Effect.Effect<void, any, Provided>,
 ): void;
 
-export function test(name: string, testCase: Effect.Effect<void, any, Provided>): void;
+export function test(
+  name: string,
+  testCase: Effect.Effect<void, any, Provided>,
+): void;
 
 export function test(
   name: string,
@@ -65,8 +71,13 @@ export function test(
       ]
     | [Effect.Effect<void, any, Provided>]
 ) {
-  const [options = {}, testCase] = args.length === 1 ? [undefined, args[0]] : args;
-  const platform = Layer.mergeAll(NodeContext.layer, FetchHttpClient.layer, Logger.pretty);
+  const [options = {}, testCase] =
+    args.length === 1 ? [undefined, args[0]] : args;
+  const platform = Layer.mergeAll(
+    NodeContext.layer,
+    FetchHttpClient.layer,
+    Logger.pretty,
+  );
 
   const alchemy = Layer.provideMerge(
     Layer.mergeAll(options.state ?? State.localFs, report),
@@ -81,7 +92,9 @@ export function test(
     () =>
       testCase.pipe(
         Effect.provide(Layer.provideMerge(alchemy, platform)),
-        Logger.withMinimumLogLevel(process.env.DEBUG ? LogLevel.Debug : LogLevel.Info),
+        Logger.withMinimumLogLevel(
+          process.env.DEBUG ? LogLevel.Debug : LogLevel.Info,
+        ),
       ),
     options.timeout,
   );
