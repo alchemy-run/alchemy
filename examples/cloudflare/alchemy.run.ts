@@ -1,6 +1,11 @@
 import * as Effect from "effect/Effect";
 import * as Config from "effect/Config";
-import { type StageConfig, defineStack, defineStages } from "alchemy-effect";
+import {
+  type StageConfig,
+  defineStack,
+  defineStages,
+  USER,
+} from "alchemy-effect";
 import * as Cloudflare from "alchemy-effect/cloudflare";
 import { Api } from "./src/api.ts";
 
@@ -24,13 +29,19 @@ const stages = defineStages(
   }),
 );
 
-export const MyService = stages.ref<typeof stack>("my-cloudflare-app");
+export const MyService = stages.ref<typeof stack>("my-cloudflare-app").as({
+  prod: "prod",
+  staging: "staging",
+  preview: (pr: number) => `preview_${pr.toString()}`,
+  dev: (user: USER = USER) => `dev_${user}`,
+});
 
 const stack = defineStack({
   name: "my-cloudflare-app",
   stages,
   resources: [Api],
   providers: Cloudflare.providers(),
-}).pipe(Effect.tap(({ resources }) => Effect.log(resources.Api.url)));
+  tap: ({ Api }) => Effect.log(Api.url),
+});
 
 export default stack;

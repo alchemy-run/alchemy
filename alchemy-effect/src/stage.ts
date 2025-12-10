@@ -1,12 +1,13 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import { type StackRef, Stack } from "./stack.ts";
+import type { StackName, StackRef, Stack, StackResources } from "./stack.ts";
+import { ref } from "./ref.ts";
 
 export interface StageConfig {
   /**
    * Whether to retain the stage when destroying the stack.
    *
-   * @default Stage.current.startsWith("prod")
+   * @default - true if the current stage starts with "prod"
    */
   retain?: boolean;
 }
@@ -15,48 +16,63 @@ export class Stage extends Context.Tag("Stage")<Stage, string>() {}
 
 export type Stages<Req = never, Err = never> = {
   config: (stage: string) => StageConfig | Effect.Effect<StageConfig, Err, Req>;
-  ref<S extends Stack>(name: Stack.Name<S>): StackRefs<S>;
+  ref<S extends Stack>(name: StackName<S>): StackRefs<S>;
 };
 
 export const defineStages = <Req = never, Err = never>(
   config: (stage: string) => StageConfig | Effect.Effect<StageConfig, Err, Req>,
 ): Stages<Req, Err> => ({
   config,
-  ref: <S extends Stack>(name: Stack.Name<NoInfer<S>>): StackRefs<S> =>
-    new Proxy(() => {}, {
-      get: (_, prop) => {
-        return undefined!;
-      },
-      apply: (_, thisArg, args) => {
-        return undefined!;
-      },
-    }) as StackRefs<S>,
+  ref: <S extends Stack>(stack: StackName<NoInfer<S>>): StackRefs<S> => {
+    const proxy = (get: (id: string) => any) =>
+      new Proxy({}, { get: (_, id: string) => get(id) });
+    const proxyStage = (stage: string) =>
+      proxy((resourceId: string) =>
+        ref({
+          stack,
+          stage,
+          resourceId,
+        }),
+      );
+    return proxy((stage) =>
+      stage == "as"
+        ? (builders: StackRefBuilders) =>
+            proxy((stage: string) => {
+              if (stage in builders) {
+                const builder = builders[stage as keyof typeof builders];
+                return typeof builder === "string"
+                  ? proxyStage(stage)
+                  : (...args: any[]) => proxyStage(builder(...args));
+              }
+              return proxyStage(stage);
+            })
+        : proxy((resourceId: string) =>
+            ref({
+              stack,
+              stage,
+              resourceId,
+            }),
+          ),
+    ) as StackRefs<S>;
+  },
 });
 
-type StackRefs<S extends Stack> = {
-  [stage in string]: StackRef<Stack.Resources<S>>;
+export interface StackRefBuilders {
+  [stage: string]: string | ((...args: any[]) => string);
+}
+
+export type StackRefs<S extends Stack> = {
+  [stage in string]: StackRef<StackResources<S>>;
 } & {
-  <
-    Builders extends {
-      [stage in string]: string | ((...args: any[]) => string);
-    },
-  >(
+  as<Builders extends StackRefBuilders>(
     stages?: Builders,
   ): {
-    [stage in Exclude<string, keyof Builders>]: StackRef<Stack.Resources<S>>;
+    [stage in Exclude<string, keyof Builders>]: StackRef<StackResources<S>>;
   } & {
     [builder in keyof Builders]: Builders[builder] extends string
-      ? StackRef<Stack.Resources<S>>
+      ? StackRef<StackResources<S>>
       : Builders[builder] extends (...args: infer Args) => any
-        ? (...args: Args) => StackRef<Stack.Resources<S>>
+        ? (...args: Args) => StackRef<StackResources<S>>
         : never;
   };
-};
-
-export const validateStage = (stage: string) => {
-  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(stage)) {
-    throw new Error(
-      `Stage '${stage}' is invalid. It can only contain lowercase letters, numbers, and hyphens.`,
-    );
-  }
 };

@@ -1,4 +1,4 @@
-import { defineStack, defineStages } from "alchemy-effect";
+import { defineStack, defineStages, USER } from "alchemy-effect";
 import { Api } from "./src/api.ts";
 import { Consumer } from "./src/consumer.ts";
 import * as AWS from "alchemy-effect/aws";
@@ -9,21 +9,13 @@ import * as Effect from "effect/Effect";
 const AWS_REGION = Config.string("AWS_REGION").pipe(
   Config.withDefault("us-west-2"),
 );
+
 const AWS_PROFILE = Config.string("AWS_PROFILE").pipe(
   Config.withDefault("default"),
 );
 
 const stages = defineStages(
-  Effect.fn(function* (stage) {
-    if (stage === "prod") {
-      return {
-        aws: {
-          profile: "prod",
-          account: "1234567890",
-          region: "us-west-2",
-        },
-      };
-    }
+  Effect.fn(function* () {
     const profileName = yield* AWS_PROFILE;
     const profile = yield* AWS.loadProfile(profileName);
     if (!profile.sso_account_id) {
@@ -41,7 +33,12 @@ const stages = defineStages(
   }),
 );
 
-export const App = stages.ref<typeof stack>("my-aws-app");
+export const App = stages.ref<typeof stack>("my-aws-app").as({
+  prod: "prod",
+  staging: "staging",
+  preview: (pr: number) => `preview_${pr.toString()}`,
+  dev: (user: USER = USER) => `dev_${user}`,
+});
 
 const stack = defineStack({
   name: "my-aws-app",

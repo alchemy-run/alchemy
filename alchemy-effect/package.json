@@ -128,9 +128,10 @@
   "devDependencies": {
     "@clack/prompts": "^0.11.0",
     "@cloudflare/workers-types": "catalog:",
+    "@effect/cli": "catalog:",
+    "@effect/cluster": "catalog:",
     "@effect/platform": "catalog:",
     "@effect/platform-node": "catalog:",
-    "@effect/typeclass": "catalog:",
     "@types/aws-lambda": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
