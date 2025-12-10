@@ -82,7 +82,11 @@ export function test(
   const alchemy = Layer.provideMerge(
     Layer.mergeAll(options.state ?? State.localFs, report),
     Layer.mergeAll(
-      App.make({ name: name.replaceAll(/[^a-zA-Z0-9_]/g, "-"), stage: "test" }),
+      App.make({
+        name: name.replaceAll(/[^a-zA-Z0-9_]/g, "-"),
+        stage: "test",
+        config: {},
+      }),
       dotAlchemy,
     ),
   );

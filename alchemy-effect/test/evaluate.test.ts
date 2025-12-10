@@ -209,7 +209,9 @@ it.live("TestVpc.vpcId.effect(Console.log)", () =>
 
 it.live("Output.ref<TestVpc>('TestVpc', 'other-stage').vpcId", () =>
   Effect.gen(function* () {
-    const vpcIdRef = Output.ref<TestVpc>("TestVpc", "other-stage").vpcId;
+    const vpcIdRef = Output.ref<TestVpc>("TestVpc", {
+      stage: "other-stage",
+    }).vpcId;
     const result = yield* Output.evaluate(vpcIdRef, resources);
     expect(result).toEqual("vpc-0987654321");
     const upstream = Output.upstream(vpcIdRef);
@@ -217,7 +219,11 @@ it.live("Output.ref<TestVpc>('TestVpc', 'other-stage').vpcId", () =>
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
-        Layer.succeed(App, { name: "test-app", stage: "test-stage" }),
+        Layer.succeed(App, {
+          name: "test-app",
+          stage: "test-stage",
+          config: {},
+        }),
         test.defaultState(
           {},
           {

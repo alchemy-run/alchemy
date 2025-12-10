@@ -9,7 +9,7 @@ export * from "./dot-alchemy.ts";
 export { env, toEnvKey, type Env } from "./env.ts";
 export * from "./event.ts";
 export * from "./input.ts";
-export type { Output } from "./output.ts";
+export * as Output from "./output.ts";
 export * from "./phase.ts";
 export * from "./plan.ts";
 export * from "./policy.ts";

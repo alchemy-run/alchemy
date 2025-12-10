@@ -151,7 +151,7 @@ bench("platform and provider layers", () => {
     Alchemy.dotAlchemy,
   );
 
-  const app = Alchemy.app({ name: "my-app", stage: "dev" });
+  const app = Alchemy.app({ name: "my-app", stage: "dev", config: {} });
 
   const layers = Layer.provideMerge(
     Layer.provideMerge(providers, alchemy),

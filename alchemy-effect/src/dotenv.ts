@@ -13,7 +13,7 @@ export function parseDotEnv(src: string): {
   [key: string]: string;
 } {
   // copied from https://github.com/motdotla/dotenv/blob/master/lib/main.js#L52
-  const obj = {};
+  const obj: Record<string, string> = {};
 
   // Convert buffer to string
   let lines = src.toString();

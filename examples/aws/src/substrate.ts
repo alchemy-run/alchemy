@@ -24,7 +24,7 @@ const stages = defineStages(
   }),
 );
 
-export const Substrate = stages.ref<typeof stack>("substrate")({
+export const Substrate = stages.ref<typeof stack>("substrate").as({
   prod: "prod",
   preview: (pr: number) => `preview_${pr.toString()}`,
   dev: (user: USER = USER) => `dev_${user}`,
