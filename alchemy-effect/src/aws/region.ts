@@ -2,6 +2,7 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { App } from "../app.ts";
 
 export class Region extends Context.Tag("AWS::Region")<Region, Region.ID>() {}
 
@@ -35,5 +36,27 @@ export const fromEnv = () =>
         );
       }
       return region;
+    }),
+  );
+
+class AWSStageConfigMissing extends Data.TaggedError("AWSStageConfigMissing")<{
+  message: string;
+  stage: string;
+}> {}
+
+export const fromStageConfig = () =>
+  Layer.effect(
+    Region,
+    Effect.gen(function* () {
+      const region = yield* App;
+      if (!region.config.aws?.region) {
+        return yield* Effect.fail(
+          new AWSStageConfigMissing({
+            message: "AWS stage config is missing region",
+            stage: region.stage,
+          }),
+        );
+      }
+      return region.config.aws.region;
     }),
   );

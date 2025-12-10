@@ -1,3 +1,4 @@
+import { env } from "./env.ts";
+
 export type USER = typeof USER;
-export const USER =
-  import.meta.env.USER ?? import.meta.env.USERNAME ?? "unknown";
+export const USER = env.USER ?? env.USERNAME ?? "unknown";

@@ -4,6 +4,7 @@ import * as HelpDoc from "@effect/cli/HelpDoc";
 import * as ConfigProvider from "effect/ConfigProvider";
 import { NodeContext, NodeRuntime } from "@effect/platform-node";
 import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
+import { Path } from "@effect/platform/Path";
 import * as Logger from "effect/Logger";
 import * as Effect from "effect/Effect";
 import * as Config from "effect/Config";
@@ -142,7 +143,10 @@ const execStack = Effect.fn(function* ({
   yes?: boolean;
   select: (stack: Stack<string, any, never, never, never, never>) => Resource[];
 }) {
-  const module = yield* Effect.promise(() => import(main));
+  const path = yield* Path;
+  const module = yield* Effect.promise(
+    () => import(path.resolve(process.cwd(), main)),
+  );
   const stack = module.default as Stack<
     string,
     any,

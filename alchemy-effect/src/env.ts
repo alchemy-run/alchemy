@@ -1,5 +1,3 @@
-import { assertDefined } from "./util.ts";
-
 let _env;
 try {
   // @ts-expect-error
@@ -14,19 +12,10 @@ try {
 }
 
 export interface Env {
-  [key: string]: string;
+  [key: string]: string | undefined;
 }
 
-export const env: Env = new Proxy(
-  {},
-  {
-    get: (target, prop) =>
-      assertDefined(
-        _env[prop as string],
-        `Environment variable '${prop as string}' is not set`,
-      ),
-  },
-);
+export const env: Env = _env;
 
 export const toEnvKey = <const ID extends string, const Suffix extends string>(
   id: ID,
