@@ -3,6 +3,7 @@ import * as ValidationError from "@effect/cli/ValidationError";
 import * as HelpDoc from "@effect/cli/HelpDoc";
 import * as ConfigProvider from "effect/ConfigProvider";
 import { NodeContext, NodeRuntime } from "@effect/platform-node";
+import * as PlatformConfigProvider from "@effect/platform/PlatformConfigProvider";
 import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
 import { Path } from "@effect/platform/Path";
 import * as Logger from "effect/Logger";
@@ -19,7 +20,6 @@ import { dotAlchemy } from "../src/dot-alchemy.ts";
 import * as App from "../src/app.ts";
 import type { Stack } from "../src/stack.ts";
 import * as CLI from "../src/cli/index.ts";
-import { loadDotEnv } from "../src/dotenv.ts";
 import { displayPlan } from "../src/cli/display-plan.tsx";
 import { Resource } from "../src/resource.ts";
 
@@ -166,7 +166,17 @@ const execStack = Effect.fn(function* ({
   stage ??= (yield* STAGE).pipe(Option.getOrElse(() => `dev_${user}`));
 
   const stackName = stack.name;
-  const stageConfig = yield* asEffect(stack.stages.config(stage));
+
+  const configProvider = Option.isSome(envFile)
+    ? ConfigProvider.orElse(
+        yield* PlatformConfigProvider.fromDotEnv(envFile.value),
+        ConfigProvider.fromEnv,
+      )
+    : ConfigProvider.fromEnv();
+
+  const stageConfig = yield* asEffect(stack.stages.config(stage)).pipe(
+    Effect.withConfigProvider(configProvider),
+  );
 
   // TODO(sam): implement local and watch
   const platform = Layer.mergeAll(
@@ -209,13 +219,7 @@ const execStack = Effect.fn(function* ({
     }
   }).pipe(
     Effect.provide(layers),
-    Effect.withConfigProvider(
-      ConfigProvider.fromJson({
-        // TODO(sam): ideally we can avoid referencing this and instead merge CofigProvider.fromEnv()?
-        ...import.meta.env,
-        ...(Option.isSome(envFile) ? yield* loadDotEnv(envFile.value) : {}),
-      }),
-    ),
+    Effect.withConfigProvider(configProvider),
   ) as Effect.Effect<void, any, never>;
   // TODO(sam): figure out why we need to cast to remove the Provider<never> requirement
   // Effect.Effect<void, any, Provider<never>>;

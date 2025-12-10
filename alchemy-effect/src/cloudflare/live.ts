@@ -1,14 +1,13 @@
 import * as Layer from "effect/Layer";
 import * as ESBuild from "../esbuild.ts";
 import { CloudflareApi } from "./api.ts";
-import { Account } from "./account.ts";
+import * as Account from "./account.ts";
 import * as KV from "./kv/index.ts";
 import { namespaceProvider } from "./kv/namespace.provider.ts";
 import { bucketProvider } from "./r2/bucket.provider.ts";
 import * as R2 from "./r2/index.ts";
 import { assetsProvider } from "./worker/assets.provider.ts";
 import { workerProvider } from "./worker/worker.provider.ts";
-import type { StageConfig } from "../stage.ts";
 
 import "./config.ts";
 
@@ -25,14 +24,9 @@ export const defaultProviders = () =>
     bucketProvider(),
   ).pipe(Layer.provideMerge(bindings()));
 
-export const providers = (config?: StageConfig) =>
+export const providers = () =>
   defaultProviders().pipe(
     Layer.provideMerge(
-      Layer.mergeAll(
-        config?.cloudflare?.account
-          ? Layer.succeed(Account, config.cloudflare.account)
-          : Account.fromEnv,
-        CloudflareApi.Default(),
-      ),
+      Layer.mergeAll(Account.fromStageConfig(), CloudflareApi.Default()),
     ),
   );

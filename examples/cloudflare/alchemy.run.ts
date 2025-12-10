@@ -9,21 +9,13 @@ import {
 import * as Cloudflare from "alchemy-effect/cloudflare";
 import { Api } from "./src/api.ts";
 
-const CLOUDFLARE_ACCOUNT_ID = Config.string("CLOUDFLARE_ACCOUNT_ID");
-
 const stages = defineStages(
   Effect.fn(function* (stage) {
-    const [env] = stage.split("_");
     return {
-      retain: env === "prod",
+      retain: stage.startsWith("prod"),
       cloudflare: {
-        account:
-          {
-            prod: "123",
-            staging: "456",
-            preview: "789",
-            dev: "101",
-          }[env] ?? (yield* CLOUDFLARE_ACCOUNT_ID),
+        // TODO(sam): integrate with alchemy's profile system
+        account: yield* Config.string("CLOUDFLARE_ACCOUNT_ID"),
       },
     } satisfies StageConfig;
   }),
