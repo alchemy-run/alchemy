@@ -14,21 +14,21 @@ import { App } from "../../app.ts";
 import { DotAlchemy } from "../../dot-alchemy.ts";
 import type { ProviderService } from "../../provider.ts";
 import { createTagger, createTagsList, hasTags } from "../../tags.ts";
-import { Account } from "../account.ts";
 import * as IAM from "../iam.ts";
-import { Region } from "../region.ts";
 import { zipCode } from "../zip.ts";
 import { LambdaClient } from "./client.ts";
 import { Function, type FunctionAttr, type FunctionProps } from "./function.ts";
+import { Account } from "../account.ts";
+import { Region } from "../region.ts";
 
 export const functionProvider = () =>
   Function.provider.effect(
     Effect.gen(function* () {
       const lambda = yield* LambdaClient;
       const iam = yield* IAM.IAMClient;
+      const app = yield* App;
       const accountId = yield* Account;
       const region = yield* Region;
-      const app = yield* App;
       const dotAlchemy = yield* DotAlchemy;
       const fs = yield* FileSystem.FileSystem;
 
@@ -69,7 +69,7 @@ export const functionProvider = () =>
       }) {
         const env = bindings
           .map((binding) => binding?.env)
-          .reduce((acc, env) => ({ ...acc, ...(env ?? {}) }), {});
+          .reduce((acc, env) => ({ ...acc, ...env }), {});
         const policyStatements = bindings.flatMap(
           (binding) =>
             binding?.policyStatements?.map((stmt: IAM.PolicyStatement) => ({
@@ -473,7 +473,7 @@ export const functionProvider = () =>
             return { action: "update" };
           }
         }),
-        precreate: Effect.fn(function* ({ id, news, session }) {
+        precreate: Effect.fn(function* ({ id, news }) {
           const { roleName, functionName, roleArn } = createPhysicalNames(id);
 
           const role = yield* createRoleIfNotExists({ id, roleName });

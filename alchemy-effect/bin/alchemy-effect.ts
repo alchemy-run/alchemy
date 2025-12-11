@@ -23,36 +23,52 @@ import * as CLI from "../src/cli/index.ts";
 import { displayPlan } from "../src/cli/display-plan.tsx";
 import { Resource } from "../src/resource.ts";
 
-const USER = Config.string("USER")
-  .pipe(Config.orElse(() => Config.string("USERNAME")))
-  .pipe(Config.withDefault("unknown"));
-
-const stageRegex = /^[a-z0-9]+(-[a-z0-9]+)*$/;
-
-const stageErrorMessage = (stage?: string) =>
-  `Stage${stage ? ` '${stage}'` : ""} must be a valid stage name matching the regex ${stageRegex.source} (lowercase letters, numbers, and hyphens))`;
+const USER = Config.string("USER").pipe(
+  Config.orElse(() => Config.string("USERNAME")),
+  Config.withDefault("unknown"),
+);
 
 const STAGE = Config.string("stage").pipe(
   Config.option,
-  Config.validate({
-    message: stageErrorMessage(),
-    validation: (stage) =>
-      stage.pipe(
-        Option.map((stage) => stageRegex.test(stage)),
-        Option.getOrElse(() => true),
-      ),
-  }),
+  Effect.map(Option.getOrUndefined),
 );
 
 const stage = Options.text("stage").pipe(
   Options.withDescription("Stage to deploy to, defaults to dev_${USER}"),
-  Options.mapEffect((stage) =>
-    !stageRegex.test(stage)
-      ? Effect.fail(
-          ValidationError.invalidValue(HelpDoc.p(stageErrorMessage(stage))),
-        )
-      : Effect.succeed(stage),
+  Options.optional,
+  Options.map(Option.getOrUndefined),
+  Options.mapEffect(
+    Effect.fn(function* (stage) {
+      if (stage) {
+        return stage;
+      }
+      return yield* STAGE.pipe(
+        Effect.catchAll((err) =>
+          Effect.fail(ValidationError.invalidValue(HelpDoc.p(err.message))),
+        ),
+        Effect.flatMap((s) =>
+          s === undefined
+            ? USER.pipe(
+                Effect.map((user) => `dev_${user}`),
+                Effect.catchAll(() => Effect.succeed("unknown")),
+              )
+            : Effect.succeed(s),
+        ),
+      );
+    }),
   ),
+  Options.mapEffect((stage) => {
+    const regex = /^[a-z0-9]+([-_a-z0-9]+)*$/gi;
+    return regex.test(stage)
+      ? Effect.succeed(stage)
+      : Effect.fail(
+          ValidationError.invalidValue(
+            HelpDoc.p(
+              `Stage '${stage}' is invalid. Must match the regex ${regex.source} (alphanumeric characters, hyphens and dashes).`,
+            ),
+          ),
+        );
+  }),
 );
 
 const envFile = Options.file("env-file").pipe(
@@ -162,8 +178,6 @@ const execStack = Effect.fn(function* ({
       ),
     );
   }
-  const user = yield* USER;
-  stage ??= (yield* STAGE).pipe(Option.getOrElse(() => `dev_${user}`));
 
   const stackName = stack.name;
 
@@ -175,6 +189,7 @@ const execStack = Effect.fn(function* ({
     : ConfigProvider.fromEnv();
 
   const stageConfig = yield* asEffect(stack.stages.config(stage)).pipe(
+    Effect.provide(stack.layers ?? Layer.empty),
     Effect.withConfigProvider(configProvider),
   );
 

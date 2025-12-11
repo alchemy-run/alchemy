@@ -27,6 +27,7 @@ import { createHash } from "node:crypto";
 import * as path from "node:path";
 import { parseIni, parseSSOSessionData } from "./parse-ini.ts";
 import { Profile } from "./profile.ts";
+import { App } from "../app.ts";
 
 export class Credentials extends Context.Tag("AWS::Credentials")<
   Credentials,
@@ -164,125 +165,145 @@ export interface SsoProfileConfig extends AwsProfileConfig {
   sso_role_name: string;
 }
 
+export const fromStageConfig = () =>
+  Layer.effect(
+    Credentials,
+    Effect.gen(function* () {
+      const app = yield* App;
+      if (app.config.aws?.profile) {
+        return yield* loadSSOCredentials(app.config.aws.profile);
+      } else if (app.config.aws?.credentials) {
+        return fromAwsCredentialIdentity(app.config.aws.credentials);
+      }
+      return yield* Effect.dieMessage(
+        "No AWS credentials found in stage config",
+      );
+    }),
+  );
+
 export const fromSSO = () =>
   Layer.effect(
     Credentials,
     Effect.gen(function* () {
-      const client = yield* HttpClient.HttpClient;
-      const fs = yield* FileSystem.FileSystem;
       const profileName = Option.getOrElse(
         yield* Effect.serviceOption(Profile),
         () => "default",
       );
-      const awsDir = path.join(ini.getHomeDir(), ".aws");
-      const cachePath = path.join(awsDir, "sso", "cache");
+      return yield* loadSSOCredentials(profileName);
+    }),
+  );
 
-      const profile = yield* loadProfile(profileName);
+export const loadSSOCredentials = Effect.fn(function* (profileName: string) {
+  const client = yield* HttpClient.HttpClient;
+  const fs = yield* FileSystem.FileSystem;
+  const awsDir = path.join(ini.getHomeDir(), ".aws");
+  const cachePath = path.join(awsDir, "sso", "cache");
 
-      if (profile.sso_session) {
-        const hasher = createHash("sha1");
-        const cacheName = hasher.update(profile.sso_session).digest("hex");
-        const ssoTokenFilepath = path.join(cachePath, `${cacheName}.json`);
-        const cachedCredsFilePath = path.join(
-          cachePath,
-          `${cacheName}.credentials.json`,
-        );
+  const profile = yield* loadProfile(profileName);
 
-        const cachedCreds = yield* fs.readFileString(cachedCredsFilePath).pipe(
-          Effect.map((text) => JSON.parse(text)),
-          Effect.catchAll(() => Effect.void),
-        );
+  if (profile.sso_session) {
+    const hasher = createHash("sha1");
+    const cacheName = hasher.update(profile.sso_session).digest("hex");
+    const ssoTokenFilepath = path.join(cachePath, `${cacheName}.json`);
+    const cachedCredsFilePath = path.join(
+      cachePath,
+      `${cacheName}.credentials.json`,
+    );
 
-        const isExpired = (expiry: number | string | undefined) => {
-          return (
-            expiry === undefined ||
-            new Date(expiry).getTime() - Date.now() <= EXPIRE_WINDOW_MS
-          );
-        };
+    const cachedCreds = yield* fs.readFileString(cachedCredsFilePath).pipe(
+      Effect.map((text) => JSON.parse(text)),
+      Effect.catchAll(() => Effect.void),
+    );
 
-        if (cachedCreds && !isExpired(cachedCreds.expiry)) {
-          return Credentials.of({
-            accessKeyId: Redacted.make(cachedCreds.accessKeyId),
-            secretAccessKey: Redacted.make(cachedCreds.secretAccessKey),
-            sessionToken: cachedCreds.sessionToken
-              ? Redacted.make(cachedCreds.sessionToken)
-              : undefined,
-            expiration: cachedCreds.expiry,
-          });
-        }
+    const isExpired = (expiry: number | string | undefined) => {
+      return (
+        expiry === undefined ||
+        new Date(expiry).getTime() - Date.now() <= EXPIRE_WINDOW_MS
+      );
+    };
 
-        const ssoToken = yield* fs.readFileString(ssoTokenFilepath).pipe(
-          Effect.map((text) => JSON.parse(text) as SSOToken),
-          Effect.catchAll(() =>
-            Effect.fail(
-              new InvalidSSOToken({
-                message: `The SSO session token associated with profile=${profileName} was not found or is invalid. ${REFRESH_MESSAGE}`,
-                sso_session: profile.sso_session!,
-              }),
-            ),
-          ),
-        );
+    if (cachedCreds && !isExpired(cachedCreds.expiry)) {
+      return Credentials.of({
+        accessKeyId: Redacted.make(cachedCreds.accessKeyId),
+        secretAccessKey: Redacted.make(cachedCreds.secretAccessKey),
+        sessionToken: cachedCreds.sessionToken
+          ? Redacted.make(cachedCreds.sessionToken)
+          : undefined,
+        expiration: cachedCreds.expiry,
+      });
+    }
 
-        if (isExpired(ssoToken.expiresAt)) {
-          yield* Console.log(
-            `The SSO session token associated with profile=${profileName} was not found or is invalid. ${REFRESH_MESSAGE}`,
-          );
-          yield* Effect.fail(
-            new ExpiredSSOToken({
-              message: `The SSO session token associated with profile=${profileName} was not found or is invalid. ${REFRESH_MESSAGE}`,
-              profile: profileName,
-            }),
-          );
-        }
-
-        const response = yield* client.get(
-          `https://portal.sso.${profile.sso_region}.amazonaws.com/federation/credentials?account_id=${profile.sso_account_id}&role_name=${profile.sso_role_name}`,
-          {
-            headers: {
-              "User-Agent": "alchemy.run",
-              "Content-Type": "application/json",
-              "x-amz-sso_bearer_token": ssoToken.accessToken,
-            },
-          },
-        );
-
-        const credentials = (
-          (yield* response.json) as {
-            roleCredentials: {
-              accessKeyId: string;
-              secretAccessKey: string;
-              sessionToken: string;
-              expiration: number;
-            };
-          }
-        ).roleCredentials;
-
-        yield* fs.writeFileString(
-          cachedCredsFilePath,
-          JSON.stringify({
-            accessKeyId: credentials.accessKeyId,
-            secretAccessKey: credentials.secretAccessKey,
-            sessionToken: credentials.sessionToken,
-            expiry: credentials.expiration,
+    const ssoToken = yield* fs.readFileString(ssoTokenFilepath).pipe(
+      Effect.map((text) => JSON.parse(text) as SSOToken),
+      Effect.catchAll(() =>
+        Effect.fail(
+          new InvalidSSOToken({
+            message: `The SSO session token associated with profile=${profileName} was not found or is invalid. ${REFRESH_MESSAGE}`,
+            sso_session: profile.sso_session!,
           }),
-        );
+        ),
+      ),
+    );
 
-        return Credentials.of({
-          accessKeyId: Redacted.make(credentials.accessKeyId),
-          secretAccessKey: Redacted.make(credentials.secretAccessKey),
-          sessionToken: Redacted.make(credentials.sessionToken),
-          expiration: credentials.expiration,
-        });
-      }
-
-      return yield* Effect.fail(
-        new ProfileNotFound({
-          message: `Profile ${profileName} not found`,
+    if (isExpired(ssoToken.expiresAt)) {
+      yield* Console.log(
+        `The SSO session token associated with profile=${profileName} was not found or is invalid. ${REFRESH_MESSAGE}`,
+      );
+      yield* Effect.fail(
+        new ExpiredSSOToken({
+          message: `The SSO session token associated with profile=${profileName} was not found or is invalid. ${REFRESH_MESSAGE}`,
           profile: profileName,
         }),
       );
+    }
+
+    const response = yield* client.get(
+      `https://portal.sso.${profile.sso_region}.amazonaws.com/federation/credentials?account_id=${profile.sso_account_id}&role_name=${profile.sso_role_name}`,
+      {
+        headers: {
+          "User-Agent": "alchemy.run",
+          "Content-Type": "application/json",
+          "x-amz-sso_bearer_token": ssoToken.accessToken,
+        },
+      },
+    );
+
+    const credentials = (
+      (yield* response.json) as {
+        roleCredentials: {
+          accessKeyId: string;
+          secretAccessKey: string;
+          sessionToken: string;
+          expiration: number;
+        };
+      }
+    ).roleCredentials;
+
+    yield* fs.writeFileString(
+      cachedCredsFilePath,
+      JSON.stringify({
+        accessKeyId: credentials.accessKeyId,
+        secretAccessKey: credentials.secretAccessKey,
+        sessionToken: credentials.sessionToken,
+        expiry: credentials.expiration,
+      }),
+    );
+
+    return Credentials.of({
+      accessKeyId: Redacted.make(credentials.accessKeyId),
+      secretAccessKey: Redacted.make(credentials.secretAccessKey),
+      sessionToken: Redacted.make(credentials.sessionToken),
+      expiration: credentials.expiration,
+    });
+  }
+
+  return yield* Effect.fail(
+    new ProfileNotFound({
+      message: `Profile ${profileName} not found`,
+      profile: profileName,
     }),
   );
+});
 
 export const loadProfile = Effect.fn(function* (profileName: string) {
   const fs = yield* FileSystem.FileSystem;

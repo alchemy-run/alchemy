@@ -2,9 +2,8 @@ import * as S from "effect/Schema";
 import type { Input } from "../../input.ts";
 import { Resource } from "../../resource.ts";
 import type { type } from "../../type.ts";
-import type { Account } from "../account.ts";
-import type { Region } from "../region.ts";
-
+import type { AccountID } from "../account.ts";
+import type { RegionID } from "../region.ts";
 import type * as DynamoDB from "itty-aws/dynamodb";
 
 export interface TableProps<
@@ -35,7 +34,7 @@ export interface TableProps<
 export interface TableAttrs<Props extends Input.Resolve<TableProps>> {
   tableName: Props["tableName"] extends string ? Props["tableName"] : string;
   tableId: string;
-  tableArn: `arn:aws:dynamodb:${Region.ID}:${Account.ID}:table/${this["tableName"]}`;
+  tableArn: `arn:aws:dynamodb:${RegionID}:${AccountID}:table/${this["tableName"]}`;
   partitionKey: Props["partitionKey"];
   sortKey: Props["sortKey"];
   // etc...

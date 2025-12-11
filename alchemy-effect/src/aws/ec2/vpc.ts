@@ -1,8 +1,8 @@
 import type * as EC2 from "itty-aws/ec2";
 import type { Input } from "../../input.ts";
 import { Resource } from "../../resource.ts";
-import type { Account } from "../account.ts";
-import type { Region } from "../region.ts";
+import type { AccountID } from "../account.ts";
+import type { RegionID } from "../region.ts";
 
 export const Vpc = Resource<{
   <const ID extends string, const Props extends VpcProps>(
@@ -108,7 +108,7 @@ export interface VpcAttrs<_Props extends VpcProps = VpcProps> {
   /**
    * The Amazon Resource Name (ARN) of the VPC.
    */
-  vpcArn: `arn:aws:ec2:${Region.ID}:${Account.ID}:vpc/${this["vpcId"]}`;
+  vpcArn: `arn:aws:ec2:${RegionID}:${AccountID}:vpc/${this["vpcId"]}`;
 
   /**
    * The primary IPv4 CIDR block for the VPC.

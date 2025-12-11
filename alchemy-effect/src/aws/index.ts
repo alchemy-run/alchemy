@@ -1,10 +1,14 @@
 export * from "./credentials.ts";
 export * from "./profile.ts";
 
+import * as Layer from "effect/Layer";
+
 export { Account } from "./account.ts";
 export { Region } from "./region.ts";
 
-import * as Layer from "effect/Layer";
+// oxlint-disable-next-line no-unused-vars - needed or else provider types are transitively resolved through DynamoDB.Provider<..> lol
+import type { Provider } from "../provider.ts";
+
 import * as ESBuild from "../esbuild.ts";
 import * as Account from "./account.ts";
 import * as Credentials from "./credentials.ts";
@@ -19,21 +23,17 @@ import * as STS from "./sts.ts";
 
 import "./config.ts";
 
-export const resources = () =>
+const resources = () =>
   Layer.mergeAll(
-    Layer.provide(
-      Layer.provideMerge(Lambda.functionProvider(), ESBuild.layer()),
-      Lambda.client(),
-    ),
-    Layer.provideMerge(SQS.queueProvider(), SQS.client()),
-    Layer.provideMerge(DynamoDB.tableProvider(), DynamoDB.client()),
-    Layer.provideMerge(EC2.vpcProvider(), EC2.client()),
-    Layer.provideMerge(EC2.subnetProvider(), EC2.client()),
+    Lambda.functionProvider(),
+    SQS.queueProvider(),
+    DynamoDB.tableProvider(),
+    EC2.vpcProvider(),
+    EC2.subnetProvider(),
   );
 
 export const bindings = () =>
   Layer.mergeAll(
-    //
     SQS.sendMessageFromLambdaFunction(),
     SQS.queueEventSourceProvider(),
     DynamoDB.getItemFromLambdaFunction(),
@@ -50,17 +50,20 @@ export const clients = () =>
     EC2.client(),
   );
 
-export const defaultProviders = () =>
-  resources().pipe(
-    Layer.provideMerge(bindings()),
-    Layer.provideMerge(Account.fromIdentity()),
-    Layer.provideMerge(clients()),
-  );
+export const utils = () => Layer.mergeAll(ESBuild.layer());
 
 export const providers = () =>
-  defaultProviders().pipe(
-    Layer.provide(Region.fromStageConfig()),
-    Layer.provide(Credentials.fromSSO()),
+  resources().pipe(
+    Layer.provideMerge(bindings()),
+    Layer.provideMerge(clients()),
+    Layer.provideMerge(
+      Layer.mergeAll(
+        utils(),
+        Region.fromStageConfig(),
+        Account.fromStageConfig(),
+        Credentials.fromStageConfig(),
+      ),
+    ),
   );
 
 export default providers;
