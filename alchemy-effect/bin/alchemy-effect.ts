@@ -14,13 +14,12 @@ import * as Layer from "effect/Layer";
 import { asEffect } from "../src/util.ts";
 import packageJson from "../package.json";
 import * as State from "../src/state.ts";
-import { apply } from "../src/apply.ts";
+import { applyPlan } from "../src/apply.ts";
 import { plan } from "../src/plan.ts";
 import { dotAlchemy } from "../src/dot-alchemy.ts";
 import * as App from "../src/app.ts";
 import type { Stack } from "../src/stack.ts";
 import * as CLI from "../src/cli/index.ts";
-import { displayPlan } from "../src/cli/display-plan.tsx";
 import { Resource } from "../src/resource.ts";
 
 const USER = Config.string("USER").pipe(
@@ -203,7 +202,7 @@ const execStack = Effect.fn(function* ({
   // override alchemy state store, CLI/reporting and dotAlchemy
   const alchemy = Layer.mergeAll(
     stack.state ?? State.localFs,
-    CLI.layer,
+    stack.cli ?? CLI.inkCLI(),
     // optional
     dotAlchemy,
   );
@@ -221,12 +220,20 @@ const execStack = Effect.fn(function* ({
   );
 
   yield* Effect.gen(function* () {
+    const cli = yield* CLI.CLI;
     const resources = select(stack);
+    const updatePlan = yield* plan(...resources);
     if (dryRun) {
-      yield* displayPlan(yield* plan(...resources));
+      yield* cli.displayPlan(updatePlan);
     } else {
-      const outputs = yield* apply(...resources);
-      if (stack.tap) {
+      if (!yes) {
+        const approved = yield* cli.approvePlan(updatePlan);
+        if (!approved) {
+          return;
+        }
+      }
+      const outputs = yield* applyPlan(updatePlan);
+      if (outputs && stack.tap) {
         yield* stack
           .tap(outputs)
           .pipe(Effect.provide(stack.layers ?? Layer.empty));

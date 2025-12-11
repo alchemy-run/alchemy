@@ -3,7 +3,7 @@ import * as Path from "@effect/platform/Path";
 import type { Workers } from "cloudflare/resources.mjs";
 import * as Effect from "effect/Effect";
 import { App } from "../../app.ts";
-import type { ScopedPlanStatusSession } from "../../apply.ts";
+import type { ScopedPlanStatusSession } from "../../cli/service.ts";
 import { DotAlchemy } from "../../dot-alchemy.ts";
 import { ESBuild } from "../../esbuild.ts";
 import { sha256 } from "../../sha256.ts";

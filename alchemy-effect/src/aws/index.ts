@@ -23,31 +23,31 @@ import * as STS from "./sts.ts";
 
 import "./config.ts";
 
-const resources = () =>
+export const resources = () =>
   Layer.mergeAll(
+    DynamoDB.tableProvider(),
+    EC2.subnetProvider(),
+    EC2.vpcProvider(),
     Lambda.functionProvider(),
     SQS.queueProvider(),
-    DynamoDB.tableProvider(),
-    EC2.vpcProvider(),
-    EC2.subnetProvider(),
   );
 
 export const bindings = () =>
   Layer.mergeAll(
-    SQS.sendMessageFromLambdaFunction(),
-    SQS.queueEventSourceProvider(),
     DynamoDB.getItemFromLambdaFunction(),
+    SQS.queueEventSourceProvider(),
+    SQS.sendMessageFromLambdaFunction(),
   );
 
 export const clients = () =>
   Layer.mergeAll(
-    STS.client(),
-    IAM.client(),
-    S3.client(),
-    SQS.client(),
-    Lambda.client(),
     DynamoDB.client(),
     EC2.client(),
+    IAM.client(),
+    Lambda.client(),
+    S3.client(),
+    SQS.client(),
+    STS.client(),
   );
 
 export const utils = () => Layer.mergeAll(ESBuild.layer());

@@ -8,10 +8,10 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Scope from "effect/Scope";
 import * as App from "./app.ts";
-import { PlanStatusReporter } from "./apply.ts";
 import { DotAlchemy, dotAlchemy } from "./dot-alchemy.ts";
 import * as State from "./state.ts";
 import type { Resource } from "./resource.ts";
+import { CLI } from "./cli/service.ts";
 
 declare module "@effect/vitest" {
   interface ExpectStatic {
@@ -80,7 +80,7 @@ export function test(
   );
 
   const alchemy = Layer.provideMerge(
-    Layer.mergeAll(options.state ?? State.localFs, report),
+    Layer.mergeAll(options.state ?? State.localFs, testCLI),
     Layer.mergeAll(
       App.make({
         name: name.replaceAll(/[^a-zA-Z0-9_]/g, "-"),
@@ -139,10 +139,12 @@ export namespace test {
     );
 }
 
-export const report = Layer.succeed(
-  PlanStatusReporter,
-  PlanStatusReporter.of({
-    start: (_plan) =>
+export const testCLI = Layer.succeed(
+  CLI,
+  CLI.of({
+    approvePlan: () => Effect.succeed(true),
+    displayPlan: () => Effect.void,
+    startApplySession: () =>
       Effect.succeed({
         done: () => Effect.void,
         emit: (event) =>

@@ -2,10 +2,16 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
 import { Box, Text } from "ink";
-import type { ApplyStatus, StatusChangeEvent } from "../../event.ts";
+import type {
+  ApplyEvent,
+  ApplyStatus,
+  StatusChangeEvent,
+} from "../../event.ts";
 import type { IPlan } from "../../plan.ts";
-import type { ProgressEventSource } from "../progress.tsx";
-import { useGlobalSpinner } from "../spinner.ts";
+
+interface ProgressEventSource {
+  subscribe(listener: (event: ApplyEvent) => void): () => void;
+}
 
 interface PlanTask
   extends Required<Pick<StatusChangeEvent, "id" | "type" | "status">> {
@@ -13,7 +19,7 @@ interface PlanTask
   updatedAt: number;
 }
 
-export interface PlanProgressProps {
+interface PlanProgressProps {
   source: ProgressEventSource;
   plan: IPlan;
 }
@@ -202,4 +208,17 @@ function isInProgress(status: ApplyStatus): boolean {
     status === "updating" ||
     status === "deleting"
   );
+}
+
+const spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+function useGlobalSpinner(intervalMs = 80): string {
+  const [index, setIndex] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setIndex((i) => (i + 1) % spinnerFrames.length);
+    }, intervalMs);
+    return () => clearInterval(timer);
+  }, [intervalMs]);
+  return spinnerFrames[index];
 }

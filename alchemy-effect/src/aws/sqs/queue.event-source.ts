@@ -8,7 +8,8 @@ import type { Consume } from "./queue.consume.ts";
 import { Queue, type QueueAttrs, type QueueProps } from "./queue.ts";
 import { Function, type FunctionBinding } from "../lambda/function.ts";
 import { LambdaClient } from "../lambda/client.ts";
-import { App } from "../../app.ts";
+import { Account } from "../account.ts";
+import { Region } from "../region.ts";
 
 export interface QueueEventSourceProps {
   batchSize?: number;
@@ -41,9 +42,8 @@ export const QueueEventSource = Binding<
 export const queueEventSourceProvider = () =>
   QueueEventSource.provider.effect(
     Effect.gen(function* () {
-      const app = yield* App;
-      const accountId = app.config.aws?.account!;
-      const region = app.config.aws?.region!;
+      const accountId = yield* Account;
+      const region = yield* Region;
       const lambda = yield* LambdaClient;
       const tagged = yield* createTagger();
 

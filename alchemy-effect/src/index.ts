@@ -1,7 +1,6 @@
 export * from "./$.ts";
 export * from "./app.ts";
 export * from "./apply.ts";
-export * from "./approve.ts";
 export * from "./binding.ts";
 export * from "./capability.ts";
 export * from "./destroy.ts";

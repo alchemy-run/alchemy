@@ -13,6 +13,7 @@ import type { AnyService } from "./service.ts";
 import { type StageConfig, type Stages } from "./stage.ts";
 import * as State from "./state.ts";
 import type { Ref } from "./ref.ts";
+import type { CLI } from "./cli/service.ts";
 
 export const defineStack = <
   const Name extends string,
@@ -71,6 +72,7 @@ export type Stack<
   resources: Resources[];
   providers: Layer.Layer<Providers<Resources>, any, BuiltInServices>;
   state?: Layer.Layer<State.State>;
+  cli?: Layer.Layer<CLI>;
   tap?: (output: StackOutput<Resources>) => Effect.Effect<void, TapErr, TapReq>;
 } & (Exclude<StagesReq | TapReq, BuiltInServices> extends never
   ? {

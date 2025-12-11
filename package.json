@@ -20,6 +20,7 @@
     "bump": "bun ./scripts/bump.ts",
     "publish:npm": "bun run build && bun run --filter alchemy-effect publish:npm",
     "prepare": "effect-language-service patch",
+    "test": "vitest run",
     "test:benchmark": "bun run --filter alchemy-effect test:benchmark"
   },
   "workspaces": {

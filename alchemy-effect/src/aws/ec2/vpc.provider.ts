@@ -4,7 +4,7 @@ import * as Schedule from "effect/Schedule";
 import type { EC2 } from "itty-aws/ec2";
 
 import type { VpcId } from "./vpc.ts";
-import type { ScopedPlanStatusSession } from "../../apply.ts";
+import type { ScopedPlanStatusSession } from "../../cli/service.ts";
 import { somePropsAreDifferent } from "../../diff.ts";
 import type { ProviderService } from "../../provider.ts";
 import { createTagger, createTagsList } from "../../tags.ts";

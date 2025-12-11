@@ -146,7 +146,7 @@ bench("platform and provider layers", () => {
 
   const alchemy = Layer.mergeAll(
     Alchemy.State.localFs,
-    CLI.layer,
+    CLI.inkCLI(),
     // optional
     Alchemy.dotAlchemy,
   );
@@ -210,7 +210,8 @@ bench("apply", () => {
 }).types([30, "instantiations"]);
 
 bench("applyPlan", () => {
-  Alchemy.applyPlan(Alchemy.plan(Api)).pipe(
+  Alchemy.plan(Api).pipe(
+    Effect.flatMap(Alchemy.applyPlan),
     Effect.tap((stack) =>
       Effect.log({
         url: stack?.Api.functionUrl,

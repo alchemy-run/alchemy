@@ -86,6 +86,7 @@ export const tableProvider = (): Layer.Layer<
           Effect.flatMap((r) =>
             dynamodb
               .listTagsOfResource({
+                // oxlint-disable-next-line no-non-null-asserted-optional-chain
                 ResourceArn: r.Table?.TableArn!,
               })
               .pipe(
