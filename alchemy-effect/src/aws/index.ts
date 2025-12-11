@@ -1,10 +1,4 @@
-export * from "./credentials.ts";
-export * from "./profile.ts";
-
 import * as Layer from "effect/Layer";
-
-export { Account } from "./account.ts";
-export { Region } from "./region.ts";
 
 // oxlint-disable-next-line no-unused-vars - needed or else provider types are transitively resolved through DynamoDB.Provider<..> lol
 import type { Provider } from "../provider.ts";
@@ -59,8 +53,6 @@ export const providers = () =>
     Layer.provideMerge(utils()),
     Layer.provideMerge(Account.fromStageConfig()),
     Layer.provideMerge(STS.client()),
-    Layer.provideMerge(Credentials.fromStageConfig()),
     Layer.provideMerge(Region.fromStageConfig()),
+    Layer.provideMerge(Credentials.fromStageConfig()),
   );
-
-export default providers;

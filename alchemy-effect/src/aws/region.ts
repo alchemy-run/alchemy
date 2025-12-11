@@ -5,7 +5,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { App } from "../app.ts";
-import { loadProfile } from "./index.ts";
+import { loadProfile } from "./credentials.ts";
 
 export class Region extends Context.Tag("AWS::Region")<Region, RegionID>() {}
 

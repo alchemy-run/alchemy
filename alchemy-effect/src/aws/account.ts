@@ -42,23 +42,16 @@ export const fromStageConfig = () =>
           return profile.sso_account_id;
         }
       }
-      return yield* getAccountFromIdentity();
+      const client = yield* STS.STSClient;
+      const identity = yield* client.getCallerIdentity({}).pipe(
+        Effect.catchAll(
+          (err) =>
+            new FailedToGetAccount({
+              message: "Failed to look up account ID",
+              cause: err,
+            }),
+        ),
+      );
+      return identity.Account!;
     }),
   );
-
-export const fromIdentity = () =>
-  Layer.effect(Account, getAccountFromIdentity());
-
-const getAccountFromIdentity = Effect.fn(function* () {
-  const client = yield* STS.STSClient;
-  const identity = yield* client.getCallerIdentity({}).pipe(
-    Effect.catchAll(
-      (err) =>
-        new FailedToGetAccount({
-          message: "Failed to look up account ID",
-          cause: err,
-        }),
-    ),
-  );
-  return identity.Account!;
-});

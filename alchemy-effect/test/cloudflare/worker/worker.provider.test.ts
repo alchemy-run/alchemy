@@ -30,7 +30,7 @@ test(
 
     {
       class Bucket extends R2.Bucket("Bucket", {
-        name: "test-bucket-initial",
+        name: "test-bucket-worker",
         storageClass: "Standard",
       }) {}
 

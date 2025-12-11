@@ -10,6 +10,13 @@ export interface StageConfig {
    * @default - true if the current stage starts with "prod"
    */
   retain?: boolean;
+
+  /**
+   * Whether to adopt resources that already exist during the created phase.
+   *
+   * @default false
+   */
+  adopt?: boolean;
 }
 
 export class Stage extends Context.Tag("Stage")<Stage, string>() {}

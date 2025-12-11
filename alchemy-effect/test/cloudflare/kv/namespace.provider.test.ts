@@ -5,7 +5,7 @@ import * as CloudflareLive from "@/cloudflare/live";
 import { apply, destroy } from "@/index";
 import { test } from "@/test";
 import { expect } from "@effect/vitest";
-import { LogLevel } from "effect";
+import { Config, LogLevel } from "effect";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Logger from "effect/Logger";

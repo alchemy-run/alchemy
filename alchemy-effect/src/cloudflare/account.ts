@@ -26,7 +26,9 @@ export const fromStageConfig = () =>
     Account,
     Effect.gen(function* () {
       const app = yield* App;
-      const accountId = app.config.cloudflare?.account;
+      const accountId =
+        app.config.cloudflare?.account ??
+        (yield* Config.string("CLOUDFLARE_ACCOUNT_ID"));
       if (!accountId) {
         return yield* Effect.die("CLOUDFLARE_ACCOUNT_ID is not set");
       }

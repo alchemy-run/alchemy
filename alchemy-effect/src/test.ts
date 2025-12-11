@@ -1,8 +1,9 @@
 import { FetchHttpClient, FileSystem, HttpClient } from "@effect/platform";
+import * as PlatformConfigProvider from "@effect/platform/PlatformConfigProvider";
 import { NodeContext } from "@effect/platform-node";
-import type * as Path from "@effect/platform/Path";
+import * as Path from "@effect/platform/Path";
 import { it, expect } from "@effect/vitest";
-import { LogLevel } from "effect";
+import { ConfigProvider, LogLevel } from "effect";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
@@ -86,6 +87,7 @@ export function test(
         name: name.replaceAll(/[^a-zA-Z0-9_]/g, "-"),
         stage: "test",
         config: {
+          adopt: true,
           aws: {
             profile: "default",
           },
@@ -98,11 +100,19 @@ export function test(
   return it.scopedLive(
     name,
     () =>
-      testCase.pipe(
+      Effect.gen(function* () {
+        const configProvider = ConfigProvider.orElse(
+          yield* PlatformConfigProvider.fromDotEnv(".env"),
+          ConfigProvider.fromEnv,
+        );
+        return yield* testCase.pipe(Effect.withConfigProvider(configProvider));
+      }).pipe(
         Effect.provide(Layer.provideMerge(alchemy, platform)),
         Logger.withMinimumLogLevel(
           process.env.DEBUG ? LogLevel.Debug : LogLevel.Info,
         ),
+        Effect.provide(NodeContext.layer),
+        Effect.provide(NodeContext.layer),
       ),
     options.timeout,
   );
