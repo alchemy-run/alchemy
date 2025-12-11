@@ -85,7 +85,11 @@ export function test(
       App.make({
         name: name.replaceAll(/[^a-zA-Z0-9_]/g, "-"),
         stage: "test",
-        config: {},
+        config: {
+          aws: {
+            profile: "default",
+          },
+        },
       }),
       dotAlchemy,
     ),

@@ -47,7 +47,7 @@ export const clients = () =>
     Lambda.client(),
     S3.client(),
     SQS.client(),
-    STS.client(),
+    // STS.client(),
   );
 
 export const utils = () => Layer.mergeAll(ESBuild.layer());
@@ -56,14 +56,11 @@ export const providers = () =>
   resources().pipe(
     Layer.provideMerge(bindings()),
     Layer.provideMerge(clients()),
-    Layer.provideMerge(
-      Layer.mergeAll(
-        utils(),
-        Region.fromStageConfig(),
-        Account.fromStageConfig(),
-        Credentials.fromStageConfig(),
-      ),
-    ),
+    Layer.provideMerge(utils()),
+    Layer.provideMerge(Account.fromStageConfig()),
+    Layer.provideMerge(STS.client()),
+    Layer.provideMerge(Credentials.fromStageConfig()),
+    Layer.provideMerge(Region.fromStageConfig()),
   );
 
 export default providers;

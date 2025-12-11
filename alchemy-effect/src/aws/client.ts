@@ -21,7 +21,6 @@ export const createAWSServiceClientLayer =
       Effect.gen(function* () {
         const region = yield* Region;
         const credentials = yield* Credentials;
-        //
         const client = new clss({
           region,
           credentials: {

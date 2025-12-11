@@ -3,7 +3,7 @@ import type { RegionID } from "./region.ts";
 import type { AwsCredentialIdentity } from "@smithy/types";
 
 export interface AwsStageConfig {
-  account: AccountID;
+  account?: AccountID;
   region?: RegionID;
   profile?: string;
   credentials?: AwsCredentialIdentity;

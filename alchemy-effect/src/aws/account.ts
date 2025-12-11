@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as STS from "./sts.ts";
 import { App } from "../app.ts";
+import { loadProfile } from "./credentials.ts";
 
 export class FailedToGetAccount extends Data.TaggedError(
   "AWS::Account::FailedToGetAccount",
@@ -29,34 +30,35 @@ export class AWSStageConfigAccountMissing extends Data.TaggedError(
 export const fromStageConfig = () =>
   Layer.effect(
     Account,
-    App.pipe(
-      Effect.flatMap((app) =>
-        app.config.aws?.account
-          ? Effect.succeed(app.config.aws.account)
-          : Effect.fail(
-              new AWSStageConfigAccountMissing({
-                message: "AWS stage config is missing account",
-                stage: app.stage,
-              }),
-            ),
-      ),
-    ),
+    Effect.gen(function* () {
+      const app = yield* App;
+      if (app.config.aws?.account) {
+        return app.config.aws.account;
+      }
+      const profileName = app.config.aws?.profile;
+      if (profileName) {
+        const profile = yield* loadProfile(profileName);
+        if (profile.sso_account_id) {
+          return profile.sso_account_id;
+        }
+      }
+      return yield* getAccountFromIdentity();
+    }),
   );
 
 export const fromIdentity = () =>
-  Layer.effect(
-    Account,
-    Effect.gen(function* () {
-      const sts = yield* STS.STSClient;
-      const identity = yield* sts.getCallerIdentity({}).pipe(
-        Effect.catchAll(
-          (err) =>
-            new FailedToGetAccount({
-              message: "Failed to look up account ID",
-              cause: err,
-            }),
-        ),
-      );
-      return identity.Account!;
-    }),
+  Layer.effect(Account, getAccountFromIdentity());
+
+const getAccountFromIdentity = Effect.fn(function* () {
+  const client = yield* STS.STSClient;
+  const identity = yield* client.getCallerIdentity({}).pipe(
+    Effect.catchAll(
+      (err) =>
+        new FailedToGetAccount({
+          message: "Failed to look up account ID",
+          cause: err,
+        }),
+    ),
   );
+  return identity.Account!;
+});
