@@ -15,6 +15,8 @@ import * as S3 from "./s3.ts";
 import * as SQS from "./sqs/index.ts";
 import * as STS from "./sts.ts";
 
+export { loadProfile, loadSSOCredentials } from "./credentials.ts";
+
 import "./config.ts";
 
 export const resources = () =>
