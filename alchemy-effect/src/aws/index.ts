@@ -1,7 +1,6 @@
 import * as Layer from "effect/Layer";
 
 // oxlint-disable-next-line no-unused-vars - needed or else provider types are transitively resolved through DynamoDB.Provider<..> lol
-import type { Provider } from "../provider.ts";
 
 import * as ESBuild from "../esbuild.ts";
 import * as Account from "./account.ts";
@@ -22,6 +21,10 @@ import "./config.ts";
 export const resources = () =>
   Layer.mergeAll(
     DynamoDB.tableProvider(),
+    EC2.internetGatewayProvider(),
+    EC2.routeProvider(),
+    EC2.routeTableAssociationProvider(),
+    EC2.routeTableProvider(),
     EC2.subnetProvider(),
     EC2.vpcProvider(),
     Lambda.functionProvider(),

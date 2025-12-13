@@ -1,7 +1,9 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type { Simplify } from "effect/Types";
+import { App } from "./app.ts";
 import type { AnyBinding, BindingService } from "./binding.ts";
+import { CLI, type ScopedPlanStatusSession } from "./cli/service.ts";
 import type { ApplyStatus } from "./event.ts";
 import * as Output from "./output.ts";
 import {
@@ -19,9 +21,7 @@ import type { Instance } from "./policy.ts";
 import type { AnyResource, Resource } from "./resource.ts";
 import type { AnyService } from "./service.ts";
 import { State } from "./state.ts";
-import { App } from "./app.ts";
 import { asEffect } from "./util.ts";
-import { type ScopedPlanStatusSession, CLI } from "./cli/service.ts";
 
 export type ApplyEffect<
   P extends IPlan,
@@ -222,6 +222,7 @@ export const applyPlan = <P extends IPlan>(plan: P) =>
                 id: node.resource.id,
                 type: node.resource.type,
                 status: node.action === "create" ? "created" : "updated",
+                downstream: node.downstream,
                 props: news,
                 output,
                 bindings,
@@ -366,7 +367,9 @@ export const applyPlan = <P extends IPlan>(plan: P) =>
                 node.downstream.map((dep) =>
                   dep in plan.resources
                     ? apply(plan.resources[dep] as any)
-                    : Effect.void,
+                    : dep in plan.deletions
+                      ? apply(plan.deletions[dep] as any)
+                      : Effect.void,
                 ),
               );
               yield* report("deleting");

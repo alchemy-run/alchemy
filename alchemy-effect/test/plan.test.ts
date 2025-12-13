@@ -1,12 +1,9 @@
-import type { Resource } from "@/resource";
 import type { Input, InputProps } from "@/input";
 import * as Output from "@/output";
-import { plan, type TransitiveResources, type TraverseResources } from "@/plan";
-import * as State from "@/state";
+import { plan, type TraverseResources } from "@/plan";
 import { test } from "@/test";
 import { describe, expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import {
   Bucket,
   Function,
@@ -15,7 +12,6 @@ import {
   TestResource,
   type TestResourceProps,
 } from "./test.resources";
-import * as App from "@/app";
 
 const _test = test;
 
@@ -81,6 +77,7 @@ test(
           name: "test-bucket",
         },
         bindings: [],
+        downstream: [],
       },
     }),
   },
@@ -123,6 +120,7 @@ test(
           name: "test-bucket",
         },
         bindings: [],
+        downstream: [],
       },
       MyQueue: {
         id: "MyQueue",
@@ -135,6 +133,7 @@ test(
           name: "test-queue",
         },
         bindings: [],
+        downstream: [],
       },
     }),
   },
@@ -205,6 +204,7 @@ test(
         output: {
           queueUrl: "https://test.queue.com/test-queue-old",
         },
+        downstream: [],
       },
     }),
   },
@@ -243,6 +243,7 @@ describe("Outputs should resolve to old values", () => {
         string: "test-string",
         stringArray: ["test-string"],
       },
+      downstream: [],
     },
   });
   class A extends TestResource("A", {
@@ -351,6 +352,7 @@ describe("stable properties should not cause downstream changes", () => {
               stableString: "A",
               stableArray: ["A"],
             },
+            downstream: [],
           },
           B: {
             id: "B",
@@ -365,6 +367,7 @@ describe("stable properties should not cause downstream changes", () => {
             output: {
               stableString: "A",
             },
+            downstream: [],
           },
         }),
       },

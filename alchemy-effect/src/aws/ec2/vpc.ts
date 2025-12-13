@@ -160,4 +160,6 @@ export interface VpcAttrs<_Props extends VpcProps = VpcProps> {
     networkBorderGroup?: string;
     ipv6Pool?: string;
   }>;
+
+  tags?: Record<string, string>;
 }

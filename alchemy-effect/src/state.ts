@@ -67,6 +67,7 @@ export type ResourceState = {
   props: any;
   output: any;
   bindings?: BindNode[];
+  downstream: string[];
 };
 
 export class StateStoreError extends Data.TaggedError("StateStoreError")<{

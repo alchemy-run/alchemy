@@ -120,6 +120,7 @@ export const tableProvider = (): Layer.Layer<
           );
 
       return {
+        stables: ["tableName", "tableId", "tableArn"],
         diff: Effect.fn(function* ({ news, olds }) {
           if (
             // TODO(sam): if the name is hard-coded, REPLACE is impossible - we need a suffix

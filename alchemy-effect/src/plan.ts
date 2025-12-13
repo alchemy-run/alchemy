@@ -1,8 +1,8 @@
 import * as Context from "effect/Context";
-import { App } from "./app.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { omit } from "effect/Struct";
+import { App } from "./app.ts";
 import type {
   AnyBinding,
   BindingDiffProps,
@@ -109,6 +109,7 @@ export type Create<R extends Resource = AnyResource> = {
   provider: ProviderService<R>;
   attributes: R["attr"];
   bindings: BindNode[];
+  downstream: string[];
 };
 
 export type Update<R extends Resource = AnyResource> = {
@@ -120,6 +121,7 @@ export type Update<R extends Resource = AnyResource> = {
   provider: ProviderService<R>;
   attributes: R["attr"];
   bindings: BindNode[];
+  downstream: string[];
 };
 
 export type Delete<R extends Resource = AnyResource> = {
@@ -138,6 +140,7 @@ export type NoopUpdate<R extends Resource = AnyResource> = {
   resource: R;
   attributes: R["attr"];
   bindings: BindNode[];
+  downstream: string[];
 };
 
 export type Replace<R extends Resource = AnyResource> = {
@@ -150,6 +153,7 @@ export type Replace<R extends Resource = AnyResource> = {
   bindings: BindNode[];
   attributes: R["attr"];
   deleteFirst?: boolean;
+  downstream: string[];
 };
 
 export type ResourceGraph<Resources extends Service | Resource> = ToGraph<
@@ -262,32 +266,11 @@ export const plan = <const Resources extends (Service | Resource)[]>(
       stack: app.name,
       stage: app.stage,
     });
-    const resourcesState = yield* Effect.all(
+    const oldResources = yield* Effect.all(
       resourceIds.map((id) =>
         state.get({ stack: app.name, stage: app.stage, resourceId: id }),
       ),
     );
-    // map of resource ID -> its downstream dependencies (resources that depend on it)
-    const downstream = resourcesState
-      .filter(
-        (
-          resource,
-        ): resource is ResourceState & {
-          bindings: BindNode[];
-        } => !!resource?.bindings,
-      )
-      .flatMap((resource) =>
-        resource.bindings.flatMap(({ binding }) => [
-          [binding.capability.resource.id, binding.capability.resource],
-        ]),
-      )
-      .reduce(
-        (acc, [id, resourceId]) => ({
-          ...acc,
-          [id]: [...(acc[id] ?? []), resourceId],
-        }),
-        {} as Record<string, string[]>,
-      );
 
     type ResolveEffect<T> = Effect.Effect<T, ResolveErr, ResolveReq>;
     type ResolveErr = StateStoreError;
@@ -337,6 +320,11 @@ export const plan = <const Resources extends (Service | Resource)[]>(
                   })
                 : Effect.succeed(undefined);
 
+              const stables: string[] = [
+                ...(provider.stables ?? []),
+                ...(diff?.stables ?? []),
+              ];
+
               if (diff == null) {
                 if (arePropsChanged(oldState, props)) {
                   // the props have changed but the provider did not provide any hints as to what is stable
@@ -345,11 +333,11 @@ export const plan = <const Resources extends (Service | Resource)[]>(
                 }
               } else if (diff.action === "update") {
                 const output = oldState?.output;
-                if (diff.stables) {
+                if (stables.length > 0) {
                   return new Output.ResourceExpr(
                     resourceExpr.src,
                     Object.fromEntries(
-                      diff.stables.map((stable) => [stable, output?.[stable]]),
+                      stables.map((stable) => [stable, output?.[stable]]),
                     ),
                   );
                 } else {
@@ -357,6 +345,7 @@ export const plan = <const Resources extends (Service | Resource)[]>(
                   return resourceExpr;
                 }
               } else if (diff.action === "replace") {
+                return resourceExpr;
               }
               return oldState?.output;
             }),
@@ -402,26 +391,39 @@ export const plan = <const Resources extends (Service | Resource)[]>(
         return yield* Effect.die(new Error("Not implemented yet"));
       });
 
-    const resolveUpstream = (
-      value: any,
-    ): {
-      [ID in string]: Resource;
-    } => {
-      if (Output.isExpr(value)) {
-        return Output.upstream(value);
-      } else if (Array.isArray(value)) {
-        return Object.assign({}, ...value.map(resolveUpstream));
-      } else if (
-        value &&
-        (typeof value === "object" || typeof value === "function")
-      ) {
-        return Object.assign(
-          {},
-          ...Object.values(value).map((value) => resolveUpstream(value)),
-        );
-      }
-      return {};
-    };
+    // map of resource ID -> its downstream dependencies (resources that depend on it)
+    const oldDownstreamDependencies: {
+      [resourceId: string]: string[];
+    } = Object.fromEntries(
+      oldResources
+        .filter((resource) => !!resource)
+        .map((resource) => [resource.id, resource.downstream]),
+    );
+
+    const newUpstreamDependencies: {
+      [resourceId: string]: string[];
+    } = Object.fromEntries(
+      resources.map((resource) => [
+        resource.id,
+        [
+          ...Object.values(Output.upstreamAny(resource.props)).map((r) => r.id),
+          ...(isService(resource)
+            ? resource.props.bindings.capabilities.map((cap) => cap.resource.id)
+            : []),
+        ],
+      ]),
+    );
+
+    const newDownstreamDependencies: {
+      [resourceId: string]: string[];
+    } = Object.fromEntries(
+      resources.map((resource) => [
+        resource.id,
+        Object.entries(newUpstreamDependencies)
+          .filter(([_, downstream]) => downstream.includes(resource.id))
+          .map(([id]) => id),
+      ]),
+    );
 
     const resourceGraph = Object.fromEntries(
       (yield* Effect.all(
@@ -432,7 +434,7 @@ export const plan = <const Resources extends (Service | Resource)[]>(
                   (cap: Capability) => cap.resource as Resource,
                 )
               : []),
-            ...Object.values(resolveUpstream(resource.props)),
+            ...Object.values(Output.upstreamAny(resource.props)),
             resource,
           ])
           .filter(
@@ -452,6 +454,8 @@ export const plan = <const Resources extends (Service | Resource)[]>(
                 resourceId: id,
               });
               const provider = yield* resource.provider.tag;
+
+              const downstream = newDownstreamDependencies[id] ?? [];
 
               const bindings = isService(node)
                 ? yield* diffBindings({
@@ -479,6 +483,7 @@ export const plan = <const Resources extends (Service | Resource)[]>(
                   bindings,
                   // phantom
                   attributes: undefined!,
+                  downstream,
                 });
               }
 
@@ -503,6 +508,7 @@ export const plan = <const Resources extends (Service | Resource)[]>(
                   provider,
                   resource,
                   bindings,
+                  downstream,
                   // phantom
                   attributes: undefined!,
                 });
@@ -515,6 +521,7 @@ export const plan = <const Resources extends (Service | Resource)[]>(
                   provider,
                   resource,
                   bindings,
+                  downstream,
                   // phantom
                   attributes: undefined!,
                 });
@@ -527,6 +534,7 @@ export const plan = <const Resources extends (Service | Resource)[]>(
                   provider,
                   resource,
                   bindings,
+                  downstream,
                   // phantom
                   attributes: undefined!,
                 });
@@ -535,6 +543,7 @@ export const plan = <const Resources extends (Service | Resource)[]>(
                   action: "noop",
                   resource,
                   bindings,
+                  downstream,
                   // phantom
                   attributes: undefined!,
                 });
@@ -582,7 +591,7 @@ export const plan = <const Resources extends (Service | Resource)[]>(
                     attr: oldState.output,
                     props: oldState.props,
                   } as Resource,
-                  downstream: downstream[id] ?? [],
+                  downstream: oldDownstreamDependencies[id] ?? [],
                 } satisfies Delete<Resource>,
               ] as const;
             }
@@ -625,8 +634,9 @@ const arePropsChanged = <R extends Resource>(
   newProps: R["props"],
 ) => {
   return (
+    Output.hasOutputs(newProps) ||
     JSON.stringify(omit(oldState?.props ?? {}, "bindings")) !==
-    JSON.stringify(omit((newProps ?? {}) as any, "bindings"))
+      JSON.stringify(omit((newProps ?? {}) as any, "bindings"))
   );
 };
 
@@ -641,9 +651,9 @@ const diffBindings = Effect.fn(function* ({
 }) {
   // const actions: BindNode[] = [];
   const oldBindings = oldState?.bindings;
-  const oldSids = new Set(
-    oldBindings?.map(({ binding }) => binding.capability.sid),
-  );
+  // const oldSids = new Set(
+  //   oldBindings?.map(({ binding }) => binding.capability.sid),
+  // );
 
   const diffBinding: (
     binding: AnyBinding,
@@ -769,3 +779,111 @@ const isBindingDiff = Effect.fn(function* ({
 });
 // TODO(sam): compare props
 // oldBinding.props !== newBinding.props;
+
+/**
+ * Print a plan in a human-readable format that shows the graph topology.
+ */
+export const printPlan = (plan: IPlan): string => {
+  const lines: string[] = [];
+  const allNodes = { ...plan.resources, ...plan.deletions };
+
+  // Build reverse mapping: upstream -> downstream
+  const upstreamMap: Record<string, string[]> = {};
+  for (const [id, node] of Object.entries(allNodes)) {
+    upstreamMap[id] = [];
+  }
+  for (const [id, node] of Object.entries(allNodes)) {
+    if (!node) continue;
+    for (const downstreamId of node.downstream ?? []) {
+      if (upstreamMap[downstreamId]) {
+        upstreamMap[downstreamId].push(id);
+      }
+    }
+  }
+
+  // Find roots (nodes with no upstream dependencies)
+  const roots = Object.keys(allNodes).filter(
+    (id) => (upstreamMap[id]?.length ?? 0) === 0,
+  );
+
+  // Action symbols
+  const actionSymbol = (action: string) => {
+    switch (action) {
+      case "create":
+        return "+";
+      case "update":
+        return "~";
+      case "delete":
+        return "-";
+      case "replace":
+        return "±";
+      case "noop":
+        return "=";
+      default:
+        return "?";
+    }
+  };
+
+  // Print header
+  lines.push(
+    "╔════════════════════════════════════════════════════════════════╗",
+  );
+  lines.push(
+    "║                           PLAN                                 ║",
+  );
+  lines.push(
+    "╠════════════════════════════════════════════════════════════════╣",
+  );
+  lines.push(
+    "║ Legend: + create, ~ update, - delete, ± replace, = noop        ║",
+  );
+  lines.push(
+    "╚════════════════════════════════════════════════════════════════╝",
+  );
+  lines.push("");
+
+  // Print resources section
+  lines.push(
+    "┌─ Resources ────────────────────────────────────────────────────┐",
+  );
+  const resourceIds = Object.keys(plan.resources).sort();
+  for (const id of resourceIds) {
+    const node = plan.resources[id];
+    const symbol = actionSymbol(node.action);
+    const type = node.resource?.type ?? "unknown";
+    const downstream = node.downstream?.length
+      ? ` → [${node.downstream.join(", ")}]`
+      : "";
+    lines.push(`│ [${symbol}] ${id} (${type})${downstream}`);
+  }
+  if (resourceIds.length === 0) {
+    lines.push("│ (none)");
+  }
+  lines.push(
+    "└────────────────────────────────────────────────────────────────┘",
+  );
+  lines.push("");
+
+  // Print deletions section
+  lines.push(
+    "┌─ Deletions ────────────────────────────────────────────────────┐",
+  );
+  const deletionIds = Object.keys(plan.deletions).sort();
+  for (const id of deletionIds) {
+    const node = plan.deletions[id]!;
+    const type = node.resource?.type ?? "unknown";
+    const downstream = node.downstream?.length
+      ? ` → [${node.downstream.join(", ")}]`
+      : "";
+    lines.push(`│ [-] ${id} (${type})${downstream}`);
+  }
+  if (deletionIds.length === 0) {
+    lines.push("│ (none)");
+  }
+  lines.push(
+    "└────────────────────────────────────────────────────────────────┘",
+  );
+  lines.push("");
+
+  return lines.join("\n");
+};

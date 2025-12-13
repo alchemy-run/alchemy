@@ -7,8 +7,8 @@ import type { ScopedPlanStatusSession } from "../../cli/service.ts";
 import { DotAlchemy } from "../../dot-alchemy.ts";
 import { ESBuild } from "../../esbuild.ts";
 import { sha256 } from "../../sha256.ts";
-import { CloudflareApi } from "../api.ts";
 import { Account } from "../account.ts";
+import { CloudflareApi } from "../api.ts";
 import { Assets } from "./assets.provider.ts";
 import { Worker, type WorkerAttr, type WorkerProps } from "./worker.ts";
 
@@ -187,6 +187,7 @@ export const workerProvider = () =>
       });
 
       return {
+        stables: ["id"],
         diff: Effect.fnUntraced(function* ({ id, olds, news, output }) {
           if (output.accountId !== accountId) {
             return { action: "replace" };
@@ -203,7 +204,10 @@ export const workerProvider = () =>
             assets?.hash !== output.hash.assets ||
             bundle.hash !== output.hash.bundle
           ) {
-            return { action: "update" };
+            return {
+              action: "update",
+              stables: output.name === workerName ? ["name"] : undefined,
+            };
           }
         }),
         create: Effect.fnUntraced(function* ({ id, news, bindings, session }) {

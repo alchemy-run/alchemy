@@ -11,8 +11,8 @@ import { EC2Client } from "./client.ts";
 import {
   Subnet,
   type SubnetAttrs,
-  type SubnetProps,
   type SubnetId,
+  type SubnetProps,
 } from "./subnet.ts";
 
 export const subnetProvider = () =>
@@ -22,6 +22,7 @@ export const subnetProvider = () =>
       const tagged = yield* createTagger();
 
       return {
+        stables: ["subnetId", "subnetArn", "ownerId", "vpcId"],
         diff: Effect.fn(function* ({ news, olds }) {
           if (
             somePropsAreDifferent(olds, news, [
@@ -71,7 +72,6 @@ export const subnetProvider = () =>
             })
             .pipe(
               Effect.retry({
-                // @ts-expect-error - this is unknown to itty-aws
                 while: (e) => e._tag === "InvalidVpcID.NotFound",
                 schedule: Schedule.exponential(100),
               }),

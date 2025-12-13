@@ -1,11 +1,11 @@
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
+import type { ScopedPlanStatusSession } from "./cli/service.ts";
 import type { Diff } from "./diff.ts";
 import type { Input } from "./input.ts";
 import type { Resource } from "./resource.ts";
 import type { Runtime } from "./runtime.ts";
 import type { Service } from "./service.ts";
-import type { ScopedPlanStatusSession } from "./cli/service.ts";
 
 export interface Provider<R extends Resource | Service>
   extends Context.TagClass<
@@ -39,6 +39,10 @@ export interface ProviderService<Res extends Resource = Resource> {
     session: ScopedPlanStatusSession;
     bindings: BindingData<Res>;
   }): Effect.Effect<Res["attr"] | undefined, any, never>;
+  /**
+   * Properties that are always stable across any update.
+   */
+  stables?: Extract<keyof Res["attr"], string>[];
   diff?(input: {
     id: string;
     olds: Props<Res>;

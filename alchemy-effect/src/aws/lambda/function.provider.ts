@@ -14,12 +14,12 @@ import { App } from "../../app.ts";
 import { DotAlchemy } from "../../dot-alchemy.ts";
 import type { ProviderService } from "../../provider.ts";
 import { createTagger, createTagsList, hasTags } from "../../tags.ts";
+import { Account } from "../account.ts";
 import * as IAM from "../iam.ts";
+import { Region } from "../region.ts";
 import { zipCode } from "../zip.ts";
 import { LambdaClient } from "./client.ts";
 import { Function, type FunctionAttr, type FunctionProps } from "./function.ts";
-import { Account } from "../account.ts";
-import { Region } from "../region.ts";
 
 export const functionProvider = () =>
   Function.provider.effect(
@@ -426,6 +426,28 @@ export const functionProvider = () =>
         }`;
 
       return {
+        stables: ["functionArn", "functionName", "roleName"],
+        diff: Effect.fn(function* ({ id, olds, news, output }) {
+          if (
+            // function name changed
+            output.functionName !==
+              (news.functionName ?? createFunctionName(id)) ||
+            // url changed
+            olds.url !== news.url
+          ) {
+            return { action: "replace" };
+          }
+          if (
+            output.code.hash !==
+            (yield* bundleCode(id, {
+              main: news.main,
+              handler: news.handler,
+            })).hash
+          ) {
+            // code changed
+            return { action: "update" };
+          }
+        }),
         read: Effect.fn(function* ({ id, output }) {
           if (output) {
             yield* Effect.logDebug(`reading function ${id}`);
@@ -452,27 +474,7 @@ export const functionProvider = () =>
           }
           return output;
         }),
-        diff: Effect.fn(function* ({ id, olds, news, output }) {
-          if (
-            // function name changed
-            output.functionName !==
-              (news.functionName ?? createFunctionName(id)) ||
-            // url changed
-            olds.url !== news.url
-          ) {
-            return { action: "replace" };
-          }
-          if (
-            output.code.hash !==
-            (yield* bundleCode(id, {
-              main: news.main,
-              handler: news.handler,
-            })).hash
-          ) {
-            // code changed
-            return { action: "update" };
-          }
-        }),
+
         precreate: Effect.fn(function* ({ id, news }) {
           const { roleName, functionName, roleArn } = createPhysicalNames(id);
 
