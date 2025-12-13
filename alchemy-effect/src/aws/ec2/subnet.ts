@@ -3,7 +3,7 @@ import type { Input } from "../../input.ts";
 import { Resource } from "../../resource.ts";
 import type { AccountID } from "../account.ts";
 import type { RegionID } from "../region.ts";
-import type { VpcId } from "./index.ts";
+import type { VpcId } from "./vpc.ts";
 
 export const Subnet = Resource<{
   <const ID extends string, const Props extends SubnetProps>(

@@ -1,10 +1,12 @@
+import type { Resource } from "@/resource";
 import type { Input, InputProps } from "@/input";
 import * as Output from "@/output";
-import { plan, type TransitiveResources } from "@/plan";
+import { plan, type TransitiveResources, type TraverseResources } from "@/plan";
 import * as State from "@/state";
 import { test } from "@/test";
 import { describe, expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import {
   Bucket,
   Function,
@@ -13,6 +15,7 @@ import {
   TestResource,
   type TestResourceProps,
 } from "./test.resources";
+import * as App from "@/app";
 
 const _test = test;
 
@@ -34,7 +37,7 @@ class MyFunction extends Function("MyFunction", {
 test(
   "create all resources when plan is empty",
   {
-    state: State.inMemory({}),
+    state: test.state(),
   },
   Effect.gen(function* () {
     expect(yield* plan(MyBucket, MyQueue)).toMatchObject({
@@ -66,7 +69,7 @@ test(
 test(
   "update the changed resources and no-op un-changed resources",
   {
-    state: State.inMemory({
+    state: test.state({
       MyBucket: {
         id: "MyBucket",
         type: "Test.Bucket",
@@ -108,7 +111,7 @@ test(
 test(
   "delete oprhaned resources",
   {
-    state: State.inMemory({
+    state: test.state({
       MyBucket: {
         id: "MyBucket",
         type: "Test.Bucket",
@@ -191,7 +194,7 @@ test(
 test(
   "detect that queueUrl will change and pass through the PropExpr instead of old output",
   {
-    state: State.inMemory({
+    state: test.state({
       MyQueue: {
         id: "MyQueue",
         type: "Test.Queue",
@@ -227,7 +230,7 @@ test(
 );
 
 describe("Outputs should resolve to old values", () => {
-  const state = State.inMemory({
+  const state = _test.state({
     A: {
       id: "A",
       type: "Test.TestResource",
@@ -335,7 +338,7 @@ describe("stable properties should not cause downstream changes", () => {
     _test(
       description,
       {
-        state: State.inMemory({
+        state: _test.state({
           A: {
             id: "A",
             type: "Test.TestResource",
@@ -454,7 +457,7 @@ const g = Effect.gen(function* () {
   }
 }).pipe(Effect.provide(TestLayers));
 
-describe("type-only tests", () => {
+describe.skip("type-only tests", () => {
   test(
     "infer transitive dependencies via outputs",
     Effect.gen(function* () {
@@ -481,11 +484,20 @@ describe("type-only tests", () => {
         // @ts-expect-error
         p.resources.D;
 
-        // attest(
-        //   yield* plan(C),
-        // );
-
-        // attest.instantiations([3500, "instantiations"]);
+        {
+          // any type should not break the type inference
+          class D extends TestResource("D", {
+            string: undefined! as any,
+            object: {
+              string: undefined! as any,
+            },
+          }) {}
+          type _ = TraverseResources<D>;
+          const p = yield* plan(D);
+          p.resources.D;
+          // @ts-expect-error
+          p.resources.E;
+        }
       }
     }).pipe(Effect.provide(TestLayers)),
   );

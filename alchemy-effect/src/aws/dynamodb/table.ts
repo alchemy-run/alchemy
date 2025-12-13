@@ -4,7 +4,6 @@ import { Resource } from "../../resource.ts";
 import type { type } from "../../type.ts";
 import type { AccountID } from "../account.ts";
 import type { RegionID } from "../region.ts";
-
 import type * as DynamoDB from "itty-aws/dynamodb";
 
 export interface TableProps<

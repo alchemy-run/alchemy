@@ -5,7 +5,6 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { App } from "./app.ts";
 import type { BindNode } from "./plan.ts";
 import { isResource } from "./resource.ts";
 
@@ -75,18 +74,29 @@ export class StateStoreError extends Data.TaggedError("StateStoreError")<{
 }> {}
 
 export interface StateService {
-  listApps(): Effect.Effect<string[], StateStoreError, never>;
-  listStages(appName?: string): Effect.Effect<string[], StateStoreError, never>;
+  listStacks(): Effect.Effect<string[], StateStoreError, never>;
+  listStages(stack: string): Effect.Effect<string[], StateStoreError, never>;
   // stub
-  get(
-    id: string,
-  ): Effect.Effect<ResourceState | undefined, StateStoreError, never>;
-  set<V extends ResourceState>(
-    id: string,
-    value: V,
-  ): Effect.Effect<V, StateStoreError, never>;
-  delete(id: string): Effect.Effect<void, StateStoreError, never>;
-  list(): Effect.Effect<string[], StateStoreError, never>;
+  get(request: {
+    stack: string;
+    stage: string;
+    resourceId: string;
+  }): Effect.Effect<ResourceState | undefined, StateStoreError, never>;
+  set<V extends ResourceState>(request: {
+    stack: string;
+    stage: string;
+    resourceId: string;
+    value: V;
+  }): Effect.Effect<V, StateStoreError, never>;
+  delete(request: {
+    stack: string;
+    stage: string;
+    resourceId: string;
+  }): Effect.Effect<void, StateStoreError, never>;
+  list(request: {
+    stack: string;
+    stage: string;
+  }): Effect.Effect<string[], StateStoreError, never>;
 }
 
 export class State extends Context.Tag("AWS::Lambda::State")<
@@ -97,14 +107,12 @@ export class State extends Context.Tag("AWS::Lambda::State")<
 // TODO(sam): implement with SQLite3
 export const localFs = Layer.effect(
   State,
+  // @ts-expect-error -
   Effect.gen(function* () {
-    const app = yield* App;
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const dotAlchemy = path.join(process.cwd(), ".alchemy");
     const stateDir = path.join(dotAlchemy, "state");
-    const appDir = path.join(stateDir, app.name);
-    const stageDir = path.join(appDir, app.stage);
 
     const fail = (err: PlatformError) =>
       Effect.fail(
@@ -121,9 +129,22 @@ export const localFs = Layer.effect(
         Effect.catchTag("BadArgument", (e) => fail(e)),
       );
 
-    const resourceFile = (id: string) => path.join(stageDir, `${id}.json`);
+    const stage = ({ stack, stage }: { stack: string; stage: string }) =>
+      path.join(stateDir, stack, stage);
 
-    yield* fs.makeDirectory(stageDir, { recursive: true });
+    const resource = ({
+      stack,
+      stage,
+      resourceId,
+    }: {
+      stack: string;
+      stage: string;
+      resourceId: string;
+    }) => path.join(stateDir, stack, stage, `${resourceId}.json`);
+
+    const ensure = yield* Effect.cachedFunction((dir: string) =>
+      fs.makeDirectory(dir, { recursive: true }),
+    );
 
     return {
       listApps: () =>
@@ -131,43 +152,44 @@ export const localFs = Layer.effect(
           recover,
           Effect.map((files) => files ?? []),
         ),
-      listStages: (appName: string = app.name) =>
-        fs.readDirectory(path.join(stateDir, appName)).pipe(
+      listStages: (stack: string) =>
+        fs.readDirectory(path.join(stateDir, stack)).pipe(
           recover,
           Effect.map((files) => files ?? []),
         ),
-      get: (id) =>
-        fs.readFile(resourceFile(id)).pipe(
+      get: (request) =>
+        fs.readFile(resource(request)).pipe(
           Effect.map((file) => JSON.parse(file.toString())),
           recover,
         ),
-      set: <V extends ResourceState>(id: string, value: V) =>
-        fs
-          .writeFileString(
-            resourceFile(id),
-            JSON.stringify(
-              value,
-              (k, v) => {
-                if (isResource(v)) {
-                  return {
-                    id: v.id,
-                    type: v.type,
-                    props: v.props,
-                    attr: v.attr,
-                  };
-                }
-                return v;
-              },
-              2,
+      set: (request) =>
+        ensure(stage(request)).pipe(
+          Effect.flatMap(() =>
+            fs.writeFileString(
+              resource(request),
+              JSON.stringify(
+                request.value,
+                (k, v) => {
+                  if (isResource(v)) {
+                    return {
+                      id: v.id,
+                      type: v.type,
+                      props: v.props,
+                      attr: v.attr,
+                    };
+                  }
+                  return v;
+                },
+                2,
+              ),
             ),
-          )
-          .pipe(
-            recover,
-            Effect.map(() => value),
           ),
-      delete: (id) => fs.remove(resourceFile(id)).pipe(recover),
-      list: () =>
-        fs.readDirectory(stageDir).pipe(
+          recover,
+          Effect.map(() => request.value),
+        ),
+      delete: (request) => fs.remove(resource(request)).pipe(recover),
+      list: (request) =>
+        fs.readDirectory(stage(request)).pipe(
           recover,
           Effect.map(
             (files) => files?.map((file) => file.replace(/\.json$/, "")) ?? [],
@@ -177,21 +199,77 @@ export const localFs = Layer.effect(
   }),
 );
 
-export const inMemory = (initialState: Record<string, any> = {}) => {
-  const state = new Map<string, any>(Object.entries(initialState));
-  return Layer.succeed(State, {
-    listApps: () => Effect.succeed([]),
+type StackId = string;
+type StageId = string;
+type ResourceId = string;
+
+export const inMemory = (
+  initialState: Record<
+    StackId,
+    Record<StageId, Record<ResourceId, ResourceState>>
+  > = {},
+) =>
+  Layer.succeed(State, inMemoryService(initialState)) as Layer.Layer<
+    State,
+    never,
+    never
+  >;
+
+export const inMemoryService = (
+  initialState: Record<
+    StackId,
+    Record<StageId, Record<ResourceId, ResourceState>>
+  > = {},
+) => {
+  const state = new Map<StackId, Map<StageId, Map<ResourceId, ResourceState>>>(
+    Object.entries(initialState).map(([stack, stages]) => [
+      stack,
+      new Map(
+        Object.entries(stages).map(([stage, resources]) => [
+          stage,
+          new Map(Object.entries(resources)),
+        ]),
+      ),
+    ]),
+  );
+  return {
+    listStacks: () => Effect.succeed(Array.from(state.keys())),
     // oxlint-disable-next-line require-yield
-    listStages: (_appName?: string) => Effect.succeed([]),
-    get: (id: string) => Effect.succeed(state.get(id)),
-    set: <V>(id: string, value: V) => {
-      state.set(id, value);
+    listStages: (stack: string) =>
+      Effect.succeed(Array.from(state.get(stack)?.keys() ?? [])),
+    get: ({
+      stack,
+      stage,
+      resourceId,
+    }: {
+      stack: string;
+      stage: string;
+      resourceId: string;
+    }) => Effect.succeed(state.get(stack)?.get(stage)?.get(resourceId)),
+    set: <V extends ResourceState>({
+      stack,
+      stage,
+      resourceId,
+      value,
+    }: {
+      stack: string;
+      stage: string;
+      resourceId: string;
+      value: V;
+    }) => {
+      state.get(stack)?.get(stage)?.set(resourceId, value);
       return Effect.succeed(value);
     },
-    delete: (id: string) => {
-      state.delete(id);
-      return Effect.succeed(undefined);
-    },
-    list: () => Effect.succeed(Array.from(state.keys())),
-  });
+    delete: ({
+      stack,
+      stage,
+      resourceId,
+    }: {
+      stack: string;
+      stage: string;
+      resourceId: string;
+    }) => Effect.succeed(state.get(stack)?.get(stage)?.delete(resourceId)),
+    list: ({ stack, stage }: { stack: string; stage: string }) =>
+      Effect.succeed(Array.from(state.get(stack)?.get(stage)?.keys() ?? [])),
+  };
 };

@@ -94,12 +94,12 @@ export interface Function<
   ID extends string = string,
   Props extends InputProps<FunctionProps> = InputProps<FunctionProps>,
 > extends Resource<
-  "Test.Function",
-  ID,
-  Props,
-  FunctionAttr<Input.Resolve<Props>>,
-  Function
-> {}
+    "Test.Function",
+    ID,
+    Props,
+    FunctionAttr<Input.Resolve<Props>>,
+    Function
+  > {}
 
 export const Function = Resource<{
   <const ID extends string, const Props extends InputProps<FunctionProps>>(
@@ -132,6 +132,9 @@ export const functionProvider = Function.provider.succeed({
 export type TestResourceProps = {
   string?: string;
   stringArray?: string[];
+  object?: {
+    string: string;
+  };
 };
 
 export type TestResourceAttr<Props extends TestResourceProps> = {
@@ -147,12 +150,12 @@ export interface TestResource<
   ID extends string = string,
   Props extends InputProps<TestResourceProps> = InputProps<TestResourceProps>,
 > extends Resource<
-  "Test.TestResource",
-  ID,
-  Props,
-  TestResourceAttr<Input.Resolve<Props>>,
-  TestResource
-> {}
+    "Test.TestResource",
+    ID,
+    Props,
+    TestResourceAttr<Input.Resolve<Props>>,
+    TestResource
+  > {}
 
 export const TestResource = Resource<{
   <const ID extends string, const Props extends InputProps<TestResourceProps>>(

@@ -4,7 +4,7 @@ import { Binding } from "../../binding.ts";
 import type { Capability } from "../../capability.ts";
 import { toEnvKey } from "../../env.ts";
 import { declare, type From, type Policy } from "../../policy.ts";
-import { Function } from "../lambda/index.ts";
+import { Function } from "../lambda/function.ts";
 import { fromAttributeValue } from "./attribute-value.ts";
 import { DynamoDBClient } from "./client.ts";
 import type { Identifier } from "./expr.ts";

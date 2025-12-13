@@ -4,21 +4,19 @@ import * as Schedule from "effect/Schedule";
 import type { EC2 } from "itty-aws/ec2";
 
 import type { VpcId } from "./vpc.ts";
-import { App } from "../../app.ts";
-import type { ScopedPlanStatusSession } from "../../apply.ts";
+import type { ScopedPlanStatusSession } from "../../cli/service.ts";
 import { somePropsAreDifferent } from "../../diff.ts";
 import type { ProviderService } from "../../provider.ts";
 import { createTagger, createTagsList } from "../../tags.ts";
-import { Account } from "../account.ts";
-import { Region } from "../region.ts";
 import { EC2Client } from "./client.ts";
 import { Vpc, type VpcAttrs, type VpcProps } from "./vpc.ts";
+import { Region } from "../region.ts";
+import { Account } from "../account.ts";
 
 export const vpcProvider = () =>
   Vpc.provider.effect(
     Effect.gen(function* () {
       const ec2 = yield* EC2Client;
-      const app = yield* App;
       const region = yield* Region;
       const accountId = yield* Account;
       const tagged = yield* createTagger();

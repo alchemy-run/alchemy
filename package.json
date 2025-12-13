@@ -12,6 +12,7 @@
   "scripts": {
     "clean:shallow": "rm -rf alchemy-effect/*.tgz && bun tsc -b --clean",
     "build": "bun run clean:shallow && bun tsc -b && bun run --filter alchemy-effect build",
+    "dev": "tsc -w & bun run --filter alchemy-effect dev",
     "build:clean": "git clean -fqdx . && bun i && bun run build",
     "download:env": "doppler secrets download --no-file --format env > .env",
     "format": "oxfmt '.' '!./alchemy-effect*/lib/' '!/**/*.mdx'",
@@ -19,6 +20,7 @@
     "bump": "bun ./scripts/bump.ts",
     "publish:npm": "bun run build && bun run --filter alchemy-effect publish:npm",
     "prepare": "effect-language-service patch",
+    "test": "vitest run",
     "test:benchmark": "bun run --filter alchemy-effect test:benchmark"
   },
   "workspaces": {
@@ -26,14 +28,15 @@
       "@aws-sdk/credential-providers": "^3.0.0",
       "@cloudflare/vite-plugin": "^1.13.12",
       "@cloudflare/workers-types": "^4.20250805.0",
-      "@effect/platform-node": "^0.98.3",
-      "@effect/platform": "^0.92.1",
-      "@effect/typeclass": "^0.38.0",
+      "@effect/cluster": "^0.55.0",
+      "@effect/cli": "^0.72.1",
+      "@effect/platform-node": "^0.103.0",
+      "@effect/platform": "^0.93.0",
       "@types/aws-lambda": "^8.10.152",
       "@types/bun": "latest",
       "@types/node": "latest",
       "cloudflare": "^5.2.0",
-      "effect": "^3.18.4",
+      "effect": "^3.19.3",
       "itty-aws": "^0.7.1",
       "typescript": "^5.9.3",
       "vite": "^7.1.9",
@@ -46,17 +49,17 @@
   },
   "devDependencies": {
     "@ark/attest": "^0.55.0",
-    "@effect/language-service": "^0.55.2",
+    "@effect/language-service": "^0.55.5",
     "@types/bun": "latest",
     "@types/node": "latest",
-    "@typescript/native-preview": "^7.0.0-dev.20251113.1",
+    "@typescript/native-preview": "^7.0.0-dev.20251208.1",
     "changelogithub": "^13.16.1",
     "dotenv": "^17.2.3",
     "oxfmt": "^0.9.0",
     "pkg-pr-new": "^0.0.60",
-    "typescript": "catalog:",
+    "typescript": "^5.9.3",
     "vite-tsconfig-paths": "^5.1.4",
-    "vitest": "^4.0.8",
-    "yaml": "^2.8.1"
+    "vitest": "^4.0.15",
+    "yaml": "^2.8.2"
   }
 }

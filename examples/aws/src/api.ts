@@ -29,7 +29,7 @@ export class SingleTable extends DynamoDB.Table("Users", {
 }) {}
 
 export class Api extends Lambda.serve("Api", {
-  fetch: Effect.fn(function* (event) {
+  fetch: Effect.fn(function* (_request) {
     const id = "USER#123";
 
     const item = yield* DynamoDB.getItem({

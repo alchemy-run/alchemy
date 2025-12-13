@@ -3,8 +3,8 @@ import type { Effect } from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type { Capability, ICapability } from "./capability.ts";
 import type { Diff } from "./diff.ts";
-import type { Resource } from "./resource.ts";
-import type { Runtime } from "./runtime.ts";
+import type { IResource, Resource } from "./resource.ts";
+import type { IRuntime } from "./runtime.ts";
 
 export interface BindingProps {
   [key: string]: any;
@@ -13,7 +13,7 @@ export interface BindingProps {
 export const isBinding = (b: any): b is AnyBinding =>
   "runtime" in b && "capability" in b && "tag" in b && "output" in b;
 
-export type AnyBinding<F extends Runtime = any> = Binding<
+export type AnyBinding<F extends IRuntime = any> = Binding<
   F,
   any,
   any,
@@ -23,7 +23,7 @@ export type AnyBinding<F extends Runtime = any> = Binding<
 >;
 
 export interface Binding<
-  Run extends Runtime<any, any, any>,
+  Run extends IRuntime<any, any, any>,
   Cap extends Capability = Capability,
   Props = any,
   Attr extends Run["binding"] = any,
@@ -40,7 +40,7 @@ export interface Binding<
 
 /** Tag for a Service that can bind a Capability to a Runtime */
 export interface Bind<
-  F extends Runtime,
+  F extends IRuntime,
   Cap extends Capability,
   Tag extends string,
 > extends Context.Tag<
@@ -91,12 +91,12 @@ export const Binding: {
         effect: (eff) => Layer.effect(Tag, eff),
         succeed: (service) => Layer.succeed(Tag, service),
       },
-    } satisfies BindingDeclaration<Runtime, any>,
+    } satisfies BindingDeclaration<IRuntime, any>,
   );
 };
 
 export interface BindingDeclaration<
-  Run extends Runtime,
+  Run extends IRuntime,
   F extends (target: any, props?: any) => AnyBinding<Run>,
   Tag extends string = ReturnType<F>["tag"],
   Cap extends Capability = ReturnType<F>["capability"],
@@ -126,8 +126,8 @@ export interface BindingDeclaration<
 }
 
 export interface BindingDiffProps<
-  Source extends Resource = Resource,
-  Target extends Resource = Resource,
+  Source extends IResource = IResource,
+  Target extends IResource = IResource,
   Props = any,
   Attr = any,
 > {
@@ -148,8 +148,8 @@ export interface BindingDiffProps<
 }
 
 export interface BindingAttachProps<
-  Source extends Resource,
-  Target extends Resource,
+  Source extends IResource,
+  Target extends IResource,
   Props,
   Attr,
 > {
@@ -168,8 +168,8 @@ export interface BindingAttachProps<
 }
 
 export interface BindingReattachProps<
-  Source extends Resource,
-  Target extends Resource,
+  Source extends IResource,
+  Target extends IResource,
   Props,
   Attr,
 > {
@@ -188,8 +188,8 @@ export interface BindingReattachProps<
 }
 
 export interface BindingDetachProps<
-  Source extends Resource,
-  Target extends Resource,
+  Source extends IResource,
+  Target extends IResource,
   Props,
   Attr,
 > {
@@ -208,8 +208,8 @@ export interface BindingDetachProps<
 }
 
 export type BindingService<
-  Target extends Runtime = any,
-  Source extends Resource = Resource,
+  Target extends IRuntime = any,
+  Source extends IResource = IResource,
   Props = any,
   Attr extends Target["binding"] = any,
   DiffReq = never,

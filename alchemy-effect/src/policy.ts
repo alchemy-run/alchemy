@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as S from "effect/Schema";
 import { type AnyBinding, type Bind } from "./binding.ts";
 import type { Capability } from "./capability.ts";
-import type { Runtime } from "./runtime.ts";
+import type { IRuntime, Runtime } from "./runtime.ts";
 
 /**
  * A Policy binds a set of Capbilities (e.g SQS.SendMessage, SQS.Consume, etc.) to a
@@ -15,7 +15,7 @@ import type { Runtime } from "./runtime.ts";
  * A Policy is invariant over the set of Capabilities to ensure least-privilege.
  */
 export interface Policy<
-  F extends Runtime,
+  F extends IRuntime,
   in out Capabilities,
   Tags = unknown,
 > {

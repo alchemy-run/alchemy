@@ -1,46 +1,39 @@
-import { FetchHttpClient } from "@effect/platform";
-import { NodeContext } from "@effect/platform-node";
-import * as Alchemy from "alchemy-effect";
-import * as CLI from "alchemy-effect/cli";
-import * as Cloudflare from "alchemy-effect/cloudflare/live";
-import { Logger } from "effect";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
+import * as Config from "effect/Config";
+import {
+  type StageConfig,
+  defineStack,
+  defineStages,
+  USER,
+} from "alchemy-effect";
+import * as Cloudflare from "alchemy-effect/cloudflare";
 import { Api } from "./src/api.ts";
 
-// select your underlying platform
-const platform = Layer.mergeAll(
-  NodeContext.layer,
-  FetchHttpClient.layer,
-  Logger.pretty,
+const stages = defineStages(
+  Effect.fn(function* (stage) {
+    return {
+      retain: stage.startsWith("prod"),
+      cloudflare: {
+        // TODO(sam): integrate with alchemy's profile system
+        account: yield* Config.string("CLOUDFLARE_ACCOUNT_ID"),
+      },
+    } satisfies StageConfig;
+  }),
 );
 
-// select your providers
-const providers = Layer.mergeAll(
-  Cloudflare.live(),
-  // AWS.live()
-);
+export const MyService = stages.ref<typeof stack>("my-cloudflare-app").as({
+  prod: "prod",
+  staging: "staging",
+  preview: (pr: number) => `preview_${pr.toString()}`,
+  dev: (user: USER = USER) => `dev_${user}`,
+});
 
-// override alchemy state store, CLI/reporting and dotAlchemy
-const alchemy = Layer.mergeAll(
-  Alchemy.State.localFs,
-  CLI.layer,
-  // optional
-  Alchemy.dotAlchemy,
-);
+const stack = defineStack({
+  name: "my-cloudflare-app",
+  stages,
+  resources: [Api],
+  providers: Cloudflare.providers(),
+  tap: ({ Api }) => Effect.log(Api.url),
+});
 
-// define your app
-const app = Alchemy.app({ name: "my-app", stage: "dev" });
-
-const layers = Layer.provideMerge(
-  Layer.provideMerge(providers, alchemy),
-  Layer.mergeAll(platform, app),
-);
-
-const stack = await Alchemy.apply(Api).pipe(
-  Effect.provide(layers),
-  Effect.tap((stack) => Effect.log(stack?.Api.url)),
-  Effect.runPromise,
-);
-
-console.log(stack.Api.url);
+export default stack;

@@ -2,7 +2,7 @@ import { FileSystem, Path } from "@effect/platform";
 import type { PlatformError } from "@effect/platform/Error";
 import { Context, Data, Layer } from "effect";
 import * as Effect from "effect/Effect";
-import type { ScopedPlanStatusSession } from "../../apply.ts";
+import type { ScopedPlanStatusSession } from "../../cli/service.ts";
 import { sha256 } from "../../sha256.ts";
 import { CloudflareApi, CloudflareApiError } from "../api.ts";
 import type { Worker } from "./worker.ts";

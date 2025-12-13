@@ -1,16 +1,16 @@
 import type { Effect } from "effect/Effect";
 import type { Capability } from "./capability.ts";
 import type { IResource } from "./resource.ts";
-import type { Runtime, RuntimeHandler, RuntimeProps } from "./runtime.ts";
+import type { IRuntime, RuntimeHandler, RuntimeProps } from "./runtime.ts";
 
 export interface IService<
   ID extends string = string,
-  F extends Runtime = Runtime,
+  F extends IRuntime = IRuntime,
   Handler extends RuntimeHandler = RuntimeHandler,
   Props extends RuntimeProps<F, any> = RuntimeProps<F, any>,
   Attr = (F & { props: Props })["attr"],
   Base = unknown,
-> extends IResource<F["type"], ID, Props, Attr, Base> {
+> extends IResource<F["type"], ID, Props, Attr, F> {
   kind: "Service";
   type: F["type"];
   id: ID;
@@ -47,7 +47,7 @@ export interface AnyService extends IService {}
 
 export interface Service<
   ID extends string = string,
-  F extends Runtime = Runtime,
+  F extends IRuntime = IRuntime,
   Handler extends RuntimeHandler = RuntimeHandler,
   Props extends RuntimeProps<F, any> = RuntimeProps<F, any>,
   Attr = (F & { props: Props })["attr"],

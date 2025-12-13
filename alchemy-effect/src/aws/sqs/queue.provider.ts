@@ -3,10 +3,10 @@ import * as Schedule from "effect/Schedule";
 
 import { App } from "../../app.ts";
 import type { ProviderService } from "../../provider.ts";
-import { Account } from "../account.ts";
-import { Region } from "../region.ts";
 import { SQSClient } from "./client.ts";
 import { Queue, type QueueProps } from "./queue.ts";
+import { Region } from "../region.ts";
+import { Account } from "../account.ts";
 
 export const queueProvider = () =>
   Queue.provider.effect(

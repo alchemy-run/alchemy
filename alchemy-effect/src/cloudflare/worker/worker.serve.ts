@@ -1,6 +1,9 @@
-import type * as types from "@cloudflare/workers-types";
+import type { ExecutionContext } from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import * as Worker from "./worker.ts";
+
+export type { ExecutionContext };
+export type * from "../../exports.ts";
 
 export const serve =
   <const ID extends string, Req>(
@@ -11,7 +14,7 @@ export const serve =
       fetch: (
         request: Request,
         env: unknown,
-        ctx: types.ExecutionContext,
+        ctx: ExecutionContext,
       ) => Effect.Effect<Response, never, Req>;
     },
   ) =>

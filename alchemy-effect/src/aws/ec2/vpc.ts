@@ -99,7 +99,7 @@ export interface VpcProps {
   tags?: Record<string, Input<string>>;
 }
 
-export interface VpcAttrs<Props extends VpcProps = VpcProps> {
+export interface VpcAttrs<_Props extends VpcProps = VpcProps> {
   /**
    * The ID of the VPC.
    */

@@ -8,6 +8,18 @@ import { test } from "@/test";
 import { expect } from "@effect/vitest";
 import { TestLayers, TestResource } from "./test.resources.ts";
 
+const testStack = "test";
+const testStage = "test";
+
+const getState = Effect.fn(function* (resourceId: string) {
+  const state = yield* State;
+  return yield* state.get({ stack: testStack, stage: testStage, resourceId });
+});
+const listState = Effect.fn(function* () {
+  const state = yield* State;
+  return yield* state.list({ stack: testStack, stage: testStage });
+});
+
 test(
   "apply should create when non-existent and update when props change",
   Effect.gen(function* () {
@@ -33,10 +45,8 @@ test(
 
     const state = yield* State;
 
-    yield* state.get("A");
-    expect(yield* state.get("A")).toBeUndefined();
-
-    expect(yield* state.list()).toEqual([]);
+    expect(yield* getState("A")).toBeUndefined();
+    expect(yield* listState()).toEqual([]);
   }).pipe(Effect.provide(TestLayers)),
 );
 

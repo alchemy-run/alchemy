@@ -1,14 +1,15 @@
 import type { R2 } from "cloudflare/resources";
 import * as Effect from "effect/Effect";
 import { App } from "../../app";
-import { CloudflareAccountId, CloudflareApi } from "../api";
+import { Account } from "../account.ts";
+import { CloudflareApi } from "../api";
 import { Bucket, type BucketAttr, type BucketProps } from "./bucket";
 
 export const bucketProvider = () =>
   Bucket.provider.effect(
     Effect.gen(function* () {
       const api = yield* CloudflareApi;
-      const accountId = yield* CloudflareAccountId;
+      const accountId = yield* Account;
       const app = yield* App;
 
       const createName = (id: string, name: string | undefined) =>
@@ -51,7 +52,7 @@ export const bucketProvider = () =>
           });
           return mapResult<BucketProps>(bucket);
         }),
-        update: Effect.fnUntraced(function* ({ id, news, output }) {
+        update: Effect.fnUntraced(function* ({ news, output }) {
           const bucket = yield* api.r2.buckets.edit(output.name, {
             account_id: output.accountId,
             storage_class: news.storageClass ?? output.storageClass,

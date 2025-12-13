@@ -1,4 +1,3 @@
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
@@ -8,8 +7,6 @@ import { App } from "../../app.ts";
 import type { Input } from "../../input.ts";
 import type { Provider, ProviderService } from "../../provider.ts";
 import { createTagger, hasTags } from "../../tags.ts";
-import { Account } from "../account.ts";
-import { Region } from "../region.ts";
 import { isScalarAttributeType, toAttributeType } from "./attribute-value.ts";
 import { DynamoDBClient } from "./client.ts";
 import {
@@ -24,14 +21,12 @@ import {
 export const tableProvider = (): Layer.Layer<
   Provider<AnyTable>,
   never,
-  App | DynamoDBClient | Region | Account
+  App | DynamoDBClient
 > =>
   Table.provider.effect(
     Effect.gen(function* () {
       const dynamodb = yield* DynamoDBClient;
       const app = yield* App;
-      const region = yield* Region;
-      const accountId = yield* Account;
 
       const createTableName = (
         id: string,
@@ -91,6 +86,7 @@ export const tableProvider = (): Layer.Layer<
           Effect.flatMap((r) =>
             dynamodb
               .listTagsOfResource({
+                // oxlint-disable-next-line no-non-null-asserted-optional-chain
                 ResourceArn: r.Table?.TableArn!,
               })
               .pipe(
@@ -260,8 +256,6 @@ export const tableProvider = (): Layer.Layer<
                 schedule: Schedule.exponential(100),
               }),
             );
-
-          class TableStillExists extends Data.TaggedError("TableStillExists") {}
 
           while (true) {
             const table = yield* dynamodb

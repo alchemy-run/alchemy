@@ -1,9 +1,13 @@
 import { pipe } from "effect";
+import * as App from "./app.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { isPrimitive } from "./data.ts";
 import type { From } from "./policy.ts";
 import type { AnyResource, Resource } from "./resource.ts";
+import type { IsAny, UnionToIntersection } from "./util.ts";
+import * as State from "./state.ts";
+import { isRef, type Ref, getRefMetadata, ref as stageRef } from "./ref.ts";
 
 // a special symbol only used at runtime to probe the Output proxy
 const ExprSymbol = Symbol.for("alchemy/Expr");
@@ -14,9 +18,26 @@ export const isOutput = (value: any): value is Output<any> =>
   ExprSymbol in value;
 
 export const of = <R extends Resource>(
-  resource: R,
-): Output.Of<R["attr"], From<R>> =>
-  new ResourceExpr(resource) as unknown as Output.Of<R["attr"], From<R>>;
+  resource: Ref<R> | R,
+): Output.Of<R["attr"], From<R>> => {
+  if (isRef(resource)) {
+    const metadata = getRefMetadata(resource);
+    return new RefExpr(
+      metadata.stack,
+      metadata.stage,
+      metadata.resourceId,
+    ) as any;
+  }
+  return new ResourceExpr(resource) as any;
+};
+
+export const ref = <R extends Resource<string, string, any, any>>(
+  resourceId: R["id"],
+  options?: {
+    stage?: string;
+    stack?: string;
+  },
+) => of(stageRef({ resourceId, ...options }));
 
 export interface Output<A = any, Src extends Resource = any, Req = any> {
   readonly kind: string;
@@ -73,7 +94,8 @@ export type Expr<A = any, Src extends AnyResource = AnyResource, Req = any> =
   | EffectExpr<any, A, Src, Req>
   | LiteralExpr<A>
   | PropExpr<A, keyof A, Src, Req>
-  | ResourceExpr<A, Src, Req>;
+  | ResourceExpr<A, Src, Req>
+  | RefExpr<A>;
 
 const proxy = (self: any): any => {
   const proxy = new Proxy(
@@ -89,7 +111,7 @@ const proxy = (self: any): any => {
               ? self.stables[prop as keyof typeof self.stables]
               : prop === "apply"
                 ? self[prop]
-                : self[prop as keyof typeof self]
+                : prop in self
                   ? typeof self[prop as keyof typeof self] === "function" &&
                     !("kind" in self)
                     ? new PropExpr(proxy, prop as never)
@@ -110,11 +132,9 @@ const proxy = (self: any): any => {
   return proxy;
 };
 
-export abstract class BaseExpr<
-  A = any,
-  Src extends Resource = any,
-  Req = any,
-> implements Output<A, Src, Req> {
+export abstract class BaseExpr<A = any, Src extends Resource = any, Req = any>
+  implements Output<A, Src, Req>
+{
   declare readonly kind: any;
   declare readonly src: Src;
   declare readonly req: Req;
@@ -263,16 +283,33 @@ export class AllExpr<Outs extends Expr[]> extends BaseExpr<Outs> {
   }
 }
 
+export const isRefExpr = <A = any>(node: any): node is RefExpr<A> =>
+  node?.kind === "RefExpr";
+
+export class RefExpr<A> extends BaseExpr<A, never, never> {
+  readonly kind = "RefExpr";
+  constructor(
+    public readonly stack: string | undefined,
+    public readonly stage: string | undefined,
+    public readonly resourceId: string,
+  ) {
+    super();
+    return proxy(this);
+  }
+}
+
 export class MissingSourceError extends Data.TaggedError("MissingSourceError")<{
   message: string;
   srcId: string;
 }> {}
 
-export class UnexpectedExprError extends Data.TaggedError(
-  "UnexpectedExprError",
+export class InvalidReferenceError extends Data.TaggedError(
+  "InvalidReferenceError",
 )<{
   message: string;
-  expr: Output<any, any, any>;
+  stack: string;
+  stage: string;
+  resourceId: string;
 }> {}
 
 export const evaluate: <A, Upstream extends AnyResource, Req>(
@@ -280,14 +317,18 @@ export const evaluate: <A, Upstream extends AnyResource, Req>(
   upstream: {
     [Id in Upstream["id"]]: Extract<Upstream, { id: Id }>["attr"];
   },
-) => Effect.Effect<A> = (expr, upstream) =>
+) => Effect.Effect<
+  A,
+  InvalidReferenceError | MissingSourceError,
+  State.State
+> = (expr, upstream) =>
   Effect.gen(function* () {
     if (isResourceExpr(expr)) {
       const srcId = expr.src.id;
       const src = upstream[srcId as keyof typeof upstream];
       if (!src) {
         // type-safety should prevent this but let the caller decide how to handle it
-        return yield* Effect.die(
+        return yield* Effect.fail(
           new MissingSourceError({
             message: `Source ${srcId} not found`,
             srcId,
@@ -306,6 +347,27 @@ export const evaluate: <A, Upstream extends AnyResource, Req>(
       return yield* Effect.all(expr.outs.map((out) => evaluate(out, upstream)));
     } else if (isPropExpr(expr)) {
       return (yield* evaluate(expr.expr, upstream))?.[expr.identifier];
+    } else if (isRefExpr(expr)) {
+      const state = yield* State.State;
+      const app = yield* App.App;
+      const stack = expr.stack ?? app.name;
+      const stage = expr.stage ?? app.stage;
+      const resource = yield* state.get({
+        stack,
+        stage,
+        resourceId: expr.resourceId,
+      });
+      if (!resource) {
+        return yield* Effect.fail(
+          new InvalidReferenceError({
+            message: `Reference to '${expr.resourceId}' in stack '${stack}' and stage '${stage}' not found. Have you deployed '${stage}' or '${stack}'?`,
+            stack,
+            stage,
+            resourceId: expr.resourceId,
+          }),
+        );
+      }
+      return resource.output;
     } else if (Array.isArray(expr)) {
       return yield* Effect.all(expr.map((item) => evaluate(item, upstream)));
     } else if (typeof expr === "object" && expr !== null) {
@@ -321,7 +383,7 @@ export const evaluate: <A, Upstream extends AnyResource, Req>(
   }) as Effect.Effect<any>;
 
 export type Upstream<O extends Output<any, any, any>> =
-  O extends Output<infer V, infer Up, infer Req>
+  O extends Output<infer _V, infer Up, infer _Req>
     ? {
         [Id in Up["id"]]: Extract<Up, { id: Id }>;
       }
@@ -378,14 +440,6 @@ export type ResolveUpstream<A> = unknown extends A
                 >]: UnionToIntersection<ResolveUpstream<A[keyof A]>>[Id];
               }
             : {};
-
-type IsAny<T> = 0 extends 1 & T ? true : false;
-
-type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (
-  k: infer I,
-) => void
-  ? I
-  : never;
 
 export const resolveUpstream = <const A>(value: A): ResolveUpstream<A> => {
   if (isPrimitive(value)) {

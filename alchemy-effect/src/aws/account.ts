@@ -3,6 +3,8 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as STS from "./sts.ts";
+import { App } from "../app.ts";
+import { loadProfile } from "./credentials.ts";
 
 export class FailedToGetAccount extends Data.TaggedError(
   "AWS::Account::FailedToGetAccount",
@@ -18,12 +20,30 @@ export class Account extends Context.Tag("AWS::AccountID")<
   AccountID
 >() {}
 
-export const fromIdentity = () =>
+export class AWSStageConfigAccountMissing extends Data.TaggedError(
+  "AWSStageConfigAccountMissing",
+)<{
+  message: string;
+  stage: string;
+}> {}
+
+export const fromStageConfig = () =>
   Layer.effect(
     Account,
     Effect.gen(function* () {
-      const sts = yield* STS.STSClient;
-      const identity = yield* sts.getCallerIdentity({}).pipe(
+      const app = yield* App;
+      if (app.config.aws?.account) {
+        return app.config.aws.account;
+      }
+      const profileName = app.config.aws?.profile;
+      if (profileName) {
+        const profile = yield* loadProfile(profileName);
+        if (profile.sso_account_id) {
+          return profile.sso_account_id;
+        }
+      }
+      const client = yield* STS.STSClient;
+      const identity = yield* client.getCallerIdentity({}).pipe(
         Effect.catchAll(
           (err) =>
             new FailedToGetAccount({

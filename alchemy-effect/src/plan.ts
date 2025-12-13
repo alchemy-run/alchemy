@@ -1,4 +1,5 @@
 import * as Context from "effect/Context";
+import { App } from "./app.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { omit } from "effect/Struct";
@@ -179,30 +180,40 @@ export type TransitiveResources<
 > = Extract<
   | Found
   | {
-      [prop in keyof Resources["props"]]: Resources["props"][prop] extends Output.Output<
-        any,
-        infer Src,
-        any
-      >
-        ? Src extends Found
+      [prop in keyof Resources["props"]]: IsAny<
+        Resources["props"][prop]
+      > extends true
+        ? Found
+        : Resources["props"][prop] extends { kind: "alchemy/Policy" }
           ? Found
-          : TransitiveResources<Src, Src | Found>
-        : {
-            [p in keyof Resources["props"][prop]]: Resources["props"][prop][p] extends Output.Output<
-              any,
-              infer Src,
-              any
-            >
-              ? Src extends Found
-                ? Found
-                : TransitiveResources<Src, Src | Found>
-              : Found;
-          }[keyof Resources["props"][prop]];
+          : Resources["props"][prop] extends Output.Output<any, infer Src, any>
+            ? Src extends Found
+              ? Found
+              : TransitiveResources<Src, Src | Found>
+            : {
+                [p in keyof Resources["props"][prop]]: IsAny<
+                  Resources["props"][prop][p]
+                > extends true
+                  ? Found
+                  : Resources["props"][prop][p] extends Output.Output<
+                        any,
+                        infer Src,
+                        any
+                      >
+                    ? Src extends Found
+                      ? Found
+                      : TransitiveResources<Src, Src | Found>
+                    : Found;
+              }[keyof Resources["props"][prop]];
     }[keyof Resources["props"]],
   Service | Resource
 >;
 
-export type Providers<Res extends Service | Resource> = Res extends any
+export type Providers<Resources extends Service | Resource> =
+  | ResourceProviders<Resources>
+  | BindingTags<Resources>;
+
+export type ResourceProviders<Res extends Service | Resource> = Res extends any
   ? Provider<Extract<Res["base"], Service | Resource>>
   : never;
 
@@ -211,6 +222,8 @@ export type BindingTags<Resources extends Service | Resource> = NeverUnknown<
 >;
 
 type NeverUnknown<T> = unknown extends T ? never : T;
+
+type IsAny<T> = 0 extends 1 & T ? true : false;
 
 export type DerivePlan<Resources extends Service | Resource> = {
   resources: {
@@ -233,7 +246,7 @@ export type IPlan = {
 export type Plan<Resources extends Service | Resource> = Effect.Effect<
   DerivePlan<Resources>,
   never,
-  BindingTags<Resources> | Providers<Resources> | State
+  Providers<Resources> | State
 >;
 
 export const plan = <const Resources extends (Service | Resource)[]>(
@@ -242,9 +255,17 @@ export const plan = <const Resources extends (Service | Resource)[]>(
   Effect.gen(function* () {
     const state = yield* State;
 
-    const resourceIds = yield* state.list();
+    // TODO(sam): rename terminology to Stack
+    const app = yield* App;
+
+    const resourceIds = yield* state.list({
+      stack: app.name,
+      stage: app.stage,
+    });
     const resourcesState = yield* Effect.all(
-      resourceIds.map((id) => state.get(id)),
+      resourceIds.map((id) =>
+        state.get({ stack: app.name, stage: app.stage, resourceId: id }),
+      ),
     );
     // map of resource ID -> its downstream dependencies (resources that depend on it)
     const downstream = resourcesState
@@ -297,7 +318,11 @@ export const plan = <const Resources extends (Service | Resource)[]>(
               };
               const provider = yield* resource.provider.tag;
               const props = yield* resolveInput(resource.props);
-              const oldState = yield* state.get(resource.id);
+              const oldState = yield* state.get({
+                stack: app.name,
+                stage: app.stage,
+                resourceId: resource.id,
+              });
 
               if (!oldState) {
                 return resourceExpr;
@@ -421,7 +446,11 @@ export const plan = <const Resources extends (Service | Resource)[]>(
               };
               const news = yield* resolveInput(resource.props);
 
-              const oldState = yield* state.get(id);
+              const oldState = yield* state.get({
+                stack: app.name,
+                stage: app.stage,
+                resourceId: id,
+              });
               const provider = yield* resource.provider.tag;
 
               const bindings = isService(node)
@@ -517,12 +546,16 @@ export const plan = <const Resources extends (Service | Resource)[]>(
 
     const deletions = Object.fromEntries(
       (yield* Effect.all(
-        (yield* state.list()).map(
+        (yield* state.list({ stack: app.name, stage: app.stage })).map(
           Effect.fn(function* (id) {
             if (id in resourceGraph) {
               return;
             }
-            const oldState = yield* state.get(id);
+            const oldState = yield* state.get({
+              stack: app.name,
+              stage: app.stage,
+              resourceId: id,
+            });
             const context = yield* Effect.context<never>();
             if (oldState) {
               const provider: ProviderService = context.unsafeMap.get(

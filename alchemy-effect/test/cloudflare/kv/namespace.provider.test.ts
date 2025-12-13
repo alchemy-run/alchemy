@@ -1,10 +1,11 @@
-import { CloudflareAccountId, CloudflareApi } from "@/cloudflare/api";
+import { CloudflareApi } from "@/cloudflare/api";
+import { Account } from "@/cloudflare/account";
 import * as KV from "@/cloudflare/kv";
 import * as CloudflareLive from "@/cloudflare/live";
 import { apply, destroy } from "@/index";
 import { test } from "@/test";
 import { expect } from "@effect/vitest";
-import { LogLevel } from "effect";
+import { Config, LogLevel } from "effect";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Logger from "effect/Logger";
@@ -18,7 +19,7 @@ test(
   "create, update, delete namespace",
   Effect.gen(function* () {
     const api = yield* CloudflareApi;
-    const accountId = yield* CloudflareAccountId;
+    const accountId = yield* Account;
 
     yield* destroy();
 
@@ -60,7 +61,7 @@ test(
       stack.TestNamespace.namespaceId,
       accountId,
     );
-  }).pipe(Effect.provide(CloudflareLive.live()), logLevel),
+  }).pipe(Effect.provide(CloudflareLive.providers()), logLevel),
 );
 
 const waitForNamespaceToBeDeleted = Effect.fn(function* (

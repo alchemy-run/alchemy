@@ -71,7 +71,7 @@ test(
     yield* destroy();
 
     yield* assertVpcDeleted(stack.TestVpc.vpcId);
-  }).pipe(Effect.provide(AWS.live), logLevel),
+  }).pipe(Effect.provide(AWS.providers()), logLevel),
 );
 
 const expectVpcAttribute = Effect.fn(function* (props: {

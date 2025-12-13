@@ -1,7 +1,6 @@
 import type { Workers } from "cloudflare/resources";
 import { Runtime, type RuntimeProps } from "../../runtime.ts";
 import type * as Assets from "./assets.fetch.ts";
-import type { Input } from "../../input.ts";
 
 export const WorkerType = "Cloudflare.Worker" as const;
 export type WorkerType = typeof WorkerType;

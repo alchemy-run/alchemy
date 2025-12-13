@@ -142,16 +142,16 @@ bench("platform and provider layers", () => {
   );
 
   // select your providers
-  const providers = Layer.mergeAll(AWS.live);
+  const providers = Layer.mergeAll(AWS.providers());
 
   const alchemy = Layer.mergeAll(
     Alchemy.State.localFs,
-    CLI.layer,
+    CLI.inkCLI(),
     // optional
     Alchemy.dotAlchemy,
   );
 
-  const app = Alchemy.app({ name: "my-app", stage: "dev" });
+  const app = Alchemy.app({ name: "my-app", stage: "dev", config: {} });
 
   const layers = Layer.provideMerge(
     Layer.provideMerge(providers, alchemy),
@@ -210,7 +210,8 @@ bench("apply", () => {
 }).types([30, "instantiations"]);
 
 bench("applyPlan", () => {
-  Alchemy.applyPlan(Alchemy.plan(Api)).pipe(
+  Alchemy.plan(Api).pipe(
+    Effect.flatMap(Alchemy.applyPlan),
     Effect.tap((stack) =>
       Effect.log({
         url: stack?.Api.functionUrl,

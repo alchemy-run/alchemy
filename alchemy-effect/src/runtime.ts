@@ -5,9 +5,8 @@ import * as Layer from "effect/Layer";
 import type { Capability } from "./capability.ts";
 import type { Policy } from "./policy.ts";
 import type { ProviderService } from "./provider.ts";
-import type { Resource, ResourceTags } from "./resource.ts";
+import type { IResource, Resource, ResourceTags } from "./resource.ts";
 import type { IService, Service } from "./service.ts";
-import type { Input } from "./input.ts";
 
 export type RuntimeHandler<
   Inputs extends any[] = any[],
@@ -38,21 +37,30 @@ export declare namespace Runtime {
 
 export type AnyRuntime = Runtime<string>;
 
-export interface RuntimeProps<Run extends Runtime, Req> {
+export interface RuntimeProps<Run extends IRuntime, Req> {
   bindings: Policy<Run, Extract<Req, Capability>, unknown>;
 }
 
-export interface Runtime<
+export interface IRuntime<
   Type extends string = string,
   Handler = unknown,
   Props = unknown,
-> extends Resource<Type, string, Props> {
+> extends IResource<Type, string, Props> {
   type: Type;
   props: Props;
   handler: Handler;
   binding: unknown;
   /** @internal phantom */
   capability: unknown;
+}
+
+export interface Runtime<
+  Type extends string = string,
+  Handler = unknown,
+  Props = unknown,
+> extends IRuntime<Type, Handler, Props>,
+    Resource<Type, string, Props> {
+  provider: ResourceTags<this>;
   <
     const ID extends string,
     Inputs extends any[],
@@ -76,9 +84,7 @@ export interface Runtime<
 
 export const Runtime =
   <const Type extends string>(type: Type) =>
-  <Self extends Runtime>(): Self & {
-    provider: ResourceTags<Self>;
-  } => {
+  <Self extends Runtime>(): Self => {
     const Tag = Context.Tag(type)();
     const provider = {
       tag: Tag,
@@ -123,7 +129,7 @@ export const Runtime =
                 parent: self,
                 // @ts-expect-error
                 provider,
-              } satisfies IService<string, Self, any, any>,
+              } satisfies IService<string, Self, any, any, Self>,
             );
         }
       },

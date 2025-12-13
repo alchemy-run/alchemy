@@ -1,6 +1,9 @@
 {
   "extends": "../tsconfig.base.json",
-  "include": ["package.json", "src"],
+  "include": [
+    "package.json",
+    "src"
+  ],
   "compilerOptions": {
     "composite": true,
     "noEmit": false,
@@ -9,9 +12,12 @@
     "module": "Preserve",
     "moduleResolution": "Bundler",
     "target": "ESNext",
-    "baseUrl": ".",
     // ink
     "jsx": "react",
-    "lib": ["DOM", "DOM.Iterable", "ES2023"]
+    "lib": [
+      "DOM",
+      "DOM.Iterable",
+      "ES2023"
+    ]
   }
 }

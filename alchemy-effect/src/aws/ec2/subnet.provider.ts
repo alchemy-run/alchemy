@@ -1,15 +1,12 @@
-import type { Input } from "../../input.ts";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
 import type { EC2 } from "itty-aws/ec2";
 
-import type { ScopedPlanStatusSession } from "../../apply.ts";
+import type { ScopedPlanStatusSession } from "../../cli/service.ts";
 import { somePropsAreDifferent } from "../../diff.ts";
 import type { ProviderService } from "../../provider.ts";
 import { createTagger, createTagsList } from "../../tags.ts";
-import { Account } from "../account.ts";
-import { Region } from "../region.ts";
 import { EC2Client } from "./client.ts";
 import {
   Subnet,
@@ -22,12 +19,10 @@ export const subnetProvider = () =>
   Subnet.provider.effect(
     Effect.gen(function* () {
       const ec2 = yield* EC2Client;
-      const region = yield* Region;
-      const accountId = yield* Account;
       const tagged = yield* createTagger();
 
       return {
-        diff: Effect.fn(function* ({ id, news, olds }) {
+        diff: Effect.fn(function* ({ news, olds }) {
           if (
             somePropsAreDifferent(olds, news, [
               "vpcId",
@@ -135,7 +130,7 @@ export const subnetProvider = () =>
           return {
             subnetId,
             subnetArn:
-              `arn:aws:ec2:${region}:${accountId}:subnet/${subnetId}` as SubnetAttrs<SubnetProps>["subnetArn"],
+              subnet.SubnetArn! as SubnetAttrs<SubnetProps>["subnetArn"],
             cidrBlock: subnet.CidrBlock!,
             vpcId: news.vpcId,
             availabilityZone: subnet.AvailabilityZone!,

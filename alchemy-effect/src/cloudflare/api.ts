@@ -5,46 +5,50 @@ import {
   type RequestOptions,
 } from "cloudflare/core";
 import type { ErrorData } from "cloudflare/resources";
-import { Layer } from "effect";
-import * as Context from "effect/Context";
 import * as Data from "effect/Data";
+import * as Option from "effect/Option";
 import * as Effect from "effect/Effect";
+import { Config } from "effect";
 
-export class CloudflareAccountId extends Context.Tag("cloudflare/account-id")<
-  CloudflareAccountId,
-  string
->() {
-  static readonly fromEnv = Layer.effect(
-    CloudflareAccountId,
-    Effect.gen(function* () {
-      const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
-      if (!accountId) {
-        return yield* Effect.die("CLOUDFLARE_ACCOUNT_ID is not set");
-      }
-      return accountId;
-    }),
-  );
-}
+export const CLOUDFLARE_BASE_URL = Config.string("CLOUDFLARE_BASE_URL").pipe(
+  Config.option,
+);
+export const CLOUDFLARE_API_TOKEN = Config.string("CLOUDFLARE_API_TOKEN").pipe(
+  Config.option,
+);
+export const CLOUDFLARE_API_KEY = Config.string("CLOUDFLARE_API_KEY").pipe(
+  Config.option,
+);
+export const CLOUDFLARE_API_EMAIL = Config.string("CLOUDFLARE_API_EMAIL").pipe(
+  Config.option,
+);
 
 export class CloudflareApi extends Effect.Service<CloudflareApi>()(
   "cloudflare/api",
   {
-    effect: (options?: {
+    effect: Effect.fn(function* (options?: {
       baseUrl?: string;
       apiToken?: string;
       apiKey?: string;
       apiEmail?: string;
-    }) =>
-      Effect.succeed(
-        createRecursiveProxy(
-          new Cloudflare({
-            baseURL: options?.baseUrl ?? import.meta.env.CLOUDFLARE_BASE_URL,
-            apiToken: options?.apiToken ?? import.meta.env.CLOUDFLARE_API_TOKEN,
-            apiKey: options?.apiKey ?? import.meta.env.CLOUDFLARE_API_KEY,
-            apiEmail: options?.apiEmail ?? import.meta.env.CLOUDFLARE_API_EMAIL,
-          }),
-        ),
-      ),
+    }) {
+      return createRecursiveProxy(
+        new Cloudflare({
+          baseURL:
+            options?.baseUrl ??
+            (yield* CLOUDFLARE_BASE_URL).pipe(Option.getOrUndefined),
+          apiToken:
+            options?.apiToken ??
+            (yield* CLOUDFLARE_API_TOKEN).pipe(Option.getOrUndefined),
+          apiKey:
+            options?.apiKey ??
+            (yield* CLOUDFLARE_API_KEY).pipe(Option.getOrUndefined),
+          apiEmail:
+            options?.apiEmail ??
+            (yield* CLOUDFLARE_API_EMAIL).pipe(Option.getOrUndefined),
+        }),
+      );
+    }),
   },
 ) {}
 

@@ -1,4 +1,5 @@
-import { CloudflareAccountId, CloudflareApi } from "@/cloudflare/api";
+import { CloudflareApi } from "@/cloudflare/api";
+import { Account } from "@/cloudflare/account";
 import * as CloudflareLive from "@/cloudflare/live";
 import * as R2 from "@/cloudflare/r2";
 import * as Worker from "@/cloudflare/worker";
@@ -25,11 +26,11 @@ test(
   "create, update, delete worker",
   Effect.gen(function* () {
     const api = yield* CloudflareApi;
-    const accountId = yield* CloudflareAccountId;
+    const accountId = yield* Account;
 
     {
       class Bucket extends R2.Bucket("Bucket", {
-        name: "test-bucket-initial",
+        name: "test-bucket-worker",
         storageClass: "Standard",
       }) {}
 
@@ -93,14 +94,14 @@ test(
     yield* destroy();
 
     yield* waitForWorkerToBeDeleted(stack.TestWorker.id, accountId);
-  }).pipe(Effect.provide(CloudflareLive.live()), logLevel),
+  }).pipe(Effect.provide(CloudflareLive.providers()), logLevel),
 );
 
 test(
   "create, update, delete worker with assets",
   Effect.gen(function* () {
     const api = yield* CloudflareApi;
-    const accountId = yield* CloudflareAccountId;
+    const accountId = yield* Account;
 
     {
       class TestWorkerWithAssets extends Worker.serve("TestWorkerWithAssets", {
@@ -203,7 +204,7 @@ test(
     yield* destroy();
 
     yield* waitForWorkerToBeDeleted(stack.TestWorkerWithAssets.id, accountId);
-  }).pipe(Effect.provide(CloudflareLive.live()), logLevel),
+  }).pipe(Effect.provide(CloudflareLive.providers()), logLevel),
 );
 
 const waitForWorkerToBeDeleted = Effect.fn(function* (

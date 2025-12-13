@@ -1,4 +1,5 @@
-import { CloudflareAccountId, CloudflareApi } from "@/cloudflare/api";
+import { CloudflareApi } from "@/cloudflare/api";
+import { Account } from "@/cloudflare/account";
 import * as CloudflareLive from "@/cloudflare/live";
 import * as R2 from "@/cloudflare/r2";
 import { apply, destroy } from "@/index";
@@ -18,7 +19,7 @@ test(
   "create, update, delete bucket",
   Effect.gen(function* () {
     const api = yield* CloudflareApi;
-    const accountId = yield* CloudflareAccountId;
+    const accountId = yield* Account;
 
     yield* destroy();
 
@@ -53,7 +54,7 @@ test(
     yield* destroy();
 
     yield* waitForBucketToBeDeleted(stack.TestBucket.name, accountId);
-  }).pipe(Effect.provide(CloudflareLive.live()), logLevel),
+  }).pipe(Effect.provide(CloudflareLive.providers()), logLevel),
 );
 
 const waitForBucketToBeDeleted = Effect.fn(function* (

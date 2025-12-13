@@ -1,16 +1,20 @@
 {
+  "diffEditor.renderSideBySide": false,
   "typescript.experimental.useTsgo": true,
   "typescript.tsdk": "node_modules/typescript/lib",
   "typescript.enablePromptUseWorkspaceTsdk": true,
   "typescript.preferences.importModuleSpecifier": "relative",
   "typescript.preferences.importModuleSpecifierEnding": "js",
-  "oxc.fmt.experimental": true, 
+  "oxc.fmt.experimental": true,
   "oxc.enable": true,
+  "oxc.lint.run": "onSave",
   "editor.defaultFormatter": "oxc.oxc-vscode",
   "editor.codeLens": false,
   "editor.formatOnSave": true,
   "editor.formatOnSaveMode": "file",
   "editor.inlayHints.enabled": "offUnlessPressed",
+  "editor.indentSize": 2,
+  "editor.insertSpaces": true,
   "editor.codeActionsOnSave": {
     "source.fixAll": "explicit",
     "source.organizeImports": "explicit"
@@ -19,9 +23,10 @@
     "editor.defaultFormatter": "tamasfe.even-better-toml"
   },
   "[json]": {
-    "editor.indentSize": 2,
-    "editor.insertSpaces": true,
-    "editor.defaultFormatter": "oxc.oxc-vscode"
+    "editor.defaultFormatter": "vscode.json-language-features"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "vscode.json-language-features"
   },
   "[markdown]": {
     "editor.formatOnSave": false,

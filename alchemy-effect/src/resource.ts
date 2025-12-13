@@ -35,22 +35,6 @@ export interface Resource<
   Base = unknown,
 > extends IResource<Type, ID, Props, Attrs, Base> {
   new (): Resource<Type, ID, Props, Attrs, Base>;
-
-  /** @internal phantom */
-  // dependencies: Input.Dependencies<Props>;
-
-  // TODO(sam): figure out how to add this back in because people preferred it
-  // ... but, it breaks resource types (e.g. class Table extends DynamoDB.Table("Table", { ... }) is not assignable to DynamoDB.Table<"Table", { ... }>)
-  // out<Self extends Resource>(
-  //   this: Self,
-  // ): Output<
-  //   {
-  //     [k in keyof Attrs]: Attrs[k];
-  //   },
-  //   InstanceType<Self>
-  // >;
-  // parent: unknown;
-  // oxlint-disable-next-line no-misused-new
 }
 
 export interface ResourceTags<R extends Resource<string, string, any, any>> {
