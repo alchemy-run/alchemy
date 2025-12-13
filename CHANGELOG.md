@@ -1,3 +1,19 @@
+## v0.3.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **core**:
+  - Inputs and Outputs &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/19 [<samp>(fa8b8)</samp>](https://github.com/alchemy-run/alchemy/commit/fa8b893)
+  - DefineStack, defineStages and alchemy-effect CLI &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/21 [<samp>(d30da)</samp>](https://github.com/alchemy-run/alchemy/commit/d30da72)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Make props optional in KV Namespace and R2 Bucket &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(dbfbe)</samp>](https://github.com/alchemy-run/alchemy/commit/dbfbe40)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v0.2.0...v0.3.0)
+
+---
+
 ## v0.2.0
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
