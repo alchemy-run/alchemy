@@ -52,7 +52,7 @@ export const bucketProvider = () =>
           });
           return mapResult<BucketProps>(bucket);
         }),
-        update: Effect.fnUntraced(function* ({ id, news, output }) {
+        update: Effect.fnUntraced(function* ({ news, output }) {
           const bucket = yield* api.r2.buckets.edit(output.name, {
             account_id: output.accountId,
             storage_class: news.storageClass ?? output.storageClass,
