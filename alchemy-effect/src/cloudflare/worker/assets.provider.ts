@@ -55,9 +55,7 @@ export class AssetNotFoundError extends Data.TaggedError("AssetNotFoundError")<{
   hash: string;
 }> {}
 
-export class FailedToReadAssetError extends Data.TaggedError(
-  "FailedToReadAssetError",
-)<{
+export class FailedToReadAssetError extends Data.TaggedError("FailedToReadAssetError")<{
   message: string;
   name: string;
   cause: PlatformError;
@@ -80,20 +78,15 @@ export const assetsProvider = () =>
       const maybeReadString = Effect.fnUntraced(function* (file: string) {
         return yield* fs.readFileString(file).pipe(
           Effect.catchIf(
-            (error) =>
-              error._tag === "SystemError" && error.reason === "NotFound",
+            (error) => error._tag === "SystemError" && error.reason === "NotFound",
             () => Effect.succeed(undefined),
           ),
         );
       });
 
-      const createIgnoreMatcher = Effect.fnUntraced(function* (
-        patterns: string[],
-      ) {
+      const createIgnoreMatcher = Effect.fnUntraced(function* (patterns: string[]) {
         const matcher = yield* Effect.promise(() =>
-          import("ignore").then(({ default: ignore }) =>
-            ignore().add(patterns),
-          ),
+          import("ignore").then(({ default: ignore }) => ignore().add(patterns)),
         );
         return (file: string) => matcher.ignores(file);
       });
@@ -114,8 +107,7 @@ export const assetsProvider = () =>
             ...(ignore
               ?.split("\n")
               .map((line) => line.trim())
-              .filter((line) => line.length > 0 && !line.startsWith("#")) ??
-              []),
+              .filter((line) => line.length > 0 && !line.startsWith("#")) ?? []),
           ]);
           const manifest = new Map<string, { hash: string; size: number }>();
           let count = 0;
@@ -160,9 +152,7 @@ export const assetsProvider = () =>
             directory: props.directory,
             config: props.config,
             manifest: Object.fromEntries(
-              Array.from(manifest.entries()).sort((a, b) =>
-                a[0].localeCompare(b[0]),
-              ),
+              Array.from(manifest.entries()).sort((a, b) => a[0].localeCompare(b[0])),
             ),
             _headers,
             _redirects,
@@ -175,13 +165,10 @@ export const assetsProvider = () =>
           { note }: ScopedPlanStatusSession,
         ) {
           yield* note("Checking assets...");
-          const session = yield* api.workers.scripts.assets.upload.create(
-            workerName,
-            {
-              account_id: accountId,
-              manifest: assets.manifest,
-            },
-          );
+          const session = yield* api.workers.scripts.assets.upload.create(workerName, {
+            account_id: accountId,
+            manifest: assets.manifest,
+          });
           if (!session.buckets?.length) {
             return { jwt: session.jwt };
           }
@@ -208,18 +195,16 @@ export const assetsProvider = () =>
                       hash,
                     });
                   }
-                  const file = yield* fs
-                    .readFile(path.join(directory, name))
-                    .pipe(
-                      Effect.mapError(
-                        (error) =>
-                          new FailedToReadAssetError({
-                            message: `Failed to read asset ${name}: ${error.message}`,
-                            name,
-                            cause: error,
-                          }),
-                      ),
-                    );
+                  const file = yield* fs.readFile(path.join(directory, name)).pipe(
+                    Effect.mapError(
+                      (error) =>
+                        new FailedToReadAssetError({
+                          message: `Failed to read asset ${name}: ${error.message}`,
+                          name,
+                          cause: error,
+                        }),
+                    ),
+                  );
                   body[hash] = Buffer.from(file).toString("base64");
                 }),
               );

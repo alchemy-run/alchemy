@@ -93,13 +93,7 @@ export type FunctionAttr<Props extends FunctionProps> = {
 export interface Function<
   ID extends string = string,
   Props extends InputProps<FunctionProps> = InputProps<FunctionProps>,
-> extends Resource<
-    "Test.Function",
-    ID,
-    Props,
-    FunctionAttr<Input.Resolve<Props>>,
-    Function
-  > {}
+> extends Resource<"Test.Function", ID, Props, FunctionAttr<Input.Resolve<Props>>, Function> {}
 
 export const Function = Resource<{
   <const ID extends string, const Props extends InputProps<FunctionProps>>(
@@ -135,13 +129,12 @@ export type TestResourceProps = {
   object?: {
     string: string;
   };
+  replaceString?: string;
 };
 
 export type TestResourceAttr<Props extends TestResourceProps> = {
   string: Props["string"] extends string ? Props["string"] : string;
-  stringArray: Props["stringArray"] extends string[]
-    ? Props["stringArray"]
-    : string[];
+  stringArray: Props["stringArray"] extends string[] ? Props["stringArray"] : string[];
   stableString: string;
   stableArray: string[];
 };
@@ -150,12 +143,12 @@ export interface TestResource<
   ID extends string = string,
   Props extends InputProps<TestResourceProps> = InputProps<TestResourceProps>,
 > extends Resource<
-    "Test.TestResource",
-    ID,
-    Props,
-    TestResourceAttr<Input.Resolve<Props>>,
-    TestResource
-  > {}
+  "Test.TestResource",
+  ID,
+  Props,
+  TestResourceAttr<Input.Resolve<Props>>,
+  TestResource
+> {}
 
 export const TestResource = Resource<{
   <const ID extends string, const Props extends InputProps<TestResourceProps>>(
@@ -166,8 +159,10 @@ export const TestResource = Resource<{
 
 export const testResourceProvider = TestResource.provider.succeed({
   diff: Effect.fn(function* ({ id, news, olds }) {
-    if (isUnknown(news.stringArray)) {
-      news.stringArray;
+    if (news.replaceString !== olds.replaceString) {
+      return {
+        action: "replace",
+      };
     }
     return isUnknown(news.string) ||
       isUnknown(news.stringArray) ||

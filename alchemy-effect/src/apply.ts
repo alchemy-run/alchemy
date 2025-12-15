@@ -5,6 +5,7 @@ import { App } from "./app.ts";
 import type { AnyBinding, BindingService } from "./binding.ts";
 import { CLI, type ScopedPlanStatusSession } from "./cli/service.ts";
 import type { ApplyStatus } from "./event.ts";
+import { generateInstanceId } from "./instance-id.ts";
 import * as Output from "./output.ts";
 import {
   plan,
@@ -20,14 +21,16 @@ import {
 import type { Instance } from "./policy.ts";
 import type { AnyResource, Resource } from "./resource.ts";
 import type { AnyService } from "./service.ts";
-import { State } from "./state.ts";
+import {
+  type ReplacingResourceState,
+  type ResourceState,
+  CreatingResourceState,
+  State,
+  type ResourceStatus,
+} from "./state.ts";
 import { asEffect } from "./util.ts";
 
-export type ApplyEffect<
-  P extends IPlan,
-  Err = never,
-  Req = never,
-> = Effect.Effect<
+export type ApplyEffect<P extends IPlan, Err = never, Req = never> = Effect.Effect<
   {
     [k in keyof AppliedPlan<P>]: AppliedPlan<P>[k];
   },
@@ -36,17 +39,12 @@ export type ApplyEffect<
 >;
 
 export type AppliedPlan<P extends IPlan> = {
-  [id in keyof P["resources"]]: P["resources"][id] extends
-    | Delete<Resource>
-    | undefined
-    | never
+  [id in keyof P["resources"]]: P["resources"][id] extends Delete<Resource> | undefined | never
     ? never
     : Simplify<P["resources"][id]["resource"]["attr"]>;
 };
 
-export const apply = <
-  const Resources extends (AnyService | AnyResource)[] = never,
->(
+export const apply = <const Resources extends (AnyService | AnyResource)[] = never>(
   ...resources: Resources
 ): ApplyEffect<
   DerivePlan<Instance<Resources[number]>>,
@@ -90,7 +88,6 @@ export const applyPlan = <P extends IPlan>(plan: P) =>
         Tag: Context.Tag<never, BindingService>;
       };
       const provider = yield* binding.Tag;
-
       const resourceId: string = node.binding.capability.resource.id;
       const { upstreamAttr, upstreamNode } = yield* resolveUpstream(resourceId);
 
@@ -136,9 +133,7 @@ export const applyPlan = <P extends IPlan>(plan: P) =>
             } else if (node.action === "reattach") {
               // reattach is optional, we fall back to attach if it's not available
               return yield* asEffect(
-                (provider.reattach ? provider.reattach : provider.attach)(
-                  input,
-                ),
+                (provider.reattach ? provider.reattach : provider.attach)(input),
               );
             } else if (node.action === "detach" && provider.detach) {
               return yield* asEffect(
@@ -176,10 +171,7 @@ export const applyPlan = <P extends IPlan>(plan: P) =>
 
             const oldBindingOutput = bindingOutputs[i];
 
-            if (
-              provider.postattach &&
-              (node.action === "attach" || node.action === "reattach")
-            ) {
+            if (provider.postattach && (node.action === "attach" || node.action === "reattach")) {
               const bindingOutput = yield* asEffect(
                 provider.postattach({
                   source: {
@@ -204,31 +196,15 @@ export const applyPlan = <P extends IPlan>(plan: P) =>
 
     const apply: (node: CRUD) => Effect.Effect<any, never, never> = (node) =>
       Effect.gen(function* () {
-        const saveState = <Output>({
-          output,
-          bindings = node.bindings,
-          news,
-        }: {
-          output: Output;
-          bindings?: BindNode[];
-          news: any;
-        }) =>
-          state
-            .set({
-              stack: app.name,
-              stage: app.stage,
-              resourceId: node.resource.id,
-              value: {
-                id: node.resource.id,
-                type: node.resource.type,
-                status: node.action === "create" ? "created" : "updated",
-                downstream: node.downstream,
-                props: news,
-                output,
-                bindings,
-              },
-            })
-            .pipe(Effect.map(() => output));
+        const resourceProvider = node.provider;
+
+        const commit = <State extends ResourceState>(value: State) =>
+          state.set({
+            stack: app.name,
+            stage: app.stage,
+            resourceId: node.resource.id,
+            value,
+          });
 
         const id = node.resource.id;
         const resource = node.resource;
@@ -253,28 +229,71 @@ export const applyPlan = <P extends IPlan>(plan: P) =>
                 status,
               });
 
-            const createOrUpdate = Effect.fn(function* ({
-              node,
-              attr,
-              phase,
-            }: {
-              node: Create | Update;
-              attr: any;
-              phase: "create" | "update";
-            }) {
+            const instanceId = yield* Effect.gen(function* () {
+              if (node.instanceId) {
+                return node.instanceId;
+              } else if (node.action === "create") {
+                const instanceId = yield* generateInstanceId();
+                yield* commit<CreatingResourceState>({
+                  status: "creating",
+                  instanceId,
+                  logicalId: id,
+                  downstream: node.downstream,
+                  props: node.props,
+                  providerVersion: node.provider.version ?? 0,
+                  resourceType: node.resource.type,
+                  bindings: node.bindings,
+                });
+                return instanceId;
+              } else if (node.action === "replace") {
+                const instanceId = yield* generateInstanceId();
+                yield* commit<ReplacingResourceState>({
+                  status: "replacing",
+                  instanceId,
+                  logicalId: id,
+                  downstream: node.downstream,
+                  props: node.news,
+                  providerVersion: node.provider.version ?? 0,
+                  resourceType: node.resource.type,
+                  bindings: node.bindings,
+                  old:
+                    node.state.status === "created" || node.state.status === "updated"
+                      ? node.state
+                      : node.state.old,
+                });
+                return instanceId;
+              }
+              // this should never happen
+              return yield* Effect.dieMessage(
+                `Instance ID not found for resource '${id}' and action is '${node.action}'`,
+              );
+            });
+
+            if (node.action === "noop") {
+              return node.output;
+            } else if (node.action === "create" || node.action === "update") {
+              let attr: any;
+              if (node.action === "create" && node.provider.precreate) {
+                yield* Effect.logDebug("precreate", id);
+                // stub the resource prior to resolving upstream resources or bindings if a stub is available
+                attr = yield* node.provider.precreate({
+                  id,
+                  news: node.props,
+                  session: scopedSession,
+                  instanceId,
+                });
+              }
+
               const upstream = Object.fromEntries(
                 yield* Effect.all(
-                  Object.entries(Output.resolveUpstream(node.news)).map(
-                    ([id]) =>
-                      resolveUpstream(id).pipe(
-                        Effect.map(({ upstreamAttr }) => [id, upstreamAttr]),
-                      ),
+                  Object.entries(Output.resolveUpstream(node.props)).map(([id]) =>
+                    resolveUpstream(id).pipe(Effect.map(({ upstreamAttr }) => [id, upstreamAttr])),
                   ),
                 ),
               );
-              const news = yield* Output.evaluate(node.news, upstream);
+              const news = (yield* Output.evaluate(node.props, upstream)) as Record<string, any>;
 
-              yield* report(phase === "create" ? "creating" : "updating");
+              yield* report(node.action === "create" ? "creating" : "updating");
 
               let bindingOutputs = yield* attachBindings({
                 resource,
@@ -287,7 +306,7 @@ export const applyPlan = <P extends IPlan>(plan: P) =>
               });
 
               const output: any = yield* (
-                phase === "create" ? node.provider.create : node.provider.update
+                node.action === "create" ? node.provider.create : node.provider.update
               )({
                 id,
                 news,
@@ -299,12 +318,11 @@ export const applyPlan = <P extends IPlan>(plan: P) =>
                       olds: node.olds,
                     }
                   : {}),
+                instanceId,
               }).pipe(
                 // TODO(sam): partial checkpoints
                 // checkpoint,
-                Effect.tap(() =>
-                  report(phase === "create" ? "created" : "updated"),
-                ),
+                Effect.tap(() => report(node.action === "create" ? "created" : "updated")),
               );
 
               bindingOutputs = yield* postAttachBindings({
@@ -325,41 +343,8 @@ export const applyPlan = <P extends IPlan>(plan: P) =>
                   ...binding,
                   attr: bindingOutputs[i],
                 })),
-              });
-
-              return output;
-            });
-
-            if (node.action === "noop") {
-              return (yield* state.get({
-                stack: app.name,
-                stage: app.stage,
-                resourceId: id,
-              }))?.output;
-            } else if (node.action === "create") {
-              let attr: any;
-              if (node.provider.precreate) {
-                yield* Effect.logDebug("precreate", id);
-                // stub the resource prior to resolving upstream resources or bindings if a stub is available
-                attr = yield* node.provider.precreate({
-                  id,
-                  news: node.news,
-                  session: scopedSession,
-                });
-              }
-
-              yield* Effect.logDebug("create", id);
-              return yield* createOrUpdate({
-                node,
-                attr,
-                phase: "create",
-              });
-            } else if (node.action === "update") {
-              yield* Effect.logDebug("update", id);
-              return yield* createOrUpdate({
-                node,
-                attr: node.attributes,
-                phase: "update",
+                instanceId,
+                olds: node.action === "create" ? undefined : node.olds,
               });
             } else if (node.action === "delete") {
               yield* Effect.logDebug("delete", id);
@@ -377,6 +362,7 @@ export const applyPlan = <P extends IPlan>(plan: P) =>
               return yield* node.provider
                 .delete({
                   id,
+                  instanceId,
                   olds: node.olds,
                   output: node.output,
                   session: scopedSession,
@@ -393,10 +379,12 @@ export const applyPlan = <P extends IPlan>(plan: P) =>
                   Effect.tap(() => report("deleted")),
                 );
             } else if (node.action === "replace") {
+              // TODO(sam): create new instanceid, commit intent to replace to state, then orchestrate appropriately
               const destroy = Effect.gen(function* () {
                 yield* report("deleting");
                 return yield* node.provider.delete({
                   id,
+                  instanceId,
                   olds: node.olds,
                   output: node.output,
                   session: scopedSession,
@@ -410,6 +398,7 @@ export const applyPlan = <P extends IPlan>(plan: P) =>
                 return yield* node.provider
                   .create({
                     id,
+                    instanceId,
                     news: node.news,
                     // TODO(sam): these need to only include attach actions
                     bindings: yield* attachBindings({
@@ -426,7 +415,12 @@ export const applyPlan = <P extends IPlan>(plan: P) =>
                   })
                   .pipe(
                     Effect.tap((output) =>
-                      saveState({ news: node.news, output }),
+                      saveState({
+                        //
+                        news: node.news,
+                        output,
+                        instanceId,
+                      }),
                     ),
                   );
               });
@@ -442,10 +436,7 @@ export const applyPlan = <P extends IPlan>(plan: P) =>
         ));
       }) as Effect.Effect<any, never, never>;
 
-    const nodes = [
-      ...Object.entries(plan.resources),
-      ...Object.entries(plan.deletions),
-    ];
+    const nodes = [...Object.entries(plan.resources), ...Object.entries(plan.deletions)];
 
     const resources: any = Object.fromEntries(
       yield* Effect.all(

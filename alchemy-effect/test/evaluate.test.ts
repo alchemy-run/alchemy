@@ -1,12 +1,11 @@
 import * as EC2 from "@/aws/ec2";
 import * as R2 from "@/cloudflare/r2";
-import { $, App, ref } from "@/index";
-import { Stage } from "@/stage";
+import { $, App } from "@/index";
 import * as Output from "@/output";
+import { test } from "@/test";
 import { expect, it } from "@effect/vitest";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
-import { test } from "@/test";
 import * as Layer from "effect/Layer";
 
 class TestVpc extends EC2.Vpc("TestVpc", {
@@ -81,8 +80,7 @@ it.live("TestVpc.cidrBlockAssociationSet[0].associationId", () =>
 
 it.live("TestVpc.cidrBlockAssociationSet.apply(c => c)[0].associationId", () =>
   Effect.gen(function* () {
-    const output = $(TestVpc).cidrBlockAssociationSet.apply((c) => c)[0]
-      .associationId;
+    const output = $(TestVpc).cidrBlockAssociationSet.apply((c) => c)[0].associationId;
     const upstream = Output.upstream(output);
     const result = yield* Output.evaluate(output, resources);
 
@@ -109,8 +107,7 @@ it.live("TestVpc.cidrBlockAssociationSet[1].associationId", () =>
 
 it.live("TestVpc.cidrBlockAssociationSet.apply(c => c)[1].associationId", () =>
   Effect.gen(function* () {
-    const output = $(TestVpc).cidrBlockAssociationSet.apply((c) => c)[1]
-      .associationId;
+    const output = $(TestVpc).cidrBlockAssociationSet.apply((c) => c)[1].associationId;
     const upstream = Output.upstream(output);
     const result = yield* Output.evaluate(output, resources);
 
@@ -140,9 +137,7 @@ it.live("TestVpc.vpcArn.apply(replace)", () =>
     );
     const upstream = Output.upstream(output);
     const result = yield* Output.evaluate(output, resources);
-    expect(result).toEqual(
-      vpcAttrs.vpcArn.replace("arn:aws:ec2:", "arn:aws:ec2:us-east-1:"),
-    );
+    expect(result).toEqual(vpcAttrs.vpcArn.replace("arn:aws:ec2:", "arn:aws:ec2:us-east-1:"));
     expect(upstream).toEqual({
       TestVpc,
     });
@@ -230,10 +225,10 @@ it.live("Output.ref<TestVpc>('TestVpc', 'other-stage').vpcId", () =>
             "test-app": {
               "other-stage": {
                 TestVpc: {
-                  type: "Test.TestVpc",
-                  id: "TestVpc",
+                  resourceType: "Test.TestVpc",
+                  logicalId: "TestVpc",
                   status: "created",
-                  props: {},
+                  news: {},
                   output: {
                     vpcId: "vpc-0987654321",
                   },
@@ -247,21 +242,17 @@ it.live("Output.ref<TestVpc>('TestVpc', 'other-stage').vpcId", () =>
   ),
 );
 
-it.live(
-  "Output.interpolate`VPC: ${$(TestVpc).vpcArn} -- Bucket: ${$(Bucket).name}`",
-  () =>
-    Effect.gen(function* () {
-      const output = Output.interpolate`VPC: ${vpc.vpcArn} -- Bucket: ${bucket.name}`;
-      const upstream = Output.upstream(output);
-      const result = yield* Output.evaluate(output, resources);
-      expect(result).toEqual(
-        `VPC: ${vpcAttrs.vpcArn} -- Bucket: ${bucketAttrs.name}`,
-      );
-      expect(upstream).toEqual({
-        TestVpc,
-        Bucket,
-      });
-    }).pipe(Effect.provide(test.defaultState())),
+it.live("Output.interpolate`VPC: ${$(TestVpc).vpcArn} -- Bucket: ${$(Bucket).name}`", () =>
+  Effect.gen(function* () {
+    const output = Output.interpolate`VPC: ${vpc.vpcArn} -- Bucket: ${bucket.name}`;
+    const upstream = Output.upstream(output);
+    const result = yield* Output.evaluate(output, resources);
+    expect(result).toEqual(`VPC: ${vpcAttrs.vpcArn} -- Bucket: ${bucketAttrs.name}`);
+    expect(upstream).toEqual({
+      TestVpc,
+      Bucket,
+    });
+  }).pipe(Effect.provide(test.defaultState())),
 );
 
 it.live("Output.resolveUpstream({})", () =>
@@ -280,16 +271,14 @@ it.live("Output.resolveUpstream({ vpcId: $(TestVpc).vpcId })", () =>
   }),
 );
 
-it.live(
-  "Output.resolveUpstream({ vpcArn: [$(TestVpc).vpcArn, $(Bucket).name] })",
-  () =>
-    Effect.gen(function* () {
-      const upstream = Output.resolveUpstream({
-        vpcArn: [$(TestVpc).vpcArn, $(Bucket).name],
-      });
-      expect(upstream).toEqual({
-        TestVpc,
-        Bucket,
-      });
-    }).pipe(Effect.provide(test.defaultState())),
+it.live("Output.resolveUpstream({ vpcArn: [$(TestVpc).vpcArn, $(Bucket).name] })", () =>
+  Effect.gen(function* () {
+    const upstream = Output.resolveUpstream({
+      vpcArn: [$(TestVpc).vpcArn, $(Bucket).name],
+    });
+    expect(upstream).toEqual({
+      TestVpc,
+      Bucket,
+    });
+  }).pipe(Effect.provide(test.defaultState())),
 );

@@ -13,20 +13,12 @@ import type { IsAny, UnionToIntersection } from "./util.ts";
 const ExprSymbol = Symbol.for("alchemy/Expr");
 
 export const isOutput = (value: any): value is Output<any> =>
-  value &&
-  (typeof value === "object" || typeof value === "function") &&
-  ExprSymbol in value;
+  value && (typeof value === "object" || typeof value === "function") && ExprSymbol in value;
 
-export const of = <R extends Resource>(
-  resource: Ref<R> | R,
-): Output.Of<R["attr"], From<R>> => {
+export const of = <R extends Resource>(resource: Ref<R> | R): Output.Of<R["attr"], From<R>> => {
   if (isRef(resource)) {
     const metadata = getRefMetadata(resource);
-    return new RefExpr(
-      metadata.stack,
-      metadata.stage,
-      metadata.resourceId,
-    ) as any;
+    return new RefExpr(metadata.stack, metadata.stage, metadata.resourceId) as any;
   }
   return new ResourceExpr(resource) as any;
 };
@@ -52,9 +44,7 @@ export interface Output<A = any, Src extends Resource = any, Req = any> {
 
 export declare namespace Output {
   // TODO(sam): doesn't support disjunct unions very well
-  export type Of<A, Src extends Resource = any, Req = never> = [
-    Extract<A, object>,
-  ] extends [never]
+  export type Of<A, Src extends Resource = any, Req = never> = [Extract<A, object>] extends [never]
     ? Output<A, Src, Req>
     : [Extract<A, any[]>] extends [never]
       ? Object<
@@ -75,18 +65,12 @@ export type Object<A, Src extends Resource, Req = any> = Output<A, Src, Req> & {
   >;
 };
 
-export type Array<A extends any[], Src extends Resource, Req = any> = Output<
-  A,
-  Src,
-  Req
-> & {
+export type Array<A extends any[], Src extends Resource, Req = any> = Output<A, Src, Req> & {
   [i in Extract<keyof A, number>]: Output.Of<A[i], Src, Req>;
 };
 
 export const isExpr = (value: any): value is Expr<any> =>
-  value &&
-  (typeof value === "object" || typeof value === "function") &&
-  ExprSymbol in value;
+  value && (typeof value === "object" || typeof value === "function") && ExprSymbol in value;
 
 export type Expr<A = any, Src extends AnyResource = AnyResource, Req = any> =
   | AllExpr<Expr<A, Src, Req>[]>
@@ -112,8 +96,7 @@ const proxy = (self: any): any => {
               : prop === "apply"
                 ? self[prop]
                 : prop in self
-                  ? typeof self[prop as keyof typeof self] === "function" &&
-                    !("kind" in self)
+                  ? typeof self[prop as keyof typeof self] === "function" && !("kind" in self)
                     ? new PropExpr(proxy, prop as never)
                     : self[prop as keyof typeof self]
                   : new PropExpr(proxy, prop as never),
@@ -125,16 +108,18 @@ const proxy = (self: any): any => {
             return new EffectExpr(self.expr, args[0]);
           }
         }
-        throw new Error("Not callable");
+        return undefined;
       },
     },
   );
   return proxy;
 };
 
-export abstract class BaseExpr<A = any, Src extends Resource = any, Req = any>
-  implements Output<A, Src, Req>
-{
+export abstract class BaseExpr<A = any, Src extends Resource = any, Req = any> implements Output<
+  A,
+  Src,
+  Req
+> {
   declare readonly kind: any;
   declare readonly src: Src;
   declare readonly req: Req;
@@ -157,19 +142,15 @@ export abstract class BaseExpr<A = any, Src extends Resource = any, Req = any>
   }
 }
 
-export const isResourceExpr = <
-  Value = any,
-  Src extends AnyResource = AnyResource,
-  Req = any,
->(
+export const isResourceExpr = <Value = any, Src extends AnyResource = AnyResource, Req = any>(
   node: Expr<Value, Src, Req> | any,
 ): node is ResourceExpr<Value, Src, Req> => node?.kind === "ResourceExpr";
 
-export class ResourceExpr<
+export class ResourceExpr<Value, Src extends AnyResource, Req = never> extends BaseExpr<
   Value,
-  Src extends AnyResource,
-  Req = never,
-> extends BaseExpr<Value, Src, Req> {
+  Src,
+  Req
+> {
   readonly kind = "ResourceExpr";
   constructor(
     public readonly src: Src,
@@ -219,21 +200,11 @@ export class LiteralExpr<A> extends BaseExpr<A, never> {
 }
 
 //Output.ApplyExpr<any, any, AnyResource, any>
-export const isApplyExpr = <
-  In = any,
-  Out = any,
-  Src extends AnyResource = AnyResource,
-  Req = any,
->(
+export const isApplyExpr = <In = any, Out = any, Src extends AnyResource = AnyResource, Req = any>(
   node: Output<Out, Src, Req>,
 ): node is ApplyExpr<In, Out, Src, Req> => node?.kind === "ApplyExpr";
 
-export class ApplyExpr<
-  A,
-  B,
-  Src extends AnyResource,
-  Req = never,
-> extends BaseExpr<B, Src, Req> {
+export class ApplyExpr<A, B, Src extends AnyResource, Req = never> extends BaseExpr<B, Src, Req> {
   readonly kind = "ApplyExpr";
   constructor(
     public readonly expr: Expr<A, Src, Req>,
@@ -254,13 +225,11 @@ export const isEffectExpr = <
   node: any,
 ): node is EffectExpr<In, Out, Src, Req, Req2> => node?.kind === "EffectExpr";
 
-export class EffectExpr<
-  A,
+export class EffectExpr<A, B, Src extends AnyResource, Req = never, Req2 = never> extends BaseExpr<
   B,
-  Src extends AnyResource,
-  Req = never,
-  Req2 = never,
-> extends BaseExpr<B, Src, Req> {
+  Src,
+  Req
+> {
   readonly kind = "EffectExpr";
   constructor(
     public readonly expr: Expr<A, Src, Req>,
@@ -271,9 +240,8 @@ export class EffectExpr<
   }
 }
 
-export const isAllExpr = <Outs extends Expr[] = Expr[]>(
-  node: any,
-): node is AllExpr<Outs> => node?.kind === "AllExpr";
+export const isAllExpr = <Outs extends Expr[] = Expr[]>(node: any): node is AllExpr<Outs> =>
+  node?.kind === "AllExpr";
 
 export class AllExpr<Outs extends Expr[]> extends BaseExpr<Outs> {
   readonly kind = "AllExpr";
@@ -283,8 +251,7 @@ export class AllExpr<Outs extends Expr[]> extends BaseExpr<Outs> {
   }
 }
 
-export const isRefExpr = <A = any>(node: any): node is RefExpr<A> =>
-  node?.kind === "RefExpr";
+export const isRefExpr = <A = any>(node: any): node is RefExpr<A> => node?.kind === "RefExpr";
 
 export class RefExpr<A> extends BaseExpr<A, never, never> {
   readonly kind = "RefExpr";
@@ -303,9 +270,7 @@ export class MissingSourceError extends Data.TaggedError("MissingSourceError")<{
   srcId: string;
 }> {}
 
-export class InvalidReferenceError extends Data.TaggedError(
-  "InvalidReferenceError",
-)<{
+export class InvalidReferenceError extends Data.TaggedError("InvalidReferenceError")<{
   message: string;
   stack: string;
   stage: string;
@@ -317,11 +282,7 @@ export const evaluate: <A, Upstream extends AnyResource, Req>(
   upstream: {
     [Id in Upstream["id"]]: Extract<Upstream, { id: Id }>["attr"];
   },
-) => Effect.Effect<
-  A,
-  InvalidReferenceError | MissingSourceError,
-  State.State
-> = (expr, upstream) =>
+) => Effect.Effect<A, InvalidReferenceError | MissingSourceError, State.State> = (expr, upstream) =>
   Effect.gen(function* () {
     if (isResourceExpr(expr)) {
       const srcId = expr.src.id;
@@ -401,14 +362,8 @@ export const upstreamAny = (
     return upstream(value);
   } else if (Array.isArray(value)) {
     return Object.assign({}, ...value.map(resolveUpstream));
-  } else if (
-    value &&
-    (typeof value === "object" || typeof value === "function")
-  ) {
-    return Object.assign(
-      {},
-      ...Object.values(value).map((value) => resolveUpstream(value)),
-    );
+  } else if (value && (typeof value === "object" || typeof value === "function")) {
+    return Object.assign({}, ...Object.values(value).map((value) => resolveUpstream(value)));
   }
   return {};
 };
@@ -459,9 +414,9 @@ export type ResolveUpstream<A> = unknown extends A
           ? ResolveUpstream<A[number]>
           : A extends Record<string, any>
             ? {
-                [Id in keyof UnionToIntersection<
+                [Id in keyof UnionToIntersection<ResolveUpstream<A[keyof A]>>]: UnionToIntersection<
                   ResolveUpstream<A[keyof A]>
-                >]: UnionToIntersection<ResolveUpstream<A[keyof A]>>[Id];
+                >[Id];
               }
             : {};
 
@@ -471,9 +426,7 @@ export const resolveUpstream = <const A>(value: A): ResolveUpstream<A> => {
   } else if (isOutput(value)) {
     return upstream(value) as any;
   } else if (Array.isArray(value)) {
-    return Object.fromEntries(
-      value.map((v) => resolveUpstream(v)).flatMap(Object.entries),
-    ) as any;
+    return Object.fromEntries(value.map((v) => resolveUpstream(v)).flatMap(Object.entries)) as any;
   } else if (typeof value === "object" || typeof value === "function") {
     return Object.fromEntries(
       Object.values(value as any)
@@ -487,14 +440,9 @@ export const resolveUpstream = <const A>(value: A): ResolveUpstream<A> => {
 export const interpolate = <Args extends any[]>(
   template: TemplateStringsArray,
   ...args: Args
-): All<Args> extends Output<any, infer Src, infer Req>
-  ? Output<string, Src, Req>
-  : never =>
-  all(...args.map((arg) => (isOutput(arg) ? arg : literal(arg)))).apply(
-    (args) =>
-      template
-        .map((str, i) => str + (args[i] == null ? "" : String(args[i])))
-        .join(""),
+): All<Args> extends Output<any, infer Src, infer Req> ? Output<string, Src, Req> : never =>
+  all(...args.map((arg) => (isOutput(arg) ? arg : literal(arg)))).apply((args) =>
+    template.map((str, i) => str + (args[i] == null ? "" : String(args[i]))).join(""),
   ) as any;
 
 export const all = <Outs extends (Output | Expr)[]>(...outs: Outs) =>
@@ -502,8 +450,7 @@ export const all = <Outs extends (Output | Expr)[]>(...outs: Outs) =>
 
 export type All<Outs extends (Output | Expr)[]> = number extends Outs["length"]
   ? [Outs[number]] extends [
-      | Output<infer V, infer Src, infer Req>
-      | Expr<infer V, infer Src, infer Req>,
+      Output<infer V, infer Src, infer Req> | Expr<infer V, infer Src, infer Req>,
     ]
     ? Output<V, Src, Req>
     : never
