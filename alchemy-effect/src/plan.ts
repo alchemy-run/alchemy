@@ -9,7 +9,7 @@ import type { Diff, NoopDiff, UpdateDiff } from "./diff.ts";
 import * as Output from "./output.ts";
 import type { Instance } from "./policy.ts";
 import type { Provider } from "./provider.ts";
-import { type ProviderService } from "./provider.ts";
+import { type ProviderService, getProviderByType } from "./provider.ts";
 import type { AnyResource, Resource, ResourceTags } from "./resource.ts";
 import { isService, type IService, type Service } from "./service.ts";
 import {
@@ -101,6 +101,7 @@ export interface BaseNode<R extends Resource = AnyResource> {
   resource: R;
   provider: ProviderService<R>;
   bindings: BindNode[];
+  downstream: string[];
 }
 
 export interface Create<R extends Resource = AnyResource> extends BaseNode<R> {
@@ -220,7 +221,7 @@ export type DerivePlan<Resources extends Service | Resource> = {
 
 export type IPlan = {
   resources: {
-    [id in string]: CRUD<any>;
+    [id in string]: Apply<any>;
   };
   deletions: {
     [id in string]?: Delete<Resource>;
@@ -593,7 +594,22 @@ export const plan = <const Resources extends (Service | Resource)[]>(
                   // could have been been updated to point to the replaced resources
                   return yield* Effect.fail(new CannotReplacePartiallyReplacedResource(id));
                 }
-                // handle stable (finalized) states
+              } else if (oldState.status === "deleting") {
+                if (diff.action === "noop" || diff.action === "update") {
+                  // we're in a partially deleted state, it is unclear whether it was or was not deleted
+                  // it should be safe to re-create it with the same instanceId?
+                  return Node<Create<Resource>>({
+                    action: "create",
+                    props: news,
+                    state: {
+                      ...oldState,
+                      status: "creating",
+                      props: news,
+                    },
+                  });
+                } else {
+                  return yield* Effect.fail(new CannotReplacePartiallyReplacedResource(id));
+                }
               } else if (diff.action === "update") {
                 return Node<Update<Resource>>({
                   action: "update",
@@ -630,14 +646,8 @@ export const plan = <const Resources extends (Service | Resource)[]>(
               stage: app.stage,
               resourceId: id,
             });
-            const context = yield* Effect.context<never>();
             if (oldState) {
-              const provider: ProviderService = context.unsafeMap.get(oldState?.resourceType);
-              if (!provider) {
-                return yield* Effect.die(
-                  new Error(`Provider not found for ${oldState?.resourceType}`),
-                );
-              }
+              const provider = yield* getProviderByType(oldState.resourceType);
               return [
                 id,
                 {
@@ -653,7 +663,7 @@ export const plan = <const Resources extends (Service | Resource)[]>(
                     props: oldState.props,
                   } as Resource,
                   // TODO(sam): is it enough to just pass through oldState?
-                  // downstream: oldDownstreamDependencies[id] ?? [],
+                  downstream: oldDownstreamDependencies[id] ?? [],
                 } satisfies Delete<Resource>,
               ] as const;
             }

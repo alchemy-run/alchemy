@@ -328,7 +328,7 @@ export const evaluate: <A, Upstream extends AnyResource, Req>(
           }),
         );
       }
-      return resource.output;
+      return resource.attr;
     } else if (Array.isArray(expr)) {
       return yield* Effect.all(expr.map((item) => evaluate(item, upstream)));
     } else if (typeof expr === "object" && expr !== null) {

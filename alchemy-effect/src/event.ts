@@ -1,11 +1,17 @@
 export type ApplyStatus =
+  | "attaching"
+  | "post-attach"
   | "pending"
+  | "pre-creating"
   | "creating"
+  | "creating replacement"
   | "created"
   | "updating"
   | "updated"
   | "deleting"
   | "deleted"
+  | "replacing"
+  | "replaced"
   | "success"
   | "fail";
 

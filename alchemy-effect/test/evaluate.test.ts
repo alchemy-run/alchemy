@@ -228,10 +228,13 @@ it.live("Output.ref<TestVpc>('TestVpc', 'other-stage').vpcId", () =>
                   resourceType: "Test.TestVpc",
                   logicalId: "TestVpc",
                   status: "created",
-                  news: {},
-                  output: {
+                  props: {},
+                  attr: {
                     vpcId: "vpc-0987654321",
                   },
+                  downstream: [],
+                  instanceId: "1234567890",
+                  providerVersion: 0,
                 },
               },
             },

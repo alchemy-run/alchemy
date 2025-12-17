@@ -275,14 +275,16 @@ const createTestResourceState = (options: {
 
 const testSimple = (
   title: string,
-  options: {
+  testCase: {
     state: {
       status: ResourceStatus;
       props: TestResourceProps;
       attr?: {};
+      old?: Partial<ResourceState>;
     };
     props: TestResourceProps;
-    plan: any;
+    plan?: any;
+    fail?: string;
   },
 ) =>
   test(
@@ -290,20 +292,32 @@ const testSimple = (
     {
       state: test.state({
         A: createTestResourceState({
-          ...options.state,
+          ...testCase.state,
           logicalId: "A",
         }),
       }),
     },
     Effect.gen(function* () {
       {
-        class A extends TestResource("A", options.props) {}
-        expect(yield* plan(A)).toMatchObject({
-          resources: {
-            A: options.plan,
-          },
-          deletions: expect.emptyObject(),
-        });
+        class A extends TestResource("A", testCase.props) {}
+        if (testCase.fail) {
+          const result = yield* plan(A).pipe(
+            Effect.map(() => false),
+            // @ts-expect-error
+            Effect.catchTag(testCase.fail, () => Effect.succeed(true)),
+            Effect.catchAll(() => Effect.succeed(false)),
+          ) as Effect.Effect<boolean>;
+          if (!result) {
+            expect.fail(`Expected error '${testCase.fail}`);
+          }
+        } else {
+          expect(yield* plan(A)).toMatchObject({
+            resources: {
+              A: testCase.plan,
+            },
+            deletions: expect.emptyObject(),
+          });
+        }
       }
     }).pipe(Effect.provide(TestLayers)),
   );
@@ -439,6 +453,159 @@ describe("prior crash in 'updating' state", () => {
         props: {
           replaceString: "A",
         },
+      },
+    },
+  });
+});
+
+describe("prior crash in 'replacing' state", () => {
+  const priorStates = ["created", "creating", "updated", "updating"] as const;
+
+  const testUnchanged = ({
+    old,
+  }: {
+    old: {
+      status: ResourceStatus;
+    };
+  }) =>
+    testSimple(
+      `"continue 'replace' if props are unchanged and previous state is '${old.status}'"`,
+      {
+        state: {
+          status: "replacing",
+          props: {
+            string: "A",
+          },
+          old,
+        },
+        props: {
+          string: "A",
+        },
+        plan: {
+          action: "replace",
+          props: {
+            string: "A",
+          },
+          state: {
+            status: "replacing",
+            props: {
+              string: "A",
+            },
+            old,
+          },
+        },
+      },
+    );
+
+  priorStates.forEach((status) =>
+    testUnchanged({
+      old: {
+        status,
+      },
+    }),
+  );
+
+  const testMinorChange = ({
+    old,
+  }: {
+    old: {
+      status: ResourceStatus;
+    };
+  }) =>
+    testSimple(
+      `"continue 'replace' if props can be updated and previous state is '${old.status}'"`,
+      {
+        state: {
+          status: "replacing",
+          props: {
+            string: "A",
+          },
+          old,
+        },
+        props: {
+          string: "B",
+        },
+        plan: {
+          action: "replace",
+          props: {
+            string: "B",
+          },
+          state: {
+            status: "replacing",
+            props: {
+              string: "A",
+            },
+            old,
+          },
+        },
+      },
+    );
+
+  priorStates.forEach((status) =>
+    testMinorChange({
+      old: {
+        status,
+      },
+    }),
+  );
+
+  const testReplacement = (
+    title: string,
+    {
+      old,
+      plan,
+      fail,
+    }: {
+      old: {
+        status: ResourceStatus;
+      };
+      plan?: any;
+      fail?: string;
+    },
+  ) =>
+    testSimple(title, {
+      state: {
+        status: "replacing",
+        props: {
+          replaceString: "A",
+        },
+        old,
+      },
+      props: {
+        replaceString: "B",
+      },
+      plan,
+      fail,
+    });
+
+  (["replaced", "replacing"] as const).forEach((status) =>
+    testReplacement(
+      `fail if trying to replace a partially replaced resource in state '${status}'`,
+      {
+        old: {
+          status,
+        },
+        fail: "CannotReplacePartiallyReplacedResource",
+      },
+    ),
+  );
+});
+
+describe("prior crash in 'deleting' state", () => {
+  testSimple("create the resource if props are unchanged and the previous state is 'deleting'", {
+    state: {
+      status: "deleting",
+      props: {
+        string: "A",
+      },
+    },
+    props: {
+      string: "A",
+    },
+    plan: {
+      action: "create",
+      props: {
+        string: "A",
       },
     },
   });

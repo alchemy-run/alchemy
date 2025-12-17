@@ -116,7 +116,7 @@ export interface UpdatedResourceState extends BaseResourceState {
 export interface DeletingResourceState extends BaseResourceState {
   status: "deleting";
   /** Attributes of the resource being deleted */
-  attr: Attr;
+  attr: Attr | undefined;
 }
 
 export interface ReplacingResourceState extends BaseResourceState {
@@ -124,7 +124,12 @@ export interface ReplacingResourceState extends BaseResourceState {
   /** Desired properties of the new resource (the replacement) */
   props: Props;
   /** Reference to the state of the old resource (the one being replaced) */
-  old: CreatedResourceState | UpdatedResourceState;
+  old:
+    | CreatedResourceState
+    | UpdatedResourceState
+    | CreatingResourceState
+    | UpdatingReourceState
+    | DeletingResourceState;
   /** Whether the resource should be deleted before or after replacements */
   deleteFirst: boolean;
 }
@@ -136,7 +141,12 @@ export interface ReplacedResourceState extends BaseResourceState {
   /** Output attributes of the new resource (the replacement) */
   attr: Attr;
   /** Reference to the state of the old resource (the one being replaced) */
-  old: CreatedResourceState | UpdatedResourceState | DeletingResourceState;
+  old:
+    | CreatingResourceState
+    | CreatedResourceState
+    | UpdatingReourceState
+    | UpdatedResourceState
+    | DeletingResourceState;
   /** Whether the resource should be deleted before or after replacements */
   deleteFirst: boolean;
   // .. will (finally) transition to `CreatedResourceState` after finalizing
@@ -147,6 +157,7 @@ export type ResourceState =
   | CreatedResourceState
   | UpdatingReourceState
   | UpdatedResourceState
+  | DeletingResourceState
   | ReplacingResourceState
   | ReplacedResourceState;
 
@@ -163,6 +174,10 @@ export interface StateService {
     stage: string;
     resourceId: string;
   }): Effect.Effect<ResourceState | undefined, StateStoreError, never>;
+  getReplacedResources(request: {
+    stack: string;
+    stage: string;
+  }): Effect.Effect<ReplacedResourceState[], StateStoreError, never>;
   set<V extends ResourceState>(request: {
     stack: string;
     stage: string;
@@ -182,7 +197,6 @@ export class State extends Context.Tag("AWS::Lambda::State")<State, StateService
 // TODO(sam): implement with SQLite3
 export const localFs = Layer.effect(
   State,
-  // @ts-expect-error -
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -221,8 +235,8 @@ export const localFs = Layer.effect(
       fs.makeDirectory(dir, { recursive: true }),
     );
 
-    return {
-      listApps: () =>
+    const state: StateService = {
+      listStacks: () =>
         fs.readDirectory(stateDir).pipe(
           recover,
           Effect.map((files) => files ?? []),
@@ -237,6 +251,13 @@ export const localFs = Layer.effect(
           Effect.map((file) => JSON.parse(file.toString())),
           recover,
         ),
+      getReplacedResources: Effect.fnUntraced(function* (request) {
+        return (yield* Effect.all(
+          (yield* state.list(request)).map((resourceId) =>
+            state.get({ stack: request.stack, stage: request.stage, resourceId }),
+          ),
+        )).filter((r) => r?.status === "replaced");
+      }),
       set: (request) =>
         ensure(stage(request)).pipe(
           Effect.flatMap(() =>
@@ -269,6 +290,7 @@ export const localFs = Layer.effect(
           Effect.map((files) => files?.map((file) => file.replace(/\.json$/, "")) ?? []),
         ),
     };
+    return state;
   }),
 );
 
@@ -300,6 +322,12 @@ export const inMemoryService = (
     listStages: (stack: string) => Effect.succeed(Array.from(state.get(stack)?.keys() ?? [])),
     get: ({ stack, stage, resourceId }: { stack: string; stage: string; resourceId: string }) =>
       Effect.succeed(state.get(stack)?.get(stage)?.get(resourceId)),
+    getReplacedResources: ({ stack, stage }: { stack: string; stage: string }) =>
+      Effect.succeed(
+        Array.from(state.get(stack)?.get(stage)?.values() ?? []).filter(
+          (s) => s.status === "replaced",
+        ),
+      ),
     set: <V extends ResourceState>({
       stack,
       stage,
