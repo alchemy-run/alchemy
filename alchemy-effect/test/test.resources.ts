@@ -1,8 +1,12 @@
 import type { Input, InputProps } from "@/input";
+import * as Context from "effect/Context";
+import * as Option from "effect/Option";
 import { Resource } from "@/resource";
 import { isUnknown } from "@/unknown";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type { ProviderService } from "@/provider";
+import * as State from "@/state";
 
 // Bucket
 export type BucketProps = {
@@ -137,6 +141,7 @@ export type TestResourceAttr<Props extends TestResourceProps> = {
   stringArray: Props["stringArray"] extends string[] ? Props["stringArray"] : string[];
   stableString: string;
   stableArray: string[];
+  replaceString: Props["replaceString"];
 };
 
 export interface TestResource<
@@ -150,6 +155,15 @@ export interface TestResource<
   TestResource
 > {}
 
+export class TestResourceHooks extends Context.Tag("TestResourceHooks")<
+  TestResourceHooks,
+  {
+    create?: (id: string, props: TestResourceProps) => Effect.Effect<void, any>;
+    update?: (id: string, props: TestResourceProps) => Effect.Effect<void, any>;
+    delete?: (id: string) => Effect.Effect<void, any>;
+  }
+>() {}
+
 export const TestResource = Resource<{
   <const ID extends string, const Props extends InputProps<TestResourceProps>>(
     id: ID,
@@ -157,46 +171,64 @@ export const TestResource = Resource<{
   ): TestResource<ID, Props>;
 }>("Test.TestResource");
 
-export const testResourceProvider = TestResource.provider.succeed({
-  diff: Effect.fn(function* ({ id, news, olds }) {
-    if (news.replaceString !== olds.replaceString) {
-      return {
-        action: "replace",
-      };
-    }
-    return isUnknown(news.string) ||
-      isUnknown(news.stringArray) ||
-      news.string !== olds.string ||
-      news.stringArray?.length !== olds.stringArray?.length ||
-      !!news.stringArray !== !!olds.stringArray ||
-      news.stringArray?.some(isUnknown) ||
-      news.stringArray?.some((s, i) => s !== olds.stringArray?.[i])
-      ? {
-          action: "update",
-          stables: ["stableString", "stableArray"],
+export const testResourceProvider = TestResource.provider.effect(
+  Effect.gen(function* () {
+    return {
+      diff: Effect.fn(function* ({ id, news, olds }) {
+        if (news.replaceString !== olds.replaceString) {
+          return {
+            action: "replace",
+          };
         }
-      : undefined;
-  }),
-  create: Effect.fn(function* ({ id, news }) {
-    return {
-      string: news.string ?? id,
-      stringArray: news.stringArray ?? [],
-      stableString: id,
-      stableArray: [id],
+        return isUnknown(news.string) ||
+          isUnknown(news.stringArray) ||
+          news.string !== olds.string ||
+          news.stringArray?.length !== olds.stringArray?.length ||
+          !!news.stringArray !== !!olds.stringArray ||
+          news.stringArray?.some(isUnknown) ||
+          news.stringArray?.some((s, i) => s !== olds.stringArray?.[i])
+          ? {
+              action: "update",
+              stables: ["stableString", "stableArray"],
+            }
+          : undefined;
+      }),
+      create: Effect.fn(function* ({ id, news }) {
+        const hooks = Option.getOrUndefined(yield* Effect.serviceOption(TestResourceHooks));
+        if (hooks?.create) {
+          yield* hooks.create(id, news);
+        }
+        return {
+          string: news.string ?? id,
+          stringArray: news.stringArray ?? [],
+          stableString: id,
+          stableArray: [id],
+          replaceString: news.replaceString,
+        };
+      }),
+      update: Effect.fn(function* ({ id, news, output }) {
+        const hooks = Option.getOrUndefined(yield* Effect.serviceOption(TestResourceHooks));
+        if (hooks?.update) {
+          yield* hooks.update(id, news);
+        }
+        return {
+          string: news.string ?? id,
+          stringArray: news.stringArray ?? [],
+          stableString: id,
+          stableArray: [id],
+          replaceString: news.replaceString,
+        };
+      }),
+      delete: Effect.fn(function* ({ id }) {
+        const hooks = Option.getOrUndefined(yield* Effect.serviceOption(TestResourceHooks));
+        if (hooks?.delete) {
+          yield* hooks.delete(id);
+        }
+        return;
+      }),
     };
   }),
-  update: Effect.fn(function* ({ id, news, output }) {
-    return {
-      string: news.string ?? id,
-      stringArray: news.stringArray ?? [],
-      stableString: id,
-      stableArray: [id],
-    };
-  }),
-  delete: Effect.fn(function* ({ output }) {
-    return;
-  }),
-});
+);
 
 // Layers
 export const TestLayers = Layer.mergeAll(
@@ -205,3 +237,5 @@ export const TestLayers = Layer.mergeAll(
   functionProvider,
   testResourceProvider,
 );
+
+export const InMemoryTestLayers = () => Layer.mergeAll(TestLayers, State.inMemory());

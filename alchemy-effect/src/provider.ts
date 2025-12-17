@@ -22,7 +22,15 @@ type BindingData<Res extends Resource> = [Res] extends [Runtime] ? Res["binding"
 
 type Props<Res extends Resource> = Input.ResolveOpaque<Res["props"]>;
 
-export interface ProviderService<Res extends Resource = Resource> {
+export interface ProviderService<
+  Res extends Resource = Resource,
+  ReadReq = never,
+  DiffReq = never,
+  PrecreateReq = never,
+  CreateReq = never,
+  UpdateReq = never,
+  DeleteReq = never,
+> {
   /**
    * The version of the provider.
    *
@@ -42,7 +50,7 @@ export interface ProviderService<Res extends Resource = Resource> {
     output: Res["attr"] | undefined; // current state -> synced state
     session: ScopedPlanStatusSession;
     bindings: BindingData<Res>;
-  }): Effect.Effect<Res["attr"] | undefined, any, never>;
+  }): Effect.Effect<Res["attr"] | undefined, any, ReadReq>;
   /**
    * Properties that are always stable across any update.
    */
@@ -55,20 +63,20 @@ export interface ProviderService<Res extends Resource = Resource> {
     // -> we need a way for the diff handlers to work with Outputs
     news: Res["props"];
     output: Res["attr"];
-  }): Effect.Effect<Diff | void, never, never>;
+  }): Effect.Effect<Diff | void, never, DiffReq>;
   precreate?(input: {
     id: string;
     news: Props<Res>;
     instanceId: string;
     session: ScopedPlanStatusSession;
-  }): Effect.Effect<Res["attr"], any, never>;
+  }): Effect.Effect<Res["attr"], any, PrecreateReq>;
   create(input: {
     id: string;
     instanceId: string;
     news: Props<Res>;
     session: ScopedPlanStatusSession;
     bindings: BindingData<Res>;
-  }): Effect.Effect<Res["attr"], any, never>;
+  }): Effect.Effect<Res["attr"], any, CreateReq>;
   update(input: {
     id: string;
     instanceId: string;
@@ -77,7 +85,7 @@ export interface ProviderService<Res extends Resource = Resource> {
     output: Res["attr"];
     session: ScopedPlanStatusSession;
     bindings: BindingData<Res>;
-  }): Effect.Effect<Res["attr"], any, never>;
+  }): Effect.Effect<Res["attr"], any, UpdateReq>;
   delete(input: {
     id: string;
     instanceId: string;
@@ -85,7 +93,7 @@ export interface ProviderService<Res extends Resource = Resource> {
     output: Res["attr"];
     session: ScopedPlanStatusSession;
     bindings: BindingData<Res>;
-  }): Effect.Effect<void, any, never>;
+  }): Effect.Effect<void, any, DeleteReq>;
 }
 
 export const getProviderByType = Effect.fnUntraced(function* (resourceType: string) {

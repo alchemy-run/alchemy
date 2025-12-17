@@ -4,9 +4,7 @@ import * as Layer from "effect/Layer";
 import type { Provider, ProviderService } from "./provider.ts";
 
 export const isResource = (r: any): r is Resource => {
-  return (
-    r && typeof r === "function" && "id" in r && "type" in r && "props" in r
-  );
+  return r && typeof r === "function" && "id" in r && "type" in r && "props" in r;
 };
 
 export type AnyResource = Resource<string, string, any, any>;
@@ -40,10 +38,40 @@ export interface Resource<
 export interface ResourceTags<R extends Resource<string, string, any, any>> {
   of<S extends ProviderService<R>>(service: S): S;
   tag: Provider<R>;
-  effect<Err, Req>(
-    eff: Effect<ProviderService<R>, Err, Req>,
-  ): Layer.Layer<Provider<R>, Err, Req>;
-  succeed(service: ProviderService<R>): Layer.Layer<Provider<R>>;
+  effect<
+    Err,
+    Req,
+    ReadReq = never,
+    DiffReq = never,
+    PrecreateReq = never,
+    CreateReq = never,
+    UpdateReq = never,
+    DeleteReq = never,
+  >(
+    eff: Effect<
+      ProviderService<R, ReadReq, DiffReq, PrecreateReq, CreateReq, UpdateReq, DeleteReq>,
+      Err,
+      Req
+    >,
+  ): Layer.Layer<
+    Provider<R>,
+    Err,
+    Req | ReadReq | DiffReq | PrecreateReq | CreateReq | UpdateReq | DeleteReq
+  >;
+  succeed<
+    ReadReq = never,
+    DiffReq = never,
+    PrecreateReq = never,
+    CreateReq = never,
+    UpdateReq = never,
+    DeleteReq = never,
+  >(
+    service: ProviderService<R, ReadReq, DiffReq, PrecreateReq, CreateReq, UpdateReq, DeleteReq>,
+  ): Layer.Layer<
+    Provider<R>,
+    never,
+    ReadReq | DiffReq | PrecreateReq | CreateReq | UpdateReq | DeleteReq
+  >;
 }
 
 export const Resource = <Ctor extends (id: string, props: any) => Resource>(
@@ -52,11 +80,9 @@ export const Resource = <Ctor extends (id: string, props: any) => Resource>(
   const Tag = Context.Tag(type)();
   const provider: ResourceTags<ReturnType<Ctor>> = {
     tag: Tag as any,
-    effect: <Err, Req>(
-      eff: Effect<ProviderService<ReturnType<Ctor>>, Err, Req>,
-    ) => Layer.effect(Tag, eff),
-    succeed: (service: ProviderService<ReturnType<Ctor>>) =>
-      Layer.succeed(Tag, service),
+    effect: <Err, Req>(eff: Effect<ProviderService<ReturnType<Ctor>>, Err, Req>) =>
+      Layer.effect(Tag, eff),
+    succeed: (service: ProviderService<ReturnType<Ctor>>) => Layer.succeed(Tag, service),
     of: (service) => service,
   };
   return Object.assign(

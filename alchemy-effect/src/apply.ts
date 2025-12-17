@@ -477,113 +477,132 @@ const expandAndPivot = Effect.fnUntraced(function* (plan: IPlan, session: PlanSt
 
             return attr;
           } else if (node.action === "replace") {
-            if (node.state.status === "replacing") {
-              const state = node.state;
-              const upstream = Object.fromEntries(
-                yield* Effect.all(
-                  Object.entries(Output.resolveUpstream(node.props)).map(([id]) =>
-                    resolveUpstream(id).pipe(Effect.map(({ upstreamAttr }) => [id, upstreamAttr])),
-                  ),
-                ),
-              );
-              const news = (yield* Output.evaluate(node.props, upstream)) as Record<string, any>;
-
-              const checkpoint = <S extends ReplacingResourceState | ReplacedResourceState>({
-                status,
-                attr,
-                bindings,
-              }: Pick<S, "status" | "attr" | "bindings">) =>
-                commit<S>({
-                  status,
+            if (node.state.status === "replaced") {
+              // we've already created the replacement resource, return the output
+              return node.state.attr;
+            }
+            let state: ReplacingResourceState;
+            if (node.state.status !== "replacing") {
+              yield* commit<ReplacingResourceState>(
+                (state = {
+                  status: "replacing",
                   logicalId: id,
                   instanceId,
                   resourceType: node.resource.type,
-                  props: news,
-                  attr,
+                  props: node.props,
+                  attr: node.state.attr,
                   providerVersion: node.provider.version ?? 0,
-                  bindings: bindings ?? node.bindings,
-                  downstream: node.downstream,
-                  old: state.old,
                   deleteFirst: node.deleteFirst,
-                } as S);
+                  old: node.state,
+                  downstream: node.downstream,
+                }),
+              );
+            } else {
+              state = node.state;
+            }
+            const upstream = Object.fromEntries(
+              yield* Effect.all(
+                Object.entries(Output.resolveUpstream(node.props)).map(([id]) =>
+                  resolveUpstream(id).pipe(Effect.map(({ upstreamAttr }) => [id, upstreamAttr])),
+                ),
+              ),
+            );
+            const news = (yield* Output.evaluate(node.props, upstream)) as Record<string, any>;
 
-              let attr: any;
-              if (
-                node.provider.precreate &&
-                // pre-create is only designed to ensure the resource exists, if we have state.attr, then it already exists and should be skipped
-                node.state?.attr === undefined
-              ) {
-                yield* report("pre-creating");
-
-                // stub the resource prior to resolving upstream resources or bindings if a stub is available
-                attr = yield* node.provider.precreate({
-                  id,
-                  news: node.props,
-                  session: scopedSession,
-                  instanceId,
-                });
-
-                yield* checkpoint({
-                  status: "replacing",
-                  attr,
-                });
-              }
-
-              yield* report("attaching");
-
-              let bindingOutputs = yield* attachBindings({
-                resource,
-                bindings: node.bindings,
-                target: {
-                  id,
-                  props: news,
-                  attr,
-                },
-              });
-
-              yield* report("creating replacement");
-
-              attr = yield* node.provider.create({
-                id,
-                news,
+            const checkpoint = <S extends ReplacingResourceState | ReplacedResourceState>({
+              status,
+              attr,
+              bindings,
+            }: Pick<S, "status" | "attr" | "bindings">) =>
+              commit<S>({
+                status,
+                logicalId: id,
                 instanceId,
-                bindings: bindingOutputs,
+                resourceType: node.resource.type,
+                props: news,
+                attr,
+                providerVersion: node.provider.version ?? 0,
+                bindings: bindings ?? node.bindings,
+                downstream: node.downstream,
+                old: state.old,
+                deleteFirst: node.deleteFirst,
+              } as S);
+
+            let attr: any;
+            if (
+              node.provider.precreate &&
+              // pre-create is only designed to ensure the resource exists, if we have state.attr, then it already exists and should be skipped
+              node.state?.attr === undefined
+            ) {
+              yield* report("pre-creating");
+
+              // stub the resource prior to resolving upstream resources or bindings if a stub is available
+              attr = yield* node.provider.precreate({
+                id,
+                news: node.props,
                 session: scopedSession,
+                instanceId,
               });
 
               yield* checkpoint({
                 status: "replacing",
                 attr,
               });
-
-              yield* report("post-attach");
-
-              bindingOutputs = yield* postAttachBindings({
-                resource,
-                bindings: node.bindings,
-                bindingOutputs,
-                target: {
-                  id,
-                  props: news,
-                  attr,
-                },
-              });
-
-              yield* checkpoint<ReplacedResourceState>({
-                status: "replaced",
-                attr,
-                bindings: node.bindings.map((binding, i) => ({
-                  ...binding,
-                  attr: bindingOutputs[i],
-                })),
-              });
-
-              yield* report("created");
-            } else if (node.state.status === "replaced") {
-              // we've already created the replacement resource, return the output
-              return node.state.attr;
             }
+
+            yield* report("attaching");
+
+            let bindingOutputs = yield* attachBindings({
+              resource,
+              bindings: node.bindings,
+              target: {
+                id,
+                props: news,
+                attr,
+              },
+            });
+
+            yield* report("creating replacement");
+
+            attr = yield* node.provider.create({
+              id,
+              news,
+              instanceId,
+              bindings: bindingOutputs,
+              session: scopedSession,
+            });
+
+            yield* checkpoint({
+              status: "replacing",
+              attr,
+            });
+
+            yield* report("post-attach");
+
+            bindingOutputs = yield* postAttachBindings({
+              resource,
+              bindings: node.bindings,
+              bindingOutputs,
+              target: {
+                id,
+                props: news,
+                attr,
+              },
+            });
+
+            yield* checkpoint<ReplacedResourceState>({
+              status: "replaced",
+              attr,
+              bindings: node.bindings.map((binding, i) => ({
+                ...binding,
+                attr: bindingOutputs[i],
+              })),
+            });
+
+            yield* report("created");
+            return attr;
           }
+          // @ts-expect-error
           return yield* Effect.dieMessage(`Unknown action: ${node.action}`);
         }),
       ));

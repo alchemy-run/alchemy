@@ -3,22 +3,32 @@ import * as Effect from "effect/Effect";
 import { apply } from "@/apply";
 import { destroy } from "@/destroy";
 import * as Output from "@/output";
-import { State } from "@/state";
+import { type ReplacedResourceState, type ResourceState, State } from "@/state";
 import { test } from "@/test";
-import { expect } from "@effect/vitest";
-import { TestLayers, TestResource } from "./test.resources.ts";
+import { expect, describe } from "@effect/vitest";
+import {
+  type TestResourceProps,
+  InMemoryTestLayers,
+  TestLayers,
+  TestResource,
+  TestResourceHooks,
+} from "./test.resources.ts";
+import { Data, Layer } from "effect";
+import { App } from "@/app";
 
 const testStack = "test";
 const testStage = "test";
 
-const getState = Effect.fn(function* (resourceId: string) {
+const getState = Effect.fn(function* <S = ResourceState>(resourceId: string) {
   const state = yield* State;
-  return yield* state.get({ stack: testStack, stage: testStage, resourceId });
+  return (yield* state.get({ stack: testStack, stage: testStage, resourceId })) as S;
 });
 const listState = Effect.fn(function* () {
   const state = yield* State;
   return yield* state.list({ stack: testStack, stage: testStage });
 });
+
+const mockApp = App.of({ name: testStack, stage: testStage, config: {} });
 
 test(
   "apply should create when non-existent and update when props change",
@@ -117,9 +127,7 @@ test(
 
     {
       class B extends TestResource("B", {
-        string: Output.of(A).stringArray[0].apply((string) =>
-          string.toUpperCase(),
-        ),
+        string: Output.of(A).stringArray[0].apply((string) => string.toUpperCase()),
       }) {}
 
       const stack = yield* apply(B);
@@ -145,10 +153,123 @@ test(
       }) {}
 
       const stack = yield* apply(B);
-      expect(stack.B.stringArray).toEqual([
-        "test-string-array",
-        "test-string-array",
-      ]);
+      expect(stack.B.stringArray).toEqual(["test-string-array", "test-string-array"]);
     }
   }).pipe(Effect.provide(TestLayers)),
 );
+
+export class ResourceFailure extends Data.TaggedError("ResourceFailure")<{
+  message: string;
+}> {
+  constructor() {
+    super({ message: `Failed to create` });
+  }
+}
+
+const MockLayers = () => Layer.mergeAll(InMemoryTestLayers(), Layer.succeed(App, mockApp));
+
+const fail = <Err, Req>(
+  test: Effect.Effect<void, Err, Req>,
+  hooks?: {
+    create?: (id: string, props: TestResourceProps) => Effect.Effect<void, any>;
+    update?: (id: string, props: TestResourceProps) => Effect.Effect<void, any>;
+    delete?: (id: string) => Effect.Effect<void, any>;
+  },
+): Effect.Effect<void, Err, Req | State> =>
+  test.pipe(
+    Effect.provide(
+      Layer.succeed(
+        TestResourceHooks,
+        hooks ?? {
+          create: () => Effect.fail(new ResourceFailure()),
+          update: () => Effect.fail(new ResourceFailure()),
+          delete: () => Effect.fail(new ResourceFailure()),
+        },
+      ),
+    ),
+    // @ts-expect-error
+    Effect.catchTag("ResourceFailure", () => Effect.succeed(true)),
+  );
+
+describe("recover from intermediate failures", () => {
+  test(
+    "should continue creating after failed create when props unchanged",
+    Effect.gen(function* () {
+      class A extends TestResource("A", {
+        string: "test-string",
+      }) {}
+      yield* fail(apply(A));
+      expect((yield* getState("A"))?.status).toEqual("creating");
+      const stack = yield* apply(A);
+      expect((yield* getState("A"))?.status).toEqual("created");
+      expect(stack.A.string).toEqual("test-string");
+    }).pipe(Effect.provide(MockLayers())),
+  );
+
+  test(
+    "should continue creating after failed create when props have changed and are updatable",
+    Effect.gen(function* () {
+      {
+        class A extends TestResource("A", {
+          string: "test-string",
+        }) {}
+        yield* fail(apply(A));
+        expect((yield* getState("A"))?.status).toEqual("creating");
+      }
+      class A extends TestResource("A", {
+        string: "test-string-changed",
+      }) {}
+      const stack = yield* apply(A);
+      expect(stack.A.string).toEqual("test-string-changed");
+      expect((yield* getState("A"))?.status).toEqual("created");
+    }).pipe(Effect.provide(MockLayers())),
+  );
+
+  test(
+    "should replace after failed create when props have changed and are not updatable",
+    Effect.gen(function* () {
+      {
+        class A extends TestResource("A", {
+          replaceString: "test-string",
+        }) {}
+        yield* fail(apply(A));
+        expect((yield* getState("A"))?.status).toEqual("creating");
+      }
+      class A extends TestResource("A", {
+        replaceString: "test-string-changed",
+      }) {}
+      const stack = yield* apply(A);
+      expect(stack.A.replaceString).toEqual("test-string-changed");
+      expect((yield* getState("A"))?.status).toEqual("created");
+    }).pipe(Effect.provide(MockLayers())),
+  );
+
+  test(
+    "should delete replaced resource after failing to delete it",
+    Effect.gen(function* () {
+      {
+        class A extends TestResource("A", {
+          replaceString: "test-string",
+        }) {}
+        yield* apply(A);
+        expect((yield* getState("A"))?.status).toEqual("created");
+      }
+      class A extends TestResource("A", {
+        replaceString: "test-string-changed",
+      }) {}
+      yield* fail(apply(A), {
+        delete: () => Effect.fail(new ResourceFailure()),
+      });
+      const AState = yield* getState<ReplacedResourceState>("A");
+      expect(AState?.status).toEqual("replaced");
+      expect(AState?.old).toMatchObject({
+        status: "created",
+        props: {
+          replaceString: "test-string",
+        },
+      });
+      yield* apply(A);
+      expect((yield* getState("A"))?.status).toEqual("created");
+    }).pipe(Effect.provide(MockLayers())),
+  );
+});

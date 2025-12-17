@@ -305,26 +305,17 @@ export const inMemory = (
 export const inMemoryService = (
   initialState: Record<StackId, Record<StageId, Record<ResourceId, ResourceState>>> = {},
 ) => {
-  const state = new Map<StackId, Map<StageId, Map<ResourceId, ResourceState>>>(
-    Object.entries(initialState).map(([stack, stages]) => [
-      stack,
-      new Map(
-        Object.entries(stages).map(([stage, resources]) => [
-          stage,
-          new Map(Object.entries(resources)),
-        ]),
-      ),
-    ]),
-  );
+  const state = initialState;
   return {
-    listStacks: () => Effect.succeed(Array.from(state.keys())),
+    listStacks: () => Effect.succeed(Array.from(Object.keys(state))),
     // oxlint-disable-next-line require-yield
-    listStages: (stack: string) => Effect.succeed(Array.from(state.get(stack)?.keys() ?? [])),
+    listStages: (stack: string) =>
+      Effect.succeed(Array.from(stack in state ? Object.keys(state[stack]) : [])),
     get: ({ stack, stage, resourceId }: { stack: string; stage: string; resourceId: string }) =>
-      Effect.succeed(state.get(stack)?.get(stage)?.get(resourceId)),
+      Effect.succeed(state[stack]?.[stage]?.[resourceId]),
     getReplacedResources: ({ stack, stage }: { stack: string; stage: string }) =>
       Effect.succeed(
-        Array.from(state.get(stack)?.get(stage)?.values() ?? []).filter(
+        Array.from(Object.values(state[stack]?.[stage] ?? {}) ?? []).filter(
           (s) => s.status === "replaced",
         ),
       ),
@@ -339,12 +330,14 @@ export const inMemoryService = (
       resourceId: string;
       value: V;
     }) => {
-      state.get(stack)?.get(stage)?.set(resourceId, value);
+      const stackState = (state[stack] ??= {});
+      const stageState = (stackState[stage] ??= {});
+      stageState[resourceId] = value;
       return Effect.succeed(value);
     },
     delete: ({ stack, stage, resourceId }: { stack: string; stage: string; resourceId: string }) =>
-      Effect.succeed(state.get(stack)?.get(stage)?.delete(resourceId)),
+      Effect.succeed(delete state[stack]?.[stage]?.[resourceId]),
     list: ({ stack, stage }: { stack: string; stage: string }) =>
-      Effect.succeed(Array.from(state.get(stack)?.get(stage)?.keys() ?? [])),
-  };
+      Effect.succeed(Array.from(Object.keys(state[stack]?.[stage] ?? {}) ?? [])),
+  } satisfies StateService;
 };
