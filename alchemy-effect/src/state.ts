@@ -97,9 +97,9 @@ export interface UpdatingReourceState extends BaseResourceState {
   props: Props;
   old: {
     /** The old resource properties that have been successfully applied. */
-    props: Record<string, any>;
+    props: Props;
     /** The old output properties that have been successfully applied. */
-    attr: Record<string, any>;
+    attr: Attr;
     // TODO(sam): do I need to track the old downstream edges?
     // downstream: string[];
   };
@@ -108,7 +108,7 @@ export interface UpdatingReourceState extends BaseResourceState {
 export interface UpdatedResourceState extends BaseResourceState {
   status: "updated";
   /** The new resource properties that are being (or have been) applied. */
-  props: Record<string, any>;
+  props: Props;
   /** The output attributes of the created resource */
   attr: Attr;
 }

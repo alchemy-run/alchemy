@@ -31,3 +31,10 @@ You can always add a `yield* destroy()` at the beginning of each test to clean u
 
 Never manually delete resources with the aws cli or api calls. Tests must be designed to be idempotent and self-healing.
 :::
+
+# Testing
+
+To test, use the following command:
+```
+bun vitest run ./alchemy-effect/test/<path>/<to>/<test>.test.ts
+```

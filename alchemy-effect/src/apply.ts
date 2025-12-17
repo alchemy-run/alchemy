@@ -405,19 +405,28 @@ const expandAndPivot = Effect.fnUntraced(function* (plan: IPlan, session: PlanSt
             );
             const news = (yield* Output.evaluate(node.props, upstream)) as Record<string, any>;
 
-            const checkpoint = (attr: any) =>
-              commit<UpdatingReourceState>({
-                status: "updating",
-                logicalId: id,
-                instanceId,
-                resourceType: node.resource.type,
-                props: news,
-                attr,
-                providerVersion: node.provider.version ?? 0,
-                bindings: node.bindings,
-                downstream: node.downstream,
-                old: node.state.status === "updating" ? node.state.old : node.state,
-              });
+            const checkpoint = (attr: any) => {
+              if (node.state.status === "replaced") {
+                return commit<ReplacedResourceState>({
+                  ...node.state,
+                  attr,
+                  props: news,
+                });
+              } else {
+                return commit<UpdatingReourceState>({
+                  status: "updating",
+                  logicalId: id,
+                  instanceId,
+                  resourceType: node.resource.type,
+                  props: news,
+                  attr,
+                  providerVersion: node.provider.version ?? 0,
+                  bindings: node.bindings,
+                  downstream: node.downstream,
+                  old: node.state.status === "updating" ? node.state.old : node.state,
+                });
+              }
+            };
 
             yield* checkpoint(node.state.attr);
 
@@ -435,12 +444,19 @@ const expandAndPivot = Effect.fnUntraced(function* (plan: IPlan, session: PlanSt
 
             yield* report("updating");
 
-            const attr = yield* node.provider.create({
+            const attr = yield* node.provider.update({
               id,
               news,
               instanceId,
               bindings: bindingOutputs,
               session: scopedSession,
+              olds:
+                node.state.status === "created" ||
+                node.state.status === "updated" ||
+                node.state.status === "replaced"
+                  ? node.state.props
+                  : node.state.old.props,
+              output: node.state.attr,
             });
 
             yield* checkpoint(attr);
@@ -458,20 +474,28 @@ const expandAndPivot = Effect.fnUntraced(function* (plan: IPlan, session: PlanSt
               },
             });
 
-            yield* commit<UpdatedResourceState>({
-              status: "updated",
-              logicalId: id,
-              instanceId,
-              resourceType: node.resource.type,
-              props: news,
-              attr,
-              bindings: node.bindings.map((binding, i) => ({
-                ...binding,
-                attr: bindingOutputs[i],
-              })),
-              providerVersion: node.provider.version ?? 0,
-              downstream: node.downstream,
-            });
+            if (node.state.status === "replaced") {
+              yield* commit<ReplacedResourceState>({
+                ...node.state,
+                attr,
+                props: news,
+              });
+            } else {
+              yield* commit<UpdatedResourceState>({
+                status: "updated",
+                logicalId: id,
+                instanceId,
+                resourceType: node.resource.type,
+                props: news,
+                attr,
+                bindings: node.bindings.map((binding, i) => ({
+                  ...binding,
+                  attr: bindingOutputs[i],
+                })),
+                providerVersion: node.provider.version ?? 0,
+                downstream: node.downstream,
+              });
+            }
 
             yield* report("updated");
 

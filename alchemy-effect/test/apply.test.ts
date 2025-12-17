@@ -272,4 +272,120 @@ describe("recover from intermediate failures", () => {
       expect((yield* getState("A"))?.status).toEqual("created");
     }).pipe(Effect.provide(MockLayers())),
   );
+
+  test(
+    "should continue updating after failed update when props unchanged",
+    Effect.gen(function* () {
+      {
+        class A extends TestResource("A", {
+          string: "test-string",
+        }) {}
+        yield* apply(A);
+        expect((yield* getState("A"))?.status).toEqual("created");
+      }
+      {
+        class A extends TestResource("A", {
+          string: "test-string-changed",
+        }) {}
+        yield* fail(apply(A), {
+          update: () => Effect.fail(new ResourceFailure()),
+        });
+        expect((yield* getState("A"))?.status).toEqual("updating");
+      }
+      class A extends TestResource("A", {
+        string: "test-string-changed",
+      }) {}
+      const stack = yield* apply(A);
+      expect((yield* getState("A"))?.status).toEqual("updated");
+      expect(stack.A.string).toEqual("test-string-changed");
+    }).pipe(Effect.provide(MockLayers())),
+  );
+
+  test(
+    "should continue updating after failed update when props have changed and are updatable",
+    Effect.gen(function* () {
+      {
+        class A extends TestResource("A", {
+          string: "test-string",
+        }) {}
+        yield* apply(A);
+        expect((yield* getState("A"))?.status).toEqual("created");
+      }
+      {
+        class A extends TestResource("A", {
+          string: "test-string-changed",
+        }) {}
+        yield* fail(apply(A), {
+          update: () => Effect.fail(new ResourceFailure()),
+        });
+        expect((yield* getState("A"))?.status).toEqual("updating");
+      }
+      class A extends TestResource("A", {
+        string: "test-string-changed-again",
+      }) {}
+      const stack = yield* apply(A);
+      expect((yield* getState("A"))?.status).toEqual("updated");
+      expect(stack.A.string).toEqual("test-string-changed-again");
+    }).pipe(Effect.provide(MockLayers())),
+  );
+
+  test(
+    "should replace after failed update when props have changed and are not updatable",
+    Effect.gen(function* () {
+      {
+        class A extends TestResource("A", {
+          string: "test-string",
+          replaceString: "original",
+        }) {}
+        yield* apply(A);
+        expect((yield* getState("A"))?.status).toEqual("created");
+      }
+      {
+        class A extends TestResource("A", {
+          string: "test-string-changed",
+          replaceString: "original",
+        }) {}
+        yield* fail(apply(A), {
+          update: () => Effect.fail(new ResourceFailure()),
+        });
+        expect((yield* getState("A"))?.status).toEqual("updating");
+      }
+      class A extends TestResource("A", {
+        string: "test-string-changed",
+        replaceString: "changed",
+      }) {}
+      const stack = yield* apply(A);
+      expect((yield* getState("A"))?.status).toEqual("created");
+      expect(stack.A.replaceString).toEqual("changed");
+    }).pipe(Effect.provide(MockLayers())),
+  );
+
+  test(
+    "should create resource after failed delete",
+    Effect.gen(function* () {
+      {
+        class A extends TestResource("A", {
+          string: "test-string",
+        }) {}
+        yield* apply(A);
+        expect((yield* getState("A"))?.status).toEqual("created");
+      }
+      {
+        class A extends TestResource("A", {
+          string: "test-string",
+        }) {}
+        yield* fail(destroy(), {
+          delete: () => Effect.fail(new ResourceFailure()),
+        });
+        expect((yield* getState("A"))?.status).toEqual("deleting");
+      }
+      // Now re-apply with the same props - should create the resource again
+      class A extends TestResource("A", {
+        string: "test-string",
+      }) {}
+      const stack = yield* apply(A);
+      expect((yield* getState("A"))?.status).toEqual("created");
+      expect(stack.A.string).toEqual("test-string");
+    }).pipe(Effect.provide(MockLayers())),
+  );
 });
