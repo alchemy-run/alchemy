@@ -249,6 +249,19 @@ const expandAndPivot = Effect.fnUntraced(function* (plan: IPlan, session: PlanSt
               status,
             });
 
+          if (node.action === "noop") {
+            return node.state.attr;
+          }
+
+          // resolve upstream dependencies before committing any changes to state
+          const upstream = Object.fromEntries(
+            yield* Effect.all(
+              Object.entries(Output.resolveUpstream(node.props)).map(([id]) =>
+                resolveUpstream(id).pipe(Effect.map(({ upstreamAttr }) => [id, upstreamAttr])),
+              ),
+            ),
+          );
+
           const instanceId = yield* Effect.gen(function* () {
             if (node.action === "create" && !node.state?.instanceId) {
               const instanceId = yield* generateInstanceId();
@@ -292,16 +305,7 @@ const expandAndPivot = Effect.fnUntraced(function* (plan: IPlan, session: PlanSt
             );
           });
 
-          if (node.action === "noop") {
-            return node.state.attr;
-          } else if (node.action === "create") {
-            const upstream = Object.fromEntries(
-              yield* Effect.all(
-                Object.entries(Output.resolveUpstream(node.props)).map(([id]) =>
-                  resolveUpstream(id).pipe(Effect.map(({ upstreamAttr }) => [id, upstreamAttr])),
-                ),
-              ),
-            );
+          if (node.action === "create") {
             const news = (yield* Output.evaluate(node.props, upstream)) as Record<string, any>;
 
             const checkpoint = (attr: any) =>

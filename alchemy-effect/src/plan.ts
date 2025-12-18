@@ -391,10 +391,10 @@ export const plan = <const Resources extends (Service | Resource)[]>(
           return upstream?.[expr.identifier];
         } else if (Output.isApplyExpr(expr)) {
           const upstream = yield* resolveOutput(expr.expr);
-          return Output.isOutput(upstream) ? expr : expr.f(upstream);
+          return Output.hasOutputs(upstream) ? expr : expr.f(upstream);
         } else if (Output.isEffectExpr(expr)) {
           const upstream = yield* resolveOutput(expr.expr);
-          return Output.isOutput(upstream) ? expr : yield* expr.f(upstream);
+          return Output.hasOutputs(upstream) ? expr : yield* expr.f(upstream);
         } else if (Output.isAllExpr(expr)) {
           return yield* Effect.all(expr.outs.map(resolveOutput));
         }
