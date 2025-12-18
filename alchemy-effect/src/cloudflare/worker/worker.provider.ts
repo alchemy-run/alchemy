@@ -36,7 +36,10 @@ export const workerProvider = () =>
       // pre-fetch subdomain in background
       yield* Effect.forkDaemon(getAccountSubdomain(accountId));
 
-      const setWorkerSubdomain = Effect.fnUntraced(function* (name: string, enabled: boolean) {
+      const setWorkerSubdomain = Effect.fnUntraced(function* (
+        name: string,
+        enabled: boolean,
+      ) {
         const subdomain = yield* api.workers.scripts.subdomain.create(name, {
           account_id: accountId,
           enabled,
@@ -47,16 +50,23 @@ export const workerProvider = () =>
       const createWorkerName = (id: string, name: string | undefined) =>
         name ?? `${app.name}-${id}-${app.stage}`.toLowerCase();
 
-      const prepareAssets = Effect.fnUntraced(function* (assets: WorkerProps["assets"]) {
+      const prepareAssets = Effect.fnUntraced(function* (
+        assets: WorkerProps["assets"],
+      ) {
         if (!assets) return undefined;
-        const result = yield* read(typeof assets === "string" ? { directory: assets } : assets);
+        const result = yield* read(
+          typeof assets === "string" ? { directory: assets } : assets,
+        );
         return {
           ...result,
           hash: yield* sha256(JSON.stringify(result)),
         };
       });
 
-      const prepareBundle = Effect.fnUntraced(function* (id: string, main: string) {
+      const prepareBundle = Effect.fnUntraced(function* (
+        id: string,
+        main: string,
+      ) {
         const outfile = path.join(dotAlchemy, "out", `${id}.js`);
         yield* build({
           entryPoints: [path.relative(process.cwd(), main)],
@@ -74,7 +84,9 @@ export const workerProvider = () =>
         };
       });
 
-      const prepareMetadata = Effect.fnUntraced(function* (props: WorkerProps<any>) {
+      const prepareMetadata = Effect.fnUntraced(function* (
+        props: WorkerProps<any>,
+      ) {
         const metadata: Workers.ScriptUpdateParams.Metadata = {
           assets: undefined,
           bindings: [],
@@ -147,7 +159,9 @@ export const workerProvider = () =>
         });
         if (!olds || news.subdomain?.enabled !== olds.subdomain?.enabled) {
           const enable = news.subdomain?.enabled !== false;
-          yield* session.note(`${enable ? "Enabling" : "Disabling"} workers.dev subdomain...`);
+          yield* session.note(
+            `${enable ? "Enabling" : "Disabling"} workers.dev subdomain...`,
+          );
           yield* setWorkerSubdomain(name, enable);
         }
         return {
@@ -186,7 +200,10 @@ export const workerProvider = () =>
             prepareAssets(news.assets),
             prepareBundle(id, news.main),
           ]).pipe(Effect.orDie);
-          if (assets?.hash !== output.hash.assets || bundle.hash !== output.hash.bundle) {
+          if (
+            assets?.hash !== output.hash.assets ||
+            bundle.hash !== output.hash.bundle
+          ) {
             return {
               action: "update",
               stables: output.name === workerName ? ["name"] : undefined,
@@ -201,11 +218,27 @@ export const workerProvider = () =>
             })
             .pipe(Effect.catchTag("NotFound", () => Effect.void));
           if (existing) {
-            return yield* Effect.fail(new Error(`Worker "${name}" already exists`));
+            return yield* Effect.fail(
+              new Error(`Worker "${name}" already exists`),
+            );
           }
-          return yield* putWorker(id, news, bindings, undefined, undefined, session);
+          return yield* putWorker(
+            id,
+            news,
+            bindings,
+            undefined,
+            undefined,
+            session,
+          );
         }),
-        update: Effect.fnUntraced(function* ({ id, olds, news, output, bindings, session }) {
+        update: Effect.fnUntraced(function* ({
+          id,
+          olds,
+          news,
+          output,
+          bindings,
+          session,
+        }) {
           return yield* putWorker(id, news, bindings, olds, output, session);
         }),
         delete: Effect.fnUntraced(function* ({ output }) {

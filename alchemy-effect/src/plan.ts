@@ -235,10 +235,25 @@ export type Plan<Resources extends Service | Resource> = Effect.Effect<
 >;
 
 export const plan = <const Resources extends (Service | Resource)[]>(
-  ...resources: Resources
+  ..._resources: Resources
 ): Plan<Instance<Resources[number]>> =>
   Effect.gen(function* () {
     const state = yield* State;
+
+    const findResources = (
+      resource: Service | Resource,
+      visited: Set<string>,
+    ): (Service | Resource)[] => {
+      if (visited.has(resource.id)) {
+        return [];
+      }
+      visited.add(resource.id);
+      const upstream = Object.values(Output.upstreamAny(resource.props)) as (Service | Resource)[];
+      return [resource, ...upstream, ...upstream.flatMap((r) => findResources(r, visited))];
+    };
+    const resources = _resources
+      .flatMap((r) => findResources(r, new Set()))
+      .filter((r, i, arr) => arr.findIndex((r2) => r2.id === r.id) === i);
 
     // TODO(sam): rename terminology to Stack
     const app = yield* App;
@@ -286,14 +301,24 @@ export const plan = <const Resources extends (Service | Resource)[]>(
               resourceId: resource.id,
             });
 
-            if (!oldState) {
+            if (!oldState || oldState.status === "creating") {
               return resourceExpr;
             }
 
             const diff = yield* provider.diff
               ? provider.diff({
                   id: resource.id,
-                  olds: oldState.props,
+                  olds:
+                    oldState.status === "created" ||
+                    oldState.status === "updated" ||
+                    oldState.status === "replaced"
+                      ? // if we're in a stable state, then just use the props
+                        oldState.props
+                      : // if we failed to update or replace, compare with the last known stable props
+                        oldState.status === "updating" || oldState.status === "replacing"
+                        ? oldState.old.props
+                        : // TODO(sam): it kinda doesn't make sense to diff with a "deleting" state
+                          oldState.props,
                   instanceId: oldState.instanceId,
                   news: props,
                   output: oldState.attr,
@@ -322,7 +347,17 @@ export const plan = <const Resources extends (Service | Resource)[]>(
             } else if (diff.action === "replace") {
               return resourceExpr;
             }
-            return oldState?.attr;
+            if (
+              oldState.status === "created" ||
+              oldState.status === "updated" ||
+              oldState.status === "replaced"
+            ) {
+              // we can safely return the attributes if we know they have stabilized
+              return oldState?.attr;
+            } else {
+              // we must assume the resource doesn't exist if it hasn't stabilized
+              return resourceExpr;
+            }
           }),
         ));
       });
@@ -441,6 +476,7 @@ export const plan = <const Resources extends (Service | Resource)[]>(
                     target: {
                       id: node.id,
                       props: node.props,
+                      // TODO(sam): pick the right ones based on old status
                       oldAttr: oldState?.attr,
                       oldProps: oldState?.props,
                     },
@@ -481,9 +517,9 @@ export const plan = <const Resources extends (Service | Resource)[]>(
                 Effect.map(
                   (diff) =>
                     diff ??
-                    ({ action: arePropsChanged(oldState, news) ? "update" : "noop" } as
-                      | UpdateDiff
-                      | NoopDiff),
+                    ({
+                      action: arePropsChanged(oldState, news) ? "update" : "noop",
+                    } as UpdateDiff | NoopDiff),
                 ),
               );
 

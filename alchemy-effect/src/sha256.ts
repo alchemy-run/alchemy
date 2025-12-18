@@ -16,5 +16,8 @@ const toArrayBuffer = (input: Input) => {
   if (typeof input === "string") {
     return new TextEncoder().encode(input);
   }
-  return input.buffer.slice(input.byteOffset, input.byteOffset + input.byteLength) as ArrayBuffer;
+  return input.buffer.slice(
+    input.byteOffset,
+    input.byteOffset + input.byteLength,
+  ) as ArrayBuffer;
 };

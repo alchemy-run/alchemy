@@ -97,7 +97,13 @@ export type FunctionAttr<Props extends FunctionProps> = {
 export interface Function<
   ID extends string = string,
   Props extends InputProps<FunctionProps> = InputProps<FunctionProps>,
-> extends Resource<"Test.Function", ID, Props, FunctionAttr<Input.Resolve<Props>>, Function> {}
+> extends Resource<
+    "Test.Function",
+    ID,
+    Props,
+    FunctionAttr<Input.Resolve<Props>>,
+    Function
+  > {}
 
 export const Function = Resource<{
   <const ID extends string, const Props extends InputProps<FunctionProps>>(
@@ -138,7 +144,9 @@ export type TestResourceProps = {
 
 export type TestResourceAttr<Props extends TestResourceProps> = {
   string: Props["string"] extends string ? Props["string"] : string;
-  stringArray: Props["stringArray"] extends string[] ? Props["stringArray"] : string[];
+  stringArray: Props["stringArray"] extends string[]
+    ? Props["stringArray"]
+    : string[];
   stableString: string;
   stableArray: string[];
   replaceString: Props["replaceString"];
@@ -148,12 +156,12 @@ export interface TestResource<
   ID extends string = string,
   Props extends InputProps<TestResourceProps> = InputProps<TestResourceProps>,
 > extends Resource<
-  "Test.TestResource",
-  ID,
-  Props,
-  TestResourceAttr<Input.Resolve<Props>>,
-  TestResource
-> {}
+    "Test.TestResource",
+    ID,
+    Props,
+    TestResourceAttr<Input.Resolve<Props>>,
+    TestResource
+  > {}
 
 export class TestResourceHooks extends Context.Tag("TestResourceHooks")<
   TestResourceHooks,
@@ -194,7 +202,9 @@ export const testResourceProvider = TestResource.provider.effect(
           : undefined;
       }),
       create: Effect.fn(function* ({ id, news }) {
-        const hooks = Option.getOrUndefined(yield* Effect.serviceOption(TestResourceHooks));
+        const hooks = Option.getOrUndefined(
+          yield* Effect.serviceOption(TestResourceHooks),
+        );
         if (hooks?.create) {
           yield* hooks.create(id, news);
         }
@@ -207,7 +217,9 @@ export const testResourceProvider = TestResource.provider.effect(
         };
       }),
       update: Effect.fn(function* ({ id, news, output }) {
-        const hooks = Option.getOrUndefined(yield* Effect.serviceOption(TestResourceHooks));
+        const hooks = Option.getOrUndefined(
+          yield* Effect.serviceOption(TestResourceHooks),
+        );
         if (hooks?.update) {
           yield* hooks.update(id, news);
         }
@@ -220,7 +232,9 @@ export const testResourceProvider = TestResource.provider.effect(
         };
       }),
       delete: Effect.fn(function* ({ id }) {
-        const hooks = Option.getOrUndefined(yield* Effect.serviceOption(TestResourceHooks));
+        const hooks = Option.getOrUndefined(
+          yield* Effect.serviceOption(TestResourceHooks),
+        );
         if (hooks?.delete) {
           yield* hooks.delete(id);
         }
@@ -238,4 +252,5 @@ export const TestLayers = Layer.mergeAll(
   testResourceProvider,
 );
 
-export const InMemoryTestLayers = () => Layer.mergeAll(TestLayers, State.inMemory());
+export const InMemoryTestLayers = () =>
+  Layer.mergeAll(TestLayers, State.inMemory());

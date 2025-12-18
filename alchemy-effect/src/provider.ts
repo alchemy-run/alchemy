@@ -7,18 +7,21 @@ import type { Resource } from "./resource.ts";
 import type { Runtime } from "./runtime.ts";
 import type { Service } from "./service.ts";
 
-export interface Provider<R extends Resource | Service> extends Context.TagClass<
-  Provider<R>,
-  R["type"],
-  ProviderService<any>
-  // TODO(sam): we are using any here because the R["type"] is enough and gaining access to the sub type (e.g. SQS.Queue)
-  // is currently not possible in the current approach
+export interface Provider<R extends Resource | Service>
+  extends Context.TagClass<
+    Provider<R>,
+    R["type"],
+    ProviderService<any>
+    // TODO(sam): we are using any here because the R["type"] is enough and gaining access to the sub type (e.g. SQS.Queue)
+    // is currently not possible in the current approach
 
-  // preferred:
-  // ProviderService<R>
-> {}
+    // preferred:
+    // ProviderService<R>
+  > {}
 
-type BindingData<Res extends Resource> = [Res] extends [Runtime] ? Res["binding"][] : any[];
+type BindingData<Res extends Resource> = [Res] extends [Runtime]
+  ? Res["binding"][]
+  : any[];
 
 type Props<Res extends Resource> = Input.ResolveOpaque<Res["props"]>;
 
@@ -96,11 +99,15 @@ export interface ProviderService<
   }): Effect.Effect<void, any, DeleteReq>;
 }
 
-export const getProviderByType = Effect.fnUntraced(function* (resourceType: string) {
+export const getProviderByType = Effect.fnUntraced(function* (
+  resourceType: string,
+) {
   const context = yield* Effect.context<never>();
   const provider: ProviderService = context.unsafeMap.get(resourceType);
   if (!provider) {
-    return yield* Effect.die(new Error(`Provider not found for ${resourceType}`));
+    return yield* Effect.die(
+      new Error(`Provider not found for ${resourceType}`),
+    );
   }
   return provider;
 });

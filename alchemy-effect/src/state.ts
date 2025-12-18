@@ -189,10 +189,16 @@ export interface StateService {
     stage: string;
     resourceId: string;
   }): Effect.Effect<void, StateStoreError, never>;
-  list(request: { stack: string; stage: string }): Effect.Effect<string[], StateStoreError, never>;
+  list(request: {
+    stack: string;
+    stage: string;
+  }): Effect.Effect<string[], StateStoreError, never>;
 }
 
-export class State extends Context.Tag("AWS::Lambda::State")<State, StateService>() {}
+export class State extends Context.Tag("AWS::Lambda::State")<
+  State,
+  StateService
+>() {}
 
 // TODO(sam): implement with SQLite3
 export const localFs = Layer.effect(
@@ -254,7 +260,11 @@ export const localFs = Layer.effect(
       getReplacedResources: Effect.fnUntraced(function* (request) {
         return (yield* Effect.all(
           (yield* state.list(request)).map((resourceId) =>
-            state.get({ stack: request.stack, stage: request.stage, resourceId }),
+            state.get({
+              stack: request.stack,
+              stage: request.stage,
+              resourceId,
+            }),
           ),
         )).filter((r) => r?.status === "replaced");
       }),
@@ -287,7 +297,9 @@ export const localFs = Layer.effect(
       list: (request) =>
         fs.readDirectory(stage(request)).pipe(
           recover,
-          Effect.map((files) => files?.map((file) => file.replace(/\.json$/, "")) ?? []),
+          Effect.map(
+            (files) => files?.map((file) => file.replace(/\.json$/, "")) ?? [],
+          ),
         ),
     };
     return state;
@@ -299,21 +311,47 @@ type StageId = string;
 type ResourceId = string;
 
 export const inMemory = (
-  initialState: Record<StackId, Record<StageId, Record<ResourceId, ResourceState>>> = {},
-) => Layer.succeed(State, inMemoryService(initialState)) as Layer.Layer<State, never, never>;
+  initialState: Record<
+    StackId,
+    Record<StageId, Record<ResourceId, ResourceState>>
+  > = {},
+) =>
+  Layer.succeed(State, inMemoryService(initialState)) as Layer.Layer<
+    State,
+    never,
+    never
+  >;
 
 export const inMemoryService = (
-  initialState: Record<StackId, Record<StageId, Record<ResourceId, ResourceState>>> = {},
+  initialState: Record<
+    StackId,
+    Record<StageId, Record<ResourceId, ResourceState>>
+  > = {},
 ) => {
   const state = initialState;
   return {
     listStacks: () => Effect.succeed(Array.from(Object.keys(state))),
     // oxlint-disable-next-line require-yield
     listStages: (stack: string) =>
-      Effect.succeed(Array.from(stack in state ? Object.keys(state[stack]) : [])),
-    get: ({ stack, stage, resourceId }: { stack: string; stage: string; resourceId: string }) =>
-      Effect.succeed(state[stack]?.[stage]?.[resourceId]),
-    getReplacedResources: ({ stack, stage }: { stack: string; stage: string }) =>
+      Effect.succeed(
+        Array.from(stack in state ? Object.keys(state[stack]) : []),
+      ),
+    get: ({
+      stack,
+      stage,
+      resourceId,
+    }: {
+      stack: string;
+      stage: string;
+      resourceId: string;
+    }) => Effect.succeed(state[stack]?.[stage]?.[resourceId]),
+    getReplacedResources: ({
+      stack,
+      stage,
+    }: {
+      stack: string;
+      stage: string;
+    }) =>
       Effect.succeed(
         Array.from(Object.values(state[stack]?.[stage] ?? {}) ?? []).filter(
           (s) => s.status === "replaced",
@@ -335,9 +373,18 @@ export const inMemoryService = (
       stageState[resourceId] = value;
       return Effect.succeed(value);
     },
-    delete: ({ stack, stage, resourceId }: { stack: string; stage: string; resourceId: string }) =>
-      Effect.succeed(delete state[stack]?.[stage]?.[resourceId]),
+    delete: ({
+      stack,
+      stage,
+      resourceId,
+    }: {
+      stack: string;
+      stage: string;
+      resourceId: string;
+    }) => Effect.succeed(delete state[stack]?.[stage]?.[resourceId]),
     list: ({ stack, stage }: { stack: string; stage: string }) =>
-      Effect.succeed(Array.from(Object.keys(state[stack]?.[stage] ?? {}) ?? [])),
+      Effect.succeed(
+        Array.from(Object.keys(state[stack]?.[stage] ?? {}) ?? []),
+      ),
   } satisfies StateService;
 };

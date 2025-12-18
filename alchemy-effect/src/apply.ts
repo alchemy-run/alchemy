@@ -389,7 +389,7 @@ const expandAndPivot = Effect.fnUntraced(function* (plan: IPlan, session: PlanSt
                 attr: bindingOutputs[i],
               })),
               providerVersion: node.provider.version ?? 0,
-              downstream: [],
+              downstream: node.downstream,
             });
 
             yield* report("created");
