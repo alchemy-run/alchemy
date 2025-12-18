@@ -244,12 +244,138 @@ export const testResourceProvider = TestResource.provider.effect(
   }),
 );
 
+// StaticStablesResource - A test resource that has static stables on the provider
+// This simulates resources like VPC, Subnet, etc. where certain properties (e.g., vpcId, subnetId)
+// are always stable and defined on the provider itself, not returned dynamically by diff()
+
+export type StaticStablesResourceProps = {
+  string?: string;
+  tags?: Record<string, string>;
+  replaceString?: string;
+};
+
+export type StaticStablesResourceAttr<
+  Props extends StaticStablesResourceProps,
+> = {
+  string: Props["string"] extends string ? Props["string"] : string;
+  tags: Props["tags"] extends Record<string, string>
+    ? Props["tags"]
+    : Record<string, string>;
+  stableId: string;
+  stableArn: string;
+  replaceString: Props["replaceString"];
+};
+
+export interface StaticStablesResource<
+  ID extends string = string,
+  Props extends
+    InputProps<StaticStablesResourceProps> = InputProps<StaticStablesResourceProps>,
+> extends Resource<
+    "Test.StaticStablesResource",
+    ID,
+    Props,
+    StaticStablesResourceAttr<Input.Resolve<Props>>,
+    StaticStablesResource
+  > {}
+
+export class StaticStablesResourceHooks extends Context.Tag(
+  "StaticStablesResourceHooks",
+)<
+  StaticStablesResourceHooks,
+  {
+    create?: (
+      id: string,
+      props: StaticStablesResourceProps,
+    ) => Effect.Effect<void, any>;
+    update?: (
+      id: string,
+      props: StaticStablesResourceProps,
+    ) => Effect.Effect<void, any>;
+    delete?: (id: string) => Effect.Effect<void, any>;
+  }
+>() {}
+
+export const StaticStablesResource = Resource<{
+  <
+    const ID extends string,
+    const Props extends InputProps<StaticStablesResourceProps>,
+  >(
+    id: ID,
+    props?: Props,
+  ): StaticStablesResource<ID, Props>;
+}>("Test.StaticStablesResource");
+
+export const staticStablesResourceProvider =
+  StaticStablesResource.provider.effect(
+    Effect.gen(function* () {
+      return {
+        // KEY DIFFERENCE: Static stables defined on the provider itself
+        // These are always stable regardless of what diff() returns
+        stables: ["stableId", "stableArn"],
+        diff: Effect.fn(function* ({ id, news, olds }) {
+          // Replace when replaceString changes
+          if (news.replaceString !== olds.replaceString) {
+            return { action: "replace" };
+          }
+          // For string changes, return update action
+          if (news.string !== olds.string) {
+            return { action: "update" };
+          }
+          // For tag-only changes, return undefined (no action)
+          // This simulates the VPC bug: tags changed, arePropsChanged returns true,
+          // but diff() returns undefined because provider doesn't explicitly handle tags
+          return undefined;
+        }),
+        create: Effect.fn(function* ({ id, news }) {
+          const hooks = Option.getOrUndefined(
+            yield* Effect.serviceOption(StaticStablesResourceHooks),
+          );
+          if (hooks?.create) {
+            yield* hooks.create(id, news);
+          }
+          return {
+            string: news.string ?? id,
+            tags: news.tags ?? {},
+            stableId: `stable-${id}`,
+            stableArn: `arn:test:resource:us-east-1:123456789:${id}`,
+            replaceString: news.replaceString,
+          };
+        }),
+        update: Effect.fn(function* ({ id, news, output }) {
+          const hooks = Option.getOrUndefined(
+            yield* Effect.serviceOption(StaticStablesResourceHooks),
+          );
+          if (hooks?.update) {
+            yield* hooks.update(id, news);
+          }
+          return {
+            string: news.string ?? id,
+            tags: news.tags ?? {},
+            stableId: output.stableId,
+            stableArn: output.stableArn,
+            replaceString: news.replaceString,
+          };
+        }),
+        delete: Effect.fn(function* ({ id }) {
+          const hooks = Option.getOrUndefined(
+            yield* Effect.serviceOption(StaticStablesResourceHooks),
+          );
+          if (hooks?.delete) {
+            yield* hooks.delete(id);
+          }
+          return;
+        }),
+      };
+    }),
+  );
+
 // Layers
 export const TestLayers = Layer.mergeAll(
   bucketProvider,
   queueProvider,
   functionProvider,
   testResourceProvider,
+  staticStablesResourceProvider,
 );
 
 export const InMemoryTestLayers = () =>

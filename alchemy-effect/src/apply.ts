@@ -3,7 +3,11 @@ import * as Effect from "effect/Effect";
 import type { Simplify } from "effect/Types";
 import { App } from "./app.ts";
 import type { AnyBinding, BindingService } from "./binding.ts";
-import { type PlanStatusSession, CLI, type ScopedPlanStatusSession } from "./cli/service.ts";
+import {
+  type PlanStatusSession,
+  CLI,
+  type ScopedPlanStatusSession,
+} from "./cli/service.ts";
 import type { ApplyStatus } from "./event.ts";
 import { generateInstanceId } from "./instance-id.ts";
 import * as Output from "./output.ts";
@@ -34,7 +38,11 @@ import {
 import { asEffect } from "./util.ts";
 import { getProviderByType } from "./provider.ts";
 
-export type ApplyEffect<P extends IPlan, Err = never, Req = never> = Effect.Effect<
+export type ApplyEffect<
+  P extends IPlan,
+  Err = never,
+  Req = never,
+> = Effect.Effect<
   {
     [k in keyof AppliedPlan<P>]: AppliedPlan<P>[k];
   },
@@ -43,19 +51,27 @@ export type ApplyEffect<P extends IPlan, Err = never, Req = never> = Effect.Effe
 >;
 
 export type AppliedPlan<P extends IPlan> = {
-  [id in keyof P["resources"]]: P["resources"][id] extends Delete<Resource> | undefined | never
+  [id in keyof P["resources"]]: P["resources"][id] extends
+    | Delete<Resource>
+    | undefined
+    | never
     ? never
     : Simplify<P["resources"][id]["resource"]["attr"]>;
 };
 
-export const apply = <const Resources extends (AnyService | AnyResource)[] = never>(
+export const apply = <
+  const Resources extends (AnyService | AnyResource)[] = never,
+>(
   ...resources: Resources
 ): ApplyEffect<
   DerivePlan<Instance<Resources[number]>>,
   never,
   State | Providers<Instance<Resources[number]>>
   // TODO(sam): don't cast to any
-> => plan(...resources).pipe(Effect.flatMap((p) => applyPlan(p as any as IPlan))) as any;
+> =>
+  plan(...resources).pipe(
+    Effect.flatMap((p) => applyPlan(p as any as IPlan)),
+  ) as any;
 
 export const applyPlan = <P extends IPlan>(plan: P) =>
   Effect.gen(function* () {
@@ -82,7 +98,10 @@ export const applyPlan = <P extends IPlan>(plan: P) =>
     };
   });
 
-const expandAndPivot = Effect.fnUntraced(function* (plan: IPlan, session: PlanStatusSession) {
+const expandAndPivot = Effect.fnUntraced(function* (
+  plan: IPlan,
+  session: PlanStatusSession,
+) {
   const state = yield* State;
   const app = yield* App;
 
@@ -193,7 +212,10 @@ const expandAndPivot = Effect.fnUntraced(function* (plan: IPlan, session: PlanSt
 
           const oldBindingOutput = bindingOutputs[i];
 
-          if (provider.postattach && (node.action === "attach" || node.action === "reattach")) {
+          if (
+            provider.postattach &&
+            (node.action === "attach" || node.action === "reattach")
+          ) {
             const bindingOutput = yield* asEffect(
               provider.postattach({
                 source: {
@@ -257,7 +279,9 @@ const expandAndPivot = Effect.fnUntraced(function* (plan: IPlan, session: PlanSt
           const upstream = Object.fromEntries(
             yield* Effect.all(
               Object.entries(Output.resolveUpstream(node.props)).map(([id]) =>
-                resolveUpstream(id).pipe(Effect.map(({ upstreamAttr }) => [id, upstreamAttr])),
+                resolveUpstream(id).pipe(
+                  Effect.map(({ upstreamAttr }) => [id, upstreamAttr]),
+                ),
               ),
             ),
           );
@@ -277,7 +301,10 @@ const expandAndPivot = Effect.fnUntraced(function* (plan: IPlan, session: PlanSt
               });
               return instanceId;
             } else if (node.action === "replace") {
-              if (node.state.status === "replaced" || node.state.status === "replacing") {
+              if (
+                node.state.status === "replaced" ||
+                node.state.status === "replacing"
+              ) {
                 // replace has already begun and we have the new instanceId, do not re-create it
                 return node.state.instanceId;
               }
@@ -306,7 +333,10 @@ const expandAndPivot = Effect.fnUntraced(function* (plan: IPlan, session: PlanSt
           });
 
           if (node.action === "create") {
-            const news = (yield* Output.evaluate(node.props, upstream)) as Record<string, any>;
+            const news = (yield* Output.evaluate(
+              node.props,
+              upstream,
+            )) as Record<string, any>;
 
             const checkpoint = (attr: any) =>
               commit<CreatingResourceState>({
@@ -403,11 +433,16 @@ const expandAndPivot = Effect.fnUntraced(function* (plan: IPlan, session: PlanSt
             const upstream = Object.fromEntries(
               yield* Effect.all(
                 Object.entries(Output.resolveUpstream(node.props)).map(([id]) =>
-                  resolveUpstream(id).pipe(Effect.map(({ upstreamAttr }) => [id, upstreamAttr])),
+                  resolveUpstream(id).pipe(
+                    Effect.map(({ upstreamAttr }) => [id, upstreamAttr]),
+                  ),
                 ),
               ),
             );
-            const news = (yield* Output.evaluate(node.props, upstream)) as Record<string, any>;
+            const news = (yield* Output.evaluate(
+              node.props,
+              upstream,
+            )) as Record<string, any>;
 
             const checkpoint = (attr: any) => {
               if (node.state.status === "replaced") {
@@ -427,7 +462,10 @@ const expandAndPivot = Effect.fnUntraced(function* (plan: IPlan, session: PlanSt
                   providerVersion: node.provider.version ?? 0,
                   bindings: node.bindings,
                   downstream: node.downstream,
-                  old: node.state.status === "updating" ? node.state.old : node.state,
+                  old:
+                    node.state.status === "updating"
+                      ? node.state.old
+                      : node.state,
                 });
               }
             };
@@ -531,13 +569,20 @@ const expandAndPivot = Effect.fnUntraced(function* (plan: IPlan, session: PlanSt
             const upstream = Object.fromEntries(
               yield* Effect.all(
                 Object.entries(Output.resolveUpstream(node.props)).map(([id]) =>
-                  resolveUpstream(id).pipe(Effect.map(({ upstreamAttr }) => [id, upstreamAttr])),
+                  resolveUpstream(id).pipe(
+                    Effect.map(({ upstreamAttr }) => [id, upstreamAttr]),
+                  ),
                 ),
               ),
             );
-            const news = (yield* Output.evaluate(node.props, upstream)) as Record<string, any>;
+            const news = (yield* Output.evaluate(
+              node.props,
+              upstream,
+            )) as Record<string, any>;
 
-            const checkpoint = <S extends ReplacingResourceState | ReplacedResourceState>({
+            const checkpoint = <
+              S extends ReplacingResourceState | ReplacedResourceState,
+            >({
               status,
               attr,
               bindings,
@@ -647,7 +692,10 @@ const expandAndPivot = Effect.fnUntraced(function* (plan: IPlan, session: PlanSt
   );
 });
 
-const collectGarbage = Effect.fnUntraced(function* (plan: IPlan, session: PlanStatusSession) {
+const collectGarbage = Effect.fnUntraced(function* (
+  plan: IPlan,
+  session: PlanStatusSession,
+) {
   const state = yield* State;
   const app = yield* App;
 
@@ -663,126 +711,134 @@ const collectGarbage = Effect.fnUntraced(function* (plan: IPlan, session: PlanSt
 
   const deletionGraph = {
     ...plan.deletions,
-    ...Object.fromEntries(replacedResources.map((replaced) => [replaced.logicalId, replaced])),
+    ...Object.fromEntries(
+      replacedResources.map((replaced) => [replaced.logicalId, replaced]),
+    ),
   };
 
   const deleteResource: (
     node: Delete<Resource> | ReplacedResourceState,
-  ) => Effect.Effect<void, StateStoreError, never> = Effect.fnUntraced(function* (
-    node: Delete<Resource> | ReplacedResourceState,
-  ) {
-    const isDeleteNode = (
-      node: Delete<Resource> | ReplacedResourceState,
-    ): node is Delete<Resource> => "action" in node;
+  ) => Effect.Effect<void, StateStoreError, never> = Effect.fnUntraced(
+    function* (node: Delete<Resource> | ReplacedResourceState) {
+      const isDeleteNode = (
+        node: Delete<Resource> | ReplacedResourceState,
+      ): node is Delete<Resource> => "action" in node;
 
-    const { logicalId, resourceType, instanceId, downstream, props, attr, provider } = isDeleteNode(
-      node,
-    )
-      ? {
-          logicalId: node.resource.id,
-          resourceType: node.resource.type,
-          instanceId: node.state.instanceId,
-          downstream: node.downstream,
-          props: node.state.props,
-          attr: node.state.attr,
-          provider: node.provider,
-        }
-      : {
-          logicalId: node.logicalId,
-          resourceType: node.old.resourceType,
-          instanceId: node.old.instanceId,
-          downstream: node.old.downstream,
-          props: node.old.props,
-          attr: node.old.attr,
-          provider: yield* getProviderByType(node.old.resourceType),
-        };
+      const {
+        logicalId,
+        resourceType,
+        instanceId,
+        downstream,
+        props,
+        attr,
+        provider,
+      } = isDeleteNode(node)
+        ? {
+            logicalId: node.resource.id,
+            resourceType: node.resource.type,
+            instanceId: node.state.instanceId,
+            downstream: node.downstream,
+            props: node.state.props,
+            attr: node.state.attr,
+            provider: node.provider,
+          }
+        : {
+            logicalId: node.logicalId,
+            resourceType: node.old.resourceType,
+            instanceId: node.old.instanceId,
+            downstream: node.old.downstream,
+            props: node.old.props,
+            attr: node.old.attr,
+            provider: yield* getProviderByType(node.old.resourceType),
+          };
 
-    const commit = <State extends ResourceState>(value: State) =>
-      state.set({
-        stack: app.name,
-        stage: app.stage,
-        resourceId: logicalId,
-        value,
-      });
-
-    const report = (status: ApplyStatus) =>
-      session.emit({
-        kind: "status-change",
-        id: logicalId,
-        type: resourceType,
-        status,
-      });
-
-    const scopedSession = {
-      ...session,
-      note: (note: string) =>
-        session.emit({
-          id: logicalId,
-          kind: "annotate",
-          message: note,
-        }),
-    } satisfies ScopedPlanStatusSession;
-
-    return yield* (deletions[logicalId] ??= yield* Effect.cached(
-      Effect.gen(function* () {
-        yield* Effect.all(
-          downstream.map((dep) =>
-            dep in deletionGraph
-              ? deleteResource(deletionGraph[dep] as Delete<Resource>)
-              : Effect.void,
-          ),
-        );
-
-        yield* report("deleting");
-
-        if (isDeleteNode(node)) {
-          yield* commit<DeletingResourceState>({
-            status: "deleting",
-            logicalId,
-            instanceId,
-            resourceType,
-            props,
-            attr,
-            downstream,
-            providerVersion: provider.version ?? 0,
-            bindings: node.bindings,
-          });
-        }
-
-        yield* provider.delete({
-          id: logicalId,
-          instanceId,
-          olds: props as never,
-          output: attr,
-          session: scopedSession,
-          bindings: [],
+      const commit = <State extends ResourceState>(value: State) =>
+        state.set({
+          stack: app.name,
+          stage: app.stage,
+          resourceId: logicalId,
+          value,
         });
 
-        if (isDeleteNode(node)) {
-          // TODO(sam): should we commit a tombstone instead? and then clean up tombstones after all deletions are complete?
-          yield* state.delete({
-            stack: app.name,
-            stage: app.stage,
-            resourceId: logicalId,
-          });
-          yield* report("deleted");
-        } else {
-          yield* commit<CreatedResourceState>({
-            status: "created",
-            logicalId,
+      const report = (status: ApplyStatus) =>
+        session.emit({
+          kind: "status-change",
+          id: logicalId,
+          type: resourceType,
+          status,
+        });
+
+      const scopedSession = {
+        ...session,
+        note: (note: string) =>
+          session.emit({
+            id: logicalId,
+            kind: "annotate",
+            message: note,
+          }),
+      } satisfies ScopedPlanStatusSession;
+
+      return yield* (deletions[logicalId] ??= yield* Effect.cached(
+        Effect.gen(function* () {
+          yield* Effect.all(
+            downstream.map((dep) =>
+              dep in deletionGraph
+                ? deleteResource(deletionGraph[dep] as Delete<Resource>)
+                : Effect.void,
+            ),
+          );
+
+          yield* report("deleting");
+
+          if (isDeleteNode(node)) {
+            yield* commit<DeletingResourceState>({
+              status: "deleting",
+              logicalId,
+              instanceId,
+              resourceType,
+              props,
+              attr,
+              downstream,
+              providerVersion: provider.version ?? 0,
+              bindings: node.bindings,
+            });
+          }
+
+          yield* provider.delete({
+            id: logicalId,
             instanceId,
-            resourceType,
-            props: node.props,
-            attr: node.attr,
-            providerVersion: provider.version ?? 0,
-            downstream: node.downstream,
-            bindings: node.bindings,
+            olds: props as never,
+            output: attr,
+            session: scopedSession,
+            bindings: [],
           });
-          yield* report("replaced");
-        }
-      }),
-    ));
-  });
+
+          if (isDeleteNode(node)) {
+            // TODO(sam): should we commit a tombstone instead? and then clean up tombstones after all deletions are complete?
+            yield* state.delete({
+              stack: app.name,
+              stage: app.stage,
+              resourceId: logicalId,
+            });
+            yield* report("deleted");
+          } else {
+            yield* commit<CreatedResourceState>({
+              status: "created",
+              logicalId,
+              instanceId,
+              resourceType,
+              props: node.props,
+              attr: node.attr,
+              providerVersion: provider.version ?? 0,
+              downstream: node.downstream,
+              bindings: node.bindings,
+            });
+            yield* report("replaced");
+          }
+        }),
+      ));
+    },
+  );
 
   yield* Effect.all(
     Object.values(deletionGraph)

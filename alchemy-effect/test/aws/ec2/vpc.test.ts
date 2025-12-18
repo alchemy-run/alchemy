@@ -16,7 +16,9 @@ import { Data, LogLevel, Schedule } from "effect";
 import * as Effect from "effect/Effect";
 import * as Logger from "effect/Logger";
 
-const logLevel = Logger.withMinimumLogLevel(process.env.DEBUG ? LogLevel.Debug : LogLevel.Info);
+const logLevel = Logger.withMinimumLogLevel(
+  process.env.DEBUG ? LogLevel.Debug : LogLevel.Info,
+);
 
 const apply = (<const Resources extends (AnyService | AnyResource)[] = never>(
   ...resources: Resources
@@ -38,7 +40,9 @@ test(
 
     // Get available AZs for multi-AZ stages
     const azResult = yield* ec2.describeAvailabilityZones({});
-    const availableAzs = azResult.AvailabilityZones?.filter((az) => az.State === "available") ?? [];
+    const availableAzs =
+      azResult.AvailabilityZones?.filter((az) => az.State === "available") ??
+      [];
     const az1 = availableAzs[0]?.ZoneName!;
     const az2 = availableAzs[1]?.ZoneName!;
 
@@ -99,10 +103,13 @@ test(
         gatewayId: Output.of(InternetGateway).internetGatewayId,
       }) {}
 
-      class PublicSubnet1Association extends EC2.RouteTableAssociation("PublicSubnet1Association", {
-        routeTableId: Output.of(PublicRouteTable).routeTableId,
-        subnetId: Output.of(PublicSubnet1).subnetId,
-      }) {}
+      class PublicSubnet1Association extends EC2.RouteTableAssociation(
+        "PublicSubnet1Association",
+        {
+          routeTableId: Output.of(PublicRouteTable).routeTableId,
+          subnetId: Output.of(PublicSubnet1).subnetId,
+        },
+      ) {}
 
       const stack = yield* apply(
         MyVpc,
@@ -124,10 +131,14 @@ test(
 
       // Verify route to IGW
       expect(stack.InternetRoute.state).toEqual("active");
-      expect(stack.InternetRoute.gatewayId).toEqual(stack.InternetGateway.internetGatewayId);
+      expect(stack.InternetRoute.gatewayId).toEqual(
+        stack.InternetGateway.internetGatewayId,
+      );
 
       // Verify association
-      expect(stack.PublicSubnet1Association.associationId).toMatch(/^rtbassoc-/);
+      expect(stack.PublicSubnet1Association.associationId).toMatch(
+        /^rtbassoc-/,
+      );
     }
 
     // =========================================================================
@@ -174,10 +185,13 @@ test(
         gatewayId: Output.of(InternetGateway).internetGatewayId,
       }) {}
 
-      class PublicSubnet1Association extends EC2.RouteTableAssociation("PublicSubnet1Association", {
-        routeTableId: Output.of(PublicRouteTable).routeTableId,
-        subnetId: Output.of(PublicSubnet1).subnetId,
-      }) {}
+      class PublicSubnet1Association extends EC2.RouteTableAssociation(
+        "PublicSubnet1Association",
+        {
+          routeTableId: Output.of(PublicRouteTable).routeTableId,
+          subnetId: Output.of(PublicSubnet1).subnetId,
+        },
+      ) {}
 
       class PrivateSubnet1Association extends EC2.RouteTableAssociation(
         "PrivateSubnet1Association",
@@ -274,10 +288,13 @@ test(
       }) {}
 
       // AZ1 associations
-      class PublicSubnet1Association extends EC2.RouteTableAssociation("PublicSubnet1Association", {
-        routeTableId: Output.of(PublicRouteTable).routeTableId,
-        subnetId: Output.of(PublicSubnet1).subnetId,
-      }) {}
+      class PublicSubnet1Association extends EC2.RouteTableAssociation(
+        "PublicSubnet1Association",
+        {
+          routeTableId: Output.of(PublicRouteTable).routeTableId,
+          subnetId: Output.of(PublicSubnet1).subnetId,
+        },
+      ) {}
 
       class PrivateSubnet1Association extends EC2.RouteTableAssociation(
         "PrivateSubnet1Association",
@@ -288,10 +305,13 @@ test(
       ) {}
 
       // AZ2 associations (share route tables)
-      class PublicSubnet2Association extends EC2.RouteTableAssociation("PublicSubnet2Association", {
-        routeTableId: Output.of(PublicRouteTable).routeTableId,
-        subnetId: Output.of(PublicSubnet2).subnetId,
-      }) {}
+      class PublicSubnet2Association extends EC2.RouteTableAssociation(
+        "PublicSubnet2Association",
+        {
+          routeTableId: Output.of(PublicRouteTable).routeTableId,
+          subnetId: Output.of(PublicSubnet2).subnetId,
+        },
+      ) {}
 
       class PrivateSubnet2Association extends EC2.RouteTableAssociation(
         "PrivateSubnet2Association",
@@ -324,10 +344,18 @@ test(
       expect(stack.PrivateSubnet2.availabilityZone).toEqual(az2);
 
       // Verify all 4 associations exist
-      expect(stack.PublicSubnet1Association.associationId).toMatch(/^rtbassoc-/);
-      expect(stack.PublicSubnet2Association.associationId).toMatch(/^rtbassoc-/);
-      expect(stack.PrivateSubnet1Association.associationId).toMatch(/^rtbassoc-/);
-      expect(stack.PrivateSubnet2Association.associationId).toMatch(/^rtbassoc-/);
+      expect(stack.PublicSubnet1Association.associationId).toMatch(
+        /^rtbassoc-/,
+      );
+      expect(stack.PublicSubnet2Association.associationId).toMatch(
+        /^rtbassoc-/,
+      );
+      expect(stack.PrivateSubnet1Association.associationId).toMatch(
+        /^rtbassoc-/,
+      );
+      expect(stack.PrivateSubnet2Association.associationId).toMatch(
+        /^rtbassoc-/,
+      );
 
       // Verify both public subnets share the same route table
       expect(stack.PublicSubnet1Association.routeTableId).toEqual(
@@ -412,10 +440,13 @@ test(
         gatewayId: Output.of(InternetGateway).internetGatewayId,
       }) {}
 
-      class PublicSubnet1Association extends EC2.RouteTableAssociation("PublicSubnet1Association", {
-        routeTableId: Output.of(PublicRouteTable).routeTableId,
-        subnetId: Output.of(PublicSubnet1).subnetId,
-      }) {}
+      class PublicSubnet1Association extends EC2.RouteTableAssociation(
+        "PublicSubnet1Association",
+        {
+          routeTableId: Output.of(PublicRouteTable).routeTableId,
+          subnetId: Output.of(PublicSubnet1).subnetId,
+        },
+      ) {}
 
       class PrivateSubnet1Association extends EC2.RouteTableAssociation(
         "PrivateSubnet1Association",
@@ -425,10 +456,13 @@ test(
         },
       ) {}
 
-      class PublicSubnet2Association extends EC2.RouteTableAssociation("PublicSubnet2Association", {
-        routeTableId: Output.of(PublicRouteTable).routeTableId,
-        subnetId: Output.of(PublicSubnet2).subnetId,
-      }) {}
+      class PublicSubnet2Association extends EC2.RouteTableAssociation(
+        "PublicSubnet2Association",
+        {
+          routeTableId: Output.of(PublicRouteTable).routeTableId,
+          subnetId: Output.of(PublicSubnet2).subnetId,
+        },
+      ) {}
 
       class PrivateSubnet2Association extends EC2.RouteTableAssociation(
         "PrivateSubnet2Association",
@@ -542,10 +576,13 @@ test(
         gatewayId: Output.of(InternetGateway).internetGatewayId,
       }) {}
 
-      class PublicSubnet1Association extends EC2.RouteTableAssociation("PublicSubnet1Association", {
-        routeTableId: Output.of(PublicRouteTable).routeTableId,
-        subnetId: Output.of(PublicSubnet1).subnetId,
-      }) {}
+      class PublicSubnet1Association extends EC2.RouteTableAssociation(
+        "PublicSubnet1Association",
+        {
+          routeTableId: Output.of(PublicRouteTable).routeTableId,
+          subnetId: Output.of(PublicSubnet1).subnetId,
+        },
+      ) {}
 
       class PrivateSubnet1Association extends EC2.RouteTableAssociation(
         "PrivateSubnet1Association",
@@ -556,10 +593,13 @@ test(
       ) {}
 
       // CHANGED: PublicSubnet2 now uses PublicRouteTable2
-      class PublicSubnet2Association extends EC2.RouteTableAssociation("PublicSubnet2Association", {
-        routeTableId: Output.of(PublicRouteTable2).routeTableId,
-        subnetId: Output.of(PublicSubnet2).subnetId,
-      }) {}
+      class PublicSubnet2Association extends EC2.RouteTableAssociation(
+        "PublicSubnet2Association",
+        {
+          routeTableId: Output.of(PublicRouteTable2).routeTableId,
+          subnetId: Output.of(PublicSubnet2).subnetId,
+        },
+      ) {}
 
       class PrivateSubnet2Association extends EC2.RouteTableAssociation(
         "PrivateSubnet2Association",
@@ -653,10 +693,13 @@ test(
         gatewayId: Output.of(InternetGateway).internetGatewayId,
       }) {}
 
-      class PublicSubnet1Association extends EC2.RouteTableAssociation("PublicSubnet1Association", {
-        routeTableId: Output.of(PublicRouteTable).routeTableId,
-        subnetId: Output.of(PublicSubnet1).subnetId,
-      }) {}
+      class PublicSubnet1Association extends EC2.RouteTableAssociation(
+        "PublicSubnet1Association",
+        {
+          routeTableId: Output.of(PublicRouteTable).routeTableId,
+          subnetId: Output.of(PublicSubnet1).subnetId,
+        },
+      ) {}
 
       class PrivateSubnet1Association extends EC2.RouteTableAssociation(
         "PrivateSubnet1Association",
@@ -732,7 +775,10 @@ class TagsNotPropagated extends Data.TaggedError("TagsNotPropagated")<{
 /**
  * Asserts that a VPC has the expected tags, retrying until eventually consistent.
  */
-const assertVpcTags = Effect.fn(function* (vpcId: string, expectedTags: Record<string, string>) {
+const assertVpcTags = Effect.fn(function* (
+  vpcId: string,
+  expectedTags: Record<string, string>,
+) {
   const ec2 = yield* EC2.EC2Client;
 
   yield* ec2.describeVpcs({ VpcIds: [vpcId] }).pipe(
@@ -744,15 +790,21 @@ const assertVpcTags = Effect.fn(function* (vpcId: string, expectedTags: Record<s
         actual[key] = tags.find((t) => t.Key === key)?.Value;
       }
 
-      const allMatch = Object.entries(expectedTags).every(([key, value]) => actual[key] === value);
+      const allMatch = Object.entries(expectedTags).every(
+        ([key, value]) => actual[key] === value,
+      );
 
       return allMatch
         ? Effect.succeed(result)
-        : Effect.fail(new TagsNotPropagated({ expected: expectedTags, actual }));
+        : Effect.fail(
+            new TagsNotPropagated({ expected: expectedTags, actual }),
+          );
     }),
     Effect.retry({
       while: (e) => e._tag === "TagsNotPropagated",
-      schedule: Schedule.exponential(100).pipe(Schedule.intersect(Schedule.recurs(10))),
+      schedule: Schedule.exponential(100).pipe(
+        Schedule.intersect(Schedule.recurs(10)),
+      ),
     }),
   );
 });

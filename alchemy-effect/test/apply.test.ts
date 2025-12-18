@@ -13,10 +13,13 @@ import { test } from "@/test";
 import { expect, describe } from "@effect/vitest";
 import {
   type TestResourceProps,
+  type StaticStablesResourceProps,
   InMemoryTestLayers,
   TestLayers,
   TestResource,
   TestResourceHooks,
+  StaticStablesResource,
+  StaticStablesResourceHooks,
 } from "./test.resources.ts";
 import { Data, Layer } from "effect";
 import { App } from "@/app";
@@ -48,7 +51,8 @@ export class ResourceFailure extends Data.TaggedError("ResourceFailure")<{
   }
 }
 
-const MockLayers = () => Layer.mergeAll(InMemoryTestLayers(), Layer.succeed(App, mockApp));
+const MockLayers = () =>
+  Layer.mergeAll(InMemoryTestLayers(), Layer.succeed(App, mockApp));
 
 const fail = <Err, Req>(
   test: Effect.Effect<void, Err, Req>,
@@ -83,7 +87,9 @@ const failOn = (
   delete?: (id: string) => Effect.Effect<void, any>;
 } => ({
   [hook]: (id: string) =>
-    id === resourceId ? Effect.fail(new ResourceFailure()) : Effect.succeed(undefined),
+    id === resourceId
+      ? Effect.fail(new ResourceFailure())
+      : Effect.succeed(undefined),
 });
 
 // Helper to fail on multiple resource IDs for different hooks
@@ -94,17 +100,29 @@ const failOnMultiple = (
   update?: (id: string, props: TestResourceProps) => Effect.Effect<void, any>;
   delete?: (id: string) => Effect.Effect<void, any>;
 } => {
-  const createFailures = failures.filter((f) => f.hook === "create").map((f) => f.id);
-  const updateFailures = failures.filter((f) => f.hook === "update").map((f) => f.id);
-  const deleteFailures = failures.filter((f) => f.hook === "delete").map((f) => f.id);
+  const createFailures = failures
+    .filter((f) => f.hook === "create")
+    .map((f) => f.id);
+  const updateFailures = failures
+    .filter((f) => f.hook === "update")
+    .map((f) => f.id);
+  const deleteFailures = failures
+    .filter((f) => f.hook === "delete")
+    .map((f) => f.id);
 
   return {
     create: (id: string) =>
-      createFailures.includes(id) ? Effect.fail(new ResourceFailure()) : Effect.succeed(undefined),
+      createFailures.includes(id)
+        ? Effect.fail(new ResourceFailure())
+        : Effect.succeed(undefined),
     update: (id: string) =>
-      updateFailures.includes(id) ? Effect.fail(new ResourceFailure()) : Effect.succeed(undefined),
+      updateFailures.includes(id)
+        ? Effect.fail(new ResourceFailure())
+        : Effect.succeed(undefined),
     delete: (id: string) =>
-      deleteFailures.includes(id) ? Effect.fail(new ResourceFailure()) : Effect.succeed(undefined),
+      deleteFailures.includes(id)
+        ? Effect.fail(new ResourceFailure())
+        : Effect.succeed(undefined),
   };
 };
 
@@ -206,7 +224,9 @@ describe("basic operations", () => {
 
       {
         class B extends TestResource("B", {
-          string: Output.of(A).stringArray[0].apply((string) => string.toUpperCase()),
+          string: Output.of(A).stringArray[0].apply((string) =>
+            string.toUpperCase(),
+          ),
         }) {}
 
         const stack = yield* apply(B);
@@ -232,7 +252,10 @@ describe("basic operations", () => {
         }) {}
 
         const stack = yield* apply(B);
-        expect(stack.B.stringArray).toEqual(["test-string-array", "test-string-array"]);
+        expect(stack.B.stringArray).toEqual([
+          "test-string-array",
+          "test-string-array",
+        ]);
       }
     }).pipe(Effect.provide(TestLayers)),
   );
@@ -577,7 +600,9 @@ describe("from replacing state", () => {
       const result = yield* apply(A).pipe(Effect.either);
       expect(result._tag).toEqual("Left");
       if (result._tag === "Left") {
-        expect(result.left).toBeInstanceOf(CannotReplacePartiallyReplacedResource);
+        expect(result.left).toBeInstanceOf(
+          CannotReplacePartiallyReplacedResource,
+        );
       }
     }).pipe(Effect.provide(MockLayers())),
   );
@@ -678,7 +703,9 @@ describe("from replaced state", () => {
       const result = yield* apply(A).pipe(Effect.either);
       expect(result._tag).toEqual("Left");
       if (result._tag === "Left") {
-        expect(result.left).toBeInstanceOf(CannotReplacePartiallyReplacedResource);
+        expect(result.left).toBeInstanceOf(
+          CannotReplacePartiallyReplacedResource,
+        );
       }
     }).pipe(Effect.provide(MockLayers())),
   );
@@ -739,7 +766,9 @@ describe("from deleting state", () => {
       const result = yield* apply(A).pipe(Effect.either);
       expect(result._tag).toEqual("Left");
       if (result._tag === "Left") {
-        expect(result.left).toBeInstanceOf(CannotReplacePartiallyReplacedResource);
+        expect(result.left).toBeInstanceOf(
+          CannotReplacePartiallyReplacedResource,
+        );
       }
     }).pipe(Effect.provide(MockLayers())),
   );
@@ -957,7 +986,9 @@ describe("dependent resources (A -> B)", () => {
         // A replacement fails (during create of new A) - B should not start
         yield* fail(apply(B), failOn("A", "create"));
 
-        expect((yield* getState<ReplacingResourceState>("A"))?.status).toEqual("replacing");
+        expect((yield* getState<ReplacingResourceState>("A"))?.status).toEqual(
+          "replacing",
+        );
         expect((yield* getState("B"))?.status).toEqual("created");
 
         // Recovery: re-apply should complete A replacement and update B
@@ -1031,7 +1062,9 @@ describe("dependent resources (A -> B)", () => {
 
         // A should be in replaced state (delete of old A failed)
         // B should have been updated successfully
-        expect((yield* getState<ReplacedResourceState>("A"))?.status).toEqual("replaced");
+        expect((yield* getState<ReplacedResourceState>("A"))?.status).toEqual(
+          "replaced",
+        );
         expect((yield* getState("B"))?.status).toEqual("updated");
 
         // Recovery: re-apply should clean up old A
@@ -1145,13 +1178,19 @@ describe("three-level dependency chain (A -> B -> C)", () => {
       "replace A propagates through B to C",
       Effect.gen(function* () {
         {
-          class A extends TestResource("A", { string: "a-value", replaceString: "original" }) {}
+          class A extends TestResource("A", {
+            string: "a-value",
+            replaceString: "original",
+          }) {}
           class B extends TestResource("B", { string: Output.of(A).string }) {}
           class C extends TestResource("C", { string: Output.of(B).string }) {}
           yield* apply(C);
         }
 
-        class A extends TestResource("A", { string: "a-value-new", replaceString: "changed" }) {}
+        class A extends TestResource("A", {
+          string: "a-value-new",
+          replaceString: "changed",
+        }) {}
         class B extends TestResource("B", { string: Output.of(A).string }) {}
         class C extends TestResource("C", { string: Output.of(B).string }) {}
 
@@ -1344,19 +1383,27 @@ describe("three-level dependency chain (A -> B -> C)", () => {
       "A replace fails - B and C remain stable",
       Effect.gen(function* () {
         {
-          class A extends TestResource("A", { string: "a-value", replaceString: "original" }) {}
+          class A extends TestResource("A", {
+            string: "a-value",
+            replaceString: "original",
+          }) {}
           class B extends TestResource("B", { string: Output.of(A).string }) {}
           class C extends TestResource("C", { string: Output.of(B).string }) {}
           yield* apply(C);
         }
 
-        class A extends TestResource("A", { string: "a-value-new", replaceString: "changed" }) {}
+        class A extends TestResource("A", {
+          string: "a-value-new",
+          replaceString: "changed",
+        }) {}
         class B extends TestResource("B", { string: Output.of(A).string }) {}
         class C extends TestResource("C", { string: Output.of(B).string }) {}
 
         yield* fail(apply(C), failOn("A", "create"));
 
-        expect((yield* getState<ReplacingResourceState>("A"))?.status).toEqual("replacing");
+        expect((yield* getState<ReplacingResourceState>("A"))?.status).toEqual(
+          "replacing",
+        );
         expect((yield* getState("B"))?.status).toEqual("created");
         expect((yield* getState("C"))?.status).toEqual("created");
 
@@ -1373,19 +1420,27 @@ describe("three-level dependency chain (A -> B -> C)", () => {
       "A replaced, B update fails - C remains stable",
       Effect.gen(function* () {
         {
-          class A extends TestResource("A", { string: "a-value", replaceString: "original" }) {}
+          class A extends TestResource("A", {
+            string: "a-value",
+            replaceString: "original",
+          }) {}
           class B extends TestResource("B", { string: Output.of(A).string }) {}
           class C extends TestResource("C", { string: Output.of(B).string }) {}
           yield* apply(C);
         }
 
-        class A extends TestResource("A", { string: "a-value-new", replaceString: "changed" }) {}
+        class A extends TestResource("A", {
+          string: "a-value-new",
+          replaceString: "changed",
+        }) {}
         class B extends TestResource("B", { string: Output.of(A).string }) {}
         class C extends TestResource("C", { string: Output.of(B).string }) {}
 
         yield* fail(apply(C), failOn("B", "update"));
 
-        expect((yield* getState<ReplacedResourceState>("A"))?.status).toEqual("replaced");
+        expect((yield* getState<ReplacedResourceState>("A"))?.status).toEqual(
+          "replaced",
+        );
         expect((yield* getState("B"))?.status).toEqual("updating");
         expect((yield* getState("C"))?.status).toEqual("created");
 
@@ -1402,19 +1457,27 @@ describe("three-level dependency chain (A -> B -> C)", () => {
       "A replaced, B updated, C update fails",
       Effect.gen(function* () {
         {
-          class A extends TestResource("A", { string: "a-value", replaceString: "original" }) {}
+          class A extends TestResource("A", {
+            string: "a-value",
+            replaceString: "original",
+          }) {}
           class B extends TestResource("B", { string: Output.of(A).string }) {}
           class C extends TestResource("C", { string: Output.of(B).string }) {}
           yield* apply(C);
         }
 
-        class A extends TestResource("A", { string: "a-value-new", replaceString: "changed" }) {}
+        class A extends TestResource("A", {
+          string: "a-value-new",
+          replaceString: "changed",
+        }) {}
         class B extends TestResource("B", { string: Output.of(A).string }) {}
         class C extends TestResource("C", { string: Output.of(B).string }) {}
 
         yield* fail(apply(C), failOn("C", "update"));
 
-        expect((yield* getState<ReplacedResourceState>("A"))?.status).toEqual("replaced");
+        expect((yield* getState<ReplacedResourceState>("A"))?.status).toEqual(
+          "replaced",
+        );
         expect((yield* getState("B"))?.status).toEqual("updated");
         expect((yield* getState("C"))?.status).toEqual("updating");
 
@@ -1431,19 +1494,27 @@ describe("three-level dependency chain (A -> B -> C)", () => {
       "A replaced, B and C updated, old A delete fails - recovery cleans up",
       Effect.gen(function* () {
         {
-          class A extends TestResource("A", { string: "a-value", replaceString: "original" }) {}
+          class A extends TestResource("A", {
+            string: "a-value",
+            replaceString: "original",
+          }) {}
           class B extends TestResource("B", { string: Output.of(A).string }) {}
           class C extends TestResource("C", { string: Output.of(B).string }) {}
           yield* apply(C);
         }
 
-        class A extends TestResource("A", { string: "a-value-new", replaceString: "changed" }) {}
+        class A extends TestResource("A", {
+          string: "a-value-new",
+          replaceString: "changed",
+        }) {}
         class B extends TestResource("B", { string: Output.of(A).string }) {}
         class C extends TestResource("C", { string: Output.of(B).string }) {}
 
         yield* fail(apply(C), failOn("A", "delete"));
 
-        expect((yield* getState<ReplacedResourceState>("A"))?.status).toEqual("replaced");
+        expect((yield* getState<ReplacedResourceState>("A"))?.status).toEqual(
+          "replaced",
+        );
         expect((yield* getState("B"))?.status).toEqual("updated");
         expect((yield* getState("C"))?.status).toEqual("updated");
 
@@ -1844,7 +1915,9 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
         expect((yield* getState("B"))?.status).toEqual("updating");
         // C might have been updated since it doesn't depend on B
         const cState = yield* getState("C");
-        expect(cState?.status === "created" || cState?.status === "updated").toBe(true);
+        expect(
+          cState?.status === "created" || cState?.status === "updated",
+        ).toBe(true);
         expect((yield* getState("D"))?.status).toEqual("created");
 
         // Recovery
@@ -2030,7 +2103,9 @@ describe("independent resources (A, B with no dependencies)", () => {
         expect((yield* getState("A"))?.status).toEqual("updating");
         // B might have been updated
         const bState = yield* getState("B");
-        expect(bState?.status === "created" || bState?.status === "updated").toBe(true);
+        expect(
+          bState?.status === "created" || bState?.status === "updated",
+        ).toBe(true);
 
         // Recovery
         const stack = yield* apply(A, B);
@@ -2069,7 +2144,9 @@ describe("independent resources (A, B with no dependencies)", () => {
         expect(AState?.status).toBeOneOf(["creating", undefined]);
         expect(BState?.status).toBeOneOf(["created", "updating"]);
         // at least one of A or B should have started their failing operation
-        expect(AState?.status === "creating" || BState?.status === "updating").toBe(true);
+        expect(
+          AState?.status === "creating" || BState?.status === "updating",
+        ).toBe(true);
 
         // Recovery
         const stack = yield* apply(A, B2);
@@ -2106,7 +2183,9 @@ describe("independent resources (A, B with no dependencies)", () => {
         expect(AState?.status).toBeOneOf(["created", "replacing"]);
         expect(BState?.status).toBeOneOf(["created", "deleting"]);
         // at least one of A or B should have started their failing operation
-        expect(AState?.status === "replacing" || BState?.status === "deleting").toBe(true);
+        expect(
+          AState?.status === "replacing" || BState?.status === "deleting",
+        ).toBe(true);
 
         // Recovery - complete the replace and delete
         yield* apply(A2);
@@ -2157,7 +2236,9 @@ describe("multiple resources replacing", () => {
 
       yield* fail(apply(A, B), failOn("A", "create"));
 
-      expect((yield* getState<ReplacingResourceState>("A"))?.status).toEqual("replacing");
+      expect((yield* getState<ReplacingResourceState>("A"))?.status).toEqual(
+        "replacing",
+      );
       // B might have been replaced
       const bState = yield* getState("B");
       expect(
@@ -2201,7 +2282,9 @@ describe("multiple resources replacing", () => {
       expect(AState?.status).toBeOneOf(["created", "replacing"]);
       expect(BState?.status).toBeOneOf(["created", "replacing"]);
       // at least one of A or B should have started replacing
-      expect(AState?.status === "replacing" || BState?.status === "replacing").toBe(true);
+      expect(
+        AState?.status === "replacing" || BState?.status === "replacing",
+      ).toBe(true);
 
       // Recovery
       const stack = yield* apply(A, B);
@@ -2240,7 +2323,9 @@ describe("multiple resources replacing", () => {
       expect(AState?.status).toBeOneOf(["created", "replacing", "replaced"]);
       expect(BState?.status).toBeOneOf(["created", "replacing"]);
       // at least one of A or B should have started their failing operation
-      expect(AState?.status === "replaced" || BState?.status === "replacing").toBe(true);
+      expect(
+        AState?.status === "replaced" || BState?.status === "replacing",
+      ).toBe(true);
 
       // Recovery
       const stack = yield* apply(A, B);
@@ -2336,12 +2421,18 @@ describe("complex mixed state scenarios", () => {
     "replace upstream while creating downstream",
     Effect.gen(function* () {
       // Create A
-      class A extends TestResource("A", { string: "a-value", replaceString: "original" }) {}
+      class A extends TestResource("A", {
+        string: "a-value",
+        replaceString: "original",
+      }) {}
       yield* apply(A);
       expect((yield* getState("A"))?.status).toEqual("created");
 
       // Now add B dependent on A, and also replace A
-      class A2 extends TestResource("A", { string: "a-value-new", replaceString: "changed" }) {}
+      class A2 extends TestResource("A", {
+        string: "a-value-new",
+        replaceString: "changed",
+      }) {}
       class B extends TestResource("B", { string: Output.of(A2).string }) {}
 
       const stack = yield* apply(B);
@@ -2378,14 +2469,20 @@ describe("complex mixed state scenarios", () => {
     "chain reaction: A replace triggers B update triggers C update",
     Effect.gen(function* () {
       {
-        class A extends TestResource("A", { string: "a-value", replaceString: "original" }) {}
+        class A extends TestResource("A", {
+          string: "a-value",
+          replaceString: "original",
+        }) {}
         class B extends TestResource("B", { string: Output.of(A).string }) {}
         class C extends TestResource("C", { string: Output.of(B).string }) {}
         yield* apply(C);
       }
 
       // Replace A - should cascade updates to B and C
-      class A extends TestResource("A", { string: "a-replaced", replaceString: "changed" }) {}
+      class A extends TestResource("A", {
+        string: "a-replaced",
+        replaceString: "changed",
+      }) {}
       class B extends TestResource("B", { string: Output.of(A).string }) {}
       class C extends TestResource("C", { string: Output.of(B).string }) {}
 
@@ -2402,12 +2499,18 @@ describe("complex mixed state scenarios", () => {
     "multiple failures across all operation types",
     Effect.gen(function* () {
       // Setup: A, B created; C, D will be added
-      class A extends TestResource("A", { string: "a-value", replaceString: "original" }) {}
+      class A extends TestResource("A", {
+        string: "a-value",
+        replaceString: "original",
+      }) {}
       class B extends TestResource("B", { string: "b-value" }) {}
       yield* apply(A, B);
 
       // Complex operation: A replace, B update, C create, D not included (nothing to delete)
-      class A2 extends TestResource("A", { string: "a-replaced", replaceString: "changed" }) {}
+      class A2 extends TestResource("A", {
+        string: "a-replaced",
+        replaceString: "changed",
+      }) {}
       class B2 extends TestResource("B", { string: "b-updated" }) {}
       class C extends TestResource("C", { string: "c-value" }) {}
 
@@ -2424,12 +2527,16 @@ describe("complex mixed state scenarios", () => {
       const AState = yield* getState<ReplacingResourceState>("A");
       // B might have been updated
       const bState = yield* getState("B");
-      expect(bState?.status === "created" || bState?.status === "updated").toBe(true);
+      expect(bState?.status === "created" || bState?.status === "updated").toBe(
+        true,
+      );
       const CState = yield* getState("C");
       expect(AState?.status).toBeOneOf(["created", "replacing"]);
       expect(CState?.status).toBeOneOf(["creating", undefined]);
       // at least one of A or C should have started their failing operation
-      expect(AState?.status === "replacing" || CState?.status === "creating").toBe(true);
+      expect(
+        AState?.status === "replacing" || CState?.status === "creating",
+      ).toBe(true);
 
       // Recovery
       const stack = yield* apply(A2, B2, C);
@@ -2441,4 +2548,257 @@ describe("complex mixed state scenarios", () => {
       expect(stack.C.string).toEqual("c-value");
     }).pipe(Effect.provide(MockLayers())),
   );
+});
+
+// =============================================================================
+// STATIC STABLE PROPERTIES (provider.stables defined on provider, not in diff)
+// This tests the bug where diff returns undefined but downstream resources
+// depend on stable properties that should be preserved
+// =============================================================================
+
+describe("static stable properties (provider.stables)", () => {
+  describe("diff returns undefined with tag-only changes", () => {
+    test(
+      "upstream has static stables, diff returns undefined, downstream depends on stableId",
+      Effect.gen(function* () {
+        // Stage 1: Create A with no tags, B depends on A.stableId
+        {
+          class A extends StaticStablesResource("A", { string: "value" }) {}
+          class B extends TestResource("B", {
+            string: Output.of(A).stableId,
+          }) {}
+
+          const stack = yield* apply(A, B);
+          expect(stack.A.stableId).toEqual("stable-A");
+          expect(stack.B.string).toEqual("stable-A");
+          expect((yield* getState("A"))?.status).toEqual("created");
+          expect((yield* getState("B"))?.status).toEqual("created");
+        }
+
+        // Stage 2: Add tags to A - diff returns undefined, but arePropsChanged is true
+        // B depends on A.stableId which should remain stable
+        {
+          class A extends StaticStablesResource("A", {
+            string: "value",
+            tags: { Name: "tagged-resource" },
+          }) {}
+          class B extends TestResource("B", {
+            string: Output.of(A).stableId,
+          }) {}
+
+          const stack = yield* apply(A, B);
+          // A should be updated (tags changed)
+          expect(stack.A.tags).toEqual({ Name: "tagged-resource" });
+          // B should NOT be updated because stableId didn't change
+          expect(stack.B.string).toEqual("stable-A");
+          expect((yield* getState("A"))?.status).toEqual("updated");
+          // B should remain "created" (noop) since its input (stableId) didn't change
+          expect((yield* getState("B"))?.status).toEqual("created");
+        }
+      }).pipe(Effect.provide(MockLayers())),
+    );
+
+    test(
+      "chain: A -> B -> C where B depends on A.stableId and C depends on B.stableString",
+      Effect.gen(function* () {
+        // Stage 1: Create chain
+        {
+          class A extends StaticStablesResource("A", { string: "initial" }) {}
+          class B extends TestResource("B", {
+            string: Output.of(A).stableId,
+          }) {}
+          class C extends TestResource("C", {
+            string: Output.of(B).stableString,
+          }) {}
+
+          const stack = yield* apply(A, B, C);
+          expect(stack.A.stableId).toEqual("stable-A");
+          expect(stack.B.string).toEqual("stable-A");
+          expect(stack.C.string).toEqual("B");
+        }
+
+        // Stage 2: Change A's tags only - diff returns undefined
+        // Neither B nor C should update since their inputs are stable
+        {
+          class A extends StaticStablesResource("A", {
+            string: "initial",
+            tags: { Env: "production" },
+          }) {}
+          class B extends TestResource("B", {
+            string: Output.of(A).stableId,
+          }) {}
+          class C extends TestResource("C", {
+            string: Output.of(B).stableString,
+          }) {}
+
+          const stack = yield* apply(A, B, C);
+          expect(stack.A.tags).toEqual({ Env: "production" });
+          expect((yield* getState("A"))?.status).toEqual("updated");
+          // B and C should not change
+          expect((yield* getState("B"))?.status).toEqual("created");
+          expect((yield* getState("C"))?.status).toEqual("created");
+        }
+      }).pipe(Effect.provide(MockLayers())),
+    );
+
+    test(
+      "diamond: A -> B,C -> D where all depend on stable properties",
+      Effect.gen(function* () {
+        // Stage 1: Create diamond
+        {
+          class A extends StaticStablesResource("A", { string: "initial" }) {}
+          class B extends TestResource("B", {
+            string: Output.of(A).stableId,
+          }) {}
+          class C extends TestResource("C", {
+            string: Output.of(A).stableArn,
+          }) {}
+          class D extends TestResource("D", {
+            string: Output.all(
+              Output.of(B).stableString,
+              Output.of(C).stableString,
+            ).apply(([b, c]) => `${b}-${c}`),
+          }) {}
+
+          const stack = yield* apply(A, B, C, D);
+          expect(stack.A.stableId).toEqual("stable-A");
+          expect(stack.A.stableArn).toEqual(
+            "arn:test:resource:us-east-1:123456789:A",
+          );
+          expect(stack.B.string).toEqual("stable-A");
+          expect(stack.C.string).toEqual(
+            "arn:test:resource:us-east-1:123456789:A",
+          );
+          expect(stack.D.string).toEqual("B-C");
+        }
+
+        // Stage 2: Change A's tags - should not affect B, C, or D
+        {
+          class A extends StaticStablesResource("A", {
+            string: "initial",
+            tags: { Team: "platform" },
+          }) {}
+          class B extends TestResource("B", {
+            string: Output.of(A).stableId,
+          }) {}
+          class C extends TestResource("C", {
+            string: Output.of(A).stableArn,
+          }) {}
+          class D extends TestResource("D", {
+            string: Output.all(
+              Output.of(B).stableString,
+              Output.of(C).stableString,
+            ).apply(([b, c]) => `${b}-${c}`),
+          }) {}
+
+          const stack = yield* apply(A, B, C, D);
+          expect((yield* getState("A"))?.status).toEqual("updated");
+          expect((yield* getState("B"))?.status).toEqual("created");
+          expect((yield* getState("C"))?.status).toEqual("created");
+          expect((yield* getState("D"))?.status).toEqual("created");
+        }
+      }).pipe(Effect.provide(MockLayers())),
+    );
+  });
+
+  describe("diff returns update action with static stables", () => {
+    test(
+      "upstream has static stables and diff returns update, downstream depends on stableId",
+      Effect.gen(function* () {
+        // Stage 1: Create A and B
+        {
+          class A extends StaticStablesResource("A", { string: "value-1" }) {}
+          class B extends TestResource("B", {
+            string: Output.of(A).stableId,
+          }) {}
+
+          const stack = yield* apply(A, B);
+          expect(stack.A.stableId).toEqual("stable-A");
+          expect(stack.B.string).toEqual("stable-A");
+        }
+
+        // Stage 2: Change A's string - diff returns "update", stableId still stable
+        {
+          class A extends StaticStablesResource("A", { string: "value-2" }) {}
+          class B extends TestResource("B", {
+            string: Output.of(A).stableId,
+          }) {}
+
+          const stack = yield* apply(A, B);
+          expect(stack.A.string).toEqual("value-2");
+          expect(stack.A.stableId).toEqual("stable-A");
+          expect((yield* getState("A"))?.status).toEqual("updated");
+          // B should not change since stableId is stable
+          expect((yield* getState("B"))?.status).toEqual("created");
+        }
+      }).pipe(Effect.provide(MockLayers())),
+    );
+
+    test(
+      "downstream depends on non-stable property, should update",
+      Effect.gen(function* () {
+        // Stage 1: Create A and B where B depends on A.string (non-stable)
+        {
+          class A extends StaticStablesResource("A", { string: "value-1" }) {}
+          class B extends TestResource("B", { string: Output.of(A).string }) {}
+
+          const stack = yield* apply(A, B);
+          expect(stack.A.string).toEqual("value-1");
+          expect(stack.B.string).toEqual("value-1");
+        }
+
+        // Stage 2: Change A's string - B should update
+        {
+          class A extends StaticStablesResource("A", { string: "value-2" }) {}
+          class B extends TestResource("B", { string: Output.of(A).string }) {}
+
+          const stack = yield* apply(A, B);
+          expect(stack.A.string).toEqual("value-2");
+          expect(stack.B.string).toEqual("value-2");
+          expect((yield* getState("A"))?.status).toEqual("updated");
+          expect((yield* getState("B"))?.status).toEqual("updated");
+        }
+      }).pipe(Effect.provide(MockLayers())),
+    );
+  });
+
+  describe("replace action with static stables", () => {
+    test(
+      "upstream replaces, downstream depends on stableId - should update with new value",
+      Effect.gen(function* () {
+        // Stage 1: Create A and B
+        {
+          class A extends StaticStablesResource("A", {
+            string: "value",
+            replaceString: "original",
+          }) {}
+          class B extends TestResource("B", {
+            string: Output.of(A).stableId,
+          }) {}
+
+          const stack = yield* apply(A, B);
+          expect(stack.A.stableId).toEqual("stable-A");
+          expect(stack.B.string).toEqual("stable-A");
+        }
+
+        // Stage 2: Replace A - stableId will change (new resource)
+        {
+          class A extends StaticStablesResource("A", {
+            string: "value",
+            replaceString: "changed",
+          }) {}
+          class B extends TestResource("B", {
+            string: Output.of(A).stableId,
+          }) {}
+
+          const stack = yield* apply(A, B);
+          // A was replaced, stableId is regenerated
+          expect(stack.A.stableId).toEqual("stable-A");
+          expect(stack.B.string).toEqual("stable-A");
+          expect((yield* getState("A"))?.status).toEqual("created");
+          expect((yield* getState("B"))?.status).toEqual("updated");
+        }
+      }).pipe(Effect.provide(MockLayers())),
+    );
+  });
 });
