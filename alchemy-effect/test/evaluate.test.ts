@@ -1,12 +1,11 @@
 import * as EC2 from "@/aws/ec2";
 import * as R2 from "@/cloudflare/r2";
-import { $, App, ref } from "@/index";
-import { Stage } from "@/stage";
+import { $, App } from "@/index";
 import * as Output from "@/output";
+import { test } from "@/test";
 import { expect, it } from "@effect/vitest";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
-import { test } from "@/test";
 import * as Layer from "effect/Layer";
 
 class TestVpc extends EC2.Vpc("TestVpc", {
@@ -174,6 +173,23 @@ it.live("Output.all($(TestVpc).vpcArn, $(Bucket).name)", () =>
   }).pipe(Effect.provide(test.defaultState())),
 );
 
+it.live(
+  "Output.all($(TestVpc).vpcId, $(Bucket).name).apply(([vpcId, name]) => `${vpcId}-${name}`)",
+  () =>
+    Effect.gen(function* () {
+      const output = Output.all($(TestVpc).vpcId, $(Bucket).name).apply(
+        ([vpcId, name]) => `${vpcId}-${name}`,
+      );
+      const upstream = Output.upstream(output);
+      const result = yield* Output.evaluate(output, resources);
+      expect(result).toEqual(`${vpcId}-${bucketAttrs.name}`);
+      expect(upstream).toEqual({
+        TestVpc,
+        Bucket,
+      });
+    }).pipe(Effect.provide(test.defaultState())),
+);
+
 it.live("TestVpc.vpcId.apply(toUpperCase).apply(addPrefix)", () =>
   Effect.gen(function* () {
     const output = $(TestVpc)
@@ -230,13 +246,16 @@ it.live("Output.ref<TestVpc>('TestVpc', 'other-stage').vpcId", () =>
             "test-app": {
               "other-stage": {
                 TestVpc: {
-                  type: "Test.TestVpc",
-                  id: "TestVpc",
+                  resourceType: "Test.TestVpc",
+                  logicalId: "TestVpc",
                   status: "created",
                   props: {},
-                  output: {
+                  attr: {
                     vpcId: "vpc-0987654321",
                   },
+                  downstream: [],
+                  instanceId: "1234567890",
+                  providerVersion: 0,
                 },
               },
             },

@@ -38,7 +38,13 @@ export const bucketProvider = () =>
               return { action: "replace" };
             }
             if (output.storageClass !== (news.storageClass ?? "Standard")) {
-              return { action: "update" };
+              return {
+                action: "update",
+                stables:
+                  output.name === createName(id, news.name)
+                    ? ["name"]
+                    : undefined,
+              };
             }
             return { action: "noop" };
           }),

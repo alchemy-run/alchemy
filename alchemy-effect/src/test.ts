@@ -1,18 +1,18 @@
 import { FetchHttpClient, FileSystem, HttpClient } from "@effect/platform";
-import * as PlatformConfigProvider from "@effect/platform/PlatformConfigProvider";
 import { NodeContext } from "@effect/platform-node";
 import * as Path from "@effect/platform/Path";
-import { it, expect } from "@effect/vitest";
+import * as PlatformConfigProvider from "@effect/platform/PlatformConfigProvider";
+import { expect, it } from "@effect/vitest";
 import { ConfigProvider, LogLevel } from "effect";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Scope from "effect/Scope";
 import * as App from "./app.ts";
-import { DotAlchemy, dotAlchemy } from "./dot-alchemy.ts";
-import * as State from "./state.ts";
-import type { Resource } from "./resource.ts";
 import { CLI } from "./cli/service.ts";
+import { DotAlchemy, dotAlchemy } from "./dot-alchemy.ts";
+import type { Resource } from "./resource.ts";
+import * as State from "./state.ts";
 
 declare module "@effect/vitest" {
   interface ExpectStatic {
@@ -165,7 +165,7 @@ export const testCLI = Layer.succeed(
           Effect.log(
             event.kind === "status-change"
               ? `${event.status} ${event.id}(${event.type})`
-              : event.message,
+              : `${event.id}: ${event.message}`,
           ),
       }),
   }),

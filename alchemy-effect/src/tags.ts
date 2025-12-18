@@ -36,3 +36,34 @@ export const createTagger = Effect.fn(function* () {
     "alchemy::id": id,
   });
 });
+
+export const diffTags = (
+  oldTags: Record<string, string>,
+  newTags: Record<string, string>,
+) => {
+  const removed: string[] = [];
+  const updated: { Key: string; Value: string }[] = [];
+  const added: { Key: string; Value: string }[] = [];
+  for (const key in oldTags) {
+    if (!(key in newTags)) {
+      removed.push(key);
+    } else if (oldTags[key] !== newTags[key]) {
+      updated.push({ Key: key, Value: newTags[key] });
+    }
+  }
+  for (const key in newTags) {
+    if (!(key in oldTags)) {
+      added.push({ Key: key, Value: newTags[key] });
+    } else if (oldTags[key] !== newTags[key]) {
+      updated.push({ Key: key, Value: newTags[key] });
+    }
+  }
+  return {
+    added,
+    removed,
+    updated,
+    upsert: [...added, ...updated].filter(
+      (tag, index, self) => self.findIndex((t) => t.Key === tag.Key) === index,
+    ),
+  };
+};

@@ -52,22 +52,114 @@ import { isResource } from "./resource.ts";
 
 // Scrap the "key-value" store on State/Scope
 
-export type ResourceStatus =
-  | "creating"
-  | "created"
-  | "updating"
-  | "updated"
-  | "deleting"
-  | "deleted";
+export type Props = Record<string, any>;
+export type Attr = Record<string, any>;
 
-export type ResourceState = {
-  type: string;
-  id: string;
+export type ResourceStatus = ResourceState["status"];
+
+interface BaseResourceState {
+  resourceType: string;
+  /** Logical ID of the Resource (stable across creates, updates, deletes and replaces) */
+  logicalId: string;
+  /** A unique randomly generated token used to seed ID generation (only changes when replaced) */
+  instanceId: string;
+  /** The version of the provider that was used to create/update the resource. */
+  providerVersion: number;
+  /** Current status of the logical Resource */
   status: ResourceStatus;
-  props: any;
-  output: any;
+  /** List of logical IDs of resources that depend on this resource */
+  downstream: string[];
+  /** List of Bindings attached to this Resource */
   bindings?: BindNode[];
-};
+  /** Desired state (input props) of this Resource */
+  props?: Props;
+  /** The output attributes of this Resource (if it has been created) */
+  attr?: Attr;
+}
+
+export interface CreatingResourceState extends BaseResourceState {
+  status: "creating";
+  /** The new resource properties that are being (or have been) applied. */
+  props: Props;
+}
+
+export interface CreatedResourceState extends BaseResourceState {
+  status: "created";
+  /** The new resource properties that have been applied. */
+  props: Props;
+  /** The output attributes of the created resource */
+  attr: Attr;
+}
+
+export interface UpdatingReourceState extends BaseResourceState {
+  status: "updating";
+  /** The new resource properties that are being (or have been) applied. */
+  props: Props;
+  old: {
+    /** The old resource properties that have been successfully applied. */
+    props: Props;
+    /** The old output properties that have been successfully applied. */
+    attr: Attr;
+    // TODO(sam): do I need to track the old downstream edges?
+    // downstream: string[];
+  };
+}
+
+export interface UpdatedResourceState extends BaseResourceState {
+  status: "updated";
+  /** The new resource properties that are being (or have been) applied. */
+  props: Props;
+  /** The output attributes of the created resource */
+  attr: Attr;
+}
+
+export interface DeletingResourceState extends BaseResourceState {
+  status: "deleting";
+  /** Attributes of the resource being deleted */
+  attr: Attr | undefined;
+}
+
+export interface ReplacingResourceState extends BaseResourceState {
+  status: "replacing";
+  /** Desired properties of the new resource (the replacement) */
+  props: Props;
+  /** Reference to the state of the old resource (the one being replaced) */
+  old:
+    | CreatedResourceState
+    | UpdatedResourceState
+    | CreatingResourceState
+    | UpdatingReourceState
+    | DeletingResourceState;
+  /** Whether the resource should be deleted before or after replacements */
+  deleteFirst: boolean;
+}
+
+export interface ReplacedResourceState extends BaseResourceState {
+  status: "replaced";
+  /** Desired properties of the new resource (the replacement) */
+  props: Props;
+  /** Output attributes of the new resource (the replacement) */
+  attr: Attr;
+  /** Reference to the state of the old resource (the one being replaced) */
+  old:
+    | CreatingResourceState
+    | CreatedResourceState
+    | UpdatingReourceState
+    | UpdatedResourceState
+    | DeletingResourceState;
+  /** Whether the resource should be deleted before or after replacements */
+  deleteFirst: boolean;
+  // .. will (finally) transition to `CreatedResourceState` after finalizing
+}
+
+export type ResourceState =
+  | CreatingResourceState
+  | CreatedResourceState
+  | UpdatingReourceState
+  | UpdatedResourceState
+  | DeletingResourceState
+  | ReplacingResourceState
+  | ReplacedResourceState;
 
 export class StateStoreError extends Data.TaggedError("StateStoreError")<{
   message: string;
@@ -82,6 +174,10 @@ export interface StateService {
     stage: string;
     resourceId: string;
   }): Effect.Effect<ResourceState | undefined, StateStoreError, never>;
+  getReplacedResources(request: {
+    stack: string;
+    stage: string;
+  }): Effect.Effect<ReplacedResourceState[], StateStoreError, never>;
   set<V extends ResourceState>(request: {
     stack: string;
     stage: string;
@@ -107,7 +203,6 @@ export class State extends Context.Tag("AWS::Lambda::State")<
 // TODO(sam): implement with SQLite3
 export const localFs = Layer.effect(
   State,
-  // @ts-expect-error -
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -146,8 +241,8 @@ export const localFs = Layer.effect(
       fs.makeDirectory(dir, { recursive: true }),
     );
 
-    return {
-      listApps: () =>
+    const state: StateService = {
+      listStacks: () =>
         fs.readDirectory(stateDir).pipe(
           recover,
           Effect.map((files) => files ?? []),
@@ -162,6 +257,17 @@ export const localFs = Layer.effect(
           Effect.map((file) => JSON.parse(file.toString())),
           recover,
         ),
+      getReplacedResources: Effect.fnUntraced(function* (request) {
+        return (yield* Effect.all(
+          (yield* state.list(request)).map((resourceId) =>
+            state.get({
+              stack: request.stack,
+              stage: request.stage,
+              resourceId,
+            }),
+          ),
+        )).filter((r) => r?.status === "replaced");
+      }),
       set: (request) =>
         ensure(stage(request)).pipe(
           Effect.flatMap(() =>
@@ -196,6 +302,7 @@ export const localFs = Layer.effect(
           ),
         ),
     };
+    return state;
   }),
 );
 
@@ -221,22 +328,14 @@ export const inMemoryService = (
     Record<StageId, Record<ResourceId, ResourceState>>
   > = {},
 ) => {
-  const state = new Map<StackId, Map<StageId, Map<ResourceId, ResourceState>>>(
-    Object.entries(initialState).map(([stack, stages]) => [
-      stack,
-      new Map(
-        Object.entries(stages).map(([stage, resources]) => [
-          stage,
-          new Map(Object.entries(resources)),
-        ]),
-      ),
-    ]),
-  );
+  const state = initialState;
   return {
-    listStacks: () => Effect.succeed(Array.from(state.keys())),
+    listStacks: () => Effect.succeed(Array.from(Object.keys(state))),
     // oxlint-disable-next-line require-yield
     listStages: (stack: string) =>
-      Effect.succeed(Array.from(state.get(stack)?.keys() ?? [])),
+      Effect.succeed(
+        Array.from(stack in state ? Object.keys(state[stack]) : []),
+      ),
     get: ({
       stack,
       stage,
@@ -245,7 +344,19 @@ export const inMemoryService = (
       stack: string;
       stage: string;
       resourceId: string;
-    }) => Effect.succeed(state.get(stack)?.get(stage)?.get(resourceId)),
+    }) => Effect.succeed(state[stack]?.[stage]?.[resourceId]),
+    getReplacedResources: ({
+      stack,
+      stage,
+    }: {
+      stack: string;
+      stage: string;
+    }) =>
+      Effect.succeed(
+        Array.from(Object.values(state[stack]?.[stage] ?? {}) ?? []).filter(
+          (s) => s.status === "replaced",
+        ),
+      ),
     set: <V extends ResourceState>({
       stack,
       stage,
@@ -257,7 +368,9 @@ export const inMemoryService = (
       resourceId: string;
       value: V;
     }) => {
-      state.get(stack)?.get(stage)?.set(resourceId, value);
+      const stackState = (state[stack] ??= {});
+      const stageState = (stackState[stage] ??= {});
+      stageState[resourceId] = value;
       return Effect.succeed(value);
     },
     delete: ({
@@ -268,8 +381,10 @@ export const inMemoryService = (
       stack: string;
       stage: string;
       resourceId: string;
-    }) => Effect.succeed(state.get(stack)?.get(stage)?.delete(resourceId)),
+    }) => Effect.succeed(delete state[stack]?.[stage]?.[resourceId]),
     list: ({ stack, stage }: { stack: string; stage: string }) =>
-      Effect.succeed(Array.from(state.get(stack)?.get(stage)?.keys() ?? [])),
-  };
+      Effect.succeed(
+        Array.from(Object.keys(state[stack]?.[stage] ?? {}) ?? []),
+      ),
+  } satisfies StateService;
 };

@@ -1,12 +1,9 @@
-import type { Resource } from "@/resource";
 import type { Input, InputProps } from "@/input";
 import * as Output from "@/output";
-import { plan, type TransitiveResources, type TraverseResources } from "@/plan";
-import * as State from "@/state";
+import { type CRUD, type IPlan, plan, type TraverseResources } from "@/plan";
 import { test } from "@/test";
 import { describe, expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import {
   Bucket,
   Function,
@@ -15,9 +12,11 @@ import {
   TestResource,
   type TestResourceProps,
 } from "./test.resources";
-import * as App from "@/app";
+import type { ResourceState, ResourceStatus } from "@/state";
 
 const _test = test;
+
+const instanceId = "852f6ec2e19b66589825efe14dca2971";
 
 class MyBucket extends Bucket("MyBucket", {
   name: "test-bucket",
@@ -45,19 +44,19 @@ test(
         MyBucket: {
           action: "create",
           bindings: [],
-          news: {
+          props: {
             name: "test-bucket",
           },
-          attributes: undefined,
+          state: undefined,
           resource: MyBucket,
         },
         MyQueue: {
           action: "create",
           bindings: [],
-          news: {
+          props: {
             name: "test-queue",
           },
-          attributes: undefined,
+          state: undefined,
           resource: MyQueue,
         },
       },
@@ -71,16 +70,19 @@ test(
   {
     state: test.state({
       MyBucket: {
-        id: "MyBucket",
-        type: "Test.Bucket",
+        instanceId,
+        providerVersion: 0,
+        logicalId: "MyBucket",
+        resourceType: "Test.Bucket",
         status: "created",
         props: {
           name: "test-bucket",
         },
-        output: {
+        attr: {
           name: "test-bucket",
         },
         bindings: [],
+        downstream: [],
       },
     }),
   },
@@ -90,17 +92,19 @@ test(
         MyBucket: {
           action: "noop",
           bindings: [],
-          attributes: undefined,
           resource: MyBucket,
+          state: {
+            status: "created",
+          },
         },
         MyQueue: {
           action: "create",
           bindings: [],
-          news: {
+          props: {
             name: "test-queue",
           },
-          attributes: undefined,
           resource: MyQueue,
+          state: undefined,
         },
       },
       deletions: expect.emptyObject(),
@@ -109,32 +113,38 @@ test(
 );
 
 test(
-  "delete oprhaned resources",
+  "delete orphaned resources",
   {
     state: test.state({
       MyBucket: {
-        id: "MyBucket",
-        type: "Test.Bucket",
+        instanceId,
+        providerVersion: 0,
+        logicalId: "MyBucket",
+        resourceType: "Test.Bucket",
         status: "created",
         props: {
           name: "test-bucket",
         },
-        output: {
+        attr: {
           name: "test-bucket",
         },
         bindings: [],
+        downstream: [],
       },
       MyQueue: {
-        id: "MyQueue",
-        type: "Test.Queue",
+        instanceId,
+        providerVersion: 0,
+        logicalId: "MyQueue",
+        resourceType: "Test.Queue",
         status: "created",
         props: {
           name: "test-queue",
         },
-        output: {
+        attr: {
           name: "test-queue",
         },
         bindings: [],
+        downstream: [],
       },
     }),
   },
@@ -144,16 +154,21 @@ test(
         MyQueue: {
           action: "noop",
           bindings: [],
-          attributes: undefined,
           resource: MyQueue,
+          state: {
+            status: "created",
+          },
         },
       },
       deletions: {
         MyBucket: {
           action: "delete",
           bindings: [],
-          attributes: {
-            name: "test-bucket",
+          state: {
+            status: "created",
+            attr: {
+              name: "test-bucket",
+            },
           },
           resource: {
             id: "MyBucket",
@@ -169,6 +184,437 @@ test(
 );
 
 test(
+  "replace resource when replaceString changes",
+  {
+    state: test.state({
+      A: {
+        instanceId,
+        providerVersion: 0,
+        logicalId: "A",
+        resourceType: "Test.TestResource",
+        status: "created",
+        props: {
+          replaceString: "A",
+        },
+        attr: {},
+        downstream: [],
+      },
+    }),
+  },
+  Effect.gen(function* () {
+    {
+      class A extends TestResource("A", {
+        replaceString: "A",
+      }) {}
+
+      // replaceString is the same
+      expect(yield* plan(A)).toMatchObject({
+        resources: {
+          A: {
+            action: "noop",
+          },
+        },
+      });
+    }
+
+    {
+      class A extends TestResource("A", {
+        replaceString: "B",
+      }) {}
+      expect(yield* plan(A)).toMatchObject({
+        resources: {
+          A: {
+            action: "replace",
+            props: {
+              replaceString: "B",
+            },
+          },
+        },
+        deletions: expect.emptyObject(),
+      });
+    }
+
+    {
+      class B extends TestResource("B", {
+        string: "A",
+      }) {}
+      class A extends TestResource("A", {
+        string: Output.of(B).string,
+      }) {}
+
+      const p = yield* plan(A);
+      expect(p).toMatchObject({
+        resources: {
+          A: {
+            action: "replace",
+            props: {
+              string: expect.propExpr("string", B),
+            },
+          },
+        },
+        deletions: expect.emptyObject(),
+      });
+    }
+  }).pipe(Effect.provide(TestLayers)),
+);
+
+const createTestResourceState = (options: {
+  logicalId: string;
+  status: ResourceStatus;
+  props: TestResourceProps;
+  attr?: {};
+}) =>
+  ({
+    instanceId,
+    providerVersion: 0,
+    ...options,
+    resourceType: "Test.TestResource",
+    attr: options.attr ?? {},
+    downstream: [],
+  }) as ResourceState;
+
+const testSimple = (
+  title: string,
+  testCase: {
+    state: {
+      status: ResourceStatus;
+      props: TestResourceProps;
+      attr?: {};
+      old?: Partial<ResourceState>;
+    };
+    props: TestResourceProps;
+    plan?: any;
+    fail?: string;
+  },
+) =>
+  test(
+    title,
+    {
+      state: test.state({
+        A: createTestResourceState({
+          ...testCase.state,
+          logicalId: "A",
+        }),
+      }),
+    },
+    Effect.gen(function* () {
+      {
+        class A extends TestResource("A", testCase.props) {}
+        if (testCase.fail) {
+          const result = yield* plan(A).pipe(
+            Effect.map(() => false),
+            // @ts-expect-error
+            Effect.catchTag(testCase.fail, () => Effect.succeed(true)),
+            Effect.catchAll(() => Effect.succeed(false)),
+          ) as Effect.Effect<boolean>;
+          if (!result) {
+            expect.fail(`Expected error '${testCase.fail}`);
+          }
+        } else {
+          expect(yield* plan(A)).toMatchObject({
+            resources: {
+              A: testCase.plan,
+            },
+            deletions: expect.emptyObject(),
+          });
+        }
+      }
+    }).pipe(Effect.provide(TestLayers)),
+  );
+
+describe("prior crash in 'creating' state", () => {
+  testSimple("create if props unchanged", {
+    state: {
+      status: "creating",
+      props: {
+        string: "A",
+      },
+    },
+    props: {
+      string: "A",
+    },
+    plan: {
+      action: "create",
+      props: {
+        string: "A",
+      },
+    },
+  });
+
+  testSimple("create if changed props can be updated", {
+    state: {
+      status: "creating",
+      props: {
+        string: "A",
+      },
+    },
+    props: {
+      string: "B",
+    },
+    plan: {
+      action: "create",
+      props: {
+        string: "B",
+      },
+    },
+  });
+
+  testSimple("replace if changed props cannot be updated", {
+    state: {
+      status: "creating",
+      props: {
+        replaceString: "A",
+      },
+    },
+    props: {
+      replaceString: "B",
+    },
+    plan: {
+      action: "replace",
+      props: {
+        replaceString: "B",
+      },
+      state: {
+        status: "creating",
+        props: {
+          replaceString: "A",
+        },
+      },
+    },
+  });
+});
+
+describe("prior crash in 'updating' state", () => {
+  testSimple("update if props unchanged", {
+    state: {
+      status: "updating",
+      props: {
+        string: "A",
+      },
+    },
+    props: {
+      string: "A",
+    },
+    plan: {
+      action: "update",
+      props: {
+        string: "A",
+      },
+      state: {
+        status: "updating",
+        props: {
+          string: "A",
+        },
+      },
+    },
+  });
+
+  testSimple("update if changed props can be updated", {
+    state: {
+      status: "updating",
+      props: {
+        string: "A",
+      },
+    },
+    props: {
+      string: "B",
+    },
+    plan: {
+      action: "update",
+      props: {
+        string: "B",
+      },
+      state: {
+        status: "updating",
+        props: {
+          string: "A",
+        },
+      },
+    },
+  });
+
+  testSimple("replace if changed props can not be updated", {
+    state: {
+      status: "updating",
+      props: {
+        replaceString: "A",
+      },
+    },
+    props: {
+      replaceString: "B",
+    },
+    plan: {
+      action: "replace",
+      props: {
+        replaceString: "B",
+      },
+      state: {
+        status: "updating",
+        props: {
+          replaceString: "A",
+        },
+      },
+    },
+  });
+});
+
+describe("prior crash in 'replacing' state", () => {
+  const priorStates = ["created", "creating", "updated", "updating"] as const;
+
+  const testUnchanged = ({
+    old,
+  }: {
+    old: {
+      status: ResourceStatus;
+    };
+  }) =>
+    testSimple(
+      `"continue 'replace' if props are unchanged and previous state is '${old.status}'"`,
+      {
+        state: {
+          status: "replacing",
+          props: {
+            string: "A",
+          },
+          old,
+        },
+        props: {
+          string: "A",
+        },
+        plan: {
+          action: "replace",
+          props: {
+            string: "A",
+          },
+          state: {
+            status: "replacing",
+            props: {
+              string: "A",
+            },
+            old,
+          },
+        },
+      },
+    );
+
+  priorStates.forEach((status) =>
+    testUnchanged({
+      old: {
+        status,
+      },
+    }),
+  );
+
+  const testMinorChange = ({
+    old,
+  }: {
+    old: {
+      status: ResourceStatus;
+    };
+  }) =>
+    testSimple(
+      `"continue 'replace' if props can be updated and previous state is '${old.status}'"`,
+      {
+        state: {
+          status: "replacing",
+          props: {
+            string: "A",
+          },
+          old,
+        },
+        props: {
+          string: "B",
+        },
+        plan: {
+          action: "replace",
+          props: {
+            string: "B",
+          },
+          state: {
+            status: "replacing",
+            props: {
+              string: "A",
+            },
+            old,
+          },
+        },
+      },
+    );
+
+  priorStates.forEach((status) =>
+    testMinorChange({
+      old: {
+        status,
+      },
+    }),
+  );
+
+  const testReplacement = (
+    title: string,
+    {
+      old,
+      plan,
+      fail,
+    }: {
+      old: {
+        status: ResourceStatus;
+      };
+      plan?: any;
+      fail?: string;
+    },
+  ) =>
+    testSimple(title, {
+      state: {
+        status: "replacing",
+        props: {
+          replaceString: "A",
+        },
+        old,
+      },
+      props: {
+        replaceString: "B",
+      },
+      plan,
+      fail,
+    });
+
+  (["replaced", "replacing"] as const).forEach((status) =>
+    testReplacement(
+      `fail if trying to replace a partially replaced resource in state '${status}'`,
+      {
+        old: {
+          status,
+        },
+        fail: "CannotReplacePartiallyReplacedResource",
+      },
+    ),
+  );
+});
+
+describe("prior crash in 'deleting' state", () => {
+  testSimple(
+    "create the resource if props are unchanged and the previous state is 'deleting'",
+    {
+      state: {
+        status: "deleting",
+        props: {
+          string: "A",
+        },
+      },
+      props: {
+        string: "A",
+      },
+      plan: {
+        action: "create",
+        props: {
+          string: "A",
+        },
+      },
+    },
+  );
+});
+
+test(
   "lazy Output queue.queueUrl to Function.env",
   Effect.gen(function* () {
     expect(yield* plan(MyFunction)).toMatchObject({
@@ -176,14 +622,14 @@ test(
         MyFunction: {
           action: "create",
           bindings: [],
-          attributes: undefined,
           resource: MyFunction,
-          news: {
+          props: {
             name: "test-function",
             env: {
               QUEUE_URL: expect.propExpr("queueUrl", MyQueue),
             },
           },
+          state: undefined,
         },
       },
       deletions: expect.emptyObject(),
@@ -196,15 +642,18 @@ test(
   {
     state: test.state({
       MyQueue: {
-        id: "MyQueue",
-        type: "Test.Queue",
+        instanceId,
+        providerVersion: 0,
+        logicalId: "MyQueue",
+        resourceType: "Test.Queue",
         status: "created",
         props: {
           name: "test-queue-old",
         },
-        output: {
+        attr: {
           queueUrl: "https://test.queue.com/test-queue-old",
         },
+        downstream: [],
       },
     }),
   },
@@ -214,14 +663,14 @@ test(
         MyFunction: {
           action: "create",
           bindings: [],
-          attributes: undefined,
           resource: MyFunction,
-          news: {
+          props: {
             name: "test-function",
             env: {
               QUEUE_URL: expect.propExpr("queueUrl", MyQueue),
             },
           },
+          state: undefined,
         },
       },
       deletions: expect.emptyObject(),
@@ -232,35 +681,36 @@ test(
 describe("Outputs should resolve to old values", () => {
   const state = _test.state({
     A: {
-      id: "A",
-      type: "Test.TestResource",
+      instanceId,
+      providerVersion: 0,
+      logicalId: "A",
+      resourceType: "Test.TestResource",
       status: "created",
       props: {
         string: "test-string",
         stringArray: ["test-string"],
       },
-      output: {
+      attr: {
         string: "test-string",
         stringArray: ["test-string"],
       },
+      downstream: [],
     },
   });
   class A extends TestResource("A", {
     string: "test-string",
     stringArray: ["test-string"],
   }) {}
-  const expected = (news: TestResourceProps) => ({
+  const expected = (props: TestResourceProps) => ({
     resources: {
       A: {
         action: "noop",
         bindings: [],
-        attributes: undefined,
       },
       B: {
         action: "create",
         bindings: [],
-        attributes: undefined,
-        news,
+        props: props,
       },
     },
     deletions: expect.emptyObject(),
@@ -272,7 +722,7 @@ describe("Outputs should resolve to old values", () => {
   const test = <const I extends InputProps<TestResourceProps>>(
     description: string,
     input: I,
-    output: Input.Resolve<I>,
+    attr: Input.Resolve<I>,
   ) =>
     _test(
       description,
@@ -280,7 +730,7 @@ describe("Outputs should resolve to old values", () => {
         state,
       },
       Effect.gen(function* () {
-        expect(yield* createPlan(input)).toMatchObject(expected(output));
+        expect(yield* createPlan(input)).toMatchObject(expected(attr));
       }).pipe(Effect.provide(TestLayers)),
     );
 
@@ -340,21 +790,26 @@ describe("stable properties should not cause downstream changes", () => {
       {
         state: _test.state({
           A: {
-            id: "A",
-            type: "Test.TestResource",
+            instanceId,
+            providerVersion: 0,
+            logicalId: "A",
+            resourceType: "Test.TestResource",
             status: "created",
             props: {
               string: "test-string-old",
             },
-            output: {
+            attr: {
               string: "test-string-old",
               stableString: "A",
               stableArray: ["A"],
             },
+            downstream: [],
           },
           B: {
-            id: "B",
-            type: "Test.TestResource",
+            instanceId,
+            providerVersion: 0,
+            logicalId: "B",
+            resourceType: "Test.TestResource",
             status: "created",
             props: Object.fromEntries(
               Object.entries({
@@ -362,9 +817,10 @@ describe("stable properties should not cause downstream changes", () => {
                 stringArray: ["A"],
               }).filter(([key]) => key in input),
             ),
-            output: {
+            attr: {
               stableString: "A",
             },
+            downstream: [],
           },
         }),
       },
@@ -373,7 +829,7 @@ describe("stable properties should not cause downstream changes", () => {
           resources: {
             A: {
               action: "update",
-              news: {
+              props: {
                 string: "test-string",
               },
             },

@@ -20,3 +20,21 @@ Conduct each engagement with the user as follows:
 Restrictions:
 1. Never use `Effect.catchAll`, always use `Effect.catchTag` or `Effect.catchTags`
 1. Always use `bun` (never npm, pnpm, yarn, etc.)
+
+:::caution
+Never (ever!) delete .alchemy/
+
+Tests are designed ot be idempotent. 
+When making changes to providers, you should keep running the tests and fixing providers until the tests pass. 
+If you think the state is corrupted stop and let me know. 
+You can always add a `yield* destroy()` at the beginning of each test to clean up state. Do not delete .alchemy files or folders.
+
+Never manually delete resources with the aws cli or api calls. Tests must be designed to be idempotent and self-healing.
+:::
+
+# Testing
+
+To test, use the following command:
+```
+bun vitest run ./alchemy-effect/test/<path>/<to>/<test>.test.ts
+```

@@ -3,15 +3,15 @@ import * as Schedule from "effect/Schedule";
 
 import type { EC2 } from "itty-aws/ec2";
 
-import type { VpcId } from "./vpc.ts";
 import type { ScopedPlanStatusSession } from "../../cli/service.ts";
 import { somePropsAreDifferent } from "../../diff.ts";
 import type { ProviderService } from "../../provider.ts";
-import { createTagger, createTagsList } from "../../tags.ts";
-import { EC2Client } from "./client.ts";
-import { Vpc, type VpcAttrs, type VpcProps } from "./vpc.ts";
-import { Region } from "../region.ts";
+import { createTagger, createTagsList, diffTags } from "../../tags.ts";
 import { Account } from "../account.ts";
+import { Region } from "../region.ts";
+import { EC2Client } from "./client.ts";
+import type { VpcId } from "./vpc.ts";
+import { Vpc, type VpcAttrs, type VpcProps } from "./vpc.ts";
 
 export const vpcProvider = () =>
   Vpc.provider.effect(
@@ -21,7 +21,17 @@ export const vpcProvider = () =>
       const accountId = yield* Account;
       const tagged = yield* createTagger();
 
+      const createTags = (
+        id: string,
+        tags?: Record<string, string>,
+      ): Record<string, string> => ({
+        Name: id,
+        ...tagged(id),
+        ...tags,
+      });
+
       return {
+        stables: ["vpcId", "vpcArn", "ownerId", "isDefault"],
         diff: Effect.fn(function* ({ news, olds }) {
           if (
             somePropsAreDifferent(olds, news, [
@@ -35,14 +45,10 @@ export const vpcProvider = () =>
             return { action: "replace" };
           }
         }),
-
         create: Effect.fn(function* ({ id, news, session }) {
-          // 1. Prepare tags
-          const alchemyTags = tagged(id);
-          const userTags = news.tags ?? {};
-          const allTags = { ...alchemyTags, ...userTags };
+          const tags = createTags(id, news.tags);
 
-          // 2. Call CreateVpc
+          // 1. Call CreateVpc
           const createResult = yield* ec2.createVpc({
             // TODO(sam): add all properties
             AmazonProvidedIpv6CidrBlock: news.amazonProvidedIpv6CidrBlock,
@@ -59,7 +65,7 @@ export const vpcProvider = () =>
             TagSpecifications: [
               {
                 ResourceType: "vpc",
-                Tags: createTagsList(allTags),
+                Tags: createTagsList(tags),
               },
             ],
             DryRun: false,
@@ -68,7 +74,7 @@ export const vpcProvider = () =>
           const vpcId = createResult.Vpc!.VpcId! as VpcId;
           yield* session.note(`VPC created: ${vpcId}`);
 
-          // 3. Modify DNS attributes if specified (separate API calls)
+          // 2. Modify DNS attributes if specified (separate API calls)
           yield* ec2.modifyVpcAttribute({
             VpcId: vpcId,
             EnableDnsSupport: { Value: news.enableDnsSupport ?? true },
@@ -116,10 +122,11 @@ export const vpcProvider = () =>
                 ipv6Pool: assoc.Ipv6Pool,
               }),
             ),
+            tags,
           } satisfies VpcAttrs<VpcProps>;
         }),
 
-        update: Effect.fn(function* ({ news, olds, output, session }) {
+        update: Effect.fn(function* ({ id, news, olds, output, session }) {
           const vpcId = output.vpcId;
 
           // Only DNS and metrics settings can be updated
@@ -141,9 +148,29 @@ export const vpcProvider = () =>
             yield* session.note("Updated DNS hostnames");
           }
 
-          // Note: Tag updates would go here if we support user tag changes
+          // Handle user tag updates
+          const newTags = createTags(id, news.tags);
+          const oldTags = output.tags ?? {};
+          const { removed, upsert } = diffTags(oldTags, newTags);
+          if (removed.length > 0) {
+            yield* ec2.deleteTags({
+              Resources: [vpcId],
+              Tags: removed.map((key) => ({ Key: key })),
+              DryRun: false,
+            });
+          }
+          if (upsert.length > 0) {
+            yield* ec2.createTags({
+              Resources: [vpcId],
+              Tags: upsert,
+              DryRun: false,
+            });
+          }
 
-          return output; // VPC attributes don't change from these updates
+          return {
+            ...output,
+            tags: newTags,
+          }; // VPC attributes don't change from these updates
         }),
 
         delete: Effect.fn(function* ({ output, session }) {
@@ -165,10 +192,7 @@ export const vpcProvider = () =>
                 while: (e) => {
                   // DependencyViolation means there are still dependent resources
                   // This can happen if subnets/IGW are being deleted concurrently
-                  return (
-                    e._tag === "ValidationError" &&
-                    e.message?.includes("DependencyViolation")
-                  );
+                  return e._tag === "DependencyViolation";
                 },
                 schedule: Schedule.exponential(1000, 1.5).pipe(
                   Schedule.intersect(Schedule.recurs(10)), // Try up to 10 times

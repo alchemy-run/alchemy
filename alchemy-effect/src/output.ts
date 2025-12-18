@@ -1,13 +1,13 @@
 import { pipe } from "effect";
-import * as App from "./app.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as App from "./app.ts";
 import { isPrimitive } from "./data.ts";
 import type { From } from "./policy.ts";
+import { getRefMetadata, isRef, ref as stageRef, type Ref } from "./ref.ts";
 import type { AnyResource, Resource } from "./resource.ts";
-import type { IsAny, UnionToIntersection } from "./util.ts";
 import * as State from "./state.ts";
-import { isRef, type Ref, getRefMetadata, ref as stageRef } from "./ref.ts";
+import type { IsAny, UnionToIntersection } from "./util.ts";
 
 // a special symbol only used at runtime to probe the Output proxy
 const ExprSymbol = Symbol.for("alchemy/Expr");
@@ -125,7 +125,7 @@ const proxy = (self: any): any => {
             return new EffectExpr(self.expr, args[0]);
           }
         }
-        throw new Error("Not callable");
+        return undefined;
       },
     },
   );
@@ -367,7 +367,7 @@ export const evaluate: <A, Upstream extends AnyResource, Req>(
           }),
         );
       }
-      return resource.output;
+      return resource.attr;
     } else if (Array.isArray(expr)) {
       return yield* Effect.all(expr.map((item) => evaluate(item, upstream)));
     } else if (typeof expr === "object" && expr !== null) {
@@ -388,6 +388,30 @@ export type Upstream<O extends Output<any, any, any>> =
         [Id in Up["id"]]: Extract<Up, { id: Id }>;
       }
     : never;
+
+export const hasOutputs = (value: any): value is Output<any, any, any> =>
+  Object.keys(upstreamAny(value)).length > 0;
+
+export const upstreamAny = (
+  value: any,
+): {
+  [ID in string]: Resource;
+} => {
+  if (isExpr(value)) {
+    return upstream(value);
+  } else if (Array.isArray(value)) {
+    return Object.assign({}, ...value.map(resolveUpstream));
+  } else if (
+    value &&
+    (typeof value === "object" || typeof value === "function")
+  ) {
+    return Object.assign(
+      {},
+      ...Object.values(value).map((value) => resolveUpstream(value)),
+    );
+  }
+  return {};
+};
 
 export const upstream = <E extends Output<any, AnyResource, any>>(
   expr: E,

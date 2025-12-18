@@ -40,10 +40,56 @@ export interface Resource<
 export interface ResourceTags<R extends Resource<string, string, any, any>> {
   of<S extends ProviderService<R>>(service: S): S;
   tag: Provider<R>;
-  effect<Err, Req>(
-    eff: Effect<ProviderService<R>, Err, Req>,
-  ): Layer.Layer<Provider<R>, Err, Req>;
-  succeed(service: ProviderService<R>): Layer.Layer<Provider<R>>;
+  effect<
+    Err,
+    Req,
+    ReadReq = never,
+    DiffReq = never,
+    PrecreateReq = never,
+    CreateReq = never,
+    UpdateReq = never,
+    DeleteReq = never,
+  >(
+    eff: Effect<
+      ProviderService<
+        R,
+        ReadReq,
+        DiffReq,
+        PrecreateReq,
+        CreateReq,
+        UpdateReq,
+        DeleteReq
+      >,
+      Err,
+      Req
+    >,
+  ): Layer.Layer<
+    Provider<R>,
+    Err,
+    Req | ReadReq | DiffReq | PrecreateReq | CreateReq | UpdateReq | DeleteReq
+  >;
+  succeed<
+    ReadReq = never,
+    DiffReq = never,
+    PrecreateReq = never,
+    CreateReq = never,
+    UpdateReq = never,
+    DeleteReq = never,
+  >(
+    service: ProviderService<
+      R,
+      ReadReq,
+      DiffReq,
+      PrecreateReq,
+      CreateReq,
+      UpdateReq,
+      DeleteReq
+    >,
+  ): Layer.Layer<
+    Provider<R>,
+    never,
+    ReadReq | DiffReq | PrecreateReq | CreateReq | UpdateReq | DeleteReq
+  >;
 }
 
 export const Resource = <Ctor extends (id: string, props: any) => Resource>(

@@ -29,6 +29,7 @@ export const namespaceProvider = () =>
       });
 
       return {
+        stables: ["namespaceId", "accountId"],
         diff: ({ id, news, output }) =>
           Effect.sync(() => {
             if (output.accountId !== accountId) {
