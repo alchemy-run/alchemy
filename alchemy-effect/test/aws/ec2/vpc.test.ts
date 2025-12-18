@@ -12,7 +12,7 @@ import {
 import * as Output from "@/output";
 import { test } from "@/test";
 import { expect } from "@effect/vitest";
-import { Data, LogLevel, Schedule } from "effect";
+import { Data, Duration, LogLevel, Schedule } from "effect";
 import * as Effect from "effect/Effect";
 import * as Logger from "effect/Logger";
 
@@ -800,9 +800,10 @@ const assertVpcTags = Effect.fn(function* (
             new TagsNotPropagated({ expected: expectedTags, actual }),
           );
     }),
+    Effect.tapError(Effect.log),
     Effect.retry({
       while: (e) => e._tag === "TagsNotPropagated",
-      schedule: Schedule.exponential(100).pipe(
+      schedule: Schedule.fixed(1000).pipe(
         Schedule.intersect(Schedule.recurs(10)),
       ),
     }),

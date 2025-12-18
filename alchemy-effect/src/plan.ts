@@ -545,11 +545,14 @@ export const plan = <const Resources extends (Service | Resource)[]>(
                 });
               }
 
+              // TODO(sam): is this correct for all possible states a resource can be in?
+              const oldProps = oldState.props;
+
               const diff = yield* asEffect(
                 provider.diff
                   ? provider.diff({
                       id,
-                      olds: oldState.props,
+                      olds: oldProps,
                       instanceId: oldState.instanceId,
                       output: oldState.attr,
                       news,
@@ -560,7 +563,7 @@ export const plan = <const Resources extends (Service | Resource)[]>(
                   (diff) =>
                     diff ??
                     ({
-                      action: arePropsChanged(oldState.props, news)
+                      action: arePropsChanged(oldProps, news)
                         ? "update"
                         : "noop",
                     } as UpdateDiff | NoopDiff),

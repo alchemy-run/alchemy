@@ -6,7 +6,7 @@ import type { EC2 } from "itty-aws/ec2";
 import type { ScopedPlanStatusSession } from "../../cli/service.ts";
 import { somePropsAreDifferent } from "../../diff.ts";
 import type { ProviderService } from "../../provider.ts";
-import { createTagger, createTagsList } from "../../tags.ts";
+import { createTagger, createTagsList, diffTags } from "../../tags.ts";
 import { Account } from "../account.ts";
 import { Region } from "../region.ts";
 import { EC2Client } from "./client.ts";
@@ -127,7 +127,6 @@ export const vpcProvider = () =>
         }),
 
         update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          const tags = createTags(id, news.tags);
           const vpcId = output.vpcId;
 
           // Only DNS and metrics settings can be updated
@@ -150,16 +149,9 @@ export const vpcProvider = () =>
           }
 
           // Handle user tag updates
-          const oldTags = output.tags;
-          const removed: string[] = [];
-          const updated: { Key: string; Value: string }[] = [];
-          for (const key in oldTags) {
-            if (!(key in tags)) {
-              removed.push(key);
-            } else if (oldTags[key] !== tags[key]) {
-              updated.push({ Key: key, Value: tags[key] });
-            }
-          }
+          const newTags = createTags(id, news.tags);
+          const oldTags = output.tags ?? {};
+          const { removed, upsert } = diffTags(oldTags, newTags);
           if (removed.length > 0) {
             yield* ec2.deleteTags({
               Resources: [vpcId],
@@ -167,17 +159,17 @@ export const vpcProvider = () =>
               DryRun: false,
             });
           }
-          if (updated.length > 0) {
+          if (upsert.length > 0) {
             yield* ec2.createTags({
               Resources: [vpcId],
-              Tags: updated,
+              Tags: upsert,
               DryRun: false,
             });
           }
 
           return {
             ...output,
-            tags,
+            tags: newTags,
           }; // VPC attributes don't change from these updates
         }),
 
