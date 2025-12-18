@@ -305,20 +305,22 @@ export const plan = <const Resources extends (Service | Resource)[]>(
               return resourceExpr;
             }
 
+            const oldProps =
+              oldState.status === "created" ||
+              oldState.status === "updated" ||
+              oldState.status === "replaced"
+                ? // if we're in a stable state, then just use the props
+                  oldState.props
+                : // if we failed to update or replace, compare with the last known stable props
+                  oldState.status === "updating" || oldState.status === "replacing"
+                  ? oldState.old.props
+                  : // TODO(sam): it kinda doesn't make sense to diff with a "deleting" state
+                    oldState.props;
+
             const diff = yield* provider.diff
               ? provider.diff({
                   id: resource.id,
-                  olds:
-                    oldState.status === "created" ||
-                    oldState.status === "updated" ||
-                    oldState.status === "replaced"
-                      ? // if we're in a stable state, then just use the props
-                        oldState.props
-                      : // if we failed to update or replace, compare with the last known stable props
-                        oldState.status === "updating" || oldState.status === "replacing"
-                        ? oldState.old.props
-                        : // TODO(sam): it kinda doesn't make sense to diff with a "deleting" state
-                          oldState.props,
+                  olds: oldProps,
                   instanceId: oldState.instanceId,
                   news: props,
                   output: oldState.attr,
@@ -327,23 +329,23 @@ export const plan = <const Resources extends (Service | Resource)[]>(
 
             const stables: string[] = [...(provider.stables ?? []), ...(diff?.stables ?? [])];
 
+            const withStables = (output: any) =>
+              stables.length > 0
+                ? new Output.ResourceExpr(
+                    resourceExpr.src,
+                    Object.fromEntries(stables.map((stable) => [stable, output?.[stable]])),
+                  )
+                : // if there are no stable properties, treat every property as changed
+                  resourceExpr;
+
             if (diff == null) {
-              if (arePropsChanged(oldState, props)) {
+              if (arePropsChanged(oldProps, props)) {
                 // the props have changed but the provider did not provide any hints as to what is stable
                 // so we must assume everything has changed
-                return resourceExpr;
+                return withStables(oldState?.attr);
               }
             } else if (diff.action === "update") {
-              const output = oldState?.attr;
-              if (stables.length > 0) {
-                return new Output.ResourceExpr(
-                  resourceExpr.src,
-                  Object.fromEntries(stables.map((stable) => [stable, output?.[stable]])),
-                );
-              } else {
-                // if there are no stable properties, treat every property as changed
-                return resourceExpr;
-              }
+              return withStables(oldState?.attr);
             } else if (diff.action === "replace") {
               return resourceExpr;
             }
@@ -753,12 +755,12 @@ export class DeleteResourceHasDownstreamDependencies extends Data.TaggedError(
 }> {}
 
 const arePropsChanged = <R extends Resource>(
-  oldState: ResourceState | undefined,
+  oldProps: R["props"] | undefined,
   newProps: R["props"],
 ) => {
   return (
     Output.hasOutputs(newProps) ||
-    JSON.stringify(omit(oldState?.props ?? {}, "bindings")) !==
+    JSON.stringify(omit((oldProps ?? {}) as any, "bindings")) !==
       JSON.stringify(omit((newProps ?? {}) as any, "bindings"))
   );
 };
