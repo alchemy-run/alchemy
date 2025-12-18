@@ -1,3 +1,13 @@
+## v0.4.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **ec2**: Add IGW, Route, Route Table, Route Table Assoication &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/23 [<samp>(0eeb6)</samp>](https://github.com/alchemy-run/alchemy/commit/0eeb613)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v0.3.0...v0.4.0)
+
+---
+
 ## v0.3.0
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
