@@ -203,6 +203,24 @@ export const internetGatewayProvider = () =>
                     "InvalidInternetGatewayID.NotFound",
                     () => Effect.void,
                   ),
+                  // Retry on dependency violations (e.g., NAT Gateway with EIP still attached)
+                  Effect.retry({
+                    while: (e) => {
+                      return (
+                        e._tag === "DependencyViolation" ||
+                        (e._tag === "ValidationError" &&
+                          e.message?.includes("DependencyViolation"))
+                      );
+                    },
+                    schedule: Schedule.exponential(1000, 1.5).pipe(
+                      Schedule.intersect(Schedule.recurs(20)), // Up to 20 retries
+                      Schedule.tapOutput(([, attempt]) =>
+                        session.note(
+                          `Waiting for VPC dependencies to clear before detaching... (attempt ${attempt + 1})`,
+                        ),
+                      ),
+                    ),
+                  }),
                 );
               yield* session.note(`Detached from VPC: ${attachment.vpcId}`);
             }

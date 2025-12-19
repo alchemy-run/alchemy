@@ -4,8 +4,10 @@ import type * as IAM from "../iam.ts";
 
 export type { Context } from "aws-lambda";
 
-export interface FunctionProps<Req = unknown>
-  extends RuntimeProps<Function, Req> {
+export interface FunctionProps<Req = unknown> extends RuntimeProps<
+  Function,
+  Req
+> {
   functionName?: string;
   functionArn?: string;
   main: string;

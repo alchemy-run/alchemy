@@ -22,11 +22,11 @@ export interface SecondaryIndex<
   ID extends string = string,
   Props extends SecondaryIndexProps = SecondaryIndexProps,
 > extends Resource<
-    "AWS.DynamoDB.SecondaryIndex",
-    ID,
-    Props,
-    SecondaryIndexAttrs<Props>
-  > {}
+  "AWS.DynamoDB.SecondaryIndex",
+  ID,
+  Props,
+  SecondaryIndexAttrs<Props>
+> {}
 
 export interface SecondaryIndexProps<
   Source extends Table = Table,

@@ -15,12 +15,12 @@ export interface InternetGateway<
   ID extends string = string,
   Props extends InternetGatewayProps = InternetGatewayProps,
 > extends Resource<
-    "AWS.EC2.InternetGateway",
-    ID,
-    Props,
-    InternetGatewayAttrs<Input.Resolve<Props>>,
-    InternetGateway
-  > {}
+  "AWS.EC2.InternetGateway",
+  ID,
+  Props,
+  InternetGatewayAttrs<Input.Resolve<Props>>,
+  InternetGateway
+> {}
 
 export type InternetGatewayId<ID extends string = string> = `igw-${ID}`;
 export const InternetGatewayId = <ID extends string>(

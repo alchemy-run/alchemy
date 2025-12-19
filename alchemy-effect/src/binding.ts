@@ -44,13 +44,13 @@ export interface Bind<
   Cap extends Capability,
   Tag extends string,
 > extends Context.Tag<
-    `${F["type"]}(${Cap["type"]}, ${Tag})`,
-    BindingService<
-      F,
-      Extract<Extract<Cap["resource"], Resource>["base"], Resource>,
-      F["props"]
-    >
-  > {
+  `${F["type"]}(${Cap["type"]}, ${Tag})`,
+  BindingService<
+    F,
+    Extract<Extract<Cap["resource"], Resource>["base"], Resource>,
+    F["props"]
+  >
+> {
   /** @internal phantom */
   name: Tag;
 }

@@ -37,6 +37,35 @@ export const createTagger = Effect.fn(function* () {
   });
 });
 
+/**
+ * Creates AWS-compatible tag filters for finding resources by alchemy tags.
+ * Use with AWS describe APIs that accept Filter parameters.
+ */
+export const createAlchemyTagFilters = Effect.fn(function* (id: string) {
+  const app = yield* App;
+  return [
+    { Name: "tag:alchemy::app", Values: [app.name] },
+    { Name: "tag:alchemy::stage", Values: [app.stage] },
+    { Name: "tag:alchemy::id", Values: [id] },
+  ];
+});
+
+/**
+ * Checks if a resource has the expected alchemy tags for this app/stage/id.
+ */
+export const hasAlchemyTags = Effect.fn(function* (
+  id: string,
+  tags: Tags | undefined,
+) {
+  const app = yield* App;
+  const expectedTags = {
+    "alchemy::app": app.name,
+    "alchemy::stage": app.stage,
+    "alchemy::id": id,
+  };
+  return hasTags(expectedTags, tags);
+});
+
 export const diffTags = (
   oldTags: Record<string, string>,
   newTags: Record<string, string>,

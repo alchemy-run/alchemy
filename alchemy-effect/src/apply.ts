@@ -1,3 +1,4 @@
+import { Layer } from "effect";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type { Simplify } from "effect/Types";
@@ -5,22 +6,23 @@ import { App } from "./app.ts";
 import type { AnyBinding, BindingService } from "./binding.ts";
 import {
   type PlanStatusSession,
-  CLI,
   type ScopedPlanStatusSession,
+  CLI,
 } from "./cli/service.ts";
 import type { ApplyStatus } from "./event.ts";
 import { generateInstanceId, InstanceId } from "./instance-id.ts";
 import * as Output from "./output.ts";
 import {
   type Apply,
-  plan,
   type BindNode,
   type Delete,
   type DerivePlan,
   type IPlan,
   type Providers,
+  plan,
 } from "./plan.ts";
 import type { Instance } from "./policy.ts";
+import { getProviderByType } from "./provider.ts";
 import type { AnyResource, Resource } from "./resource.ts";
 import type { AnyService } from "./service.ts";
 import {
@@ -36,8 +38,6 @@ import {
   StateStoreError,
 } from "./state.ts";
 import { asEffect } from "./util.ts";
-import { getProviderByType } from "./provider.ts";
-import { Layer } from "effect";
 
 export type ApplyEffect<
   P extends IPlan,
@@ -237,6 +237,7 @@ const expandAndPivot = Effect.fnUntraced(function* (
           return oldBindingOutput;
         }),
       ),
+      { concurrency: "unbounded" },
     );
 
   const apply: (node: Apply) => Effect.Effect<any, never, never> = (node) =>
@@ -284,6 +285,7 @@ const expandAndPivot = Effect.fnUntraced(function* (
                   Effect.map(({ upstreamAttr }) => [id, upstreamAttr]),
                 ),
               ),
+              { concurrency: "unbounded" },
             ),
           );
 
@@ -440,6 +442,7 @@ const expandAndPivot = Effect.fnUntraced(function* (
                         Effect.map(({ upstreamAttr }) => [id, upstreamAttr]),
                       ),
                   ),
+                  { concurrency: "unbounded" },
                 ),
               );
               const news = (yield* Output.evaluate(
@@ -577,6 +580,7 @@ const expandAndPivot = Effect.fnUntraced(function* (
                         Effect.map(({ upstreamAttr }) => [id, upstreamAttr]),
                       ),
                   ),
+                  { concurrency: "unbounded" },
                 ),
               );
               const news = (yield* Output.evaluate(
@@ -698,6 +702,7 @@ const expandAndPivot = Effect.fnUntraced(function* (
           return [id, yield* apply(node)];
         }),
       ),
+      { concurrency: "unbounded" },
     ),
   );
 });
@@ -796,6 +801,7 @@ const collectGarbage = Effect.fnUntraced(function* (
                 ? deleteResource(deletionGraph[dep] as Delete<Resource>)
                 : Effect.void,
             ),
+            { concurrency: "unbounded" },
           );
 
           yield* report("deleting");
@@ -814,14 +820,16 @@ const collectGarbage = Effect.fnUntraced(function* (
             });
           }
 
-          yield* provider.delete({
-            id: logicalId,
-            instanceId,
-            olds: props as never,
-            output: attr,
-            session: scopedSession,
-            bindings: [],
-          });
+          if (attr !== undefined) {
+            yield* provider.delete({
+              id: logicalId,
+              instanceId,
+              olds: props as never,
+              output: attr,
+              session: scopedSession,
+              bindings: [],
+            });
+          }
 
           if (isDeleteNode(node)) {
             // TODO(sam): should we commit a tombstone instead? and then clean up tombstones after all deletions are complete?
@@ -854,5 +862,6 @@ const collectGarbage = Effect.fnUntraced(function* (
     Object.values(deletionGraph)
       .filter((node) => node !== undefined)
       .map(deleteResource),
+    { concurrency: "unbounded" },
   );
 });

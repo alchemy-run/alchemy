@@ -1,6 +1,6 @@
 {
-    "include": ["bin"],
-    "compilerOptions": {
-        "noEmit": true,
-    }
+  "include": ["bin"],
+  "compilerOptions": {
+    "noEmit": true
+  }
 }

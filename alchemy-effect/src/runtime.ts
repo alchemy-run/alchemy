@@ -58,8 +58,8 @@ export interface Runtime<
   Type extends string = string,
   Handler = unknown,
   Props = unknown,
-> extends IRuntime<Type, Handler, Props>,
-    Resource<Type, string, Props> {
+>
+  extends IRuntime<Type, Handler, Props>, Resource<Type, string, Props> {
   provider: ResourceTags<this>;
   <
     const ID extends string,

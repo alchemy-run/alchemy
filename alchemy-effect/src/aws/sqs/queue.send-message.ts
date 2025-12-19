@@ -8,8 +8,10 @@ import { Function } from "../lambda/function.ts";
 import { SQSClient } from "./client.ts";
 import { Queue } from "./queue.ts";
 
-export interface SendMessage<Q = Queue>
-  extends Capability<"AWS.SQS.SendMessage", Q> {}
+export interface SendMessage<Q = Queue> extends Capability<
+  "AWS.SQS.SendMessage",
+  Q
+> {}
 
 export const SendMessage = Binding<
   <Q extends Queue>(queue: Q) => Binding<Function, SendMessage<To<Q>>>

@@ -4,8 +4,10 @@ import type { To } from "../../policy.ts";
 import { Worker } from "../worker/worker.ts";
 import type { Bucket } from "./bucket.ts";
 
-export interface Bind<B = Bucket>
-  extends Capability<"Cloudflare.R2.Bucket.Bind", B> {}
+export interface Bind<B = Bucket> extends Capability<
+  "Cloudflare.R2.Bucket.Bind",
+  B
+> {}
 
 export const Bind = Binding<
   <B extends Bucket>(bucket: B) => Binding<Worker, Bind<To<B>>>

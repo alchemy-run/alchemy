@@ -3,13 +3,15 @@
 # `alchemy-effect`
 
 `alchemy-effect` is an **Infrastructure-as-Effects (IaE)** framework that unifies business logic and infrastructure config into a single, type-safe program with the following benefits:
+
 1. Type-Checked IAM Policies
 2. Optimally Tree-Shaken Bundles
 3. Testable Business Logic
 4. Re-usable Components
-5. Reviewable Deployment Plans 
+5. Reviewable Deployment Plans
 
 ## Install
+
 ```bash
 bun add alchemy-effect
 ```
@@ -27,11 +29,13 @@ You will receive a type error if you mess up your Bindings:
 > This error means you are missing the `SendMessage<Messages>` binding (you provided `never` instead of `SendMessage<Messages>`).
 
 ## Plan & Deploy
+
 An `alchemy-effect` program produces a Plan that can be reviewed prior to deployment:
 
 <img src="./images/alchemy-effect-plan.gif" alt="alchemy-effect plan video" width="600"/>
 
-## Type-Level Plan 
+## Type-Level Plan
+
 All knowable information about the Plan is available at compile-time:
 
 <img src="./images/alchemy-effect-plan-type.png" alt="alchemy-effect plan type" width="600"/>
@@ -50,17 +54,19 @@ export default Api.handler.pipe(
 );
 ```
 
-## Pluggable Layers 
+## Pluggable Layers
+
 Everything (including the CLI) is provided as Effect layers:
 
 <img src="./images/alchemy-effect-layers.png" alt="alchemy-effect layers" width="600"/>
 
 ## Literally Typed Outputs
+
 The output of deploying a stack is totally known at compile-time, e.g. the `.fifo` suffix of a SQS FIFO Queue:
 
 <img src="./images/alchemy-effect-output.png" alt="alchemy-effect output" width="600"/>
 
-# Concepts 🔱 
+# Concepts 🔱
 
 <img src="./images/alchemy-effect-triple.png" alt="alchemy-effect logo" width="600"/>
 
@@ -78,7 +84,7 @@ Resources are declared along-side your business logic as classes, e.g. a FIFO SQ
 class Messages extends SQS.Queue("Messages", {
   fifo: true,
   schema: S.String,
-}) {} 
+}) {}
 ```
 
 ## Functions
@@ -122,7 +128,7 @@ class Api extends Lambda.serve("Api", {
 
 # Components
 
-Infrastructure and business logic can be encapsulated as a Component using a simple function. 
+Infrastructure and business logic can be encapsulated as a Component using a simple function.
 
 ```ts
 const Monitor = <const ID extends string, ReqAlarm, ReqResolved>(

@@ -28,7 +28,7 @@
     "noPropertyAccessFromIndexSignature": false,
 
     "noImplicitThis": true,
-    
+
     "sourceMap": true,
     "declaration": true,
     "declarationMap": true,

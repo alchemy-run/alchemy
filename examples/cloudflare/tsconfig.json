@@ -11,9 +11,7 @@
     "declaration": true,
     "module": "Preserve",
     "moduleResolution": "Bundler",
-    "target": "ESNext",
+    "target": "ESNext"
   },
-  "references": [
-    { "path": "../../alchemy-effect/tsconfig.json" },
-  ]
+  "references": [{ "path": "../../alchemy-effect/tsconfig.json" }]
 }

@@ -1,12 +1,11 @@
 import type { Input, InputProps } from "@/input";
-import * as Context from "effect/Context";
-import * as Option from "effect/Option";
 import { Resource } from "@/resource";
+import * as State from "@/state";
 import { isUnknown } from "@/unknown";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import type { ProviderService } from "@/provider";
-import * as State from "@/state";
+import * as Option from "effect/Option";
 
 // Bucket
 export type BucketProps = {
@@ -98,12 +97,12 @@ export interface Function<
   ID extends string = string,
   Props extends InputProps<FunctionProps> = InputProps<FunctionProps>,
 > extends Resource<
-    "Test.Function",
-    ID,
-    Props,
-    FunctionAttr<Input.Resolve<Props>>,
-    Function
-  > {}
+  "Test.Function",
+  ID,
+  Props,
+  FunctionAttr<Input.Resolve<Props>>,
+  Function
+> {}
 
 export const Function = Resource<{
   <const ID extends string, const Props extends InputProps<FunctionProps>>(
@@ -156,12 +155,12 @@ export interface TestResource<
   ID extends string = string,
   Props extends InputProps<TestResourceProps> = InputProps<TestResourceProps>,
 > extends Resource<
-    "Test.TestResource",
-    ID,
-    Props,
-    TestResourceAttr<Input.Resolve<Props>>,
-    TestResource
-  > {}
+  "Test.TestResource",
+  ID,
+  Props,
+  TestResourceAttr<Input.Resolve<Props>>,
+  TestResource
+> {}
 
 export class TestResourceHooks extends Context.Tag("TestResourceHooks")<
   TestResourceHooks,
@@ -169,6 +168,7 @@ export class TestResourceHooks extends Context.Tag("TestResourceHooks")<
     create?: (id: string, props: TestResourceProps) => Effect.Effect<void, any>;
     update?: (id: string, props: TestResourceProps) => Effect.Effect<void, any>;
     delete?: (id: string) => Effect.Effect<void, any>;
+    read?: (id: string) => Effect.Effect<void, any>;
   }
 >() {}
 
@@ -182,6 +182,15 @@ export const TestResource = Resource<{
 export const testResourceProvider = TestResource.provider.effect(
   Effect.gen(function* () {
     return {
+      read: Effect.fn(function* ({ id, output }) {
+        const hooks = Option.getOrUndefined(
+          yield* Effect.serviceOption(TestResourceHooks),
+        );
+        if (hooks?.read) {
+          return (yield* hooks.read(id)) as any;
+        }
+        return output;
+      }),
       diff: Effect.fn(function* ({ id, news, olds }) {
         if (news.replaceString !== olds.replaceString) {
           return {
@@ -268,15 +277,15 @@ export type StaticStablesResourceAttr<
 
 export interface StaticStablesResource<
   ID extends string = string,
-  Props extends
-    InputProps<StaticStablesResourceProps> = InputProps<StaticStablesResourceProps>,
+  Props extends InputProps<StaticStablesResourceProps> =
+    InputProps<StaticStablesResourceProps>,
 > extends Resource<
-    "Test.StaticStablesResource",
-    ID,
-    Props,
-    StaticStablesResourceAttr<Input.Resolve<Props>>,
-    StaticStablesResource
-  > {}
+  "Test.StaticStablesResource",
+  ID,
+  Props,
+  StaticStablesResourceAttr<Input.Resolve<Props>>,
+  StaticStablesResource
+> {}
 
 export class StaticStablesResourceHooks extends Context.Tag(
   "StaticStablesResourceHooks",
@@ -356,7 +365,8 @@ export const staticStablesResourceProvider =
             replaceString: news.replaceString,
           };
         }),
-        delete: Effect.fn(function* ({ id }) {
+        delete: Effect.fn(function* ({ id, output }) {
+          yield* Effect.logDebug(output.string);
           const hooks = Option.getOrUndefined(
             yield* Effect.serviceOption(StaticStablesResourceHooks),
           );

@@ -15,12 +15,12 @@ export interface Namespace<
   ID extends string = string,
   Props extends NamespaceProps = NamespaceProps,
 > extends Resource<
-    "Cloudflare.KV.Namespace",
-    ID,
-    Props,
-    NamespaceAttr<Props>,
-    Namespace
-  > {}
+  "Cloudflare.KV.Namespace",
+  ID,
+  Props,
+  NamespaceAttr<Props>,
+  Namespace
+> {}
 
 export const Namespace = Resource<{
   <const ID extends string, const Props extends NamespaceProps>(

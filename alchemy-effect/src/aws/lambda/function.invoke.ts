@@ -8,8 +8,10 @@ import type { $ } from "../../$.ts";
 import { LambdaClient } from "./client.ts";
 import { Function } from "./function.ts";
 
-export interface InvokeFunction<Resource = unknown>
-  extends Capability<"AWS.Lambda.InvokeFunction", Resource> {}
+export interface InvokeFunction<Resource = unknown> extends Capability<
+  "AWS.Lambda.InvokeFunction",
+  Resource
+> {}
 
 export const InvokeFunction = Binding<
   <F extends Function>(func: F) => Binding<Function, InvokeFunction<On<F>>>

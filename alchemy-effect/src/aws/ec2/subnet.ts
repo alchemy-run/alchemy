@@ -16,12 +16,12 @@ export interface Subnet<
   ID extends string = string,
   Props extends SubnetProps = SubnetProps,
 > extends Resource<
-    "AWS.EC2.Subnet",
-    ID,
-    Props,
-    SubnetAttrs<Input.Resolve<Props>>,
-    Subnet
-  > {}
+  "AWS.EC2.Subnet",
+  ID,
+  Props,
+  SubnetAttrs<Input.Resolve<Props>>,
+  Subnet
+> {}
 
 export interface SubnetProps {
   /**

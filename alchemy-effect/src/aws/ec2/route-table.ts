@@ -16,12 +16,12 @@ export interface RouteTable<
   ID extends string = string,
   Props extends RouteTableProps = RouteTableProps,
 > extends Resource<
-    "AWS.EC2.RouteTable",
-    ID,
-    Props,
-    RouteTableAttrs<Input.Resolve<Props>>,
-    RouteTable
-  > {}
+  "AWS.EC2.RouteTable",
+  ID,
+  Props,
+  RouteTableAttrs<Input.Resolve<Props>>,
+  RouteTable
+> {}
 
 export type RouteTableId<ID extends string = string> = `rtb-${ID}`;
 export const RouteTableId = <ID extends string>(
