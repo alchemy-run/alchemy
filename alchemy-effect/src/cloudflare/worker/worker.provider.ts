@@ -170,8 +170,8 @@ export const workerProvider = () =>
           yield* setWorkerSubdomain(name, enable);
         }
         return {
-          id: worker.id,
-          name,
+          workerId: worker.id,
+          workerName: name,
           logpush: worker.logpush,
           observability: metadata.observability,
           subdomain: news.subdomain ?? {
@@ -192,13 +192,13 @@ export const workerProvider = () =>
       });
 
       return {
-        stables: ["id"],
+        stables: ["workerId"],
         diff: Effect.fnUntraced(function* ({ id, news, output }) {
           if (output.accountId !== accountId) {
             return { action: "replace" };
           }
           const workerName = yield* createWorkerName(id, news.name);
-          if (workerName !== output.name) {
+          if (workerName !== output.workerName) {
             return { action: "replace" };
           }
           const [assets, bundle] = yield* Effect.all([
@@ -211,19 +211,19 @@ export const workerProvider = () =>
           ) {
             return {
               action: "update",
-              stables: output.name === workerName ? ["name"] : undefined,
+              stables: output.workerName === workerName ? ["name"] : undefined,
             };
           }
         }),
         read: Effect.fnUntraced(function* ({ id, output }) {
-          const workerName = yield* createWorkerName(id, output?.name);
+          const workerName = yield* createWorkerName(id, output?.workerName);
           const worker = yield* api.workers.beta.workers.get(workerName, {
             account_id: accountId,
           });
           return {
             accountId,
-            id: worker.id,
-            name: worker.name,
+            workerId: worker.id,
+            workerName: worker.name,
             logpush: worker.logpush,
             observability: worker.observability,
             subdomain: {
@@ -269,7 +269,7 @@ export const workerProvider = () =>
         }),
         delete: Effect.fnUntraced(function* ({ output }) {
           yield* api.workers.scripts
-            .delete(output.id, {
+            .delete(output.workerId, {
               account_id: output.accountId,
             })
             .pipe(Effect.catchTag("NotFound", () => Effect.void));

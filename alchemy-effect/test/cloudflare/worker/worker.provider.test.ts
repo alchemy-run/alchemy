@@ -53,12 +53,12 @@ test(
       const stack = yield* apply(TestWorker);
 
       const actualWorker = yield* api.workers.beta.workers.get(
-        stack.TestWorker.name,
+        stack.TestWorker.workerName,
         {
           account_id: accountId,
         },
       );
-      expect(actualWorker.name).toEqual(stack.TestWorker.name);
+      expect(actualWorker.name).toEqual(stack.TestWorker.workerName);
 
       // Verify the worker is accessible via URL
       if (stack.TestWorker.url) {
@@ -82,12 +82,12 @@ test(
     const stack = yield* apply(TestWorker);
 
     const actualWorker = yield* api.workers.beta.workers.get(
-      stack.TestWorker.name,
+      stack.TestWorker.workerName,
       {
         account_id: accountId,
       },
     );
-    expect(actualWorker.name).toEqual(stack.TestWorker.name);
+    expect(actualWorker.name).toEqual(stack.TestWorker.workerName);
     expect(actualWorker.subdomain).toEqual({
       enabled: true,
       previews_enabled: true,
@@ -95,7 +95,7 @@ test(
 
     yield* destroy();
 
-    yield* waitForWorkerToBeDeleted(stack.TestWorker.id, accountId);
+    yield* waitForWorkerToBeDeleted(stack.TestWorker.workerId, accountId);
   }).pipe(Effect.provide(CloudflareLive.providers()), logLevel),
 );
 
@@ -131,12 +131,12 @@ test(
       const stack = yield* apply(TestWorkerWithAssets);
 
       const actualWorker = yield* api.workers.beta.workers.get(
-        stack.TestWorkerWithAssets.name,
+        stack.TestWorkerWithAssets.workerName,
         {
           account_id: accountId,
         },
       );
-      expect(actualWorker.name).toEqual(stack.TestWorkerWithAssets.name);
+      expect(actualWorker.name).toEqual(stack.TestWorkerWithAssets.workerName);
 
       // Verify the worker has assets
       expect(stack.TestWorkerWithAssets.hash.assets).toBeDefined();
@@ -174,12 +174,12 @@ test(
       const stack = yield* apply(TestWorkerWithAssets);
 
       const actualWorker = yield* api.workers.beta.workers.get(
-        stack.TestWorkerWithAssets.name,
+        stack.TestWorkerWithAssets.workerName,
         {
           account_id: accountId,
         },
       );
-      expect(actualWorker.name).toEqual(stack.TestWorkerWithAssets.name);
+      expect(actualWorker.name).toEqual(stack.TestWorkerWithAssets.workerName);
       expect(stack.TestWorkerWithAssets.hash.assets).toBeDefined();
     }
 
@@ -207,7 +207,10 @@ test(
 
     yield* destroy();
 
-    yield* waitForWorkerToBeDeleted(stack.TestWorkerWithAssets.id, accountId);
+    yield* waitForWorkerToBeDeleted(
+      stack.TestWorkerWithAssets.workerId,
+      accountId,
+    );
   }).pipe(Effect.provide(CloudflareLive.providers()), logLevel),
 );
 

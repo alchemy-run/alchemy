@@ -30,8 +30,8 @@ export type WorkerProps<Req = any> = RuntimeProps<
       });
 
 export type WorkerAttr<Props extends WorkerProps<any>> = {
-  id: string;
-  name: Props["name"] extends string ? Props["name"] : string;
+  workerId: string;
+  workerName: Props["name"] extends string ? Props["name"] : string;
   logpush: Props["logpush"] extends boolean ? Props["logpush"] : boolean;
   observability: Props["observability"] extends Worker.Observability
     ? Props["observability"]
