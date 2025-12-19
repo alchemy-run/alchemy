@@ -12,12 +12,12 @@ import type {
 } from "itty-aws/lambda";
 import { App } from "../../app.ts";
 import { DotAlchemy } from "../../dot-alchemy.ts";
-import type { ProviderService } from "../../provider.ts";
 import { createTagger, createTagsList, hasTags } from "../../tags.ts";
 import { Account } from "../account.ts";
 import * as IAM from "../iam.ts";
 import { Region } from "../region.ts";
 import { zipCode } from "../zip.ts";
+import { createPhysicalName } from "../../physical-name.ts";
 import { LambdaClient } from "./client.ts";
 import { Function, type FunctionAttr, type FunctionProps } from "./function.ts";
 
@@ -34,25 +34,35 @@ export const functionProvider = () =>
 
       // const assets = yield* Assets;
 
-      const createFunctionName = (id: string) =>
-        `${app.name}-${app.stage}-${id}-${region}`;
-      const createRoleName = (id: string) =>
-        `${app.name}-${app.stage}-${id}-${region}`;
-      const createPolicyName = (id: string) =>
-        `${app.name}-${app.stage}-${id}-${region}`;
+      const createFunctionName = (
+        id: string,
+        functionName: string | undefined,
+      ) =>
+        Effect.gen(function* () {
+          return (
+            functionName ?? (yield* createPhysicalName({ id, maxLength: 64 }))
+          );
+        });
 
-      const createPhysicalNames = (id: string) => {
-        const roleName = createRoleName(id);
-        const policyName = createPolicyName(id);
-        const functionName = createFunctionName(id);
-        return {
-          roleName,
-          policyName,
-          functionName,
-          roleArn: `arn:aws:iam::${accountId}:role/${roleName}`,
-          functionArn: `arn:aws:lambda:${region}:${accountId}:function:${functionName}`,
-        };
-      };
+      const createRoleName = (id: string) =>
+        createPhysicalName({ id, maxLength: 64 });
+
+      const createPolicyName = (id: string) =>
+        createPhysicalName({ id, maxLength: 128 });
+
+      const createNames = (id: string, functionName: string | undefined) =>
+        Effect.gen(function* () {
+          const roleName = yield* createRoleName(id);
+          const policyName = yield* createPolicyName(id);
+          const fn = yield* createFunctionName(id, functionName);
+          return {
+            roleName,
+            policyName,
+            functionName: fn,
+            roleArn: `arn:aws:iam::${accountId}:role/${roleName}`,
+            functionArn: `arn:aws:lambda:${region}:${accountId}:function:${fn}`,
+          };
+        });
 
       const attachBindings = Effect.fn(function* ({
         roleName,
@@ -431,7 +441,7 @@ export const functionProvider = () =>
           if (
             // function name changed
             output.functionName !==
-              (news.functionName ?? createFunctionName(id)) ||
+              (yield* createFunctionName(id, news.functionName)) ||
             // url changed
             olds.url !== news.url
           ) {
@@ -456,7 +466,10 @@ export const functionProvider = () =>
               ...output,
               functionUrl: (yield* lambda
                 .getFunctionUrlConfig({
-                  FunctionName: createFunctionName(id),
+                  FunctionName: yield* createFunctionName(
+                    id,
+                    output.functionName,
+                  ),
                 })
                 .pipe(
                   Effect.map((f) => f.FunctionUrl),
@@ -476,7 +489,10 @@ export const functionProvider = () =>
         }),
 
         precreate: Effect.fn(function* ({ id, news }) {
-          const { roleName, functionName, roleArn } = createPhysicalNames(id);
+          const { roleName, functionName, roleArn } = yield* createNames(
+            id,
+            news.functionName,
+          );
 
           const role = yield* createRoleIfNotExists({ id, roleName });
 
@@ -495,7 +511,7 @@ export const functionProvider = () =>
             functionArn: `arn:aws:lambda:${region}:${accountId}:function:${functionName}`,
             functionName,
             functionUrl: undefined,
-            roleName: createRoleName(id),
+            roleName,
             code: {
               hash: yield* hashCode(code),
             },
@@ -503,11 +519,8 @@ export const functionProvider = () =>
           } satisfies FunctionAttr<FunctionProps>;
         }),
         create: Effect.fn(function* ({ id, news, bindings, session }) {
-          const roleName = createRoleName(id);
-          const policyName = createPolicyName(id);
-          // const policyArn = `arn:aws:iam::${accountId}:policy/${policyName}`;
-          const functionName = news.functionName ?? createFunctionName(id);
-          const functionArn = `arn:aws:lambda:${region}:${accountId}:function:${functionName}`;
+          const { roleName, policyName, functionName, functionArn } =
+            yield* createNames(id, news.functionName);
 
           const role = yield* createRoleIfNotExists({ id, roleName });
 
@@ -557,10 +570,8 @@ export const functionProvider = () =>
           output,
           session,
         }) {
-          const roleName = createRoleName(id);
-          const policyName = createPolicyName(id);
-          const functionName = news.functionName ?? createFunctionName(id);
-          const functionArn = `arn:aws:lambda:${region}:${accountId}:function:${functionName}`;
+          const { roleName, policyName, functionName, functionArn } =
+            yield* createNames(id, news.functionName);
 
           const env = yield* attachBindings({
             roleName,
@@ -659,6 +670,6 @@ export const functionProvider = () =>
             .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
           return null as any;
         }),
-      } satisfies ProviderService<Function>;
+      };
     }),
   );

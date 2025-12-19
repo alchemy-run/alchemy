@@ -1,8 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
-import { App } from "../../app.ts";
-import type { ProviderService } from "../../provider.ts";
+import { createPhysicalName } from "../../physical-name.ts";
 import { Account } from "../account.ts";
 import { Region } from "../region.ts";
 import { SQSClient } from "./client.ts";
@@ -12,7 +11,6 @@ export const queueProvider = () =>
   Queue.provider.effect(
     Effect.gen(function* () {
       const sqs = yield* SQSClient;
-      const app = yield* App;
       const region = yield* Region;
       const accountId = yield* Account;
       const createQueueName = (
@@ -22,8 +20,16 @@ export const queueProvider = () =>
           fifo?: boolean;
         },
       ) =>
-        props.queueName ??
-        `${app.name}-${id}-${app.stage}${props.fifo ? ".fifo" : ""}`;
+        Effect.gen(function* () {
+          if (props.queueName) {
+            return props.queueName;
+          }
+          const baseName = yield* createPhysicalName({
+            id,
+            maxLength: props.fifo ? 80 - ".fifo".length : 80,
+          });
+          return props.fifo ? `${baseName}.fifo` : baseName;
+        });
       const createAttributes = (props: QueueProps) => ({
         FifoQueue: props.fifo ? "true" : "false",
         FifoThroughputLimit: props.fifoThroughputLimit,
@@ -46,15 +52,15 @@ export const queueProvider = () =>
           if (oldFifo !== newFifo) {
             return { action: "replace" } as const;
           }
-          const oldQueueName = createQueueName(id, olds);
-          const newQueueName = createQueueName(id, news);
+          const oldQueueName = yield* createQueueName(id, olds);
+          const newQueueName = yield* createQueueName(id, news);
           if (oldQueueName !== newQueueName) {
             return { action: "replace" } as const;
           }
           return { action: "noop" } as const;
         }),
         create: Effect.fn(function* ({ id, news, session }) {
-          const queueName = createQueueName(id, news);
+          const queueName = yield* createQueueName(id, news);
           const response = yield* sqs
             .createQueue({
               QueueName: queueName,
@@ -97,6 +103,6 @@ export const queueProvider = () =>
             })
             .pipe(Effect.catchTag("QueueDoesNotExist", () => Effect.void));
         }),
-      } satisfies ProviderService<Queue>;
+      };
     }),
   );

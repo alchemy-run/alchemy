@@ -1,7 +1,11 @@
 import * as Effect from "effect/Effect";
+import * as Context from "effect/Context";
 
 /** A 16-byte (128-bit) random hex-encoded string representing an physical instance of a logical resource */
-export type InstanceId = string;
+export class InstanceId extends Context.Tag("instance-id")<
+  InstanceId,
+  string
+>() {}
 
 /**
  * @returns Hex-encoded instance ID (16 random bytes)

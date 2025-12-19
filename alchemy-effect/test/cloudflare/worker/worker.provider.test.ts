@@ -28,6 +28,8 @@ test(
     const api = yield* CloudflareApi;
     const accountId = yield* Account;
 
+    yield* destroy();
+
     {
       class Bucket extends R2.Bucket("Bucket", {
         name: "test-bucket-worker",
@@ -102,6 +104,8 @@ test(
   Effect.gen(function* () {
     const api = yield* CloudflareApi;
     const accountId = yield* Account;
+
+    yield* destroy();
 
     {
       class TestWorkerWithAssets extends Worker.serve("TestWorkerWithAssets", {

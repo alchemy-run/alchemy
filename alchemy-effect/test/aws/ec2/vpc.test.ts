@@ -387,13 +387,6 @@ test(
         },
       }) {}
 
-      // class PublicSubnet1 extends EC2.Subnet("PublicSubnet1", {
-      //   vpcId: Output.of(MyVpc).vpcId,
-      //   cidrBlock: "10.0.1.0/24",
-      //   availabilityZone: az1,
-      //   mapPublicIpOnLaunch: true,
-      // }) {}
-
       class PublicSubnet1 extends EC2.Subnet("PublicSubnet1", {
         vpcId: Output.of(MyVpc).vpcId,
         cidrBlock: "10.0.1.0/24",

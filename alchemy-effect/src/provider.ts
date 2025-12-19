@@ -51,7 +51,6 @@ export interface ProviderService<
     olds: Props<Res> | undefined;
     // what is the ARN?
     output: Res["attr"] | undefined; // current state -> synced state
-    session: ScopedPlanStatusSession;
     bindings: BindingData<Res>;
   }): Effect.Effect<Res["attr"] | undefined, any, ReadReq>;
   /**

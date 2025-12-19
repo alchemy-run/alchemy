@@ -2,10 +2,10 @@ import * as FileSystem from "@effect/platform/FileSystem";
 import * as Path from "@effect/platform/Path";
 import type { Workers } from "cloudflare/resources.mjs";
 import * as Effect from "effect/Effect";
-import { App } from "../../app.ts";
 import type { ScopedPlanStatusSession } from "../../cli/service.ts";
 import { DotAlchemy } from "../../dot-alchemy.ts";
 import { ESBuild } from "../../esbuild.ts";
+import { createPhysicalName } from "../../physical-name.ts";
 import { sha256 } from "../../sha256.ts";
 import { Account } from "../account.ts";
 import { CloudflareApi } from "../api.ts";
@@ -15,7 +15,6 @@ import { Worker, type WorkerAttr, type WorkerProps } from "./worker.ts";
 export const workerProvider = () =>
   Worker.provider.effect(
     Effect.gen(function* () {
-      const app = yield* App;
       const api = yield* CloudflareApi;
       const accountId = yield* Account;
       const { read, upload } = yield* Assets;
@@ -48,7 +47,13 @@ export const workerProvider = () =>
       });
 
       const createWorkerName = (id: string, name: string | undefined) =>
-        name ?? `${app.name}-${id}-${app.stage}`.toLowerCase();
+        Effect.gen(function* () {
+          if (name) return name;
+          return (yield* createPhysicalName({
+            id,
+            maxLength: 54,
+          })).toLowerCase();
+        });
 
       const prepareAssets = Effect.fnUntraced(function* (
         assets: WorkerProps["assets"],
@@ -122,7 +127,7 @@ export const workerProvider = () =>
         output: WorkerAttr<WorkerProps<any>> | undefined,
         session: ScopedPlanStatusSession,
       ) {
-        const name = createWorkerName(id, news.name);
+        const name = yield* createWorkerName(id, news.name);
         const [assets, bundle, metadata] = yield* Effect.all([
           prepareAssets(news.assets),
           prepareBundle(id, news.main),
@@ -188,11 +193,11 @@ export const workerProvider = () =>
 
       return {
         stables: ["id"],
-        diff: Effect.fnUntraced(function* ({ id, olds, news, output }) {
+        diff: Effect.fnUntraced(function* ({ id, news, output }) {
           if (output.accountId !== accountId) {
             return { action: "replace" };
           }
-          const workerName = createWorkerName(id, news.name);
+          const workerName = yield* createWorkerName(id, news.name);
           if (workerName !== output.name) {
             return { action: "replace" };
           }
@@ -210,8 +215,29 @@ export const workerProvider = () =>
             };
           }
         }),
+        read: Effect.fnUntraced(function* ({ id, output }) {
+          const workerName = yield* createWorkerName(id, output?.name);
+          const worker = yield* api.workers.beta.workers.get(workerName, {
+            account_id: accountId,
+          });
+          return {
+            accountId,
+            id: worker.id,
+            name: worker.name,
+            logpush: worker.logpush,
+            observability: worker.observability,
+            subdomain: {
+              enabled: worker.subdomain.enabled,
+              previews_enabled: worker.subdomain.previews_enabled,
+            },
+            url: worker.subdomain.enabled
+              ? `https://${workerName}.${yield* getAccountSubdomain(accountId)}.workers.dev`
+              : undefined,
+            tags: worker.tags,
+          } as WorkerAttr<WorkerProps<any>>;
+        }),
         create: Effect.fnUntraced(function* ({ id, news, bindings, session }) {
-          const name = createWorkerName(id, news.name);
+          const name = yield* createWorkerName(id, news.name);
           const existing = yield* api.workers.beta.workers
             .get(name, {
               account_id: accountId,

@@ -1,6 +1,7 @@
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { omit } from "effect/Struct";
 import { App } from "./app.ts";
 import type {
@@ -28,6 +29,7 @@ import {
   type ResourceState,
 } from "./state.ts";
 import { asEffect } from "./util.ts";
+import { InstanceId } from "./instance-id.ts";
 
 export type PlanError = never;
 
@@ -348,13 +350,19 @@ export const plan = <const Resources extends (Service | Resource)[]>(
                       oldState.props;
 
               const diff = yield* provider.diff
-                ? provider.diff({
-                    id: resource.id,
-                    olds: oldProps,
-                    instanceId: oldState.instanceId,
-                    news: props,
-                    output: oldState.attr,
-                  })
+                ? provider
+                    .diff({
+                      id: resource.id,
+                      olds: oldProps,
+                      instanceId: oldState.instanceId,
+                      news: props,
+                      output: oldState.attr,
+                    })
+                    .pipe(
+                      Effect.provide(
+                        Layer.succeed(InstanceId, oldState.instanceId),
+                      ),
+                    )
                 : Effect.succeed(undefined);
 
               const stables: string[] = [
@@ -543,6 +551,26 @@ export const plan = <const Resources extends (Service | Resource)[]>(
                   props: news,
                   state: oldState,
                 });
+              } else if (
+                oldState.status === "creating" &&
+                oldState.attr === undefined
+              ) {
+                if (provider.read) {
+                  const attr = yield* provider.read({
+                    id,
+                    instanceId: oldState.instanceId,
+                    olds: oldState.props,
+                    output: oldState.attr,
+                    bindings,
+                  });
+                  if (attr) {
+                    return Node<Create<Resource>>({
+                      action: "create",
+                      props: news,
+                      state: { ...oldState, attr },
+                    });
+                  }
+                }
               }
 
               // TODO(sam): is this correct for all possible states a resource can be in?
@@ -550,13 +578,19 @@ export const plan = <const Resources extends (Service | Resource)[]>(
 
               const diff = yield* asEffect(
                 provider.diff
-                  ? provider.diff({
-                      id,
-                      olds: oldProps,
-                      instanceId: oldState.instanceId,
-                      output: oldState.attr,
-                      news,
-                    })
+                  ? provider
+                      .diff({
+                        id,
+                        olds: oldProps,
+                        instanceId: oldState.instanceId,
+                        output: oldState.attr,
+                        news,
+                      })
+                      .pipe(
+                        Effect.provide(
+                          Layer.succeed(InstanceId, oldState.instanceId),
+                        ),
+                      )
                   : undefined,
               ).pipe(
                 Effect.map(
@@ -735,20 +769,43 @@ export const plan = <const Resources extends (Service | Resource)[]>(
               stage: app.stage,
               resourceId: id,
             });
+            let attr: any = oldState?.attr;
             if (oldState) {
               const provider = yield* getProviderByType(oldState.resourceType);
+              if (oldState.attr === undefined) {
+                if (provider.read) {
+                  attr = yield* provider
+                    .read({
+                      id,
+                      instanceId: oldState.instanceId,
+                      olds: oldState.props as any,
+                      output: oldState.attr as any,
+                      bindings: oldState.bindings ?? [],
+                    })
+                    .pipe(
+                      Effect.provide(
+                        Layer.succeed(InstanceId, oldState.instanceId),
+                      ),
+                    );
+                }
+                if (attr === undefined) {
+                  // skip deletion if we have no record of any attributes
+                  // TODO(sam): should we open up provider.delete to accept undefined and let it try and generate a physical name and delete?
+                  return undefined;
+                }
+              }
               return [
                 id,
                 {
                   action: "delete",
-                  state: oldState,
+                  state: { ...oldState, attr },
                   // // TODO(sam): Support Detach Bindings
                   bindings: [],
                   provider,
                   resource: {
                     id: id,
                     type: oldState.resourceType,
-                    attr: oldState.attr,
+                    attr,
                     props: oldState.props,
                   } as Resource,
                   // TODO(sam): is it enough to just pass through oldState?
@@ -930,20 +987,24 @@ const isBindingDiff = Effect.fn(function* ({
   if (provider.diff) {
     const state = yield* State;
     const oldState = yield* state.get(oldCap.resource.id);
-    const diff = yield* provider.diff({
-      source: {
-        id: oldCap.resource.id,
-        props: newCap.resource.props,
-        oldProps: oldState?.props,
-        oldAttr: oldState?.attr,
-      },
-      props: newBinding.props,
-      attr: oldBinding.attr,
-      target,
-    });
+    if (oldState) {
+      const diff = yield* provider
+        .diff({
+          source: {
+            id: oldCap.resource.id,
+            props: newCap.resource.props,
+            oldProps: oldState?.props,
+            oldAttr: oldState?.attr,
+          },
+          props: newBinding.props,
+          attr: oldBinding.attr,
+          target,
+        })
+        .pipe(Effect.provide(Layer.succeed(InstanceId, oldState.instanceId)));
 
-    if (diff?.action === "update" || diff?.action === "replace") {
-      return diff;
+      if (diff?.action === "update" || diff?.action === "replace") {
+        return diff;
+      }
     }
   }
   return {

@@ -3,15 +3,15 @@ import * as Schedule from "effect/Schedule";
 
 import type { EC2 } from "itty-aws/ec2";
 
+import type { VpcId } from "./vpc.ts";
 import type { ScopedPlanStatusSession } from "../../cli/service.ts";
 import { somePropsAreDifferent } from "../../diff.ts";
 import type { ProviderService } from "../../provider.ts";
 import { createTagger, createTagsList, diffTags } from "../../tags.ts";
-import { Account } from "../account.ts";
-import { Region } from "../region.ts";
 import { EC2Client } from "./client.ts";
-import type { VpcId } from "./vpc.ts";
 import { Vpc, type VpcAttrs, type VpcProps } from "./vpc.ts";
+import { Region } from "../region.ts";
+import { Account } from "../account.ts";
 
 export const vpcProvider = () =>
   Vpc.provider.effect(
@@ -45,9 +45,8 @@ export const vpcProvider = () =>
             return { action: "replace" };
           }
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const tags = createTags(id, news.tags);
 
+        create: Effect.fn(function* ({ id, news, session }) {
           // 1. Call CreateVpc
           const createResult = yield* ec2.createVpc({
             // TODO(sam): add all properties
@@ -65,7 +64,7 @@ export const vpcProvider = () =>
             TagSpecifications: [
               {
                 ResourceType: "vpc",
-                Tags: createTagsList(tags),
+                Tags: createTagsList(createTags(id, news.tags)),
               },
             ],
             DryRun: false,
@@ -74,7 +73,7 @@ export const vpcProvider = () =>
           const vpcId = createResult.Vpc!.VpcId! as VpcId;
           yield* session.note(`VPC created: ${vpcId}`);
 
-          // 2. Modify DNS attributes if specified (separate API calls)
+          // 3. Modify DNS attributes if specified (separate API calls)
           yield* ec2.modifyVpcAttribute({
             VpcId: vpcId,
             EnableDnsSupport: { Value: news.enableDnsSupport ?? true },
@@ -122,7 +121,6 @@ export const vpcProvider = () =>
                 ipv6Pool: assoc.Ipv6Pool,
               }),
             ),
-            tags,
           } satisfies VpcAttrs<VpcProps>;
         }),
 
@@ -192,7 +190,10 @@ export const vpcProvider = () =>
                 while: (e) => {
                   // DependencyViolation means there are still dependent resources
                   // This can happen if subnets/IGW are being deleted concurrently
-                  return e._tag === "DependencyViolation";
+                  return (
+                    e._tag === "ValidationError" &&
+                    e.message?.includes("DependencyViolation")
+                  );
                 },
                 schedule: Schedule.exponential(1000, 1.5).pipe(
                   Schedule.intersect(Schedule.recurs(10)), // Try up to 10 times

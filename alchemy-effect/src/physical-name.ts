@@ -1,19 +1,41 @@
 import * as Effect from "effect/Effect";
 import { App } from "./app.ts";
+import { InstanceId } from "./instance-id.ts";
 
-export const physicalName = Effect.fn(function* ({
+export const createPhysicalName = Effect.fn(function* ({
   id,
-  instanceId,
   // 16 base32 characters = 80 bits of entropy = 4 × 10⁻⁷
+  instanceId,
   suffixLength = 16,
+  maxLength = 64,
 }: {
   id: string;
-  /** Hex-encoded instance ID (16 random bytes) */
-  instanceId: string;
+  /**
+   * Hex-encoded instance ID (16 random bytes)
+   *
+   * @default - the InstanceID set by the engine in Context
+   */
+  instanceId?: string;
   suffixLength?: number;
+  /**
+   * Maximum length of the physical name.
+   *
+   * If the name exceeds this length, the human-friendly portion of the name will be truncated to maxLength-suffixLength
+   */
+  maxLength?: number;
 }) {
   const app = yield* App;
-  return `${app.name}-${id}-${app.stage}-${base32(Buffer.from(instanceId, "hex")).slice(0, suffixLength)}`;
+  const sanitizedId = id.replace(/[^a-zA-Z0-9-_]/g, "-");
+  const prefix = `${app.name}-${sanitizedId}-${app.stage}-`;
+  const randomId = base32(
+    Buffer.from(instanceId ?? (yield* InstanceId), "hex"),
+  );
+  const suffix = randomId.slice(0, suffixLength);
+  const name = `${prefix}${suffix}`;
+  if (maxLength && name.length > maxLength) {
+    return `${prefix.slice(0, maxLength - suffix.length)}${suffix}`;
+  }
+  return name;
 });
 
 // Base32 is ideal for physical names because it's denser than hex (5 bits per char vs 4)

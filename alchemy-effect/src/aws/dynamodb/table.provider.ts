@@ -5,7 +5,7 @@ import * as Schedule from "effect/Schedule";
 import type { TimeToLiveSpecification } from "itty-aws/dynamodb";
 import { App } from "../../app.ts";
 import type { Input } from "../../input.ts";
-import type { Provider, ProviderService } from "../../provider.ts";
+import type { Provider } from "../../provider.ts";
 import { createTagger, hasTags } from "../../tags.ts";
 import { isScalarAttributeType, toAttributeType } from "./attribute-value.ts";
 import { DynamoDBClient } from "./client.ts";
@@ -16,6 +16,7 @@ import {
   type TableAttrs,
   type TableProps,
 } from "./table.ts";
+import { createPhysicalName } from "../../physical-name.ts";
 
 // we add an explict type to simplify the Layer type errors because the Table interface has a lot of type args
 export const tableProvider = (): Layer.Layer<
@@ -31,7 +32,17 @@ export const tableProvider = (): Layer.Layer<
       const createTableName = (
         id: string,
         props: Input.ResolveProps<TableProps>,
-      ) => props.tableName ?? `${app.name}-${id}-${app.stage}`;
+      ) =>
+        Effect.gen(function* () {
+          return (
+            props.tableName ??
+            (yield* createPhysicalName({
+              id,
+              // see: https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_TableDescription.html#DDB-Type-TableDescription-TableName
+              maxLength: 255,
+            }))
+          );
+        });
 
       const tagged = yield* createTagger();
 
@@ -144,7 +155,7 @@ export const tableProvider = (): Layer.Layer<
         }),
 
         create: Effect.fn(function* ({ id, news, session }) {
-          const tableName = createTableName(id, news);
+          const tableName = yield* createTableName(id, news);
 
           const response = yield* dynamodb
             .createTable({
@@ -272,6 +283,6 @@ export const tableProvider = (): Layer.Layer<
             }
           }
         }),
-      } satisfies ProviderService<Table<string, TableProps<unknown>>>;
+      };
     }),
   );
