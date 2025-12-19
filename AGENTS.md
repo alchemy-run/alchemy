@@ -18,6 +18,10 @@ Conduct each engagement with the user as follows:
   - Compiling the AWS.live layer (see [aws/index.ts](alchemy-effect/src/aws/index.ts))
   - Using resources (see [example/src/api.ts](example/src/api.ts) and [example/src/consumer.ts](example/src/consumer.ts))
 
+Provider Implementation Tips:
+- The `diff` function should return `undefined` (not `{ action: "noop" }`) when properties don't require replacement - this allows the `update` function to be called for in-place attribute changes.
+- Only include service-specific attributes conditionally (e.g., SQS FIFO attributes like `FifoQueue`, `ContentBasedDeduplication` should only be sent for FIFO queues, not standard queues).
+
 Restrictions:
 1. Never use `Effect.catchAll`, always use `Effect.catchTag` or `Effect.catchTags`
 1. Always use `bun` (never npm, pnpm, yarn, etc.)
