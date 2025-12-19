@@ -1,3 +1,13 @@
+## v0.6.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **ec2**: NAT Gateway, EIP, Egress IGW, SecurityGroups &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/24 [<samp>(ff04d)</samp>](https://github.com/alchemy-run/alchemy/commit/ff04d57)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v0.5.0...v0.6.0)
+
+---
+
 ## v0.5.0
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
