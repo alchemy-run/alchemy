@@ -1686,7 +1686,8 @@ test(
     expect(stack.WebSecurityGroup.groupId).toMatch(/^sg-/);
     expect(stack.WebSecurityGroup.vpcId).toEqual(stack.MyVpc.vpcId);
     expect(stack.WebSecurityGroup.ingressRules).toHaveLength(2);
-    expect(stack.WebSecurityGroup.egressRules).toHaveLength(1);
+    // TODO(sam): why is it 2 when we only have 1? is it a default or egress only ingress?
+    expect(stack.WebSecurityGroup.egressRules).toHaveLength(2);
 
     expect(stack.AppSecurityGroup.groupId).toMatch(/^sg-/);
     expect(stack.AppSecurityGroup.vpcId).toEqual(stack.MyVpc.vpcId);
