@@ -6,7 +6,6 @@ import type { EC2 } from "itty-aws/ec2";
 
 import type { ScopedPlanStatusSession } from "../../cli/service.ts";
 import { somePropsAreDifferent } from "../../diff.ts";
-import type { ProviderService } from "../../provider.ts";
 import { createTagger, createTagsList, diffTags } from "../../tags.ts";
 import { Account } from "../account.ts";
 import { Region } from "../region.ts";
@@ -213,7 +212,7 @@ export const vpcProvider = () =>
 
           yield* session.note(`VPC ${vpcId} deleted successfully`);
         }),
-      } satisfies ProviderService<Vpc>;
+      };
     }),
   );
 

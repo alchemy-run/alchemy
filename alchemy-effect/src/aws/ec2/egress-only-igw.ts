@@ -29,6 +29,10 @@ export const EgressOnlyInternetGatewayId = <ID extends string>(
 ): ID & EgressOnlyInternetGatewayId<ID> =>
   `eigw-${id}` as ID & EgressOnlyInternetGatewayId<ID>;
 
+export type EgressOnlyInternetGatewayArn<
+  ID extends EgressOnlyInternetGatewayId = EgressOnlyInternetGatewayId,
+> = `arn:aws:ec2:${RegionID}:${AccountID}:egress-only-internet-gateway/${ID}`;
+
 export interface EgressOnlyInternetGatewayProps {
   /**
    * The VPC for which to create the egress-only internet gateway.
@@ -42,7 +46,8 @@ export interface EgressOnlyInternetGatewayProps {
 }
 
 export interface EgressOnlyInternetGatewayAttrs<
-  Props extends EgressOnlyInternetGatewayProps,
+  Props extends Input.Resolve<EgressOnlyInternetGatewayProps> =
+    Input.Resolve<EgressOnlyInternetGatewayProps>,
 > {
   /**
    * The ID of the egress-only internet gateway.
@@ -52,7 +57,9 @@ export interface EgressOnlyInternetGatewayAttrs<
   /**
    * The Amazon Resource Name (ARN) of the egress-only internet gateway.
    */
-  egressOnlyInternetGatewayArn: `arn:aws:ec2:${RegionID}:${AccountID}:egress-only-internet-gateway/${this["egressOnlyInternetGatewayId"]}`;
+  egressOnlyInternetGatewayArn: EgressOnlyInternetGatewayArn<
+    this["egressOnlyInternetGatewayId"]
+  >;
 
   /**
    * Information about the attachment of the egress-only internet gateway.

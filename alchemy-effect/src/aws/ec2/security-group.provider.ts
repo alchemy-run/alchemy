@@ -1,20 +1,20 @@
-import type { EC2 } from "itty-aws/ec2";
+import * as EC2 from "itty-aws/ec2";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
 import { createPhysicalName } from "../../physical-name.ts";
-import type { ProviderService } from "../../provider.ts";
 import { createTagger, createTagsList, diffTags } from "../../tags.ts";
 import { Account } from "../account.ts";
 import { Region } from "../region.ts";
 import { EC2Client } from "./client.ts";
 import {
+  type SecurityGroupArn,
+  type SecurityGroupRuleData,
   SecurityGroup,
   type SecurityGroupAttrs,
   type SecurityGroupId,
-  type SecurityGroupProps,
-  type SecurityGroupRule,
 } from "./security-group.ts";
+import type { VpcId } from "./vpc.ts";
 
 export const securityGroupProvider = () =>
   SecurityGroup.provider.effect(
@@ -57,13 +57,13 @@ export const securityGroupProvider = () =>
       const toAttrs = (
         sg: EC2.SecurityGroup,
         rules: EC2.SecurityGroupRule[],
-      ): SecurityGroupAttrs<SecurityGroupProps> => ({
+      ): SecurityGroupAttrs => ({
         groupId: sg.GroupId as SecurityGroupId,
         groupArn:
-          `arn:aws:ec2:${region}:${accountId}:security-group/${sg.GroupId}` as SecurityGroupAttrs<SecurityGroupProps>["groupArn"],
+          `arn:aws:ec2:${region}:${accountId}:security-group/${sg.GroupId as SecurityGroupId}` as SecurityGroupArn,
         groupName: sg.GroupName!,
         description: sg.Description!,
-        vpcId: sg.VpcId as SecurityGroupAttrs<SecurityGroupProps>["vpcId"],
+        vpcId: sg.VpcId as VpcId,
         ownerId: sg.OwnerId!,
         ingressRules: rules
           .filter((r) => !r.IsEgress)
@@ -95,7 +95,9 @@ export const securityGroupProvider = () =>
           })),
       });
 
-      const toIpPermission = (rule: SecurityGroupRule): EC2.IpPermission => ({
+      const toIpPermission = (
+        rule: SecurityGroupRuleData,
+      ): EC2.IpPermission => ({
         IpProtocol: rule.ipProtocol,
         FromPort: rule.fromPort,
         ToPort: rule.toPort,
@@ -385,6 +387,6 @@ export const securityGroupProvider = () =>
 
           yield* session.note(`Security Group ${groupId} deleted`);
         }),
-      } satisfies ProviderService<SecurityGroup>;
+      };
     }),
   );

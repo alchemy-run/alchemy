@@ -1,16 +1,17 @@
 import * as Effect from "effect/Effect";
 
-import type { ProviderService } from "../../provider.ts";
 import { createTagger, createTagsList, diffTags } from "../../tags.ts";
 import { Account } from "../account.ts";
 import { Region } from "../region.ts";
 import { EC2Client } from "./client.ts";
 import {
+  type EgressOnlyInternetGatewayArn,
   EgressOnlyInternetGateway,
   type EgressOnlyInternetGatewayAttrs,
   type EgressOnlyInternetGatewayId,
-  type EgressOnlyInternetGatewayProps,
 } from "./egress-only-igw.ts";
+import type * as EC2 from "itty-aws/ec2";
+import type { VpcId } from "./vpc.ts";
 
 export const egressOnlyInternetGatewayProvider = () =>
   EgressOnlyInternetGateway.provider.effect(
@@ -48,24 +49,15 @@ export const egressOnlyInternetGatewayProvider = () =>
           );
 
       const toAttrs = (
-        gw: Awaited<
-          ReturnType<
-            typeof describeEgressOnlyInternetGateway extends (
-              ...args: any
-            ) => Effect.Effect<infer R, any, any>
-              ? () => Promise<R>
-              : never
-          >
-        >,
-      ): EgressOnlyInternetGatewayAttrs<EgressOnlyInternetGatewayProps> => ({
+        gw: EC2.EgressOnlyInternetGateway,
+      ): EgressOnlyInternetGatewayAttrs => ({
         egressOnlyInternetGatewayId:
           gw.EgressOnlyInternetGatewayId as EgressOnlyInternetGatewayId,
         egressOnlyInternetGatewayArn:
-          `arn:aws:ec2:${region}:${accountId}:egress-only-internet-gateway/${gw.EgressOnlyInternetGatewayId}` as EgressOnlyInternetGatewayAttrs<EgressOnlyInternetGatewayProps>["egressOnlyInternetGatewayArn"],
+          `arn:aws:ec2:${region}:${accountId}:egress-only-internet-gateway/${gw.EgressOnlyInternetGatewayId}` as EgressOnlyInternetGatewayArn,
         attachments: gw.Attachments?.map((a) => ({
           state: a.State as "attaching" | "attached" | "detaching" | "detached",
-          vpcId:
-            a.VpcId as EgressOnlyInternetGatewayAttrs<EgressOnlyInternetGatewayProps>["attachments"][number]["vpcId"],
+          vpcId: a.VpcId as VpcId,
         })),
       });
 
@@ -184,6 +176,6 @@ export const egressOnlyInternetGatewayProvider = () =>
 
           yield* session.note(`Egress-Only Internet Gateway ${eigwId} deleted`);
         }),
-      } satisfies ProviderService<EgressOnlyInternetGateway>;
+      };
     }),
   );

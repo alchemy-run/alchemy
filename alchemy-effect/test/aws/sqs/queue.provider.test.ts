@@ -1,6 +1,15 @@
 import * as AWS from "@/aws";
 import * as SQS from "@/aws/sqs";
-import { apply, destroy } from "@/index";
+import {
+  type DerivePlan,
+  type Instance,
+  type ResourceGraph,
+  type TransitiveResources,
+  type TraverseResources,
+  apply,
+  destroy,
+  plan,
+} from "@/index";
 import { test } from "@/test";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";

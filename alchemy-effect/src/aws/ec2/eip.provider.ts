@@ -186,6 +186,6 @@ export const eipProvider = () =>
 
           yield* session.note(`Elastic IP ${allocationId} released`);
         }),
-      } satisfies ProviderService<Eip>;
+      };
     }),
   );

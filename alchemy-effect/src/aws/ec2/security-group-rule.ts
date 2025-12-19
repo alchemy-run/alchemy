@@ -85,7 +85,10 @@ export interface SecurityGroupRuleProps {
   tags?: Record<string, Input<string>>;
 }
 
-export interface SecurityGroupRuleAttrs<Props extends SecurityGroupRuleProps> {
+export interface SecurityGroupRuleAttrs<
+  Props extends Input.Resolve<SecurityGroupRuleProps> =
+    Input.Resolve<SecurityGroupRuleProps>,
+> {
   /**
    * The ID of the security group rule.
    */

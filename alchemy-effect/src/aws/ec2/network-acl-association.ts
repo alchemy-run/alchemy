@@ -41,7 +41,7 @@ export interface NetworkAclAssociationProps {
 }
 
 export interface NetworkAclAssociationAttrs<
-  Props extends NetworkAclAssociationProps,
+  Props extends Input.Resolve<NetworkAclAssociationProps>,
 > {
   /**
    * The ID of the association between the network ACL and subnet.

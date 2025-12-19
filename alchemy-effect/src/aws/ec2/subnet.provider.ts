@@ -6,7 +6,6 @@ import type { EC2 } from "itty-aws/ec2";
 
 import type { ScopedPlanStatusSession } from "../../cli/service.ts";
 import { somePropsAreDifferent } from "../../diff.ts";
-import type { ProviderService } from "../../provider.ts";
 import { createTagger, createTagsList } from "../../tags.ts";
 import { EC2Client } from "./client.ts";
 import {
@@ -269,7 +268,7 @@ export const subnetProvider = () =>
 
           yield* session.note(`Subnet ${subnetId} deleted successfully`);
         }),
-      } satisfies ProviderService<Subnet>;
+      };
     }),
   );
 

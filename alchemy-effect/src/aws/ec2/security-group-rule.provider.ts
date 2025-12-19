@@ -1,14 +1,13 @@
 import * as Effect from "effect/Effect";
 
-import type { ProviderService } from "../../provider.ts";
 import { createTagger, createTagsList, diffTags } from "../../tags.ts";
 import { EC2Client } from "./client.ts";
 import {
   SecurityGroupRule,
   type SecurityGroupRuleAttrs,
   type SecurityGroupRuleId,
-  type SecurityGroupRuleProps,
 } from "./security-group-rule.ts";
+import type { SecurityGroupId } from "./security-group.ts";
 
 export const securityGroupRuleProvider = () =>
   SecurityGroupRule.provider.effect(
@@ -47,13 +46,11 @@ export const securityGroupRuleProvider = () =>
               : never
           >
         >,
-      ): SecurityGroupRuleAttrs<SecurityGroupRuleProps> => ({
+      ): SecurityGroupRuleAttrs => ({
         securityGroupRuleId: rule.SecurityGroupRuleId as SecurityGroupRuleId,
-        groupId:
-          rule.GroupId as SecurityGroupRuleAttrs<SecurityGroupRuleProps>["groupId"],
+        groupId: rule.GroupId as SecurityGroupId,
         groupOwnerId: rule.GroupOwnerId!,
-        isEgress:
-          rule.IsEgress as SecurityGroupRuleAttrs<SecurityGroupRuleProps>["isEgress"],
+        isEgress: rule.IsEgress as any,
         ipProtocol: rule.IpProtocol!,
         fromPort: rule.FromPort,
         toPort: rule.ToPort,
@@ -227,15 +224,15 @@ export const securityGroupRuleProvider = () =>
           return toAttrs(rule);
         }),
 
-        delete: Effect.fn(function* ({ news, output, session }) {
+        delete: Effect.fn(function* ({ olds, output, session }) {
           const ruleId = output.securityGroupRuleId;
 
           yield* session.note(`Deleting Security Group Rule: ${ruleId}`);
 
-          if (news.type === "ingress") {
+          if (olds.type === "ingress") {
             yield* ec2
               .revokeSecurityGroupIngress({
-                GroupId: news.groupId as string,
+                GroupId: olds.groupId as string,
                 SecurityGroupRuleIds: [ruleId],
                 DryRun: false,
               })
@@ -248,7 +245,7 @@ export const securityGroupRuleProvider = () =>
           } else {
             yield* ec2
               .revokeSecurityGroupEgress({
-                GroupId: news.groupId as string,
+                GroupId: olds.groupId as string,
                 SecurityGroupRuleIds: [ruleId],
                 DryRun: false,
               })
@@ -262,6 +259,6 @@ export const securityGroupRuleProvider = () =>
 
           yield* session.note(`Security Group Rule ${ruleId} deleted`);
         }),
-      } satisfies ProviderService<SecurityGroupRule>;
+      };
     }),
   );

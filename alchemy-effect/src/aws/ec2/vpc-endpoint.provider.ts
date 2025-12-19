@@ -1,10 +1,9 @@
-import type { EC2 } from "itty-aws/ec2";
+import * as EC2 from "itty-aws/ec2";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
 import type { ScopedPlanStatusSession } from "../../cli/service.ts";
-import type { ProviderService } from "../../provider.ts";
 import { createTagger, createTagsList, diffTags } from "../../tags.ts";
 import { Account } from "../account.ts";
 import { Region } from "../region.ts";
@@ -18,6 +17,7 @@ import {
 
 export const vpcEndpointProvider = () =>
   VpcEndpoint.provider.effect(
+    // @ts-expect-error - TODO: fix this
     Effect.gen(function* () {
       const ec2 = yield* EC2Client;
       const region = yield* Region;
@@ -151,7 +151,7 @@ export const vpcEndpointProvider = () =>
             news.vpcEndpointType === "Interface" ||
             news.vpcEndpointType === "GatewayLoadBalancer"
           ) {
-            yield* waitForVpcEndpointAvailable(ec2, vpcEndpointId, session);
+            yield* waitForVpcEndpointAvailable(vpcEndpointId, session);
           }
 
           const ep = yield* describeVpcEndpoint(vpcEndpointId);
@@ -323,7 +323,7 @@ export const vpcEndpointProvider = () =>
             (news.vpcEndpointType === "Interface" ||
               news.vpcEndpointType === "GatewayLoadBalancer")
           ) {
-            yield* waitForVpcEndpointAvailable(ec2, vpcEndpointId, session);
+            yield* waitForVpcEndpointAvailable(vpcEndpointId, session);
           }
 
           const ep = yield* describeVpcEndpoint(vpcEndpointId);
@@ -348,11 +348,11 @@ export const vpcEndpointProvider = () =>
             );
 
           // Wait for deletion
-          yield* waitForVpcEndpointDeleted(ec2, vpcEndpointId, session);
+          yield* waitForVpcEndpointDeleted(vpcEndpointId, session);
 
           yield* session.note(`VPC Endpoint ${vpcEndpointId} deleted`);
         }),
-      } satisfies ProviderService<VpcEndpoint>;
+      };
     }),
   );
 
@@ -384,11 +384,11 @@ class VpcEndpointDeleting extends Data.TaggedError("VpcEndpointDeleting")<{
  * Wait for VPC Endpoint to be in available state
  */
 const waitForVpcEndpointAvailable = (
-  ec2: EC2,
   vpcEndpointId: string,
   session: ScopedPlanStatusSession,
 ) =>
   Effect.gen(function* () {
+    const ec2 = yield* EC2Client;
     const result = yield* ec2.describeVpcEndpoints({
       VpcEndpointIds: [vpcEndpointId],
     });
@@ -398,11 +398,11 @@ const waitForVpcEndpointAvailable = (
       return yield* new VpcEndpointNotFound({ vpcEndpointId });
     }
 
-    if (ep.State === "available") {
+    if (ep.State === "Available") {
       return ep;
     }
 
-    if (ep.State === "failed" || ep.State === "rejected") {
+    if (ep.State === "Failed" || ep.State === "Rejected") {
       return yield* new VpcEndpointFailed({
         vpcEndpointId,
         errorCode: ep.LastError?.Code,
@@ -430,11 +430,11 @@ const waitForVpcEndpointAvailable = (
  * Wait for VPC Endpoint to be deleted
  */
 const waitForVpcEndpointDeleted = (
-  ec2: EC2,
   vpcEndpointId: string,
   session: ScopedPlanStatusSession,
 ) =>
   Effect.gen(function* () {
+    const ec2 = yield* EC2Client;
     const result = yield* ec2
       .describeVpcEndpoints({ VpcEndpointIds: [vpcEndpointId] })
       .pipe(
@@ -445,7 +445,7 @@ const waitForVpcEndpointDeleted = (
 
     const ep = result.VpcEndpoints?.[0];
 
-    if (!ep || ep.State === "deleted") {
+    if (!ep || ep.State === "Deleted") {
       return; // Successfully deleted
     }
 

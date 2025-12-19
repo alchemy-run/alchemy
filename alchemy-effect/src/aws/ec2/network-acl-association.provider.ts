@@ -4,10 +4,10 @@ import type { ProviderService } from "../../provider.ts";
 import { EC2Client } from "./client.ts";
 import {
   NetworkAclAssociation,
-  type NetworkAclAssociationAttrs,
   type NetworkAclAssociationId,
-  type NetworkAclAssociationProps,
 } from "./network-acl-association.ts";
+import type { NetworkAclId } from "./network-acl.ts";
+import type { SubnetId } from "./subnet.ts";
 
 export const networkAclAssociationProvider = () =>
   NetworkAclAssociation.provider.effect(
@@ -38,22 +38,21 @@ export const networkAclAssociationProvider = () =>
       return {
         stables: ["subnetId"],
 
-        read: Effect.fn(function* ({ news }) {
-          const assoc = yield* findAssociation(news.subnetId as string);
+        read: Effect.fn(function* ({ olds }) {
+          if (!olds) return undefined;
+          const assoc = yield* findAssociation(olds.subnetId as string);
           if (!assoc) {
             return yield* Effect.fail(
               new Error(
-                `Network ACL Association not found for subnet ${news.subnetId}`,
+                `Network ACL Association not found for subnet ${olds.subnetId}`,
               ),
             );
           }
           return {
             associationId: assoc.associationId as NetworkAclAssociationId,
-            networkAclId:
-              assoc.networkAclId as NetworkAclAssociationAttrs<NetworkAclAssociationProps>["networkAclId"],
-            subnetId:
-              assoc.subnetId as NetworkAclAssociationAttrs<NetworkAclAssociationProps>["subnetId"],
-          } satisfies NetworkAclAssociationAttrs<NetworkAclAssociationProps>;
+            networkAclId: assoc.networkAclId as NetworkAclId,
+            subnetId: assoc.subnetId as SubnetId,
+          };
         }),
 
         diff: Effect.fn(function* ({ news, olds }) {
@@ -93,11 +92,9 @@ export const networkAclAssociationProvider = () =>
 
           return {
             associationId: newAssociationId as NetworkAclAssociationId,
-            networkAclId:
-              news.networkAclId as NetworkAclAssociationAttrs<NetworkAclAssociationProps>["networkAclId"],
-            subnetId:
-              news.subnetId as NetworkAclAssociationAttrs<NetworkAclAssociationProps>["subnetId"],
-          } satisfies NetworkAclAssociationAttrs<NetworkAclAssociationProps>;
+            networkAclId: news.networkAclId as NetworkAclId,
+            subnetId: news.subnetId as SubnetId,
+          };
         }),
 
         update: Effect.fn(function* ({ news, output, session }) {
@@ -117,20 +114,18 @@ export const networkAclAssociationProvider = () =>
 
           return {
             associationId: newAssociationId as NetworkAclAssociationId,
-            networkAclId:
-              news.networkAclId as NetworkAclAssociationAttrs<NetworkAclAssociationProps>["networkAclId"],
-            subnetId:
-              news.subnetId as NetworkAclAssociationAttrs<NetworkAclAssociationProps>["subnetId"],
-          } satisfies NetworkAclAssociationAttrs<NetworkAclAssociationProps>;
+            networkAclId: news.networkAclId as NetworkAclId,
+            subnetId: news.subnetId as SubnetId,
+          };
         }),
 
-        delete: Effect.fn(function* ({ news, output, session }) {
+        delete: Effect.fn(function* ({ olds, output, session }) {
           yield* session.note(`Deleting Network ACL Association...`);
 
           // When deleting, we need to associate the subnet back to the default NACL
           // Find the default NACL for the VPC
           const subnetResult = yield* ec2.describeSubnets({
-            SubnetIds: [news.subnetId as string],
+            SubnetIds: [olds.subnetId as string],
           });
           const vpcId = subnetResult.Subnets?.[0]?.VpcId;
 
@@ -147,7 +142,7 @@ export const networkAclAssociationProvider = () =>
 
             if (
               defaultAclId &&
-              defaultAclId !== (news.networkAclId as string)
+              defaultAclId !== (olds.networkAclId as string)
             ) {
               // Replace with default NACL
               yield* ec2
@@ -173,6 +168,14 @@ export const networkAclAssociationProvider = () =>
             }
           }
         }),
-      } satisfies ProviderService<NetworkAclAssociation>;
+      } satisfies ProviderService<
+        NetworkAclAssociation,
+        any,
+        any,
+        any,
+        any,
+        any,
+        any
+      >;
     }),
   );

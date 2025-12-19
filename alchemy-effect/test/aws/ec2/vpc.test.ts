@@ -1182,11 +1182,12 @@ test(
     // Define all resources for a production-ready VPC
     // =========================================================================
 
-    // VPC with DNS enabled
+    // VPC with DNS enabled and IPv6 for egress-only IGW
     class MyVpc extends EC2.Vpc("MyVpc", {
       cidrBlock: "10.0.0.0/16",
       enableDnsSupport: true,
       enableDnsHostnames: true,
+      amazonProvidedIpv6CidrBlock: true,
       tags: {
         Name: "comprehensive-vpc",
         Environment: "test",
@@ -1197,6 +1198,12 @@ test(
     class InternetGateway extends EC2.InternetGateway("InternetGateway", {
       vpcId: Output.of(MyVpc).vpcId,
       tags: { Name: "comprehensive-igw" },
+    }) {}
+
+    // Egress-Only Internet Gateway for IPv6 outbound traffic from private subnets
+    class EgressOnlyIgw extends EC2.EgressOnlyInternetGateway("EgressOnlyIgw", {
+      vpcId: Output.of(MyVpc).vpcId,
+      tags: { Name: "comprehensive-eigw" },
     }) {}
 
     // Public Subnets in two AZs
@@ -1396,12 +1403,92 @@ test(
       tags: { Name: "db-sg" },
     }) {}
 
+    // Network ACL for private subnets with custom rules
+    class PrivateNetworkAcl extends EC2.NetworkAcl("PrivateNetworkAcl", {
+      vpcId: Output.of(MyVpc).vpcId,
+      tags: { Name: "private-nacl" },
+    }) {}
+
+    // Network ACL Entries (rules)
+    // Allow inbound traffic from VPC CIDR
+    class PrivateNaclIngressVpc extends EC2.NetworkAclEntry(
+      "PrivateNaclIngressVpc",
+      {
+        networkAclId: Output.of(PrivateNetworkAcl).networkAclId,
+        ruleNumber: 100,
+        protocol: "-1", // All protocols
+        ruleAction: "allow",
+        egress: false,
+        cidrBlock: "10.0.0.0/16",
+      },
+    ) {}
+
+    // Allow inbound ephemeral ports (for NAT return traffic)
+    class PrivateNaclIngressEphemeral extends EC2.NetworkAclEntry(
+      "PrivateNaclIngressEphemeral",
+      {
+        networkAclId: Output.of(PrivateNetworkAcl).networkAclId,
+        ruleNumber: 200,
+        protocol: "6", // TCP
+        ruleAction: "allow",
+        egress: false,
+        cidrBlock: "0.0.0.0/0",
+        portRange: { from: 1024, to: 65535 },
+      },
+    ) {}
+
+    // Allow all outbound traffic
+    class PrivateNaclEgressAll extends EC2.NetworkAclEntry(
+      "PrivateNaclEgressAll",
+      {
+        networkAclId: Output.of(PrivateNetworkAcl).networkAclId,
+        ruleNumber: 100,
+        protocol: "-1", // All protocols
+        ruleAction: "allow",
+        egress: true,
+        cidrBlock: "0.0.0.0/0",
+      },
+    ) {}
+
+    // Network ACL Associations - associate private subnets with the custom NACL
+    class PrivateSubnet1NaclAssoc extends EC2.NetworkAclAssociation(
+      "PrivateSubnet1NaclAssoc",
+      {
+        networkAclId: Output.of(PrivateNetworkAcl).networkAclId,
+        subnetId: Output.of(PrivateSubnet1).subnetId,
+      },
+    ) {}
+
+    class PrivateSubnet2NaclAssoc extends EC2.NetworkAclAssociation(
+      "PrivateSubnet2NaclAssoc",
+      {
+        networkAclId: Output.of(PrivateNetworkAcl).networkAclId,
+        subnetId: Output.of(PrivateSubnet2).subnetId,
+      },
+    ) {}
+
+    // VPC Gateway Endpoint for S3 (reduces NAT costs and improves latency)
+    class S3Endpoint extends EC2.VpcEndpoint("S3Endpoint", {
+      vpcId: Output.of(MyVpc).vpcId,
+      serviceName: `com.amazonaws.${
+        (yield* ec2.describeAvailabilityZones({})).AvailabilityZones?.[0]
+          ?.RegionName
+      }.s3`,
+      vpcEndpointType: "Gateway",
+      routeTableIds: [
+        Output.of(PrivateRouteTable1).routeTableId,
+        Output.of(PrivateRouteTable2).routeTableId,
+      ],
+      tags: { Name: "s3-endpoint" },
+    }) {}
+
     // =========================================================================
     // Apply all resources at once
     // =========================================================================
     const stack = yield* apply(
       MyVpc,
       InternetGateway,
+      EgressOnlyIgw,
       PublicSubnet1,
       PublicSubnet2,
       PrivateSubnet1,
@@ -1423,6 +1510,13 @@ test(
       WebSecurityGroup,
       AppSecurityGroup,
       DbSecurityGroup,
+      PrivateNetworkAcl,
+      PrivateNaclIngressVpc,
+      PrivateNaclIngressEphemeral,
+      PrivateNaclEgressAll,
+      PrivateSubnet1NaclAssoc,
+      PrivateSubnet2NaclAssoc,
+      S3Endpoint,
     );
 
     // =========================================================================
@@ -1450,11 +1544,24 @@ test(
     });
     expect(dnsHostnames.EnableDnsHostnames?.Value).toBeTruthy();
 
+    // Verify VPC has IPv6 CIDR block
+    expect(stack.MyVpc.ipv6CidrBlockAssociationSet).toBeDefined();
+    expect(stack.MyVpc.ipv6CidrBlockAssociationSet?.length).toBeGreaterThan(0);
+
     // =========================================================================
     // Verify Internet Gateway
     // =========================================================================
     expect(stack.InternetGateway.internetGatewayId).toMatch(/^igw-/);
     expect(stack.InternetGateway.vpcId).toEqual(stack.MyVpc.vpcId);
+
+    // =========================================================================
+    // Verify Egress-Only Internet Gateway
+    // =========================================================================
+    expect(stack.EgressOnlyIgw.egressOnlyInternetGatewayId).toMatch(/^eigw-/);
+    expect(stack.EgressOnlyIgw.attachments).toBeDefined();
+    expect(stack.EgressOnlyIgw.attachments?.[0]?.vpcId).toEqual(
+      stack.MyVpc.vpcId,
+    );
 
     // =========================================================================
     // Verify Subnets
@@ -1603,6 +1710,76 @@ test(
     expect(sgResult.SecurityGroups).toHaveLength(4);
 
     // =========================================================================
+    // Verify Network ACL
+    // =========================================================================
+    expect(stack.PrivateNetworkAcl.networkAclId).toMatch(/^acl-/);
+    expect(stack.PrivateNetworkAcl.vpcId).toEqual(stack.MyVpc.vpcId);
+    expect(stack.PrivateNetworkAcl.isDefault).toEqual(false);
+
+    // Verify Network ACL in AWS
+    const naclResult = yield* ec2.describeNetworkAcls({
+      NetworkAclIds: [stack.PrivateNetworkAcl.networkAclId],
+    });
+    expect(naclResult.NetworkAcls).toHaveLength(1);
+    expect(naclResult.NetworkAcls?.[0]?.VpcId).toEqual(stack.MyVpc.vpcId);
+
+    // =========================================================================
+    // Verify Network ACL Entries
+    // =========================================================================
+    expect(stack.PrivateNaclIngressVpc.networkAclId).toEqual(
+      stack.PrivateNetworkAcl.networkAclId,
+    );
+    expect(stack.PrivateNaclIngressVpc.ruleNumber).toEqual(100);
+    expect(stack.PrivateNaclIngressVpc.egress).toEqual(false);
+    expect(stack.PrivateNaclIngressVpc.ruleAction).toEqual("allow");
+
+    expect(stack.PrivateNaclIngressEphemeral.ruleNumber).toEqual(200);
+    expect(stack.PrivateNaclIngressEphemeral.portRange).toEqual({
+      from: 1024,
+      to: 65535,
+    });
+
+    expect(stack.PrivateNaclEgressAll.egress).toEqual(true);
+    expect(stack.PrivateNaclEgressAll.ruleNumber).toEqual(100);
+
+    // =========================================================================
+    // Verify Network ACL Associations
+    // =========================================================================
+    expect(stack.PrivateSubnet1NaclAssoc.associationId).toMatch(/^aclassoc-/);
+    expect(stack.PrivateSubnet1NaclAssoc.networkAclId).toEqual(
+      stack.PrivateNetworkAcl.networkAclId,
+    );
+    expect(stack.PrivateSubnet1NaclAssoc.subnetId).toEqual(
+      stack.PrivateSubnet1.subnetId,
+    );
+
+    expect(stack.PrivateSubnet2NaclAssoc.associationId).toMatch(/^aclassoc-/);
+    expect(stack.PrivateSubnet2NaclAssoc.subnetId).toEqual(
+      stack.PrivateSubnet2.subnetId,
+    );
+
+    // =========================================================================
+    // Verify VPC Endpoint for S3
+    // =========================================================================
+    expect(stack.S3Endpoint.vpcEndpointId).toMatch(/^vpce-/);
+    expect(stack.S3Endpoint.vpcEndpointType).toEqual("Gateway");
+    expect(stack.S3Endpoint.vpcId).toEqual(stack.MyVpc.vpcId);
+    expect(stack.S3Endpoint.state).toEqual("available");
+    expect(stack.S3Endpoint.routeTableIds).toContain(
+      stack.PrivateRouteTable1.routeTableId,
+    );
+    expect(stack.S3Endpoint.routeTableIds).toContain(
+      stack.PrivateRouteTable2.routeTableId,
+    );
+
+    // Verify VPC Endpoint in AWS
+    const vpceResult = yield* ec2.describeVpcEndpoints({
+      VpcEndpointIds: [stack.S3Endpoint.vpcEndpointId],
+    });
+    expect(vpceResult.VpcEndpoints).toHaveLength(1);
+    expect(vpceResult.VpcEndpoints?.[0]?.VpcEndpointType).toEqual("Gateway");
+
+    // =========================================================================
     // Verify Tags
     // =========================================================================
     yield* assertVpcTags(stack.MyVpc.vpcId, {
@@ -1617,6 +1794,7 @@ test(
     const stack2 = yield* apply(
       MyVpc,
       InternetGateway,
+      EgressOnlyIgw,
       PublicSubnet1,
       PublicSubnet2,
       PrivateSubnet1,
@@ -1638,6 +1816,13 @@ test(
       WebSecurityGroup,
       AppSecurityGroup,
       DbSecurityGroup,
+      PrivateNetworkAcl,
+      PrivateNaclIngressVpc,
+      PrivateNaclIngressEphemeral,
+      PrivateNaclEgressAll,
+      PrivateSubnet1NaclAssoc,
+      PrivateSubnet2NaclAssoc,
+      S3Endpoint,
     );
 
     // All IDs should remain the same
@@ -1645,11 +1830,20 @@ test(
     expect(stack2.InternetGateway.internetGatewayId).toEqual(
       stack.InternetGateway.internetGatewayId,
     );
+    expect(stack2.EgressOnlyIgw.egressOnlyInternetGatewayId).toEqual(
+      stack.EgressOnlyIgw.egressOnlyInternetGatewayId,
+    );
     expect(stack2.NatGateway1.natGatewayId).toEqual(
       stack.NatGateway1.natGatewayId,
     );
     expect(stack2.NatGateway2.natGatewayId).toEqual(
       stack.NatGateway2.natGatewayId,
+    );
+    expect(stack2.PrivateNetworkAcl.networkAclId).toEqual(
+      stack.PrivateNetworkAcl.networkAclId,
+    );
+    expect(stack2.S3Endpoint.vpcEndpointId).toEqual(
+      stack.S3Endpoint.vpcEndpointId,
     );
 
     // =========================================================================

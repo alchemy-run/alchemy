@@ -49,7 +49,7 @@ export interface ProviderService<
   read?(input: {
     id: string;
     instanceId: string;
-    olds: Props<Res> | undefined;
+    olds: Props<Res>;
     // what is the ARN?
     output: Res["attr"] | undefined; // current state -> synced state
     bindings: BindingData<Res>;

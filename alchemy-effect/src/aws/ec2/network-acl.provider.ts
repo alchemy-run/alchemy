@@ -1,18 +1,18 @@
-import type { EC2 } from "itty-aws/ec2";
+import type * as EC2 from "itty-aws/ec2";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
-import type { ProviderService } from "../../provider.ts";
 import { createTagger, createTagsList, diffTags } from "../../tags.ts";
 import { Account } from "../account.ts";
 import { Region } from "../region.ts";
 import { EC2Client } from "./client.ts";
 import {
+  type NetworkAclArn,
   NetworkAcl,
   type NetworkAclAttrs,
   type NetworkAclId,
-  type NetworkAclProps,
 } from "./network-acl.ts";
+import type { VpcId } from "./vpc.ts";
 
 export const networkAclProvider = () =>
   NetworkAcl.provider.effect(
@@ -41,13 +41,11 @@ export const networkAclProvider = () =>
           ),
         );
 
-      const toAttrs = (
-        acl: EC2.NetworkAcl,
-      ): NetworkAclAttrs<NetworkAclProps> => ({
+      const toAttrs = (acl: EC2.NetworkAcl): NetworkAclAttrs => ({
         networkAclId: acl.NetworkAclId as NetworkAclId,
         networkAclArn:
-          `arn:aws:ec2:${region}:${accountId}:network-acl/${acl.NetworkAclId}` as NetworkAclAttrs<NetworkAclProps>["networkAclArn"],
-        vpcId: acl.VpcId as NetworkAclAttrs<NetworkAclProps>["vpcId"],
+          `arn:aws:ec2:${region}:${accountId}:network-acl/${acl.NetworkAclId}` as NetworkAclArn,
+        vpcId: acl.VpcId as VpcId,
         isDefault: acl.IsDefault ?? false,
         ownerId: acl.OwnerId!,
         entries: acl.Entries?.map((e) => ({
@@ -177,11 +175,7 @@ export const networkAclProvider = () =>
               // Retry on dependency violations (e.g., associations still being removed)
               Effect.retry({
                 while: (e) => {
-                  return (
-                    e._tag === "DependencyViolation" ||
-                    (e._tag === "ValidationError" &&
-                      e.message?.includes("DependencyViolation"))
-                  );
+                  return e._tag === "DependencyViolation";
                 },
                 schedule: Schedule.exponential(1000, 1.5).pipe(
                   Schedule.intersect(Schedule.recurs(15)),
@@ -196,6 +190,6 @@ export const networkAclProvider = () =>
 
           yield* session.note(`Network ACL ${networkAclId} deleted`);
         }),
-      } satisfies ProviderService<NetworkAcl>;
+      };
     }),
   );

@@ -40,7 +40,12 @@ export interface NetworkAclProps {
   tags?: Record<string, Input<string>>;
 }
 
-export interface NetworkAclAttrs<Props extends NetworkAclProps> {
+export type NetworkAclArn<ID extends NetworkAclId = NetworkAclId> =
+  `arn:aws:ec2:${RegionID}:${AccountID}:network-acl/${ID}`;
+
+export interface NetworkAclAttrs<
+  Props extends Input.Resolve<NetworkAclProps> = Input.Resolve<NetworkAclProps>,
+> {
   /**
    * The ID of the network ACL.
    */
@@ -49,7 +54,7 @@ export interface NetworkAclAttrs<Props extends NetworkAclProps> {
   /**
    * The Amazon Resource Name (ARN) of the network ACL.
    */
-  networkAclArn: `arn:aws:ec2:${RegionID}:${AccountID}:network-acl/${this["networkAclId"]}`;
+  networkAclArn: NetworkAclArn<this["networkAclId"]>;
 
   /**
    * The ID of the VPC for the network ACL.

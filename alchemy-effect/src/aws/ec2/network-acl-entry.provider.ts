@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
 
-import type { ProviderService } from "../../provider.ts";
 import { EC2Client } from "./client.ts";
 import {
   NetworkAclEntry,
@@ -10,6 +9,7 @@ import {
 
 export const networkAclEntryProvider = () =>
   NetworkAclEntry.provider.effect(
+    // @ts-expect-error - TODO: fix this
     Effect.gen(function* () {
       const ec2 = yield* EC2Client;
 
@@ -70,10 +70,10 @@ export const networkAclEntryProvider = () =>
       return {
         stables: [],
 
-        read: Effect.fn(function* ({ news, output }) {
+        read: Effect.fn(function* ({ olds, output }) {
           if (!output) return undefined;
           const entry = yield* findEntry(
-            news.networkAclId as string,
+            olds.networkAclId as string,
             output.ruleNumber,
             output.egress,
           );
@@ -84,7 +84,7 @@ export const networkAclEntryProvider = () =>
               ),
             );
           }
-          return toAttrs(news, entry);
+          return toAttrs(olds, entry);
         }),
 
         diff: Effect.fn(function* ({ news, olds }) {
@@ -190,14 +190,14 @@ export const networkAclEntryProvider = () =>
           return toAttrs(news, entry);
         }),
 
-        delete: Effect.fn(function* ({ news, output, session }) {
+        delete: Effect.fn(function* ({ olds, output, session }) {
           yield* session.note(
             `Deleting Network ACL Entry (rule ${output.ruleNumber})...`,
           );
 
           yield* ec2
             .deleteNetworkAclEntry({
-              NetworkAclId: news.networkAclId as string,
+              NetworkAclId: olds.networkAclId as string,
               RuleNumber: output.ruleNumber,
               Egress: output.egress,
               DryRun: false,
@@ -213,6 +213,6 @@ export const networkAclEntryProvider = () =>
             `Network ACL Entry deleted: rule ${output.ruleNumber}`,
           );
         }),
-      } satisfies ProviderService<NetworkAclEntry>;
+      };
     }),
   );

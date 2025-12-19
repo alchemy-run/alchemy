@@ -21,7 +21,7 @@
       "@types/node": "latest",
       "cloudflare": "^5.2.0",
       "effect": "^3.19.3",
-      "itty-aws": "^0.8.7",
+      "itty-aws": "^0.8.10",
       "typescript": "^5.9.3",
       "vite": "^7.1.9",
       "wrangler": "^4.42.2"

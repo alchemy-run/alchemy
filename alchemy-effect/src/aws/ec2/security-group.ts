@@ -27,10 +27,14 @@ export const SecurityGroupId = <ID extends string>(
   id: ID,
 ): ID & SecurityGroupId<ID> => `sg-${id}` as ID & SecurityGroupId<ID>;
 
+export type SecurityGroupArn<
+  GroupId extends SecurityGroupId = SecurityGroupId,
+> = `arn:aws:ec2:${RegionID}:${AccountID}:security-group/${GroupId}`;
+
 /**
  * Ingress or egress rule for a security group.
  */
-export interface SecurityGroupRule {
+export interface SecurityGroupRuleData {
   /**
    * The IP protocol name or number.
    * Use -1 to specify all protocols.
@@ -96,13 +100,13 @@ export interface SecurityGroupProps {
   /**
    * Inbound rules for the security group.
    */
-  ingress?: SecurityGroupRule[];
+  ingress?: SecurityGroupRuleData[];
 
   /**
    * Outbound rules for the security group.
    * If not specified, allows all outbound traffic by default.
    */
-  egress?: SecurityGroupRule[];
+  egress?: SecurityGroupRuleData[];
 
   /**
    * Tags to assign to the security group.
@@ -110,7 +114,10 @@ export interface SecurityGroupProps {
   tags?: Record<string, Input<string>>;
 }
 
-export interface SecurityGroupAttrs<Props extends SecurityGroupProps> {
+export interface SecurityGroupAttrs<
+  Props extends Input.Resolve<SecurityGroupProps> =
+    Input.Resolve<SecurityGroupProps>,
+> {
   /**
    * The ID of the security group.
    */
@@ -119,7 +126,7 @@ export interface SecurityGroupAttrs<Props extends SecurityGroupProps> {
   /**
    * The Amazon Resource Name (ARN) of the security group.
    */
-  groupArn: `arn:aws:ec2:${RegionID}:${AccountID}:security-group/${this["groupId"]}`;
+  groupArn: SecurityGroupArn<this["groupId"]>;
 
   /**
    * The name of the security group.

@@ -206,7 +206,9 @@ export type TransitiveResources<
                       >
                     ? Src extends Found
                       ? Found
-                      : TransitiveResources<Src, Src | Found>
+                      : string extends Src["id"]
+                        ? Found
+                        : TransitiveResources<Src, Src | Found>
                     : Found;
               }[keyof Resources["props"][prop]];
     }[keyof Resources["props"]],
@@ -786,8 +788,8 @@ export const plan = <const Resources extends (Service | Resource)[]>(
                     .read({
                       id,
                       instanceId: oldState.instanceId,
-                      olds: oldState.props as any,
-                      output: oldState.attr as any,
+                      olds: oldState.props as never,
+                      output: oldState.attr as never,
                       bindings: oldState.bindings ?? [],
                     })
                     .pipe(
