@@ -1,3 +1,16 @@
+## v0.5.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- Standardize physical name generation &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(91199)</samp>](https://github.com/alchemy-run/alchemy/commit/9119967)
+- **cloudflare**:
+  - Rename worker.id and name workerId and workerName &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(273cb)</samp>](https://github.com/alchemy-run/alchemy/commit/273cb26)
+  - Rename Bucket.name to Bucket.bucketName and constraint name length &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(a0733)</samp>](https://github.com/alchemy-run/alchemy/commit/a0733a6)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v0.4.0...v0.5.0)
+
+---
+
 ## v0.4.0
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
