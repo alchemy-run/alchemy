@@ -13,8 +13,9 @@ interface ProgressEventSource {
   subscribe(listener: (event: ApplyEvent) => void): () => void;
 }
 
-interface PlanTask
-  extends Required<Pick<StatusChangeEvent, "id" | "type" | "status">> {
+interface PlanTask extends Required<
+  Pick<StatusChangeEvent, "id" | "type" | "status">
+> {
   message?: string;
   updatedAt: number;
 }

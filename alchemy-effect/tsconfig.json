@@ -1,9 +1,6 @@
 {
   "extends": "../tsconfig.base.json",
-  "include": [
-    "package.json",
-    "src"
-  ],
+  "include": ["package.json", "src"],
   "compilerOptions": {
     "composite": true,
     "noEmit": false,
@@ -14,10 +11,6 @@
     "target": "ESNext",
     // ink
     "jsx": "react",
-    "lib": [
-      "DOM",
-      "DOM.Iterable",
-      "ES2023"
-    ]
+    "lib": ["DOM", "DOM.Iterable", "ES2023"]
   }
 }

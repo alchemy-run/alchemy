@@ -14,12 +14,12 @@ export interface Route<
   ID extends string = string,
   Props extends RouteProps = RouteProps,
 > extends Resource<
-    "AWS.EC2.Route",
-    ID,
-    Props,
-    RouteAttrs<Input.Resolve<Props>>,
-    Route
-  > {}
+  "AWS.EC2.Route",
+  ID,
+  Props,
+  RouteAttrs<Input.Resolve<Props>>,
+  Route
+> {}
 
 export interface RouteProps {
   /**

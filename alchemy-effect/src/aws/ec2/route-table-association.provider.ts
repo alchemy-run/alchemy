@@ -2,7 +2,6 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
 import type { ScopedPlanStatusSession } from "../../cli/service.ts";
-import type { ProviderService } from "../../provider.ts";
 import { EC2Client } from "./client.ts";
 import {
   RouteTableAssociation,
@@ -139,7 +138,7 @@ export const routeTableAssociationProvider = () =>
             `Route table association ${output.associationId} deleted successfully`,
           );
         }),
-      } satisfies ProviderService<RouteTableAssociation>;
+      };
     }),
   );
 

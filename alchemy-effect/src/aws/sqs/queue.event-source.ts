@@ -25,12 +25,12 @@ export interface QueueEventSource<
   Q extends Queue,
   Props extends QueueEventSourceProps,
 > extends Binding<
-    Function,
-    Consume<From<Q>>,
-    Props,
-    QueueEventSourceAttr,
-    "QueueEventSource"
-  > {}
+  Function,
+  Consume<From<Q>>,
+  Props,
+  QueueEventSourceAttr,
+  "QueueEventSource"
+> {}
 
 export const QueueEventSource = Binding<
   <Q extends Queue, const Props extends QueueEventSourceProps>(
@@ -212,14 +212,12 @@ export const queueEventSourceProvider = () =>
             (yield* findEventSourceMapping(queue, functionName))?.UUID;
           if (uuid) {
             // we found (or were aware of) the event source mapping, so we can delete it
-            yield* (
-              lambda
-                .deleteEventSourceMapping({
-                  UUID: uuid,
-                })
-                // TODO(sam): handle errors properly
-                .pipe(Effect.catchAll(() => Effect.void))
-            );
+            yield* lambda
+              .deleteEventSourceMapping({
+                UUID: uuid,
+              })
+              // TODO(sam): handle errors properly
+              .pipe(Effect.catchAll(() => Effect.void));
           }
         }),
       };

@@ -1,3 +1,4 @@
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
@@ -5,7 +6,6 @@ import type { EC2 } from "itty-aws/ec2";
 
 import type { ScopedPlanStatusSession } from "../../cli/service.ts";
 import { somePropsAreDifferent } from "../../diff.ts";
-import type { ProviderService } from "../../provider.ts";
 import { createTagger, createTagsList } from "../../tags.ts";
 import { EC2Client } from "./client.ts";
 import {
@@ -250,10 +250,7 @@ export const subnetProvider = () =>
                 while: (e) => {
                   // DependencyViolation means there are still dependent resources
                   // This can happen if ENIs/instances are being deleted concurrently
-                  return (
-                    e._tag === "ValidationError" &&
-                    e.message?.includes("DependencyViolation")
-                  );
+                  return e._tag === "DependencyViolation";
                 },
                 schedule: Schedule.exponential(1000, 1.5).pipe(
                   Schedule.intersect(Schedule.recurs(10)), // Try up to 10 times
@@ -271,9 +268,20 @@ export const subnetProvider = () =>
 
           yield* session.note(`Subnet ${subnetId} deleted successfully`);
         }),
-      } satisfies ProviderService<Subnet>;
+      };
     }),
   );
+
+// Retryable error: Subnet is still pending
+class SubnetPending extends Data.TaggedError("SubnetPending")<{
+  subnetId: string;
+  state: string;
+}> {}
+
+// Retryable error: Subnet still exists during deletion
+class SubnetStillExists extends Data.TaggedError("SubnetStillExists")<{
+  subnetId: string;
+}> {}
 
 /**
  * Wait for subnet to be in available state
@@ -283,27 +291,24 @@ const waitForSubnetAvailable = (
   subnetId: string,
   session?: ScopedPlanStatusSession,
 ) =>
-  Effect.retry(
-    Effect.gen(function* () {
-      const result = yield* ec2
-        .describeSubnets({ SubnetIds: [subnetId] })
-        .pipe(
-          Effect.catchTag("InvalidSubnetID.NotFound", () =>
-            Effect.succeed({ Subnets: [] }),
-          ),
-        );
-      const subnet = result.Subnets![0];
+  Effect.gen(function* () {
+    const result = yield* ec2.describeSubnets({ SubnetIds: [subnetId] });
+    const subnet = result.Subnets?.[0];
 
-      if (subnet.State === "available") {
-        return subnet;
-      }
+    if (!subnet) {
+      return yield* Effect.fail(new Error(`Subnet ${subnetId} not found`));
+    }
 
-      // Still pending, fail to trigger retry
-      return yield* Effect.fail(new Error("Subnet not yet available"));
-    }),
-    {
+    if (subnet.State === "available") {
+      return subnet;
+    }
+
+    // Still pending - this is the only retryable case
+    return yield* new SubnetPending({ subnetId, state: subnet.State! });
+  }).pipe(
+    Effect.retry({
+      while: (e) => e instanceof SubnetPending,
       schedule: Schedule.fixed(2000).pipe(
-        // Check every 2 seconds
         Schedule.intersect(Schedule.recurs(30)), // Max 60 seconds
         Schedule.tapOutput(([, attempt]) =>
           session
@@ -313,7 +318,7 @@ const waitForSubnetAvailable = (
             : Effect.void,
         ),
       ),
-    },
+    }),
   );
 
 /**
@@ -325,34 +330,30 @@ const waitForSubnetDeleted = (
   session: ScopedPlanStatusSession,
 ) =>
   Effect.gen(function* () {
-    yield* Effect.retry(
-      Effect.gen(function* () {
-        const result = yield* ec2
-          .describeSubnets({ SubnetIds: [subnetId] })
-          .pipe(
-            Effect.tapError(Effect.logDebug),
-            Effect.catchTag("InvalidSubnetID.NotFound", () =>
-              Effect.succeed({ Subnets: [] }),
-            ),
-          );
+    const result = yield* ec2
+      .describeSubnets({ SubnetIds: [subnetId] })
+      .pipe(
+        Effect.catchTag("InvalidSubnetID.NotFound", () =>
+          Effect.succeed({ Subnets: [] }),
+        ),
+      );
 
-        if (!result.Subnets || result.Subnets.length === 0) {
-          return; // Successfully deleted
-        }
+    if (!result.Subnets || result.Subnets.length === 0) {
+      return; // Successfully deleted
+    }
 
-        // Still exists, fail to trigger retry
-        return yield* Effect.fail(new Error("Subnet still exists"));
-      }),
-      {
-        schedule: Schedule.fixed(2000).pipe(
-          // Check every 2 seconds
-          Schedule.intersect(Schedule.recurs(15)), // Max 30 seconds
-          Schedule.tapOutput(([, attempt]) =>
-            session.note(
-              `Waiting for subnet deletion... (${(attempt + 1) * 2}s)`,
-            ),
+    // Still exists - this is the only retryable case
+    return yield* new SubnetStillExists({ subnetId });
+  }).pipe(
+    Effect.retry({
+      while: (e) => e instanceof SubnetStillExists,
+      schedule: Schedule.fixed(2000).pipe(
+        Schedule.intersect(Schedule.recurs(15)), // Max 30 seconds
+        Schedule.tapOutput(([, attempt]) =>
+          session.note(
+            `Waiting for subnet deletion... (${(attempt + 1) * 2}s)`,
           ),
         ),
-      },
-    );
-  });
+      ),
+    }),
+  );

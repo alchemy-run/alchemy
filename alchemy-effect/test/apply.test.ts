@@ -1,8 +1,10 @@
 import * as Effect from "effect/Effect";
 
+import { App } from "@/app";
 import { apply } from "@/apply";
 import { destroy } from "@/destroy";
 import * as Output from "@/output";
+import { CannotReplacePartiallyReplacedResource } from "@/plan";
 import {
   type ReplacedResourceState,
   type ReplacingResourceState,
@@ -10,20 +12,16 @@ import {
   State,
 } from "@/state";
 import { test } from "@/test";
-import { expect, describe } from "@effect/vitest";
+import { describe, expect } from "@effect/vitest";
+import { Data, Layer } from "effect";
 import {
   type TestResourceProps,
-  type StaticStablesResourceProps,
   InMemoryTestLayers,
+  StaticStablesResource,
   TestLayers,
   TestResource,
   TestResourceHooks,
-  StaticStablesResource,
-  StaticStablesResourceHooks,
 } from "./test.resources.ts";
-import { Data, Layer } from "effect";
-import { App } from "@/app";
-import { CannotReplacePartiallyReplacedResource } from "@/plan";
 
 const testStack = "test";
 const testStage = "test";
@@ -54,12 +52,13 @@ export class ResourceFailure extends Data.TaggedError("ResourceFailure")<{
 const MockLayers = () =>
   Layer.mergeAll(InMemoryTestLayers(), Layer.succeed(App, mockApp));
 
-const fail = <Err, Req>(
+const hook = <Err, Req>(
   test: Effect.Effect<void, Err, Req>,
   hooks?: {
     create?: (id: string, props: TestResourceProps) => Effect.Effect<void, any>;
     update?: (id: string, props: TestResourceProps) => Effect.Effect<void, any>;
     delete?: (id: string) => Effect.Effect<void, any>;
+    read?: (id: string) => Effect.Effect<void, any>;
   },
 ): Effect.Effect<void, Err, Req | State> =>
   test.pipe(
@@ -70,6 +69,7 @@ const fail = <Err, Req>(
           create: () => Effect.fail(new ResourceFailure()),
           update: () => Effect.fail(new ResourceFailure()),
           delete: () => Effect.fail(new ResourceFailure()),
+          read: () => Effect.succeed(undefined),
         },
       ),
     ),
@@ -367,7 +367,7 @@ describe("from creating state", () => {
       class A extends TestResource("A", {
         string: "test-string",
       }) {}
-      yield* fail(apply(A));
+      yield* hook(apply(A));
       expect((yield* getState("A"))?.status).toEqual("creating");
       const stack = yield* apply(A);
       expect((yield* getState("A"))?.status).toEqual("created");
@@ -382,7 +382,7 @@ describe("from creating state", () => {
         class A extends TestResource("A", {
           string: "test-string",
         }) {}
-        yield* fail(apply(A));
+        yield* hook(apply(A));
         expect((yield* getState("A"))?.status).toEqual("creating");
       }
       class A extends TestResource("A", {
@@ -401,7 +401,7 @@ describe("from creating state", () => {
         class A extends TestResource("A", {
           replaceString: "test-string",
         }) {}
-        yield* fail(apply(A));
+        yield* hook(apply(A));
         expect((yield* getState("A"))?.status).toEqual("creating");
       }
       class A extends TestResource("A", {
@@ -410,6 +410,99 @@ describe("from creating state", () => {
       const stack = yield* apply(A);
       expect(stack.A.replaceString).toEqual("test-string-changed");
       expect((yield* getState("A"))?.status).toEqual("created");
+    }).pipe(Effect.provide(MockLayers())),
+  );
+
+  test(
+    "destroy should handle creating state with no attributes",
+    Effect.gen(function* () {
+      // 1. Create a resource but fail - this leaves state in "creating" with no attr
+      class A extends TestResource("A", {
+        string: "test-string",
+      }) {}
+      yield* hook(apply(A));
+      expect((yield* getState("A"))?.status).toEqual("creating");
+      expect((yield* getState("A"))?.attr).toBeUndefined();
+
+      // 2. Call destroy - this triggers collectGarbage which tries to delete
+      // the orphaned resource. The bug is that output is undefined in the
+      // delete call when the resource never completed creation.
+      yield* destroy();
+
+      // Resource should be cleaned up
+      expect(yield* getState("A")).toBeUndefined();
+    }).pipe(Effect.provide(MockLayers())),
+  );
+
+  test(
+    "destroy should handle creating state when attributes can be recovered",
+    Effect.gen(function* () {
+      class A extends TestResource("A", {
+        string: "test-string",
+      }) {}
+      yield* hook(apply(A));
+      expect((yield* getState("A"))?.status).toEqual("creating");
+      expect((yield* getState("A"))?.attr).toBeUndefined();
+
+      yield* hook(destroy(), {
+        delete: () => Effect.fail(new ResourceFailure()),
+        read: () =>
+          Effect.succeed({
+            string: "test-string",
+          }),
+      });
+
+      // Resource should be cleaned up
+      expect((yield* getState("A"))?.status).toEqual("deleting");
+
+      // actually delete this time
+      yield* hook(destroy(), {
+        read: () =>
+          Effect.succeed({
+            string: "test-string",
+          }),
+      });
+
+      expect(yield* getState("A")).toBeUndefined();
+    }).pipe(Effect.provide(MockLayers())),
+  );
+
+  test(
+    "destroy should handle replacing state when old resource has no attributes",
+    Effect.gen(function* () {
+      // 1. Create a resource but fail - this leaves state in "creating" with no attr
+      {
+        class A extends TestResource("A", {
+          replaceString: "original",
+        }) {}
+        yield* hook(apply(A));
+        expect((yield* getState("A"))?.status).toEqual("creating");
+        expect((yield* getState("A"))?.attr).toBeUndefined();
+      }
+
+      // 2. Trigger replacement but also fail during create - this leaves state in "replacing"
+      // with old.attr being undefined
+      {
+        class A extends TestResource("A", {
+          replaceString: "new",
+        }) {}
+        yield* hook(apply(A));
+        const state = yield* getState<ReplacingResourceState>("A");
+        expect(state?.status).toEqual("replacing");
+        expect(state?.old?.attr).toBeUndefined();
+      }
+
+      // 3. Call destroy - this triggers collectGarbage which tries to delete
+      // the resource. The bug is that old.attr is undefined.
+      yield* hook(destroy(), {
+        read: () =>
+          Effect.succeed({
+            replaceString: "original",
+          }),
+      });
+
+      // Resource should be cleaned up
+      expect(yield* getState("A")).toBeUndefined();
     }).pipe(Effect.provide(MockLayers())),
   );
 });
@@ -429,7 +522,7 @@ describe("from updating state", () => {
         class A extends TestResource("A", {
           string: "test-string-changed",
         }) {}
-        yield* fail(apply(A), {
+        yield* hook(apply(A), {
           update: () => Effect.fail(new ResourceFailure()),
         });
         expect((yield* getState("A"))?.status).toEqual("updating");
@@ -457,7 +550,7 @@ describe("from updating state", () => {
         class A extends TestResource("A", {
           string: "test-string-changed",
         }) {}
-        yield* fail(apply(A), {
+        yield* hook(apply(A), {
           update: () => Effect.fail(new ResourceFailure()),
         });
         expect((yield* getState("A"))?.status).toEqual("updating");
@@ -487,7 +580,7 @@ describe("from updating state", () => {
           string: "test-string-changed",
           replaceString: "original",
         }) {}
-        yield* fail(apply(A), {
+        yield* hook(apply(A), {
           update: () => Effect.fail(new ResourceFailure()),
         });
         expect((yield* getState("A"))?.status).toEqual("updating");
@@ -520,7 +613,7 @@ describe("from replacing state", () => {
         class A extends TestResource("A", {
           replaceString: "new",
         }) {}
-        yield* fail(apply(A), {
+        yield* hook(apply(A), {
           create: () => Effect.fail(new ResourceFailure()),
         });
         const state = yield* getState<ReplacingResourceState>("A");
@@ -555,7 +648,7 @@ describe("from replacing state", () => {
           replaceString: "new",
           string: "initial",
         }) {}
-        yield* fail(apply(A), {
+        yield* hook(apply(A), {
           create: () => Effect.fail(new ResourceFailure()),
         });
         expect((yield* getState("A"))?.status).toEqual("replacing");
@@ -588,7 +681,7 @@ describe("from replacing state", () => {
         class A extends TestResource("A", {
           replaceString: "new",
         }) {}
-        yield* fail(apply(A), {
+        yield* hook(apply(A), {
           create: () => Effect.fail(new ResourceFailure()),
         });
         expect((yield* getState("A"))?.status).toEqual("replacing");
@@ -622,7 +715,7 @@ describe("from replaced state", () => {
       class A extends TestResource("A", {
         replaceString: "test-string-changed",
       }) {}
-      yield* fail(apply(A), {
+      yield* hook(apply(A), {
         delete: () => Effect.fail(new ResourceFailure()),
       });
       const AState = yield* getState<ReplacedResourceState>("A");
@@ -656,7 +749,7 @@ describe("from replaced state", () => {
           replaceString: "new",
           string: "initial",
         }) {}
-        yield* fail(apply(A), {
+        yield* hook(apply(A), {
           delete: () => Effect.fail(new ResourceFailure()),
         });
         const state = yield* getState<ReplacedResourceState>("A");
@@ -691,7 +784,7 @@ describe("from replaced state", () => {
         class A extends TestResource("A", {
           replaceString: "new",
         }) {}
-        yield* fail(apply(A), {
+        yield* hook(apply(A), {
           delete: () => Effect.fail(new ResourceFailure()),
         });
         expect((yield* getState("A"))?.status).toEqual("replaced");
@@ -726,7 +819,7 @@ describe("from deleting state", () => {
         class A extends TestResource("A", {
           string: "test-string",
         }) {}
-        yield* fail(destroy(), {
+        yield* hook(destroy(), {
           delete: () => Effect.fail(new ResourceFailure()),
         });
         expect((yield* getState("A"))?.status).toEqual("deleting");
@@ -754,7 +847,7 @@ describe("from deleting state", () => {
       }
       {
         // 2. Try to delete but fail
-        yield* fail(destroy(), {
+        yield* hook(destroy(), {
           delete: () => Effect.fail(new ResourceFailure()),
         });
         expect((yield* getState("A"))?.status).toEqual("deleting");
@@ -874,7 +967,7 @@ describe("dependent resources (A -> B)", () => {
         class B extends TestResource("B", { string: Output.of(A).string }) {}
 
         // A fails to create - B should never start
-        yield* fail(apply(B), failOn("A", "create"));
+        yield* hook(apply(B), failOn("A", "create"));
 
         expect((yield* getState("A"))?.status).toEqual("creating");
         expect(yield* getState("B")).toBeUndefined();
@@ -896,7 +989,7 @@ describe("dependent resources (A -> B)", () => {
         class B extends TestResource("B", { string: Output.of(A).string }) {}
 
         // A succeeds, B fails to create
-        yield* fail(apply(B), failOn("B", "create"));
+        yield* hook(apply(B), failOn("B", "create"));
 
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("creating");
@@ -923,7 +1016,7 @@ describe("dependent resources (A -> B)", () => {
         class B extends TestResource("B", { string: Output.of(A).string }) {}
 
         // A fails to update - B should not start updating
-        yield* fail(apply(B), failOn("A", "update"));
+        yield* hook(apply(B), failOn("A", "update"));
 
         expect((yield* getState("A"))?.status).toEqual("updating");
         expect((yield* getState("B"))?.status).toEqual("created");
@@ -951,7 +1044,7 @@ describe("dependent resources (A -> B)", () => {
         class B extends TestResource("B", { string: Output.of(A).string }) {}
 
         // A succeeds, B fails to update
-        yield* fail(apply(B), failOn("B", "update"));
+        yield* hook(apply(B), failOn("B", "update"));
 
         expect((yield* getState("A"))?.status).toEqual("updated");
         expect((yield* getState("B"))?.status).toEqual("updating");
@@ -984,7 +1077,7 @@ describe("dependent resources (A -> B)", () => {
         class B extends TestResource("B", { string: Output.of(A).string }) {}
 
         // A replacement fails (during create of new A) - B should not start
-        yield* fail(apply(B), failOn("A", "create"));
+        yield* hook(apply(B), failOn("A", "create"));
 
         expect((yield* getState<ReplacingResourceState>("A"))?.status).toEqual(
           "replacing",
@@ -1020,7 +1113,7 @@ describe("dependent resources (A -> B)", () => {
         class B extends TestResource("B", { string: Output.of(A).string }) {}
 
         // A replacement succeeds, B fails to update
-        yield* fail(apply(B), failOn("B", "update"));
+        yield* hook(apply(B), failOn("B", "update"));
 
         // A should be in replaced state (new A created, old A pending cleanup)
         // B should be in updating state
@@ -1058,7 +1151,7 @@ describe("dependent resources (A -> B)", () => {
         class B extends TestResource("B", { string: Output.of(A).string }) {}
 
         // A replacement and B update succeed, but old A delete fails
-        yield* fail(apply(B), failOn("A", "delete"));
+        yield* hook(apply(B), failOn("A", "delete"));
 
         // A should be in replaced state (delete of old A failed)
         // B should have been updated successfully
@@ -1087,7 +1180,7 @@ describe("dependent resources (A -> B)", () => {
         expect((yield* getState("B"))?.status).toEqual("created");
 
         // Orphan deletion: B delete fails
-        yield* fail(destroy(), failOn("B", "delete"));
+        yield* hook(destroy(), failOn("B", "delete"));
 
         // B should be in deleting state, A should still be created (waiting for B)
         expect((yield* getState("B"))?.status).toEqual("deleting");
@@ -1112,7 +1205,7 @@ describe("dependent resources (A -> B)", () => {
         expect((yield* getState("B"))?.status).toEqual("created");
 
         // Orphan deletion: B succeeds, A fails
-        yield* fail(destroy(), failOn("A", "delete"));
+        yield* hook(destroy(), failOn("A", "delete"));
 
         // B should be deleted, A should be in deleting state
         expect(yield* getState("B")).toBeUndefined();
@@ -1229,7 +1322,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
         class B extends TestResource("B", { string: Output.of(A).string }) {}
         class C extends TestResource("C", { string: Output.of(B).string }) {}
 
-        yield* fail(apply(C), failOn("A", "create"));
+        yield* hook(apply(C), failOn("A", "create"));
 
         expect((yield* getState("A"))?.status).toEqual("creating");
         expect(yield* getState("B")).toBeUndefined();
@@ -1251,7 +1344,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
         class B extends TestResource("B", { string: Output.of(A).string }) {}
         class C extends TestResource("C", { string: Output.of(B).string }) {}
 
-        yield* fail(apply(C), failOn("B", "create"));
+        yield* hook(apply(C), failOn("B", "create"));
 
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("creating");
@@ -1273,7 +1366,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
         class B extends TestResource("B", { string: Output.of(A).string }) {}
         class C extends TestResource("C", { string: Output.of(B).string }) {}
 
-        yield* fail(apply(C), failOn("C", "create"));
+        yield* hook(apply(C), failOn("C", "create"));
 
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("created");
@@ -1304,7 +1397,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
         class B extends TestResource("B", { string: Output.of(A).string }) {}
         class C extends TestResource("C", { string: Output.of(B).string }) {}
 
-        yield* fail(apply(C), failOn("A", "update"));
+        yield* hook(apply(C), failOn("A", "update"));
 
         expect((yield* getState("A"))?.status).toEqual("updating");
         expect((yield* getState("B"))?.status).toEqual("created");
@@ -1333,7 +1426,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
         class B extends TestResource("B", { string: Output.of(A).string }) {}
         class C extends TestResource("C", { string: Output.of(B).string }) {}
 
-        yield* fail(apply(C), failOn("B", "update"));
+        yield* hook(apply(C), failOn("B", "update"));
 
         expect((yield* getState("A"))?.status).toEqual("updated");
         expect((yield* getState("B"))?.status).toEqual("updating");
@@ -1362,7 +1455,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
         class B extends TestResource("B", { string: Output.of(A).string }) {}
         class C extends TestResource("C", { string: Output.of(B).string }) {}
 
-        yield* fail(apply(C), failOn("C", "update"));
+        yield* hook(apply(C), failOn("C", "update"));
 
         expect((yield* getState("A"))?.status).toEqual("updated");
         expect((yield* getState("B"))?.status).toEqual("updated");
@@ -1399,7 +1492,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
         class B extends TestResource("B", { string: Output.of(A).string }) {}
         class C extends TestResource("C", { string: Output.of(B).string }) {}
 
-        yield* fail(apply(C), failOn("A", "create"));
+        yield* hook(apply(C), failOn("A", "create"));
 
         expect((yield* getState<ReplacingResourceState>("A"))?.status).toEqual(
           "replacing",
@@ -1436,7 +1529,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
         class B extends TestResource("B", { string: Output.of(A).string }) {}
         class C extends TestResource("C", { string: Output.of(B).string }) {}
 
-        yield* fail(apply(C), failOn("B", "update"));
+        yield* hook(apply(C), failOn("B", "update"));
 
         expect((yield* getState<ReplacedResourceState>("A"))?.status).toEqual(
           "replaced",
@@ -1473,7 +1566,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
         class B extends TestResource("B", { string: Output.of(A).string }) {}
         class C extends TestResource("C", { string: Output.of(B).string }) {}
 
-        yield* fail(apply(C), failOn("C", "update"));
+        yield* hook(apply(C), failOn("C", "update"));
 
         expect((yield* getState<ReplacedResourceState>("A"))?.status).toEqual(
           "replaced",
@@ -1510,7 +1603,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
         class B extends TestResource("B", { string: Output.of(A).string }) {}
         class C extends TestResource("C", { string: Output.of(B).string }) {}
 
-        yield* fail(apply(C), failOn("A", "delete"));
+        yield* hook(apply(C), failOn("A", "delete"));
 
         expect((yield* getState<ReplacedResourceState>("A"))?.status).toEqual(
           "replaced",
@@ -1537,7 +1630,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
         class C extends TestResource("C", { string: Output.of(B).string }) {}
 
         yield* apply(C);
-        yield* fail(destroy(), failOn("C", "delete"));
+        yield* hook(destroy(), failOn("C", "delete"));
 
         expect((yield* getState("C"))?.status).toEqual("deleting");
         expect((yield* getState("B"))?.status).toEqual("created");
@@ -1559,7 +1652,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
         class C extends TestResource("C", { string: Output.of(B).string }) {}
 
         yield* apply(C);
-        yield* fail(destroy(), failOn("B", "delete"));
+        yield* hook(destroy(), failOn("B", "delete"));
 
         expect(yield* getState("C")).toBeUndefined();
         expect((yield* getState("B"))?.status).toEqual("deleting");
@@ -1580,7 +1673,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
         class C extends TestResource("C", { string: Output.of(B).string }) {}
 
         yield* apply(C);
-        yield* fail(destroy(), failOn("A", "delete"));
+        yield* hook(destroy(), failOn("A", "delete"));
 
         expect(yield* getState("C")).toBeUndefined();
         expect(yield* getState("B")).toBeUndefined();
@@ -1697,7 +1790,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
           ),
         }) {}
 
-        yield* fail(apply(D), failOn("A", "create"));
+        yield* hook(apply(D), failOn("A", "create"));
 
         expect((yield* getState("A"))?.status).toEqual("creating");
         expect(yield* getState("B")).toBeUndefined();
@@ -1726,7 +1819,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
           ),
         }) {}
 
-        yield* fail(apply(D), failOn("B", "create"));
+        yield* hook(apply(D), failOn("B", "create"));
 
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("creating");
@@ -1757,7 +1850,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
           ),
         }) {}
 
-        yield* fail(apply(D), failOn("C", "create"));
+        yield* hook(apply(D), failOn("C", "create"));
 
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("C"))?.status).toEqual("creating");
@@ -1788,7 +1881,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
           ),
         }) {}
 
-        yield* fail(apply(D), failOn("D", "create"));
+        yield* hook(apply(D), failOn("D", "create"));
 
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("created");
@@ -1814,7 +1907,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
           ),
         }) {}
 
-        yield* fail(
+        yield* hook(
           apply(D),
           failOnMultiple([
             { id: "B", hook: "create" },
@@ -1868,7 +1961,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
           ),
         }) {}
 
-        yield* fail(apply(D), failOn("A", "update"));
+        yield* hook(apply(D), failOn("A", "update"));
 
         expect((yield* getState("A"))?.status).toEqual("updating");
         expect((yield* getState("B"))?.status).toEqual("created");
@@ -1909,7 +2002,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
           ),
         }) {}
 
-        yield* fail(apply(D), failOn("B", "update"));
+        yield* hook(apply(D), failOn("B", "update"));
 
         expect((yield* getState("A"))?.status).toEqual("updated");
         expect((yield* getState("B"))?.status).toEqual("updating");
@@ -1953,7 +2046,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
           ),
         }) {}
 
-        yield* fail(apply(D), failOn("D", "update"));
+        yield* hook(apply(D), failOn("D", "update"));
 
         expect((yield* getState("A"))?.status).toEqual("updated");
         expect((yield* getState("B"))?.status).toEqual("updated");
@@ -1982,7 +2075,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
         }) {}
 
         yield* apply(D);
-        yield* fail(destroy(), failOn("D", "delete"));
+        yield* hook(destroy(), failOn("D", "delete"));
 
         expect((yield* getState("D"))?.status).toEqual("deleting");
         expect((yield* getState("B"))?.status).toEqual("created");
@@ -2011,7 +2104,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
         }) {}
 
         yield* apply(D);
-        yield* fail(destroy(), failOn("B", "delete"));
+        yield* hook(destroy(), failOn("B", "delete"));
 
         expect(yield* getState("D")).toBeUndefined();
         expect((yield* getState("B"))?.status).toEqual("deleting");
@@ -2042,7 +2135,7 @@ describe("independent resources (A, B with no dependencies)", () => {
         class A extends TestResource("A", { string: "a-value" }) {}
         class B extends TestResource("B", { string: "b-value" }) {}
 
-        yield* fail(
+        yield* hook(
           apply(A, B),
           failOnMultiple([
             { id: "A", hook: "create" },
@@ -2073,7 +2166,7 @@ describe("independent resources (A, B with no dependencies)", () => {
         class A extends TestResource("A", { string: "a-value" }) {}
         class B extends TestResource("B", { string: "b-value" }) {}
 
-        yield* fail(apply(A, B), failOn("B", "create"));
+        yield* hook(apply(A, B), failOn("B", "create"));
 
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("creating");
@@ -2098,7 +2191,7 @@ describe("independent resources (A, B with no dependencies)", () => {
         class A extends TestResource("A", { string: "a-updated" }) {}
         class B extends TestResource("B", { string: "b-updated" }) {}
 
-        yield* fail(apply(A, B), failOn("A", "update"));
+        yield* hook(apply(A, B), failOn("A", "update"));
 
         expect((yield* getState("A"))?.status).toEqual("updating");
         // B might have been updated
@@ -2130,7 +2223,7 @@ describe("independent resources (A, B with no dependencies)", () => {
         class A extends TestResource("A", { string: "a-value" }) {}
         class B2 extends TestResource("B", { string: "b-updated" }) {}
 
-        yield* fail(
+        yield* hook(
           apply(A, B2),
           failOnMultiple([
             { id: "A", hook: "create" },
@@ -2169,7 +2262,7 @@ describe("independent resources (A, B with no dependencies)", () => {
 
         // Try to replace A and delete B (by not including B) - both fail
         class A2 extends TestResource("A", { replaceString: "changed" }) {}
-        yield* fail(
+        yield* hook(
           apply(A2),
           failOnMultiple([
             { id: "A", hook: "create" },
@@ -2234,7 +2327,7 @@ describe("multiple resources replacing", () => {
       class A extends TestResource("A", { replaceString: "a-new" }) {}
       class B extends TestResource("B", { replaceString: "b-new" }) {}
 
-      yield* fail(apply(A, B), failOn("A", "create"));
+      yield* hook(apply(A, B), failOn("A", "create"));
 
       expect((yield* getState<ReplacingResourceState>("A"))?.status).toEqual(
         "replacing",
@@ -2268,7 +2361,7 @@ describe("multiple resources replacing", () => {
       class A extends TestResource("A", { replaceString: "a-new" }) {}
       class B extends TestResource("B", { replaceString: "b-new" }) {}
 
-      yield* fail(
+      yield* hook(
         apply(A, B),
         failOnMultiple([
           { id: "A", hook: "create" },
@@ -2307,7 +2400,7 @@ describe("multiple resources replacing", () => {
       class A extends TestResource("A", { replaceString: "a-new" }) {}
       class B extends TestResource("B", { replaceString: "b-new" }) {}
 
-      yield* fail(
+      yield* hook(
         apply(A, B),
         failOnMultiple([
           { id: "A", hook: "delete" },
@@ -2375,7 +2468,7 @@ describe("orphan chain deletion", () => {
       yield* apply(C);
 
       // Remove all three - C fails to delete
-      yield* fail(destroy(), failOn("C", "delete"));
+      yield* hook(destroy(), failOn("C", "delete"));
 
       expect((yield* getState("C"))?.status).toEqual("deleting");
       expect((yield* getState("B"))?.status).toEqual("created");
@@ -2515,7 +2608,7 @@ describe("complex mixed state scenarios", () => {
       class C extends TestResource("C", { string: "c-value" }) {}
 
       // Fail on A replace (create phase) and C create
-      yield* fail(
+      yield* hook(
         apply(A2, B2, C),
         failOnMultiple([
           { id: "A", hook: "create" },

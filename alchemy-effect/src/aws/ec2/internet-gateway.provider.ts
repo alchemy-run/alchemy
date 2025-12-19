@@ -4,7 +4,6 @@ import * as Schedule from "effect/Schedule";
 import type { EC2 } from "itty-aws/ec2";
 
 import type { ScopedPlanStatusSession } from "../../cli/service.ts";
-import type { ProviderService } from "../../provider.ts";
 import { createTagger, createTagsList } from "../../tags.ts";
 import { Account } from "../account.ts";
 import { Region } from "../region.ts";
@@ -26,10 +25,6 @@ export const internetGatewayProvider = () =>
 
       return {
         stables: ["internetGatewayId", "internetGatewayArn", "ownerId"],
-        diff: Effect.fn(function* ({ news, olds }) {
-          // VPC attachment change can be handled via attach/detach (update)
-          // No properties require replacement
-        }),
 
         create: Effect.fn(function* ({ id, news, session }) {
           // 1. Prepare tags
@@ -203,6 +198,20 @@ export const internetGatewayProvider = () =>
                     "InvalidInternetGatewayID.NotFound",
                     () => Effect.void,
                   ),
+                  // Retry on dependency violations (e.g., NAT Gateway with EIP still attached)
+                  Effect.retry({
+                    while: (e) => {
+                      return e._tag === "DependencyViolation";
+                    },
+                    schedule: Schedule.exponential(1000, 1.5).pipe(
+                      Schedule.intersect(Schedule.recurs(20)), // Up to 20 retries
+                      Schedule.tapOutput(([, attempt]) =>
+                        session.note(
+                          `Waiting for VPC dependencies to clear before detaching... (attempt ${attempt + 1})`,
+                        ),
+                      ),
+                    ),
+                  }),
                 );
               yield* session.note(`Detached from VPC: ${attachment.vpcId}`);
             }
@@ -247,7 +256,7 @@ export const internetGatewayProvider = () =>
             `Internet gateway ${internetGatewayId} deleted successfully`,
           );
         }),
-      } satisfies ProviderService<InternetGateway>;
+      };
     }),
   );
 

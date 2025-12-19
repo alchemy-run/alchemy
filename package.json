@@ -2,26 +2,10 @@
   "name": "alchemy-effect-monorepo",
   "version": "0.0.0",
   "private": true,
-  "type": "module",
-  "module": "./lib/index.js",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/alchemy-run/alchemy"
-  },
-  "scripts": {
-    "clean:shallow": "rm -rf alchemy-effect/*.tgz && bun tsc -b --clean",
-    "build": "bun run clean:shallow && bun tsc -b && bun run --filter alchemy-effect build",
-    "dev": "tsc -w & bun run --filter alchemy-effect dev",
-    "build:clean": "git clean -fqdx . && bun i && bun run build",
-    "download:env": "doppler secrets download --no-file --format env > .env",
-    "format": "oxfmt '.' '!./alchemy-effect*/lib/' '!/**/*.mdx'",
-    "format:check": "bun run format -- --check",
-    "bump": "bun ./scripts/bump.ts",
-    "publish:npm": "bun run build && bun run --filter alchemy-effect publish:npm",
-    "prepare": "effect-language-service patch",
-    "test": "vitest run",
-    "test:benchmark": "bun run --filter alchemy-effect test:benchmark"
   },
   "workspaces": {
     "catalog": {
@@ -37,7 +21,7 @@
       "@types/node": "latest",
       "cloudflare": "^5.2.0",
       "effect": "^3.19.3",
-      "itty-aws": "^0.8.4",
+      "itty-aws": "^0.8.10",
       "typescript": "^5.9.3",
       "vite": "^7.1.9",
       "wrangler": "^4.42.2"
@@ -47,6 +31,22 @@
       "examples/*"
     ]
   },
+  "type": "module",
+  "module": "./lib/index.js",
+  "scripts": {
+    "clean:shallow": "rm -rf alchemy-effect/*.tgz && bun tsc -b --clean",
+    "build": "bun run clean:shallow && bun tsc -b && bun run --filter alchemy-effect build",
+    "dev": "tsc -w & bun run --filter alchemy-effect dev",
+    "build:clean": "git clean -fqdx . && bun i && bun run build",
+    "download:env": "doppler secrets download --no-file --format env > .env",
+    "format": "oxfmt '.' '!./alchemy-effect*/lib/' '!/**/*.mdx'",
+    "format:check": "bun run format -- --check",
+    "bump": "bun ./scripts/bump.ts",
+    "publish:npm": "bun run build && bun run --filter alchemy-effect publish:npm",
+    "prepare": "effect-language-service patch",
+    "test": "vitest run",
+    "test:benchmark": "bun run --filter alchemy-effect test:benchmark"
+  },
   "devDependencies": {
     "@ark/attest": "^0.55.0",
     "@effect/language-service": "^0.55.5",
@@ -55,7 +55,7 @@
     "@typescript/native-preview": "^7.0.0-dev.20251208.1",
     "changelogithub": "^13.16.1",
     "dotenv": "^17.2.3",
-    "oxfmt": "^0.9.0",
+    "oxfmt": "^0.19.0",
     "pkg-pr-new": "^0.0.60",
     "typescript": "^5.9.3",
     "vite-tsconfig-paths": "^5.1.4",

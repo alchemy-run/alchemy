@@ -11,25 +11,25 @@ import type {
 } from "./binding.ts";
 import type { Capability } from "./capability.ts";
 import type { Diff, NoopDiff, UpdateDiff } from "./diff.ts";
+import { InstanceId } from "./instance-id.ts";
 import * as Output from "./output.ts";
 import type { Instance } from "./policy.ts";
 import type { Provider } from "./provider.ts";
-import { type ProviderService, getProviderByType } from "./provider.ts";
+import { getProviderByType, type ProviderService } from "./provider.ts";
 import type { AnyResource, Resource, ResourceTags } from "./resource.ts";
 import { isService, type IService, type Service } from "./service.ts";
 import {
+  State,
+  StateStoreError,
   type CreatedResourceState,
   type CreatingResourceState,
   type ReplacedResourceState,
   type ReplacingResourceState,
+  type ResourceState,
   type UpdatedResourceState,
   type UpdatingReourceState,
-  State,
-  StateStoreError,
-  type ResourceState,
 } from "./state.ts";
 import { asEffect } from "./util.ts";
-import { InstanceId } from "./instance-id.ts";
 
 export type PlanError = never;
 
@@ -136,8 +136,9 @@ export interface Delete<R extends Resource = AnyResource> extends BaseNode<R> {
   state: ResourceState;
 }
 
-export interface NoopUpdate<R extends Resource = AnyResource>
-  extends BaseNode<R> {
+export interface NoopUpdate<
+  R extends Resource = AnyResource,
+> extends BaseNode<R> {
   action: "noop";
   state: CreatedResourceState | UpdatedResourceState;
 }
@@ -205,7 +206,9 @@ export type TransitiveResources<
                       >
                     ? Src extends Found
                       ? Found
-                      : TransitiveResources<Src, Src | Found>
+                      : string extends Src["id"]
+                        ? Found
+                        : TransitiveResources<Src, Src | Found>
                     : Found;
               }[keyof Resources["props"][prop]];
     }[keyof Resources["props"]],
@@ -292,6 +295,7 @@ export const plan = <const Resources extends (Service | Resource)[]>(
       resourceIds.map((id) =>
         state.get({ stack: app.name, stage: app.stage, resourceId: id }),
       ),
+      { concurrency: "unbounded" },
     );
 
     type ResolveEffect<T> = Effect.Effect<T, ResolveErr, ResolveReq>;
@@ -414,13 +418,16 @@ export const plan = <const Resources extends (Service | Resource)[]>(
         } else if (Output.isExpr(input)) {
           return yield* resolveOutput(input);
         } else if (Array.isArray(input)) {
-          return yield* Effect.all(input.map(resolveInput));
+          return yield* Effect.all(input.map(resolveInput), {
+            concurrency: "unbounded",
+          });
         } else if (typeof input === "object") {
           return Object.fromEntries(
             yield* Effect.all(
               Object.entries(input).map(([key, value]) =>
                 resolveInput(value).pipe(Effect.map((value) => [key, value])),
               ),
+              { concurrency: "unbounded" },
             ),
           );
         }
@@ -441,7 +448,9 @@ export const plan = <const Resources extends (Service | Resource)[]>(
           const upstream = yield* resolveOutput(expr.expr);
           return Output.hasOutputs(upstream) ? expr : yield* expr.f(upstream);
         } else if (Output.isAllExpr(expr)) {
-          return yield* Effect.all(expr.outs.map(resolveOutput));
+          return yield* Effect.all(expr.outs.map(resolveOutput), {
+            concurrency: "unbounded",
+          });
         }
         return yield* Effect.die(new Error("Not implemented yet"));
       });
@@ -754,6 +763,7 @@ export const plan = <const Resources extends (Service | Resource)[]>(
               }
             }),
           ),
+        { concurrency: "unbounded" },
       )).map((update) => [update.resource.id, update]),
     ) as IPlan["resources"];
 
@@ -778,8 +788,8 @@ export const plan = <const Resources extends (Service | Resource)[]>(
                     .read({
                       id,
                       instanceId: oldState.instanceId,
-                      olds: oldState.props as any,
-                      output: oldState.attr as any,
+                      olds: oldState.props as never,
+                      output: oldState.attr as never,
                       bindings: oldState.bindings ?? [],
                     })
                     .pipe(
@@ -787,11 +797,6 @@ export const plan = <const Resources extends (Service | Resource)[]>(
                         Layer.succeed(InstanceId, oldState.instanceId),
                       ),
                     );
-                }
-                if (attr === undefined) {
-                  // skip deletion if we have no record of any attributes
-                  // TODO(sam): should we open up provider.delete to accept undefined and let it try and generate a physical name and delete?
-                  return undefined;
                 }
               }
               return [
@@ -815,6 +820,7 @@ export const plan = <const Resources extends (Service | Resource)[]>(
             }
           }),
         ),
+        { concurrency: "unbounded" },
       )).filter((v) => !!v),
     );
 
@@ -948,9 +954,9 @@ const diffBindings = Effect.fn(function* ({
     },
   );
 
-  return (yield* Effect.all(bindings.map(diffBinding))).filter(
-    (action): action is BindNode => action !== null,
-  );
+  return (yield* Effect.all(bindings.map(diffBinding), {
+    concurrency: "unbounded",
+  })).filter((action): action is BindNode => action !== null);
 });
 
 const isBindingDiff = Effect.fn(function* ({

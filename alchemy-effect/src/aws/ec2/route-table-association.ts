@@ -15,12 +15,12 @@ export interface RouteTableAssociation<
   ID extends string = string,
   Props extends RouteTableAssociationProps = RouteTableAssociationProps,
 > extends Resource<
-    "AWS.EC2.RouteTableAssociation",
-    ID,
-    Props,
-    RouteTableAssociationAttrs<Input.Resolve<Props>>,
-    RouteTableAssociation
-  > {}
+  "AWS.EC2.RouteTableAssociation",
+  ID,
+  Props,
+  RouteTableAssociationAttrs<Input.Resolve<Props>>,
+  RouteTableAssociation
+> {}
 
 export type RouteTableAssociationId<ID extends string = string> =
   `rtbassoc-${ID}`;

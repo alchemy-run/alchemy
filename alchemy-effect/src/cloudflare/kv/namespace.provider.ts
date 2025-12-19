@@ -1,6 +1,5 @@
 import type { KV } from "cloudflare/resources";
 import * as Effect from "effect/Effect";
-import { App } from "../../app.ts";
 import { createPhysicalName } from "../../physical-name.ts";
 import { Account } from "../account.ts";
 import { CloudflareApi } from "../api.ts";
@@ -13,7 +12,6 @@ import {
 export const namespaceProvider = () =>
   Namespace.provider.effect(
     Effect.gen(function* () {
-      const app = yield* App;
       const api = yield* CloudflareApi;
       const accountId = yield* Account;
 

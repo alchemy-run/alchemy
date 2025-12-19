@@ -4,7 +4,6 @@ import * as Schedule from "effect/Schedule";
 import type { EC2 } from "itty-aws/ec2";
 
 import { somePropsAreDifferent } from "../../diff.ts";
-import type { ProviderService } from "../../provider.ts";
 import { EC2Client } from "./client.ts";
 import { Route, type RouteAttrs, type RouteProps } from "./route.ts";
 
@@ -173,7 +172,7 @@ export const routeProvider = () =>
 
           yield* session.note(`Route ${dest} deleted successfully`);
         }),
-      } satisfies ProviderService<Route>;
+      };
     }),
   );
 

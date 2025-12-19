@@ -1,17 +1,17 @@
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
 import type { EC2 } from "itty-aws/ec2";
 
-import type { VpcId } from "./vpc.ts";
 import type { ScopedPlanStatusSession } from "../../cli/service.ts";
 import { somePropsAreDifferent } from "../../diff.ts";
-import type { ProviderService } from "../../provider.ts";
 import { createTagger, createTagsList, diffTags } from "../../tags.ts";
-import { EC2Client } from "./client.ts";
-import { Vpc, type VpcAttrs, type VpcProps } from "./vpc.ts";
-import { Region } from "../region.ts";
 import { Account } from "../account.ts";
+import { Region } from "../region.ts";
+import { EC2Client } from "./client.ts";
+import type { VpcId } from "./vpc.ts";
+import { Vpc, type VpcAttrs, type VpcProps } from "./vpc.ts";
 
 export const vpcProvider = () =>
   Vpc.provider.effect(
@@ -191,12 +191,13 @@ export const vpcProvider = () =>
                   // DependencyViolation means there are still dependent resources
                   // This can happen if subnets/IGW are being deleted concurrently
                   return (
-                    e._tag === "ValidationError" &&
-                    e.message?.includes("DependencyViolation")
+                    e._tag === "DependencyViolation" ||
+                    (e._tag === "ValidationError" &&
+                      e.message?.includes("DependencyViolation"))
                   );
                 },
                 schedule: Schedule.exponential(1000, 1.5).pipe(
-                  Schedule.intersect(Schedule.recurs(10)), // Try up to 10 times
+                  Schedule.intersect(Schedule.recurs(20)), // Try up to 20 times
                   Schedule.tapOutput(([, attempt]) =>
                     session.note(
                       `Waiting for dependencies to clear... (attempt ${attempt + 1})`,
@@ -211,9 +212,20 @@ export const vpcProvider = () =>
 
           yield* session.note(`VPC ${vpcId} deleted successfully`);
         }),
-      } satisfies ProviderService<Vpc>;
+      };
     }),
   );
+
+// Retryable error: VPC is still pending
+class VpcPending extends Data.TaggedError("VpcPending")<{
+  vpcId: string;
+  state: string;
+}> {}
+
+// Retryable error: VPC still exists during deletion
+class VpcStillExists extends Data.TaggedError("VpcStillExists")<{
+  vpcId: string;
+}> {}
 
 /**
  * Wait for VPC to be in available state
@@ -223,27 +235,24 @@ const waitForVpcAvailable = (
   vpcId: string,
   session?: ScopedPlanStatusSession,
 ) =>
-  Effect.retry(
-    Effect.gen(function* () {
-      const result = yield* ec2
-        .describeVpcs({ VpcIds: [vpcId] })
-        .pipe(
-          Effect.catchTag("InvalidVpcID.NotFound", () =>
-            Effect.succeed({ Vpcs: [] }),
-          ),
-        );
-      const vpc = result.Vpcs![0];
+  Effect.gen(function* () {
+    const result = yield* ec2.describeVpcs({ VpcIds: [vpcId] });
+    const vpc = result.Vpcs?.[0];
 
-      if (vpc.State === "available") {
-        return vpc;
-      }
+    if (!vpc) {
+      return yield* Effect.fail(new Error(`VPC ${vpcId} not found`));
+    }
 
-      // Still pending, fail to trigger retry
-      return yield* Effect.fail(new Error("VPC not yet available"));
-    }),
-    {
+    if (vpc.State === "available") {
+      return vpc;
+    }
+
+    // Still pending - this is the only retryable case
+    return yield* new VpcPending({ vpcId, state: vpc.State! });
+  }).pipe(
+    Effect.retry({
+      while: (e) => e instanceof VpcPending,
       schedule: Schedule.fixed(2000).pipe(
-        // Check every 2 seconds
         Schedule.intersect(Schedule.recurs(30)), // Max 60 seconds
         Schedule.tapOutput(([, attempt]) =>
           session
@@ -253,7 +262,7 @@ const waitForVpcAvailable = (
             : Effect.void,
         ),
       ),
-    },
+    }),
   );
 
 /**
@@ -265,30 +274,28 @@ const waitForVpcDeleted = (
   session: ScopedPlanStatusSession,
 ) =>
   Effect.gen(function* () {
-    yield* Effect.retry(
-      Effect.gen(function* () {
-        const result = yield* ec2.describeVpcs({ VpcIds: [vpcId] }).pipe(
-          Effect.tapError(Effect.logDebug),
-          Effect.catchTag("InvalidVpcID.NotFound", () =>
-            Effect.succeed({ Vpcs: [] }),
-          ),
-        );
-
-        if (!result.Vpcs || result.Vpcs.length === 0) {
-          return; // Successfully deleted
-        }
-
-        // Still exists, fail to trigger retry
-        return yield* Effect.fail(new Error("VPC still exists"));
-      }),
-      {
-        schedule: Schedule.fixed(2000).pipe(
-          // Check every 2 seconds
-          Schedule.intersect(Schedule.recurs(15)), // Max 30 seconds
-          Schedule.tapOutput(([, attempt]) =>
-            session.note(`Waiting for VPC deletion... (${(attempt + 1) * 2}s)`),
-          ),
+    const result = yield* ec2
+      .describeVpcs({ VpcIds: [vpcId] })
+      .pipe(
+        Effect.catchTag("InvalidVpcID.NotFound", () =>
+          Effect.succeed({ Vpcs: [] }),
         ),
-      },
-    );
-  });
+      );
+
+    if (!result.Vpcs || result.Vpcs.length === 0) {
+      return; // Successfully deleted
+    }
+
+    // Still exists - this is the only retryable case
+    return yield* new VpcStillExists({ vpcId });
+  }).pipe(
+    Effect.retry({
+      while: (e) => e instanceof VpcStillExists,
+      schedule: Schedule.fixed(2000).pipe(
+        Schedule.intersect(Schedule.recurs(15)), // Max 30 seconds
+        Schedule.tapOutput(([, attempt]) =>
+          session.note(`Waiting for VPC deletion... (${(attempt + 1) * 2}s)`),
+        ),
+      ),
+    }),
+  );

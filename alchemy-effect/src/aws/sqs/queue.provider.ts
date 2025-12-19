@@ -30,20 +30,30 @@ export const queueProvider = () =>
           });
           return props.fifo ? `${baseName}.fifo` : baseName;
         });
-      const createAttributes = (props: QueueProps) => ({
-        FifoQueue: props.fifo ? "true" : "false",
-        FifoThroughputLimit: props.fifoThroughputLimit,
-        ContentBasedDeduplication: props.contentBasedDeduplication
-          ? "true"
-          : "false",
-        DeduplicationScope: props.deduplicationScope,
-        DelaySeconds: props.delaySeconds?.toString(),
-        MaximumMessageSize: props.maximumMessageSize?.toString(),
-        MessageRetentionPeriod: props.messageRetentionPeriod?.toString(),
-        ReceiveMessageWaitTimeSeconds:
-          props.receiveMessageWaitTimeSeconds?.toString(),
-        VisibilityTimeout: props.visibilityTimeout?.toString(),
-      });
+      const createAttributes = (props: QueueProps) => {
+        const baseAttributes: Record<string, string | undefined> = {
+          DelaySeconds: props.delaySeconds?.toString(),
+          MaximumMessageSize: props.maximumMessageSize?.toString(),
+          MessageRetentionPeriod: props.messageRetentionPeriod?.toString(),
+          ReceiveMessageWaitTimeSeconds:
+            props.receiveMessageWaitTimeSeconds?.toString(),
+          VisibilityTimeout: props.visibilityTimeout?.toString(),
+        };
+
+        if (props.fifo) {
+          return {
+            ...baseAttributes,
+            FifoQueue: "true",
+            FifoThroughputLimit: props.fifoThroughputLimit,
+            ContentBasedDeduplication: props.contentBasedDeduplication
+              ? "true"
+              : "false",
+            DeduplicationScope: props.deduplicationScope,
+          };
+        }
+
+        return baseAttributes;
+      };
       return {
         stables: ["queueName", "queueUrl", "queueArn"],
         diff: Effect.fn(function* ({ id, news, olds }) {
@@ -57,7 +67,7 @@ export const queueProvider = () =>
           if (oldQueueName !== newQueueName) {
             return { action: "replace" } as const;
           }
-          return { action: "noop" } as const;
+          // Return undefined to allow update function to be called for other attribute changes
         }),
         create: Effect.fn(function* ({ id, news, session }) {
           const queueName = yield* createQueueName(id, news);
