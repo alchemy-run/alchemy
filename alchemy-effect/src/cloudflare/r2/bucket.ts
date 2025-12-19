@@ -8,7 +8,7 @@ export type BucketProps = {
 };
 
 export type BucketAttr<Props extends BucketProps> = {
-  name: Props["name"] extends string ? Props["name"] : string;
+  bucketName: Props["name"] extends string ? Props["name"] : string;
   storageClass: Props["storageClass"] extends Bucket.StorageClass
     ? Props["storageClass"]
     : "Standard";

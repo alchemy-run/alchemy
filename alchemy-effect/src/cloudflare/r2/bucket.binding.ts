@@ -18,7 +18,7 @@ export const bindFromWorker = () =>
         {
           type: "r2_bucket",
           name: source.id,
-          bucket_name: source.attr.name,
+          bucket_name: source.attr.bucketName,
           jurisdiction:
             source.attr.jurisdiction === "default"
               ? undefined

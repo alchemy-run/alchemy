@@ -11,17 +11,20 @@ export const bucketProvider = () =>
       const api = yield* CloudflareApi;
       const accountId = yield* Account;
 
-      const createName = (id: string, name: string | undefined) =>
+      const createBucketName = (id: string, name: string | undefined) =>
         Effect.gen(function* () {
           if (name) return name;
-          return (yield* createPhysicalName({ id })).toLowerCase();
+          return (yield* createPhysicalName({
+            id,
+            maxLength: 63,
+          })).toLowerCase();
         });
 
       const mapResult = <Props extends BucketProps>(
         bucket: R2.Bucket,
       ): BucketAttr<Props> =>
         ({
-          name: bucket.name,
+          bucketName: bucket.name,
           storageClass: bucket.storage_class ?? "Standard",
           jurisdiction: bucket.jurisdiction ?? "default",
           location: bucket.location,
@@ -30,10 +33,10 @@ export const bucketProvider = () =>
 
       return {
         diff: Effect.fn(function* ({ id, olds, news, output }) {
-          const name = yield* createName(id, news.name);
+          const name = yield* createBucketName(id, news.name);
           if (
             output.accountId !== accountId ||
-            output.name !== name ||
+            output.bucketName !== name ||
             output.jurisdiction !== (news.jurisdiction ?? "default") ||
             olds.locationHint !== news.locationHint
           ) {
@@ -42,13 +45,12 @@ export const bucketProvider = () =>
           if (output.storageClass !== (news.storageClass ?? "Standard")) {
             return {
               action: "update",
-              stables: output.name === name ? ["name"] : undefined,
+              stables: output.bucketName === name ? ["name"] : undefined,
             };
           }
-          return { action: "noop" };
         }),
         create: Effect.fnUntraced(function* ({ id, news }) {
-          const name = yield* createName(id, news.name);
+          const name = yield* createBucketName(id, news.name);
           const bucket = yield* api.r2.buckets.create({
             account_id: accountId,
             name,
@@ -59,7 +61,7 @@ export const bucketProvider = () =>
           return mapResult<BucketProps>(bucket);
         }),
         update: Effect.fnUntraced(function* ({ news, output }) {
-          const bucket = yield* api.r2.buckets.edit(output.name, {
+          const bucket = yield* api.r2.buckets.edit(output.bucketName, {
             account_id: output.accountId,
             storage_class: news.storageClass ?? output.storageClass,
             jurisdiction: output.jurisdiction,
@@ -68,13 +70,14 @@ export const bucketProvider = () =>
         }),
         delete: Effect.fnUntraced(function* ({ output }) {
           yield* api.r2.buckets
-            .delete(output.name, {
+            .delete(output.bucketName, {
               account_id: output.accountId,
             })
             .pipe(Effect.catchTag("NotFound", () => Effect.void));
         }),
         read: Effect.fnUntraced(function* ({ id, output, olds }) {
-          const name = output?.name ?? (yield* createName(id, olds?.name));
+          const name =
+            output?.bucketName ?? (yield* createBucketName(id, olds?.name));
           const params = {
             account_id: output?.accountId ?? accountId,
             name,

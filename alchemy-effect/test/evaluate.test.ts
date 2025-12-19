@@ -41,7 +41,7 @@ const vpcAttrs = {
 } as const satisfies TestVpc["attr"];
 
 const bucketAttrs = {
-  name: "test-bucket",
+  bucketName: "test-bucket",
   storageClass: "Standard",
   jurisdiction: "default",
   location: undefined,
@@ -162,7 +162,7 @@ it.live("Output.all($(TestVpc).vpcArn, $(TestVpc).vpcId)", () =>
 
 it.live("Output.all($(TestVpc).vpcArn, $(Bucket).name)", () =>
   Effect.gen(function* () {
-    const output = Output.all($(TestVpc).vpcArn, $(Bucket).name);
+    const output = Output.all($(TestVpc).vpcArn, $(Bucket).bucketName);
     const upstream = Output.upstream(output);
     const result = yield* Output.evaluate(output, resources);
     expect(result).toEqual([vpcAttrs.vpcArn, "test-bucket"]);
@@ -177,12 +177,12 @@ it.live(
   "Output.all($(TestVpc).vpcId, $(Bucket).name).apply(([vpcId, name]) => `${vpcId}-${name}`)",
   () =>
     Effect.gen(function* () {
-      const output = Output.all($(TestVpc).vpcId, $(Bucket).name).apply(
+      const output = Output.all($(TestVpc).vpcId, $(Bucket).bucketName).apply(
         ([vpcId, name]) => `${vpcId}-${name}`,
       );
       const upstream = Output.upstream(output);
       const result = yield* Output.evaluate(output, resources);
-      expect(result).toEqual(`${vpcId}-${bucketAttrs.name}`);
+      expect(result).toEqual(`${vpcId}-${bucketAttrs.bucketName}`);
       expect(upstream).toEqual({
         TestVpc,
         Bucket,
@@ -270,11 +270,11 @@ it.live(
   "Output.interpolate`VPC: ${$(TestVpc).vpcArn} -- Bucket: ${$(Bucket).name}`",
   () =>
     Effect.gen(function* () {
-      const output = Output.interpolate`VPC: ${vpc.vpcArn} -- Bucket: ${bucket.name}`;
+      const output = Output.interpolate`VPC: ${vpc.vpcArn} -- Bucket: ${bucket.bucketName}`;
       const upstream = Output.upstream(output);
       const result = yield* Output.evaluate(output, resources);
       expect(result).toEqual(
-        `VPC: ${vpcAttrs.vpcArn} -- Bucket: ${bucketAttrs.name}`,
+        `VPC: ${vpcAttrs.vpcArn} -- Bucket: ${bucketAttrs.bucketName}`,
       );
       expect(upstream).toEqual({
         TestVpc,
@@ -304,7 +304,7 @@ it.live(
   () =>
     Effect.gen(function* () {
       const upstream = Output.resolveUpstream({
-        vpcArn: [$(TestVpc).vpcArn, $(Bucket).name],
+        vpcArn: [$(TestVpc).vpcArn, $(Bucket).bucketName],
       });
       expect(upstream).toEqual({
         TestVpc,

@@ -31,10 +31,13 @@ test(
 
       const stack = yield* apply(TestBucket);
 
-      const actualBucket = yield* api.r2.buckets.get(stack.TestBucket.name, {
-        account_id: accountId,
-      });
-      expect(actualBucket.name).toEqual(stack.TestBucket.name);
+      const actualBucket = yield* api.r2.buckets.get(
+        stack.TestBucket.bucketName,
+        {
+          account_id: accountId,
+        },
+      );
+      expect(actualBucket.name).toEqual(stack.TestBucket.bucketName);
       expect(actualBucket.storage_class).toEqual("Standard");
     }
 
@@ -45,15 +48,18 @@ test(
 
     const stack = yield* apply(TestBucket);
 
-    const actualBucket = yield* api.r2.buckets.get(stack.TestBucket.name, {
-      account_id: accountId,
-    });
-    expect(actualBucket.name).toEqual(stack.TestBucket.name);
+    const actualBucket = yield* api.r2.buckets.get(
+      stack.TestBucket.bucketName,
+      {
+        account_id: accountId,
+      },
+    );
+    expect(actualBucket.name).toEqual(stack.TestBucket.bucketName);
     expect(actualBucket.storage_class).toEqual("InfrequentAccess");
 
     yield* destroy();
 
-    yield* waitForBucketToBeDeleted(stack.TestBucket.name, accountId);
+    yield* waitForBucketToBeDeleted(stack.TestBucket.bucketName, accountId);
   }).pipe(Effect.provide(CloudflareLive.providers()), logLevel),
 );
 
