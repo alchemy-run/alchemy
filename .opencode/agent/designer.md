@@ -4,13 +4,12 @@ mode: subagent
 model: anthropic/claude-opus-4-5
 temperature: 0.1
 permission:
-  edit: deny
+  edit: deny # or: allow, ask
   bash:
     "git diff": allow
     "git log*": allow
     "*": ask
   webfetch: deny
-  edit: ask # or: allow, never
 tools:
   write: false
   edit: false
