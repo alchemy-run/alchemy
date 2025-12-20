@@ -32,3 +32,4 @@ smoke
 *.map
 
 .attest
+.cache
