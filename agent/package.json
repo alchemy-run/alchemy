@@ -1,0 +1,14 @@
+{
+  "name": "alchemy-agent",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "agent": "bun ./src/index.ts"
+  },
+  "dependencies": {
+    "@opencode-ai/sdk": "^1.0.174"
+  },
+  "devDependencies": {
+    "bun-types": "^1.3.5"
+  }
+}

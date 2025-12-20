@@ -27,6 +27,7 @@
       "wrangler": "^4.42.2"
     },
     "packages": [
+      "agent",
       "alchemy-effect",
       "examples/*"
     ]
@@ -45,7 +46,8 @@
     "publish:npm": "bun run build && bun run --filter alchemy-effect publish:npm",
     "prepare": "effect-language-service patch",
     "test": "vitest run",
-    "test:benchmark": "bun run --filter alchemy-effect test:benchmark"
+    "test:benchmark": "bun run --filter alchemy-effect test:benchmark",
+    "opencode": "OPENCODE_EXPERIMENTAL_OXFMT=true opencode"
   },
   "devDependencies": {
     "@ark/attest": "^0.55.0",
