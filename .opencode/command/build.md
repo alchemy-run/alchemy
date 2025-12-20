@@ -1,6 +1,6 @@
 ---
 description: Build a new AWS Service's Infrastructure-as-Code Resources
-agent: designer
+agent: builder
 ---
 
 Build the $1 AWS Service's Infrastructure-as-Code Resources

@@ -7,9 +7,11 @@
       "devDependencies": {
         "@ark/attest": "^0.55.0",
         "@effect/language-service": "^0.55.5",
+        "@opencode-ai/sdk": "^1.0.174",
         "@types/bun": "latest",
         "@types/node": "latest",
         "@typescript/native-preview": "^7.0.0-dev.20251208.1",
+        "bun-types": "^1.3.5",
         "changelogithub": "^13.16.1",
         "dotenv": "^17.2.3",
         "oxfmt": "^0.19.0",
@@ -18,16 +20,6 @@
         "vite-tsconfig-paths": "^5.1.4",
         "vitest": "^4.0.15",
         "yaml": "^2.8.2",
-      },
-    },
-    "agent": {
-      "name": "alchemy-agent",
-      "version": "0.0.1",
-      "dependencies": {
-        "@opencode-ai/sdk": "^1.0.174",
-      },
-      "devDependencies": {
-        "bun-types": "^1.3.5",
       },
     },
     "alchemy-effect": {
@@ -628,8 +620,6 @@
     "acorn": ["acorn@8.15.0", "", { "bin": { "acorn": "bin/acorn" } }, "sha512-NZyJarBfL7nWwIq+FDL6Zp/yHEhePMNnnJ0y3qfieCrmNvYct8uvtiV41UvlSe6apAfk0fY1FbWx+NwfmpvtTg=="],
 
     "agentkeepalive": ["agentkeepalive@4.6.0", "", { "dependencies": { "humanize-ms": "^1.2.1" } }, "sha512-kja8j7PjmncONqaTsB8fQ+wE2mSU2DJ9D4XKoJ5PFWIdRMa6SLSN1ff4mOr4jCbfRSsxR4keIiySJU0N9T5hIQ=="],
-
-    "alchemy-agent": ["alchemy-agent@workspace:agent"],
 
     "alchemy-effect": ["alchemy-effect@workspace:alchemy-effect"],
 

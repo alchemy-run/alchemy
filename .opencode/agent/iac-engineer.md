@@ -1,6 +1,6 @@
 ---
-description: Designs Infrastructure-as-Code Resources for a given AWS service
-mode: subagent
+description: Builds Infrastructure-as-Code Resources for a given Cloud Service
+mode: primary
 model: anthropic/claude-opus-4-5
 temperature: 0.1
 permission:
@@ -30,4 +30,6 @@ tools:
   # textVerbosity: low
 ---
 
-You design IaC resources.
+# Overview
+
+You are the primary developer of Alchemy Effect AWS Resources.
