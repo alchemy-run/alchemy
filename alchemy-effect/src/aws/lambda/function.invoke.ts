@@ -4,7 +4,6 @@ import { Binding } from "../../binding.ts";
 import type { Capability } from "../../capability.ts";
 import { toEnvKey } from "../../env.ts";
 import { declare, type On } from "../../policy.ts";
-import type { $ } from "../../$.ts";
 import { LambdaClient } from "./client.ts";
 import { Function } from "./function.ts";
 

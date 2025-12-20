@@ -7,7 +7,7 @@ import { App } from "./app.ts";
 import type {
   AnyBinding,
   BindingDiffProps,
-  BindingService,
+  BindingProvider,
 } from "./binding.ts";
 import type { Capability } from "./capability.ts";
 import type { Diff, NoopDiff, UpdateDiff } from "./diff.ts";
@@ -987,7 +987,7 @@ const isBindingDiff = Effect.fn(function* ({
 
   const binding = newBinding as AnyBinding & {
     // smuggled property (because it interacts poorly with inference)
-    Tag: Context.Tag<never, BindingService>;
+    Tag: Context.Tag<never, BindingProvider>;
   };
   const provider = yield* binding.Tag;
   if (provider.diff) {

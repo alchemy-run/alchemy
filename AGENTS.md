@@ -13,19 +13,30 @@ It includes a core IaC engine built with Effect. Effect provides the foundation 
 - **Output Attributes** - the attributes produced by a Resource. Otherwise known as the "current state" of the Resource.
 - **Stable Properties** - properties that are not affected by an Update, e.g. the ID or ARN of a Resource.
 - **Function** (aka. **Runtime**) - a special kind of Resource that includes a runtime implementation expressed as a Function producing an `Effect<A, Err, Req>`. The `Req` type captures runtime dependencies, from which Infrastructure Dependencies are inferred.
-- **Lifecycle Operation** (see [Provider](./alchemy-effect/src/provider.ts))
-  - **Diff** - compares new props with old props and determines if the Resource needs to be updated or replaced. For updates, it can also specify a list of Stable Properties that will not be changed by the update.
-  - **Read** - reads the current state of a Resource and returns the current Output Attributes.
-  - **Pre-Create** - an optional operation that can be called to create a stub of a Resource before the actual create operation is called. This is useful for resolving circular dependencies since it allows for an empty resoruce to be created and then updated later with its dependencies (e.g. Function A and B depend on each other, so we can create a stub of Function A and then update it with the actual Function B later).
-  - **Create** - creates a new Resource. It must be designed as idempotent because it is always possible for state persistence to fail after the create operation is called. There are various techniques for resolving idempotency, such as deterministic physical name generation and resource tagging.
-  - **Update** - updates an existing Resource with new Input Properties.
-  - **Delete** - deletes an existing Resource. It must be designed as idempotent because it is always possible for state persistence to fail after the delete operation is called. If the resource doesn't exist during deletion, it should not be considered an error.
+- **Resource Provider** (see [Provider](./alchemy-effect/src/provider.ts))
+
+A Resource Provider implements the following Lifecycle Operations:
+
+- **Diff** - compares new props with old props and determines if the Resource needs to be updated or replaced. For updates, it can also specify a list of Stable Properties that will not be changed by the update.
+- **Read** - reads the current state of a Resource and returns the current Output Attributes.
+- **Pre-Create** - an optional operation that can be called to create a stub of a Resource before the actual create operation is called. This is useful for resolving circular dependencies since it allows for an empty resoruce to be created and then updated later with its dependencies (e.g. Function A and B depend on each other, so we can create a stub of Function A and then update it with the actual Function B later).
+- **Create** - creates a new Resource. It must be designed as idempotent because it is always possible for state persistence to fail after the create operation is called. There are various techniques for resolving idempotency, such as deterministic physical name generation and resource tagging.
+- **Update** - updates an existing Resource with new Input Properties.
+- **Delete** - deletes an existing Resource. It must be designed as idempotent because it is always possible for state persistence to fail after the delete operation is called. If the resource doesn't exist during deletion, it should not be considered an error.
+- **Capability** - a runtime requirement of a Function (e.g. require `SQS.SendMessage` on a `SQS.Queue`, `Messages`). It maps closely to an IAM Policy and Environment variable requirement.
+- **Binding** - a declared physical connection between a Function and a Resource to satisfy a Capability, e.g. `SQS.SendMessage(Messages)`
+- **Binding Attributes** - the Attributes that a specific Function (Runtime) Resource accepts as input from Bindings. For example, a Lambda Function accepts the following Binding Attributes: `env`, `policyStatements` because it needs to set environment variables and attach IAM policies to the function. A Cloudflare Worker just accepts `env` (bindings) because Cloudflare Workers do not support IAM policies, but do have their own first-class Binding concept.
+- **Binding Provider** - see [BindingProvider](./alchemy-effect/src/binding.ts)
+  - **Diff** - compares new props with old props and determines if the Binding needs to be updated or replaced.
+  - **Preattach** - a pre-attach operation that can be called before the Binding is attached to the Resource. It returns a partial set of the target resource's Binding Attributes because it is not expected for pre-attach to fully populate the Binding Attributes.
+  - **Attach** - Actually performs the attachment side-effect if one is needed. Most Bindings are pure (just returning IAM policies and environment variables) but some, such as Event Sources, actually need to call an API like Create or Update Event Source to create the event source.
+  - **Postattach** - a post-attach operation that can be called after the Binding is attached to the Resource.
+  - **Reattach** - reattaches the Binding to the Resource. This is similar to the Update operation in a Resource Provider. It is expected to update (re-attach) the Binding to the Resource.
+  - **Detach** - detaches the Binding from the Resource.
 - **Dependency** - Resources depend on other Resources through two mechanisms:
   - Output Properties of one Resource passed as Input Properties to another Resource (non-circular, directed acyclic graph)
   - Bindings (e.g. `SQS.SendMessage(Messages)`) that connect a Function to a Resource to satisfy a Capability (cyclic graph).
 - **Output** - a reference to (or derived from) a Resource's "Output Attributes". E.g. Bucket.bucketArn
-- **Capability** - a runtime requirement of a Function (e.g. require `SQS.SendMessage` on a `SQS.Queue`, `Messages`). It maps closely to an IAM Policy and Environment variable requirement.
-- **Binding** - a declared physical connection between a Function and a Resource to satisfy a Capability, e.g. `SQS.SendMessage(Messages)`
 - **Stack** - a collection of Resources, Functions, and Bindings that are deployed together.
 - **Stack Name** - the name of a Stack, e.g. `my-stack`
 - **Stage** - the stage of a Stack, e.g. `dev`, `prod`, `dev-sam`
@@ -51,8 +62,8 @@ Each Service's Resources follow the same pattern and have
 alchemy-effect/src/{cloud}/{service}/index.ts
 alchemy-effect/src/{cloud}/{service}/client.ts
 alchemy-effect/src/{cloud}/{service}/{resource}.ts
-alchemy-effect/src/{cloud}/{service}/{resource}.{capability}.ts
 alchemy-effect/src/{cloud}/{service}/{resource}.provider.ts
+alchemy-effect/src/{cloud}/{service}/{resource}.{capability}.ts
 # test files
 alchemy-effect/test/{cloud}/{service}/{resource}.provider.test.ts
 # docs
@@ -123,8 +134,48 @@ Each of the following operations are documented in a separate document named `{r
 
 5. Research and design the test cases for each resource in `alchemy-effect/design/{cloud}/{service}/${resource}.test.md`. Test cases can be single or multi-step. Single-step test cases are just testing a single create success or failure mode. Multi-step cases are testing a sequence of operations, starting with create and then updating or replacing the resource multiple times. Test cases should be designed to be exhaustive and cover all possible success and failure modes, starting from simple happy paths to long, complicated aggregate (including other resources) smoke tests.
 6. Implement the Resource interfaces in `alchemy-effect/src/{cloud}/{service}/${resource}.ts`.
-7. Implement the Capabilities and Bindings in `alchemy-effect/src/{cloud}/{service}/${resource}.{capability}.ts`.
-8. Implement the Lifecycle Operations in `alchemy-effect/src/{cloud}/{service}/${resource}.provider.ts`.
+
+It is always worth reading through the established examples to understand the pattern:
+
+- [Lambda Function](./alchemy-effect/src/aws/lambda/function.ts)
+- [SQS Queue](./alchemy-effect/src/aws/sqs/queue.ts)
+- [DynamoDB Table](./alchemy-effect/src/aws/dynamodb/table.ts)
+- [VPC](./alchemy-effect/src/aws/ec2/vpc.ts)
+- [Subnet](./alchemy-effect/src/aws/ec2/subnet.ts)
+
+8. Implement the Resource Provider in `alchemy-effect/src/{cloud}/{service}/${resource}.provider.ts`.
+
+It is always worth reading through the established examples to understand the pattern:
+
+- [Lambda Function Provider](./alchemy-effect/src/aws/lambda/function.provider.ts)
+- [SQS Queue Provider](./alchemy-effect/src/aws/sqs/queue.provider.ts)
+- [DynamoDB Table Provider](./alchemy-effect/src/aws/dynamodb/table.provider.ts)
+- [VPC Provider](./alchemy-effect/src/aws/ec2/vpc.provider.ts)
+- [Subnet Provider](./alchemy-effect/src/aws/ec2/subnet.provider.ts)
+
+7. Implement the Capabilities and Binding Providers in `alchemy-effect/src/{cloud}/{service}/${resource}.{capability}.ts`.
+
+Read through the established capabilities before continuing so that you understand the pattern and structure of the capabilities and binding layers:
+
+- [GetItem Binding Provider](./alchemy-effect/src/aws/dynamodb/table.get-item.ts)
+- [SendMessage Binding Provider](./alchemy-effect/src/aws/sqs/queue.send-message.ts)
+- [InvokeFunction Binding Provider](./alchemy-effect/src/aws/lambda/function.invoke.ts)
+
+For Event Sources, see the [QueueEventSource Binding Provider](./alchemy-effect/src/aws/sqs/queue.event-source.ts) for an example which provides a comprehensive example of how to use pre-attach and attach properly for a Lambda Function event source.
+
 9. Implement the test cases in `alchemy-effect/test/{cloud}/{service}/${resource}.test.ts`.
+
+Read through the established test cases before continuing so that you understand the pattern and structure of the test cases.
+
+- [GetItem Test Cases](./alchemy-effect/test/aws/dynamodb/table.provider.test.ts)
+- [SendMessage Test Cases](./alchemy-effect/test/aws/sqs/queue.provider.test.ts)
+- [InvokeFunction Test Cases](./alchemy-effect/test/aws/lambda/function.provider.test.ts)
+- [VPC Test Cases](./alchemy-effect/test/aws/ec2/vpc.provider.test.ts)
+- [Subnet Test Cases](./alchemy-effect/test/aws/ec2/subnet.provider.test.ts)
+
+10. Consider implementing an aggregate Smoke test that brings together multiple resources that are often used together.
+
+See the [VPC Smoke Test](./alchemy-effect/test/aws/ec2/vpc.smoke.test.ts) for an example.
+
 10. Write the usage patterns for the Resource in `alchemy-effect/docs/{cloud}/{service}/${resource}.md`.
 11. Write the index for the Service in `alchemy-effect/docs/{cloud}/{service}/index.md`.

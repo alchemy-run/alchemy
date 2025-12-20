@@ -45,7 +45,7 @@ export interface Bind<
   Tag extends string,
 > extends Context.Tag<
   `${F["type"]}(${Cap["type"]}, ${Tag})`,
-  BindingService<
+  BindingProvider<
     F,
     Extract<Extract<Cap["resource"], Resource>["base"], Resource>,
     F["props"]
@@ -104,7 +104,7 @@ export interface BindingDeclaration<
   provider: {
     effect<Err, Req>(
       eff: Effect<
-        BindingService<
+        BindingProvider<
           Run,
           Parameters<F>[0],
           Parameters<F>[1],
@@ -115,7 +115,7 @@ export interface BindingDeclaration<
       >,
     ): Layer.Layer<Bind<Run, Cap, Tag>, Err, Req>;
     succeed(
-      service: BindingService<
+      service: BindingProvider<
         Run,
         Parameters<F>[0],
         Parameters<F>[1],
@@ -207,7 +207,7 @@ export interface BindingDetachProps<
   };
 }
 
-export type BindingService<
+export type BindingProvider<
   Target extends IRuntime = any,
   Source extends IResource = IResource,
   Props = any,
