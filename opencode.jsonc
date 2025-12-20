@@ -3,18 +3,15 @@
   "instructions": [],
   "formatter": {
     "oxfmt": {
-      "extensions": [
-        ".ts",
-        ".tsx"
-      ]
-    }
+      "extensions": [".ts", ".tsx"],
+    },
   },
   "permission": {
     "bash": {
       // we can use this to default deny and then whitelist specific commands
       // "*": "deny",
-      "git push*": "deny"
-    }
+      "git push*": "deny",
+    },
   },
   "tools": {},
   // "agent": {

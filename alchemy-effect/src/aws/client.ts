@@ -9,6 +9,7 @@ import * as Schedule from "effect/Schedule";
 import type { AWSClientConfig } from "itty-aws";
 import { Credentials } from "./credentials.ts";
 import { Region } from "./region.ts";
+import { Endpoint } from "./endpoint.ts";
 
 export type TagInstance<T> = T extends new (_: never) => infer R ? R : never;
 
@@ -23,8 +24,10 @@ export const createAWSServiceClientLayer =
       Effect.gen(function* () {
         const region = yield* Region;
         const credentials = yield* Credentials;
+        const endpoint = yield* Endpoint;
         const client = new clss({
           region,
+          endpoint,
           credentials: {
             accessKeyId: Redacted.value(credentials.accessKeyId),
             secretAccessKey: Redacted.value(credentials.secretAccessKey),

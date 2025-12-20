@@ -7,6 +7,7 @@ export interface AwsStageConfig {
   region?: RegionID;
   profile?: string;
   credentials?: AwsCredentialIdentity;
+  endpoint?: string;
 }
 
 declare module "../stage.ts" {

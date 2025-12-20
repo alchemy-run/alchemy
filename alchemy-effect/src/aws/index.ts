@@ -1,7 +1,4 @@
 import * as Layer from "effect/Layer";
-
-// oxlint-disable-next-line no-unused-vars - needed or else provider types are transitively resolved through DynamoDB.Provider<..> lol
-
 import * as ESBuild from "../esbuild.ts";
 import * as Account from "./account.ts";
 import * as Credentials from "./credentials.ts";
@@ -13,7 +10,7 @@ import * as Region from "./region.ts";
 import * as S3 from "./s3.ts";
 import * as SQS from "./sqs/index.ts";
 import * as STS from "./sts.ts";
-
+import * as Endpoint from "./endpoint.ts";
 export { loadProfile, loadSSOCredentials } from "./credentials.ts";
 
 import "./config.ts";
@@ -60,13 +57,20 @@ export const clients = () =>
 
 export const utils = () => Layer.mergeAll(ESBuild.layer());
 
-export const providers = () =>
+export const bareProviders = () =>
   resources().pipe(
     Layer.provideMerge(bindings()),
     Layer.provideMerge(clients()),
     Layer.provideMerge(utils()),
+  );
+
+export const config = <L extends Layer.Layer<any, any, any>>(layer: L) =>
+  layer.pipe(
     Layer.provideMerge(Account.fromStageConfig()),
     Layer.provideMerge(STS.client()),
     Layer.provideMerge(Region.fromStageConfig()),
     Layer.provideMerge(Credentials.fromStageConfig()),
+    Layer.provideMerge(Endpoint.fromStageConfig()),
   );
+
+export const providers = () => bareProviders().pipe(config);

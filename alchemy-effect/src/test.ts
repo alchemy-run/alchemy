@@ -1,14 +1,16 @@
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as Scope from "effect/Scope";
+
 import { FetchHttpClient, FileSystem, HttpClient } from "@effect/platform";
 import { NodeContext } from "@effect/platform-node";
 import * as Path from "@effect/platform/Path";
 import * as PlatformConfigProvider from "@effect/platform/PlatformConfigProvider";
 import { expect, it } from "@effect/vitest";
 import { ConfigProvider, LogLevel } from "effect";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
-import * as Scope from "effect/Scope";
-import * as App from "./app.ts";
+import { App } from "./app.ts";
 import { CLI } from "./cli/service.ts";
 import { DotAlchemy, dotAlchemy } from "./dot-alchemy.ts";
 import type { Resource } from "./resource.ts";
@@ -39,7 +41,7 @@ expect.propExpr = (identifier: string, src: Resource) =>
 
 type Provided =
   | Scope.Scope
-  | App.App
+  | App
   | State.State
   | DotAlchemy
   | HttpClient.HttpClient
@@ -50,7 +52,7 @@ export function test(
   name: string,
   options: {
     timeout?: number;
-    state?: Layer.Layer<State.State, never, App.App>;
+    state?: Layer.Layer<State.State, never, App>;
   },
   testCase: Effect.Effect<void, any, Provided>,
 ): void;
@@ -66,7 +68,7 @@ export function test(
     | [
         {
           timeout?: number;
-          state?: Layer.Layer<State.State, never, App.App>;
+          state?: Layer.Layer<State.State, never, App>;
         },
         Effect.Effect<void, any, Provided>,
       ]
@@ -83,16 +85,45 @@ export function test(
   const alchemy = Layer.provideMerge(
     Layer.mergeAll(options.state ?? State.localFs, testCLI),
     Layer.mergeAll(
-      App.make({
-        name: name.replaceAll(/[^a-zA-Z0-9_]/g, "-"),
-        stage: "test",
-        config: {
-          adopt: true,
-          aws: {
-            profile: "default",
-          },
-        },
-      }),
+      Layer.effect(
+        App,
+        Effect.gen(function* () {
+          const AWS_PROFILE = yield* Config.string("AWS_PROFILE").pipe(
+            Config.withDefault("default"),
+          );
+
+          const LOCAL = yield* Config.boolean("LOCAL").pipe(
+            Config.withDefault(false),
+          );
+
+          const LOCALSTACK_ENDPOINT = yield* Config.string(
+            "LOCALSTACK_ENDPOINT",
+          ).pipe(Config.withDefault("http://localhost.localstack.cloud:4566"));
+
+          return App.of({
+            name: name.replaceAll(/[^a-zA-Z0-9_]/g, "-"),
+            stage: "test",
+            config: {
+              adopt: true,
+              aws: {
+                profile: LOCAL ? undefined : AWS_PROFILE,
+                credentials: LOCAL
+                  ? {
+                      accessKeyId: "test",
+                      secretAccessKey: "test",
+                      sessionToken: "test",
+                    }
+                  : undefined,
+                endpoint: LOCAL
+                  ? // use the default LOCALSTACK_ENDPOINT unless overridden
+                    LOCALSTACK_ENDPOINT
+                  : // if we tests are explicitly being run against a live AWS account, we don't need to use LocalStack
+                    undefined,
+              },
+            },
+          });
+        }),
+      ),
       dotAlchemy,
     ),
   );
@@ -123,7 +154,7 @@ export namespace test {
     Layer.effect(
       State.State,
       Effect.gen(function* () {
-        const app = yield* App.App;
+        const app = yield* App;
         return State.inMemoryService({
           [app.name]: {
             [app.stage]: resources,
