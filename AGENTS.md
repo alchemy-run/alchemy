@@ -191,3 +191,10 @@ We include various external references in the `.external` directory for you to s
 - To list all available AWS services, you can simply `ls .external/terraform-provider-aws/internal/service/`.
 - To list all available resources for a specific service, you can simply `ls .external/terraform-provider-aws/internal/service/{service}`.
 - Each resource has a corresponding `{resource}.go` containing the Resource Provider implementation and `{resource}_test.go` file containing the test cases for the Resource Provider.
+
+## [CloudFormation Documentation](.external/cfn)
+
+- Docs for each Resource are located in `.external/cfn/{service}/{resource}.md`, e.g. `.external/cfn/s3/Bucket.md`.
+- To list all available AWS services, you can simply `ls .external/cfn/`.
+- To list all available resources for a service, you can simply `ls .external/cfn/{service}/`.
+- To list all available resources for a specific service, you can simply `ls .external/cfn/{service}/`.
