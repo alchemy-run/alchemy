@@ -1,7 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-const CONCURRENCY = 100;
+const CONCURRENCY = 10;
+const MAX_RETRIES = 3;
+const INITIAL_BACKOFF_MS = 1000;
+
+let failedRequests = 0;
 
 const CFN_SPEC_URL =
   "https://d1uauaxba7bl26.cloudfront.net/latest/gzip/CloudFormationResourceSpecification.json";
@@ -182,6 +186,62 @@ function createLimiter(concurrency: number) {
   };
 }
 
+// Delay helper
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Fetch with retry and exponential backoff
+async function fetchWithRetry(
+  url: string,
+  retries = MAX_RETRIES,
+): Promise<Response | null> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(url, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        },
+      });
+
+      if (res.ok) {
+        return res;
+      }
+
+      // Don't retry on 404 - page doesn't exist
+      if (res.status === 404) {
+        console.error(`  404 Not Found: ${url}`);
+        failedRequests++;
+        return null;
+      }
+
+      // Retry on rate limiting or server errors
+      if (res.status === 429 || res.status >= 500) {
+        const backoffMs = INITIAL_BACKOFF_MS * Math.pow(2, attempt);
+        console.warn(
+          `  ${res.status} on ${url} - retrying in ${backoffMs}ms (attempt ${attempt + 1}/${retries + 1})`,
+        );
+        await delay(backoffMs);
+        continue;
+      }
+
+      // Other errors - log and don't retry
+      console.error(`  HTTP ${res.status} ${res.statusText}: ${url}`);
+      failedRequests++;
+      return null;
+    } catch (error) {
+      const backoffMs = INITIAL_BACKOFF_MS * Math.pow(2, attempt);
+      console.warn(
+        `  Network error on ${url} - retrying in ${backoffMs}ms (attempt ${attempt + 1}/${retries + 1}): ${error}`,
+      );
+      await delay(backoffMs);
+    }
+  }
+
+  console.error(`  Failed after ${retries + 1} attempts: ${url}`);
+  failedRequests++;
+  return null;
+}
+
 // Scraped data for a property type (struct)
 interface ScrapedPropertyTypeData {
   description: string;
@@ -192,13 +252,10 @@ interface ScrapedPropertyTypeData {
 async function scrapePropertyTypeDocs(
   docUrl: string,
 ): Promise<ScrapedPropertyTypeData | null> {
+  const res = await fetchWithRetry(docUrl);
+  if (!res) return null;
+
   try {
-    const res = await fetch(docUrl, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; CFN-Doc-Scraper/1.0)",
-      },
-    });
-    if (!res.ok) return null;
     const html = await res.text();
 
     const result: ScrapedPropertyTypeData = {
@@ -255,7 +312,9 @@ async function scrapePropertyTypeDocs(
     }
 
     return result;
-  } catch {
+  } catch (error) {
+    console.error(`  Error parsing ${docUrl}:`, error);
+    failedRequests++;
     return null;
   }
 }
@@ -264,13 +323,10 @@ async function scrapePropertyTypeDocs(
 async function scrapeResourceDocs(
   docUrl: string,
 ): Promise<ScrapedResourceData | null> {
+  const res = await fetchWithRetry(docUrl);
+  if (!res) return null;
+
   try {
-    const res = await fetch(docUrl, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; CFN-Doc-Scraper/1.0)",
-      },
-    });
-    if (!res.ok) return null;
     const html = await res.text();
 
     const result: ScrapedResourceData = {
@@ -430,7 +486,8 @@ async function scrapeResourceDocs(
 
     return result;
   } catch (error) {
-    console.error(`  Failed to scrape ${docUrl}:`, error);
+    console.error(`  Error parsing ${docUrl}:`, error);
+    failedRequests++;
     return null;
   }
 }
@@ -631,8 +688,7 @@ async function main() {
 
   const cfnDir = ".external/cfn";
 
-  // Start from scratch
-  await fs.rm(cfnDir, { recursive: true, force: true });
+  // Ensure directory exists (don't delete existing files)
   await fs.mkdir(cfnDir, { recursive: true });
 
   // Group resources by service
@@ -696,7 +752,43 @@ async function main() {
     }
   }
 
-  const totalToProcess = allResources.length;
+  // Helper to check if file exists
+  async function fileExists(filePath: string): Promise<boolean> {
+    try {
+      await fs.access(filePath);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  // Filter to only resources that need processing
+  const resourcesToProcess: typeof allResources = [];
+  let skippedCount = 0;
+
+  for (const item of allResources) {
+    const serviceDir = path.join(cfnDir, toKebabCase(item.service));
+    const filePath = path.join(serviceDir, `${item.resourceName}.md`);
+    if (await fileExists(filePath)) {
+      console.log(`Skipping ${filePath} (already exists)`);
+      skippedCount++;
+    } else {
+      resourcesToProcess.push(item);
+    }
+  }
+
+  if (skippedCount > 0) {
+    console.log(`Skipping ${skippedCount} resources (already exist)`);
+  }
+
+  const totalToProcess = resourcesToProcess.length;
+  if (totalToProcess === 0) {
+    console.log("All resources already processed. Nothing to do.");
+    return;
+  }
+
+  console.log(`Processing ${totalToProcess} resources...\n`);
+
   let processedResources = 0;
   let scrapedCount = 0;
 
@@ -705,7 +797,7 @@ async function main() {
 
   // Process all resources in parallel with limited concurrency
   await Promise.all(
-    allResources.map(
+    resourcesToProcess.map(
       async ({ service, resourceName, resource, relatedStructs }) => {
         const fullType = resource._fullType;
 
@@ -765,6 +857,13 @@ async function main() {
 
   console.log(`\nDone! Generated ${totalToProcess} resource docs.`);
   console.log(`Successfully scraped ${scrapedCount} AWS documentation pages.`);
+
+  if (failedRequests > 0) {
+    console.warn(
+      `\n⚠️  Warning: ${failedRequests} requests failed - some docs may be incomplete`,
+    );
+    process.exit(1);
+  }
 }
 
 main().catch(console.error);
