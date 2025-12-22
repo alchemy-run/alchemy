@@ -179,3 +179,15 @@ See the [VPC Smoke Test](./alchemy-effect/test/aws/ec2/vpc.smoke.test.ts) for an
 
 10. Write the usage patterns for the Resource in `alchemy-effect/docs/{cloud}/{service}/${resource}.md`.
 11. Write the index for the Service in `alchemy-effect/docs/{cloud}/{service}/index.md`.
+
+# External References
+
+We include various external references in the `.external` directory for you to search through using your tools.
+
+## [Terraform AWS Provider Repository](.external/terraform-provider-aws)
+
+- Docs for each Resource Provider are located in `.external/terraform-provider-aws/website/docs/r/`, e.g. `.external/terraform-provider-aws/website/docs/r/s3_bucket.html.markdown`.
+- The source code for each Service is located in `.external/terraform-provider-aws/internal/service/{service}`, e.g. [s3](.external/terraform-provider-aws/internal/service/s3/).
+- To list all available AWS services, you can simply `ls .external/terraform-provider-aws/internal/service/`.
+- To list all available resources for a specific service, you can simply `ls .external/terraform-provider-aws/internal/service/{service}`.
+- Each resource has a corresponding `{resource}.go` containing the Resource Provider implementation and `{resource}_test.go` file containing the test cases for the Resource Provider.
