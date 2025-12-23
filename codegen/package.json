@@ -1,0 +1,12 @@
+{
+  "name": "codegen",
+  "version": "0.0.1",
+  "private": true,
+  "dependencies": {
+    "@effect/cli": "catalog:",
+    "@effect/platform": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "@opencode-ai/sdk": "catalog:",
+    "effect": "catalog:"
+  }
+}
