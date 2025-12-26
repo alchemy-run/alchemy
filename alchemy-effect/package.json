@@ -99,6 +99,11 @@
       "types": "./lib/cloudflare/r2/index.d.ts",
       "bun": "./src/cloudflare/r2/index.ts",
       "import": "./lib/cloudflare/r2/index.js"
+    },
+    "./neon": {
+      "types": "./lib/neon/index.d.ts",
+      "bun": "./src/neon/index.ts",
+      "import": "./lib/neon/index.js"
     }
   },
   "publishConfig": {
@@ -114,6 +119,7 @@
   },
   "dependencies": {
     "@aws-sdk/credential-providers": "catalog:",
+    "@neondatabase/api-client": "^2.6.0",
     "@effect/vitest": "^0.27.0",
     "@smithy/node-config-provider": "^4.0.0",
     "@smithy/shared-ini-file-loader": "^4.3.4",
