@@ -7,7 +7,7 @@ import * as EC2 from "./ec2/index.ts";
 import * as IAM from "./iam.ts";
 import * as Lambda from "./lambda/index.ts";
 import * as Region from "./region.ts";
-import * as S3 from "./s3.ts";
+import * as S3 from "./s3/index.ts";
 import * as SQS from "./sqs/index.ts";
 import * as STS from "./sts.ts";
 import * as Endpoint from "./endpoint.ts";
@@ -34,6 +34,7 @@ export const resources = () =>
     EC2.vpcEndpointProvider(),
     EC2.vpcProvider(),
     Lambda.functionProvider(),
+    S3.bucketProvider(),
     SQS.queueProvider(),
   );
 

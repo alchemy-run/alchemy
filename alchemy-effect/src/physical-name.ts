@@ -4,12 +4,19 @@ import { InstanceId } from "./instance-id.ts";
 
 export const createPhysicalName = Effect.fn(function* ({
   id,
+  prefix: _prefix,
   // 16 base32 characters = 80 bits of entropy = 4 × 10⁻⁷
   instanceId,
   suffixLength = 16,
   maxLength = 64,
 }: {
   id: string;
+  /**
+   * Prefix to add to the physical name.
+   *
+   * @default ${app.name}-${sanitizedId}-${app.stage}-
+   */
+  prefix?: string;
   /**
    * Hex-encoded instance ID (16 random bytes)
    *
@@ -26,7 +33,7 @@ export const createPhysicalName = Effect.fn(function* ({
 }) {
   const app = yield* App;
   const sanitizedId = id.replace(/[^a-zA-Z0-9-_]/g, "-");
-  const prefix = `${app.name}-${sanitizedId}-${app.stage}-`;
+  const prefix = _prefix ?? `${app.name}-${sanitizedId}-${app.stage}-`;
   const randomId = base32(
     Buffer.from(instanceId ?? (yield* InstanceId), "hex"),
   );

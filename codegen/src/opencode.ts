@@ -87,6 +87,8 @@ export class Session extends Context.Tag("Session")<
             return client.session.prompt({
               path: { id: session.id },
               body: {
+                // TODO(sam): select an agent with temperature <= 0.1
+                // agent: "",
                 model: input.model ?? {
                   providerID: "anthropic",
                   modelID: "claude-opus-4-5-20251101",

@@ -565,13 +565,19 @@ export const plan = <const Resources extends (Service | Resource)[]>(
                 oldState.attr === undefined
               ) {
                 if (provider.read) {
-                  const attr = yield* provider.read({
-                    id,
-                    instanceId: oldState.instanceId,
-                    olds: oldState.props,
-                    output: oldState.attr,
-                    bindings,
-                  });
+                  const attr = yield* provider
+                    .read({
+                      id,
+                      instanceId: oldState.instanceId,
+                      olds: oldState.props,
+                      output: oldState.attr,
+                      bindings,
+                    })
+                    .pipe(
+                      Effect.provide(
+                        Layer.succeed(InstanceId, oldState.instanceId),
+                      ),
+                    );
                   if (attr) {
                     return Node<Create<Resource>>({
                       action: "create",
