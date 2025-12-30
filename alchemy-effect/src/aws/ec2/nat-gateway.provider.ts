@@ -6,7 +6,7 @@ import type * as EC2 from "itty-aws/ec2";
 import type { ScopedPlanStatusSession } from "../../cli/service.ts";
 import {
   createAlchemyTagFilters,
-  createTagger,
+  createInternalTags,
   createTagsList,
   diffTags,
 } from "../../tags.ts";
@@ -27,15 +27,16 @@ export const natGatewayProvider = () =>
       const ec2 = yield* EC2Client;
       const region = yield* Region;
       const accountId = yield* Account;
-      const tagged = yield* createTagger();
 
-      const createTags = (
+      const createTags = Effect.fn(function* (
         id: string,
         tags?: Record<string, string>,
-      ): Record<string, string> => ({
-        Name: id,
-        ...tagged(id),
-        ...tags,
+      ) {
+        return {
+          Name: id,
+          ...(yield* createInternalTags(id)),
+          ...tags,
+        };
       });
 
       const describeNatGateway = (natGatewayId: string) =>
@@ -146,7 +147,7 @@ export const natGatewayProvider = () =>
             TagSpecifications: [
               {
                 ResourceType: "natgateway",
-                Tags: createTagsList(createTags(id, news.tags)),
+                Tags: createTagsList(yield* createTags(id, news.tags)),
               },
             ],
             DryRun: false,
@@ -165,7 +166,7 @@ export const natGatewayProvider = () =>
           const natGatewayId = output.natGatewayId;
 
           // Handle tag updates
-          const newTags = createTags(id, news.tags);
+          const newTags = yield* createTags(id, news.tags);
           const oldTags =
             (yield* ec2
               .describeTags({

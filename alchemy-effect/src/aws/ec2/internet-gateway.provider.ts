@@ -4,7 +4,7 @@ import * as Schedule from "effect/Schedule";
 import type { EC2 } from "itty-aws/ec2";
 
 import type { ScopedPlanStatusSession } from "../../cli/service.ts";
-import { createTagger, createTagsList } from "../../tags.ts";
+import { createInternalTags, createTagsList } from "../../tags.ts";
 import { Account } from "../account.ts";
 import { Region } from "../region.ts";
 import { EC2Client } from "./client.ts";
@@ -21,14 +21,13 @@ export const internetGatewayProvider = () =>
       const ec2 = yield* EC2Client;
       const region = yield* Region;
       const accountId = yield* Account;
-      const tagged = yield* createTagger();
 
       return {
         stables: ["internetGatewayId", "internetGatewayArn", "ownerId"],
 
         create: Effect.fn(function* ({ id, news, session }) {
           // 1. Prepare tags
-          const alchemyTags = tagged(id);
+          const alchemyTags = yield* createInternalTags(id);
           const userTags = news.tags ?? {};
           const allTags = { ...alchemyTags, ...userTags };
 
@@ -128,7 +127,9 @@ export const internetGatewayProvider = () =>
           if (
             JSON.stringify(news.tags ?? {}) !== JSON.stringify(olds.tags ?? {})
           ) {
-            const alchemyTags = tagged(output.internetGatewayId);
+            const alchemyTags = yield* createInternalTags(
+              output.internetGatewayId,
+            );
             const userTags = news.tags ?? {};
             const allTags = { ...alchemyTags, ...userTags };
 

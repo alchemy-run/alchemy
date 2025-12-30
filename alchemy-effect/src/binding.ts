@@ -102,24 +102,52 @@ export interface BindingDeclaration<
   Cap extends Capability = ReturnType<F>["capability"],
 > {
   provider: {
-    effect<Err, Req>(
+    effect<
+      Err,
+      Req,
+      DiffReq = never,
+      PreReattachReq = never,
+      AttachReq = never,
+      ReattachReq = never,
+      DetachReq = never,
+      PostAttachReq = never,
+    >(
       eff: Effect<
         BindingProvider<
           Run,
           Parameters<F>[0],
           Parameters<F>[1],
-          ReturnType<F>["attr"]
+          ReturnType<F>["attr"],
+          DiffReq,
+          PreReattachReq,
+          AttachReq,
+          ReattachReq,
+          DetachReq,
+          PostAttachReq
         >,
         Err,
         Req
       >,
     ): Layer.Layer<Bind<Run, Cap, Tag>, Err, Req>;
-    succeed(
+    succeed<
+      DiffReq = never,
+      PreReattachReq = never,
+      AttachReq = never,
+      ReattachReq = never,
+      DetachReq = never,
+      PostAttachReq = never,
+    >(
       service: BindingProvider<
         Run,
         Parameters<F>[0],
         Parameters<F>[1],
-        ReturnType<F>["attr"]
+        ReturnType<F>["attr"],
+        DiffReq,
+        PreReattachReq,
+        AttachReq,
+        ReattachReq,
+        DetachReq,
+        PostAttachReq
       >,
     ): Layer.Layer<Bind<Run, Cap, Tag>>;
   };

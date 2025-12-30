@@ -72,7 +72,7 @@ export class Session extends Context.Tag("Session")<
               prevSession ??
               (yield* client.session.create({
                 body: {
-                  parentID: session.id,
+                  // parentID: session.id,
                   title,
                 },
               }));
@@ -91,7 +91,7 @@ export class Session extends Context.Tag("Session")<
                 // agent: "",
                 model: input.model ?? {
                   providerID: "anthropic",
-                  modelID: "claude-opus-4-5-20251101",
+                  modelID: "claude-sonnet-4-5-20251101",
                 },
                 noReply: input.noReply ?? false,
                 parts: [

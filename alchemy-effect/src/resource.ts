@@ -18,6 +18,7 @@ export interface IResource<
   Props = unknown,
   Attrs = unknown,
   Base = unknown,
+  Binding = unknown,
 > {
   id: ID;
   type: Type;
@@ -26,6 +27,7 @@ export interface IResource<
   base: Base;
   /** @internal phantom */
   attr: Attrs;
+  binding: Binding;
 }
 
 export interface Resource<
@@ -34,8 +36,9 @@ export interface Resource<
   Props = unknown,
   Attrs = unknown,
   Base = unknown,
-> extends IResource<Type, ID, Props, Attrs, Base> {
-  new (): Resource<Type, ID, Props, Attrs, Base>;
+  Binding = unknown,
+> extends IResource<Type, ID, Props, Attrs, Base, Binding> {
+  new (): Resource<Type, ID, Props, Attrs, Base, Binding>;
 }
 
 export interface ResourceTags<R extends Resource<string, string, any, any>> {

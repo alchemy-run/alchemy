@@ -28,13 +28,13 @@ export const createTagsList = (tags: Tags) =>
     Value,
   }));
 
-export const createTagger = Effect.fn(function* () {
+export const createInternalTags = Effect.fn(function* (id: string) {
   const app = yield* App;
-  return (id: string) => ({
+  return {
     "alchemy::app": app.name,
     "alchemy::stage": app.stage,
     "alchemy::id": id,
-  });
+  };
 });
 
 /**

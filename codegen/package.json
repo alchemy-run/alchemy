@@ -2,11 +2,14 @@
   "name": "codegen",
   "version": "0.0.1",
   "private": true,
+  "type": "module",
   "dependencies": {
+    "@effect/ai": "catalog:",
     "@effect/cli": "catalog:",
     "@effect/platform": "catalog:",
     "@effect/platform-node": "catalog:",
     "@opencode-ai/sdk": "catalog:",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "web-tree-sitter": "^0.26.3"
   }
 }

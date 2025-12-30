@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 
-import { createTagger, createTagsList, diffTags } from "../../tags.ts";
+import { createInternalTags, createTagsList, diffTags } from "../../tags.ts";
 import { EC2Client } from "./client.ts";
 import {
   SecurityGroupRule,
@@ -13,15 +13,16 @@ export const securityGroupRuleProvider = () =>
   SecurityGroupRule.provider.effect(
     Effect.gen(function* () {
       const ec2 = yield* EC2Client;
-      const tagged = yield* createTagger();
 
-      const createTags = (
+      const createTags = Effect.fn(function* (
         id: string,
         tags?: Record<string, string>,
-      ): Record<string, string> => ({
-        Name: id,
-        ...tagged(id),
-        ...tags,
+      ) {
+        return {
+          Name: id,
+          ...(yield* createInternalTags(id)),
+          ...tags,
+        };
       });
 
       const describeRule = (ruleId: string) =>
@@ -128,7 +129,7 @@ export const securityGroupRuleProvider = () =>
               TagSpecifications: [
                 {
                   ResourceType: "security-group-rule",
-                  Tags: createTagsList(createTags(id, news.tags)),
+                  Tags: createTagsList(yield* createTags(id, news.tags)),
                 },
               ],
               DryRun: false,
@@ -141,7 +142,7 @@ export const securityGroupRuleProvider = () =>
               TagSpecifications: [
                 {
                   ResourceType: "security-group-rule",
-                  Tags: createTagsList(createTags(id, news.tags)),
+                  Tags: createTagsList(yield* createTags(id, news.tags)),
                 },
               ],
               DryRun: false,
@@ -184,7 +185,7 @@ export const securityGroupRuleProvider = () =>
           }
 
           // Handle tag updates
-          const newTags = createTags(id, news.tags);
+          const newTags = yield* createTags(id, news.tags);
           const oldTags =
             (yield* ec2
               .describeTags({

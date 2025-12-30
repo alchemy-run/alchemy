@@ -34,6 +34,7 @@ export const resources = () =>
     EC2.vpcEndpointProvider(),
     EC2.vpcProvider(),
     Lambda.functionProvider(),
+    S3.bucketPolicyProvider(),
     S3.bucketProvider(),
     SQS.queueProvider(),
   );
@@ -41,6 +42,10 @@ export const resources = () =>
 export const bindings = () =>
   Layer.mergeAll(
     DynamoDB.getItemFromLambdaFunction(),
+    S3.bucketEventSourceProvider(),
+    S3.deleteObjectFromLambdaFunction(),
+    S3.getObjectFromLambdaFunction(),
+    S3.putObjectFromLambdaFunction(),
     SQS.queueEventSourceProvider(),
     SQS.sendMessageFromLambdaFunction(),
   );

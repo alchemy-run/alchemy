@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
 import type { ScopedPlanStatusSession } from "../../cli/service.ts";
-import { createTagger, createTagsList, diffTags } from "../../tags.ts";
+import { createInternalTags, createTagsList, diffTags } from "../../tags.ts";
 import { Account } from "../account.ts";
 import { Region } from "../region.ts";
 import { EC2Client } from "./client.ts";
@@ -22,15 +22,16 @@ export const vpcEndpointProvider = () =>
       const ec2 = yield* EC2Client;
       const region = yield* Region;
       const accountId = yield* Account;
-      const tagged = yield* createTagger();
 
-      const createTags = (
+      const createTags = Effect.fn(function* (
         id: string,
         tags?: Record<string, string>,
-      ): Record<string, string> => ({
-        Name: id,
-        ...tagged(id),
-        ...tags,
+      ) {
+        return {
+          Name: id,
+          ...(yield* createInternalTags(id)),
+          ...tags,
+        };
       });
 
       const describeVpcEndpoint = (vpcEndpointId: string) =>
@@ -137,7 +138,7 @@ export const vpcEndpointProvider = () =>
             TagSpecifications: [
               {
                 ResourceType: "vpc-endpoint",
-                Tags: createTagsList(createTags(id, news.tags)),
+                Tags: createTagsList(yield* createTags(id, news.tags)),
               },
             ],
             DryRun: false,
@@ -281,7 +282,7 @@ export const vpcEndpointProvider = () =>
           }
 
           // Handle tag updates
-          const newTags = createTags(id, news.tags);
+          const newTags = yield* createTags(id, news.tags);
           const oldTags =
             (yield* ec2
               .describeTags({

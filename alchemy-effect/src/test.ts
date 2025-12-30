@@ -101,12 +101,13 @@ export function test(
           ).pipe(Config.withDefault("http://localhost.localstack.cloud:4566"));
 
           return App.of({
-            name: name.replaceAll(/[^a-zA-Z0-9_]/g, "-"),
+            name: name.replaceAll(/[^a-zA-Z0-9_]/g, "-").replace(/-+/g, "-"),
             stage: "test",
             config: {
               adopt: true,
               aws: {
                 profile: LOCAL ? undefined : AWS_PROFILE,
+                region: LOCAL ? "us-east-1" : undefined,
                 credentials: LOCAL
                   ? {
                       accessKeyId: "test",

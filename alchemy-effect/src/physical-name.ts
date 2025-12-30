@@ -9,6 +9,8 @@ export const createPhysicalName = Effect.fn(function* ({
   instanceId,
   suffixLength = 16,
   maxLength = 64,
+  delimiter = "-",
+  lowercase = false,
 }: {
   id: string;
   /**
@@ -30,19 +32,29 @@ export const createPhysicalName = Effect.fn(function* ({
    * If the name exceeds this length, the human-friendly portion of the name will be truncated to maxLength-suffixLength
    */
   maxLength?: number;
+  /** @default - "-" */
+  delimiter?: string;
+  /** Whether to lowercase the physical name. @default false */
+  lowercase?: boolean;
 }) {
+  const sanitize = (name: string) =>
+    (lowercase ? name.toLowerCase() : name).replaceAll(
+      /[^a-zA-Z0-9-_]/g,
+      delimiter,
+    );
   const app = yield* App;
-  const sanitizedId = id.replace(/[^a-zA-Z0-9-_]/g, "-");
-  const prefix = _prefix ?? `${app.name}-${sanitizedId}-${app.stage}-`;
+  const prefix =
+    _prefix ??
+    `${app.name}${delimiter}${id}${delimiter}${app.stage}${delimiter}`;
   const randomId = base32(
     Buffer.from(instanceId ?? (yield* InstanceId), "hex"),
   );
   const suffix = randomId.slice(0, suffixLength);
   const name = `${prefix}${suffix}`;
   if (maxLength && name.length > maxLength) {
-    return `${prefix.slice(0, maxLength - suffix.length)}${suffix}`;
+    return sanitize(`${prefix.slice(0, maxLength - suffix.length)}${suffix}`);
   }
-  return name;
+  return sanitize(name);
 });
 
 // Base32 is ideal for physical names because it's denser than hex (5 bits per char vs 4)

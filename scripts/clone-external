@@ -2,4 +2,6 @@
 
 mkdir -p .external
 cd .external
-git clone git@github.com:hashicorp/terraform-provider-aws.git --depth=1
+if [ ! -d "terraform-provider-aws" ]; then
+  git clone git@github.com:hashicorp/terraform-provider-aws.git --depth=1
+fi

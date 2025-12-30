@@ -20,14 +20,11 @@ export const testPath = (service: string, file: string) =>
   });
 
 export const lifecyclePaths = (service: string, resource: string) =>
-  Effect.gen(function* () {
-    const path = yield* Path.Path;
-    return yield* Effect.all([
-      designPath(service, `${resource}.diff.md`),
-      designPath(service, `${resource}.read.md`),
-      designPath(service, `${resource}.pre-create.md`),
-      designPath(service, `${resource}.create.md`),
-      designPath(service, `${resource}.update.md`),
-      designPath(service, `${resource}.delete.md`),
-    ]);
-  });
+  Effect.all([
+    designPath(service, `${resource}.diff.md`),
+    designPath(service, `${resource}.read.md`),
+    designPath(service, `${resource}.pre-create.md`),
+    designPath(service, `${resource}.create.md`),
+    designPath(service, `${resource}.update.md`),
+    designPath(service, `${resource}.delete.md`),
+  ]);

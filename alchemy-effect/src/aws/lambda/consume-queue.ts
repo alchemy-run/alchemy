@@ -11,7 +11,7 @@ import type { Queue } from "../sqs/queue.ts";
 import type { Consume, QueueEvent } from "../sqs/queue.consume.ts";
 import { QueueEventSource } from "../sqs/queue.event-source.ts";
 
-export const consume =
+export const consumeQueue =
   <Q extends Queue, ID extends string, Req>(
     id: ID,
     {

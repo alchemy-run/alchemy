@@ -4,7 +4,7 @@ import * as Schedule from "effect/Schedule";
 import type { EC2 } from "itty-aws/ec2";
 
 import type { ScopedPlanStatusSession } from "../../cli/service.ts";
-import { createTagger, createTagsList } from "../../tags.ts";
+import { createInternalTags, createTagsList } from "../../tags.ts";
 import { Account } from "../account.ts";
 import { Region } from "../region.ts";
 import { EC2Client } from "./client.ts";
@@ -21,7 +21,6 @@ export const routeTableProvider = () =>
       const ec2 = yield* EC2Client;
       const region = yield* Region;
       const accountId = yield* Account;
-      const tagged = yield* createTagger();
 
       return {
         stables: ["routeTableId", "ownerId", "routeTableArn", "vpcId"],
@@ -35,7 +34,7 @@ export const routeTableProvider = () =>
 
         create: Effect.fn(function* ({ id, news, session }) {
           // 1. Prepare tags
-          const alchemyTags = tagged(id);
+          const alchemyTags = yield* createInternalTags(id);
           const userTags = news.tags ?? {};
           const allTags = { ...alchemyTags, ...userTags };
 
@@ -114,14 +113,14 @@ export const routeTableProvider = () =>
           } satisfies RouteTableAttrs<RouteTableProps>;
         }),
 
-        update: Effect.fn(function* ({ news, olds, output, session }) {
+        update: Effect.fn(function* ({ id, news, olds, output, session }) {
           const routeTableId = output.routeTableId;
 
           // Handle tag updates
           if (
             JSON.stringify(news.tags ?? {}) !== JSON.stringify(olds.tags ?? {})
           ) {
-            const alchemyTags = tagged(output.routeTableId);
+            const alchemyTags = yield* createInternalTags(id);
             const userTags = news.tags ?? {};
             const allTags = { ...alchemyTags, ...userTags };
 

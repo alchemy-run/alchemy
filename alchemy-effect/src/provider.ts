@@ -20,7 +20,7 @@ export interface Provider<
   // ProviderService<R>
 > {}
 
-type BindingData<Res extends Resource> = [Res] extends [Runtime]
+type BindingData<Res extends Resource> = [Res] extends [Resource]
   ? Res["binding"][]
   : any[];
 

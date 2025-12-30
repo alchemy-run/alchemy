@@ -6,7 +6,7 @@ import type { TimeToLiveSpecification } from "itty-aws/dynamodb";
 import { App } from "../../app.ts";
 import type { Input } from "../../input.ts";
 import type { Provider } from "../../provider.ts";
-import { createTagger, hasTags } from "../../tags.ts";
+import { createInternalTags, hasTags } from "../../tags.ts";
 import { isScalarAttributeType, toAttributeType } from "./attribute-value.ts";
 import { DynamoDBClient } from "./client.ts";
 import {
@@ -43,8 +43,6 @@ export const tableProvider = (): Layer.Layer<
             }))
           );
         });
-
-      const tagged = yield* createTagger();
 
       const toKeySchema = (props: Input.ResolveProps<TableProps>) => [
         {
@@ -102,14 +100,16 @@ export const tableProvider = (): Layer.Layer<
               })
               .pipe(
                 Effect.map((tags) => [r, tags.Tags] as const),
-                Effect.flatMap(([r, tags]) => {
-                  if (hasTags(tagged(id), tags)) {
-                    return Effect.succeed(r.Table!);
-                  }
-                  return Effect.fail(
-                    new Error("Table tags do not match expected values"),
-                  );
-                }),
+                Effect.flatMap(
+                  Effect.fn(function* ([r, tags]) {
+                    if (hasTags(yield* createInternalTags(id), tags)) {
+                      return r.Table!;
+                    }
+                    return yield* Effect.fail(
+                      new Error("Table tags do not match expected values"),
+                    );
+                  }),
+                ),
               ),
           ),
         );

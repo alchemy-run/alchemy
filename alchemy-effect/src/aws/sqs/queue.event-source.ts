@@ -3,13 +3,14 @@ import * as Schedule from "effect/Schedule";
 import type * as Lambda from "itty-aws/lambda";
 import { Binding } from "../../binding.ts";
 import type { From } from "../../policy.ts";
-import { createTagger, hasTags } from "../../tags.ts";
+import { createInternalTags, hasTags } from "../../tags.ts";
 import type { Consume } from "./queue.consume.ts";
 import { Queue, type QueueAttrs, type QueueProps } from "./queue.ts";
 import { Function, type FunctionBinding } from "../lambda/function.ts";
 import { LambdaClient } from "../lambda/client.ts";
 import { Account } from "../account.ts";
 import { Region } from "../region.ts";
+import type { App } from "../../index.ts";
 
 export interface QueueEventSourceProps {
   batchSize?: number;
@@ -45,7 +46,6 @@ export const queueEventSourceProvider = () =>
       const accountId = yield* Account;
       const region = yield* Region;
       const lambda = yield* LambdaClient;
-      const tagged = yield* createTagger();
 
       const findEventSourceMapping: (
         queue: {
@@ -55,60 +55,63 @@ export const queueEventSourceProvider = () =>
         },
         functionName: string,
         marker?: string,
-      ) => Effect.Effect<Lambda.EventSourceMappingConfiguration | undefined> =
-        Effect.fn(function* (queue, functionName, marker) {
-          const retry = Effect.retry({
-            while: (
-              e:
-                | Lambda.InvalidParameterValueException
-                | Lambda.ResourceNotFoundException
-                | Lambda.ServiceException
-                | Lambda.TooManyRequestsException
-                | Lambda.CommonAwsError
-                | any,
-            ) =>
-              // TODO(sam): figure out how to write a function that generalizes this or upstream into itty-aws
-              e._tag === "InternalFailure" ||
-              e._tag === "RequestExpired" ||
-              e._tag === "ServiceException" ||
-              e._tag === "ServiceUnavailable" ||
-              e._tag === "ThrottlingException" ||
-              e._tag === "TooManyRequestsException",
-            schedule: Schedule.exponential(100),
-          });
+      ) => Effect.Effect<
+        Lambda.EventSourceMappingConfiguration | undefined,
+        never,
+        App
+      > = Effect.fn(function* (queue, functionName, marker) {
+        const retry = Effect.retry({
+          while: (
+            e:
+              | Lambda.InvalidParameterValueException
+              | Lambda.ResourceNotFoundException
+              | Lambda.ServiceException
+              | Lambda.TooManyRequestsException
+              | Lambda.CommonAwsError
+              | any,
+          ) =>
+            // TODO(sam): figure out how to write a function that generalizes this or upstream into itty-aws
+            e._tag === "InternalFailure" ||
+            e._tag === "RequestExpired" ||
+            e._tag === "ServiceException" ||
+            e._tag === "ServiceUnavailable" ||
+            e._tag === "ThrottlingException" ||
+            e._tag === "TooManyRequestsException",
+          schedule: Schedule.exponential(100),
+        });
 
-          // TODO(sam): return an accepted error
-          // const orDie = Effect.catchAll((e) => Effect.die(e));
+        // TODO(sam): return an accepted error
+        // const orDie = Effect.catchAll((e) => Effect.die(e));
 
-          const mappings = yield* lambda
-            .listEventSourceMappings({
-              FunctionName: functionName,
-              Marker: marker,
+        const mappings = yield* lambda
+          .listEventSourceMappings({
+            FunctionName: functionName,
+            Marker: marker,
+          })
+          .pipe(retry, Effect.orDie);
+        const mapping = mappings.EventSourceMappings?.find(
+          (mapping) => mapping.EventSourceArn === queue.attr.queueArn,
+        );
+        if (mapping?.EventSourceArn) {
+          const { Tags } = yield* lambda
+            .listTags({
+              Resource: `arn:aws:lambda:${region}:${accountId}:event-source-mapping:${mapping.UUID!}`,
             })
             .pipe(retry, Effect.orDie);
-          const mapping = mappings.EventSourceMappings?.find(
-            (mapping) => mapping.EventSourceArn === queue.attr.queueArn,
-          );
-          if (mapping?.EventSourceArn) {
-            const { Tags } = yield* lambda
-              .listTags({
-                Resource: `arn:aws:lambda:${region}:${accountId}:event-source-mapping:${mapping.UUID!}`,
-              })
-              .pipe(retry, Effect.orDie);
-            if (hasTags(tagged(queue.id), Tags)) {
-              return mapping;
-            }
-            return undefined;
-          }
-          if (mappings.NextMarker) {
-            return yield* findEventSourceMapping(
-              queue,
-              functionName,
-              mappings.NextMarker,
-            );
+          if (hasTags(yield* createInternalTags(queue.id), Tags)) {
+            return mapping;
           }
           return undefined;
-        });
+        }
+        if (mappings.NextMarker) {
+          return yield* findEventSourceMapping(
+            queue,
+            functionName,
+            mappings.NextMarker,
+          );
+        }
+        return undefined;
+      });
 
       return {
         attach: ({ source: queue, attr }) => ({
@@ -156,7 +159,7 @@ export const queueEventSourceProvider = () =>
             // FilterCriteria: {
             //   Filters: [{Pattern: ""}]
             // }
-            Tags: tagged(queue.id),
+            Tags: yield* createInternalTags(queue.id),
           };
 
           const findOrDie = findEventSourceMapping(queue, functionName).pipe(
