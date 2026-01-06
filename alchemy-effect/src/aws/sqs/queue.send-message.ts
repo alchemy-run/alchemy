@@ -1,11 +1,11 @@
 import * as Effect from "effect/Effect";
 
+import * as SQS from "distilled-aws/sqs";
 import { Binding } from "../../binding.ts";
 import type { Capability } from "../../capability.ts";
 import { toEnvKey } from "../../env.ts";
 import { declare, type To } from "../../policy.ts";
 import { Function } from "../lambda/function.ts";
-import { SQSClient } from "./client.ts";
 import { Queue } from "./queue.ts";
 
 export interface SendMessage<Q = Queue> extends Capability<
@@ -17,19 +17,17 @@ export const SendMessage = Binding<
   <Q extends Queue>(queue: Q) => Binding<Function, SendMessage<To<Q>>>
 >(Function, "AWS.SQS.SendMessage");
 
-export const sendMessage = <Q extends Queue>(
+export const sendMessage = Effect.fnUntraced(function* <Q extends Queue>(
   queue: Q,
   message: Q["props"]["schema"]["Type"],
-) =>
-  Effect.gen(function* () {
-    yield* declare<SendMessage<To<Q>>>();
-    const sqs = yield* SQSClient;
-    const url = process.env[toEnvKey(queue.id, "QUEUE_URL")]!;
-    return yield* sqs.sendMessage({
-      QueueUrl: url,
-      MessageBody: JSON.stringify(message),
-    });
+) {
+  yield* declare<SendMessage<To<Q>>>();
+  const url = process.env[toEnvKey(queue.id, "QUEUE_URL")]!;
+  return yield* SQS.sendMessage({
+    QueueUrl: url,
+    MessageBody: JSON.stringify(message),
   });
+});
 
 export const sendMessageFromLambdaFunction = () =>
   SendMessage.provider.succeed({

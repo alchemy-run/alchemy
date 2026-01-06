@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import { Messages } from "./messages.ts";
 
 // business logic
-export class Consumer extends Lambda.consume("Consumer", {
+export class Consumer extends Lambda.consumeQueue("Consumer", {
   queue: Messages,
   handle: Effect.fn(function* (batch) {
     for (const record of batch.Records) {
@@ -24,7 +24,4 @@ export class Consumer extends Lambda.consume("Consumer", {
 }) {}
 
 // runtime handler
-export default Consumer.handler.pipe(
-  Effect.provide(SQS.clientFromEnv()),
-  Lambda.toHandler,
-);
+export default Consumer.handler.pipe(Lambda.toHandler);

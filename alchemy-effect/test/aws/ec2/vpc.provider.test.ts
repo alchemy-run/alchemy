@@ -8,7 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Logger from "effect/Logger";
 import * as Schedule from "effect/Schedule";
-import * as ec2 from "itty-aws/ec2";
+import * as ec2 from "distilled-aws/ec2";
 
 const logLevel = Logger.withMinimumLogLevel(
   process.env.DEBUG ? LogLevel.Debug : LogLevel.Info,

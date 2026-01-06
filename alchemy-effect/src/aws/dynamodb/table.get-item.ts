@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import type { ReturnConsumedCapacity } from "itty-aws/dynamodb";
+import type { ReturnConsumedCapacity } from "distilled-aws/dynamodb";
 import { Binding } from "../../binding.ts";
 import type { Capability } from "../../capability.ts";
 import { toEnvKey } from "../../env.ts";

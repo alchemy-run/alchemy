@@ -9,7 +9,7 @@ import type {
   CreateFunctionRequest,
   CreateFunctionUrlConfigRequest,
   UpdateFunctionUrlConfigRequest,
-} from "itty-aws/lambda";
+} from "distilled-aws/lambda";
 import { App } from "../../app.ts";
 import { DotAlchemy } from "../../dot-alchemy.ts";
 import { createInternalTags, createTagsList, hasTags } from "../../tags.ts";

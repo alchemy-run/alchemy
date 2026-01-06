@@ -1,17 +1,14 @@
 import * as Layer from "effect/Layer";
 import * as ESBuild from "../esbuild.ts";
 import * as Account from "./account.ts";
-import * as Credentials from "./credentials.ts";
 import * as DynamoDB from "./dynamodb/index.ts";
 import * as EC2 from "./ec2/index.ts";
-import * as IAM from "./iam.ts";
 import * as Lambda from "./lambda/index.ts";
 import * as Region from "./region.ts";
 import * as S3 from "./s3/index.ts";
 import * as SQS from "./sqs/index.ts";
-import * as STS from "./sts.ts";
 import * as Endpoint from "./endpoint.ts";
-export { loadProfile, loadSSOCredentials } from "./credentials.ts";
+import * as Credentials from "./credentials.ts";
 
 import "./config.ts";
 
@@ -50,30 +47,14 @@ export const bindings = () =>
     SQS.sendMessageFromLambdaFunction(),
   );
 
-export const clients = () =>
-  Layer.mergeAll(
-    DynamoDB.client(),
-    EC2.client(),
-    IAM.client(),
-    Lambda.client(),
-    S3.client(),
-    SQS.client(),
-    // STS.client(),
-  );
-
 export const utils = () => Layer.mergeAll(ESBuild.layer());
 
 export const bareProviders = () =>
-  resources().pipe(
-    Layer.provideMerge(bindings()),
-    Layer.provideMerge(clients()),
-    Layer.provideMerge(utils()),
-  );
+  resources().pipe(Layer.provideMerge(bindings()), Layer.provideMerge(utils()));
 
 export const config = <L extends Layer.Layer<any, any, any>>(layer: L) =>
   layer.pipe(
     Layer.provideMerge(Account.fromStageConfig()),
-    Layer.provideMerge(STS.client()),
     Layer.provideMerge(Region.fromStageConfig()),
     Layer.provideMerge(Credentials.fromStageConfig()),
     Layer.provideMerge(Endpoint.fromStageConfig()),

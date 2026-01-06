@@ -10,7 +10,7 @@ import {
   type EgressOnlyInternetGatewayAttrs,
   type EgressOnlyInternetGatewayId,
 } from "./egress-only-igw.ts";
-import type * as EC2 from "itty-aws/ec2";
+import type * as EC2 from "distilled-aws/ec2";
 import type { VpcId } from "./vpc.ts";
 
 export const egressOnlyInternetGatewayProvider = () =>

@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import type { Event } from "itty-aws/s3";
+import type { Event } from "distilled-aws/s3";
 import { Binding } from "../../binding.ts";
 import type { From } from "../../policy.ts";
 import type { OnBucketEvent, S3EventType } from "./bucket.on-event.ts";

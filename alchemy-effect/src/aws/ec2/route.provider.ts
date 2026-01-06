@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
-import type { EC2 } from "itty-aws/ec2";
+import type { EC2 } from "distilled-aws/ec2";
 
 import { somePropsAreDifferent } from "../../diff.ts";
 import { EC2Client } from "./client.ts";

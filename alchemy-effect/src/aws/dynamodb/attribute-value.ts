@@ -1,7 +1,10 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as S from "effect/Schema";
-import type { AttributeValue, ScalarAttributeType } from "itty-aws/dynamodb";
+import type {
+  AttributeValue,
+  ScalarAttributeType,
+} from "distilled-aws/dynamodb";
 import {
   getSetValueAST,
   isClassSchema,

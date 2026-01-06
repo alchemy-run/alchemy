@@ -2,7 +2,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
-import type { EC2 } from "itty-aws/ec2";
+import type { EC2 } from "distilled-aws/ec2";
 
 import type { ScopedPlanStatusSession } from "../../cli/service.ts";
 import { somePropsAreDifferent } from "../../diff.ts";

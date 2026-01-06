@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import type * as Lambda from "itty-aws/lambda";
+import type * as Lambda from "distilled-aws/lambda";
 import { Binding } from "../../binding.ts";
 import type { From } from "../../policy.ts";
 import { createInternalTags, hasTags } from "../../tags.ts";
@@ -70,7 +70,7 @@ export const queueEventSourceProvider = () =>
               | Lambda.CommonAwsError
               | any,
           ) =>
-            // TODO(sam): figure out how to write a function that generalizes this or upstream into itty-aws
+            // TODO(sam): figure out how to write a function that generalizes this or upstream into distilled-aws
             e._tag === "InternalFailure" ||
             e._tag === "RequestExpired" ||
             e._tag === "ServiceException" ||

@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 
-import type { TimeToLiveSpecification } from "itty-aws/dynamodb";
+import type { TimeToLiveSpecification } from "distilled-aws/dynamodb";
 import { App } from "../../app.ts";
 import type { Input } from "../../input.ts";
 import type { Provider } from "../../provider.ts";

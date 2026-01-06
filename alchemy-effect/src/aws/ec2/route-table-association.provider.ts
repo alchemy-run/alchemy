@@ -146,7 +146,7 @@ export const routeTableAssociationProvider = () =>
  * Wait for association to reach a specific state
  */
 const waitForAssociationState = (
-  ec2: import("itty-aws/ec2").EC2,
+  ec2: import("distilled-aws/ec2").EC2,
   routeTableId: string,
   associationId: string,
   targetState:

@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import * as Effect from "effect/Effect";
 import * as S from "effect/Schema";
-import type { AttributeValue } from "itty-aws/dynamodb";
+import type { AttributeValue } from "distilled-aws/dynamodb";
 import {
   fromAttributeValue,
   isMapSchemaType,

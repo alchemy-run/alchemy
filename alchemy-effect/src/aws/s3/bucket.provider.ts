@@ -7,7 +7,7 @@ import { Account } from "../account.ts";
 import { Region } from "../region.ts";
 import { S3Client } from "./client.ts";
 import { Bucket } from "./bucket.ts";
-import type { BucketLocationConstraint } from "itty-aws/s3";
+import type { BucketLocationConstraint } from "distilled-aws/s3";
 
 export const bucketProvider = () =>
   Bucket.provider.effect(

@@ -1,4 +1,4 @@
-import type * as EC2 from "itty-aws/ec2";
+import type * as EC2 from "distilled-aws/ec2";
 import type { Input } from "../../input.ts";
 import { Resource } from "../../resource.ts";
 import type { AccountID } from "../account.ts";
