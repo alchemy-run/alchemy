@@ -4,9 +4,9 @@ import * as Effect from "effect/Effect";
 import { App } from "../app.ts";
 import {
   Credentials,
-  fromAwsCredentialIdentity,
   loadSSOCredentials,
-} from "distilled-aws";
+  fromAwsCredentialIdentity,
+} from "distilled-aws/Credentials";
 import { Profile } from "./profile.ts";
 
 export const fromStageConfig = () =>

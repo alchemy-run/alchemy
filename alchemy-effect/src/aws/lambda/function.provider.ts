@@ -14,18 +14,17 @@ import { App } from "../../app.ts";
 import { DotAlchemy } from "../../dot-alchemy.ts";
 import { createInternalTags, createTagsList, hasTags } from "../../tags.ts";
 import { Account } from "../account.ts";
-import * as IAM from "../iam.ts";
-import { Region } from "../region.ts";
+import * as IAM from "../iam/index.ts";
+import { Region } from "distilled-aws/Region";
 import { zipCode } from "../zip.ts";
 import { createPhysicalName } from "../../physical-name.ts";
-import { LambdaClient } from "./client.ts";
 import { Function, type FunctionAttr, type FunctionProps } from "./function.ts";
+import * as iam from "distilled-aws/iam";
+import * as lambda from "distilled-aws/lambda";
 
 export const functionProvider = () =>
   Function.provider.effect(
     Effect.gen(function* () {
-      const lambda = yield* LambdaClient;
-      const iam = yield* IAM.IAMClient;
       const app = yield* App;
       const accountId = yield* Account;
       const region = yield* Region;

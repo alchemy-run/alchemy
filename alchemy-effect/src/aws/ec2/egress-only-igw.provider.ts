@@ -2,21 +2,19 @@ import * as Effect from "effect/Effect";
 
 import { createInternalTags, createTagsList, diffTags } from "../../tags.ts";
 import { Account } from "../account.ts";
-import { Region } from "../region.ts";
-import { EC2Client } from "./client.ts";
+import { Region } from "distilled-aws/Region";
 import {
   type EgressOnlyInternetGatewayArn,
   EgressOnlyInternetGateway,
   type EgressOnlyInternetGatewayAttrs,
   type EgressOnlyInternetGatewayId,
 } from "./egress-only-igw.ts";
-import type * as EC2 from "distilled-aws/ec2";
+import * as ec2 from "distilled-aws/ec2";
 import type { VpcId } from "./vpc.ts";
 
 export const egressOnlyInternetGatewayProvider = () =>
   EgressOnlyInternetGateway.provider.effect(
     Effect.gen(function* () {
-      const ec2 = yield* EC2Client;
       const region = yield* Region;
       const accountId = yield* Account;
 
@@ -50,7 +48,7 @@ export const egressOnlyInternetGatewayProvider = () =>
           );
 
       const toAttrs = (
-        gw: EC2.EgressOnlyInternetGateway,
+        gw: ec2.EgressOnlyInternetGateway,
       ): EgressOnlyInternetGatewayAttrs => ({
         egressOnlyInternetGatewayId:
           gw.EgressOnlyInternetGatewayId as EgressOnlyInternetGatewayId,

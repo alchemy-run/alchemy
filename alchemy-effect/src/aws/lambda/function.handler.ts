@@ -1,13 +1,17 @@
 import type { Context as LambdaContext } from "aws-lambda";
 import * as Effect from "effect/Effect";
 import type { Capability } from "../../capability.ts";
+import type { HttpClient } from "@effect/platform/HttpClient";
+import type { Credentials } from "distilled-aws/Credentials";
+import type { Region } from "distilled-aws/Region";
 
 type Handler = (
   event: any,
   context: LambdaContext,
 ) => Effect.Effect<any, any, never>;
 
-type HandlerEffect<Req = Capability> = Effect.Effect<Handler, any, Req>;
+type HandlerEffect<Req = Capability | Credentials | HttpClient | Region> =
+  Effect.Effect<Handler, any, Req>;
 
 const memo = Symbol.for("alchemy::memo");
 
@@ -23,7 +27,13 @@ const resolveHandler = async (
   ));
 
 export const toHandler =
-  <H extends Handler>(effect: Effect.Effect<H, any, Capability>) =>
+  <H extends Handler>(
+    effect: Effect.Effect<
+      H,
+      any,
+      Capability | HttpClient | Credentials | Region
+    >,
+  ) =>
   async (event: any, context: LambdaContext) =>
     Effect.runPromise(
       (await resolveHandler(effect))(event, context),

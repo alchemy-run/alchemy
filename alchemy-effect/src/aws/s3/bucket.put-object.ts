@@ -1,11 +1,11 @@
 import * as Effect from "effect/Effect";
 
+import * as S3 from "distilled-aws/s3";
 import { Binding } from "../../binding.ts";
 import type { Capability } from "../../capability.ts";
 import { toEnvKey } from "../../env.ts";
 import { declare, type To } from "../../policy.ts";
 import { Function } from "../lambda/function.ts";
-import { S3Client } from "./client.ts";
 import { Bucket } from "./bucket.ts";
 
 export interface PutObject<B = Bucket> extends Capability<
@@ -39,30 +39,28 @@ export interface PutObjectOptions {
   tagging?: string;
 }
 
-export const putObject = <B extends Bucket>(
+export const putObject = Effect.fnUntraced(function* <B extends Bucket>(
   bucket: B,
   options: PutObjectOptions,
-) =>
-  Effect.gen(function* () {
-    yield* declare<PutObject<To<B>>>();
-    const s3 = yield* S3Client;
-    const bucketName = process.env[toEnvKey(bucket.id, "BUCKET_NAME")]!;
+) {
+  yield* declare<PutObject<To<B>>>();
+  const bucketName = process.env[toEnvKey(bucket.id, "BUCKET_NAME")]!;
 
-    return yield* s3.putObject({
-      Bucket: bucketName,
-      Key: options.key,
-      Body: options.body,
-      ContentType: options.contentType,
-      ContentEncoding: options.contentEncoding,
-      ContentDisposition: options.contentDisposition,
-      CacheControl: options.cacheControl,
-      Metadata: options.metadata,
-      StorageClass: options.storageClass,
-      ServerSideEncryption: options.serverSideEncryption,
-      SSEKMSKeyId: options.sseKmsKeyId,
-      Tagging: options.tagging,
-    });
+  return yield* S3.putObject({
+    Bucket: bucketName,
+    Key: options.key,
+    Body: options.body,
+    ContentType: options.contentType,
+    ContentEncoding: options.contentEncoding,
+    ContentDisposition: options.contentDisposition,
+    CacheControl: options.cacheControl,
+    Metadata: options.metadata,
+    StorageClass: options.storageClass,
+    ServerSideEncryption: options.serverSideEncryption,
+    SSEKMSKeyId: options.sseKmsKeyId,
+    Tagging: options.tagging,
   });
+});
 
 export const putObjectFromLambdaFunction = () =>
   PutObject.provider.succeed({

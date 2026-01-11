@@ -1,7 +1,7 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import type * as EC2 from "distilled-aws/ec2";
+import * as ec2 from "distilled-aws/ec2";
 
 import type { ScopedPlanStatusSession } from "../../cli/service.ts";
 import {
@@ -11,8 +11,7 @@ import {
   diffTags,
 } from "../../tags.ts";
 import { Account } from "../account.ts";
-import { Region } from "../region.ts";
-import { EC2Client } from "./client.ts";
+import { Region } from "distilled-aws/Region";
 import {
   NatGateway,
   type NatGatewayAttrs,
@@ -24,7 +23,6 @@ export const natGatewayProvider = () =>
   NatGateway.provider.effect(
     // @ts-expect-error
     Effect.gen(function* () {
-      const ec2 = yield* EC2Client;
       const region = yield* Region;
       const accountId = yield* Account;
 
@@ -50,7 +48,7 @@ export const natGatewayProvider = () =>
         );
 
       const toAttrs = (
-        gw: EC2.NatGateway,
+        gw: ec2.NatGateway,
       ): NatGatewayAttrs<NatGatewayProps> => {
         const primaryAddress =
           gw.NatGatewayAddresses?.find((a) => a.IsPrimary) ??
@@ -254,7 +252,6 @@ const waitForNatGatewayAvailable = (
   session: ScopedPlanStatusSession,
 ) =>
   Effect.gen(function* () {
-    const ec2 = yield* EC2Client;
     const result = yield* ec2.describeNatGateways({
       NatGatewayIds: [natGatewayId],
     });
@@ -307,7 +304,6 @@ const waitForNatGatewayDeleted = (
   session: ScopedPlanStatusSession,
 ) =>
   Effect.gen(function* () {
-    const ec2 = yield* EC2Client;
     const result = yield* ec2
       .describeNatGateways({ NatGatewayIds: [natGatewayId] })
       .pipe(

@@ -4,8 +4,8 @@ import * as Schedule from "effect/Schedule";
 
 import { createInternalTags, createTagsList, diffTags } from "../../tags.ts";
 import { Account } from "../account.ts";
-import { Region } from "../region.ts";
-import { EC2Client } from "./client.ts";
+import { Region } from "distilled-aws/Region";
+import * as ec2 from "distilled-aws/ec2";
 import {
   type NetworkAclArn,
   NetworkAcl,
@@ -17,7 +17,6 @@ import type { VpcId } from "./vpc.ts";
 export const networkAclProvider = () =>
   NetworkAcl.provider.effect(
     Effect.gen(function* () {
-      const ec2 = yield* EC2Client;
       const region = yield* Region;
       const accountId = yield* Account;
 

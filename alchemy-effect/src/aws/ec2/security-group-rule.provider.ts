@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
+import * as ec2 from "distilled-aws/ec2";
 
 import { createInternalTags, createTagsList, diffTags } from "../../tags.ts";
-import { EC2Client } from "./client.ts";
 import {
   SecurityGroupRule,
   type SecurityGroupRuleAttrs,
@@ -12,8 +12,6 @@ import type { SecurityGroupId } from "./security-group.ts";
 export const securityGroupRuleProvider = () =>
   SecurityGroupRule.provider.effect(
     Effect.gen(function* () {
-      const ec2 = yield* EC2Client;
-
       const createTags = Effect.fn(function* (
         id: string,
         tags?: Record<string, string>,

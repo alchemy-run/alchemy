@@ -4,6 +4,8 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Scope from "effect/Scope";
 
+import type * as AWS from "distilled-aws";
+
 import { FetchHttpClient, FileSystem, HttpClient } from "@effect/platform";
 import { NodeContext } from "@effect/platform-node";
 import * as Path from "@effect/platform/Path";
@@ -15,6 +17,9 @@ import { CLI } from "./cli/service.ts";
 import { DotAlchemy, dotAlchemy } from "./dot-alchemy.ts";
 import type { Resource } from "./resource.ts";
 import * as State from "./state.ts";
+
+import * as Credentials from "./aws/credentials.ts";
+import * as Region from "./aws/region.ts";
 
 declare module "@effect/vitest" {
   interface ExpectStatic {
@@ -46,7 +51,9 @@ type Provided =
   | DotAlchemy
   | HttpClient.HttpClient
   | FileSystem.FileSystem
-  | Path.Path;
+  | Path.Path
+  | AWS.Credentials.Credentials
+  | AWS.Region.Region;
 
 export function test(
   name: string,
@@ -80,6 +87,11 @@ export function test(
     NodeContext.layer,
     FetchHttpClient.layer,
     Logger.pretty,
+  );
+
+  const aws = Layer.mergeAll(
+    Credentials.fromStageConfig(),
+    Region.fromStageConfig(),
   );
 
   const alchemy = Layer.provideMerge(
@@ -139,11 +151,12 @@ export function test(
         );
         return yield* testCase.pipe(Effect.withConfigProvider(configProvider));
       }).pipe(
-        Effect.provide(Layer.provideMerge(alchemy, platform)),
+        Effect.provide(
+          Layer.provideMerge(aws, Layer.provideMerge(alchemy, platform)),
+        ),
         Logger.withMinimumLogLevel(
           process.env.DEBUG ? LogLevel.Debug : LogLevel.Info,
         ),
-        Effect.provide(NodeContext.layer),
         Effect.provide(NodeContext.layer),
       ),
     options.timeout,

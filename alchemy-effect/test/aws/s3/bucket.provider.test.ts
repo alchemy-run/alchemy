@@ -1,8 +1,9 @@
 import * as AWS from "@/aws";
-import * as S3 from "@/aws/s3";
+import { Bucket } from "@/aws/s3";
 import { apply, destroy } from "@/index";
 import { test } from "@/test";
 import { expect } from "@effect/vitest";
+import * as S3 from "distilled-aws/s3";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,19 +11,17 @@ import * as Schedule from "effect/Schedule";
 test(
   "create, update, delete bucket",
   Effect.gen(function* () {
-    const s3 = yield* S3.S3Client;
-
-    class TestBucket extends S3.Bucket("TestBucket", {
+    class TestBucket extends Bucket("TestBucket", {
       tags: { Environment: "test" },
     }) {}
 
     const stack = yield* apply(TestBucket);
 
     // Verify the bucket was created
-    yield* s3.headBucket({ Bucket: stack.TestBucket.bucketName });
+    yield* S3.headBucket({ Bucket: stack.TestBucket.bucketName });
 
     // Verify tags
-    const tagging = yield* s3.getBucketTagging({
+    const tagging = yield* S3.getBucketTagging({
       Bucket: stack.TestBucket.bucketName,
     });
     expect(tagging.TagSet).toContainEqual({
@@ -31,14 +30,14 @@ test(
     });
 
     // Update the bucket tags
-    class UpdatedBucket extends S3.Bucket("TestBucket", {
+    class UpdatedBucket extends Bucket("TestBucket", {
       tags: { Environment: "production", Team: "platform" },
     }) {}
 
     yield* apply(UpdatedBucket);
 
     // Verify tags were updated
-    const updatedTagging = yield* s3.getBucketTagging({
+    const updatedTagging = yield* S3.getBucketTagging({
       Bucket: stack.TestBucket.bucketName,
     });
     expect(updatedTagging.TagSet).toContainEqual({
@@ -59,9 +58,7 @@ test(
 test(
   "create bucket with custom name",
   Effect.gen(function* () {
-    const s3 = yield* S3.S3Client;
-
-    class CustomNameBucket extends S3.Bucket("CustomNameBucket", {
+    class CustomNameBucket extends Bucket("CustomNameBucket", {
       bucketName: "alchemy-test-custom-name-bucket",
     }) {}
 
@@ -75,7 +72,7 @@ test(
     );
 
     // Verify the bucket exists
-    yield* s3.headBucket({ Bucket: stack.CustomNameBucket.bucketName });
+    yield* S3.headBucket({ Bucket: stack.CustomNameBucket.bucketName });
 
     yield* destroy();
 
@@ -86,23 +83,21 @@ test(
 test(
   "create bucket with forceDestroy",
   Effect.gen(function* () {
-    const s3 = yield* S3.S3Client;
-
-    class ForceDestroyBucket extends S3.Bucket("ForceDestroyBucket", {
+    class ForceDestroyBucket extends Bucket("ForceDestroyBucket", {
       forceDestroy: true,
     }) {}
 
     const stack = yield* apply(ForceDestroyBucket);
 
     // Put an object in the bucket
-    yield* s3.putObject({
+    yield* S3.putObject({
       Bucket: stack.ForceDestroyBucket.bucketName,
       Key: "test-object.txt",
       Body: "Hello, World!",
     });
 
     // Verify the object exists
-    yield* s3.headObject({
+    yield* S3.headObject({
       Bucket: stack.ForceDestroyBucket.bucketName,
       Key: "test-object.txt",
     });
@@ -117,9 +112,7 @@ test(
 test(
   "idempotent create - bucket already exists",
   Effect.gen(function* () {
-    const s3 = yield* S3.S3Client;
-
-    class IdempotentBucket extends S3.Bucket("IdempotentBucket", {
+    class IdempotentBucket extends Bucket("IdempotentBucket", {
       forceDestroy: true,
     }) {}
 
@@ -140,8 +133,7 @@ test(
 class BucketStillExists extends Data.TaggedError("BucketStillExists") {}
 
 const assertBucketDeleted = Effect.fn(function* (bucketName: string) {
-  const s3 = yield* S3.S3Client;
-  yield* s3.headBucket({ Bucket: bucketName }).pipe(
+  yield* S3.headBucket({ Bucket: bucketName }).pipe(
     Effect.flatMap(() => Effect.fail(new BucketStillExists())),
     Effect.retry({
       while: (e) => e._tag === "BucketStillExists",

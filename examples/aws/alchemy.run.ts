@@ -5,6 +5,7 @@ import * as AWS from "alchemy-effect/aws";
 import * as Layer from "effect/Layer";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import { Credentials } from "distilled-aws";
 
 const AWS_REGION = Config.string("AWS_REGION").pipe(
   Config.withDefault("us-west-2"),
@@ -17,7 +18,7 @@ const AWS_PROFILE = Config.string("AWS_PROFILE").pipe(
 const stages = defineStages(
   Effect.fn(function* () {
     const profileName = yield* AWS_PROFILE;
-    const profile = yield* AWS.loadProfile(profileName);
+    const profile = yield* Credentials.loadProfile(profileName);
     if (!profile.sso_account_id) {
       return yield* Effect.dieMessage(
         `AWS SSO Profile '${profileName}' is missing sso_account_id configuration`,
@@ -44,7 +45,7 @@ const stack = defineStack({
   name: "my-aws-app",
   stages,
   resources: [Api, Consumer],
-  providers: Layer.mergeAll(AWS.providers()),
+  providers: AWS.providers(),
 });
 
 export default stack;

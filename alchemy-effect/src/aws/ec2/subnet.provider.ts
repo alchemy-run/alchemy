@@ -2,12 +2,11 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
-import type { EC2 } from "distilled-aws/ec2";
+import * as ec2 from "distilled-aws/ec2";
 
 import type { ScopedPlanStatusSession } from "../../cli/service.ts";
 import { somePropsAreDifferent } from "../../diff.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../tags.ts";
-import { EC2Client } from "./client.ts";
 import {
   Subnet,
   type SubnetAttrs,
@@ -18,8 +17,6 @@ import {
 export const subnetProvider = () =>
   Subnet.provider.effect(
     Effect.gen(function* () {
-      const ec2 = yield* EC2Client;
-
       return {
         stables: ["subnetId", "subnetArn", "ownerId", "vpcId"],
         diff: Effect.fn(function* ({ news, olds }) {
@@ -123,7 +120,7 @@ export const subnetProvider = () =>
           }
 
           // 5. Wait for subnet to be available
-          const subnet = yield* waitForSubnetAvailable(ec2, subnetId, session);
+          const subnet = yield* waitForSubnetAvailable(subnetId, session);
 
           // 6. Return attributes
           return {
@@ -299,7 +296,7 @@ export const subnetProvider = () =>
             );
 
           // 2. Wait for subnet to be fully deleted
-          yield* waitForSubnetDeleted(ec2, subnetId, session);
+          yield* waitForSubnetDeleted(subnetId, session);
 
           yield* session.note(`Subnet ${subnetId} deleted successfully`);
         }),
@@ -322,7 +319,6 @@ class SubnetStillExists extends Data.TaggedError("SubnetStillExists")<{
  * Wait for subnet to be in available state
  */
 const waitForSubnetAvailable = (
-  ec2: EC2,
   subnetId: string,
   session?: ScopedPlanStatusSession,
 ) =>
@@ -360,7 +356,6 @@ const waitForSubnetAvailable = (
  * Wait for subnet to be deleted
  */
 const waitForSubnetDeleted = (
-  ec2: EC2,
   subnetId: string,
   session: ScopedPlanStatusSession,
 ) =>

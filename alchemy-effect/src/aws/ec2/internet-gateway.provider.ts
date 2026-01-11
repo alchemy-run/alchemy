@@ -1,13 +1,12 @@
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
-import type { EC2 } from "distilled-aws/ec2";
+import * as ec2 from "distilled-aws/ec2";
 
 import type { ScopedPlanStatusSession } from "../../cli/service.ts";
 import { createInternalTags, createTagsList } from "../../tags.ts";
 import { Account } from "../account.ts";
-import { Region } from "../region.ts";
-import { EC2Client } from "./client.ts";
+import { Region } from "distilled-aws/Region";
 import {
   InternetGateway,
   type InternetGatewayAttrs,
@@ -18,7 +17,6 @@ import {
 export const internetGatewayProvider = () =>
   InternetGateway.provider.effect(
     Effect.gen(function* () {
-      const ec2 = yield* EC2Client;
       const region = yield* Region;
       const accountId = yield* Account;
 
@@ -65,7 +63,6 @@ export const internetGatewayProvider = () =>
 
           // 4. Describe to get full details
           const igw = yield* describeInternetGateway(
-            ec2,
             internetGatewayId,
             session,
           );
@@ -158,7 +155,6 @@ export const internetGatewayProvider = () =>
 
           // Re-describe to get current state
           const igw = yield* describeInternetGateway(
-            ec2,
             internetGatewayId,
             session,
           );
@@ -251,7 +247,7 @@ export const internetGatewayProvider = () =>
             );
 
           // 3. Wait for internet gateway to be fully deleted
-          yield* waitForInternetGatewayDeleted(ec2, internetGatewayId, session);
+          yield* waitForInternetGatewayDeleted(internetGatewayId, session);
 
           yield* session.note(
             `Internet gateway ${internetGatewayId} deleted successfully`,
@@ -265,7 +261,6 @@ export const internetGatewayProvider = () =>
  * Describe an internet gateway by ID
  */
 const describeInternetGateway = (
-  ec2: EC2,
   internetGatewayId: string,
   _session?: ScopedPlanStatusSession,
 ) =>
@@ -289,7 +284,6 @@ const describeInternetGateway = (
  * Wait for internet gateway to be deleted
  */
 const waitForInternetGatewayDeleted = (
-  ec2: EC2,
   internetGatewayId: string,
   session: ScopedPlanStatusSession,
 ) =>

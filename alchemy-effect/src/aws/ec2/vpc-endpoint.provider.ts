@@ -1,4 +1,4 @@
-import * as EC2 from "distilled-aws/ec2";
+import * as ec2 from "distilled-aws/ec2";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -6,8 +6,7 @@ import * as Schedule from "effect/Schedule";
 import type { ScopedPlanStatusSession } from "../../cli/service.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../tags.ts";
 import { Account } from "../account.ts";
-import { Region } from "../region.ts";
-import { EC2Client } from "./client.ts";
+import { Region } from "distilled-aws/Region";
 import {
   VpcEndpoint,
   type VpcEndpointAttrs,
@@ -19,7 +18,6 @@ export const vpcEndpointProvider = () =>
   VpcEndpoint.provider.effect(
     // @ts-expect-error - TODO: fix this
     Effect.gen(function* () {
-      const ec2 = yield* EC2Client;
       const region = yield* Region;
       const accountId = yield* Account;
 
@@ -47,7 +45,7 @@ export const vpcEndpointProvider = () =>
         );
 
       const toAttrs = (
-        ep: EC2.VpcEndpoint,
+        ep: ec2.VpcEndpoint,
       ): VpcEndpointAttrs<VpcEndpointProps> => ({
         vpcEndpointId: ep.VpcEndpointId as VpcEndpointId,
         vpcEndpointArn:
@@ -389,7 +387,6 @@ const waitForVpcEndpointAvailable = (
   session: ScopedPlanStatusSession,
 ) =>
   Effect.gen(function* () {
-    const ec2 = yield* EC2Client;
     const result = yield* ec2.describeVpcEndpoints({
       VpcEndpointIds: [vpcEndpointId],
     });
@@ -435,7 +432,6 @@ const waitForVpcEndpointDeleted = (
   session: ScopedPlanStatusSession,
 ) =>
   Effect.gen(function* () {
-    const ec2 = yield* EC2Client;
     const result = yield* ec2
       .describeVpcEndpoints({ VpcEndpointIds: [vpcEndpointId] })
       .pipe(

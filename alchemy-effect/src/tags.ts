@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import { App } from "./app.ts";
 
 export type Tags =
-  | Record<string, string>
+  | Record<string, string | undefined>
   | [string, string][]
   | { Key: string; Value: string }[];
 
@@ -23,10 +23,12 @@ export const hasTags = (expectedTags: Tags, tags: Tags | undefined) => {
 };
 
 export const createTagsList = (tags: Tags) =>
-  Object.entries(normalizeTags(tags)).map(([Key, Value]) => ({
-    Key,
-    Value,
-  }));
+  Object.entries(normalizeTags(tags))
+    .filter((t): t is [string, string] => t[1] !== undefined)
+    .map(([Key, Value]) => ({
+      Key,
+      Value,
+    }));
 
 export const createInternalTags = Effect.fn(function* (id: string) {
   const app = yield* App;

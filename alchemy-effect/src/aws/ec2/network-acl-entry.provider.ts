@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 
-import { EC2Client } from "./client.ts";
+import * as ec2 from "distilled-aws/ec2";
 import {
   NetworkAclEntry,
   type NetworkAclEntryAttrs,
@@ -11,8 +11,6 @@ export const networkAclEntryProvider = () =>
   NetworkAclEntry.provider.effect(
     // @ts-expect-error - TODO: fix this
     Effect.gen(function* () {
-      const ec2 = yield* EC2Client;
-
       const findEntry = (
         networkAclId: string,
         ruleNumber: number,

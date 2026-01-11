@@ -6,9 +6,9 @@ import type { From } from "../../policy.ts";
 import type { OnBucketEvent, S3EventType } from "./bucket.on-event.ts";
 import { Bucket } from "./bucket.ts";
 import { Function, type FunctionBinding } from "../lambda/function.ts";
-import { LambdaClient } from "../lambda/client.ts";
-import { S3Client } from "./client.ts";
 import { Account } from "../account.ts";
+import * as s3 from "distilled-aws/s3";
+import * as lambda from "distilled-aws/lambda";
 
 export interface BucketEventSourceProps {
   /**
@@ -55,8 +55,6 @@ export const bucketEventSourceProvider = () =>
   BucketEventSource.provider.effect(
     Effect.gen(function* () {
       const accountId = yield* Account;
-      const lambda = yield* LambdaClient;
-      const s3 = yield* S3Client;
 
       return {
         // Attach returns the function binding info

@@ -1,4 +1,3 @@
-export * from "./client.ts";
 export * from "./consume-bucket-notification.ts";
 export * from "./consume-queue.ts";
 export * from "./function.handler.ts";

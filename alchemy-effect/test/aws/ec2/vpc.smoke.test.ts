@@ -1,5 +1,20 @@
 import * as AWS from "@/aws";
-import * as EC2 from "@/aws/ec2";
+import {
+  Eip,
+  EgressOnlyInternetGateway,
+  InternetGateway,
+  NatGateway,
+  NetworkAcl,
+  NetworkAclAssociation,
+  NetworkAclEntry,
+  Route,
+  RouteTable,
+  RouteTableAssociation,
+  SecurityGroup,
+  Subnet,
+  Vpc,
+  VpcEndpoint,
+} from "@/aws/ec2";
 import {
   apply as _apply,
   applyPlan,
@@ -12,9 +27,11 @@ import {
 import * as Output from "@/output";
 import { test } from "@/test";
 import { expect } from "@effect/vitest";
+import * as EC2 from "distilled-aws/ec2";
 import { Data, LogLevel, Schedule } from "effect";
 import * as Effect from "effect/Effect";
 import * as Logger from "effect/Logger";
+import * as ec2 from "distilled-aws/ec2";
 
 const logLevel = Logger.withMinimumLogLevel(
   process.env.DEBUG ? LogLevel.Debug : LogLevel.Info,
@@ -34,12 +51,10 @@ test(
     timeout: 1_000_000,
   },
   Effect.gen(function* () {
-    const ec2 = yield* EC2.EC2Client;
-
     yield* destroy();
 
     // Get available AZs for multi-AZ stages
-    const azResult = yield* ec2.describeAvailabilityZones({});
+    const azResult = yield* EC2.describeAvailabilityZones({});
     const availableAzs =
       azResult.AvailabilityZones?.filter((az) => az.State === "available") ??
       [];
@@ -52,7 +67,7 @@ test(
     // =========================================================================
     yield* Effect.log("=== Stage 1: Bare Minimum VPC ===");
     {
-      class MyVpc extends EC2.Vpc("MyVpc", {
+      class MyVpc extends Vpc("MyVpc", {
         cidrBlock: "10.0.0.0/16",
       }) {}
 
@@ -63,7 +78,7 @@ test(
       expect(stack.MyVpc.cidrBlock).toEqual("10.0.0.0/16");
       expect(stack.MyVpc.state).toEqual("available");
 
-      const vpcResult = yield* ec2.describeVpcs({
+      const vpcResult = yield* EC2.describeVpcs({
         VpcIds: [stack.MyVpc.vpcId],
       });
       expect(vpcResult.Vpcs?.[0]?.CidrBlock).toEqual("10.0.0.0/16");
@@ -76,34 +91,34 @@ test(
     // =========================================================================
     yield* Effect.log("=== Stage 2: Add Internet Connectivity ===");
     {
-      class MyVpc extends EC2.Vpc("MyVpc", {
+      class MyVpc extends Vpc("MyVpc", {
         cidrBlock: "10.0.0.0/16",
         enableDnsSupport: true,
         enableDnsHostnames: true,
       }) {}
 
-      class InternetGateway extends EC2.InternetGateway("InternetGateway", {
+      class TestInternetGateway extends InternetGateway("InternetGateway", {
         vpcId: Output.of(MyVpc).vpcId,
       }) {}
 
-      class PublicSubnet1 extends EC2.Subnet("PublicSubnet1", {
+      class PublicSubnet1 extends Subnet("PublicSubnet1", {
         vpcId: Output.of(MyVpc).vpcId,
         cidrBlock: "10.0.1.0/24",
         availabilityZone: az1,
         mapPublicIpOnLaunch: true,
       }) {}
 
-      class PublicRouteTable extends EC2.RouteTable("PublicRouteTable", {
+      class PublicRouteTable extends RouteTable("PublicRouteTable", {
         vpcId: Output.of(MyVpc).vpcId,
       }) {}
 
-      class InternetRoute extends EC2.Route("InternetRoute", {
+      class InternetRoute extends Route("InternetRoute", {
         routeTableId: Output.of(PublicRouteTable).routeTableId,
         destinationCidrBlock: "0.0.0.0/0",
-        gatewayId: Output.of(InternetGateway).internetGatewayId,
+        gatewayId: Output.of(TestInternetGateway).internetGatewayId,
       }) {}
 
-      class PublicSubnet1Association extends EC2.RouteTableAssociation(
+      class PublicSubnet1Association extends RouteTableAssociation(
         "PublicSubnet1Association",
         {
           routeTableId: Output.of(PublicRouteTable).routeTableId,
@@ -113,7 +128,7 @@ test(
 
       const stack = yield* apply(
         MyVpc,
-        InternetGateway,
+        TestInternetGateway,
         PublicSubnet1,
         PublicRouteTable,
         InternetRoute,
@@ -148,44 +163,44 @@ test(
     // =========================================================================
     yield* Effect.log("=== Stage 3: Add Private Subnet ===");
     {
-      class MyVpc extends EC2.Vpc("MyVpc", {
+      class MyVpc extends Vpc("MyVpc", {
         cidrBlock: "10.0.0.0/16",
         enableDnsSupport: true,
         enableDnsHostnames: true,
       }) {}
 
-      class InternetGateway extends EC2.InternetGateway("InternetGateway", {
+      class TestInternetGateway extends InternetGateway("InternetGateway", {
         vpcId: Output.of(MyVpc).vpcId,
       }) {}
 
-      class PublicSubnet1 extends EC2.Subnet("PublicSubnet1", {
+      class PublicSubnet1 extends Subnet("PublicSubnet1", {
         vpcId: Output.of(MyVpc).vpcId,
         cidrBlock: "10.0.1.0/24",
         availabilityZone: az1,
         mapPublicIpOnLaunch: true,
       }) {}
 
-      class PrivateSubnet1 extends EC2.Subnet("PrivateSubnet1", {
+      class PrivateSubnet1 extends Subnet("PrivateSubnet1", {
         vpcId: Output.of(MyVpc).vpcId,
         cidrBlock: "10.0.10.0/24",
         availabilityZone: az1,
       }) {}
 
-      class PublicRouteTable extends EC2.RouteTable("PublicRouteTable", {
+      class PublicRouteTable extends RouteTable("PublicRouteTable", {
         vpcId: Output.of(MyVpc).vpcId,
       }) {}
 
-      class PrivateRouteTable extends EC2.RouteTable("PrivateRouteTable", {
+      class PrivateRouteTable extends RouteTable("PrivateRouteTable", {
         vpcId: Output.of(MyVpc).vpcId,
       }) {}
 
-      class InternetRoute extends EC2.Route("InternetRoute", {
+      class InternetRoute extends Route("InternetRoute", {
         routeTableId: Output.of(PublicRouteTable).routeTableId,
         destinationCidrBlock: "0.0.0.0/0",
-        gatewayId: Output.of(InternetGateway).internetGatewayId,
+        gatewayId: Output.of(TestInternetGateway).internetGatewayId,
       }) {}
 
-      class PublicSubnet1Association extends EC2.RouteTableAssociation(
+      class PublicSubnet1Association extends RouteTableAssociation(
         "PublicSubnet1Association",
         {
           routeTableId: Output.of(PublicRouteTable).routeTableId,
@@ -193,7 +208,7 @@ test(
         },
       ) {}
 
-      class PrivateSubnet1Association extends EC2.RouteTableAssociation(
+      class PrivateSubnet1Association extends RouteTableAssociation(
         "PrivateSubnet1Association",
         {
           routeTableId: Output.of(PrivateRouteTable).routeTableId,
@@ -203,7 +218,7 @@ test(
 
       const stack = yield* apply(
         MyVpc,
-        InternetGateway,
+        TestInternetGateway,
         PublicSubnet1,
         PrivateSubnet1,
         PublicRouteTable,
@@ -218,7 +233,7 @@ test(
       expect(stack.PrivateSubnet1.mapPublicIpOnLaunch).toBeFalsy();
 
       // Verify private route table has NO internet route
-      const privateRtResult = yield* ec2.describeRouteTables({
+      const privateRtResult = yield* EC2.describeRouteTables({
         RouteTableIds: [stack.PrivateRouteTable.routeTableId],
       });
       const privateRoutes = privateRtResult.RouteTables?.[0]?.Routes ?? [];
@@ -235,60 +250,60 @@ test(
     // =========================================================================
     yield* Effect.log("=== Stage 4: Multi-AZ Expansion ===");
     {
-      class MyVpc extends EC2.Vpc("MyVpc", {
+      class MyVpc extends Vpc("MyVpc", {
         cidrBlock: "10.0.0.0/16",
         enableDnsSupport: true,
         enableDnsHostnames: true,
       }) {}
 
-      class InternetGateway extends EC2.InternetGateway("InternetGateway", {
+      class TestInternetGateway extends InternetGateway("InternetGateway", {
         vpcId: Output.of(MyVpc).vpcId,
       }) {}
 
       // AZ1 subnets
-      class PublicSubnet1 extends EC2.Subnet("PublicSubnet1", {
+      class PublicSubnet1 extends Subnet("PublicSubnet1", {
         vpcId: Output.of(MyVpc).vpcId,
         cidrBlock: "10.0.1.0/24",
         availabilityZone: az1,
         mapPublicIpOnLaunch: true,
       }) {}
 
-      class PrivateSubnet1 extends EC2.Subnet("PrivateSubnet1", {
+      class PrivateSubnet1 extends Subnet("PrivateSubnet1", {
         vpcId: Output.of(MyVpc).vpcId,
         cidrBlock: "10.0.10.0/24",
         availabilityZone: az1,
       }) {}
 
       // AZ2 subnets
-      class PublicSubnet2 extends EC2.Subnet("PublicSubnet2", {
+      class PublicSubnet2 extends Subnet("PublicSubnet2", {
         vpcId: Output.of(MyVpc).vpcId,
         cidrBlock: "10.0.2.0/24",
         availabilityZone: az2,
         mapPublicIpOnLaunch: true,
       }) {}
 
-      class PrivateSubnet2 extends EC2.Subnet("PrivateSubnet2", {
+      class PrivateSubnet2 extends Subnet("PrivateSubnet2", {
         vpcId: Output.of(MyVpc).vpcId,
         cidrBlock: "10.0.11.0/24",
         availabilityZone: az2,
       }) {}
 
-      class PublicRouteTable extends EC2.RouteTable("PublicRouteTable", {
+      class PublicRouteTable extends RouteTable("PublicRouteTable", {
         vpcId: Output.of(MyVpc).vpcId,
       }) {}
 
-      class PrivateRouteTable extends EC2.RouteTable("PrivateRouteTable", {
+      class PrivateRouteTable extends RouteTable("PrivateRouteTable", {
         vpcId: Output.of(MyVpc).vpcId,
       }) {}
 
-      class InternetRoute extends EC2.Route("InternetRoute", {
+      class InternetRoute extends Route("InternetRoute", {
         routeTableId: Output.of(PublicRouteTable).routeTableId,
         destinationCidrBlock: "0.0.0.0/0",
-        gatewayId: Output.of(InternetGateway).internetGatewayId,
+        gatewayId: Output.of(TestInternetGateway).internetGatewayId,
       }) {}
 
       // AZ1 associations
-      class PublicSubnet1Association extends EC2.RouteTableAssociation(
+      class PublicSubnet1Association extends RouteTableAssociation(
         "PublicSubnet1Association",
         {
           routeTableId: Output.of(PublicRouteTable).routeTableId,
@@ -296,7 +311,7 @@ test(
         },
       ) {}
 
-      class PrivateSubnet1Association extends EC2.RouteTableAssociation(
+      class PrivateSubnet1Association extends RouteTableAssociation(
         "PrivateSubnet1Association",
         {
           routeTableId: Output.of(PrivateRouteTable).routeTableId,
@@ -305,7 +320,7 @@ test(
       ) {}
 
       // AZ2 associations (share route tables)
-      class PublicSubnet2Association extends EC2.RouteTableAssociation(
+      class PublicSubnet2Association extends RouteTableAssociation(
         "PublicSubnet2Association",
         {
           routeTableId: Output.of(PublicRouteTable).routeTableId,
@@ -313,7 +328,7 @@ test(
         },
       ) {}
 
-      class PrivateSubnet2Association extends EC2.RouteTableAssociation(
+      class PrivateSubnet2Association extends RouteTableAssociation(
         "PrivateSubnet2Association",
         {
           routeTableId: Output.of(PrivateRouteTable).routeTableId,
@@ -323,7 +338,7 @@ test(
 
       const stack = yield* apply(
         MyVpc,
-        InternetGateway,
+        TestInternetGateway,
         PublicSubnet1,
         PrivateSubnet1,
         PublicSubnet2,
@@ -370,7 +385,7 @@ test(
     // =========================================================================
     yield* Effect.log("=== Stage 5: Update Tags and Properties ===");
     {
-      class MyVpc extends EC2.Vpc("MyVpc", {
+      class MyVpc extends Vpc("MyVpc", {
         cidrBlock: "10.0.0.0/16",
         enableDnsSupport: true,
         enableDnsHostnames: true,
@@ -380,14 +395,14 @@ test(
         },
       }) {}
 
-      class InternetGateway extends EC2.InternetGateway("InternetGateway", {
+      class TestInternetGateway extends InternetGateway("InternetGateway", {
         vpcId: Output.of(MyVpc).vpcId,
         tags: {
           Name: "production-igw",
         },
       }) {}
 
-      class PublicSubnet1 extends EC2.Subnet("PublicSubnet1", {
+      class PublicSubnet1 extends Subnet("PublicSubnet1", {
         vpcId: Output.of(MyVpc).vpcId,
         cidrBlock: "10.0.1.0/24",
         availabilityZone: az1,
@@ -395,14 +410,14 @@ test(
         tags: { Name: "public-1a", Tier: "public" },
       }) {}
 
-      class PrivateSubnet1 extends EC2.Subnet("PrivateSubnet1", {
+      class PrivateSubnet1 extends Subnet("PrivateSubnet1", {
         vpcId: Output.of(MyVpc).vpcId,
         cidrBlock: "10.0.10.0/24",
         availabilityZone: az1,
         tags: { Name: "private-1a", Tier: "private" },
       }) {}
 
-      class PublicSubnet2 extends EC2.Subnet("PublicSubnet2", {
+      class PublicSubnet2 extends Subnet("PublicSubnet2", {
         vpcId: Output.of(MyVpc).vpcId,
         cidrBlock: "10.0.2.0/24",
         availabilityZone: az2,
@@ -410,30 +425,30 @@ test(
         tags: { Name: "public-1b", Tier: "public" },
       }) {}
 
-      class PrivateSubnet2 extends EC2.Subnet("PrivateSubnet2", {
+      class PrivateSubnet2 extends Subnet("PrivateSubnet2", {
         vpcId: Output.of(MyVpc).vpcId,
         cidrBlock: "10.0.11.0/24",
         availabilityZone: az2,
         tags: { Name: "private-1b", Tier: "private" },
       }) {}
 
-      class PublicRouteTable extends EC2.RouteTable("PublicRouteTable", {
+      class PublicRouteTable extends RouteTable("PublicRouteTable", {
         vpcId: Output.of(MyVpc).vpcId,
         tags: { Name: "public-rt" },
       }) {}
 
-      class PrivateRouteTable extends EC2.RouteTable("PrivateRouteTable", {
+      class PrivateRouteTable extends RouteTable("PrivateRouteTable", {
         vpcId: Output.of(MyVpc).vpcId,
         tags: { Name: "private-rt" },
       }) {}
 
-      class InternetRoute extends EC2.Route("InternetRoute", {
+      class InternetRoute extends Route("InternetRoute", {
         routeTableId: Output.of(PublicRouteTable).routeTableId,
         destinationCidrBlock: "0.0.0.0/0",
-        gatewayId: Output.of(InternetGateway).internetGatewayId,
+        gatewayId: Output.of(TestInternetGateway).internetGatewayId,
       }) {}
 
-      class PublicSubnet1Association extends EC2.RouteTableAssociation(
+      class PublicSubnet1Association extends RouteTableAssociation(
         "PublicSubnet1Association",
         {
           routeTableId: Output.of(PublicRouteTable).routeTableId,
@@ -441,7 +456,7 @@ test(
         },
       ) {}
 
-      class PrivateSubnet1Association extends EC2.RouteTableAssociation(
+      class PrivateSubnet1Association extends RouteTableAssociation(
         "PrivateSubnet1Association",
         {
           routeTableId: Output.of(PrivateRouteTable).routeTableId,
@@ -449,7 +464,7 @@ test(
         },
       ) {}
 
-      class PublicSubnet2Association extends EC2.RouteTableAssociation(
+      class PublicSubnet2Association extends RouteTableAssociation(
         "PublicSubnet2Association",
         {
           routeTableId: Output.of(PublicRouteTable).routeTableId,
@@ -457,7 +472,7 @@ test(
         },
       ) {}
 
-      class PrivateSubnet2Association extends EC2.RouteTableAssociation(
+      class PrivateSubnet2Association extends RouteTableAssociation(
         "PrivateSubnet2Association",
         {
           routeTableId: Output.of(PrivateRouteTable).routeTableId,
@@ -467,7 +482,7 @@ test(
 
       const stack = yield* apply(
         MyVpc,
-        InternetGateway,
+        TestInternetGateway,
         PublicSubnet1,
         PrivateSubnet1,
         PublicSubnet2,
@@ -495,7 +510,7 @@ test(
     // =========================================================================
     yield* Effect.log("=== Stage 6: Re-associate Subnet ===");
     {
-      class MyVpc extends EC2.Vpc("MyVpc", {
+      class MyVpc extends Vpc("MyVpc", {
         cidrBlock: "10.0.0.0/16",
         enableDnsSupport: true,
         enableDnsHostnames: true,
@@ -505,12 +520,12 @@ test(
         },
       }) {}
 
-      class InternetGateway extends EC2.InternetGateway("InternetGateway", {
+      class TestInternetGateway extends InternetGateway("InternetGateway", {
         vpcId: Output.of(MyVpc).vpcId,
         tags: { Name: "production-igw" },
       }) {}
 
-      class PublicSubnet1 extends EC2.Subnet("PublicSubnet1", {
+      class PublicSubnet1 extends Subnet("PublicSubnet1", {
         vpcId: Output.of(MyVpc).vpcId,
         cidrBlock: "10.0.1.0/24",
         availabilityZone: az1,
@@ -518,14 +533,14 @@ test(
         tags: { Name: "public-1a", Tier: "public" },
       }) {}
 
-      class PrivateSubnet1 extends EC2.Subnet("PrivateSubnet1", {
+      class PrivateSubnet1 extends Subnet("PrivateSubnet1", {
         vpcId: Output.of(MyVpc).vpcId,
         cidrBlock: "10.0.10.0/24",
         availabilityZone: az1,
         tags: { Name: "private-1a", Tier: "private" },
       }) {}
 
-      class PublicSubnet2 extends EC2.Subnet("PublicSubnet2", {
+      class PublicSubnet2 extends Subnet("PublicSubnet2", {
         vpcId: Output.of(MyVpc).vpcId,
         cidrBlock: "10.0.2.0/24",
         availabilityZone: az2,
@@ -533,43 +548,43 @@ test(
         tags: { Name: "public-1b", Tier: "public" },
       }) {}
 
-      class PrivateSubnet2 extends EC2.Subnet("PrivateSubnet2", {
+      class PrivateSubnet2 extends Subnet("PrivateSubnet2", {
         vpcId: Output.of(MyVpc).vpcId,
         cidrBlock: "10.0.11.0/24",
         availabilityZone: az2,
         tags: { Name: "private-1b", Tier: "private" },
       }) {}
 
-      class PublicRouteTable extends EC2.RouteTable("PublicRouteTable", {
+      class PublicRouteTable extends RouteTable("PublicRouteTable", {
         vpcId: Output.of(MyVpc).vpcId,
         tags: { Name: "public-rt" },
       }) {}
 
-      class PrivateRouteTable extends EC2.RouteTable("PrivateRouteTable", {
+      class PrivateRouteTable extends RouteTable("PrivateRouteTable", {
         vpcId: Output.of(MyVpc).vpcId,
         tags: { Name: "private-rt" },
       }) {}
 
       // NEW: Dedicated route table for AZ2 public subnet
-      class PublicRouteTable2 extends EC2.RouteTable("PublicRouteTable2", {
+      class PublicRouteTable2 extends RouteTable("PublicRouteTable2", {
         vpcId: Output.of(MyVpc).vpcId,
         tags: { Name: "public-rt-az2" },
       }) {}
 
-      class InternetRoute extends EC2.Route("InternetRoute", {
+      class InternetRoute extends Route("InternetRoute", {
         routeTableId: Output.of(PublicRouteTable).routeTableId,
         destinationCidrBlock: "0.0.0.0/0",
-        gatewayId: Output.of(InternetGateway).internetGatewayId,
+        gatewayId: Output.of(TestInternetGateway).internetGatewayId,
       }) {}
 
       // NEW: Internet route for AZ2 public route table
-      class InternetRoute2 extends EC2.Route("InternetRoute2", {
+      class InternetRoute2 extends Route("InternetRoute2", {
         routeTableId: Output.of(PublicRouteTable2).routeTableId,
         destinationCidrBlock: "0.0.0.0/0",
-        gatewayId: Output.of(InternetGateway).internetGatewayId,
+        gatewayId: Output.of(TestInternetGateway).internetGatewayId,
       }) {}
 
-      class PublicSubnet1Association extends EC2.RouteTableAssociation(
+      class PublicSubnet1Association extends RouteTableAssociation(
         "PublicSubnet1Association",
         {
           routeTableId: Output.of(PublicRouteTable).routeTableId,
@@ -577,7 +592,7 @@ test(
         },
       ) {}
 
-      class PrivateSubnet1Association extends EC2.RouteTableAssociation(
+      class PrivateSubnet1Association extends RouteTableAssociation(
         "PrivateSubnet1Association",
         {
           routeTableId: Output.of(PrivateRouteTable).routeTableId,
@@ -586,7 +601,7 @@ test(
       ) {}
 
       // CHANGED: PublicSubnet2 now uses PublicRouteTable2
-      class PublicSubnet2Association extends EC2.RouteTableAssociation(
+      class PublicSubnet2Association extends RouteTableAssociation(
         "PublicSubnet2Association",
         {
           routeTableId: Output.of(PublicRouteTable2).routeTableId,
@@ -594,7 +609,7 @@ test(
         },
       ) {}
 
-      class PrivateSubnet2Association extends EC2.RouteTableAssociation(
+      class PrivateSubnet2Association extends RouteTableAssociation(
         "PrivateSubnet2Association",
         {
           routeTableId: Output.of(PrivateRouteTable).routeTableId,
@@ -604,7 +619,7 @@ test(
 
       const stack = yield* apply(
         MyVpc,
-        InternetGateway,
+        TestInternetGateway,
         PublicSubnet1,
         PrivateSubnet1,
         PublicSubnet2,
@@ -639,7 +654,7 @@ test(
     // =========================================================================
     yield* Effect.log("=== Stage 7: Scale Down ===");
     {
-      class MyVpc extends EC2.Vpc("MyVpc", {
+      class MyVpc extends Vpc("MyVpc", {
         cidrBlock: "10.0.0.0/16",
         enableDnsSupport: true,
         enableDnsHostnames: true,
@@ -649,13 +664,13 @@ test(
         },
       }) {}
 
-      class InternetGateway extends EC2.InternetGateway("InternetGateway", {
+      class TestInternetGateway extends InternetGateway("InternetGateway", {
         vpcId: Output.of(MyVpc).vpcId,
         tags: { Name: "production-igw" },
       }) {}
 
       // Only AZ1 subnets remain
-      class PublicSubnet1 extends EC2.Subnet("PublicSubnet1", {
+      class PublicSubnet1 extends Subnet("PublicSubnet1", {
         vpcId: Output.of(MyVpc).vpcId,
         cidrBlock: "10.0.1.0/24",
         availabilityZone: az1,
@@ -663,30 +678,30 @@ test(
         tags: { Name: "public-1a", Tier: "public" },
       }) {}
 
-      class PrivateSubnet1 extends EC2.Subnet("PrivateSubnet1", {
+      class PrivateSubnet1 extends Subnet("PrivateSubnet1", {
         vpcId: Output.of(MyVpc).vpcId,
         cidrBlock: "10.0.10.0/24",
         availabilityZone: az1,
         tags: { Name: "private-1a", Tier: "private" },
       }) {}
 
-      class PublicRouteTable extends EC2.RouteTable("PublicRouteTable", {
+      class PublicRouteTable extends RouteTable("PublicRouteTable", {
         vpcId: Output.of(MyVpc).vpcId,
         tags: { Name: "public-rt" },
       }) {}
 
-      class PrivateRouteTable extends EC2.RouteTable("PrivateRouteTable", {
+      class PrivateRouteTable extends RouteTable("PrivateRouteTable", {
         vpcId: Output.of(MyVpc).vpcId,
         tags: { Name: "private-rt" },
       }) {}
 
-      class InternetRoute extends EC2.Route("InternetRoute", {
+      class InternetRoute extends Route("InternetRoute", {
         routeTableId: Output.of(PublicRouteTable).routeTableId,
         destinationCidrBlock: "0.0.0.0/0",
-        gatewayId: Output.of(InternetGateway).internetGatewayId,
+        gatewayId: Output.of(TestInternetGateway).internetGatewayId,
       }) {}
 
-      class PublicSubnet1Association extends EC2.RouteTableAssociation(
+      class PublicSubnet1Association extends RouteTableAssociation(
         "PublicSubnet1Association",
         {
           routeTableId: Output.of(PublicRouteTable).routeTableId,
@@ -694,7 +709,7 @@ test(
         },
       ) {}
 
-      class PrivateSubnet1Association extends EC2.RouteTableAssociation(
+      class PrivateSubnet1Association extends RouteTableAssociation(
         "PrivateSubnet1Association",
         {
           routeTableId: Output.of(PrivateRouteTable).routeTableId,
@@ -707,7 +722,7 @@ test(
 
       const stack = yield* apply(
         MyVpc,
-        InternetGateway,
+        TestInternetGateway,
         PublicSubnet1,
         PrivateSubnet1,
         PublicRouteTable,
@@ -718,7 +733,7 @@ test(
       );
 
       // Verify only 2 subnets exist now
-      const subnetsResult = yield* ec2.describeSubnets({
+      const subnetsResult = yield* EC2.describeSubnets({
         Filters: [{ Name: "vpc-id", Values: [stack.MyVpc.vpcId] }],
       });
       expect(subnetsResult.Subnets).toHaveLength(2);
@@ -736,7 +751,7 @@ test(
     // =========================================================================
     yield* Effect.log("=== Stage 8: Add NAT Gateway ===");
     {
-      class MyVpc extends EC2.Vpc("MyVpc", {
+      class MyVpc extends Vpc("MyVpc", {
         cidrBlock: "10.0.0.0/16",
         enableDnsSupport: true,
         enableDnsHostnames: true,
@@ -746,12 +761,12 @@ test(
         },
       }) {}
 
-      class InternetGateway extends EC2.InternetGateway("InternetGateway", {
+      class TestInternetGateway extends InternetGateway("InternetGateway", {
         vpcId: Output.of(MyVpc).vpcId,
         tags: { Name: "production-igw" },
       }) {}
 
-      class PublicSubnet1 extends EC2.Subnet("PublicSubnet1", {
+      class PublicSubnet1 extends Subnet("PublicSubnet1", {
         vpcId: Output.of(MyVpc).vpcId,
         cidrBlock: "10.0.1.0/24",
         availabilityZone: az1,
@@ -759,49 +774,49 @@ test(
         tags: { Name: "public-1a", Tier: "public" },
       }) {}
 
-      class PrivateSubnet1 extends EC2.Subnet("PrivateSubnet1", {
+      class PrivateSubnet1 extends Subnet("PrivateSubnet1", {
         vpcId: Output.of(MyVpc).vpcId,
         cidrBlock: "10.0.10.0/24",
         availabilityZone: az1,
         tags: { Name: "private-1a", Tier: "private" },
       }) {}
 
-      class PublicRouteTable extends EC2.RouteTable("PublicRouteTable", {
+      class PublicRouteTable extends RouteTable("PublicRouteTable", {
         vpcId: Output.of(MyVpc).vpcId,
         tags: { Name: "public-rt" },
       }) {}
 
-      class PrivateRouteTable extends EC2.RouteTable("PrivateRouteTable", {
+      class PrivateRouteTable extends RouteTable("PrivateRouteTable", {
         vpcId: Output.of(MyVpc).vpcId,
         tags: { Name: "private-rt" },
       }) {}
 
-      class InternetRoute extends EC2.Route("InternetRoute", {
+      class InternetRoute extends Route("InternetRoute", {
         routeTableId: Output.of(PublicRouteTable).routeTableId,
         destinationCidrBlock: "0.0.0.0/0",
-        gatewayId: Output.of(InternetGateway).internetGatewayId,
+        gatewayId: Output.of(TestInternetGateway).internetGatewayId,
       }) {}
 
       // NEW: Elastic IP for NAT Gateway
-      class NatEip extends EC2.Eip("NatEip", {
+      class NatEip extends Eip("NatEip", {
         tags: { Name: "nat-eip" },
       }) {}
 
       // NEW: NAT Gateway in public subnet
-      class NatGateway extends EC2.NatGateway("NatGateway", {
+      class TestNatGateway extends NatGateway("NatGateway", {
         subnetId: Output.of(PublicSubnet1).subnetId,
         allocationId: Output.of(NatEip).allocationId,
         tags: { Name: "production-nat" },
       }) {}
 
       // NEW: Route from private subnet to NAT Gateway
-      class NatRoute extends EC2.Route("NatRoute", {
+      class NatRoute extends Route("NatRoute", {
         routeTableId: Output.of(PrivateRouteTable).routeTableId,
         destinationCidrBlock: "0.0.0.0/0",
-        natGatewayId: Output.of(NatGateway).natGatewayId,
+        natGatewayId: Output.of(TestNatGateway).natGatewayId,
       }) {}
 
-      class PublicSubnet1Association extends EC2.RouteTableAssociation(
+      class PublicSubnet1Association extends RouteTableAssociation(
         "PublicSubnet1Association",
         {
           routeTableId: Output.of(PublicRouteTable).routeTableId,
@@ -809,7 +824,7 @@ test(
         },
       ) {}
 
-      class PrivateSubnet1Association extends EC2.RouteTableAssociation(
+      class PrivateSubnet1Association extends RouteTableAssociation(
         "PrivateSubnet1Association",
         {
           routeTableId: Output.of(PrivateRouteTable).routeTableId,
@@ -819,14 +834,14 @@ test(
 
       const stack = yield* apply(
         MyVpc,
-        InternetGateway,
+        TestInternetGateway,
         PublicSubnet1,
         PrivateSubnet1,
         PublicRouteTable,
         PrivateRouteTable,
         InternetRoute,
         NatEip,
-        NatGateway,
+        TestNatGateway,
         NatRoute,
         PublicSubnet1Association,
         PrivateSubnet1Association,
@@ -848,7 +863,7 @@ test(
       );
 
       // Verify private route table now has internet route via NAT
-      const privateRtResult = yield* ec2.describeRouteTables({
+      const privateRtResult = yield* EC2.describeRouteTables({
         RouteTableIds: [stack.PrivateRouteTable.routeTableId],
       });
       const privateRoutes = privateRtResult.RouteTables?.[0]?.Routes ?? [];
@@ -867,7 +882,7 @@ test(
     // =========================================================================
     yield* Effect.log("=== Stage 9: Add Security Groups ===");
     {
-      class MyVpc extends EC2.Vpc("MyVpc", {
+      class MyVpc extends Vpc("MyVpc", {
         cidrBlock: "10.0.0.0/16",
         enableDnsSupport: true,
         enableDnsHostnames: true,
@@ -877,12 +892,12 @@ test(
         },
       }) {}
 
-      class InternetGateway extends EC2.InternetGateway("InternetGateway", {
+      class TestInternetGateway extends InternetGateway("InternetGateway", {
         vpcId: Output.of(MyVpc).vpcId,
         tags: { Name: "production-igw" },
       }) {}
 
-      class PublicSubnet1 extends EC2.Subnet("PublicSubnet1", {
+      class PublicSubnet1 extends Subnet("PublicSubnet1", {
         vpcId: Output.of(MyVpc).vpcId,
         cidrBlock: "10.0.1.0/24",
         availabilityZone: az1,
@@ -890,47 +905,47 @@ test(
         tags: { Name: "public-1a", Tier: "public" },
       }) {}
 
-      class PrivateSubnet1 extends EC2.Subnet("PrivateSubnet1", {
+      class PrivateSubnet1 extends Subnet("PrivateSubnet1", {
         vpcId: Output.of(MyVpc).vpcId,
         cidrBlock: "10.0.10.0/24",
         availabilityZone: az1,
         tags: { Name: "private-1a", Tier: "private" },
       }) {}
 
-      class PublicRouteTable extends EC2.RouteTable("PublicRouteTable", {
+      class PublicRouteTable extends RouteTable("PublicRouteTable", {
         vpcId: Output.of(MyVpc).vpcId,
         tags: { Name: "public-rt" },
       }) {}
 
-      class PrivateRouteTable extends EC2.RouteTable("PrivateRouteTable", {
+      class PrivateRouteTable extends RouteTable("PrivateRouteTable", {
         vpcId: Output.of(MyVpc).vpcId,
         tags: { Name: "private-rt" },
       }) {}
 
-      class InternetRoute extends EC2.Route("InternetRoute", {
+      class InternetRoute extends Route("InternetRoute", {
         routeTableId: Output.of(PublicRouteTable).routeTableId,
         destinationCidrBlock: "0.0.0.0/0",
-        gatewayId: Output.of(InternetGateway).internetGatewayId,
+        gatewayId: Output.of(TestInternetGateway).internetGatewayId,
       }) {}
 
-      class NatEip extends EC2.Eip("NatEip", {
+      class NatEip extends Eip("NatEip", {
         tags: { Name: "nat-eip" },
       }) {}
 
-      class NatGateway extends EC2.NatGateway("NatGateway", {
+      class TestNatGateway extends NatGateway("NatGateway", {
         subnetId: Output.of(PublicSubnet1).subnetId,
         allocationId: Output.of(NatEip).allocationId,
         tags: { Name: "production-nat" },
       }) {}
 
-      class NatRoute extends EC2.Route("NatRoute", {
+      class NatRoute extends Route("NatRoute", {
         routeTableId: Output.of(PrivateRouteTable).routeTableId,
         destinationCidrBlock: "0.0.0.0/0",
-        natGatewayId: Output.of(NatGateway).natGatewayId,
+        natGatewayId: Output.of(TestNatGateway).natGatewayId,
       }) {}
 
       // NEW: Web security group allowing HTTP/HTTPS
-      class WebSecurityGroup extends EC2.SecurityGroup("WebSecurityGroup", {
+      class WebSecurityGroup extends SecurityGroup("WebSecurityGroup", {
         vpcId: Output.of(MyVpc).vpcId,
         description: "Web tier security group",
         ingress: [
@@ -960,7 +975,7 @@ test(
       }) {}
 
       // NEW: Database security group allowing access from web tier
-      class DbSecurityGroup extends EC2.SecurityGroup("DbSecurityGroup", {
+      class DbSecurityGroup extends SecurityGroup("DbSecurityGroup", {
         vpcId: Output.of(MyVpc).vpcId,
         description: "Database tier security group",
         ingress: [
@@ -982,7 +997,7 @@ test(
         tags: { Name: "db-sg" },
       }) {}
 
-      class PublicSubnet1Association extends EC2.RouteTableAssociation(
+      class PublicSubnet1Association extends RouteTableAssociation(
         "PublicSubnet1Association",
         {
           routeTableId: Output.of(PublicRouteTable).routeTableId,
@@ -990,7 +1005,7 @@ test(
         },
       ) {}
 
-      class PrivateSubnet1Association extends EC2.RouteTableAssociation(
+      class PrivateSubnet1Association extends RouteTableAssociation(
         "PrivateSubnet1Association",
         {
           routeTableId: Output.of(PrivateRouteTable).routeTableId,
@@ -1000,14 +1015,14 @@ test(
 
       const stack = yield* apply(
         MyVpc,
-        InternetGateway,
+        TestInternetGateway,
         PublicSubnet1,
         PrivateSubnet1,
         PublicRouteTable,
         PrivateRouteTable,
         InternetRoute,
         NatEip,
-        NatGateway,
+        TestNatGateway,
         NatRoute,
         WebSecurityGroup,
         DbSecurityGroup,
@@ -1036,7 +1051,7 @@ test(
     // =========================================================================
     yield* Effect.log("=== Stage 10: Scale Down to Basic VPC ===");
     {
-      class MyVpc extends EC2.Vpc("MyVpc", {
+      class MyVpc extends Vpc("MyVpc", {
         cidrBlock: "10.0.0.0/16",
         enableDnsSupport: true,
         enableDnsHostnames: true,
@@ -1046,12 +1061,12 @@ test(
         },
       }) {}
 
-      class InternetGateway extends EC2.InternetGateway("InternetGateway", {
+      class TestInternetGateway extends InternetGateway("InternetGateway", {
         vpcId: Output.of(MyVpc).vpcId,
         tags: { Name: "production-igw" },
       }) {}
 
-      class PublicSubnet1 extends EC2.Subnet("PublicSubnet1", {
+      class PublicSubnet1 extends Subnet("PublicSubnet1", {
         vpcId: Output.of(MyVpc).vpcId,
         cidrBlock: "10.0.1.0/24",
         availabilityZone: az1,
@@ -1059,30 +1074,30 @@ test(
         tags: { Name: "public-1a", Tier: "public" },
       }) {}
 
-      class PrivateSubnet1 extends EC2.Subnet("PrivateSubnet1", {
+      class PrivateSubnet1 extends Subnet("PrivateSubnet1", {
         vpcId: Output.of(MyVpc).vpcId,
         cidrBlock: "10.0.10.0/24",
         availabilityZone: az1,
         tags: { Name: "private-1a", Tier: "private" },
       }) {}
 
-      class PublicRouteTable extends EC2.RouteTable("PublicRouteTable", {
+      class PublicRouteTable extends RouteTable("PublicRouteTable", {
         vpcId: Output.of(MyVpc).vpcId,
         tags: { Name: "public-rt" },
       }) {}
 
-      class PrivateRouteTable extends EC2.RouteTable("PrivateRouteTable", {
+      class PrivateRouteTable extends RouteTable("PrivateRouteTable", {
         vpcId: Output.of(MyVpc).vpcId,
         tags: { Name: "private-rt" },
       }) {}
 
-      class InternetRoute extends EC2.Route("InternetRoute", {
+      class InternetRoute extends Route("InternetRoute", {
         routeTableId: Output.of(PublicRouteTable).routeTableId,
         destinationCidrBlock: "0.0.0.0/0",
-        gatewayId: Output.of(InternetGateway).internetGatewayId,
+        gatewayId: Output.of(TestInternetGateway).internetGatewayId,
       }) {}
 
-      class PublicSubnet1Association extends EC2.RouteTableAssociation(
+      class PublicSubnet1Association extends RouteTableAssociation(
         "PublicSubnet1Association",
         {
           routeTableId: Output.of(PublicRouteTable).routeTableId,
@@ -1090,7 +1105,7 @@ test(
         },
       ) {}
 
-      class PrivateSubnet1Association extends EC2.RouteTableAssociation(
+      class PrivateSubnet1Association extends RouteTableAssociation(
         "PrivateSubnet1Association",
         {
           routeTableId: Output.of(PrivateRouteTable).routeTableId,
@@ -1103,7 +1118,7 @@ test(
 
       const stack = yield* apply(
         MyVpc,
-        InternetGateway,
+        TestInternetGateway,
         PublicSubnet1,
         PrivateSubnet1,
         PublicRouteTable,
@@ -1126,7 +1141,7 @@ test(
       expect(natGwResult).toHaveLength(0);
 
       // Verify Security Groups are deleted (only default should remain)
-      const sgResult = yield* ec2.describeSecurityGroups({
+      const sgResult = yield* EC2.describeSecurityGroups({
         Filters: [{ Name: "vpc-id", Values: [stack.MyVpc.vpcId] }],
       });
       expect(sgResult.SecurityGroups).toHaveLength(1); // Only default SG
@@ -1138,19 +1153,16 @@ test(
     // Destroy everything and verify
     // =========================================================================
     yield* Effect.log("=== Stage 11: Final Cleanup ===");
-    const vpcId = (yield* EC2.EC2Client)
-      .describeVpcs({
-        Filters: [{ Name: "tag:Name", Values: ["production-vpc"] }],
-      })
-      .pipe(Effect.map((r) => r.Vpcs?.[0]?.VpcId));
-
-    const capturedVpcId = yield* vpcId;
+    const vpcResult = yield* EC2.describeVpcs({
+      Filters: [{ Name: "tag:Name", Values: ["production-vpc"] }],
+    });
+    const capturedVpcId = vpcResult.Vpcs?.[0]?.VpcId;
 
     yield* destroy();
 
     // Verify VPC is deleted
     if (capturedVpcId) {
-      yield* ec2.describeVpcs({ VpcIds: [capturedVpcId] }).pipe(
+      yield* EC2.describeVpcs({ VpcIds: [capturedVpcId] }).pipe(
         Effect.flatMap(() => Effect.fail(new Error("VPC still exists"))),
         Effect.catchTag("InvalidVpcID.NotFound", () => Effect.void),
       );
@@ -1166,12 +1178,10 @@ test(
     timeout: 1_000_000,
   },
   Effect.gen(function* () {
-    const ec2 = yield* EC2.EC2Client;
-
     yield* destroy();
 
     // Get available AZs
-    const azResult = yield* ec2.describeAvailabilityZones({});
+    const azResult = yield* EC2.describeAvailabilityZones({});
     const availableAzs =
       azResult.AvailabilityZones?.filter((az) => az.State === "available") ??
       [];
@@ -1183,7 +1193,7 @@ test(
     // =========================================================================
 
     // VPC with DNS enabled and IPv6 for egress-only IGW
-    class MyVpc extends EC2.Vpc("MyVpc", {
+    class MyVpc extends Vpc("MyVpc", {
       cidrBlock: "10.0.0.0/16",
       enableDnsSupport: true,
       enableDnsHostnames: true,
@@ -1195,19 +1205,19 @@ test(
     }) {}
 
     // Internet Gateway for public internet access
-    class InternetGateway extends EC2.InternetGateway("InternetGateway", {
+    class TestInternetGateway extends InternetGateway("InternetGateway", {
       vpcId: Output.of(MyVpc).vpcId,
       tags: { Name: "comprehensive-igw" },
     }) {}
 
     // Egress-Only Internet Gateway for IPv6 outbound traffic from private subnets
-    class EgressOnlyIgw extends EC2.EgressOnlyInternetGateway("EgressOnlyIgw", {
+    class EgressOnlyIgw extends EgressOnlyInternetGateway("EgressOnlyIgw", {
       vpcId: Output.of(MyVpc).vpcId,
       tags: { Name: "comprehensive-eigw" },
     }) {}
 
     // Public Subnets in two AZs
-    class PublicSubnet1 extends EC2.Subnet("PublicSubnet1", {
+    class PublicSubnet1 extends Subnet("PublicSubnet1", {
       vpcId: Output.of(MyVpc).vpcId,
       cidrBlock: "10.0.1.0/24",
       availabilityZone: az1,
@@ -1215,7 +1225,7 @@ test(
       tags: { Name: "public-1a", Tier: "public" },
     }) {}
 
-    class PublicSubnet2 extends EC2.Subnet("PublicSubnet2", {
+    class PublicSubnet2 extends Subnet("PublicSubnet2", {
       vpcId: Output.of(MyVpc).vpcId,
       cidrBlock: "10.0.2.0/24",
       availabilityZone: az2,
@@ -1224,14 +1234,14 @@ test(
     }) {}
 
     // Private Subnets in two AZs
-    class PrivateSubnet1 extends EC2.Subnet("PrivateSubnet1", {
+    class PrivateSubnet1 extends Subnet("PrivateSubnet1", {
       vpcId: Output.of(MyVpc).vpcId,
       cidrBlock: "10.0.10.0/24",
       availabilityZone: az1,
       tags: { Name: "private-1a", Tier: "private" },
     }) {}
 
-    class PrivateSubnet2 extends EC2.Subnet("PrivateSubnet2", {
+    class PrivateSubnet2 extends Subnet("PrivateSubnet2", {
       vpcId: Output.of(MyVpc).vpcId,
       cidrBlock: "10.0.11.0/24",
       availabilityZone: az2,
@@ -1239,65 +1249,65 @@ test(
     }) {}
 
     // Route Tables
-    class PublicRouteTable extends EC2.RouteTable("PublicRouteTable", {
+    class PublicRouteTable extends RouteTable("PublicRouteTable", {
       vpcId: Output.of(MyVpc).vpcId,
       tags: { Name: "public-rt" },
     }) {}
 
-    class PrivateRouteTable1 extends EC2.RouteTable("PrivateRouteTable1", {
+    class PrivateRouteTable1 extends RouteTable("PrivateRouteTable1", {
       vpcId: Output.of(MyVpc).vpcId,
       tags: { Name: "private-rt-1" },
     }) {}
 
-    class PrivateRouteTable2 extends EC2.RouteTable("PrivateRouteTable2", {
+    class PrivateRouteTable2 extends RouteTable("PrivateRouteTable2", {
       vpcId: Output.of(MyVpc).vpcId,
       tags: { Name: "private-rt-2" },
     }) {}
 
     // Internet route for public subnets
-    class InternetRoute extends EC2.Route("InternetRoute", {
+    class InternetRoute extends Route("InternetRoute", {
       routeTableId: Output.of(PublicRouteTable).routeTableId,
       destinationCidrBlock: "0.0.0.0/0",
-      gatewayId: Output.of(InternetGateway).internetGatewayId,
+      gatewayId: Output.of(TestInternetGateway).internetGatewayId,
     }) {}
 
     // NAT Gateway with EIP for AZ1
-    class NatEip1 extends EC2.Eip("NatEip1", {
+    class NatEip1 extends Eip("NatEip1", {
       tags: { Name: "nat-eip-1" },
     }) {}
 
-    class NatGateway1 extends EC2.NatGateway("NatGateway1", {
+    class TestNatGateway1 extends NatGateway("NatGateway1", {
       subnetId: Output.of(PublicSubnet1).subnetId,
       allocationId: Output.of(NatEip1).allocationId,
       tags: { Name: "nat-gateway-1" },
     }) {}
 
     // NAT Gateway with EIP for AZ2
-    class NatEip2 extends EC2.Eip("NatEip2", {
+    class NatEip2 extends Eip("NatEip2", {
       tags: { Name: "nat-eip-2" },
     }) {}
 
-    class NatGateway2 extends EC2.NatGateway("NatGateway2", {
+    class TestNatGateway2 extends NatGateway("NatGateway2", {
       subnetId: Output.of(PublicSubnet2).subnetId,
       allocationId: Output.of(NatEip2).allocationId,
       tags: { Name: "nat-gateway-2" },
     }) {}
 
     // NAT routes for private subnets (each AZ routes to its own NAT)
-    class NatRoute1 extends EC2.Route("NatRoute1", {
+    class NatRoute1 extends Route("NatRoute1", {
       routeTableId: Output.of(PrivateRouteTable1).routeTableId,
       destinationCidrBlock: "0.0.0.0/0",
-      natGatewayId: Output.of(NatGateway1).natGatewayId,
+      natGatewayId: Output.of(TestNatGateway1).natGatewayId,
     }) {}
 
-    class NatRoute2 extends EC2.Route("NatRoute2", {
+    class NatRoute2 extends Route("NatRoute2", {
       routeTableId: Output.of(PrivateRouteTable2).routeTableId,
       destinationCidrBlock: "0.0.0.0/0",
-      natGatewayId: Output.of(NatGateway2).natGatewayId,
+      natGatewayId: Output.of(TestNatGateway2).natGatewayId,
     }) {}
 
     // Route Table Associations
-    class PublicSubnet1Association extends EC2.RouteTableAssociation(
+    class PublicSubnet1Association extends RouteTableAssociation(
       "PublicSubnet1Association",
       {
         routeTableId: Output.of(PublicRouteTable).routeTableId,
@@ -1305,7 +1315,7 @@ test(
       },
     ) {}
 
-    class PublicSubnet2Association extends EC2.RouteTableAssociation(
+    class PublicSubnet2Association extends RouteTableAssociation(
       "PublicSubnet2Association",
       {
         routeTableId: Output.of(PublicRouteTable).routeTableId,
@@ -1313,7 +1323,7 @@ test(
       },
     ) {}
 
-    class PrivateSubnet1Association extends EC2.RouteTableAssociation(
+    class PrivateSubnet1Association extends RouteTableAssociation(
       "PrivateSubnet1Association",
       {
         routeTableId: Output.of(PrivateRouteTable1).routeTableId,
@@ -1321,7 +1331,7 @@ test(
       },
     ) {}
 
-    class PrivateSubnet2Association extends EC2.RouteTableAssociation(
+    class PrivateSubnet2Association extends RouteTableAssociation(
       "PrivateSubnet2Association",
       {
         routeTableId: Output.of(PrivateRouteTable2).routeTableId,
@@ -1330,7 +1340,7 @@ test(
     ) {}
 
     // Security Groups
-    class WebSecurityGroup extends EC2.SecurityGroup("WebSecurityGroup", {
+    class WebSecurityGroup extends SecurityGroup("WebSecurityGroup", {
       vpcId: Output.of(MyVpc).vpcId,
       description: "Web tier security group",
       ingress: [
@@ -1359,7 +1369,7 @@ test(
       tags: { Name: "web-sg" },
     }) {}
 
-    class AppSecurityGroup extends EC2.SecurityGroup("AppSecurityGroup", {
+    class AppSecurityGroup extends SecurityGroup("AppSecurityGroup", {
       vpcId: Output.of(MyVpc).vpcId,
       description: "Application tier security group",
       ingress: [
@@ -1381,7 +1391,7 @@ test(
       tags: { Name: "app-sg" },
     }) {}
 
-    class DbSecurityGroup extends EC2.SecurityGroup("DbSecurityGroup", {
+    class DbSecurityGroup extends SecurityGroup("DbSecurityGroup", {
       vpcId: Output.of(MyVpc).vpcId,
       description: "Database tier security group",
       ingress: [
@@ -1404,14 +1414,14 @@ test(
     }) {}
 
     // Network ACL for private subnets with custom rules
-    class PrivateNetworkAcl extends EC2.NetworkAcl("PrivateNetworkAcl", {
+    class PrivateNetworkAcl extends NetworkAcl("PrivateNetworkAcl", {
       vpcId: Output.of(MyVpc).vpcId,
       tags: { Name: "private-nacl" },
     }) {}
 
     // Network ACL Entries (rules)
     // Allow inbound traffic from VPC CIDR
-    class PrivateNaclIngressVpc extends EC2.NetworkAclEntry(
+    class PrivateNaclIngressVpc extends NetworkAclEntry(
       "PrivateNaclIngressVpc",
       {
         networkAclId: Output.of(PrivateNetworkAcl).networkAclId,
@@ -1424,7 +1434,7 @@ test(
     ) {}
 
     // Allow inbound ephemeral ports (for NAT return traffic)
-    class PrivateNaclIngressEphemeral extends EC2.NetworkAclEntry(
+    class PrivateNaclIngressEphemeral extends NetworkAclEntry(
       "PrivateNaclIngressEphemeral",
       {
         networkAclId: Output.of(PrivateNetworkAcl).networkAclId,
@@ -1438,20 +1448,17 @@ test(
     ) {}
 
     // Allow all outbound traffic
-    class PrivateNaclEgressAll extends EC2.NetworkAclEntry(
-      "PrivateNaclEgressAll",
-      {
-        networkAclId: Output.of(PrivateNetworkAcl).networkAclId,
-        ruleNumber: 100,
-        protocol: "-1", // All protocols
-        ruleAction: "allow",
-        egress: true,
-        cidrBlock: "0.0.0.0/0",
-      },
-    ) {}
+    class PrivateNaclEgressAll extends NetworkAclEntry("PrivateNaclEgressAll", {
+      networkAclId: Output.of(PrivateNetworkAcl).networkAclId,
+      ruleNumber: 100,
+      protocol: "-1", // All protocols
+      ruleAction: "allow",
+      egress: true,
+      cidrBlock: "0.0.0.0/0",
+    }) {}
 
     // Network ACL Associations - associate private subnets with the custom NACL
-    class PrivateSubnet1NaclAssoc extends EC2.NetworkAclAssociation(
+    class PrivateSubnet1NaclAssoc extends NetworkAclAssociation(
       "PrivateSubnet1NaclAssoc",
       {
         networkAclId: Output.of(PrivateNetworkAcl).networkAclId,
@@ -1459,7 +1466,7 @@ test(
       },
     ) {}
 
-    class PrivateSubnet2NaclAssoc extends EC2.NetworkAclAssociation(
+    class PrivateSubnet2NaclAssoc extends NetworkAclAssociation(
       "PrivateSubnet2NaclAssoc",
       {
         networkAclId: Output.of(PrivateNetworkAcl).networkAclId,
@@ -1468,10 +1475,10 @@ test(
     ) {}
 
     // VPC Gateway Endpoint for S3 (reduces NAT costs and improves latency)
-    class S3Endpoint extends EC2.VpcEndpoint("S3Endpoint", {
+    class S3Endpoint extends VpcEndpoint("S3Endpoint", {
       vpcId: Output.of(MyVpc).vpcId,
       serviceName: `com.amazonaws.${
-        (yield* ec2.describeAvailabilityZones({})).AvailabilityZones?.[0]
+        (yield* EC2.describeAvailabilityZones({})).AvailabilityZones?.[0]
           ?.RegionName
       }.s3`,
       vpcEndpointType: "Gateway",
@@ -1487,7 +1494,7 @@ test(
     // =========================================================================
     const stack = yield* apply(
       MyVpc,
-      InternetGateway,
+      TestInternetGateway,
       EgressOnlyIgw,
       PublicSubnet1,
       PublicSubnet2,
@@ -1499,8 +1506,8 @@ test(
       InternetRoute,
       NatEip1,
       NatEip2,
-      NatGateway1,
-      NatGateway2,
+      TestNatGateway1,
+      TestNatGateway2,
       NatRoute1,
       NatRoute2,
       PublicSubnet1Association,
@@ -1526,19 +1533,19 @@ test(
     expect(stack.MyVpc.cidrBlock).toEqual("10.0.0.0/16");
     expect(stack.MyVpc.state).toEqual("available");
 
-    const vpcResult = yield* ec2.describeVpcs({
+    const vpcResult = yield* EC2.describeVpcs({
       VpcIds: [stack.MyVpc.vpcId],
     });
     expect(vpcResult.Vpcs?.[0]?.CidrBlock).toEqual("10.0.0.0/16");
     // EnableDnsSupport and EnableDnsHostnames are not present in the describeVpcs output.
     // Instead, use describeVpcAttribute for these:
-    const dnsSupport = yield* ec2.describeVpcAttribute({
+    const dnsSupport = yield* EC2.describeVpcAttribute({
       VpcId: stack.MyVpc.vpcId,
       Attribute: "enableDnsSupport",
     });
     expect(dnsSupport.EnableDnsSupport?.Value).toBeTruthy();
 
-    const dnsHostnames = yield* ec2.describeVpcAttribute({
+    const dnsHostnames = yield* EC2.describeVpcAttribute({
       VpcId: stack.MyVpc.vpcId,
       Attribute: "enableDnsHostnames",
     });
@@ -1583,7 +1590,7 @@ test(
     expect(stack.PrivateSubnet2.mapPublicIpOnLaunch).toBeFalsy();
 
     // Verify 4 subnets total
-    const subnetsResult = yield* ec2.describeSubnets({
+    const subnetsResult = yield* EC2.describeSubnets({
       Filters: [{ Name: "vpc-id", Values: [stack.MyVpc.vpcId] }],
     });
     expect(subnetsResult.Subnets).toHaveLength(4);
@@ -1628,7 +1635,7 @@ test(
     );
 
     // Verify public route table has internet route
-    const publicRtResult = yield* ec2.describeRouteTables({
+    const publicRtResult = yield* EC2.describeRouteTables({
       RouteTableIds: [stack.PublicRouteTable.routeTableId],
     });
     const publicRoutes = publicRtResult.RouteTables?.[0]?.Routes ?? [];
@@ -1640,7 +1647,7 @@ test(
     );
 
     // Verify private route tables have NAT routes
-    const private1RtResult = yield* ec2.describeRouteTables({
+    const private1RtResult = yield* EC2.describeRouteTables({
       RouteTableIds: [stack.PrivateRouteTable1.routeTableId],
     });
     const private1Routes = private1RtResult.RouteTables?.[0]?.Routes ?? [];
@@ -1651,7 +1658,7 @@ test(
       stack.NatGateway1.natGatewayId,
     );
 
-    const private2RtResult = yield* ec2.describeRouteTables({
+    const private2RtResult = yield* EC2.describeRouteTables({
       RouteTableIds: [stack.PrivateRouteTable2.routeTableId],
     });
     const private2Routes = private2RtResult.RouteTables?.[0]?.Routes ?? [];
@@ -1704,7 +1711,7 @@ test(
     );
 
     // Verify security groups in AWS
-    const sgResult = yield* ec2.describeSecurityGroups({
+    const sgResult = yield* EC2.describeSecurityGroups({
       Filters: [{ Name: "vpc-id", Values: [stack.MyVpc.vpcId] }],
     });
     // 4 security groups: default + web + app + db
@@ -1718,7 +1725,7 @@ test(
     expect(stack.PrivateNetworkAcl.isDefault).toEqual(false);
 
     // Verify Network ACL in AWS
-    const naclResult = yield* ec2.describeNetworkAcls({
+    const naclResult = yield* EC2.describeNetworkAcls({
       NetworkAclIds: [stack.PrivateNetworkAcl.networkAclId],
     });
     expect(naclResult.NetworkAcls).toHaveLength(1);
@@ -1774,7 +1781,7 @@ test(
     );
 
     // Verify VPC Endpoint in AWS
-    const vpceResult = yield* ec2.describeVpcEndpoints({
+    const vpceResult = yield* EC2.describeVpcEndpoints({
       VpcEndpointIds: [stack.S3Endpoint.vpcEndpointId],
     });
     expect(vpceResult.VpcEndpoints).toHaveLength(1);
@@ -1794,7 +1801,7 @@ test(
     yield* Effect.log("=== Idempotency Check: Re-applying stack ===");
     const stack2 = yield* apply(
       MyVpc,
-      InternetGateway,
+      TestInternetGateway,
       EgressOnlyIgw,
       PublicSubnet1,
       PublicSubnet2,
@@ -1806,8 +1813,8 @@ test(
       InternetRoute,
       NatEip1,
       NatEip2,
-      NatGateway1,
-      NatGateway2,
+      TestNatGateway1,
+      TestNatGateway2,
       NatRoute1,
       NatRoute2,
       PublicSubnet1Association,
@@ -1856,7 +1863,7 @@ test(
     yield* destroy();
 
     // Verify VPC is deleted
-    yield* ec2.describeVpcs({ VpcIds: [capturedVpcId] }).pipe(
+    yield* EC2.describeVpcs({ VpcIds: [capturedVpcId] }).pipe(
       Effect.flatMap(() => Effect.fail(new Error("VPC still exists"))),
       Effect.catchTag("InvalidVpcID.NotFound", () => Effect.void),
     );
@@ -1881,9 +1888,7 @@ const assertVpcTags = Effect.fn(function* (
   vpcId: string,
   expectedTags: Record<string, string>,
 ) {
-  const ec2 = yield* EC2.EC2Client;
-
-  yield* ec2.describeVpcs({ VpcIds: [vpcId] }).pipe(
+  yield* EC2.describeVpcs({ VpcIds: [vpcId] }).pipe(
     Effect.flatMap((result) => {
       const tags = result.Vpcs?.[0]?.Tags ?? [];
       const actual: Record<string, string | undefined> = {};

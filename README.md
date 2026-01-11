@@ -154,7 +154,7 @@ const Monitor = <const ID extends string, ReqAlarm, ReqResolved>(
     bindings,
     ...props
   }: Props) =>
-    Lambda.consume(id, {
+    Lambda.consumeQueue(id, {
       queue: Messages,
       handle: Effect.fn(function* (batch) {
         yield* SQS.sendMessage(Messages, {

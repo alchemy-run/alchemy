@@ -4,16 +4,14 @@ import * as Schedule from "effect/Schedule";
 import { createPhysicalName } from "../../physical-name.ts";
 import { diffTags } from "../../tags.ts";
 import { Account } from "../account.ts";
-import { Region } from "../region.ts";
-import { S3Client } from "./client.ts";
+import { Region } from "distilled-aws/Region";
 import { Bucket } from "./bucket.ts";
+import * as s3 from "distilled-aws/s3";
 import type { BucketLocationConstraint } from "distilled-aws/s3";
 
 export const bucketProvider = () =>
   Bucket.provider.effect(
     Effect.gen(function* () {
-      const s3 = yield* S3Client;
-
       const createBucketName = (
         id: string,
         props: { bucketName?: string | undefined },

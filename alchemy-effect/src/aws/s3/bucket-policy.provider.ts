@@ -1,13 +1,11 @@
 import * as Effect from "effect/Effect";
 
-import { S3Client } from "./client.ts";
 import { BucketPolicy } from "./bucket-policy.ts";
+import * as s3 from "distilled-aws/s3";
 
 export const bucketPolicyProvider = () =>
   BucketPolicy.provider.effect(
     Effect.gen(function* () {
-      const s3 = yield* S3Client;
-
       return {
         stables: ["bucket"],
         diff: Effect.fn(function* ({ news, olds }) {

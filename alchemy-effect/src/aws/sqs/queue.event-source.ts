@@ -7,10 +7,13 @@ import { createInternalTags, hasTags } from "../../tags.ts";
 import type { Consume } from "./queue.consume.ts";
 import { Queue, type QueueAttrs, type QueueProps } from "./queue.ts";
 import { Function, type FunctionBinding } from "../lambda/function.ts";
-import { LambdaClient } from "../lambda/client.ts";
+import * as lambda from "distilled-aws/lambda";
 import { Account } from "../account.ts";
-import { Region } from "../region.ts";
+import { Region } from "distilled-aws/Region";
 import type { App } from "../../index.ts";
+import type { CommonAwsError } from "distilled-aws/Errors";
+import type { Credentials } from "distilled-aws/Credentials";
+import type { HttpClient } from "@effect/platform/HttpClient";
 
 export interface QueueEventSourceProps {
   batchSize?: number;
@@ -45,7 +48,6 @@ export const queueEventSourceProvider = () =>
     Effect.gen(function* () {
       const accountId = yield* Account;
       const region = yield* Region;
-      const lambda = yield* LambdaClient;
 
       const findEventSourceMapping: (
         queue: {
@@ -58,7 +60,7 @@ export const queueEventSourceProvider = () =>
       ) => Effect.Effect<
         Lambda.EventSourceMappingConfiguration | undefined,
         never,
-        App
+        App | Credentials | Region | HttpClient
       > = Effect.fn(function* (queue, functionName, marker) {
         const retry = Effect.retry({
           while: (
@@ -67,7 +69,7 @@ export const queueEventSourceProvider = () =>
               | Lambda.ResourceNotFoundException
               | Lambda.ServiceException
               | Lambda.TooManyRequestsException
-              | Lambda.CommonAwsError
+              | CommonAwsError
               | any,
           ) =>
             // TODO(sam): figure out how to write a function that generalizes this or upstream into distilled-aws

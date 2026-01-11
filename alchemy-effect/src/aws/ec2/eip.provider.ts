@@ -3,14 +3,13 @@ import * as Schedule from "effect/Schedule";
 
 import { createInternalTags, createTagsList, diffTags } from "../../tags.ts";
 import { Account } from "../account.ts";
-import { Region } from "../region.ts";
-import { EC2Client } from "./client.ts";
+import { Region } from "distilled-aws/Region";
 import { Eip, type AllocationId, type EipAttrs, type EipProps } from "./eip.ts";
+import * as ec2 from "distilled-aws/ec2";
 
 export const eipProvider = () =>
   Eip.provider.effect(
     Effect.gen(function* () {
-      const ec2 = yield* EC2Client;
       const region = yield* Region;
       const accountId = yield* Account;
 
@@ -160,14 +159,13 @@ export const eipProvider = () =>
                 () => Effect.void,
               ),
               Effect.catchTag("AuthFailure", () => Effect.void),
-              Effect.tapError((e) => {
-                return Effect.logDebug(e);
-              }),
+              Effect.tapError(Effect.logDebug),
               // Retry when EIP is still in use (e.g., NAT Gateway being deleted)
               Effect.retry({
                 while: (e) => {
                   return (
-                    e._tag === "DependencyViolation" ||
+                    // TODO(sam): not sure if the API will actually throw this
+                    // e._tag === "DependencyViolation" ||
                     // this throws if the address hasn't been disassociated from all resources
                     // we will retry it assuming that another resource provider is dissassociating it (e.g. a NAT Gateway resource is being deleted)
                     e._tag === "InvalidIPAddress.InUse"

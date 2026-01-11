@@ -1,14 +1,14 @@
 import * as Layer from "effect/Layer";
 import * as ESBuild from "../esbuild.ts";
 import * as Account from "./account.ts";
+import * as Credentials from "./credentials.ts";
 import * as DynamoDB from "./dynamodb/index.ts";
 import * as EC2 from "./ec2/index.ts";
+import * as Endpoint from "./endpoint.ts";
 import * as Lambda from "./lambda/index.ts";
 import * as Region from "./region.ts";
 import * as S3 from "./s3/index.ts";
 import * as SQS from "./sqs/index.ts";
-import * as Endpoint from "./endpoint.ts";
-import * as Credentials from "./credentials.ts";
 
 import "./config.ts";
 
@@ -60,4 +60,10 @@ export const config = <L extends Layer.Layer<any, any, any>>(layer: L) =>
     Layer.provideMerge(Endpoint.fromStageConfig()),
   );
 
-export const providers = () => bareProviders().pipe(config);
+export const providers = () =>
+  bareProviders().pipe(
+    Layer.provideMerge(Account.fromStageConfig()),
+    Layer.provideMerge(Region.fromStageConfig()),
+    Layer.provideMerge(Credentials.fromStageConfig()),
+    Layer.provideMerge(Endpoint.fromStageConfig()),
+  );

@@ -1,6 +1,6 @@
 import type { Input } from "../../input.ts";
 import { Resource } from "../../resource.ts";
-import type { PolicyDocument } from "../iam.ts";
+import type { PolicyDocument } from "../iam/index.ts";
 import type { BucketName } from "./bucket.ts";
 
 export interface BucketPolicyProps {

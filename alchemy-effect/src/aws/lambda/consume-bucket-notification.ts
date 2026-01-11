@@ -39,11 +39,3 @@ export const consumeBucketNotification =
       ...props,
       bindings: bindings.and(BucketEventSource(bucket, eventSourceProps)),
     });
-
-
-
-
-
-
-
-

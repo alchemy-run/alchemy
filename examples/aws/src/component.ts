@@ -22,7 +22,7 @@ const MonitorSimple = <const ID extends string, Req>(
     schema: Message,
   }) {}
 
-  return Lambda.consume(id, {
+  return Lambda.consumeQueue(id, {
     queue: Messages,
     handle: Effect.fn(function* (event) {
       for (const record of event.Records) {
@@ -82,7 +82,7 @@ const MonitorComplex = <const ID extends string, ReqAlarm, ReqResolved>(
     bindings,
     ...props
   }: Props) =>
-    Lambda.consume(id, {
+    Lambda.consumeQueue(id, {
       queue: Messages,
       handle: Effect.fn(function* (batch) {
         yield* SQS.sendMessage(Messages, {

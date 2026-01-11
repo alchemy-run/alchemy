@@ -1,12 +1,11 @@
-import * as EC2 from "distilled-aws/ec2";
+import * as ec2 from "distilled-aws/ec2";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
 import { createPhysicalName } from "../../physical-name.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../tags.ts";
 import { Account } from "../account.ts";
-import { Region } from "../region.ts";
-import { EC2Client } from "./client.ts";
+import { Region } from "distilled-aws/Region";
 import {
   type SecurityGroupArn,
   type SecurityGroupRuleData,
@@ -19,7 +18,6 @@ import type { VpcId } from "./vpc.ts";
 export const securityGroupProvider = () =>
   SecurityGroup.provider.effect(
     Effect.gen(function* () {
-      const ec2 = yield* EC2Client;
       const region = yield* Region;
       const accountId = yield* Account;
 
@@ -56,8 +54,8 @@ export const securityGroupProvider = () =>
         });
 
       const toAttrs = (
-        sg: EC2.SecurityGroup,
-        rules: EC2.SecurityGroupRule[],
+        sg: ec2.SecurityGroup,
+        rules: ec2.SecurityGroupRule[],
       ): SecurityGroupAttrs => ({
         groupId: sg.GroupId as SecurityGroupId,
         groupArn:
@@ -98,7 +96,7 @@ export const securityGroupProvider = () =>
 
       const toIpPermission = (
         rule: SecurityGroupRuleData,
-      ): EC2.IpPermission => ({
+      ): ec2.IpPermission => ({
         IpProtocol: rule.ipProtocol,
         FromPort: rule.fromPort,
         ToPort: rule.toPort,

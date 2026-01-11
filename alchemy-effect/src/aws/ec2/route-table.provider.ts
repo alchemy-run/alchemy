@@ -1,13 +1,12 @@
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
-import type { EC2 } from "distilled-aws/ec2";
+import * as ec2 from "distilled-aws/ec2";
 
 import type { ScopedPlanStatusSession } from "../../cli/service.ts";
 import { createInternalTags, createTagsList } from "../../tags.ts";
 import { Account } from "../account.ts";
-import { Region } from "../region.ts";
-import { EC2Client } from "./client.ts";
+import { Region } from "distilled-aws/Region";
 import {
   RouteTable,
   type RouteTableAttrs,
@@ -18,7 +17,6 @@ import {
 export const routeTableProvider = () =>
   RouteTable.provider.effect(
     Effect.gen(function* () {
-      const ec2 = yield* EC2Client;
       const region = yield* Region;
       const accountId = yield* Account;
 
@@ -63,11 +61,7 @@ export const routeTableProvider = () =>
           yield* session.note(`Route table created: ${routeTableId}`);
 
           // 3. Describe to get full details
-          const routeTable = yield* describeRouteTable(
-            ec2,
-            routeTableId,
-            session,
-          );
+          const routeTable = yield* describeRouteTable(routeTableId, session);
 
           // 4. Return attributes
           return {
@@ -148,11 +142,7 @@ export const routeTableProvider = () =>
           }
 
           // Re-describe to get current state
-          const routeTable = yield* describeRouteTable(
-            ec2,
-            routeTableId,
-            session,
-          );
+          const routeTable = yield* describeRouteTable(routeTableId, session);
 
           return {
             ...output,
@@ -228,7 +218,7 @@ export const routeTableProvider = () =>
             );
 
           // 2. Wait for route table to be fully deleted
-          yield* waitForRouteTableDeleted(ec2, routeTableId, session);
+          yield* waitForRouteTableDeleted(routeTableId, session);
 
           yield* session.note(
             `Route table ${routeTableId} deleted successfully`,
@@ -242,7 +232,6 @@ export const routeTableProvider = () =>
  * Describe a route table by ID
  */
 const describeRouteTable = (
-  ec2: EC2,
   routeTableId: string,
   _session?: ScopedPlanStatusSession,
 ) =>
@@ -266,7 +255,6 @@ const describeRouteTable = (
  * Wait for route table to be deleted
  */
 const waitForRouteTableDeleted = (
-  ec2: EC2,
   routeTableId: string,
   session: ScopedPlanStatusSession,
 ) =>

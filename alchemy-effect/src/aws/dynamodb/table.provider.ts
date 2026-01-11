@@ -8,7 +8,6 @@ import type { Input } from "../../input.ts";
 import type { Provider } from "../../provider.ts";
 import { createInternalTags, hasTags } from "../../tags.ts";
 import { isScalarAttributeType, toAttributeType } from "./attribute-value.ts";
-import { DynamoDBClient } from "./client.ts";
 import {
   Table,
   type AnyTable,
@@ -17,16 +16,19 @@ import {
   type TableProps,
 } from "./table.ts";
 import { createPhysicalName } from "../../physical-name.ts";
+import * as dynamodb from "distilled-aws/dynamodb";
+import type { Region } from "distilled-aws/Region";
+import type { Credentials } from "distilled-aws/Credentials";
+import type { HttpClient } from "@effect/platform/HttpClient";
 
 // we add an explict type to simplify the Layer type errors because the Table interface has a lot of type args
 export const tableProvider = (): Layer.Layer<
   Provider<AnyTable>,
   never,
-  App | DynamoDBClient
+  App | Region | Credentials | HttpClient
 > =>
   Table.provider.effect(
     Effect.gen(function* () {
-      const dynamodb = yield* DynamoDBClient;
       const app = yield* App;
 
       const createTableName = (
