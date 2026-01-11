@@ -70,6 +70,11 @@
       "bun": "./src/aws/credentials.ts",
       "import": "./lib/aws/credentials.js"
     },
+    "./aws/s3-state-store": {
+      "types": "./lib/aws/s3-state-store.d.ts",
+      "bun": "./src/aws/s3-state-store.ts",
+      "import": "./lib/aws/s3-state-store.js"
+    },
     "./cli": {
       "types": "./lib/cli/index.d.ts",
       "bun": "./src/cli/index.ts",

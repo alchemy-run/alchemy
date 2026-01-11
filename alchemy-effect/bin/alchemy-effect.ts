@@ -21,6 +21,7 @@ import * as App from "../src/app.ts";
 import type { Stack } from "../src/stack.ts";
 import * as CLI from "../src/cli/index.ts";
 import { Resource } from "../src/resource.ts";
+import { bootstrapS3Command } from "../src/commands/bootstrap-s3.ts";
 
 const USER = Config.string("USER").pipe(
   Config.orElse(() => Config.string("USERNAME")),
@@ -248,7 +249,12 @@ const execStack = Effect.fn(function* ({
 });
 
 const root = Command.make("alchemy-effect", {}).pipe(
-  Command.withSubcommands([deployCommand, destroyCommand, planCommand]),
+  Command.withSubcommands([
+    deployCommand,
+    destroyCommand,
+    planCommand,
+    bootstrapS3Command,
+  ]),
 );
 
 // Set up the CLI application

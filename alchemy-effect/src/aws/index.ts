@@ -11,6 +11,7 @@ import * as IAM from "./iam.ts";
 import * as Lambda from "./lambda/index.ts";
 import * as Region from "./region.ts";
 import * as S3 from "./s3.ts";
+import * as S3StateStore from "./s3-state-store.ts";
 import * as SQS from "./sqs/index.ts";
 import * as STS from "./sts.ts";
 
@@ -70,3 +71,6 @@ export const providers = () =>
     Layer.provideMerge(Region.fromStageConfig()),
     Layer.provideMerge(Credentials.fromStageConfig()),
   );
+
+// Re-export S3StateStore for convenience
+export { S3StateStore };
