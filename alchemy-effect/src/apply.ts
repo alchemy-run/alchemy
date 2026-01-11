@@ -3,7 +3,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type { Simplify } from "effect/Types";
 import { App } from "./app.ts";
-import type { AnyBinding, BindingService } from "./binding.ts";
+import type { AnyBinding, BindingProvider } from "./binding.ts";
 import {
   type PlanStatusSession,
   type ScopedPlanStatusSession,
@@ -127,7 +127,7 @@ const expandAndPivot = Effect.fnUntraced(function* (
   }) {
     const binding = node.binding as AnyBinding & {
       // smuggled property (because it interacts poorly with inference)
-      Tag: Context.Tag<never, BindingService>;
+      Tag: Context.Tag<never, BindingProvider>;
     };
     const provider = yield* binding.Tag;
     const resourceId: string = node.binding.capability.resource.id;

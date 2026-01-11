@@ -2,12 +2,11 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
-import type { EC2 } from "itty-aws/ec2";
+import * as ec2 from "distilled-aws/ec2";
 
 import type { ScopedPlanStatusSession } from "../../cli/service.ts";
 import { somePropsAreDifferent } from "../../diff.ts";
-import { createTagger, createTagsList } from "../../tags.ts";
-import { EC2Client } from "./client.ts";
+import { createInternalTags, createTagsList, diffTags } from "../../tags.ts";
 import {
   Subnet,
   type SubnetAttrs,
@@ -18,9 +17,6 @@ import {
 export const subnetProvider = () =>
   Subnet.provider.effect(
     Effect.gen(function* () {
-      const ec2 = yield* EC2Client;
-      const tagged = yield* createTagger();
-
       return {
         stables: ["subnetId", "subnetArn", "ownerId", "vpcId"],
         diff: Effect.fn(function* ({ news, olds }) {
@@ -45,7 +41,7 @@ export const subnetProvider = () =>
           const vpcId = news.vpcId;
 
           // 2. Prepare tags
-          const alchemyTags = tagged(id);
+          const alchemyTags = yield* createInternalTags(id);
           const userTags = news.tags ?? {};
           const allTags = { ...alchemyTags, ...userTags };
 
@@ -124,7 +120,7 @@ export const subnetProvider = () =>
           }
 
           // 5. Wait for subnet to be available
-          const subnet = yield* waitForSubnetAvailable(ec2, subnetId, session);
+          const subnet = yield* waitForSubnetAvailable(subnetId, session);
 
           // 6. Return attributes
           return {
@@ -168,7 +164,7 @@ export const subnetProvider = () =>
           } satisfies SubnetAttrs<SubnetProps>;
         }),
 
-        update: Effect.fn(function* ({ news, olds, output, session }) {
+        update: Effect.fn(function* ({ id, news, olds, output, session }) {
           const subnetId = output.subnetId;
 
           // Update MapPublicIpOnLaunch if changed
@@ -226,7 +222,43 @@ export const subnetProvider = () =>
             yield* session.note("Updated private DNS hostname settings");
           }
 
-          // Note: Tag updates would go here if we support user tag changes
+          // Handle tag updates
+          const alchemyTags = yield* createInternalTags(id);
+          const newTags = { ...alchemyTags, ...news.tags };
+          const oldTags =
+            (yield* ec2
+              .describeTags({
+                Filters: [
+                  { Name: "resource-id", Values: [subnetId] },
+                  { Name: "resource-type", Values: ["subnet"] },
+                ],
+              })
+              .pipe(
+                Effect.map(
+                  (r) =>
+                    Object.fromEntries(
+                      r.Tags?.map((t) => [t.Key!, t.Value!]) ?? [],
+                    ) as Record<string, string>,
+                ),
+              )) ?? {};
+
+          const { removed, upsert } = diffTags(oldTags, newTags);
+
+          if (removed.length > 0) {
+            yield* ec2.deleteTags({
+              Resources: [subnetId],
+              Tags: removed.map((key) => ({ Key: key })),
+              DryRun: false,
+            });
+          }
+          if (upsert.length > 0) {
+            yield* ec2.createTags({
+              Resources: [subnetId],
+              Tags: upsert,
+              DryRun: false,
+            });
+            yield* session.note("Updated tags");
+          }
 
           return output; // Subnet attributes don't change from these updates
         }),
@@ -264,7 +296,7 @@ export const subnetProvider = () =>
             );
 
           // 2. Wait for subnet to be fully deleted
-          yield* waitForSubnetDeleted(ec2, subnetId, session);
+          yield* waitForSubnetDeleted(subnetId, session);
 
           yield* session.note(`Subnet ${subnetId} deleted successfully`);
         }),
@@ -287,7 +319,6 @@ class SubnetStillExists extends Data.TaggedError("SubnetStillExists")<{
  * Wait for subnet to be in available state
  */
 const waitForSubnetAvailable = (
-  ec2: EC2,
   subnetId: string,
   session?: ScopedPlanStatusSession,
 ) =>
@@ -325,7 +356,6 @@ const waitForSubnetAvailable = (
  * Wait for subnet to be deleted
  */
 const waitForSubnetDeleted = (
-  ec2: EC2,
   subnetId: string,
   session: ScopedPlanStatusSession,
 ) =>

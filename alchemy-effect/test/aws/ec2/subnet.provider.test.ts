@@ -1,15 +1,15 @@
 import * as AWS from "@/aws";
-import * as EC2 from "@/aws/ec2";
-import type { Input } from "@/input";
-import { $, apply, destroy } from "@/index";
+import { Subnet, Vpc } from "@/aws/ec2";
+import { apply, destroy } from "@/index";
+import * as Output from "@/output";
 import { test } from "@/test";
 import { expect } from "@effect/vitest";
+import * as EC2 from "distilled-aws/ec2";
 import { LogLevel } from "effect";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Logger from "effect/Logger";
 import * as Schedule from "effect/Schedule";
-import * as Output from "@/output";
 
 const logLevel = Logger.withMinimumLogLevel(
   process.env.DEBUG ? LogLevel.Debug : LogLevel.Info,
@@ -18,23 +18,21 @@ const logLevel = Logger.withMinimumLogLevel(
 test(
   "create, update, delete subnet",
   Effect.gen(function* () {
-    const ec2 = yield* EC2.EC2Client;
-
     yield* destroy();
 
     {
-      class TestVpc extends EC2.Vpc("TestVpc", {
+      class TestVpc extends Vpc("TestVpc", {
         cidrBlock: "10.0.0.0/16",
       }) {}
 
-      class TestSubnet extends EC2.Subnet("TestSubnet", {
+      class TestSubnet extends Subnet("TestSubnet", {
         vpcId: Output.of(TestVpc).vpcId,
         cidrBlock: "10.0.1.0/24",
       }) {}
 
       const stack = yield* apply(TestVpc, TestSubnet);
 
-      const actualSubnet = yield* ec2.describeSubnets({
+      const actualSubnet = yield* EC2.describeSubnets({
         SubnetIds: [stack.TestSubnet.subnetId],
       });
 
@@ -48,11 +46,11 @@ test(
     }
 
     // Update subnet attributes
-    class TestVpc extends EC2.Vpc("TestVpc", {
+    class TestVpc extends Vpc("TestVpc", {
       cidrBlock: "10.0.0.0/16",
     }) {}
 
-    class TestSubnet extends EC2.Subnet("TestSubnet", {
+    class TestSubnet extends Subnet("TestSubnet", {
       vpcId: Output.of(TestVpc).vpcId,
       cidrBlock: "10.0.1.0/24",
       mapPublicIpOnLaunch: true,
@@ -78,45 +76,39 @@ const expectSubnetAttribute = Effect.fn(function* (props: {
   Attribute: "mapPublicIpOnLaunch" | "assignIpv6AddressOnCreation";
   Value: boolean;
 }) {
-  const ec2 = yield* EC2.EC2Client;
-  yield* ec2
-    .describeSubnets({
-      SubnetIds: [props.SubnetId],
-    })
-    .pipe(
-      Effect.tap(Effect.logDebug),
-      Effect.flatMap((result) => {
-        const subnet = result.Subnets?.[0];
-        const actualValue =
-          props.Attribute === "mapPublicIpOnLaunch"
-            ? subnet?.MapPublicIpOnLaunch
-            : subnet?.AssignIpv6AddressOnCreation;
+  yield* EC2.describeSubnets({
+    SubnetIds: [props.SubnetId],
+  }).pipe(
+    Effect.tap(Effect.logDebug),
+    Effect.flatMap((result) => {
+      const subnet = result.Subnets?.[0];
+      const actualValue =
+        props.Attribute === "mapPublicIpOnLaunch"
+          ? subnet?.MapPublicIpOnLaunch
+          : subnet?.AssignIpv6AddressOnCreation;
 
-        return actualValue === props.Value
-          ? Effect.succeed(result)
-          : Effect.fail(new SubnetAttributeStale());
-      }),
-      Effect.retry({
-        while: (e) => e._tag === "SubnetAttributeStale",
-        schedule: Schedule.exponential(100),
-      }),
-    );
+      return actualValue === props.Value
+        ? Effect.succeed(result)
+        : Effect.fail(new SubnetAttributeStale());
+    }),
+    Effect.retry({
+      while: (e) => e._tag === "SubnetAttributeStale",
+      schedule: Schedule.exponential(100),
+    }),
+  );
 });
 
 const assertSubnetDeleted = Effect.fn(function* (subnetId: string) {
-  const ec2 = yield* EC2.EC2Client;
-  yield* ec2
-    .describeSubnets({
-      SubnetIds: [subnetId],
-    })
-    .pipe(
-      Effect.flatMap(() => Effect.fail(new SubnetStillExists())),
-      Effect.retry({
-        while: (e) => e._tag === "SubnetStillExists",
-        schedule: Schedule.exponential(100),
-      }),
-      Effect.catchTag("InvalidSubnetID.NotFound", () => Effect.void),
-    );
+  yield* EC2.describeSubnets({
+    SubnetIds: [subnetId],
+  }).pipe(
+    Effect.flatMap(() => Effect.fail(new SubnetStillExists())),
+    Effect.retry({
+      while: (e) => e._tag === "SubnetStillExists",
+      schedule: Schedule.exponential(100),
+    }),
+    Effect.catchTag("InvalidSubnetID.NotFound", () => Effect.void),
+  );
 });
 
 class SubnetStillExists extends Data.TaggedError("SubnetStillExists") {}

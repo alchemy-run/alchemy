@@ -1,6 +1,6 @@
 import type { Capability } from "../../capability.ts";
 import { Runtime, type RuntimeProps } from "../../runtime.ts";
-import type * as IAM from "../iam.ts";
+import type * as IAM from "../iam/index.ts";
 
 export type { Context } from "aws-lambda";
 

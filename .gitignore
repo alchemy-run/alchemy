@@ -32,3 +32,5 @@ smoke
 *.map
 
 .attest
+.cache
+.external

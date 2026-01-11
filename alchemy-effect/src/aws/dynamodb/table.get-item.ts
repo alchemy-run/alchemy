@@ -1,15 +1,61 @@
+import type { HttpClient } from "@effect/platform/HttpClient";
+import type { Credentials } from "distilled-aws/Credentials";
+import type {
+  ConsumedCapacity,
+  InternalServerError,
+  InvalidEndpointException,
+  ProvisionedThroughputExceededException,
+  RequestLimitExceeded,
+  ResourceNotFoundException,
+  ReturnConsumedCapacity,
+  ThrottlingException,
+} from "distilled-aws/dynamodb";
+import * as DynamoDB from "distilled-aws/dynamodb";
+import type { CommonErrors } from "distilled-aws/Errors";
+import type { Region } from "distilled-aws/Region";
 import { Effect } from "effect";
-import type { ReturnConsumedCapacity } from "itty-aws/dynamodb";
 import { Binding } from "../../binding.ts";
 import type { Capability } from "../../capability.ts";
 import { toEnvKey } from "../../env.ts";
-import { declare, type From, type Policy } from "../../policy.ts";
+import { type From, type Policy } from "../../policy.ts";
 import { Function } from "../lambda/function.ts";
 import { fromAttributeValue } from "./attribute-value.ts";
-import { DynamoDBClient } from "./client.ts";
 import type { Identifier } from "./expr.ts";
 import type { ParseProjectionExpression } from "./projection.ts";
 import { Table } from "./table.ts";
+
+// Helper types extracted for explicit type annotations
+type GetItemParsed<ProjectionExpression extends string> =
+  ParseProjectionExpression<ProjectionExpression>;
+
+type GetItemAttributes<ProjectionExpression extends string> = Extract<
+  GetItemParsed<ProjectionExpression>[number],
+  Identifier
+>["name"];
+
+type GetItemLeadingKeys<
+  T extends Table<string, any>,
+  Key extends Table.Key<T>,
+> = Extract<Key[T["props"]["partitionKey"]], string>;
+
+type GetItemDeclaredConstraint<
+  T extends Table<string, any>,
+  Key extends Table.Key<T>,
+  ProjectionExpression extends string,
+  Capacity extends ReturnConsumedCapacity,
+> = Policy.Constraint<{
+  leadingKeys: Policy.AnyOf<GetItemLeadingKeys<T, Key>>;
+  attributes: Policy.AnyOf<GetItemAttributes<ProjectionExpression>>;
+  returnConsumedCapacity: Policy.AnyOf<Capacity>;
+}>;
+
+export interface GetItemResult<
+  T extends Table<string, any>,
+  Key extends Table.Key<T>,
+> {
+  Item: (InstanceType<T["props"]["items"]> & Key) | undefined;
+  ConsumedCapacity?: ConsumedCapacity;
+}
 
 export interface GetItemConstraint<
   LeadingKeys extends Policy.AnyOf<any> = Policy.AnyOf<any>,
@@ -62,80 +108,94 @@ export const GetItem = Binding<
   >
 >(Function, "AWS.DynamoDB.GetItem");
 
+// Error type for getItem operations
+type GetItemError =
+  | InternalServerError
+  | InvalidEndpointException
+  | ProvisionedThroughputExceededException
+  | RequestLimitExceeded
+  | ResourceNotFoundException
+  | ThrottlingException
+  | CommonErrors;
+
 // see: https://docs.aws.amazon.com/service-authorization/latest/reference/list_amazondynamodb.html
-export const getItem = <
+export const getItem: <
   T extends Table<string, any>,
   const Key extends Table.Key<T>,
   const ProjectionExpression extends string = never,
   const Capacity extends ReturnConsumedCapacity = never,
->({
-  table,
-  key,
-  projectionExpression,
-  returnConsumedCapacity,
-}: {
+>(args: {
   table: T;
   key: Key;
   projectionExpression?: ProjectionExpression;
   returnConsumedCapacity?: Capacity;
-}) =>
-  Effect.gen(function* () {
-    type Parsed = ParseProjectionExpression<ProjectionExpression>;
-    type Attributes = Extract<Parsed[number], Identifier>["name"];
-    type LeadingKeys = Extract<Key[T["props"]["partitionKey"]], string>;
-    type Constraint = Policy.Constraint<{
-      leadingKeys: Policy.AnyOf<LeadingKeys>;
-      attributes: Policy.AnyOf<Attributes>;
-      returnConsumedCapacity: Policy.AnyOf<Capacity>;
-    }>;
-    yield* declare<
-      GetItem<
-        From<T>,
-        {
-          [k in keyof Constraint]: Constraint[k];
-        }
-      >
-    >();
-    const tableNameEnv = toEnvKey(table.id, "TABLE_NAME");
-    const tableName = process.env[tableNameEnv];
-    if (!tableName) {
-      return yield* Effect.die(new Error(`${tableNameEnv} is not set`));
-    }
-    const ddb = yield* DynamoDBClient;
-    const { Item, ...rest } = yield* ddb.getItem({
-      TableName: tableName,
-      Key: {
-        [table.props.partitionKey]: {
-          S: (key as any)[table.props.partitionKey] as string,
-        },
-        ...(table.props.sortKey
-          ? {
-              [table.props.sortKey]: {
-                S: (key as any)[table.props.sortKey] as string,
-              },
-            }
-          : {}),
+}) => Effect.Effect<
+  GetItemResult<T, Key>,
+  GetItemError,
+  | Credentials
+  | Region
+  | HttpClient
+  | GetItem<
+      From<T>,
+      {
+        [k in keyof GetItemDeclaredConstraint<
+          T,
+          Key,
+          ProjectionExpression,
+          Capacity
+        >]: GetItemDeclaredConstraint<
+          T,
+          Key,
+          ProjectionExpression,
+          Capacity
+        >[k];
+      }
+    >
+> = Effect.fnUntraced(function* ({
+  table,
+  key,
+  projectionExpression,
+  returnConsumedCapacity,
+}) {
+  const tableNameEnv = toEnvKey(table.id, "TABLE_NAME");
+  const tableName = process.env[tableNameEnv];
+  if (!tableName) {
+    return yield* Effect.die(new Error(`${tableNameEnv} is not set`));
+  }
+  const { Item, ...rest } = yield* DynamoDB.getItem({
+    TableName: tableName,
+    Key: {
+      [table.props.partitionKey]: {
+        S: (key as any)[table.props.partitionKey] as string,
       },
-      ProjectionExpression: projectionExpression,
-      ReturnConsumedCapacity: returnConsumedCapacity,
-    });
-
-    return {
-      ...rest,
-      Item: Item
-        ? (Object.fromEntries(
-            yield* Effect.promise(() =>
-              Promise.all(
-                Object.entries(Item!).map(async ([key, value]) => [
-                  key,
-                  await fromAttributeValue(value),
-                ]),
-              ),
-            ),
-          ) as InstanceType<T["props"]["items"]> & Key)
-        : undefined,
-    };
+      ...(table.props.sortKey
+        ? {
+            [table.props.sortKey]: {
+              S: (key as any)[table.props.sortKey] as string,
+            },
+          }
+        : {}),
+    },
+    ProjectionExpression: projectionExpression,
+    ReturnConsumedCapacity: returnConsumedCapacity,
   });
+
+  return {
+    ...rest,
+    Item: Item
+      ? (Object.fromEntries(
+          yield* Effect.promise(() =>
+            Promise.all(
+              Object.entries(Item!).map(async ([key, value]) => [
+                key,
+                await fromAttributeValue(value!),
+              ]),
+            ),
+          ),
+        ) as any)
+      : undefined,
+  };
+});
 
 export const getItemFromLambdaFunction = () =>
   GetItem.provider.succeed({

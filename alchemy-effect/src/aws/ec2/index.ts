@@ -1,4 +1,3 @@
-export * from "./client.ts";
 export * from "./egress-only-igw.provider.ts";
 export * from "./egress-only-igw.ts";
 export * from "./eip.provider.ts";

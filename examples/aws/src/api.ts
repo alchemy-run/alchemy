@@ -1,9 +1,7 @@
 import { $, type } from "alchemy-effect";
 import * as DynamoDB from "alchemy-effect/aws/dynamodb";
 import * as Lambda from "alchemy-effect/aws/lambda";
-import * as SQS from "alchemy-effect/aws/sqs";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
 
 export interface User {
@@ -59,7 +57,4 @@ export class Api extends Lambda.serve("Api", {
   ),
 }) {}
 
-export default Api.handler.pipe(
-  Effect.provide(Layer.mergeAll(SQS.clientFromEnv(), DynamoDB.clientFromEnv())),
-  Lambda.toHandler,
-);
+export default Api.handler.pipe(Lambda.toHandler);

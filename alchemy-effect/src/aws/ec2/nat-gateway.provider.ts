@@ -1,18 +1,17 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import type * as EC2 from "itty-aws/ec2";
+import * as ec2 from "distilled-aws/ec2";
 
 import type { ScopedPlanStatusSession } from "../../cli/service.ts";
 import {
   createAlchemyTagFilters,
-  createTagger,
+  createInternalTags,
   createTagsList,
   diffTags,
 } from "../../tags.ts";
 import { Account } from "../account.ts";
-import { Region } from "../region.ts";
-import { EC2Client } from "./client.ts";
+import { Region } from "distilled-aws/Region";
 import {
   NatGateway,
   type NatGatewayAttrs,
@@ -24,18 +23,18 @@ export const natGatewayProvider = () =>
   NatGateway.provider.effect(
     // @ts-expect-error
     Effect.gen(function* () {
-      const ec2 = yield* EC2Client;
       const region = yield* Region;
       const accountId = yield* Account;
-      const tagged = yield* createTagger();
 
-      const createTags = (
+      const createTags = Effect.fn(function* (
         id: string,
         tags?: Record<string, string>,
-      ): Record<string, string> => ({
-        Name: id,
-        ...tagged(id),
-        ...tags,
+      ) {
+        return {
+          Name: id,
+          ...(yield* createInternalTags(id)),
+          ...tags,
+        };
       });
 
       const describeNatGateway = (natGatewayId: string) =>
@@ -49,7 +48,7 @@ export const natGatewayProvider = () =>
         );
 
       const toAttrs = (
-        gw: EC2.NatGateway,
+        gw: ec2.NatGateway,
       ): NatGatewayAttrs<NatGatewayProps> => {
         const primaryAddress =
           gw.NatGatewayAddresses?.find((a) => a.IsPrimary) ??
@@ -146,7 +145,7 @@ export const natGatewayProvider = () =>
             TagSpecifications: [
               {
                 ResourceType: "natgateway",
-                Tags: createTagsList(createTags(id, news.tags)),
+                Tags: createTagsList(yield* createTags(id, news.tags)),
               },
             ],
             DryRun: false,
@@ -165,7 +164,7 @@ export const natGatewayProvider = () =>
           const natGatewayId = output.natGatewayId;
 
           // Handle tag updates
-          const newTags = createTags(id, news.tags);
+          const newTags = yield* createTags(id, news.tags);
           const oldTags =
             (yield* ec2
               .describeTags({
@@ -253,7 +252,6 @@ const waitForNatGatewayAvailable = (
   session: ScopedPlanStatusSession,
 ) =>
   Effect.gen(function* () {
-    const ec2 = yield* EC2Client;
     const result = yield* ec2.describeNatGateways({
       NatGatewayIds: [natGatewayId],
     });
@@ -306,7 +304,6 @@ const waitForNatGatewayDeleted = (
   session: ScopedPlanStatusSession,
 ) =>
   Effect.gen(function* () {
-    const ec2 = yield* EC2Client;
     const result = yield* ec2
       .describeNatGateways({ NatGatewayIds: [natGatewayId] })
       .pipe(

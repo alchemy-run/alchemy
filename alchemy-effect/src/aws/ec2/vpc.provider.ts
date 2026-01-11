@@ -2,32 +2,30 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
-import type { EC2 } from "itty-aws/ec2";
-
 import type { ScopedPlanStatusSession } from "../../cli/service.ts";
 import { somePropsAreDifferent } from "../../diff.ts";
-import { createTagger, createTagsList, diffTags } from "../../tags.ts";
+import { createInternalTags, createTagsList, diffTags } from "../../tags.ts";
 import { Account } from "../account.ts";
-import { Region } from "../region.ts";
-import { EC2Client } from "./client.ts";
+import { Region } from "distilled-aws/Region";
 import type { VpcId } from "./vpc.ts";
 import { Vpc, type VpcAttrs, type VpcProps } from "./vpc.ts";
+import * as ec2 from "distilled-aws/ec2";
 
 export const vpcProvider = () =>
   Vpc.provider.effect(
     Effect.gen(function* () {
-      const ec2 = yield* EC2Client;
       const region = yield* Region;
       const accountId = yield* Account;
-      const tagged = yield* createTagger();
 
-      const createTags = (
+      const createTags = Effect.fn(function* (
         id: string,
         tags?: Record<string, string>,
-      ): Record<string, string> => ({
-        Name: id,
-        ...tagged(id),
-        ...tags,
+      ) {
+        return {
+          Name: id,
+          ...(yield* createInternalTags(id)),
+          ...tags,
+        };
       });
 
       return {
@@ -64,7 +62,7 @@ export const vpcProvider = () =>
             TagSpecifications: [
               {
                 ResourceType: "vpc",
-                Tags: createTagsList(createTags(id, news.tags)),
+                Tags: createTagsList(yield* createTags(id, news.tags)),
               },
             ],
             DryRun: false,
@@ -87,7 +85,7 @@ export const vpcProvider = () =>
           }
 
           // 4. Wait for VPC to be available
-          const vpc = yield* waitForVpcAvailable(ec2, vpcId, session);
+          const vpc = yield* waitForVpcAvailable(vpcId, session);
 
           // 6. Return attributes
           return {
@@ -147,7 +145,7 @@ export const vpcProvider = () =>
           }
 
           // Handle user tag updates
-          const newTags = createTags(id, news.tags);
+          const newTags = yield* createTags(id, news.tags);
           const oldTags = output.tags ?? {};
           const { removed, upsert } = diffTags(oldTags, newTags);
           if (removed.length > 0) {
@@ -208,7 +206,7 @@ export const vpcProvider = () =>
             );
 
           // 2. Wait for VPC to be fully deleted
-          yield* waitForVpcDeleted(ec2, vpcId, session);
+          yield* waitForVpcDeleted(vpcId, session);
 
           yield* session.note(`VPC ${vpcId} deleted successfully`);
         }),
@@ -231,7 +229,6 @@ class VpcStillExists extends Data.TaggedError("VpcStillExists")<{
  * Wait for VPC to be in available state
  */
 const waitForVpcAvailable = (
-  ec2: EC2,
   vpcId: string,
   session?: ScopedPlanStatusSession,
 ) =>
@@ -268,11 +265,7 @@ const waitForVpcAvailable = (
 /**
  * Wait for VPC to be deleted
  */
-const waitForVpcDeleted = (
-  ec2: EC2,
-  vpcId: string,
-  session: ScopedPlanStatusSession,
-) =>
+const waitForVpcDeleted = (vpcId: string, session: ScopedPlanStatusSession) =>
   Effect.gen(function* () {
     const result = yield* ec2
       .describeVpcs({ VpcIds: [vpcId] })

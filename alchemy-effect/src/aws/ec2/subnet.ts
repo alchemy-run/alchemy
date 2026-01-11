@@ -1,4 +1,4 @@
-import type * as EC2 from "itty-aws/ec2";
+import type * as ec2 from "distilled-aws/ec2";
 import type { Input } from "../../input.ts";
 import { Resource } from "../../resource.ts";
 import type { AccountID } from "../account.ts";
@@ -106,7 +106,7 @@ export interface SubnetProps {
   /**
    * The hostname type for EC2 instances launched into this subnet.
    */
-  hostnameType?: EC2.HostnameType;
+  hostnameType?: ec2.HostnameType;
 
   /**
    * Tags to assign to the subnet.
@@ -153,7 +153,7 @@ export interface SubnetAttrs<Props extends SubnetProps> {
   /**
    * The current state of the subnet.
    */
-  state: EC2.SubnetState;
+  state: ec2.SubnetState;
 
   /**
    * The number of available IPv4 addresses in the subnet.
@@ -187,7 +187,7 @@ export interface SubnetAttrs<Props extends SubnetProps> {
     associationId: string;
     ipv6CidrBlock: string;
     ipv6CidrBlockState: {
-      state: EC2.SubnetCidrBlockStateCode;
+      state: ec2.SubnetCidrBlockStateCode;
       statusMessage?: string;
     };
   }>;
@@ -206,7 +206,7 @@ export interface SubnetAttrs<Props extends SubnetProps> {
    * The private DNS name options on launch.
    */
   privateDnsNameOptionsOnLaunch?: {
-    hostnameType?: EC2.HostnameType;
+    hostnameType?: ec2.HostnameType;
     enableResourceNameDnsARecord?: boolean;
     enableResourceNameDnsAAAARecord?: boolean;
   };

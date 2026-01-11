@@ -1,19 +1,17 @@
 import * as Effect from "effect/Effect";
 
 import type { ProviderService } from "../../provider.ts";
-import { EC2Client } from "./client.ts";
 import {
   NetworkAclAssociation,
   type NetworkAclAssociationId,
 } from "./network-acl-association.ts";
 import type { NetworkAclId } from "./network-acl.ts";
 import type { SubnetId } from "./subnet.ts";
+import * as ec2 from "distilled-aws/ec2";
 
 export const networkAclAssociationProvider = () =>
   NetworkAclAssociation.provider.effect(
     Effect.gen(function* () {
-      const ec2 = yield* EC2Client;
-
       const findAssociation = (subnetId: string) =>
         ec2
           .describeNetworkAcls({

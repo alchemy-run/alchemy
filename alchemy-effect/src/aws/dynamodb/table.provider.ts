@@ -2,13 +2,12 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 
-import type { TimeToLiveSpecification } from "itty-aws/dynamodb";
+import type { TimeToLiveSpecification } from "distilled-aws/dynamodb";
 import { App } from "../../app.ts";
 import type { Input } from "../../input.ts";
 import type { Provider } from "../../provider.ts";
-import { createTagger, hasTags } from "../../tags.ts";
+import { createInternalTags, hasTags } from "../../tags.ts";
 import { isScalarAttributeType, toAttributeType } from "./attribute-value.ts";
-import { DynamoDBClient } from "./client.ts";
 import {
   Table,
   type AnyTable,
@@ -17,16 +16,19 @@ import {
   type TableProps,
 } from "./table.ts";
 import { createPhysicalName } from "../../physical-name.ts";
+import * as dynamodb from "distilled-aws/dynamodb";
+import type { Region } from "distilled-aws/Region";
+import type { Credentials } from "distilled-aws/Credentials";
+import type { HttpClient } from "@effect/platform/HttpClient";
 
 // we add an explict type to simplify the Layer type errors because the Table interface has a lot of type args
 export const tableProvider = (): Layer.Layer<
   Provider<AnyTable>,
   never,
-  App | DynamoDBClient
+  App | Region | Credentials | HttpClient
 > =>
   Table.provider.effect(
     Effect.gen(function* () {
-      const dynamodb = yield* DynamoDBClient;
       const app = yield* App;
 
       const createTableName = (
@@ -43,8 +45,6 @@ export const tableProvider = (): Layer.Layer<
             }))
           );
         });
-
-      const tagged = yield* createTagger();
 
       const toKeySchema = (props: Input.ResolveProps<TableProps>) => [
         {
@@ -102,14 +102,16 @@ export const tableProvider = (): Layer.Layer<
               })
               .pipe(
                 Effect.map((tags) => [r, tags.Tags] as const),
-                Effect.flatMap(([r, tags]) => {
-                  if (hasTags(tagged(id), tags)) {
-                    return Effect.succeed(r.Table!);
-                  }
-                  return Effect.fail(
-                    new Error("Table tags do not match expected values"),
-                  );
-                }),
+                Effect.flatMap(
+                  Effect.fn(function* ([r, tags]) {
+                    if (hasTags(yield* createInternalTags(id), tags)) {
+                      return r.Table!;
+                    }
+                    return yield* Effect.fail(
+                      new Error("Table tags do not match expected values"),
+                    );
+                  }),
+                ),
               ),
           ),
         );

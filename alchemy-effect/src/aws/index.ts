@@ -1,20 +1,14 @@
 import * as Layer from "effect/Layer";
-
-// oxlint-disable-next-line no-unused-vars - needed or else provider types are transitively resolved through DynamoDB.Provider<..> lol
-
 import * as ESBuild from "../esbuild.ts";
 import * as Account from "./account.ts";
 import * as Credentials from "./credentials.ts";
 import * as DynamoDB from "./dynamodb/index.ts";
 import * as EC2 from "./ec2/index.ts";
-import * as IAM from "./iam.ts";
+import * as Endpoint from "./endpoint.ts";
 import * as Lambda from "./lambda/index.ts";
 import * as Region from "./region.ts";
-import * as S3 from "./s3.ts";
+import * as S3 from "./s3/index.ts";
 import * as SQS from "./sqs/index.ts";
-import * as STS from "./sts.ts";
-
-export { loadProfile, loadSSOCredentials } from "./credentials.ts";
 
 import "./config.ts";
 
@@ -37,36 +31,39 @@ export const resources = () =>
     EC2.vpcEndpointProvider(),
     EC2.vpcProvider(),
     Lambda.functionProvider(),
+    S3.bucketPolicyProvider(),
+    S3.bucketProvider(),
     SQS.queueProvider(),
   );
 
 export const bindings = () =>
   Layer.mergeAll(
     DynamoDB.getItemFromLambdaFunction(),
+    S3.bucketEventSourceProvider(),
+    S3.deleteObjectFromLambdaFunction(),
+    S3.getObjectFromLambdaFunction(),
+    S3.putObjectFromLambdaFunction(),
     SQS.queueEventSourceProvider(),
     SQS.sendMessageFromLambdaFunction(),
   );
 
-export const clients = () =>
-  Layer.mergeAll(
-    DynamoDB.client(),
-    EC2.client(),
-    IAM.client(),
-    Lambda.client(),
-    S3.client(),
-    SQS.client(),
-    // STS.client(),
-  );
-
 export const utils = () => Layer.mergeAll(ESBuild.layer());
 
-export const providers = () =>
-  resources().pipe(
-    Layer.provideMerge(bindings()),
-    Layer.provideMerge(clients()),
-    Layer.provideMerge(utils()),
+export const bareProviders = () =>
+  resources().pipe(Layer.provideMerge(bindings()), Layer.provideMerge(utils()));
+
+export const config = <L extends Layer.Layer<any, any, any>>(layer: L) =>
+  layer.pipe(
     Layer.provideMerge(Account.fromStageConfig()),
-    Layer.provideMerge(STS.client()),
     Layer.provideMerge(Region.fromStageConfig()),
     Layer.provideMerge(Credentials.fromStageConfig()),
+    Layer.provideMerge(Endpoint.fromStageConfig()),
+  );
+
+export const providers = () =>
+  bareProviders().pipe(
+    Layer.provideMerge(Account.fromStageConfig()),
+    Layer.provideMerge(Region.fromStageConfig()),
+    Layer.provideMerge(Credentials.fromStageConfig()),
+    Layer.provideMerge(Endpoint.fromStageConfig()),
   );

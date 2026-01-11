@@ -9,23 +9,22 @@ import type {
   CreateFunctionRequest,
   CreateFunctionUrlConfigRequest,
   UpdateFunctionUrlConfigRequest,
-} from "itty-aws/lambda";
+} from "distilled-aws/lambda";
 import { App } from "../../app.ts";
 import { DotAlchemy } from "../../dot-alchemy.ts";
-import { createTagger, createTagsList, hasTags } from "../../tags.ts";
+import { createInternalTags, createTagsList, hasTags } from "../../tags.ts";
 import { Account } from "../account.ts";
-import * as IAM from "../iam.ts";
-import { Region } from "../region.ts";
+import * as IAM from "../iam/index.ts";
+import { Region } from "distilled-aws/Region";
 import { zipCode } from "../zip.ts";
 import { createPhysicalName } from "../../physical-name.ts";
-import { LambdaClient } from "./client.ts";
 import { Function, type FunctionAttr, type FunctionProps } from "./function.ts";
+import * as iam from "distilled-aws/iam";
+import * as lambda from "distilled-aws/lambda";
 
 export const functionProvider = () =>
   Function.provider.effect(
     Effect.gen(function* () {
-      const lambda = yield* LambdaClient;
-      const iam = yield* IAM.IAMClient;
       const app = yield* App;
       const accountId = yield* Account;
       const region = yield* Region;
@@ -117,6 +116,7 @@ export const functionProvider = () =>
         roleName: string;
       }) {
         yield* Effect.logDebug(`creating role ${id}`);
+        const tags = yield* createInternalTags(id);
         const role = yield* iam
           .createRole({
             RoleName: roleName,
@@ -132,7 +132,7 @@ export const functionProvider = () =>
                 },
               ],
             }),
-            Tags: createTagsList(tagged(id)),
+            Tags: createTagsList(tags),
           })
           .pipe(
             Effect.catchTag("EntityAlreadyExistsException", () =>
@@ -142,7 +142,7 @@ export const functionProvider = () =>
                 })
                 .pipe(
                   Effect.filterOrFail(
-                    (role) => hasTags(tagged(id), role.Role?.Tags),
+                    (role) => hasTags(tags, role.Role?.Tags),
                     () =>
                       new Error(
                         `Role ${roleName} exists but has incorrect tags`,
@@ -218,8 +218,6 @@ export const functionProvider = () =>
           crypto.createHash("sha256").update(code).digest("hex"),
         );
 
-      const tagged = yield* createTagger();
-
       const createOrUpdateFunction = Effect.fn(function* ({
         id,
         news,
@@ -236,6 +234,8 @@ export const functionProvider = () =>
         functionName: string;
       }) {
         yield* Effect.logDebug(`creating function ${id}`);
+
+        const tags = yield* createInternalTags(id);
         const createFunctionRequest: CreateFunctionRequest = {
           FunctionName: functionName,
           Handler: `index.${news.handler ?? "default"}`,
@@ -250,7 +250,7 @@ export const functionProvider = () =>
                 Variables: env,
               }
             : undefined,
-          Tags: tagged(id),
+          Tags: tags,
         };
 
         const getAndUpdate = lambda
@@ -261,7 +261,7 @@ export const functionProvider = () =>
             Effect.filterOrFail(
               // if it exists and contains these tags, we will assume it was created by alchemy
               // but state was lost, so if it exists, let's adopt it
-              (f) => hasTags(tagged(id), f.Tags),
+              (f) => hasTags(tags, f.Tags),
               () =>
                 // TODO(sam): add custom
                 new Error("Function tags do not match expected values"),

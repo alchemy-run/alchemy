@@ -1,17 +1,14 @@
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
-import type { EC2 } from "itty-aws/ec2";
+import * as ec2 from "distilled-aws/ec2";
 
 import { somePropsAreDifferent } from "../../diff.ts";
-import { EC2Client } from "./client.ts";
 import { Route, type RouteAttrs, type RouteProps } from "./route.ts";
 
 export const routeProvider = () =>
   Route.provider.effect(
     Effect.gen(function* () {
-      const ec2 = yield* EC2Client;
-
       return {
         diff: Effect.fn(function* ({ news, olds }) {
           // Route table change requires replacement
@@ -70,7 +67,7 @@ export const routeProvider = () =>
           yield* session.note(`Route created: ${dest}`);
 
           // Describe to get route details
-          const route = yield* describeRoute(ec2, news.routeTableId, news);
+          const route = yield* describeRoute(news.routeTableId, news);
 
           // Return attributes
           return {
@@ -124,7 +121,7 @@ export const routeProvider = () =>
           yield* session.note("Route target updated");
 
           // Describe to get updated route details
-          const route = yield* describeRoute(ec2, news.routeTableId, news);
+          const route = yield* describeRoute(news.routeTableId, news);
 
           return {
             ...output,
@@ -179,7 +176,7 @@ export const routeProvider = () =>
 /**
  * Find a specific route in a route table
  */
-const describeRoute = (ec2: EC2, routeTableId: string, props: RouteProps) =>
+const describeRoute = (routeTableId: string, props: RouteProps) =>
   Effect.gen(function* () {
     const result = yield* ec2
       .describeRouteTables({ RouteTableIds: [routeTableId] })

@@ -1,17 +1,9 @@
 import * as AWS from "@/aws";
-import * as SQS from "@/aws/sqs";
-import {
-  type DerivePlan,
-  type Instance,
-  type ResourceGraph,
-  type TransitiveResources,
-  type TraverseResources,
-  apply,
-  destroy,
-  plan,
-} from "@/index";
+import { Queue } from "@/aws/sqs";
+import { apply, destroy } from "@/index";
 import { test } from "@/test";
 import { expect } from "@effect/vitest";
+import * as SQS from "distilled-aws/sqs";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -20,9 +12,7 @@ import * as S from "effect/Schema";
 test(
   "create, update, delete standard queue",
   Effect.gen(function* () {
-    const sqs = yield* SQS.SQSClient;
-
-    class TestQueue extends SQS.Queue("TestQueue", {
+    class TestQueue extends Queue("TestQueue", {
       schema: S.Struct({
         message: S.String,
       }),
@@ -33,7 +23,7 @@ test(
     const stack = yield* apply(TestQueue);
 
     // Verify the queue was created
-    const queueAttributes = yield* sqs.getQueueAttributes({
+    const queueAttributes = yield* SQS.getQueueAttributes({
       QueueUrl: stack.TestQueue.queueUrl,
       AttributeNames: ["All"],
     });
@@ -41,7 +31,7 @@ test(
     expect(queueAttributes.Attributes?.DelaySeconds).toEqual("0");
 
     // Update the queue
-    class UpdatedQueue extends SQS.Queue("TestQueue", {
+    class UpdatedQueue extends Queue("TestQueue", {
       schema: S.Struct({
         message: S.String,
       }),
@@ -52,7 +42,7 @@ test(
     const updatedStack = yield* apply(UpdatedQueue);
 
     // Verify the queue was updated
-    const updatedAttributes = yield* sqs.getQueueAttributes({
+    const updatedAttributes = yield* SQS.getQueueAttributes({
       QueueUrl: updatedStack.TestQueue.queueUrl,
       AttributeNames: ["All"],
     });
@@ -68,9 +58,7 @@ test(
 test(
   "create, update, delete fifo queue",
   Effect.gen(function* () {
-    const sqs = yield* SQS.SQSClient;
-
-    class TestFifoQueue extends SQS.Queue("TestFifoQueue", {
+    class TestFifoQueue extends Queue("TestFifoQueue", {
       schema: S.Struct({
         message: S.String,
       }),
@@ -85,7 +73,7 @@ test(
     expect(stack.TestFifoQueue.queueUrl).toContain(".fifo");
     expect(stack.TestFifoQueue.queueName).toContain(".fifo");
 
-    const queueAttributes = yield* sqs.getQueueAttributes({
+    const queueAttributes = yield* SQS.getQueueAttributes({
       QueueUrl: stack.TestFifoQueue.queueUrl,
       AttributeNames: ["All"],
     });
@@ -95,7 +83,7 @@ test(
     );
 
     // Update the FIFO queue to enable content-based deduplication
-    class UpdatedFifoQueue extends SQS.Queue("TestFifoQueue", {
+    class UpdatedFifoQueue extends Queue("TestFifoQueue", {
       schema: S.Struct({
         message: S.String,
       }),
@@ -107,7 +95,7 @@ test(
     const updatedStack = yield* apply(UpdatedFifoQueue);
 
     // Verify the queue was updated
-    const updatedAttributes = yield* sqs.getQueueAttributes({
+    const updatedAttributes = yield* SQS.getQueueAttributes({
       QueueUrl: updatedStack.TestFifoQueue.queueUrl,
       AttributeNames: ["All"],
     });
@@ -125,9 +113,7 @@ test(
 test(
   "create queue with custom name",
   Effect.gen(function* () {
-    const sqs = yield* SQS.SQSClient;
-
-    class CustomNameQueue extends SQS.Queue("CustomNameQueue", {
+    class CustomNameQueue extends Queue("CustomNameQueue", {
       schema: S.Struct({
         data: S.Number,
       }),
@@ -140,7 +126,7 @@ test(
     expect(stack.CustomNameQueue.queueUrl).toContain("my-custom-test-queue");
 
     // Verify the queue exists
-    const queueAttributes = yield* sqs.getQueueAttributes({
+    const queueAttributes = yield* SQS.getQueueAttributes({
       QueueUrl: stack.CustomNameQueue.queueUrl,
       AttributeNames: ["All"],
     });
@@ -155,18 +141,15 @@ test(
 class QueueStillExists extends Data.TaggedError("QueueStillExists") {}
 
 const assertQueueDeleted = Effect.fn(function* (queueUrl: string) {
-  const sqs = yield* SQS.SQSClient;
-  yield* sqs
-    .getQueueAttributes({
-      QueueUrl: queueUrl,
-      AttributeNames: ["All"],
-    })
-    .pipe(
-      Effect.flatMap(() => Effect.fail(new QueueStillExists())),
-      Effect.retry({
-        while: (e) => e._tag === "QueueStillExists",
-        schedule: Schedule.exponential(100),
-      }),
-      Effect.catchTag("QueueDoesNotExist", () => Effect.void),
-    );
+  yield* SQS.getQueueAttributes({
+    QueueUrl: queueUrl,
+    AttributeNames: ["All"],
+  }).pipe(
+    Effect.flatMap(() => Effect.fail(new QueueStillExists())),
+    Effect.retry({
+      while: (e) => e._tag === "QueueStillExists",
+      schedule: Schedule.exponential(100),
+    }),
+    Effect.catchTag("QueueDoesNotExist", () => Effect.void),
+  );
 });

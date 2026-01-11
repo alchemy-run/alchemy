@@ -1,13 +1,12 @@
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
-import type { EC2 } from "itty-aws/ec2";
+import * as ec2 from "distilled-aws/ec2";
 
 import type { ScopedPlanStatusSession } from "../../cli/service.ts";
-import { createTagger, createTagsList } from "../../tags.ts";
+import { createInternalTags, createTagsList } from "../../tags.ts";
 import { Account } from "../account.ts";
-import { Region } from "../region.ts";
-import { EC2Client } from "./client.ts";
+import { Region } from "distilled-aws/Region";
 import {
   InternetGateway,
   type InternetGatewayAttrs,
@@ -18,17 +17,15 @@ import {
 export const internetGatewayProvider = () =>
   InternetGateway.provider.effect(
     Effect.gen(function* () {
-      const ec2 = yield* EC2Client;
       const region = yield* Region;
       const accountId = yield* Account;
-      const tagged = yield* createTagger();
 
       return {
         stables: ["internetGatewayId", "internetGatewayArn", "ownerId"],
 
         create: Effect.fn(function* ({ id, news, session }) {
           // 1. Prepare tags
-          const alchemyTags = tagged(id);
+          const alchemyTags = yield* createInternalTags(id);
           const userTags = news.tags ?? {};
           const allTags = { ...alchemyTags, ...userTags };
 
@@ -66,7 +63,6 @@ export const internetGatewayProvider = () =>
 
           // 4. Describe to get full details
           const igw = yield* describeInternetGateway(
-            ec2,
             internetGatewayId,
             session,
           );
@@ -128,7 +124,9 @@ export const internetGatewayProvider = () =>
           if (
             JSON.stringify(news.tags ?? {}) !== JSON.stringify(olds.tags ?? {})
           ) {
-            const alchemyTags = tagged(output.internetGatewayId);
+            const alchemyTags = yield* createInternalTags(
+              output.internetGatewayId,
+            );
             const userTags = news.tags ?? {};
             const allTags = { ...alchemyTags, ...userTags };
 
@@ -157,7 +155,6 @@ export const internetGatewayProvider = () =>
 
           // Re-describe to get current state
           const igw = yield* describeInternetGateway(
-            ec2,
             internetGatewayId,
             session,
           );
@@ -250,7 +247,7 @@ export const internetGatewayProvider = () =>
             );
 
           // 3. Wait for internet gateway to be fully deleted
-          yield* waitForInternetGatewayDeleted(ec2, internetGatewayId, session);
+          yield* waitForInternetGatewayDeleted(internetGatewayId, session);
 
           yield* session.note(
             `Internet gateway ${internetGatewayId} deleted successfully`,
@@ -264,7 +261,6 @@ export const internetGatewayProvider = () =>
  * Describe an internet gateway by ID
  */
 const describeInternetGateway = (
-  ec2: EC2,
   internetGatewayId: string,
   _session?: ScopedPlanStatusSession,
 ) =>
@@ -288,7 +284,6 @@ const describeInternetGateway = (
  * Wait for internet gateway to be deleted
  */
 const waitForInternetGatewayDeleted = (
-  ec2: EC2,
   internetGatewayId: string,
   session: ScopedPlanStatusSession,
 ) =>

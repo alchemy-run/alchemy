@@ -3,14 +3,13 @@ import * as Schedule from "effect/Schedule";
 
 import { createPhysicalName } from "../../physical-name.ts";
 import { Account } from "../account.ts";
-import { Region } from "../region.ts";
-import { SQSClient } from "./client.ts";
 import { Queue, type QueueProps } from "./queue.ts";
+import { Region } from "distilled-aws/Region";
+import * as sqs from "distilled-aws/sqs";
 
 export const queueProvider = () =>
   Queue.provider.effect(
     Effect.gen(function* () {
-      const sqs = yield* SQSClient;
       const region = yield* Region;
       const accountId = yield* Account;
       const createQueueName = (

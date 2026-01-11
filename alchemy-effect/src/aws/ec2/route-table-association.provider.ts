@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
 import type { ScopedPlanStatusSession } from "../../cli/service.ts";
-import { EC2Client } from "./client.ts";
+import * as ec2 from "distilled-aws/ec2";
 import {
   RouteTableAssociation,
   type RouteTableAssociationAttrs,
@@ -13,8 +13,6 @@ import {
 export const routeTableAssociationProvider = () =>
   RouteTableAssociation.provider.effect(
     Effect.gen(function* () {
-      const ec2 = yield* EC2Client;
-
       return {
         stables: ["associationId", "subnetId", "gatewayId"],
         diff: Effect.fn(function* ({ news, olds }) {
@@ -55,7 +53,6 @@ export const routeTableAssociationProvider = () =>
 
           // Wait for association to be associated
           yield* waitForAssociationState(
-            ec2,
             news.routeTableId,
             associationId,
             "associated",
@@ -92,7 +89,6 @@ export const routeTableAssociationProvider = () =>
 
             // Wait for new association to be associated
             yield* waitForAssociationState(
-              ec2,
               news.routeTableId,
               newAssociationId,
               "associated",
@@ -146,7 +142,6 @@ export const routeTableAssociationProvider = () =>
  * Wait for association to reach a specific state
  */
 const waitForAssociationState = (
-  ec2: import("itty-aws/ec2").EC2,
   routeTableId: string,
   associationId: string,
   targetState:
@@ -162,7 +157,9 @@ const waitForAssociationState = (
         .describeRouteTables({ RouteTableIds: [routeTableId] })
         .pipe(
           Effect.catchTag("InvalidRouteTableID.NotFound", () =>
-            Effect.succeed({ RouteTables: [] }),
+            Effect.succeed({
+              RouteTables: [],
+            } as ec2.DescribeRouteTablesResult),
           ),
         );
 

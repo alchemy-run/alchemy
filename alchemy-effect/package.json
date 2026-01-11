@@ -121,10 +121,10 @@
     "@types/aws-lambda": "catalog:",
     "aws4fetch": "^1.0.20",
     "cloudflare": "catalog:",
+    "distilled-aws": "catalog:",
     "esbuild": "^0.25.12",
     "fast-xml-parser": "^5.2.5",
     "ignore": "^7.0.5",
-    "itty-aws": "catalog:",
     "jszip": "^3.10.1",
     "yaml": "^2.0.0"
   },

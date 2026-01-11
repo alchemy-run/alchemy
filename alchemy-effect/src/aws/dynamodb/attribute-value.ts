@@ -1,7 +1,10 @@
+import type {
+  AttributeValue,
+  ScalarAttributeType,
+} from "distilled-aws/dynamodb";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as S from "effect/Schema";
-import type { AttributeValue, ScalarAttributeType } from "itty-aws/dynamodb";
 import {
   getSetValueAST,
   isClassSchema,
@@ -130,7 +133,7 @@ export const fromAttributeValue = (value: AttributeValue): any => {
     return Object.fromEntries(
       Object.entries(value.M).map(([key, value]) => [
         key,
-        fromAttributeValue(value),
+        fromAttributeValue(value!),
       ]),
     );
   } else if (value.N) {
