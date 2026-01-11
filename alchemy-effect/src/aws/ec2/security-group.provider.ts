@@ -373,8 +373,8 @@ export const securityGroupProvider = () =>
                       e.message?.includes("DependencyViolation"))
                   );
                 },
-                schedule: Schedule.exponential(1000, 1.5).pipe(
-                  Schedule.intersect(Schedule.recurs(15)),
+                schedule: Schedule.fixed(5000).pipe(
+                  Schedule.intersect(Schedule.recurs(30)), // Up to ~2.5 minutes
                   Schedule.tapOutput(([, attempt]) =>
                     session.note(
                       `Waiting for dependencies to clear... (attempt ${attempt + 1})`,

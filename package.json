@@ -26,7 +26,7 @@
       "@types/node": "latest",
       "cloudflare": "^5.2.0",
       "effect": "latest",
-      "distilled-aws": "^0.0.18",
+      "distilled-aws": "^0.0.19",
       "typescript": "^5.9.3",
       "vite": "^7.1.9",
       "wrangler": "^4.42.2"
@@ -56,8 +56,10 @@
     "setup": "effect-language-service patch && bun run download:external",
     "publish:npm": "bun run build && bun run --filter alchemy-effect publish:npm",
     "test:benchmark": "bun run --filter alchemy-effect test:benchmark",
+    "test:fast": "FAST=1 bun run test:live",
     "test:local": "LOCAL=1 bun ./scripts/test.ts",
-    "test:live": "bun ./scripts/test.ts"
+    "test:live": "bun ./scripts/test.ts",
+    "test": "bun run test:live"
   },
   "devDependencies": {
     "@ark/attest": "^0.55.0",

@@ -164,6 +164,60 @@ export function test(
 }
 
 export namespace test {
+  export function skip(
+    name: string,
+    options: {
+      timeout?: number;
+      state?: Layer.Layer<State.State, never, App>;
+    },
+    testCase: Effect.Effect<void, any, Provided>,
+  ): void;
+
+  export function skip(
+    name: string,
+    testCase: Effect.Effect<void, any, Provided>,
+  ): void;
+
+  export function skip(
+    name: string,
+    ...args:
+      | [
+          {
+            timeout?: number;
+            state?: Layer.Layer<State.State, never, App>;
+          },
+          Effect.Effect<void, any, Provided>,
+        ]
+      | [Effect.Effect<void, any, Provided>]
+  ) {
+    const [options = {}, _testCase] =
+      args.length === 1 ? [undefined, args[0]] : args;
+    it.skip(name, () => {}, options.timeout);
+  }
+
+  export function skipIf(condition: boolean) {
+    return function (
+      name: string,
+      ...args:
+        | [
+            {
+              timeout?: number;
+              state?: Layer.Layer<State.State, never, App>;
+            },
+            Effect.Effect<void, any, Provided>,
+          ]
+        | [Effect.Effect<void, any, Provided>]
+    ) {
+      if (condition) {
+        const [options = {}, _testCase] =
+          args.length === 1 ? [undefined, args[0]] : args;
+        it.skip(name, () => {}, options.timeout);
+      } else {
+        test(name, ...(args as [Effect.Effect<void, any, Provided>]));
+      }
+    };
+  }
+
   export const state = (resources: Record<string, State.ResourceState> = {}) =>
     Layer.effect(
       State.State,

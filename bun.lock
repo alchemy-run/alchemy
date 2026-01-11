@@ -119,7 +119,7 @@
     "@types/bun": "latest",
     "@types/node": "latest",
     "cloudflare": "^5.2.0",
-    "distilled-aws": "^0.0.18",
+    "distilled-aws": "^0.0.19",
     "effect": "latest",
     "typescript": "^5.9.3",
     "vite": "^7.1.9",
@@ -762,7 +762,7 @@
 
     "diff": ["diff@8.0.2", "", {}, "sha512-sSuxWU5j5SR9QQji/o2qMvqRNYRDOcBTgsJ/DeCf4iSN4gW+gNMXM7wFIP+fdXZxoNiAnHUTGjCr+TSWXdRDKg=="],
 
-    "distilled-aws": ["distilled-aws@0.0.18", "", { "dependencies": { "@aws-crypto/crc32": "^5.2.0", "@aws-sdk/credential-providers": "^3.933.0", "@smithy/util-base64": "^4.3.0", "aws4fetch": "^1.0.20", "fast-xml-parser": "^5.3.2" }, "peerDependencies": { "@effect/platform": "latest", "effect": "latest" } }, "sha512-MCmHoJxPRwIVJhhW197tTfszT+jKKtSsYvpIDhtwTrxxgaVXCJNP8xn04H0ECduuAMQZH8hyPq2m/ue0Z1pw9g=="],
+    "distilled-aws": ["distilled-aws@0.0.19", "", { "dependencies": { "@aws-crypto/crc32": "^5.2.0", "@aws-sdk/credential-providers": "^3.933.0", "@smithy/util-base64": "^4.3.0", "aws4fetch": "^1.0.20", "fast-xml-parser": "^5.3.2" }, "peerDependencies": { "@effect/platform": "latest", "effect": "latest" } }, "sha512-khgFOw7NqML0gXhhLIC8CsdtKWM6BH3aUfH+KL2GEmHR4nMezbbB9Po1sNXfB6XMpt6+KcbIuMVqKT2Wev5TKw=="],
 
     "dotenv": ["dotenv@17.2.3", "", {}, "sha512-JVUnt+DUIzu87TABbhPmNfVdBDt18BLOWjMUFJMSi/Qqg7NTYtabbvSNJGOJ7afbRuv9D/lngizHtP7QyLQ+9w=="],
 

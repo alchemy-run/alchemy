@@ -45,7 +45,7 @@ const apply = (<const Resources extends (AnyService | AnyResource)[] = never>(
     Effect.flatMap(applyPlan),
   )) as typeof _apply;
 
-test(
+test.skipIf(!!process.env.FAST)(
   "VPC evolution: from simple to complex",
   {
     timeout: 1_000_000,
@@ -1172,7 +1172,7 @@ test(
   }).pipe(Effect.provide(AWS.providers()), logLevel),
 );
 
-test(
+test.skipIf(!!process.env.FAST)(
   "Comprehensive VPC with all components",
   {
     timeout: 1_000_000,

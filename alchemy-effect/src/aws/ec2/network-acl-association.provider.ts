@@ -122,48 +122,61 @@ export const networkAclAssociationProvider = () =>
 
           // When deleting, we need to associate the subnet back to the default NACL
           // Find the default NACL for the VPC
-          const subnetResult = yield* ec2.describeSubnets({
-            SubnetIds: [olds.subnetId as string],
-          });
+          const subnetResult = yield* ec2
+            .describeSubnets({
+              SubnetIds: [olds.subnetId as string],
+            })
+            .pipe(
+              // If subnet is already deleted, association is gone too
+              Effect.catchTag("InvalidSubnetID.NotFound", () =>
+                Effect.succeed({ Subnets: [] }),
+              ),
+            );
           const vpcId = subnetResult.Subnets?.[0]?.VpcId;
 
-          if (vpcId) {
-            const defaultAclResult = yield* ec2.describeNetworkAcls({
-              Filters: [
-                { Name: "vpc-id", Values: [vpcId] },
-                { Name: "default", Values: ["true"] },
-              ],
-            });
+          if (!vpcId) {
+            // Subnet is already deleted, so the association is gone
+            yield* session.note(
+              `Subnet already deleted, association is gone`,
+            );
+            return;
+          }
 
-            const defaultAclId =
-              defaultAclResult.NetworkAcls?.[0]?.NetworkAclId;
+          const defaultAclResult = yield* ec2.describeNetworkAcls({
+            Filters: [
+              { Name: "vpc-id", Values: [vpcId] },
+              { Name: "default", Values: ["true"] },
+            ],
+          });
 
-            if (
-              defaultAclId &&
-              defaultAclId !== (olds.networkAclId as string)
-            ) {
-              // Replace with default NACL
-              yield* ec2
-                .replaceNetworkAclAssociation({
-                  AssociationId: output.associationId,
-                  NetworkAclId: defaultAclId,
-                  DryRun: false,
-                })
-                .pipe(
-                  Effect.catchTag(
-                    "InvalidAssociationID.NotFound",
-                    () => Effect.void,
-                  ),
-                );
+          const defaultAclId =
+            defaultAclResult.NetworkAcls?.[0]?.NetworkAclId;
 
-              yield* session.note(
-                `Network ACL Association reverted to default`,
+          if (
+            defaultAclId &&
+            defaultAclId !== (olds.networkAclId as string)
+          ) {
+            // Replace with default NACL
+            yield* ec2
+              .replaceNetworkAclAssociation({
+                AssociationId: output.associationId,
+                NetworkAclId: defaultAclId,
+                DryRun: false,
+              })
+              .pipe(
+                Effect.catchTag(
+                  "InvalidAssociationID.NotFound",
+                  () => Effect.void,
+                ),
               );
-            } else {
-              yield* session.note(
-                `Already using default Network ACL, nothing to do`,
-              );
-            }
+
+            yield* session.note(
+              `Network ACL Association reverted to default`,
+            );
+          } else {
+            yield* session.note(
+              `Already using default Network ACL, nothing to do`,
+            );
           }
         }),
       } satisfies ProviderService<

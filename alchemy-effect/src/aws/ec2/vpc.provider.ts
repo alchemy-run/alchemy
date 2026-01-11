@@ -194,8 +194,9 @@ export const vpcProvider = () =>
                       e.message?.includes("DependencyViolation"))
                   );
                 },
-                schedule: Schedule.exponential(1000, 1.5).pipe(
-                  Schedule.intersect(Schedule.recurs(20)), // Try up to 20 times
+                // Use fixed 5s delay instead of exponential to avoid very long waits
+                schedule: Schedule.fixed(5000).pipe(
+                  Schedule.intersect(Schedule.recurs(60)), // Up to 5 minutes total
                   Schedule.tapOutput(([, attempt]) =>
                     session.note(
                       `Waiting for dependencies to clear... (attempt ${attempt + 1})`,
@@ -203,6 +204,10 @@ export const vpcProvider = () =>
                   ),
                 ),
               }),
+              // Log the actual error for debugging
+              Effect.tapError((e) =>
+                session.note(`VPC delete failed: ${e._tag} - ${e.message}`),
+              ),
             );
 
           // 2. Wait for VPC to be fully deleted

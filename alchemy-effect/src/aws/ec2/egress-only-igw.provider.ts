@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 
 import { createInternalTags, createTagsList, diffTags } from "../../tags.ts";
 import { Account } from "../account.ts";
@@ -166,11 +167,24 @@ export const egressOnlyInternetGatewayProvider = () =>
               DryRun: false,
             })
             .pipe(
+              Effect.tapError(Effect.logDebug),
               Effect.catchTag("InvalidGatewayID.NotFound", () => Effect.void),
               Effect.catchTag(
                 "InvalidEgressOnlyInternetGatewayId.NotFound",
                 () => Effect.void,
               ),
+              // Retry on dependency violations (e.g., routes still using the EIGW)
+              Effect.retry({
+                while: (e) => e._tag === "DependencyViolation",
+                schedule: Schedule.fixed(5000).pipe(
+                  Schedule.intersect(Schedule.recurs(30)), // Up to ~2.5 minutes
+                  Schedule.tapOutput(([, attempt]) =>
+                    session.note(
+                      `Waiting for dependencies to clear... (attempt ${attempt + 1})`,
+                    ),
+                  ),
+                ),
+              }),
             );
 
           yield* session.note(`Egress-Only Internet Gateway ${eigwId} deleted`);
