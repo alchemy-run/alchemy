@@ -40,8 +40,12 @@ export const bindings = () =>
   Layer.mergeAll(
     DynamoDB.getItemFromLambdaFunction(),
     S3.bucketEventSourceProvider(),
+    S3.copyObjectFromLambdaFunction(),
     S3.deleteObjectFromLambdaFunction(),
     S3.getObjectFromLambdaFunction(),
+    S3.headObjectFromLambdaFunction(),
+    S3.listObjectsV2FromLambdaFunction(),
+    S3.multipartUploadFromLambdaFunction(),
     S3.putObjectFromLambdaFunction(),
     SQS.queueEventSourceProvider(),
     SQS.sendMessageFromLambdaFunction(),
