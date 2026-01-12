@@ -1,6 +1,7 @@
 import * as Layer from "effect/Layer";
 import * as ESBuild from "../esbuild.ts";
 import * as Account from "./account.ts";
+import * as AssetsProvider from "./assets.provider.ts";
 import * as Credentials from "./credentials.ts";
 import * as DynamoDB from "./dynamodb/index.ts";
 import * as EC2 from "./ec2/index.ts";
@@ -68,8 +69,14 @@ export const config = <L extends Layer.Layer<any, any, any>>(layer: L) =>
     Layer.provideMerge(Endpoint.fromStageConfig()),
   );
 
+/**
+ * AWS providers with optional Assets layer for S3-based code deployment.
+ * If the assets bucket exists (created via `alchemy-effect bootstrap`),
+ * Lambda functions will use S3 for code deployment instead of inline ZipFile.
+ */
 export const providers = () =>
   bareProviders().pipe(
+    Layer.provideMerge(AssetsProvider.assetsLayerWithFallback()),
     Layer.provideMerge(Account.fromStageConfig()),
     Layer.provideMerge(Region.fromStageConfig()),
     Layer.provideMerge(Credentials.fromStageConfig()),

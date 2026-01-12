@@ -20,6 +20,7 @@
     "@effect/platform-node": "catalog:",
     "@types/aws-lambda": "catalog:",
     "alchemy-effect": "workspace:*",
+    "distilled-aws": "catalog:",
     "effect": "catalog:"
   },
   "devDependencies": {

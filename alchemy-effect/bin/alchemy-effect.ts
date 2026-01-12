@@ -1,26 +1,33 @@
-import { Command, Options, Args } from "@effect/cli";
-import * as ValidationError from "@effect/cli/ValidationError";
+import { Args, Command, Options } from "@effect/cli";
 import * as HelpDoc from "@effect/cli/HelpDoc";
-import * as ConfigProvider from "effect/ConfigProvider";
+import * as ValidationError from "@effect/cli/ValidationError";
 import { NodeContext, NodeRuntime } from "@effect/platform-node";
-import * as PlatformConfigProvider from "@effect/platform/PlatformConfigProvider";
 import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
 import { Path } from "@effect/platform/Path";
-import * as Logger from "effect/Logger";
-import * as Effect from "effect/Effect";
+import * as PlatformConfigProvider from "@effect/platform/PlatformConfigProvider";
 import * as Config from "effect/Config";
-import * as Option from "effect/Option";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { asEffect } from "../src/util.ts";
+import * as Logger from "effect/Logger";
+import * as Option from "effect/Option";
 import packageJson from "../package.json";
-import * as State from "../src/state.ts";
-import { applyPlan } from "../src/apply.ts";
-import { plan } from "../src/plan.ts";
-import { dotAlchemy } from "../src/dot-alchemy.ts";
 import * as App from "../src/app.ts";
-import type { Stack } from "../src/stack.ts";
+import { applyPlan } from "../src/apply.ts";
+import * as AWSAccount from "../src/aws/account.ts";
+import { bootstrap as bootstrapAws } from "../src/aws/bootstrap.ts";
+import * as AWSCredentials from "../src/aws/credentials.ts";
+import * as AWSEndpoint from "../src/aws/endpoint.ts";
+import * as AWSRegion from "../src/aws/region.ts";
 import * as CLI from "../src/cli/index.ts";
+import { dotAlchemy } from "../src/dot-alchemy.ts";
+import { plan } from "../src/plan.ts";
 import { Resource } from "../src/resource.ts";
+import type { Stack } from "../src/stack.ts";
+import * as State from "../src/state.ts";
+import { asEffect } from "../src/util.ts";
+// Import to trigger module augmentation for StageConfig.aws
+import "../src/aws/config.ts";
 
 const USER = Config.string("USER").pipe(
   Config.orElse(() => Config.string("USERNAME")),
@@ -118,6 +125,7 @@ const destroyCommand = Command.make(
     main,
     envFile,
     stage,
+    yes,
   },
   (args) =>
     execStack({
@@ -141,6 +149,77 @@ const planCommand = Command.make(
       dryRun: true,
       select: (stack) => stack.resources,
     }),
+);
+
+const awsProfile = Options.text("profile").pipe(
+  Options.withDescription("AWS profile to use for credentials"),
+  Options.optional,
+  Options.map(Option.getOrUndefined),
+);
+
+const awsRegion = Options.text("region").pipe(
+  Options.withDescription(
+    "AWS region to bootstrap (defaults to AWS_REGION env var)",
+  ),
+  Options.optional,
+  Options.map(Option.getOrUndefined),
+);
+
+const bootstrapCommand = Command.make(
+  "bootstrap",
+  {
+    envFile,
+    profile: awsProfile,
+    region: awsRegion,
+  },
+  (args) => {
+    // Create a minimal app config for bootstrap
+    // Use "default" profile if none specified
+    const appLayer = App.make({
+      name: "bootstrap",
+      stage: "bootstrap",
+      config: {
+        aws: {
+          profile: args.profile ?? "default",
+          region: args.region,
+        },
+      },
+    });
+
+    const awsLayers = Layer.mergeAll(
+      AWSAccount.fromStageConfig(),
+      AWSRegion.fromStageConfig(),
+      AWSCredentials.fromStageConfig(),
+      AWSEndpoint.fromStageConfig(),
+    ).pipe(Layer.provideMerge(appLayer));
+
+    const platform = Layer.mergeAll(
+      NodeContext.layer,
+      FetchHttpClient.layer,
+      Logger.pretty,
+    );
+
+    // Build configProvider effect that requires platform (for fromDotEnv)
+    const configProviderEffect = Option.isSome(args.envFile)
+      ? Effect.map(
+          PlatformConfigProvider.fromDotEnv(args.envFile.value),
+          (dotEnv) => ConfigProvider.orElse(dotEnv, ConfigProvider.fromEnv),
+        )
+      : Effect.succeed(ConfigProvider.fromEnv());
+
+    return Effect.gen(function* () {
+      const provider = yield* configProviderEffect;
+      yield* bootstrapAws().pipe(
+        Effect.tap(({ bucketName, created }) =>
+          created
+            ? Effect.logInfo(`✓ Created assets bucket: ${bucketName}`)
+            : Effect.logInfo(`✓ Assets bucket already exists: ${bucketName}`),
+        ),
+        Effect.provide(awsLayers),
+        Effect.withConfigProvider(provider),
+      );
+    }).pipe(Effect.provide(platform)) as Effect.Effect<void, any, never>;
+  },
 );
 
 const execStack = Effect.fn(function* ({
@@ -248,7 +327,12 @@ const execStack = Effect.fn(function* ({
 });
 
 const root = Command.make("alchemy-effect", {}).pipe(
-  Command.withSubcommands([deployCommand, destroyCommand, planCommand]),
+  Command.withSubcommands([
+    bootstrapCommand,
+    deployCommand,
+    destroyCommand,
+    planCommand,
+  ]),
 );
 
 // Set up the CLI application

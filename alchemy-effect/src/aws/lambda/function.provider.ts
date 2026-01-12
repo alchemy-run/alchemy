@@ -3,24 +3,26 @@ import path from "node:path";
 
 import { FileSystem } from "@effect/platform";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 
+import * as iam from "distilled-aws/iam";
 import type {
   CreateFunctionRequest,
   CreateFunctionUrlConfigRequest,
   UpdateFunctionUrlConfigRequest,
 } from "distilled-aws/lambda";
+import * as lambda from "distilled-aws/lambda";
+import { Region } from "distilled-aws/Region";
 import { App } from "../../app.ts";
 import { DotAlchemy } from "../../dot-alchemy.ts";
+import { createPhysicalName } from "../../physical-name.ts";
 import { createInternalTags, createTagsList, hasTags } from "../../tags.ts";
 import { Account } from "../account.ts";
+import { Assets } from "../assets.ts";
 import * as IAM from "../iam/index.ts";
-import { Region } from "distilled-aws/Region";
 import { zipCode } from "../zip.ts";
-import { createPhysicalName } from "../../physical-name.ts";
 import { Function, type FunctionAttr, type FunctionProps } from "./function.ts";
-import * as iam from "distilled-aws/iam";
-import * as lambda from "distilled-aws/lambda";
 
 export const functionProvider = () =>
   Function.provider.effect(
@@ -223,27 +225,51 @@ export const functionProvider = () =>
         news,
         roleArn,
         code,
+        hash,
         env,
         functionName,
       }: {
         id: string;
         news: FunctionProps<any>;
         roleArn: string;
-        code: string | Uint8Array<ArrayBufferLike>;
+        code: Uint8Array<ArrayBufferLike>;
+        hash: string;
         env: Record<string, string> | undefined;
         functionName: string;
       }) {
         yield* Effect.logDebug(`creating function ${id}`);
 
         const tags = yield* createInternalTags(id);
+
+        // Try to use S3 if assets bucket is available, otherwise fall back to inline ZipFile
+        const assets = yield* Effect.serviceOption(Assets);
+        const codeLocation = yield* Option.match(assets, {
+          onNone: () =>
+            Effect.gen(function* () {
+              const zipped = yield* zipCode(code);
+              return { ZipFile: zipped } as const;
+            }),
+          onSome: (assetsService) =>
+            Effect.gen(function* () {
+              const key = yield* assetsService.uploadAsset(
+                hash,
+                yield* zipCode(code),
+              );
+              yield* Effect.logDebug(
+                `Using S3 for code: s3://${assetsService.bucketName}/${key}`,
+              );
+              return {
+                S3Bucket: assetsService.bucketName,
+                S3Key: key,
+              } as const;
+            }),
+        });
+
         const createFunctionRequest: CreateFunctionRequest = {
           FunctionName: functionName,
           Handler: `index.${news.handler ?? "default"}`,
           Role: roleArn,
-          Code: {
-            // TODO(sam): upload to assets
-            ZipFile: yield* zipCode(code),
-          },
+          Code: codeLocation,
           Runtime: news.runtime ?? "nodejs22.x",
           Environment: env
             ? {
@@ -273,8 +299,13 @@ export const functionProvider = () =>
                   .updateFunctionCode({
                     FunctionName: createFunctionRequest.FunctionName,
                     Architectures: createFunctionRequest.Architectures,
-                    ZipFile: createFunctionRequest.Code.ZipFile,
-                    // TODO(sam): support uploading via S3
+                    // Use S3 or ZipFile based on what was used for create
+                    ...("S3Bucket" in codeLocation
+                      ? {
+                          S3Bucket: codeLocation.S3Bucket,
+                          S3Key: codeLocation.S3Key,
+                        }
+                      : { ZipFile: codeLocation.ZipFile }),
                   })
                   .pipe(
                     Effect.retry({
@@ -438,6 +469,10 @@ export const functionProvider = () =>
       return {
         stables: ["functionArn", "functionName", "roleName"],
         diff: Effect.fn(function* ({ id, olds, news, output }) {
+          // If output is undefined (resource in creating state), defer to default diff
+          if (!output) {
+            return undefined;
+          }
           if (
             // function name changed
             output.functionName !==
@@ -497,12 +532,14 @@ export const functionProvider = () =>
           const role = yield* createRoleIfNotExists({ id, roleName });
 
           // mock code
-          const code = "export default () => {}";
+          const code = new TextEncoder().encode("export default () => {}");
+          const hash = yield* hashCode(code);
           yield* createOrUpdateFunction({
             id,
             news,
             roleArn: role.Role.Arn,
             code,
+            hash,
             functionName,
             env: {},
           });
@@ -513,7 +550,7 @@ export const functionProvider = () =>
             functionUrl: undefined,
             roleName,
             code: {
-              hash: yield* hashCode(code),
+              hash,
             },
             roleArn,
           } satisfies FunctionAttr<FunctionProps>;
@@ -538,8 +575,8 @@ export const functionProvider = () =>
             id,
             news,
             roleArn: role.Role.Arn,
-            // TODO(sam): upload to assets
             code,
+            hash,
             env,
             functionName,
           });
@@ -587,8 +624,8 @@ export const functionProvider = () =>
             id,
             news,
             roleArn: output.roleArn,
-            // TODO(sam): upload to assets
             code,
+            hash,
             env,
             functionName,
           });

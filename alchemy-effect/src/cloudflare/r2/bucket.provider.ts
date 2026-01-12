@@ -51,13 +51,20 @@ export const bucketProvider = () =>
         }),
         create: Effect.fnUntraced(function* ({ id, news }) {
           const name = yield* createBucketName(id, news.name);
-          const bucket = yield* api.r2.buckets.create({
-            account_id: accountId,
-            name,
-            storageClass: news.storageClass,
-            jurisdiction: news.jurisdiction,
-            locationHint: news.locationHint,
-          });
+          const bucket = yield* api.r2.buckets
+            .create({
+              account_id: accountId,
+              name,
+              storageClass: news.storageClass,
+              jurisdiction: news.jurisdiction,
+              locationHint: news.locationHint,
+            })
+            .pipe(
+              // Handle idempotency: if bucket already exists and we own it, adopt it
+              Effect.catchTag("Conflict", () =>
+                api.r2.buckets.get(name, { account_id: accountId }),
+              ),
+            );
           return mapResult<BucketProps>(bucket);
         }),
         update: Effect.fnUntraced(function* ({ news, output }) {
