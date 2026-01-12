@@ -584,6 +584,10 @@ function parseResourceFile(
   const resourceInfo = findResourceType(sourceFile);
   if (!resourceInfo) return undefined;
 
+  // Extract to local constants for TypeScript narrowing in nested function
+  const resourceName = resourceInfo.name;
+  const resourceType = resourceInfo.type;
+
   let propsInterface: ParsedInterface | undefined;
   let attrsInterface: ParsedInterface | undefined;
   let resourceJsDoc: string | undefined;
@@ -594,22 +598,22 @@ function parseResourceFile(
     if (ts.isInterfaceDeclaration(node)) {
       const name = node.name.text;
 
-      if (name === `${resourceInfo.name}Props`) {
+      if (name === `${resourceName}Props`) {
         propsInterface = {
           name,
           jsDoc: extractJSDoc(node, sourceFile),
           properties: parseInterfaceProperties(node, sourceFile),
         };
       } else if (
-        name === `${resourceInfo.name}Attrs` ||
-        name === `${resourceInfo.name}Attr`
+        name === `${resourceName}Attrs` ||
+        name === `${resourceName}Attr`
       ) {
         attrsInterface = {
           name,
           jsDoc: extractJSDoc(node, sourceFile),
           properties: parseInterfaceProperties(node, sourceFile),
         };
-      } else if (name === resourceInfo.name) {
+      } else if (name === resourceName) {
         // The main resource interface might have JSDoc
         resourceJsDoc = extractJSDoc(node, sourceFile);
       }
@@ -621,7 +625,7 @@ function parseResourceFile(
       node.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)
     ) {
       for (const decl of node.declarationList.declarations) {
-        if (ts.isIdentifier(decl.name) && decl.name.text === resourceInfo.name) {
+        if (ts.isIdentifier(decl.name) && decl.name.text === resourceName) {
           // Extract sections and examples from the resource declaration's JSDoc
           sections = extractSectionsAndExamples(node, sourceFile);
           // Also try to get JSDoc from the variable statement if not found elsewhere
@@ -638,8 +642,8 @@ function parseResourceFile(
   visit(sourceFile);
 
   return {
-    name: resourceInfo.name,
-    resourceType: resourceInfo.type,
+    name: resourceName,
+    resourceType: resourceType,
     cloud,
     service,
     propsInterface,
@@ -657,6 +661,10 @@ function parseCapabilityFile(
   const capabilityInfo = findCapabilityType(sourceFile);
   if (!capabilityInfo) return undefined;
 
+  // Extract to local constants for TypeScript narrowing in nested function
+  const capabilityName = capabilityInfo.name;
+  const capabilityType = capabilityInfo.type;
+
   const parentResourceName = getParentResourceName(filePath);
   let optionsInterface: ParsedInterface | undefined;
   let capabilityJsDoc: string | undefined;
@@ -666,13 +674,13 @@ function parseCapabilityFile(
     if (ts.isInterfaceDeclaration(node)) {
       const name = node.name.text;
 
-      if (name === `${capabilityInfo.name}Options`) {
+      if (name === `${capabilityName}Options`) {
         optionsInterface = {
           name,
           jsDoc: extractJSDoc(node, sourceFile),
           properties: parseInterfaceProperties(node, sourceFile),
         };
-      } else if (name === capabilityInfo.name) {
+      } else if (name === capabilityName) {
         capabilityJsDoc = extractJSDoc(node, sourceFile);
       }
     }
@@ -684,8 +692,8 @@ function parseCapabilityFile(
   const functions = findExportedFunctions(sourceFile);
 
   return {
-    name: capabilityInfo.name,
-    capabilityType: capabilityInfo.type,
+    name: capabilityName,
+    capabilityType: capabilityType,
     parentResourceName,
     options: optionsInterface,
     functions,
