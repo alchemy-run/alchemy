@@ -175,7 +175,7 @@ function extractJSDoc(node: ts.Node, sourceFile: ts.SourceFile): string | undefi
         return doc.comment;
       }
       return doc.comment
-        .map((c) => (ts.isJSDocText(c) ? c.text : ""))
+        .map((c) => ("text" in c ? c.text : ""))
         .join("");
     }
   }
@@ -215,7 +215,7 @@ function extractDefaultTag(node: ts.Node, sourceFile: ts.SourceFile): string | u
           }
           if (tag.comment) {
             return tag.comment
-              .map((c) => (ts.isJSDocText(c) ? c.text : ""))
+              .map((c) => ("text" in c ? c.text : ""))
               .join("");
           }
         }
@@ -772,7 +772,7 @@ function groupByResource(
   for (const cap of capabilities) {
     // Find the matching resource in the same directory
     const capDir = path.dirname(cap.filePath);
-    for (const [key, doc] of docs) {
+    for (const [_key, doc] of Array.from(docs.entries())) {
       const resourceDir = path.dirname(doc.resource.filePath);
       if (
         capDir === resourceDir &&
@@ -787,7 +787,7 @@ function groupByResource(
   // Link event sources to resources
   for (const es of eventSources) {
     const esDir = path.dirname(es.filePath);
-    for (const [key, doc] of docs) {
+    for (const [_key, doc] of Array.from(docs.entries())) {
       const resourceDir = path.dirname(doc.resource.filePath);
       if (
         esDir === resourceDir &&
@@ -1026,7 +1026,7 @@ async function writeDocFiles(
   docs: Map<string, ResourceDoc>,
   outputDir: string
 ): Promise<void> {
-  for (const [_key, doc] of docs) {
+  for (const [_key, doc] of Array.from(docs.entries())) {
     const outputPath = path.join(
       outputDir,
       doc.resource.cloud,
