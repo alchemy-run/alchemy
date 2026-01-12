@@ -1,0 +1,34 @@
+# NatGateway
+
+**Type:** `AWS.EC2.NatGateway`
+
+## Props
+
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| subnetId | `Input<SubnetId>` | Yes | - | The subnet in which to create the NAT gateway. For public NAT gateways, this must be a public subnet. |
+| allocationId | `Input<AllocationId>` | No | - | The allocation ID of the Elastic IP address for the gateway. Required for public NAT gateways. |
+| connectivityType | `EC2.ConnectivityType` | No | "public" | Indicates whether the NAT gateway supports public or private connectivity. |
+| privateIpAddress | `string` | No | - | The private IPv4 address to assign to the NAT gateway. If you don't provide an address, a private IPv4 address will be automatically assigned. |
+| secondaryAllocationIds | `Input<AllocationId>[]` | No | - | Secondary allocation IDs for additional private IP addresses. Only valid for private NAT gateways. |
+| secondaryPrivateIpAddresses | `string[]` | No | - | Secondary private IPv4 addresses. Only valid for private NAT gateways. |
+| secondaryPrivateIpAddressCount | `number` | No | - | The number of secondary private IPv4 addresses to assign. Only valid for private NAT gateways. |
+| tags | `Record<string, Input<string>>` | No | - | Tags to assign to the NAT gateway. |
+
+## Attributes
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| natGatewayId | `NatGatewayId` | The ID of the NAT gateway. |
+| natGatewayArn | ``arn:aws:ec2:${RegionID}:${AccountID}:natgateway/${this["natGatewayId"]}`` | The Amazon Resource Name (ARN) of the NAT gateway. |
+| subnetId | `Props["subnetId"]` | The ID of the subnet in which the NAT gateway is located. |
+| vpcId | `string` | The ID of the VPC in which the NAT gateway is located. |
+| state | `EC2.NatGatewayState` | The current state of the NAT gateway. |
+| connectivityType | `EC2.ConnectivityType` | The connectivity type of the NAT gateway. |
+| publicIp | `string` | The Elastic IP address associated with the NAT gateway (for public NAT gateways). |
+| privateIp | `string` | The private IP address associated with the NAT gateway. |
+| natGatewayAddresses | `Array<{     allocationId?: string;     networkInterfaceId?: string;     privateIp?: string;     publicIp?: string;     associationId?: string;     isPrimary?: boolean;     failureMessage?: string;     status?: EC2.NatGatewayAddressStatus;   }>` | Information about the IP addresses and network interface associated with the NAT gateway. |
+| failureCode | `string` | If the NAT gateway could not be created, specifies the error code for the failure. |
+| failureMessage | `string` | If the NAT gateway could not be created, specifies the error message for the failure. |
+| createTime | `string` | The date and time the NAT gateway was created. |
+| deleteTime | `string` | The date and time the NAT gateway was deleted, if applicable. |

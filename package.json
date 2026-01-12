@@ -47,6 +47,7 @@
     "dev": "tsc -w & bun run --filter alchemy-effect dev",
     "download:cfn": "bun scripts/generate-cfn-docs.ts",
     "download:terraform": "./scripts/clone-external",
+    "generate:docs": "bun scripts/generate-docs.ts",
     "download:env": "doppler secrets download --no-file --format env > .env",
     "download:external": "bun download:env && bun download:cfn && bun download:terraform",
     "format:check": "bun run format -- --check",
