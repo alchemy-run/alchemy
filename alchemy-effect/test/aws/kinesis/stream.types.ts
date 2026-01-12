@@ -39,7 +39,7 @@ const streamForwarder = Lambda.consumeStream("StreamForwarder", {
         AnotherStream,
         { id: record.kinesis.data.eventId },
         { partitionKey: record.kinesis.data.eventId },
-      );
+      ).pipe(Effect.catchAll(() => Effect.void));
     }
   }),
 });
@@ -77,7 +77,9 @@ const streamToQueue = Lambda.consumeStream("StreamToQueue", {
   stream: EventStream,
   handle: Effect.fn(function* (event) {
     for (const record of event.Records) {
-      yield* SQS.sendMessage(OutputQueue, JSON.stringify(record.kinesis.data));
+      yield* SQS.sendMessage(OutputQueue, JSON.stringify(record.kinesis.data)).pipe(
+        Effect.catchAll(() => Effect.void),
+      );
     }
   }),
 });
@@ -105,12 +107,14 @@ const multiBindingConsumer = Lambda.consumeStream("MultiBindingConsumer", {
   stream: EventStream,
   handle: Effect.fn(function* (event) {
     for (const record of event.Records) {
-      yield* SQS.sendMessage(OutputQueue, JSON.stringify(record.kinesis.data));
+      yield* SQS.sendMessage(OutputQueue, JSON.stringify(record.kinesis.data)).pipe(
+        Effect.catchAll(() => Effect.void),
+      );
       yield* Kinesis.putRecord(
         AnotherStream,
         { id: record.kinesis.data.eventId },
         { partitionKey: record.kinesis.data.eventId },
-      );
+      ).pipe(Effect.catchAll(() => Effect.void));
     }
   }),
 });
@@ -194,7 +198,7 @@ const batchProducer = Lambda.serve("BatchProducer", {
         data: { eventId: "2", timestamp: Date.now(), data: null },
         partitionKey: "pk2",
       },
-    ]);
+    ]).pipe(Effect.catchAll(() => Effect.void));
     return { statusCode: 200, body: "OK" };
   }),
 });

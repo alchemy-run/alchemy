@@ -63,7 +63,7 @@ test(
             payload: "Hello from producer",
           },
           { partitionKey: "test-key" },
-        );
+        ).pipe(Effect.catchAll(() => Effect.void));
         return { statusCode: 200, body: "OK" };
       }),
     })({
@@ -103,7 +103,7 @@ test(
           { data: { id: "1", value: 100 }, partitionKey: "pk1" },
           { data: { id: "2", value: 200 }, partitionKey: "pk2" },
           { data: { id: "3", value: 300 }, partitionKey: "pk3" },
-        ]);
+        ]).pipe(Effect.catchAll(() => Effect.void));
         return { statusCode: 200, body: "OK" };
       }),
     })({
