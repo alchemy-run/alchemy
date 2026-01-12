@@ -19,7 +19,7 @@ const waitForStreamActive = (streamName: string) =>
     return StreamDescriptionSummary;
   }).pipe(
     Effect.retry({
-      while: (e) =>
+      while: (e: { _tag: string }) =>
         e._tag === "StreamNotActive" ||
         // During stream creation, AWS may return incomplete responses that fail parsing
         e._tag === "ParseError",
@@ -37,7 +37,7 @@ const waitForStreamDeleted = (streamName: string) =>
     return yield* Effect.fail({ _tag: "StreamStillExists" as const });
   }).pipe(
     Effect.retry({
-      while: (e) =>
+      while: (e: { _tag: string }) =>
         e._tag === "StreamStillExists" ||
         // During stream deletion, AWS may return incomplete responses that fail parsing
         e._tag === "ParseError",

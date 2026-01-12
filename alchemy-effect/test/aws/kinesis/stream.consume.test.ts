@@ -169,7 +169,7 @@ const assertStreamDeleted = Effect.fn(function* (streamName: string) {
   }).pipe(
     Effect.flatMap(() => Effect.fail(new StreamStillExists())),
     Effect.retry({
-      while: (e) =>
+      while: (e: { _tag: string }) =>
         e._tag === "StreamStillExists" ||
         e._tag === "ParseError",
       schedule: Schedule.exponential(500).pipe(

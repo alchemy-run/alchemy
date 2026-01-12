@@ -420,7 +420,7 @@ const assertStreamDeleted = Effect.fn(function* (streamName: string) {
   }).pipe(
     Effect.flatMap(() => Effect.fail(new StreamStillExists())),
     Effect.retry({
-      while: (e) =>
+      while: (e: { _tag: string }) =>
         e._tag === "StreamStillExists" ||
         // During stream deletion, AWS may return incomplete responses that fail parsing
         e._tag === "ParseError",
