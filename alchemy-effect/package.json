@@ -55,6 +55,11 @@
       "bun": "./src/aws/lambda/index.ts",
       "import": "./lib/aws/lambda/index.js"
     },
+    "./aws/s3": {
+      "types": "./lib/aws/s3/index.d.ts",
+      "bun": "./src/aws/s3/index.ts",
+      "import": "./lib/aws/s3/index.js"
+    },
     "./aws/sqs": {
       "types": "./lib/sqs/aws/index.d.ts",
       "bun": "./src/aws/sqs/index.ts",
