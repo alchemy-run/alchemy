@@ -1,5 +1,6 @@
 export * from "./consume-bucket-notification.ts";
 export * from "./consume-queue.ts";
+export * from "./consume-stream.ts";
 export * from "./function.handler.ts";
 export * from "./function.invoke.ts";
 export * from "./function.provider.ts";
