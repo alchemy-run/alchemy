@@ -320,3 +320,97 @@ We include various external references in the `.external` directory for you to s
 - To list all available AWS services, you can simply `ls .external/cfn/`.
 - To list all available resources for a service, you can simply `ls .external/cfn/{service}/`.
 - To list all available resources for a specific service, you can simply `ls .external/cfn/{service}/`.
+
+# Pull Request Guidelines
+
+## PR Body Format
+
+PR bodies should focus exclusively on developer experience (DX) through code snippets. Keep descriptions minimal - one sentence per section followed by a code example.
+
+**Format:**
+
+```markdown
+One sentence describing the feature or change.
+
+## Section Name
+
+```typescript
+// Code snippet demonstrating usage
+```
+
+## Another Section
+
+```typescript
+// Another code snippet
+```
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+```
+
+**Example PR body:**
+
+```markdown
+Add AWS Kinesis Data Streams support with type-safe Lambda integration.
+
+## Stream Resource
+
+\`\`\`typescript
+class EventStream extends Kinesis.Stream("EventStream", {
+  schema: S.Struct({
+    eventId: S.String,
+    timestamp: S.Number,
+  }),
+  streamMode: "ON_DEMAND",
+}) {}
+\`\`\`
+
+## Consume Stream
+
+\`\`\`typescript
+class Consumer extends Lambda.consumeStream("Consumer", {
+  stream: EventStream,
+  handle: Effect.fn(function* (event) {
+    for (const record of event.Records) {
+      console.log(record.kinesis.data.eventId);
+    }
+  }),
+})({
+  main: "./handler.ts",
+  bindings: $(),
+}) {}
+\`\`\`
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+```
+
+**Guidelines:**
+
+- One sentence intro, then code
+- Each section: heading + code snippet
+- No bullet point lists of features
+- No test plan checklists
+- Let the code speak for itself
+
+# Build and Type Checking
+
+Always run type checking before committing changes:
+
+```bash
+bun tsc -b
+```
+
+This runs the TypeScript compiler in build mode, which checks all projects in the workspace. This is critical because CI will fail if there are type errors.
+
+## Build Commands
+
+| Command | Description |
+|---------|-------------|
+| `bun tsc -b` | Type check all projects (always run before committing) |
+| `bun run build` | Clean, type check, and build the alchemy-effect package |
+| `bun build:clean` | Full clean rebuild: cleans all artifacts, reinstalls dependencies, builds, and downloads env |
+
+Use `bun build:clean` when you encounter stale build artifacts or dependency issues. It runs:
+1. `bun clean .` - Removes all untracked files except .env
+2. `bun i` - Reinstalls dependencies
+3. `bun run build` - Builds the project
+4. `bun download:env` - Downloads environment files
