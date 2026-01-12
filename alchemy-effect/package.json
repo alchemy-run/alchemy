@@ -45,6 +45,11 @@
       "bun": "./src/aws/ec2/index.ts",
       "import": "./lib/aws/ec2/index.js"
     },
+    "./aws/kinesis": {
+      "types": "./lib/aws/kinesis/index.d.ts",
+      "bun": "./src/aws/kinesis/index.ts",
+      "import": "./lib/aws/kinesis/index.js"
+    },
     "./aws/lambda": {
       "types": "./lib/aws/lambda/index.d.ts",
       "bun": "./src/aws/lambda/index.ts",

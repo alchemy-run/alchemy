@@ -5,6 +5,7 @@ import * as Credentials from "./credentials.ts";
 import * as DynamoDB from "./dynamodb/index.ts";
 import * as EC2 from "./ec2/index.ts";
 import * as Endpoint from "./endpoint.ts";
+import * as Kinesis from "./kinesis/index.ts";
 import * as Lambda from "./lambda/index.ts";
 import * as Region from "./region.ts";
 import * as S3 from "./s3/index.ts";
@@ -30,6 +31,7 @@ export const resources = () =>
     EC2.subnetProvider(),
     EC2.vpcEndpointProvider(),
     EC2.vpcProvider(),
+    Kinesis.streamProvider(),
     Lambda.functionProvider(),
     S3.bucketPolicyProvider(),
     S3.bucketProvider(),
@@ -39,6 +41,8 @@ export const resources = () =>
 export const bindings = () =>
   Layer.mergeAll(
     DynamoDB.getItemFromLambdaFunction(),
+    Kinesis.streamEventSourceProvider(),
+    Kinesis.putRecordFromLambdaFunction(),
     S3.bucketEventSourceProvider(),
     S3.deleteObjectFromLambdaFunction(),
     S3.getObjectFromLambdaFunction(),
