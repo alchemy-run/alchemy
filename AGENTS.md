@@ -390,3 +390,27 @@ class Consumer extends Lambda.consumeStream("Consumer", {
 - No bullet point lists of features
 - No test plan checklists
 - Let the code speak for itself
+
+# Build and Type Checking
+
+Always run type checking before committing changes:
+
+```bash
+bun tsc -b
+```
+
+This runs the TypeScript compiler in build mode, which checks all projects in the workspace. This is critical because CI will fail if there are type errors.
+
+## Build Commands
+
+| Command | Description |
+|---------|-------------|
+| `bun tsc -b` | Type check all projects (always run before committing) |
+| `bun run build` | Clean, type check, and build the alchemy-effect package |
+| `bun build:clean` | Full clean rebuild: cleans all artifacts, reinstalls dependencies, builds, and downloads env |
+
+Use `bun build:clean` when you encounter stale build artifacts or dependency issues. It runs:
+1. `bun clean .` - Removes all untracked files except .env
+2. `bun i` - Reinstalls dependencies
+3. `bun run build` - Builds the project
+4. `bun download:env` - Downloads environment files
