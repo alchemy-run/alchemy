@@ -110,6 +110,64 @@ export interface BucketProps {
 
 The `@default` tag is used to document default values and will appear in the generated documentation.
 
+### Examples and Sections (IMPORTANT)
+
+**Examples are critical for documentation.** Every resource should have examples demonstrating common use cases. Use `@section` and `@example` JSDoc tags on the main Resource export to organize examples into a navigable table of contents.
+
+**Format:**
+- `@section <Section Title>` - Creates a heading in the Examples section and adds an entry to the Quick Reference table of contents
+- `@example <Example Title>` - Creates a subheading for a specific code example (must follow a `@section`)
+- Code blocks inside examples use standard markdown fenced code blocks (``` ```)
+
+**Example:**
+
+```typescript
+/**
+ * An S3 bucket for storing objects.
+ *
+ * @section Creating a Bucket
+ * @example Basic Bucket
+ * ```typescript
+ * const bucket = yield* Bucket("my-bucket", {});
+ * ```
+ *
+ * @example Bucket with Force Destroy
+ * ```typescript
+ * const bucket = yield* Bucket("my-bucket", {
+ *   forceDestroy: true,
+ * });
+ * ```
+ *
+ * @section Reading Objects
+ * @example Get Object from Bucket
+ * ```typescript
+ * const response = yield* getObject(bucket, { key: "my-key" });
+ * const body = yield* Effect.tryPromise(() => response.Body?.transformToString());
+ * ```
+ *
+ * @section Writing Objects
+ * @example Put Object to Bucket
+ * ```typescript
+ * yield* putObject(bucket, {
+ *   key: "hello.txt",
+ *   body: "Hello, World!",
+ *   contentType: "text/plain",
+ * });
+ * ```
+ */
+export const Bucket = Resource<...>("AWS.S3.Bucket");
+```
+
+This generates:
+1. A "Quick Reference" section with links to each `@section`
+2. An "Examples" section with organized code examples under each section heading
+
+**Best practices for examples:**
+- Start with the simplest use case and progress to more complex ones
+- Include examples for all major capabilities (GetObject, PutObject, etc.)
+- Show real-world patterns like error handling, combining with other resources
+- Use descriptive titles that explain what the example demonstrates
+
 # Workflow
 
 Development of Alchemy-Effect Resources is heavily pattern based. Each Service has many Resources that each have 0 oor more Capabilities and Event Sources. When working on a new Service, the following steps should be followed.

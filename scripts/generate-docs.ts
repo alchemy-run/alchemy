@@ -4,6 +4,19 @@ import * as ts from "typescript";
 
 // ============ Types ============
 
+interface ParsedExample {
+  title: string;
+  code: string;
+  language: string;
+}
+
+interface ParsedSection {
+  title: string;
+  anchor: string;
+  description: string | undefined;
+  examples: ParsedExample[];
+}
+
 interface ParsedProperty {
   name: string;
   type: string;
@@ -52,6 +65,7 @@ interface ParsedResource {
   attrsInterface: ParsedInterface | undefined;
   filePath: string;
   jsDoc: string | undefined;
+  sections: ParsedSection[];
 }
 
 interface ResourceDoc {
@@ -220,6 +234,120 @@ function extractDefaultTag(node: ts.Node, sourceFile: ts.SourceFile): string | u
   }
 
   return undefined;
+}
+
+function toAnchor(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-");
+}
+
+function extractSectionsAndExamples(
+  node: ts.Node,
+  sourceFile: ts.SourceFile
+): ParsedSection[] {
+  const sections: ParsedSection[] = [];
+
+  // Get the full JSDoc comment text
+  const fullText = sourceFile.getFullText();
+  const nodeStart = node.getFullStart();
+  const leadingTrivia = fullText.substring(nodeStart, node.getStart(sourceFile));
+
+  // Look for JSDoc comment pattern: /** ... */
+  const jsDocMatch = leadingTrivia.match(/\/\*\*\s*([\s\S]*?)\s*\*\//);
+  if (!jsDocMatch) return sections;
+
+  const docContent = jsDocMatch[1];
+
+  // Clean up lines but preserve structure
+  const lines = docContent
+    .split("\n")
+    .map((line) => line.replace(/^\s*\*\s?/, ""));
+
+  let currentSection: ParsedSection | undefined;
+  let currentExample: { title: string; codeLines: string[]; language: string } | undefined;
+  let inCodeBlock = false;
+  let codeBlockLanguage = "typescript";
+
+  for (const line of lines) {
+    // Check for @section tag
+    const sectionMatch = line.match(/^@section\s+(.+)$/);
+    if (sectionMatch) {
+      // Save previous section
+      if (currentSection) {
+        if (currentExample && currentExample.codeLines.length > 0) {
+          currentSection.examples.push({
+            title: currentExample.title,
+            code: currentExample.codeLines.join("\n"),
+            language: currentExample.language,
+          });
+        }
+        sections.push(currentSection);
+      }
+      currentSection = {
+        title: sectionMatch[1].trim(),
+        anchor: toAnchor(sectionMatch[1].trim()),
+        description: undefined,
+        examples: [],
+      };
+      currentExample = undefined;
+      continue;
+    }
+
+    // Check for @example tag
+    const exampleMatch = line.match(/^@example\s+(.+)$/);
+    if (exampleMatch) {
+      // Save previous example
+      if (currentSection && currentExample && currentExample.codeLines.length > 0) {
+        currentSection.examples.push({
+          title: currentExample.title,
+          code: currentExample.codeLines.join("\n"),
+          language: currentExample.language,
+        });
+      }
+      currentExample = {
+        title: exampleMatch[1].trim(),
+        codeLines: [],
+        language: "typescript",
+      };
+      continue;
+    }
+
+    // Check for code block start
+    const codeStartMatch = line.match(/^```(\w*)$/);
+    if (codeStartMatch && currentExample) {
+      inCodeBlock = true;
+      codeBlockLanguage = codeStartMatch[1] || "typescript";
+      currentExample.language = codeBlockLanguage;
+      continue;
+    }
+
+    // Check for code block end
+    if (line.trim() === "```" && inCodeBlock) {
+      inCodeBlock = false;
+      continue;
+    }
+
+    // Collect code lines
+    if (inCodeBlock && currentExample) {
+      currentExample.codeLines.push(line);
+    }
+  }
+
+  // Save final section and example
+  if (currentSection) {
+    if (currentExample && currentExample.codeLines.length > 0) {
+      currentSection.examples.push({
+        title: currentExample.title,
+        code: currentExample.codeLines.join("\n"),
+        language: currentExample.language,
+      });
+    }
+    sections.push(currentSection);
+  }
+
+  return sections;
 }
 
 function parseInterfaceProperties(
@@ -459,8 +587,9 @@ function parseResourceFile(
   let propsInterface: ParsedInterface | undefined;
   let attrsInterface: ParsedInterface | undefined;
   let resourceJsDoc: string | undefined;
+  let sections: ParsedSection[] = [];
 
-  // Find Props and Attrs interfaces
+  // Find Props and Attrs interfaces, and extract sections from resource declaration
   function visit(node: ts.Node) {
     if (ts.isInterfaceDeclaration(node)) {
       const name = node.name.text;
@@ -485,6 +614,24 @@ function parseResourceFile(
         resourceJsDoc = extractJSDoc(node, sourceFile);
       }
     }
+
+    // Look for the resource declaration to extract sections/examples
+    if (
+      ts.isVariableStatement(node) &&
+      node.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)
+    ) {
+      for (const decl of node.declarationList.declarations) {
+        if (ts.isIdentifier(decl.name) && decl.name.text === resourceInfo.name) {
+          // Extract sections and examples from the resource declaration's JSDoc
+          sections = extractSectionsAndExamples(node, sourceFile);
+          // Also try to get JSDoc from the variable statement if not found elsewhere
+          if (!resourceJsDoc) {
+            resourceJsDoc = extractJSDoc(node, sourceFile);
+          }
+        }
+      }
+    }
+
     ts.forEachChild(node, visit);
   }
 
@@ -499,6 +646,7 @@ function parseResourceFile(
     attrsInterface,
     filePath,
     jsDoc: resourceJsDoc,
+    sections,
   };
 }
 
@@ -786,6 +934,16 @@ function generateResourceMarkdown(doc: ResourceDoc): string {
   lines.push(`**Type:** \`${doc.resource.resourceType}\``);
   lines.push("");
 
+  // Table of Contents (if there are sections)
+  if (doc.resource.sections.length > 0) {
+    lines.push("## Quick Reference");
+    lines.push("");
+    for (const section of doc.resource.sections) {
+      lines.push(`- [${section.title}](#${section.anchor})`);
+    }
+    lines.push("");
+  }
+
   // Props section
   if (
     doc.resource.propsInterface &&
@@ -831,6 +989,31 @@ function generateResourceMarkdown(doc: ResourceDoc): string {
     lines.push("");
     for (const es of doc.eventSources) {
       lines.push(generateEventSourceSection(es));
+    }
+  }
+
+  // Examples section (from @section and @example tags)
+  if (doc.resource.sections.length > 0) {
+    lines.push("## Examples");
+    lines.push("");
+
+    for (const section of doc.resource.sections) {
+      lines.push(`### ${section.title}`);
+      lines.push("");
+
+      if (section.description) {
+        lines.push(section.description);
+        lines.push("");
+      }
+
+      for (const example of section.examples) {
+        lines.push(`#### ${example.title}`);
+        lines.push("");
+        lines.push(`\`\`\`${example.language}`);
+        lines.push(example.code);
+        lines.push("```");
+        lines.push("");
+      }
     }
   }
 
