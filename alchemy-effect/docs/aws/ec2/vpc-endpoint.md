@@ -1,0 +1,43 @@
+# VpcEndpoint
+
+**Type:** `AWS.EC2.VpcEndpoint`
+
+## Props
+
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| vpcId | `Input<VpcId>` | Yes | - | The VPC to create the endpoint in. |
+| serviceName | `string` | Yes | - | The service name. For AWS services, use the format: com.amazonaws.<region>.<service> |
+| vpcEndpointType | `EC2.VpcEndpointType` | No | "Gateway" | The type of endpoint. - Gateway: For S3 and DynamoDB (route table based) - Interface: For most other AWS services (ENI based) - GatewayLoadBalancer: For Gateway Load Balancer endpoints |
+| routeTableIds | `Input<RouteTableId>[]` | No | - | The IDs of route tables for a Gateway endpoint. Required for Gateway endpoints. |
+| subnetIds | `Input<SubnetId>[]` | No | - | The IDs of subnets for an Interface endpoint. Required for Interface endpoints. |
+| securityGroupIds | `Input<SecurityGroupId>[]` | No | - | The IDs of security groups for an Interface endpoint. Required for Interface endpoints. |
+| privateDnsEnabled | `boolean` | No | true | Whether to associate a private hosted zone with the VPC. Only applicable for Interface endpoints. |
+| policyDocument | `string` | No | - | A policy to attach to the endpoint that controls access to the service. The policy document must be in JSON format. |
+| ipAddressType | `EC2.IpAddressType` | No | - | The IP address type for the endpoint. |
+| dnsOptions | `{     dnsRecordIpType?: EC2.DnsRecordIpType;     privateDnsOnlyForInboundResolverEndpoint?: boolean;   }` | No | - | The DNS options for the endpoint. |
+| tags | `Record<string, Input<string>>` | No | - | Tags to assign to the VPC endpoint. |
+
+## Attributes
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| vpcEndpointId | `VpcEndpointId` | The ID of the VPC endpoint. |
+| vpcEndpointArn | ``arn:aws:ec2:${RegionID}:${AccountID}:vpc-endpoint/${this["vpcEndpointId"]}`` | The Amazon Resource Name (ARN) of the VPC endpoint. |
+| vpcEndpointType | `EC2.VpcEndpointType` | The type of endpoint. |
+| vpcId | `Props["vpcId"]` | The ID of the VPC. |
+| serviceName | `Props["serviceName"]` | The service name. |
+| state | `EC2.State` | The current state of the VPC endpoint. |
+| policyDocument | `string` | The policy document associated with the endpoint. |
+| routeTableIds | `string[]` | The IDs of the route tables associated with the endpoint. |
+| subnetIds | `string[]` | The IDs of the subnets associated with the endpoint. |
+| groups | `Array<{     groupId: string;     groupName: string;   }>` | Information about the security groups associated with the network interfaces. |
+| privateDnsEnabled | `boolean` | Whether private DNS is enabled. |
+| requesterManaged | `boolean` | Whether the VPC endpoint is being managed by its service. |
+| networkInterfaceIds | `string[]` | The IDs of the network interfaces for the endpoint. |
+| dnsEntries | `Array<{     dnsName?: string;     hostedZoneId?: string;   }>` | The DNS entries for the endpoint. |
+| creationTimestamp | `string` | The date and time the VPC endpoint was created. |
+| ownerId | `string` | The ID of the AWS account that owns the VPC endpoint. |
+| ipAddressType | `EC2.IpAddressType` | The IP address type for the endpoint. |
+| dnsOptions | `{     dnsRecordIpType?: EC2.DnsRecordIpType;     privateDnsOnlyForInboundResolverEndpoint?: boolean;   }` | The DNS options for the endpoint. |
+| lastError | `{     code?: string;     message?: string;   }` | The last error that occurred for VPC endpoint. |

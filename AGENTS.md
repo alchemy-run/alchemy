@@ -67,11 +67,48 @@ alchemy-effect/src/{cloud}/{service}/{resource}.provider.ts # resource provider
 alchemy-effect/src/{cloud}/{service}/{resource}.{capability}.ts
 # test files
 alchemy-effect/test/{cloud}/{service}/{resource}.provider.test.ts
-# docs
-alchemy-effect/docs/{cloud}/{service}/index.md # overview and references to each resource in the service
-alchemy-effect/docs/{cloud}/{service}/{resource}.md # documents the usage patterns of a resource. This is not an API reference, it is a use-case oriented guide that focuses on providing snippets of common patterns and best practices. It can link out to the API reference for more detailed information.
-alchemy-effect/docs/api/{cloud}/{service}/{resource}.md # API reference for the resource generated from comments in the source code (do not manually edit this file).
+# docs (auto-generated from source code - do not manually edit)
+alchemy-effect/docs/{cloud}/{service}/{resource}.md # API reference for the resource, auto-generated from JSDoc comments
 ```
+
+# Documentation Generation
+
+**Source of truth:** The source code is the single source of truth for all API documentation. JSDoc comments in the source files are extracted and used to generate markdown documentation.
+
+**How to generate docs:**
+
+```sh
+bun run generate:docs
+# or directly:
+bun scripts/generate-docs.ts
+```
+
+This script:
+1. Discovers all resource files in `alchemy-effect/src/{cloud}/{service}/`
+2. Parses TypeScript using the TypeScript Compiler API
+3. Extracts JSDoc comments from Props and Attrs interfaces
+4. Extracts capabilities and event sources for each resource
+5. Generates one markdown file per resource at `alchemy-effect/docs/{cloud}/{service}/{resource}.md`
+
+**Writing good documentation:** When adding or updating a resource, ensure all Props and Attrs have JSDoc comments:
+
+```typescript
+export interface BucketProps {
+  /**
+   * Name of the bucket. If omitted, a unique name will be generated.
+   * Must be lowercase and between 3-63 characters.
+   */
+  bucketName?: string;
+
+  /**
+   * Whether to delete all objects when the bucket is destroyed.
+   * @default false
+   */
+  forceDestroy?: boolean;
+}
+```
+
+The `@default` tag is used to document default values and will appear in the generated documentation.
 
 # Workflow
 
