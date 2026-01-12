@@ -320,3 +320,73 @@ We include various external references in the `.external` directory for you to s
 - To list all available AWS services, you can simply `ls .external/cfn/`.
 - To list all available resources for a service, you can simply `ls .external/cfn/{service}/`.
 - To list all available resources for a specific service, you can simply `ls .external/cfn/{service}/`.
+
+# Pull Request Guidelines
+
+## PR Body Format
+
+PR bodies should focus exclusively on developer experience (DX) through code snippets. Keep descriptions minimal - one sentence per section followed by a code example.
+
+**Format:**
+
+```markdown
+One sentence describing the feature or change.
+
+## Section Name
+
+```typescript
+// Code snippet demonstrating usage
+```
+
+## Another Section
+
+```typescript
+// Another code snippet
+```
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+```
+
+**Example PR body:**
+
+```markdown
+Add AWS Kinesis Data Streams support with type-safe Lambda integration.
+
+## Stream Resource
+
+\`\`\`typescript
+class EventStream extends Kinesis.Stream("EventStream", {
+  schema: S.Struct({
+    eventId: S.String,
+    timestamp: S.Number,
+  }),
+  streamMode: "ON_DEMAND",
+}) {}
+\`\`\`
+
+## Consume Stream
+
+\`\`\`typescript
+class Consumer extends Lambda.consumeStream("Consumer", {
+  stream: EventStream,
+  handle: Effect.fn(function* (event) {
+    for (const record of event.Records) {
+      console.log(record.kinesis.data.eventId);
+    }
+  }),
+})({
+  main: "./handler.ts",
+  bindings: $(),
+}) {}
+\`\`\`
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+```
+
+**Guidelines:**
+
+- One sentence intro, then code
+- Each section: heading + code snippet
+- No bullet point lists of features
+- No test plan checklists
+- Let the code speak for itself
