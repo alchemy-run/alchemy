@@ -19,7 +19,10 @@ const waitForStreamActive = (streamName: string) =>
     return StreamDescriptionSummary;
   }).pipe(
     Effect.retry({
-      while: (e) => e._tag === "StreamNotActive",
+      while: (e) =>
+        e._tag === "StreamNotActive" ||
+        // During stream creation, AWS may return incomplete responses that fail parsing
+        e._tag === "ParseError",
       schedule: Schedule.exponential(500).pipe(
         Schedule.intersect(Schedule.recurs(60)),
       ),
@@ -34,7 +37,10 @@ const waitForStreamDeleted = (streamName: string) =>
     return yield* Effect.fail({ _tag: "StreamStillExists" as const });
   }).pipe(
     Effect.retry({
-      while: (e) => e._tag === "StreamStillExists",
+      while: (e) =>
+        e._tag === "StreamStillExists" ||
+        // During stream deletion, AWS may return incomplete responses that fail parsing
+        e._tag === "ParseError",
       schedule: Schedule.exponential(500).pipe(
         Schedule.intersect(Schedule.recurs(60)),
       ),
