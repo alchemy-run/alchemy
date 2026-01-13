@@ -26,7 +26,7 @@
       "@types/node": "latest",
       "cloudflare": "^5.2.0",
       "effect": "latest",
-      "distilled-aws": "^0.0.20",
+      "distilled-aws": "^0.0.21",
       "typescript": "^5.9.3",
       "vite": "^7.1.9",
       "wrangler": "^4.42.2"
@@ -80,6 +80,6 @@
     "yaml": "^2.8.2"
   },
   "dependencies": {
-    "distilled-aws": "0.0.20"
+    "distilled-aws": "0.0.21"
   }
 }

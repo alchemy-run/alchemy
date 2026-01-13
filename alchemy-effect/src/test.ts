@@ -12,6 +12,7 @@ import * as Path from "@effect/platform/Path";
 import * as PlatformConfigProvider from "@effect/platform/PlatformConfigProvider";
 import { expect, it } from "@effect/vitest";
 import { ConfigProvider, LogLevel } from "effect";
+import * as NodePath from "node:path";
 import { App } from "./app.ts";
 import { CLI } from "./cli/service.ts";
 import { DotAlchemy, dotAlchemy } from "./dot-alchemy.ts";
@@ -112,8 +113,19 @@ export function test(
             "LOCALSTACK_ENDPOINT",
           ).pipe(Config.withDefault("http://localhost.localstack.cloud:4566"));
 
+          // Include test file path to prevent state collisions between tests with the same name
+          // Use the relative path from the test directory (e.g., "aws/s3/bucket.provider.test")
+          const testPath = expect.getState().testPath ?? "";
+          const testDir = testPath.includes("/test/")
+            ? testPath.split("/test/").pop() ?? ""
+            : NodePath.basename(testPath);
+          const testPathWithoutExt = testDir.replace(/\.[^.]+$/, "");
+          const appName = `${testPathWithoutExt}-${name}`
+            .replaceAll(/[^a-zA-Z0-9_]/g, "-")
+            .replace(/-+/g, "-");
+
           return App.of({
-            name: name.replaceAll(/[^a-zA-Z0-9_]/g, "-").replace(/-+/g, "-"),
+            name: appName,
             stage: "test",
             config: {
               adopt: true,

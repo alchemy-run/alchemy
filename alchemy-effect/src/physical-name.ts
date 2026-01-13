@@ -37,9 +37,11 @@ export const createPhysicalName = Effect.fn(function* ({
   /** Whether to lowercase the physical name. @default false */
   lowercase?: boolean;
 }) {
+  // Always generate DNS-compatible names (letters, numbers, and hyphens only).
+  // This ensures physical names work across all services including S3 buckets.
   const sanitize = (name: string) =>
     (lowercase ? name.toLowerCase() : name).replaceAll(
-      /[^a-zA-Z0-9-_]/g,
+      lowercase ? /[^a-z0-9-]/g : /[^a-zA-Z0-9-]/g,
       delimiter,
     );
   const app = yield* App;
