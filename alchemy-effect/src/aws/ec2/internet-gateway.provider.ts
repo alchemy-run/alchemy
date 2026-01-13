@@ -180,13 +180,21 @@ export const internetGatewayProvider = () =>
             `Deleting internet gateway: ${internetGatewayId}`,
           );
 
+          // Re-describe to get current attachments from AWS (don't rely on stored state)
+          // This handles cases where state is incomplete from a previous crashed run
+          const igw = yield* describeInternetGateway(
+            internetGatewayId,
+            session,
+          ).pipe(Effect.catchAll(() => Effect.succeed({ Attachments: [] })));
+          const attachments = igw.Attachments ?? [];
+
           // 1. Detach from all VPCs first
-          if (output.attachments && output.attachments.length > 0) {
-            for (const attachment of output.attachments) {
+          if (attachments.length > 0) {
+            for (const attachment of attachments) {
               yield* ec2
                 .detachInternetGateway({
                   InternetGatewayId: internetGatewayId,
-                  VpcId: attachment.vpcId,
+                  VpcId: attachment.VpcId!,
                 })
                 .pipe(
                   Effect.tapError(Effect.logDebug),
@@ -200,8 +208,8 @@ export const internetGatewayProvider = () =>
                     while: (e) => {
                       return e._tag === "DependencyViolation";
                     },
-                    schedule: Schedule.exponential(1000, 1.5).pipe(
-                      Schedule.intersect(Schedule.recurs(20)), // Up to 20 retries
+                    schedule: Schedule.fixed(5000).pipe(
+                      Schedule.intersect(Schedule.recurs(60)), // Up to 5 minutes
                       Schedule.tapOutput(([, attempt]) =>
                         session.note(
                           `Waiting for VPC dependencies to clear before detaching... (attempt ${attempt + 1})`,
@@ -210,7 +218,7 @@ export const internetGatewayProvider = () =>
                     ),
                   }),
                 );
-              yield* session.note(`Detached from VPC: ${attachment.vpcId}`);
+              yield* session.note(`Detached from VPC: ${attachment.VpcId}`);
             }
           }
 
@@ -235,8 +243,8 @@ export const internetGatewayProvider = () =>
                       e.message?.includes("DependencyViolation"))
                   );
                 },
-                schedule: Schedule.exponential(1000, 1.5).pipe(
-                  Schedule.intersect(Schedule.recurs(10)),
+                schedule: Schedule.fixed(5000).pipe(
+                  Schedule.intersect(Schedule.recurs(60)), // Up to 5 minutes
                   Schedule.tapOutput(([, attempt]) =>
                     session.note(
                       `Waiting for dependencies to clear... (attempt ${attempt + 1})`,
