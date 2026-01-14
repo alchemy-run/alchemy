@@ -2,6 +2,7 @@ import { defineStack, defineStages, USER } from "alchemy-effect";
 import { Api } from "./src/api.ts";
 import { Consumer } from "./src/consumer.ts";
 import { FileApi } from "./src/file-api.ts";
+import { TableConsumer } from "./src/table-consumer.ts";
 import * as AWS from "alchemy-effect/aws";
 import * as Layer from "effect/Layer";
 import * as Config from "effect/Config";
@@ -45,7 +46,7 @@ export const App = stages.ref<typeof stack>("my-aws-app").as({
 const stack = defineStack({
   name: "my-aws-app",
   stages,
-  resources: [Api, Consumer, FileApi],
+  resources: [Api, Consumer, FileApi, TableConsumer],
   providers: AWS.providers(),
 });
 

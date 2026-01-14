@@ -42,6 +42,7 @@ export const resources = () =>
 export const bindings = () =>
   Layer.mergeAll(
     DynamoDB.getItemFromLambdaFunction(),
+    DynamoDB.tableEventSourceProvider(),
     Kinesis.streamEventSourceProvider(),
     Kinesis.putRecordFromLambdaFunction(),
     S3.bucketEventSourceProvider(),
