@@ -44,8 +44,7 @@ export class FileApi extends Lambda.serve("FileApi", {
     if (method === "GET" && path === "/files") {
       const prefix = event.queryStringParameters?.prefix;
       const maxKeysStr = event.queryStringParameters?.maxKeys;
-      const continuationToken =
-        event.queryStringParameters?.continuationToken;
+      const continuationToken = event.queryStringParameters?.continuationToken;
 
       const result = yield* S3.listObjectsV2(FilesBucket, {
         prefix,

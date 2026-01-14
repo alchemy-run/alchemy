@@ -8,8 +8,10 @@ import { declare, type To } from "../../policy.ts";
 import { Function } from "../lambda/function.ts";
 import { Bucket } from "./bucket.ts";
 
-export interface ListObjectsV2<B = Bucket>
-  extends Capability<"AWS.S3.ListObjectsV2", B> {}
+export interface ListObjectsV2<B = Bucket> extends Capability<
+  "AWS.S3.ListObjectsV2",
+  B
+> {}
 
 export const ListObjectsV2 = Binding<
   <B extends Bucket>(bucket: B) => Binding<Function, ListObjectsV2<To<B>>>

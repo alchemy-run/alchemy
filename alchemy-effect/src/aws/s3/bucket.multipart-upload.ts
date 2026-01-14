@@ -12,8 +12,10 @@ import { Bucket } from "./bucket.ts";
 // MultipartUpload Capability (covers create, upload part, complete, abort)
 // ============================================================================
 
-export interface MultipartUpload<B = Bucket>
-  extends Capability<"AWS.S3.MultipartUpload", B> {}
+export interface MultipartUpload<B = Bucket> extends Capability<
+  "AWS.S3.MultipartUpload",
+  B
+> {}
 
 export const MultipartUpload = Binding<
   <B extends Bucket>(bucket: B) => Binding<Function, MultipartUpload<To<B>>>

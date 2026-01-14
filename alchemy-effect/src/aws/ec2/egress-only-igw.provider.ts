@@ -175,7 +175,8 @@ export const egressOnlyInternetGatewayProvider = () =>
               ),
               // Retry on dependency violations (e.g., routes still using the EIGW)
               Effect.retry({
-                while: (e: { _tag: string }) => e._tag === "DependencyViolation",
+                while: (e: { _tag: string }) =>
+                  e._tag === "DependencyViolation",
                 schedule: Schedule.fixed(5000).pipe(
                   Schedule.intersect(Schedule.recurs(30)), // Up to ~2.5 minutes
                   Schedule.tapOutput(([, attempt]) =>

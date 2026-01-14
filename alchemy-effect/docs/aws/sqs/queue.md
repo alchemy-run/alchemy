@@ -18,14 +18,14 @@
 
 #### Props
 
-| Property | Type | Required | Default | Description |
-|----------|------|----------|---------|-------------|
-| batchSize | `number` | No | - | - |
-| maxBatchingWindow | `number` | No | - | - |
-| scalingConfig | `Lambda.ScalingConfig` | No | - | - |
+| Property          | Type                   | Required | Default | Description |
+| ----------------- | ---------------------- | -------- | ------- | ----------- |
+| batchSize         | `number`               | No       | -       | -           |
+| maxBatchingWindow | `number`               | No       | -       | -           |
+| scalingConfig     | `Lambda.ScalingConfig` | No       | -       | -           |
 
 #### Attributes
 
-| Attribute | Type | Description |
-|-----------|------|-------------|
-| uuid | `string` | - |
+| Attribute | Type     | Description |
+| --------- | -------- | ----------- |
+| uuid      | `string` | -           |

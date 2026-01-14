@@ -12,4 +12,7 @@ export type StreamEvent<Data> = Omit<lambda.KinesisStreamEvent, "Records"> & {
   Records: StreamRecord<Data>[];
 };
 
-export interface Consume<S = Stream> extends Capability<"AWS.Kinesis.Consume", S> {}
+export interface Consume<S = Stream> extends Capability<
+  "AWS.Kinesis.Consume",
+  S
+> {}

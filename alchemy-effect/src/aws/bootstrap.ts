@@ -48,7 +48,9 @@ export const bootstrap = Effect.fn(function* () {
     // Verify it has our tag
     const tagging = yield* s3
       .getBucketTagging({ Bucket: bucketName })
-      .pipe(Effect.catchTag("NoSuchTagSet", () => Effect.succeed({ TagSet: [] })));
+      .pipe(
+        Effect.catchTag("NoSuchTagSet", () => Effect.succeed({ TagSet: [] })),
+      );
 
     const hasAssetsTag = tagging.TagSet?.some(
       (tag) => tag.Key === ASSETS_BUCKET_TAG && tag.Value === "true",
@@ -60,7 +62,9 @@ export const bootstrap = Effect.fn(function* () {
     }
 
     // Bucket exists but doesn't have our tag - add it
-    yield* Effect.logInfo(`Adding alchemy tag to existing bucket: ${bucketName}`);
+    yield* Effect.logInfo(
+      `Adding alchemy tag to existing bucket: ${bucketName}`,
+    );
     const existingTags = tagging.TagSet ?? [];
     yield* s3.putBucketTagging({
       Bucket: bucketName,

@@ -274,7 +274,11 @@ test(
       schema: S.Struct({
         event: S.String,
       }),
-      shardLevelMetrics: ["IncomingBytes", "IncomingRecords", "IteratorAgeMilliseconds"],
+      shardLevelMetrics: [
+        "IncomingBytes",
+        "IncomingRecords",
+        "IteratorAgeMilliseconds",
+      ],
     }) {}
 
     yield* apply(UpdatedMonitoredStream);

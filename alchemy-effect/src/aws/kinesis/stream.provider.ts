@@ -94,7 +94,8 @@ export const streamProvider = () =>
           yield* kinesis
             .createStream({
               StreamName: streamName,
-              ShardCount: news.streamMode === "PROVISIONED" ? news.shardCount : undefined,
+              ShardCount:
+                news.streamMode === "PROVISIONED" ? news.shardCount : undefined,
               StreamModeDetails: getStreamMode(news),
               Tags: allTags,
             })
@@ -144,7 +145,8 @@ export const streamProvider = () =>
             yield* waitForStreamActive(streamName);
           }
 
-          const streamArn = `arn:aws:kinesis:${region}:${accountId}:stream/${streamName}` as const;
+          const streamArn =
+            `arn:aws:kinesis:${region}:${accountId}:stream/${streamName}` as const;
           yield* session.note(streamArn);
 
           return {
@@ -169,7 +171,11 @@ export const streamProvider = () =>
           }
 
           // Handle shard count changes (only for PROVISIONED mode)
-          if (newMode === "PROVISIONED" && news.shardCount && news.shardCount !== olds.shardCount) {
+          if (
+            newMode === "PROVISIONED" &&
+            news.shardCount &&
+            news.shardCount !== olds.shardCount
+          ) {
             yield* kinesis.updateShardCount({
               StreamName: streamName,
               TargetShardCount: news.shardCount,
@@ -195,7 +201,9 @@ export const streamProvider = () =>
               });
             }
             yield* waitForStreamActive(streamName);
-            yield* session.note(`Updated retention period to ${newRetention} hours`);
+            yield* session.note(
+              `Updated retention period to ${newRetention} hours`,
+            );
           }
 
           // Handle encryption changes
@@ -217,7 +225,11 @@ export const streamProvider = () =>
             });
             yield* waitForStreamActive(streamName);
             yield* session.note("Disabled encryption");
-          } else if (oldEncryption && newEncryption && olds.kmsKeyId !== news.kmsKeyId) {
+          } else if (
+            oldEncryption &&
+            newEncryption &&
+            olds.kmsKeyId !== news.kmsKeyId
+          ) {
             // Change KMS key - need to stop and restart encryption
             yield* kinesis.stopStreamEncryption({
               StreamName: streamName,
@@ -237,8 +249,12 @@ export const streamProvider = () =>
           // Handle shard-level metrics changes
           const oldMetrics = new Set(olds.shardLevelMetrics ?? []);
           const newMetrics = new Set(news.shardLevelMetrics ?? []);
-          const metricsToEnable = (news.shardLevelMetrics ?? []).filter(m => !oldMetrics.has(m));
-          const metricsToDisable = (olds.shardLevelMetrics ?? []).filter(m => !newMetrics.has(m));
+          const metricsToEnable = (news.shardLevelMetrics ?? []).filter(
+            (m) => !oldMetrics.has(m),
+          );
+          const metricsToDisable = (olds.shardLevelMetrics ?? []).filter(
+            (m) => !newMetrics.has(m),
+          );
 
           if (metricsToDisable.length > 0) {
             yield* kinesis.disableEnhancedMonitoring({
@@ -246,7 +262,9 @@ export const streamProvider = () =>
               ShardLevelMetrics: metricsToDisable,
             });
             yield* waitForStreamActive(streamName);
-            yield* session.note(`Disabled metrics: ${metricsToDisable.join(", ")}`);
+            yield* session.note(
+              `Disabled metrics: ${metricsToDisable.join(", ")}`,
+            );
           }
 
           if (metricsToEnable.length > 0) {
@@ -255,7 +273,9 @@ export const streamProvider = () =>
               ShardLevelMetrics: metricsToEnable,
             });
             yield* waitForStreamActive(streamName);
-            yield* session.note(`Enabled metrics: ${metricsToEnable.join(", ")}`);
+            yield* session.note(
+              `Enabled metrics: ${metricsToEnable.join(", ")}`,
+            );
           }
 
           // Handle tag changes
@@ -291,7 +311,9 @@ export const streamProvider = () =>
               StreamName: input.output.streamName,
               EnforceConsumerDeletion: true,
             })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
+            .pipe(
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            );
 
           yield* waitForStreamDeleted(input.output.streamName);
         }),

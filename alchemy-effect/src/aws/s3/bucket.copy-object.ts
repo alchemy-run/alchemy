@@ -8,8 +8,10 @@ import { declare, type To } from "../../policy.ts";
 import { Function } from "../lambda/function.ts";
 import { Bucket } from "./bucket.ts";
 
-export interface CopyObject<B = Bucket>
-  extends Capability<"AWS.S3.CopyObject", B> {}
+export interface CopyObject<B = Bucket> extends Capability<
+  "AWS.S3.CopyObject",
+  B
+> {}
 
 export const CopyObject = Binding<
   <B extends Bucket>(bucket: B) => Binding<Function, CopyObject<To<B>>>

@@ -117,7 +117,7 @@ export function test(
           // Use the relative path from the test directory (e.g., "aws/s3/bucket.provider.test")
           const testPath = expect.getState().testPath ?? "";
           const testDir = testPath.includes("/test/")
-            ? testPath.split("/test/").pop() ?? ""
+            ? (testPath.split("/test/").pop() ?? "")
             : NodePath.basename(testPath);
           const testPathWithoutExt = testDir.replace(/\.[^.]+$/, "");
           const appName = `${testPathWithoutExt}-${name}`

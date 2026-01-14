@@ -136,9 +136,7 @@ export const networkAclAssociationProvider = () =>
 
           if (!vpcId) {
             // Subnet is already deleted, so the association is gone
-            yield* session.note(
-              `Subnet already deleted, association is gone`,
-            );
+            yield* session.note(`Subnet already deleted, association is gone`);
             return;
           }
 
@@ -149,13 +147,9 @@ export const networkAclAssociationProvider = () =>
             ],
           });
 
-          const defaultAclId =
-            defaultAclResult.NetworkAcls?.[0]?.NetworkAclId;
+          const defaultAclId = defaultAclResult.NetworkAcls?.[0]?.NetworkAclId;
 
-          if (
-            defaultAclId &&
-            defaultAclId !== (olds.networkAclId as string)
-          ) {
+          if (defaultAclId && defaultAclId !== (olds.networkAclId as string)) {
             // Replace with default NACL
             yield* ec2
               .replaceNetworkAclAssociation({
@@ -170,9 +164,7 @@ export const networkAclAssociationProvider = () =>
                 ),
               );
 
-            yield* session.note(
-              `Network ACL Association reverted to default`,
-            );
+            yield* session.note(`Network ACL Association reverted to default`);
           } else {
             yield* session.note(
               `Already using default Network ACL, nothing to do`,

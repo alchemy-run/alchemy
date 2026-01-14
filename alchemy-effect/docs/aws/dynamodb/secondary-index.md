@@ -4,9 +4,9 @@
 
 ## Props
 
-| Property | Type | Required | Default | Description |
-|----------|------|----------|---------|-------------|
-| table | `new () => Source` | Yes | - | - |
-| indexName | `string` | No | - | - |
-| partitionKey | `PartitionKey` | Yes | - | - |
-| sortKey | `SortKey` | No | - | - |
+| Property     | Type               | Required | Default | Description |
+| ------------ | ------------------ | -------- | ------- | ----------- |
+| table        | `new () => Source` | Yes      | -       | -           |
+| indexName    | `string`           | No       | -       | -           |
+| partitionKey | `PartitionKey`     | Yes      | -       | -           |
+| sortKey      | `SortKey`          | No       | -       | -           |

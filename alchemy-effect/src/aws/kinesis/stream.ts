@@ -13,7 +13,13 @@ export const Stream = Resource<{
 export interface Stream<
   ID extends string = string,
   Props extends StreamProps = StreamProps,
-> extends Resource<"AWS.Kinesis.Stream", ID, Props, StreamAttrs<Props>, Stream> {}
+> extends Resource<
+  "AWS.Kinesis.Stream",
+  ID,
+  Props,
+  StreamAttrs<Props>,
+  Stream
+> {}
 
 export type StreamAttrs<Props extends StreamProps> = {
   streamName: Props["streamName"] extends string ? Props["streamName"] : string;
@@ -21,11 +27,7 @@ export type StreamAttrs<Props extends StreamProps> = {
   streamStatus: StreamStatus;
 };
 
-export type StreamStatus =
-  | "CREATING"
-  | "DELETING"
-  | "ACTIVE"
-  | "UPDATING";
+export type StreamStatus = "CREATING" | "DELETING" | "ACTIVE" | "UPDATING";
 
 export type StreamMode = "PROVISIONED" | "ON_DEMAND";
 

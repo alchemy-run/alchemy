@@ -40,7 +40,9 @@ export const lookupAssetsBucket = Effect.gen(function* () {
   // Verify it has our tag
   const tagging = yield* s3
     .getBucketTagging({ Bucket: bucketName })
-    .pipe(Effect.catchTag("NoSuchTagSet", () => Effect.succeed({ TagSet: [] })));
+    .pipe(
+      Effect.catchTag("NoSuchTagSet", () => Effect.succeed({ TagSet: [] })),
+    );
 
   const hasAssetsTag = tagging.TagSet?.some(
     (tag) => tag.Key === ASSETS_BUCKET_TAG && tag.Value === "true",
@@ -63,13 +65,17 @@ const createAssetsService = (bucketName: string): typeof Assets.Service => ({
 
     return Effect.gen(function* () {
       // Check if asset already exists
-      const exists = yield* s3.headObject({ Bucket: bucketName, Key: key }).pipe(
-        Effect.map(() => true),
-        Effect.catchTag("NotFound", () => Effect.succeed(false)),
-      );
+      const exists = yield* s3
+        .headObject({ Bucket: bucketName, Key: key })
+        .pipe(
+          Effect.map(() => true),
+          Effect.catchTag("NotFound", () => Effect.succeed(false)),
+        );
 
       if (exists) {
-        yield* Effect.logDebug(`Asset already exists: s3://${bucketName}/${key}`);
+        yield* Effect.logDebug(
+          `Asset already exists: s3://${bucketName}/${key}`,
+        );
         return key;
       }
 

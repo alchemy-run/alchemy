@@ -166,7 +166,10 @@ async function discoverSourceFiles(srcDir: string): Promise<string[]> {
 
 // ============ TypeScript Parsing ============
 
-function extractJSDoc(node: ts.Node, sourceFile: ts.SourceFile): string | undefined {
+function extractJSDoc(
+  node: ts.Node,
+  sourceFile: ts.SourceFile,
+): string | undefined {
   // Try getJSDocCommentsAndTags first
   const jsDocs = ts.getJSDocCommentsAndTags(node);
   for (const doc of jsDocs) {
@@ -174,16 +177,17 @@ function extractJSDoc(node: ts.Node, sourceFile: ts.SourceFile): string | undefi
       if (typeof doc.comment === "string") {
         return doc.comment;
       }
-      return doc.comment
-        .map((c) => ("text" in c ? c.text : ""))
-        .join("");
+      return doc.comment.map((c) => ("text" in c ? c.text : "")).join("");
     }
   }
 
   // Fallback: look at leading comment trivia
   const fullText = sourceFile.getFullText();
   const nodeStart = node.getFullStart();
-  const leadingTrivia = fullText.substring(nodeStart, node.getStart(sourceFile));
+  const leadingTrivia = fullText.substring(
+    nodeStart,
+    node.getStart(sourceFile),
+  );
 
   // Look for JSDoc comment pattern: /** ... */
   const jsDocMatch = leadingTrivia.match(/\/\*\*\s*([\s\S]*?)\s*\*\//);
@@ -203,7 +207,10 @@ function extractJSDoc(node: ts.Node, sourceFile: ts.SourceFile): string | undefi
   return undefined;
 }
 
-function extractDefaultTag(node: ts.Node, sourceFile: ts.SourceFile): string | undefined {
+function extractDefaultTag(
+  node: ts.Node,
+  sourceFile: ts.SourceFile,
+): string | undefined {
   // Try getJSDocCommentsAndTags first
   const jsDocs = ts.getJSDocCommentsAndTags(node);
   for (const doc of jsDocs) {
@@ -214,9 +221,7 @@ function extractDefaultTag(node: ts.Node, sourceFile: ts.SourceFile): string | u
             return tag.comment;
           }
           if (tag.comment) {
-            return tag.comment
-              .map((c) => ("text" in c ? c.text : ""))
-              .join("");
+            return tag.comment.map((c) => ("text" in c ? c.text : "")).join("");
           }
         }
       }
@@ -226,7 +231,10 @@ function extractDefaultTag(node: ts.Node, sourceFile: ts.SourceFile): string | u
   // Fallback: look at leading comment trivia for @default tag
   const fullText = sourceFile.getFullText();
   const nodeStart = node.getFullStart();
-  const leadingTrivia = fullText.substring(nodeStart, node.getStart(sourceFile));
+  const leadingTrivia = fullText.substring(
+    nodeStart,
+    node.getStart(sourceFile),
+  );
 
   const defaultMatch = leadingTrivia.match(/@default\s+(.+?)(?:\n|\*\/)/);
   if (defaultMatch) {
@@ -245,14 +253,17 @@ function toAnchor(title: string): string {
 
 function extractSectionsAndExamples(
   node: ts.Node,
-  sourceFile: ts.SourceFile
+  sourceFile: ts.SourceFile,
 ): ParsedSection[] {
   const sections: ParsedSection[] = [];
 
   // Get the full JSDoc comment text
   const fullText = sourceFile.getFullText();
   const nodeStart = node.getFullStart();
-  const leadingTrivia = fullText.substring(nodeStart, node.getStart(sourceFile));
+  const leadingTrivia = fullText.substring(
+    nodeStart,
+    node.getStart(sourceFile),
+  );
 
   // Look for JSDoc comment pattern: /** ... */
   const jsDocMatch = leadingTrivia.match(/\/\*\*\s*([\s\S]*?)\s*\*\//);
@@ -266,7 +277,9 @@ function extractSectionsAndExamples(
     .map((line) => line.replace(/^\s*\*\s?/, ""));
 
   let currentSection: ParsedSection | undefined;
-  let currentExample: { title: string; codeLines: string[]; language: string } | undefined;
+  let currentExample:
+    | { title: string; codeLines: string[]; language: string }
+    | undefined;
   let inCodeBlock = false;
   let codeBlockLanguage = "typescript";
 
@@ -299,7 +312,11 @@ function extractSectionsAndExamples(
     const exampleMatch = line.match(/^@example\s+(.+)$/);
     if (exampleMatch) {
       // Save previous example
-      if (currentSection && currentExample && currentExample.codeLines.length > 0) {
+      if (
+        currentSection &&
+        currentExample &&
+        currentExample.codeLines.length > 0
+      ) {
         currentSection.examples.push({
           title: currentExample.title,
           code: currentExample.codeLines.join("\n"),
@@ -352,7 +369,7 @@ function extractSectionsAndExamples(
 
 function parseInterfaceProperties(
   node: ts.InterfaceDeclaration,
-  sourceFile: ts.SourceFile
+  sourceFile: ts.SourceFile,
 ): ParsedProperty[] {
   const properties: ParsedProperty[] = [];
 
@@ -374,7 +391,7 @@ function parseInterfaceProperties(
 function findStringLiteralInCallExpression(
   node: ts.Node,
   calleeName: string,
-  sourceFile: ts.SourceFile
+  sourceFile: ts.SourceFile,
 ): string | undefined {
   // Recursively find a CallExpression where the callee involves the given name
   // and extract the first string literal argument
@@ -410,7 +427,7 @@ function findStringLiteralInCallExpression(
 }
 
 function findResourceType(
-  sourceFile: ts.SourceFile
+  sourceFile: ts.SourceFile,
 ): { name: string; type: string } | undefined {
   let result: { name: string; type: string } | undefined;
 
@@ -429,7 +446,7 @@ function findResourceType(
           const resourceType = findStringLiteralInCallExpression(
             decl.initializer,
             "Resource",
-            sourceFile
+            sourceFile,
           );
           if (resourceType) {
             result = { name, type: resourceType };
@@ -439,7 +456,7 @@ function findResourceType(
           const runtimeType = findStringLiteralInCallExpression(
             decl.initializer,
             "Runtime",
-            sourceFile
+            sourceFile,
           );
           if (runtimeType) {
             result = { name, type: runtimeType };
@@ -457,7 +474,7 @@ function findResourceType(
 
 function findBindingType(
   node: ts.Node,
-  sourceFile: ts.SourceFile
+  sourceFile: ts.SourceFile,
 ): string | undefined {
   // Look for Binding<...>(Target, "TYPE") or Binding<...>(Target, "TYPE", "Name")
   // The second argument is the capability type string
@@ -492,7 +509,7 @@ function findBindingType(
 }
 
 function findCapabilityType(
-  sourceFile: ts.SourceFile
+  sourceFile: ts.SourceFile,
 ): { name: string; type: string } | undefined {
   let result: { name: string; type: string } | undefined;
 
@@ -579,7 +596,7 @@ function parseResourceFile(
   filePath: string,
   sourceFile: ts.SourceFile,
   cloud: string,
-  service: string
+  service: string,
 ): ParsedResource | undefined {
   const resourceInfo = findResourceType(sourceFile);
   if (!resourceInfo) return undefined;
@@ -656,7 +673,7 @@ function parseResourceFile(
 
 function parseCapabilityFile(
   filePath: string,
-  sourceFile: ts.SourceFile
+  sourceFile: ts.SourceFile,
 ): ParsedCapability | undefined {
   const capabilityInfo = findCapabilityType(sourceFile);
   if (!capabilityInfo) return undefined;
@@ -704,12 +721,13 @@ function parseCapabilityFile(
 
 function parseEventSourceFile(
   filePath: string,
-  sourceFile: ts.SourceFile
+  sourceFile: ts.SourceFile,
 ): ParsedEventSource | undefined {
   const basename = path.basename(filePath, ".ts");
   const parts = basename.split(".");
   const parentResourceName = toPascalCase(parts[0]);
-  const eventSourceName = toPascalCase(parts.slice(0, -1).join("-")) + "EventSource";
+  const eventSourceName =
+    toPascalCase(parts.slice(0, -1).join("-")) + "EventSource";
 
   let propsInterface: ParsedInterface | undefined;
   let attrsInterface: ParsedInterface | undefined;
@@ -735,7 +753,11 @@ function parseEventSourceFile(
           jsDoc: extractJSDoc(node, sourceFile),
           properties: parseInterfaceProperties(node, sourceFile),
         };
-      } else if (name.endsWith("EventSource") && !name.endsWith("Props") && !name.endsWith("Attr")) {
+      } else if (
+        name.endsWith("EventSource") &&
+        !name.endsWith("Props") &&
+        !name.endsWith("Attr")
+      ) {
         eventSourceJsDoc = extractJSDoc(node, sourceFile);
       }
     }
@@ -762,7 +784,7 @@ function parseEventSourceFile(
 function groupByResource(
   resources: ParsedResource[],
   capabilities: ParsedCapability[],
-  eventSources: ParsedEventSource[]
+  eventSources: ParsedEventSource[],
 ): Map<string, ResourceDoc> {
   const docs = new Map<string, ResourceDoc>();
 
@@ -814,21 +836,17 @@ function groupByResource(
 
 function generatePropsTable(iface: ParsedInterface): string {
   const lines: string[] = [];
-  lines.push(
-    "| Property | Type | Required | Default | Description |"
-  );
+  lines.push("| Property | Type | Required | Default | Description |");
   lines.push("|----------|------|----------|---------|-------------|");
 
   for (const prop of iface.properties) {
     const required = prop.optional ? "No" : "Yes";
     const defaultVal = prop.defaultValue || "-";
-    const description = prop.jsDoc
-      ? escapeMarkdown(prop.jsDoc)
-      : "-";
+    const description = prop.jsDoc ? escapeMarkdown(prop.jsDoc) : "-";
     const type = `\`${escapeMarkdown(prop.type)}\``;
 
     lines.push(
-      `| ${prop.name} | ${type} | ${required} | ${defaultVal} | ${description} |`
+      `| ${prop.name} | ${type} | ${required} | ${defaultVal} | ${description} |`,
     );
   }
 
@@ -841,9 +859,7 @@ function generateAttrsTable(iface: ParsedInterface): string {
   lines.push("|-----------|------|-------------|");
 
   for (const prop of iface.properties) {
-    const description = prop.jsDoc
-      ? escapeMarkdown(prop.jsDoc)
-      : "-";
+    const description = prop.jsDoc ? escapeMarkdown(prop.jsDoc) : "-";
     const type = `\`${escapeMarkdown(prop.type)}\``;
 
     lines.push(`| ${prop.name} | ${type} | ${description} |`);
@@ -874,9 +890,7 @@ function generateCapabilitySection(cap: ParsedCapability): string {
 
     for (const prop of cap.options.properties) {
       const required = prop.optional ? "No" : "Yes";
-      const description = prop.jsDoc
-        ? escapeMarkdown(prop.jsDoc)
-        : "-";
+      const description = prop.jsDoc ? escapeMarkdown(prop.jsDoc) : "-";
       const type = `\`${escapeMarkdown(prop.type)}\``;
 
       lines.push(`| ${prop.name} | ${type} | ${required} | ${description} |`);
@@ -1032,14 +1046,14 @@ function generateResourceMarkdown(doc: ResourceDoc): string {
 
 async function writeDocFiles(
   docs: Map<string, ResourceDoc>,
-  outputDir: string
+  outputDir: string,
 ): Promise<void> {
   for (const [_key, doc] of Array.from(docs.entries())) {
     const outputPath = path.join(
       outputDir,
       doc.resource.cloud,
       doc.resource.service,
-      `${toKebabCase(doc.resource.name)}.md`
+      `${toKebabCase(doc.resource.name)}.md`,
     );
 
     await fs.mkdir(path.dirname(outputPath), { recursive: true });

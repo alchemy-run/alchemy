@@ -77,9 +77,10 @@ const streamToQueue = Lambda.consumeStream("StreamToQueue", {
   stream: EventStream,
   handle: Effect.fn(function* (event) {
     for (const record of event.Records) {
-      yield* SQS.sendMessage(OutputQueue, JSON.stringify(record.kinesis.data)).pipe(
-        Effect.catchAll(() => Effect.void),
-      );
+      yield* SQS.sendMessage(
+        OutputQueue,
+        JSON.stringify(record.kinesis.data),
+      ).pipe(Effect.catchAll(() => Effect.void));
     }
   }),
 });
@@ -107,9 +108,10 @@ const multiBindingConsumer = Lambda.consumeStream("MultiBindingConsumer", {
   stream: EventStream,
   handle: Effect.fn(function* (event) {
     for (const record of event.Records) {
-      yield* SQS.sendMessage(OutputQueue, JSON.stringify(record.kinesis.data)).pipe(
-        Effect.catchAll(() => Effect.void),
-      );
+      yield* SQS.sendMessage(
+        OutputQueue,
+        JSON.stringify(record.kinesis.data),
+      ).pipe(Effect.catchAll(() => Effect.void));
       yield* Kinesis.putRecord(
         AnotherStream,
         { id: record.kinesis.data.eventId },
