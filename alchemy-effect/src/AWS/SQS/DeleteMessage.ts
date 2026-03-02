@@ -1,0 +1,73 @@
+import * as sqs from "distilled-aws/sqs";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Binding from "../../Binding.ts";
+import { ExecutionContext } from "../../Executable.ts";
+import * as Output from "../../Output.ts";
+import * as Lambda from "../Lambda/index.ts";
+import type { Queue } from "./Queue.ts";
+
+export interface DeleteMessageRequest extends Omit<
+  sqs.DeleteMessageRequest,
+  "QueueUrl"
+> {}
+
+export class DeleteMessage extends Binding.Service<
+  DeleteMessage,
+  (
+    queue: Queue,
+  ) => Effect.Effect<
+    (
+      request: DeleteMessageRequest,
+    ) => Effect.Effect<sqs.DeleteMessageResponse, sqs.DeleteMessageError>
+  >
+>()("AWS.SQS.DeleteMessage") {}
+
+export const DeleteMessageLive = Layer.effect(
+  DeleteMessage,
+  Effect.gen(function* () {
+    const Policy = yield* DeleteMessagePolicy;
+    const deleteMessage = yield* sqs.deleteMessage;
+
+    return Effect.fn(function* (queue: Queue) {
+      const QueueUrl = yield* queue.queueUrl;
+      yield* Policy(queue);
+      return Effect.fn(function* (request: DeleteMessageRequest) {
+        return yield* deleteMessage({
+          ...request,
+          QueueUrl: yield* QueueUrl,
+        });
+      });
+    });
+  }),
+);
+
+export class DeleteMessagePolicy extends Binding.Policy<
+  DeleteMessagePolicy,
+  (queue: Queue) => Effect.Effect<void>
+>()("AWS.SQS.DeleteMessage") {}
+
+export const DeleteMessagePolicyLive = Layer.effect(
+  DeleteMessagePolicy,
+  Effect.gen(function* () {
+    const ctx = yield* ExecutionContext;
+    return Effect.fn(function* (queue: Queue) {
+      if (Lambda.isFunction(ctx)) {
+        return yield* ctx.bind({
+          policyStatements: [
+            {
+              Sid: "DeleteMessage",
+              Effect: "Allow",
+              Action: ["sqs:DeleteMessage"],
+              Resource: [Output.interpolate`${queue.queueArn}`],
+            },
+          ],
+        });
+      } else {
+        return yield* Effect.die(
+          `DeleteMessagePolicy does not support runtime '${ctx.type}'`,
+        );
+      }
+    });
+  }),
+);

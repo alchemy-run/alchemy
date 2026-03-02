@@ -1,9 +1,12 @@
-import type { Input, InputProps } from "@/input";
-import * as Output from "@/output";
-import { type CRUD, type IPlan, plan, type TraverseResources } from "@/plan";
-import { test } from "@/test";
+import type { Input, InputProps } from "@/Input";
+import * as Output from "@/Output";
+import * as Plan from "@/Plan";
+import * as Stack from "@/Stack";
+import { State, type ResourceState, type ResourceStatus } from "@/State";
+import { test } from "@/Test/Vitest";
 import { describe, expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import { Stage } from "../src/Stage.ts";
 import {
   Bucket,
   Function,
@@ -12,26 +15,24 @@ import {
   TestResource,
   type TestResourceProps,
 } from "./test.resources";
-import type { ResourceState, ResourceStatus } from "@/state";
 
 const _test = test;
 
 const instanceId = "852f6ec2e19b66589825efe14dca2971";
 
-class MyBucket extends Bucket("MyBucket", {
-  name: "test-bucket",
-}) {}
-
-class MyQueue extends Queue("MyQueue", {
-  name: "test-queue",
-}) {}
-
-class MyFunction extends Function("MyFunction", {
-  name: "test-function",
-  env: {
-    QUEUE_URL: Output.of(MyQueue).queueUrl,
-  },
-}) {}
+const makePlan = <A, Err = never, Req = never>(
+  effect: Effect.Effect<A, Err, Req>,
+): Effect.Effect<Stack.StackSpec & { output: A }, Err, never> =>
+  // @ts-expect-error
+  Effect.gen(function* () {
+    const stack = yield* Stack.Stack;
+    return yield* effect.pipe(
+      Stack.make(stack.name),
+      Effect.provideService(Stage, stack.stage),
+      Effect.flatMap(Plan.make),
+      Effect.provide(TestLayers),
+    );
+  });
 
 test(
   "create all resources when plan is empty",
@@ -39,7 +40,21 @@ test(
     state: test.state(),
   },
   Effect.gen(function* () {
-    expect(yield* plan(MyBucket, MyQueue)).toMatchObject({
+    expect(
+      yield* Effect.gen(function* () {
+        const bucket = yield* Bucket("MyBucket", {
+          name: "test-bucket",
+        });
+        const queue = yield* Queue("MyQueue", {
+          name: "test-queue",
+        });
+
+        return {
+          queueUrl: queue.queueUrl,
+          bucketArn: bucket.bucketArn,
+        };
+      }).pipe(makePlan),
+    ).toMatchObject({
       resources: {
         MyBucket: {
           action: "create",
@@ -48,7 +63,6 @@ test(
             name: "test-bucket",
           },
           state: undefined,
-          resource: MyBucket,
         },
         MyQueue: {
           action: "create",
@@ -57,12 +71,11 @@ test(
             name: "test-queue",
           },
           state: undefined,
-          resource: MyQueue,
         },
       },
       deletions: expect.emptyObject(),
     });
-  }).pipe(Effect.provide(TestLayers)),
+  }),
 );
 
 test(
@@ -87,12 +100,22 @@ test(
     }),
   },
   Effect.gen(function* () {
-    expect(yield* plan(MyBucket, MyQueue)).toMatchObject({
+    expect(
+      yield* makePlan(
+        Effect.gen(function* () {
+          yield* Bucket("MyBucket", {
+            name: "test-bucket",
+          });
+          yield* Queue("MyQueue", {
+            name: "test-queue",
+          });
+        }),
+      ),
+    ).toMatchObject({
       resources: {
         MyBucket: {
           action: "noop",
           bindings: [],
-          resource: MyBucket,
           state: {
             status: "created",
           },
@@ -103,13 +126,12 @@ test(
           props: {
             name: "test-queue",
           },
-          resource: MyQueue,
           state: undefined,
         },
       },
       deletions: expect.emptyObject(),
     });
-  }).pipe(Effect.provide(TestLayers)),
+  }),
 );
 
 test(
@@ -149,12 +171,24 @@ test(
     }),
   },
   Effect.gen(function* () {
-    expect(yield* plan(MyQueue)).toMatchObject({
+    const state = yield* State;
+    const resourceIds = yield* state.list({
+      stack: "test",
+      stage: "test",
+    });
+    expect(
+      yield* makePlan(
+        Effect.gen(function* () {
+          yield* Queue("MyQueue", {
+            name: "test-queue",
+          });
+        }),
+      ),
+    ).toMatchObject({
       resources: {
         MyQueue: {
           action: "noop",
           bindings: [],
-          resource: MyQueue,
           state: {
             status: "created",
           },
@@ -171,16 +205,16 @@ test(
             },
           },
           resource: {
-            id: "MyBucket",
-            type: "Test.Bucket",
-            props: {
+            LogicalId: "MyBucket",
+            Type: "Test.Bucket",
+            Props: {
               name: "test-bucket",
             },
           },
         },
       },
     });
-  }).pipe(Effect.provide(TestLayers)),
+  }),
 );
 
 test(
@@ -198,64 +232,66 @@ test(
         },
         attr: {},
         downstream: [],
+        bindings: [],
       },
     }),
   },
   Effect.gen(function* () {
-    {
-      class A extends TestResource("A", {
-        replaceString: "A",
-      }) {}
+    expect(
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", {
+          replaceString: "A",
+        });
+      }).pipe(makePlan),
+    ).toMatchObject({
+      resources: {
+        A: {
+          action: "noop",
+        },
+      },
+      deletions: expect.emptyObject(),
+    });
 
-      // replaceString is the same
-      expect(yield* plan(A)).toMatchObject({
-        resources: {
-          A: {
-            action: "noop",
+    expect(
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", {
+          replaceString: "B",
+        });
+      }).pipe(makePlan),
+    ).toMatchObject({
+      resources: {
+        A: {
+          action: "replace",
+          props: {
+            replaceString: "B",
           },
         },
-      });
-    }
+      },
+      deletions: expect.emptyObject(),
+    });
 
-    {
-      class A extends TestResource("A", {
-        replaceString: "B",
-      }) {}
-      expect(yield* plan(A)).toMatchObject({
-        resources: {
-          A: {
-            action: "replace",
-            props: {
-              replaceString: "B",
-            },
+    let B: TestResource;
+    expect(
+      yield* Effect.gen(function* () {
+        B = yield* TestResource("B", {
+          string: "A",
+        });
+        yield* TestResource("A", {
+          replaceString: B.string,
+        });
+      }).pipe(makePlan),
+    ).toMatchObject({
+      resources: {
+        A: {
+          action: "replace",
+          props: {
+            replaceString: expect.propExpr("string", B!),
           },
         },
-        deletions: expect.emptyObject(),
-      });
-    }
-
-    {
-      class B extends TestResource("B", {
-        string: "A",
-      }) {}
-      class A extends TestResource("A", {
-        string: Output.of(B).string,
-      }) {}
-
-      const p = yield* plan(A);
-      expect(p).toMatchObject({
-        resources: {
-          A: {
-            action: "replace",
-            props: {
-              string: expect.propExpr("string", B),
-            },
-          },
-        },
-        deletions: expect.emptyObject(),
-      });
-    }
-  }).pipe(Effect.provide(TestLayers)),
+      },
+      deletions: expect.emptyObject(),
+    });
+  }),
 );
 
 const createTestResourceState = (options: {
@@ -271,6 +307,7 @@ const createTestResourceState = (options: {
     resourceType: "Test.TestResource",
     attr: options.attr ?? {},
     downstream: [],
+    bindings: [],
   }) as ResourceState;
 
 const testSimple = (
@@ -299,19 +336,22 @@ const testSimple = (
     },
     Effect.gen(function* () {
       {
-        class A extends TestResource("A", testCase.props) {}
+        const plan = Effect.gen(function* () {
+          yield* TestResource("A", testCase.props);
+        }).pipe(makePlan);
+
         if (testCase.fail) {
-          const result = yield* plan(A).pipe(
+          const result = plan.pipe(
             Effect.map(() => false),
             // @ts-expect-error
             Effect.catchTag(testCase.fail, () => Effect.succeed(true)),
-            Effect.catchAll(() => Effect.succeed(false)),
+            Effect.catch(() => Effect.succeed(false)),
           ) as Effect.Effect<boolean>;
           if (!result) {
             expect.fail(`Expected error '${testCase.fail}`);
           }
         } else {
-          expect(yield* plan(A)).toMatchObject({
+          expect(yield* plan).toMatchObject({
             resources: {
               A: testCase.plan,
             },
@@ -319,7 +359,7 @@ const testSimple = (
           });
         }
       }
-    }).pipe(Effect.provide(TestLayers)),
+    }),
   );
 
 describe("prior crash in 'creating' state", () => {
@@ -617,16 +657,27 @@ describe("prior crash in 'deleting' state", () => {
 test(
   "lazy Output queue.queueUrl to Function.env",
   Effect.gen(function* () {
-    expect(yield* plan(MyFunction)).toMatchObject({
+    let MyQueue: Queue;
+    let MyFunction: Function;
+    const plan = yield* Effect.gen(function* () {
+      MyQueue = yield* Queue("MyQueue");
+      MyFunction = yield* Function("MyFunction", {
+        name: "test-function",
+        env: {
+          QUEUE_URL: MyQueue.queueUrl,
+        },
+      });
+    }).pipe(makePlan);
+    expect(plan).toMatchObject({
       resources: {
         MyFunction: {
           action: "create",
           bindings: [],
-          resource: MyFunction,
+          resource: MyFunction!,
           props: {
             name: "test-function",
             env: {
-              QUEUE_URL: expect.propExpr("queueUrl", MyQueue),
+              QUEUE_URL: expect.propExpr("queueUrl", MyQueue!),
             },
           },
           state: undefined,
@@ -634,7 +685,7 @@ test(
       },
       deletions: expect.emptyObject(),
     });
-  }).pipe(Effect.provide(TestLayers)),
+  }),
 );
 
 test(
@@ -654,20 +705,32 @@ test(
           queueUrl: "https://test.queue.com/test-queue-old",
         },
         downstream: [],
+        bindings: [],
       },
     }),
   },
   Effect.gen(function* () {
-    expect(yield* plan(MyFunction)).toMatchObject({
+    let MyQueue: Queue;
+    let MyFunction: Function;
+    const plan = yield* Effect.gen(function* () {
+      MyQueue = yield* Queue("MyQueue");
+      MyFunction = yield* Function("MyFunction", {
+        name: "test-function",
+        env: {
+          QUEUE_URL: MyQueue.queueUrl,
+        },
+      });
+    }).pipe(makePlan);
+    expect(plan).toMatchObject({
       resources: {
         MyFunction: {
           action: "create",
           bindings: [],
-          resource: MyFunction,
+          resource: MyFunction!,
           props: {
             name: "test-function",
             env: {
-              QUEUE_URL: expect.propExpr("queueUrl", MyQueue),
+              QUEUE_URL: expect.propExpr("queueUrl", MyQueue!),
             },
           },
           state: undefined,
@@ -675,7 +738,7 @@ test(
       },
       deletions: expect.emptyObject(),
     });
-  }).pipe(Effect.provide(TestLayers)),
+  }),
 );
 
 describe("Outputs should resolve to old values", () => {
@@ -695,12 +758,10 @@ describe("Outputs should resolve to old values", () => {
         stringArray: ["test-string"],
       },
       downstream: [],
+      bindings: [],
     },
   });
-  class A extends TestResource("A", {
-    string: "test-string",
-    stringArray: ["test-string"],
-  }) {}
+
   const expected = (props: TestResourceProps) => ({
     resources: {
       A: {
@@ -716,12 +777,9 @@ describe("Outputs should resolve to old values", () => {
     deletions: expect.emptyObject(),
   });
 
-  const createPlan = (props: InputProps<TestResourceProps>) =>
-    plan(class B extends TestResource("B", props) {});
-
   const test = <const I extends InputProps<TestResourceProps>>(
     description: string,
-    input: I,
+    input: (resource: TestResource) => I,
     attr: Input.Resolve<I>,
   ) =>
     _test(
@@ -730,15 +788,23 @@ describe("Outputs should resolve to old values", () => {
         state,
       },
       Effect.gen(function* () {
-        expect(yield* createPlan(input)).toMatchObject(expected(attr));
-      }).pipe(Effect.provide(TestLayers)),
+        expect(
+          yield* Effect.gen(function* () {
+            const A = yield* TestResource("A", {
+              string: "test-string",
+              stringArray: ["test-string"],
+            });
+            yield* TestResource("B", input(A));
+          }).pipe(makePlan),
+        ).toMatchObject(expected(attr));
+      }),
     );
 
   test(
     "string",
-    {
-      string: Output.of(A).string,
-    },
+    (A) => ({
+      string: A.string,
+    }),
     {
       string: "test-string",
     },
@@ -746,9 +812,9 @@ describe("Outputs should resolve to old values", () => {
 
   test(
     "string.apply(string => undefined)",
-    {
-      string: Output.of(A).string.apply((string) => undefined),
-    },
+    (A) => ({
+      string: A.string.pipe(Output.map(() => undefined)),
+    }),
     {
       string: undefined,
     },
@@ -756,9 +822,9 @@ describe("Outputs should resolve to old values", () => {
 
   test(
     "string.effect(string => Effect.succeed(undefined))",
-    {
-      string: Output.of(A).string.effect((string) => Effect.succeed(undefined)),
-    },
+    (A) => ({
+      string: A.string.pipe(Output.mapEffect(() => Effect.succeed(undefined))),
+    }),
     {
       string: undefined,
     },
@@ -766,11 +832,11 @@ describe("Outputs should resolve to old values", () => {
 
   test(
     "stringArray[0].toUpperCase()",
-    {
-      string: Output.of(A).stringArray[0].apply((string) =>
-        string.toUpperCase(),
+    (A) => ({
+      string: A.stringArray.pipe(
+        Output.map((stringArray) => stringArray[0]!.toUpperCase()),
       ),
-    },
+    }),
     {
       string: "TEST-STRING",
     },
@@ -778,13 +844,12 @@ describe("Outputs should resolve to old values", () => {
 });
 
 describe("stable properties should not cause downstream changes", () => {
-  class A extends TestResource("A", {
-    string: "test-string",
-  }) {}
-
-  const test = (description: string, input: InputProps<TestResourceProps>) => {
-    class B extends TestResource("B", input) {}
-
+  const test = (
+    description: string,
+    input: (A: TestResource) => Input<TestResourceProps>,
+  ) => {
+    // @ts-expect-error - get the keys
+    const props = input(Output.of({}));
     _test(
       description,
       {
@@ -804,6 +869,7 @@ describe("stable properties should not cause downstream changes", () => {
               stableArray: ["A"],
             },
             downstream: [],
+            bindings: [],
           },
           B: {
             instanceId,
@@ -815,17 +881,25 @@ describe("stable properties should not cause downstream changes", () => {
               Object.entries({
                 string: "A",
                 stringArray: ["A"],
-              }).filter(([key]) => key in input),
+              }).filter(([key]) => key in props),
             ),
             attr: {
               stableString: "A",
             },
             downstream: [],
+            bindings: [],
           },
         }),
       },
       Effect.gen(function* () {
-        expect(yield* plan(A, B)).toMatchObject({
+        expect(
+          yield* Effect.gen(function* () {
+            const A = yield* TestResource("A", {
+              string: "test-string",
+            });
+            yield* TestResource("B", input(A));
+          }).pipe(makePlan),
+        ).toMatchObject({
           resources: {
             A: {
               action: "update",
@@ -839,122 +913,43 @@ describe("stable properties should not cause downstream changes", () => {
           },
           deletions: expect.emptyObject(),
         });
-      }).pipe(Effect.provide(TestLayers)),
+      }),
     );
   };
 
-  test("A.stableString", {
-    string: Output.of(A).stableString,
-  });
+  test("A.stableString", (A) => ({
+    string: A.stableString,
+  }));
 
-  test("A.stableString.apply((string) => string.toUpperCase())", {
-    string: Output.of(A).stableString.apply((string) => string.toUpperCase()),
-  });
+  test("A.stableString.apply((string) => string.toUpperCase())", (A) => ({
+    string: A.stableString.pipe(Output.map((string) => string.toUpperCase())),
+  }));
 
-  test(
-    "A.stableString.effect((string) => Effect.succeed(string.toUpperCase()))",
-    {
-      string: Output.of(A).stableString.effect((string) =>
-        Effect.succeed(string.toUpperCase()),
+  test("A.stableString.effect((string) => Effect.succeed(string.toUpperCase()))", (A) => ({
+    string: A.stableString.pipe(
+      Output.mapEffect((string) => Effect.succeed(string.toUpperCase())),
+    ),
+  }));
+
+  test("A.stableArray", (A) => ({
+    stringArray: A.stableArray,
+  }));
+
+  test("A.stableArray[0]", (A) => ({
+    string: A.stableArray.pipe(Output.map((stableArray) => stableArray[0]!)),
+  }));
+
+  test("A.stableArray[0].apply((string) => string.toUpperCase())", (A) => ({
+    string: A.stableArray.pipe(
+      Output.map((stableArray) => stableArray[0]!.toUpperCase()),
+    ),
+  }));
+
+  test("A.stableArray[0].effect((string) => Effect.succeed(string.toUpperCase()))", (A) => ({
+    string: A.stableArray.pipe(
+      Output.mapEffect((stableArray) =>
+        Effect.succeed(stableArray[0]!.toUpperCase()),
       ),
-    },
-  );
-
-  test("A.stableArray", {
-    stringArray: Output.of(A).stableArray,
-  });
-
-  test("A.stableArray[0]", {
-    string: Output.of(A).stableArray[0],
-  });
-
-  test("A.stableArray[0].apply((string) => string.toUpperCase())", {
-    string: Output.of(A).stableArray[0].apply((string) => string.toUpperCase()),
-  });
-
-  test(
-    "A.stableArray[0].effect((string) => Effect.succeed(string.toUpperCase()))",
-    {
-      string: Output.of(A).stableArray[0].effect((string) =>
-        Effect.succeed(string.toUpperCase()),
-      ),
-    },
-  );
-});
-
-const g = Effect.gen(function* () {
-  {
-    const p = yield* plan(MyFunction);
-    p.resources.MyFunction;
-    // transitive dependency detected via outputs
-    p.resources.MyQueue;
-    // TODO(sam): test multiple transitive hops
-  }
-  {
-    class A extends TestResource("A", {}) {}
-    class B extends TestResource("B", {
-      string: Output.of(A).string,
-    }) {}
-    class C extends TestResource("C", {
-      string: Output.of(B).string,
-    }) {}
-    const p = yield* plan(C);
-    p.resources.A;
-    p.resources.B;
-    p.resources.C;
-    // @ts-expect-error
-    p.resources.D;
-
-    // attest(
-    //   yield* plan(C),
-    // );
-
-    // attest.instantiations([3500, "instantiations"]);
-  }
-}).pipe(Effect.provide(TestLayers));
-
-describe.skip("type-only tests", () => {
-  test(
-    "infer transitive dependencies via outputs",
-    Effect.gen(function* () {
-      {
-        const p = yield* plan(MyFunction);
-        p.resources.MyFunction;
-        // transitive dependency detected via outputs
-        p.resources.MyQueue;
-        // TODO(sam): test multiple transitive hops
-      }
-      {
-        class A extends TestResource("A", {}) {}
-        class B extends TestResource("B", {
-          string: Output.of(A).string,
-        }) {}
-        class C extends TestResource("C", {
-          string: Output.of(B).string,
-        }) {}
-        const p = yield* plan(C);
-
-        p.resources.A;
-        p.resources.B;
-        p.resources.C;
-        // @ts-expect-error
-        p.resources.D;
-
-        {
-          // any type should not break the type inference
-          class D extends TestResource("D", {
-            string: undefined! as any,
-            object: {
-              string: undefined! as any,
-            },
-          }) {}
-          type _ = TraverseResources<D>;
-          const p = yield* plan(D);
-          p.resources.D;
-          // @ts-expect-error
-          p.resources.E;
-        }
-      }
-    }).pipe(Effect.provide(TestLayers)),
-  );
+    ),
+  }));
 });

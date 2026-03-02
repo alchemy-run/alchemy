@@ -13,7 +13,7 @@ import {
   isSetSchema,
   isStringSchema,
   isUndefinedSchema,
-} from "../src/schema.ts";
+} from "../src/Schema.ts";
 
 describe("isStringSchema", () => {
   test("string", () => {

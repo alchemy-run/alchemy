@@ -1,8 +1,8 @@
 import * as EC2 from "@/aws/ec2";
 import * as R2 from "@/cloudflare/r2";
 import { $, App } from "@/index";
-import * as Output from "@/output";
-import { test } from "@/test";
+import * as Output from "@/Output/Output";
+import { test } from "@/Test/Vitest";
 import { expect, it } from "@effect/vitest";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";

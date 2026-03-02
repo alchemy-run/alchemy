@@ -18,7 +18,7 @@
 | enableDnsSupport                | `boolean`                       | No       | true      | Whether DNS resolution is supported for the VPC.                                                                    |
 | enableDnsHostnames              | `boolean`                       | No       | true      | Whether instances launched in the VPC get DNS hostnames.                                                            |
 | amazonProvidedIpv6CidrBlock     | `boolean`                       | No       | -         | Requests an Amazon-provided IPv6 CIDR block with a /56 prefix length for the VPC.                                   |
-| tags                            | `Record<string, Input<string>>` | No       | -         | Tags to assign to the VPC. These will be merged with alchemy auto-tags (alchemy::app, alchemy::stage, alchemy::id). |
+| tags                            | `Record<string, Input<string>>` | No       | -         | Tags to assign to the VPC. These will be merged with alchemy auto-tags (alchemy::stack, alchemy::stage, alchemy::id). |
 
 ## Attributes
 

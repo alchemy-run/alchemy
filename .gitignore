@@ -1,6 +1,7 @@
 node_modules/
 dist/
-lib/
+/lib/
+/alchemy-effect/lib/
 .out/
 .test/
 .DS_Store

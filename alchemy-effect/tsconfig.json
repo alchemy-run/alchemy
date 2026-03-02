@@ -1,6 +1,11 @@
 {
   "extends": "../tsconfig.base.json",
-  "include": ["package.json", "src"],
+  "include": [
+    "package.json",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.json"
+  ],
   "compilerOptions": {
     "composite": true,
     "noEmit": false,
@@ -9,8 +14,18 @@
     "module": "Preserve",
     "moduleResolution": "Bundler",
     "target": "ESNext",
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ]
+    },
     // ink
-    "jsx": "react",
-    "lib": ["DOM", "DOM.Iterable", "ES2023"]
+    "jsx": "preserve",
+    "jsxImportSource": "@opentui/solid",
+    "lib": [
+      "DOM",
+      "DOM.Iterable",
+      "ES2023"
+    ],
   }
 }

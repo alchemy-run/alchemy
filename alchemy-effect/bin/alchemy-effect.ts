@@ -1,31 +1,30 @@
 import { Args, Command, Options } from "@effect/cli";
-import * as HelpDoc from "@effect/cli/HelpDoc";
-import * as ValidationError from "@effect/cli/ValidationError";
-import { NodeContext, NodeRuntime } from "@effect/platform-node";
-import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
-import { Path } from "@effect/platform/Path";
-import * as PlatformConfigProvider from "@effect/platform/PlatformConfigProvider";
+import * as CliError from "effect/unstable/cli/CliError";
+import * as HelpDoc from "effect/unstable/cli/HelpDoc";
+// import * as ValidationError from "effect/unstable/cli/CliError";
+import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as PlatformConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
+import { Path } from "effect/Path";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import packageJson from "../package.json";
-import * as App from "../src/app.ts";
-import { applyPlan } from "../src/apply.ts";
-import * as AWSAccount from "../src/aws/account.ts";
-import { bootstrap as bootstrapAws } from "../src/aws/bootstrap.ts";
-import * as AWSCredentials from "../src/aws/credentials.ts";
-import * as AWSEndpoint from "../src/aws/endpoint.ts";
-import * as AWSRegion from "../src/aws/region.ts";
-import * as CLI from "../src/cli/index.ts";
-import { dotAlchemy } from "../src/dot-alchemy.ts";
-import { plan } from "../src/plan.ts";
-import { Resource } from "../src/resource.ts";
-import type { Stack } from "../src/stack.ts";
-import * as State from "../src/state.ts";
-import { asEffect } from "../src/util.ts";
+import * as AWSAccount from "../src/AWS/Account.ts";
+import { bootstrap as bootstrapAws } from "../src/AWS/Bootstrap.ts";
+import * as AWSCredentials from "../src/AWS/Credentials.ts";
+import * as AWSEndpoint from "../src/AWS/Endpoint.ts";
+import * as AWSRegion from "../src/AWS/Region.ts";
+import * as CLI from "../src/Cli/index.ts";
+import { dotAlchemy } from "../src/Config.ts";
+import * as Plan from "../src/Plan.ts";
+import { Resource } from "../src/Resource.ts";
+import type { Stack } from "../src/Stack.ts";
+import * as State from "../src/State/index.ts";
+import { asEffect } from "../src/Util/index.ts";
 // Import to trigger module augmentation for StageConfig.aws
 import "../src/aws/config.ts";
 
@@ -36,6 +35,7 @@ const USER = Config.string("USER").pipe(
 
 const STAGE = Config.string("stage").pipe(
   Config.option,
+  (a) => a.asEffect(),
   Effect.map(Option.getOrUndefined),
 );
 
@@ -49,14 +49,14 @@ const stage = Options.text("stage").pipe(
         return stage;
       }
       return yield* STAGE.pipe(
-        Effect.catchAll((err) =>
-          Effect.fail(ValidationError.invalidValue(HelpDoc.p(err.message))),
+        Effect.catch((err) =>
+          Effect.fail(CliError.invalidValue(HelpDoc.p(err.message))),
         ),
         Effect.flatMap((s) =>
           s === undefined
             ? USER.pipe(
                 Effect.map((user) => `dev_${user}`),
-                Effect.catchAll(() => Effect.succeed("unknown")),
+                Effect.catch(() => Effect.succeed("unknown")),
               )
             : Effect.succeed(s),
         ),
@@ -194,7 +194,7 @@ const bootstrapCommand = Command.make(
     ).pipe(Layer.provideMerge(appLayer));
 
     const platform = Layer.mergeAll(
-      NodeContext.layer,
+      NodeServices.layer,
       FetchHttpClient.layer,
       Logger.pretty,
     );
@@ -273,7 +273,7 @@ const execStack = Effect.fn(function* ({
 
   // TODO(sam): implement local and watch
   const platform = Layer.mergeAll(
-    NodeContext.layer,
+    NodeServices.layer,
     FetchHttpClient.layer,
     Logger.pretty,
   );
@@ -299,9 +299,9 @@ const execStack = Effect.fn(function* ({
   );
 
   yield* Effect.gen(function* () {
-    const cli = yield* CLI.CLI;
+    const cli = yield* CLI.Cli;
     const resources = select(stack);
-    const updatePlan = yield* plan(...resources);
+    const updatePlan = yield* Plan.make(...resources);
     if (dryRun) {
       yield* cli.displayPlan(updatePlan);
     } else {
@@ -345,6 +345,6 @@ const cli = Command.run(root, {
 cli(process.argv).pipe(
   // $USER and $STAGE are set by the environment
   Effect.withConfigProvider(ConfigProvider.fromEnv()),
-  Effect.provide(NodeContext.layer),
+  Effect.provide(NodeServices.layer),
   NodeRuntime.runMain,
 );

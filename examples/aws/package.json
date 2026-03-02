@@ -1,29 +1,21 @@
 {
-  "name": "example-aws",
+  "name": "aws-example",
+  "version": "0.0.0",
   "private": true,
-  "homepage": "https://alchemy.run",
   "license": "Apache-2.0",
-  "author": "Sam Goodwin <sam@alchemy.run>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/alchemy-run/alchemy-effect.git",
-    "directory": "alchemy"
+    "url": "https://github.com/alchemy-run/alchemy-effect"
   },
-  "type": "module",
-  "sideEffects": [],
   "scripts": {
-    "deploy": "AWS_REGION=us-west-2 bun ./alchemy.run.ts",
-    "destroy": "AWS_REGION=us-west-2 bun ./alchemy.run.ts --destroy"
+    "build": "tsc -b",
+    "deploy": "alchemy deploy",
+    "dev": "alchemy dev",
+    "destroy": "alchemy destroy"
   },
   "dependencies": {
-    "@effect/platform": "catalog:",
-    "@effect/platform-node": "catalog:",
-    "@types/aws-lambda": "catalog:",
     "alchemy-effect": "workspace:*",
-    "distilled-aws": "catalog:",
-    "effect": "catalog:"
-  },
-  "devDependencies": {
-    "@types/bun": "catalog:"
+    "effect": "catalog:",
+    "@effect/platform-node": "catalog:"
   }
 }

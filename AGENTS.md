@@ -12,9 +12,8 @@ It includes a core IaC engine built with Effect. Effect provides the foundation 
 - **Input Properties** - the properties passed as input to configure a Resource. Otherwise known as the "desired state" of the Resource.
 - **Output Attributes** - the attributes produced by a Resource. Otherwise known as the "current state" of the Resource.
 - **Stable Properties** - properties that are not affected by an Update, e.g. the ID or ARN of a Resource.
-  .
 - **Function** (aka. **Runtime**) - a special kind of Resource that includes a runtime implementation expressed as a Function producing an `Effect<A, Err, Req>`. The `Req` type captures runtime dependencies, from which Infrastructure Dependencies are inferred.
-- **Resource Provider** (see [Provider](./alchemy-effect/src/provider.ts))
+- **Resource Provider** (see [Provider](./alchemy-effect/src/Provider.ts))
 
 A Resource Provider implements the following Lifecycle Operations:
 
@@ -24,19 +23,14 @@ A Resource Provider implements the following Lifecycle Operations:
 - **Create** - creates a new Resource. It must be designed as idempotent because it is always possible for state persistence to fail after the create operation is called. There are various techniques for resolving idempotency, such as deterministic physical name generation and resource tagging.
 - **Update** - updates an existing Resource with new Input Properties.
 - **Delete** - deletes an existing Resource. It must be designed as idempotent because it is always possible for state persistence to fail after the delete operation is called. If the resource doesn't exist during deletion, it should not be considered an error.
-- **Capability** - a runtime requirement of a Function (e.g. require `SQS.SendMessage` on a `SQS.Queue`, `Messages`). It maps closely to an IAM Policy and Environment variable requirement.
-- **Binding** - a declared physical connection between a Function and a Resource to satisfy a Capability, e.g. `SQS.SendMessage(Messages)`
-- **Binding Contract** - the Attributes that a specific Resource accepts as input from Bindings. For example, a Lambda Function accepts the following Binding Contract: `env`, `policyStatements` because it needs to set environment variables and attach IAM policies to the function. A Cloudflare Worker just accepts `env` (bindings) because Cloudflare Workers do not support IAM policies, but do have their own first-class Binding concept. An example is the `binding` attribute in [Function](./alchemy-effect/src/aws/lambda/function.ts). By adding that property, the resource can now accept bindings.
-- **Binding Provider** - see [BindingProvider](./alchemy-effect/src/binding.ts)
-  - **Diff** - compares new props with old props and determines if the Binding needs to be updated or replaced.
-  - **Preattach** - a pre-attach operation that can be called before the Binding is attached to the Resource. It returns a partial set of the target resource's Binding Contract because it is not expected for pre-attach to fully populate the Binding Contract.
-  - **Attach** - Actually performs the attachment side-effect if one is needed. Most Bindings are pure (just returning IAM policies and environment variables) but some, such as Event Sources, actually need to call an API like Create or Update Event Source to create the event source.
-  - **Postattach** - a post-attach operation that can be called after the Binding is attached to the Resource.
-  - **Reattach** - reattaches the Binding to the Resource. This is similar to the Update operation in a Resource Provider. It is expected to update (re-attach) the Binding to the Resource.
-  - **Detach** - detaches the Binding from the Resource.
+- **Capability** - a runtime requirement of a Function (e.g. require `SQS.SendMessage` on a `SQS.Queue`). Each Capability is split into two parts: a `Binding.Service` (runtime SDK wrapper) and a `Binding.Policy` (deploy-time IAM/binding attachment).
+- **Binding.Service** - an Effect Service that wraps an SDK client and exposes a `.bind(resource)` method returning a typed callable for runtime use. Provided as a Layer on the **Function** Effect so it gets bundled into the Lambda/Worker. See [Binding](./alchemy-effect/src/Binding.ts).
+- **Binding.Policy** - an Effect Service that runs only at deploy time to attach IAM policies (AWS) or bindings (Cloudflare) to a Function's role/config. At runtime, `Binding.Policy` uses `Effect.serviceOption` so it gracefully becomes a no-op when the layer is not provided. Policy layers are provided on the **Stack** via `AWS.providers()`, not on the Function.
+- **Binding** - data attached to a Resource via `resource.bind(data)`. A Binding is a `{ context: PolicyContext, data: BindingData }` tuple that is collected on the Stack during plan/deploy. Bindings enable circular references between Resources — the `Binding.Policy` calls `ctx.bind({ policyStatements: [...] })` on the target Function, which records the binding data on the Stack. The Resource Provider then receives the resolved binding data in its `create`/`update` lifecycle operations via the `bindings` parameter.
+- **Binding Contract** - the shape of data a Resource accepts from Bindings. For example, a Lambda Function accepts `{ env?: Record<string, any>, policyStatements?: PolicyStatement[] }` because it needs environment variables and IAM policies. A Cloudflare Worker accepts `{ bindings: Worker.Binding[] }` for its native binding system. The Binding Contract is declared as the fourth type parameter on the `Resource` interface. See [Lambda Function](./alchemy-effect/src/AWS/Lambda/Function.ts) and [Cloudflare Worker](./alchemy-effect/src/Cloudflare/Workers/Worker.ts).
 - **Dependency** - Resources depend on other Resources through two mechanisms:
   - Output Properties of one Resource passed as Input Properties to another Resource (non-circular, directed acyclic graph)
-  - Bindings (e.g. `SQS.SendMessage(Messages)`) that connect a Function to a Resource to satisfy a Capability (cyclic graph).
+  - Bindings that attach data (IAM policies, env vars, Cloudflare bindings) from one Resource to another, enabling circular references between Resources.
 - **Output** - a reference to (or derived from) a Resource's "Output Attributes". E.g. Bucket.bucketArn
 - **Stack** - a collection of Resources, Functions, and Bindings that are deployed together.
 - **Stack Name** - the name of a Stack, e.g. `my-stack`
@@ -46,7 +40,7 @@ A Resource Provider implements the following Lifecycle Operations:
 - **Physical Name** - a unique name for a Resource, e.g. `my-bucket-1234567890`. It is usually best to generate them using the built-in createPhysicalName utility function which generates
 - **Logical ID** - the logical ID identifying a resource within a Stack, e.g. `my-bucket`. It is stable across creates, updates, deletes and replaces.
 - **Instance ID** - a unique identifier for an instance of a Resource. It is stable across creates, updates and deletes. It changes when a resource is replaced. It is truncated and used as the suffix of the Physical Name.
-- **Event Source** - a Binding between a Function and a Resource that produces events that invoke the Function, e.g. `SQS.QueueEventSource(Messages)`
+- **Event Source** - a special kind of Binding between a Function and a Resource that produces events that invoke the Function, e.g. `SQS.QueueEventSource`. Event Sources are implemented as Binding.Service + Binding.Policy pairs, where the attach logic creates/updates the event source mapping via the cloud provider API.
 - **Replacement** - the process of replacing a Resource with a new one. A new one is created, downstream dependencies are updated with the new reference, and then the old one is deleted. Or, the old one is deleted first and then the new one is created.
 - **Dependency Violation** - an error that some APIs call when an operation cannot be performed because a dependency is not met. E.g. you cannot delete an EIP until the NAT Gateway it is attached to is deleted. Lifecycle operations typically retry Dependency Violations.
 - **Eventual Consistency** - create/update/delete operations can be eventually consistent leading to a variety of failure modes. For example, a Resource may be created but not yet available for use, or a Resource may be deleted but still appear in the console. Errors caused by eventual consistency should be retried, and lifecycle operations/tests should be carefully designed to wait for consistency before proceeding.
@@ -56,19 +50,34 @@ A Resource Provider implements the following Lifecycle Operations:
 
 # File System Conventions
 
-Each Service's Resources follow the same pattern and have
+Each Service's Resources follow the same pattern. Resource contract and provider are co-located in the same file. Capabilities (Binding.Service + Binding.Policy) are in separate files named after the capability.
 
 ```sh
 # source files
-alchemy-effect/src/{cloud}/{service}/index.ts
-alchemy-effect/src/{cloud}/{service}/client.ts
-alchemy-effect/src/{cloud}/{service}/{resource}.ts # resource contract
-alchemy-effect/src/{cloud}/{service}/{resource}.provider.ts # resource provider
-alchemy-effect/src/{cloud}/{service}/{resource}.{capability}.ts
+alchemy-effect/src/{Cloud}/{Service}/index.ts         # re-exports all resources and capabilities
+alchemy-effect/src/{Cloud}/{Service}/{Resource}.ts     # resource contract + resource provider
+alchemy-effect/src/{Cloud}/{Service}/{Capability}.ts   # Binding.Service + Binding.Policy for a capability
 # test files
-alchemy-effect/test/{cloud}/{service}/{resource}.provider.test.ts
+alchemy-effect/test/{Cloud}/{Service}/{Resource}.test.ts
 # docs (auto-generated from source code - do not manually edit)
-alchemy-effect/docs/{cloud}/{service}/{resource}.md # API reference for the resource, auto-generated from JSDoc comments
+alchemy-effect/docs/{Cloud}/{Service}/{Resource}.md    # API reference, auto-generated from JSDoc comments
+```
+
+Examples of actual paths:
+
+```sh
+alchemy-effect/src/AWS/S3/Bucket.ts          # S3 Bucket resource + provider
+alchemy-effect/src/AWS/S3/GetObject.ts       # S3 GetObject Binding.Service + Binding.Policy
+alchemy-effect/src/AWS/S3/PutObject.ts       # S3 PutObject Binding.Service + Binding.Policy
+alchemy-effect/src/AWS/SQS/Queue.ts          # SQS Queue resource + provider
+alchemy-effect/src/AWS/SQS/SendMessage.ts    # SQS SendMessage capability
+alchemy-effect/src/AWS/Kinesis/Stream.ts     # Kinesis Stream resource + provider
+alchemy-effect/src/AWS/Kinesis/PutRecord.ts  # Kinesis PutRecord capability
+alchemy-effect/src/AWS/Lambda/Function.ts    # Lambda Function resource + provider
+alchemy-effect/src/AWS/DynamoDB/Table.ts     # DynamoDB Table resource + provider
+alchemy-effect/src/AWS/DynamoDB/GetItem.ts   # DynamoDB GetItem capability
+alchemy-effect/src/AWS/EC2/Vpc.ts            # VPC resource + provider
+alchemy-effect/src/AWS/EC2/Subnet.ts         # Subnet resource + provider
 ```
 
 # Documentation Generation
@@ -84,6 +93,7 @@ bun scripts/generate-docs.ts
 ```
 
 This script:
+
 1. Discovers all resource files in `alchemy-effect/src/{cloud}/{service}/`
 2. Parses TypeScript using the TypeScript Compiler API
 3. Extracts JSDoc comments from Props and Attrs interfaces
@@ -115,13 +125,14 @@ The `@default` tag is used to document default values and will appear in the gen
 **Examples are critical for documentation.** Every resource should have examples demonstrating common use cases. Use `@section` and `@example` JSDoc tags on the main Resource export to organize examples into a navigable table of contents.
 
 **Format:**
+
 - `@section <Section Title>` - Creates a heading in the Examples section and adds an entry to the Quick Reference table of contents
 - `@example <Example Title>` - Creates a subheading for a specific code example (must follow a `@section`)
-- Code blocks inside examples use standard markdown fenced code blocks (``` ```)
+- Code blocks inside examples use standard markdown fenced code blocks (` `)
 
 **Example:**
 
-```typescript
+````typescript
 /**
  * An S3 bucket for storing objects.
  *
@@ -156,13 +167,15 @@ The `@default` tag is used to document default values and will appear in the gen
  * ```
  */
 export const Bucket = Resource<...>("AWS.S3.Bucket");
-```
+````
 
 This generates:
+
 1. A "Quick Reference" section with links to each `@section`
 2. An "Examples" section with organized code examples under each section heading
 
 **Best practices for examples:**
+
 - Start with the simplest use case and progress to more complex ones
 - Include examples for all major capabilities (GetObject, PutObject, etc.)
 - Show real-world patterns like error handling, combining with other resources
@@ -232,92 +245,113 @@ You should almost never use `no-op` in the Diff. No-op should be explicitly desi
 - **Delete** - determine which APIs should be called and in what order to delete an existing Resource. Delete should be idempotent so that if the resource has already been deleted, it is not considered an error. It is common for deletions to fail because of Dependency Violations or Eventual Consistency Errors. These are not always called Dependency Violations in the API docs, so attention should be paid to investigating each API's possible error codes and how they should be handled by the Delete operation. Should we retry for a period of time, indefinitely, or fail immediately?
 
 5. Research and design the test cases for each resource. Test cases can be single or multi-step. Single-step test cases are just testing a single create success or failure mode. Multi-step cases are testing a sequence of operations, starting with create and then updating or replacing the resource multiple times. Test cases should be designed to be exhaustive and cover all possible success and failure modes, starting from simple happy paths to long, complicated aggregate (including other resources) smoke tests.
-6. Implement the Resource interfaces/contracts in `alchemy-effect/src/{cloud}/{service}/${resource}.ts`.
+6. Implement the Resource contract and Provider in `alchemy-effect/src/{Cloud}/{Service}/{Resource}.ts`.
 
-It is always worth reading through the established examples to understand the pattern:
+The Resource contract (Props, Attributes, Binding Contract) and the Resource Provider (lifecycle operations) are co-located in the same file.
 
-- [Lambda Function](./alchemy-effect/src/aws/lambda/function.ts)
-- [SQS Queue](./alchemy-effect/src/aws/sqs/queue.ts)
-- [DynamoDB Table](./alchemy-effect/src/aws/dynamodb/table.ts)
-- [VPC](./alchemy-effect/src/aws/ec2/vpc.ts)
-- [Subnet](./alchemy-effect/src/aws/ec2/subnet.ts)
+Read through the established examples to understand the pattern:
 
-:::tip
-There is an important pattern to note here.
+- [S3 Bucket](./alchemy-effect/src/AWS/S3/Bucket.ts)
+- [SQS Queue](./alchemy-effect/src/AWS/SQS/Queue.ts)
+- [DynamoDB Table](./alchemy-effect/src/AWS/DynamoDB/Table.ts)
+- [Kinesis Stream](./alchemy-effect/src/AWS/Kinesis/Stream.ts)
+- [Lambda Function](./alchemy-effect/src/AWS/Lambda/Function.ts)
+- [VPC](./alchemy-effect/src/AWS/EC2/Vpc.ts)
+- [Subnet](./alchemy-effect/src/AWS/EC2/Subnet.ts)
 
-Some Input Property types are wrapped in an `Input<T>`, but not all are. Only properties that may need to be references to another resource's Output Attribute. E.g. common use-cases are `Input<VpcId>`, `Input<QueueUrl>`, `Tags: Record<string, Input<string>>`.
-
-When you do this, you must use `Input.Resolve` on the Output Attributes interface properly:
-
-1. The Attributes interface acts on the resolved properties, not their lazy inputs
+The Resource interface takes four type parameters: `Resource<Type, Props, Attributes, BindingContract>`.
 
 ```ts
-export interface {Resource}Attrs<Props extends Input.Resolve<{Resource}Props>> {
-  // ...
-}
+export interface Stream extends Resource<
+  "AWS.Kinesis.Stream",
+  StreamProps,
+  {
+    streamName: string;
+    streamArn: string;
+    streamStatus: StreamStatus;
+  }
+> {}
+
+export const Stream = Resource<Stream>("AWS.Kinesis.Stream");
 ```
 
-2. The Resource definition should resolve the Props before passing them into the Attrs interface.
+For Resources that accept Bindings (like Lambda Function), include a fourth type parameter for the Binding Contract:
 
 ```ts
-export interface {Resoruce}<
-  ID extends string = string,
-  Props extends {Resource}Props = {Resource}Props,
-> extends Resource<
-  "{ResourceFQN}",
-  ID,
-  Props,
-  // Resolve the lazy Props when passing them into the Attributes interface
-  {Resource}Attrs<Input.Resolve<Props>>,
-  {Resource}
+export interface Function extends Resource<
+  "AWS.Lambda.Function",
+  FunctionProps,
+  {
+    functionArn: string;
+    functionName: string;
+    functionUrl: string | undefined;
+    roleName: string;
+    roleArn: string;
+  },
+  {
+    env?: Record<string, any>;
+    policyStatements?: PolicyStatement[];
+  }
 > {}
 ```
 
-3. If a Resource includes IAM Policies, you should use the `PolicyDocument` type from the `../iam.ts` file. If used in Props, it should be wrapped in an `Input<T>` because it needs to refer to other resources' Output Attributes.
-
-Example:
-
-```ts
-import type * as IAM from "../iam.ts";
-
-export interface {Resource}Props {
-  // ...
-  policy: Input<IAM.PolicyDocument>;
-}
-```
-
+:::tip
+Some Input Property types are wrapped in an `Input<T>`, but not all are. Only properties that may need to be references to another resource's Output Attribute. E.g. common use-cases are `Input<VpcId>`, `Input<QueueUrl>`, `Tags: Record<string, Input<string>>`.
 :::
 
 :::warning
 For fields like `name: string`, `bucketName: string`, `bucketPrefix: string`, you should not use `Input<string>` because these properties need to be statically knowable in the `diff` function.
 :::
 
-8. Implement the Resource Provider in `alchemy-effect/src/{cloud}/{service}/${resource}.provider.ts`.
+7. Implement the Capabilities as `Binding.Service` + `Binding.Policy` pairs in `alchemy-effect/src/{Cloud}/{Service}/{Capability}.ts`.
 
-It is always worth reading through the established examples to understand the pattern:
+Each capability has two parts:
 
-- [Lambda Function Provider](./alchemy-effect/src/aws/lambda/function.provider.ts)
-- [SQS Queue Provider](./alchemy-effect/src/aws/sqs/queue.provider.ts)
-- [DynamoDB Table Provider](./alchemy-effect/src/aws/dynamodb/table.provider.ts)
-- [VPC Provider](./alchemy-effect/src/aws/ec2/vpc.provider.ts)
-- [Subnet Provider](./alchemy-effect/src/aws/ec2/subnet.provider.ts)
+- **`Binding.Service`** — runtime SDK wrapper, provided on the Function Effect (bundled into Lambda/Worker)
+- **`Binding.Policy`** — deploy-time IAM policy attachment, provided on the Stack via `AWS.providers()` (never bundled)
 
-7. Implement the Capabilities and Binding Providers in `alchemy-effect/src/{cloud}/{service}/${resource}.{capability}.ts`.
+Read through the established capabilities to understand the pattern:
 
-Read through the established capabilities before continuing so that you understand the pattern and structure of the capabilities and binding layers:
+- [S3 GetObject](./alchemy-effect/src/AWS/S3/GetObject.ts) — `Binding.Service` + `Binding.Policy`
+- [S3 PutObject](./alchemy-effect/src/AWS/S3/PutObject.ts) — `Binding.Service` + `Binding.Policy`
+- [SQS SendMessage](./alchemy-effect/src/AWS/SQS/SendMessage.ts) — `Binding.Service` + `Binding.Policy`
+- [DynamoDB GetItem](./alchemy-effect/src/AWS/DynamoDB/GetItem.ts) — `Binding.Service` + `Binding.Policy`
+- [Kinesis PutRecord](./alchemy-effect/src/AWS/Kinesis/PutRecord.ts) — `Binding.Service` + `Binding.Policy`
+- [Lambda InvokeFunction](./alchemy-effect/src/AWS/Lambda/InvokeFunction.ts) — `Binding.Service` + `Binding.Policy`
 
-- [GetItem Binding Provider](./alchemy-effect/src/aws/dynamodb/table.get-item.ts)
-- [SendMessage Binding Provider](./alchemy-effect/src/aws/sqs/queue.send-message.ts)
-- [InvokeFunction Binding Provider](./alchemy-effect/src/aws/lambda/function.invoke.ts)
+For Event Sources, see:
 
-For Event Sources, see the [QueueEventSource Binding Provider](./alchemy-effect/src/aws/sqs/queue.event-source.ts) for an example which provides a comprehensive example of how to use pre-attach and attach properly for a Lambda Function event source.
+- [SQS QueueEventSource](./alchemy-effect/src/AWS/SQS/QueueEventSource.ts)
+- [S3 BucketEventSource](./alchemy-effect/src/AWS/S3/BucketEventSource.ts)
+
+The `Binding.Policy` implementation calls `ctx.bind({ policyStatements: [...] })` on the target Function, which records binding data on the Stack. The `Binding.Service` implementation resolves the Policy via `yield* Policy(resource)`, then returns a typed callable that wraps the SDK client. At runtime, the Policy is not provided and becomes a no-op.
+
+Each capability exports four things:
+
+```ts
+// 1. The Binding.Service class
+export class PutRecord extends Binding.Service<...>()("AWS.Kinesis.PutRecord") {}
+
+// 2. The Binding.Service Live layer (provided on Function Effect)
+export const PutRecordLive = Layer.effect(PutRecord, ...);
+
+// 3. The Binding.Policy class
+export class PutRecordPolicy extends Binding.Policy<...>()("AWS.Kinesis.PutRecord") {}
+
+// 4. The Binding.Policy Live layer (provided on Stack via AWS.providers())
+export const PutRecordPolicyLive = Layer.effect(PutRecordPolicy, ...);
+```
+
+After implementing, register the Policy in `AWS.providers()`:
+- Add the `*PolicyLive` layer to `bindings()` in [Providers.ts](./alchemy-effect/src/AWS/Providers.ts)
+- Re-export from the service's `index.ts`
 
 :::tip
 If you need to know what AWS region or account ID the resource is being created/updated in, you can use this inside any of the lifecycle operations.
 
 ```ts
-const region = yield* Region;
-const account = yield* Account;
+const region = yield * Region;
+const account = yield * Account;
 ```
 
 :::
@@ -329,7 +363,7 @@ You should favor getting the region/account INSIDE the lifecycle operations inst
 create: Effect.fn(function* ({ id, news, session }) {
   const region = yield* Region;
   const accountId = yield* Account;
-})
+});
 ```
 
 :::
@@ -352,7 +386,7 @@ create: Effect.fn(function* ({ id, news, session }) {
 :::
 
 :::warning
-Do not roll your own tag diffing logic, always use diffTags from [tags.ts](./alchemy-effect/src/tags.ts)
+Do not roll your own tag diffing logic, always use diffTags from [Tags.ts](./alchemy-effect/src/Tags.ts)
 
 ```ts
 update: Effect.fn(function* ({ id, news, olds, output, session }) {
@@ -369,19 +403,17 @@ update: Effect.fn(function* ({ id, news, olds, output, session }) {
 
 :::
 
-9. Implement Event Source helper functions for Lambda Functions.
-
-For tasks like setting up a Lambda Function to consume from a SQS Queue or some other Event Source, you create a wrapper function like [Lambda.consumeQueue](./alchemy-effect/src/aws/lambda/consume-queue.ts) which is a wrapper around the Lambda Function resource that auto-binds the corresponding Event Source Binding.
-
-10. Implement the test cases in `alchemy-effect/test/{cloud}/{service}/${resource}.test.ts`.
+9. Implement the test cases in `alchemy-effect/test/{Cloud}/{Service}/{Resource}.test.ts`.
 
 Read through the established test cases before continuing so that you understand the pattern and structure of the test cases.
 
-- [GetItem Test Cases](./alchemy-effect/test/aws/dynamodb/table.provider.test.ts)
-- [SendMessage Test Cases](./alchemy-effect/test/aws/sqs/queue.provider.test.ts)
-- [InvokeFunction Test Cases](./alchemy-effect/test/aws/lambda/function.provider.test.ts)
-- [VPC Test Cases](./alchemy-effect/test/aws/ec2/vpc.provider.test.ts)
-- [Subnet Test Cases](./alchemy-effect/test/aws/ec2/subnet.provider.test.ts)
+- [S3 Bucket Test Cases](./alchemy-effect/test/AWS/S3/Bucket.test.ts)
+- [SQS Queue Test Cases](./alchemy-effect/test/AWS/SQS/Queue.test.ts)
+- [Lambda Function Test Cases](./alchemy-effect/test/AWS/Lambda/Function.test.ts)
+- [Kinesis Stream Test Cases](./alchemy-effect/test/AWS/Kinesis/Stream.test.ts)
+- [DynamoDB Table Test Cases](./alchemy-effect/test/AWS/DynamoDB/Table.test.ts)
+- [VPC Test Cases](./alchemy-effect/test/AWS/EC2/Vpc.test.ts)
+- [Subnet Test Cases](./alchemy-effect/test/AWS/EC2/Subnet.test.ts)
 
 :::warning
 Never use `Date.now()` when constructing the physical name of a resource. You should either:
@@ -392,10 +424,10 @@ Never use `Date.now()` when constructing the physical name of a resource. You sh
 
 3. Consider implementing an aggregate Smoke test that brings together multiple resources that are often used together.
 
-See the [VPC Smoke Test](./alchemy-effect/test/aws/ec2/vpc.smoke.test.ts) for an example.
+See the [VPC Smoke Test](./alchemy-effect/test/AWS/EC2/Vpc.smoke.test.ts) for an example.
 
-12. Write the usage patterns for the Resource in `alchemy-effect/docs/{cloud}/{service}/${resource}.md`.
-13. Write the index for the Service in `alchemy-effect/docs/{cloud}/{service}/index.md`.
+11. Write the usage patterns for the Resource in `alchemy-effect/docs/{Cloud}/{Service}/${Resource}.md`.
+12. Write the index for the Service in `alchemy-effect/docs/{Cloud}/{Service}/index.md`.
 
 # External References
 
@@ -424,7 +456,7 @@ PR bodies should focus exclusively on developer experience (DX) through code sni
 
 **Format:**
 
-```markdown
+````markdown
 One sentence describing the feature or change.
 
 ## Section Name
@@ -432,6 +464,7 @@ One sentence describing the feature or change.
 ```typescript
 // Code snippet demonstrating usage
 ```
+````
 
 ## Another Section
 
@@ -440,7 +473,8 @@ One sentence describing the feature or change.
 ```
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
-```
+
+````
 
 **Example PR body:**
 
@@ -450,33 +484,39 @@ Add AWS Kinesis Data Streams support with type-safe Lambda integration.
 ## Stream Resource
 
 \`\`\`typescript
-class EventStream extends Kinesis.Stream("EventStream", {
-  schema: S.Struct({
-    eventId: S.String,
-    timestamp: S.Number,
-  }),
+const stream = yield* Kinesis.Stream("EventStream", {
   streamMode: "ON_DEMAND",
-}) {}
+  retentionPeriodHours: 48,
+});
 \`\`\`
 
-## Consume Stream
+## PutRecord Capability
 
 \`\`\`typescript
-class Consumer extends Lambda.consumeStream("Consumer", {
-  stream: EventStream,
-  handle: Effect.fn(function* (event) {
-    for (const record of event.Records) {
-      console.log(record.kinesis.data.eventId);
-    }
-  }),
-})({
-  main: "./handler.ts",
-  bindings: $(),
-}) {}
+const putRecord = yield* Kinesis.PutRecord.bind(stream);
+
+yield* putRecord({
+  Data: JSON.stringify({ eventId: "123" }),
+  PartitionKey: "partition-1",
+});
+\`\`\`
+
+## Lambda Function with Kinesis
+
+\`\`\`typescript
+export default Effect.gen(function* () {
+  const stream = yield* Kinesis.Stream("Events", { streamMode: "ON_DEMAND" });
+  const putRecord = yield* Kinesis.PutRecord.bind(stream);
+  // use putRecord at runtime
+  return { main: import.meta.filename } as const;
+}).pipe(
+  Effect.provide(Kinesis.PutRecordLive),
+  Lambda.Function("Producer"),
+);
 \`\`\`
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
-```
+````
 
 **Guidelines:**
 
@@ -498,13 +538,14 @@ This runs the TypeScript compiler in build mode, which checks all projects in th
 
 ## Build Commands
 
-| Command | Description |
-|---------|-------------|
-| `bun tsc -b` | Type check all projects (always run before committing) |
-| `bun run build` | Clean, type check, and build the alchemy-effect package |
+| Command           | Description                                                                                  |
+| ----------------- | -------------------------------------------------------------------------------------------- |
+| `bun tsc -b`      | Type check all projects (always run before committing)                                       |
+| `bun run build`   | Clean, type check, and build the alchemy-effect package                                      |
 | `bun build:clean` | Full clean rebuild: cleans all artifacts, reinstalls dependencies, builds, and downloads env |
 
 Use `bun build:clean` when you encounter stale build artifacts or dependency issues. It runs:
+
 1. `bun clean .` - Removes all untracked files except .env
 2. `bun i` - Reinstalls dependencies
 3. `bun run build` - Builds the project

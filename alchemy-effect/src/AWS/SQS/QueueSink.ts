@@ -1,0 +1,67 @@
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Sink from "effect/Sink";
+import * as Binding from "../../Binding.ts";
+import { ExecutionContext } from "../../Executable.ts";
+import * as Output from "../../Output.ts";
+import * as Lambda from "../Lambda/index.ts";
+import type { Queue } from "./Queue.ts";
+import { SendMessageBatch } from "./SendMessageBatch.ts";
+
+export class QueueSink extends Binding.Service<
+  QueueSink,
+  (
+    queue: Queue,
+  ) => Effect.Effect<Sink.Sink<void, string, readonly string[], never>>
+>()("AWS.SQS.QueueSink") {}
+
+export const QueueSinkLive = Layer.effect(
+  QueueSink,
+  Effect.gen(function* () {
+    const Policy = yield* QueueSinkPolicy;
+    const sendMessageBatch = yield* SendMessageBatch;
+
+    return Effect.fn(function* (queue: Queue) {
+      yield* Policy(queue);
+      const sendBatch = yield* sendMessageBatch(queue);
+      return Sink.forEachArray((messages: readonly string[]) =>
+        sendBatch({
+          Entries: messages.map((message, i) => ({
+            Id: `${i}`,
+            MessageBody: message,
+          })),
+        }).pipe(Effect.orDie, Effect.asVoid),
+      );
+    });
+  }),
+);
+
+export class QueueSinkPolicy extends Binding.Policy<
+  QueueSinkPolicy,
+  (queue: Queue) => Effect.Effect<void>
+>()("AWS.SQS.QueueSinkPolicy") {}
+
+export const QueueSinkPolicyLive = Layer.effect(
+  QueueSinkPolicy,
+  Effect.gen(function* () {
+    const ctx = yield* ExecutionContext;
+    return Effect.fn(function* (queue: Queue) {
+      if (Lambda.isFunction(ctx)) {
+        return yield* ctx.bind({
+          policyStatements: [
+            {
+              Sid: "QueueSink",
+              Effect: "Allow",
+              Action: ["sqs:SendMessage"],
+              Resource: [Output.interpolate`${queue.queueArn}`],
+            },
+          ],
+        });
+      } else {
+        return yield* Effect.die(
+          `QueueSinkPolicy does not support runtime '${ctx.type}'`,
+        );
+      }
+    });
+  }),
+);
