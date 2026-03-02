@@ -37,7 +37,5 @@ export class HeadObjectPolicy extends Binding.Policy<
   (bucket: Bucket) => Effect.Effect<void>
 >()("Cloudflare.R2.HeadObject") {}
 
-export const HeadObjectPolicyLive = Layer.effect(
-  HeadObjectPolicy,
-  BucketBinding,
-);
+export const HeadObjectPolicyLive =
+  HeadObjectPolicy.layer.succeed(BucketBinding);

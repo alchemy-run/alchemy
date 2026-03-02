@@ -16,6 +16,7 @@ import { DotAlchemy } from "../../Config.ts";
 import {
   Executable,
   type ExecutionContext,
+  type ExecutionContextLike,
   type FunctionExecutionContext,
 } from "../../Executable.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -44,11 +45,11 @@ export type Context = lambda.Context;
 
 export type Provided =
   | Credentials
-  | Region
-  | HttpClient
   | ExecutionContext
-  | Scope
-  | FunctionRuntime;
+  | FunctionRuntime
+  | HttpClient
+  | Region
+  | Scope;
 
 export interface FunctionProps {
   main: string;
@@ -85,7 +86,6 @@ export const Function = Executable<Function, Provided>("AWS.Lambda.Function");
 
 export const FunctionProvider = () =>
   Function.provider.effect(
-    // @ts-expect-error
     Effect.gen(function* () {
       const stack = yield* Stack;
       const stage = yield* Stage;
@@ -747,3 +747,5 @@ export const FunctionProvider = () =>
       };
     }),
   );
+
+type _____ = Exclude<Function, ExecutionContextLike>;

@@ -14,7 +14,7 @@ import { Stack } from "./Stack.ts";
 export type ResourceConstructor<R extends ResourceLike, Req = never> = (
   id: string,
   props?: Input<R["Props"]>,
-) => Effect.Effect<R, never, Req | Stack>;
+) => Effect.Effect<R, never, Req>;
 
 export type ResourceClass<Self extends ResourceLike> = ResourceConstructor<
   Self,

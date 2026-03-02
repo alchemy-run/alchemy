@@ -37,4 +37,4 @@ export class GetPolicy extends Binding.Policy<
   (namespace: Namespace) => Effect.Effect<void>
 >()("Cloudflare.KV.Get") {}
 
-export const GetPolicyLive = Layer.effect(GetPolicy, NamespaceBinding);
+export const GetPolicyLive = GetPolicy.layer.succeed(NamespaceBinding);

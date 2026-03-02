@@ -36,9 +36,18 @@ export interface StackSpec<Output = any> {
 
 export const StackName = Stack.use((stack) => Effect.succeed(stack.name));
 
-export const make =
-  <const Name extends string>(name: Name) =>
-  <A, Err = never, Req = never>(effect: Effect.Effect<A, Err, Req>) =>
+export const make: {
+  <const Name extends string>(
+    name: Name,
+  ): <A, Err = never>(
+    effect: Effect.Effect<A, Err, StackServices>,
+  ) => Effect.Effect<StackSpec<A> & { output: A }, Err, StackServices>;
+  <const Name extends string, A, Err = never>(
+    name: Name,
+    effect: Effect.Effect<A, Err, StackServices>,
+  ): Effect.Effect<StackSpec<A> & { output: A }, Err, StackServices>;
+} = ((name: string, effect?: Effect.Effect<any, any, any>) => {
+  const make = (effect: Effect.Effect<any, any, any>) =>
     effect.pipe(
       Effect.flatMap((output) =>
         Stack.asEffect().pipe(
@@ -63,3 +72,5 @@ export const make =
         ),
       ),
     );
+  return effect ? make(effect) : make;
+}) as any;

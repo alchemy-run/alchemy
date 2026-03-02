@@ -2,7 +2,6 @@ import * as Kinesis from "distilled-aws/kinesis";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
-import { ExecutionContext } from "../../Executable.ts";
 import * as Output from "../../Output.ts";
 import * as Lambda from "../Lambda/index.ts";
 import type { Stream } from "./Stream.ts";
@@ -47,27 +46,23 @@ export class PutRecordsPolicy extends Binding.Policy<
   (stream: Stream) => Effect.Effect<void>
 >()("AWS.Kinesis.PutRecords") {}
 
-export const PutRecordsPolicyLive = Layer.effect(
-  PutRecordsPolicy,
-  Effect.gen(function* () {
-    const ctx = yield* ExecutionContext;
-    return Effect.fn(function* (stream: Stream) {
-      if (Lambda.isFunction(ctx)) {
-        return yield* ctx.bind({
-          policyStatements: [
-            {
-              Sid: "PutRecords",
-              Effect: "Allow",
-              Action: ["kinesis:PutRecords"],
-              Resource: [Output.interpolate`${stream.streamArn}`],
-            },
-          ],
-        });
-      } else {
-        return yield* Effect.die(
-          `PutRecordsPolicy does not support runtime '${ctx.type}'`,
-        );
-      }
-    });
+export const PutRecordsPolicyLive = PutRecordsPolicy.layer.succeed(
+  Effect.fn(function* (ctx, stream: Stream) {
+    if (Lambda.isFunction(ctx)) {
+      yield* ctx.bind({
+        policyStatements: [
+          {
+            Sid: "PutRecords",
+            Effect: "Allow",
+            Action: ["kinesis:PutRecords"],
+            Resource: [Output.interpolate`${stream.streamArn}`],
+          },
+        ],
+      });
+    } else {
+      return yield* Effect.die(
+        `PutRecordsPolicy does not support runtime '${ctx.type}'`,
+      );
+    }
   }),
 );

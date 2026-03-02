@@ -41,7 +41,5 @@ export class ListObjectsPolicy extends Binding.Policy<
   (bucket: Bucket) => Effect.Effect<void>
 >()("Cloudflare.R2.ListObjects") {}
 
-export const ListObjectsPolicyLive = Layer.effect(
-  ListObjectsPolicy,
-  BucketBinding,
-);
+export const ListObjectsPolicyLive =
+  ListObjectsPolicy.layer.succeed(BucketBinding);

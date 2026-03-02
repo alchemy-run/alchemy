@@ -28,7 +28,7 @@ import { JobStorage, jobStorage } from "./JobStorage.ts";
 // alchemy deploy --dry-run --adopt
 // alchemy deploy --dry-run --adopt JobsQueue,JobsDatabase
 
-export default Effect.gen(function* () {
+const JobFunction = Effect.gen(function* () {
   const stack = yield* Stack;
 
   const { bucket, getJob } = yield* JobStorage;
@@ -78,3 +78,5 @@ export default Effect.gen(function* () {
   ),
   Lambda.Function("JobFunction"),
 );
+
+export default JobFunction;

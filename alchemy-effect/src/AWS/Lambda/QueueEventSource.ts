@@ -2,6 +2,7 @@ import type lambda from "aws-lambda";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
+import * as Lambda from "../Lambda/index.ts";
 
 import * as Binding from "../../Binding.ts";
 import type { SQSRecord } from "../SQS/index.ts";
@@ -53,35 +54,41 @@ export class QueueEventSourcePolicy extends Binding.Policy<
   (queue: Queue, props: QueueEventSourceProps) => Effect.Effect<void>
 >()("AWS.SQS.QueueEventSourcePolicy") {}
 
-export const QueueEventSourcePolicyLive = Layer.effect(
-  QueueEventSourcePolicy,
+export const QueueEventSourcePolicyLive = QueueEventSourcePolicy.layer.effect(
   Effect.gen(function* () {
-    const Function = yield* FunctionRuntime;
     const Mapping = yield* EventSourceMapping;
 
-    return Effect.fn(function* (queue, props) {
-      yield* Function.bind({
-        policyStatements: [
-          {
-            Sid: "QueueEventSource",
-            Effect: "Allow",
-            Action: [
-              "sqs:ReceiveMessage",
-              "sqs:DeleteMessage",
-              "sqs:GetQueueAttributes",
-            ],
-            Resource: [queue.queueArn],
-          },
-        ],
-      });
+    return Effect.fn(function* (ctx, queue, props) {
+      if (Lambda.isFunction(ctx)) {
+        yield* ctx.bind({
+          policyStatements: [
+            {
+              Sid: "QueueEventSource",
+              Effect: "Allow",
+              Action: [
+                "sqs:ReceiveMessage",
+                "sqs:DeleteMessage",
+                "sqs:GetQueueAttributes",
+              ],
+              Resource: [queue.queueArn],
+            },
+          ],
+        });
 
-      yield* Mapping(`${queue.LogicalId}-EventSource`, {
-        functionName: Function.functionName,
-        eventSourceArn: queue.queueArn,
-        batchSize: props.batchSize,
-        maximumBatchingWindowInSeconds: props.maximumBatchingWindowInSeconds,
-        enabled: true,
-      });
+        yield* Mapping(`${queue.LogicalId}-EventSource`, {
+          functionName: ctx.functionName,
+          eventSourceArn: queue.queueArn,
+          batchSize: props.batchSize,
+          maximumBatchingWindowInSeconds: props.maximumBatchingWindowInSeconds,
+          enabled: true,
+        });
+      } else {
+        return yield* Effect.die(
+          new Error(
+            `QueueEventSourcePolicy does not support runtime '${ctx.type}'`,
+          ),
+        );
+      }
     });
   }),
 );

@@ -86,7 +86,5 @@ export class ResumeMultipartUploadPolicy extends Binding.Policy<
   (bucket: Bucket) => Effect.Effect<void>
 >()("Cloudflare.R2.ResumeMultipartUpload") {}
 
-export const ResumeMultipartUploadPolicyLive = Layer.effect(
-  ResumeMultipartUploadPolicy,
-  BucketBinding,
-);
+export const ResumeMultipartUploadPolicyLive =
+  ResumeMultipartUploadPolicy.layer.succeed(BucketBinding);

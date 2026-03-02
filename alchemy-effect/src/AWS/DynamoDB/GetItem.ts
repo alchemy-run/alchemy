@@ -3,7 +3,6 @@ import * as DynamoDB from "distilled-aws/dynamodb";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
-import { ExecutionContext } from "../../Executable.ts";
 import * as Output from "../../Output.ts";
 import * as Lambda from "../Lambda/index.ts";
 import { fromAttributeValue } from "./AttributeValue.ts";
@@ -85,27 +84,23 @@ export class GetItemPolicy extends Binding.Policy<
   <T extends Table>(table: T) => Effect.Effect<void>
 >()("AWS.DynamoDB.GetItem") {}
 
-export const GetItemPolicyLive = Layer.effect(
-  GetItemPolicy,
-  Effect.gen(function* () {
-    const ctx = yield* ExecutionContext;
-    return Effect.fn(function* <T extends Table>(table: T) {
-      if (Lambda.isFunction(ctx)) {
-        return yield* ctx.bind({
-          policyStatements: [
-            {
-              Sid: "GetItem",
-              Effect: "Allow",
-              Action: ["dynamodb:GetItem"],
-              Resource: [Output.interpolate`${table.tableArn}`],
-            },
-          ],
-        });
-      } else {
-        return yield* Effect.die(
-          `GetItemPolicy does not support runtime '${ctx.type}'`,
-        );
-      }
-    });
+export const GetItemPolicyLive = GetItemPolicy.layer.succeed(
+  Effect.fn(function* (ctx, table) {
+    if (Lambda.isFunction(ctx)) {
+      yield* ctx.bind({
+        policyStatements: [
+          {
+            Sid: "GetItem",
+            Effect: "Allow",
+            Action: ["dynamodb:GetItem"],
+            Resource: [Output.interpolate`${table.tableArn}`],
+          },
+        ],
+      });
+    } else {
+      return yield* Effect.die(
+        `GetItemPolicy does not support runtime '${ctx.type}'`,
+      );
+    }
   }),
 );

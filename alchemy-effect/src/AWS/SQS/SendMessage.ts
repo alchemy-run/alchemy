@@ -2,7 +2,6 @@ import * as sqs from "distilled-aws/sqs";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
-import { ExecutionContext } from "../../Executable.ts";
 import * as Output from "../../Output.ts";
 import * as Lambda from "../Lambda/index.ts";
 import type { Queue } from "./Queue.ts";
@@ -48,27 +47,23 @@ export class SendMessagePolicy extends Binding.Policy<
   (queue: Queue) => Effect.Effect<void>
 >()("AWS.SQS.SendMessage") {}
 
-export const SendMessagePolicyLive = Layer.effect(
-  SendMessagePolicy,
-  Effect.gen(function* () {
-    const ctx = yield* ExecutionContext;
-    return Effect.fn(function* (queue: Queue) {
-      if (Lambda.isFunction(ctx)) {
-        return yield* ctx.bind({
-          policyStatements: [
-            {
-              Sid: "SendMessage",
-              Effect: "Allow",
-              Action: ["sqs:SendMessage"],
-              Resource: [Output.interpolate`${queue.queueArn}`],
-            },
-          ],
-        });
-      } else {
-        return yield* Effect.die(
-          `SendMessagePolicy does not support runtime '${ctx.type}'`,
-        );
-      }
-    });
+export const SendMessagePolicyLive = SendMessagePolicy.layer.succeed(
+  Effect.fn(function* (ctx, queue: Queue) {
+    if (Lambda.isFunction(ctx)) {
+      yield* ctx.bind({
+        policyStatements: [
+          {
+            Sid: "SendMessage",
+            Effect: "Allow",
+            Action: ["sqs:SendMessage"],
+            Resource: [Output.interpolate`${queue.queueArn}`],
+          },
+        ],
+      });
+    } else {
+      return yield* Effect.die(
+        `SendMessagePolicy does not support runtime '${ctx.type}'`,
+      );
+    }
   }),
 );

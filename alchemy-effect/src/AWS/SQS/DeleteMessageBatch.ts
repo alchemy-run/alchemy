@@ -2,7 +2,6 @@ import * as sqs from "distilled-aws/sqs";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
-import { ExecutionContext } from "../../Executable.ts";
 import * as Output from "../../Output.ts";
 import * as Lambda from "../Lambda/index.ts";
 import type { Queue } from "./Queue.ts";
@@ -50,13 +49,11 @@ export class DeleteMessageBatchPolicy extends Binding.Policy<
   (queue: Queue) => Effect.Effect<void>
 >()("AWS.SQS.DeleteMessageBatch") {}
 
-export const DeleteMessageBatchPolicyLive = Layer.effect(
-  DeleteMessageBatchPolicy,
-  Effect.gen(function* () {
-    const ctx = yield* ExecutionContext;
-    return Effect.fn(function* (queue: Queue) {
+export const DeleteMessageBatchPolicyLive =
+  DeleteMessageBatchPolicy.layer.succeed(
+    Effect.fn(function* (ctx, queue: Queue) {
       if (Lambda.isFunction(ctx)) {
-        return yield* ctx.bind({
+        yield* ctx.bind({
           policyStatements: [
             {
               Sid: "DeleteMessageBatch",
@@ -71,6 +68,5 @@ export const DeleteMessageBatchPolicyLive = Layer.effect(
           `DeleteMessageBatchPolicy does not support runtime '${ctx.type}'`,
         );
       }
-    });
-  }),
-);
+    }),
+  );

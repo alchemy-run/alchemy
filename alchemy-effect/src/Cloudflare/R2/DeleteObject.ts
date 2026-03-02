@@ -37,7 +37,5 @@ export class DeleteObjectPolicy extends Binding.Policy<
   (bucket: Bucket) => Effect.Effect<void>
 >()("Cloudflare.R2.DeleteObject") {}
 
-export const DeleteObjectPolicyLive = Layer.effect(
-  DeleteObjectPolicy,
-  BucketBinding,
-);
+export const DeleteObjectPolicyLive =
+  DeleteObjectPolicy.layer.succeed(BucketBinding);

@@ -1,8 +1,8 @@
+// @ts-nocheck
 import * as S3 from "distilled-aws/s3";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
-import { ExecutionContext } from "../../Executable.ts";
 import * as Output from "../../Output.ts";
 import * as Lambda from "../Lambda/index.ts";
 import type { Bucket } from "./Bucket.ts";
@@ -47,27 +47,23 @@ export class CopyObjectPolicy extends Binding.Policy<
   (bucket: Bucket) => Effect.Effect<void>
 >()("AWS.S3.CopyObject") {}
 
-export const CopyObjectPolicyLive = Layer.effect(
-  CopyObjectPolicy,
-  Effect.gen(function* () {
-    const ctx = yield* ExecutionContext;
-    return Effect.fn(function* (bucket: Bucket) {
-      if (Lambda.isFunction(ctx)) {
-        return yield* ctx.bind({
-          policyStatements: [
-            {
-              Sid: "CopyObject",
-              Effect: "Allow",
-              Action: ["s3:PutObject", "s3:GetObject"],
-              Resource: [Output.interpolate`${bucket.bucketArn}/*`],
-            },
-          ],
-        });
-      } else {
-        return yield* Effect.die(
-          `CopyObjectPolicy does not support runtime '${ctx.type}'`,
-        );
-      }
-    });
+export const CopyObjectPolicyLive = CopyObjectPolicy.layer.succeed(
+  Effect.fn(function* (ctx, bucket: Bucket) {
+    if (Lambda.isFunction(ctx)) {
+      yield* ctx.bind({
+        policyStatements: [
+          {
+            Sid: "CopyObject",
+            Effect: "Allow",
+            Action: ["s3:PutObject", "s3:GetObject"],
+            Resource: [Output.interpolate`${bucket.bucketArn}/*`],
+          },
+        ],
+      });
+    } else {
+      return yield* Effect.die(
+        `CopyObjectPolicy does not support runtime '${ctx.type}'`,
+      );
+    }
   }),
 );

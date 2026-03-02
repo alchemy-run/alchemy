@@ -12,28 +12,26 @@ import type { Stage } from "./Stage.ts";
 
 type ExecutableServices = Provider<any> | PolicyLike | Stack | Stage;
 
-export type ExecutableConstructor<
-  R extends ResourceLike,
-  Provided,
-  Req = never,
-> = {
-  (
+export type ExecutableConstructor<R extends ResourceLike, Provided> = {
+  <Req = never>(
     id: string,
     eff: Effect.Effect<R["Props"], never, Req | ExecutableServices>,
-  ): Effect.Effect<R, never, Exclude<Req, Provided>>;
-  (
+  ): Effect.Effect<R, never, Exclude<Req, Provided | ExecutionContextLike>>;
+  <Req = never>(
     id: string,
   ): (
     eff: Effect.Effect<R["Props"], never, Req | ExecutableServices>,
-  ) => Effect.Effect<R, never, Exclude<Req, Provided>>;
+  ) => Effect.Effect<R, never, Exclude<Req, Provided | ExecutionContextLike>>;
 };
 
 export type ExecutableClass<
   Self extends ResourceLike,
   Provided,
-> = ExecutableConstructor<Self, Provider<Self>, Provided> &
+> = ExecutableConstructor<Self, Provided> &
   Effect.Effect<ExecutableConstructor<Self, Provided>> & {
+    kind: "Executable";
     provider: ResourceProviders<Self>;
+    ExecutionContext: ServiceMap.Service<Self, Self>;
   };
 
 export const Executable = <R extends ResourceLike, Provided>(
@@ -46,7 +44,11 @@ export class ExecutionContext extends ServiceMap.Service<
   FunctionExecutionContext | DaemonExecutionContext
 >()("Alchemy::ExecutionContext") {}
 
-interface BaseExecutionContext<Type extends string> {
+export type ExecutionContextLike = { kind: "ExecutionContext" };
+
+interface BaseExecutionContext<
+  Type extends string = string,
+> extends ExecutionContextLike {
   type: Type;
   /**
    * Get a value from the Runtime

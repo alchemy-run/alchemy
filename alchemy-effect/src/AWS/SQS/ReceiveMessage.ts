@@ -2,7 +2,6 @@ import * as sqs from "distilled-aws/sqs";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
-import { ExecutionContext } from "../../Executable.ts";
 import * as Output from "../../Output.ts";
 import * as Lambda from "../Lambda/index.ts";
 import type { Queue } from "./Queue.ts";
@@ -47,27 +46,23 @@ export class ReceiveMessagePolicy extends Binding.Policy<
   (queue: Queue) => Effect.Effect<void>
 >()("AWS.SQS.ReceiveMessage") {}
 
-export const ReceiveMessagePolicyLive = Layer.effect(
-  ReceiveMessagePolicy,
-  Effect.gen(function* () {
-    const ctx = yield* ExecutionContext;
-    return Effect.fn(function* (queue: Queue) {
-      if (Lambda.isFunction(ctx)) {
-        return yield* ctx.bind({
-          policyStatements: [
-            {
-              Sid: "ReceiveMessage",
-              Effect: "Allow",
-              Action: ["sqs:ReceiveMessage"],
-              Resource: [Output.interpolate`${queue.queueArn}`],
-            },
-          ],
-        });
-      } else {
-        return yield* Effect.die(
-          `ReceiveMessagePolicy does not support runtime '${ctx.type}'`,
-        );
-      }
-    });
+export const ReceiveMessagePolicyLive = ReceiveMessagePolicy.layer.succeed(
+  Effect.fn(function* (ctx, queue: Queue) {
+    if (Lambda.isFunction(ctx)) {
+      yield* ctx.bind({
+        policyStatements: [
+          {
+            Sid: "ReceiveMessage",
+            Effect: "Allow",
+            Action: ["sqs:ReceiveMessage"],
+            Resource: [Output.interpolate`${queue.queueArn}`],
+          },
+        ],
+      });
+    } else {
+      return yield* Effect.die(
+        `ReceiveMessagePolicy does not support runtime '${ctx.type}'`,
+      );
+    }
   }),
 );

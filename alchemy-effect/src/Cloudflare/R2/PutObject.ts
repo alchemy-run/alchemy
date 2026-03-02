@@ -60,4 +60,4 @@ export class PutObjectPolicy extends Binding.Policy<
   (bucket: Bucket) => Effect.Effect<void>
 >()("Cloudflare.R2.PutObject") {}
 
-export const PutObjectPolicyLive = Layer.effect(PutObjectPolicy, BucketBinding);
+export const PutObjectPolicyLive = PutObjectPolicy.layer.succeed(BucketBinding);

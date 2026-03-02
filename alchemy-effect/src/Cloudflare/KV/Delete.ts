@@ -35,4 +35,4 @@ export class DeletePolicy extends Binding.Policy<
   (namespace: Namespace) => Effect.Effect<void>
 >()("Cloudflare.KV.Delete") {}
 
-export const DeletePolicyLive = Layer.effect(DeletePolicy, NamespaceBinding);
+export const DeletePolicyLive = DeletePolicy.layer.succeed(NamespaceBinding);

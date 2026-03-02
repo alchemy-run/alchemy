@@ -9,8 +9,7 @@ import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import * as UrlParams from "effect/unstable/http/UrlParams";
 import * as Binding from "../../Binding.ts";
 import { CloudflareContext } from "../CloudflareContext.ts";
-import type { Worker } from "./Worker.ts";
-import * as WorkerRuntime from "./Worker.ts";
+import { isWorker, type Worker } from "./Worker.ts";
 
 export class Fetch extends Binding.Service<
   Fetch,
@@ -34,7 +33,9 @@ export const FetchLive = Layer.effect(
 
     return Effect.fn(function* (worker: Worker) {
       yield* Policy(worker);
-      const fetcher = (env as Record<string, runtime.Fetcher>)[worker.id];
+      const fetcher = (env as Record<string, runtime.Fetcher>)[
+        worker.LogicalId
+      ];
 
       return (request: HttpClientRequest.HttpClientRequest) =>
         doFetch(fetcher, request);
@@ -70,12 +71,15 @@ const doFetch = (
       Effect.map(
         Effect.tryPromise({
           try: () =>
-            fetcher.fetch(url.toString() as runtime.RequestInfo, {
-              method: request.method,
-              headers: request.headers as unknown as runtime.HeadersInit,
-              body,
-              duplex: request.body._tag === "Stream" ? "half" : undefined,
-            } as runtime.RequestInit) as unknown as Promise<Response>,
+            fetcher.fetch(
+              url.toString() as runtime.RequestInfo,
+              {
+                method: request.method,
+                headers: request.headers as unknown as runtime.HeadersInit,
+                body,
+                duplex: request.body._tag === "Stream" ? "half" : undefined,
+              } as runtime.RequestInit,
+            ) as unknown as Promise<Response>,
           catch: (cause) => cause,
         }),
         (response) => HttpClientResponse.fromWeb(request, response),
@@ -117,19 +121,22 @@ export class FetchPolicy extends Binding.Policy<
   (worker: Worker) => Effect.Effect<void>
 >()("Cloudflare.Workers.Fetch") {}
 
-export const FetchPolicyLive = Layer.effect(
-  FetchPolicy,
-  Effect.gen(function* () {
-    const runtime = yield* WorkerRuntime.WorkerRuntime;
-    return (worker: Worker) =>
-      runtime.bind({
+export const FetchPolicyLive = FetchPolicy.layer.succeed(
+  Effect.fn(function* (worker) {
+    if (isWorker(worker)) {
+      yield* worker.bind({
         bindings: [
           {
             type: "service",
-            name: worker.id,
+            name: worker.LogicalId,
             service: worker.workerName,
           },
         ],
       });
+    } else {
+      return yield* Effect.die(
+        new Error(`FetchPolicy does not support runtime '${worker.type}'`),
+      );
+    }
   }),
 );

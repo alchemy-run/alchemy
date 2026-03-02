@@ -50,7 +50,5 @@ export class GetWithMetadataPolicy extends Binding.Policy<
   (namespace: Namespace) => Effect.Effect<void>
 >()("Cloudflare.KV.GetWithMetadata") {}
 
-export const GetWithMetadataPolicyLive = Layer.effect(
-  GetWithMetadataPolicy,
-  NamespaceBinding,
-);
+export const GetWithMetadataPolicyLive =
+  GetWithMetadataPolicy.layer.succeed(NamespaceBinding);

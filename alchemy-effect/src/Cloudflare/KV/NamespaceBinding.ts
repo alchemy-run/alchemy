@@ -1,11 +1,14 @@
 import * as Effect from "effect/Effect";
-import * as Worker from "../Workers/Worker.ts";
+import type { ExecutionContext } from "../../Executable.ts";
+import { isWorker } from "../Workers/Worker.ts";
 import type { Namespace } from "./Namespace.ts";
 
-export const NamespaceBinding = Effect.gen(function* () {
-  const worker = yield* Worker.WorkerRuntime;
-  return (namespace: Namespace) =>
-    worker.bind({
+export const NamespaceBinding = Effect.fn(function* (
+  worker: ExecutionContext["Service"],
+  namespace: Namespace,
+) {
+  if (isWorker(worker)) {
+    yield* worker.bind({
       bindings: [
         {
           type: "kv_namespace",
@@ -14,4 +17,9 @@ export const NamespaceBinding = Effect.gen(function* () {
         },
       ],
     });
+  } else {
+    return yield* Effect.die(
+      new Error(`NamespaceBinding does not support runtime '${worker.type}'`),
+    );
+  }
 });

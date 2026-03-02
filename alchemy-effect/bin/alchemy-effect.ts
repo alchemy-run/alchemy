@@ -1,18 +1,20 @@
-import { Args, Command, Options } from "@effect/cli";
-import * as CliError from "effect/unstable/cli/CliError";
-import * as HelpDoc from "effect/unstable/cli/HelpDoc";
-// import * as ValidationError from "effect/unstable/cli/CliError";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as PlatformConfigProvider from "effect/ConfigProvider";
+import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import { Path } from "effect/Path";
+import * as S from "effect/Schema";
+import { Argument, Command, Flag } from "effect/unstable/cli";
+import * as CliError from "effect/unstable/cli/CliError";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+
 import packageJson from "../package.json";
+import { apply } from "../src/Apply.ts";
 import * as AWSAccount from "../src/AWS/Account.ts";
 import { bootstrap as bootstrapAws } from "../src/AWS/Bootstrap.ts";
 import * as AWSCredentials from "../src/AWS/Credentials.ts";
@@ -21,12 +23,13 @@ import * as AWSRegion from "../src/AWS/Region.ts";
 import * as CLI from "../src/Cli/index.ts";
 import { dotAlchemy } from "../src/Config.ts";
 import * as Plan from "../src/Plan.ts";
-import { Resource } from "../src/Resource.ts";
-import type { Stack } from "../src/Stack.ts";
+import { ResourceLike } from "../src/Resource.ts";
+import { Stack } from "../src/Stack.ts";
 import * as State from "../src/State/index.ts";
-import { asEffect } from "../src/Util/index.ts";
+
 // Import to trigger module augmentation for StageConfig.aws
 import "../src/aws/config.ts";
+import { Stage } from "../src/Stage.ts";
 
 const USER = Config.string("USER").pipe(
   Config.orElse(() => Config.string("USERNAME")),
@@ -39,22 +42,27 @@ const STAGE = Config.string("stage").pipe(
   Effect.map(Option.getOrUndefined),
 );
 
-const stage = Options.text("stage").pipe(
-  Options.withDescription("Stage to deploy to, defaults to dev_${USER}"),
-  Options.optional,
-  Options.map(Option.getOrUndefined),
-  Options.mapEffect(
+const stage = Flag.string("stage").pipe(
+  Flag.withSchema(S.String.check(S.isPattern(/^[a-z0-9]+([-_a-z0-9]+)*$/gi))),
+  Flag.withDescription("Stage to deploy to, defaults to dev_${USER}"),
+  Flag.optional,
+  Flag.map(Option.getOrUndefined),
+  Flag.mapEffect(
     Effect.fn(function* (stage) {
       if (stage) {
         return stage;
       }
       return yield* STAGE.pipe(
-        Effect.catch((err) =>
-          Effect.fail(CliError.invalidValue(HelpDoc.p(err.message))),
+        Effect.catch(() =>
+          Effect.fail(
+            new CliError.MissingOption({
+              option: "stage",
+            }),
+          ),
         ),
         Effect.flatMap((s) =>
           s === undefined
-            ? USER.pipe(
+            ? USER.asEffect().pipe(
                 Effect.map((user) => `dev_${user}`),
                 Effect.catch(() => Effect.succeed("unknown")),
               )
@@ -63,43 +71,30 @@ const stage = Options.text("stage").pipe(
       );
     }),
   ),
-  Options.mapEffect((stage) => {
-    const regex = /^[a-z0-9]+([-_a-z0-9]+)*$/gi;
-    return regex.test(stage)
-      ? Effect.succeed(stage)
-      : Effect.fail(
-          ValidationError.invalidValue(
-            HelpDoc.p(
-              `Stage '${stage}' is invalid. Must match the regex ${regex.source} (alphanumeric characters, hyphens and dashes).`,
-            ),
-          ),
-        );
-  }),
 );
 
-const envFile = Options.file("env-file").pipe(
-  Options.optional,
-  Options.withDescription(
+const envFile = Flag.file("env-file").pipe(
+  Flag.optional,
+  Flag.withDescription(
     "File to load environment variables from, defaults to .env",
   ),
 );
 
-const dryRun = Options.boolean("dry-run").pipe(
-  Options.withDescription("Dry run the deployment, do not actually deploy"),
-  Options.withDefault(false),
+const dryRun = Flag.boolean("dry-run").pipe(
+  Flag.withDescription("Dry run the deployment, do not actually deploy"),
+  Flag.withDefault(false),
 );
 
-const yes = Options.boolean("yes").pipe(
-  Options.withDescription("Yes to all prompts"),
-  Options.withDefault(false),
+const yes = Flag.boolean("yes").pipe(
+  Flag.withDescription("Yes to all prompts"),
+  Flag.withDefault(false),
 );
 
-const main = Args.file({
-  name: "main",
-  exists: "yes",
+const main = Argument.file("main", {
+  mustExist: true,
 }).pipe(
-  Args.withDescription("Main file to deploy, defaults to alchemy.run.ts"),
-  Args.withDefault("alchemy.run.ts"),
+  Argument.withDescription("Main file to deploy, defaults to alchemy.run.ts"),
+  Argument.withDefault("alchemy.run.ts"),
 );
 
 const deployCommand = Command.make(
@@ -114,7 +109,7 @@ const deployCommand = Command.make(
   (args) =>
     execStack({
       ...args,
-      select: (stack) => stack.resources,
+      select: (stack) => Object.values(stack.resources),
     }),
 );
 
@@ -147,22 +142,22 @@ const planCommand = Command.make(
       ...args,
       // plan is the same as deploy with dryRun always set to true
       dryRun: true,
-      select: (stack) => stack.resources,
+      select: (stack) => Object.values(stack.resources),
     }),
 );
 
-const awsProfile = Options.text("profile").pipe(
-  Options.withDescription("AWS profile to use for credentials"),
-  Options.optional,
-  Options.map(Option.getOrUndefined),
+const awsProfile = Flag.string("profile").pipe(
+  Flag.withDescription("AWS profile to use for credentials"),
+  Flag.optional,
+  Flag.map(Option.getOrUndefined),
 );
 
-const awsRegion = Options.text("region").pipe(
-  Options.withDescription(
+const awsRegion = Flag.string("region").pipe(
+  Flag.withDescription(
     "AWS region to bootstrap (defaults to AWS_REGION env var)",
   ),
-  Options.optional,
-  Options.map(Option.getOrUndefined),
+  Flag.optional,
+  Flag.map(Option.getOrUndefined),
 );
 
 const bootstrapCommand = Command.make(
@@ -175,35 +170,39 @@ const bootstrapCommand = Command.make(
   (args) => {
     // Create a minimal app config for bootstrap
     // Use "default" profile if none specified
-    const appLayer = App.make({
-      name: "bootstrap",
-      stage: "bootstrap",
-      config: {
-        aws: {
-          profile: args.profile ?? "default",
-          region: args.region,
-        },
-      },
-    });
 
     const awsLayers = Layer.mergeAll(
       AWSAccount.fromStageConfig(),
       AWSRegion.fromStageConfig(),
       AWSCredentials.fromStageConfig(),
       AWSEndpoint.fromStageConfig(),
-    ).pipe(Layer.provideMerge(appLayer));
+    ).pipe(
+      Layer.provideMerge(
+        Layer.succeed(
+          Stack,
+          Stack.of({
+            name: "bootstrap",
+            stage: "bootstrap",
+            bindings: {},
+            resources: {},
+          }),
+        ),
+      ),
+    );
 
     const platform = Layer.mergeAll(
       NodeServices.layer,
       FetchHttpClient.layer,
-      Logger.pretty,
+      Logger.layer([Logger.consolePretty()]),
     );
 
     // Build configProvider effect that requires platform (for fromDotEnv)
     const configProviderEffect = Option.isSome(args.envFile)
       ? Effect.map(
-          PlatformConfigProvider.fromDotEnv(args.envFile.value),
-          (dotEnv) => ConfigProvider.orElse(dotEnv, ConfigProvider.fromEnv),
+          PlatformConfigProvider.fromDotEnv({
+            path: args.envFile.value,
+          }),
+          (dotEnv) => ConfigProvider.orElse(dotEnv, ConfigProvider.fromEnv()),
         )
       : Effect.succeed(ConfigProvider.fromEnv());
 
@@ -215,8 +214,12 @@ const bootstrapCommand = Command.make(
             ? Effect.logInfo(`✓ Created assets bucket: ${bucketName}`)
             : Effect.logInfo(`✓ Assets bucket already exists: ${bucketName}`),
         ),
-        Effect.provide(awsLayers),
-        Effect.withConfigProvider(provider),
+        Effect.provide(
+          Layer.provide(
+            awsLayers,
+            Layer.succeed(ConfigProvider.ConfigProvider, provider),
+          ),
+        ),
       );
     }).pipe(Effect.provide(platform)) as Effect.Effect<void, any, never>;
   },
@@ -235,20 +238,13 @@ const execStack = Effect.fn(function* ({
   envFile: Option.Option<string>;
   dryRun?: boolean;
   yes?: boolean;
-  select: (stack: Stack<string, any, never, never, never, never>) => Resource[];
+  select: (stack: Stack["Service"]) => ResourceLike[];
 }) {
   const path = yield* Path;
   const module = yield* Effect.promise(
     () => import(path.resolve(process.cwd(), main)),
   );
-  const stack = module.default as Stack<
-    string,
-    any,
-    never,
-    never,
-    never,
-    never
-  >;
+  const stack = module.default as Effect.Effect<Stack["Service"]>;
   if (!stack) {
     return yield* Effect.die(
       new Error(
@@ -257,31 +253,31 @@ const execStack = Effect.fn(function* ({
     );
   }
 
-  const stackName = stack.name;
+  const _stackSpec = yield* stack.pipe(Effect.provideService(Stage, stage));
+
+  // const stackName = stack.name;
 
   const configProvider = Option.isSome(envFile)
     ? ConfigProvider.orElse(
-        yield* PlatformConfigProvider.fromDotEnv(envFile.value),
-        ConfigProvider.fromEnv,
+        yield* PlatformConfigProvider.fromDotEnv({
+          path: envFile.value,
+        }),
+        ConfigProvider.fromEnv(),
       )
     : ConfigProvider.fromEnv();
-
-  const stageConfig = yield* asEffect(stack.stages.config(stage)).pipe(
-    Effect.provide(stack.layers ?? Layer.empty),
-    Effect.withConfigProvider(configProvider),
-  );
 
   // TODO(sam): implement local and watch
   const platform = Layer.mergeAll(
     NodeServices.layer,
     FetchHttpClient.layer,
-    Logger.pretty,
+    Logger.layer([Logger.consolePretty()]),
   );
 
   // override alchemy state store, CLI/reporting and dotAlchemy
   const alchemy = Layer.mergeAll(
-    stack.state ?? State.localFs,
-    stack.cli ?? CLI.inkCLI(),
+    // TODO(sam): support overriding these
+    State.LocalState,
+    CLI.inkCLI(),
     // optional
     dotAlchemy,
   );
@@ -290,11 +286,15 @@ const execStack = Effect.fn(function* ({
     Layer.provideMerge(stack.providers, alchemy),
     Layer.mergeAll(
       platform,
-      App.make({
-        name: stackName,
-        stage,
-        config: stageConfig,
-      }),
+      Layer.succeed(
+        Stack,
+        Stack.of({
+          name: stackName,
+          stage,
+          bindings: {},
+          resources: {},
+        }),
+      ),
     ),
   );
 
@@ -311,16 +311,13 @@ const execStack = Effect.fn(function* ({
           return;
         }
       }
-      const outputs = yield* applyPlan(updatePlan);
-      if (outputs && stack.tap) {
-        yield* stack
-          .tap(outputs)
-          .pipe(Effect.provide(stack.layers ?? Layer.empty));
-      }
+      const outputs = yield* apply(updatePlan);
+
+      yield* Console.log(outputs);
     }
   }).pipe(
     Effect.provide(layers),
-    Effect.withConfigProvider(configProvider),
+    Effect.provideService(ConfigProvider.ConfigProvider, configProvider),
   ) as Effect.Effect<void, any, never>;
   // TODO(sam): figure out why we need to cast to remove the Provider<never> requirement
   // Effect.Effect<void, any, Provider<never>>;
@@ -337,14 +334,17 @@ const root = Command.make("alchemy-effect", {}).pipe(
 
 // Set up the CLI application
 const cli = Command.run(root, {
-  name: "Alchemy Effect CLI",
+  // name: "Alchemy Effect CLI",
   version: packageJson.version,
 });
 
 // Prepare and run the CLI application
-cli(process.argv).pipe(
+cli.pipe(
   // $USER and $STAGE are set by the environment
-  Effect.withConfigProvider(ConfigProvider.fromEnv()),
+  Effect.provideService(
+    ConfigProvider.ConfigProvider,
+    ConfigProvider.fromEnv(),
+  ),
   Effect.provide(NodeServices.layer),
   NodeRuntime.runMain,
 );

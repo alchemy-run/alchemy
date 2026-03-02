@@ -12,7 +12,7 @@ export const BucketEventSource = Layer.effect(
   S3.BucketEventSource,
   Effect.gen(function* () {
     // this layer can only be used in a Lambda Function
-    const func = yield* Lambda.FunctionRuntime;
+    const func = yield* Lambda.Function.ExecutionContext;
 
     const Policy = yield* BucketEventSourcePolicy;
 
@@ -75,14 +75,12 @@ export class BucketEventSourcePolicy extends Binding.Policy<
   ) => Effect.Effect<void>
 >()("AWS.S3.BucketEventSourcePermissions") {}
 
-export const BucketEventSourcePolicyLive = Layer.effect(
-  BucketEventSourcePolicy,
+export const BucketEventSourcePolicyLive = BucketEventSourcePolicy.layer.effect(
   Effect.gen(function* () {
-    const ctx = yield* Lambda.FunctionRuntime;
-
     const LambdaPermission = yield* Lambda.Permission;
 
     return Effect.fn(function* (
+      ctx,
       bucket: S3.Bucket,
       {
         events: Events = ["s3:ObjectCreated:*"],
@@ -90,22 +88,30 @@ export const BucketEventSourcePolicyLive = Layer.effect(
         events?: S3.S3EventType[];
       } = {},
     ) {
-      yield* LambdaPermission("Permission", {
-        action: "lambda.InvokeFunction",
-        functionName: ctx.functionName,
-        principal: "s3.amazonaws.com",
-        sourceArn: bucket.bucketArn,
-      });
-      yield* bucket.bind({
-        notificationConfiguration: {
-          LambdaFunctionConfigurations: [
-            {
-              LambdaFunctionArn: ctx.functionArn,
-              Events,
-            },
-          ],
-        },
-      });
+      if (Lambda.isFunction(ctx)) {
+        yield* LambdaPermission("Permission", {
+          action: "lambda.InvokeFunction",
+          functionName: ctx.functionName,
+          principal: "s3.amazonaws.com",
+          sourceArn: bucket.bucketArn,
+        });
+        yield* bucket.bind({
+          notificationConfiguration: {
+            LambdaFunctionConfigurations: [
+              {
+                LambdaFunctionArn: ctx.functionArn,
+                Events,
+              },
+            ],
+          },
+        });
+      } else {
+        return yield* Effect.die(
+          new Error(
+            `BucketEventSourcePolicy does not support runtime '${ctx.type}'`,
+          ),
+        );
+      }
     });
   }),
 );

@@ -2,7 +2,6 @@ import * as S3 from "distilled-aws/s3";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
-import { ExecutionContext } from "../../Executable.ts";
 import * as Output from "../../Output.ts";
 import * as Lambda from "../Lambda/index.ts";
 import type { Bucket } from "./Bucket.ts";
@@ -50,13 +49,11 @@ export class AbortMultipartUploadPolicy extends Binding.Policy<
   (bucket: Bucket) => Effect.Effect<void>
 >()("AWS.S3.AbortMultipartUpload") {}
 
-export const AbortMultipartUploadPolicyLive = Layer.effect(
-  AbortMultipartUploadPolicy,
-  Effect.gen(function* () {
-    const ctx = yield* ExecutionContext;
-    return Effect.fn(function* (bucket: Bucket) {
+export const AbortMultipartUploadPolicyLive =
+  AbortMultipartUploadPolicy.layer.succeed(
+    Effect.fn(function* (ctx, bucket: Bucket) {
       if (Lambda.isFunction(ctx)) {
-        return yield* ctx.bind({
+        yield* ctx.bind({
           policyStatements: [
             {
               Sid: "AbortMultipartUpload",
@@ -71,6 +68,5 @@ export const AbortMultipartUploadPolicyLive = Layer.effect(
           `AbortMultipartUploadPolicy does not support runtime '${ctx.type}'`,
         );
       }
-    });
-  }),
-);
+    }),
+  );

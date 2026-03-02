@@ -42,4 +42,4 @@ export class ListPolicy extends Binding.Policy<
   (namespace: Namespace) => Effect.Effect<void>
 >()("Cloudflare.KV.List") {}
 
-export const ListPolicyLive = Layer.effect(ListPolicy, NamespaceBinding);
+export const ListPolicyLive = ListPolicy.layer.succeed(NamespaceBinding);

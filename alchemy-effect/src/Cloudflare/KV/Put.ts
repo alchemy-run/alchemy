@@ -56,4 +56,4 @@ export class PutPolicy extends Binding.Policy<
   (namespace: Namespace) => Effect.Effect<void>
 >()("Cloudflare.KV.Put") {}
 
-export const PutPolicyLive = Layer.effect(PutPolicy, NamespaceBinding);
+export const PutPolicyLive = PutPolicy.layer.succeed(NamespaceBinding);

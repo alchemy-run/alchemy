@@ -44,4 +44,4 @@ export class GetObjectPolicy extends Binding.Policy<
   (bucket: Bucket) => Effect.Effect<void>
 >()("Cloudflare.R2.GetObject") {}
 
-export const GetObjectPolicyLive = Layer.effect(GetObjectPolicy, BucketBinding);
+export const GetObjectPolicyLive = GetObjectPolicy.layer.succeed(BucketBinding);

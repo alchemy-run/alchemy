@@ -145,7 +145,6 @@ export interface EventSourceMappingProps {
 }
 
 export interface EventSourceMapping extends Resource<
-  EventSourceMapping,
   "AWS.Lambda.EventSourceMapping",
   EventSourceMappingProps,
   {
@@ -275,7 +274,7 @@ export const EventSourceMappingProvider = () =>
 
       const configToAttrs = (
         config: lambda.EventSourceMappingConfiguration,
-      ): EventSourceMapping["attr"] => ({
+      ): EventSourceMapping["Attributes"] => ({
         uuid: config.UUID!,
         eventSourceMappingArn: config.EventSourceMappingArn!,
         functionArn: config.FunctionArn!,
