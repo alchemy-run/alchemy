@@ -44,7 +44,7 @@ export const Diagnostic = S.Struct({
   severity: S.optional(S.Number),
   message: S.String,
   source: S.optional(S.String),
-  code: S.optional(S.Union(S.String, S.Number)),
+  code: S.optional(S.Union([S.String, S.Number])),
 });
 export type Diagnostic = S.Schema.Type<typeof Diagnostic>;
 
@@ -124,9 +124,9 @@ export const makeLSPClient = (id: string, proc: Subprocess, root: string) =>
       "textDocument/publishDiagnostics",
       (params: unknown) =>
         Effect.gen(function* () {
-          const decoded = yield* S.decodeUnknown(PublishDiagnosticsParams)(
-            params,
-          ).pipe(Effect.catch(() => Effect.succeed(null)));
+          const decoded = yield* S.decodeUnknownEffect(
+            PublishDiagnosticsParams,
+          )(params).pipe(Effect.catch(() => Effect.succeed(null)));
 
           if (!decoded) return;
 
@@ -213,7 +213,7 @@ export const makeLSPClient = (id: string, proc: Subprocess, root: string) =>
           yield* Effect.scoped(
             Effect.gen(function* () {
               const subscription = yield* PubSub.subscribe(diagnosticsPubSub);
-              yield* Stream.fromQueue(subscription).pipe(
+              yield* Stream.fromSubscription(subscription).pipe(
                 Stream.filter((e) => e.uri === uri),
                 Stream.debounce(150),
                 Stream.take(1),

@@ -1,16 +1,15 @@
+import * as Effect from "effect/Effect";
 import * as S from "effect/Schema";
-
-import { effect, func } from "../../Schema.ts";
-import { ServiceTag } from "../../Service.ts";
+import * as ServiceMap from "effect/ServiceMap";
 import { AgentId } from "../Agent.ts";
 import { StreamTextPart } from "../llm/stream-text-part.ts";
-import { TaskId } from "../process/task.ts";
+import { Task, TaskId } from "../process/task.ts";
 import { ChannelId } from "./channel.ts";
 import { Message, MessageId } from "./message.ts";
 import { Thread, ThreadId } from "./thread.ts";
 
 export type SenderId = string;
-export const SenderId = S.String.annotations({
+export const SenderId = S.String.annotate({
   description: "The ID of the Agent or User who sent the message",
 });
 
@@ -102,19 +101,33 @@ export class CreateTaskRequest extends S.Class<CreateTaskRequest>(
 /**
  * The ChatService is the central service for managing Channels, Threads, and Messages.
  */
-export class Chat extends ServiceTag("Chat")<Chat>()({
-  getThread: func(GetThreadRequest, effect(GetThreadResponse))`
-    Get a thread by its ID. 
-    If it does not exist, you should first use ${() => Chat.createThread}
-  `,
-  createThread: func(CreateThreadRequest, effect(CreateThreadResponse)),
-  listThreads: func(ListThreadsRequest, effect(ListThreadsResponse)),
-  // sendMessage: fn(SendMessageRequest, effect(SendMessageResponse)),
-  // listMessages: fn(ListMessagesRequest, effect(ListMessagesResponse)),
-  // subscribe: fn(SubscribeRequest, stream(StreamTextPart)),
-  // createTask: fn(CreateTaskRequest, effect(Task)),
-  // appendTask: fn(AppendRequest, effect(S.Void)),
-  // subscribeTask: fn(SubscribeRequest, stream(StreamTextPart)),
-  // sinkTask: fn(TaskId, sink(StreamTextPart, StreamTextPart)),
-  // sinkThreadDriver: fn(ThreadId, sink(StreamTextPart, StreamTextPart)),
-}) {}
+export class Chat extends ServiceMap.Service<
+  Chat,
+  {
+    getThread: (request: GetThreadRequest) => Effect.Effect<GetThreadResponse>;
+    createThread: (
+      request: CreateThreadRequest,
+    ) => Effect.Effect<CreateThreadResponse>;
+    listThreads: (
+      request: ListThreadsRequest,
+    ) => Effect.Effect<ListThreadsResponse>;
+    sendMessage: (
+      request: SendMessageRequest,
+    ) => Effect.Effect<SendMessageResponse>;
+    listMessages: (
+      request: ListMessagesRequest,
+    ) => Effect.Effect<ListMessagesResponse>;
+    subscribe: (request: SubscribeRequest) => Effect.Effect<StreamTextPart>;
+    createTask: (request: CreateTaskRequest) => Effect.Effect<Task>;
+    appendTask: (request: AppendRequest) => Effect.Effect<void>;
+    subscribeTask: (request: SubscribeRequest) => Effect.Effect<StreamTextPart>;
+    sinkTask: (
+      taskId: TaskId,
+      sink: (part: StreamTextPart) => Effect.Effect<void>,
+    ) => Effect.Effect<void>;
+    sinkThreadDriver: (
+      threadId: ThreadId,
+      sink: (part: StreamTextPart) => Effect.Effect<void>,
+    ) => Effect.Effect<void>;
+  }
+>()("Chat") {}

@@ -37,12 +37,12 @@ export type ToolErrorPart = Extract<StreamTextPart, { type: "tool-error" }>;
  * ```
  */
 export const lastMessageText: Sink.Sink<string | undefined, StreamTextPart> =
-  Sink.foldLeft(
-    {
+  Sink.reduce(
+    () => ({
       currentId: undefined as string | undefined,
       text: "",
       lastComplete: undefined as string | undefined,
-    },
+    }),
     (acc, part: StreamTextPart) => {
       if (part.type === "text-start") {
         return { currentId: part.id, text: "", lastComplete: acc.lastComplete };

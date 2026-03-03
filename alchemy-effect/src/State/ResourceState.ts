@@ -33,7 +33,7 @@ interface BaseResourceState {
   /** The output attributes of this Resource (if it has been created) */
   attr?: Attr;
   /** The removal policy of the resource */
-  removalPolicy: RemovalPolicy["Service"];
+  removalPolicy?: RemovalPolicy["Service"];
 }
 
 export interface CreatingResourceState extends BaseResourceState {

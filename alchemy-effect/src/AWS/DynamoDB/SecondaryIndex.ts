@@ -15,7 +15,6 @@ export interface SecondaryIndexProps<
 }
 
 export interface SecondaryIndex extends Resource<
-  SecondaryIndex,
   "AWS.DynamoDB.SecondaryIndex",
   SecondaryIndexProps,
   {

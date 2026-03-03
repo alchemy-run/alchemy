@@ -41,11 +41,11 @@ export const make: {
     name: Name,
   ): <A, Err = never>(
     effect: Effect.Effect<A, Err, StackServices>,
-  ) => Effect.Effect<StackSpec<A> & { output: A }, Err, StackServices>;
+  ) => Effect.Effect<StackSpec<A>, Err, StackServices>;
   <const Name extends string, A, Err = never>(
     name: Name,
     effect: Effect.Effect<A, Err, StackServices>,
-  ): Effect.Effect<StackSpec<A> & { output: A }, Err, StackServices>;
+  ): Effect.Effect<StackSpec<A>, Err, StackServices>;
 } = ((name: string, effect?: Effect.Effect<any, any, any>) => {
   const make = (effect: Effect.Effect<any, any, any>) =>
     effect.pipe(

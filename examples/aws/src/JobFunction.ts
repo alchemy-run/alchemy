@@ -8,7 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import { JobHttpEffect } from "./JobHttpApi.ts";
-import { JobStorage, jobStorage } from "./JobStorage.ts";
+import { JobStorage, JobStorageLive } from "./JobStorage.ts";
 
 // ## sync drift
 // alchemy sync
@@ -66,10 +66,10 @@ const JobFunction = Effect.gen(function* () {
 }).pipe(
   Effect.provide(
     Layer.mergeAll(
-      jobStorage,
+      JobStorageLive,
       Lambda.BucketEventSource,
+      Lambda.HttpServer,
       SQS.QueueSinkLive,
-      Http.lambdaHttpServer,
     ).pipe(
       Layer.provide(S3.PutObjectLive),
       Layer.provide(S3.GetObjectLive),

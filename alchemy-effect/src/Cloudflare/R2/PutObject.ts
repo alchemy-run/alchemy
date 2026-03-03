@@ -1,20 +1,12 @@
 import type * as runtime from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import type * as Stream from "effect/Stream";
 import * as Binding from "../../Binding.ts";
 import { CloudflareContext } from "../CloudflareContext.ts";
 import { replaceEffectStream } from "../stream.ts";
 import type { Bucket } from "./Bucket.ts";
 import { BucketBinding } from "./BucketBinding.ts";
-
-export type UploadValue =
-  | string
-  | ArrayBuffer
-  | ArrayBufferView
-  | runtime.Blob
-  | runtime.ReadableStream
-  | Stream.Stream<any>;
+import type { UploadValue } from "./UploadValue.ts";
 
 export interface PutObjectOptions extends runtime.R2PutOptions {}
 

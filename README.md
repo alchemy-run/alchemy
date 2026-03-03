@@ -485,23 +485,23 @@ export class PutRecordPolicy extends Binding.Policy<
   (stream: Stream) => Effect.Effect<void>
 >()("AWS.Kinesis.PutRecord") {}
 
-export const PutRecordPolicyLive = Layer.effect(
-  PutRecordPolicy,
-  Effect.gen(function* () {
-    const ctx = yield* ExecutionContext;
-    return Effect.fn(function* (stream: Stream) {
-      if (Lambda.isFunction(ctx)) {
-        yield* ctx.bind({
-          policyStatements: [{
-            Sid: "PutRecord",
-            Effect: "Allow",
-            Action: ["kinesis:PutRecord"],
-            Resource: [Output.interpolate`${stream.streamArn}`],
-          }],
-        });
-      }
-    });
-  }),
+export const PutRecordPolicyLive = PutRecordPolicy.layer.succeed(
+  Effect.fn(function* (ctx, stream: Stream) {
+    if (Lambda.isFunction(ctx)) {
+      yield* ctx.bind({
+        policyStatements: [{
+          Sid: "PutRecord",
+          Effect: "Allow",
+          Action: ["kinesis:PutRecord"],
+          Resource: [Output.interpolate`${stream.streamArn}`],
+        }],
+      });
+    } else {
+      return yield* Effect.die(
+        `PutRecordPolicy does not support runtime '${ctx.type}'`,
+      );
+    }
+  })
 );
 ```
 

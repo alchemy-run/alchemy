@@ -7,7 +7,7 @@ export interface Channel<
 > extends Aspect<Channel, "channel", Name, References> {}
 
 export type ChannelId = string;
-export const ChannelId = S.String.annotations({
+export const ChannelId = S.String.annotate({
   description: "The ID of the channel",
 });
 

@@ -16,10 +16,6 @@ import {
   VpcEndpoint,
 } from "@/AWS/EC2";
 import { destroy } from "@/Destroy";
-import { apply } from "@/Apply";
-import * as Plan from "@/Plan";
-import { printPlan } from "@/Plan";
-import * as Stack from "@/Stack";
 import { test } from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
 import * as EC2 from "distilled-aws/ec2";
@@ -32,18 +28,6 @@ const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
-
-const deploy = <A, Err = never, Req = never>(
-  effect: Effect.Effect<A, Err, Req>,
-) =>
-  Stack.Stack.use((stack) =>
-    effect.pipe(
-      Stack.make(stack.name),
-      Effect.flatMap(Plan.make),
-      Effect.tap((plan) => Effect.log(printPlan(plan))),
-      Effect.flatMap(apply),
-    ),
-  );
 
 test.skipIf(!!process.env.FAST)(
   "VPC evolution: from simple to complex",
@@ -67,7 +51,7 @@ test.skipIf(!!process.env.FAST)(
     // =========================================================================
     yield* Effect.log("=== Stage 1: Bare Minimum VPC ===");
     {
-      const myVpc = yield* deploy(
+      const myVpc = yield* test.deploy(
         Effect.gen(function* () {
           return yield* Vpc("MyVpc", {
             cidrBlock: "10.0.0.0/16",
@@ -93,7 +77,7 @@ test.skipIf(!!process.env.FAST)(
     // =========================================================================
     yield* Effect.log("=== Stage 2: Add Internet Connectivity ===");
     {
-      const stack = yield* deploy(
+      const stack = yield* test.deploy(
         Effect.gen(function* () {
           const myVpc = yield* Vpc("MyVpc", {
             cidrBlock: "10.0.0.0/16",
@@ -169,7 +153,7 @@ test.skipIf(!!process.env.FAST)(
     // =========================================================================
     yield* Effect.log("=== Stage 3: Add Private Subnet ===");
     {
-      const stack = yield* deploy(
+      const stack = yield* test.deploy(
         Effect.gen(function* () {
           const myVpc = yield* Vpc("MyVpc", {
             cidrBlock: "10.0.0.0/16",
@@ -260,7 +244,7 @@ test.skipIf(!!process.env.FAST)(
     // =========================================================================
     yield* Effect.log("=== Stage 4: Multi-AZ Expansion ===");
     {
-      const stack = yield* deploy(
+      const stack = yield* test.deploy(
         Effect.gen(function* () {
           const myVpc = yield* Vpc("MyVpc", {
             cidrBlock: "10.0.0.0/16",
@@ -399,7 +383,7 @@ test.skipIf(!!process.env.FAST)(
     // =========================================================================
     yield* Effect.log("=== Stage 5: Update Tags and Properties ===");
     {
-      const stack = yield* deploy(
+      const stack = yield* test.deploy(
         Effect.gen(function* () {
           const myVpc = yield* Vpc("MyVpc", {
             cidrBlock: "10.0.0.0/16",
@@ -528,7 +512,7 @@ test.skipIf(!!process.env.FAST)(
     // =========================================================================
     yield* Effect.log("=== Stage 6: Re-associate Subnet ===");
     {
-      const stack = yield* deploy(
+      const stack = yield* test.deploy(
         Effect.gen(function* () {
           const myVpc = yield* Vpc("MyVpc", {
             cidrBlock: "10.0.0.0/16",
@@ -676,7 +660,7 @@ test.skipIf(!!process.env.FAST)(
     // =========================================================================
     yield* Effect.log("=== Stage 7: Scale Down ===");
     {
-      const stack = yield* deploy(
+      const stack = yield* test.deploy(
         Effect.gen(function* () {
           const myVpc = yield* Vpc("MyVpc", {
             cidrBlock: "10.0.0.0/16",
@@ -777,7 +761,7 @@ test.skipIf(!!process.env.FAST)(
     // =========================================================================
     yield* Effect.log("=== Stage 8: Add NAT Gateway ===");
     {
-      const stack = yield* deploy(
+      const stack = yield* test.deploy(
         Effect.gen(function* () {
           const myVpc = yield* Vpc("MyVpc", {
             cidrBlock: "10.0.0.0/16",
@@ -888,7 +872,9 @@ test.skipIf(!!process.env.FAST)(
 
       // Verify NAT route is active
       expect(stack.natRoute.state).toEqual("active");
-      expect(stack.natRoute.natGatewayId).toEqual(stack.natGateway.natGatewayId);
+      expect(stack.natRoute.natGatewayId).toEqual(
+        stack.natGateway.natGatewayId,
+      );
 
       // Verify private route table now has internet route via NAT
       const privateRtResult = yield* EC2.describeRouteTables({
@@ -910,7 +896,7 @@ test.skipIf(!!process.env.FAST)(
     // =========================================================================
     yield* Effect.log("=== Stage 9: Add Security Groups ===");
     {
-      const stack = yield* deploy(
+      const stack = yield* test.deploy(
         Effect.gen(function* () {
           const myVpc = yield* Vpc("MyVpc", {
             cidrBlock: "10.0.0.0/16",
@@ -1071,9 +1057,9 @@ test.skipIf(!!process.env.FAST)(
       // Verify DB Security Group references Web Security Group
       expect(stack.dbSecurityGroup.groupId).toMatch(/^sg-/);
       expect(stack.dbSecurityGroup.ingressRules).toHaveLength(1);
-      expect(stack.dbSecurityGroup.ingressRules?.[0]?.referencedGroupId).toEqual(
-        stack.webSecurityGroup.groupId,
-      );
+      expect(
+        stack.dbSecurityGroup.ingressRules?.[0]?.referencedGroupId,
+      ).toEqual(stack.webSecurityGroup.groupId);
     }
 
     // =========================================================================
@@ -1083,7 +1069,7 @@ test.skipIf(!!process.env.FAST)(
     // =========================================================================
     yield* Effect.log("=== Stage 10: Scale Down to Basic VPC ===");
     {
-      const stack = yield* deploy(
+      const stack = yield* test.deploy(
         Effect.gen(function* () {
           const myVpc = yield* Vpc("MyVpc", {
             cidrBlock: "10.0.0.0/16",
@@ -1227,7 +1213,7 @@ test.skipIf(!!process.env.FAST)(
     // =========================================================================
     // Define all resources for a production-ready VPC
     // =========================================================================
-    const stack = yield* deploy(
+    const stack = yield* test.deploy(
       Effect.gen(function* () {
         // VPC with DNS enabled and IPv6 for egress-only IGW
         const myVpc = yield* Vpc("MyVpc", {
@@ -1248,10 +1234,13 @@ test.skipIf(!!process.env.FAST)(
         });
 
         // Egress-Only Internet Gateway for IPv6 outbound traffic from private subnets
-        const egressOnlyIgw = yield* EgressOnlyInternetGateway("EgressOnlyIgw", {
-          vpcId: myVpc.vpcId,
-          tags: { Name: "comprehensive-eigw" },
-        });
+        const egressOnlyIgw = yield* EgressOnlyInternetGateway(
+          "EgressOnlyIgw",
+          {
+            vpcId: myVpc.vpcId,
+            tags: { Name: "comprehensive-eigw" },
+          },
+        );
 
         // Public Subnets in two AZs
         const publicSubnet1 = yield* Subnet("PublicSubnet1", {
@@ -1664,10 +1653,14 @@ test.skipIf(!!process.env.FAST)(
 
     // NAT routes
     expect(stack.natRoute1.state).toEqual("active");
-    expect(stack.natRoute1.natGatewayId).toEqual(stack.natGateway1.natGatewayId);
+    expect(stack.natRoute1.natGatewayId).toEqual(
+      stack.natGateway1.natGatewayId,
+    );
 
     expect(stack.natRoute2.state).toEqual("active");
-    expect(stack.natRoute2.natGatewayId).toEqual(stack.natGateway2.natGatewayId);
+    expect(stack.natRoute2.natGatewayId).toEqual(
+      stack.natGateway2.natGatewayId,
+    );
 
     // Verify public route table has internet route
     const publicRtResult = yield* EC2.describeRouteTables({
@@ -1834,7 +1827,7 @@ test.skipIf(!!process.env.FAST)(
     // Idempotency check - apply again and verify no changes
     // =========================================================================
     yield* Effect.log("=== Idempotency Check: Re-applying stack ===");
-    const stack2 = yield* deploy(
+    const stack2 = yield* test.deploy(
       Effect.gen(function* () {
         // VPC with DNS enabled and IPv6 for egress-only IGW
         const myVpc = yield* Vpc("MyVpc", {
@@ -1855,10 +1848,13 @@ test.skipIf(!!process.env.FAST)(
         });
 
         // Egress-Only Internet Gateway for IPv6 outbound traffic from private subnets
-        const egressOnlyIgw = yield* EgressOnlyInternetGateway("EgressOnlyIgw", {
-          vpcId: myVpc.vpcId,
-          tags: { Name: "comprehensive-eigw" },
-        });
+        const egressOnlyIgw = yield* EgressOnlyInternetGateway(
+          "EgressOnlyIgw",
+          {
+            vpcId: myVpc.vpcId,
+            tags: { Name: "comprehensive-eigw" },
+          },
+        );
 
         // Public Subnets in two AZs
         const publicSubnet1 = yield* Subnet("PublicSubnet1", {

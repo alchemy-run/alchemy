@@ -1,9 +1,10 @@
+// @ts-nocheck - uncomment this once we are working on AI again
 import * as Effect from "effect/Effect";
 import * as S from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as util from "node:util";
 import * as vm from "node:vm";
-import { schemaToType } from "../../internal/internal/util/schema-to-type.ts";
+import { schemaToType } from "../../Util/schema-to-type.ts";
 import { Agent, AgentId } from "../Agent.ts";
 import { AspectGraph } from "../AspectGraph.ts";
 import { Chat } from "../chat/service.ts";
@@ -153,9 +154,15 @@ declare function recursiveLLM(subQuery: string): Promise<string>;
     return lastMessage;
   }) {}
 
-  const stream = LLM.stream({
-    system: "You are a helpful assistant.",
-    messages: [],
-    tools: [evaluate, reply],
-  }).pipe(Stream.tapSink(Chat.sinkThreadDriver(thread.threadId)));
+  const stream = Effect.gen(function* () {
+    const llm = yield* LLM;
+    const chat = yield* Chat;
+    return yield* llm
+      .stream({
+        system: "You are a helpful assistant.",
+        messages: [],
+        tools: [evaluate, reply],
+      })
+      .pipe(Stream.tapSink(chat.sinkThreadDriver(thread.threadId)));
+  });
 });

@@ -1,9 +1,9 @@
-import * as FileSystem from "@effect/platform/FileSystem";
-import * as Path from "@effect/platform/Path";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as S from "effect/Schema";
-import { cwd } from "../../internal/cwd.ts";
+import { cwd } from "../../Config.ts";
 import { AspectConfig } from "../Aspect.ts";
 import { Tool } from "../tool/tool.ts";
 import * as Ripgrep from "../util/ripgrep.ts";
@@ -72,7 +72,7 @@ Given a ${pattern} and optional ${path}:
     if (!stats) continue;
     fileList.push({
       path: filePath,
-      mtime: stats.mtime.pipe(Option.getOrUndefined)?.getTime() || 0,
+      mtime: stats.mtime?.getTime() || 0,
     });
   }
 

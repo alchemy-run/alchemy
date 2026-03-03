@@ -1,5 +1,5 @@
 import type * as lambda from "distilled-aws/lambda";
-import { Resource, type ResourceEffect } from "../../Resource.ts";
+import { Resource } from "../../Resource.ts";
 
 export type { FunctionUrlAuthType } from "distilled-aws/lambda";
 
@@ -59,22 +59,15 @@ export interface PermissionProps {
   sourceArn?: string;
 }
 
-export interface PermissionAttrs {
-  /** The statement ID of the permission. */
-  statementId: string;
-  /** The function name or ARN the permission is attached to. */
-  functionName: string;
-}
-
-export interface Permission<
-  ID extends string = string,
-  Props extends PermissionProps = PermissionProps,
-> extends Resource<
-  Permission,
+export interface Permission extends Resource<
   "AWS.Lambda.Permission",
-  ID,
-  Props,
-  PermissionAttrs
+  PermissionProps,
+  {
+    /** The statement ID of the permission. */
+    statementId: string;
+    /** The function name or ARN the permission is attached to. */
+    functionName: string;
+  }
 > {}
 
 /**
@@ -112,12 +105,4 @@ export interface Permission<
  * });
  * ```
  */
-export const Permission = Resource<{
-  <
-    const ID extends string,
-    const Props extends PermissionProps = PermissionProps,
-  >(
-    id: ID,
-    props: Props,
-  ): ResourceEffect<Permission<ID, Props>>;
-}>("AWS.Lambda.Permission");
+export const Permission = Resource<Permission>("AWS.Lambda.Permission");

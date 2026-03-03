@@ -1,9 +1,9 @@
-import * as Command from "@effect/platform/Command";
-import * as FileSystem from "@effect/platform/FileSystem";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as S from "effect/Schema";
-import { cwd } from "../../internal/cwd.ts";
+import { ChildProcess } from "effect/unstable/process";
+import { cwd } from "../../Config.ts";
 import { AspectConfig } from "../Aspect.ts";
 import { Tool } from "../tool/tool.ts";
 import { exec } from "../util/exec.ts";
@@ -57,13 +57,9 @@ Given a ${pattern} and optional ${path} and ${include}:
   }
   rgArgs.push(searchPath);
 
-  const { stdout, stderr, exitCode } = yield* Command.make(
-    "rg",
-    ...rgArgs,
+  const { stdout, stderr, exitCode } = yield* exec(
+    ChildProcess.make("rg", rgArgs),
   ).pipe(
-    Command.stdout("pipe"),
-    Command.stderr("pipe"),
-    exec,
     Effect.catch(() => Effect.succeed({ stdout: "", stderr: "", exitCode: 1 })),
   );
 
@@ -97,7 +93,7 @@ Given a ${pattern} and optional ${path} and ${include}:
       .pipe(Effect.catch(() => Effect.succeed(null)));
     if (!stats) continue;
 
-    const modTime = stats.mtime.pipe(Option.getOrUndefined);
+    const modTime = stats.mtime;
     if (!modTime) continue;
     matchList.push({
       path: filePath,

@@ -2,7 +2,7 @@ import * as S from "effect/Schema";
 import { defineAspect, type Aspect } from "./Aspect.ts";
 
 export type AgentId = string;
-export const AgentId = S.String.annotations({
+export const AgentId = S.String.annotate({
   description: "The ID of the agent",
 });
 

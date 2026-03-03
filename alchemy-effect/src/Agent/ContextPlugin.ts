@@ -1,7 +1,7 @@
-import * as Context from "effect/Context";
+import * as ServiceMap from "effect/ServiceMap";
 import type { Aspect } from "./Aspect.ts";
 
-export type ContextPlugin<A extends Aspect> = Context.Tag<
+export type ContextPlugin<A extends Aspect> = ServiceMap.Service<
   `ContextPlugin<${A["type"]}>`,
   ContextPluginService<A>
 >;
@@ -13,6 +13,6 @@ export interface ContextPluginService<A extends Aspect> {
 export const ContextPlugin = <A extends Aspect>(
   type: A["type"],
 ): ContextPlugin<A> =>
-  Context.GenericTag<`ContextPlugin<${A["type"]}>`, ContextPluginService<A>>(
+  ServiceMap.Service<`ContextPlugin<${A["type"]}>`, ContextPluginService<A>>(
     `ContextPlugin<${type}>`,
   );

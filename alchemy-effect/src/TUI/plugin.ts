@@ -1,10 +1,10 @@
 // TODO: not sure if we should be depending on react types
 import type { JSX } from "react";
 
-import * as Context from "effect/Context";
+import * as ServiceMap from "effect/ServiceMap";
 import type { Aspect } from "../Agent/Aspect.ts";
 
-export type TuiPlugin<A extends Aspect> = Context.Tag<
+export type TuiPlugin<A extends Aspect> = ServiceMap.Service<
   `TuiPlugin<${A["type"]}>`,
   TuiPluginService<A>
 >;
@@ -17,6 +17,6 @@ export interface TuiPluginService<A extends Aspect> {
 }
 
 export const TuiPlugin = <A extends Aspect>(type: A["type"]): TuiPlugin<A> =>
-  Context.GenericTag<`TuiPlugin<${A["type"]}>`, TuiPluginService<A>>(
+  ServiceMap.Service<`TuiPlugin<${A["type"]}>`, TuiPluginService<A>>(
     `TuiPlugin<${type}>`,
   );

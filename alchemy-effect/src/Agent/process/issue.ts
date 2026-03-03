@@ -1,17 +1,17 @@
 import * as S from "effect/Schema";
 
 export type IssueId = number;
-export const IssueId = S.Int.pipe(S.positive()).annotations({
+export const IssueId = S.Int.check(S.isGreaterThan(0)).annotate({
   description: "The ID of the issue",
 });
 
 export type IssueDescription = string;
-export const IssueDescription = S.String.annotations({
+export const IssueDescription = S.String.annotate({
   description: "The description of the issue",
 });
 
 export type IssueTitle = string;
-export const IssueTitle = S.String.annotations({
+export const IssueTitle = S.String.annotate({
   description: "The title of the issue",
 });
 

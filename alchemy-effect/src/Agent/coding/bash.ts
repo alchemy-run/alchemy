@@ -1,13 +1,12 @@
-import * as EffectCommand from "@effect/platform/Command";
 import * as Effect from "effect/Effect";
-import { pipe } from "effect/Function";
 import * as Option from "effect/Option";
 import * as S from "effect/Schema";
-import * as Stream from "effect/Stream";
-import { cwd } from "../../internal/cwd.ts";
+import { ChildProcess } from "effect/unstable/process";
+import { cwd } from "../../Config.ts";
 import { AspectConfig } from "../Aspect.ts";
 import { Tool } from "../tool/tool.ts";
 import { CommandValidator } from "../util/command-validator.ts";
+import { exec } from "../util/exec.ts";
 
 export class command extends Tool.input("command")`The command to execute` {}
 
@@ -185,32 +184,15 @@ Important:
     }
   }
 
-  const cmd = EffectCommand.make(command).pipe(
-    EffectCommand.runInShell(true),
-    EffectCommand.workingDirectory(workdir ?? config.cwd),
+  const cmd = ChildProcess.setCwd(
+    ChildProcess.make(command, [], { shell: true }),
+    workdir ?? config.cwd,
   );
 
-  const [exitCode, output] = yield* pipe(
-    // Start running the command and return a handle to the running process
-    EffectCommand.start(cmd),
-    Effect.flatMap((process) =>
-      Effect.all(
-        [
-          // Waits for the process to exit and returns
-          // the ExitCode of the command that was run
-          process.exitCode,
-          // The standard output stream of the process
-          Stream.merge(process.stdout, process.stderr)
-            .pipe(Stream.decodeText())
-            .pipe(Stream.mkString),
-        ],
-        { concurrency: 3 },
-      ),
-    ),
-  );
+  const result = yield* exec(cmd);
 
   return {
-    exitCode,
-    stdout: output,
+    exitCode: result.exitCode,
+    stdout: result.stdout + result.stderr,
   };
 }) {}

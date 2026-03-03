@@ -1,6 +1,6 @@
-import * as Path from "@effect/platform/Path";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as S from "effect/Schema";
 import { AspectConfig } from "../Aspect.ts";
 import { formatDiagnostic } from "../lsp/diagnostics.ts";

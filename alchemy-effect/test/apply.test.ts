@@ -1,7 +1,5 @@
-import { apply } from "@/Apply";
 import { destroy } from "@/Destroy";
 import * as Output from "@/Output";
-import * as Plan from "@/Plan";
 import { CannotReplacePartiallyReplacedResource } from "@/Plan";
 import * as Stack from "@/Stack";
 import {
@@ -14,8 +12,6 @@ import { test } from "@/Test/Vitest";
 import { describe, expect } from "@effect/vitest";
 import { Data, Layer } from "effect";
 import * as Effect from "effect/Effect";
-import type { Input } from "../src/Input.ts";
-import { Stage } from "../src/Stage.ts";
 import {
   type TestResourceProps,
   InMemoryTestLayers,
@@ -132,18 +128,6 @@ const failOnMultiple = (
   };
 };
 
-const deploy = <A, Err = never, Req = never>(
-  effect: Effect.Effect<A, Err, Req>,
-): Effect.Effect<Input.Resolve<A>, Err, never> =>
-  // @ts-expect-error
-  effect.pipe(
-    Stack.make("test"),
-    Effect.flatMap(Plan.make),
-    Effect.provide(TestLayers),
-    Effect.provideService(Stage, "test"),
-    Effect.flatMap(apply),
-  );
-
 describe("basic operations", () => {
   test(
     "should create, update, and delete resources",
@@ -154,7 +138,7 @@ describe("basic operations", () => {
             string: "test-string",
           });
           return A.string;
-        }).pipe(deploy),
+        }).pipe(test.deploy),
       ).toEqual("test-string");
 
       expect(
@@ -163,7 +147,7 @@ describe("basic operations", () => {
             string: "test-string-new",
           });
           return A.string;
-        }).pipe(deploy),
+        }).pipe(test.deploy),
       ).toEqual("test-string-new");
 
       yield* destroy();
@@ -186,7 +170,7 @@ describe("basic operations", () => {
             string: A.string,
           });
           return B.string;
-        }).pipe(deploy),
+        }).pipe(test.deploy),
       ).toEqual("test-string");
 
       expect(
@@ -199,7 +183,7 @@ describe("basic operations", () => {
             string: A.string.pipe(Output.map((string) => string.toUpperCase())),
           });
           return B.string;
-        }).pipe(deploy),
+        }).pipe(test.deploy),
       ).toEqual("TEST-STRING");
 
       expect(
@@ -214,7 +198,7 @@ describe("basic operations", () => {
             ),
           });
           return B.string;
-        }).pipe(deploy),
+        }).pipe(test.deploy),
       ).toEqual("TEST-STRING-NEW");
     }).pipe(Effect.provide(TestLayers)),
   );
@@ -231,11 +215,11 @@ describe("from created state", () => {
         return A.string;
       });
 
-      let output = yield* deploy(stack);
+      let output = yield* test.deploy(stack);
       expect(output).toEqual("test-string");
 
       expect((yield* getState("A"))?.status).toEqual("created");
-      output = yield* deploy(stack);
+      output = yield* test.deploy(stack);
 
       // Re-apply with same props - should be noop
       expect((yield* getState("A"))?.status).toEqual("created");
@@ -246,7 +230,7 @@ describe("from created state", () => {
   test(
     "replace when props trigger replacement",
     Effect.gen(function* () {
-      yield* deploy(
+      yield* test.deploy(
         Effect.gen(function* () {
           const A = yield* TestResource("A", {
             replaceString: "original",
@@ -258,7 +242,7 @@ describe("from created state", () => {
 
       // Change props that trigger replacement
 
-      const output = yield* deploy(
+      const output = yield* test.deploy(
         Effect.gen(function* () {
           const A = yield* TestResource("A", {
             replaceString: "new",
@@ -276,7 +260,7 @@ describe("from updated state", () => {
   test(
     "noop when props unchanged",
     Effect.gen(function* () {
-      yield* deploy(
+      yield* test.deploy(
         Effect.gen(function* () {
           yield* TestResource("A", {
             string: "test-string",
@@ -286,7 +270,7 @@ describe("from updated state", () => {
       expect((yield* getState("A"))?.status).toEqual("created");
 
       // Update to get to updated state
-      yield* deploy(
+      yield* test.deploy(
         Effect.gen(function* () {
           yield* TestResource("A", {
             string: "test-string-changed",
@@ -296,7 +280,7 @@ describe("from updated state", () => {
       expect((yield* getState("A"))?.status).toEqual("updated");
 
       // Re-apply with same props - should be noop
-      const output = yield* deploy(
+      const output = yield* test.deploy(
         Effect.gen(function* () {
           const A = yield* TestResource("A", {
             string: "test-string-changed",
@@ -312,7 +296,7 @@ describe("from updated state", () => {
   test(
     "replace when props trigger replacement",
     Effect.gen(function* () {
-      yield* deploy(
+      yield* test.deploy(
         Effect.gen(function* () {
           yield* TestResource("A", {
             string: "test-string",
@@ -323,7 +307,7 @@ describe("from updated state", () => {
       expect((yield* getState("A"))?.status).toEqual("created");
 
       // Update to get to updated state
-      yield* deploy(
+      yield* test.deploy(
         Effect.gen(function* () {
           yield* TestResource("A", {
             string: "test-string-changed",
@@ -334,7 +318,7 @@ describe("from updated state", () => {
       expect((yield* getState("A"))?.status).toEqual("updated");
 
       // Change props that trigger replacement
-      const output = yield* deploy(
+      const output = yield* test.deploy(
         Effect.gen(function* () {
           const A = yield* TestResource("A", {
             string: "test-string-changed",
@@ -357,7 +341,7 @@ describe("from creating state", () => {
         yield* TestResource("A", {
           string: "test-string",
         });
-      }).pipe(deploy, hook());
+      }).pipe(test.deploy, hook());
       expect((yield* getState("A"))?.status).toEqual("creating");
 
       const output = yield* Effect.gen(function* () {
@@ -365,7 +349,7 @@ describe("from creating state", () => {
           string: "test-string",
         });
         return A.string;
-      }).pipe(deploy);
+      }).pipe(test.deploy);
       expect((yield* getState("A"))?.status).toEqual("created");
       expect(output).toEqual("test-string");
     }).pipe(Effect.provide(MockLayers())),
@@ -378,7 +362,7 @@ describe("from creating state", () => {
         yield* TestResource("A", {
           string: "test-string",
         });
-      }).pipe(deploy, hook());
+      }).pipe(test.deploy, hook());
       expect((yield* getState("A"))?.status).toEqual("creating");
 
       const output = yield* Effect.gen(function* () {
@@ -386,7 +370,7 @@ describe("from creating state", () => {
           string: "test-string-changed",
         });
         return A.string;
-      }).pipe(deploy);
+      }).pipe(test.deploy);
       expect(output).toEqual("test-string-changed");
       expect((yield* getState("A"))?.status).toEqual("created");
     }).pipe(Effect.provide(MockLayers())),
@@ -399,7 +383,7 @@ describe("from creating state", () => {
         yield* TestResource("A", {
           replaceString: "test-string",
         });
-      }).pipe(deploy, hook());
+      }).pipe(test.deploy, hook());
       expect((yield* getState("A"))?.status).toEqual("creating");
 
       const output = yield* Effect.gen(function* () {
@@ -407,7 +391,7 @@ describe("from creating state", () => {
           replaceString: "test-string-changed",
         });
         return A.replaceString;
-      }).pipe(deploy);
+      }).pipe(test.deploy);
       expect(output).toEqual("test-string-changed");
       expect((yield* getState("A"))?.status).toEqual("created");
     }).pipe(Effect.provide(MockLayers())),
@@ -421,7 +405,7 @@ describe("from creating state", () => {
         yield* TestResource("A", {
           string: "test-string",
         });
-      }).pipe(deploy, hook());
+      }).pipe(test.deploy, hook());
       expect((yield* getState("A"))?.status).toEqual("creating");
       expect((yield* getState("A"))?.attr).toBeUndefined();
 
@@ -442,7 +426,7 @@ describe("from creating state", () => {
         yield* TestResource("A", {
           string: "test-string",
         });
-      }).pipe(deploy, hook());
+      }).pipe(test.deploy, hook());
       expect((yield* getState("A"))?.status).toEqual("creating");
       expect((yield* getState("A"))?.attr).toBeUndefined();
 
@@ -481,7 +465,7 @@ describe("from creating state", () => {
         yield* TestResource("A", {
           replaceString: "original",
         });
-      }).pipe(deploy, hook());
+      }).pipe(test.deploy, hook());
       expect((yield* getState("A"))?.status).toEqual("creating");
       expect((yield* getState("A"))?.attr).toBeUndefined();
 
@@ -491,7 +475,7 @@ describe("from creating state", () => {
         yield* TestResource("A", {
           replaceString: "new",
         });
-      }).pipe(deploy, hook());
+      }).pipe(test.deploy, hook());
       const state = yield* getState<ReplacingResourceState>("A");
       expect(state?.status).toEqual("replacing");
       expect(state?.old?.attr).toBeUndefined();
@@ -521,7 +505,7 @@ describe("from updating state", () => {
         yield* TestResource("A", {
           string: "test-string",
         });
-      }).pipe(deploy);
+      }).pipe(test.deploy);
       expect((yield* getState("A"))?.status).toEqual("created");
 
       yield* Effect.gen(function* () {
@@ -529,7 +513,7 @@ describe("from updating state", () => {
           string: "test-string-changed",
         });
       }).pipe(
-        deploy,
+        test.deploy,
         hook({
           update: () => Effect.fail(new ResourceFailure()),
         }),
@@ -541,7 +525,7 @@ describe("from updating state", () => {
           string: "test-string-changed",
         });
         return A.string;
-      }).pipe(deploy);
+      }).pipe(test.deploy);
       expect((yield* getState("A"))?.status).toEqual("updated");
       expect(output).toEqual("test-string-changed");
     }).pipe(Effect.provide(MockLayers())),
@@ -554,7 +538,7 @@ describe("from updating state", () => {
         yield* TestResource("A", {
           string: "test-string",
         });
-      }).pipe(deploy);
+      }).pipe(test.deploy);
       expect((yield* getState("A"))?.status).toEqual("created");
 
       yield* Effect.gen(function* () {
@@ -562,7 +546,7 @@ describe("from updating state", () => {
           string: "test-string-changed",
         });
       }).pipe(
-        deploy,
+        test.deploy,
         hook({
           update: () => Effect.fail(new ResourceFailure()),
         }),
@@ -574,7 +558,7 @@ describe("from updating state", () => {
           string: "test-string-changed-again",
         });
         return A.string;
-      }).pipe(deploy);
+      }).pipe(test.deploy);
       expect((yield* getState("A"))?.status).toEqual("updated");
       expect(output).toEqual("test-string-changed-again");
     }).pipe(Effect.provide(MockLayers())),
@@ -588,7 +572,7 @@ describe("from updating state", () => {
           string: "test-string",
           replaceString: "original",
         });
-      }).pipe(deploy);
+      }).pipe(test.deploy);
       expect((yield* getState("A"))?.status).toEqual("created");
 
       yield* Effect.gen(function* () {
@@ -597,7 +581,7 @@ describe("from updating state", () => {
           replaceString: "original",
         });
       }).pipe(
-        deploy,
+        test.deploy,
         hook({
           update: () => Effect.fail(new ResourceFailure()),
         }),
@@ -610,7 +594,7 @@ describe("from updating state", () => {
           replaceString: "changed",
         });
         return A.replaceString;
-      }).pipe(deploy);
+      }).pipe(test.deploy);
       expect((yield* getState("A"))?.status).toEqual("created");
       expect(output).toEqual("changed");
     }).pipe(Effect.provide(MockLayers())),
@@ -626,7 +610,7 @@ describe("from replacing state", () => {
         yield* TestResource("A", {
           replaceString: "original",
         });
-      }).pipe(deploy);
+      }).pipe(test.deploy);
       expect((yield* getState("A"))?.status).toEqual("created");
 
       // 2. Trigger replacement but fail during create of replacement
@@ -635,7 +619,7 @@ describe("from replacing state", () => {
           replaceString: "new",
         });
       }).pipe(
-        deploy,
+        test.deploy,
         hook({
           create: () => Effect.fail(new ResourceFailure()),
         }),
@@ -650,7 +634,7 @@ describe("from replacing state", () => {
           replaceString: "new",
         });
         return A.replaceString;
-      }).pipe(deploy);
+      }).pipe(test.deploy);
       expect((yield* getState("A"))?.status).toEqual("created");
       expect(output).toEqual("new");
     }).pipe(Effect.provide(MockLayers())),
@@ -665,7 +649,7 @@ describe("from replacing state", () => {
           replaceString: "original",
           string: "initial",
         });
-      }).pipe(deploy);
+      }).pipe(test.deploy);
       expect((yield* getState("A"))?.status).toEqual("created");
 
       // 2. Trigger replacement but fail during create
@@ -675,7 +659,7 @@ describe("from replacing state", () => {
           string: "initial",
         });
       }).pipe(
-        deploy,
+        test.deploy,
         hook({
           create: () => Effect.fail(new ResourceFailure()),
         }),
@@ -689,7 +673,7 @@ describe("from replacing state", () => {
           string: "changed",
         });
         return { replaceString: A.replaceString, string: A.string };
-      }).pipe(deploy);
+      }).pipe(test.deploy);
       expect((yield* getState("A"))?.status).toEqual("created");
       expect(output.replaceString).toEqual("new");
       expect(output.string).toEqual("changed");
@@ -704,7 +688,7 @@ describe("from replacing state", () => {
         yield* TestResource("A", {
           replaceString: "original",
         });
-      }).pipe(deploy);
+      }).pipe(test.deploy);
       expect((yield* getState("A"))?.status).toEqual("created");
 
       // 2. Trigger replacement but fail during create
@@ -713,7 +697,7 @@ describe("from replacing state", () => {
           replaceString: "new",
         });
       }).pipe(
-        deploy,
+        test.deploy,
         hook({
           create: () => Effect.fail(new ResourceFailure()),
         }),
@@ -725,7 +709,7 @@ describe("from replacing state", () => {
         yield* TestResource("A", {
           replaceString: "another-replacement",
         });
-      }).pipe(deploy, Effect.result);
+      }).pipe(test.deploy, Effect.result);
       expect(result._tag).toEqual("Failure");
       if (result._tag === "Failure") {
         expect(result.failure).toBeInstanceOf(
@@ -744,7 +728,7 @@ describe("from replaced state", () => {
         yield* TestResource("A", {
           replaceString: "test-string",
         });
-      }).pipe(deploy);
+      }).pipe(test.deploy);
       expect((yield* getState("A"))?.status).toEqual("created");
 
       yield* Effect.gen(function* () {
@@ -752,7 +736,7 @@ describe("from replaced state", () => {
           replaceString: "test-string-changed",
         });
       }).pipe(
-        deploy,
+        test.deploy,
         hook({
           delete: () => Effect.fail(new ResourceFailure()),
         }),
@@ -770,7 +754,7 @@ describe("from replaced state", () => {
         yield* TestResource("A", {
           replaceString: "test-string-changed",
         });
-      }).pipe(deploy);
+      }).pipe(test.deploy);
       expect((yield* getState("A"))?.status).toEqual("created");
     }).pipe(Effect.provide(MockLayers())),
   );
@@ -784,7 +768,7 @@ describe("from replaced state", () => {
           replaceString: "original",
           string: "initial",
         });
-      }).pipe(deploy);
+      }).pipe(test.deploy);
       expect((yield* getState("A"))?.status).toEqual("created");
 
       // 2. Trigger replacement and fail during delete of old resource
@@ -794,7 +778,7 @@ describe("from replaced state", () => {
           string: "initial",
         });
       }).pipe(
-        deploy,
+        test.deploy,
         hook({
           delete: () => Effect.fail(new ResourceFailure()),
         }),
@@ -810,7 +794,7 @@ describe("from replaced state", () => {
           string: "changed",
         });
         return { replaceString: A.replaceString, string: A.string };
-      }).pipe(deploy);
+      }).pipe(test.deploy);
       expect((yield* getState("A"))?.status).toEqual("created");
       expect(output.replaceString).toEqual("new");
       expect(output.string).toEqual("changed");
@@ -825,7 +809,7 @@ describe("from replaced state", () => {
         yield* TestResource("A", {
           replaceString: "original",
         });
-      }).pipe(deploy);
+      }).pipe(test.deploy);
       expect((yield* getState("A"))?.status).toEqual("created");
 
       // 2. Trigger replacement and fail during delete of old resource
@@ -834,7 +818,7 @@ describe("from replaced state", () => {
           replaceString: "new",
         });
       }).pipe(
-        deploy,
+        test.deploy,
         hook({
           delete: () => Effect.fail(new ResourceFailure()),
         }),
@@ -846,7 +830,7 @@ describe("from replaced state", () => {
         yield* TestResource("A", {
           replaceString: "another-replacement",
         });
-      }).pipe(deploy, Effect.result);
+      }).pipe(test.deploy, Effect.result);
       expect(result._tag).toEqual("Failure");
       if (result._tag === "Failure") {
         expect(result.failure).toBeInstanceOf(
@@ -865,7 +849,7 @@ describe("from deleting state", () => {
         yield* TestResource("A", {
           string: "test-string",
         });
-      }).pipe(deploy);
+      }).pipe(test.deploy);
       expect((yield* getState("A"))?.status).toEqual("created");
 
       yield* destroy().pipe(
@@ -881,7 +865,7 @@ describe("from deleting state", () => {
           string: "test-string",
         });
         return A.string;
-      }).pipe(deploy);
+      }).pipe(test.deploy);
       expect((yield* getState("A"))?.status).toEqual("created");
       expect(output).toEqual("test-string");
     }).pipe(Effect.provide(MockLayers())),
@@ -895,7 +879,7 @@ describe("from deleting state", () => {
         yield* TestResource("A", {
           replaceString: "original",
         });
-      }).pipe(deploy);
+      }).pipe(test.deploy);
       expect((yield* getState("A"))?.status).toEqual("created");
 
       // 2. Try to delete but fail
@@ -911,7 +895,7 @@ describe("from deleting state", () => {
         yield* TestResource("A", {
           replaceString: "new",
         });
-      }).pipe(deploy, Effect.result);
+      }).pipe(test.deploy, Effect.result);
       expect(result._tag).toEqual("Failure");
       if (result._tag === "Failure") {
         expect(result.failure).toBeInstanceOf(
@@ -935,7 +919,7 @@ describe("dependent resources (A -> B)", () => {
           const A = yield* TestResource("A", { string: "a-value" });
           const B = yield* TestResource("B", { string: A.string });
           return { A, B };
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("created");
@@ -950,7 +934,7 @@ describe("dependent resources (A -> B)", () => {
         yield* Effect.gen(function* () {
           const A = yield* TestResource("A", { string: "a-value" });
           yield* TestResource("B", { string: A.string });
-        }).pipe(deploy);
+        }).pipe(test.deploy);
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("created");
 
@@ -959,7 +943,7 @@ describe("dependent resources (A -> B)", () => {
           const A = yield* TestResource("A", { string: "a-value-updated" });
           const B = yield* TestResource("B", { string: A.string });
           return { A, B };
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         expect((yield* getState("A"))?.status).toEqual("updated");
         expect((yield* getState("B"))?.status).toEqual("updated");
@@ -977,7 +961,7 @@ describe("dependent resources (A -> B)", () => {
             replaceString: "original",
           });
           yield* TestResource("B", { string: A.string });
-        }).pipe(deploy);
+        }).pipe(test.deploy);
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("created");
 
@@ -989,7 +973,7 @@ describe("dependent resources (A -> B)", () => {
           });
           const B = yield* TestResource("B", { string: A.string });
           return { A, B };
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("updated");
@@ -1004,7 +988,7 @@ describe("dependent resources (A -> B)", () => {
         yield* Effect.gen(function* () {
           const A = yield* TestResource("A", { string: "a-value" });
           yield* TestResource("B", { string: A.string });
-        }).pipe(deploy);
+        }).pipe(test.deploy);
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("created");
 
@@ -1025,7 +1009,7 @@ describe("dependent resources (A -> B)", () => {
         yield* Effect.gen(function* () {
           const A = yield* TestResource("A", { string: "a-value" });
           yield* TestResource("B", { string: A.string });
-        }).pipe(deploy, hook(failOn("A", "create")));
+        }).pipe(test.deploy, hook(failOn("A", "create")));
 
         expect((yield* getState("A"))?.status).toEqual("creating");
         expect(yield* getState("B")).toBeUndefined();
@@ -1035,7 +1019,7 @@ describe("dependent resources (A -> B)", () => {
           const A = yield* TestResource("A", { string: "a-value" });
           const B = yield* TestResource("B", { string: A.string });
           return { A, B };
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("created");
@@ -1051,7 +1035,7 @@ describe("dependent resources (A -> B)", () => {
         yield* Effect.gen(function* () {
           const A = yield* TestResource("A", { string: "a-value" });
           yield* TestResource("B", { string: A.string });
-        }).pipe(deploy, hook(failOn("B", "create")));
+        }).pipe(test.deploy, hook(failOn("B", "create")));
 
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("creating");
@@ -1061,7 +1045,7 @@ describe("dependent resources (A -> B)", () => {
           const A = yield* TestResource("A", { string: "a-value" });
           const B = yield* TestResource("B", { string: A.string });
           return { A, B };
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("created");
@@ -1075,7 +1059,7 @@ describe("dependent resources (A -> B)", () => {
         yield* Effect.gen(function* () {
           const A = yield* TestResource("A", { string: "a-value" });
           yield* TestResource("B", { string: A.string });
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         const stack = Effect.gen(function* () {
           const A = yield* TestResource("A", { string: "a-value-updated" });
@@ -1084,13 +1068,13 @@ describe("dependent resources (A -> B)", () => {
         });
 
         // A fails to update - B should not start updating
-        yield* stack.pipe(deploy, hook(failOn("A", "update")));
+        yield* stack.pipe(test.deploy, hook(failOn("A", "update")));
 
         expect((yield* getState("A"))?.status).toEqual("updating");
         expect((yield* getState("B"))?.status).toEqual("created");
 
         // Recovery: re-apply should update both
-        const output = yield* stack.pipe(deploy);
+        const output = yield* stack.pipe(test.deploy);
 
         expect((yield* getState("A"))?.status).toEqual("updated");
         expect((yield* getState("B"))?.status).toEqual("updated");
@@ -1105,7 +1089,7 @@ describe("dependent resources (A -> B)", () => {
         yield* Effect.gen(function* () {
           const A = yield* TestResource("A", { string: "a-value" });
           yield* TestResource("B", { string: A.string });
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         const stack = Effect.gen(function* () {
           const A = yield* TestResource("A", { string: "a-value-updated" });
@@ -1114,13 +1098,13 @@ describe("dependent resources (A -> B)", () => {
         });
 
         // A succeeds, B fails to update
-        yield* stack.pipe(deploy, hook(failOn("B", "update")));
+        yield* stack.pipe(test.deploy, hook(failOn("B", "update")));
 
         expect((yield* getState("A"))?.status).toEqual("updated");
         expect((yield* getState("B"))?.status).toEqual("updating");
 
         // Recovery: re-apply should noop A and update B
-        const output = yield* stack.pipe(deploy);
+        const output = yield* stack.pipe(test.deploy);
 
         expect((yield* getState("A"))?.status).toEqual("updated");
         expect((yield* getState("B"))?.status).toEqual("updated");
@@ -1137,7 +1121,7 @@ describe("dependent resources (A -> B)", () => {
             replaceString: "original",
           });
           yield* TestResource("B", { string: A.string });
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         const stack = Effect.gen(function* () {
           const A = yield* TestResource("A", {
@@ -1149,7 +1133,7 @@ describe("dependent resources (A -> B)", () => {
         });
 
         // A replacement fails (during create of new A) - B should not start
-        yield* stack.pipe(deploy, hook(failOn("A", "create")));
+        yield* stack.pipe(test.deploy, hook(failOn("A", "create")));
 
         expect((yield* getState<ReplacingResourceState>("A"))?.status).toEqual(
           "replacing",
@@ -1157,7 +1141,7 @@ describe("dependent resources (A -> B)", () => {
         expect((yield* getState("B"))?.status).toEqual("created");
 
         // Recovery: re-apply should complete A replacement and update B
-        const output = yield* stack.pipe(deploy);
+        const output = yield* stack.pipe(test.deploy);
 
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("updated");
@@ -1175,7 +1159,7 @@ describe("dependent resources (A -> B)", () => {
             replaceString: "original",
           });
           yield* TestResource("B", { string: A.string });
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         const stack = Effect.gen(function* () {
           const A = yield* TestResource("A", {
@@ -1187,7 +1171,7 @@ describe("dependent resources (A -> B)", () => {
         });
 
         // A replacement succeeds, B fails to update
-        yield* stack.pipe(deploy, hook(failOn("B", "update")));
+        yield* stack.pipe(test.deploy, hook(failOn("B", "update")));
 
         // A should be in replaced state (new A created, old A pending cleanup)
         // B should be in updating state
@@ -1196,7 +1180,7 @@ describe("dependent resources (A -> B)", () => {
         expect((yield* getState("B"))?.status).toEqual("updating");
 
         // Recovery: re-apply should update B and clean up old A
-        const output = yield* stack.pipe(deploy);
+        const output = yield* stack.pipe(test.deploy);
 
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("updated");
@@ -1215,7 +1199,7 @@ describe("dependent resources (A -> B)", () => {
             replaceString: "original",
           });
           yield* TestResource("B", { string: A.string });
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         const stack = Effect.gen(function* () {
           const A = yield* TestResource("A", {
@@ -1227,7 +1211,7 @@ describe("dependent resources (A -> B)", () => {
         });
 
         // A replacement and B update succeed, but old A delete fails
-        yield* stack.pipe(deploy, hook(failOn("A", "delete")));
+        yield* stack.pipe(test.deploy, hook(failOn("A", "delete")));
 
         // A should be in replaced state (delete of old A failed)
         // B should have been updated successfully
@@ -1237,7 +1221,7 @@ describe("dependent resources (A -> B)", () => {
         expect((yield* getState("B"))?.status).toEqual("updated");
 
         // Recovery: re-apply should clean up old A
-        const output = yield* stack.pipe(deploy);
+        const output = yield* stack.pipe(test.deploy);
 
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("updated");
@@ -1251,7 +1235,7 @@ describe("dependent resources (A -> B)", () => {
         yield* Effect.gen(function* () {
           const A = yield* TestResource("A", { string: "a-value" });
           yield* TestResource("B", { string: A.string });
-        }).pipe(deploy);
+        }).pipe(test.deploy);
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("created");
 
@@ -1276,7 +1260,7 @@ describe("dependent resources (A -> B)", () => {
         yield* Effect.gen(function* () {
           const A = yield* TestResource("A", { string: "a-value" });
           yield* TestResource("B", { string: A.string });
-        }).pipe(deploy);
+        }).pipe(test.deploy);
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("created");
 
@@ -1310,7 +1294,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
           const B = yield* TestResource("B", { string: A.string });
           const C = yield* TestResource("C", { string: B.string });
           return { A, B, C };
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("created");
@@ -1328,14 +1312,14 @@ describe("three-level dependency chain (A -> B -> C)", () => {
           const A = yield* TestResource("A", { string: "a-value" });
           const B = yield* TestResource("B", { string: A.string });
           yield* TestResource("C", { string: B.string });
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         const output = yield* Effect.gen(function* () {
           const A = yield* TestResource("A", { string: "a-value-updated" });
           const B = yield* TestResource("B", { string: A.string });
           const C = yield* TestResource("C", { string: B.string });
           return { A, B, C };
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         expect((yield* getState("A"))?.status).toEqual("updated");
         expect((yield* getState("B"))?.status).toEqual("updated");
@@ -1354,7 +1338,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
           });
           const B = yield* TestResource("B", { string: A.string });
           yield* TestResource("C", { string: B.string });
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         const output = yield* Effect.gen(function* () {
           const A = yield* TestResource("A", {
@@ -1364,7 +1348,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
           const B = yield* TestResource("B", { string: A.string });
           const C = yield* TestResource("C", { string: B.string });
           return { A, B, C };
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("updated");
@@ -1380,7 +1364,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
           const A = yield* TestResource("A", { string: "a-value" });
           const B = yield* TestResource("B", { string: A.string });
           yield* TestResource("C", { string: B.string });
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         yield* destroy();
 
@@ -1403,14 +1387,14 @@ describe("three-level dependency chain (A -> B -> C)", () => {
           return { A, B, C };
         });
 
-        yield* stack.pipe(deploy, hook(failOn("A", "create")));
+        yield* stack.pipe(test.deploy, hook(failOn("A", "create")));
 
         expect((yield* getState("A"))?.status).toEqual("creating");
         expect(yield* getState("B")).toBeUndefined();
         expect(yield* getState("C")).toBeUndefined();
 
         // Recovery
-        const output = yield* stack.pipe(deploy);
+        const output = yield* stack.pipe(test.deploy);
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("created");
         expect((yield* getState("C"))?.status).toEqual("created");
@@ -1428,14 +1412,14 @@ describe("three-level dependency chain (A -> B -> C)", () => {
           return { A, B, C };
         });
 
-        yield* stack.pipe(deploy, hook(failOn("B", "create")));
+        yield* stack.pipe(test.deploy, hook(failOn("B", "create")));
 
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("creating");
         expect(yield* getState("C")).toBeUndefined();
 
         // Recovery
-        const output = yield* stack.pipe(deploy);
+        const output = yield* stack.pipe(test.deploy);
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("created");
         expect((yield* getState("C"))?.status).toEqual("created");
@@ -1453,14 +1437,14 @@ describe("three-level dependency chain (A -> B -> C)", () => {
           return { A, B, C };
         });
 
-        yield* stack.pipe(deploy, hook(failOn("C", "create")));
+        yield* stack.pipe(test.deploy, hook(failOn("C", "create")));
 
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("created");
         expect((yield* getState("C"))?.status).toEqual("creating");
 
         // Recovery
-        const output = yield* stack.pipe(deploy);
+        const output = yield* stack.pipe(test.deploy);
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("created");
         expect((yield* getState("C"))?.status).toEqual("created");
@@ -1477,7 +1461,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
           const A = yield* TestResource("A", { string: "a-value" });
           const B = yield* TestResource("B", { string: A.string });
           yield* TestResource("C", { string: B.string });
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         const stack = Effect.gen(function* () {
           const A = yield* TestResource("A", { string: "a-value-updated" });
@@ -1486,14 +1470,14 @@ describe("three-level dependency chain (A -> B -> C)", () => {
           return { A, B, C };
         });
 
-        yield* stack.pipe(deploy, hook(failOn("A", "update")));
+        yield* stack.pipe(test.deploy, hook(failOn("A", "update")));
 
         expect((yield* getState("A"))?.status).toEqual("updating");
         expect((yield* getState("B"))?.status).toEqual("created");
         expect((yield* getState("C"))?.status).toEqual("created");
 
         // Recovery
-        const output = yield* stack.pipe(deploy);
+        const output = yield* stack.pipe(test.deploy);
         expect((yield* getState("A"))?.status).toEqual("updated");
         expect((yield* getState("B"))?.status).toEqual("updated");
         expect((yield* getState("C"))?.status).toEqual("updated");
@@ -1508,7 +1492,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
           const A = yield* TestResource("A", { string: "a-value" });
           const B = yield* TestResource("B", { string: A.string });
           yield* TestResource("C", { string: B.string });
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         const stack = Effect.gen(function* () {
           const A = yield* TestResource("A", { string: "a-value-updated" });
@@ -1517,14 +1501,14 @@ describe("three-level dependency chain (A -> B -> C)", () => {
           return { A, B, C };
         });
 
-        yield* stack.pipe(deploy, hook(failOn("B", "update")));
+        yield* stack.pipe(test.deploy, hook(failOn("B", "update")));
 
         expect((yield* getState("A"))?.status).toEqual("updated");
         expect((yield* getState("B"))?.status).toEqual("updating");
         expect((yield* getState("C"))?.status).toEqual("created");
 
         // Recovery
-        const output = yield* stack.pipe(deploy);
+        const output = yield* stack.pipe(test.deploy);
         expect((yield* getState("A"))?.status).toEqual("updated");
         expect((yield* getState("B"))?.status).toEqual("updated");
         expect((yield* getState("C"))?.status).toEqual("updated");
@@ -1539,7 +1523,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
           const A = yield* TestResource("A", { string: "a-value" });
           const B = yield* TestResource("B", { string: A.string });
           yield* TestResource("C", { string: B.string });
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         const stack = Effect.gen(function* () {
           const A = yield* TestResource("A", { string: "a-value-updated" });
@@ -1548,14 +1532,14 @@ describe("three-level dependency chain (A -> B -> C)", () => {
           return { A, B, C };
         });
 
-        yield* stack.pipe(deploy, hook(failOn("C", "update")));
+        yield* stack.pipe(test.deploy, hook(failOn("C", "update")));
 
         expect((yield* getState("A"))?.status).toEqual("updated");
         expect((yield* getState("B"))?.status).toEqual("updated");
         expect((yield* getState("C"))?.status).toEqual("updating");
 
         // Recovery
-        const output = yield* stack.pipe(deploy);
+        const output = yield* stack.pipe(test.deploy);
         expect((yield* getState("A"))?.status).toEqual("updated");
         expect((yield* getState("B"))?.status).toEqual("updated");
         expect((yield* getState("C"))?.status).toEqual("updated");
@@ -1575,7 +1559,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
           });
           const B = yield* TestResource("B", { string: A.string });
           yield* TestResource("C", { string: B.string });
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         const stack = Effect.gen(function* () {
           const A = yield* TestResource("A", {
@@ -1587,7 +1571,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
           return { A, B, C };
         });
 
-        yield* stack.pipe(deploy, hook(failOn("A", "create")));
+        yield* stack.pipe(test.deploy, hook(failOn("A", "create")));
 
         expect((yield* getState<ReplacingResourceState>("A"))?.status).toEqual(
           "replacing",
@@ -1596,7 +1580,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
         expect((yield* getState("C"))?.status).toEqual("created");
 
         // Recovery
-        const output = yield* stack.pipe(deploy);
+        const output = yield* stack.pipe(test.deploy);
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("updated");
         expect((yield* getState("C"))?.status).toEqual("updated");
@@ -1614,7 +1598,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
           });
           const B = yield* TestResource("B", { string: A.string });
           yield* TestResource("C", { string: B.string });
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         const stack = Effect.gen(function* () {
           const A = yield* TestResource("A", {
@@ -1626,7 +1610,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
           return { A, B, C };
         });
 
-        yield* stack.pipe(deploy, hook(failOn("B", "update")));
+        yield* stack.pipe(test.deploy, hook(failOn("B", "update")));
 
         expect((yield* getState<ReplacedResourceState>("A"))?.status).toEqual(
           "replaced",
@@ -1635,7 +1619,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
         expect((yield* getState("C"))?.status).toEqual("created");
 
         // Recovery
-        const output = yield* stack.pipe(deploy);
+        const output = yield* stack.pipe(test.deploy);
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("updated");
         expect((yield* getState("C"))?.status).toEqual("updated");
@@ -1653,7 +1637,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
           });
           const B = yield* TestResource("B", { string: A.string });
           yield* TestResource("C", { string: B.string });
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         const stack = Effect.gen(function* () {
           const A = yield* TestResource("A", {
@@ -1665,7 +1649,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
           return { A, B, C };
         });
 
-        yield* stack.pipe(deploy, hook(failOn("C", "update")));
+        yield* stack.pipe(test.deploy, hook(failOn("C", "update")));
 
         expect((yield* getState<ReplacedResourceState>("A"))?.status).toEqual(
           "replaced",
@@ -1674,7 +1658,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
         expect((yield* getState("C"))?.status).toEqual("updating");
 
         // Recovery
-        const output = yield* stack.pipe(deploy);
+        const output = yield* stack.pipe(test.deploy);
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("updated");
         expect((yield* getState("C"))?.status).toEqual("updated");
@@ -1692,7 +1676,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
           });
           const B = yield* TestResource("B", { string: A.string });
           yield* TestResource("C", { string: B.string });
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         const stack = Effect.gen(function* () {
           const A = yield* TestResource("A", {
@@ -1704,7 +1688,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
           return { A, B, C };
         });
 
-        yield* stack.pipe(deploy, hook(failOn("A", "delete")));
+        yield* stack.pipe(test.deploy, hook(failOn("A", "delete")));
 
         expect((yield* getState<ReplacedResourceState>("A"))?.status).toEqual(
           "replaced",
@@ -1713,7 +1697,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
         expect((yield* getState("C"))?.status).toEqual("updated");
 
         // Recovery
-        const output = yield* stack.pipe(deploy);
+        const output = yield* stack.pipe(test.deploy);
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("updated");
         expect((yield* getState("C"))?.status).toEqual("updated");
@@ -1730,7 +1714,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
           const A = yield* TestResource("A", { string: "a-value" });
           const B = yield* TestResource("B", { string: A.string });
           yield* TestResource("C", { string: B.string });
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         yield* destroy().pipe(hook(failOn("C", "delete")));
 
@@ -1753,7 +1737,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
           const A = yield* TestResource("A", { string: "a-value" });
           const B = yield* TestResource("B", { string: A.string });
           yield* TestResource("C", { string: B.string });
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         yield* destroy().pipe(hook(failOn("B", "delete")));
 
@@ -1775,7 +1759,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
           const A = yield* TestResource("A", { string: "a-value" });
           const B = yield* TestResource("B", { string: A.string });
           yield* TestResource("C", { string: B.string });
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         yield* destroy().pipe(hook(failOn("A", "delete")));
 
@@ -1813,7 +1797,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
             string: Output.interpolate`${B.string}-${C.string}`,
           });
           return { A, B, C, D };
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("created");
@@ -1833,7 +1817,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
           yield* TestResource("D", {
             string: Output.interpolate`${B.string}-${C.string}`,
           });
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         const output = yield* Effect.gen(function* () {
           const A = yield* TestResource("A", { string: "updated" });
@@ -1843,7 +1827,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
             string: Output.interpolate`${B.string}-${C.string}`,
           });
           return { A, B, C, D };
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         expect((yield* getState("A"))?.status).toEqual("updated");
         expect((yield* getState("B"))?.status).toEqual("updated");
@@ -1863,7 +1847,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
           yield* TestResource("D", {
             string: Output.interpolate`${B.string}-${C.string}`,
           });
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         yield* destroy();
 
@@ -1889,7 +1873,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
           return { A, B, C, D };
         });
 
-        yield* stack.pipe(deploy, hook(failOn("A", "create")));
+        yield* stack.pipe(test.deploy, hook(failOn("A", "create")));
 
         expect((yield* getState("A"))?.status).toEqual("creating");
         expect(yield* getState("B")).toBeUndefined();
@@ -1897,7 +1881,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
         expect(yield* getState("D")).toBeUndefined();
 
         // Recovery
-        const output = yield* stack.pipe(deploy);
+        const output = yield* stack.pipe(test.deploy);
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("created");
         expect((yield* getState("C"))?.status).toEqual("created");
@@ -1919,7 +1903,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
           return { A, B, C, D };
         });
 
-        yield* stack.pipe(deploy, hook(failOn("B", "create")));
+        yield* stack.pipe(test.deploy, hook(failOn("B", "create")));
 
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("creating");
@@ -1929,7 +1913,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
         expect(yield* getState("D")).toBeUndefined();
 
         // Recovery
-        const output = yield* stack.pipe(deploy);
+        const output = yield* stack.pipe(test.deploy);
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("created");
         expect((yield* getState("C"))?.status).toEqual("created");
@@ -1951,7 +1935,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
           return { A, B, C, D };
         });
 
-        yield* stack.pipe(deploy, hook(failOn("C", "create")));
+        yield* stack.pipe(test.deploy, hook(failOn("C", "create")));
 
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("C"))?.status).toEqual("creating");
@@ -1961,7 +1945,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
         expect(yield* getState("D")).toBeUndefined();
 
         // Recovery
-        const output = yield* stack.pipe(deploy);
+        const output = yield* stack.pipe(test.deploy);
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("created");
         expect((yield* getState("C"))?.status).toEqual("created");
@@ -1983,7 +1967,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
           return { A, B, C, D };
         });
 
-        yield* stack.pipe(deploy, hook(failOn("D", "create")));
+        yield* stack.pipe(test.deploy, hook(failOn("D", "create")));
 
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("created");
@@ -1991,7 +1975,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
         expect((yield* getState("D"))?.status).toEqual("creating");
 
         // Recovery
-        const output = yield* stack.pipe(deploy);
+        const output = yield* stack.pipe(test.deploy);
         expect((yield* getState("D"))?.status).toEqual("created");
         expect(output.D.string).toEqual("a-value-a-value");
       }).pipe(Effect.provide(MockLayers())),
@@ -2011,7 +1995,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
         });
 
         yield* stack.pipe(
-          deploy,
+          test.deploy,
           hook(
             failOnMultiple([
               { id: "B", hook: "create" },
@@ -2032,7 +2016,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
         expect(yield* getState("D")).toBeUndefined();
 
         // Recovery
-        const output = yield* stack.pipe(deploy);
+        const output = yield* stack.pipe(test.deploy);
         expect((yield* getState("B"))?.status).toEqual("created");
         expect((yield* getState("C"))?.status).toEqual("created");
         expect((yield* getState("D"))?.status).toEqual("created");
@@ -2052,7 +2036,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
           yield* TestResource("D", {
             string: Output.interpolate`${B.string}-${C.string}`,
           });
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         const stack = Effect.gen(function* () {
           const A = yield* TestResource("A", { string: "updated" });
@@ -2064,7 +2048,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
           return { A, B, C, D };
         });
 
-        yield* stack.pipe(deploy, hook(failOn("A", "update")));
+        yield* stack.pipe(test.deploy, hook(failOn("A", "update")));
 
         expect((yield* getState("A"))?.status).toEqual("updating");
         expect((yield* getState("B"))?.status).toEqual("created");
@@ -2072,7 +2056,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
         expect((yield* getState("D"))?.status).toEqual("created");
 
         // Recovery
-        const output = yield* stack.pipe(deploy);
+        const output = yield* stack.pipe(test.deploy);
         expect((yield* getState("A"))?.status).toEqual("updated");
         expect((yield* getState("B"))?.status).toEqual("updated");
         expect((yield* getState("C"))?.status).toEqual("updated");
@@ -2091,7 +2075,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
           yield* TestResource("D", {
             string: Output.interpolate`${B.string}-${C.string}`,
           });
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         const stack = Effect.gen(function* () {
           const A = yield* TestResource("A", { string: "updated" });
@@ -2103,7 +2087,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
           return { A, B, C, D };
         });
 
-        yield* stack.pipe(deploy, hook(failOn("B", "update")));
+        yield* stack.pipe(test.deploy, hook(failOn("B", "update")));
 
         expect((yield* getState("A"))?.status).toEqual("updated");
         expect((yield* getState("B"))?.status).toEqual("updating");
@@ -2115,7 +2099,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
         expect((yield* getState("D"))?.status).toEqual("created");
 
         // Recovery
-        const output = yield* stack.pipe(deploy);
+        const output = yield* stack.pipe(test.deploy);
         expect((yield* getState("B"))?.status).toEqual("updated");
         expect((yield* getState("C"))?.status).toEqual("updated");
         expect((yield* getState("D"))?.status).toEqual("updated");
@@ -2133,7 +2117,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
           yield* TestResource("D", {
             string: Output.interpolate`${B.string}-${C.string}`,
           });
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         const stack = Effect.gen(function* () {
           const A = yield* TestResource("A", { string: "updated" });
@@ -2145,7 +2129,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
           return { A, B, C, D };
         });
 
-        yield* stack.pipe(deploy, hook(failOn("D", "update")));
+        yield* stack.pipe(test.deploy, hook(failOn("D", "update")));
 
         expect((yield* getState("A"))?.status).toEqual("updated");
         expect((yield* getState("B"))?.status).toEqual("updated");
@@ -2153,7 +2137,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
         expect((yield* getState("D"))?.status).toEqual("updating");
 
         // Recovery
-        const output = yield* stack.pipe(deploy);
+        const output = yield* stack.pipe(test.deploy);
         expect((yield* getState("D"))?.status).toEqual("updated");
         expect(output.D.string).toEqual("updated-updated");
       }).pipe(Effect.provide(MockLayers())),
@@ -2171,7 +2155,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
           yield* TestResource("D", {
             string: Output.interpolate`${B.string}-${C.string}`,
           });
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         yield* destroy().pipe(hook(failOn("D", "delete")));
 
@@ -2199,7 +2183,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
           yield* TestResource("D", {
             string: Output.interpolate`${B.string}-${C.string}`,
           });
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         yield* destroy().pipe(hook(failOn("B", "delete")));
 
@@ -2236,7 +2220,7 @@ describe("independent resources (A, B with no dependencies)", () => {
         });
 
         yield* stack.pipe(
-          deploy,
+          test.deploy,
           hook(
             failOnMultiple([
               { id: "A", hook: "create" },
@@ -2254,7 +2238,7 @@ describe("independent resources (A, B with no dependencies)", () => {
         expect(AState?.status ?? BState?.status).toEqual("creating");
 
         // Recovery
-        const output = yield* stack.pipe(deploy);
+        const output = yield* stack.pipe(test.deploy);
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("created");
         expect(output.A.string).toEqual("a-value");
@@ -2271,13 +2255,13 @@ describe("independent resources (A, B with no dependencies)", () => {
           return { A, B };
         });
 
-        yield* stack.pipe(deploy, hook(failOn("B", "create")));
+        yield* stack.pipe(test.deploy, hook(failOn("B", "create")));
 
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("creating");
 
         // Recovery
-        const output = yield* stack.pipe(deploy);
+        const output = yield* stack.pipe(test.deploy);
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("created");
         expect(output.B.string).toEqual("b-value");
@@ -2290,7 +2274,7 @@ describe("independent resources (A, B with no dependencies)", () => {
         yield* Effect.gen(function* () {
           yield* TestResource("A", { string: "a-value" });
           yield* TestResource("B", { string: "b-value" });
-        }).pipe(deploy);
+        }).pipe(test.deploy);
 
         const stack = Effect.gen(function* () {
           const A = yield* TestResource("A", { string: "a-updated" });
@@ -2298,7 +2282,7 @@ describe("independent resources (A, B with no dependencies)", () => {
           return { A, B };
         });
 
-        yield* stack.pipe(deploy, hook(failOn("A", "update")));
+        yield* stack.pipe(test.deploy, hook(failOn("A", "update")));
 
         expect((yield* getState("A"))?.status).toEqual("updating");
         // B might have been updated
@@ -2308,7 +2292,7 @@ describe("independent resources (A, B with no dependencies)", () => {
         ).toBe(true);
 
         // Recovery
-        const output = yield* stack.pipe(deploy);
+        const output = yield* stack.pipe(test.deploy);
         expect((yield* getState("A"))?.status).toEqual("updated");
         expect((yield* getState("B"))?.status).toEqual("updated");
         expect(output.A.string).toEqual("a-updated");
@@ -2324,7 +2308,7 @@ describe("independent resources (A, B with no dependencies)", () => {
         // First create B successfully
         yield* Effect.gen(function* () {
           yield* TestResource("B", { string: "b-value" });
-        }).pipe(deploy);
+        }).pipe(test.deploy);
         expect((yield* getState("B"))?.status).toEqual("created");
 
         // Now try to create A and update B - A fails
@@ -2335,7 +2319,7 @@ describe("independent resources (A, B with no dependencies)", () => {
         });
 
         yield* stack.pipe(
-          deploy,
+          test.deploy,
           hook(
             failOnMultiple([
               { id: "A", hook: "create" },
@@ -2355,7 +2339,7 @@ describe("independent resources (A, B with no dependencies)", () => {
         ).toBe(true);
 
         // Recovery
-        const output = yield* stack.pipe(deploy);
+        const output = yield* stack.pipe(test.deploy);
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("updated");
         expect(output.A.string).toEqual("a-value");
@@ -2370,7 +2354,7 @@ describe("independent resources (A, B with no dependencies)", () => {
         yield* Effect.gen(function* () {
           yield* TestResource("A", { replaceString: "original" });
           yield* TestResource("B", { string: "b-value" });
-        }).pipe(deploy);
+        }).pipe(test.deploy);
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("created");
 
@@ -2380,7 +2364,7 @@ describe("independent resources (A, B with no dependencies)", () => {
         });
 
         yield* stack.pipe(
-          deploy,
+          test.deploy,
           hook(
             failOnMultiple([
               { id: "A", hook: "create" },
@@ -2400,7 +2384,7 @@ describe("independent resources (A, B with no dependencies)", () => {
         ).toBe(true);
 
         // Recovery - complete the replace and delete
-        yield* stack.pipe(deploy);
+        yield* stack.pipe(test.deploy);
         expect((yield* getState("A"))?.status).toEqual("created");
         expect(yield* getState("B")).toBeUndefined();
       }).pipe(Effect.provide(MockLayers())),
@@ -2419,13 +2403,13 @@ describe("multiple resources replacing", () => {
       yield* Effect.gen(function* () {
         yield* TestResource("A", { replaceString: "a-original" });
         yield* TestResource("B", { replaceString: "b-original" });
-      }).pipe(deploy);
+      }).pipe(test.deploy);
 
       const output = yield* Effect.gen(function* () {
         const A = yield* TestResource("A", { replaceString: "a-new" });
         const B = yield* TestResource("B", { replaceString: "b-new" });
         return { A, B };
-      }).pipe(deploy);
+      }).pipe(test.deploy);
 
       expect((yield* getState("A"))?.status).toEqual("created");
       expect((yield* getState("B"))?.status).toEqual("created");
@@ -2440,7 +2424,7 @@ describe("multiple resources replacing", () => {
       yield* Effect.gen(function* () {
         yield* TestResource("A", { replaceString: "a-original" });
         yield* TestResource("B", { replaceString: "b-original" });
-      }).pipe(deploy);
+      }).pipe(test.deploy);
 
       const stack = Effect.gen(function* () {
         const A = yield* TestResource("A", { replaceString: "a-new" });
@@ -2448,7 +2432,7 @@ describe("multiple resources replacing", () => {
         return { A, B };
       });
 
-      yield* stack.pipe(deploy, hook(failOn("A", "create")));
+      yield* stack.pipe(test.deploy, hook(failOn("A", "create")));
 
       expect((yield* getState<ReplacingResourceState>("A"))?.status).toEqual(
         "replacing",
@@ -2462,7 +2446,7 @@ describe("multiple resources replacing", () => {
       ).toBe(true);
 
       // Recovery
-      const output = yield* stack.pipe(deploy);
+      const output = yield* stack.pipe(test.deploy);
       expect((yield* getState("A"))?.status).toEqual("created");
       expect((yield* getState("B"))?.status).toEqual("created");
       expect(output.A.replaceString).toEqual("a-new");
@@ -2476,7 +2460,7 @@ describe("multiple resources replacing", () => {
       yield* Effect.gen(function* () {
         yield* TestResource("A", { replaceString: "a-original" });
         yield* TestResource("B", { replaceString: "b-original" });
-      }).pipe(deploy);
+      }).pipe(test.deploy);
 
       const stack = Effect.gen(function* () {
         const A = yield* TestResource("A", { replaceString: "a-new" });
@@ -2485,7 +2469,7 @@ describe("multiple resources replacing", () => {
       });
 
       yield* stack.pipe(
-        deploy,
+        test.deploy,
         hook(
           failOnMultiple([
             { id: "A", hook: "create" },
@@ -2505,7 +2489,7 @@ describe("multiple resources replacing", () => {
       ).toBe(true);
 
       // Recovery
-      const output = yield* stack.pipe(deploy);
+      const output = yield* stack.pipe(test.deploy);
       expect((yield* getState("A"))?.status).toEqual("created");
       expect((yield* getState("B"))?.status).toEqual("created");
       expect(output.A.replaceString).toEqual("a-new");
@@ -2519,7 +2503,7 @@ describe("multiple resources replacing", () => {
       yield* Effect.gen(function* () {
         yield* TestResource("A", { replaceString: "a-original" });
         yield* TestResource("B", { replaceString: "b-original" });
-      }).pipe(deploy);
+      }).pipe(test.deploy);
 
       const stack = Effect.gen(function* () {
         const A = yield* TestResource("A", { replaceString: "a-new" });
@@ -2528,7 +2512,7 @@ describe("multiple resources replacing", () => {
       });
 
       yield* stack.pipe(
-        deploy,
+        test.deploy,
         hook(
           failOnMultiple([
             { id: "A", hook: "delete" },
@@ -2550,7 +2534,7 @@ describe("multiple resources replacing", () => {
       ).toBe(true);
 
       // Recovery
-      const output = yield* stack.pipe(deploy);
+      const output = yield* stack.pipe(test.deploy);
       expect((yield* getState("A"))?.status).toEqual("created");
       expect((yield* getState("B"))?.status).toEqual("created");
       expect(output.A.replaceString).toEqual("a-new");
@@ -2571,7 +2555,7 @@ describe("orphan chain deletion", () => {
         const A = yield* TestResource("A", { string: "a-value" });
         const B = yield* TestResource("B", { string: A.string });
         yield* TestResource("C", { string: B.string });
-      }).pipe(deploy);
+      }).pipe(test.deploy);
       expect((yield* getState("A"))?.status).toEqual("created");
       expect((yield* getState("B"))?.status).toEqual("created");
       expect((yield* getState("C"))?.status).toEqual("created");
@@ -2580,7 +2564,7 @@ describe("orphan chain deletion", () => {
       yield* Effect.gen(function* () {
         const A = yield* TestResource("A", { string: "a-value" });
         yield* TestResource("B", { string: A.string });
-      }).pipe(deploy);
+      }).pipe(test.deploy);
       expect((yield* getState("A"))?.status).toEqual("created");
       expect((yield* getState("B"))?.status).toEqual("created");
       expect(yield* getState("C")).toBeUndefined();
@@ -2594,7 +2578,7 @@ describe("orphan chain deletion", () => {
         const A = yield* TestResource("A", { string: "a-value" });
         const B = yield* TestResource("B", { string: A.string });
         yield* TestResource("C", { string: B.string });
-      }).pipe(deploy);
+      }).pipe(test.deploy);
 
       // Remove all three - C fails to delete
       yield* destroy().pipe(hook(failOn("C", "delete")));
@@ -2617,7 +2601,7 @@ describe("orphan chain deletion", () => {
       yield* Effect.gen(function* () {
         const A = yield* TestResource("A", { string: "a-value" });
         yield* TestResource("B", { string: A.string });
-      }).pipe(deploy);
+      }).pipe(test.deploy);
       expect((yield* getState("A"))?.status).toEqual("created");
       expect((yield* getState("B"))?.status).toEqual("created");
 
@@ -2626,7 +2610,7 @@ describe("orphan chain deletion", () => {
         const A = yield* TestResource("A", { string: "a-value" });
         const C = yield* TestResource("C", { string: A.string });
         return { A, C };
-      }).pipe(deploy);
+      }).pipe(test.deploy);
       expect((yield* getState("A"))?.status).toEqual("created");
       expect(yield* getState("B")).toBeUndefined();
       expect((yield* getState("C"))?.status).toEqual("created");
@@ -2649,7 +2633,7 @@ describe("complex mixed state scenarios", () => {
           string: "a-value",
           replaceString: "original",
         });
-      }).pipe(deploy);
+      }).pipe(test.deploy);
       expect((yield* getState("A"))?.status).toEqual("created");
 
       // Now add B dependent on A, and also replace A
@@ -2660,7 +2644,7 @@ describe("complex mixed state scenarios", () => {
         });
         const B = yield* TestResource("B", { string: A.string });
         return { A, B };
-      }).pipe(deploy);
+      }).pipe(test.deploy);
 
       expect((yield* getState("A"))?.status).toEqual("created");
       expect((yield* getState("B"))?.status).toEqual("created");
@@ -2676,14 +2660,14 @@ describe("complex mixed state scenarios", () => {
       yield* Effect.gen(function* () {
         yield* TestResource("A", { string: "a-value" });
         yield* TestResource("B", { string: "b-value" });
-      }).pipe(deploy);
+      }).pipe(test.deploy);
 
       // Update A, delete B (by not including), create C
       const output = yield* Effect.gen(function* () {
         const A = yield* TestResource("A", { string: "a-updated" });
         const C = yield* TestResource("C", { string: A.string });
         return { A, C };
-      }).pipe(deploy);
+      }).pipe(test.deploy);
 
       expect((yield* getState("A"))?.status).toEqual("updated");
       expect(yield* getState("B")).toBeUndefined();
@@ -2702,7 +2686,7 @@ describe("complex mixed state scenarios", () => {
         });
         const B = yield* TestResource("B", { string: A.string });
         yield* TestResource("C", { string: B.string });
-      }).pipe(deploy);
+      }).pipe(test.deploy);
 
       // Replace A - should cascade updates to B and C
       const output = yield* Effect.gen(function* () {
@@ -2713,7 +2697,7 @@ describe("complex mixed state scenarios", () => {
         const B = yield* TestResource("B", { string: A.string });
         const C = yield* TestResource("C", { string: B.string });
         return { A, B, C };
-      }).pipe(deploy);
+      }).pipe(test.deploy);
 
       expect((yield* getState("A"))?.status).toEqual("created");
       expect((yield* getState("B"))?.status).toEqual("updated");
@@ -2732,7 +2716,7 @@ describe("complex mixed state scenarios", () => {
           replaceString: "original",
         });
         yield* TestResource("B", { string: "b-value" });
-      }).pipe(deploy);
+      }).pipe(test.deploy);
 
       // Complex operation: A replace, B update, C create, D not included (nothing to delete)
       const stack = Effect.gen(function* () {
@@ -2747,7 +2731,7 @@ describe("complex mixed state scenarios", () => {
 
       // Fail on A replace (create phase) and C create
       yield* stack.pipe(
-        deploy,
+        test.deploy,
         hook(
           failOnMultiple([
             { id: "A", hook: "create" },
@@ -2772,7 +2756,7 @@ describe("complex mixed state scenarios", () => {
       ).toBe(true);
 
       // Recovery
-      const output = yield* stack.pipe(deploy);
+      const output = yield* stack.pipe(test.deploy);
       expect((yield* getState("A"))?.status).toEqual("created");
       expect((yield* getState("B"))?.status).toEqual("updated");
       expect((yield* getState("C"))?.status).toEqual("created");
@@ -2800,7 +2784,7 @@ describe("static stable properties (provider.stables)", () => {
             const A = yield* StaticStablesResource("A", { string: "value" });
             const B = yield* TestResource("B", { string: A.stableId });
             return { A, B };
-          }).pipe(deploy);
+          }).pipe(test.deploy);
           expect(output.A.stableId).toEqual("stable-A");
           expect(output.B.string).toEqual("stable-A");
           expect((yield* getState("A"))?.status).toEqual("created");
@@ -2817,7 +2801,7 @@ describe("static stable properties (provider.stables)", () => {
             });
             const B = yield* TestResource("B", { string: A.stableId });
             return { A, B };
-          }).pipe(deploy);
+          }).pipe(test.deploy);
           // A should be updated (tags changed)
           expect(output.A.tags).toEqual({ Name: "tagged-resource" });
           // B should NOT be updated because stableId didn't change
@@ -2839,7 +2823,7 @@ describe("static stable properties (provider.stables)", () => {
             const B = yield* TestResource("B", { string: A.stableId });
             const C = yield* TestResource("C", { string: B.stableString });
             return { A, B, C };
-          }).pipe(deploy);
+          }).pipe(test.deploy);
           expect(output.A.stableId).toEqual("stable-A");
           expect(output.B.string).toEqual("stable-A");
           expect(output.C.string).toEqual("B");
@@ -2856,7 +2840,7 @@ describe("static stable properties (provider.stables)", () => {
             const B = yield* TestResource("B", { string: A.stableId });
             const C = yield* TestResource("C", { string: B.stableString });
             return { A, B, C };
-          }).pipe(deploy);
+          }).pipe(test.deploy);
           expect(output.A.tags).toEqual({ Env: "production" });
           expect((yield* getState("A"))?.status).toEqual("updated");
           // B and C should not change
@@ -2879,7 +2863,7 @@ describe("static stable properties (provider.stables)", () => {
               string: Output.interpolate`${B.stableString}-${C.stableString}`,
             });
             return { A, B, C, D };
-          }).pipe(deploy);
+          }).pipe(test.deploy);
           expect(output.A.stableId).toEqual("stable-A");
           expect(output.A.stableArn).toEqual(
             "arn:test:resource:us-east-1:123456789:A",
@@ -2903,7 +2887,7 @@ describe("static stable properties (provider.stables)", () => {
             yield* TestResource("D", {
               string: Output.interpolate`${B.stableString}-${C.stableString}`,
             });
-          }).pipe(deploy);
+          }).pipe(test.deploy);
           expect((yield* getState("A"))?.status).toEqual("updated");
           expect((yield* getState("B"))?.status).toEqual("created");
           expect((yield* getState("C"))?.status).toEqual("created");
@@ -2923,7 +2907,7 @@ describe("static stable properties (provider.stables)", () => {
             const A = yield* StaticStablesResource("A", { string: "value-1" });
             const B = yield* TestResource("B", { string: A.stableId });
             return { A, B };
-          }).pipe(deploy);
+          }).pipe(test.deploy);
           expect(output.A.stableId).toEqual("stable-A");
           expect(output.B.string).toEqual("stable-A");
         }
@@ -2934,7 +2918,7 @@ describe("static stable properties (provider.stables)", () => {
             const A = yield* StaticStablesResource("A", { string: "value-2" });
             const B = yield* TestResource("B", { string: A.stableId });
             return { A, B };
-          }).pipe(deploy);
+          }).pipe(test.deploy);
           expect(output.A.string).toEqual("value-2");
           expect(output.A.stableId).toEqual("stable-A");
           expect((yield* getState("A"))?.status).toEqual("updated");
@@ -2953,7 +2937,7 @@ describe("static stable properties (provider.stables)", () => {
             const A = yield* StaticStablesResource("A", { string: "value-1" });
             const B = yield* TestResource("B", { string: A.string });
             return { A, B };
-          }).pipe(deploy);
+          }).pipe(test.deploy);
           expect(output.A.string).toEqual("value-1");
           expect(output.B.string).toEqual("value-1");
         }
@@ -2964,7 +2948,7 @@ describe("static stable properties (provider.stables)", () => {
             const A = yield* StaticStablesResource("A", { string: "value-2" });
             const B = yield* TestResource("B", { string: A.string });
             return { A, B };
-          }).pipe(deploy);
+          }).pipe(test.deploy);
           expect(output.A.string).toEqual("value-2");
           expect(output.B.string).toEqual("value-2");
           expect((yield* getState("A"))?.status).toEqual("updated");
@@ -2987,7 +2971,7 @@ describe("static stable properties (provider.stables)", () => {
             });
             const B = yield* TestResource("B", { string: A.stableId });
             return { A, B };
-          }).pipe(deploy);
+          }).pipe(test.deploy);
           expect(output.A.stableId).toEqual("stable-A");
           expect(output.B.string).toEqual("stable-A");
         }
@@ -3001,7 +2985,7 @@ describe("static stable properties (provider.stables)", () => {
             });
             const B = yield* TestResource("B", { string: A.stableId });
             return { A, B };
-          }).pipe(deploy);
+          }).pipe(test.deploy);
           // A was replaced, stableId is regenerated
           expect(output.A.stableId).toEqual("stable-A");
           expect(output.B.string).toEqual("stable-A");

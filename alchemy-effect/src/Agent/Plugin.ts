@@ -1,6 +1,6 @@
-import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as ServiceMap from "effect/ServiceMap";
 import type { TuiPlugin, TuiPluginService } from "../Tui/plugin.ts";
 import type { Aspect } from "./Aspect.ts";
 import type { ContextPlugin, ContextPluginService } from "./ContextPlugin.ts";
@@ -22,7 +22,7 @@ export type TuiPlugins<C> = C extends Aspect ? TuiPlugin<C> : never;
 export type ContextPlugins<C> = C extends Aspect ? ContextPlugin<C> : never;
 
 export const createPluginBuilder = <
-  Tag extends Context.Tag<string, Service>,
+  Tag extends ServiceMap.Service<string, Service>,
   Service,
 >(
   tag: Tag,

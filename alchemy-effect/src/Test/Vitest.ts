@@ -21,6 +21,7 @@ import * as Region from "../AWS/Region.ts";
 import type { Cli } from "../Cli/index.ts";
 import { DotAlchemy, dotAlchemy } from "../Config.ts";
 import { ExecutionContext } from "../Executable.ts";
+import type { Input } from "../Input.ts";
 import * as Plan from "../Plan.ts";
 import * as Stack from "../Stack.ts";
 import * as Stage from "../Stage.ts";
@@ -175,6 +176,7 @@ export function test(
     ),
     Effect.provideService(Stage.Stage, "test"),
     Effect.provideService(ExecutionContext, {
+      kind: "ExecutionContext",
       type: "function",
       listen: () => {
         return Effect.void;
@@ -281,11 +283,12 @@ export namespace test {
       }),
     );
 
-  export const deploy = <A, Err = never, Req = never>(
+  export const deploy = <A, Err = never, Req = any>(
     effect: Effect.Effect<A, Err, Req>,
-  ) =>
+  ): Effect.Effect<Input.Resolve<A>, Err, Req | Stack.Stack> =>
     Stack.Stack.use((stack) =>
       effect.pipe(
+        // @ts-expect-error
         Stack.make(stack.name),
         Effect.flatMap(Plan.make),
         Effect.flatMap(apply),

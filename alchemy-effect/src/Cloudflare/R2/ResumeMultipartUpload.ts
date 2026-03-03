@@ -1,34 +1,14 @@
 import type * as runtime from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import type * as Stream from "effect/Stream";
 import * as Binding from "../../Binding.ts";
 import { CloudflareContext } from "../CloudflareContext.ts";
-import { replaceEffectStream } from "../stream.ts";
 import type { Bucket } from "./Bucket.ts";
-import { BucketBinding } from "./BucketBinding.js";
-
-export type UploadValue =
-  | string
-  | ArrayBuffer
-  | ArrayBufferView
-  | runtime.Blob
-  | runtime.ReadableStream
-  | Stream.Stream<any>;
-
-export interface MultipartUploadClient {
-  key: string;
-  uploadId: string;
-  uploadPart: (
-    partNumber: number,
-    value: UploadValue,
-    options?: runtime.R2UploadPartOptions,
-  ) => Effect.Effect<runtime.R2UploadedPart>;
-  abort: () => Effect.Effect<void>;
-  complete: (
-    uploadedParts: runtime.R2UploadedPart[],
-  ) => Effect.Effect<runtime.R2Object>;
-}
+import { BucketBinding } from "./BucketBinding.ts";
+import {
+  type MultipartUploadClient,
+  makeMultipartUploadClient,
+} from "./MultipartUploadClient.ts";
 
 export class ResumeMultipartUpload extends Binding.Service<
   ResumeMultipartUpload,
@@ -58,28 +38,6 @@ export const ResumeMultipartUploadLive = Layer.effect(
     });
   }),
 );
-
-const makeMultipartUploadClient = (
-  multipartUpload: runtime.R2MultipartUpload,
-): MultipartUploadClient => ({
-  key: multipartUpload.key,
-  uploadId: multipartUpload.uploadId,
-  uploadPart: (
-    partNumber: number,
-    value: UploadValue,
-    options?: runtime.R2UploadPartOptions,
-  ) =>
-    Effect.promise(() =>
-      multipartUpload.uploadPart(
-        partNumber,
-        replaceEffectStream(value),
-        options,
-      ),
-    ),
-  abort: () => Effect.promise(() => multipartUpload.abort()),
-  complete: (uploadedParts: runtime.R2UploadedPart[]) =>
-    Effect.promise(() => multipartUpload.complete(uploadedParts)),
-});
 
 export class ResumeMultipartUploadPolicy extends Binding.Policy<
   ResumeMultipartUploadPolicy,

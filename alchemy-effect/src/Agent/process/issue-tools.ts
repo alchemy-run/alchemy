@@ -1,3 +1,5 @@
+// @ts-nocheck - uncomment this once we are working on AI again
+
 import { Tool } from "../tool/tool.ts";
 import { Issues } from "./issue-service.ts";
 import { Issue, IssueId } from "./issue.ts";

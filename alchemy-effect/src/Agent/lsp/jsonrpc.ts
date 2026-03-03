@@ -160,14 +160,13 @@ const parseMessages = (stdout: ReadableStream<Uint8Array>) =>
     onError: (cause) => new JsonRpcParseError({ cause }),
   }).pipe(
     Stream.mapAccum(
-      new Uint8Array(0) as Uint8Array<ArrayBuffer>,
+      () => new Uint8Array(0) as Uint8Array<ArrayBuffer>,
       (buffer, chunk): [Uint8Array<ArrayBuffer>, JsonRpcMessage[]] => {
         const combined = concatBytes(buffer, chunk);
         const { messages, remaining } = parseBuffer(combined);
         return [remaining, messages];
       },
     ),
-    Stream.flatMap((messages) => Stream.fromIterable(messages)),
   );
 
 /**
@@ -260,7 +259,7 @@ export const make = (proc: Subprocess) =>
         }),
       ),
       Effect.catch((e) => Effect.logWarning(`JSON-RPC reader error: ${e}`)),
-      Effect.fork,
+      Effect.forkDetach,
     );
 
     const connection: JsonRpcConnection = {

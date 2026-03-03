@@ -1,7 +1,6 @@
 import * as ec2 from "distilled-aws/ec2";
 import * as Effect from "effect/Effect";
 
-import type { ProviderService } from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { NetworkAclId } from "./NetworkAcl.ts";
 import type { SubnetId } from "./Subnet.ts";
@@ -62,7 +61,7 @@ export const NetworkAclAssociationProvider = () =>
             }),
           );
 
-      return {
+      return NetworkAclAssociation.provider.of({
         stables: ["subnetId"],
 
         read: Effect.fn(function* ({ olds }) {
@@ -200,14 +199,6 @@ export const NetworkAclAssociationProvider = () =>
             );
           }
         }),
-      } satisfies ProviderService<
-        NetworkAclAssociation,
-        any,
-        any,
-        any,
-        any,
-        any,
-        any
-      >;
+      });
     }),
   );

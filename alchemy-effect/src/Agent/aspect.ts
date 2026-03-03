@@ -6,8 +6,9 @@ import { TuiPlugin } from "../Tui/plugin.ts";
 import type { Class, IsAny } from "../Util/index.ts";
 import { ContextPlugin } from "./ContextPlugin.ts";
 import { createPluginBuilder, type Plugins } from "./Plugin.ts";
+import { type Parameters } from "./tool/parameter.ts";
 import type { Result } from "./tool/result.ts";
-import type { Parameters, ToolHandler } from "./tool/tool.ts";
+import type { ToolHandler } from "./tool/tool.ts";
 
 export const isAspect = (a: any): a is Aspect => {
   return (
@@ -61,7 +62,7 @@ export interface Aspect<
   references: References;
   schema: IsAny<Props> extends true
     ? any
-    : [Props] extends [S.Struct.Field]
+    : [Props] extends [S.Top]
       ? S.Schema<Props>
       : [Props] extends [object]
         ? Class<Props> & S.Schema<Props>
@@ -76,7 +77,7 @@ export const defineAspect: <Fn extends AspectType<any>>(
     ? Schema extends Class<infer C>
       ? IsAny<C> extends true
         ? []
-        : [C] extends [S.Struct.Field]
+        : [C] extends [S.Top]
           ? [schema: S.Schema<C>]
           : [C] extends [object]
             ? [cls: Class<C>]

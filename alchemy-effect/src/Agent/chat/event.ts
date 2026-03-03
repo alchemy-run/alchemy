@@ -34,10 +34,10 @@ export class TaskCompletedEvent extends S.Class<TaskCompletedEvent>(
 }) {}
 
 export type ChatEvent = S.Schema.Type<typeof ChatEvent>;
-export const ChatEvent = S.Union(
+export const ChatEvent = S.Union([
   MessageCreatedEvent,
   ThreadCreatedEvent,
   ThreadUpdatedEvent,
   TaskStartedEvent,
   TaskCompletedEvent,
-);
+]);

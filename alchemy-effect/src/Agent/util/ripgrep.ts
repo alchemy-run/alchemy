@@ -1,9 +1,10 @@
 // Ripgrep utility functions
-import * as Command from "@effect/platform/Command";
-import * as FileSystem from "@effect/platform/FileSystem";
 import { Schema } from "effect";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as S from "effect/Schema";
+import * as Stream from "effect/Stream";
+import { ChildProcess } from "effect/unstable/process";
 import path from "path";
 import { exec } from "./exec.ts";
 
@@ -78,9 +79,9 @@ class Summary extends S.Class<Summary>("Summary")({
   }),
 }) {}
 
-const Result = S.Union(Begin, Match, End, Summary);
+const Result = S.Union([Begin, Match, End, Summary]);
 
-const parseResult = Schema.decodeUnknown(Result);
+const parseResult = Schema.decodeEffect(Result);
 
 export type Result = typeof Result.Type;
 
@@ -103,7 +104,10 @@ export const findFiles = Effect.fn("findFiles")(function* (input: {
       args.push(`--glob=${g}`);
     }
   }
-  return yield* Command.make("rg", ...args).pipe(Command.lines);
+  const cmd = ChildProcess.make("rg", args);
+  const handle = yield* cmd;
+  const output = yield* Stream.mkString(Stream.decodeText(handle.stdout));
+  return output.trim().split(/\r?\n/).filter(Boolean);
 });
 
 export const tree = Effect.fn("tree")(function* (input: {
@@ -231,9 +235,9 @@ export const search = Effect.fn("search")(function* (input: {
   args.push("--");
   args.push(input.pattern);
 
-  const result = yield* Command.make(args[0], ...args.slice(1)).pipe(
-    Command.runInShell(true),
-    exec,
+  const result = yield* exec(
+    ChildProcess.make(args[0], args.slice(1), { shell: true }),
+  ).pipe(
     Effect.catch(() => Effect.succeed({ exitCode: 0, stdout: "", stderr: "" })),
   );
 

@@ -6,7 +6,7 @@ import * as S from "effect/Schema";
 /**
  * Error when oldString is not found in the content.
  */
-export class ReplaceNotFoundError extends S.TaggedError<ReplaceNotFoundError>()(
+export class ReplaceNotFoundError extends S.TaggedErrorClass<ReplaceNotFoundError>()(
   "ReplaceNotFoundError",
   {
     oldString: S.String,
@@ -16,7 +16,7 @@ export class ReplaceNotFoundError extends S.TaggedError<ReplaceNotFoundError>()(
 /**
  * Error when oldString matches multiple locations and replaceAll is not set.
  */
-export class ReplaceMultipleMatchesError extends S.TaggedError<ReplaceMultipleMatchesError>()(
+export class ReplaceMultipleMatchesError extends S.TaggedErrorClass<ReplaceMultipleMatchesError>()(
   "ReplaceMultipleMatchesError",
   {
     oldString: S.String,
@@ -26,7 +26,7 @@ export class ReplaceMultipleMatchesError extends S.TaggedError<ReplaceMultipleMa
 /**
  * Error when oldString equals newString.
  */
-export class ReplaceSameStringError extends S.TaggedError<ReplaceSameStringError>()(
+export class ReplaceSameStringError extends S.TaggedErrorClass<ReplaceSameStringError>()(
   "ReplaceSameStringError",
   {},
 ) {}

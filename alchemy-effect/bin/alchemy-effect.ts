@@ -23,8 +23,7 @@ import * as AWSRegion from "../src/AWS/Region.ts";
 import * as CLI from "../src/Cli/index.ts";
 import { dotAlchemy } from "../src/Config.ts";
 import * as Plan from "../src/Plan.ts";
-import { ResourceLike } from "../src/Resource.ts";
-import { Stack } from "../src/Stack.ts";
+import { Stack, StackSpec } from "../src/Stack.ts";
 import * as State from "../src/State/index.ts";
 
 // Import to trigger module augmentation for StageConfig.aws
@@ -106,11 +105,7 @@ const deployCommand = Command.make(
     stage,
     yes,
   },
-  (args) =>
-    execStack({
-      ...args,
-      select: (stack) => Object.values(stack.resources),
-    }),
+  (args) => execStack(args),
 );
 
 const destroyCommand = Command.make(
@@ -125,8 +120,7 @@ const destroyCommand = Command.make(
   (args) =>
     execStack({
       ...args,
-      // destroy is just a plan with 0 resources
-      select: () => [],
+      destroy: true,
     }),
 );
 
@@ -142,7 +136,6 @@ const planCommand = Command.make(
       ...args,
       // plan is the same as deploy with dryRun always set to true
       dryRun: true,
-      select: (stack) => Object.values(stack.resources),
     }),
 );
 
@@ -231,31 +224,27 @@ const execStack = Effect.fn(function* ({
   envFile,
   dryRun = false,
   yes = false,
-  select,
+  destroy = false,
 }: {
   main: string;
   stage: string;
   envFile: Option.Option<string>;
   dryRun?: boolean;
   yes?: boolean;
-  select: (stack: Stack["Service"]) => ResourceLike[];
+  destroy?: boolean;
 }) {
   const path = yield* Path;
   const module = yield* Effect.promise(
     () => import(path.resolve(process.cwd(), main)),
   );
-  const stack = module.default as Effect.Effect<Stack["Service"]>;
-  if (!stack) {
+  const stackEffect = module.default as Effect.Effect<StackSpec>;
+  if (!stackEffect) {
     return yield* Effect.die(
       new Error(
         `Main file '${main}' must export a default stack definition (export default defineStack({...}))`,
       ),
     );
   }
-
-  const _stackSpec = yield* stack.pipe(Effect.provideService(Stage, stage));
-
-  // const stackName = stack.name;
 
   const configProvider = Option.isSome(envFile)
     ? ConfigProvider.orElse(
@@ -282,26 +271,20 @@ const execStack = Effect.fn(function* ({
     dotAlchemy,
   );
 
-  const layers = Layer.provideMerge(
-    Layer.provideMerge(stack.providers, alchemy),
-    Layer.mergeAll(
-      platform,
-      Layer.succeed(
-        Stack,
-        Stack.of({
-          name: stackName,
-          stage,
-          bindings: {},
-          resources: {},
-        }),
-      ),
-    ),
-  );
-
   yield* Effect.gen(function* () {
     const cli = yield* CLI.Cli;
-    const resources = select(stack);
-    const updatePlan = yield* Plan.make(...resources);
+    const stack = yield* stackEffect;
+    const updatePlan = yield* Plan.make(
+      destroy
+        ? {
+            ...stack,
+            // zero these out (destroy will treat all as orphans)
+            // TODO(sam): probably better to have Plan.destroy and Plan.update
+            resources: {},
+            bindings: {},
+          }
+        : stack,
+    );
     if (dryRun) {
       yield* cli.displayPlan(updatePlan);
     } else {
@@ -316,7 +299,12 @@ const execStack = Effect.fn(function* ({
       yield* Console.log(outputs);
     }
   }).pipe(
-    Effect.provide(layers),
+    Effect.provide(
+      Layer.provideMerge(
+        alchemy,
+        Layer.mergeAll(platform, Layer.succeed(Stage, stage)),
+      ),
+    ),
     Effect.provideService(ConfigProvider.ConfigProvider, configProvider),
   ) as Effect.Effect<void, any, never>;
   // TODO(sam): figure out why we need to cast to remove the Provider<never> requirement

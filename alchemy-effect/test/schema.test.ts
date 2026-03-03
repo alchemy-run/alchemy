@@ -35,43 +35,16 @@ describe("isNumberSchema", () => {
 
 describe("isMapSchema", () => {
   test("map", () => {
-    expect(
-      isMapSchema(
-        S.Map({
-          key: S.String,
-          value: S.String,
-        }),
-      ),
-    ).toBe(true);
+    expect(isMapSchema(S.ReadonlyMap(S.String, S.String))).toBe(true);
   });
   test("not map", () => {
-    expect(
-      isMapSchema(
-        S.Record({
-          key: S.String,
-          value: S.String,
-        }),
-      ),
-    ).toBe(false);
+    expect(isMapSchema(S.Record(S.String, S.String))).toBe(false);
   });
 });
 
 describe("isRecordLikeSchema", () => {
   for (const [key, value] of Object.entries({
-    map: S.Map({
-      key: S.String,
-      value: S.String,
-    }),
-    mapFromSelf: S.MapFromSelf({
-      key: S.String,
-      value: S.String,
-    }),
-    mapFromRecord: S.MapFromRecord({
-      key: S.String,
-      value: S.Struct({
-        key: S.String,
-      }),
-    }),
+    map: S.ReadonlyMap(S.String, S.String),
     struct: S.Struct({
       key: S.String,
       value: S.String,
@@ -89,27 +62,23 @@ describe("isRecordLikeSchema", () => {
 
 describe("isListSchema", () => {
   test("list", () => {
-    expect(isListSchema(S.List(S.String))).toBe(true);
+    expect(isListSchema(S.Array(S.String))).toBe(true);
   });
   test("Map type is not list", () => {
     expect(
-      isListSchema(
-        // Maps are built on top of tuples
-        S.Map({
-          key: S.String,
-          value: S.String,
-        }),
-      ),
+      isListSchema(S.ReadonlyMap(S.String, S.String)),
     ).toBe(false);
   });
 });
 
 describe("isSetSchema", () => {
   test("set", () => {
-    expect(isSetSchema(S.Set(S.String))).toBe(true);
+    expect(isSetSchema(S.ReadonlySet(S.String))).toBe(true);
   });
   test("getSetValueAST", () => {
-    expect(isStringSchema(getSetValueAST(S.Set(S.String)))).toBe(true);
+    const ast = getSetValueAST(S.ReadonlySet(S.String));
+    expect(ast).toBeDefined();
+    expect(isStringSchema(S.make(ast!))).toBe(true);
   });
 });
 

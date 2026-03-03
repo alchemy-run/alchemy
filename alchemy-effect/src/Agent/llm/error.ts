@@ -1,5 +1,5 @@
 import * as AISDKProvider from "@ai-sdk/provider";
-import * as AISDKProviderUtils from "@ai-sdk/provider-utils";
+import { DownloadError as AISDKDownloadError } from "ai";
 import * as Data from "effect/Data";
 
 /**
@@ -107,13 +107,7 @@ export class NoContentGeneratedError extends Data.TaggedError(
 export class NoSuchModelError extends Data.TaggedError("NoSuchModelError")<{
   readonly message: string;
   readonly modelId: string;
-  readonly modelType:
-    | "languageModel"
-    | "embeddingModel"
-    | "imageModel"
-    | "transcriptionModel"
-    | "speechModel"
-    | "rerankingModel";
+  readonly modelType: "languageModel" | "textEmbeddingModel" | "imageModel";
   readonly cause?: unknown;
 }> {}
 
@@ -139,11 +133,6 @@ export class TypeValidationError extends Data.TaggedError(
 )<{
   readonly message: string;
   readonly value: unknown;
-  readonly context?: {
-    readonly field?: string;
-    readonly entityName?: string;
-    readonly entityId?: string;
-  };
   readonly cause?: unknown;
 }> {}
 
@@ -202,7 +191,7 @@ export type LLMError =
  * Converts any error to a typed LLMError
  */
 export const fromAnyError = (e: unknown): LLMError => {
-  if (AISDKProviderUtils.DownloadError.isInstance(e)) {
+  if (AISDKDownloadError.isInstance(e)) {
     return new DownloadError({
       message: e.message,
       url: e.url,
@@ -310,7 +299,6 @@ export const fromAnyError = (e: unknown): LLMError => {
     return new TypeValidationError({
       message: e.message,
       value: e.value,
-      context: e.context,
       cause: e,
     });
   }

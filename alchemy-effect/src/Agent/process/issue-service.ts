@@ -1,6 +1,6 @@
 import type { Effect } from "effect/Effect";
 import * as S from "effect/Schema";
-import { ServiceTag } from "../../internal/ServiceTag.ts";
+import * as ServiceMap from "effect/ServiceMap";
 import { Issue, IssueId } from "./issue.ts";
 import { Reply, ReplyId } from "./reply.ts";
 
@@ -33,7 +33,7 @@ export class UpdateReplyRequest extends S.Class<UpdateReplyRequest>(
   content: S.String.pipe(S.optional),
 }) {}
 
-export class Issues extends ServiceTag("Issues")<
+export class Issues extends ServiceMap.Service<
   Issues,
   {
     listIssues: () => Effect<Issue[]>;
@@ -45,4 +45,4 @@ export class Issues extends ServiceTag("Issues")<
     updateReply: (input: UpdateReplyRequest) => Effect<Reply>;
     deleteReply: (replyId: ReplyId) => Effect<void>;
   }
->() {}
+>()("Issues") {}

@@ -4,5 +4,6 @@ export * from "./DeleteObject.ts";
 export * from "./GetObject.ts";
 export * from "./HeadObject.ts";
 export * from "./ListObjects.ts";
+export * from "./MultipartUploadClient.ts";
 export * from "./PutObject.ts";
 export * from "./ResumeMultipartUpload.ts";
