@@ -32,7 +32,7 @@ export type ToolErrorPart = Extract<StreamTextPart, { type: "tool-error" }>;
  *   Stream.run(collectLastText())
  * );
  * if (lastText) {
- *   console.log(`Last message: ${lastText}`);
+ *   yield* Console.log(`Last message: ${lastText}`);
  * }
  * ```
  */

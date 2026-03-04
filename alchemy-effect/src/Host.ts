@@ -48,7 +48,15 @@ export type HostClass<Self extends ResourceLike, Provided> = HostConstructor<
 
 export const Host = <R extends ResourceLike, Provided>(
   type: R["Type"],
-): HostClass<R, Provided> => Resource(type) as any as HostClass<R, Provided>;
+): HostClass<R, Provided> => {
+  type Eff = Effect.Effect<R["Props"], never, Provided>;
+
+  const resource = Resource(type);
+  const constructor = (id: string, eff?: Eff) => {
+    return eff ? resource(id, eff) : (eff: Eff) => resource(id, eff);
+  };
+  return Object.assign(constructor, resource);
+};
 
 export class ExecutionContext extends ServiceMap.Service<
   ExecutionContext,

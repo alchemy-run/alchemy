@@ -154,9 +154,7 @@ export const StreamProvider = () =>
             );
 
           yield* session.note(`Creating stream ${streamName}...`);
-          console.log("Waiting for stream to be active...");
           yield* waitForStreamActive(streamName);
-          console.log("Stream is active");
           yield* session.note(`Stream ${streamName} created`);
 
           // Configure encryption if requested

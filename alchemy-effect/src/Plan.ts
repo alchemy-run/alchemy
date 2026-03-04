@@ -2,7 +2,12 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { asEffect } from ".//Util/types.ts";
-import type { NoopDiff, UpdateDiff } from "./Diff.ts";
+import {
+  diffBindings,
+  havePropsChanged,
+  type NoopDiff,
+  type UpdateDiff,
+} from "./Diff.ts";
 import { InstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
 import {
@@ -39,7 +44,7 @@ export const isCRUD = (node: any): node is CRUD => {
 /**
  * A node in the plan that represents a resource CRUD operation.
  */
-export type CRUD<R extends ResourceLike = any> =
+export type CRUD<R extends ResourceLike = ResourceLike> =
   | Create<R>
   | Update<R>
   | Delete<R>
@@ -54,10 +59,10 @@ export type Apply<R extends ResourceLike = ResourceLike> =
 
 export type BindingAction = "create" | "update" | "delete" | "noop";
 
-export interface BindingNode<Args extends any[]> {
+export interface BindingNode<Data = any> {
   action: BindingAction;
   sid: string;
-  args: Args;
+  data: Data;
 }
 
 export interface BaseNode<
@@ -166,6 +171,7 @@ export const make = <A>(
           yield* Effect.cached(
             Effect.gen(function* () {
               const resource = resourceExpr.src;
+
               const provider =
                 yield* resource.Provider as any as Effect.Effect<ProviderService>;
               const props = yield* resolveInput(resource.Props);
@@ -228,7 +234,7 @@ export const make = <A>(
                     resourceExpr;
 
               if (diff == null) {
-                if (arePropsChanged(oldProps, props)) {
+                if (havePropsChanged(oldProps, props)) {
                   // the props have changed but the provider did not provide any hints as to what is stable
                   // so we must assume everything has changed
                   return withStables(oldState?.attr);
@@ -353,34 +359,6 @@ export const make = <A>(
             const oldBindings = oldState?.bindings ?? [];
             const provider = yield* resource.Provider;
 
-            const diffBindings = (
-              oldBindings: ResourceBinding[],
-              newBindings: ResourceBinding[],
-            ) => {
-              const oldMap = new Map(oldBindings.map((b) => [b.sid, b]));
-              const oldKeys = Array.from(oldMap.keys());
-              const newMap = new Map(newBindings.map((b) => [b.sid, b]));
-              const newKeys = Array.from(newMap.keys());
-              const deleted = oldKeys.filter((k) => !newKeys.includes(k));
-              const created = newKeys.filter((k) => !oldKeys.includes(k));
-              const updated = newKeys.filter(
-                (k) =>
-                  oldKeys.includes(k) &&
-                  arePropsChanged(oldMap.get(k)?.data, newMap.get(k)?.data),
-              );
-              const noops = newKeys.filter(
-                (k) =>
-                  oldKeys.includes(k) &&
-                  !arePropsChanged(oldMap.get(k)?.data, newMap.get(k)?.data),
-              );
-              return {
-                deleted,
-                created,
-                updated,
-                noops,
-              };
-            };
-
             const downstream = newDownstreamDependencies[id] ?? [];
 
             const Node = <T extends Apply>(
@@ -393,7 +371,7 @@ export const make = <A>(
                 ...node,
                 provider,
                 resource,
-                bindings,
+                bindings: diffBindings(oldBindings, newBindings),
                 downstream,
               }) as any as T;
 
@@ -444,7 +422,7 @@ export const make = <A>(
                       output: oldState.attr,
                       news,
                       oldBindings,
-                      newBindings: newBindings,
+                      newBindings,
                     }),
                     Layer.succeed(InstanceId, oldState.instanceId),
                   )
@@ -454,7 +432,9 @@ export const make = <A>(
                 (diff) =>
                   diff ??
                   ({
-                    action: arePropsChanged(oldProps, news) ? "update" : "noop",
+                    action: havePropsChanged(oldProps, news)
+                      ? "update"
+                      : "noop",
                   } as UpdateDiff | NoopDiff),
               ),
             );
@@ -652,6 +632,7 @@ export const make = <A>(
                   state: { ...oldState, attr },
                   provider: provider,
                   resource: {
+                    Namespace: oldState.namespace,
                     LogicalId: id,
                     Type: oldState.resourceType,
                     Attributes: attr,
@@ -663,9 +644,9 @@ export const make = <A>(
                   // TODO(sam): is it enough to just pass through oldState?
                   downstream: oldDownstreamDependencies[id] ?? [],
                   bindings: oldState.bindings.map((binding) => ({
-                    sid: "TODO",
-                    action: "delete",
-                    args: binding.args,
+                    sid: binding.sid,
+                    action: "delete" as const,
+                    data: binding.data,
                   })),
                 } satisfies Delete,
               ] as const;
@@ -722,17 +703,6 @@ export class DeleteResourceHasDownstreamDependencies extends Data.TaggedError(
   resourceId: string;
   dependencies: string[];
 }> {}
-
-const arePropsChanged = <R extends ResourceLike>(
-  oldProps: R["Props"] | undefined,
-  newProps: R["Props"],
-) => {
-  return (
-    Output.hasOutputs(newProps) ||
-    // TODO(sam): sort keys and deep compare
-    JSON.stringify(oldProps ?? {}) !== JSON.stringify(newProps)
-  );
-};
 
 // TODO(sam): compare props
 // oldBinding.props !== newBinding.props;

@@ -1,3 +1,4 @@
+import type { NamespaceNode } from "../Namespace.ts";
 import type { RemovalPolicy } from "../RemovalPolicy.ts";
 import type { ResourceBinding } from "../Resource.ts";
 
@@ -16,7 +17,10 @@ export type Attr = Record<string, any>;
 export type ResourceStatus = ResourceState["status"];
 
 interface BaseResourceState {
+  /** Type of the Resource (e.g. AWS.Lambda.Function) */
   resourceType: string;
+  /** Namespace of the Resource */
+  namespace: NamespaceNode | undefined;
   /** Logical ID of the Resource (stable across creates, updates, deletes and replaces) */
   logicalId: string;
   /** A unique randomly generated token used to seed ID generation (only changes when replaced) */

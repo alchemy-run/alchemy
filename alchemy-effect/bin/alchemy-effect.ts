@@ -13,7 +13,8 @@ import { Argument, Command, Flag } from "effect/unstable/cli";
 import * as CliError from "effect/unstable/cli/CliError";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
-import packageJson from "../package.json";
+import { ServiceMap } from "effect/ServiceMap";
+import packageJson from "../package.json" with { type: "json" };
 import { apply } from "../src/Apply.ts";
 import * as AWSAccount from "../src/AWS/Account.ts";
 import { bootstrap as bootstrapAws } from "../src/AWS/Bootstrap.ts";
@@ -234,7 +235,11 @@ const execStack = Effect.fn(function* ({
   const module = yield* Effect.promise(
     () => import(path.resolve(process.cwd(), main)),
   );
-  const stackEffect = module.default as Effect.Effect<StackSpec>;
+  const stackEffect = module.default as Effect.Effect<
+    StackSpec & {
+      services: ServiceMap<never>;
+    }
+  >;
   if (!stackEffect) {
     return yield* Effect.die(
       new Error(
@@ -271,30 +276,32 @@ const execStack = Effect.fn(function* ({
   yield* Effect.gen(function* () {
     const cli = yield* CLI.Cli;
     const stack = yield* stackEffect;
-    const updatePlan = yield* Plan.make(
-      destroy
-        ? {
-            ...stack,
-            // zero these out (destroy will treat all as orphans)
-            // TODO(sam): probably better to have Plan.destroy and Plan.update
-            resources: {},
-            bindings: {},
+    yield* Effect.gen(function* () {
+      const updatePlan = yield* Plan.make(
+        destroy
+          ? {
+              ...stack,
+              // zero these out (destroy will treat all as orphans)
+              // TODO(sam): probably better to have Plan.destroy and Plan.update
+              resources: {},
+              bindings: {},
+            }
+          : stack,
+      );
+      if (dryRun) {
+        yield* cli.displayPlan(updatePlan);
+      } else {
+        if (!yes) {
+          const approved = yield* cli.approvePlan(updatePlan);
+          if (!approved) {
+            return;
           }
-        : stack,
-    );
-    if (dryRun) {
-      yield* cli.displayPlan(updatePlan);
-    } else {
-      if (!yes) {
-        const approved = yield* cli.approvePlan(updatePlan);
-        if (!approved) {
-          return;
         }
-      }
-      const outputs = yield* apply(updatePlan);
+        const outputs = yield* apply(updatePlan);
 
-      yield* Console.log(outputs);
-    }
+        yield* Console.log(outputs);
+      }
+    }).pipe(Effect.provide(stack.services));
   }).pipe(
     Effect.provide(
       Layer.provideMerge(

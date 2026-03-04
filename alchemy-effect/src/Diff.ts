@@ -1,3 +1,7 @@
+import * as Output from "./Output.ts";
+import type { BindingNode } from "./Plan.ts";
+import type { ResourceBinding, ResourceLike } from "./Resource.ts";
+
 export type Diff = NoopDiff | UpdateDiff | ReplaceDiff;
 
 export interface NoopDiff {
@@ -45,4 +49,44 @@ export const anyPropsAreDifferent = <Props extends Record<string, any>>(
     }
   }
   return false;
+};
+
+export const havePropsChanged = <R extends ResourceLike>(
+  oldProps: R["Props"] | undefined,
+  newProps: R["Props"],
+) => {
+  return (
+    Output.hasOutputs(newProps) ||
+    // TODO(sam): sort keys and deep compare
+    JSON.stringify(oldProps ?? {}) !== JSON.stringify(newProps)
+  );
+};
+
+export const diffBindings = (
+  oldBindings: ResourceBinding[],
+  newBindings: ResourceBinding[],
+): BindingNode[] => {
+  const oldMap = new Map(oldBindings.map((b) => [b.sid, b]));
+  const newMap = new Map(newBindings.map((b) => [b.sid, b]));
+  return [
+    ...Array.from(oldMap)
+      .filter(([sid]) => !newMap.has(sid))
+      .map(([sid, old]) => ({
+        sid,
+        action: "delete" as const,
+        data: old.data,
+      })),
+    ...Array.from(newMap).map(([sid, binding]) => {
+      const old = oldMap.get(sid);
+      return {
+        sid,
+        action: (!old
+          ? "create"
+          : havePropsChanged(old.data, binding.data)
+            ? "update"
+            : "noop") as BindingNode["action"],
+        data: binding.data,
+      };
+    }),
+  ];
 };

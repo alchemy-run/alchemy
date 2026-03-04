@@ -5,11 +5,7 @@ import { pipeArguments, type Pipeable } from "effect/Pipeable";
 import { SingleShotGen } from "effect/Utils";
 import type { Input } from "./Input.ts";
 import type { InstanceId } from "./InstanceId.ts";
-import {
-  CurrentNamespace,
-  Namespace,
-  type NamespaceNode,
-} from "./Namespace.ts";
+import { CurrentNamespace, type NamespaceNode } from "./Namespace.ts";
 import * as Output from "./Output.ts";
 import { Provider, type ProviderService } from "./Provider.ts";
 import { RemovalPolicy } from "./RemovalPolicy.ts";
@@ -80,7 +76,7 @@ export type Resource<
   Type extends string = any,
   Props extends object = any,
   Attributes extends object = any,
-  Binding extends ResourceBinding = never,
+  Binding = never,
 > = Pipeable &
   ResourceLike<Type, Props, Attributes, Binding> & {
     bind(sid: string, binding: Input<Binding>): Effect.Effect<void>;
@@ -138,7 +134,7 @@ export const Resource = <R extends ResourceLike>(
           Type: type,
           LogicalId: id,
           Props: props,
-          Namespace: yield* Namespace,
+          Namespace: yield* CurrentNamespace,
           Provider: ProviderTag as Provider<any>,
           RemovalPolicy: yield* Effect.serviceOption(RemovalPolicy).pipe(
             Effect.map(Option.getOrElse(() => "destroy" as const)),

@@ -82,8 +82,6 @@ export const FunctionProvider = () =>
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path;
 
-      // const assets = yield* Assets;
-
       const createFunctionName = (
         id: string,
         functionName: string | undefined,

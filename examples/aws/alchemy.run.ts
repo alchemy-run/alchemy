@@ -41,19 +41,16 @@ const awsConfig = Layer.effect(
   }).pipe(Effect.orDie),
 );
 
-export const stack = Stack.make(
-  "Job",
-  Effect.gen(function* () {
-    const func = yield* JobFunction;
-    const bucket = yield* AWS.S3.Bucket("JobsBucket");
-    return {
-      url: func.functionUrl,
-      bucketArn: bucket.bucketArn,
-    };
-  }).pipe(Effect.provide(Layer.provide(AWS.providers(), awsConfig))),
-);
+const awsProviders = Layer.provide(AWS.providers(), awsConfig);
 
-export default stack;
+export default Effect.gen(function* () {
+  const func = yield* JobFunction;
+  const bucket = yield* AWS.S3.Bucket("JobsBucket");
+  return {
+    url: func.functionUrl,
+    bucketArn: bucket.bucketArn,
+  };
+}).pipe(Stack.make("Job", awsProviders));
 
 /*
 ~ JobFunction [AWS.Lambda.Function]

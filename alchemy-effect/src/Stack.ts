@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import { FileSystem } from "effect/FileSystem";
+import * as Layer from "effect/Layer";
 import { Path } from "effect/Path";
 import type { Scope } from "effect/Scope";
 import * as ServiceMap from "effect/ServiceMap";
@@ -37,27 +38,28 @@ export interface StackSpec<Output = any> {
 
 export const StackName = Stack.use((stack) => Effect.succeed(stack.name));
 
-export const make: {
-  <const Name extends string>(
+export const make =
+  <const Name extends string, ROut = never>(
     name: Name,
-  ): <A, Err = never>(
-    effect: Effect.Effect<A, Err, StackServices>,
-  ) => Effect.Effect<StackSpec<A>, Err, StackServices>;
-  <const Name extends string, A, Err = never>(
-    name: Name,
-    effect: Effect.Effect<A, Err, StackServices>,
-  ): Effect.Effect<StackSpec<A>, Err, StackServices>;
-} = ((name: string, effect?: Effect.Effect<any, any, any>) => {
-  const make = (effect: Effect.Effect<any, any, any>) =>
-    effect.pipe(
-      Effect.flatMap((output) =>
-        Stack.asEffect().pipe(
-          Effect.map((stack) => ({
+    providers: Layer.Layer<ROut, never, StackServices>,
+  ) =>
+  <A, Err = never, Req extends ROut | StackServices = never>(
+    effect: Effect.Effect<A, Err, Req>,
+  ) =>
+    Effect.all([
+      Stack.asEffect(),
+      Effect.services<ROut | StackServices>(),
+    ]).pipe(
+      Effect.map(([stack, services]) =>
+        effect.pipe(
+          Effect.map((output) => ({
             output,
+            services,
             ...stack,
           })),
         ),
       ),
+      Effect.provide(providers),
       Effect.provideServiceEffect(
         Stack,
         Stage.asEffect().pipe(
@@ -73,5 +75,3 @@ export const make: {
         ),
       ),
     );
-  return effect ? make(effect) : make;
-}) as any;

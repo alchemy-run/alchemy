@@ -144,13 +144,10 @@ export const Policy =
           Layer.succeed(
             self,
             // @ts-expect-error
-            ExecutionContext.asEffect().pipe(
-              Effect.map(
-                (ctx) =>
-                  (...args: Parameters<Shape>) =>
-                    fn(ctx, ...args),
+            (...args: Parameters<Shape>) =>
+              ExecutionContext.asEffect().pipe(
+                Effect.flatMap((ctx) => fn(ctx, ...args)),
               ),
-            ),
           ),
         effect: (
           fn: Effect.Effect<
@@ -164,14 +161,12 @@ export const Policy =
             self,
             // @ts-expect-error
             fn.pipe(
-              Effect.flatMap((fn) =>
-                ExecutionContext.asEffect().pipe(
-                  Effect.map(
-                    (ctx) =>
-                      (...args: Parameters<Shape>) =>
-                        fn(ctx, ...args),
-                  ),
-                ),
+              Effect.map(
+                (fn) =>
+                  (...args: Parameters<Shape>) =>
+                    ExecutionContext.asEffect().pipe(
+                      Effect.map((ctx) => fn(ctx, ...args)),
+                    ),
               ),
             ),
           ),

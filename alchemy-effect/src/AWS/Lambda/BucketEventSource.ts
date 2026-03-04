@@ -6,13 +6,14 @@ import * as Stream from "effect/Stream";
 import * as Binding from "../../Binding.ts";
 import type { Bucket } from "../S3/Bucket.ts";
 import * as S3 from "../S3/index.ts";
-import * as Lambda from "./index.ts";
+import { isFunction, Function as LambdaFunction } from "./Function.ts";
+import { Permission as LambdaPermission } from "./Permission.ts";
 
 export const BucketEventSource = Layer.effect(
   S3.BucketEventSource,
   Effect.gen(function* () {
     // this layer can only be used in a Lambda Function
-    const func = yield* Lambda.Function.self;
+    const func = yield* LambdaFunction.self;
 
     const bind = yield* BucketEventSourcePolicy;
 
@@ -77,7 +78,7 @@ export class BucketEventSourcePolicy extends Binding.Policy<
 
 export const BucketEventSourcePolicyLive = BucketEventSourcePolicy.layer.effect(
   Effect.gen(function* () {
-    const LambdaPermission = yield* Lambda.Permission;
+    const Permission = yield* LambdaPermission;
 
     return Effect.fn(function* (
       host,
@@ -88,16 +89,13 @@ export const BucketEventSourcePolicyLive = BucketEventSourcePolicy.layer.effect(
         events?: S3.S3EventType[];
       } = {},
     ) {
-      if (Lambda.isFunction(host)) {
-        yield* LambdaPermission(
-          `AWS.Lambda.InvokeFunction(${bucket.LogicalId})`,
-          {
-            action: "lambda.InvokeFunction",
-            functionName: host.functionName,
-            principal: "s3.amazonaws.com",
-            sourceArn: bucket.bucketArn,
-          },
-        );
+      if (isFunction(host)) {
+        yield* Permission(`AWS.Lambda.InvokeFunction(${bucket.LogicalId})`, {
+          action: "lambda.InvokeFunction",
+          functionName: host.functionName,
+          principal: "s3.amazonaws.com",
+          sourceArn: bucket.bucketArn,
+        });
         yield* bucket.bind(`AWS.S3.Notifications(${bucket.LogicalId})`, {
           notificationConfiguration: {
             LambdaFunctionConfigurations: [

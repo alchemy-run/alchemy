@@ -340,7 +340,7 @@ const stream = yield* Stream("MyStream", {
   retentionPeriodHours: 48,
 });
 
-console.log(stream.streamArn); // typed Output attribute
+yield* Console.log(stream.streamArn); // typed Output attribute
 ```
 
 ## Resource Provider

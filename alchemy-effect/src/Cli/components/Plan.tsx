@@ -15,7 +15,9 @@ export function Plan({ plan }: PlanProps): React.JSX.Element {
           ...Object.values(plan.resources),
           ...Object.values(plan.deletions),
         ] as CRUD[]
-      ).sort((n1, n2) => n1.resource.id.localeCompare(n2.resource.id)),
+      ).sort((n1, n2) =>
+        n1.resource.LogicalId.localeCompare(n2.resource.LogicalId),
+      ),
     [plan],
   );
 
@@ -59,18 +61,19 @@ export function Plan({ plan }: PlanProps): React.JSX.Element {
           const color = actionColor(item.action);
           const icon = actionIcon(item.action);
           const hasBindings = item.bindings && item.bindings.length > 0;
+          console.log({ hasBindings }, item.bindings);
 
           return (
-            <Box key={item.resource.id} flexDirection="column">
+            <Box key={item.resource.LogicalId} flexDirection="column">
               <Box flexDirection="row">
                 <Box width={2}>
                   <Text color={color}>{icon} </Text>
                 </Box>
                 <Box width={12}>
-                  <Text bold>{item.resource.id}</Text>
+                  <Text bold>{item.resource.LogicalId}</Text>
                 </Box>
                 <Box width={25}>
-                  <Text color="blackBright">({item.resource.type})</Text>
+                  <Text color="blackBright">({item.resource.Type})</Text>
                 </Box>
                 {/* <Box width={12}>
                   <Text color={color}>{item.action}</Text>
@@ -91,7 +94,7 @@ export function Plan({ plan }: PlanProps): React.JSX.Element {
                   const bindingIcon = bindingActionIcon(node.action);
                   return (
                     <Box
-                      key={`${item.resource.id}${node.sid}`}
+                      key={`${item.resource.LogicalId}${node.sid}`}
                       flexDirection="row"
                     >
                       <Box width={4}>
