@@ -3,7 +3,8 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as ServiceMap from "effect/ServiceMap";
 import { SingleShotGen } from "effect/Utils";
-import { ExecutionContext } from "./Executable.ts";
+import { ExecutionContext } from "./Host.ts";
+import { namespace } from "./Namespace.ts";
 
 export interface ServiceLike {
   kind: "Service";
@@ -92,9 +93,9 @@ export interface Policy<
 export const Policy =
   <Self, Shape extends (...args: any[]) => Effect.Effect<void, any, any>>() =>
   <Identifier extends string>(
-    id: Identifier,
-  ): Policy<Self, Identifier, Shape> => {
-    const self = ServiceMap.Service<Self, Shape>(id);
+    Identifier: Identifier,
+  ): Policy<Self, `Policy<${Identifier}>`, Shape> => {
+    const self = ServiceMap.Service<Self, Shape>(`Policy<${Identifier}>`);
 
     // we use a service option because at runtime (e.g. in a Lambda Function or Cloudflare Worker)
     // the Policy Layer is not provided and this becomes a no-op
@@ -104,31 +105,35 @@ export const Policy =
         Effect.map(Option.getOrElse(() => (() => Effect.void) as any as Shape)),
       );
 
-    const policyTarget = (args: any[]) =>
-      Layer.succeed(PolicyContext, {
-        type: id,
-        args,
-      });
+    const asEffect = () =>
+      Effect.all([ExecutionContext.asEffect(), Service]).pipe(
+        Effect.map(
+          ([ctx, fn]) =>
+            (...args: any[]) =>
+              fn(ctx, ...args).pipe(
+                namespace(
+                  `${Identifier}(${args
+                    .flatMap((arg) =>
+                      typeof arg === "object" && "LogicalId" in arg
+                        ? [arg.LogicalId]
+                        : ["string", "number", "boolean"].includes(typeof arg)
+                          ? [arg]
+                          : // TODO(sam): improve SID generation to support arrays and objects
+                            [],
+                    )
+                    .join(", ")})`,
+                ),
+              ),
+        ),
+      );
     // @ts-expect-error
     return Object.assign(self, {
       [Symbol.iterator]() {
         return new SingleShotGen(this);
       },
-      asEffect: () =>
-        Effect.all([Service, ExecutionContext.asEffect()]).pipe(
-          Effect.map(
-            ([fn, ctx]) =>
-              (...args: any[]) =>
-                fn(...args).pipe(
-                  Effect.provide(
-                    Layer.mergeAll(
-                      policyTarget(args),
-                      Layer.succeed(ExecutionContext, ctx),
-                    ),
-                  ),
-                ),
-          ),
-        ),
+      asEffect,
+      bind: (...args: any[]) =>
+        asEffect().pipe(Effect.flatMap((fn) => fn(...args))),
       layer: {
         succeed: (
           fn: (
@@ -171,31 +176,5 @@ export const Policy =
             ),
           ),
       },
-      bind: (...args: any[]) =>
-        Effect.all([Service, ExecutionContext.asEffect()]).pipe(
-          Effect.flatMap(([fn, ctx]) =>
-            fn(...args).pipe(
-              Effect.provide(
-                Layer.mergeAll(
-                  policyTarget(args),
-                  Layer.succeed(ExecutionContext, ctx),
-                ),
-              ),
-            ),
-          ),
-        ),
     });
   };
-
-export class PolicyContext extends ServiceMap.Service<
-  PolicyContext,
-  {
-    type: string;
-    args: any[];
-  }
->()("alchemy/Binding/Target") {}
-
-export type Binding<Data = any> = {
-  context: PolicyContext["Service"];
-  data: Data;
-};

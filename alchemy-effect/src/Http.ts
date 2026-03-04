@@ -12,12 +12,8 @@ export class HttpServer extends ServiceMap.Service<
   HttpServer,
   {
     serve: <Req = never>(
-      handler: Effect.Effect<
-        HttpServerResponse,
-        HttpServerError,
-        HttpServerRequest | Scope | Req
-      >,
-    ) => Effect.Effect<void, never, Req>;
+      handler: Effect.Effect<HttpServerResponse, HttpServerError, Req>,
+    ) => Effect.Effect<void, never, Exclude<Req, HttpServerRequest | Scope>>;
   }
 >()("HttpServer") {}
 
@@ -30,13 +26,12 @@ export const serve = (
 ) =>
   HttpServer.use((http) =>
     http.serve(
-      handler.pipe(
-        Effect.catch((error) =>
-          Effect.succeed(
-            text(`Error: ${error.message}`, {
-              status: 500,
-            }),
-          ),
+      Effect.catch(handler, (_cause) =>
+        Effect.succeed(
+          // we don't return cause because it may contain sensitive information
+          text(`Internal Server Error`, {
+            status: 500,
+          }),
         ),
       ),
     ),

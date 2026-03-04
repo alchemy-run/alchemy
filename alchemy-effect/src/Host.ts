@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import type { Scope } from "effect/Scope";
 import * as ServiceMap from "effect/ServiceMap";
 import type { PolicyLike } from "./Binding.ts";
 import type { Provider } from "./Provider.ts";
@@ -7,49 +8,56 @@ import {
   type ResourceLike,
   type ResourceProviders,
 } from "./Resource.ts";
-import type { Stack } from "./Stack.ts";
+import type { Stack, StackServices } from "./Stack.ts";
 import type { Stage } from "./Stage.ts";
 
-type ExecutableServices = Provider<any> | PolicyLike | Stack | Stage;
+export type HostServices =
+  | Provider<any>
+  | PolicyLike
+  | Stack
+  | Stage
+  | Scope
+  | ExecutionContext
+  | StackServices;
 
-export type ExecutableConstructor<R extends ResourceLike, Provided> = {
-  <Req = never>(
+export type HostConstructor<R extends ResourceLike, RuntimeServices> = {
+  <Req extends HostServices | RuntimeServices = never>(
     id: string,
-    eff: Effect.Effect<R["Props"], never, Req | ExecutableServices>,
-  ): Effect.Effect<R, never, Exclude<Req, Provided | ExecutionContextLike>>;
-  <Req = never>(
+    eff: Effect.Effect<R["Props"], never, Req>,
+  ): Effect.Effect<R, never, Exclude<Req, RuntimeServices | ExecutionContext>>;
+  (
     id: string,
-  ): (
-    eff: Effect.Effect<R["Props"], never, Req | ExecutableServices>,
-  ) => Effect.Effect<R, never, Exclude<Req, Provided | ExecutionContextLike>>;
+  ): <Req extends HostServices | RuntimeServices = never>(
+    eff: Effect.Effect<R["Props"], never, Req>,
+  ) => Effect.Effect<
+    R,
+    never,
+    Exclude<Req, RuntimeServices | ExecutionContext>
+  >;
 };
 
-export type ExecutableClass<
-  Self extends ResourceLike,
-  Provided,
-> = ExecutableConstructor<Self, Provided> &
-  Effect.Effect<ExecutableConstructor<Self, Provided>> & {
+export type HostClass<Self extends ResourceLike, Provided> = HostConstructor<
+  Self,
+  Provided
+> &
+  Effect.Effect<HostConstructor<Self, Provided>> & {
     kind: "Executable";
     provider: ResourceProviders<Self>;
-    ExecutionContext: ServiceMap.Service<Self, Self>;
+    self: ServiceMap.Service<Self, Self>;
   };
 
-export const Executable = <R extends ResourceLike, Provided>(
+export const Host = <R extends ResourceLike, Provided>(
   type: R["Type"],
-): ExecutableClass<R, Provided> =>
-  Resource(type) as any as ExecutableClass<R, Provided>;
+): HostClass<R, Provided> => Resource(type) as any as HostClass<R, Provided>;
 
 export class ExecutionContext extends ServiceMap.Service<
   ExecutionContext,
-  FunctionExecutionContext | DaemonExecutionContext
+  FunctionExecutionContext | ProcessExecutionContext
 >()("Alchemy::ExecutionContext") {}
 
-export type ExecutionContextLike = { kind: "ExecutionContext" };
-
-interface BaseExecutionContext<
-  Type extends string = string,
-> extends ExecutionContextLike {
-  type: Type;
+interface BaseExecutionContext<Type extends string = string> {
+  LogicalId: string;
+  Type: Type;
   /**
    * Get a value from the Runtime
    */
@@ -72,7 +80,7 @@ export interface FunctionExecutionContext<
   run?: never;
 }
 
-export interface DaemonExecutionContext<
+export interface ProcessExecutionContext<
   Type extends string = string,
 > extends BaseExecutionContext<Type> {
   listen?: never;

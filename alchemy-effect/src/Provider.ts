@@ -57,7 +57,6 @@ export interface ProviderService<
     olds: Props<Res>;
     // what is the ARN?
     output: Res["Attributes"] | undefined; // current state -> synced state
-    bindings: BindingData<Res>;
   }): Effect.Effect<Res["Attributes"] | undefined, any, ReadReq>;
   /**
    * Properties that are always stable across any update.

@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as ServiceMap from "effect/ServiceMap";
 import * as Stream from "effect/Stream";
 import type { Bucket } from "../AWS/S3/Bucket.ts";
 import type {
@@ -10,13 +9,13 @@ import type {
 import * as S3 from "../AWS/S3/index.ts";
 import type { S3EventType } from "../AWS/S3/S3Event.ts";
 import * as SQS from "../AWS/SQS/index.ts";
-import { ProcessRuntime } from "./Runtime.ts";
+import * as Binding from "../Binding.ts";
 
 export const S3BucketEventSource = Layer.effect(
   S3.BucketEventSource,
   Effect.gen(function* () {
     const Queue = yield* SQS.Queue;
-    const Policy = yield* S3BucketEventSourcePolicy;
+    const bind = yield* S3BucketEventSourcePolicy;
 
     return Effect.fn(function* <
       Events extends S3EventType[],
@@ -31,8 +30,7 @@ export const S3BucketEventSource = Layer.effect(
     ) {
       const queue = yield* Queue(`${bucket.LogicalId}-BucketEvents`);
 
-      yield* Policy({
-        bucket,
+      yield* bind(bucket, {
         queue,
         events: props.events,
       });
@@ -56,24 +54,22 @@ export const S3BucketEventSource = Layer.effect(
   }),
 );
 
-export class S3BucketEventSourcePolicy extends ServiceMap.Service<
+export class S3BucketEventSourcePolicy extends Binding.Policy<
   S3BucketEventSourcePolicy,
-  (props: {
-    bucket: S3.Bucket;
-    queue: SQS.Queue;
-    events?: S3.S3EventType[];
-  }) => Effect.Effect<void>
->()("AWS.S3.S3BucketEventSourcePolicy") {}
+  (
+    bucket: S3.Bucket,
+    props: {
+      queue: SQS.Queue;
+      events?: S3.S3EventType[];
+    },
+  ) => Effect.Effect<void>
+>()("Process.S3BucketEventSource") {}
 
-export const S3BucketEventSourcePolicyLive = Layer.effect(
-  S3BucketEventSourcePolicy,
-  Effect.gen(function* () {
-    // this should only be run in a process-oriented runtime like a EC2 instance or a Kubernetes pod etc.
-    yield* ProcessRuntime;
-
-    return ({ bucket, queue, events: Events = ["s3:ObjectCreated:*"] }) =>
+export const S3BucketEventSourcePolicyLive =
+  S3BucketEventSourcePolicy.layer.succeed(
+    (_ctx, bucket, { queue, events: Events = ["s3:ObjectCreated:*"] }) =>
       Effect.all([
-        queue.bind({
+        queue.bind(`AWS.SQS.SendMessage(${bucket.LogicalId})`, {
           policyStatements: [
             {
               Sid: `AllowS3EventsFrom${bucket.LogicalId}`,
@@ -88,7 +84,7 @@ export const S3BucketEventSourcePolicyLive = Layer.effect(
             },
           ],
         }),
-        bucket.bind({
+        bucket.bind(`AWS.S3.NotificationConfiguration(${queue.LogicalId})`, {
           notificationConfiguration: {
             QueueConfigurations: [
               {
@@ -98,6 +94,5 @@ export const S3BucketEventSourcePolicyLive = Layer.effect(
             ],
           },
         }),
-      ]);
-  }),
-);
+      ]),
+  );

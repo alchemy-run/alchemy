@@ -7,7 +7,7 @@ import * as ServiceMap from "effect/ServiceMap";
 import * as ESBuild from "../../Bundle/ESBuild.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/index.ts";
 import { DotAlchemy } from "../../Config.ts";
-import { Executable, type FunctionExecutionContext } from "../../Executable.ts";
+import { Host, type FunctionExecutionContext } from "../../Host.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import { sha256 } from "../../Util/sha256.ts";
@@ -88,7 +88,7 @@ export interface Worker
       }
     > {}
 
-export const Worker = Executable<Worker, WorkerRuntime>("Cloudflare.Worker");
+export const Worker = Host<Worker, WorkerRuntime>("Cloudflare.Worker");
 
 export declare namespace Worker {
   export type Observability = Workers.ScriptUpdateParams.Metadata.Observability;

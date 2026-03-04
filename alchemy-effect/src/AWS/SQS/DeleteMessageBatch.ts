@@ -51,9 +51,9 @@ export class DeleteMessageBatchPolicy extends Binding.Policy<
 
 export const DeleteMessageBatchPolicyLive =
   DeleteMessageBatchPolicy.layer.succeed(
-    Effect.fn(function* (ctx, queue: Queue) {
-      if (Lambda.isFunction(ctx)) {
-        yield* ctx.bind({
+    Effect.fn(function* (host, queue) {
+      if (Lambda.isFunction(host)) {
+        yield* host.bind`Allow(${host}, AWS.SQS.DeleteMessageBatch(${queue}))`({
           policyStatements: [
             {
               Sid: "DeleteMessageBatch",
@@ -65,7 +65,7 @@ export const DeleteMessageBatchPolicyLive =
         });
       } else {
         return yield* Effect.die(
-          `DeleteMessageBatchPolicy does not support runtime '${ctx.type}'`,
+          `DeleteMessageBatchPolicy does not support runtime '${host.Type}'`,
         );
       }
     }),

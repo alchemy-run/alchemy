@@ -51,9 +51,9 @@ export class AbortMultipartUploadPolicy extends Binding.Policy<
 
 export const AbortMultipartUploadPolicyLive =
   AbortMultipartUploadPolicy.layer.succeed(
-    Effect.fn(function* (ctx, bucket: Bucket) {
-      if (Lambda.isFunction(ctx)) {
-        yield* ctx.bind({
+    Effect.fn(function* (host, bucket) {
+      if (Lambda.isFunction(host)) {
+        yield* host.bind`Allow(${host}, AWS.S3.AbortMultipartUpload(${bucket}))`({
           policyStatements: [
             {
               Sid: "AbortMultipartUpload",
@@ -65,7 +65,7 @@ export const AbortMultipartUploadPolicyLive =
         });
       } else {
         return yield* Effect.die(
-          `AbortMultipartUploadPolicy does not support runtime '${ctx.type}'`,
+          `AbortMultipartUploadPolicy does not support runtime '${host.Type}'`,
         );
       }
     }),

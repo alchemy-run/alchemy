@@ -44,9 +44,9 @@ export class GetObjectPolicy extends Binding.Policy<
 >()("AWS.S3.GetObject") {}
 
 export const GetObjectPolicyLive = GetObjectPolicy.layer.succeed(
-  Effect.fn(function* (ctx, bucket: Bucket) {
-    if (Lambda.isFunction(ctx)) {
-      yield* ctx.bind({
+  Effect.fn(function* (host, bucket) {
+    if (Lambda.isFunction(host)) {
+      yield* host.bind`Allow(${host}, AWS.S3.GetObject(${bucket}))`({
         policyStatements: [
           {
             Sid: "GetObject",
@@ -58,7 +58,7 @@ export const GetObjectPolicyLive = GetObjectPolicy.layer.succeed(
       });
     } else {
       return yield* Effect.die(
-        `GetObjectPolicy does not support runtime '${ctx.type}'`,
+        `GetObjectPolicy does not support runtime '${host.Type}'`,
       );
     }
   }),

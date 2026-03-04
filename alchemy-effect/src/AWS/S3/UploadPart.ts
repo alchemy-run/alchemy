@@ -47,9 +47,9 @@ export class UploadPartPolicy extends Binding.Policy<
 >()("AWS.S3.UploadPart") {}
 
 export const UploadPartPolicyLive = UploadPartPolicy.layer.succeed(
-  Effect.fn(function* (ctx, bucket: Bucket) {
-    if (Lambda.isFunction(ctx)) {
-      yield* ctx.bind({
+  Effect.fn(function* (host, bucket: Bucket) {
+    if (Lambda.isFunction(host)) {
+      yield* host.bind`Allow(${host}, AWS.S3.UploadPart(${bucket}))`({
         policyStatements: [
           {
             Sid: "UploadPart",
@@ -61,7 +61,7 @@ export const UploadPartPolicyLive = UploadPartPolicy.layer.succeed(
       });
     } else {
       return yield* Effect.die(
-        `UploadPartPolicy does not support runtime '${ctx.type}'`,
+        `UploadPartPolicy does not support runtime '${host.Type}'`,
       );
     }
   }),

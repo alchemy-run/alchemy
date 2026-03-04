@@ -2,7 +2,7 @@
 import React, { useMemo } from "react";
 
 import { Box, Text } from "ink";
-import type { Plan as AlchemyPlan, CRUD } from "../../Plan.ts";
+import type { Plan as AlchemyPlan, BindingAction, CRUD } from "../../Plan.ts";
 
 export interface PlanProps {
   plan: AlchemyPlan;
@@ -91,16 +91,14 @@ export function Plan({ plan }: PlanProps): React.JSX.Element {
                   const bindingIcon = bindingActionIcon(node.action);
                   return (
                     <Box
-                      key={`${item.resource.id}${(node.binding.capability as Capability).sid}`}
+                      key={`${item.resource.id}${node.sid}`}
                       flexDirection="row"
                     >
                       <Box width={4}>
                         <Text color={bindingColor}> {bindingIcon}</Text>
                       </Box>
                       <Box width={40}>
-                        <Text color="cyan">
-                          {node.binding.capability.label}
-                        </Text>
+                        <Text color="cyan">{node.sid}</Text>
                       </Box>
                     </Box>
                   );
@@ -134,19 +132,19 @@ const actionIcon = (action: CRUD["action"]): string =>
   })[action];
 
 const bindingActionColor = (
-  action: BindNode["action"],
+  action: BindingAction,
 ): Parameters<typeof Text>[0]["color"] =>
   ({
-    attach: "green",
-    detach: "red",
+    create: "green",
+    update: "orange",
+    delete: "red",
     noop: "gray",
-    reattach: "orange",
   })[action];
 
-const bindingActionIcon = (action: BindNode["action"]): string =>
+const bindingActionIcon = (action: BindingAction): string =>
   ({
-    attach: "+",
-    detach: "-",
+    create: "+",
+    update: "~",
+    delete: "-",
     noop: "•",
-    reattach: "~",
   })[action];

@@ -124,7 +124,7 @@ export class FetchPolicy extends Binding.Policy<
 export const FetchPolicyLive = FetchPolicy.layer.succeed(
   Effect.fn(function* (worker) {
     if (isWorker(worker)) {
-      yield* worker.bind({
+      yield* worker.bind`Bind(${worker})`({
         bindings: [
           {
             type: "service",
@@ -135,7 +135,7 @@ export const FetchPolicyLive = FetchPolicy.layer.succeed(
       });
     } else {
       return yield* Effect.die(
-        new Error(`FetchPolicy does not support runtime '${worker.type}'`),
+        new Error(`FetchPolicy does not support runtime '${worker.Type}'`),
       );
     }
   }),

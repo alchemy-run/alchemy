@@ -12,9 +12,9 @@ export const BucketEventSource = Layer.effect(
   S3.BucketEventSource,
   Effect.gen(function* () {
     // this layer can only be used in a Lambda Function
-    const func = yield* Lambda.Function.ExecutionContext;
+    const func = yield* Lambda.Function.self;
 
-    const Policy = yield* BucketEventSourcePolicy;
+    const bind = yield* BucketEventSourcePolicy;
 
     return Effect.fn(function* <
       Events extends S3.S3EventType[],
@@ -30,7 +30,7 @@ export const BucketEventSource = Layer.effect(
       // this adds it to the Lambda Function's environment variables
       const BucketName = yield* bucket.bucketName;
 
-      yield* Policy(bucket, props);
+      yield* bind(bucket, props);
 
       yield* func.listen(
         Effect.gen(function* () {
@@ -71,16 +71,16 @@ export class BucketEventSourcePolicy extends Binding.Policy<
   BucketEventSourcePolicy,
   (
     bucket: S3.Bucket,
-    props: S3.NotificationsProps<S3.S3EventType[]>,
+    props?: S3.NotificationsProps<S3.S3EventType[]>,
   ) => Effect.Effect<void>
->()("AWS.S3.BucketEventSourcePermissions") {}
+>()("AWS.S3.BucketEventSource") {}
 
 export const BucketEventSourcePolicyLive = BucketEventSourcePolicy.layer.effect(
   Effect.gen(function* () {
     const LambdaPermission = yield* Lambda.Permission;
 
     return Effect.fn(function* (
-      ctx,
+      host,
       bucket: S3.Bucket,
       {
         events: Events = ["s3:ObjectCreated:*"],
@@ -88,18 +88,21 @@ export const BucketEventSourcePolicyLive = BucketEventSourcePolicy.layer.effect(
         events?: S3.S3EventType[];
       } = {},
     ) {
-      if (Lambda.isFunction(ctx)) {
-        yield* LambdaPermission("Permission", {
-          action: "lambda.InvokeFunction",
-          functionName: ctx.functionName,
-          principal: "s3.amazonaws.com",
-          sourceArn: bucket.bucketArn,
-        });
-        yield* bucket.bind({
+      if (Lambda.isFunction(host)) {
+        yield* LambdaPermission(
+          `AWS.Lambda.InvokeFunction(${bucket.LogicalId})`,
+          {
+            action: "lambda.InvokeFunction",
+            functionName: host.functionName,
+            principal: "s3.amazonaws.com",
+            sourceArn: bucket.bucketArn,
+          },
+        );
+        yield* bucket.bind(`AWS.S3.Notifications(${bucket.LogicalId})`, {
           notificationConfiguration: {
             LambdaFunctionConfigurations: [
               {
-                LambdaFunctionArn: ctx.functionArn,
+                LambdaFunctionArn: host.functionArn,
                 Events,
               },
             ],
@@ -108,7 +111,7 @@ export const BucketEventSourcePolicyLive = BucketEventSourcePolicy.layer.effect(
       } else {
         return yield* Effect.die(
           new Error(
-            `BucketEventSourcePolicy does not support runtime '${ctx.type}'`,
+            `BucketEventSourcePolicy does not support runtime '${host.Type}'`,
           ),
         );
       }

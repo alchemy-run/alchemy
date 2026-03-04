@@ -47,9 +47,9 @@ export class HeadObjectPolicy extends Binding.Policy<
 >()("AWS.S3.HeadObject") {}
 
 export const HeadObjectPolicyLive = HeadObjectPolicy.layer.succeed(
-  Effect.fn(function* (ctx, bucket: Bucket) {
-    if (Lambda.isFunction(ctx)) {
-      yield* ctx.bind({
+  Effect.fn(function* (host, bucket) {
+    if (Lambda.isFunction(host)) {
+      yield* host.bind`Allow(${host}, AWS.S3.HeadObject(${bucket}))`({
         policyStatements: [
           {
             Sid: "HeadObject",
@@ -61,7 +61,7 @@ export const HeadObjectPolicyLive = HeadObjectPolicy.layer.succeed(
       });
     } else {
       return yield* Effect.die(
-        `HeadObjectPolicy does not support runtime '${ctx.type}'`,
+        `HeadObjectPolicy does not support runtime '${host.Type}'`,
       );
     }
   }),

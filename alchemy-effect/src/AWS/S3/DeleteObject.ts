@@ -47,9 +47,9 @@ export class DeleteObjectPolicy extends Binding.Policy<
 >()("AWS.S3.DeleteObject") {}
 
 export const DeleteObjectPolicyLive = DeleteObjectPolicy.layer.succeed(
-  Effect.fn(function* (ctx, bucket: Bucket) {
-    if (Lambda.isFunction(ctx)) {
-      yield* ctx.bind({
+  Effect.fn(function* (host, bucket) {
+    if (Lambda.isFunction(host)) {
+      yield* host.bind`Allow(${host}, AWS.S3.DeleteObject(${bucket}))`({
         policyStatements: [
           {
             Sid: "DeleteObject",
@@ -61,7 +61,7 @@ export const DeleteObjectPolicyLive = DeleteObjectPolicy.layer.succeed(
       });
     } else {
       return yield* Effect.die(
-        `DeleteObjectPolicy does not support runtime '${ctx.type}'`,
+        `DeleteObjectPolicy does not support runtime '${host.Type}'`,
       );
     }
   }),

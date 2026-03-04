@@ -48,9 +48,9 @@ export class CopyObjectPolicy extends Binding.Policy<
 >()("AWS.S3.CopyObject") {}
 
 export const CopyObjectPolicyLive = CopyObjectPolicy.layer.succeed(
-  Effect.fn(function* (ctx, bucket: Bucket) {
-    if (Lambda.isFunction(ctx)) {
-      yield* ctx.bind({
+  Effect.fn(function* (host, bucket) {
+    if (Lambda.isFunction(host)) {
+      yield* host.bind`Allow(${host}, AWS.S3.CopyObject(${bucket}))`({
         policyStatements: [
           {
             Sid: "CopyObject",
@@ -62,7 +62,7 @@ export const CopyObjectPolicyLive = CopyObjectPolicy.layer.succeed(
       });
     } else {
       return yield* Effect.die(
-        `CopyObjectPolicy does not support runtime '${ctx.type}'`,
+        `CopyObjectPolicy does not support runtime '${host.Type}'`,
       );
     }
   }),

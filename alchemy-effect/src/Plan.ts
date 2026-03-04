@@ -2,7 +2,6 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { asEffect } from ".//Util/types.ts";
-import type { Binding } from "./Binding.ts";
 import type { NoopDiff, UpdateDiff } from "./Diff.ts";
 import { InstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
@@ -11,7 +10,7 @@ import {
   Provider,
   type ProviderService,
 } from "./Provider.ts";
-import type { ResourceLike } from "./Resource.ts";
+import type { ResourceBinding, ResourceLike } from "./Resource.ts";
 import { type StackSpec } from "./Stack.ts";
 import {
   State,
@@ -53,13 +52,21 @@ export type Apply<R extends ResourceLike = ResourceLike> =
   | Replace<R>
   | NoopUpdate<R>;
 
+export type BindingAction = "create" | "update" | "delete" | "noop";
+
+export interface BindingNode<Args extends any[]> {
+  action: BindingAction;
+  sid: string;
+  args: Args;
+}
+
 export interface BaseNode<
   R extends ResourceLike<string> = ResourceLike<string>,
 > {
   resource: R;
   provider: ProviderService<R>;
   downstream: string[];
-  bindings: Binding<R["Binding"]>[];
+  bindings: BindingNode<R["Binding"]>[];
 }
 
 export interface Create<
@@ -185,6 +192,9 @@ export const make = <A>(
                     : // TODO(sam): it kinda doesn't make sense to diff with a "deleting" state
                       oldState.props;
 
+              const oldBindings = oldState.bindings ?? [];
+              const newBindings = stack.bindings[resource.LogicalId] ?? [];
+
               const diff = yield* provider.diff
                 ? provider
                     .diff({
@@ -193,9 +203,8 @@ export const make = <A>(
                       instanceId: oldState.instanceId,
                       news: props,
                       output: oldState.attr,
-                      oldBindings: oldState.bindings,
-                      // TODO(sam): reso
-                      newBindings: stack.bindings[resource.LogicalId] ?? [],
+                      oldBindings,
+                      newBindings,
                     })
                     .pipe(
                       Effect.provideService(InstanceId, oldState.instanceId),
@@ -332,14 +341,45 @@ export const make = <A>(
           Effect.fn(function* (resource) {
             const id = resource.LogicalId;
             const news = yield* resolveInput(resource.Props);
-            const bindings = yield* resolveInput(stack.bindings[id] ?? []);
+            const newBindings: ResourceBinding[] = yield* resolveInput(
+              stack.bindings[id] ?? [],
+            );
 
             const oldState = yield* state.get({
               stack: stackName,
               stage: stage,
               logicalId: id,
             });
+            const oldBindings = oldState?.bindings ?? [];
             const provider = yield* resource.Provider;
+
+            const diffBindings = (
+              oldBindings: ResourceBinding[],
+              newBindings: ResourceBinding[],
+            ) => {
+              const oldMap = new Map(oldBindings.map((b) => [b.sid, b]));
+              const oldKeys = Array.from(oldMap.keys());
+              const newMap = new Map(newBindings.map((b) => [b.sid, b]));
+              const newKeys = Array.from(newMap.keys());
+              const deleted = oldKeys.filter((k) => !newKeys.includes(k));
+              const created = newKeys.filter((k) => !oldKeys.includes(k));
+              const updated = newKeys.filter(
+                (k) =>
+                  oldKeys.includes(k) &&
+                  arePropsChanged(oldMap.get(k)?.data, newMap.get(k)?.data),
+              );
+              const noops = newKeys.filter(
+                (k) =>
+                  oldKeys.includes(k) &&
+                  !arePropsChanged(oldMap.get(k)?.data, newMap.get(k)?.data),
+              );
+              return {
+                deleted,
+                created,
+                updated,
+                noops,
+              };
+            };
 
             const downstream = newDownstreamDependencies[id] ?? [];
 
@@ -375,7 +415,6 @@ export const make = <A>(
                     instanceId: oldState.instanceId,
                     olds: oldState.props,
                     output: oldState.attr,
-                    bindings,
                   })
                   .pipe(
                     Effect.provide(
@@ -397,21 +436,18 @@ export const make = <A>(
 
             const diff = yield* asEffect(
               provider.diff
-                ? provider
-                    .diff({
+                ? Effect.provide(
+                    provider.diff({
                       id,
                       olds: oldProps,
                       instanceId: oldState.instanceId,
                       output: oldState.attr,
                       news,
-                      oldBindings: oldState.bindings ?? [],
-                      newBindings: bindings,
-                    })
-                    .pipe(
-                      Effect.provide(
-                        Layer.succeed(InstanceId, oldState.instanceId),
-                      ),
-                    )
+                      oldBindings,
+                      newBindings: newBindings,
+                    }),
+                    Layer.succeed(InstanceId, oldState.instanceId),
+                  )
                 : undefined,
             ).pipe(
               Effect.map(
@@ -601,7 +637,6 @@ export const make = <A>(
                       instanceId: oldState.instanceId,
                       olds: oldState.props as never,
                       output: oldState.attr as never,
-                      bindings: oldState.bindings ?? [],
                     })
                     .pipe(
                       Effect.provide(
@@ -627,7 +662,11 @@ export const make = <A>(
                   } as ResourceLike,
                   // TODO(sam): is it enough to just pass through oldState?
                   downstream: oldDownstreamDependencies[id] ?? [],
-                  bindings: oldState.bindings ?? [],
+                  bindings: oldState.bindings.map((binding) => ({
+                    sid: "TODO",
+                    action: "delete",
+                    args: binding.args,
+                  })),
                 } satisfies Delete,
               ] as const;
             }
@@ -656,7 +695,7 @@ export const make = <A>(
       resources: resourceGraph,
       deletions,
       output: stack.output,
-    } as Plan;
+    } satisfies Plan<A> as Plan<A>;
   });
 
 export class CannotReplacePartiallyReplacedResource extends Data.TaggedError(

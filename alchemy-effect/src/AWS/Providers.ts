@@ -65,6 +65,7 @@ export const resources = () =>
     EC2.VpcProvider(),
     Kinesis.StreamProvider(),
     Lambda.FunctionProvider(),
+    Lambda.PermissionProvider(),
     S3.BucketProvider(),
     SQS.QueueProvider(),
   );

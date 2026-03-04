@@ -47,9 +47,9 @@ export class PutRecordsPolicy extends Binding.Policy<
 >()("AWS.Kinesis.PutRecords") {}
 
 export const PutRecordsPolicyLive = PutRecordsPolicy.layer.succeed(
-  Effect.fn(function* (ctx, stream: Stream) {
-    if (Lambda.isFunction(ctx)) {
-      yield* ctx.bind({
+  Effect.fn(function* (host, stream: Stream) {
+    if (Lambda.isFunction(host)) {
+      yield* host.bind`Allow(${host}, AWS.Kinesis.PutRecords(${stream}))`({
         policyStatements: [
           {
             Sid: "PutRecords",
@@ -61,7 +61,7 @@ export const PutRecordsPolicyLive = PutRecordsPolicy.layer.succeed(
       });
     } else {
       return yield* Effect.die(
-        `PutRecordsPolicy does not support runtime '${ctx.type}'`,
+        `PutRecordsPolicy does not support runtime '${host.Type}'`,
       );
     }
   }),

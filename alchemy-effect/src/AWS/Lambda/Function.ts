@@ -9,16 +9,10 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import { Path } from "effect/Path";
 import * as Schedule from "effect/Schedule";
-import type { Scope } from "effect/Scope";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import { ESBuild } from "../../Bundle/index.ts";
 import { DotAlchemy } from "../../Config.ts";
-import {
-  Executable,
-  type ExecutionContext,
-  type ExecutionContextLike,
-  type FunctionExecutionContext,
-} from "../../Executable.ts";
+import { Host, type FunctionExecutionContext } from "../../Host.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
@@ -30,7 +24,6 @@ import { Account } from "../Account.ts";
 import { Assets } from "../Assets.ts";
 import * as IAM from "../IAM/index.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
-import type { FunctionRuntime } from "./FunctionRuntime.ts";
 
 export const isFunction = <T>(value: T): value is T & Function => {
   return (
@@ -43,13 +36,7 @@ export const isFunction = <T>(value: T): value is T & Function => {
 
 export type Context = lambda.Context;
 
-export type Provided =
-  | Credentials
-  | ExecutionContext
-  | FunctionRuntime
-  | HttpClient
-  | Region
-  | Scope;
+export type FunctionServices = Credentials | Function | Region | HttpClient;
 
 export interface FunctionProps {
   main: string;
@@ -82,7 +69,7 @@ export interface Function
       }
     > {}
 
-export const Function = Executable<Function, Provided>("AWS.Lambda.Function");
+export const Function = Host<Function, FunctionServices>("AWS.Lambda.Function");
 
 export const FunctionProvider = () =>
   Function.provider.effect(
@@ -747,5 +734,3 @@ export const FunctionProvider = () =>
       };
     }),
   );
-
-type _____ = Exclude<Function, ExecutionContextLike>;

@@ -41,9 +41,9 @@ export class QueueSinkPolicy extends Binding.Policy<
 >()("AWS.SQS.QueueSinkPolicy") {}
 
 export const QueueSinkPolicyLive = QueueSinkPolicy.layer.succeed(
-  Effect.fn(function* (ctx, queue: Queue) {
-    if (Lambda.isFunction(ctx)) {
-      yield* ctx.bind({
+  Effect.fn(function* (host, queue) {
+    if (Lambda.isFunction(host)) {
+      yield* host.bind`Allow(${host}, AWS.SQS.QueueSink(${queue}))`({
         policyStatements: [
           {
             Sid: "QueueSink",
@@ -55,7 +55,7 @@ export const QueueSinkPolicyLive = QueueSinkPolicy.layer.succeed(
       });
     } else {
       return yield* Effect.die(
-        `QueueSinkPolicy does not support runtime '${ctx.type}'`,
+        `QueueSinkPolicy does not support runtime '${host.Type}'`,
       );
     }
   }),

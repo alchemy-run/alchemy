@@ -7,7 +7,7 @@ import { Worker } from "./Worker.ts";
 export const HttpServer = Layer.effect(
   Http.HttpServer,
   Effect.gen(function* () {
-    const worker = yield* Worker.ExecutionContext;
+    const worker = yield* Worker.self;
     return Http.HttpServer.of({
       // @ts-expect-error
       serve: Effect.fn(function* (handler) {

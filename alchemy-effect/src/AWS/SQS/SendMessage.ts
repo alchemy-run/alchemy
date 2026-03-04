@@ -48,9 +48,9 @@ export class SendMessagePolicy extends Binding.Policy<
 >()("AWS.SQS.SendMessage") {}
 
 export const SendMessagePolicyLive = SendMessagePolicy.layer.succeed(
-  Effect.fn(function* (ctx, queue: Queue) {
-    if (Lambda.isFunction(ctx)) {
-      yield* ctx.bind({
+  Effect.fn(function* (host, queue) {
+    if (Lambda.isFunction(host)) {
+      yield* host.bind`Allow(${host}, AWS.SQS.SendMessage(${queue}))`({
         policyStatements: [
           {
             Sid: "SendMessage",
@@ -62,7 +62,7 @@ export const SendMessagePolicyLive = SendMessagePolicy.layer.succeed(
       });
     } else {
       return yield* Effect.die(
-        `SendMessagePolicy does not support runtime '${ctx.type}'`,
+        `SendMessagePolicy does not support runtime '${host.Type}'`,
       );
     }
   }),

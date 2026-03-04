@@ -38,7 +38,7 @@ const awsConfig = Layer.effect(
       account: profile.sso_account_id,
       region: profile.region ?? (yield* AWS_REGION),
     });
-  }),
+  }).pipe(Effect.orDie),
 );
 
 export const stack = Stack.make(
@@ -54,3 +54,12 @@ export const stack = Stack.make(
 );
 
 export default stack;
+
+/*
+~ JobFunction [AWS.Lambda.Function]
+  ~ AWS.Lambda.BucketEventSource(JobBucket)
+    • Allow(JobBucket, AWS.Lambda.InvokeFunction(JobFunction))
+    + AWS.S3.Notifications(JobBucket)
+  ~ AWS.Kinesis.PutRecord(JobsStream)
+    + Allow(JobFunction, AWS.Kinesis.PutRecord(JobsStream))
+*/

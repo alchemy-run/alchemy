@@ -24,11 +24,8 @@ import * as CLI from "../src/Cli/index.ts";
 import { dotAlchemy } from "../src/Config.ts";
 import * as Plan from "../src/Plan.ts";
 import { Stack, StackSpec } from "../src/Stack.ts";
-import * as State from "../src/State/index.ts";
-
-// Import to trigger module augmentation for StageConfig.aws
-import "../src/aws/config.ts";
 import { Stage } from "../src/Stage.ts";
+import * as State from "../src/State/index.ts";
 
 const USER = Config.string("USER").pipe(
   Config.orElse(() => Config.string("USERNAME")),

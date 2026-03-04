@@ -3,7 +3,7 @@ import type { Yieldable } from "effect/Effect";
 import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
 import type { Pipeable } from "effect/Pipeable";
-import { ExecutionContext } from "./Executable.ts";
+import { ExecutionContext } from "./Host.ts";
 import { getRefMetadata, isRef, ref as stageRef, type Ref } from "./Ref.ts";
 import { isResource, type Resource, type ResourceLike } from "./Resource.ts";
 import { Stack } from "./Stack.ts";

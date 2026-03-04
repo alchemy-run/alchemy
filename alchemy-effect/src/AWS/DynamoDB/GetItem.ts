@@ -85,9 +85,9 @@ export class GetItemPolicy extends Binding.Policy<
 >()("AWS.DynamoDB.GetItem") {}
 
 export const GetItemPolicyLive = GetItemPolicy.layer.succeed(
-  Effect.fn(function* (ctx, table) {
-    if (Lambda.isFunction(ctx)) {
-      yield* ctx.bind({
+  Effect.fn(function* (host, table) {
+    if (Lambda.isFunction(host)) {
+      yield* host.bind`Allow(${host}, AWS.DynamoDB.GetItem(${table}))`({
         policyStatements: [
           {
             Sid: "GetItem",
@@ -99,7 +99,7 @@ export const GetItemPolicyLive = GetItemPolicy.layer.succeed(
       });
     } else {
       return yield* Effect.die(
-        `GetItemPolicy does not support runtime '${ctx.type}'`,
+        `GetItemPolicy does not support runtime '${host.Type}'`,
       );
     }
   }),

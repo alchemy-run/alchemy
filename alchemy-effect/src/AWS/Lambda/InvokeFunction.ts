@@ -3,8 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import type { Function } from "./Function.ts";
-import * as LambdaModule from "./index.ts";
+import { isFunction, type Function } from "./Function.ts";
 
 export interface InvokeFunctionRequest extends Omit<
   Lambda.InvocationRequest,
@@ -25,12 +24,12 @@ export class InvokeFunction extends Binding.Service<
 export const InvokeFunctionLive = Layer.effect(
   InvokeFunction,
   Effect.gen(function* () {
-    const Policy = yield* InvokeFunctionPolicy;
+    const bind = yield* InvokeFunctionPolicy;
     const invoke = yield* Lambda.invoke;
 
     return Effect.fn(function* (func: Function) {
       const FunctionArn = yield* func.functionArn;
-      yield* Policy(func);
+      yield* bind(func);
       return Effect.fn(function* (request: InvokeFunctionRequest) {
         return yield* invoke({
           ...request,
@@ -47,9 +46,9 @@ export class InvokeFunctionPolicy extends Binding.Policy<
 >()("AWS.Lambda.InvokeFunction") {}
 
 export const InvokeFunctionPolicyLive = InvokeFunctionPolicy.layer.succeed(
-  Effect.fn(function* (ctx, func: Function) {
-    if (LambdaModule.isFunction(ctx)) {
-      yield* ctx.bind({
+  Effect.fn(function* (host, func) {
+    if (isFunction(host)) {
+      yield* host.bind`Allow(${host}, AWS.Lambda.InvokeFunction(${func}))`({
         policyStatements: [
           {
             Sid: "InvokeFunction",
@@ -61,7 +60,7 @@ export const InvokeFunctionPolicyLive = InvokeFunctionPolicy.layer.succeed(
       });
     } else {
       return yield* Effect.die(
-        `InvokeFunctionPolicy does not support runtime '${ctx.type}'`,
+        `InvokeFunctionPolicy does not support runtime '${host.Type}'`,
       );
     }
   }),

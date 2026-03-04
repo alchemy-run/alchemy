@@ -1,4 +1,5 @@
 import type { RemovalPolicy } from "../RemovalPolicy.ts";
+import type { ResourceBinding } from "../Resource.ts";
 
 export type ResourceState =
   | CreatingResourceState
@@ -27,7 +28,7 @@ interface BaseResourceState {
   /** List of logical IDs of resources that depend on this resource */
   downstream: string[];
   /** List of Bindings attached to this Resource */
-  bindings: any[];
+  bindings: ResourceBinding[];
   /** Desired state (input props) of this Resource */
   props?: Props;
   /** The output attributes of this Resource (if it has been created) */

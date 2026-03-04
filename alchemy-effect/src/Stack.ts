@@ -1,16 +1,17 @@
 import * as Effect from "effect/Effect";
 import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
+import type { Scope } from "effect/Scope";
 import * as ServiceMap from "effect/ServiceMap";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
-import type { Binding } from "./Binding.ts";
 import { DotAlchemy } from "./Config.ts";
-import type { ResourceLike } from "./Resource.ts";
+import type { ResourceBinding, ResourceLike } from "./Resource.ts";
 import { Stage } from "./Stage.ts";
 
 export type StackServices =
   | Stack
   | Stage
+  | Scope
   | FileSystem
   | Path
   | DotAlchemy
@@ -29,7 +30,7 @@ export interface StackSpec<Output = any> {
     [logicalId: string]: ResourceLike;
   };
   bindings: {
-    [logicalId: string]: Binding[];
+    [logicalId: string]: ResourceBinding[];
   };
   output: Output;
 }

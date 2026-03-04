@@ -47,9 +47,9 @@ export class ReceiveMessagePolicy extends Binding.Policy<
 >()("AWS.SQS.ReceiveMessage") {}
 
 export const ReceiveMessagePolicyLive = ReceiveMessagePolicy.layer.succeed(
-  Effect.fn(function* (ctx, queue: Queue) {
-    if (Lambda.isFunction(ctx)) {
-      yield* ctx.bind({
+  Effect.fn(function* (host, queue) {
+    if (Lambda.isFunction(host)) {
+      yield* host.bind`Allow(${host}, AWS.SQS.ReceiveMessage(${queue}))`({
         policyStatements: [
           {
             Sid: "ReceiveMessage",
@@ -61,7 +61,7 @@ export const ReceiveMessagePolicyLive = ReceiveMessagePolicy.layer.succeed(
       });
     } else {
       return yield* Effect.die(
-        `ReceiveMessagePolicy does not support runtime '${ctx.type}'`,
+        `ReceiveMessagePolicy does not support runtime '${host.Type}'`,
       );
     }
   }),

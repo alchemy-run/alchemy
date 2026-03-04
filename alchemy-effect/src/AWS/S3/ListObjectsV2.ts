@@ -47,9 +47,9 @@ export class ListObjectsV2Policy extends Binding.Policy<
 >()("AWS.S3.ListObjectsV2") {}
 
 export const ListObjectsV2PolicyLive = ListObjectsV2Policy.layer.succeed(
-  Effect.fn(function* (ctx, bucket: Bucket) {
-    if (Lambda.isFunction(ctx)) {
-      yield* ctx.bind({
+  Effect.fn(function* (host, bucket) {
+    if (Lambda.isFunction(host)) {
+      yield* host.bind`Allow(${host}, AWS.S3.ListObjectsV2(${bucket}))`({
         policyStatements: [
           {
             Sid: "ListObjectsV2",
@@ -61,7 +61,7 @@ export const ListObjectsV2PolicyLive = ListObjectsV2Policy.layer.succeed(
       });
     } else {
       return yield* Effect.die(
-        `ListObjectsV2Policy does not support runtime '${ctx.type}'`,
+        `ListObjectsV2Policy does not support runtime '${host.Type}'`,
       );
     }
   }),

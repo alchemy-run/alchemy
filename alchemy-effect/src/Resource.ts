@@ -3,9 +3,13 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { pipeArguments, type Pipeable } from "effect/Pipeable";
 import { SingleShotGen } from "effect/Utils";
-import { PolicyContext } from "./Binding.ts";
 import type { Input } from "./Input.ts";
 import type { InstanceId } from "./InstanceId.ts";
+import {
+  CurrentNamespace,
+  Namespace,
+  type NamespaceNode,
+} from "./Namespace.ts";
 import * as Output from "./Output.ts";
 import { Provider, type ProviderService } from "./Provider.ts";
 import { RemovalPolicy } from "./RemovalPolicy.ts";
@@ -26,21 +30,46 @@ export type ResourceClass<Self extends ResourceLike> = ResourceConstructor<
 
 export type LogicalId = string;
 
+export interface ResourceBinding {
+  namespace: NamespaceNode | undefined;
+  sid: string;
+  data: any;
+}
+
 export interface ResourceLike<
   Type extends string = any,
   Props extends object = any,
   Attributes extends object = any,
   Binding = any,
 > {
+  /**
+   * Namespace containing this Resource.
+   */
+  Namespace: NamespaceNode | undefined;
+  /**
+   * Type of the Resource (e.g. AWS.Lambda.Function)
+   */
   Type: Type;
+  /**
+   * Logical ID of the Resource (e.g. MyFunction)
+   */
   LogicalId: LogicalId;
+  /**
+   * Properties of the Resource.
+   */
   Props: Props;
+  /**
+   * Service Tag for this Resource type's Lifecycle Provider.
+   */
+  Provider: Provider<this>;
+  /**
+   * Removal Policy of the Resource.
+   */
+  RemovalPolicy: RemovalPolicy["Service"];
   /** @internal phantom */
   Attributes: Attributes;
   /** @internal phantom */
   Binding: Binding;
-  Provider: Provider<this>;
-  RemovalPolicy: RemovalPolicy["Service"];
 }
 
 export const isResource = (value: any): value is ResourceLike => {
@@ -51,10 +80,14 @@ export type Resource<
   Type extends string = any,
   Props extends object = any,
   Attributes extends object = any,
-  Binding = never,
+  Binding extends ResourceBinding = never,
 > = Pipeable &
   ResourceLike<Type, Props, Attributes, Binding> & {
-    bind(binding: Input<Binding>): Effect.Effect<void>;
+    bind(sid: string, binding: Input<Binding>): Effect.Effect<void>;
+    bind(
+      template: TemplateStringsArray,
+      ...args: any[]
+    ): (binding: Input<Binding>) => Effect.Effect<void>;
   } & {
     [attr in keyof Attributes]-?: Output.Output<Attributes[attr], never>;
   };
@@ -62,46 +95,65 @@ export type Resource<
 export const Resource = <R extends ResourceLike>(
   type: R["Type"],
 ): ResourceClass<R> => {
-  const constructor = Effect.fnUntraced(function* (
-    id: string,
-    props?: R["Props"],
-  ) {
-    const stack = yield* Stack;
+  const constructor = (id: string, props?: R["Props"]) =>
+    Effect.gen(function* () {
+      const stack = yield* Stack;
 
-    const existing = stack.resources[id];
-    if (existing) {
-      // TODO(sam): check if props are same and allow duplicates
-      return yield* Effect.die(new Error(`Resource ${id} already exists`));
-    }
+      const existing = stack.resources[id];
+      if (existing) {
+        // TODO(sam): check if props are same and allow duplicates
+        return yield* Effect.die(new Error(`Resource ${id} already exists`));
+      }
+      const bind = (
+        ...args:
+          | [sid: string, data: R["Binding"]]
+          | [template: TemplateStringsArray, ...args: any[]]
+      ) =>
+        typeof args[0] === "string"
+          ? Effect.gen(function* () {
+              const [sid, data] = args as [sid: string, data: R["Binding"]];
+              (stack.bindings[id] ??= []).push({
+                namespace: yield* CurrentNamespace,
+                sid,
+                data,
+              });
+              return undefined;
+            })
+          : (data: R["Binding"]) =>
+              bind(
+                `${(args[0] as TemplateStringsArray)
+                  .flatMap((text, i) => {
+                    const arg = args[i];
+                    if (arg && typeof arg === "object" && "LogicalId" in arg) {
+                      return [text, arg.LogicalId];
+                    }
+                    return [text, args[i]];
+                  })
+                  .join("")}`,
+                data,
+              );
 
-    const Resource: R = (stack.resources[id] = new Proxy(
-      {
-        Type: type,
-        LogicalId: id,
-        Props: props,
-        Provider: ProviderTag,
-        RemovalPolicy: yield* Effect.serviceOption(RemovalPolicy).pipe(
-          Effect.map(Option.getOrElse(() => "destroy" as const)),
-        ),
-        // Attributes: undefined!,
-        // Binding: undefined!,
-        bind: Effect.fn(function* (data: any) {
-          const target = yield* PolicyContext;
-          (stack.bindings[id] ??= []).push({
-            data,
-            target,
-          });
-        }),
-      } as any,
-      {
-        get: (target, prop) =>
-          typeof prop === "symbol" || prop in target
-            ? target[prop as keyof typeof target]
-            : new Output.PropExpr(Output.of(Resource), prop),
-      },
-    )) as R;
-    return Resource;
-  });
+      const Resource: R = (stack.resources[id] = new Proxy(
+        {
+          Type: type,
+          LogicalId: id,
+          Props: props,
+          Namespace: yield* Namespace,
+          Provider: ProviderTag as Provider<any>,
+          RemovalPolicy: yield* Effect.serviceOption(RemovalPolicy).pipe(
+            Effect.map(Option.getOrElse(() => "destroy" as const)),
+          ),
+          bind,
+        } as any,
+        {
+          get: (target, prop) =>
+            typeof prop === "symbol" || prop in target
+              ? target[prop as keyof typeof target]
+              : new Output.PropExpr(Output.of(Resource), prop),
+        },
+      )) as R;
+      return Resource;
+    });
 
   const ProviderTag = Provider(type);
 

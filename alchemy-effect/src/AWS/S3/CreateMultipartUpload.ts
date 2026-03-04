@@ -51,9 +51,9 @@ export class CreateMultipartUploadPolicy extends Binding.Policy<
 
 export const CreateMultipartUploadPolicyLive =
   CreateMultipartUploadPolicy.layer.succeed(
-    Effect.fn(function* (ctx, bucket: Bucket) {
-      if (Lambda.isFunction(ctx)) {
-        yield* ctx.bind({
+    Effect.fn(function* (host, bucket) {
+      if (Lambda.isFunction(host)) {
+        yield* host.bind`Allow(${host}, AWS.S3.CreateMultipartUpload(${bucket}))`({
           policyStatements: [
             {
               Sid: "CreateMultipartUpload",
@@ -65,7 +65,7 @@ export const CreateMultipartUploadPolicyLive =
         });
       } else {
         return yield* Effect.die(
-          `CreateMultipartUploadPolicy does not support runtime '${ctx.type}'`,
+          `CreateMultipartUploadPolicy does not support runtime '${host.Type}'`,
         );
       }
     }),

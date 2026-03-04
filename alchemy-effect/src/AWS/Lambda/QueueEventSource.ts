@@ -58,9 +58,9 @@ export const QueueEventSourcePolicyLive = QueueEventSourcePolicy.layer.effect(
   Effect.gen(function* () {
     const Mapping = yield* EventSourceMapping;
 
-    return Effect.fn(function* (ctx, queue, props) {
-      if (Lambda.isFunction(ctx)) {
-        yield* ctx.bind({
+    return Effect.fn(function* (host, queue, props) {
+      if (Lambda.isFunction(host)) {
+        yield* host.bind`Allow(${host}, AWS.Lambda.QueueEventSource(${queue}))`({
           policyStatements: [
             {
               Sid: "QueueEventSource",
@@ -76,7 +76,7 @@ export const QueueEventSourcePolicyLive = QueueEventSourcePolicy.layer.effect(
         });
 
         yield* Mapping(`${queue.LogicalId}-EventSource`, {
-          functionName: ctx.functionName,
+          functionName: host.functionName,
           eventSourceArn: queue.queueArn,
           batchSize: props.batchSize,
           maximumBatchingWindowInSeconds: props.maximumBatchingWindowInSeconds,
@@ -85,7 +85,7 @@ export const QueueEventSourcePolicyLive = QueueEventSourcePolicy.layer.effect(
       } else {
         return yield* Effect.die(
           new Error(
-            `QueueEventSourcePolicy does not support runtime '${ctx.type}'`,
+            `QueueEventSourcePolicy does not support runtime '${host.Type}'`,
           ),
         );
       }

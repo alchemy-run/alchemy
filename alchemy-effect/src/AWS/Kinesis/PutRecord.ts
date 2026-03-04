@@ -47,9 +47,9 @@ export class PutRecordPolicy extends Binding.Policy<
 >()("AWS.Kinesis.PutRecord") {}
 
 export const PutRecordPolicyLive = PutRecordPolicy.layer.succeed(
-  Effect.fn(function* (ctx, stream: Stream) {
-    if (Lambda.isFunction(ctx)) {
-      yield* ctx.bind({
+  Effect.fn(function* (host, stream) {
+    if (Lambda.isFunction(host)) {
+      yield* host.bind`Allow(${host}, AWS.Kinesis.PutRecord(${stream}))`({
         policyStatements: [
           {
             Sid: "PutRecord",
@@ -61,8 +61,38 @@ export const PutRecordPolicyLive = PutRecordPolicy.layer.succeed(
       });
     } else {
       return yield* Effect.die(
-        `PutRecordPolicy does not support runtime '${ctx.type}'`,
+        `PutRecordPolicy does not support runtime '${host.Type}'`,
       );
     }
   }),
 );
+
+/*
+# Verbose
+
+~ JobFunction [AWS.Lambda.Function]
+  ~ AWS.Kinesis.PutRecord(JobStream)
+    ~ Allow(JobFunction, AWS.Kinesis.PutRecord(JobStream))
+~ OtherFunction [AWS.Lambda.Function]
+  ~ AWS.Lambda.BucketEventSource(JobBucket)
+    • Allow(JobFunction, AWS.Lambda.InvokeFunction(JobBucket))
+    + AWS.S3.NotificationConfiguration(JobBucket >> JobFunction)
+~ JobWorker [AWS.Lambda.Function]
+  ~ Cloudflare.R2.PutObject(JobBucket)
+    ~ Bind(JobBucket)
+  ~ Cloudflare.R2.GetObject(JobBucket)
+    ~ Bind(JobBucket)
+  ~ Cloudflare.R2.ListObjects(JobBucket)
+    ~ Bind(JobBucket)
+
+# Not Verbose
+
+~ JobFunction [AWS.Lambda.Function]
+  ~ AWS.Kinesis.PutRecord(JobStream)
+~ OtherFunction [AWS.Lambda.Function]
+  ~ AWS.Lambda.BucketEventSource(JobBucket)
+~ JobWorker [AWS.Lambda.Function]
+  ~ Cloudflare.R2.PutObject(JobBucket)
+  ~ Cloudflare.R2.GetObject(JobBucket)
+  ~ Cloudflare.R2.ListObjects(JobBucket)
+*/

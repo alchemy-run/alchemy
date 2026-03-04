@@ -20,7 +20,7 @@ import * as Credentials from "../AWS/Credentials.ts";
 import * as Region from "../AWS/Region.ts";
 import type { Cli } from "../Cli/index.ts";
 import { DotAlchemy, dotAlchemy } from "../Config.ts";
-import { ExecutionContext } from "../Executable.ts";
+import { ExecutionContext } from "../Host.ts";
 import type { Input } from "../Input.ts";
 import * as Plan from "../Plan.ts";
 import * as Stack from "../Stack.ts";
@@ -176,8 +176,8 @@ export function test(
     ),
     Effect.provideService(Stage.Stage, "test"),
     Effect.provideService(ExecutionContext, {
-      kind: "ExecutionContext",
-      type: "function",
+      Type: "function",
+      LogicalId: "TODO",
       listen: () => {
         return Effect.void;
       },

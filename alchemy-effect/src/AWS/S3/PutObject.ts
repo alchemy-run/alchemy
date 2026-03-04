@@ -45,9 +45,9 @@ export class PutObjectPolicy extends Binding.Policy<
 >()("AWS.S3.PutObject") {}
 
 export const PutObjectPolicyLive = PutObjectPolicy.layer.succeed(
-  Effect.fn(function* (ctx, bucket) {
-    if (Lambda.isFunction(ctx)) {
-      yield* ctx.bind({
+  Effect.fn(function* (host, bucket) {
+    if (Lambda.isFunction(host)) {
+      yield* host.bind`Allow(${host}, AWS.S3.PutObject(${bucket}))`({
         policyStatements: [
           {
             Sid: "PutObject",
@@ -59,7 +59,7 @@ export const PutObjectPolicyLive = PutObjectPolicy.layer.succeed(
       });
     } else {
       return yield* Effect.die(
-        `PutObjectPolicy does not support runtime '${ctx.type}'`,
+        `PutObjectPolicy does not support runtime '${host.Type}'`,
       );
     }
   }),

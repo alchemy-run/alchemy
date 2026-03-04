@@ -47,9 +47,9 @@ export class SendMessageBatchPolicy extends Binding.Policy<
 >()("AWS.SQS.SendMessageBatch") {}
 
 export const SendMessageBatchPolicyLive = SendMessageBatchPolicy.layer.succeed(
-  Effect.fn(function* (ctx, queue: Queue) {
-    if (Lambda.isFunction(ctx)) {
-      yield* ctx.bind({
+  Effect.fn(function* (host, queue) {
+    if (Lambda.isFunction(host)) {
+      yield* host.bind`Allow(${host}, AWS.SQS.SendMessageBatch(${queue}))`({
         policyStatements: [
           {
             Sid: "SendMessageBatch",
@@ -61,7 +61,7 @@ export const SendMessageBatchPolicyLive = SendMessageBatchPolicy.layer.succeed(
       });
     } else {
       return yield* Effect.die(
-        `SendMessageBatchPolicy does not support runtime '${ctx.type}'`,
+        `SendMessageBatchPolicy does not support runtime '${host.Type}'`,
       );
     }
   }),
