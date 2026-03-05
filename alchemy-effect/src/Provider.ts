@@ -28,7 +28,9 @@ type BindingData<Res extends ResourceLike> = [Res] extends [
   ? B[]
   : any[];
 
-type Props<Res extends ResourceLike> = Input.ResolveOpaque<Res["Props"]>;
+type Props<Res extends ResourceLike> = {} extends Res["Props"]
+  ? Res["Props"] | undefined
+  : Props<Res>;
 
 export interface ProviderService<
   Res extends ResourceLike = ResourceLike,
@@ -66,9 +68,9 @@ export interface ProviderService<
     id: string;
     instanceId: string;
     olds: Props<Res>;
-    // Note: we do not resolve (Props<Res>) here because diff runs during plan
+    // Note: we do not resolve (Res["Props"]) here because diff runs during plan
     // -> we need a way for the diff handlers to work with Outputs
-    news: Res["Props"];
+    news: Props<Res>;
     oldBindings: BindingData<Res>;
     newBindings: Input<BindingData<Res>>;
     output: Res["Attributes"];

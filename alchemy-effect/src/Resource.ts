@@ -13,7 +13,12 @@ import { RemovalPolicy } from "./RemovalPolicy.ts";
 import { Stack } from "./Stack.ts";
 
 export type ResourceConstructor<R extends ResourceLike, Req = never> = {
-  (id: string, props?: Input<R["Props"]>): Effect.Effect<R, never, Req>;
+  (
+    id: string,
+    ...args: {} extends R["Props"]
+      ? [props?: Input<R["Props"]>]
+      : [props: Input<R["Props"]>]
+  ): Effect.Effect<R, never, Req>;
   <PropsReq = never>(
     id: string,
     props: Effect.Effect<Input<R["Props"]>, never, PropsReq>,
@@ -38,7 +43,7 @@ export interface ResourceBinding {
 
 export interface ResourceLike<
   Type extends string = any,
-  Props extends object = any,
+  Props extends object | undefined = any,
   Attributes extends object = any,
   Binding = any,
 > {
@@ -74,7 +79,7 @@ export const isResource = (value: any): value is ResourceLike => {
 
 export type Resource<
   Type extends string = any,
-  Props extends object = any,
+  Props extends object | undefined = any,
   Attributes extends object = any,
   Binding = never,
 > = Pipeable &

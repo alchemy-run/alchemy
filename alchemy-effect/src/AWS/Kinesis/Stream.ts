@@ -116,14 +116,16 @@ export const StreamProvider = () =>
           });
         });
 
-      const getStreamMode = (props: StreamProps): kinesis.StreamModeDetails => {
+      const getStreamMode = (
+        props: StreamProps,
+      ): kinesis.StreamModeDetails => {
         const mode = props.streamMode ?? "ON_DEMAND";
         return { StreamMode: mode };
       };
 
       return {
         stables: ["streamName", "streamArn"],
-        diff: Effect.fn(function* ({ id, news, olds }) {
+        diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
           const oldStreamName = yield* createStreamName(id, olds);
           const newStreamName = yield* createStreamName(id, news);
           if (oldStreamName !== newStreamName) {
@@ -132,7 +134,7 @@ export const StreamProvider = () =>
           // Stream mode changes, shard count changes, retention period changes, encryption changes
           // can all be done via update
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
+        create: Effect.fn(function* ({ id, news = {}, session }) {
           const streamName = yield* createStreamName(id, news);
           const internalTags = yield* createInternalTags(id);
           const allTags = { ...internalTags, ...news.tags };
@@ -141,7 +143,9 @@ export const StreamProvider = () =>
             .createStream({
               StreamName: streamName,
               ShardCount:
-                news.streamMode === "PROVISIONED" ? news.shardCount : undefined,
+                news.streamMode === "PROVISIONED"
+                  ? news.shardCount
+                  : undefined,
               StreamModeDetails: getStreamMode(news),
               Tags: allTags,
             })
@@ -202,7 +206,7 @@ export const StreamProvider = () =>
             streamStatus: "ACTIVE" as const,
           };
         }),
-        update: Effect.fn(function* ({ news, olds, output, session }) {
+        update: Effect.fn(function* ({ news = {}, olds = {}, output, session }) {
           const streamName = output.streamName;
 
           // Handle stream mode changes

@@ -148,7 +148,7 @@ export const EIPProvider = () =>
           } satisfies EIP["Attributes"];
         }),
 
-        diff: Effect.fn(function* ({ news, olds }) {
+        diff: Effect.fn(function* ({ news = {}, olds = {} }) {
           // EIPs are immutable - any change to core properties requires replacement
           if (
             news.publicIpv4Pool !== olds.publicIpv4Pool ||
@@ -160,7 +160,7 @@ export const EIPProvider = () =>
           // Tags can be updated in-place
         }),
 
-        create: Effect.fn(function* ({ id, news, session }) {
+        create: Effect.fn(function* ({ id, news = {}, session }) {
           yield* session.note("Allocating Elastic IP address...");
 
           const result = yield* ec2.allocateAddress({
@@ -194,7 +194,7 @@ export const EIPProvider = () =>
           } satisfies EIP["Attributes"];
         }),
 
-        update: Effect.fn(function* ({ id, news, output, session }) {
+        update: Effect.fn(function* ({ id, news = {}, output, session }) {
           const allocationId = output.allocationId;
 
           // Handle tag updates

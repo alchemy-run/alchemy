@@ -76,7 +76,7 @@ export const BucketProvider = () =>
 
       return {
         stables: ["bucketName", "accountId"],
-        diff: Effect.fn(function* ({ id, olds, news, output }) {
+        diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
           const name = yield* createBucketName(id, news.name);
           if (
             output.accountId !== accountId ||
@@ -93,7 +93,7 @@ export const BucketProvider = () =>
             } as const;
           }
         }),
-        create: Effect.fn(function* ({ id, news }) {
+        create: Effect.fn(function* ({ id, news = {} }) {
           const name = yield* createBucketName(id, news.name);
           const bucket = yield* createBucket({
             accountId,
@@ -118,7 +118,7 @@ export const BucketProvider = () =>
             accountId,
           };
         }),
-        update: Effect.fn(function* ({ news, output }) {
+        update: Effect.fn(function* ({ news = {}, output }) {
           const bucket = yield* patchBucket({
             accountId: output.accountId,
             bucketName: output.bucketName,

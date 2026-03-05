@@ -144,7 +144,7 @@ export const QueueProvider = () =>
       };
       return Queue.provider.of({
         stables: ["queueName", "queueUrl", "queueArn"],
-        diff: Effect.fn(function* ({ id, news, olds }) {
+        diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
           const oldFifo = olds.fifo ?? false;
           const newFifo = news.fifo ?? false;
           if (oldFifo !== newFifo) {
@@ -157,7 +157,7 @@ export const QueueProvider = () =>
           }
           // Return undefined to allow update function to be called for other attribute changes
         }),
-        create: Effect.fn(function* ({ id, news, session, bindings }) {
+        create: Effect.fn(function* ({ id, news = {}, session, bindings }) {
           const queueName = yield* createQueueName(id, news);
           const response = yield* sqs
             .createQueue({
@@ -186,7 +186,7 @@ export const QueueProvider = () =>
             queueArn: queueArn,
           };
         }),
-        update: Effect.fn(function* ({ news, output, session, bindings }) {
+        update: Effect.fn(function* ({ news = {}, output, session, bindings }) {
           yield* sqs.setQueueAttributes({
             QueueUrl: output.queueUrl,
             Attributes: createAttributes(news, bindings),

@@ -5,7 +5,6 @@ import * as Schedule from "effect/Schedule";
 
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { somePropsAreDifferent } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 import type { AccountID } from "../Account.ts";
@@ -108,7 +107,7 @@ export interface SubnetProps {
    * Tags to assign to the subnet.
    * These will be merged with alchemy auto-tags (alchemy::stack, alchemy::stage, alchemy::id).
    */
-  tags?: Record<string, Input<string>>;
+  tags?: Record<string, string>;
 }
 
 export interface Subnet extends Resource<

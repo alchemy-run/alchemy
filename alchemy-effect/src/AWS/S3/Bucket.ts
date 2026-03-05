@@ -3,7 +3,6 @@ import type { BucketLocationConstraint } from "distilled-aws/s3";
 import * as s3 from "distilled-aws/s3";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import { diffTags } from "../../Tags.ts";
@@ -33,7 +32,7 @@ export interface BucketProps {
   /**
    * Tags to apply to the bucket.
    */
-  tags?: Record<string, Input<string>>;
+  tags?: Record<string, string>;
 }
 
 export interface Bucket extends Resource<
@@ -159,7 +158,7 @@ export const BucketProvider = () =>
 
       return {
         stables: ["bucketName", "bucketArn", "region", "accountId"],
-        diff: Effect.fn(function* ({ id, news, olds }) {
+        diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
           const oldBucketName = yield* createBucketName(id, olds);
           const newBucketName = yield* createBucketName(id, news);
           if (oldBucketName !== newBucketName) {
@@ -173,7 +172,7 @@ export const BucketProvider = () =>
             return { action: "replace" } as const;
           }
         }),
-        create: Effect.fn(function* ({ id, news, session, bindings }) {
+        create: Effect.fn(function* ({ id, news = {}, session, bindings }) {
           const region = yield* Region;
           const accountId = yield* Account;
           const bucketName = yield* createBucketName(id, news);
@@ -269,8 +268,8 @@ export const BucketProvider = () =>
           };
         }),
         update: Effect.fn(function* ({
-          news,
-          olds,
+          news = {},
+          olds = {},
           output,
           session,
           bindings,
@@ -331,7 +330,7 @@ export const BucketProvider = () =>
 
           return output;
         }),
-        delete: Effect.fn(function* ({ olds, output, session }) {
+        delete: Effect.fn(function* ({ olds = {}, output, session }) {
           // If forceDestroy is enabled, delete all objects first
           if (olds.forceDestroy) {
             yield* session.note(

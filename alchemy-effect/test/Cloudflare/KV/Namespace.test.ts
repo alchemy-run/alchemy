@@ -16,6 +16,37 @@ const logLevel = Effect.provideService(
 );
 
 test(
+  "create and delete namespace with default props",
+  Effect.gen(function* () {
+    const api = yield* CloudflareApi;
+    const accountId = yield* Account;
+
+    yield* destroy();
+
+    const namespace = yield* test.deploy(
+      Effect.gen(function* () {
+        return yield* KV.Namespace("DefaultNamespace");
+      }),
+    );
+
+    expect(namespace.title).toBeDefined();
+    expect(namespace.namespaceId).toBeDefined();
+
+    const actualNamespace = yield* api.kv.namespaces.get(
+      namespace.namespaceId,
+      {
+        account_id: accountId,
+      },
+    );
+    expect(actualNamespace.id).toEqual(namespace.namespaceId);
+
+    yield* destroy();
+
+    yield* waitForNamespaceToBeDeleted(namespace.namespaceId, accountId);
+  }).pipe(Effect.provide(Cloudflare.providers()), logLevel),
+);
+
+test(
   "create, update, delete namespace",
   Effect.gen(function* () {
     const api = yield* CloudflareApi;

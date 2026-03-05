@@ -2,7 +2,6 @@ import { Region } from "distilled-aws/Region";
 import * as eventbridge from "distilled-aws/eventbridge";
 import * as Effect from "effect/Effect";
 
-import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import {
@@ -67,7 +66,7 @@ export interface EventBusProps {
   /**
    * Tags to assign to the event bus.
    */
-  tags?: Record<string, Input<string>>;
+  tags?: Record<string, string>;
 }
 
 /**
@@ -117,7 +116,7 @@ export const EventBusProvider = () =>
       const region = yield* Region;
       const accountId = yield* Account;
 
-      const createEventBusName = (id: string, props: { name?: string }) =>
+      const createEventBusName = (id: string, props: { name?: string } = {}) =>
         Effect.gen(function* () {
           if (props.name) {
             return props.name;
@@ -130,7 +129,7 @@ export const EventBusProvider = () =>
 
       return {
         stables: ["eventBusName", "eventBusArn"],
-        diff: Effect.fn(function* ({ id, news, olds }) {
+        diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
           const oldName = yield* createEventBusName(id, olds);
           const newName = yield* createEventBusName(id, news);
           if (oldName !== newName) {
@@ -140,7 +139,7 @@ export const EventBusProvider = () =>
             return { action: "replace" } as const;
           }
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
+        create: Effect.fn(function* ({ id, news = {}, session }) {
           const eventBusName = yield* createEventBusName(id, news);
           const internalTags = yield* createInternalTags(id);
           const allTags = {
@@ -188,7 +187,13 @@ export const EventBusProvider = () =>
             description: news.description,
           };
         }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
+        update: Effect.fn(function* ({
+          id,
+          news = {},
+          olds = {},
+          output,
+          session,
+        }) {
           const eventBusName = output.eventBusName;
 
           yield* eventbridge.updateEventBus({

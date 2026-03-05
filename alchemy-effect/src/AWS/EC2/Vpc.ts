@@ -6,7 +6,6 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { somePropsAreDifferent } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 import type { AccountID } from "../Account.ts";
@@ -89,7 +88,7 @@ export interface VpcProps {
    * Tags to assign to the VPC.
    * These will be merged with alchemy auto-tags (alchemy::stack, alchemy::stage, alchemy::id).
    */
-  tags?: Record<string, Input<string>>;
+  tags?: Record<string, string>;
 }
 
 export interface Vpc extends Resource<
@@ -181,7 +180,7 @@ export const VpcProvider = () =>
 
       return {
         stables: ["vpcId", "vpcArn", "ownerId", "isDefault"],
-        diff: Effect.fn(function* ({ news, olds }) {
+        diff: Effect.fn(function* ({ news = {}, olds = {} }) {
           if (
             somePropsAreDifferent(olds, news, [
               "cidrBlock",
@@ -195,7 +194,7 @@ export const VpcProvider = () =>
           }
         }),
 
-        create: Effect.fn(function* ({ id, news, session }) {
+        create: Effect.fn(function* ({ id, news = {}, session }) {
           // 1. Call CreateVpc
           const createResult = yield* ec2.createVpc({
             // TODO(sam): add all properties
@@ -272,7 +271,13 @@ export const VpcProvider = () =>
           };
         }),
 
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
+        update: Effect.fn(function* ({
+          id,
+          news = {},
+          olds = {},
+          output,
+          session,
+        }) {
           const vpcId = output.vpcId;
 
           // Only DNS and metrics settings can be updated

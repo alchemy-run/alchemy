@@ -9,6 +9,29 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
 test(
+  "create and delete bucket with default props",
+  Effect.gen(function* () {
+    yield* destroy();
+
+    const bucket = yield* test.deploy(
+      Effect.gen(function* () {
+        return yield* Bucket("DefaultBucket");
+      }),
+    );
+
+    expect(bucket.bucketName).toBeDefined();
+    expect(bucket.bucketArn).toBeDefined();
+    expect(bucket.region).toBeDefined();
+
+    yield* S3.headBucket({ Bucket: bucket.bucketName });
+
+    yield* destroy();
+
+    yield* assertBucketDeleted(bucket.bucketName);
+  }).pipe(Effect.provide(AWS.providers())),
+);
+
+test(
   "create, update, delete bucket",
   Effect.gen(function* () {
     // Clean up any previous state

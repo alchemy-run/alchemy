@@ -92,7 +92,7 @@ export const Function = Host<
         )) as any as ServerlessExecutionContext["listen"],
       exports: {
         // construct an Effect that produces the Function's entrypoint
-        default: Effect.map(
+        handler: Effect.map(
           Effect.all(listeners, {
             concurrency: "unbounded",
           }),
@@ -577,7 +577,7 @@ export default await Effect.runPromise(handler);`,
               }).pipe(
                 Effect.map((f) => f.FunctionUrl),
                 Effect.retry({
-                  // TODO(sam): did we lose this error? Is it missing for a good reason?
+                  // TODO(sam): did we lose this error? Is it missing for a good
                   while: (e: any) => e._tag === "ResourceConflictException",
                   schedule: Schedule.exponential(100),
                 }),

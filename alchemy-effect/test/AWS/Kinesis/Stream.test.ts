@@ -10,6 +10,37 @@ import * as Schedule from "effect/Schedule";
 
 describe("AWS.Kinesis.Stream", () => {
   test(
+    "create and delete stream with default props",
+    { timeout: 180_000 },
+    Effect.gen(function* () {
+      const stream = yield* test.deploy(
+        Effect.gen(function* () {
+          return yield* Stream("DefaultStream");
+        }),
+      );
+
+      expect(stream.streamName).toBeDefined();
+      expect(stream.streamArn).toBeDefined();
+      expect(stream.streamStatus).toEqual("ACTIVE");
+
+      const streamDescription = yield* Kinesis.describeStreamSummary({
+        StreamName: stream.streamName,
+      });
+      expect(streamDescription.StreamDescriptionSummary.StreamStatus).toEqual(
+        "ACTIVE",
+      );
+      expect(
+        streamDescription.StreamDescriptionSummary.StreamModeDetails
+          ?.StreamMode,
+      ).toEqual("ON_DEMAND");
+
+      yield* destroy();
+
+      yield* assertStreamDeleted(stream.streamName);
+    }).pipe(Effect.provide(AWS.providers())),
+  );
+
+  test(
     "create, update, delete on-demand stream with tags",
     { timeout: 180_000 },
     Effect.gen(function* () {

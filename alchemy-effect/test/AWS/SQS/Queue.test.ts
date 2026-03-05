@@ -9,6 +9,31 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
 test(
+  "create and delete queue with default props",
+  Effect.gen(function* () {
+    const queue = yield* test.deploy(
+      Effect.gen(function* () {
+        return yield* Queue("DefaultQueue");
+      }),
+    );
+
+    expect(queue.queueName).toBeDefined();
+    expect(queue.queueUrl).toBeDefined();
+    expect(queue.queueArn).toBeDefined();
+
+    const queueAttributes = yield* SQS.getQueueAttributes({
+      QueueUrl: queue.queueUrl,
+      AttributeNames: ["All"],
+    });
+    expect(queueAttributes.Attributes).toBeDefined();
+
+    yield* destroy();
+
+    yield* assertQueueDeleted(queue.queueUrl);
+  }).pipe(Effect.provide(AWS.providers())),
+);
+
+test(
   "create, update, delete standard queue",
   Effect.gen(function* () {
     const queue = yield* test.deploy(

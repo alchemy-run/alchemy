@@ -44,7 +44,7 @@ export const NamespaceProvider = () =>
 
       return {
         stables: ["namespaceId", "accountId"],
-        diff: Effect.fn(function* ({ id, news, output }) {
+        diff: Effect.fn(function* ({ id, news = {}, output }) {
           if (output.accountId !== accountId) {
             return { action: "replace" } as const;
           }
@@ -53,7 +53,7 @@ export const NamespaceProvider = () =>
             return { action: "update" } as const;
           }
         }),
-        create: Effect.fn(function* ({ id, news }) {
+        create: Effect.fn(function* ({ id, news = {} }) {
           const title = yield* createTitle(id, news.title);
           const namespace = yield* createNamespace({
             accountId,
@@ -79,7 +79,7 @@ export const NamespaceProvider = () =>
             accountId,
           };
         }),
-        update: Effect.fn(function* ({ id, news, output }) {
+        update: Effect.fn(function* ({ id, news = {}, output }) {
           const title = yield* createTitle(id, news.title);
           const namespace = yield* updateNamespace({
             accountId,

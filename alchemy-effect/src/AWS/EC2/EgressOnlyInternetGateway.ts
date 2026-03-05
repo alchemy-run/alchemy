@@ -3,7 +3,6 @@ import { Region } from "distilled-aws/Region";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
-import type { Input } from "../../Input.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 import type { AccountID } from "../Account.ts";
@@ -31,7 +30,7 @@ export interface EgressOnlyInternetGatewayProps {
   /**
    * Tags to assign to the egress-only internet gateway.
    */
-  tags?: Record<string, Input<string>>;
+  tags?: Record<string, string>;
 }
 
 export interface EgressOnlyInternetGateway extends Resource<

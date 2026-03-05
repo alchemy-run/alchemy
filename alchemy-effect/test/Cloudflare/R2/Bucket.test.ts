@@ -16,6 +16,35 @@ const logLevel = Effect.provideService(
 );
 
 test(
+  "create and delete bucket with default props",
+  Effect.gen(function* () {
+    const api = yield* CloudflareApi;
+    const accountId = yield* Account;
+
+    yield* destroy();
+
+    const bucket = yield* test.deploy(
+      Effect.gen(function* () {
+        return yield* R2.Bucket("DefaultBucket");
+      }),
+    );
+
+    expect(bucket.bucketName).toBeDefined();
+    expect(bucket.storageClass).toEqual("Standard");
+    expect(bucket.jurisdiction).toEqual("default");
+
+    const actualBucket = yield* api.r2.buckets.get(bucket.bucketName, {
+      account_id: accountId,
+    });
+    expect(actualBucket.name).toEqual(bucket.bucketName);
+
+    yield* destroy();
+
+    yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
+  }).pipe(Effect.provide(Cloudflare.providers()), logLevel),
+);
+
+test(
   "create, update, delete bucket",
   Effect.gen(function* () {
     const api = yield* CloudflareApi;

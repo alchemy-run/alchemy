@@ -150,7 +150,7 @@ export interface RuleProps {
   /**
    * Tags to assign to the rule.
    */
-  tags?: Record<string, Input<string>>;
+  tags?: Record<string, string>;
 }
 
 /**
@@ -266,7 +266,7 @@ export const RuleProvider = () =>
       const region = yield* Region;
       const accountId = yield* Account;
 
-      const createRuleName = (id: string, props: { name?: string }) => {
+      const createRuleName = (id: string, props: { name?: string } = {}) => {
         if (props.name) {
           return Effect.succeed(props.name);
         }
@@ -278,7 +278,7 @@ export const RuleProvider = () =>
 
       return {
         stables: ["ruleName", "ruleArn", "eventBusName"],
-        diff: Effect.fn(function* ({ id, news, olds }) {
+        diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
           const oldName = yield* createRuleName(id, olds);
           const newName = yield* createRuleName(id, news);
           if (oldName !== newName) {
@@ -290,7 +290,7 @@ export const RuleProvider = () =>
             return { action: "replace" } as const;
           }
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
+        create: Effect.fn(function* ({ id, news = {}, session }) {
           const ruleName = yield* createRuleName(id, news);
           const internalTags = yield* createInternalTags(id);
           const allTags = {
@@ -336,7 +336,13 @@ export const RuleProvider = () =>
             eventBusName,
           };
         }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
+        update: Effect.fn(function* ({
+          id,
+          news = {},
+          olds = {},
+          output,
+          session,
+        }) {
           const ruleName = output.ruleName;
           const eventBusName = output.eventBusName;
           const eventBusParam =

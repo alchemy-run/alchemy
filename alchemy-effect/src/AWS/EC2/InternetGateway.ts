@@ -73,7 +73,7 @@ export const InternetGatewayProvider = () =>
       return {
         stables: ["internetGatewayId", "internetGatewayArn", "ownerId"],
 
-        create: Effect.fn(function* ({ id, news, session }) {
+        create: Effect.fn(function* ({ id, news = {}, session }) {
           // 1. Prepare tags
           const alchemyTags = yield* createInternalTags(id);
           const userTags = news.tags ?? {};
@@ -134,7 +134,7 @@ export const InternetGatewayProvider = () =>
           };
         }),
 
-        update: Effect.fn(function* ({ news, olds, output, session }) {
+        update: Effect.fn(function* ({ news = {}, olds = {}, output, session }) {
           const internetGatewayId = output.internetGatewayId;
 
           // Handle VPC attachment changes
