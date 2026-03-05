@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import * as Lambda from "../Lambda/index.ts";
+import { isFunction } from "../Lambda/Function.ts";
 import type { Bucket } from "./Bucket.ts";
 
 export interface GetObjectRequest extends Omit<S3.GetObjectRequest, "Bucket"> {}
@@ -26,7 +26,8 @@ export const GetObjectLive = Layer.effect(
     const getObject = yield* S3.getObject;
 
     return Effect.fn(function* (bucket: Bucket) {
-      const BucketName = yield* bucket.bucketName;
+      const b = bucket.bucketName;
+      const BucketName = yield* b;
       yield* Policy(bucket);
       return Effect.fn(function* (request: GetObjectRequest) {
         return yield* getObject({
@@ -45,7 +46,7 @@ export class GetObjectPolicy extends Binding.Policy<
 
 export const GetObjectPolicyLive = GetObjectPolicy.layer.succeed(
   Effect.fn(function* (host, bucket) {
-    if (Lambda.isFunction(host)) {
+    if (isFunction(host)) {
       yield* host.bind`Allow(${host}, AWS.S3.GetObject(${bucket}))`({
         policyStatements: [
           {

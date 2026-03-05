@@ -13,7 +13,6 @@ import { Argument, Command, Flag } from "effect/unstable/cli";
 import * as CliError from "effect/unstable/cli/CliError";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
-import { ServiceMap } from "effect/ServiceMap";
 import packageJson from "../package.json" with { type: "json" };
 import { apply } from "../src/Apply.ts";
 import * as AWSAccount from "../src/AWS/Account.ts";
@@ -24,7 +23,7 @@ import * as AWSRegion from "../src/AWS/Region.ts";
 import * as CLI from "../src/Cli/index.ts";
 import { dotAlchemy } from "../src/Config.ts";
 import * as Plan from "../src/Plan.ts";
-import { Stack, StackSpec } from "../src/Stack.ts";
+import * as Stack from "../src/Stack.ts";
 import { Stage } from "../src/Stage.ts";
 import * as State from "../src/State/index.ts";
 
@@ -170,8 +169,8 @@ const bootstrapCommand = Command.make(
     ).pipe(
       Layer.provideMerge(
         Layer.succeed(
-          Stack,
-          Stack.of({
+          Stack.Stack,
+          Stack.Stack.of({
             name: "bootstrap",
             stage: "bootstrap",
             bindings: {},
@@ -235,10 +234,8 @@ const execStack = Effect.fn(function* ({
   const module = yield* Effect.promise(
     () => import(path.resolve(process.cwd(), main)),
   );
-  const stackEffect = module.default as Effect.Effect<
-    StackSpec & {
-      services: ServiceMap<never>;
-    }
+  const stackEffect = module.default as ReturnType<
+    ReturnType<typeof Stack.make>
   >;
   if (!stackEffect) {
     return yield* Effect.die(
@@ -338,5 +335,6 @@ cli.pipe(
     ConfigProvider.fromEnv(),
   ),
   Effect.provide(NodeServices.layer),
+  Effect.scoped,
   NodeRuntime.runMain,
 );

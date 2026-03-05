@@ -61,7 +61,6 @@ export function Plan({ plan }: PlanProps): React.JSX.Element {
           const color = actionColor(item.action);
           const icon = actionIcon(item.action);
           const hasBindings = item.bindings && item.bindings.length > 0;
-          console.log({ hasBindings }, item.bindings);
 
           return (
             <Box key={item.resource.LogicalId} flexDirection="column">

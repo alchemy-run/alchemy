@@ -71,8 +71,8 @@ const JobFunction = Effect.gen(function* () {
       Lambda.HttpServer,
       SQS.QueueSinkLive,
     ).pipe(
-      Layer.provide(S3.PutObjectLive),
       Layer.provide(S3.GetObjectLive),
+      Layer.provide(S3.PutObjectLive),
       Layer.provide(SQS.SendMessageBatchLive),
     ),
   ),

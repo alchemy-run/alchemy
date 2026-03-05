@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import * as Lambda from "../Lambda/index.ts";
+import { isFunction } from "../Lambda/Function.ts";
 import type { Queue } from "./Queue.ts";
 
 export interface SendMessageBatchRequest extends Omit<
@@ -48,7 +48,7 @@ export class SendMessageBatchPolicy extends Binding.Policy<
 
 export const SendMessageBatchPolicyLive = SendMessageBatchPolicy.layer.succeed(
   Effect.fn(function* (host, queue) {
-    if (Lambda.isFunction(host)) {
+    if (isFunction(host)) {
       yield* host.bind`Allow(${host}, AWS.SQS.SendMessageBatch(${queue}))`({
         policyStatements: [
           {

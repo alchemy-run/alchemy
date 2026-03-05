@@ -76,6 +76,7 @@ export const bindings = () =>
     Kinesis.PutRecordPolicyLive,
     Kinesis.PutRecordsPolicyLive,
     Lambda.BucketEventSourcePolicyLive,
+    Lambda.QueueEventSourcePolicyLive,
     S3.AbortMultipartUploadPolicyLive,
     S3.CompleteMultipartUploadPolicyLive,
     S3.CreateMultipartUploadPolicyLive,

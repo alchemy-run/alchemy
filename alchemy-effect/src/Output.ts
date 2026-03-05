@@ -3,6 +3,7 @@ import type { Yieldable } from "effect/Effect";
 import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
 import type { Pipeable } from "effect/Pipeable";
+import { SingleShotGen } from "effect/Utils";
 import { ExecutionContext } from "./Host.ts";
 import { getRefMetadata, isRef, ref as stageRef, type Ref } from "./Ref.ts";
 import { isResource, type Resource, type ResourceLike } from "./Resource.ts";
@@ -29,12 +30,13 @@ export const isOutput = (value: any): value is Output<any> =>
   ExprSymbol in value;
 
 export interface Output<A = any, Req = any> extends Pipeable {
+  /** @internal phantom */
   readonly kind: string;
   /** @internal phantom */
   readonly A: A;
   /** @internal phantom */
   readonly req: Req;
-
+  /** @internal phantom */
   [Symbol.iterator](): Iterator<
     Yieldable<any, void, never, Req>,
     Accessor<A>,
@@ -84,11 +86,15 @@ export abstract class BaseExpr<A = any, Req = any> implements Output<A, Req> {
     Accessor<A>,
     void
   > {
+    return new SingleShotGen(this);
+  }
+
+  asEffect(): Effect.Effect<A, never, Req> {
     return Effect.gen(function* () {
       const _ctx = yield* ExecutionContext;
       // TODO(sam): implement
       return;
-    }) as any;
+    });
   }
 
   public pipe(...fns: any[]): any {

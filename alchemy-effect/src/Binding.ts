@@ -3,8 +3,10 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as ServiceMap from "effect/ServiceMap";
 import { SingleShotGen } from "effect/Utils";
-import { ExecutionContext } from "./Host.ts";
+import { ExecutionContext, Self } from "./Host.ts";
 import { namespace } from "./Namespace.ts";
+import type { ResourceLike } from "./Resource.ts";
+import { CurrentStack } from "./Stack.ts";
 
 export interface ServiceLike {
   kind: "Service";
@@ -66,16 +68,13 @@ export interface Policy<
   layer: {
     succeed(
       fn: (
-        ctx: ExecutionContext["Service"],
+        ctx: ResourceLike,
         ...args: Parameters<Shape>
       ) => Effect.Effect<void>,
     ): Layer.Layer<Self>;
     effect<Req = never>(
       fn: Effect.Effect<
-        (
-          ctx: ExecutionContext["Service"],
-          ...args: Parameters<Shape>
-        ) => Effect.Effect<void>,
+        (ctx: ResourceLike, ...args: Parameters<Shape>) => Effect.Effect<void>,
         never,
         Req
       >,
@@ -102,7 +101,20 @@ export const Policy =
     const Service = Effect.serviceOption(self)
       .asEffect()
       .pipe(
-        Effect.map(Option.getOrElse(() => (() => Effect.void) as any as Shape)),
+        Effect.map(Option.getOrUndefined),
+        Effect.flatMap((service) =>
+          service
+            ? Effect.succeed(service)
+            : CurrentStack.pipe(
+                Effect.flatMap((stack) =>
+                  stack
+                    ? Effect.die(
+                        `Binding.Policy provider '${Identifier}' was not provided at Plan Time in Stack '${stack.name}'`,
+                      )
+                    : Effect.succeed((() => Effect.void) as any as Shape),
+                ),
+              ),
+        ),
       );
 
     const asEffect = () =>
@@ -137,7 +149,7 @@ export const Policy =
       layer: {
         succeed: (
           fn: (
-            ctx: ExecutionContext["Service"],
+            self: ResourceLike,
             ...args: Parameters<Shape>
           ) => Effect.Effect<void>,
         ) =>
@@ -145,14 +157,12 @@ export const Policy =
             self,
             // @ts-expect-error
             (...args: Parameters<Shape>) =>
-              ExecutionContext.asEffect().pipe(
-                Effect.flatMap((ctx) => fn(ctx, ...args)),
-              ),
+              Self.asEffect().pipe(Effect.flatMap((self) => fn(self, ...args))),
           ),
         effect: (
           fn: Effect.Effect<
             (
-              ctx: ExecutionContext["Service"],
+              self: ResourceLike,
               ...args: Parameters<Shape>
             ) => Effect.Effect<void>
           >,
@@ -164,9 +174,7 @@ export const Policy =
               Effect.map(
                 (fn) =>
                   (...args: Parameters<Shape>) =>
-                    ExecutionContext.asEffect().pipe(
-                      Effect.map((ctx) => fn(ctx, ...args)),
-                    ),
+                    Self.asEffect().pipe(Effect.map((ctx) => fn(ctx, ...args))),
               ),
             ),
           ),

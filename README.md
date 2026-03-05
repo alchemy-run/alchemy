@@ -480,6 +480,8 @@ export default Effect.gen(function* () {
 A `Binding.Policy` runs only at deploy time to attach IAM policies (or Cloudflare bindings) to the Function's role. At runtime, `Binding.Policy` uses `Effect.serviceOption` so it gracefully becomes a no-op when the layer is not provided.
 
 ```typescript
+import { isFunction } from "alchemy-effect/AWS/Lambda/Function";
+
 export class PutRecordPolicy extends Binding.Policy<
   PutRecordPolicy,
   (stream: Stream) => Effect.Effect<void>
@@ -487,7 +489,7 @@ export class PutRecordPolicy extends Binding.Policy<
 
 export const PutRecordPolicyLive = PutRecordPolicy.layer.succeed(
   Effect.fn(function* (ctx, stream: Stream) {
-    if (Lambda.isFunction(ctx)) {
+    if (isFunction(ctx)) {
       yield* ctx.bind({
         policyStatements: [{
           Sid: "PutRecord",

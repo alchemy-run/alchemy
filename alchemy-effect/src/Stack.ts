@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import { FileSystem } from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import { Path } from "effect/Path";
 import type { Scope } from "effect/Scope";
 import * as ServiceMap from "effect/ServiceMap";
@@ -47,18 +48,15 @@ export const make =
     effect: Effect.Effect<A, Err, Req>,
   ) =>
     Effect.all([
+      effect,
       Stack.asEffect(),
       Effect.services<ROut | StackServices>(),
     ]).pipe(
-      Effect.map(([stack, services]) =>
-        effect.pipe(
-          Effect.map((output) => ({
-            output,
-            services,
-            ...stack,
-          })),
-        ),
-      ),
+      Effect.map(([output, stack, services]) => ({
+        output,
+        services,
+        ...stack,
+      })),
       Effect.provide(providers),
       Effect.provideServiceEffect(
         Stack,
@@ -75,3 +73,7 @@ export const make =
         ),
       ),
     );
+
+export const CurrentStack = Effect.serviceOption(Stack)
+  .asEffect()
+  .pipe(Effect.map(Option.getOrUndefined));

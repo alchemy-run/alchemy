@@ -9,10 +9,14 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import { Path } from "effect/Path";
 import * as Schedule from "effect/Schedule";
-import type { HttpClient } from "effect/unstable/http/HttpClient";
+import * as ServiceMap from "effect/ServiceMap";
 import { ESBuild } from "../../Bundle/index.ts";
 import { DotAlchemy } from "../../Config.ts";
-import { Host, type FunctionExecutionContext } from "../../Host.ts";
+import {
+  Host,
+  type FunctionExecutionContext,
+  type ListenHandler,
+} from "../../Host.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
@@ -25,18 +29,19 @@ import { Assets } from "../Assets.ts";
 import * as IAM from "../IAM/index.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 
-export const isFunction = <T>(value: T): value is T & Function => {
+export class HandlerContext extends ServiceMap.Service<
+  HandlerContext,
+  lambda.Context
+>()("AWS.Lambda.HandlerContext") {}
+
+export const isFunction = (value: any): value is Function => {
   return (
     typeof value === "object" &&
     value !== null &&
-    "type" in value &&
-    value.type === "function"
+    "Type" in value &&
+    value.Type === "AWS.Lambda.Function"
   );
 };
-
-export type Context = lambda.Context;
-
-export type FunctionServices = Credentials | Function | Region | HttpClient;
 
 export interface FunctionProps {
   main: string;
@@ -47,29 +52,68 @@ export interface FunctionProps {
   runtime?: "nodejs22.x" | "nodejs24.x";
 }
 
-export interface Function
-  extends
-    FunctionExecutionContext<"AWS.Lambda.Function">,
-    Resource<
-      "AWS.Lambda.Function",
-      FunctionProps,
-      {
-        functionArn: string;
-        functionName: string;
-        functionUrl: string | undefined;
-        roleName: string;
-        roleArn: string;
-        code: {
-          hash: string;
-        };
-      },
-      {
-        env?: Record<string, any>;
-        policyStatements?: PolicyStatement[];
-      }
-    > {}
+export interface Function extends Resource<
+  "AWS.Lambda.Function",
+  FunctionProps,
+  {
+    functionArn: string;
+    functionName: string;
+    functionUrl: string | undefined;
+    roleName: string;
+    roleArn: string;
+    code: {
+      hash: string;
+    };
+  },
+  {
+    env?: Record<string, any>;
+    policyStatements?: PolicyStatement[];
+  }
+> {}
 
-export const Function = Host<Function, FunctionServices>("AWS.Lambda.Function");
+export const Function = Host<
+  Function,
+  FunctionExecutionContext,
+  Credentials | Region
+>(
+  "AWS.Lambda.Function",
+  Effect.gen(function* () {
+    const listeners: Effect.Effect<ListenHandler>[] = [];
+
+    return {
+      type: "AWS.Lambda.Function",
+      run: undefined!,
+      get: () => Effect.succeed(undefined!),
+      listen: ((handler: ListenHandler | Effect.Effect<ListenHandler>) =>
+        Effect.sync(() =>
+          Effect.isEffect(handler)
+            ? listeners.push(handler)
+            : listeners.push(Effect.succeed(handler)),
+        )) as any as FunctionExecutionContext["listen"],
+      exports: {
+        // construct an Effect that produces the Function's entrypoint
+        default: Effect.map(
+          Effect.all(listeners, {
+            concurrency: "unbounded",
+          }),
+          (handlers) =>
+            (event: any, context: lambda.Context): Promise<any> => {
+              for (const handler of handlers) {
+                const eff = handler(event);
+                if (Effect.isEffect(eff)) {
+                  return eff.pipe(
+                    Effect.provideService(HandlerContext, context),
+                    Effect.runPromise,
+                  );
+                }
+              }
+              throw new Error("No event handler found");
+            },
+        ),
+      },
+    } satisfies FunctionExecutionContext;
+  }),
+);
 
 export const FunctionProvider = () =>
   Function.provider.effect(
@@ -237,7 +281,9 @@ export const FunctionProvider = () =>
           // entryPoints: [props.main],
           // we use a virtual entry point so that we can pluck out the user's handler closure and only its dependencies (not the whole module)
           stdin: {
-            contents: `import { ${handler} as handler } from "${file}";\nexport default handler;`,
+            contents: `import { ${handler} as handler } from "${file}";
+import * as Effect from "effect/Effect";
+export default await Effect.runPromise(handler);`,
             resolveDir: process.cwd(),
             loader: "ts",
             sourcefile: "__index.ts",

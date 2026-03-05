@@ -3,7 +3,7 @@ import * as Layer from "effect/Layer";
 import * as Sink from "effect/Sink";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import * as Lambda from "../Lambda/index.ts";
+import { isFunction } from "../Lambda/Function.ts";
 import type { Queue } from "./Queue.ts";
 import { SendMessageBatch } from "./SendMessageBatch.ts";
 
@@ -42,7 +42,7 @@ export class QueueSinkPolicy extends Binding.Policy<
 
 export const QueueSinkPolicyLive = QueueSinkPolicy.layer.succeed(
   Effect.fn(function* (host, queue) {
-    if (Lambda.isFunction(host)) {
+    if (isFunction(host)) {
       yield* host.bind`Allow(${host}, AWS.SQS.QueueSink(${queue}))`({
         policyStatements: [
           {

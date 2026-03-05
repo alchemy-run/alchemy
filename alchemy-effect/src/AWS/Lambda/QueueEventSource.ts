@@ -2,7 +2,6 @@ import type lambda from "aws-lambda";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import * as Lambda from "../Lambda/index.ts";
 
 import * as Binding from "../../Binding.ts";
 import type { SQSRecord } from "../SQS/index.ts";
@@ -10,7 +9,7 @@ import * as SQS from "../SQS/index.ts";
 import type { Queue } from "../SQS/Queue.ts";
 import type { QueueEventSourceProps } from "../SQS/QueueEventSource.ts";
 import { EventSourceMapping } from "./EventSourceMapping.ts";
-import { FunctionRuntime } from "./FunctionRuntime.ts";
+import * as Lambda from "./Function.ts";
 
 export const isSQSEvent = (event: any): event is lambda.SQSEvent =>
   Array.isArray(event?.Records) &&
@@ -21,7 +20,7 @@ export const QueueEventSource = Layer.effect(
   SQS.QueueEventSource,
   // @ts-expect-error
   Effect.gen(function* () {
-    const Function = yield* FunctionRuntime;
+    const host = yield* Lambda.Function.Runtime;
     const Policy = yield* QueueEventSourcePolicy;
 
     return Effect.fn(function* <StreamReq = never, Req = never>(
@@ -33,7 +32,7 @@ export const QueueEventSource = Layer.effect(
     ) {
       yield* Policy(queue, props);
 
-      yield* Function.listen(
+      yield* host.listen(
         Effect.gen(function* () {
           return (event: any) => {
             if (isSQSEvent(event)) {
@@ -60,20 +59,22 @@ export const QueueEventSourcePolicyLive = QueueEventSourcePolicy.layer.effect(
 
     return Effect.fn(function* (host, queue, props) {
       if (Lambda.isFunction(host)) {
-        yield* host.bind`Allow(${host}, AWS.Lambda.QueueEventSource(${queue}))`({
-          policyStatements: [
-            {
-              Sid: "QueueEventSource",
-              Effect: "Allow",
-              Action: [
-                "sqs:ReceiveMessage",
-                "sqs:DeleteMessage",
-                "sqs:GetQueueAttributes",
-              ],
-              Resource: [queue.queueArn],
-            },
-          ],
-        });
+        yield* host.bind`Allow(${host}, AWS.Lambda.QueueEventSource(${queue}))`(
+          {
+            policyStatements: [
+              {
+                Sid: "QueueEventSource",
+                Effect: "Allow",
+                Action: [
+                  "sqs:ReceiveMessage",
+                  "sqs:DeleteMessage",
+                  "sqs:GetQueueAttributes",
+                ],
+                Resource: [queue.queueArn],
+              },
+            ],
+          },
+        );
 
         yield* Mapping(`${queue.LogicalId}-EventSource`, {
           functionName: host.functionName,

@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import type { Scope } from "effect/Scope";
 import * as ServiceMap from "effect/ServiceMap";
+import type { HttpClient } from "effect/unstable/http/HttpClient";
 import type { PolicyLike } from "./Binding.ts";
 import type { Provider } from "./Provider.ts";
 import {
@@ -17,80 +18,107 @@ export type HostServices =
   | Stack
   | Stage
   | Scope
-  | ExecutionContext
   | StackServices;
 
-export type HostConstructor<R extends ResourceLike, RuntimeServices> = {
+export type HostRuntimeServices = ExecutionContext | HttpClient | Scope;
+
+export type HostConstructor<Self extends ResourceLike, RuntimeServices> = {
   <Req extends HostServices | RuntimeServices = never>(
     id: string,
-    eff: Effect.Effect<R["Props"], never, Req>,
-  ): Effect.Effect<R, never, Exclude<Req, RuntimeServices | ExecutionContext>>;
+    eff: Effect.Effect<Self["Props"], never, Req>,
+  ): Effect.Effect<Self, never, Provider<Self> | Exclude<Req, RuntimeServices>>;
   (
     id: string,
   ): <Req extends HostServices | RuntimeServices = never>(
-    eff: Effect.Effect<R["Props"], never, Req>,
+    eff: Effect.Effect<Self["Props"], never, Req>,
   ) => Effect.Effect<
-    R,
+    Self,
     never,
-    Exclude<Req, RuntimeServices | ExecutionContext>
+    Provider<Self> | Exclude<Req, RuntimeServices>
   >;
 };
 
-export type HostClass<Self extends ResourceLike, Provided> = HostConstructor<
-  Self,
-  Provided
-> &
-  Effect.Effect<HostConstructor<Self, Provided>> & {
+export interface Host<Self = any> {
+  self: Self;
+}
+
+export type HostClass<
+  Self extends ResourceLike,
+  Runtime extends ExecutionContextService,
+  Services,
+> = HostConstructor<Self, Services | Host> &
+  Effect.Effect<HostConstructor<Self, Services>> & {
     kind: "Executable";
     provider: ResourceProviders<Self>;
-    self: ServiceMap.Service<Self, Self>;
+    Runtime: ServiceMap.Service<Host<Self>, Runtime>;
   };
 
-export const Host = <R extends ResourceLike, Provided>(
+export const Host = <
+  R extends ResourceLike,
+  Runtime extends ExecutionContextService,
+  Services = never,
+>(
   type: R["Type"],
-): HostClass<R, Provided> => {
-  type Eff = Effect.Effect<R["Props"], never, Provided>;
+  runtime: Effect.Effect<Runtime>,
+): HostClass<R, Runtime, Services | HostRuntimeServices> => {
+  type Eff = Effect.Effect<R["Props"], never, Services | Runtime>;
 
   const resource = Resource(type);
-  const constructor = (id: string, eff?: Eff) => {
-    return eff ? resource(id, eff) : (eff: Eff) => resource(id, eff);
-  };
-  return Object.assign(constructor, resource);
+  const host = ServiceMap.Service<Host<R>, Runtime>(`Host<${type}>`);
+  const constructor = (id: string, eff?: Eff) =>
+    eff
+      ? Effect.flatMap(runtime, (executionContext) =>
+          resource(
+            id,
+            eff.pipe(
+              Effect.provideService(ExecutionContext, executionContext),
+              Effect.provideService(host, executionContext),
+            ),
+          ),
+        )
+      : (eff: Eff) => constructor(id, eff);
+  return Object.assign(constructor, resource, {
+    Runtime: host,
+  }) as any;
 };
+
+export class Self extends ServiceMap.Service<Self, ResourceLike>()(
+  "Alchemy::Self",
+) {}
 
 export class ExecutionContext extends ServiceMap.Service<
   ExecutionContext,
   FunctionExecutionContext | ProcessExecutionContext
 >()("Alchemy::ExecutionContext") {}
 
-interface BaseExecutionContext<Type extends string = string> {
-  LogicalId: string;
-  Type: Type;
+export type ExecutionContextService =
+  | FunctionExecutionContext
+  | ProcessExecutionContext;
+
+interface BaseExecutionContext {
+  type: string;
   /**
    * Get a value from the Runtime
    */
   get<T>(key: string): Effect.Effect<T>;
 }
 
-export interface FunctionExecutionContext<
-  Type extends string = string,
-> extends BaseExecutionContext<Type> {
+export type ListenHandler<A = any, Req = never> = (
+  event: any,
+) => Effect.Effect<A, never, Req> | void;
+
+export interface FunctionExecutionContext extends BaseExecutionContext {
   listen<A, Req = never>(
-    handler: (event: any) => Effect.Effect<A, never, Req> | void,
-  ): Effect.Effect<A, never, Req>;
+    handler: ListenHandler<A, Req>,
+  ): Effect.Effect<void, never, Req>;
   listen<A, Req = never, InitReq = never>(
-    effect: Effect.Effect<
-      (event: any) => Effect.Effect<A, never, Req> | void,
-      never,
-      InitReq
-    >,
-  ): Effect.Effect<A, never, Req | InitReq>;
+    effect: Effect.Effect<ListenHandler<A, Req>, never, InitReq>,
+  ): Effect.Effect<void, never, Req | InitReq>;
+  exports: Record<string, any>;
   run?: never;
 }
 
-export interface ProcessExecutionContext<
-  Type extends string = string,
-> extends BaseExecutionContext<Type> {
+export interface ProcessExecutionContext extends BaseExecutionContext {
   listen?: never;
   run: <Req = never, RunReq = never>(
     effect: Effect.Effect<void, never, RunReq>,

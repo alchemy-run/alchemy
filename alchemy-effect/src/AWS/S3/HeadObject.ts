@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import * as Lambda from "../Lambda/index.ts";
+import { isFunction } from "../Lambda/Function.ts";
 import type { Bucket } from "./Bucket.ts";
 
 export interface HeadObjectRequest extends Omit<
@@ -48,7 +48,7 @@ export class HeadObjectPolicy extends Binding.Policy<
 
 export const HeadObjectPolicyLive = HeadObjectPolicy.layer.succeed(
   Effect.fn(function* (host, bucket) {
-    if (Lambda.isFunction(host)) {
+    if (isFunction(host)) {
       yield* host.bind`Allow(${host}, AWS.S3.HeadObject(${bucket}))`({
         policyStatements: [
           {

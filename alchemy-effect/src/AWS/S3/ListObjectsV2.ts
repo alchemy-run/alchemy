@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import * as Lambda from "../Lambda/index.ts";
+import { isFunction } from "../Lambda/Function.ts";
 import type { Bucket } from "./Bucket.ts";
 
 export interface ListObjectsV2Request extends Omit<
@@ -48,7 +48,7 @@ export class ListObjectsV2Policy extends Binding.Policy<
 
 export const ListObjectsV2PolicyLive = ListObjectsV2Policy.layer.succeed(
   Effect.fn(function* (host, bucket) {
-    if (Lambda.isFunction(host)) {
+    if (isFunction(host)) {
       yield* host.bind`Allow(${host}, AWS.S3.ListObjectsV2(${bucket}))`({
         policyStatements: [
           {

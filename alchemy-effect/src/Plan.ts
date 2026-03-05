@@ -172,8 +172,7 @@ export const make = <A>(
             Effect.gen(function* () {
               const resource = resourceExpr.src;
 
-              const provider =
-                yield* resource.Provider as any as Effect.Effect<ProviderService>;
+              const provider = yield* Provider(resource.Type);
               const props = yield* resolveInput(resource.Props);
               const oldState = yield* state.get({
                 stack: stackName,
@@ -299,6 +298,8 @@ export const make = <A>(
           return yield* Effect.all(expr.outs.map(resolveOutput), {
             concurrency: "unbounded",
           });
+        } else if (Output.isLiteralExpr(expr)) {
+          return expr.value;
         }
         return yield* Effect.die(new Error("Not implemented yet"));
       });
@@ -357,7 +358,7 @@ export const make = <A>(
               logicalId: id,
             });
             const oldBindings = oldState?.bindings ?? [];
-            const provider = yield* resource.Provider;
+            const provider = yield* Provider(resource.Type);
 
             const downstream = newDownstreamDependencies[id] ?? [];
 
@@ -640,6 +641,7 @@ export const make = <A>(
                     Binding: undefined!,
                     Provider: Provider(resourceType),
                     RemovalPolicy: oldState.removalPolicy,
+                    ExecutionContext: undefined!,
                   } as ResourceLike,
                   // TODO(sam): is it enough to just pass through oldState?
                   downstream: oldDownstreamDependencies[id] ?? [],

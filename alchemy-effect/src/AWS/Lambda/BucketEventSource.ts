@@ -6,14 +6,14 @@ import * as Stream from "effect/Stream";
 import * as Binding from "../../Binding.ts";
 import type { Bucket } from "../S3/Bucket.ts";
 import * as S3 from "../S3/index.ts";
-import { isFunction, Function as LambdaFunction } from "./Function.ts";
+import * as Lambda from "./Function.ts";
 import { Permission as LambdaPermission } from "./Permission.ts";
 
 export const BucketEventSource = Layer.effect(
   S3.BucketEventSource,
   Effect.gen(function* () {
     // this layer can only be used in a Lambda Function
-    const func = yield* LambdaFunction.self;
+    const func = yield* Lambda.Function.Runtime;
 
     const bind = yield* BucketEventSourcePolicy;
 
@@ -89,7 +89,7 @@ export const BucketEventSourcePolicyLive = BucketEventSourcePolicy.layer.effect(
         events?: S3.S3EventType[];
       } = {},
     ) {
-      if (isFunction(host)) {
+      if (Lambda.isFunction(host)) {
         yield* Permission(`AWS.Lambda.InvokeFunction(${bucket.LogicalId})`, {
           action: "lambda.InvokeFunction",
           functionName: host.functionName,

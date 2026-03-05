@@ -43,14 +43,14 @@ const awsConfig = Layer.effect(
 
 const awsProviders = Layer.provide(AWS.providers(), awsConfig);
 
-export default Effect.gen(function* () {
+const stack = Effect.gen(function* () {
   const func = yield* JobFunction;
-  const bucket = yield* AWS.S3.Bucket("JobsBucket");
   return {
     url: func.functionUrl,
-    bucketArn: bucket.bucketArn,
   };
 }).pipe(Stack.make("Job", awsProviders));
+
+export default stack;
 
 /*
 ~ JobFunction [AWS.Lambda.Function]

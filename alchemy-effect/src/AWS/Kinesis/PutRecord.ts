@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import * as Lambda from "../Lambda/index.ts";
+import { isFunction } from "../Lambda/Function.ts";
 import type { Stream } from "./Stream.ts";
 
 export interface PutRecordRequest extends Omit<
@@ -48,7 +48,7 @@ export class PutRecordPolicy extends Binding.Policy<
 
 export const PutRecordPolicyLive = PutRecordPolicy.layer.succeed(
   Effect.fn(function* (host, stream) {
-    if (Lambda.isFunction(host)) {
+    if (isFunction(host)) {
       yield* host.bind`Allow(${host}, AWS.Kinesis.PutRecord(${stream}))`({
         policyStatements: [
           {

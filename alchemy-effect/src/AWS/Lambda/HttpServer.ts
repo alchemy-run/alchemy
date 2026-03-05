@@ -12,7 +12,7 @@ const isFunctionURLEvent = (event: any): event is LambdaFunctionURLEvent => {
 export const HttpServer = Layer.effect(
   Http.HttpServer,
   Effect.gen(function* () {
-    const func = yield* Function.self;
+    const func = yield* Function.Runtime;
     return Http.HttpServer.of({
       // @ts-expect-error
       serve: Effect.fn(function* (handler) {

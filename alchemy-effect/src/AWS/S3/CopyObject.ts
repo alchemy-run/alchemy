@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import * as Lambda from "../Lambda/index.ts";
+import { isFunction } from "../Lambda/Function.ts";
 import type { Bucket } from "./Bucket.ts";
 
 export interface CopyObjectRequest extends Omit<
@@ -49,7 +49,7 @@ export class CopyObjectPolicy extends Binding.Policy<
 
 export const CopyObjectPolicyLive = CopyObjectPolicy.layer.succeed(
   Effect.fn(function* (host, bucket) {
-    if (Lambda.isFunction(host)) {
+    if (isFunction(host)) {
       yield* host.bind`Allow(${host}, AWS.S3.CopyObject(${bucket}))`({
         policyStatements: [
           {

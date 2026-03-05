@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import * as Lambda from "../Lambda/index.ts";
+import { isFunction } from "../Lambda/Function.ts";
 import type { Bucket } from "./Bucket.ts";
 
 export interface CompleteMultipartUploadRequest extends Omit<
@@ -52,17 +52,19 @@ export class CompleteMultipartUploadPolicy extends Binding.Policy<
 export const CompleteMultipartUploadPolicyLive =
   CompleteMultipartUploadPolicy.layer.succeed(
     Effect.fn(function* (host, bucket) {
-      if (Lambda.isFunction(host)) {
-        yield* host.bind`Allow(${host}, AWS.S3.CompleteMultipartUpload(${bucket}))`({
-          policyStatements: [
-            {
-              Sid: "CompleteMultipartUpload",
-              Effect: "Allow",
-              Action: ["s3:PutObject"],
-              Resource: [Output.interpolate`${bucket.bucketArn}/*`],
-            },
-          ],
-        });
+      if (isFunction(host)) {
+        yield* host.bind`Allow(${host}, AWS.S3.CompleteMultipartUpload(${bucket}))`(
+          {
+            policyStatements: [
+              {
+                Sid: "CompleteMultipartUpload",
+                Effect: "Allow",
+                Action: ["s3:PutObject"],
+                Resource: [Output.interpolate`${bucket.bucketArn}/*`],
+              },
+            ],
+          },
+        );
       } else {
         return yield* Effect.die(
           `CompleteMultipartUploadPolicy does not support runtime '${host.Type}'`,
