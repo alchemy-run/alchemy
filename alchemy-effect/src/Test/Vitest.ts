@@ -176,8 +176,8 @@ export function test(
     ),
     Effect.provideService(Stage.Stage, "test"),
     Effect.provideService(ExecutionContext, {
-      Type: "function",
-      LogicalId: "TODO",
+      type: "Test",
+      exports: {},
       listen: () => {
         return Effect.void;
       },
@@ -288,8 +288,7 @@ export namespace test {
   ): Effect.Effect<Input.Resolve<A>, Err, Req | Stack.Stack> =>
     Stack.Stack.use((stack) =>
       effect.pipe(
-        // @ts-expect-error
-        Stack.make(stack.name),
+        Stack.make(stack.name, Layer.effectServices(Effect.services<never>())),
         Effect.flatMap(Plan.make),
         Effect.flatMap(apply),
       ),

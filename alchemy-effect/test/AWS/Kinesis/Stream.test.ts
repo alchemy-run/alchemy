@@ -8,7 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
-describe.sequential("AWS.Kinesis.Stream", () => {
+describe("AWS.Kinesis.Stream", () => {
   test(
     "create, update, delete on-demand stream with tags",
     { timeout: 180_000 },

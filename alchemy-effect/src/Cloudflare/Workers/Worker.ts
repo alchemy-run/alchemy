@@ -250,10 +250,20 @@ export const WorkerProvider = () =>
       const prepareBundle = Effect.fnUntraced(function* (
         id: string,
         main: string,
+        handler = "default",
       ) {
         const outfile = path.join(dotAlchemy, "out", `${id}.js`);
+        const entrypoint = path.relative(process.cwd(), main);
         yield* build({
-          entryPoints: [path.relative(process.cwd(), main)],
+          stdin: {
+            contents: `import { ${handler} as handler } from "${entrypoint}";
+import * as Effect from "effect/Effect";
+export default await Effect.runPromise(handler);`,
+            resolveDir: process.cwd(),
+            loader: "ts",
+            sourcefile: "__index.ts",
+          },
+          // entryPoints: [path.relative(process.cwd(), main)],
           outfile,
           write: true,
           bundle: true,

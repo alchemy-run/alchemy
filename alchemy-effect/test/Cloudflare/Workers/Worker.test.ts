@@ -1,6 +1,6 @@
 import { Account } from "@/Cloudflare/Account";
 import { CloudflareApi } from "@/Cloudflare/CloudflareApi";
-import CloudflareLive from "@/Cloudflare/Live";
+import * as Cloudflare from "@/Cloudflare";
 import * as R2 from "@/Cloudflare/R2";
 import * as Worker from "@/Cloudflare/Workers";
 import { destroy } from "@/Destroy";
@@ -85,7 +85,7 @@ test(
     yield* destroy();
 
     yield* waitForWorkerToBeDeleted(worker.workerId, accountId);
-  }).pipe(Effect.provide(CloudflareLive), logLevel),
+  }).pipe(Effect.provide(Cloudflare.providers()), logLevel),
 );
 
 test(
@@ -168,7 +168,7 @@ test(
     yield* destroy();
 
     yield* waitForWorkerToBeDeleted(finalWorker.workerId, accountId);
-  }).pipe(Effect.provide(CloudflareLive), logLevel),
+  }).pipe(Effect.provide(Cloudflare.providers()), logLevel),
 );
 
 const waitForWorkerToBeDeleted = Effect.fn(function* (

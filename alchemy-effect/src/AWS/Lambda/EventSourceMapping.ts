@@ -188,7 +188,7 @@ const retryTransient: <A, R, Err>(
 
 const retryPermissionsPropagation = Effect.retry({
   while: (e: any) =>
-    e.name === "InvalidParameterValueException" &&
+    e._tag === "InvalidParameterValueException" &&
     (e.message?.includes(
       "The function execution role does not have permissions to call",
     ) ||

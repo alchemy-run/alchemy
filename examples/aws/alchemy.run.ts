@@ -1,4 +1,4 @@
-import { AWS, Stack, Stage } from "alchemy-effect";
+import { AWS, Cloudflare, Stack, Stage } from "alchemy-effect";
 import * as Credentials from "distilled-aws/Credentials";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
@@ -43,10 +43,29 @@ const awsConfig = Layer.effect(
 
 const awsProviders = Layer.provide(AWS.providers(), awsConfig);
 
+const cloudflareConfig = Layer.effect(
+  Cloudflare.StageConfig,
+  Effect.gen(function* () {
+    const _stage = yield* Stage;
+    return Cloudflare.StageConfig.of({
+      account: "123456789012",
+    });
+  }).pipe(Effect.orDie),
+);
+
+const cloudflareProviders = Layer.provide(
+  Cloudflare.providers(),
+  cloudflareConfig,
+);
+
+// const providers = Layer.mergeAll(awsProviders, cloudflareProviders);
+
 const stack = Effect.gen(function* () {
   const func = yield* JobFunction;
+  // const worker = yield* JobWorker;
   return {
-    url: func.functionUrl,
+    awsUrl: func.functionUrl,
+    // cloudflareUrl: worker.url,
   };
 }).pipe(Stack.make("Job", awsProviders));
 

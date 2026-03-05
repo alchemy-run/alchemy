@@ -99,7 +99,7 @@ export function Plan({ plan }: PlanProps): React.JSX.Element {
                       <Box width={4}>
                         <Text color={bindingColor}> {bindingIcon}</Text>
                       </Box>
-                      <Box width={40}>
+                      <Box>
                         <Text color="cyan">{node.sid}</Text>
                       </Box>
                     </Box>

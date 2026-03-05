@@ -278,8 +278,6 @@ export const FunctionProvider = () =>
           `${stack.name}-${stage}-${id}.ts`,
         );
         yield* esbuild.build({
-          // entryPoints: [props.main],
-          // we use a virtual entry point so that we can pluck out the user's handler closure and only its dependencies (not the whole module)
           stdin: {
             contents: `import { ${handler} as handler } from "${file}";
 import * as Effect from "effect/Effect";
@@ -579,9 +577,8 @@ export default await Effect.runPromise(handler);`,
               }).pipe(
                 Effect.map((f) => f.FunctionUrl),
                 Effect.retry({
-                  //   error: ResourceConflictException: The operation cannot be performed at this time.
-                  // An update is in progress for resource: arn:aws:lambda:us-west-2:084828582823:function:my-app-dev-Consumer-us-west-2
-                  while: (e) => e.name === "ResourceConflictException",
+                  // TODO(sam): did we lose this error? Is it missing for a good reason?
+                  while: (e: any) => e._tag === "ResourceConflictException",
                   schedule: Schedule.exponential(100),
                 }),
                 Effect.catchTag("ResourceNotFoundException", () =>

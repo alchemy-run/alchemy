@@ -203,7 +203,8 @@ export const DurableObjectNamespace = Effect.fnUntraced(function* <
   ) => DurableObjectNamespace.pipe(Effect.map((ns) => fn(ns)));
 
   return {
-    getByName: (name: string) => use((ns) => ns.getByName(name)),
+    // @ts-expect-error - TODO(sam): we need to build a proxy around Cloudflare RPC
+    getByName: (name: string) => use((ns) => ns.getByName(name) as Shape),
     newUniqueId: () => use((ns) => ns.newUniqueId()),
     idFromName: (name: string) => use((ns) => ns.idFromName(name)),
     idFromString: (id: string) => use((ns) => ns.idFromString(id)),

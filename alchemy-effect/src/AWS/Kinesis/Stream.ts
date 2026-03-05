@@ -148,7 +148,7 @@ export const StreamProvider = () =>
             .pipe(
               Effect.catchTag("ResourceInUseException", () => Effect.void),
               Effect.retry({
-                while: (e) => e.name === "LimitExceededException",
+                while: (e) => e._tag === "LimitExceededException",
                 schedule: Schedule.exponential(1000),
               }),
             );

@@ -1,6 +1,7 @@
 export * from "./Apply.ts";
 export * as AWS from "./AWS/index.ts";
 export * from "./Binding.ts";
+export * as Cloudflare from "./Cloudflare/index.ts";
 export * from "./Config.ts";
 export * from "./Destroy.ts";
 export * from "./Diff.ts";

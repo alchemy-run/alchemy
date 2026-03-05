@@ -143,7 +143,7 @@ export const TableProvider = () =>
           })
           .pipe(
             Effect.retry({
-              while: (e) => e.name === "ResourceInUseException",
+              while: (e) => e._tag === "ResourceInUseException",
               schedule: Schedule.exponential(100),
             }),
           );
@@ -194,8 +194,8 @@ export const TableProvider = () =>
               Effect.map((r) => r.TableDescription!),
               Effect.retry({
                 while: (e) =>
-                  e.name === "LimitExceededException" ||
-                  e.name === "InternalServerError",
+                  e._tag === "LimitExceededException" ||
+                  e._tag === "InternalServerError",
                 schedule: Schedule.exponential(100),
               }),
               Effect.catchTag("ResourceInUseException", () =>

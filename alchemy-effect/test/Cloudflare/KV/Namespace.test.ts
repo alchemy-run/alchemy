@@ -1,7 +1,7 @@
 import { Account } from "@/Cloudflare/Account";
 import { CloudflareApi } from "@/Cloudflare/CloudflareApi";
 import * as KV from "@/Cloudflare/KV/index";
-import * as CloudflareLive from "@/Cloudflare/Live";
+import * as Cloudflare from "@/Cloudflare";
 import { destroy } from "@/Destroy";
 import { test } from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
@@ -61,7 +61,7 @@ test(
     yield* destroy();
 
     yield* waitForNamespaceToBeDeleted(namespace.namespaceId, accountId);
-  }).pipe(Effect.provide(CloudflareLive.default), logLevel),
+  }).pipe(Effect.provide(Cloudflare.providers()), logLevel),
 );
 
 const waitForNamespaceToBeDeleted = Effect.fn(function* (

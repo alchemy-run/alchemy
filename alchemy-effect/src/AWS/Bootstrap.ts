@@ -72,7 +72,7 @@ export const bootstrap = Effect.fn(function* () {
       .pipe(
         Effect.retry({
           while: (e) =>
-            e.name === "OperationAborted" || e.name === "ServiceUnavailable",
+            e._tag === "OperationAborted" || e._tag === "ServiceUnavailable",
           schedule: Schedule.exponential(100),
         }),
       );
@@ -88,7 +88,7 @@ export const bootstrap = Effect.fn(function* () {
         Effect.catchTag("BucketAlreadyOwnedByYou", () => Effect.void),
         Effect.retry({
           while: (e) =>
-            e.name === "OperationAborted" || e.name === "ServiceUnavailable",
+            e._tag === "OperationAborted" || e._tag === "ServiceUnavailable",
           schedule: Schedule.exponential(100),
         }),
       );

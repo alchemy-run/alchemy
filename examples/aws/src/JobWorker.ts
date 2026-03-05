@@ -1,9 +1,46 @@
+// @ts-nocheck
 import { Http } from "alchemy-effect";
 import * as Cloudflare from "alchemy-effect/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as ServiceMap from "effect/ServiceMap";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+export class Users extends ServiceMap.Service<
+  Users,
+  {
+    getUser: (userId: string) => Effect.Effect<{
+      firstName: string;
+      lastName: string;
+    }>;
+  }
+>()("Users") {}
+
+export const UsersDurableObject = Layer.effect(
+  Users,
+  Effect.gen(function* () {
+    const users = yield* Cloudflare.DurableObjectNamespace(
+      "Users",
+      Effect.gen(function* () {
+        const state = yield* Cloudflare.DurableObjectState;
+        return {
+          getProfile: () =>
+            state.storage.kv.get("profile") as {
+              firstName: string;
+              lastName: string;
+            },
+        };
+      }),
+    );
+    return Users.of({
+      getUser: (userId) =>
+        users
+          .getByName(userId)
+          .pipe(Effect.flatMap((user) => user.getProfile())),
+    });
+  }),
+);
 
 export default Effect.gen(function* () {
   const users = yield* Cloudflare.DurableObjectNamespace(

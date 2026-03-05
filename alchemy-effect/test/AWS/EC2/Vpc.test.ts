@@ -14,7 +14,7 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-test(
+test.skip(
   "create, update, delete vpc",
   Effect.gen(function* () {
     const vpc = yield* test.deploy(

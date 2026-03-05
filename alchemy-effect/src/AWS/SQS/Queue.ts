@@ -166,7 +166,7 @@ export const QueueProvider = () =>
             })
             .pipe(
               Effect.retry({
-                while: (e) => e.name === "QueueDeletedRecently",
+                while: (e) => e._tag === "QueueDeletedRecently",
                 schedule: Schedule.fixed(1000).pipe(
                   Schedule.tapOutput((i) =>
                     session.note(

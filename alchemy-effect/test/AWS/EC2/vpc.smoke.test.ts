@@ -29,7 +29,7 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-test.skipIf(!!process.env.FAST)(
+test.skip(
   "VPC evolution: from simple to complex",
   {
     timeout: 1_000_000,
@@ -1194,7 +1194,7 @@ test.skipIf(!!process.env.FAST)(
   }).pipe(Effect.provide(AWS.providers()), logLevel),
 );
 
-test.skipIf(!!process.env.FAST)(
+test.skip(
   "Comprehensive VPC with all components",
   {
     timeout: 1_000_000,

@@ -196,8 +196,8 @@ export const BucketProvider = () =>
                 .pipe(
                   Effect.retry({
                     while: (e) =>
-                      e.name === "OperationAborted" ||
-                      e.name === "ServiceUnavailable",
+                      e._tag === "OperationAborted" ||
+                      e._tag === "ServiceUnavailable",
                     schedule: Schedule.exponential(100),
                   }),
                 );
@@ -216,8 +216,8 @@ export const BucketProvider = () =>
                 Effect.catchTag("BucketAlreadyOwnedByYou", () => Effect.void),
                 Effect.retry({
                   while: (e) =>
-                    e.name === "OperationAborted" ||
-                    e.name === "ServiceUnavailable",
+                    e._tag === "OperationAborted" ||
+                    e._tag === "ServiceUnavailable",
                   schedule: Schedule.exponential(100),
                 }),
               );
@@ -347,7 +347,7 @@ export const BucketProvider = () =>
             .pipe(
               Effect.catchTag("NoSuchBucket", () => Effect.void),
               Effect.retry({
-                while: (e) => e.name === "BucketNotEmpty",
+                while: (e) => e._tag === "BucketNotEmpty",
                 schedule: Schedule.exponential(100).pipe(
                   Schedule.both(Schedule.recurs(5)),
                 ),
