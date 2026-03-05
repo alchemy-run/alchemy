@@ -1,8 +1,48 @@
+import { Http } from "alchemy-effect";
 import * as Cloudflare from "alchemy-effect/Cloudflare";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 export default Effect.gen(function* () {
+  const users = yield* Cloudflare.DurableObjectNamespace(
+    "Users",
+    Effect.gen(function* () {
+      const state = yield* Cloudflare.DurableObjectState;
+
+      return {
+        getCart: () =>
+          state.storage.kv.get("cart") as {
+            items: string[];
+          },
+      };
+    }),
+  );
+
+  yield* Http.serve(
+    Effect.gen(function* () {
+      const request = yield* HttpServerRequest;
+      if (request.method === "GET" && request.url.includes("/users")) {
+        const user = yield* users.getByName(request.url.split("/").pop()!);
+        const cart = user.getCart();
+
+        return yield* HttpServerResponse.json(cart).pipe(
+          Effect.catch(() =>
+            Effect.succeed(
+              HttpServerResponse.text("Internal server error", { status: 500 }),
+            ),
+          ),
+        );
+      }
+      return HttpServerResponse.text("Not found", { status: 404 });
+    }),
+  );
+
   return {
     main: import.meta.filename,
   } as Cloudflare.WorkerProps;
-}).pipe(Cloudflare.Worker("JobWorker"));
+}).pipe(
+  Effect.provide(Layer.mergeAll(Cloudflare.HttpServer)),
+  Cloudflare.Worker("JobWorker"),
+);

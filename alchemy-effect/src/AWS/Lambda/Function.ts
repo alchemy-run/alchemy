@@ -14,8 +14,8 @@ import { ESBuild } from "../../Bundle/index.ts";
 import { DotAlchemy } from "../../Config.ts";
 import {
   Host,
-  type FunctionExecutionContext,
   type ListenHandler,
+  type ServerlessExecutionContext,
 } from "../../Host.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
@@ -73,7 +73,7 @@ export interface Function extends Resource<
 
 export const Function = Host<
   Function,
-  FunctionExecutionContext,
+  ServerlessExecutionContext,
   Credentials | Region
 >(
   "AWS.Lambda.Function",
@@ -89,7 +89,7 @@ export const Function = Host<
           Effect.isEffect(handler)
             ? listeners.push(handler)
             : listeners.push(Effect.succeed(handler)),
-        )) as any as FunctionExecutionContext["listen"],
+        )) as any as ServerlessExecutionContext["listen"],
       exports: {
         // construct an Effect that produces the Function's entrypoint
         default: Effect.map(
@@ -111,7 +111,7 @@ export const Function = Host<
             },
         ),
       },
-    } satisfies FunctionExecutionContext;
+    } satisfies ServerlessExecutionContext;
   }),
 );
 

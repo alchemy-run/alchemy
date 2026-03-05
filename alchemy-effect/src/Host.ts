@@ -88,12 +88,12 @@ export class Self extends ServiceMap.Service<Self, ResourceLike>()(
 
 export class ExecutionContext extends ServiceMap.Service<
   ExecutionContext,
-  FunctionExecutionContext | ProcessExecutionContext
+  ServerlessExecutionContext | ServerExecutionContext
 >()("Alchemy::ExecutionContext") {}
 
 export type ExecutionContextService =
-  | FunctionExecutionContext
-  | ProcessExecutionContext;
+  | ServerlessExecutionContext
+  | ServerExecutionContext;
 
 interface BaseExecutionContext {
   type: string;
@@ -107,7 +107,7 @@ export type ListenHandler<A = any, Req = never> = (
   event: any,
 ) => Effect.Effect<A, never, Req> | void;
 
-export interface FunctionExecutionContext extends BaseExecutionContext {
+export interface ServerlessExecutionContext extends BaseExecutionContext {
   listen<A, Req = never>(
     handler: ListenHandler<A, Req>,
   ): Effect.Effect<void, never, Req>;
@@ -118,7 +118,7 @@ export interface FunctionExecutionContext extends BaseExecutionContext {
   run?: never;
 }
 
-export interface ProcessExecutionContext extends BaseExecutionContext {
+export interface ServerExecutionContext extends BaseExecutionContext {
   listen?: never;
   run: <Req = never, RunReq = never>(
     effect: Effect.Effect<void, never, RunReq>,

@@ -17,11 +17,11 @@ export class HttpServer extends ServiceMap.Service<
   }
 >()("HttpServer") {}
 
-export const serve = (
+export const serve = <Req = never>(
   handler: Effect.Effect<
     HttpServerResponse,
     HttpServerError,
-    HttpServerRequest | Scope
+    HttpServerRequest | Scope | Req
   >,
 ) =>
   HttpServer.use((http) =>

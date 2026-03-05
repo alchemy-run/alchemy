@@ -1,3 +1,5 @@
+import type * as cf from "@cloudflare/workers-types";
+
 import type { Workers } from "cloudflare/resources";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -7,17 +9,18 @@ import * as ServiceMap from "effect/ServiceMap";
 import * as ESBuild from "../../Bundle/ESBuild.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/index.ts";
 import { DotAlchemy } from "../../Config.ts";
-import { Host, type FunctionExecutionContext } from "../../Host.ts";
+import {
+  Host,
+  type ListenHandler,
+  type ServerlessExecutionContext,
+} from "../../Host.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import { sha256 } from "../../Util/sha256.ts";
 import { Account } from "../Account.ts";
 import { CloudflareApi } from "../CloudflareApi.ts";
 import * as Assets from "./Assets.ts";
-
-export class WorkerRuntime extends ServiceMap.Service<WorkerRuntime, Worker>()(
-  "Cloudflare.Workers.WorkerRuntime",
-) {}
+import type { DurableObjectState } from "./DurableObject.ts";
 
 export const isWorker = <T>(value: T): value is T & Worker => {
   return (
@@ -28,26 +31,31 @@ export const isWorker = <T>(value: T): value is T & Worker => {
   );
 };
 
-export interface WorkerExecutionContext extends FunctionExecutionContext<"Cloudflare.Worker"> {
-  /**
-   * An object with properties that are exported from the Worker entrypoint.
-   *
-   * Equivalent to these in code:
-   * ```ts
-   * export class MyDo extends DurableObject {
-   *   fetch(request: Request) {
-   *     return new Response("Hello from MyDo");
-   *   }
-   * }
-   *
-   * export default {
-   *   fetch: (request: Request) => Promise<Response>;
-   *   queue: (message: any) => Promise<void>;
-   * }
-   * ```
-   */
-  exports: Record<string, any>;
-}
+export class WorkerEnvironment extends ServiceMap.Service<
+  WorkerEnvironment,
+  Record<string, any>
+>()("Cloudflare.Workers.WorkerEnvironment") {}
+
+export class ExecutionContext extends ServiceMap.Service<
+  ExecutionContext,
+  cf.ExecutionContext
+>()("Cloudflare.Workers.ExecutionContext") {}
+
+export type WorkerEvent = Exclude<
+  {
+    [type in keyof cf.ExportedHandler]: {
+      kind: "Cloudflare.Workers.WorkerEvent";
+      type: type;
+      input: Parameters<Exclude<cf.ExportedHandler[type], undefined>>[0];
+      env: Parameters<Exclude<cf.ExportedHandler[type], undefined>>[1];
+      context: Parameters<Exclude<cf.ExportedHandler[type], undefined>>[2];
+    };
+  }[keyof cf.ExportedHandler],
+  undefined
+>;
+
+export const isWorkerEvent = (value: any): value is WorkerEvent =>
+  value?.kind === "Cloudflare.Workers.WorkerEvent";
 
 export type WorkerProps = {
   name?: string;
@@ -65,30 +73,108 @@ export type WorkerProps = {
   placement?: Worker.Placement;
 };
 
-export interface Worker
-  extends
-    WorkerExecutionContext,
-    Resource<
-      "Cloudflare.Worker",
-      WorkerProps,
-      {
-        workerId: string;
-        workerName: string;
-        logpush: boolean | undefined;
-        url: string | undefined;
-        tags: string[] | undefined;
-        accountId: string;
-        hash?: {
-          assets: string | undefined;
-          bundle: string;
-        };
-      },
-      {
-        bindings: Worker.Binding[];
-      }
-    > {}
+export interface WorkerExecutionContext extends ServerlessExecutionContext {
+  export(name: string, value: any): Effect.Effect<void>;
+}
 
-export const Worker = Host<Worker, WorkerRuntime>("Cloudflare.Worker");
+export interface Worker extends Resource<
+  "Cloudflare.Workers.Worker",
+  WorkerProps,
+  {
+    workerId: string;
+    workerName: string;
+    logpush: boolean | undefined;
+    url: string | undefined;
+    tags: string[] | undefined;
+    accountId: string;
+    hash?: {
+      assets: string | undefined;
+      bundle: string;
+    };
+  },
+  {
+    bindings: Worker.Binding[];
+  }
+> {}
+
+export const Worker = Host<
+  Worker,
+  WorkerExecutionContext,
+  DurableObjectState | WorkerEnvironment | ExecutionContext
+>(
+  "Cloudflare.Workers.Worker",
+  Effect.gen(function* () {
+    const listeners: Effect.Effect<ListenHandler>[] = [];
+    const exports: Record<string, any> = {};
+
+    return {
+      type: "Cloudflare.Workers.Worker",
+      run: undefined!,
+      get: () => Effect.succeed(undefined!),
+      listen: ((handler: ListenHandler | Effect.Effect<ListenHandler>) =>
+        Effect.sync(() =>
+          Effect.isEffect(handler)
+            ? listeners.push(handler)
+            : listeners.push(Effect.succeed(handler)),
+        )) as any as ServerlessExecutionContext["listen"],
+      export: (name: string, value: any) =>
+        Effect.gen(function* () {
+          if (name in exports) {
+            return yield* Effect.die(
+              new Error(`Worker export '${name}' already exists`),
+            );
+          }
+          exports[name] = value;
+        }),
+      exports: Effect.sync(() => ({
+        ...exports,
+        // construct an Effect that produces the Function's entrypoint
+        default: Effect.map(
+          Effect.all(listeners, {
+            concurrency: "unbounded",
+          }),
+          (handlers) => {
+            const handle =
+              (type: WorkerEvent["type"]) =>
+              (request: any, env: unknown, context: cf.ExecutionContext) => {
+                const event: WorkerEvent = {
+                  kind: "Cloudflare.Workers.WorkerEvent",
+                  type,
+                  input: request,
+                  env,
+                  context,
+                };
+                for (const handler of handlers) {
+                  const eff = handler(event);
+                  if (Effect.isEffect(eff)) {
+                    return eff.pipe(
+                      Effect.provideService(ExecutionContext, context),
+                      Effect.provideService(
+                        WorkerEnvironment,
+                        env as Record<string, any>,
+                      ),
+                      Effect.runPromise,
+                    );
+                  }
+                }
+                throw new Error("No event handler found");
+              };
+            return {
+              fetch: handle("fetch"),
+              email: handle("email"),
+              queue: handle("queue"),
+              scheduled: handle("scheduled"),
+              tail: handle("tail"),
+              trace: handle("trace"),
+              tailStream: handle("tailStream"),
+              test: handle("test"),
+            } satisfies Required<cf.ExportedHandler>;
+          },
+        ),
+      })),
+    } satisfies WorkerExecutionContext;
+  }),
+);
 
 export declare namespace Worker {
   export type Observability = Workers.ScriptUpdateParams.Metadata.Observability;

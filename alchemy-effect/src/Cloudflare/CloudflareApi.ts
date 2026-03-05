@@ -117,7 +117,7 @@ export class CloudflareApiError extends Data.Error<{
   }
 }
 
-type ToEffect<T> = {
+export type ToEffect<T> = {
   [K in keyof T]: T[K] extends (...args: any[]) => any
     ? (
         ...args: Parameters<T[K]>
