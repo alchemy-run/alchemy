@@ -11,6 +11,7 @@ import type {
   WatchOptions as RolldownWatchOptions,
 } from "rolldown";
 import * as _rolldown from "rolldown";
+import { DotAlchemy } from "../Config.ts";
 import {
   BundleError,
   Bundler,
@@ -26,6 +27,7 @@ export const rolldown = () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const pathService = yield* Path.Path;
+      const dotAlchemy = yield* DotAlchemy;
 
       const resolveStdin = (options: BundleOptions) =>
         Effect.gen(function* () {
@@ -40,11 +42,17 @@ export const rolldown = () =>
             .digest("hex")
             .slice(0, 8);
           const resolveDir = options.stdin.resolveDir ?? process.cwd();
-          const tempFile = pathService.join(
+          const tempDir = pathService.join(
             resolveDir,
-            `.alchemy-stdin-${hash}${ext}`,
+            pathService.basename(dotAlchemy),
+            "tmp",
+          );
+          const tempFile = pathService.join(
+            tempDir,
+            `stdin-${hash}${ext}`,
           );
 
+          yield* fs.makeDirectory(tempDir, { recursive: true }).pipe(Effect.orDie);
           yield* fs
             .writeFileString(tempFile, options.stdin.contents)
             .pipe(Effect.orDie);

@@ -5,6 +5,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as crypto from "node:crypto";
+import { DotAlchemy } from "../Config.ts";
 import {
   BundleError,
   Bundler,
@@ -22,6 +23,7 @@ export const rspack = () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const pathService = yield* Path.Path;
+      const dotAlchemy = yield* DotAlchemy;
 
       const resolveStdin = (options: BundleOptions) =>
         Effect.gen(function* () {
@@ -36,7 +38,11 @@ export const rspack = () =>
             .digest("hex")
             .slice(0, 8);
           const resolveDir = options.stdin.resolveDir ?? process.cwd();
-          const tempDir = pathService.join(resolveDir, ".alchemy", "tmp");
+          const tempDir = pathService.join(
+            resolveDir,
+            pathService.basename(dotAlchemy),
+            "tmp",
+          );
           const tempFile = pathService.join(
             tempDir,
             `stdin-${hash}${ext}`,
