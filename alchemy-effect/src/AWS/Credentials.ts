@@ -8,7 +8,6 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { Profile } from "./Profile.ts";
 
-import "./StageConfig.ts";
 import { StageConfig } from "./StageConfig.ts";
 
 export const fromStageConfig = () =>

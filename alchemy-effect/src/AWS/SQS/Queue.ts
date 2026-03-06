@@ -187,6 +187,7 @@ export const QueueProvider = () =>
           };
         }),
         update: Effect.fn(function* ({ news = {}, output, session, bindings }) {
+          console.log(createAttributes(news, bindings));
           yield* sqs.setQueueAttributes({
             QueueUrl: output.queueUrl,
             Attributes: createAttributes(news, bindings),

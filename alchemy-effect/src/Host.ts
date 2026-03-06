@@ -23,18 +23,28 @@ export type HostServices =
 export type HostRuntimeServices = ExecutionContext | HttpClient | Scope;
 
 export type HostConstructor<Self extends ResourceLike, RuntimeServices> = {
-  <Req extends HostServices | RuntimeServices = never>(
-    id: string,
-    eff: Effect.Effect<Self["Props"], never, Req>,
-  ): Effect.Effect<Self, never, Provider<Self> | Exclude<Req, RuntimeServices>>;
+  // <Req extends HostServices | RuntimeServices = never>(
+  //   id: string,
+  //   eff: Effect.Effect<Self["Props"], never, Req>,
+  // ): Effect.Effect<
+  //   Self,
+  //   never,
+  //   Provider<Self> | Exclude<Req, RuntimeServices | HostRuntimeServices>
+  // >;
   (
     id: string,
-  ): <Req extends HostServices | RuntimeServices = never>(
+  ): <
+    Req extends
+      | HostServices
+      | RuntimeServices
+      | HostRuntimeServices
+      | HttpClient = never,
+  >(
     eff: Effect.Effect<Self["Props"], never, Req>,
   ) => Effect.Effect<
     Self,
     never,
-    Provider<Self> | Exclude<Req, RuntimeServices>
+    Provider<Self> | Exclude<Req, RuntimeServices | HostRuntimeServices>
   >;
 };
 
@@ -67,12 +77,18 @@ export const Host = <
   const host = ServiceMap.Service<Host<R>, Runtime>(`Host<${type}>`);
   const constructor = (id: string, eff?: Eff) =>
     eff
-      ? Effect.flatMap(runtime, (executionContext) =>
-          resource(
-            id,
-            eff.pipe(
-              Effect.provideService(ExecutionContext, executionContext),
-              Effect.provideService(host, executionContext),
+      ? runtime.pipe(
+          Effect.map((executionContext) => ({
+            LogicalId: id,
+            ...executionContext,
+          })),
+          Effect.flatMap((executionContext) =>
+            resource(
+              id,
+              eff.pipe(
+                Effect.provideService(ExecutionContext, executionContext),
+                Effect.provideService(host, executionContext),
+              ),
             ),
           ),
         )

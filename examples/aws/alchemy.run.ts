@@ -1,4 +1,8 @@
-import { AWS, Cloudflare, Stack, Stage } from "alchemy-effect";
+// import { Bundle, Stack, Stage } from "alchemy-effect";
+import * as AWS from "alchemy-effect/AWS";
+import * as Cloudflare from "alchemy-effect/Cloudflare";
+import * as Stack from "alchemy-effect/Stack";
+import { Stage } from "alchemy-effect/Stage";
 import * as Credentials from "distilled-aws/Credentials";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";

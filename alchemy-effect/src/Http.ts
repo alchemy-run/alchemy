@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import type { Scope } from "effect/Scope";
 import * as ServiceMap from "effect/ServiceMap";
+import type { HttpBodyError } from "effect/unstable/http/HttpBody";
 import type { HttpServerError } from "effect/unstable/http/HttpServerError";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import {
@@ -20,7 +21,7 @@ export class HttpServer extends ServiceMap.Service<
 export const serve = <Req = never>(
   handler: Effect.Effect<
     HttpServerResponse,
-    HttpServerError,
+    HttpServerError | HttpBodyError,
     HttpServerRequest | Scope | Req
   >,
 ) =>

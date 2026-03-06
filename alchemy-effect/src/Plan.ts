@@ -1,6 +1,5 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { asEffect } from ".//Util/types.ts";
 import {
   diffBindings,
@@ -395,11 +394,7 @@ export const make = <A>(
                     olds: oldState.props,
                     output: oldState.attr,
                   })
-                  .pipe(
-                    Effect.provide(
-                      Layer.succeed(InstanceId, oldState.instanceId),
-                    ),
-                  );
+                  .pipe(Effect.provideService(InstanceId, oldState.instanceId));
                 if (attr) {
                   return Node<Create>({
                     action: "create",
@@ -414,20 +409,17 @@ export const make = <A>(
             const oldProps = oldState.props;
 
             const diff = yield* asEffect(
-              provider.diff
-                ? Effect.provide(
-                    provider.diff({
-                      id,
-                      olds: oldProps,
-                      instanceId: oldState.instanceId,
-                      output: oldState.attr,
-                      news,
-                      oldBindings,
-                      newBindings,
-                    }),
-                    Layer.succeed(InstanceId, oldState.instanceId),
-                  )
-                : undefined,
+              provider
+                ?.diff?.({
+                  id,
+                  olds: oldProps,
+                  instanceId: oldState.instanceId,
+                  output: oldState.attr,
+                  news,
+                  oldBindings,
+                  newBindings,
+                })
+                .pipe(Effect.provideService(InstanceId, oldState.instanceId)),
             ).pipe(
               Effect.map(
                 (diff) =>
@@ -472,6 +464,7 @@ export const make = <A>(
             } else if (oldState.status === "updating") {
               // we started to update a resource but did not complete
               if (diff.action === "update" || diff.action === "noop") {
+                // we can continue where we left off
                 return Node<Update>({
                   action: "update",
                   props: news,
@@ -484,7 +477,7 @@ export const make = <A>(
                   deleteFirst: diff.deleteFirst ?? false,
                   props: news,
                   // TODO(sam): can Apply handle replacements when the oldState is UpdatingResourceState?
-                  // -> or is there we do a provider.read to try and reconcile back to UpdatedResourceState?
+                  // -> or should we do a provider.read to try and reconcile back to UpdatedResourceState?
                   state: oldState,
                 });
               }
@@ -519,9 +512,7 @@ export const make = <A>(
                 // 2. expect the resource provider to handle it idempotently?
                 // -> i don't think this case is fair to put on the resource provider
                 //    because if the resource was created, it's in a state that can't be updated
-                return yield* Effect.fail(
-                  new CannotReplacePartiallyReplacedResource(id),
-                );
+                return yield* new CannotReplacePartiallyReplacedResource(id);
               }
             } else if (oldState.status === "replaced") {
               // replacement has been created but we're not done cleaning up the old state
@@ -547,9 +538,7 @@ export const make = <A>(
                 // the replacement has been created but now it needs to be replaced
                 // this is the worst-case scenario because downstream resources
                 // could have been been updated to point to the replaced resources
-                return yield* Effect.fail(
-                  new CannotReplacePartiallyReplacedResource(id),
-                );
+                return yield* new CannotReplacePartiallyReplacedResource(id);
               }
             } else if (oldState.status === "deleting") {
               if (diff.action === "noop" || diff.action === "update") {
@@ -565,9 +554,7 @@ export const make = <A>(
                   },
                 });
               } else {
-                return yield* Effect.fail(
-                  new CannotReplacePartiallyReplacedResource(id),
-                );
+                return yield* new CannotReplacePartiallyReplacedResource(id);
               }
             } else if (diff.action === "update") {
               return Node<Update>({
@@ -620,9 +607,7 @@ export const make = <A>(
                       output: oldState.attr as never,
                     })
                     .pipe(
-                      Effect.provide(
-                        Layer.succeed(InstanceId, oldState.instanceId),
-                      ),
+                      Effect.provideService(InstanceId, oldState.instanceId),
                     );
                 }
               }
@@ -664,13 +649,11 @@ export const make = <A>(
         (d) => d in resourceGraph,
       );
       if (dependencies.length > 0) {
-        return yield* Effect.fail(
-          new DeleteResourceHasDownstreamDependencies({
-            message: `Resource ${resourceId} has downstream dependencies`,
-            resourceId,
-            dependencies,
-          }),
-        );
+        return yield* new DeleteResourceHasDownstreamDependencies({
+          message: `Resource ${resourceId} has downstream dependencies`,
+          resourceId,
+          dependencies,
+        });
       }
     }
 

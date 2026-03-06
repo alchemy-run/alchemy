@@ -6,7 +6,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as ServiceMap from "effect/ServiceMap";
 
-import * as ESBuild from "../../Bundle/ESBuild.ts";
+import { Bundler } from "../../Bundle/Bundler.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/index.ts";
 import { DotAlchemy } from "../../Config.ts";
 import {
@@ -200,7 +200,7 @@ export const WorkerProvider = () =>
       const api = yield* CloudflareApi;
       const accountId = yield* Account;
       const { read, upload } = yield* Assets.Assets;
-      const { build } = yield* ESBuild.ESBuild;
+      const { build } = yield* Bundler;
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const dotAlchemy = yield* DotAlchemy;
@@ -258,18 +258,19 @@ export const WorkerProvider = () =>
           stdin: {
             contents: `import { ${handler} as handler } from "${entrypoint}";
 import * as Effect from "effect/Effect";
-export default await Effect.runPromise(handler);`,
+const handler = await Effect.runPromise(handler)
+export default handler;
+${exports.map((name) => `export const ${name} = handler.${name};`).join("\n")}
+`,
             resolveDir: process.cwd(),
             loader: "ts",
             sourcefile: "__index.ts",
           },
-          // entryPoints: [path.relative(process.cwd(), main)],
           outfile,
-          write: true,
-          bundle: true,
           format: "esm",
           sourcemap: false,
-          treeShaking: true,
+          treeshake: true,
+          minify: true,
         });
         const code = yield* fs.readFileString(outfile);
         return {

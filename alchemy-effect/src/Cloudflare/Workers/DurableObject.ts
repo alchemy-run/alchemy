@@ -1,24 +1,137 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as ServiceMap from "effect/ServiceMap";
 import * as Binding from "../../Binding.ts";
 import type { ToEffect } from "../CloudflareApi.ts";
 import { isWorker, Worker, WorkerEnvironment } from "./Worker.ts";
 
+export type DurableObjectId = cf.DurableObjectId;
+export type DurableObjectJurisdiction = cf.DurableObjectJurisdiction;
+export type DurableObjectNamespaceGetDurableObjectOptions =
+  cf.DurableObjectNamespaceGetDurableObjectOptions;
+
 export interface DurableObjectNamespace<Name extends string, Shape> {
   name: Name;
   getByName: (name: string) => Effect.Effect<DurableObjectStub<Shape>>;
-  newUniqueId: () => Effect.Effect<cf.DurableObjectId>;
-  idFromName: (name: string) => Effect.Effect<cf.DurableObjectId>;
-  idFromString: (id: string) => Effect.Effect<cf.DurableObjectId>;
+  newUniqueId: () => Effect.Effect<DurableObjectId>;
+  idFromName: (name: string) => Effect.Effect<DurableObjectId>;
+  idFromString: (id: string) => Effect.Effect<DurableObjectId>;
   get: (
-    id: cf.DurableObjectId,
-    options?: cf.DurableObjectNamespaceGetDurableObjectOptions,
+    id: DurableObjectId,
+    options?: DurableObjectNamespaceGetDurableObjectOptions,
   ) => Effect.Effect<DurableObjectStub<Shape>>;
   jurisdiction: (
-    jurisdiction: cf.DurableObjectJurisdiction,
+    jurisdiction: DurableObjectJurisdiction,
   ) => Effect.Effect<DurableObjectNamespace<Name, Shape>>;
 }
+
+export const DurableObjectNamespace = Effect.fnUntraced(function* <
+  const Name extends string,
+  Shape extends Record<string, any>,
+  Req = never,
+>(namespace: Name, eff: Effect.Effect<Shape, never, Req>) {
+  const worker = yield* Worker.Runtime;
+
+  yield* DurableObjectPolicy.bind(namespace);
+
+  const DurableObject = yield* Effect.promise(() =>
+    // @ts-expect-error
+    import("cloudflare:workers").then((m) => m.DurableObject),
+  );
+
+  const services = yield* Effect.services<Req>();
+
+  yield* worker.export(
+    namespace,
+    class extends DurableObject {
+      constructor(state: cf.DurableObjectState, env: any) {
+        super(state, env);
+
+        const methods = state.waitUntil(
+          Effect.runPromise(eff.pipe(Effect.provide(services))),
+        );
+
+        Object.assign(this, methods);
+      }
+    },
+  );
+
+  const DurableObjectNamespace = Effect.serviceOption(WorkerEnvironment).pipe(
+    Effect.map(Option.getOrUndefined),
+    Effect.flatMap((env) => {
+      if (env === undefined) {
+        // should be fine to return undefined here (it is only undefined at plantime)
+        return undefined!;
+      }
+      const ns = env[namespace];
+      if (!ns) {
+        return Effect.die(
+          new Error(`DurableObjectNamespace '${namespace}' not found`),
+        );
+      } else if (typeof ns.getByName === "function") {
+        return Effect.succeed(ns);
+      } else {
+        return Effect.die(
+          new Error(
+            `DurableObjectNamespace '${namespace}' is not a DurableObjectNamespace`,
+          ),
+        );
+      }
+    }),
+  );
+  const use = <T>(fn: (ns: cf.DurableObjectNamespace) => T) =>
+    DurableObjectNamespace.pipe(Effect.map((ns) => fn(ns)));
+
+  return {
+    name: namespace,
+    // @ts-expect-error - TODO(sam): we need to build a proxy around Cloudflare RPC
+    getByName: (name: string) => use((ns) => ns.getByName(name) as Shape),
+    newUniqueId: () => use((ns) => ns.newUniqueId()),
+    idFromName: (name: string) => use((ns) => ns.idFromName(name)),
+    idFromString: (id: string) => use((ns) => ns.idFromString(id)),
+    get: (
+      id: cf.DurableObjectId,
+      options?: cf.DurableObjectNamespaceGetDurableObjectOptions,
+    ) => use((ns) => ns.get(id, options)),
+    jurisdiction: (jurisdiction: cf.DurableObjectJurisdiction) =>
+      use((ns) => ns.jurisdiction(jurisdiction)),
+  } as unknown as DurableObjectNamespace<Name, Shape>;
+});
+
+export class DurableObjectPolicy extends Binding.Policy<
+  DurableObjectPolicy,
+  (namespace: string) => Effect.Effect<void>
+>()("Cloudflare.Workers.DurableObject") {}
+
+export const DurableObjectPolicyLive = DurableObjectPolicy.layer.succeed(
+  Effect.fn(function* (host, namespace: string) {
+    if (isWorker(host)) {
+      yield* host.bind`Bind(DurableObject(${namespace}))`({
+        // TODO(sam): automate class migrations, probably in the provider
+        bindings: [
+          {
+            type: "durable_object_namespace",
+            name: namespace,
+            class_name: namespace,
+            // script_name:
+            //   binding.scriptName === props.workerName
+            //     ? undefined
+            //     : binding.scriptName,
+            // environment: binding.environment,
+            // namespace_id: binding.namespaceId,
+          },
+        ],
+      });
+    } else {
+      return yield* Effect.die(
+        new Error(
+          `DurableObjectPolicy does not support runtime '${host.Type}'`,
+        ),
+      );
+    }
+  }),
+);
 
 export type DurableObjectStub<Shape> = {
   // TODO(sam): do we need to transform? hopefully not
@@ -146,106 +259,3 @@ export interface DurableObjectStorage {
   getBookmarkForTime(timestamp: number | Date): Effect.Effect<string>;
   onNextSessionRestoreBookmark(bookmark: string): Effect.Effect<string>;
 }
-
-export const DurableObjectNamespace = Effect.fnUntraced(function* <
-  const Name extends string,
-  Shape extends Record<string, any>,
-  Req = never,
->(namespace: Name, eff: Effect.Effect<Shape, never, Req>) {
-  const worker = yield* Worker.Runtime;
-
-  const DurableObject = yield* Effect.promise(() =>
-    // @ts-expect-error
-    import("cloudflare:workers").then((m) => m.DurableObject),
-  );
-
-  const services = yield* Effect.services<Req>();
-
-  yield* worker.export(
-    namespace,
-    class extends DurableObject {
-      constructor(state: cf.DurableObjectState, env: any) {
-        super(state, env);
-
-        const methods = state.waitUntil(
-          Effect.runPromise(eff.pipe(Effect.provide(services))),
-        );
-
-        Object.assign(this, methods);
-      }
-    },
-  );
-
-  yield* DurableObjectPolicy.bind(namespace);
-
-  const DurableObjectNamespace = WorkerEnvironment.asEffect().pipe(
-    Effect.flatMap((env) => {
-      const ns = env[namespace];
-      if (!ns) {
-        return Effect.die(
-          new Error(`DurableObjectNamespace '${namespace}' not found`),
-        );
-      } else if (typeof ns.getByName === "function") {
-        return Effect.succeed(ns);
-      } else {
-        return Effect.die(
-          new Error(
-            `DurableObjectNamespace '${namespace}' is not a DurableObjectNamespace`,
-          ),
-        );
-      }
-    }),
-  );
-  const use = <T>(
-    fn: (
-      ns: cf.DurableObjectNamespace<Shape & cf.Rpc.DurableObjectBranded>,
-    ) => T,
-  ) => DurableObjectNamespace.pipe(Effect.map((ns) => fn(ns)));
-
-  return {
-    // @ts-expect-error - TODO(sam): we need to build a proxy around Cloudflare RPC
-    getByName: (name: string) => use((ns) => ns.getByName(name) as Shape),
-    newUniqueId: () => use((ns) => ns.newUniqueId()),
-    idFromName: (name: string) => use((ns) => ns.idFromName(name)),
-    idFromString: (id: string) => use((ns) => ns.idFromString(id)),
-    get: (
-      id: cf.DurableObjectId,
-      options?: cf.DurableObjectNamespaceGetDurableObjectOptions,
-    ) => use((ns) => ns.get(id, options)),
-    jurisdiction: (jurisdiction: cf.DurableObjectJurisdiction) =>
-      use((ns) => ns.jurisdiction(jurisdiction)),
-  };
-});
-
-export class DurableObjectPolicy extends Binding.Policy<
-  DurableObjectPolicy,
-  (namespace: string) => Effect.Effect<void>
->()("Cloudflare.Workers.DurableObject") {}
-
-export const DurableObjectPolicyLive = DurableObjectPolicy.layer.succeed(
-  Effect.fn(function* (host, namespace: string) {
-    if (isWorker(host)) {
-      yield* host.bind`Bind(DurableObject(${namespace}))`({
-        bindings: [
-          {
-            type: "durable_object_namespace",
-            name: namespace,
-            class_name: namespace,
-            // script_name:
-            //   binding.scriptName === props.workerName
-            //     ? undefined
-            //     : binding.scriptName,
-            // environment: binding.environment,
-            // namespace_id: binding.namespaceId,
-          },
-        ],
-      });
-    } else {
-      return yield* Effect.die(
-        new Error(
-          `DurableObjectPolicy does not support runtime '${host.Type}'`,
-        ),
-      );
-    }
-  }),
-);

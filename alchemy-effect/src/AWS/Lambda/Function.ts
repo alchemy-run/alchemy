@@ -10,7 +10,7 @@ import * as Option from "effect/Option";
 import { Path } from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as ServiceMap from "effect/ServiceMap";
-import { ESBuild } from "../../Bundle/index.ts";
+import { Bundler, type BundleOptions } from "../../Bundle/Bundler.ts";
 import { DotAlchemy } from "../../Config.ts";
 import {
   Host,
@@ -50,6 +50,7 @@ export interface FunctionProps {
   functionName?: string;
   // TODO(sam): use a Layer instead so we can manage Effect platform?
   runtime?: "nodejs22.x" | "nodejs24.x";
+  build?: Partial<BundleOptions>;
 }
 
 export interface Function extends Resource<
@@ -125,6 +126,7 @@ export const FunctionProvider = () =>
       const dotAlchemy = yield* DotAlchemy;
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path;
+      const bundler = yield* Bundler;
 
       const createFunctionName = (
         id: string,
@@ -156,7 +158,7 @@ export const FunctionProvider = () =>
           };
         });
 
-      const attachBindings = Effect.fn(function* ({
+      const attachBindings = Effect.fnUntraced(function* ({
         roleName,
         policyName,
         // functionArn,
@@ -201,7 +203,7 @@ export const FunctionProvider = () =>
         return env;
       });
 
-      const createRoleIfNotExists = Effect.fn(function* ({
+      const createRoleIfNotExists = Effect.fnUntraced(function* ({
         id,
         roleName,
       }: {
@@ -258,26 +260,23 @@ export const FunctionProvider = () =>
         return role;
       });
 
-      const bundleCode = Effect.fn(function* (
+      const bundleCode = Effect.fnUntraced(function* (
         id: string,
-        props: {
-          main: string;
-          handler?: string;
-        },
+        props: FunctionProps,
       ) {
         const handler = props.handler ?? "default";
         let file = path.relative(process.cwd(), props.main);
         if (!file.startsWith(".")) {
           file = `./${file}`;
         }
-        const esbuild = yield* ESBuild;
 
         const outfile = path.join(
           dotAlchemy,
           "out",
-          `${stack.name}-${stage}-${id}.ts`,
+          `${stack.name}-${stage}-${id}.js`,
         );
-        yield* esbuild.build({
+        yield* bundler.build({
+          ...props.build,
           stdin: {
             contents: `import { ${handler} as handler } from "${file}";
 import * as Effect from "effect/Effect";
@@ -286,17 +285,18 @@ export default await Effect.runPromise(handler);`,
             loader: "ts",
             sourcefile: "__index.ts",
           },
-          bundle: true,
+          outfile,
           format: "esm",
           platform: "node",
           target: "node22",
           sourcemap: true,
-          treeShaking: true,
-          write: true,
-          outfile,
+          treeshake: true,
           minify: true,
-          external: ["@aws-sdk/*", "@smithy/*"],
-          logLevel: "error",
+          external: [
+            "@aws-sdk/*",
+            "@smithy/*",
+            ...(props.build?.external ?? []),
+          ],
         });
         const code = yield* fs.readFile(outfile).pipe(Effect.orDie);
         return {
@@ -305,7 +305,7 @@ export default await Effect.runPromise(handler);`,
         };
       });
 
-      const createOrUpdateFunction = Effect.fn(function* ({
+      const createOrUpdateFunction = Effect.fnUntraced(function* ({
         id,
         news,
         roleArn,
@@ -447,7 +447,7 @@ export default await Effect.runPromise(handler);`,
         );
       });
 
-      const createOrUpdateFunctionUrl = Effect.fn(function* ({
+      const createOrUpdateFunctionUrl = Effect.fnUntraced(function* ({
         functionName,
         url,
         oldUrl,
@@ -538,7 +538,7 @@ export default await Effect.runPromise(handler);`,
 
       return {
         stables: ["functionArn", "functionName", "roleName"],
-        diff: Effect.fn(function* ({ id, olds, news, output }) {
+        diff: Effect.fnUntraced(function* ({ id, olds, news, output }) {
           // If output is undefined (resource in creating state), defer to default diff
           if (!output) {
             return undefined;
@@ -563,7 +563,7 @@ export default await Effect.runPromise(handler);`,
             return { action: "update" };
           }
         }),
-        read: Effect.fn(function* ({ id, output }) {
+        read: Effect.fnUntraced(function* ({ id, output }) {
           if (output) {
             yield* Effect.logDebug(`reading function ${id}`);
             // example: refresh the function URL from the API
@@ -590,7 +590,7 @@ export default await Effect.runPromise(handler);`,
           return output;
         }),
 
-        precreate: Effect.fn(function* ({ id, news }) {
+        precreate: Effect.fnUntraced(function* ({ id, news }) {
           const { roleName, functionName, roleArn } = yield* createNames(
             id,
             news.functionName,
@@ -622,7 +622,7 @@ export default await Effect.runPromise(handler);`,
             roleArn,
           };
         }),
-        create: Effect.fn(function* ({ id, news, bindings, session }) {
+        create: Effect.fnUntraced(function* ({ id, news, bindings, session }) {
           const { roleName, policyName, functionName, functionArn } =
             yield* createNames(id, news.functionName);
 
@@ -666,7 +666,7 @@ export default await Effect.runPromise(handler);`,
             },
           };
         }),
-        update: Effect.fn(function* ({
+        update: Effect.fnUntraced(function* ({
           id,
           news,
           olds,
@@ -717,7 +717,7 @@ export default await Effect.runPromise(handler);`,
             },
           };
         }),
-        delete: Effect.fn(function* ({ output }) {
+        delete: Effect.fnUntraced(function* ({ output }) {
           yield* iam
             .listRolePolicies({
               RoleName: output.roleName,

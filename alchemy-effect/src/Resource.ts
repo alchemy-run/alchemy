@@ -128,11 +128,15 @@ export const Resource = <R extends ResourceLike>(
               bind(
                 `${(args[0] as TemplateStringsArray)
                   .flatMap((text, i) => {
-                    const arg = args[i];
-                    if (arg && typeof arg === "object" && "LogicalId" in arg) {
+                    const arg = args[i + 1];
+                    if (
+                      arg &&
+                      (typeof arg === "object" || typeof arg === "function") &&
+                      "LogicalId" in arg
+                    ) {
                       return [text, arg.LogicalId];
                     }
-                    return [text, args[i]];
+                    return arg !== undefined ? [text, arg] : [text];
                   })
                   .join("")}`,
                 data,

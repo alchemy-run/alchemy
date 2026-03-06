@@ -8,7 +8,6 @@ import * as HttpApi from "effect/unstable/httpapi/HttpApi";
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
-import * as HttpApiScalar from "effect/unstable/httpapi/HttpApiScalar";
 import { Job, JobId } from "./Job.ts";
 import { JobStorage } from "./JobStorage.ts";
 
@@ -59,7 +58,7 @@ const JobApiHandlers = HttpApiBuilder.group(JobApi, "Jobs", (handlers) =>
 // Provide the implementation for the API
 export const JobApiLive = HttpApiBuilder.layer(JobApi).pipe(
   Layer.provide(JobApiHandlers),
-  Layer.provide(HttpApiScalar.layer(JobApi)),
+  // Layer.provide(HttpApiScalar.layer(JobApi)),
   Layer.provide(HttpServer.layerServices),
 );
 

@@ -1,7 +1,7 @@
-import { RemovalPolicy } from "alchemy-effect";
-import * as Lambda from "alchemy-effect/AWS/Lambda";
-import * as S3 from "alchemy-effect/AWS/S3";
-import * as SQS from "alchemy-effect/AWS/SQS";
+import { AWS, RemovalPolicy } from "alchemy-effect";
+// import * as Lambda from "alchemy-effect/AWS/Lambda";
+// import * as S3 from "alchemy-effect/AWS/S3";
+// import * as SQS from "alchemy-effect/AWS/SQS";
 import * as Http from "alchemy-effect/Http";
 import { Stack } from "alchemy-effect/Stack";
 import * as Effect from "effect/Effect";
@@ -33,12 +33,12 @@ const JobFunction = Effect.gen(function* () {
 
   const { bucket, getJob } = yield* JobStorage;
 
-  const queue = yield* SQS.Queue("JobsQueue").pipe(
+  const queue = yield* AWS.SQS.Queue("JobsQueue").pipe(
     RemovalPolicy.retain(stack.stage === "prod"),
   );
 
   // Sink
-  const sink = yield* SQS.QueueSink.bind(queue);
+  const sink = yield* AWS.SQS.QueueSink.bind(queue);
 
   // register a HTTP server in the Lambda Function runtime
   yield* Http.serve(yield* JobHttpEffect);
@@ -46,7 +46,7 @@ const JobFunction = Effect.gen(function* () {
   // yield* Http.serve(yield* JobRpcHttpEffect);
 
   // register a SQS Event Handler in the Lambda Function runtime
-  yield* S3.notifications(bucket).subscribe((stream) =>
+  yield* AWS.S3.notifications(bucket).subscribe((stream) =>
     stream.pipe(
       Stream.flatMap((item) =>
         Stream.fromEffect(getJob(item.key).pipe(Effect.orDie)),
@@ -59,24 +59,26 @@ const JobFunction = Effect.gen(function* () {
 
   // return the Function properties for this stage
   return {
-    main: import.meta.filename,
-    memory: 1024,
+    main: import.meta.path,
     url: true,
-  } as const;
+    build: {
+      external: ["cloudflare:workers"],
+    },
+  } as const satisfies AWS.Lambda.FunctionProps;
 }).pipe(
   Effect.provide(
     Layer.mergeAll(
       JobStorageLive,
-      Lambda.BucketEventSource,
-      Lambda.HttpServer,
-      SQS.QueueSinkLive,
+      AWS.Lambda.BucketEventSource,
+      AWS.Lambda.HttpServer,
+      AWS.SQS.QueueSinkLive,
     ).pipe(
-      Layer.provide(S3.GetObjectLive),
-      Layer.provide(S3.PutObjectLive),
-      Layer.provide(SQS.SendMessageBatchLive),
+      Layer.provide(AWS.S3.GetObjectLive),
+      Layer.provide(AWS.S3.PutObjectLive),
+      Layer.provide(AWS.SQS.SendMessageBatchLive),
     ),
   ),
-  Lambda.Function("JobFunction"),
+  AWS.Lambda.Function("JobFunction"),
 );
 
 export default JobFunction;

@@ -1,6 +1,6 @@
 import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
-import * as ESBuild from "../Bundle/ESBuild.ts";
+import { rolldown } from "../Bundle/Rolldown.ts";
 import type { Provider } from "../Provider.ts";
 import * as Account from "./Account.ts";
 import * as Assets from "./Assets.ts";
@@ -92,4 +92,4 @@ export const bindings = () =>
     // SQS.QueueEventSourcePolicyLive,
   );
 
-const utils = () => Layer.mergeAll(ESBuild.ESBuildLive());
+const utils = () => rolldown();

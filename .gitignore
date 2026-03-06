@@ -35,3 +35,4 @@ smoke
 .attest
 .cache
 .external
+.bundle-benchmark

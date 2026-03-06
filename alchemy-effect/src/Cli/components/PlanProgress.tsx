@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
 import { Box, Text } from "ink";
-import type { Plan } from "../../Plan.ts";
+import type { CRUD, Plan } from "../../Plan.ts";
 import type { ApplyEvent, ApplyStatus, StatusChangeEvent } from "../Event.ts";
 
 interface ProgressEventSource {
@@ -21,6 +21,15 @@ interface PlanProgressProps {
   plan: Plan;
 }
 
+type PlanItem = CRUD | NonNullable<Plan["deletions"][string]>;
+
+export const toPlanTask = (id: string, planItem: PlanItem): PlanTask => ({
+  id,
+  type: planItem.resource.Type,
+  status: planItem.action === "noop" ? "success" : "pending",
+  updatedAt: Date.now(),
+});
+
 export function PlanProgress(props: PlanProgressProps): React.JSX.Element {
   const { source, plan } = props;
   const spinner = useGlobalSpinner();
@@ -32,15 +41,7 @@ export function PlanProgress(props: PlanProgressProps): React.JSX.Element {
       ...Object.entries(plan.deletions),
     ];
     for (const [id, item] of nodes) {
-      const planItem = item!;
-      const status: ApplyStatus =
-        planItem.action === "noop" ? "success" : "pending";
-      initialTasks.set(id, {
-        id,
-        type: planItem.resource.type,
-        status,
-        updatedAt: Date.now(),
-      });
+      initialTasks.set(id, toPlanTask(id, item!));
     }
     return initialTasks;
   });
@@ -92,15 +93,7 @@ export function PlanProgress(props: PlanProgressProps): React.JSX.Element {
         ...Object.entries(plan.deletions),
       ];
       for (const [id, item] of nodes) {
-        const planItem = item!;
-        const status: ApplyStatus =
-          planItem.action === "noop" ? "success" : "pending";
-        initialTasks.set(id, {
-          id,
-          type: planItem.resource.type,
-          status,
-          updatedAt: Date.now(),
-        });
+        initialTasks.set(id, toPlanTask(id, item!));
       }
       return initialTasks;
     });
