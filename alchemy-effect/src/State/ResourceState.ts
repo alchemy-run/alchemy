@@ -21,6 +21,8 @@ interface BaseResourceState {
   resourceType: string;
   /** Namespace of the Resource */
   namespace: NamespaceNode | undefined;
+  /** Fully Qualified Name (namespace path + logical ID) */
+  fqn: string;
   /** Logical ID of the Resource (stable across creates, updates, deletes and replaces) */
   logicalId: string;
   /** A unique randomly generated token used to seed ID generation (only changes when replaced) */
@@ -29,7 +31,7 @@ interface BaseResourceState {
   providerVersion: number;
   /** Current status of the logical Resource */
   status: ResourceStatus;
-  /** List of logical IDs of resources that depend on this resource */
+  /** List of FQNs of resources that depend on this resource */
   downstream: string[];
   /** List of Bindings attached to this Resource */
   bindings: ResourceBinding[];

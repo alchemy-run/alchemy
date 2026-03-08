@@ -4,7 +4,7 @@ import * as Option from "effect/Option";
 import * as ServiceMap from "effect/ServiceMap";
 import { SingleShotGen } from "effect/Utils";
 import { ExecutionContext, Self } from "./Host.ts";
-import { namespace } from "./Namespace.ts";
+import * as Namespace from "./Namespace.ts";
 import type { ResourceLike } from "./Resource.ts";
 import { CurrentStack } from "./Stack.ts";
 
@@ -123,7 +123,8 @@ export const Policy =
           ([ctx, fn]) =>
             (...args: any[]) =>
               fn(ctx, ...args).pipe(
-                namespace(
+                // place all of this Binding's Resoruces and Policies in their own dedicated namespace
+                Namespace.push(
                   `${Identifier}(${args
                     .flatMap((arg) =>
                       typeof arg === "object" && "LogicalId" in arg
@@ -135,6 +136,8 @@ export const Policy =
                     )
                     .join(", ")})`,
                 ),
+                // place all of a Host's Bindings in the Host's namespace
+                Namespace.push(ctx.id),
               ),
         ),
       );

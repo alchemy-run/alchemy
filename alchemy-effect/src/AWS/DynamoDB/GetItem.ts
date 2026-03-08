@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isFunction } from "../Lambda/index.ts";
+import { isFunction } from "../Lambda/Function.ts";
 import { fromAttributeValue } from "./AttributeValue.ts";
 import type { Table } from "./Table.ts";
 

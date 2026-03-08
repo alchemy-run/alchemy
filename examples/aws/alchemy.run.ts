@@ -68,7 +68,7 @@ const stack = Effect.gen(function* () {
   const func = yield* JobFunction;
   // const worker = yield* JobWorker;
   return {
-    awsUrl: func.functionUrl,
+    url: func.functionUrl,
     // cloudflareUrl: worker.url,
   };
 }).pipe(Stack.make("Job", awsProviders));

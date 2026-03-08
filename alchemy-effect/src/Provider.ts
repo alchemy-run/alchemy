@@ -87,6 +87,7 @@ export interface ProviderService<
     news: Props<Res>;
     session: ScopedPlanStatusSession;
     bindings: BindingData<Res>;
+    output?: Res["Attributes"];
   }): Effect.Effect<Res["Attributes"], any, CreateReq>;
   update(input: {
     id: string;

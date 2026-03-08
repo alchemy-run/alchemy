@@ -395,7 +395,7 @@ export const evaluate: <A, Upstream extends ResourceLike, Req = never>(
         const resource = yield* state.get({
           stack,
           stage,
-          logicalId: expr.resourceId,
+          fqn: expr.resourceId,
         });
         if (!resource) {
           return yield* Effect.fail(

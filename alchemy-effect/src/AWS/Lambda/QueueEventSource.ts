@@ -4,10 +4,12 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 
 import * as Binding from "../../Binding.ts";
-import type { SQSRecord } from "../SQS/index.ts";
-import * as SQS from "../SQS/index.ts";
 import type { Queue } from "../SQS/Queue.ts";
-import type { QueueEventSourceProps } from "../SQS/QueueEventSource.ts";
+import {
+  QueueEventSource as SQSQueueEventSource,
+  type QueueEventSourceProps,
+  type SQSRecord,
+} from "../SQS/QueueEventSource.ts";
 import { EventSourceMapping } from "./EventSourceMapping.ts";
 import * as Lambda from "./Function.ts";
 
@@ -17,7 +19,7 @@ export const isSQSEvent = (event: any): event is lambda.SQSEvent =>
   event.Records[0].eventSource === "aws:sqs";
 
 export const QueueEventSource = Layer.effect(
-  SQS.QueueEventSource,
+  SQSQueueEventSource,
   // @ts-expect-error
   Effect.gen(function* () {
     const host = yield* Lambda.Function.Runtime;

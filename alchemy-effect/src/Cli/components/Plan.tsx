@@ -3,6 +3,12 @@ import React, { useMemo } from "react";
 
 import { Box, Text } from "ink";
 import type { Plan as AlchemyPlan, BindingAction, CRUD } from "../../Plan.ts";
+import {
+  buildNamespaceTree,
+  flattenTree,
+  type DerivedAction,
+  type FlattenedItem,
+} from "../NamespaceTree.ts";
 
 export interface PlanProps {
   plan: AlchemyPlan;
@@ -10,16 +16,17 @@ export interface PlanProps {
 export function Plan({ plan }: PlanProps): React.JSX.Element {
   const items = useMemo(
     () =>
-      (
-        [
-          ...Object.values(plan.resources),
-          ...Object.values(plan.deletions),
-        ] as CRUD[]
-      ).sort((n1, n2) =>
-        n1.resource.LogicalId.localeCompare(n2.resource.LogicalId),
-      ),
+      [
+        ...Object.values(plan.resources),
+        ...Object.values(plan.deletions),
+      ] as CRUD[],
     [plan],
   );
+
+  const flatItems = useMemo(() => {
+    const tree = buildNamespaceTree(items);
+    return flattenTree(tree);
+  }, [items]);
 
   if (items.length === 0) {
     return <Text color="gray">No changes planned</Text>;
@@ -57,54 +64,54 @@ export function Plan({ plan }: PlanProps): React.JSX.Element {
         })}
       </Box>
       <Box flexDirection="column" marginTop={1}>
-        {items.map((item) => {
-          const color = actionColor(item.action);
-          const icon = actionIcon(item.action);
-          const hasBindings = item.bindings && item.bindings.length > 0;
+        {flatItems.map((item) => {
+          const indent = "  ".repeat(item.depth);
+          const color = getActionColor(item.action);
+          const icon = getActionIcon(item.action);
+          const key = item.path.join("/");
 
-          return (
-            <Box key={item.resource.LogicalId} flexDirection="column">
-              <Box flexDirection="row">
+          if (item.type === "namespace") {
+            return (
+              <Box key={key} flexDirection="row">
+                <Text>{indent}</Text>
                 <Box width={2}>
                   <Text color={color}>{icon} </Text>
                 </Box>
-                <Box width={12}>
-                  <Text bold>{item.resource.LogicalId}</Text>
-                </Box>
-                <Box width={25}>
-                  <Text color="blackBright">({item.resource.Type})</Text>
-                </Box>
-                {/* <Box width={12}>
-                  <Text color={color}>{item.action}</Text>
-                </Box> */}
-                {hasBindings && (
-                  <Box>
-                    <Text color={"cyan"}>
-                      ({item.bindings!.length} bindings)
-                    </Text>
-                  </Box>
-                )}
+                <Text color="blueBright">{item.id}</Text>
               </Box>
+            );
+          }
 
-              {/* Show bindings as sub-items */}
-              {hasBindings &&
-                item.bindings!.map((node) => {
-                  const bindingColor = bindingActionColor(node.action);
-                  const bindingIcon = bindingActionIcon(node.action);
-                  return (
-                    <Box
-                      key={`${item.resource.LogicalId}${node.sid}`}
-                      flexDirection="row"
-                    >
-                      <Box width={4}>
-                        <Text color={bindingColor}> {bindingIcon}</Text>
-                      </Box>
-                      <Box>
-                        <Text color="cyan">{node.sid}</Text>
-                      </Box>
-                    </Box>
-                  );
-                })}
+          if (item.type === "binding") {
+            return (
+              <Box key={key} flexDirection="row">
+                <Text>{indent}</Text>
+                <Box width={2}>
+                  <Text color={color}>{icon} </Text>
+                </Box>
+                <Text color="cyan">{item.bindingSid}</Text>
+              </Box>
+            );
+          }
+
+          // Resource item
+          return (
+            <Box key={key} flexDirection="row">
+              <Text>{indent}</Text>
+              <Box width={2}>
+                <Text color={color}>{icon} </Text>
+              </Box>
+              <Box>
+                <Text bold>{item.id}</Text>
+              </Box>
+              <Box marginLeft={1}>
+                <Text color="blackBright">({item.resourceType})</Text>
+              </Box>
+              {item.bindingCount !== undefined && item.bindingCount > 0 && (
+                <Box marginLeft={1}>
+                  <Text color="cyan">({item.bindingCount} bindings)</Text>
+                </Box>
+              )}
             </Box>
           );
         })}
@@ -115,38 +122,28 @@ export function Plan({ plan }: PlanProps): React.JSX.Element {
 
 type Color = Parameters<typeof Text>[0]["color"];
 
-const actionColor = (action: CRUD["action"]): Color =>
+type AnyAction = CRUD["action"] | BindingAction | DerivedAction;
+
+const getActionColor = (action: AnyAction): Color =>
   ({
     noop: "gray",
     create: "green",
     update: "yellow",
     delete: "red",
-    replace: "orange",
-  })[action];
+    replace: "magenta",
+    mixed: "cyan",
+  })[action] ?? "gray";
 
-const actionIcon = (action: CRUD["action"]): string =>
+const getActionIcon = (action: AnyAction): string =>
   ({
     create: "+",
     update: "~",
     delete: "-",
     noop: "•",
     replace: "!",
-  })[action];
+    mixed: "*",
+  })[action] ?? "?";
 
-const bindingActionColor = (
-  action: BindingAction,
-): Parameters<typeof Text>[0]["color"] =>
-  ({
-    create: "green",
-    update: "orange",
-    delete: "red",
-    noop: "gray",
-  })[action];
+const actionColor = (action: CRUD["action"]): Color => getActionColor(action);
 
-const bindingActionIcon = (action: BindingAction): string =>
-  ({
-    create: "+",
-    update: "~",
-    delete: "-",
-    noop: "•",
-  })[action];
+const actionIcon = (action: CRUD["action"]): string => getActionIcon(action);

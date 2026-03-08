@@ -3,6 +3,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { pipeArguments, type Pipeable } from "effect/Pipeable";
 import { SingleShotGen } from "effect/Utils";
+import { toFqn } from "./FQN.ts";
 import { Self } from "./Host.ts";
 import type { Input } from "./Input.ts";
 import type { InstanceId } from "./InstanceId.ts";
@@ -51,6 +52,11 @@ export interface ResourceLike<
    * Namespace containing this Resource.
    */
   Namespace: NamespaceNode | undefined;
+  /**
+   * Fully Qualified Name (namespace path + logical ID).
+   * Used as the unique key for state storage.
+   */
+  FQN: string;
   /**
    * Type of the Resource (e.g. AWS.Lambda.Function)
    */
@@ -131,10 +137,16 @@ export const Resource = <R extends ResourceLike>(
                     const arg = args[i + 1];
                     if (
                       arg &&
-                      (typeof arg === "object" || typeof arg === "function") &&
-                      "LogicalId" in arg
+                      (typeof arg === "object" || typeof arg === "function")
                     ) {
-                      return [text, arg.LogicalId];
+                      if (
+                        "LogicalId" in arg &&
+                        typeof arg.LogicalId === "string"
+                      ) {
+                        return [text, arg.LogicalId];
+                      } else if ("id" in arg && typeof arg.id === "string") {
+                        return [text, arg.id];
+                      }
                     }
                     return arg !== undefined ? [text, arg] : [text];
                   })
@@ -142,10 +154,14 @@ export const Resource = <R extends ResourceLike>(
                 data,
               );
 
+      const namespace = yield* CurrentNamespace;
+      const fqn = toFqn(namespace, id);
+
       const Resource: R = (stack.resources[id] = new Proxy(
         {
           Type: type,
-          Namespace: yield* CurrentNamespace,
+          Namespace: namespace,
+          FQN: fqn,
           LogicalId: id,
           Props: props,
           Provider: ProviderTag as Provider<any>,
@@ -163,7 +179,13 @@ export const Resource = <R extends ResourceLike>(
         },
       )) as R;
       Resource.Props = Effect.isEffect(props)
-        ? yield* props.pipe(Effect.provideService(Self, Resource))
+        ? yield* props.pipe(
+            Effect.provideService(Self, Resource),
+            // Effect.provideService(Namespace, {
+            //   Id: id,
+            //   Parent: namespace,
+            // }),
+          )
         : props;
       return Resource;
     });

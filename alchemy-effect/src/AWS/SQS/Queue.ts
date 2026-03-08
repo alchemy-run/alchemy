@@ -187,11 +187,13 @@ export const QueueProvider = () =>
           };
         }),
         update: Effect.fn(function* ({ news = {}, output, session, bindings }) {
-          console.log(createAttributes(news, bindings));
-          yield* sqs.setQueueAttributes({
-            QueueUrl: output.queueUrl,
-            Attributes: createAttributes(news, bindings),
-          });
+          const attributes = createAttributes(news, bindings);
+          if (Object.values(attributes).some((a) => a !== undefined)) {
+            yield* sqs.setQueueAttributes({
+              QueueUrl: output.queueUrl,
+              Attributes: attributes,
+            });
+          }
           yield* session.note(output.queueUrl);
           return output;
         }),

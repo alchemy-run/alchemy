@@ -3,10 +3,10 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
+import { decodeFqn, encodeFqn } from "../FQN.ts";
 import { isResource } from "../Resource.ts";
 import { State, StateStoreError, type StateService } from "./State.ts";
 
-// TODO(sam): implement with SQLite3
 export const LocalState = Layer.effect(
   State,
   Effect.gen(function* () {
@@ -30,18 +30,18 @@ export const LocalState = Layer.effect(
         ),
       );
 
-    const stage = ({ stack, stage }: { stack: string; stage: string }) =>
+    const stageDir = ({ stack, stage }: { stack: string; stage: string }) =>
       path.join(stateDir, stack, stage);
 
     const resource = ({
       stack,
       stage,
-      logicalId,
+      fqn,
     }: {
       stack: string;
       stage: string;
-      logicalId: string;
-    }) => path.join(stateDir, stack, stage, `${logicalId}.json`);
+      fqn: string;
+    }) => path.join(stateDir, stack, stage, `${encodeFqn(fqn)}.json`);
 
     const created = new Set<string>();
 
@@ -70,17 +70,17 @@ export const LocalState = Layer.effect(
         ),
       getReplacedResources: Effect.fnUntraced(function* (request) {
         return (yield* Effect.all(
-          (yield* state.list(request)).map((logicalId) =>
+          (yield* state.list(request)).map((fqn) =>
             state.get({
               stack: request.stack,
               stage: request.stage,
-              logicalId: logicalId,
+              fqn,
             }),
           ),
         )).filter((r) => r?.status === "replaced");
       }),
       set: (request) =>
-        ensure(stage(request)).pipe(
+        ensure(stageDir(request)).pipe(
           Effect.flatMap(() =>
             fs.writeFileString(
               resource(request),
@@ -106,10 +106,12 @@ export const LocalState = Layer.effect(
         ),
       delete: (request) => fs.remove(resource(request)).pipe(recover),
       list: (request) =>
-        fs.readDirectory(stage(request)).pipe(
+        fs.readDirectory(stageDir(request)).pipe(
           recover,
           Effect.map(
-            (files) => files?.map((file) => file.replace(/\.json$/, "")) ?? [],
+            (files) =>
+              files?.map((file) => decodeFqn(file.replace(/\.json$/, ""))) ??
+              [],
           ),
         ),
     };

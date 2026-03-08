@@ -16,4 +16,4 @@ export default Effect.gen(function* () {
   return {
     main,
   } as const;
-}).pipe(Effect.provide(Http.lambdaHttpServer), Lambda.Function("TestFunction"));
+}).pipe(Effect.provide(Lambda.HttpServer), Lambda.Function("TestFunction"));

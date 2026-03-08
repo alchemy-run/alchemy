@@ -78,12 +78,13 @@ export const Function = Host<
   Credentials | Region
 >(
   "AWS.Lambda.Function",
-  Effect.gen(function* () {
+  Effect.fn(function* (id: string) {
     const listeners: Effect.Effect<ListenHandler>[] = [];
 
     return {
       type: "AWS.Lambda.Function",
       run: undefined!,
+      id,
       get: () => Effect.succeed(undefined!),
       listen: ((handler: ListenHandler | Effect.Effect<ListenHandler>) =>
         Effect.sync(() =>
@@ -265,44 +266,62 @@ export const FunctionProvider = () =>
         props: FunctionProps,
       ) {
         const handler = props.handler ?? "default";
-        let file = path.relative(process.cwd(), props.main);
-        if (!file.startsWith(".")) {
-          file = `./${file}`;
-        }
-
         const outfile = path.join(
           dotAlchemy,
           "out",
           `${stack.name}-${stage}-${id}.js`,
         );
-        yield* bundler.build({
-          ...props.build,
-          stdin: {
-            contents: `import { ${handler} as handler } from "${file}";
+        const tempRoot = path.join(dotAlchemy, "tmp");
+        yield* fs.makeDirectory(tempRoot, { recursive: true });
+        const tempDir = yield* fs.makeTempDirectory({
+          directory: tempRoot,
+          prefix: `${stack.name}-${stage}-${id}-`,
+        });
+
+        const [realTempDir, realMain] = yield* Effect.all([
+          fs.realPath(tempDir),
+          fs.realPath(props.main),
+        ]);
+        const tempEntry = path.join(realTempDir, "__index.ts");
+        let file = path.relative(realTempDir, realMain);
+        if (!file.startsWith(".")) {
+          file = `./${file}`;
+        }
+        file = file.replaceAll("\\", "/");
+        yield* fs.writeFileString(
+          tempEntry,
+          `import { ${handler} as handler } from "${file}";
 import * as Effect from "effect/Effect";
 export default await Effect.runPromise(handler);`,
-            resolveDir: process.cwd(),
-            loader: "ts",
-            sourcefile: "__index.ts",
-          },
-          outfile,
-          format: "esm",
-          platform: "node",
-          target: "node22",
-          sourcemap: true,
-          treeshake: true,
-          minify: true,
-          external: [
-            "@aws-sdk/*",
-            "@smithy/*",
-            ...(props.build?.external ?? []),
-          ],
-        });
-        const code = yield* fs.readFile(outfile).pipe(Effect.orDie);
-        return {
-          code,
-          hash: yield* sha256(code),
-        };
+        );
+
+        return yield* Effect.gen(function* () {
+          yield* bundler.build({
+            ...props.build,
+            entry: tempEntry,
+            outfile,
+            format: "esm",
+            platform: "node",
+            target: "node22",
+            sourcemap: true,
+            treeshake: true,
+            minify: true,
+            external: [
+              "@aws-sdk/*",
+              "@smithy/*",
+              ...(props.build?.external ?? []),
+            ],
+          });
+          const code = yield* fs.readFile(outfile).pipe(Effect.orDie);
+          return {
+            code,
+            hash: yield* sha256(code),
+          };
+        }).pipe(
+          Effect.ensuring(
+            fs.remove(tempDir, { recursive: true }).pipe(Effect.ignore),
+          ),
+        );
       });
 
       const createOrUpdateFunction = Effect.fnUntraced(function* ({
@@ -313,6 +332,8 @@ export default await Effect.runPromise(handler);`,
         hash,
         env,
         functionName,
+        preferUpdate,
+        session,
       }: {
         id: string;
         news: FunctionProps;
@@ -321,8 +342,29 @@ export default await Effect.runPromise(handler);`,
         hash: string;
         env: Record<string, string> | undefined;
         functionName: string;
+        preferUpdate?: boolean;
+        session: { note: (note: string) => Effect.Effect<void> };
       }) {
         yield* Effect.logDebug(`creating function ${id}`);
+        const waitStartedAt = Date.now();
+
+        const isRolePropagationError = (e: any) =>
+          e._tag === "InvalidParameterValueException" &&
+          (e.message?.includes("cannot be assumed by Lambda") ||
+            (e.message?.includes("KMS key is invalid for CreateGrant") &&
+              e.message?.includes("ARN does not refer to a valid principal")));
+
+        const noteRolePropagationWait = () =>
+          session.note(
+            `Waiting for Lambda execution role to become assumable: ${functionName} (${Math.ceil((Date.now() - waitStartedAt) / 1000)}s)`,
+          );
+
+        const retryRolePropagation = Effect.retry({
+          while: isRolePropagationError,
+          schedule: Schedule.fixed(1000).pipe(
+            Schedule.tapOutput(() => noteRolePropagationWait()),
+          ),
+        });
 
         const tags = yield* createInternalTags(id);
 
@@ -386,13 +428,15 @@ export default await Effect.runPromise(handler);`,
                     }
                   : { ZipFile: codeLocation.ZipFile }),
               }).pipe(
+                Effect.tapError((e) =>
+                  isRolePropagationError(e)
+                    ? noteRolePropagationWait()
+                    : Effect.void,
+                ),
                 Effect.retry({
                   while: (e) =>
                     e._tag === "ResourceConflictException" ||
-                    (e._tag === "InvalidParameterValueException" &&
-                      e.message?.includes(
-                        "The role defined for the function cannot be assumed by Lambda.",
-                      )),
+                    isRolePropagationError(e),
                   schedule: Schedule.exponential(100),
                 }),
               );
@@ -418,13 +462,15 @@ export default await Effect.runPromise(handler);`,
                 TracingConfig: createFunctionRequest.TracingConfig,
                 VpcConfig: createFunctionRequest.VpcConfig,
               }).pipe(
+                Effect.tapError((e) =>
+                  isRolePropagationError(e)
+                    ? noteRolePropagationWait()
+                    : Effect.void,
+                ),
                 Effect.retry({
                   while: (e) =>
                     e._tag === "ResourceConflictException" ||
-                    (e._tag === "InvalidParameterValueException" &&
-                      e.message?.includes(
-                        "The role defined for the function cannot be assumed by Lambda.",
-                      )),
+                    isRolePropagationError(e),
                   schedule: Schedule.exponential(100),
                 }),
               );
@@ -433,18 +479,27 @@ export default await Effect.runPromise(handler);`,
           ),
         );
 
-        yield* Lambda.createFunction(createFunctionRequest).pipe(
-          Effect.tapError(Effect.logDebug),
-          Effect.retry({
-            while: (e) =>
-              e._tag === "InvalidParameterValueException" &&
-              e.message?.includes("cannot be assumed by Lambda"),
-            schedule: Schedule.exponential(10),
-          }),
+        const create = Lambda.createFunction(createFunctionRequest).pipe(
+          Effect.tapError((e) =>
+            Effect.gen(function* () {
+              yield* Effect.logDebug(e);
+            }),
+          ),
+          retryRolePropagation,
           Effect.catchTags({
             ResourceConflictException: () => getAndUpdate,
           }),
         );
+
+        if (preferUpdate) {
+          yield* getAndUpdate.pipe(
+            Effect.catchTags({
+              ResourceNotFoundException: () => create,
+            }),
+          );
+        } else {
+          yield* create;
+        }
       });
 
       const createOrUpdateFunctionUrl = Effect.fnUntraced(function* ({
@@ -590,7 +645,7 @@ export default await Effect.runPromise(handler);`,
           return output;
         }),
 
-        precreate: Effect.fnUntraced(function* ({ id, news }) {
+        precreate: Effect.fnUntraced(function* ({ id, news, session }) {
           const { roleName, functionName, roleArn } = yield* createNames(
             id,
             news.functionName,
@@ -609,6 +664,7 @@ export default await Effect.runPromise(handler);`,
             hash,
             functionName,
             env: {},
+            session,
           });
 
           return {
@@ -622,11 +678,19 @@ export default await Effect.runPromise(handler);`,
             roleArn,
           };
         }),
-        create: Effect.fnUntraced(function* ({ id, news, bindings, session }) {
+        create: Effect.fnUntraced(function* ({
+          id,
+          news,
+          bindings,
+          output,
+          session,
+        }) {
           const { roleName, policyName, functionName, functionArn } =
             yield* createNames(id, news.functionName);
 
-          const role = yield* createRoleIfNotExists({ id, roleName });
+          const roleArn =
+            output?.roleArn ??
+            (yield* createRoleIfNotExists({ id, roleName })).Role.Arn;
 
           const env = yield* attachBindings({
             roleName,
@@ -641,11 +705,13 @@ export default await Effect.runPromise(handler);`,
           yield* createOrUpdateFunction({
             id,
             news,
-            roleArn: role.Role.Arn,
+            roleArn,
             code,
             hash,
             env,
             functionName,
+            preferUpdate: output !== undefined,
+            session,
           });
 
           const functionUrl = yield* createOrUpdateFunctionUrl({
@@ -660,7 +726,7 @@ export default await Effect.runPromise(handler);`,
             functionName,
             functionUrl: functionUrl as any,
             roleName,
-            roleArn: role.Role.Arn,
+            roleArn,
             code: {
               hash,
             },
@@ -695,6 +761,7 @@ export default await Effect.runPromise(handler);`,
             hash,
             env,
             functionName,
+            session,
           });
 
           const functionUrl = yield* createOrUpdateFunctionUrl({

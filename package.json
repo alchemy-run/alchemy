@@ -36,7 +36,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.31",
     "@ai-sdk/openai": "^3.0.23",
-    "distilled-aws": "catalog:"
+    "distilled-aws": "link:distilled-aws"
   },
   "devDependencies": {
     "@ark/attest": "^0.56.0",
@@ -74,10 +74,10 @@
       "@aws-sdk/credential-providers": "^3.0.0",
       "@cloudflare/vite-plugin": "^1.13.12",
       "@cloudflare/workers-types": "^4.20250805.0",
-      "@effect/language-service": "4.0.0-beta.21",
-      "@effect/platform-node": "4.0.0-beta.21",
-      "@effect/platform-node-shared": "4.0.0-beta.21",
-      "@effect/vitest": "4.0.0-beta.21",
+      "@effect/language-service": "4.0.0-beta.28",
+      "@effect/platform-node": "4.0.0-beta.28",
+      "@effect/platform-node-shared": "4.0.0-beta.28",
+      "@effect/vitest": "4.0.0-beta.28",
       "@libsql/client": "^0.17.0",
       "@opentui/core": "latest",
       "@opentui/solid": "latest",
@@ -92,7 +92,7 @@
       "cloudflare": "^5.2.0",
       "distilled-aws": "latest",
       "distilled-cloudflare": "^0.0.4",
-      "effect": "4.0.0-beta.21",
+      "effect": "4.0.0-beta.28",
       "esbuild": "^0.25.12",
       "fast-xml-parser": "^5.3.4",
       "solid-js": "latest",

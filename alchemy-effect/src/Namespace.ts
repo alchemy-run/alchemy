@@ -11,18 +11,18 @@ export class Namespace extends ServiceMap.Service<Namespace, NamespaceNode>()(
   "Alchemy/Namespace",
 ) {}
 
-export function namespace<const Id extends string, A, Err = never, Req = never>(
+export function push<const Id extends string, A, Err = never, Req = never>(
   id: Id,
   eff: Effect.Effect<A, Err, Req>,
 ): Effect.Effect<A, Err, Req>;
 
-export function namespace<const Id extends string>(
+export function push<const Id extends string>(
   id: Id,
 ): <A, Err = never, Req = never>(
   eff: Effect.Effect<A, Err, Req>,
 ) => Effect.Effect<A, Err, Req>;
 
-export function namespace(id: string, eff?: Effect.Effect<any, any, any>) {
+export function push(id: string, eff?: Effect.Effect<any, any, any>) {
   return eff
     ? Effect.flatMap(CurrentNamespace, (parent) =>
         Effect.provideService(eff, Namespace, {
@@ -30,7 +30,7 @@ export function namespace(id: string, eff?: Effect.Effect<any, any, any>) {
           Parent: parent,
         }),
       )
-    : (eff: Effect.Effect<any, any, any>) => namespace(id, eff);
+    : (eff: Effect.Effect<any, any, any>) => push(id, eff);
 }
 
 export const CurrentNamespace = Effect.serviceOption(Namespace)

@@ -5,12 +5,20 @@ import * as Stream from "effect/Stream";
 
 import * as Binding from "../../Binding.ts";
 import type { Bucket } from "../S3/Bucket.ts";
-import * as S3 from "../S3/index.ts";
+import {
+  BucketEventSource as S3BucketEventSource,
+  type BucketEventSourceService,
+} from "../S3/BucketEventSource.ts";
+import type {
+  BucketNotification,
+  NotificationsProps,
+} from "../S3/BucketNotifications.ts";
+import type { S3EventType } from "../S3/S3Event.ts";
 import * as Lambda from "./Function.ts";
 import { Permission as LambdaPermission } from "./Permission.ts";
 
 export const BucketEventSource = Layer.effect(
-  S3.BucketEventSource,
+  S3BucketEventSource,
   Effect.gen(function* () {
     // this layer can only be used in a Lambda Function
     const func = yield* Lambda.Function.Runtime;
@@ -18,14 +26,14 @@ export const BucketEventSource = Layer.effect(
     const bind = yield* BucketEventSourcePolicy;
 
     return Effect.fn(function* <
-      Events extends S3.S3EventType[],
+      Events extends S3EventType[],
       StreamReq = never,
       Req = never,
     >(
       bucket: Bucket,
-      props: S3.NotificationsProps<Events>,
+      props: NotificationsProps<Events>,
       process: (
-        stream: Stream.Stream<S3.BucketNotification, never, StreamReq>,
+        stream: Stream.Stream<BucketNotification, never, StreamReq>,
       ) => Effect.Effect<void, never, Req>,
     ) {
       // this adds it to the Lambda Function's environment variables
@@ -46,7 +54,7 @@ export const BucketEventSource = Layer.effect(
                 return process(
                   Stream.fromArray(
                     events.map((record: lambda.S3EventRecord) => ({
-                      type: record.eventName as S3.S3EventType,
+                      type: record.eventName as S3EventType,
                       bucket: record.s3.bucket.name,
                       key: record.s3.object.key,
                       size: record.s3.object.size,
@@ -60,7 +68,7 @@ export const BucketEventSource = Layer.effect(
           };
         }),
       );
-    }) as S3.BucketEventSourceService;
+    }) as BucketEventSourceService;
   }),
 );
 
@@ -71,8 +79,8 @@ const isS3Event = (event: any): event is lambda.S3Event =>
 export class BucketEventSourcePolicy extends Binding.Policy<
   BucketEventSourcePolicy,
   (
-    bucket: S3.Bucket,
-    props?: S3.NotificationsProps<S3.S3EventType[]>,
+    bucket: Bucket,
+    props?: NotificationsProps<S3EventType[]>,
   ) => Effect.Effect<void>
 >()("AWS.S3.BucketEventSource") {}
 
@@ -82,11 +90,11 @@ export const BucketEventSourcePolicyLive = BucketEventSourcePolicy.layer.effect(
 
     return Effect.fn(function* (
       host,
-      bucket: S3.Bucket,
+      bucket: Bucket,
       {
         events: Events = ["s3:ObjectCreated:*"],
       }: {
-        events?: S3.S3EventType[];
+        events?: S3EventType[];
       } = {},
     ) {
       if (Lambda.isFunction(host)) {

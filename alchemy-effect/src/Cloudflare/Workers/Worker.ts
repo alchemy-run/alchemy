@@ -103,12 +103,13 @@ export const Worker = Host<
   DurableObjectState | WorkerEnvironment | ExecutionContext
 >(
   "Cloudflare.Workers.Worker",
-  Effect.gen(function* () {
+  Effect.fn(function* (id: string) {
     const listeners: Effect.Effect<ListenHandler>[] = [];
     const exports: Record<string, any> = {};
 
     return {
       type: "Cloudflare.Workers.Worker",
+      id,
       run: undefined!,
       get: () => Effect.succeed(undefined!),
       listen: ((handler: ListenHandler | Effect.Effect<ListenHandler>) =>
@@ -259,8 +260,7 @@ export const WorkerProvider = () =>
             contents: `import { ${handler} as handler } from "${entrypoint}";
 import * as Effect from "effect/Effect";
 const handler = await Effect.runPromise(handler)
-export default handler;
-${exports.map((name) => `export const ${name} = handler.${name};`).join("\n")}
+export default handler;}
 `,
             resolveDir: process.cwd(),
             loader: "ts",

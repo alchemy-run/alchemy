@@ -69,7 +69,7 @@ export const Host = <
   Services = never,
 >(
   type: R["Type"],
-  runtime: Effect.Effect<Runtime>,
+  runtime: (id: string) => Effect.Effect<Runtime>,
 ): HostClass<R, Runtime, Services | HostRuntimeServices> => {
   type Eff = Effect.Effect<R["Props"], never, Services | Runtime>;
 
@@ -77,11 +77,11 @@ export const Host = <
   const host = ServiceMap.Service<Host<R>, Runtime>(`Host<${type}>`);
   const constructor = (id: string, eff?: Eff) =>
     eff
-      ? runtime.pipe(
-          Effect.map((executionContext) => ({
-            LogicalId: id,
-            ...executionContext,
-          })),
+      ? runtime(id).pipe(
+          // Effect.map((executionContext) => ({
+          //   LogicalId: id,
+          //   ...executionContext,
+          // })),
           Effect.flatMap((executionContext) =>
             resource(
               id,
@@ -113,6 +113,7 @@ export type ExecutionContextService =
 
 interface BaseExecutionContext {
   type: string;
+  id: string;
   /**
    * Get a value from the Runtime
    */

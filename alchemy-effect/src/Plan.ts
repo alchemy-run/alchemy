@@ -7,6 +7,7 @@ import {
   type NoopDiff,
   type UpdateDiff,
 } from "./Diff.ts";
+import { parseFqn } from "./FQN.ts";
 import { InstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
 import {
@@ -58,9 +59,8 @@ export type Apply<R extends ResourceLike = ResourceLike> =
 
 export type BindingAction = "create" | "update" | "delete" | "noop";
 
-export interface BindingNode<Data = any> {
+export interface BindingNode<Data = any> extends ResourceBinding {
   action: BindingAction;
-  sid: string;
   data: Data;
 }
 
@@ -148,13 +148,13 @@ export const make = <A>(
     const stackName = stack.name;
     const stage = stack.stage;
 
-    const resourceIds = yield* state.list({
+    const resourceFqns = yield* state.list({
       stack: stackName,
       stage: stage,
     });
     const oldResources = yield* Effect.all(
-      resourceIds.map((id) =>
-        state.get({ stack: stackName, stage: stage, logicalId: id }),
+      resourceFqns.map((fqn) =>
+        state.get({ stack: stackName, stage: stage, fqn }),
       ),
       { concurrency: "unbounded" },
     );
@@ -176,7 +176,7 @@ export const make = <A>(
               const oldState = yield* state.get({
                 stack: stackName,
                 stage: stage,
-                logicalId: resource.LogicalId,
+                fqn: resource.FQN,
               });
 
               if (!oldState || oldState.status === "creating") {
@@ -303,49 +303,55 @@ export const make = <A>(
         return yield* Effect.die(new Error("Not implemented yet"));
       });
 
-    // map of resource ID -> its downstream dependencies (resources that depend on it)
+    // map of resource FQN -> its downstream dependencies (resources that depend on it)
     const oldDownstreamDependencies: {
-      [resourceId: string]: string[];
+      [fqn: string]: string[];
     } = Object.fromEntries(
       oldResources
         .filter((resource) => !!resource)
-        .map((resource) => [resource.logicalId, resource.downstream]),
+        .map((resource) => [resource.fqn, resource.downstream]),
     );
 
+    // Map FQN -> list of upstream FQNs (resources this one depends on)
     const newUpstreamDependencies: {
-      [resourceId: string]: string[];
+      [fqn: string]: string[];
     } = Object.fromEntries(
       resources.map((resource) => [
-        resource.LogicalId,
+        resource.FQN,
         [
           ...Object.values(Output.upstreamAny(resource.Props)).map(
-            (r) => r.LogicalId,
+            (r) => r.FQN,
           ),
           // TODO(sam): are we sure we want bindings to be included as upstream dependencies?
           // this kind of breaks their purpose of enabling circularity between resources
           ...Object.values(
             Output.upstreamAny(stack.bindings[resource.LogicalId] ?? []),
-          ).map((r) => r.LogicalId),
+          ).map((r) => r.FQN),
         ],
       ]),
     );
 
+    // Map FQN -> list of downstream FQNs (resources that depend on this one)
     const newDownstreamDependencies: {
-      [resourceId: string]: string[];
+      [fqn: string]: string[];
     } = Object.fromEntries(
       resources.map((resource) => [
-        resource.LogicalId,
+        resource.FQN,
         Object.entries(newUpstreamDependencies)
-          .filter(([_, downstream]) => downstream.includes(resource.LogicalId))
-          .map(([id]) => id),
+          .filter(([_, upstream]) => upstream.includes(resource.FQN))
+          .map(([depFqn]) => depFqn),
       ]),
     );
+
+    // Build a set of FQNs for the new resources to detect orphans
+    const newResourceFqns = new Set(resources.map((r) => r.FQN));
 
     const resourceGraph = Object.fromEntries(
       (yield* Effect.all(
         resources.map(
           Effect.fn(function* (resource) {
             const id = resource.LogicalId;
+            const fqn = resource.FQN;
             const news = yield* resolveInput(resource.Props);
             const newBindings: ResourceBinding[] = yield* resolveInput(
               stack.bindings[id] ?? [],
@@ -354,12 +360,12 @@ export const make = <A>(
             const oldState = yield* state.get({
               stack: stackName,
               stage: stage,
-              logicalId: id,
+              fqn,
             });
             const oldBindings = oldState?.bindings ?? [];
             const provider = yield* Provider(resource.Type);
 
-            const downstream = newDownstreamDependencies[id] ?? [];
+            const downstream = newDownstreamDependencies[fqn] ?? [];
 
             const Node = <T extends Apply>(
               node: Omit<
@@ -578,30 +584,32 @@ export const make = <A>(
           }),
         ),
         { concurrency: "unbounded" },
-      )).map((update) => [update.resource.LogicalId, update]),
+      )).map((update) => [update.resource.FQN, update]),
     ) as Plan["resources"];
 
     const deletions = Object.fromEntries(
       (yield* Effect.all(
         (yield* state.list({ stack: stackName, stage: stage })).map(
-          Effect.fn(function* (id) {
-            if (id in resourceGraph) {
+          Effect.fn(function* (fqn) {
+            // Check if this FQN is in the new resources
+            if (newResourceFqns.has(fqn)) {
               return;
             }
             const oldState = yield* state.get({
               stack: stackName,
               stage: stage,
-              logicalId: id,
+              fqn,
             });
             let attr: any = oldState?.attr;
             if (oldState) {
+              const { logicalId } = parseFqn(fqn);
               const resourceType = oldState.resourceType;
               const provider = yield* getProviderByType(resourceType);
               if (oldState.attr === undefined) {
                 if (provider.read) {
                   attr = yield* provider
                     .read({
-                      id,
+                      id: logicalId,
                       instanceId: oldState.instanceId,
                       olds: oldState.props as never,
                       output: oldState.attr as never,
@@ -612,14 +620,15 @@ export const make = <A>(
                 }
               }
               return [
-                id,
+                fqn,
                 {
                   action: "delete",
                   state: { ...oldState, attr },
                   provider: provider,
                   resource: {
                     Namespace: oldState.namespace,
-                    LogicalId: id,
+                    FQN: fqn,
+                    LogicalId: logicalId,
                     Type: oldState.resourceType,
                     Attributes: attr,
                     Props: oldState.props,
@@ -628,10 +637,10 @@ export const make = <A>(
                     RemovalPolicy: oldState.removalPolicy,
                     ExecutionContext: undefined!,
                   } as ResourceLike,
-                  // TODO(sam): is it enough to just pass through oldState?
-                  downstream: oldDownstreamDependencies[id] ?? [],
+                  downstream: oldDownstreamDependencies[fqn] ?? [],
                   bindings: oldState.bindings.map((binding) => ({
                     sid: binding.sid,
+                    namespace: binding.namespace,
                     action: "delete" as const,
                     data: binding.data,
                   })),
@@ -644,14 +653,15 @@ export const make = <A>(
       )).filter((v) => !!v),
     );
 
-    for (const [resourceId, deletion] of Object.entries(deletions)) {
+    for (const [resourceFqn, deletion] of Object.entries(deletions)) {
+      // downstream is stored as FQNs - check if any exist in resourceGraph
       const dependencies = deletion.state.downstream.filter(
         (d) => d in resourceGraph,
       );
       if (dependencies.length > 0) {
         return yield* new DeleteResourceHasDownstreamDependencies({
-          message: `Resource ${resourceId} has downstream dependencies`,
-          resourceId,
+          message: `Resource ${resourceFqn} has downstream dependencies`,
+          resourceId: resourceFqn,
           dependencies,
         });
       }
