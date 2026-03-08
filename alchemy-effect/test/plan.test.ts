@@ -6,6 +6,7 @@ import { State, type ResourceState, type ResourceStatus } from "@/State";
 import { test } from "@/Test/Vitest";
 import { describe, expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { Stage } from "../src/Stage.ts";
 import {
   Bucket,
@@ -29,7 +30,7 @@ const makePlan = <A, Err = never, Req = never>(
     // @ts-expect-error
     return yield* effect.pipe(
       // @ts-expect-error
-      Stack.make(stack.name),
+      Stack.make(stack.name, Layer.empty),
       Effect.provideService(Stage, stack.stage),
       Effect.flatMap(Plan.make),
       Effect.provide(TestLayers),
