@@ -23,14 +23,23 @@ export type HostServices =
 export type HostRuntimeServices = ExecutionContext | HttpClient | Scope;
 
 export type HostConstructor<Self extends ResourceLike, RuntimeServices> = {
-  // <Req extends HostServices | RuntimeServices = never>(
-  //   id: string,
-  //   eff: Effect.Effect<Self["Props"], never, Req>,
-  // ): Effect.Effect<
-  //   Self,
-  //   never,
-  //   Provider<Self> | Exclude<Req, RuntimeServices | HostRuntimeServices>
-  // >;
+  <Req extends HostServices | RuntimeServices = never>(
+    id: string,
+    eff: Self["Props"],
+  ): Effect.Effect<
+    Self,
+    never,
+    Provider<Self> | Exclude<Req, RuntimeServices | HostRuntimeServices>
+  >;
+  <Req extends HostServices | RuntimeServices = never>(
+    id: string,
+    eff: Effect.Effect<Self["Props"], never, Req>,
+  ): Effect.Effect<
+    Self,
+    never,
+    Provider<Self> | Exclude<Req, RuntimeServices | HostRuntimeServices>
+  >;
+
   (
     id: string,
   ): <

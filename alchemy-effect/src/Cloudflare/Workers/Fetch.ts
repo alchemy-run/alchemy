@@ -122,20 +122,20 @@ export class FetchPolicy extends Binding.Policy<
 >()("Cloudflare.Workers.Fetch") {}
 
 export const FetchPolicyLive = FetchPolicy.layer.succeed(
-  Effect.fn(function* (worker) {
-    if (isWorker(worker)) {
-      yield* worker.bind`Bind(${worker})`({
+  Effect.fn(function* (host) {
+    if (isWorker(host)) {
+      yield* host.bind`Bind(${host})`({
         bindings: [
           {
             type: "service",
-            name: worker.LogicalId,
-            service: worker.workerName,
+            name: host.LogicalId,
+            service: host.workerName,
           },
         ],
       });
     } else {
       return yield* Effect.die(
-        new Error(`FetchPolicy does not support runtime '${worker.Type}'`),
+        new Error(`FetchPolicy does not support runtime '${host.Type}'`),
       );
     }
   }),

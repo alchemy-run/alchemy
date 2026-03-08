@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
 import { rolldown } from "../Bundle/Rolldown.ts";
@@ -13,6 +14,7 @@ import * as Lambda from "./Lambda/index.ts";
 import * as Region from "./Region.ts";
 import * as S3 from "./S3/index.ts";
 import * as SQS from "./SQS/index.ts";
+import { loadDefaultStageConfig, StageConfig } from "./StageConfig.ts";
 
 export type Providers = Extract<
   Layer.Success<ReturnType<typeof providers>>,
@@ -34,8 +36,12 @@ export const providers = () =>
     Layer.provideMerge(Region.fromStageConfig()),
     Layer.provideMerge(Credentials.fromStageConfig()),
     Layer.provideMerge(Endpoint.fromStageConfig()),
+    Layer.provideMerge(stageConfig()),
     Layer.orDie,
   );
+
+export const stageConfig = () =>
+  Layer.effect(StageConfig, Effect.suspend(loadDefaultStageConfig));
 
 export const credentials = () =>
   pipe(
@@ -43,6 +49,7 @@ export const credentials = () =>
     Layer.provideMerge(Region.fromStageConfig()),
     Layer.provideMerge(Credentials.fromStageConfig()),
     Layer.provideMerge(Endpoint.fromStageConfig()),
+    Layer.provideMerge(stageConfig()),
   );
 
 export const resources = () =>

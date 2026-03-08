@@ -1,4 +1,4 @@
-import * as Credentials from "distilled-aws/Credentials";
+import * as Auth from "distilled-aws/Auth";
 import * as Region from "distilled-aws/Region";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
@@ -6,6 +6,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { StageConfig } from "./StageConfig.ts";
+
+export const AWS_REGION = Config.string("AWS_REGION");
 
 export type RegionID = string;
 
@@ -20,8 +22,6 @@ export class EnvironmentVariableNotSet extends Data.TaggedError(
   message: string;
   variable: string;
 }> {}
-
-export const AWS_REGION = Config.string("AWS_REGION");
 
 const tryGetAWSRegion = () =>
   Config.option(AWS_REGION).pipe(Config.map(Option.getOrUndefined));
@@ -55,10 +55,11 @@ export const fromStageConfig = () =>
     Region.Region,
     Effect.gen(function* () {
       const config = yield* StageConfig;
+      const auth = yield* Auth.Default;
       if (config.region) {
         return config.region;
       } else if (config.profile) {
-        const profile = yield* Credentials.loadProfile(config.profile);
+        const profile = yield* auth.loadProfile(config.profile);
         if (profile.region) {
           return profile.region;
         }

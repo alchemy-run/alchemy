@@ -1,7 +1,14 @@
 import type { AwsCredentialIdentity } from "@smithy/types";
+import * as Auth from "distilled-aws/Auth";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
 import * as ServiceMap from "effect/ServiceMap";
 import type { AccountID } from "./Account.ts";
-import type { RegionID } from "./Region.ts";
+import { AWS_REGION, type RegionID } from "./Region.ts";
+
+export const AWS_PROFILE = Config.string("AWS_PROFILE").pipe(
+  Config.withDefault("default"),
+);
 
 export class StageConfig extends ServiceMap.Service<
   StageConfig,
@@ -13,3 +20,19 @@ export class StageConfig extends ServiceMap.Service<
     endpoint?: string;
   }
 >()("StageConfig") {}
+
+export const loadDefaultStageConfig = () =>
+  Effect.gen(function* () {
+    const profileName = yield* AWS_PROFILE;
+    const profile = yield* Auth.loadProfile(profileName);
+    if (!profile.sso_account_id) {
+      return yield* Effect.die(
+        `AWS SSO Profile '${profileName}' is missing sso_account_id configuration`,
+      );
+    }
+    return {
+      profile: profileName,
+      account: profile.sso_account_id,
+      region: profile.region ?? (yield* AWS_REGION),
+    };
+  });

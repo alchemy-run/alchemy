@@ -148,7 +148,7 @@ export const TableProvider = () =>
             }),
           );
 
-      return {
+      return Table.provider.of({
         stables: ["tableName", "tableId", "tableArn"],
         diff: Effect.fn(function* ({ news, olds }) {
           if (
@@ -291,6 +291,6 @@ export const TableProvider = () =>
             }
           }
         }),
-      };
+      });
     }),
   );

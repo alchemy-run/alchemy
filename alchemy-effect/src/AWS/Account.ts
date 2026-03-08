@@ -1,4 +1,4 @@
-import * as Credentials from "distilled-aws/Credentials";
+import * as Auth from "distilled-aws/Auth";
 import * as STS from "distilled-aws/sts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -36,7 +36,7 @@ export const fromStageConfig = () =>
       }
       const profileName = config.profile;
       if (profileName) {
-        const profile = yield* Credentials.loadProfile(profileName);
+        const profile = yield* Auth.loadProfile(profileName);
         if (profile.sso_account_id) {
           return profile.sso_account_id;
         }

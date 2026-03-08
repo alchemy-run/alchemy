@@ -88,6 +88,8 @@ test(
         instanceId,
         providerVersion: 0,
         logicalId: "MyBucket",
+        fqn: "MyBucket",
+        namespace: undefined,
         resourceType: "Test.Bucket",
         status: "created",
         props: {
@@ -144,6 +146,8 @@ test(
         instanceId,
         providerVersion: 0,
         logicalId: "MyBucket",
+        fqn: "MyBucket",
+        namespace: undefined,
         resourceType: "Test.Bucket",
         status: "created",
         props: {
@@ -159,6 +163,8 @@ test(
         instanceId,
         providerVersion: 0,
         logicalId: "MyQueue",
+        fqn: "MyQueue",
+        namespace: undefined,
         resourceType: "Test.Queue",
         status: "created",
         props: {
@@ -227,6 +233,8 @@ test(
         instanceId,
         providerVersion: 0,
         logicalId: "A",
+        fqn: "A",
+        namespace: undefined,
         resourceType: "Test.TestResource",
         status: "created",
         props: {
@@ -310,6 +318,8 @@ const createTestResourceState = (options: {
     attr: options.attr ?? {},
     downstream: [],
     bindings: [],
+    fqn: options.logicalId,
+    namespace: undefined,
   }) as ResourceState;
 
 const testSimple = (
@@ -698,6 +708,8 @@ test(
         instanceId,
         providerVersion: 0,
         logicalId: "MyQueue",
+        fqn: "MyQueue",
+        namespace: undefined,
         resourceType: "Test.Queue",
         status: "created",
         props: {
@@ -749,6 +761,8 @@ describe("Outputs should resolve to old values", () => {
       instanceId,
       providerVersion: 0,
       logicalId: "A",
+      fqn: "A",
+      namespace: undefined,
       resourceType: "Test.TestResource",
       status: "created",
       props: {
@@ -860,6 +874,8 @@ describe("stable properties should not cause downstream changes", () => {
             instanceId,
             providerVersion: 0,
             logicalId: "A",
+            fqn: "A",
+            namespace: undefined,
             resourceType: "Test.TestResource",
             status: "created",
             props: {
@@ -877,6 +893,8 @@ describe("stable properties should not cause downstream changes", () => {
             instanceId,
             providerVersion: 0,
             logicalId: "B",
+            fqn: "B",
+            namespace: undefined,
             resourceType: "Test.TestResource",
             status: "created",
             props: Object.fromEntries(

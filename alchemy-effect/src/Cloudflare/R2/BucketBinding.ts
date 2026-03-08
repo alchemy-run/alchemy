@@ -1,15 +1,15 @@
 import * as Effect from "effect/Effect";
-import type { ExecutionContext } from "../../Host.ts";
 import * as Output from "../../Output.ts";
+import type { ResourceLike } from "../../Resource.ts";
 import { isWorker } from "../Workers/Worker.ts";
 import type { Bucket } from "./Bucket.ts";
 
 export const BucketBinding = Effect.fn(function* (
-  worker: ExecutionContext["Service"],
+  host: ResourceLike,
   bucket: Bucket,
 ) {
-  if (isWorker(worker)) {
-    yield* worker.bind`Bind(${bucket})`({
+  if (isWorker(host)) {
+    yield* host.bind`Bind(${bucket})`({
       bindings: [
         {
           type: "r2_bucket",
@@ -25,7 +25,7 @@ export const BucketBinding = Effect.fn(function* (
     });
   } else {
     return yield* Effect.die(
-      new Error(`BucketBinding does not support runtime '${worker.Type}'`),
+      new Error(`BucketBinding does not support runtime '${host.Type}'`),
     );
   }
 });

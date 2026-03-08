@@ -1,6 +1,6 @@
+import * as Cloudflare from "@/Cloudflare";
 import { Account } from "@/Cloudflare/Account";
 import { CloudflareApi } from "@/Cloudflare/CloudflareApi";
-import * as Cloudflare from "@/Cloudflare";
 import * as R2 from "@/Cloudflare/R2";
 import * as Worker from "@/Cloudflare/Workers";
 import { destroy } from "@/Destroy";

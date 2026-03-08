@@ -29,7 +29,7 @@ const getState = Effect.fn(function* <S = ResourceState>(resourceId: string) {
   return (yield* state.get({
     stack: testStack,
     stage: testStage,
-    logicalId: resourceId,
+    fqn: resourceId,
   })) as S;
 });
 const listState = Effect.fn(function* () {

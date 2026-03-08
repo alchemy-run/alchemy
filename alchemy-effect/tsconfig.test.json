@@ -19,8 +19,9 @@
         "./src/*"
       ]
     },
-    // ink
-    "jsx": "react",
+    // Solid is the default JSX runtime in this package; React files opt in per-file.
+    "jsx": "react-jsx",
+    "jsxImportSource": "@opentui/solid",
     "lib": [
       "DOM",
       "DOM.Iterable",

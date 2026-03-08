@@ -1,5 +1,5 @@
-// biome-ignore lint/style/useImportType: UMD global
-import React, { useState } from "react";
+/** @jsxImportSource react */
+import { useState, type JSX } from "react";
 
 import { Box, Text, useApp, useInput } from "ink";
 import type { Plan as AlchemyPlan } from "../../Plan.ts";
@@ -11,7 +11,7 @@ export interface ApprovePlanProps {
   approve: (result: boolean) => void;
 }
 
-export function ApprovePlan(props: ApprovePlanProps): React.JSX.Element {
+export function ApprovePlan(props: ApprovePlanProps): JSX.Element {
   const { plan, approve } = props;
   const [selected, setSelected] = useState(0);
   const { exit } = useApp();

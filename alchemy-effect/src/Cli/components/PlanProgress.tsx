@@ -1,5 +1,5 @@
-// biome-ignore lint/style/useImportType: UMD global
-import React, { useEffect, useMemo, useRef, useState } from "react";
+/** @jsxImportSource react */
+import { useEffect, useMemo, useRef, useState, type JSX } from "react";
 
 import { Box, Text } from "ink";
 import type { CRUD, Plan } from "../../Plan.ts";
@@ -30,7 +30,7 @@ export const toPlanTask = (id: string, planItem: PlanItem): PlanTask => ({
   updatedAt: Date.now(),
 });
 
-export function PlanProgress(props: PlanProgressProps): React.JSX.Element {
+export function PlanProgress(props: PlanProgressProps): JSX.Element {
   const { source, plan } = props;
   const spinner = useGlobalSpinner();
   const [tasks, setTasks] = useState<Map<string, PlanTask>>(() => {

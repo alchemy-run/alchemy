@@ -1,14 +1,14 @@
 import * as Effect from "effect/Effect";
-import type { ExecutionContext } from "../../Host.ts";
+import type { ResourceLike } from "../../Resource.ts";
 import { isWorker } from "../Workers/Worker.ts";
 import type { Namespace } from "./Namespace.ts";
 
 export const NamespaceBinding = Effect.fn(function* (
-  worker: ExecutionContext["Service"],
+  host: ResourceLike,
   namespace: Namespace,
 ) {
-  if (isWorker(worker)) {
-    yield* worker.bind`Bind(${namespace})`({
+  if (isWorker(host)) {
+    yield* host.bind`Bind(${namespace})`({
       bindings: [
         {
           type: "kv_namespace",
@@ -19,7 +19,7 @@ export const NamespaceBinding = Effect.fn(function* (
     });
   } else {
     return yield* Effect.die(
-      new Error(`NamespaceBinding does not support runtime '${worker.Type}'`),
+      new Error(`NamespaceBinding does not support runtime '${host.Type}'`),
     );
   }
 });

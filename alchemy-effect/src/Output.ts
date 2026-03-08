@@ -86,10 +86,12 @@ export abstract class BaseExpr<A = any, Req = any> implements Output<A, Req> {
     Accessor<A>,
     void
   > {
+    // @ts-expect-error - TODO(sam): fix this (works at runtime, but maybe indicates a bad assumption)
     return new SingleShotGen(this);
   }
 
   asEffect(): Effect.Effect<A, never, Req> {
+    // @ts-expect-error - TODO(sam): fix this (works at runtime, but maybe indicates a bad assumption)
     return Effect.gen(function* () {
       const _ctx = yield* ExecutionContext;
       // TODO(sam): implement

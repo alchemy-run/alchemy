@@ -1,3 +1,4 @@
+/** @jsxImportSource react */
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { render } from "ink";

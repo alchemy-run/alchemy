@@ -28,9 +28,9 @@ type BindingData<Res extends ResourceLike> = [Res] extends [
   ? B[]
   : any[];
 
-type Props<Res extends ResourceLike> = {} extends Res["Props"]
+type Props<Res extends ResourceLike> = keyof Res["Props"] extends never
   ? Res["Props"] | undefined
-  : Props<Res>;
+  : Res["Props"];
 
 export interface ProviderService<
   Res extends ResourceLike = ResourceLike,

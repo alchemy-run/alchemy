@@ -24,7 +24,7 @@ export const Bucket = Resource<Bucket>("Test.Bucket");
 
 const bucketProvider = Bucket.provider.succeed({
   diff: Effect.fn(function* ({ id, news, output }) {}),
-  create: Effect.fn(function* ({ id, news }) {
+  create: Effect.fn(function* ({ id, news = {} }) {
     return {
       name: news.name ?? id,
       bucketArn: `arn:test:bucket:us-east-1:123456789:${id}`,
@@ -55,15 +55,15 @@ export interface Queue extends Resource<
 export const Queue = Resource<Queue>("Test.Queue");
 
 export const queueProvider = Queue.provider.succeed({
-  diff: Effect.fn(function* ({ id, news, output }) {}),
-  create: Effect.fn(function* ({ id, news }) {
+  diff: Effect.fn(function* ({ id, news = {}, output }) {}),
+  create: Effect.fn(function* ({ id, news = {} }) {
     const name = news.name ?? id;
     return {
       name,
       queueUrl: `https://test.queue.com/${name}`,
     };
   }),
-  update: Effect.fn(function* ({ id, news, output }) {
+  update: Effect.fn(function* ({ id, news = {}, output }) {
     const name = news.name ?? id;
     return {
       name,
@@ -92,14 +92,14 @@ export const Function = Resource<Function>("Test.Function");
 
 export const functionProvider = Function.provider.succeed({
   diff: Effect.fn(function* ({ id, news, output }) {}),
-  create: Effect.fn(function* ({ id, news }) {
+  create: Effect.fn(function* ({ id, news = {} }) {
     return {
       name: news.name ?? id,
       env: news.env ?? {},
       functionArn: `arn:aws:lambda:us-west-2:084828582823:function:${id}`,
     };
   }),
-  update: Effect.fn(function* ({ id, news, output }) {
+  update: Effect.fn(function* ({ id, news = {}, output }) {
     return {
       name: news.name ?? id,
       env: news.env ?? {},
@@ -156,7 +156,7 @@ export const testResourceProvider = TestResource.provider.effect(
         }
         return output;
       }),
-      diff: Effect.fn(function* ({ id, news, olds }) {
+      diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
         if (news.replaceString !== olds.replaceString) {
           return {
             action: "replace",
@@ -175,7 +175,7 @@ export const testResourceProvider = TestResource.provider.effect(
             }
           : undefined;
       }),
-      create: Effect.fn(function* ({ id, news }) {
+      create: Effect.fn(function* ({ id, news = {} }) {
         const hooks = Option.getOrUndefined(
           yield* Effect.serviceOption(TestResourceHooks),
         );
@@ -190,7 +190,7 @@ export const testResourceProvider = TestResource.provider.effect(
           replaceString: news.replaceString,
         };
       }),
-      update: Effect.fn(function* ({ id, news, output }) {
+      update: Effect.fn(function* ({ id, news = {}, output }) {
         const hooks = Option.getOrUndefined(
           yield* Effect.serviceOption(TestResourceHooks),
         );
@@ -264,7 +264,7 @@ export const staticStablesResourceProvider =
     // KEY DIFFERENCE: Static stables defined on the provider itself
     // These are always stable regardless of what diff() returns
     stables: ["stableId", "stableArn"],
-    diff: Effect.fn(function* ({ id, news, olds }) {
+    diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
       // Replace when replaceString changes
       if (news.replaceString !== olds.replaceString) {
         return { action: "replace" };
@@ -278,7 +278,7 @@ export const staticStablesResourceProvider =
       // but diff() returns undefined because provider doesn't explicitly handle tags
       return undefined;
     }),
-    create: Effect.fn(function* ({ id, news }) {
+    create: Effect.fn(function* ({ id, news = {} }) {
       const hooks = Option.getOrUndefined(
         yield* Effect.serviceOption(StaticStablesResourceHooks),
       );
@@ -293,7 +293,7 @@ export const staticStablesResourceProvider =
         replaceString: news.replaceString,
       };
     }),
-    update: Effect.fn(function* ({ id, news, output }) {
+    update: Effect.fn(function* ({ id, news = {}, output }) {
       const hooks = Option.getOrUndefined(
         yield* Effect.serviceOption(StaticStablesResourceHooks),
       );

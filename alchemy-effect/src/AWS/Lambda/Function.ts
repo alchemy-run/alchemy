@@ -7,7 +7,7 @@ import { Region } from "distilled-aws/Region";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
-import { Path } from "effect/Path";
+import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as ServiceMap from "effect/ServiceMap";
 import { Bundler, type BundleOptions } from "../../Bundle/Bundler.ts";
@@ -126,7 +126,7 @@ export const FunctionProvider = () =>
       const region = yield* Region;
       const dotAlchemy = yield* DotAlchemy;
       const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path;
+      const path = yield* Path.Path;
       const bundler = yield* Bundler;
 
       const createFunctionName = (
@@ -348,7 +348,11 @@ export default await Effect.runPromise(handler);`,
         yield* Effect.logDebug(`creating function ${id}`);
         const waitStartedAt = Date.now();
 
-        const isRolePropagationError = (e: any) =>
+        const isRolePropagationError = <
+          E extends Lambda.UpdateFunctionCodeError | Lambda.CreateFunctionError,
+        >(
+          e: E,
+        ) =>
           e._tag === "InvalidParameterValueException" &&
           (e.message?.includes("cannot be assumed by Lambda") ||
             (e.message?.includes("KMS key is invalid for CreateGrant") &&
@@ -358,13 +362,6 @@ export default await Effect.runPromise(handler);`,
           session.note(
             `Waiting for Lambda execution role to become assumable: ${functionName} (${Math.ceil((Date.now() - waitStartedAt) / 1000)}s)`,
           );
-
-        const retryRolePropagation = Effect.retry({
-          while: isRolePropagationError,
-          schedule: Schedule.fixed(1000).pipe(
-            Schedule.tapOutput(() => noteRolePropagationWait()),
-          ),
-        });
 
         const tags = yield* createInternalTags(id);
 
@@ -485,7 +482,12 @@ export default await Effect.runPromise(handler);`,
               yield* Effect.logDebug(e);
             }),
           ),
-          retryRolePropagation,
+          Effect.retry({
+            while: (e) => isRolePropagationError(e),
+            schedule: Schedule.fixed(1000).pipe(
+              Schedule.tapOutput(() => noteRolePropagationWait()),
+            ),
+          }),
           Effect.catchTags({
             ResourceConflictException: () => getAndUpdate,
           }),
