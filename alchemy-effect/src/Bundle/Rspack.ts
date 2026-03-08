@@ -15,7 +15,7 @@ import {
   type WatchOutput,
 } from "./Bundler.ts";
 
-type RspackRuntime = typeof import("@rspack/core")["rspack"];
+type RspackRuntime = (typeof import("@rspack/core"))["rspack"];
 
 export const rspack = () =>
   Layer.effect(
@@ -43,12 +43,11 @@ export const rspack = () =>
             pathService.basename(dotAlchemy),
             "tmp",
           );
-          const tempFile = pathService.join(
-            tempDir,
-            `stdin-${hash}${ext}`,
-          );
+          const tempFile = pathService.join(tempDir, `stdin-${hash}${ext}`);
 
-          yield* fs.makeDirectory(tempDir, { recursive: true }).pipe(Effect.orDie);
+          yield* fs
+            .makeDirectory(tempDir, { recursive: true })
+            .pipe(Effect.orDie);
           yield* fs
             .writeFileString(tempFile, options.stdin.contents)
             .pipe(Effect.orDie);

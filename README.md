@@ -23,10 +23,7 @@ export default Effect.gen(function* () {
   return {
     bucketArn: bucket.bucketArn,
   };
-}).pipe(
-  Stack.make("MyStack"),
-  Effect.provide(AWS.providers()),
-);
+}).pipe(Stack.make("MyStack"), Effect.provide(AWS.providers()));
 ```
 
 ## Resources
@@ -34,20 +31,26 @@ export default Effect.gen(function* () {
 Resources are declared inline as Effects. They produce typed Output Attributes that flow into other Resources.
 
 ```typescript
-const bucket = yield* AWS.S3.Bucket("DataBucket", {
-  forceDestroy: true,
-});
+const bucket =
+  yield *
+  AWS.S3.Bucket("DataBucket", {
+    forceDestroy: true,
+  });
 
-const queue = yield* AWS.SQS.Queue("JobsQueue", {
-  fifo: true,
-  visibilityTimeout: 60,
-});
+const queue =
+  yield *
+  AWS.SQS.Queue("JobsQueue", {
+    fifo: true,
+    visibilityTimeout: 60,
+  });
 
-const table = yield* AWS.DynamoDB.Table("UsersTable", {
-  tableName: "users",
-  partitionKey: { name: "pk", type: "S" },
-  sortKey: { name: "sk", type: "S" },
-});
+const table =
+  yield *
+  AWS.DynamoDB.Table("UsersTable", {
+    tableName: "users",
+    partitionKey: { name: "pk", type: "S" },
+    sortKey: { name: "sk", type: "S" },
+  });
 ```
 
 Output Attributes from one Resource can be passed as Input Properties to another — the engine resolves the dependency graph automatically.
@@ -80,11 +83,7 @@ export default Effect.gen(function* () {
   } as const;
 }).pipe(
   Effect.provide(
-    Layer.mergeAll(
-      Http.lambdaHttpServer,
-      S3.GetObjectLive,
-      S3.PutObjectLive,
-    ),
+    Layer.mergeAll(Http.lambdaHttpServer, S3.GetObjectLive, S3.PutObjectLive),
   ),
   Lambda.Function("ApiFunction"),
 );
@@ -140,12 +139,8 @@ export default Effect.gen(function* () {
   const { bucket, getJob } = yield* JobStorage;
   // ...
   return { main: import.meta.filename, url: true } as const;
-}).pipe(
-  Effect.provide(jobStorage),
-  Lambda.Function("JobFunction"),
-);
+}).pipe(Effect.provide(jobStorage), Lambda.Function("JobFunction"));
 ```
-
 
 ## Event Sources
 
@@ -154,17 +149,15 @@ Subscribe to S3 notifications, SQS queues, and other event sources as Streams.
 ```typescript
 import * as Stream from "effect/Stream";
 
-yield* S3.notifications(bucket).subscribe((stream) =>
-  stream.pipe(
-    Stream.flatMap((item) =>
-      Stream.fromEffect(getJob(item.key)),
+yield *
+  S3.notifications(bucket).subscribe((stream) =>
+    stream.pipe(
+      Stream.flatMap((item) => Stream.fromEffect(getJob(item.key))),
+      Stream.tapSink(sink),
+      Stream.runDrain,
     ),
-    Stream.tapSink(sink),
-    Stream.runDrain,
-  ),
-);
+  );
 ```
-
 
 ## HTTP APIs
 
@@ -199,15 +192,24 @@ const JobApi = HttpApi.make("JobApi").add(
 // 2. Implement handlers
 const JobApiHandlers = HttpApiBuilder.group(JobApi, "Jobs", (handlers) =>
   handlers
-    .handle("getJob", Effect.fn(function* (req) {
-      const storage = yield* JobStorage;
-      return yield* storage.getJob(req.params.jobId);
-    }))
-    .handle("createJob", Effect.fn(function* (req) {
-      const storage = yield* JobStorage;
-      const job = yield* storage.putJob({ id: "TODO", content: req.payload.content });
-      return job.id;
-    })),
+    .handle(
+      "getJob",
+      Effect.fn(function* (req) {
+        const storage = yield* JobStorage;
+        return yield* storage.getJob(req.params.jobId);
+      }),
+    )
+    .handle(
+      "createJob",
+      Effect.fn(function* (req) {
+        const storage = yield* JobStorage;
+        const job = yield* storage.putJob({
+          id: "TODO",
+          content: req.payload.content,
+        });
+        return job.id;
+      }),
+    ),
 );
 
 // 3. Build the API Layer and convert to an HttpEffect
@@ -222,7 +224,7 @@ export const JobHttpEffect = HttpRouter.toHttpEffect(JobApiLive);
 Then serve it inside your Lambda Function:
 
 ```typescript
-yield* Http.serve(JobHttpEffect);
+yield * Http.serve(JobHttpEffect);
 ```
 
 ## RPC
@@ -252,10 +254,10 @@ Control what happens when a Resource is removed from your stack.
 ```typescript
 import { RemovalPolicy } from "alchemy-effect";
 
-const queue = yield* SQS.Queue("JobsQueue").pipe(
-  RemovalPolicy.retain(stage === "prod"),
-);
+const queue =
+  yield * SQS.Queue("JobsQueue").pipe(RemovalPolicy.retain(stage === "prod"));
 ```
+
 ## AWS Configuration
 
 Configure AWS credentials and region per stage using Effect Layers and Config.
@@ -335,12 +337,14 @@ export const Stream = Resource<Stream>("AWS.Kinesis.Stream");
 Users interact with the Resource as an Effect:
 
 ```typescript
-const stream = yield* Stream("MyStream", {
-  streamMode: "ON_DEMAND",
-  retentionPeriodHours: 48,
-});
+const stream =
+  yield *
+  Stream("MyStream", {
+    streamMode: "ON_DEMAND",
+    retentionPeriodHours: 48,
+  });
 
-yield* Console.log(stream.streamArn); // typed Output attribute
+yield * Console.log(stream.streamArn); // typed Output attribute
 ```
 
 ## Resource Provider
@@ -360,8 +364,10 @@ export const StreamProvider = () =>
 
         // determine if a prop change requires replace vs update
         diff: Effect.fn(function* ({ id, news, olds }) {
-          const oldName = olds.streamName ?? (yield* createPhysicalName({ id }));
-          const newName = news.streamName ?? (yield* createPhysicalName({ id }));
+          const oldName =
+            olds.streamName ?? (yield* createPhysicalName({ id }));
+          const newName =
+            news.streamName ?? (yield* createPhysicalName({ id }));
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
@@ -369,18 +375,18 @@ export const StreamProvider = () =>
         }),
 
         create: Effect.fn(function* ({ id, news, session }) {
-          const streamName = news.streamName
-            ?? (yield* createPhysicalName({ id, maxLength: 128 }));
+          const streamName =
+            news.streamName ??
+            (yield* createPhysicalName({ id, maxLength: 128 }));
 
-          yield* kinesis.createStream({
-            StreamName: streamName,
-            StreamModeDetails: { StreamMode: news.streamMode ?? "ON_DEMAND" },
-            ShardCount: news.streamMode === "PROVISIONED"
-              ? news.shardCount
-              : undefined,
-          }).pipe(
-            Effect.catchTag("ResourceInUseException", () => Effect.void),
-          );
+          yield* kinesis
+            .createStream({
+              StreamName: streamName,
+              StreamModeDetails: { StreamMode: news.streamMode ?? "ON_DEMAND" },
+              ShardCount:
+                news.streamMode === "PROVISIONED" ? news.shardCount : undefined,
+            })
+            .pipe(Effect.catchTag("ResourceInUseException", () => Effect.void));
 
           yield* waitForStreamActive(streamName);
 
@@ -398,12 +404,14 @@ export const StreamProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* kinesis.deleteStream({
-            StreamName: output.streamName,
-            EnforceConsumerDeletion: true,
-          }).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          yield* kinesis
+            .deleteStream({
+              StreamName: output.streamName,
+              EnforceConsumerDeletion: true,
+            })
+            .pipe(
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            );
         }),
       };
     }),
@@ -436,11 +444,12 @@ import * as Binding from "alchemy-effect/Binding";
 
 export class PutRecord extends Binding.Service<
   PutRecord,
-  (stream: Stream) => Effect.Effect<
-    (request: PutRecordRequest) => Effect.Effect<
-      Kinesis.PutRecordOutput,
-      Kinesis.PutRecordError
-    >
+  (
+    stream: Stream,
+  ) => Effect.Effect<
+    (
+      request: PutRecordRequest,
+    ) => Effect.Effect<Kinesis.PutRecordOutput, Kinesis.PutRecordError>
   >
 >()("AWS.Kinesis.PutRecord") {}
 
@@ -469,10 +478,7 @@ export default Effect.gen(function* () {
   const putRecord = yield* Kinesis.PutRecord.bind(stream);
   // use putRecord(...) at runtime
   return { main: import.meta.filename } as const;
-}).pipe(
-  Effect.provide(Kinesis.PutRecordLive),
-  Lambda.Function("Producer"),
-);
+}).pipe(Effect.provide(Kinesis.PutRecordLive), Lambda.Function("Producer"));
 ```
 
 ### Binding.Policy
@@ -491,19 +497,21 @@ export const PutRecordPolicyLive = PutRecordPolicy.layer.succeed(
   Effect.fn(function* (ctx, stream: Stream) {
     if (isFunction(ctx)) {
       yield* ctx.bind({
-        policyStatements: [{
-          Sid: "PutRecord",
-          Effect: "Allow",
-          Action: ["kinesis:PutRecord"],
-          Resource: [Output.interpolate`${stream.streamArn}`],
-        }],
+        policyStatements: [
+          {
+            Sid: "PutRecord",
+            Effect: "Allow",
+            Action: ["kinesis:PutRecord"],
+            Resource: [Output.interpolate`${stream.streamArn}`],
+          },
+        ],
       });
     } else {
       return yield* Effect.die(
         `PutRecordPolicy does not support runtime '${ctx.type}'`,
       );
     }
-  })
+  }),
 );
 ```
 
@@ -537,16 +545,16 @@ Stack (alchemy.run.ts)
 
 ## Supported AWS Services
 
-| Service | Resources |
-| --- | --- |
-| **DynamoDB** | Table |
-| **EC2** | VPC, Subnet, InternetGateway, RouteTable, SecurityGroup, ... |
-| **EventBridge** | Rule, EventBus |
-| **IAM** | Role, Policy |
-| **Kinesis** | Stream |
-| **Lambda** | Function |
-| **S3** | Bucket, GetObject, PutObject, Notifications |
-| **SQS** | Queue, SendMessage, QueueSink, EventSource |
+| Service         | Resources                                                    |
+| --------------- | ------------------------------------------------------------ |
+| **DynamoDB**    | Table                                                        |
+| **EC2**         | VPC, Subnet, InternetGateway, RouteTable, SecurityGroup, ... |
+| **EventBridge** | Rule, EventBus                                               |
+| **IAM**         | Role, Policy                                                 |
+| **Kinesis**     | Stream                                                       |
+| **Lambda**      | Function                                                     |
+| **S3**          | Bucket, GetObject, PutObject, Notifications                  |
+| **SQS**         | Queue, SendMessage, QueueSink, EventSource                   |
 
 ## License
 

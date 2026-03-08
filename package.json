@@ -7,6 +7,44 @@
     "type": "git",
     "url": "https://github.com/alchemy-run/alchemy"
   },
+  "workspaces": {
+    "packages": [
+      "alchemy-effect",
+      "examples/*"
+    ],
+    "catalog": {
+      "@aws-sdk/credential-providers": "^3.0.0",
+      "@cloudflare/vite-plugin": "^1.13.12",
+      "@cloudflare/workers-types": "^4.20250805.0",
+      "@effect/language-service": "4.0.0-beta.28",
+      "@effect/platform-node": "4.0.0-beta.28",
+      "@effect/platform-node-shared": "4.0.0-beta.28",
+      "@effect/vitest": "4.0.0-beta.28",
+      "@libsql/client": "^0.17.0",
+      "@opentui/core": "latest",
+      "@opentui/solid": "latest",
+      "@smithy/node-config-provider": "^4.0.0",
+      "@smithy/shared-ini-file-loader": "^4.3.4",
+      "@smithy/types": "^4.8.1",
+      "@types/aws-lambda": "^8.10.152",
+      "@types/bun": "latest",
+      "@types/node": "latest",
+      "ai": "^6.0.62",
+      "aws4fetch": "^1.0.20",
+      "cloudflare": "^5.2.0",
+      "distilled-aws": "^0.1.1",
+      "distilled-cloudflare": "^0.0.7",
+      "effect": "4.0.0-beta.28",
+      "esbuild": "^0.25.12",
+      "fast-xml-parser": "^5.3.4",
+      "solid-js": "latest",
+      "typescript": "^5.9.3",
+      "vite": "^7.1.9",
+      "web-tree-sitter": "0.25.10",
+      "wrangler": "^4.42.2",
+      "yaml": "^2.0.0"
+    }
+  },
   "type": "module",
   "module": "./lib/index.js",
   "scripts": {
@@ -64,43 +102,5 @@
     "vitest": "^4.0.18",
     "webpack": "^5.105.4",
     "yaml": "^2.8.2"
-  },
-  "workspaces": {
-    "packages": [
-      "alchemy-effect",
-      "examples/*"
-    ],
-    "catalog": {
-      "@aws-sdk/credential-providers": "^3.0.0",
-      "@cloudflare/vite-plugin": "^1.13.12",
-      "@cloudflare/workers-types": "^4.20250805.0",
-      "@effect/language-service": "4.0.0-beta.28",
-      "@effect/platform-node": "4.0.0-beta.28",
-      "@effect/platform-node-shared": "4.0.0-beta.28",
-      "@effect/vitest": "4.0.0-beta.28",
-      "@libsql/client": "^0.17.0",
-      "@opentui/core": "latest",
-      "@opentui/solid": "latest",
-      "@smithy/node-config-provider": "^4.0.0",
-      "@smithy/shared-ini-file-loader": "^4.3.4",
-      "@smithy/types": "^4.8.1",
-      "@types/aws-lambda": "^8.10.152",
-      "@types/bun": "latest",
-      "@types/node": "latest",
-      "ai": "^6.0.62",
-      "aws4fetch": "^1.0.20",
-      "cloudflare": "^5.2.0",
-      "distilled-aws": "^0.1.1",
-      "distilled-cloudflare": "^0.0.7",
-      "effect": "4.0.0-beta.28",
-      "esbuild": "^0.25.12",
-      "fast-xml-parser": "^5.3.4",
-      "solid-js": "latest",
-      "typescript": "^5.9.3",
-      "vite": "^7.1.9",
-      "web-tree-sitter": "0.25.10",
-      "wrangler": "^4.42.2",
-      "yaml": "^2.0.0"
-    }
   }
 }

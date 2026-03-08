@@ -4,9 +4,9 @@
 
 ## Props
 
-| Property | Type                            | Required | Default | Description                                                                                                                 |
-| -------- | ------------------------------- | -------- | ------- | --------------------------------------------------------------------------------------------------------------------------- |
-| vpcId    | `Input<VpcId>`                  | Yes      | -       | The VPC to create the route table in. Required.                                                                             |
+| Property | Type                            | Required | Default | Description                                                                                                                   |
+| -------- | ------------------------------- | -------- | ------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| vpcId    | `Input<VpcId>`                  | Yes      | -       | The VPC to create the route table in. Required.                                                                               |
 | tags     | `Record<string, Input<string>>` | No       | -       | Tags to assign to the route table. These will be merged with alchemy auto-tags (alchemy::stack, alchemy::stage, alchemy::id). |
 
 ## Attributes

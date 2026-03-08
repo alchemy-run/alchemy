@@ -134,7 +134,12 @@ export const InternetGatewayProvider = () =>
           };
         }),
 
-        update: Effect.fn(function* ({ news = {}, olds = {}, output, session }) {
+        update: Effect.fn(function* ({
+          news = {},
+          olds = {},
+          output,
+          session,
+        }) {
           const internetGatewayId = output.internetGatewayId;
 
           // Handle VPC attachment changes

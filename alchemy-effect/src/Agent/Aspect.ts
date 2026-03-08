@@ -2,7 +2,6 @@ import type { Yieldable } from "effect/Effect";
 import * as Effect from "effect/Effect";
 import * as S from "effect/Schema";
 import * as ServiceMap from "effect/ServiceMap";
-import { TuiPlugin } from "../Tui/plugin.ts";
 import type { Class, IsAny } from "../Util/index.ts";
 import { ContextPlugin } from "./ContextPlugin.ts";
 import { createPluginBuilder, type Plugins } from "./Plugin.ts";
@@ -101,7 +100,6 @@ export const defineAspect: <Fn extends AspectType<any>>(
           handler,
           plugin: {
             context: createPluginBuilder(ContextPlugin(type) as any),
-            tui: createPluginBuilder(TuiPlugin(type) as any),
           },
         });
         // function declaration so that a class can extends this
@@ -115,7 +113,6 @@ export const defineAspect: <Fn extends AspectType<any>>(
       schema,
       plugin: {
         context: createPluginBuilder(ContextPlugin(type) as any),
-        tui: createPluginBuilder(TuiPlugin(type) as any),
       },
     },
   )) as AspectClass<any>;

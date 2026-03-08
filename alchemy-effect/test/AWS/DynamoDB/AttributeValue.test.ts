@@ -318,19 +318,11 @@ describe("toAttributeType", () => {
   });
 
   test("Record schema -> M", () => {
-    expect(
-      toAttributeType(
-        S.Record(S.String, S.String),
-      ),
-    ).toBe("M");
+    expect(toAttributeType(S.Record(S.String, S.String))).toBe("M");
   });
 
   test("Map schema -> M", () => {
-    expect(
-      toAttributeType(
-        S.ReadonlyMap(S.String, S.String),
-      ),
-    ).toBe("M");
+    expect(toAttributeType(S.ReadonlyMap(S.String, S.String))).toBe("M");
   });
 
   test("Array/List schema -> L", () => {
@@ -360,19 +352,11 @@ describe("toAttributeType", () => {
 
 describe("isMapSchemaType", () => {
   test("Map schema", () => {
-    expect(
-      isMapSchemaType(
-        S.ReadonlyMap(S.String, S.String),
-      ),
-    ).toBe(true);
+    expect(isMapSchemaType(S.ReadonlyMap(S.String, S.String))).toBe(true);
   });
 
   test("Record schema", () => {
-    expect(
-      isMapSchemaType(
-        S.Record(S.String, S.String),
-      ),
-    ).toBe(true);
+    expect(isMapSchemaType(S.Record(S.String, S.String))).toBe(true);
   });
 
   test("Struct schema", () => {

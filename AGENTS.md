@@ -343,6 +343,7 @@ export const PutRecordPolicyLive = Layer.effect(PutRecordPolicy, ...);
 ```
 
 After implementing, register the Policy in `AWS.providers()`:
+
 - Add the `*PolicyLive` layer to `bindings()` in [Providers.ts](./alchemy-effect/src/AWS/Providers.ts)
 - Re-export from the service's `index.ts`
 

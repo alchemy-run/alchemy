@@ -117,7 +117,10 @@ const createVariantFile = (
 
 const createDirectFilesVariant = (): { path: string; cleanup(): void } => {
   const storageOriginal = readFileSync(JOB_STORAGE, "utf8");
-  const storagePath = resolve(SRC_DIR, "__bundle-benchmark.direct-files.JobStorage.ts");
+  const storagePath = resolve(
+    SRC_DIR,
+    "__bundle-benchmark.direct-files.JobStorage.ts",
+  );
   const storageContents = storageOriginal
     .replace(
       'import * as S3 from "alchemy-effect/AWS/S3";',
@@ -125,12 +128,21 @@ const createDirectFilesVariant = (): { path: string; cleanup(): void } => {
     )
     .replace("bucket: S3.Bucket;", "bucket: Bucket;")
     .replace('yield* S3.Bucket("JobsBucket")', 'yield* Bucket("JobsBucket")')
-    .replace("yield* S3.GetObject.bind(bucket)", "yield* GetObject.bind(bucket)")
-    .replace("yield* S3.PutObject.bind(bucket)", "yield* PutObject.bind(bucket)");
+    .replace(
+      "yield* S3.GetObject.bind(bucket)",
+      "yield* GetObject.bind(bucket)",
+    )
+    .replace(
+      "yield* S3.PutObject.bind(bucket)",
+      "yield* PutObject.bind(bucket)",
+    );
   writeFileSync(storagePath, storageContents);
 
   const mainOriginal = readFileSync(JOB_FUNCTION, "utf8");
-  const mainPath = resolve(SRC_DIR, "__bundle-benchmark.direct-files.JobFunction.ts");
+  const mainPath = resolve(
+    SRC_DIR,
+    "__bundle-benchmark.direct-files.JobFunction.ts",
+  );
   const mainContents = mainOriginal
     .replace(
       'import { AWS, RemovalPolicy } from "alchemy-effect";',
@@ -209,7 +221,10 @@ const variants: Variant[] = [
         ["AWS.S3.GetObjectLive", "S3.GetObjectLive"],
         ["AWS.S3.PutObjectLive", "S3.PutObjectLive"],
         ["AWS.SQS.SendMessageBatchLive", "SQS.SendMessageBatchLive"],
-        ['AWS.Lambda.Function("JobFunction")', 'AWSLambda.Function("JobFunction")'],
+        [
+          'AWS.Lambda.Function("JobFunction")',
+          'AWSLambda.Function("JobFunction")',
+        ],
       ]),
   },
   {
@@ -227,7 +242,10 @@ async function buildVariant(variant: Variant): Promise<Result> {
   const main = variant.createMain();
   try {
     const entry = join(dir, "__entry.ts");
-    const importPath = relative(dirname(entry), main.path).replaceAll("\\", "/");
+    const importPath = relative(dirname(entry), main.path).replaceAll(
+      "\\",
+      "/",
+    );
     writeFileSync(
       entry,
       `import { default as handler } from ${JSON.stringify(importPath.startsWith(".") ? importPath : `./${importPath}`)};
@@ -435,9 +453,7 @@ function printS3Table(results: Result[]) {
     const row =
       "  " +
       op.padEnd(28) +
-      results
-        .map((r) => (r.s3Ops[op] ? "present" : "-").padStart(16))
-        .join("");
+      results.map((r) => (r.s3Ops[op] ? "present" : "-").padStart(16)).join("");
     console.log(row);
   }
 }
@@ -484,7 +500,9 @@ function printUniqueAlchemyComparison(results: Result[]) {
   for (const mod of unique) {
     const short = shortModulePath(mod.path);
     const display =
-      short.length > pathWidth - 2 ? "…" + short.slice(-(pathWidth - 3)) : short;
+      short.length > pathWidth - 2
+        ? "…" + short.slice(-(pathWidth - 3))
+        : short;
     console.log(
       "  " + display.padEnd(pathWidth) + formatBytes(mod.size).padStart(12),
     );
@@ -512,16 +530,16 @@ function printMicroResults(results: MicroResult[]) {
   console.log("  MICRO S3 OPERATIONS");
   console.log("═".repeat(88) + "\n");
   const header =
-    "  " + "Operation".padEnd(28) + results.map((r) => r.name.padStart(20)).join("");
+    "  " +
+    "Operation".padEnd(28) +
+    results.map((r) => r.name.padStart(20)).join("");
   console.log(header);
   console.log("  " + "─".repeat(28 + 20 * results.length));
   for (const op of S3_OPS) {
     const row =
       "  " +
       op.padEnd(28) +
-      results
-        .map((r) => (r.s3Ops[op] ? "present" : "-").padStart(20))
-        .join("");
+      results.map((r) => (r.s3Ops[op] ? "present" : "-").padStart(20)).join("");
     console.log(row);
   }
 }

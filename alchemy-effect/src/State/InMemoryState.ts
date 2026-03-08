@@ -8,7 +8,10 @@ type StageId = string;
 type Fqn = string;
 
 export const InMemory = (
-  initialState: Record<StackId, Record<StageId, Record<Fqn, ResourceState>>> = {},
+  initialState: Record<
+    StackId,
+    Record<StageId, Record<Fqn, ResourceState>>
+  > = {},
 ) =>
   Layer.succeed(State, InMemoryService(initialState)) as Layer.Layer<
     State,
@@ -17,7 +20,10 @@ export const InMemory = (
   >;
 
 export const InMemoryService = (
-  initialState: Record<StackId, Record<StageId, Record<Fqn, ResourceState>>> = {},
+  initialState: Record<
+    StackId,
+    Record<StageId, Record<Fqn, ResourceState>>
+  > = {},
 ) => {
   const state = initialState;
   return {

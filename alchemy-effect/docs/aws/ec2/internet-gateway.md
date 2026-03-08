@@ -7,7 +7,7 @@
 | Property | Type                            | Required | Default | Description                                                                                                                                                                                           |
 | -------- | ------------------------------- | -------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | vpcId    | `Input<VpcId>`                  | No       | -       | The VPC to attach the internet gateway to. If provided, the internet gateway will be automatically attached to the VPC. Optional - you can create an unattached internet gateway and attach it later. |
-| tags     | `Record<string, Input<string>>` | No       | -       | Tags to assign to the internet gateway. These will be merged with alchemy auto-tags (alchemy::stack, alchemy::stage, alchemy::id).                                                                      |
+| tags     | `Record<string, Input<string>>` | No       | -       | Tags to assign to the internet gateway. These will be merged with alchemy auto-tags (alchemy::stack, alchemy::stage, alchemy::id).                                                                    |
 
 ## Attributes
 

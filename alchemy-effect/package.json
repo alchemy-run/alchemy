@@ -19,70 +19,6 @@
   ],
   "type": "module",
   "sideEffects": false,
-  "publishConfig": {
-    "access": "public"
-  },
-  "scripts": {
-    "dev": "tsdown --watch",
-    "build": "bun bundle && bun pm pack",
-    "bundle": "tsdown",
-    "bundle:watch": "tsdown --watch",
-    "publish:npm": "cp ../README.md . && bun publish && rm README.md",
-    "test:benchmark": "tsx --tsconfig tsconfig.test.json test/types.benchmark.ts"
-  },
-  "dependencies": {
-    "@aws-sdk/credential-providers": "catalog:",
-    "@effect/vitest": "catalog:",
-    "@libsql/client": "catalog:",
-    "@opentui/core": "catalog:",
-    "@opentui/solid": "catalog:",
-    "@smithy/node-config-provider": "catalog:",
-    "@smithy/shared-ini-file-loader": "catalog:",
-    "@smithy/types": "catalog:",
-    "@types/aws-lambda": "catalog:",
-    "ai": "catalog:",
-    "aws4fetch": "catalog:",
-    "cloudflare": "catalog:",
-    "distilled-aws": "catalog:",
-    "distilled-cloudflare": "catalog:",
-    "esbuild": "catalog:",
-    "fast-xml-parser": "catalog:",
-    "ignore": "^7.0.5",
-    "jszip": "^3.10.1",
-    "solid-js": "catalog:",
-    "web-tree-sitter": "catalog:",
-    "yaml": "catalog:"
-  },
-  "devDependencies": {
-    "@clack/prompts": "^0.11.0",
-    "@cloudflare/workers-types": "catalog:",
-    "@effect/platform-node": "catalog:",
-    "@effect/platform-node-shared": "catalog:",
-    "@types/aws-lambda": "catalog:",
-    "@types/bun": "catalog:",
-    "@types/node": "catalog:",
-    "@types/react": "^19.2.2",
-    "effect": "catalog:",
-    "ink": "^6.3.1",
-    "react": "^19.2.0",
-    "react-devtools-core": "^7.0.1",
-    "tsconfig-paths": "^4.2.0",
-    "tsdown": "^0.15.4",
-    "tsx": "^4.20.6",
-    "typescript": "catalog:"
-  },
-  "peerDependencies": {
-    "@effect/platform-node": "*",
-    "effect": "*"
-  },
-  "peerDependenciesMeta": {
-    "@effect/platform-node": {
-      "optional": true
-    },
-    "effect": {
-      "optional": true
-    }
-  },
   "exports": {
     ".": {
       "types": "./src/index.d.ts",
@@ -193,6 +129,68 @@
       "types": "./src/Util/index.d.ts",
       "bun": "./src/Util/index.ts",
       "import": "./lib/Util/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "dev": "tsdown --watch",
+    "build": "bun bundle && bun pm pack",
+    "bundle": "tsdown",
+    "bundle:watch": "tsdown --watch",
+    "publish:npm": "cp ../README.md . && bun publish && rm README.md",
+    "test:benchmark": "tsx --tsconfig tsconfig.test.json test/types.benchmark.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/credential-providers": "catalog:",
+    "@effect/vitest": "catalog:",
+    "@libsql/client": "catalog:",
+    "@smithy/node-config-provider": "catalog:",
+    "@smithy/shared-ini-file-loader": "catalog:",
+    "@smithy/types": "catalog:",
+    "@types/aws-lambda": "catalog:",
+    "ai": "catalog:",
+    "aws4fetch": "catalog:",
+    "cloudflare": "catalog:",
+    "distilled-aws": "catalog:",
+    "distilled-cloudflare": "catalog:",
+    "esbuild": "catalog:",
+    "fast-xml-parser": "catalog:",
+    "ignore": "^7.0.5",
+    "jszip": "^3.10.1",
+    "solid-js": "catalog:",
+    "web-tree-sitter": "catalog:",
+    "yaml": "catalog:"
+  },
+  "devDependencies": {
+    "@clack/prompts": "^0.11.0",
+    "@cloudflare/workers-types": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "@effect/platform-node-shared": "catalog:",
+    "@types/aws-lambda": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "^19.2.2",
+    "effect": "catalog:",
+    "ink": "^6.3.1",
+    "react": "^19.2.0",
+    "react-devtools-core": "^7.0.1",
+    "tsconfig-paths": "^4.2.0",
+    "tsdown": "^0.15.4",
+    "tsx": "^4.20.6",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "@effect/platform-node": "*",
+    "effect": "*"
+  },
+  "peerDependenciesMeta": {
+    "@effect/platform-node": {
+      "optional": true
+    },
+    "effect": {
+      "optional": true
     }
   }
 }

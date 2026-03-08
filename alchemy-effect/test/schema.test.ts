@@ -65,9 +65,7 @@ describe("isListSchema", () => {
     expect(isListSchema(S.Array(S.String))).toBe(true);
   });
   test("Map type is not list", () => {
-    expect(
-      isListSchema(S.ReadonlyMap(S.String, S.String)),
-    ).toBe(false);
+    expect(isListSchema(S.ReadonlyMap(S.String, S.String))).toBe(false);
   });
 });
 

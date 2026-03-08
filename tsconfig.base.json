@@ -1,14 +1,8 @@
 {
-  "exclude": [
-    "node_modules",
-    "dist"
-  ],
+  "exclude": ["node_modules", "dist"],
   "compilerOptions": {
     // Enable latest features
-    "lib": [
-      "ESNext",
-      "DOM"
-    ],
+    "lib": ["ESNext", "DOM"],
     "target": "ESNext",
     "moduleDetection": "force",
     "jsx": "react-jsx",
@@ -34,6 +28,6 @@
     "sourceMap": true,
     "declaration": true,
     "declarationMap": true,
-    "noErrorTruncation": true,
+    "noErrorTruncation": true
   }
 }

@@ -21,7 +21,7 @@
 | enableResourceNameDnsARecordOnLaunch    | `boolean`                       | No       | false   | Whether to enable resource name DNS A record on launch.                                                                                        |
 | enableResourceNameDnsAAAARecordOnLaunch | `boolean`                       | No       | false   | Whether to enable resource name DNS AAAA record on launch.                                                                                     |
 | hostnameType                            | `ec2.HostnameType`              | No       | -       | The hostname type for EC2 instances launched into this subnet.                                                                                 |
-| tags                                    | `Record<string, Input<string>>` | No       | -       | Tags to assign to the subnet. These will be merged with alchemy auto-tags (alchemy::stack, alchemy::stage, alchemy::id).                         |
+| tags                                    | `Record<string, Input<string>>` | No       | -       | Tags to assign to the subnet. These will be merged with alchemy auto-tags (alchemy::stack, alchemy::stage, alchemy::id).                       |
 
 ## Attributes
 

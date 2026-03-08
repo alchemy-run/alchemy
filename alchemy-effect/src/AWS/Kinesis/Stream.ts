@@ -116,9 +116,7 @@ export const StreamProvider = () =>
           });
         });
 
-      const getStreamMode = (
-        props: StreamProps,
-      ): kinesis.StreamModeDetails => {
+      const getStreamMode = (props: StreamProps): kinesis.StreamModeDetails => {
         const mode = props.streamMode ?? "ON_DEMAND";
         return { StreamMode: mode };
       };
@@ -143,9 +141,7 @@ export const StreamProvider = () =>
             .createStream({
               StreamName: streamName,
               ShardCount:
-                news.streamMode === "PROVISIONED"
-                  ? news.shardCount
-                  : undefined,
+                news.streamMode === "PROVISIONED" ? news.shardCount : undefined,
               StreamModeDetails: getStreamMode(news),
               Tags: allTags,
             })
@@ -206,7 +202,12 @@ export const StreamProvider = () =>
             streamStatus: "ACTIVE" as const,
           };
         }),
-        update: Effect.fn(function* ({ news = {}, olds = {}, output, session }) {
+        update: Effect.fn(function* ({
+          news = {},
+          olds = {},
+          output,
+          session,
+        }) {
           const streamName = output.streamName;
 
           // Handle stream mode changes

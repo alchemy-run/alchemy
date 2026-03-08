@@ -419,10 +419,7 @@ function formatArrays(ast: AST.Arrays, options: GoOptions): string {
 }
 
 function formatObjects(ast: AST.Objects, options: GoOptions): string {
-  if (
-    ast.propertySignatures.length === 0 &&
-    ast.indexSignatures.length === 0
-  ) {
+  if (ast.propertySignatures.length === 0 && ast.indexSignatures.length === 0) {
     return "{}";
   }
 

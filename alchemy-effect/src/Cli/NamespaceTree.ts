@@ -117,11 +117,15 @@ const flattenNamespace = (
   const sortedResources = [...node.resources].sort((a, b) =>
     a.resource.LogicalId.localeCompare(b.resource.LogicalId),
   );
-  const sortedBindings = [...node.bindings].sort((a, b) => a.sid.localeCompare(b.sid));
+  const sortedBindings = [...node.bindings].sort((a, b) =>
+    a.sid.localeCompare(b.sid),
+  );
   const sortedChildren = Array.from(node.children.entries()).sort(([a], [b]) =>
     a.localeCompare(b),
   );
-  const resourceIds = new Set(sortedResources.map((resource) => resource.resource.LogicalId));
+  const resourceIds = new Set(
+    sortedResources.map((resource) => resource.resource.LogicalId),
+  );
 
   for (const [id, child] of sortedChildren) {
     if (resourceIds.has(id) || isEmpty(child)) {
@@ -172,7 +176,9 @@ const isEmpty = (node: TreeNode) =>
   Array.from(node.children.values()).every(isEmpty);
 
 const countVisibleChildren = (node: TreeNode) => {
-  const resourceIds = new Set(node.resources.map((resource) => resource.resource.LogicalId));
+  const resourceIds = new Set(
+    node.resources.map((resource) => resource.resource.LogicalId),
+  );
   return (
     node.bindings.length +
     node.resources.length +

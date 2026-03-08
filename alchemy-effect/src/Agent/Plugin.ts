@@ -1,13 +1,11 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ServiceMap from "effect/ServiceMap";
-import type { TuiPlugin, TuiPluginService } from "../Tui/plugin.ts";
 import type { Aspect } from "./Aspect.ts";
 import type { ContextPlugin, ContextPluginService } from "./ContextPlugin.ts";
 
 export type Plugins<A extends Aspect> = {
   readonly context: Plugin<ContextPlugin<A>, ContextPluginService<A>>;
-  readonly tui: Plugin<TuiPlugin<A>, TuiPluginService<A>>;
 };
 
 export type Plugin<Tag, Service> = {
@@ -16,8 +14,6 @@ export type Plugin<Tag, Service> = {
   ) => Layer.Layer<Tag, Err, Req>;
   succeed: (service: Service) => Layer.Layer<Tag>;
 };
-
-export type TuiPlugins<C> = C extends Aspect ? TuiPlugin<C> : never;
 
 export type ContextPlugins<C> = C extends Aspect ? ContextPlugin<C> : never;
 
