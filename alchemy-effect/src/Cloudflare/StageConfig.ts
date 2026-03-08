@@ -5,4 +5,4 @@ export class StageConfig extends ServiceMap.Service<
   {
     account?: string;
   }
->()("StageConfig") {}
+>()("Cloudflare::StageConfig") {}

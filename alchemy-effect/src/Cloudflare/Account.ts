@@ -1,6 +1,7 @@
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as ServiceMap from "effect/ServiceMap";
 import { StageConfig } from "./StageConfig.ts";
 
@@ -24,8 +25,11 @@ export const fromStageConfig = () =>
   Layer.effect(
     Account,
     Effect.gen(function* () {
-      const { account = yield* Config.string("CLOUDFLARE_ACCOUNT_ID") } =
-        yield* StageConfig;
+      const stageConfig = yield* Effect.serviceOption(StageConfig).pipe(
+        Effect.map(Option.getOrUndefined),
+      );
+      const account =
+        stageConfig?.account ?? (yield* Config.string("CLOUDFLARE_ACCOUNT_ID"));
       if (!account) {
         return yield* Effect.die("CLOUDFLARE_ACCOUNT_ID is not set");
       }

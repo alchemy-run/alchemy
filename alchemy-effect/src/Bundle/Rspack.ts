@@ -1,17 +1,12 @@
 import type { RspackOptions, Stats } from "@rspack/core";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
-import * as crypto from "node:crypto";
-import { DotAlchemy } from "../Config.ts";
 import {
   BundleError,
   Bundler,
   type BundleOptions,
   type BundleOutput,
-  type StdinOptions,
   type WatchOutput,
 } from "./Bundler.ts";
 
@@ -20,112 +15,67 @@ type RspackRuntime = (typeof import("@rspack/core"))["rspack"];
 export const rspack = () =>
   Layer.effect(
     Bundler,
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const pathService = yield* Path.Path;
-      const dotAlchemy = yield* DotAlchemy;
-
-      const resolveStdin = (options: BundleOptions) =>
+    Effect.succeed({
+      build: (options) =>
         Effect.gen(function* () {
-          if (!options.stdin) {
-            return { options, cleanup: Effect.void };
-          }
+          const rspack = yield* loadRspack();
+          const stats = yield* Effect.tryPromise({
+            try: () =>
+              new Promise<Stats>((resolve, reject) => {
+                const compiler = rspack(toRspackOptions(options, rspack));
+                compiler.run((err, stats) => {
+                  compiler.close(() => {});
+                  if (err) {
+                    reject(err);
+                  } else if (stats?.hasErrors()) {
+                    const errors = stats.compilation.errors.map((e) => ({
+                      message: e.message,
+                    }));
+                    reject(
+                      new BundleError({
+                        message: errors[0]?.message ?? "Build failed",
+                        errors,
+                      }),
+                    );
+                  } else {
+                    resolve(stats!);
+                  }
+                });
+              }),
+            catch: (error) =>
+              error instanceof BundleError ? error : fromRspackError(error),
+          });
+          return fromRspackStats(stats);
+        }),
 
-          const ext = getLoaderExtension(options.stdin.loader);
-          const hash = crypto
-            .createHash("sha256")
-            .update(options.stdin.contents)
-            .digest("hex")
-            .slice(0, 8);
-          const resolveDir = options.stdin.resolveDir ?? process.cwd();
-          const tempDir = pathService.join(
-            resolveDir,
-            pathService.basename(dotAlchemy),
-            "tmp",
-          );
-          const tempFile = pathService.join(tempDir, `stdin-${hash}${ext}`);
+      watch: (options) =>
+        Effect.gen(function* () {
+          const queue = yield* Queue.unbounded<WatchOutput>();
+          const rspack = yield* loadRspack();
+          const compiler = rspack(toRspackOptions(options, rspack));
 
-          yield* fs
-            .makeDirectory(tempDir, { recursive: true })
-            .pipe(Effect.orDie);
-          yield* fs
-            .writeFileString(tempFile, options.stdin.contents)
-            .pipe(Effect.orDie);
+          const watching = compiler.watch({}, (err, stats) => {
+            if (err) return;
+            if (stats && !stats.hasErrors()) {
+              Queue.offerUnsafe(queue, fromRspackStats(stats));
+            }
+          });
 
-          return {
-            options: { ...options, entry: tempFile, stdin: undefined },
-            cleanup: fs.remove(tempFile).pipe(Effect.ignore),
-          };
-        });
-
-      return {
-        build: (options) =>
-          Effect.gen(function* () {
-            const { options: resolved, cleanup } = yield* resolveStdin(options);
-            const rspack = yield* loadRspack();
-            const stats = yield* Effect.tryPromise({
-              try: () =>
-                new Promise<Stats>((resolve, reject) => {
-                  const compiler = rspack(toRspackOptions(resolved, rspack));
-                  compiler.run((err, stats) => {
-                    compiler.close(() => {});
-                    if (err) {
-                      reject(err);
-                    } else if (stats?.hasErrors()) {
-                      const errors = stats.compilation.errors.map((e) => ({
-                        message: e.message,
-                      }));
-                      reject(
-                        new BundleError({
-                          message: errors[0]?.message ?? "Build failed",
-                          errors,
-                        }),
-                      );
-                    } else {
-                      resolve(stats!);
-                    }
+          yield* Effect.addFinalizer(() =>
+            Effect.promise(
+              () =>
+                new Promise<void>((resolve) => {
+                  watching.close(() => {
+                    compiler.close(() => {
+                      resolve();
+                    });
                   });
                 }),
-              catch: (error) =>
-                error instanceof BundleError ? error : fromRspackError(error),
-            });
-            yield* cleanup;
-            return fromRspackStats(stats);
-          }),
+            ),
+          );
 
-        watch: (options) =>
-          Effect.gen(function* () {
-            const queue = yield* Queue.unbounded<WatchOutput>();
-            const { options: resolved, cleanup } = yield* resolveStdin(options);
-            const rspack = yield* loadRspack();
-            const compiler = rspack(toRspackOptions(resolved, rspack));
-
-            const watching = compiler.watch({}, (err, stats) => {
-              if (err) return;
-              if (stats && !stats.hasErrors()) {
-                Queue.offerUnsafe(queue, fromRspackStats(stats));
-              }
-            });
-
-            yield* Effect.addFinalizer(() =>
-              Effect.andThen(
-                cleanup,
-                Effect.promise(
-                  () =>
-                    new Promise<void>((resolve) => {
-                      watching.close(() => {
-                        compiler.close(() => {
-                          resolve();
-                        });
-                      });
-                    }),
-                ),
-              ),
-            );
-
-            return { queue };
-          }),
-      };
+          return { queue };
+        }),
     }),
   );
 
@@ -245,23 +195,4 @@ function fromRspackError(error: unknown): BundleError {
     errors: [{ message: String(error) }],
     cause: error,
   });
-}
-
-function getLoaderExtension(loader?: StdinOptions["loader"]): string {
-  switch (loader) {
-    case "ts":
-      return ".ts";
-    case "tsx":
-      return ".tsx";
-    case "jsx":
-      return ".jsx";
-    case "json":
-      return ".json";
-    case "css":
-      return ".css";
-    case "text":
-      return ".txt";
-    default:
-      return ".js";
-  }
 }

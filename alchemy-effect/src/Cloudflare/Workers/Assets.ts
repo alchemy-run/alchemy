@@ -1,3 +1,4 @@
+import * as workers from "distilled-cloudflare/workers";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -7,7 +8,6 @@ import type { PlatformError } from "effect/PlatformError";
 import * as ServiceMap from "effect/ServiceMap";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { sha256 } from "../../Util/index.ts";
-import { CloudflareApi, CloudflareApiError } from "../CloudflareApi.ts";
 import { Worker } from "./Worker.ts";
 
 const MAX_ASSET_SIZE = 1024 * 1024 * 25; // 25MB
@@ -34,7 +34,10 @@ export class Assets extends ServiceMap.Service<
       session: ScopedPlanStatusSession,
     ): Effect.Effect<
       { jwt: string | undefined },
-      PlatformError | ValidationError | CloudflareApiError
+      | PlatformError
+      | ValidationError
+      | workers.CreateScriptAssetUploadError
+      | workers.CreateAssetUploadError
     >;
   }
 >()("Cloudflare.Assets") {}
@@ -76,7 +79,9 @@ export const AssetsProvider = () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const api = yield* CloudflareApi;
+
+      const createScriptAssetUpload = yield* workers.createScriptAssetUpload;
+      const createAssetUpload = yield* workers.createAssetUpload;
 
       const maybeReadString = Effect.fnUntraced(function* (file: string) {
         return yield* fs.readFileString(file).pipe(
@@ -177,13 +182,11 @@ export const AssetsProvider = () =>
           { note }: ScopedPlanStatusSession,
         ) {
           yield* note("Checking assets...");
-          const session = yield* api.workers.scripts.assets.upload.create(
-            workerName,
-            {
-              account_id: accountId,
-              manifest: assets.manifest,
-            },
-          );
+          const session = yield* createScriptAssetUpload({
+            accountId,
+            scriptName: workerName,
+            manifest: assets.manifest,
+          });
           if (!session.buckets?.length) {
             return { jwt: session.jwt };
           }
@@ -225,18 +228,11 @@ export const AssetsProvider = () =>
                   body[hash] = Buffer.from(file).toString("base64");
                 }),
               );
-              const result = yield* api.workers.assets.upload.create(
-                {
-                  account_id: accountId,
-                  base64: true,
-                  body,
-                },
-                {
-                  headers: {
-                    Authorization: `Bearer ${session.jwt}`,
-                  },
-                },
-              );
+              const result = yield* createAssetUpload({
+                accountId,
+                base64: true,
+                body,
+              });
               uploaded += bucket.length;
               yield* note(`Uploaded ${uploaded} of ${total} assets...`);
               if (result.jwt) {

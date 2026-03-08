@@ -122,7 +122,7 @@ export const Policy =
         Effect.map(
           ([ctx, fn]) =>
             (...args: any[]) =>
-              fn(ctx, ...args).pipe(
+              fn(...args).pipe(
                 // place all of this Binding's Resoruces and Policies in their own dedicated namespace
                 Namespace.push(
                   `${Identifier}(${args

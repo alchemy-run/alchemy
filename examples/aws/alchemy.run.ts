@@ -36,7 +36,7 @@ const stack = Effect.gen(function* () {
   Stack.make(
     "Job",
     Layer.mergeAll(
-      // Fully configured cloud provider Layers
+      // Fully configured cloud provider Layers go here:
       aws,
       // cloudflare,
       // planetscale,

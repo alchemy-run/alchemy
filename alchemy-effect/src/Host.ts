@@ -86,18 +86,12 @@ export const Host = <
   const host = ServiceMap.Service<Host<R>, Runtime>(`Host<${type}>`);
   const constructor = (id: string, eff?: Eff) =>
     eff
-      ? runtime(id).pipe(
-          // Effect.map((executionContext) => ({
-          //   LogicalId: id,
-          //   ...executionContext,
-          // })),
-          Effect.flatMap((executionContext) =>
-            resource(
-              id,
-              eff.pipe(
-                Effect.provideService(ExecutionContext, executionContext),
-                Effect.provideService(host, executionContext),
-              ),
+      ? Effect.flatMap(runtime(id), (executionContext) =>
+          resource(
+            id,
+            (Effect.isEffect(eff) ? eff : Effect.succeed(eff)).pipe(
+              Effect.provideService(ExecutionContext, executionContext),
+              Effect.provideService(host, executionContext),
             ),
           ),
         )

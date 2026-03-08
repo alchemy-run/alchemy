@@ -50,19 +50,8 @@ export const esbuild = () =>
   });
 
 const toESBuildOptions = (options: BundleOptions): _esbuild.BuildOptions => ({
-  entryPoints: options.stdin
-    ? undefined
-    : typeof options.entry === "string"
-      ? [options.entry]
-      : options.entry,
-  stdin: options.stdin
-    ? {
-        contents: options.stdin.contents,
-        resolveDir: options.stdin.resolveDir,
-        sourcefile: options.stdin.sourcefile,
-        loader: options.stdin.loader,
-      }
-    : undefined,
+  entryPoints:
+    typeof options.entry === "string" ? [options.entry] : options.entry,
   outdir: options.outdir,
   outfile: options.outfile,
   format: options.format,

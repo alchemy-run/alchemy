@@ -91,23 +91,22 @@ export const QueueProvider = () =>
     Effect.gen(function* () {
       const region = yield* Region;
       const accountId = yield* Account;
-      const createQueueName = (
+      const createQueueName = Effect.fnUntraced(function* (
         id: string,
         props: {
           queueName?: string | undefined;
           fifo?: boolean;
         },
-      ) =>
-        Effect.gen(function* () {
-          if (props.queueName) {
-            return props.queueName;
-          }
-          const baseName = yield* createPhysicalName({
-            id,
-            maxLength: props.fifo ? 80 - ".fifo".length : 80,
-          });
-          return props.fifo ? `${baseName}.fifo` : baseName;
+      ) {
+        if (props.queueName) {
+          return props.queueName;
+        }
+        const baseName = yield* createPhysicalName({
+          id,
+          maxLength: props.fifo ? 80 - ".fifo".length : 80,
         });
+        return props.fifo ? `${baseName}.fifo` : baseName;
+      });
       const createAttributes = (
         props: QueueProps,
         bindings: Queue["Binding"][],

@@ -20,7 +20,6 @@ export class Bundler extends ServiceMap.Service<
 
 export interface BundleOptions {
   readonly entry?: string | string[] | Record<string, string>;
-  readonly stdin?: StdinOptions;
   readonly outdir?: string;
   readonly outfile?: string;
   readonly format?: "esm" | "cjs" | "iife";
@@ -32,13 +31,6 @@ export interface BundleOptions {
   readonly define?: Record<string, string>;
   readonly splitting?: boolean;
   readonly treeshake?: boolean;
-}
-
-export interface StdinOptions {
-  readonly contents: string;
-  readonly resolveDir?: string;
-  readonly sourcefile?: string;
-  readonly loader?: "ts" | "tsx" | "js" | "jsx" | "json" | "css" | "text";
 }
 
 export interface BundleOutput {

@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as ServiceMap from "effect/ServiceMap";
 import * as Binding from "../../Binding.ts";
-import type { ToEffect } from "../CloudflareApi.ts";
 import { isWorker, Worker, WorkerEnvironment } from "./Worker.ts";
 
 export type DurableObjectId = cf.DurableObjectId;
@@ -149,7 +148,8 @@ export class DurableObjectState extends ServiceMap.Service<
 
     readonly id: cf.DurableObjectId;
     readonly storage: DurableObjectStorage;
-    container?: ToEffect<cf.Container>;
+    // TODO(sam): effect-native interface for container
+    // container?: ToEffect<cf.Container>;
     blockConcurrencyWhile<T>(
       callback: () => Effect.Effect<T>,
     ): Effect.Effect<T>;

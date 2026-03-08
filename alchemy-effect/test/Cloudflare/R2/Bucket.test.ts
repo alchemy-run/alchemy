@@ -1,10 +1,10 @@
 import * as Cloudflare from "@/Cloudflare";
 import { Account } from "@/Cloudflare/Account";
-import { CloudflareApi } from "@/Cloudflare/CloudflareApi";
 import * as R2 from "@/Cloudflare/R2/index";
 import { destroy } from "@/Destroy";
 import { test } from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
+import * as r2 from "distilled-cloudflare/r2";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -18,7 +18,6 @@ const logLevel = Effect.provideService(
 test(
   "create and delete bucket with default props",
   Effect.gen(function* () {
-    const api = yield* CloudflareApi;
     const accountId = yield* Account;
 
     yield* destroy();
@@ -33,8 +32,9 @@ test(
     expect(bucket.storageClass).toEqual("Standard");
     expect(bucket.jurisdiction).toEqual("default");
 
-    const actualBucket = yield* api.r2.buckets.get(bucket.bucketName, {
-      account_id: accountId,
+    const actualBucket = yield* r2.getBucket({
+      accountId,
+      bucketName: bucket.bucketName,
     });
     expect(actualBucket.name).toEqual(bucket.bucketName);
 
@@ -47,7 +47,6 @@ test(
 test(
   "create, update, delete bucket",
   Effect.gen(function* () {
-    const api = yield* CloudflareApi;
     const accountId = yield* Account;
 
     yield* destroy();
@@ -61,11 +60,12 @@ test(
       }),
     );
 
-    const actualBucket = yield* api.r2.buckets.get(bucket.bucketName, {
-      account_id: accountId,
+    const actualBucket = yield* r2.getBucket({
+      accountId,
+      bucketName: bucket.bucketName,
     });
     expect(actualBucket.name).toEqual(bucket.bucketName);
-    expect(actualBucket.storage_class).toEqual("Standard");
+    expect(actualBucket.storageClass).toEqual("Standard");
 
     // Update the bucket
     const updatedBucket = yield* test.deploy(
@@ -77,14 +77,12 @@ test(
       }),
     );
 
-    const actualUpdatedBucket = yield* api.r2.buckets.get(
-      updatedBucket.bucketName,
-      {
-        account_id: accountId,
-      },
-    );
+    const actualUpdatedBucket = yield* r2.getBucket({
+      accountId,
+      bucketName: updatedBucket.bucketName,
+    });
     expect(actualUpdatedBucket.name).toEqual(updatedBucket.bucketName);
-    expect(actualUpdatedBucket.storage_class).toEqual("InfrequentAccess");
+    expect(actualUpdatedBucket.storageClass).toEqual("InfrequentAccess");
 
     yield* destroy();
 
@@ -96,10 +94,10 @@ const waitForBucketToBeDeleted = Effect.fn(function* (
   bucketName: string,
   accountId: string,
 ) {
-  const api = yield* CloudflareApi;
-  yield* api.r2.buckets
-    .get(bucketName, {
-      account_id: accountId,
+  yield* r2
+    .getBucket({
+      accountId,
+      bucketName,
     })
     .pipe(
       Effect.flatMap(() => Effect.fail(new BucketStillExists())),
@@ -107,7 +105,7 @@ const waitForBucketToBeDeleted = Effect.fn(function* (
         while: (e): e is BucketStillExists => e instanceof BucketStillExists,
         schedule: Schedule.exponential(100),
       }),
-      Effect.catchTag("NotFound", () => Effect.void),
+      Effect.catchTag("NoSuchBucket", () => Effect.void),
     );
 });
 

@@ -8,8 +8,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import * as UrlParams from "effect/unstable/http/UrlParams";
 import * as Binding from "../../Binding.ts";
-import { CloudflareContext } from "../CloudflareContext.ts";
-import { isWorker, type Worker } from "./Worker.ts";
+import { isWorker, type Worker, WorkerEnvironment } from "./Worker.ts";
 
 export class Fetch extends Binding.Service<
   Fetch,
@@ -29,7 +28,7 @@ export const FetchLive = Layer.effect(
   Fetch,
   Effect.gen(function* () {
     const Policy = yield* FetchPolicy;
-    const { env } = yield* CloudflareContext;
+    const env = yield* WorkerEnvironment;
 
     return Effect.fn(function* (worker: Worker) {
       yield* Policy(worker);

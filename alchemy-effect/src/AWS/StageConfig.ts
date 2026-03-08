@@ -19,7 +19,7 @@ export class StageConfig extends ServiceMap.Service<
     credentials?: AwsCredentialIdentity;
     endpoint?: string;
   }
->()("StageConfig") {}
+>()("AWS::StageConfig") {}
 
 export const loadDefaultStageConfig = () =>
   Effect.gen(function* () {

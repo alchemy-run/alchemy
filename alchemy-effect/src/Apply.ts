@@ -144,17 +144,25 @@ const expandAndPivot = Effect.fnUntraced(function* (
             return node.state.attr;
           }
 
-          // resolve upstream dependencies before committing any changes to state
-          const upstream = Object.fromEntries(
-            yield* Effect.all(
-              Object.entries(Output.resolveUpstream(node.props)).map(([id]) =>
-                resolveUpstream(id).pipe(
-                  Effect.map(({ upstreamAttr }) => [id, upstreamAttr]),
+          const resolveNodeUpstream = Effect.fn(function* () {
+            const upstreamDeps = {
+              ...Output.resolveUpstream(node.props),
+              ...Output.resolveUpstream(node.bindings),
+            };
+            return Object.fromEntries(
+              yield* Effect.all(
+                Object.entries(upstreamDeps).map(([id]) =>
+                  resolveUpstream(id).pipe(
+                    Effect.map(({ upstreamAttr }) => [id, upstreamAttr]),
+                  ),
                 ),
+                { concurrency: "unbounded" },
               ),
-              { concurrency: "unbounded" },
-            ),
-          );
+            );
+          });
+
+          // resolve upstream dependencies before committing any changes to state
+          const upstream = yield* resolveNodeUpstream();
 
           const instanceId = yield* Effect.gen(function* () {
             if (node.action === "create" && !node.state?.instanceId) {
@@ -286,17 +294,6 @@ const expandAndPivot = Effect.fnUntraced(function* (
 
               return attr;
             } else if (node.action === "update") {
-              const upstream = Object.fromEntries(
-                yield* Effect.all(
-                  Object.entries(Output.resolveUpstream(node.props)).map(
-                    ([id]) =>
-                      resolveUpstream(id).pipe(
-                        Effect.map(({ upstreamAttr }) => [id, upstreamAttr]),
-                      ),
-                  ),
-                  { concurrency: "unbounded" },
-                ),
-              );
               const news = (yield* Output.evaluate(
                 node.props,
                 upstream,
@@ -402,17 +399,6 @@ const expandAndPivot = Effect.fnUntraced(function* (
               } else {
                 state = node.state;
               }
-              const upstream = Object.fromEntries(
-                yield* Effect.all(
-                  Object.entries(Output.resolveUpstream(node.props)).map(
-                    ([id]) =>
-                      resolveUpstream(id).pipe(
-                        Effect.map(({ upstreamAttr }) => [id, upstreamAttr]),
-                      ),
-                  ),
-                  { concurrency: "unbounded" },
-                ),
-              );
               const news = (yield* Output.evaluate(
                 node.props,
                 upstream,
@@ -483,7 +469,7 @@ const expandAndPivot = Effect.fnUntraced(function* (
               yield* report("created");
               return attr;
             }
-            // @ts-expect-error
+            // @ts-expect-error - node is never, this should be unreachable
             return yield* Effect.die(`Unknown action: ${node.action}`);
           });
 
@@ -497,10 +483,8 @@ const expandAndPivot = Effect.fnUntraced(function* (
 
   return Object.fromEntries(
     yield* Effect.all(
-      Object.entries(plan.resources).map(
-        Effect.fn(function* ([id, node]) {
-          return [id, yield* apply(node)];
-        }),
+      Object.entries(plan.resources).map(([id, node]) =>
+        Effect.map(apply(node), (attr) => [id, attr]),
       ),
       { concurrency: "unbounded" },
     ),

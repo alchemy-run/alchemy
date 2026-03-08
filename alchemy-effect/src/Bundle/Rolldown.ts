@@ -1,9 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
-import * as crypto from "node:crypto";
 import type {
   InputOptions,
   OutputOptions,
@@ -11,104 +8,52 @@ import type {
   WatchOptions as RolldownWatchOptions,
 } from "rolldown";
 import * as _rolldown from "rolldown";
-import { DotAlchemy } from "../Config.ts";
 import {
   BundleError,
   Bundler,
   type BundleOptions,
   type BundleOutput,
-  type StdinOptions,
   type WatchOutput,
 } from "./Bundler.ts";
 
 export const rolldown = () =>
   Layer.effect(
     Bundler,
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const pathService = yield* Path.Path;
-      const dotAlchemy = yield* DotAlchemy;
-
-      const resolveStdin = (options: BundleOptions) =>
-        Effect.gen(function* () {
-          if (!options.stdin) {
-            return { options, cleanup: Effect.void };
-          }
-
-          const ext = getLoaderExtension(options.stdin.loader);
-          const hash = crypto
-            .createHash("sha256")
-            .update(options.stdin.contents)
-            .digest("hex")
-            .slice(0, 8);
-          const resolveDir = options.stdin.resolveDir ?? process.cwd();
-          const tempDir = pathService.join(
-            resolveDir,
-            pathService.basename(dotAlchemy),
-            "tmp",
-          );
-          const tempFile = pathService.join(tempDir, `stdin-${hash}${ext}`);
-
-          yield* fs
-            .makeDirectory(tempDir, { recursive: true })
-            .pipe(Effect.orDie);
-          yield* fs
-            .writeFileString(tempFile, options.stdin.contents)
-            .pipe(Effect.orDie);
-
-          return {
-            options: { ...options, entry: tempFile, stdin: undefined },
-            cleanup: fs.remove(tempFile).pipe(Effect.ignore),
-          };
-        });
-
-      return {
-        build: (options) =>
-          Effect.gen(function* () {
-            const { options: resolved, cleanup } = yield* resolveStdin(options);
-            const result = yield* Effect.tryPromise({
-              try: async () => {
-                const { input, output } = toRolldownOptions(resolved);
-                const bundle = await _rolldown.rolldown(input);
-                const result = await bundle.write(output);
-                await bundle.close();
-                return result;
-              },
-              catch: fromRolldownError,
-            });
-            yield* cleanup;
+    Effect.succeed({
+      build: (options) =>
+        Effect.tryPromise({
+          try: async () => {
+            const { input, output } = toRolldownOptions(options);
+            const bundle = await _rolldown.rolldown(input);
+            const result = await bundle.write(output);
+            await bundle.close();
             return fromRolldownOutput(result);
-          }),
+          },
+          catch: fromRolldownError,
+        }),
 
-        watch: (options) =>
-          Effect.gen(function* () {
-            const queue = yield* Queue.unbounded<WatchOutput>();
-            const { options: resolved, cleanup } = yield* resolveStdin(options);
-            const watcher = _rolldown.watch(toRolldownWatchOptions(resolved));
+      watch: (options) =>
+        Effect.gen(function* () {
+          const queue = yield* Queue.unbounded<WatchOutput>();
+          const watcher = _rolldown.watch(toRolldownWatchOptions(options));
 
-            watcher.on("event", (event) => {
-              if (event.code === "BUNDLE_END") {
-                Queue.offerUnsafe(queue, {
-                  outputs: event.output.map((p) => ({
-                    path: p,
-                    size: 0,
-                  })),
-                  duration: event.duration,
-                });
-                event.result.close().catch(() => {});
-              }
-            });
+          watcher.on("event", (event) => {
+            if (event.code === "BUNDLE_END") {
+              Queue.offerUnsafe(queue, {
+                outputs: event.output.map((p) => ({
+                  path: p,
+                  size: 0,
+                })),
+                duration: event.duration,
+              });
+              event.result.close().catch(() => {});
+            }
+          });
 
-            yield* Effect.addFinalizer(() =>
-              Effect.andThen(
-                cleanup,
-                Effect.promise(() => watcher.close()),
-              ),
-            );
+          yield* Effect.addFinalizer(() => Effect.promise(() => watcher.close()));
 
-            return { queue };
-          }),
-      };
+          return { queue };
+        }),
     }),
   );
 
@@ -206,23 +151,4 @@ function fromRolldownError(error: unknown): BundleError {
     errors: [{ message: err.message ?? String(error) }],
     cause: error,
   });
-}
-
-function getLoaderExtension(loader?: StdinOptions["loader"]): string {
-  switch (loader) {
-    case "ts":
-      return ".ts";
-    case "tsx":
-      return ".tsx";
-    case "jsx":
-      return ".jsx";
-    case "json":
-      return ".json";
-    case "css":
-      return ".css";
-    case "text":
-      return ".txt";
-    default:
-      return ".js";
-  }
 }

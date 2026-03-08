@@ -355,12 +355,10 @@ export const evaluate: <A, Upstream extends ResourceLike, Req = never>(
       const src = upstream[srcId as keyof typeof upstream];
       if (!src) {
         // type-safety should prevent this but let the caller decide how to handle it
-        return yield* Effect.fail(
-          new MissingSourceError({
-            message: `Source ${srcId} not found`,
-            srcId,
-          }),
-        );
+        return yield* new MissingSourceError({
+          message: `Source ${srcId} not found`,
+          srcId,
+        });
       }
       return src;
     } else if (isOutput(expr)) {
@@ -368,13 +366,12 @@ export const evaluate: <A, Upstream extends ResourceLike, Req = never>(
         const srcId = expr.src.LogicalId;
         const src = upstream[srcId as keyof typeof upstream];
         if (!src) {
+          console.log({ srcId, upstream });
           // type-safety should prevent this but let the caller decide how to handle it
-          return yield* Effect.fail(
-            new MissingSourceError({
-              message: `Source ${srcId} not found`,
-              srcId,
-            }),
-          );
+          return yield* new MissingSourceError({
+            message: `Source ${srcId} not found`,
+            srcId,
+          });
         }
         return src;
       } else if (isLiteralExpr(expr)) {

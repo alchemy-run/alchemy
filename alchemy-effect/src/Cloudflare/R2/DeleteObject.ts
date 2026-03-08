@@ -2,7 +2,7 @@ import type * as runtime from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
-import { CloudflareContext } from "../CloudflareContext.ts";
+import { WorkerEnvironment } from "../Workers/Worker.ts";
 import type { Bucket } from "./Bucket.ts";
 import { BucketBinding } from "./BucketBinding.ts";
 
@@ -17,7 +17,7 @@ export const DeleteObjectLive = Layer.effect(
   DeleteObject,
   Effect.gen(function* () {
     const Policy = yield* DeleteObjectPolicy;
-    const { env } = yield* CloudflareContext;
+    const env = yield* WorkerEnvironment;
 
     return Effect.fn(function* (bucket: Bucket) {
       yield* Policy(bucket);

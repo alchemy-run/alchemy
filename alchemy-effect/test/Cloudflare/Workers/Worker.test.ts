@@ -1,11 +1,11 @@
 import * as Cloudflare from "@/Cloudflare";
 import { Account } from "@/Cloudflare/Account";
-import { CloudflareApi } from "@/Cloudflare/CloudflareApi";
 import * as R2 from "@/Cloudflare/R2";
 import * as Worker from "@/Cloudflare/Workers";
 import { destroy } from "@/Destroy";
 import { test } from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
+import * as workers from "distilled-cloudflare/workers";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -22,7 +22,6 @@ const main = pathe.resolve(import.meta.dirname, "worker.ts");
 test(
   "create, update, delete worker",
   Effect.gen(function* () {
-    const api = yield* CloudflareApi;
     const accountId = yield* Account;
 
     yield* destroy();
@@ -44,13 +43,8 @@ test(
       }),
     );
 
-    const actualWorker = yield* api.workers.beta.workers.get(
-      worker.workerName,
-      {
-        account_id: accountId,
-      },
-    );
-    expect(actualWorker.name).toEqual(worker.workerName);
+    const actualWorker = yield* findWorker(worker.workerName, accountId);
+    expect(actualWorker?.scriptName).toEqual(worker.workerName);
 
     // Verify the worker is accessible via URL
     if (worker.url) {
@@ -70,28 +64,26 @@ test(
       }),
     );
 
-    const actualUpdatedWorker = yield* api.workers.beta.workers.get(
-      updatedWorker.workerName,
-      {
-        account_id: accountId,
-      },
-    );
-    expect(actualUpdatedWorker.name).toEqual(updatedWorker.workerName);
-    expect(actualUpdatedWorker.subdomain).toEqual({
+    const actualUpdatedWorker = yield* findWorker(updatedWorker.workerName, accountId);
+    expect(actualUpdatedWorker?.scriptName).toEqual(updatedWorker.workerName);
+    const actualUpdatedSubdomain = yield* workers.getScriptSubdomain({
+      accountId,
+      scriptName: updatedWorker.workerName,
+    });
+    expect(actualUpdatedSubdomain).toEqual({
       enabled: true,
-      previews_enabled: true,
+      previewsEnabled: true,
     });
 
     yield* destroy();
 
-    yield* waitForWorkerToBeDeleted(worker.workerId, accountId);
+    yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
   }).pipe(Effect.provide(Cloudflare.providers()), logLevel),
 );
 
 test(
   "create, update, delete worker with assets",
   Effect.gen(function* () {
-    const api = yield* CloudflareApi;
     const accountId = yield* Account;
 
     yield* destroy();
@@ -110,13 +102,8 @@ test(
       }),
     );
 
-    const actualWorker = yield* api.workers.beta.workers.get(
-      worker.workerName,
-      {
-        account_id: accountId,
-      },
-    );
-    expect(actualWorker.name).toEqual(worker.workerName);
+    const actualWorker = yield* findWorker(worker.workerName, accountId);
+    expect(actualWorker?.scriptName).toEqual(worker.workerName);
 
     // Verify the worker has assets
     expect(worker.hash?.assets).toBeDefined();
@@ -141,13 +128,8 @@ test(
       }),
     );
 
-    const actualUpdatedWorker = yield* api.workers.beta.workers.get(
-      updatedWorker.workerName,
-      {
-        account_id: accountId,
-      },
-    );
-    expect(actualUpdatedWorker.name).toEqual(updatedWorker.workerName);
+    const actualUpdatedWorker = yield* findWorker(updatedWorker.workerName, accountId);
+    expect(actualUpdatedWorker?.scriptName).toEqual(updatedWorker.workerName);
     expect(updatedWorker.hash?.assets).toBeDefined();
 
     // Final update
@@ -167,18 +149,26 @@ test(
 
     yield* destroy();
 
-    yield* waitForWorkerToBeDeleted(finalWorker.workerId, accountId);
+    yield* waitForWorkerToBeDeleted(finalWorker.workerName, accountId);
   }).pipe(Effect.provide(Cloudflare.providers()), logLevel),
 );
 
+const findWorker = Effect.fn(function* (workerName: string, accountId: string) {
+  const matches = yield* workers.searchScript({
+    accountId,
+    name: workerName,
+  });
+  return matches.find((worker) => worker.scriptName === workerName);
+});
+
 const waitForWorkerToBeDeleted = Effect.fn(function* (
-  workerId: string,
+  workerName: string,
   accountId: string,
 ) {
-  const api = yield* CloudflareApi;
-  yield* api.workers.scripts
-    .get(workerId, {
-      account_id: accountId,
+  yield* workers
+    .getScript({
+      accountId,
+      scriptName: workerName,
     })
     .pipe(
       Effect.flatMap(() => Effect.fail(new WorkerStillExists())),
@@ -186,7 +176,7 @@ const waitForWorkerToBeDeleted = Effect.fn(function* (
         while: (e): e is WorkerStillExists => e instanceof WorkerStillExists,
         schedule: Schedule.exponential(100),
       }),
-      Effect.catchTag("NotFound", () => Effect.void),
+      Effect.catchTag("WorkerNotFound", () => Effect.void),
     );
 });
 

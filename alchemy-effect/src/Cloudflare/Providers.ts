@@ -5,7 +5,6 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { esbuild } from "../Bundle/ESBuild.ts";
 import type { Provider } from "../Provider.ts";
 import * as Account from "./Account.ts";
-import { CloudflareApiDefault } from "./CloudflareApi.ts";
 import * as KV from "./KV/index.ts";
 import * as R2 from "./R2/index.ts";
 import { AssetsProvider } from "./Workers/Assets.ts";
@@ -29,7 +28,6 @@ export const providers = () =>
 export const credentials = () =>
   Layer.mergeAll(
     Account.fromStageConfig(),
-    CloudflareApiDefault(),
     Layer.provideMerge(Auth.fromEnv(), FetchHttpClient.layer),
   );
 

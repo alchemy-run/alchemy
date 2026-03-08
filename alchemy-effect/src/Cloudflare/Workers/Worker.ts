@@ -1,6 +1,6 @@
 import type * as cf from "@cloudflare/workers-types";
-
 import type { Workers } from "cloudflare/resources";
+import * as workers from "distilled-cloudflare/workers";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -18,7 +18,6 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import { sha256 } from "../../Util/sha256.ts";
 import { Account } from "../Account.ts";
-import { CloudflareApi } from "../CloudflareApi.ts";
 import * as Assets from "./Assets.ts";
 import type { DurableObjectState } from "./DurableObject.ts";
 
@@ -195,11 +194,41 @@ export declare namespace Worker {
   }
 }
 
+const camelCaseKey = (key: string) =>
+  key
+    .replace(/^_+/, "")
+    .replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
+
+const toCamelCase = <T>(value: unknown): T => {
+  if (Array.isArray(value)) {
+    return value.map((item) => toCamelCase(item)) as T;
+  }
+  if (
+    value &&
+    typeof value === "object" &&
+    Object.getPrototypeOf(value) === Object.prototype
+  ) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nested]) => [
+        camelCaseKey(key),
+        toCamelCase(nested),
+      ]),
+    ) as T;
+  }
+  return value as T;
+};
+
 export const WorkerProvider = () =>
   Worker.provider.effect(
     Effect.gen(function* () {
-      const api = yield* CloudflareApi;
       const accountId = yield* Account;
+      const getSubdomain = yield* workers.getSubdomain;
+      const getScript = yield* workers.getScript;
+      const listScripts = yield* workers.listScripts;
+      const putScript = yield* workers.putScript;
+      const deleteScript = yield* workers.deleteScript;
+      const getScriptSubdomain = yield* workers.getScriptSubdomain;
+      const createScriptSubdomain = yield* workers.createScriptSubdomain;
       const { read, upload } = yield* Assets.Assets;
       const { build } = yield* Bundler;
       const fs = yield* FileSystem.FileSystem;
@@ -209,8 +238,8 @@ export const WorkerProvider = () =>
       const getAccountSubdomain = Effect.fnUntraced(function* (
         accountId: string,
       ) {
-        const { subdomain } = yield* api.workers.subdomains.get({
-          account_id: accountId,
+        const { subdomain } = yield* getSubdomain({
+          accountId,
         });
         return subdomain;
       });
@@ -219,8 +248,9 @@ export const WorkerProvider = () =>
         name: string,
         enabled: boolean,
       ) {
-        const subdomain = yield* api.workers.scripts.subdomain.create(name, {
-          account_id: accountId,
+        const subdomain = yield* createScriptSubdomain({
+          accountId,
+          scriptName: name,
           enabled,
         });
         yield* Effect.logDebug("setWorkerSubdomain", subdomain);
@@ -254,29 +284,53 @@ export const WorkerProvider = () =>
         handler = "default",
       ) {
         const outfile = path.join(dotAlchemy, "out", `${id}.js`);
-        const entrypoint = path.relative(process.cwd(), main);
-        yield* build({
-          stdin: {
-            contents: `import { ${handler} as handler } from "${entrypoint}";
-import * as Effect from "effect/Effect";
-const handler = await Effect.runPromise(handler)
-export default handler;}
-`,
-            resolveDir: process.cwd(),
-            loader: "ts",
-            sourcefile: "__index.ts",
-          },
-          outfile,
-          format: "esm",
-          sourcemap: false,
-          treeshake: true,
-          minify: true,
+        const realMain = yield* fs.realPath(main);
+        const tempRoot = path.join(
+          path.dirname(realMain),
+          path.basename(dotAlchemy),
+          "tmp",
+        );
+
+        yield* fs.makeDirectory(tempRoot, { recursive: true });
+        const tempDir = yield* fs.makeTempDirectory({
+          directory: tempRoot,
+          prefix: `${id}-`,
         });
-        const code = yield* fs.readFileString(outfile);
-        return {
-          code,
-          hash: yield* sha256(code),
-        };
+
+        const realTempDir = yield* fs.realPath(tempDir);
+        const tempEntry = path.join(realTempDir, "__index.ts");
+        let importPath = path.relative(realTempDir, realMain);
+        if (!importPath.startsWith(".")) {
+          importPath = `./${importPath}`;
+        }
+        importPath = importPath.replaceAll("\\", "/");
+        const script = `import { ${handler} as exported } from "${importPath}";
+import * as Effect from "effect/Effect";
+const handler = Effect.isEffect(exported)
+  ? await Effect.runPromise(exported)
+  : exported;
+export default handler;
+`;
+        yield* fs.writeFileString(tempEntry, script);
+        return yield* Effect.gen(function* () {
+          yield* build({
+            entry: tempEntry,
+            outfile,
+            format: "esm",
+            sourcemap: false,
+            treeshake: true,
+            minify: true,
+          });
+          const code = yield* fs.readFileString(outfile);
+          return {
+            code,
+            hash: yield* sha256(code),
+          };
+        }).pipe(
+          Effect.ensuring(
+            fs.remove(tempDir, { recursive: true }).pipe(Effect.ignore),
+          ),
+        );
       });
 
       const prepareMetadata = Effect.fnUntraced(function* (props: WorkerProps) {
@@ -320,7 +374,7 @@ export default handler;}
           prepareAssets(news.assets),
           prepareBundle(id, news.main),
           prepareMetadata(news),
-        ]).pipe(Effect.orDie);
+        ]);
         metadata.bindings = bindings.flatMap((binding) => binding.bindings);
         if (assets) {
           if (output?.hash?.assets !== assets.hash) {
@@ -341,9 +395,10 @@ export default handler;}
           });
         }
         yield* session.note("Uploading worker...");
-        const worker = yield* api.workers.scripts.update(name, {
-          account_id: accountId,
-          metadata: metadata,
+        const worker = yield* putScript({
+          accountId,
+          scriptName: name,
+          metadata: toCamelCase<workers.PutScriptRequest["metadata"]>(metadata),
           files: [
             new File([bundle.code], "worker.js", {
               type: "application/javascript+module",
@@ -358,7 +413,7 @@ export default handler;}
           yield* setWorkerSubdomain(name, enable);
         }
         return {
-          workerId: worker.id!,
+          workerId: worker.id ?? name,
           workerName: name,
           logpush: worker.logpush,
           url:
@@ -387,7 +442,7 @@ export default handler;}
           const [assets, bundle] = yield* Effect.all([
             prepareAssets(news.assets),
             prepareBundle(id, news.main),
-          ]).pipe(Effect.orDie);
+          ]);
           if (
             assets?.hash !== output.hash?.assets ||
             bundle.hash !== output.hash?.bundle
@@ -400,32 +455,50 @@ export default handler;}
         }),
         read: Effect.fnUntraced(function* ({ id, output }) {
           const workerName = yield* createWorkerName(id, output?.workerName);
-          const worker = yield* api.workers.beta.workers.get(workerName, {
-            account_id: accountId,
-          });
-          return {
-            accountId,
-            workerId: worker.id,
-            workerName: worker.name,
-            logpush: worker.logpush,
-            observability: worker.observability,
-            subdomain: {
-              enabled: worker.subdomain.enabled,
-              previews_enabled: worker.subdomain.previews_enabled,
-            },
-            url: worker.subdomain.enabled
-              ? `https://${workerName}.${yield* getAccountSubdomain(accountId)}.workers.dev`
-              : undefined,
-            tags: worker.tags,
-          };
+          return yield* Effect.gen(function* () {
+            yield* getScript({
+              accountId,
+              scriptName: workerName,
+            });
+            const [worker, subdomain] = yield* Effect.all([
+              listScripts({
+                accountId,
+              }).pipe(
+                Effect.map((workers) =>
+                  workers.find((worker) => worker.id === workerName),
+                ),
+              ),
+              getScriptSubdomain({
+                accountId,
+                scriptName: workerName,
+              }),
+            ]);
+            if (!worker) {
+              return undefined;
+            }
+            return {
+              accountId,
+              workerId: worker.id ?? workerName,
+              workerName,
+              logpush: worker.logpush ?? undefined,
+              url: subdomain.enabled
+                ? `https://${workerName}.${yield* getAccountSubdomain(accountId)}.workers.dev`
+                : undefined,
+              tags: worker.tags ?? undefined,
+            } satisfies Worker["Attributes"];
+          }).pipe(
+            Effect.catchTag("WorkerNotFound", () => Effect.succeed(undefined)),
+          );
         }),
         create: Effect.fnUntraced(function* ({ id, news, bindings, session }) {
           const name = yield* createWorkerName(id, news.name);
-          const existing = yield* api.workers.beta.workers
-            .get(name, {
-              account_id: accountId,
-            })
-            .pipe(Effect.catchTag("NotFound", () => Effect.void));
+          const existing = yield* getScript({
+            accountId,
+            scriptName: name,
+          }).pipe(
+            Effect.as(true),
+            Effect.catchTag("WorkerNotFound", () => Effect.succeed(false)),
+          );
           if (existing) {
             return yield* Effect.fail(
               new Error(`Worker "${name}" already exists`),
@@ -451,11 +524,10 @@ export default handler;}
           return yield* putWorker(id, news, bindings, olds, output, session);
         }),
         delete: Effect.fnUntraced(function* ({ output }) {
-          yield* api.workers.scripts
-            .delete(output.workerId, {
-              account_id: output.accountId,
-            })
-            .pipe(Effect.catchTag("NotFound", () => Effect.void));
+          yield* deleteScript({
+            accountId: output.accountId,
+            scriptName: output.workerName,
+          }).pipe(Effect.catchTag("WorkerNotFound", () => Effect.void));
         }),
       });
     }),

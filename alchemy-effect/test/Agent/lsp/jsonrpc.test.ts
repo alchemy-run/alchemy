@@ -5,7 +5,7 @@ import {
   type JsonRpcRequest,
   type JsonRpcResponse,
 } from "@/Agent/lsp/jsonrpc";
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "@effect/vitest";
 
 const encoder = new TextEncoder();
 

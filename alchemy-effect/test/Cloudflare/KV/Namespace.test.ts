@@ -1,10 +1,10 @@
 import { Account } from "@/Cloudflare/Account";
-import { CloudflareApi } from "@/Cloudflare/CloudflareApi";
 import * as KV from "@/Cloudflare/KV/index";
 import * as Cloudflare from "@/Cloudflare";
 import { destroy } from "@/Destroy";
 import { test } from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
+import * as kv from "distilled-cloudflare/kv";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -18,7 +18,6 @@ const logLevel = Effect.provideService(
 test(
   "create and delete namespace with default props",
   Effect.gen(function* () {
-    const api = yield* CloudflareApi;
     const accountId = yield* Account;
 
     yield* destroy();
@@ -32,12 +31,10 @@ test(
     expect(namespace.title).toBeDefined();
     expect(namespace.namespaceId).toBeDefined();
 
-    const actualNamespace = yield* api.kv.namespaces.get(
-      namespace.namespaceId,
-      {
-        account_id: accountId,
-      },
-    );
+    const actualNamespace = yield* kv.getNamespace({
+      accountId,
+      namespaceId: namespace.namespaceId,
+    });
     expect(actualNamespace.id).toEqual(namespace.namespaceId);
 
     yield* destroy();
@@ -49,7 +46,6 @@ test(
 test(
   "create, update, delete namespace",
   Effect.gen(function* () {
-    const api = yield* CloudflareApi;
     const accountId = yield* Account;
 
     yield* destroy();
@@ -62,12 +58,10 @@ test(
       }),
     );
 
-    const actualNamespace = yield* api.kv.namespaces.get(
-      namespace.namespaceId,
-      {
-        account_id: accountId,
-      },
-    );
+    const actualNamespace = yield* kv.getNamespace({
+      accountId,
+      namespaceId: namespace.namespaceId,
+    });
     expect(actualNamespace.id).toEqual(namespace.namespaceId);
     expect(actualNamespace.title).toEqual(namespace.title);
 
@@ -80,12 +74,10 @@ test(
       }),
     );
 
-    const actualUpdatedNamespace = yield* api.kv.namespaces.get(
-      updatedNamespace.namespaceId,
-      {
-        account_id: accountId,
-      },
-    );
+    const actualUpdatedNamespace = yield* kv.getNamespace({
+      accountId,
+      namespaceId: updatedNamespace.namespaceId,
+    });
     expect(actualUpdatedNamespace.title).toEqual("test-namespace-updated");
     expect(actualUpdatedNamespace.id).toEqual(updatedNamespace.namespaceId);
 
@@ -99,10 +91,10 @@ const waitForNamespaceToBeDeleted = Effect.fn(function* (
   namespaceId: string,
   accountId: string,
 ) {
-  const api = yield* CloudflareApi;
-  yield* api.kv.namespaces
-    .get(namespaceId, {
-      account_id: accountId,
+  yield* kv
+    .getNamespace({
+      accountId,
+      namespaceId,
     })
     .pipe(
       Effect.flatMap(() => Effect.fail(new NamespaceStillExists())),
@@ -111,7 +103,7 @@ const waitForNamespaceToBeDeleted = Effect.fn(function* (
           e instanceof NamespaceStillExists,
         schedule: Schedule.exponential(100),
       }),
-      Effect.catchTag("NotFound", () => Effect.void),
+      Effect.catchTag("NamespaceNotFound", () => Effect.void),
     );
 });
 

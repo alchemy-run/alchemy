@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Stream from "effect/Stream";
 import * as Binding from "../../Binding.ts";
-import { CloudflareContext } from "../CloudflareContext.ts";
+import { WorkerEnvironment } from "../Workers/Worker.ts";
 import { replaceEffectStream } from "../stream.ts";
 import type { Namespace } from "./Namespace.ts";
 import { NamespaceBinding } from "./NamespaceBinding.ts";
@@ -30,7 +30,7 @@ export const PutLive = Layer.effect(
   Put,
   Effect.gen(function* () {
     const Policy = yield* PutPolicy;
-    const { env } = yield* CloudflareContext;
+    const env = yield* WorkerEnvironment;
 
     return Effect.fn(function* (namespace: Namespace) {
       yield* Policy(namespace);

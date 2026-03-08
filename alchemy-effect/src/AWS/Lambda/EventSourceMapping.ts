@@ -171,32 +171,6 @@ export const EventSourceMapping = Resource<EventSourceMapping>(
   "AWS.Lambda.EventSourceMapping",
 );
 
-const retryTransient: <A, R, Err>(
-  self: Effect.Effect<A, Err, R>,
-) => Effect.Effect<A, Err, R> = Effect.retry({
-  while: (e: any) =>
-    e._tag === "InternalFailure" ||
-    e._tag === "RequestExpired" ||
-    e._tag === "ServiceException" ||
-    e._tag === "ServiceUnavailable" ||
-    e._tag === "ThrottlingException" ||
-    e._tag === "TooManyRequestsException" ||
-    e._tag === "RequestLimitExceeded" ||
-    e._tag === "ResourceInUseException",
-  schedule: Schedule.exponential(100).pipe(Schedule.both(Schedule.recurs(30))),
-});
-
-const retryPermissionsPropagation = Effect.retry({
-  while: (e: any) =>
-    e._tag === "InvalidParameterValueException" &&
-    (e.message?.includes(
-      "The function execution role does not have permissions to call",
-    ) ||
-      e.message?.includes("Cannot access stream") ||
-      e.message?.includes("Please ensure the role can perform the GetRecords")),
-  schedule: Schedule.exponential(100).pipe(Schedule.both(Schedule.recurs(30))),
-});
-
 export const EventSourceMappingProvider = () =>
   EventSourceMapping.provider.effect(
     Effect.gen(function* () {
@@ -423,3 +397,29 @@ export const EventSourceMappingProvider = () =>
       };
     }),
   );
+
+const retryTransient: <A, R, Err>(
+  self: Effect.Effect<A, Err, R>,
+) => Effect.Effect<A, Err, R> = Effect.retry({
+  while: (e: any) =>
+    e._tag === "InternalFailure" ||
+    e._tag === "RequestExpired" ||
+    e._tag === "ServiceException" ||
+    e._tag === "ServiceUnavailable" ||
+    e._tag === "ThrottlingException" ||
+    e._tag === "TooManyRequestsException" ||
+    e._tag === "RequestLimitExceeded" ||
+    e._tag === "ResourceInUseException",
+  schedule: Schedule.exponential(100).pipe(Schedule.both(Schedule.recurs(30))),
+});
+
+const retryPermissionsPropagation = Effect.retry({
+  while: (e: any) =>
+    e._tag === "InvalidParameterValueException" &&
+    (e.message?.includes(
+      "The function execution role does not have permissions to call",
+    ) ||
+      e.message?.includes("Cannot access stream") ||
+      e.message?.includes("Please ensure the role can perform the GetRecords")),
+  schedule: Schedule.exponential(100).pipe(Schedule.both(Schedule.recurs(30))),
+});

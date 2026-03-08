@@ -2,7 +2,7 @@ import type * as runtime from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
-import { CloudflareContext } from "../CloudflareContext.ts";
+import { WorkerEnvironment } from "../Workers/Worker.ts";
 import type { Namespace } from "./Namespace.ts";
 import { NamespaceBinding } from "./NamespaceBinding.ts";
 
@@ -23,7 +23,7 @@ export const ListLive = Layer.effect(
   List,
   Effect.gen(function* () {
     const Policy = yield* ListPolicy;
-    const { env } = yield* CloudflareContext;
+    const env = yield* WorkerEnvironment;
 
     return Effect.fn(function* (namespace: Namespace) {
       yield* Policy(namespace);
