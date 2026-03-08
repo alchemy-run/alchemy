@@ -1,5 +1,5 @@
-import * as ServiceMap from "effect/ServiceMap";
+import * as Config from "effect/Config";
 
-export class Phase extends ServiceMap.Service<Phase, "plan" | "runtime">()(
-  "Alchemy::Phase",
-) {}
+export const ALCHEMY_PHASE = Config.string("ALCHEMY_PHASE").pipe(
+  Config.withDefault("plan"),
+);

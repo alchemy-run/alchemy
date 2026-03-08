@@ -5,6 +5,7 @@ import * as ServiceMap from "effect/ServiceMap";
 import { SingleShotGen } from "effect/Utils";
 import { ExecutionContext, Self } from "./Host.ts";
 import * as Namespace from "./Namespace.ts";
+import { ALCHEMY_PHASE } from "./Phase.ts";
 import type { ResourceLike } from "./Resource.ts";
 import { CurrentStack } from "./Stack.ts";
 
@@ -105,9 +106,9 @@ export const Policy =
         Effect.flatMap((service) =>
           service
             ? Effect.succeed(service)
-            : CurrentStack.pipe(
-                Effect.flatMap((stack) =>
-                  stack
+            : Effect.all([CurrentStack, ALCHEMY_PHASE.asEffect()]).pipe(
+                Effect.flatMap(([stack, phase]) =>
+                  stack && phase === "plan"
                     ? Effect.die(
                         `Binding.Policy provider '${Identifier}' was not provided at Plan Time in Stack '${stack.name}'`,
                       )

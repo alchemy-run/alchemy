@@ -128,6 +128,11 @@ export const FunctionProvider = () =>
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const bundler = yield* Bundler;
+      const alchemyEnv = {
+        ALCHEMY_STACK_NAME: stack.name,
+        ALCHEMY_STAGE: stack.stage,
+        ALCHEMY_PHASE: "runtime",
+      };
 
       const createFunctionName = (
         id: string,
@@ -291,8 +296,30 @@ export const FunctionProvider = () =>
         yield* fs.writeFileString(
           tempEntry,
           `import { ${handler} as handler } from "${file}";
+import { Stack } from "alchemy-effect/Stack";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
-export default await Effect.runPromise(handler);`,
+
+export default await Effect.runPromise(
+  handler.pipe(
+    Effect.provideServiceEffect(
+      Stack,
+      Effect.all([
+        Config.string("ALCHEMY_STACK_NAME").asEffect(),
+        Config.string("ALCHEMY_STAGE").asEffect(),
+      ]).pipe(
+        Effect.map(([name, stage]) => ({
+          name,
+          stage,
+          bindings: {},
+          resources: {},
+        }))
+      )
+    ),
+    Effect.scoped
+  )
+);
+`,
         );
 
         return yield* Effect.gen(function* () {
@@ -394,7 +421,10 @@ export default await Effect.runPromise(handler);`,
           Runtime: news.runtime ?? "nodejs22.x",
           Environment: env
             ? {
-                Variables: env,
+                Variables: {
+                  ...env,
+                  ...alchemyEnv,
+                },
               }
             : undefined,
           Tags: tags,
@@ -665,7 +695,7 @@ export default await Effect.runPromise(handler);`,
             code,
             hash,
             functionName,
-            env: {},
+            env: alchemyEnv,
             session,
           });
 

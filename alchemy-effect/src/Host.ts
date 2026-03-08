@@ -9,7 +9,7 @@ import {
   type ResourceLike,
   type ResourceProviders,
 } from "./Resource.ts";
-import type { Stack, StackServices } from "./Stack.ts";
+import { Stack, type StackServices } from "./Stack.ts";
 import type { Stage } from "./Stage.ts";
 
 export type HostServices =
