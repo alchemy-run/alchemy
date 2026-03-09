@@ -12,6 +12,8 @@ import { Stage } from "./Stage.ts";
 import * as State from "./State/State.ts";
 import { isPrimitive } from "./Util/data.ts";
 
+const inspect = Symbol.for("nodejs.util.inspect.custom");
+
 export const of = <R extends ResourceLike>(
   resource: Ref<R> | R,
 ): R extends ResourceLike
@@ -42,6 +44,7 @@ export interface Output<A = any, Req = any> extends Pipeable {
     Accessor<A>,
     void
   >;
+  bind(id: string): Effect.Effect<Effect.Effect<A>, never, ExecutionContext>;
 }
 
 export interface Accessor<A> extends Effect.Effect<A> {}
@@ -90,21 +93,25 @@ export abstract class BaseExpr<A = any, Req = any> implements Output<A, Req> {
     return new SingleShotGen(this);
   }
 
-  asEffect(): Effect.Effect<A, never, Req> {
-    // @ts-expect-error - TODO(sam): fix this (works at runtime, but maybe indicates a bad assumption)
-    return Effect.gen(function* () {
-      const _ctx = yield* ExecutionContext;
-      // TODO(sam): implement
-      return;
-    });
+  asEffect() {
+    return this.bind(this.toString());
+  }
+
+  public bind(id: string) {
+    return ExecutionContext.asEffect().pipe(
+      Effect.flatMap((ctx) =>
+        Effect.map(ctx.set(id, this), (key) => ctx.get<A>(key)),
+      ),
+    );
   }
 
   public pipe(...fns: any[]): any {
     // @ts-expect-error
     return pipe(this, ...fns);
   }
-  toString(): string {
-    return JSON.stringify(this, null, 2);
+  public abstract [inspect](): string;
+  public toString(): string {
+    return this[inspect]();
   }
 }
 export type ObjectExpr<A, Req = any> = Output<A, Req> & {
@@ -131,6 +138,9 @@ export class ResourceExpr<Value, Req = never> extends BaseExpr<Value, Req> {
     super();
     return proxy(this);
   }
+  [inspect](): string {
+    return this.src.LogicalId;
+  }
 }
 
 export const isPropExpr = <A = any, Prop extends keyof A = keyof A, Req = any>(
@@ -150,6 +160,9 @@ export class PropExpr<
     super();
     return proxy(this);
   }
+  [inspect](): string {
+    return `${this.expr[inspect]()}.${this.identifier.toString()}`;
+  }
 }
 
 export const literal = <A>(value: A) => new LiteralExpr(value);
@@ -162,6 +175,9 @@ export class LiteralExpr<A> extends BaseExpr<A, never> {
   constructor(public readonly value: A) {
     super();
     return proxy(this);
+  }
+  [inspect](): string {
+    return String(this.value);
   }
 }
 
@@ -183,6 +199,10 @@ export class ApplyExpr<A, B, Req = never> extends BaseExpr<B, Req> {
   ) {
     super();
     return proxy(this);
+  }
+
+  [inspect](): string {
+    return `${this.expr[inspect]()}.map(${this.f.toString()})`;
   }
 }
 
@@ -206,6 +226,9 @@ export class EffectExpr<A, B, Req = never, Req2 = never> extends BaseExpr<
   ) {
     super();
     return proxy(this);
+  }
+  [inspect](): string {
+    return `${this.expr[inspect]()}.mapEffect(${this.f.toString()})`;
   }
 }
 
@@ -240,6 +263,9 @@ export class AllExpr<Outs extends Expr[]> extends BaseExpr<Outs> {
     super();
     return proxy(this);
   }
+  [inspect](): string {
+    return `all(${this.outs.map((out) => out[inspect]()).join(", ")})`;
+  }
 }
 
 export const isRefExpr = <A = any>(node: any): node is RefExpr<A> =>
@@ -254,6 +280,9 @@ export class RefExpr<A> extends BaseExpr<A, never> {
   ) {
     super();
     return proxy(this);
+  }
+  [inspect](): string {
+    return `ref(${this.resourceId}, { stack: ${this.stack}, stage: ${this.stage} })`;
   }
 }
 
@@ -289,15 +318,23 @@ export const interpolate = <Args extends any[]>(
   ) as any;
 
 const proxy = (self: any): any => {
-  const proxy = new Proxy(
-    Object.assign(() => {}, self),
-    {
-      has: (_, prop) => (prop === ExprSymbol ? true : prop in self),
-      get: (_, prop) =>
-        prop === Symbol.toPrimitive
-          ? (hint: string) => (hint === "string" ? self.toString() : self)
-          : prop === ExprSymbol
-            ? self
+  const target = Object.assign(() => {}, self);
+  if (inspect in self) {
+    Object.defineProperty(target, inspect, {
+      value: self[inspect].bind(self),
+      configurable: true,
+    });
+  }
+  const proxy = new Proxy(target, {
+    has: (_, prop) =>
+      prop === ExprSymbol || prop === inspect ? true : prop in self,
+    get: (target, prop) =>
+      prop === Symbol.toPrimitive
+        ? (hint: string) => (hint === "string" ? self.toString() : self)
+        : prop === ExprSymbol
+          ? self
+          : prop === inspect
+            ? target[inspect]
             : isResourceExpr(self) && self.stables && prop in self.stables
               ? self.stables[prop as keyof typeof self.stables]
               : prop === "apply"
@@ -308,18 +345,17 @@ const proxy = (self: any): any => {
                     ? new PropExpr(proxy, prop as never)
                     : self[prop as keyof typeof self]
                   : new PropExpr(proxy, prop as never),
-      apply: (_, thisArg, args) => {
-        if (isPropExpr(self)) {
-          if (self.identifier === "apply") {
-            return new ApplyExpr(self.expr, args[0]);
-          } else if (self.identifier === "effect") {
-            return new EffectExpr(self.expr, args[0]);
-          }
+    apply: (_, thisArg, args) => {
+      if (isPropExpr(self)) {
+        if (self.identifier === "apply") {
+          return new ApplyExpr(self.expr, args[0]);
+        } else if (self.identifier === "effect") {
+          return new EffectExpr(self.expr, args[0]);
         }
-        return undefined;
-      },
+      }
+      return undefined;
     },
-  );
+  });
   return proxy;
 };
 

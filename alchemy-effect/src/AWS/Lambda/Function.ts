@@ -4,6 +4,7 @@ import * as iam from "distilled-aws/iam";
 import type { CreateFunctionRequest } from "distilled-aws/lambda";
 import * as Lambda from "distilled-aws/lambda";
 import { Region } from "distilled-aws/Region";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -17,6 +18,7 @@ import {
   type ListenHandler,
   type ServerlessExecutionContext,
 } from "../../Host.ts";
+import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
@@ -51,6 +53,8 @@ export interface FunctionProps {
   // TODO(sam): use a Layer instead so we can manage Effect platform?
   runtime?: "nodejs22.x" | "nodejs24.x";
   build?: Partial<BundleOptions>;
+  env?: Record<string, any>;
+  exports?: string[];
 }
 
 export interface Function extends Resource<
@@ -76,46 +80,68 @@ export const Function = Host<
   Function,
   ServerlessExecutionContext,
   Credentials | Region
->(
-  "AWS.Lambda.Function",
-  Effect.fn(function* (id: string) {
-    const listeners: Effect.Effect<ListenHandler>[] = [];
+>("AWS.Lambda.Function", (id: string) => {
+  const listeners: Effect.Effect<ListenHandler>[] = [];
+  const env: Record<string, any> = {};
 
-    return {
-      type: "AWS.Lambda.Function",
-      run: undefined!,
-      id,
-      get: () => Effect.succeed(undefined!),
-      listen: ((handler: ListenHandler | Effect.Effect<ListenHandler>) =>
-        Effect.sync(() =>
-          Effect.isEffect(handler)
-            ? listeners.push(handler)
-            : listeners.push(Effect.succeed(handler)),
-        )) as any as ServerlessExecutionContext["listen"],
-      exports: {
-        // construct an Effect that produces the Function's entrypoint
-        handler: Effect.map(
-          Effect.all(listeners, {
-            concurrency: "unbounded",
-          }),
-          (handlers) =>
-            (event: any, context: lambda.Context): Promise<any> => {
-              for (const handler of handlers) {
-                const eff = handler(event);
-                if (Effect.isEffect(eff)) {
-                  return eff.pipe(
-                    Effect.provideService(HandlerContext, context),
-                    Effect.runPromise,
-                  );
-                }
-              }
-              throw new Error("No event handler found");
-            },
+  return {
+    type: "AWS.Lambda.Function",
+    run: undefined!,
+    id,
+    env,
+    set: (id: string, output: Output.Output) =>
+      Effect.sync(() => {
+        const key = id.replaceAll(/[^a-zA-Z0-9]/g, "_");
+        env[key] = output.pipe(Output.map((value) => JSON.stringify(value)));
+        return key;
+      }),
+    get: <T>(key: string) =>
+      Config.string(key)
+        .asEffect()
+        .pipe(
+          Effect.flatMap((val) =>
+            Effect.try({
+              try: () => JSON.parse(val) as T,
+              catch: (error) => error as Error,
+            }),
+          ),
+          Effect.catch((cause) =>
+            Effect.die(
+              new Error(`Failed to get environment variable: ${key}`, {
+                cause,
+              }),
+            ),
+          ),
         ),
-      },
-    } satisfies ServerlessExecutionContext;
-  }),
-);
+    listen: ((handler: ListenHandler | Effect.Effect<ListenHandler>) =>
+      Effect.sync(() =>
+        Effect.isEffect(handler)
+          ? listeners.push(handler)
+          : listeners.push(Effect.succeed(handler)),
+      )) as any as ServerlessExecutionContext["listen"],
+    exports: {
+      // construct an Effect that produces the Function's entrypoint
+      handler: Effect.map(
+        Effect.all(listeners, {
+          concurrency: "unbounded",
+        }),
+        (handlers) =>
+          (event: any, context: lambda.Context): Promise<any> => {
+            for (const handler of handlers) {
+              const eff = handler(event);
+              if (Effect.isEffect(eff)) {
+                return eff.pipe(
+                  Effect.provideService(HandlerContext, context),
+                  Effect.runPromise,
+                );
+              }
+            }
+            throw new Error("No event handler found");
+          },
+      ),
+    },
+  } satisfies ServerlessExecutionContext;
+});
 
 export const FunctionProvider = () =>
   Function.provider.effect(
@@ -298,26 +324,27 @@ export const FunctionProvider = () =>
           `import { ${handler} as handler } from "${file}";
 import { Stack } from "alchemy-effect/Stack";
 import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 
-export default await Effect.runPromise(
-  handler.pipe(
-    Effect.provideServiceEffect(
-      Stack,
-      Effect.all([
-        Config.string("ALCHEMY_STACK_NAME").asEffect(),
-        Config.string("ALCHEMY_STAGE").asEffect(),
-      ]).pipe(
-        Effect.map(([name, stage]) => ({
-          name,
-          stage,
-          bindings: {},
-          resources: {},
-        }))
-      )
-    ),
-    Effect.scoped
-  )
+export default await handler.pipe(
+  Effect.provideServiceEffect(
+    Stack,
+    Effect.all([
+      Config.string("ALCHEMY_STACK_NAME").asEffect(),
+      Config.string("ALCHEMY_STAGE").asEffect(),
+    ]).pipe(
+      Effect.map(([name, stage]) => ({
+        name,
+        stage,
+        bindings: {},
+        resources: {},
+      }))
+    )
+  ),
+  Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromEnv()),
+  Effect.scoped,
+  Effect.runPromise
 );
 `,
         );
@@ -740,7 +767,10 @@ export default await Effect.runPromise(
             roleArn,
             code,
             hash,
-            env,
+            env: {
+              ...env,
+              ...news.env,
+            },
             functionName,
             preferUpdate: output !== undefined,
             session,
@@ -791,7 +821,10 @@ export default await Effect.runPromise(
             roleArn: output.roleArn,
             code,
             hash,
-            env,
+            env: {
+              ...env,
+              ...news.env,
+            },
             functionName,
             session,
           });

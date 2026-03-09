@@ -3,8 +3,10 @@ import type { Workers } from "cloudflare/resources";
 import * as workers from "distilled-cloudflare/workers";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as ServiceMap from "effect/ServiceMap";
+import * as Output from "../../Output.ts";
 
 import { Bundler } from "../../Bundle/Bundler.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/index.ts";
@@ -70,6 +72,8 @@ export type WorkerProps = {
   };
   limits?: Worker.Limits;
   placement?: Worker.Placement;
+  env?: Record<string, any>;
+  exports?: Record<string, any>;
 };
 
 export interface WorkerExecutionContext extends ServerlessExecutionContext {
@@ -100,81 +104,99 @@ export const Worker = Host<
   Worker,
   WorkerExecutionContext,
   DurableObjectState | WorkerEnvironment | ExecutionContext
->(
-  "Cloudflare.Workers.Worker",
-  Effect.fn(function* (id: string) {
-    const listeners: Effect.Effect<ListenHandler>[] = [];
-    const exports: Record<string, any> = {};
+>("Cloudflare.Workers.Worker", (id: string) => {
+  const listeners: Effect.Effect<ListenHandler>[] = [];
+  const exports: Record<string, any> = {};
+  const env: Record<string, any> = {};
 
-    return {
-      type: "Cloudflare.Workers.Worker",
-      id,
-      run: undefined!,
-      get: () => Effect.succeed(undefined!),
-      listen: ((handler: ListenHandler | Effect.Effect<ListenHandler>) =>
-        Effect.sync(() =>
-          Effect.isEffect(handler)
-            ? listeners.push(handler)
-            : listeners.push(Effect.succeed(handler)),
-        )) as any as ServerlessExecutionContext["listen"],
-      export: (name: string, value: any) =>
-        Effect.gen(function* () {
-          if (name in exports) {
-            return yield* Effect.die(
-              new Error(`Worker export '${name}' already exists`),
-            );
-          }
-          exports[name] = value;
-        }),
-      exports: Effect.sync(() => ({
-        ...exports,
-        // construct an Effect that produces the Function's entrypoint
-        default: Effect.map(
-          Effect.all(listeners, {
-            concurrency: "unbounded",
-          }),
-          (handlers) => {
-            const handle =
-              (type: WorkerEvent["type"]) =>
-              (request: any, env: unknown, context: cf.ExecutionContext) => {
-                const event: WorkerEvent = {
-                  kind: "Cloudflare.Workers.WorkerEvent",
-                  type,
-                  input: request,
-                  env,
-                  context,
-                };
-                for (const handler of handlers) {
-                  const eff = handler(event);
-                  if (Effect.isEffect(eff)) {
-                    return eff.pipe(
-                      Effect.provideService(ExecutionContext, context),
-                      Effect.provideService(
-                        WorkerEnvironment,
-                        env as Record<string, any>,
-                      ),
-                      Effect.runPromise,
-                    );
-                  }
-                }
-                throw new Error("No event handler found");
-              };
-            return {
-              fetch: handle("fetch"),
-              email: handle("email"),
-              queue: handle("queue"),
-              scheduled: handle("scheduled"),
-              tail: handle("tail"),
-              trace: handle("trace"),
-              tailStream: handle("tailStream"),
-              test: handle("test"),
-            } satisfies Required<cf.ExportedHandler>;
-          },
+  return {
+    type: "Cloudflare.Workers.Worker",
+    id,
+    run: undefined!,
+    env,
+    get: (key: string) =>
+      Effect.serviceOption(WorkerEnvironment).pipe(
+        Effect.map(Option.getOrUndefined),
+        Effect.flatMap((env) =>
+          env
+            ? Effect.succeed(env[key])
+            : Effect.die("WorkerEnvironment not found"),
         ),
-      })),
-    } satisfies WorkerExecutionContext;
-  }),
-);
+        Effect.flatMap((value) =>
+          value
+            ? Effect.succeed(value)
+            : Effect.die(`Environment variable '${key}' not found`),
+        ),
+      ) as any,
+    set: (id: string, output: Output.Output) =>
+      Effect.sync(() => {
+        const key = id.replaceAll(/[^a-zA-Z0-9]/g, "_");
+        env[key] = output.pipe(Output.map((value) => JSON.stringify(value)));
+        return key;
+      }),
+    listen: ((handler: ListenHandler | Effect.Effect<ListenHandler>) =>
+      Effect.sync(() =>
+        Effect.isEffect(handler)
+          ? listeners.push(handler)
+          : listeners.push(Effect.succeed(handler)),
+      )) as any as ServerlessExecutionContext["listen"],
+    export: (name: string, value: any) =>
+      Effect.gen(function* () {
+        if (name in exports) {
+          return yield* Effect.die(
+            new Error(`Worker export '${name}' already exists`),
+          );
+        }
+        exports[name] = value;
+      }),
+    exports: Effect.sync(() => ({
+      ...exports,
+      // construct an Effect that produces the Function's entrypoint
+      default: Effect.map(
+        Effect.all(listeners, {
+          concurrency: "unbounded",
+        }),
+        (handlers) => {
+          const handle =
+            (type: WorkerEvent["type"]) =>
+            (request: any, env: unknown, context: cf.ExecutionContext) => {
+              const event: WorkerEvent = {
+                kind: "Cloudflare.Workers.WorkerEvent",
+                type,
+                input: request,
+                env,
+                context,
+              };
+              for (const handler of handlers) {
+                const eff = handler(event);
+                if (Effect.isEffect(eff)) {
+                  return eff.pipe(
+                    Effect.provideService(ExecutionContext, context),
+                    Effect.provideService(
+                      WorkerEnvironment,
+                      env as Record<string, any>,
+                    ),
+                    Effect.runPromise,
+                  );
+                }
+              }
+              throw new Error("No event handler found");
+            };
+          return {
+            fetch: handle("fetch"),
+            email: handle("email"),
+            queue: handle("queue"),
+            scheduled: handle("scheduled"),
+            tail: handle("tail"),
+            trace: handle("trace"),
+            tailStream: handle("tailStream"),
+            test: handle("test"),
+          } satisfies Required<cf.ExportedHandler>;
+        },
+      ),
+    })),
+  } satisfies WorkerExecutionContext;
+});
 
 export declare namespace Worker {
   export type Observability = Workers.ScriptUpdateParams.Metadata.Observability;

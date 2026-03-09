@@ -30,6 +30,7 @@ import { JobStorage, JobStorageLive } from "./JobStorage.ts";
 // alchemy deploy --dry-run --adopt JobsQueue,JobsDatabase
 
 const JobFunction = Effect.gen(function* () {
+  console.log("JobFunction");
   const stack = yield* Stack;
 
   const { bucket, getJob } = yield* JobStorage;

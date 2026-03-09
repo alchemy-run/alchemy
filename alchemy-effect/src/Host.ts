@@ -3,6 +3,7 @@ import type { Scope } from "effect/Scope";
 import * as ServiceMap from "effect/ServiceMap";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import type { PolicyLike } from "./Binding.ts";
+import type { Output } from "./Output.ts";
 import type { Provider } from "./Provider.ts";
 import {
   Resource,
@@ -73,12 +74,19 @@ export type HostClass<
   };
 
 export const Host = <
-  R extends ResourceLike,
+  R extends ResourceLike<
+    string,
+    | {
+        env?: Record<string, any>;
+        exports?: Record<string, any>;
+      }
+    | undefined
+  >,
   Runtime extends ExecutionContextService,
   Services = never,
 >(
   type: R["Type"],
-  runtime: (id: string) => Effect.Effect<Runtime>,
+  runtime: (id: string) => Runtime,
 ): HostClass<R, Runtime, Services | HostRuntimeServices> => {
   type Eff = Effect.Effect<R["Props"], never, Services | Runtime>;
 
@@ -86,14 +94,24 @@ export const Host = <
   const host = ServiceMap.Service<Host<R>, Runtime>(`Host<${type}>`);
   const constructor = (id: string, eff?: Eff) =>
     eff
-      ? Effect.flatMap(runtime(id), (executionContext) =>
-          resource(
-            id,
-            (Effect.isEffect(eff) ? eff : Effect.succeed(eff)).pipe(
-              Effect.provideService(ExecutionContext, executionContext),
-              Effect.provideService(host, executionContext),
+      ? Effect.flatMap(
+          Effect.sync(() => runtime(id)),
+          (executionContext) =>
+            resource(
+              id,
+              (Effect.isEffect(eff) ? eff : Effect.succeed(eff)).pipe(
+                Effect.map((props) => ({
+                  ...props,
+                  env: {
+                    ...props?.env,
+                    ...executionContext.env,
+                  },
+                  exports: Object.keys(executionContext.exports ?? {}),
+                })),
+                Effect.provideService(ExecutionContext, executionContext),
+                Effect.provideService(host, executionContext),
+              ),
             ),
-          ),
         )
       : (eff: Eff) => constructor(id, eff);
   return Object.assign(constructor, resource, {
@@ -118,9 +136,21 @@ interface BaseExecutionContext {
   type: string;
   id: string;
   /**
+   * Environment variables
+   */
+  env: Record<string, any>;
+  /**
    * Get a value from the Runtime
    */
   get<T>(key: string): Effect.Effect<T>;
+  /**
+   * Set a value in the Runtime
+   */
+  set(id: string, output: Output): Effect.Effect<string>;
+  /**
+   * Exports
+   */
+  exports?: Record<string, any>;
 }
 
 export type ListenHandler<A = any, Req = never> = (
