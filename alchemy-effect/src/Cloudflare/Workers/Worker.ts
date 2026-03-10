@@ -9,6 +9,10 @@ import * as ServiceMap from "effect/ServiceMap";
 import * as Output from "../../Output.ts";
 
 import { Bundler } from "../../Bundle/Bundler.ts";
+import {
+  cleanupBundleTempDir,
+  createTempBundleDir,
+} from "../../Bundle/TempRoot.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/index.ts";
 import { DotAlchemy } from "../../Config.ts";
 import {
@@ -306,17 +310,11 @@ export const WorkerProvider = () =>
       ) {
         const outfile = path.join(dotAlchemy, "out", `${id}.js`);
         const realMain = yield* fs.realPath(props.main);
-        const tempRoot = path.join(
-          path.dirname(realMain),
-          path.basename(dotAlchemy),
-          "tmp",
+        const tempDir = yield* createTempBundleDir(
+          realMain,
+          dotAlchemy,
+          id,
         );
-
-        yield* fs.makeDirectory(tempRoot, { recursive: true });
-        const tempDir = yield* fs.makeTempDirectory({
-          directory: tempRoot,
-          prefix: `${id}-`,
-        });
 
         const realTempDir = yield* fs.realPath(tempDir);
         const tempEntry = path.join(realTempDir, "__index.ts");
@@ -358,9 +356,7 @@ ${props.exports?.map((id) => `class ${id} {}`).join("\n") ?? ""}
             hash: yield* sha256(code),
           };
         }).pipe(
-          Effect.ensuring(
-            fs.remove(tempDir, { recursive: true }).pipe(Effect.ignore),
-          ),
+          Effect.ensuring(cleanupBundleTempDir(tempDir)),
         );
       });
 

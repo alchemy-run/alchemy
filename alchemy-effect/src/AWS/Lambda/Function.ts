@@ -12,6 +12,10 @@ import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as ServiceMap from "effect/ServiceMap";
 import { Bundler, type BundleOptions } from "../../Bundle/Bundler.ts";
+import {
+  cleanupBundleTempDir,
+  createTempBundleDir,
+} from "../../Bundle/TempRoot.ts";
 import { DotAlchemy } from "../../Config.ts";
 import {
   Host,
@@ -321,16 +325,14 @@ export const FunctionProvider = () =>
           "out",
           `${stack.name}-${stage}-${id}.js`,
         );
-        const tempRoot = path.join(dotAlchemy, "tmp");
-        yield* fs.makeDirectory(tempRoot, { recursive: true });
-        const tempDir = path.join(tempRoot, `${stack.name}-${stage}-${id}`);
-        yield* fs.remove(tempDir, { recursive: true }).pipe(Effect.ignore);
-        yield* fs.makeDirectory(tempDir, { recursive: true });
+        const realMain = yield* fs.realPath(props.main);
+        const tempDir = yield* createTempBundleDir(
+          realMain,
+          dotAlchemy,
+          id,
+        );
 
-        const [realTempDir, realMain] = yield* Effect.all([
-          fs.realPath(tempDir),
-          fs.realPath(props.main),
-        ]);
+        const realTempDir = yield* fs.realPath(tempDir);
         const tempEntry = path.join(realTempDir, "__index.ts");
         let file = path.relative(realTempDir, realMain);
         if (!file.startsWith(".")) {
@@ -443,11 +445,7 @@ export default await Effect.runPromise(handlerEffect)
             code,
             hash: yield* hashBundle(code, sourceMap),
           };
-        }).pipe(
-          Effect.ensuring(
-            fs.remove(tempDir, { recursive: true }).pipe(Effect.ignore),
-          ),
-        );
+        }).pipe(Effect.ensuring(cleanupBundleTempDir(tempDir)));
       });
 
       const withNodeSourceMaps = (
