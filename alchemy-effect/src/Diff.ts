@@ -54,12 +54,24 @@ export const anyPropsAreDifferent = <Props extends Record<string, any>>(
 export const havePropsChanged = <R extends ResourceLike>(
   oldProps: R["Props"] | undefined,
   newProps: R["Props"],
-) => {
-  return (
-    Output.hasOutputs(newProps) ||
-    // TODO(sam): sort keys and deep compare
-    JSON.stringify(oldProps ?? {}) !== JSON.stringify(newProps)
-  );
+) =>
+  Output.hasOutputs(newProps) ||
+  // TODO(sam): sort keys and deep compare
+  JSON.stringify(canonicalize(oldProps ?? {})) !==
+    JSON.stringify(canonicalize(newProps ?? {}));
+
+const canonicalize = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map(canonicalize);
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, nested]) => [key, canonicalize(nested)]),
+    );
+  }
+  return value;
 };
 
 export const diffBindings = (

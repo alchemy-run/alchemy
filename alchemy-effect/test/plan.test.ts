@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Stage } from "../src/Stage.ts";
 import {
+  BindingTarget,
   Bucket,
   Function,
   Queue,
@@ -132,6 +133,110 @@ test(
             name: "test-queue",
           },
           state: undefined,
+        },
+      },
+      deletions: expect.emptyObject(),
+    });
+  }),
+);
+
+test(
+  "no-op resources with undefined props",
+  {
+    state: test.state({
+      MyQueue: {
+        instanceId,
+        providerVersion: 0,
+        logicalId: "MyQueue",
+        fqn: "MyQueue",
+        namespace: undefined,
+        resourceType: "Test.Queue",
+        status: "created",
+        props: undefined as any,
+        attr: {
+          name: "MyQueue",
+          queueUrl: "https://test.queue.com/MyQueue",
+        },
+        bindings: [],
+        downstream: [],
+      },
+    }),
+  },
+  Effect.gen(function* () {
+    expect(
+      yield* makePlan(
+        Effect.gen(function* () {
+          yield* Queue("MyQueue");
+        }),
+      ),
+    ).toMatchObject({
+      resources: {
+        MyQueue: {
+          action: "noop",
+          bindings: [],
+          state: {
+            status: "created",
+          },
+        },
+      },
+      deletions: expect.emptyObject(),
+    });
+  }),
+);
+
+test(
+  "no-op resources when object prop key order changes",
+  {
+    state: test.state({
+      MyFunction: {
+        instanceId,
+        providerVersion: 0,
+        logicalId: "MyFunction",
+        fqn: "MyFunction",
+        namespace: undefined,
+        resourceType: "Test.Function",
+        status: "created",
+        props: {
+          name: "test-function",
+          env: {
+            A: "1",
+            B: "2",
+          },
+        },
+        attr: {
+          name: "test-function",
+          env: {
+            A: "1",
+            B: "2",
+          },
+          functionArn: "arn:test:function:MyFunction",
+        },
+        bindings: [],
+        downstream: [],
+      },
+    }),
+  },
+  Effect.gen(function* () {
+    expect(
+      yield* makePlan(
+        Effect.gen(function* () {
+          yield* Function("MyFunction", {
+            name: "test-function",
+            env: {
+              B: "2",
+              A: "1",
+            },
+          });
+        }),
+      ),
+    ).toMatchObject({
+      resources: {
+        MyFunction: {
+          action: "noop",
+          bindings: [],
+          state: {
+            status: "created",
+          },
         },
       },
       deletions: expect.emptyObject(),
@@ -298,6 +403,211 @@ test(
           props: {
             replaceString: expect.propExpr("string", B!),
           },
+        },
+      },
+      deletions: expect.emptyObject(),
+    });
+  }),
+);
+
+test(
+  "update resource when a binding is added without prop changes",
+  {
+    state: test.state({
+      A: {
+        instanceId,
+        providerVersion: 0,
+        logicalId: "A",
+        fqn: "A",
+        namespace: undefined,
+        resourceType: "Test.BindingTarget",
+        status: "created",
+        props: {
+          name: "target",
+        },
+        attr: {
+          name: "target",
+          env: {},
+        },
+        bindings: [],
+        downstream: [],
+      },
+    }),
+  },
+  Effect.gen(function* () {
+    expect(
+      yield* Effect.gen(function* () {
+        const target = yield* BindingTarget("A", {
+          name: "target",
+        });
+        yield* target.bind("TestBinding", {
+          env: {
+            FEATURE_FLAG: "on",
+          },
+        });
+      }).pipe(makePlan),
+    ).toMatchObject({
+      resources: {
+        A: {
+          action: "update",
+          bindings: [
+            {
+              action: "create",
+              sid: "TestBinding",
+              data: {
+                env: {
+                  FEATURE_FLAG: "on",
+                },
+              },
+            },
+          ],
+          state: {
+            status: "created",
+          },
+        },
+      },
+      deletions: expect.emptyObject(),
+    });
+  }),
+);
+
+test(
+  "update resource when a binding is removed without prop changes",
+  {
+    state: test.state({
+      A: {
+        instanceId,
+        providerVersion: 0,
+        logicalId: "A",
+        fqn: "A",
+        namespace: undefined,
+        resourceType: "Test.BindingTarget",
+        status: "created",
+        props: {
+          name: "target",
+        },
+        attr: {
+          name: "target",
+          env: {
+            FEATURE_FLAG: "on",
+          },
+        },
+        bindings: [
+          {
+            namespace: undefined,
+            sid: "TestBinding",
+            data: {
+              env: {
+                FEATURE_FLAG: "on",
+              },
+            },
+          },
+        ],
+        downstream: [],
+      },
+    }),
+  },
+  Effect.gen(function* () {
+    expect(
+      yield* Effect.gen(function* () {
+        yield* BindingTarget("A", {
+          name: "target",
+        });
+      }).pipe(makePlan),
+    ).toMatchObject({
+      resources: {
+        A: {
+          action: "update",
+          bindings: [
+            {
+              action: "delete",
+              sid: "TestBinding",
+              data: {
+                env: {
+                  FEATURE_FLAG: "on",
+                },
+              },
+            },
+          ],
+          state: {
+            status: "created",
+          },
+        },
+      },
+      deletions: expect.emptyObject(),
+    });
+  }),
+);
+
+test(
+  "binding removals do not keep reappearing after apply",
+  {
+    state: test.state({
+      A: {
+        instanceId,
+        providerVersion: 0,
+        logicalId: "A",
+        fqn: "A",
+        namespace: undefined,
+        resourceType: "Test.BindingTarget",
+        status: "created",
+        props: {
+          name: "target",
+        },
+        attr: {
+          name: "target",
+          env: {
+            FEATURE_FLAG: "on",
+          },
+        },
+        bindings: [
+          {
+            namespace: undefined,
+            sid: "TestBinding",
+            data: {
+              env: {
+                FEATURE_FLAG: "on",
+              },
+            },
+          },
+        ],
+        downstream: [],
+      },
+    }),
+  },
+  Effect.gen(function* () {
+    const stack = yield* Stack.Stack;
+    const state = yield* State;
+
+    yield* test.deploy(
+      Effect.gen(function* () {
+        yield* BindingTarget("A", {
+          name: "target",
+        });
+      }),
+    ).pipe(Effect.provide(TestLayers));
+
+    expect(
+      yield* state.get({
+        stack: stack.name,
+        stage: stack.stage,
+        fqn: "A",
+      }),
+    ).toMatchObject({
+      bindings: [],
+    });
+
+    expect(
+      yield* Effect.gen(function* () {
+        yield* BindingTarget("A", {
+          name: "target",
+        });
+      }).pipe(makePlan),
+    ).toMatchObject({
+      resources: {
+        A: {
+          action: "noop",
+          bindings: [],
         },
       },
       deletions: expect.emptyObject(),

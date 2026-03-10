@@ -36,10 +36,10 @@ export type ResourceClass<Self extends ResourceLike> = ResourceConstructor<
 
 export type LogicalId = string;
 
-export interface ResourceBinding {
+export interface ResourceBinding<Data = any> {
   namespace: NamespaceNode | undefined;
   sid: string;
-  data: any;
+  data: Data;
 }
 
 export interface ResourceLike<

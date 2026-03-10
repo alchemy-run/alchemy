@@ -1,4 +1,6 @@
 import * as Effect from "effect/Effect";
+import { pipe } from "effect/Function";
+import * as Layer from "effect/Layer";
 import type { Scope } from "effect/Scope";
 import * as ServiceMap from "effect/ServiceMap";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
@@ -78,7 +80,7 @@ export const Host = <
     string,
     | {
         env?: Record<string, any>;
-        exports?: Record<string, any>;
+        exports?: string[];
       }
     | undefined
   >,
@@ -95,8 +97,11 @@ export const Host = <
   const constructor = (id: string, eff?: Eff) =>
     eff
       ? Effect.flatMap(
-          Effect.sync(() => runtime(id)),
-          (executionContext) =>
+          Effect.all([
+            Effect.sync(() => runtime(id)),
+            Effect.services<never>(),
+          ]),
+          ([executionContext, services]) =>
             resource(
               id,
               (Effect.isEffect(eff) ? eff : Effect.succeed(eff)).pipe(
@@ -108,8 +113,20 @@ export const Host = <
                   },
                   exports: Object.keys(executionContext.exports ?? {}),
                 })),
-                Effect.provideService(ExecutionContext, executionContext),
-                Effect.provideService(host, executionContext),
+                Effect.provide(
+                  pipe(
+                    Layer.succeed(ExecutionContext, executionContext),
+                    Layer.provideMerge(Layer.succeed(host, executionContext)),
+                    Layer.provideMerge(Layer.succeedServices(services)),
+                  ),
+                ),
+              ),
+            ).pipe(
+              Effect.map(
+                (resource) =>
+                  Object.assign(resource, {
+                    ExecutionContext: executionContext,
+                  }) as R,
               ),
             ),
         )

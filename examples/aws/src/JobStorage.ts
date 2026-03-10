@@ -1,7 +1,9 @@
 import * as S3 from "alchemy-effect/AWS/S3";
+import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ServiceMap from "effect/ServiceMap";
+import * as Stream from "effect/Stream";
 
 import type { Job } from "./Job.ts";
 
@@ -28,6 +30,7 @@ export const JobStorageLive = Layer.effect(
         Body: JSON.stringify(job),
       }).pipe(
         Effect.map(() => job),
+        Effect.tapError(Console.log),
         Effect.orDie,
       );
 
@@ -35,7 +38,16 @@ export const JobStorageLive = Layer.effect(
       getObject({
         Key: jobId,
       }).pipe(
-        Effect.map((item) => item.Body as any),
+        Effect.catchTag("NoSuchKey", () => Effect.succeed(undefined)),
+        Effect.flatMap(
+          (item) =>
+            item?.Body?.pipe(
+              Stream.decodeText,
+              Stream.mkString,
+              Effect.map(JSON.parse),
+            ) ?? Effect.succeed(undefined),
+        ),
+        Effect.tapError(Console.log),
         Effect.orDie,
       );
 

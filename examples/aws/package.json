@@ -16,6 +16,7 @@
   "dependencies": {
     "@effect/platform-node": "catalog:",
     "alchemy-effect": "workspace:*",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "distilled-aws": "catalog:"
   }
 }

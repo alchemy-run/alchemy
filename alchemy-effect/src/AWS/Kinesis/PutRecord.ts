@@ -66,33 +66,3 @@ export const PutRecordPolicyLive = PutRecordPolicy.layer.succeed(
     }
   }),
 );
-
-/*
-# Verbose
-
-~ JobFunction [AWS.Lambda.Function]
-  ~ AWS.Kinesis.PutRecord(JobStream)
-    ~ Allow(JobFunction, AWS.Kinesis.PutRecord(JobStream))
-~ OtherFunction [AWS.Lambda.Function]
-  ~ AWS.Lambda.BucketEventSource(JobBucket)
-    • Allow(JobFunction, AWS.Lambda.InvokeFunction(JobBucket))
-    + AWS.S3.NotificationConfiguration(JobBucket >> JobFunction)
-~ JobWorker [AWS.Lambda.Function]
-  ~ Cloudflare.R2.PutObject(JobBucket)
-    ~ Bind(JobBucket)
-  ~ Cloudflare.R2.GetObject(JobBucket)
-    ~ Bind(JobBucket)
-  ~ Cloudflare.R2.ListObjects(JobBucket)
-    ~ Bind(JobBucket)
-
-# Not Verbose
-
-~ JobFunction [AWS.Lambda.Function]
-  ~ AWS.Kinesis.PutRecord(JobStream)
-~ OtherFunction [AWS.Lambda.Function]
-  ~ AWS.Lambda.BucketEventSource(JobBucket)
-~ JobWorker [AWS.Lambda.Function]
-  ~ Cloudflare.R2.PutObject(JobBucket)
-  ~ Cloudflare.R2.GetObject(JobBucket)
-  ~ Cloudflare.R2.ListObjects(JobBucket)
-*/

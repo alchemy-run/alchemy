@@ -90,6 +90,7 @@ export const bindings = () =>
     S3.DeleteObjectPolicyLive,
     S3.GetObjectPolicyLive,
     S3.HeadObjectPolicyLive,
+    S3.ListObjectsV2PolicyLive,
     S3.PutObjectPolicyLive,
     S3.UploadPartPolicyLive,
     SQS.DeleteMessageBatchPolicyLive,

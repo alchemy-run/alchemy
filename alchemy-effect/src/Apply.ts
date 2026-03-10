@@ -176,7 +176,7 @@ const expandAndPivot = Effect.fnUntraced(function* (
                 props: node.props,
                 providerVersion: node.provider.version ?? 0,
                 resourceType: node.resource.Type,
-                bindings: node.bindings,
+                bindings: excludeDeletedBindings(node.bindings),
                 removalPolicy: node.resource.RemovalPolicy,
               });
               return instanceId;
@@ -198,7 +198,7 @@ const expandAndPivot = Effect.fnUntraced(function* (
                 props: node.props,
                 providerVersion: node.provider.version ?? 0,
                 resourceType: node.resource.Type,
-                bindings: node.bindings,
+                bindings: excludeDeletedBindings(node.bindings),
                 old: node.state,
                 deleteFirst: node.deleteFirst,
                 removalPolicy: node.resource.RemovalPolicy,
@@ -231,7 +231,7 @@ const expandAndPivot = Effect.fnUntraced(function* (
                   props: news,
                   attr,
                   providerVersion: node.provider.version ?? 0,
-                  bindings: node.bindings,
+                  bindings: excludeDeletedBindings(node.bindings),
                   downstream: node.downstream,
                   removalPolicy: node.resource.RemovalPolicy,
                 });
@@ -284,7 +284,7 @@ const expandAndPivot = Effect.fnUntraced(function* (
                 resourceType: node.resource.Type,
                 props: news,
                 attr,
-                bindings: node.bindings,
+                bindings: excludeDeletedBindings(node.bindings),
                 providerVersion: node.provider.version ?? 0,
                 downstream: node.downstream,
                 removalPolicy: node.resource.RemovalPolicy,
@@ -314,7 +314,7 @@ const expandAndPivot = Effect.fnUntraced(function* (
                     props: news,
                     attr: node.state.attr,
                     providerVersion: node.provider.version ?? 0,
-                    bindings: node.bindings,
+                    bindings: excludeDeletedBindings(node.bindings),
                     downstream: node.downstream,
                     old:
                       node.state.status === "updating"
@@ -360,11 +360,7 @@ const expandAndPivot = Effect.fnUntraced(function* (
                   resourceType: node.resource.Type,
                   props: news,
                   attr,
-                  bindings: node.bindings.map(({ namespace, sid, data }) => ({
-                    namespace,
-                    sid,
-                    data,
-                  })),
+                  bindings: excludeDeletedBindings(node.bindings),
                   providerVersion: node.provider.version ?? 0,
                   downstream: node.downstream,
                   removalPolicy: node.resource.RemovalPolicy,
@@ -388,7 +384,7 @@ const expandAndPivot = Effect.fnUntraced(function* (
                   instanceId,
                   resourceType: node.resource.Type,
                   props: node.props,
-                  bindings: node.bindings,
+                  bindings: excludeDeletedBindings(node.bindings),
                   attr: node.state.attr,
                   providerVersion: node.provider.version ?? 0,
                   deleteFirst: node.deleteFirst,
@@ -421,7 +417,7 @@ const expandAndPivot = Effect.fnUntraced(function* (
                   props: news,
                   attr,
                   providerVersion: node.provider.version ?? 0,
-                  bindings: node.bindings as ResourceBinding[],
+                  bindings: excludeDeletedBindings(node.bindings),
                   downstream: node.downstream,
                   old: state.old,
                   deleteFirst: node.deleteFirst,
@@ -621,7 +617,7 @@ const collectGarbage = Effect.fnUntraced(function* (
               attr,
               downstream,
               providerVersion: provider.version ?? 0,
-              bindings: node.bindings,
+              bindings: excludeDeletedBindings(node.bindings),
               removalPolicy: node.resource.RemovalPolicy,
             });
           }
@@ -655,7 +651,7 @@ const collectGarbage = Effect.fnUntraced(function* (
               attr: node.attr,
               providerVersion: provider.version ?? 0,
               downstream: node.downstream,
-              bindings: node.bindings,
+              bindings: excludeDeletedBindings(node.bindings),
               removalPolicy: node.removalPolicy,
             });
             yield* report("replaced");
@@ -672,3 +668,10 @@ const collectGarbage = Effect.fnUntraced(function* (
     { concurrency: "unbounded" },
   );
 });
+
+const excludeDeletedBindings = (
+  bindings: ReadonlyArray<ResourceBinding & { action?: string }>,
+): ResourceBinding[] =>
+  bindings.flatMap(({ action, namespace, sid, data }) =>
+    action === "delete" ? [] : [{ namespace, sid, data }],
+  );

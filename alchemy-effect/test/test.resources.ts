@@ -109,6 +109,41 @@ export const functionProvider = Function.provider.succeed({
   delete: Effect.fn(function* ({ output }) {}),
 });
 
+export type BindingTargetProps = {
+  name?: string;
+};
+
+export interface BindingTarget extends Resource<
+  "Test.BindingTarget",
+  BindingTargetProps,
+  {
+    name: string;
+    env: Record<string, string>;
+  },
+  {
+    env?: Record<string, string>;
+  }
+> {}
+
+export const BindingTarget = Resource<BindingTarget>("Test.BindingTarget");
+
+export const bindingTargetProvider = BindingTarget.provider.succeed({
+  diff: Effect.fn(function* ({ id, news, output }) {}),
+  create: Effect.fn(function* ({ id, news = {}, bindings }) {
+    return {
+      name: news.name ?? id,
+      env: Object.assign({}, ...bindings.map((binding) => binding.env ?? {})),
+    };
+  }),
+  update: Effect.fn(function* ({ id, news = {}, bindings }) {
+    return {
+      name: news.name ?? id,
+      env: Object.assign({}, ...bindings.map((binding) => binding.env ?? {})),
+    };
+  }),
+  delete: Effect.fn(function* ({ output }) {}),
+});
+
 // TestResource
 
 export type TestResourceProps = {
@@ -325,6 +360,7 @@ export const TestLayers = Layer.mergeAll(
   bucketProvider,
   queueProvider,
   functionProvider,
+  bindingTargetProvider,
   testResourceProvider,
   staticStablesResourceProvider,
 );

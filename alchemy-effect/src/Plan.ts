@@ -350,22 +350,22 @@ export const make = <A>(
       (yield* Effect.all(
         resources.map(
           Effect.fn(function* (resource) {
+            const provider = yield* Provider(resource.Type);
             const id = resource.LogicalId;
             const fqn = resource.FQN;
             const news = yield* resolveInput(resource.Props);
+            const downstream = newDownstreamDependencies[fqn] ?? [];
+
             const newBindings: ResourceBinding[] = yield* resolveInput(
               stack.bindings[id] ?? [],
             );
-
             const oldState = yield* state.get({
               stack: stackName,
               stage: stage,
               fqn,
             });
             const oldBindings = oldState?.bindings ?? [];
-            const provider = yield* Provider(resource.Type);
-
-            const downstream = newDownstreamDependencies[fqn] ?? [];
+            const bindingDiffs = diffBindings(oldBindings, newBindings);
 
             const Node = <T extends Apply>(
               node: Omit<
@@ -377,7 +377,7 @@ export const make = <A>(
                 ...node,
                 provider,
                 resource,
-                bindings: diffBindings(oldBindings, newBindings),
+                bindings: bindingDiffs,
                 downstream,
               }) as any as T;
 
@@ -431,9 +431,11 @@ export const make = <A>(
                 (diff) =>
                   diff ??
                   ({
-                    action: havePropsChanged(oldProps, news)
-                      ? "update"
-                      : "noop",
+                    action:
+                      havePropsChanged(oldProps, news) ||
+                      bindingDiffs.some((b) => b.action !== "noop")
+                        ? "update"
+                        : "noop",
                   } as UpdateDiff | NoopDiff),
               ),
             );

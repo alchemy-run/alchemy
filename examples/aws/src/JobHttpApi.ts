@@ -13,8 +13,8 @@ import { JobStorage } from "./JobStorage.ts";
 
 export const getJob = HttpApiEndpoint.get("getJob", "/", {
   success: Job,
-  params: {
-    jobId: JobId,
+  query: {
+    jobId: JobId.pipe(Schema.optional),
   },
 });
 
@@ -35,7 +35,10 @@ const JobApiHandlers = HttpApiBuilder.group(JobApi, "Jobs", (handlers) =>
       "getJob",
       Effect.fn(function* (req) {
         const jobService = yield* JobStorage;
-        const job = yield* jobService.getJob(req.params.jobId);
+        if (!req.query.jobId) {
+          return HttpServerResponse.text("Job ID is required", { status: 400 });
+        }
+        const job = yield* jobService.getJob(req.query.jobId);
         if (!job) {
           return HttpServerResponse.text("Job not found", { status: 404 });
         }

@@ -73,7 +73,7 @@ export type WorkerProps = {
   limits?: Worker.Limits;
   placement?: Worker.Placement;
   env?: Record<string, any>;
-  exports?: Record<string, any>;
+  exports?: string[];
 };
 
 export interface WorkerExecutionContext extends ServerlessExecutionContext {
@@ -302,11 +302,10 @@ export const WorkerProvider = () =>
 
       const prepareBundle = Effect.fnUntraced(function* (
         id: string,
-        main: string,
-        handler = "default",
+        props: WorkerProps,
       ) {
         const outfile = path.join(dotAlchemy, "out", `${id}.js`);
-        const realMain = yield* fs.realPath(main);
+        const realMain = yield* fs.realPath(props.main);
         const tempRoot = path.join(
           path.dirname(realMain),
           path.basename(dotAlchemy),
@@ -326,12 +325,22 @@ export const WorkerProvider = () =>
           importPath = `./${importPath}`;
         }
         importPath = importPath.replaceAll("\\", "/");
-        const script = `import { ${handler} as exported } from "${importPath}";
+        const script = `
 import * as Effect from "effect/Effect";
-const handler = Effect.isEffect(exported)
-  ? await Effect.runPromise(exported)
-  : exported;
-export default handler;
+import workerEffect from "${importPath}";
+
+let workerPromise;
+// don't initialize the workerEffect during module init because Cloudflare does not allow I/O during module init
+// we cache it synchronously (??=) to guarnatee only one initialization ever happens
+const worker = () => (workerPromise ??= Effect.runPromise(workerEffect))
+
+export default new Proxy({}, {
+  get: (_, prop) => async (...args) => 
+    (await worker()).exports.default[prop](...args),
+});
+
+// export class proxy stubs that
+${props.exports?.map((id) => `class ${id} {}`).join("\n") ?? ""}
 `;
         yield* fs.writeFileString(tempEntry, script);
         return yield* Effect.gen(function* () {
@@ -394,7 +403,7 @@ export default handler;
         const name = yield* createWorkerName(id, news.name);
         const [assets, bundle, metadata] = yield* Effect.all([
           prepareAssets(news.assets),
-          prepareBundle(id, news.main),
+          prepareBundle(id, news),
           prepareMetadata(news),
         ]);
         metadata.bindings = bindings.flatMap((binding) => binding.bindings);
@@ -463,7 +472,7 @@ export default handler;
           }
           const [assets, bundle] = yield* Effect.all([
             prepareAssets(news.assets),
-            prepareBundle(id, news.main),
+            prepareBundle(id, news),
           ]);
           if (
             assets?.hash !== output.hash?.assets ||

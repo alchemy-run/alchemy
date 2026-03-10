@@ -25,12 +25,12 @@ export class ListObjectsV2 extends Binding.Service<
 export const ListObjectsV2Live = Layer.effect(
   ListObjectsV2,
   Effect.gen(function* () {
-    const Policy = yield* ListObjectsV2Policy;
+    const bind = yield* ListObjectsV2Policy;
     const listObjectsV2 = yield* S3.listObjectsV2;
 
     return Effect.fn(function* (bucket: Bucket) {
       const BucketName = yield* bucket.bucketName;
-      yield* Policy(bucket);
+      yield* bind(bucket);
       return Effect.fn(function* (request?: ListObjectsV2Request) {
         return yield* listObjectsV2({
           ...request,

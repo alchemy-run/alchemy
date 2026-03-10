@@ -20,7 +20,7 @@ import {
 } from "../../Host.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import { Resource } from "../../Resource.ts";
+import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import { createInternalTags, createTagsList, hasTags } from "../../Tags.ts";
@@ -53,6 +53,7 @@ export interface FunctionProps {
   // TODO(sam): use a Layer instead so we can manage Effect platform?
   runtime?: "nodejs22.x" | "nodejs24.x";
   build?: Partial<BundleOptions>;
+  uploadSourceMap?: boolean;
   env?: Record<string, any>;
   exports?: string[];
 }
@@ -121,6 +122,7 @@ export const Function = Host<
       )) as any as ServerlessExecutionContext["listen"],
     exports: {
       // construct an Effect that produces the Function's entrypoint
+      // Effect<(event, context) => Promise<any>>
       handler: Effect.map(
         Effect.all(listeners, {
           concurrency: "unbounded",
@@ -132,6 +134,7 @@ export const Function = Host<
               if (Effect.isEffect(eff)) {
                 return eff.pipe(
                   Effect.provideService(HandlerContext, context),
+                  Effect.tap(Effect.logDebug),
                   Effect.runPromise,
                 );
               }
@@ -176,6 +179,15 @@ export const FunctionProvider = () =>
       const createPolicyName = (id: string) =>
         createPhysicalName({ id, maxLength: 128 });
 
+      const hashBundle = Effect.fnUntraced(function* (
+        code: Uint8Array<ArrayBufferLike>,
+        sourceMap?: Uint8Array<ArrayBufferLike>,
+      ) {
+        const codeHash = yield* sha256(code);
+        const sourceMapHash = sourceMap ? yield* sha256(sourceMap) : "";
+        return yield* sha256(JSON.stringify({ codeHash, sourceMapHash }));
+      });
+
       const createNames = (id: string, functionName: string | undefined) =>
         Effect.gen(function* () {
           const roleName = yield* createRoleName(id);
@@ -201,17 +213,23 @@ export const FunctionProvider = () =>
         policyName: string;
         functionArn: string;
         functionName: string;
-        bindings: Function["Binding"][];
+        bindings: ResourceBinding<Function["Binding"]>[];
       }) {
-        const env = bindings
-          .map((binding) => binding?.env)
+        const activeBindings = bindings.filter(
+          (binding: ResourceBinding<Function["Binding"]> & { action?: string }) =>
+            binding.action !== "delete",
+        );
+        const env = activeBindings
+          .map((binding) => binding?.data?.env)
           .reduce((acc, env) => ({ ...acc, ...env }), {});
-        const policyStatements = bindings.flatMap(
+        const policyStatements = activeBindings.flatMap(
           (binding) =>
-            binding?.policyStatements?.map((stmt: IAM.PolicyStatement) => ({
-              ...stmt,
-              Sid: stmt.Sid?.replace(/[^A-Za-z0-9]+/gi, ""),
-            })) ?? [],
+            binding?.data?.policyStatements?.map(
+              (stmt: IAM.PolicyStatement) => ({
+                ...stmt,
+                Sid: stmt.Sid?.replace(/[^A-Za-z0-9]+/gi, ""),
+              }),
+            ) ?? [],
         );
 
         if (policyStatements.length > 0) {
@@ -304,10 +322,9 @@ export const FunctionProvider = () =>
         );
         const tempRoot = path.join(dotAlchemy, "tmp");
         yield* fs.makeDirectory(tempRoot, { recursive: true });
-        const tempDir = yield* fs.makeTempDirectory({
-          directory: tempRoot,
-          prefix: `${stack.name}-${stage}-${id}-`,
-        });
+        const tempDir = path.join(tempRoot, `${stack.name}-${stage}-${id}`);
+        yield* fs.remove(tempDir, { recursive: true }).pipe(Effect.ignore);
+        yield* fs.makeDirectory(tempDir, { recursive: true });
 
         const [realTempDir, realMain] = yield* Effect.all([
           fs.realPath(tempDir),
@@ -321,35 +338,65 @@ export const FunctionProvider = () =>
         file = file.replaceAll("\\", "/");
         yield* fs.writeFileString(
           tempEntry,
-          `import { ${handler} as handler } from "${file}";
+          `
+import { NodeServices } from "@effect/platform-node";
 import { Stack } from "alchemy-effect/Stack";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as Credentials from "distilled-aws/Credentials";
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as Region from "distilled-aws/Region";
 
-export default await handler.pipe(
-  Effect.provideServiceEffect(
-    Stack,
-    Effect.all([
-      Config.string("ALCHEMY_STACK_NAME").asEffect(),
-      Config.string("ALCHEMY_STAGE").asEffect(),
-    ]).pipe(
-      Effect.map(([name, stage]) => ({
-        name,
-        stage,
-        bindings: {},
-        resources: {},
-      }))
+import { ${handler} as handler } from "${file}";
+
+const platform = Layer.mergeAll(
+  NodeServices.layer,
+  FetchHttpClient.layer,
+  // TODO(sam): wire this up to telemetry more directly
+  Logger.layer([Logger.consolePretty()]),
+);
+
+const handlerEffect = handler.pipe(
+  Effect.flatMap(func => func.ExecutionContext.exports.handler),
+  Effect.provide(
+    Layer.effect(
+      Stack,
+      Effect.all([
+        Config.string("ALCHEMY_STACK_NAME").asEffect(),
+        Config.string("ALCHEMY_STAGE").asEffect()
+      ]).pipe(
+        Effect.map(([name, stage]) => ({
+          name,
+          stage,
+          bindings: {},
+          resources: {}
+        }))
+      )
+    ).pipe(
+      Layer.provideMerge(Credentials.fromEnv()),
+      Layer.provideMerge(Region.fromEnv()),
+      Layer.provideMerge(platform),
+      Layer.provideMerge(
+        Layer.succeed(
+          ConfigProvider.ConfigProvider,
+          ConfigProvider.fromEnv()
+        )
+      ),
     )
   ),
-  Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromEnv()),
-  Effect.scoped,
-  Effect.runPromise
+  Effect.scoped
 );
+
+export default await Effect.runPromise(handlerEffect)
 `,
         );
 
         return yield* Effect.gen(function* () {
+          const sourcemap = props.build?.sourcemap ?? true;
+          const uploadSourceMap = props.uploadSourceMap ?? true;
           yield* bundler.build({
             ...props.build,
             entry: tempEntry,
@@ -357,9 +404,9 @@ export default await handler.pipe(
             format: "esm",
             platform: "node",
             target: "node22",
-            sourcemap: true,
-            treeshake: true,
-            minify: true,
+            sourcemap,
+            treeshake: props.build?.treeshake ?? true,
+            minify: props.build?.minify ?? true,
             external: [
               "@aws-sdk/*",
               "@smithy/*",
@@ -367,9 +414,33 @@ export default await handler.pipe(
             ],
           });
           const code = yield* fs.readFile(outfile).pipe(Effect.orDie);
-          return {
+          const sourceMap =
+            uploadSourceMap && (sourcemap === true || sourcemap === "external")
+              ? yield* fs
+                  .exists(`${outfile}.map`)
+                  .pipe(
+                    Effect.flatMap((exists) =>
+                      exists
+                        ? fs.readFile(`${outfile}.map`).pipe(Effect.orDie)
+                        : Effect.succeed(undefined),
+                    ),
+                  )
+              : undefined;
+          const archive = yield* zipCode(
             code,
-            hash: yield* sha256(code),
+            sourceMap
+              ? [
+                  {
+                    path: `${path.basename(outfile)}.map`,
+                    content: sourceMap,
+                  },
+                ]
+              : undefined,
+          );
+          return {
+            archive,
+            code,
+            hash: yield* hashBundle(code, sourceMap),
           };
         }).pipe(
           Effect.ensuring(
@@ -378,11 +449,38 @@ export default await handler.pipe(
         );
       });
 
+      const withNodeSourceMaps = (
+        env: Record<string, string> | undefined,
+        props: FunctionProps,
+      ) => {
+        const sourcemap = props.build?.sourcemap ?? true;
+        const uploadSourceMap = props.uploadSourceMap ?? true;
+        const shouldEnableSourceMaps =
+          sourcemap === "inline" ||
+          (uploadSourceMap && (sourcemap === true || sourcemap === "external"));
+
+        if (!shouldEnableSourceMaps) {
+          return env;
+        }
+
+        const current = env?.NODE_OPTIONS;
+        if (current?.split(/\s+/).includes("--enable-source-maps")) {
+          return env;
+        }
+
+        return {
+          ...env,
+          NODE_OPTIONS: current
+            ? `${current} --enable-source-maps`
+            : "--enable-source-maps",
+        };
+      };
+
       const createOrUpdateFunction = Effect.fnUntraced(function* ({
         id,
         news,
         roleArn,
-        code,
+        archive,
         hash,
         env,
         functionName,
@@ -392,7 +490,7 @@ export default await handler.pipe(
         id: string;
         news: FunctionProps;
         roleArn: string;
-        code: Uint8Array<ArrayBufferLike>;
+        archive: Uint8Array<ArrayBufferLike>;
         hash: string;
         env: Record<string, string> | undefined;
         functionName: string;
@@ -426,7 +524,7 @@ export default await handler.pipe(
 
         const codeLocation = yield* Effect.gen(function* () {
           if (assets) {
-            const key = yield* assets.uploadAsset(hash, yield* zipCode(code));
+            const key = yield* assets.uploadAsset(hash, archive);
             yield* Effect.logDebug(
               `Using S3 for code: s3://${assets.bucketName}/${key}`,
             );
@@ -435,10 +533,10 @@ export default await handler.pipe(
               S3Key: key,
             } as const;
           } else {
-            const zipped = yield* zipCode(code);
-            return { ZipFile: zipped } as const;
+            return { ZipFile: archive } as const;
           }
         });
+        const runtimeEnv = withNodeSourceMaps(env, news);
 
         const createFunctionRequest: CreateFunctionRequest = {
           FunctionName: functionName,
@@ -446,10 +544,10 @@ export default await handler.pipe(
           Role: roleArn,
           Code: codeLocation,
           Runtime: news.runtime ?? "nodejs22.x",
-          Environment: env
+          Environment: runtimeEnv
             ? {
                 Variables: {
-                  ...env,
+                  ...runtimeEnv,
                   ...alchemyEnv,
                 },
               }
@@ -671,6 +769,8 @@ export default await handler.pipe(
             (yield* bundleCode(id, {
               main: news.main,
               handler: news.handler,
+              build: news.build,
+              uploadSourceMap: news.uploadSourceMap,
             })).hash
           ) {
             // code changed
@@ -714,12 +814,13 @@ export default await handler.pipe(
 
           // mock code
           const code = new TextEncoder().encode("export default () => {}");
-          const hash = yield* sha256(code);
+          const archive = yield* zipCode(code);
+          const hash = yield* hashBundle(code);
           yield* createOrUpdateFunction({
             id,
             news,
             roleArn: role.Role.Arn,
-            code,
+            archive,
             hash,
             functionName,
             env: alchemyEnv,
@@ -759,13 +860,13 @@ export default await handler.pipe(
             bindings,
           });
 
-          const { code, hash } = yield* bundleCode(id, news);
+          const { archive, code, hash } = yield* bundleCode(id, news);
 
           yield* createOrUpdateFunction({
             id,
             news,
             roleArn,
-            code,
+            archive,
             hash,
             env: {
               ...env,
@@ -813,13 +914,13 @@ export default await handler.pipe(
             bindings,
           });
 
-          const { code, hash } = yield* bundleCode(id, news);
+          const { archive, code, hash } = yield* bundleCode(id, news);
 
           yield* createOrUpdateFunction({
             id,
             news,
             roleArn: output.roleArn,
-            code,
+            archive,
             hash,
             env: {
               ...env,

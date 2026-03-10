@@ -1,4 +1,5 @@
 import * as AWS from "alchemy-effect/AWS";
+import * as Output from "alchemy-effect/Output";
 import * as Stack from "alchemy-effect/Stack";
 import { Stage } from "alchemy-effect/Stage";
 import * as Effect from "effect/Effect";
@@ -29,7 +30,7 @@ const stack = Effect.gen(function* () {
   const func = yield* JobFunction;
   // const worker = yield* JobWorker;
   return {
-    url: func.functionUrl,
+    url: Output.interpolate`${func.functionUrl}?jobId=foo`,
     // cloudflareUrl: worker.url,
   };
 }).pipe(

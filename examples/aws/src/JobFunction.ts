@@ -30,10 +30,9 @@ import { JobStorage, JobStorageLive } from "./JobStorage.ts";
 // alchemy deploy --dry-run --adopt JobsQueue,JobsDatabase
 
 const JobFunction = Effect.gen(function* () {
-  console.log("JobFunction");
   const stack = yield* Stack;
 
-  const { bucket, getJob } = yield* JobStorage;
+  const { bucket, ...jobStorage } = yield* JobStorage;
 
   const queue = yield* AWS.SQS.Queue("JobsQueue").pipe(
     RemovalPolicy.retain(stack.stage === "prod"),
@@ -51,7 +50,7 @@ const JobFunction = Effect.gen(function* () {
   yield* AWS.S3.notifications(bucket).subscribe((stream) =>
     stream.pipe(
       Stream.flatMap((item) =>
-        Stream.fromEffect(getJob(item.key).pipe(Effect.orDie)),
+        Stream.fromEffect(jobStorage.getJob(item.key).pipe(Effect.orDie)),
       ),
       Stream.map((msg) => JSON.stringify(msg)),
       Stream.tapSink(sink),
@@ -59,25 +58,31 @@ const JobFunction = Effect.gen(function* () {
     ),
   );
 
+  // yield* AWS.S3.ListObjectsV2.bind(bucket);
+
   // return the Function properties for this stage
   return {
     main: import.meta.path,
     url: true,
-    build: {
-      external: ["cloudflare:workers"],
-    },
   } as const satisfies AWS.Lambda.FunctionProps;
 }).pipe(
   Effect.provide(
     Layer.mergeAll(
+      // Services go here
       JobStorageLive,
       AWS.Lambda.BucketEventSource,
       AWS.Lambda.HttpServer,
       AWS.SQS.QueueSinkLive,
     ).pipe(
-      Layer.provide(AWS.S3.GetObjectLive),
-      Layer.provide(AWS.S3.PutObjectLive),
-      Layer.provide(AWS.SQS.SendMessageBatchLive),
+      Layer.provideMerge(
+        Layer.mergeAll(
+          // Policies go here
+          AWS.S3.GetObjectLive,
+          // AWS.S3.ListObjectsV2Live,
+          AWS.S3.PutObjectLive,
+          AWS.SQS.SendMessageBatchLive,
+        ),
+      ),
     ),
   ),
   AWS.Lambda.Function("JobFunction"),
