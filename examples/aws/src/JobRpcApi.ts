@@ -13,9 +13,19 @@ export class JobNotFound extends Schema.TaggedClass<JobNotFound>()(
   { jobId: JobId },
 ) {}
 
+export class GetJobFailed extends Schema.TaggedClass<GetJobFailed>()(
+  "GetJobFailed",
+  { message: Schema.String },
+) {}
+
+export class PutJobFailed extends Schema.TaggedClass<PutJobFailed>()(
+  "PutJobFailed",
+  { message: Schema.String },
+) {}
+
 const getJob = Rpc.make("getJob", {
   success: Job,
-  error: JobNotFound,
+  error: Schema.Union([JobNotFound, GetJobFailed]),
   payload: {
     jobId: JobId,
   },
@@ -23,6 +33,7 @@ const getJob = Rpc.make("getJob", {
 
 const createJob = Rpc.make("createJob", {
   success: JobId,
+  error: PutJobFailed,
   payload: {
     content: Schema.String,
   },
@@ -36,22 +47,32 @@ export const JobRpcsLive = JobRpcs.toLayer(
 
     return {
       getJob: ({ jobId }) =>
-        jobService
-          .getJob(jobId)
-          .pipe(
-            Effect.flatMap((job) =>
-              job
-                ? Effect.succeed(job)
-                : Effect.fail(new JobNotFound({ jobId })),
-            ),
+        jobService.getJob(jobId).pipe(
+          Effect.mapError(
+            (error) =>
+              new GetJobFailed({
+                message: error.message,
+              }),
           ),
+          Effect.flatMap((job) =>
+            job ? Effect.succeed(job) : Effect.fail(new JobNotFound({ jobId })),
+          ),
+        ),
       createJob: ({ content }) =>
         jobService
           .putJob({
             id: "TODO",
             content,
           })
-          .pipe(Effect.map((job) => job.id)),
+          .pipe(
+            Effect.mapError(
+              (error) =>
+                new PutJobFailed({
+                  message: error.message,
+                }),
+            ),
+            Effect.map((job) => job.id),
+          ),
     };
   }),
 );

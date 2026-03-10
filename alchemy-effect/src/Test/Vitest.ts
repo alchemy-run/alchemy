@@ -178,12 +178,16 @@ export function test(
     Effect.provideService(ExecutionContext, {
       type: "Test",
       id: "Test",
+      env: {},
       exports: {},
       listen: () => {
         return Effect.void;
       },
       get: <T>(_key: string) => {
         return Effect.succeed<T>(undefined as T);
+      },
+      set: (id: string) => {
+        return Effect.succeed(id);
       },
     }),
     Effect.provideService(

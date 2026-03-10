@@ -8,6 +8,9 @@ import type {
 } from "aws-lambda";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type { Scope } from "effect/Scope";
+import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { describe, expect, it } from "vitest";
 import { TestHttpEffect } from "./HttpServer.fixture";
 
@@ -116,15 +119,41 @@ describe("AWS.Lambda.HttpServer", () => {
       "alchemy",
     );
   });
+
+  it("uses shared Http error handling for defects", async () => {
+    const result = asStructuredResult(
+      await invoke(
+        makeEvent({
+          rawPath: "/boom",
+          requestContext: {
+            http: {
+              method: "GET",
+              path: "/boom",
+            },
+          } as LambdaFunctionURLEvent["requestContext"],
+        }),
+        Effect.fail({ message: "Boom" } as any).pipe(Effect.orDie),
+      ),
+    );
+
+    expect(result.statusCode).toBe(500);
+    expect(result.headers?.["content-type"]).toContain("text/plain");
+    expect(result.body).toBe("Internal Server Error");
+  });
 });
 
 const invoke = async (
   event: LambdaFunctionURLEvent,
+  handler: Effect.Effect<
+    HttpServerResponse.HttpServerResponse,
+    any,
+    HttpServerRequest.HttpServerRequest | Scope
+  > = TestHttpEffect,
 ): Promise<LambdaFunctionURLResult> => {
   const { listeners, runtime } = makeRuntime();
 
   await Effect.runPromise(
-    Http.serve(TestHttpEffect).pipe(
+    Http.serve(handler).pipe(
       Effect.provide(
         LambdaHttpServer.pipe(
           Layer.provide(Layer.succeed(LambdaFunction.Runtime, runtime)),

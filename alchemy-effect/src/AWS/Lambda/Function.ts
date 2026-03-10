@@ -216,8 +216,9 @@ export const FunctionProvider = () =>
         bindings: ResourceBinding<Function["Binding"]>[];
       }) {
         const activeBindings = bindings.filter(
-          (binding: ResourceBinding<Function["Binding"]> & { action?: string }) =>
-            binding.action !== "delete",
+          (
+            binding: ResourceBinding<Function["Binding"]> & { action?: string },
+          ) => binding.action !== "delete",
         );
         const env = activeBindings
           .map((binding) => binding?.data?.env)

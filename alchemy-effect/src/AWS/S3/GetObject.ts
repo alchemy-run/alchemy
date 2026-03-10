@@ -50,10 +50,18 @@ export const GetObjectPolicyLive = GetObjectPolicy.layer.succeed(
       yield* host.bind`Allow(${host}, AWS.S3.GetObject(${bucket}))`({
         policyStatements: [
           {
-            Sid: "GetObject",
             Effect: "Allow",
             Action: ["s3:GetObject", "s3:GetObjectVersion"],
             Resource: [Output.interpolate`${bucket.bucketArn}/*`],
+          },
+          {
+            Effect: "Allow",
+            Action: [
+              // ListBucket is required to check if the object exists (otherwise a non-existent key returns 403)
+              // https://repost.aws/articles/ARe3OTZ3SCTWWqGtiJ6aHn8Q/why-does-s-3-return-403-instead-of-404-when-the-object-doesnt-exist
+              "s3:ListBucket",
+            ],
+            Resource: [bucket.bucketArn],
           },
         ],
       });

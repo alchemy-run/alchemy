@@ -75,7 +75,7 @@ export const NamespaceProvider = () =>
           return {
             title: namespace.title,
             namespaceId: namespace.id,
-            supportsUrlEncoding: namespace.supportsUrlEncoding,
+            supportsUrlEncoding: namespace.supportsUrlEncoding ?? undefined,
             accountId,
           };
         }),
@@ -89,7 +89,7 @@ export const NamespaceProvider = () =>
           return {
             title: namespace.title,
             namespaceId: namespace.id,
-            supportsUrlEncoding: namespace.supportsUrlEncoding,
+            supportsUrlEncoding: namespace.supportsUrlEncoding ?? undefined,
             accountId,
           };
         }),
@@ -108,7 +108,7 @@ export const NamespaceProvider = () =>
               Effect.map((namespace) => ({
                 title: namespace.title,
                 namespaceId: namespace.id,
-                supportsUrlEncoding: namespace.supportsUrlEncoding,
+                supportsUrlEncoding: namespace.supportsUrlEncoding ?? undefined,
                 accountId: output.accountId,
               })),
               Effect.catchTag("NamespaceNotFound", () =>
@@ -123,7 +123,7 @@ export const NamespaceProvider = () =>
             return {
               title: match.title,
               namespaceId: match.id,
-              supportsUrlEncoding: match.supportsUrlEncoding,
+              supportsUrlEncoding: match.supportsUrlEncoding ?? undefined,
               accountId,
             };
           }

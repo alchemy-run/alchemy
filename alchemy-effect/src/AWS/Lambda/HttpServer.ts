@@ -4,6 +4,7 @@ import type {
 } from "aws-lambda";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type { Scope } from "effect/Scope";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as Http from "../../Http.ts";
@@ -17,24 +18,31 @@ export const HttpServer = Layer.effect(
   Http.HttpServer,
   Effect.gen(function* () {
     const func = yield* Function.Runtime;
-    return Http.HttpServer.of({
-      // @ts-expect-error
-      serve: Effect.fn(function* (handler) {
-        yield* func.listen(
-          Effect.fn(function* (event) {
-            if (isFunctionURLEvent(event)) {
-              const request = HttpServerRequest.fromWeb(toWebRequest(event)).modify({
-                remoteAddress: event.requestContext.http.sourceIp,
-              });
-              const response = yield* handler.pipe(
-                Effect.provideService(HttpServerRequest.HttpServerRequest, request),
-                Effect.orDie,
-              );
-              return yield* toLambdaFunctionURLResult(response);
-            }
-          }),
-        );
-      }),
+    return Http.server({
+      serve: (handler) =>
+        func.listen((event) => {
+          if (isFunctionURLEvent(event)) {
+            const request = HttpServerRequest.fromWeb(
+              toWebRequest(event),
+            ).modify({
+              remoteAddress: event.requestContext.http.sourceIp,
+            });
+            return handler.pipe(
+              Effect.provideService(
+                HttpServerRequest.HttpServerRequest,
+                request,
+              ),
+              Effect.flatMap(toLambdaFunctionURLResult),
+            ) as Effect.Effect<
+              LambdaFunctionURLResult,
+              never,
+              Exclude<
+                Effect.Services<typeof handler>,
+                HttpServerRequest.HttpServerRequest | Scope
+              >
+            >;
+          }
+        }),
     });
   }),
 );
@@ -101,6 +109,15 @@ const toLambdaFunctionURLResult = (
         : isTextual
           ? new TextDecoder().decode(bytes)
           : Buffer.from(bytes).toString("base64");
+
+    console.log({
+      response,
+      statusCode: webResponse.status,
+      headers: Object.fromEntries(headers.entries()),
+      body,
+      cookies: cookies.length > 0 ? cookies : undefined,
+      isBase64Encoded: body !== undefined && !isTextual ? true : undefined,
+    });
 
     return {
       statusCode: webResponse.status,
