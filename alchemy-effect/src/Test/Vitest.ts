@@ -22,6 +22,11 @@ import * as AWS from "../AWS/index.ts";
 import { apply } from "../Apply.ts";
 import * as Credentials from "../AWS/Credentials.ts";
 import * as Region from "../AWS/Region.ts";
+import {
+  buildNamespaceTree,
+  flattenTree,
+  type DerivedAction,
+} from "../Cli/NamespaceTree.ts";
 import type { Cli } from "../Cli/index.ts";
 import { DotAlchemy, dotAlchemy } from "../Config.ts";
 import { ExecutionContext } from "../Host.ts";
@@ -304,10 +309,81 @@ export namespace test {
         // @ts-expect-error
         Stack.make(stack.name, Layer.effectServices(Effect.services<never>())),
         Effect.flatMap(Plan.make),
+        Effect.tap((plan) => Effect.logInfo(formatPlan(plan))),
         Effect.flatMap(apply),
       ),
     );
 }
+
+type AnyAction = Plan.CRUD["action"] | Plan.BindingAction | DerivedAction;
+
+const formatPlan = (plan: Plan.Plan) => {
+  const items = [
+    ...Object.values(plan.resources),
+    ...Object.values(plan.deletions),
+  ] as Plan.CRUD[];
+
+  if (items.length === 0) {
+    return "Plan: no changes planned";
+  }
+
+  const counts = items.reduce(
+    (acc, item) => {
+      acc[item.action] += 1;
+      return acc;
+    },
+    {
+      create: 0,
+      update: 0,
+      delete: 0,
+      noop: 0,
+      replace: 0,
+    },
+  );
+
+  const summary = (["create", "update", "delete", "replace"] as const)
+    .filter((action) => counts[action] > 0)
+    .map((action) => `${counts[action]} to ${action}`)
+    .join(" | ");
+
+  const flatItems = flattenTree(buildNamespaceTree(items));
+  const lines = [`Plan: ${summary}`];
+
+  for (const item of flatItems) {
+    const indent = "  ".repeat(item.depth);
+    const icon = getActionIcon(item.action);
+
+    if (item.type === "namespace") {
+      lines.push(`${indent}${icon} ${item.id}`);
+      continue;
+    }
+
+    if (item.type === "binding") {
+      lines.push(`${indent}${icon} ${item.bindingSid}`);
+      continue;
+    }
+
+    const bindingSuffix =
+      item.bindingCount && item.bindingCount > 0
+        ? ` (${item.bindingCount} bindings)`
+        : "";
+    lines.push(
+      `${indent}${icon} ${item.id} (${item.resourceType})${bindingSuffix}`,
+    );
+  }
+
+  return lines.join("\n");
+};
+
+const getActionIcon = (action: AnyAction): string =>
+  ({
+    create: "+",
+    update: "~",
+    delete: "-",
+    noop: "•",
+    replace: "!",
+    mixed: "*",
+  })[action] ?? "?";
 
 export function skip(
   name: string,
