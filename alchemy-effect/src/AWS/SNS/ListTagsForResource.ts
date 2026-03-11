@@ -52,15 +52,17 @@ export const ListTagsForResourcePolicyLive =
   ListTagsForResourcePolicy.layer.succeed(
     Effect.fn(function* (host, topic) {
       if (isFunction(host)) {
-        yield* host.bind`Allow(${host}, AWS.SNS.ListTagsForResource(${topic}))`({
-          policyStatements: [
-            {
-              Effect: "Allow",
-              Action: ["sns:ListTagsForResource"],
-              Resource: [topic.topicArn],
-            },
-          ],
-        });
+        yield* host.bind`Allow(${host}, AWS.SNS.ListTagsForResource(${topic}))`(
+          {
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["sns:ListTagsForResource"],
+                Resource: [topic.topicArn],
+              },
+            ],
+          },
+        );
       } else {
         return yield* Effect.die(
           `ListTagsForResourcePolicy does not support runtime '${host.Type}'`,

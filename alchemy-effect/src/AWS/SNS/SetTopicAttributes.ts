@@ -17,7 +17,10 @@ export class SetTopicAttributes extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SetTopicAttributesRequest,
-    ) => Effect.Effect<sns.SetTopicAttributesResponse, sns.SetTopicAttributesError>
+    ) => Effect.Effect<
+      sns.SetTopicAttributesResponse,
+      sns.SetTopicAttributesError
+    >
   >
 >()("AWS.SNS.SetTopicAttributes") {}
 

@@ -11,7 +11,10 @@ export class ListSubscriptions extends Binding.Service<
   () => Effect.Effect<
     (
       request?: ListSubscriptionsRequest,
-    ) => Effect.Effect<sns.ListSubscriptionsResponse, sns.ListSubscriptionsError>
+    ) => Effect.Effect<
+      sns.ListSubscriptionsResponse,
+      sns.ListSubscriptionsError
+    >
   >
 >()("AWS.SNS.ListSubscriptions") {}
 
@@ -35,22 +38,23 @@ export class ListSubscriptionsPolicy extends Binding.Policy<
   () => Effect.Effect<void>
 >()("AWS.SNS.ListSubscriptions") {}
 
-export const ListSubscriptionsPolicyLive = ListSubscriptionsPolicy.layer.succeed(
-  Effect.fn(function* (host) {
-    if (isFunction(host)) {
-      yield* host.bind`Allow(${host}, AWS.SNS.ListSubscriptions())`({
-        policyStatements: [
-          {
-            Effect: "Allow",
-            Action: ["sns:ListSubscriptions"],
-            Resource: ["*"],
-          },
-        ],
-      });
-    } else {
-      return yield* Effect.die(
-        `ListSubscriptionsPolicy does not support runtime '${host.Type}'`,
-      );
-    }
-  }),
-);
+export const ListSubscriptionsPolicyLive =
+  ListSubscriptionsPolicy.layer.succeed(
+    Effect.fn(function* (host) {
+      if (isFunction(host)) {
+        yield* host.bind`Allow(${host}, AWS.SNS.ListSubscriptions())`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["sns:ListSubscriptions"],
+              Resource: ["*"],
+            },
+          ],
+        });
+      } else {
+        return yield* Effect.die(
+          `ListSubscriptionsPolicy does not support runtime '${host.Type}'`,
+        );
+      }
+    }),
+  );

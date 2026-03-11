@@ -15,7 +15,9 @@ export class TagResource extends Binding.Service<
   (
     topic: Topic,
   ) => Effect.Effect<
-    (request: TagResourceRequest) => Effect.Effect<sns.TagResourceResponse, sns.TagResourceError>
+    (
+      request: TagResourceRequest,
+    ) => Effect.Effect<sns.TagResourceResponse, sns.TagResourceError>
   >
 >()("AWS.SNS.TagResource") {}
 

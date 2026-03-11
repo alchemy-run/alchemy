@@ -237,9 +237,9 @@ export const TableProvider = () =>
         Schedule.both(Schedule.recurs(120)),
       );
 
-      const waitForTableActivationConvergence = Schedule.fixed("10 seconds").pipe(
-        Schedule.both(Schedule.recurs(180)),
-      );
+      const waitForTableActivationConvergence = Schedule.fixed(
+        "10 seconds",
+      ).pipe(Schedule.both(Schedule.recurs(180)));
 
       const waitForGlobalSecondaryIndexesConvergence = Schedule.fixed(
         "10 seconds",
@@ -253,7 +253,9 @@ export const TableProvider = () =>
         `${elapsedSeconds}s elapsed`;
 
       const formatGlobalSecondaryIndexStatuses = (
-        indexes: readonly DynamoDB.GlobalSecondaryIndexDescription[] | undefined,
+        indexes:
+          | readonly DynamoDB.GlobalSecondaryIndexDescription[]
+          | undefined,
       ) =>
         JSON.stringify(
           (indexes ?? []).map((index) => ({

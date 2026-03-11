@@ -73,7 +73,9 @@ describe.sequential("SNS Bindings", () => {
 
         expect((response as any).MessageId).toBeTruthy();
 
-        const queued = yield* waitForQueueMessage((body) => body.message === marker);
+        const queued = yield* waitForQueueMessage(
+          (body) => body.message === marker,
+        );
         expect((queued as any).topicArn).toBe(topicArn);
         expect((queued as any).subject).toBe("PublishTest");
       }),
@@ -186,7 +188,9 @@ describe.sequential("SNS Bindings", () => {
       "lists the deployed topic",
       Effect.gen(function* () {
         const response = yield* getJson("/topics");
-        const arns = ((response as any).Topics ?? []).map((topic: any) => topic.TopicArn);
+        const arns = ((response as any).Topics ?? []).map(
+          (topic: any) => topic.TopicArn,
+        );
         expect(arns).toContain(topicArn);
       }),
     );
@@ -241,7 +245,10 @@ describe.sequential("SNS Bindings", () => {
         });
         const response = yield* getJson("/tags");
         const tags = Object.fromEntries(
-          ((response as any).Tags ?? []).map((tag: any) => [tag.Key, tag.Value]),
+          ((response as any).Tags ?? []).map((tag: any) => [
+            tag.Key,
+            tag.Value,
+          ]),
         );
         expect(tags["sns-binding-test"]).toBe("true");
       }),
@@ -325,7 +332,9 @@ describe.sequential("SNS Bindings", () => {
 });
 
 const getJson = (path: string) =>
-  HttpClient.get(`${baseUrl}${path}`).pipe(Effect.flatMap((response) => response.json));
+  HttpClient.get(`${baseUrl}${path}`).pipe(
+    Effect.flatMap((response) => response.json),
+  );
 
 const postJson = (path: string, body: unknown) =>
   HttpClient.execute(
@@ -344,7 +353,8 @@ const deleteJson = (path: string, body: unknown) =>
   ).pipe(Effect.flatMap((response) => response.json));
 
 const waitForQueueMessages = Effect.fn(function* (count: number) {
-  const bodies: Array<{ message: string; topicArn: string; subject?: string }> = [];
+  const bodies: Array<{ message: string; topicArn: string; subject?: string }> =
+    [];
 
   while (bodies.length < count) {
     bodies.push(yield* waitForQueueMessage(() => true));
@@ -354,7 +364,11 @@ const waitForQueueMessages = Effect.fn(function* (count: number) {
 });
 
 const waitForQueueMessage = Effect.fn(function* (
-  predicate: (body: { message: string; topicArn: string; subject?: string }) => boolean,
+  predicate: (body: {
+    message: string;
+    topicArn: string;
+    subject?: string;
+  }) => boolean,
 ) {
   return yield* SQS.receiveMessage({
     QueueUrl: queueUrl,

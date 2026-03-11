@@ -161,7 +161,9 @@ export interface DeletedBindingRegressionTarget extends Resource<
 > {}
 
 export const DeletedBindingRegressionTarget =
-  Resource<DeletedBindingRegressionTarget>("Test.DeletedBindingRegressionTarget");
+  Resource<DeletedBindingRegressionTarget>(
+    "Test.DeletedBindingRegressionTarget",
+  );
 
 export const deletedBindingRegressionProvider =
   DeletedBindingRegressionTarget.provider.succeed({

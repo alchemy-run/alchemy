@@ -74,9 +74,11 @@ const JobApiHandlers = HttpApiBuilder.group(JobApi, "Jobs", (handlers) =>
         if (job instanceof PutJobError) {
           return HttpServerResponse.text(job.message, { status: 500 });
         }
-        const notificationResult = yield* notifications.notifyJobCreated(job).pipe(
-          Effect.catchTag("NotifyJobError", (error) => Effect.succeed(error)),
-        );
+        const notificationResult = yield* notifications
+          .notifyJobCreated(job)
+          .pipe(
+            Effect.catchTag("NotifyJobError", (error) => Effect.succeed(error)),
+          );
         if (notificationResult instanceof NotifyJobError) {
           return HttpServerResponse.text(notificationResult.message, {
             status: 500,

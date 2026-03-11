@@ -54,7 +54,8 @@ export const buildProgressRows = (plan: Plan): ProgressRow[] => {
   const items = [
     ...Object.values(plan.resources),
     ...Object.values(plan.deletions).filter(
-      (item): item is NonNullable<Plan["deletions"][string]> => item !== undefined,
+      (item): item is NonNullable<Plan["deletions"][string]> =>
+        item !== undefined,
     ),
   ] as PlanItem[];
   const tree = buildNamespaceTree(items);
@@ -121,7 +122,9 @@ export function toPlanTask(
 
 const buildInitialTasks = (rows: ProgressRow[]) =>
   new Map(
-    rows.flatMap((row) => (row.type === "resource" ? [[row.key, toPlanTask(row)]] : [])),
+    rows.flatMap((row) =>
+      row.type === "resource" ? [[row.key, toPlanTask(row)]] : [],
+    ),
   );
 
 export function PlanProgress(props: PlanProgressProps): JSX.Element {

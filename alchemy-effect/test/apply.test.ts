@@ -240,9 +240,7 @@ describe("basic operations", () => {
           env: {},
         },
       });
-    }).pipe(
-      Effect.provide(MockLayers()),
-    ),
+    }).pipe(Effect.provide(MockLayers())),
   );
 });
 

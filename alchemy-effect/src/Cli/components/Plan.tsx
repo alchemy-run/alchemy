@@ -146,4 +146,3 @@ const getActionIcon = (action: AnyAction): string =>
   })[action] ?? "?";
 
 const actionColor = (action: CRUD["action"]): Color => getActionColor(action);
-

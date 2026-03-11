@@ -306,12 +306,14 @@ Required shape:
 ```ts
 Effect.provide(
   Layer.provideMerge(
-    Layer.mergeAll(
+    Layer
+      .mergeAll
       // composite services: event sources, sinks, helpers
-    ),
-    Layer.mergeAll(
+      (),
+    Layer
+      .mergeAll
       // foundational bindings/capabilities they depend on
-    ),
+      (),
   ),
 );
 ```
@@ -501,4 +503,3 @@ Inside that block:
 - relevant unhappy paths
 
 Do not lump all bindings into one large undifferentiated test block.
-

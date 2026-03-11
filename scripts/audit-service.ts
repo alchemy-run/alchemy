@@ -170,11 +170,7 @@ const ZERO_ARITY_PATTERNS = [
   /^describe(?:Endpoints|Limits|Account)$/i,
 ];
 
-const FIXED_MULTI_ARITY_PATTERNS = [
-  /^copy/i,
-  /^replicate/i,
-  /^restore.*From/i,
-];
+const FIXED_MULTI_ARITY_PATTERNS = [/^copy/i, /^replicate/i, /^restore.*From/i];
 
 const N_ARITY_PATTERNS = [
   /^batch/i,
@@ -605,29 +601,31 @@ async function auditService(serviceName: string): Promise<AuditReport> {
   const bindingTestCoverage = await getBindingTestDescribes(bindingTestPath);
 
   // Classify operations
-  const operations: Operation[] = await Promise.all(distilledOps.map(async (name) => {
-    const pascalCase = toPascalCase(name);
-    const classification = classifyOperation(serviceNameLower, name);
-    const implemented = alchemyFiles.has(pascalCase);
-    const resourceArity = implemented
-      ? await inferImplementedResourceArity(
-          alchemyPath,
-          pascalCase,
-          classification.resourceArity,
-        )
-      : classification.resourceArity;
+  const operations: Operation[] = await Promise.all(
+    distilledOps.map(async (name) => {
+      const pascalCase = toPascalCase(name);
+      const classification = classifyOperation(serviceNameLower, name);
+      const implemented = alchemyFiles.has(pascalCase);
+      const resourceArity = implemented
+        ? await inferImplementedResourceArity(
+            alchemyPath,
+            pascalCase,
+            classification.resourceArity,
+          )
+        : classification.resourceArity;
 
-    return {
-      name,
-      camelCase: name,
-      pascalCase,
-      ...classification,
-      resourceArity,
-      implemented,
-      registeredInProviders: providerRegs.bindings.has(pascalCase),
-      registeredInIndex: indexExports.has(pascalCase),
-    };
-  }));
+      return {
+        name,
+        camelCase: name,
+        pascalCase,
+        ...classification,
+        resourceArity,
+        implemented,
+        registeredInProviders: providerRegs.bindings.has(pascalCase),
+        registeredInIndex: indexExports.has(pascalCase),
+      };
+    }),
+  );
 
   // Group by category
   const implementedBindings = operations.filter(
@@ -898,7 +896,9 @@ function formatReport(report: AuditReport): string {
     lines.push(`${"─".repeat(80)}`);
     for (const op of report.helperCandidates) {
       const impl = op.implemented ? "✓" : "○";
-      lines.push(`  ${impl} ${op.camelCase} [${formatArity(op.resourceArity)}]`);
+      lines.push(
+        `  ${impl} ${op.camelCase} [${formatArity(op.resourceArity)}]`,
+      );
     }
     lines.push("");
   }

@@ -94,7 +94,8 @@ const findSubscription = Effect.fn(function* ({
 
     const match = response.Subscriptions?.find(
       (subscription) =>
-        subscription.Protocol === protocol && subscription.Endpoint === endpoint,
+        subscription.Protocol === protocol &&
+        subscription.Endpoint === endpoint,
     );
 
     if (match?.SubscriptionArn) {
@@ -141,12 +142,16 @@ const readSubscription = Effect.fn(function* ({
     };
   }
 
-  const response = yield* sns.getSubscriptionAttributes({
-    SubscriptionArn: resolvedSubscriptionArn,
-  }).pipe(
-    Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
-    Effect.catchTag("InvalidParameterException", () => Effect.succeed(undefined)),
-  );
+  const response = yield* sns
+    .getSubscriptionAttributes({
+      SubscriptionArn: resolvedSubscriptionArn,
+    })
+    .pipe(
+      Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+      Effect.catchTag("InvalidParameterException", () =>
+        Effect.succeed(undefined),
+      ),
+    );
 
   if (!response) {
     return undefined;
@@ -272,11 +277,13 @@ export const SubscriptionProvider = () =>
         return;
       }
 
-      yield* sns.unsubscribe({
-        SubscriptionArn: subscriptionArn,
-      }).pipe(
-        Effect.catchTag("NotFoundException", () => Effect.void),
-        Effect.catchTag("InvalidParameterException", () => Effect.void),
-      );
+      yield* sns
+        .unsubscribe({
+          SubscriptionArn: subscriptionArn,
+        })
+        .pipe(
+          Effect.catchTag("NotFoundException", () => Effect.void),
+          Effect.catchTag("InvalidParameterException", () => Effect.void),
+        );
     }),
   });
