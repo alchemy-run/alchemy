@@ -5,5 +5,6 @@ export * from "./HttpServer.ts";
 export * from "./InvokeFunction.ts";
 export * from "./Permission.ts";
 export * from "./QueueEventSource.ts";
+export * from "./TableEventSource.ts";
 
 export type { Context } from "aws-lambda";

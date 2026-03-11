@@ -262,9 +262,8 @@ const expandAndPivot = Effect.fnUntraced(function* (
 
               yield* report("creating");
 
-              const bindingOutputs = yield* Output.evaluate(
-                node.bindings,
-                upstream,
+              const bindingOutputs = excludeDeletedBindings(
+                yield* Output.evaluate(node.bindings, upstream),
               );
 
               attr = yield* node.provider.create({
@@ -325,9 +324,8 @@ const expandAndPivot = Effect.fnUntraced(function* (
 
               yield* report("updating");
 
-              const bindingOutputs = yield* Output.evaluate(
-                node.bindings,
-                upstream,
+              const bindingOutputs = excludeDeletedBindings(
+                yield* Output.evaluate(node.bindings, upstream),
               );
 
               const attr = yield* node.provider.update({
@@ -400,7 +398,9 @@ const expandAndPivot = Effect.fnUntraced(function* (
                 upstream,
               )) as Record<string, any>;
 
-              const bindings = yield* Output.evaluate(node.bindings, upstream);
+              const bindings = excludeDeletedBindings(
+                yield* Output.evaluate(node.bindings, upstream),
+              );
 
               const checkpoint = <
                 S extends ReplacingResourceState | ReplacedResourceState,

@@ -13,6 +13,7 @@ import { describe, expect } from "@effect/vitest";
 import { Data, Layer } from "effect";
 import * as Effect from "effect/Effect";
 import {
+  DeletedBindingRegressionTarget,
   type TestResourceProps,
   InMemoryTestLayers,
   StaticStablesResource,
@@ -201,6 +202,47 @@ describe("basic operations", () => {
         }).pipe(test.deploy),
       ).toEqual("TEST-STRING-NEW");
     }).pipe(Effect.provide(TestLayers)),
+  );
+
+  test(
+    "should exclude deleted bindings before provider updates",
+    Effect.gen(function* () {
+      const created = yield* test.deploy(
+        Effect.gen(function* () {
+          const target = yield* DeletedBindingRegressionTarget("A", {
+            name: "target",
+          });
+          yield* target.bind("TestBinding", {
+            env: {
+              FEATURE_FLAG: "on",
+            },
+          });
+          return target;
+        }),
+      );
+
+      expect(created.env).toEqual({
+        FEATURE_FLAG: "on",
+      });
+
+      const updated = yield* test.deploy(
+        Effect.gen(function* () {
+          return yield* DeletedBindingRegressionTarget("A", {
+            name: "target",
+          });
+        }),
+      );
+
+      expect(updated.env).toEqual({});
+      expect(yield* getState("A")).toMatchObject({
+        bindings: [],
+        attr: {
+          env: {},
+        },
+      });
+    }).pipe(
+      Effect.provide(MockLayers()),
+    ),
   );
 });
 

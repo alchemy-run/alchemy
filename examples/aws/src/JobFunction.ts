@@ -1,15 +1,9 @@
-import { AWS, RemovalPolicy } from "alchemy-effect";
-
-// import * as Lambda from "alchemy-effect/AWS/Lambda";
-// import * as S3 from "alchemy-effect/AWS/S3";
-// import * as SQS from "alchemy-effect/AWS/SQS";
+import { AWS } from "alchemy-effect";
 import * as Http from "alchemy-effect/Http";
-import { Stack } from "alchemy-effect/Stack";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Stream from "effect/Stream";
 import { JobHttpEffect } from "./JobHttpApi.ts";
-import { JobStorage, JobStorageLive } from "./JobStorage.ts";
+import { JobStorage, JobStorageDynamoDB } from "./JobStorage.ts";
 
 // ## sync drift
 // alchemy sync
@@ -30,35 +24,12 @@ import { JobStorage, JobStorageLive } from "./JobStorage.ts";
 // alchemy deploy --dry-run --adopt JobsQueue,JobsDatabase
 
 const JobFunction = Effect.gen(function* () {
-  const stack = yield* Stack;
-
-  const { bucket, ...jobStorage } = yield* JobStorage;
-
-  const queue = yield* AWS.SQS.Queue("JobsQueue").pipe(
-    RemovalPolicy.retain(stack.stage === "prod"),
-  );
-
-  // Sink
-  const sink = yield* AWS.SQS.QueueSink.bind(queue);
+  yield* JobStorage;
 
   // register a HTTP server in the Lambda Function runtime
   yield* Http.serve(yield* JobHttpEffect);
   // if you want to use RPC instead of HttpApi:
   // yield* Http.serve(yield* JobRpcHttpEffect);
-
-  // register a SQS Event Handler in the Lambda Function runtime
-  yield* AWS.S3.notifications(bucket).subscribe((stream) =>
-    stream.pipe(
-      Stream.flatMap((item) =>
-        Stream.fromEffect(jobStorage.getJob(item.key).pipe(Effect.orDie)),
-      ),
-      Stream.map((msg) => JSON.stringify(msg)),
-      Stream.tapSink(sink),
-      Stream.runDrain,
-    ),
-  );
-
-  // yield* AWS.S3.ListObjectsV2.bind(bucket);
 
   // return the Function properties for this stage
   return {
@@ -69,20 +40,9 @@ const JobFunction = Effect.gen(function* () {
   Effect.provide(
     Layer.mergeAll(
       // Services go here
-      JobStorageLive,
-      AWS.Lambda.BucketEventSource,
+      JobStorageDynamoDB,
+      // JobStorageS3,
       AWS.Lambda.HttpServer,
-      AWS.SQS.QueueSinkLive,
-    ).pipe(
-      Layer.provideMerge(
-        Layer.mergeAll(
-          // Policies go here
-          AWS.S3.GetObjectLive,
-          // AWS.S3.ListObjectsV2Live,
-          AWS.S3.PutObjectLive,
-          AWS.SQS.SendMessageBatchLive,
-        ),
-      ),
     ),
   ),
   AWS.Lambda.Function("JobFunction"),

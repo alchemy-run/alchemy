@@ -4,6 +4,7 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as PlatformConfigProvider from "effect/ConfigProvider";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
@@ -85,6 +86,21 @@ const yes = Flag.boolean("yes").pipe(
   Flag.withDescription("Yes to all prompts"),
   Flag.withDefault(false),
 );
+
+const fileLogger = (...segments: ReadonlyArray<string>) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path;
+    const logFile = path.join(process.cwd(), ".alchemy", "log", ...segments);
+
+    yield* fs.makeDirectory(path.dirname(logFile), { recursive: true });
+
+    return yield* Logger.formatLogFmt.pipe(
+      Logger.toFile(logFile, {
+        flag: "a",
+      }),
+    );
+  });
 
 const main = Argument.file("main", {
   mustExist: true,
@@ -183,7 +199,7 @@ const bootstrapCommand = Command.make(
     const platform = Layer.mergeAll(
       NodeServices.layer,
       FetchHttpClient.layer,
-      Logger.layer([Logger.consolePretty()]),
+      Logger.layer([fileLogger("bootstrap.txt")]),
     );
 
     // Build configProvider effect that requires platform (for fromDotEnv)
@@ -255,11 +271,7 @@ const execStack = Effect.fn(function* ({
     : ConfigProvider.fromEnv();
 
   // TODO(sam): implement local and watch
-  const platform = Layer.mergeAll(
-    NodeServices.layer,
-    FetchHttpClient.layer,
-    Logger.layer([Logger.consolePretty()]),
-  );
+  const platform = Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer);
 
   // override alchemy state store, CLI/reporting and dotAlchemy
   const alchemy = Layer.mergeAll(
@@ -270,9 +282,12 @@ const execStack = Effect.fn(function* ({
     dotAlchemy,
   );
 
+  const rootLogger = Logger.layer([fileLogger("out")]);
+
   yield* Effect.gen(function* () {
     const cli = yield* CLI.Cli;
     const stack = yield* stackEffect;
+
     yield* Effect.gen(function* () {
       const updatePlan = yield* Plan.make(
         destroy
@@ -298,8 +313,12 @@ const execStack = Effect.fn(function* ({
 
         yield* Console.log(outputs);
       }
-    }).pipe(Effect.provide(stack.services));
+    }).pipe(
+      Effect.provide(stack.services),
+      Effect.provide(Logger.layer([fileLogger("stacks", stack.name, stage)])),
+    );
   }).pipe(
+    Effect.provide(rootLogger),
     Effect.provide(
       Layer.provideMerge(
         alchemy,

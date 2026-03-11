@@ -7,7 +7,6 @@ import {
   buildNamespaceTree,
   flattenTree,
   type DerivedAction,
-  type FlattenedItem,
 } from "../NamespaceTree.ts";
 
 export interface PlanProps {
@@ -60,7 +59,9 @@ export function Plan({ plan }: PlanProps): JSX.Element {
               </Text>
             </Box>
           );
-          return i === actions.length - 1 ? [box] : [box, <Text> | </Text>];
+          return i === actions.length - 1
+            ? [box]
+            : [box, <Text key={`${action}-separator`}> | </Text>];
         })}
       </Box>
       <Box flexDirection="column" marginTop={1}>
@@ -146,4 +147,3 @@ const getActionIcon = (action: AnyAction): string =>
 
 const actionColor = (action: CRUD["action"]): Color => getActionColor(action);
 
-const actionIcon = (action: CRUD["action"]): string => getActionIcon(action);

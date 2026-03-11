@@ -1,6 +1,6 @@
 import * as Output from "./Output.ts";
 import type { BindingNode } from "./Plan.ts";
-import type { ResourceBinding, ResourceLike } from "./Resource.ts";
+import type { ResourceBinding } from "./Resource.ts";
 
 export type Diff = NoopDiff | UpdateDiff | ReplaceDiff;
 
@@ -51,9 +51,9 @@ export const anyPropsAreDifferent = <Props extends Record<string, any>>(
   return false;
 };
 
-export const havePropsChanged = <R extends ResourceLike>(
-  oldProps: R["Props"] | undefined,
-  newProps: R["Props"],
+export const havePropsChanged = <Props extends object>(
+  oldProps: Props | undefined,
+  newProps: Props,
 ) =>
   Output.hasOutputs(newProps) ||
   // TODO(sam): sort keys and deep compare

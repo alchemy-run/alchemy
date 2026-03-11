@@ -210,10 +210,10 @@ Before coding, explicitly answer:
 For DynamoDB, for example:
 
 - canonical resource: `Table`
-- pending resource surface: `SecondaryIndex` if treated as first-class
+- folded table-owned surface: local/global secondary indexes live on `Table`, not a standalone `SecondaryIndex` resource
 - bindings: item/table/admin operations
 - event source: Kinesis streaming destination / change stream surface
-- helper: `changes(table)`
+- helper: `streams(table)`
 
 ### Step 3: Implement Missing Bindings
 
@@ -332,8 +332,7 @@ Important:
 
 Example:
 
-- `SecondaryIndex.ts` may exist but still be only a placeholder
-- that still counts as incomplete coverage
+- a placeholder like `SecondaryIndex.ts` still counts as incomplete coverage until it is either removed or folded into the canonical resource model
 
 ### Step 10: Implement Event Sources
 
@@ -348,7 +347,7 @@ For DynamoDB-style changes this likely means:
 
 1. table-side stream/destination surface
 2. Lambda runtime integration
-3. `changes(table)` helper
+3. `streams(table)` helper
 4. E2E coverage
 
 ### Step 11: Implement Helpers
@@ -360,6 +359,41 @@ After low-level primitives exist, add ergonomic helpers for:
 - transactions
 
 Helpers should feel native to Alchemy and match established service patterns.
+
+### Case Study: DynamoDB Streams
+
+DynamoDB Streams is the reference pattern for mutable event-source configuration that belongs to a canonical resource but still needs binding-based composition.
+
+Required shape:
+
+- the canonical resource remains `Table`
+- `Table` keeps stream state in its attributes, but does not accept `streamSpecification` as a plain input prop
+- stream enablement is requested through the table binding contract
+- the public helper is `streams(table).process(...)`
+- the service-level abstraction lives in `alchemy-effect/src/AWS/DynamoDB/Stream.ts`
+- the Lambda runtime implementation lives in `alchemy-effect/src/AWS/Lambda/TableEventSource.ts`
+
+Why this pattern exists:
+
+- stream enablement mutates the table itself
+- the consumer is another resource, usually a Lambda Function
+- prop-driven stream configuration makes circular composition awkward
+- bindings let the consumer request the mutation while `Table` stays the canonical owner of stream state
+
+Implementation rules:
+
+1. The helper attaches stream requirements to `Table` through bindings.
+2. The `Table` provider derives the effective stream configuration from bindings during `create` and `update`.
+3. Zero stream bindings means the table stream should be disabled.
+4. Multiple bindings may coexist only when they request the same `StreamViewType`.
+5. Conflicting `StreamViewType` requests must fail deterministically before AWS calls are made.
+6. Runtime-specific layers handle IAM, host wiring, and event-source mapping resources; they do not move stream ownership out of `Table`.
+
+Lambda-first slice:
+
+- implement `streams(table).process(...)` first for Lambda
+- the Lambda layer binds the table stream requirement, grants stream-read IAM, and creates `AWS.Lambda.EventSourceMapping`
+- Process or other runtimes can be added later without changing `Table` back to a prop-driven stream model
 
 ### Step 12: Re-Run Tests And Audit
 
@@ -428,28 +462,3 @@ Inside that block:
 
 Do not lump all bindings into one large undifferentiated test block.
 
-## Current DynamoDB Snapshot
-
-At the time of writing:
-
-- implemented bindings include:
-  - `GetItem`
-  - `PutItem`
-  - `DeleteItem`
-  - `UpdateItem`
-  - `Query`
-  - `Scan`
-  - `DescribeTable`
-  - `DescribeTimeToLive`
-  - `ListTables`
-  - `ListTagsOfResource`
-  - `UpdateTimeToLive`
-- remaining low-level gaps include:
-  - `ExecuteTransaction`
-  - `RestoreTableToPointInTime`
-- missing higher-level surface includes:
-  - DynamoDB streaming/event-source support
-  - `changes(table)`
-  - potentially real `SecondaryIndex` coverage beyond the current placeholder
-
-Use that as a living example of this loop in practice.

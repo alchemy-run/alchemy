@@ -444,6 +444,8 @@ That process covers:
 
 Keep `AGENTS.md` high-level and update @processes/AWS.md when the process evolves.
 
+When a canonical resource needs mutable event-source configuration and there is any chance of circularity, prefer a resource binding contract over a plain input prop. DynamoDB Streams is the reference case: `Table` owns the actual stream state, while `streams(table)` injects that state via bindings and the runtime-specific layer handles the subscription mechanics. See @processes/AWS.md for the DynamoDB Streams case study.
+
 # Build and Type Checking
 
 Always run type checking before committing changes:

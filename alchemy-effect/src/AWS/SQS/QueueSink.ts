@@ -43,6 +43,9 @@ export class QueueSinkPolicy extends Binding.Policy<
 export const QueueSinkPolicyLive = QueueSinkPolicy.layer.succeed(
   Effect.fn(function* (host, queue) {
     if (isFunction(host)) {
+      yield* Effect.logInfo(
+        `QueueSinkPolicy: binding send permission for ${host.LogicalId} -> ${queue.LogicalId}`,
+      );
       yield* host.bind`Allow(${host}, AWS.SQS.QueueSink(${queue}))`({
         policyStatements: [
           {

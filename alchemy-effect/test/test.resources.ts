@@ -144,6 +144,53 @@ export const bindingTargetProvider = BindingTarget.provider.succeed({
   delete: Effect.fn(function* ({ output }) {}),
 });
 
+export type DeletedBindingRegressionProps = {
+  name?: string;
+};
+
+export interface DeletedBindingRegressionTarget extends Resource<
+  "Test.DeletedBindingRegressionTarget",
+  DeletedBindingRegressionProps,
+  {
+    name: string;
+    env: Record<string, string>;
+  },
+  {
+    env?: Record<string, string>;
+  }
+> {}
+
+export const DeletedBindingRegressionTarget =
+  Resource<DeletedBindingRegressionTarget>("Test.DeletedBindingRegressionTarget");
+
+export const deletedBindingRegressionProvider =
+  DeletedBindingRegressionTarget.provider.succeed({
+    diff: Effect.fn(function* () {}),
+    create: Effect.fn(function* ({ id, news = {}, bindings }) {
+      return {
+        name: news.name ?? id,
+        env: Object.assign(
+          {},
+          ...bindings.map(
+            (binding: any) => binding.env ?? binding.data?.env ?? {},
+          ),
+        ),
+      };
+    }),
+    update: Effect.fn(function* ({ id, news = {}, bindings }) {
+      return {
+        name: news.name ?? id,
+        env: Object.assign(
+          {},
+          ...bindings.map(
+            (binding: any) => binding.env ?? binding.data?.env ?? {},
+          ),
+        ),
+      };
+    }),
+    delete: Effect.fn(function* () {}),
+  });
+
 // TestResource
 
 export type TestResourceProps = {
@@ -361,6 +408,7 @@ export const TestLayers = Layer.mergeAll(
   queueProvider,
   functionProvider,
   bindingTargetProvider,
+  deletedBindingRegressionProvider,
   testResourceProvider,
   staticStablesResourceProvider,
 );

@@ -3,6 +3,11 @@ import { useEffect, useMemo, useRef, useState, type JSX } from "react";
 
 import { Box, Text } from "ink";
 import type { CRUD, Plan } from "../../Plan.ts";
+import {
+  buildNamespaceTree,
+  flattenTree,
+  type FlattenedItem,
+} from "../NamespaceTree.ts";
 import type { ApplyEvent, ApplyStatus, StatusChangeEvent } from "../Event.ts";
 
 interface ProgressEventSource {
@@ -12,6 +17,7 @@ interface ProgressEventSource {
 interface PlanTask extends Required<
   Pick<StatusChangeEvent, "id" | "type" | "status">
 > {
+  key: string;
   message?: string;
   updatedAt: number;
 }
@@ -23,28 +29,109 @@ interface PlanProgressProps {
 
 type PlanItem = CRUD | NonNullable<Plan["deletions"][string]>;
 
-export const toPlanTask = (id: string, planItem: PlanItem): PlanTask => ({
-  id,
-  type: planItem.resource.Type,
-  status: planItem.action === "noop" ? "success" : "pending",
-  updatedAt: Date.now(),
-});
+export type ProgressRow =
+  | {
+      key: string;
+      type: "namespace";
+      id: string;
+      depth: number;
+      action: FlattenedItem["action"];
+    }
+  | {
+      key: string;
+      type: "resource";
+      id: string;
+      depth: number;
+      resourceType: string;
+      action: CRUD["action"];
+    };
+
+const getTaskKey = (item: FlattenedItem) => item.path.join("/");
+
+type ResourceProgressRow = Extract<ProgressRow, { type: "resource" }>;
+
+export const buildProgressRows = (plan: Plan): ProgressRow[] => {
+  const items = [
+    ...Object.values(plan.resources),
+    ...Object.values(plan.deletions).filter(
+      (item): item is NonNullable<Plan["deletions"][string]> => item !== undefined,
+    ),
+  ] as PlanItem[];
+  const tree = buildNamespaceTree(items);
+  return flattenTree(tree)
+    .filter((item) => item.type !== "binding")
+    .map((item) =>
+      item.type === "namespace"
+        ? {
+            key: getTaskKey(item),
+            type: "namespace" as const,
+            id: item.id,
+            depth: item.depth,
+            action: item.action,
+          }
+        : {
+            key: getTaskKey(item),
+            type: "resource" as const,
+            id: item.id,
+            depth: item.depth,
+            resourceType: item.resourceType ?? "unknown",
+            action: item.action as CRUD["action"],
+          },
+    );
+};
+
+const buildLogicalIdIndex = (rows: ProgressRow[]) => {
+  const index = new Map<string, string[]>();
+  for (const row of rows) {
+    if (row.type !== "resource") continue;
+    const keys = index.get(row.id);
+    if (keys) {
+      keys.push(row.key);
+    } else {
+      index.set(row.id, [row.key]);
+    }
+  }
+  return index;
+};
+
+export function toPlanTask(id: string, planItem: PlanItem): PlanTask;
+export function toPlanTask(row: ResourceProgressRow): PlanTask;
+export function toPlanTask(
+  rowOrId: ResourceProgressRow | string,
+  planItem?: PlanItem,
+): PlanTask {
+  if (typeof rowOrId === "string") {
+    return {
+      key: rowOrId,
+      id: rowOrId,
+      type: planItem!.resource.Type,
+      status: planItem!.action === "noop" ? "success" : "pending",
+      updatedAt: Date.now(),
+    };
+  }
+
+  return {
+    key: rowOrId.key,
+    id: rowOrId.id,
+    type: rowOrId.resourceType,
+    status: rowOrId.action === "noop" ? "success" : "pending",
+    updatedAt: Date.now(),
+  };
+}
+
+const buildInitialTasks = (rows: ProgressRow[]) =>
+  new Map(
+    rows.flatMap((row) => (row.type === "resource" ? [[row.key, toPlanTask(row)]] : [])),
+  );
 
 export function PlanProgress(props: PlanProgressProps): JSX.Element {
   const { source, plan } = props;
   const spinner = useGlobalSpinner();
-  const [tasks, setTasks] = useState<Map<string, PlanTask>>(() => {
-    // Initialize tasks from the plan with appropriate starting status
-    const initialTasks = new Map<string, PlanTask>();
-    const nodes = [
-      ...Object.entries(plan.resources),
-      ...Object.entries(plan.deletions),
-    ];
-    for (const [id, item] of nodes) {
-      initialTasks.set(id, toPlanTask(id, item!));
-    }
-    return initialTasks;
-  });
+  const rows = useMemo(() => buildProgressRows(plan), [plan]);
+  const logicalIdIndex = useMemo(() => buildLogicalIdIndex(rows), [rows]);
+  const [tasks, setTasks] = useState<Map<string, PlanTask>>(() =>
+    buildInitialTasks(rows),
+  );
 
   const unsubscribeRef = useRef<null | (() => void)>(null);
 
@@ -53,26 +140,32 @@ export function PlanProgress(props: PlanProgressProps): JSX.Element {
     unsubscribeRef.current = source.subscribe((event) => {
       setTasks((prev) => {
         const next = new Map(prev);
-        const current = next.get(event.id);
+        const keys = logicalIdIndex.get(event.id) ?? [];
 
         if (event.kind === "status-change") {
           if (!event.bindingId) {
-            // Only handle resource-level events, ignore binding events
-            const updated: PlanTask = {
-              id: event.id,
-              type: event.type,
-              status: event.status,
-              message: event.message ?? current?.message,
-              updatedAt: Date.now(),
-            };
-            next.set(event.id, updated);
+            for (const key of keys) {
+              const current = next.get(key);
+              next.set(key, {
+                key,
+                id: event.id,
+                type: event.type,
+                status: event.status,
+                message: event.message ?? current?.message,
+                updatedAt: Date.now(),
+              });
+            }
           }
-        } else if (event.kind === "annotate" && current) {
-          next.set(event.id, {
-            ...current,
-            message: event.message,
-            updatedAt: Date.now(),
-          });
+        } else {
+          for (const key of keys) {
+            const current = next.get(key);
+            if (!current) continue;
+            next.set(key, {
+              ...current,
+              message: event.message,
+              updatedAt: Date.now(),
+            });
+          }
         }
 
         return next;
@@ -82,85 +175,54 @@ export function PlanProgress(props: PlanProgressProps): JSX.Element {
       unsubscribeRef.current?.();
       unsubscribeRef.current = null;
     };
-  }, [source]);
+  }, [logicalIdIndex, source]);
 
-  // Reinitialize tasks when plan changes
   useEffect(() => {
-    setTasks(() => {
-      const initialTasks = new Map<string, PlanTask>();
-      const nodes = [
-        ...Object.entries(plan.resources),
-        ...Object.entries(plan.deletions),
-      ];
-      for (const [id, item] of nodes) {
-        initialTasks.set(id, toPlanTask(id, item!));
-      }
-      return initialTasks;
-    });
-  }, [plan]);
-
-  const rows = useMemo(
-    () =>
-      Array.from(tasks.values()).sort((a, b) => {
-        // First sort by status priority
-        const priorityDiff =
-          statusPriority(a.status) - statusPriority(b.status);
-        if (priorityDiff !== 0) return priorityDiff;
-
-        // Then sort by ID for consistent ordering within same priority
-        return a.id.localeCompare(b.id);
-      }),
-    [tasks],
-  );
+    setTasks(buildInitialTasks(rows));
+  }, [rows]);
 
   return (
     <Box flexDirection="column">
-      {rows.map((task) => {
+      {rows.map((row) => {
+        const indent = "  ".repeat(row.depth);
+
+        if (row.type === "namespace") {
+          return (
+            <Box key={row.key} flexDirection="row">
+              <Text>{indent}</Text>
+              <Box width={2}>
+                <Text color="blueBright">↳ </Text>
+              </Box>
+              <Text color="blueBright">{row.id}</Text>
+            </Box>
+          );
+        }
+
+        const task = tasks.get(row.key) ?? toPlanTask(row);
         const color = statusColor(task.status);
         const icon = statusIcon(task.status, spinner);
 
         return (
-          <Box key={task.id} flexDirection="row">
-            <Box width={2}>
-              <Text color={color}>{icon} </Text>
-            </Box>
-            <Box width={12}>
+          <Box key={row.key} flexDirection="column">
+            <Box flexDirection="row">
+              <Text>{indent}</Text>
+              <Box width={2}>
+                <Text color={color}>{icon} </Text>
+              </Box>
               <Text bold>{task.id}</Text>
+              <Text dimColor> ({task.type})</Text>
+              <Text color={color}> {task.status}</Text>
             </Box>
-            <Box width={25}>
-              <Text dimColor>({task.type})</Text>
-            </Box>
-            <Box width={12}>
-              <Text color={color}>{task.status}</Text>
-            </Box>
-            <Box>
-              {task.message ? <Text dimColor>• {task.message}</Text> : null}
-            </Box>
+            {task.message ? (
+              <Box paddingLeft={row.depth * 2 + 2}>
+                <Text dimColor>• {task.message}</Text>
+              </Box>
+            ) : null}
           </Box>
         );
       })}
     </Box>
   );
-}
-
-function statusPriority(status: ApplyStatus): number {
-  switch (status) {
-    case "success":
-    case "created":
-    case "updated":
-    case "deleted":
-      return 0; // highest priority (success)
-    case "fail":
-      return 1;
-    case "creating":
-    case "updating":
-    case "deleting":
-      return 2; // in progress
-    case "pending":
-      return 3; // lowest priority (pending)
-    default:
-      return 4;
-  }
 }
 
 function statusColor(status: ApplyStatus): Parameters<typeof Text>[0]["color"] {

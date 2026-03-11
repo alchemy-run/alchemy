@@ -40,7 +40,8 @@ type OperationCategory =
 type ResourceArity =
   | 0 // account/service scoped (e.g., ListBuckets, DescribeLimits)
   | 1 // single resource scoped (e.g., GetObject(Bucket), GetItem(Table))
-  | 2; // multiple resources (e.g., CopyObject(SourceBucket, DestBucket))
+  | 2 // fixed multi-resource (e.g., CopyObject(SourceBucket, DestBucket))
+  | "n"; // variadic resource set (e.g., ExecuteTransaction(TableA, TableB, ...))
 
 interface AuditReport {
   service: string;
@@ -167,12 +168,17 @@ const ZERO_ARITY_PATTERNS = [
   /^describe(?:Endpoints|Limits|Account)$/i,
 ];
 
-const MULTI_ARITY_PATTERNS = [
+const FIXED_MULTI_ARITY_PATTERNS = [
   /^copy/i,
   /^replicate/i,
   /^restore.*From/i,
+];
+
+const N_ARITY_PATTERNS = [
   /^batch/i,
   /^transact/i,
+  /^execute.*Statement/i,
+  /^execute.*Transaction/i,
 ];
 
 // ============ Utilities ============
@@ -218,13 +224,60 @@ function classifyOperation(name: string): {
   let resourceArity: ResourceArity;
   if (matchesAnyPattern(name, ZERO_ARITY_PATTERNS)) {
     resourceArity = 0;
-  } else if (matchesAnyPattern(name, MULTI_ARITY_PATTERNS)) {
+  } else if (matchesAnyPattern(name, N_ARITY_PATTERNS)) {
+    resourceArity = "n";
+  } else if (matchesAnyPattern(name, FIXED_MULTI_ARITY_PATTERNS)) {
     resourceArity = 2;
   } else {
     resourceArity = 1;
   }
 
   return { category, resourceArity, impliesResource, impliesEventSource };
+}
+
+async function inferImplementedResourceArity(
+  alchemyPath: string,
+  pascalCase: string,
+  fallback: ResourceArity,
+): Promise<ResourceArity> {
+  const file = path.join(alchemyPath, `${pascalCase}.ts`);
+
+  try {
+    const content = await fs.readFile(file, "utf-8");
+    const serviceSignatureMatch = content.match(
+      /Binding\.Service<[\s\S]*?,\s*(\([\s\S]*?\)\s*=>\s*Effect\.Effect<)/,
+    );
+
+    if (!serviceSignatureMatch) {
+      return fallback;
+    }
+
+    const signature = serviceSignatureMatch[1];
+
+    if (/\(\s*\)\s*=>\s*Effect\.Effect</.test(signature)) {
+      return 0;
+    }
+
+    if (/\(\s*\.\.\.[^)]+\)\s*=>\s*Effect\.Effect</.test(signature)) {
+      return "n";
+    }
+
+    if (/\([^)]*,[^)]*\)\s*=>\s*Effect\.Effect</.test(signature)) {
+      return 2;
+    }
+
+    if (/\([^)]*\)\s*=>\s*Effect\.Effect</.test(signature)) {
+      return 1;
+    }
+  } catch {
+    // Fall back to heuristic classification.
+  }
+
+  return fallback;
+}
+
+function formatArity(arity: ResourceArity): string {
+  return `arity=${arity}`;
 }
 
 // ============ File Parsing ============
@@ -526,20 +579,29 @@ async function auditService(serviceName: string): Promise<AuditReport> {
   const bindingTestCoverage = await getBindingTestDescribes(bindingTestPath);
 
   // Classify operations
-  const operations: Operation[] = distilledOps.map((name) => {
+  const operations: Operation[] = await Promise.all(distilledOps.map(async (name) => {
     const pascalCase = toPascalCase(name);
     const classification = classifyOperation(name);
+    const implemented = alchemyFiles.has(pascalCase);
+    const resourceArity = implemented
+      ? await inferImplementedResourceArity(
+          alchemyPath,
+          pascalCase,
+          classification.resourceArity,
+        )
+      : classification.resourceArity;
 
     return {
       name,
       camelCase: name,
       pascalCase,
       ...classification,
-      implemented: alchemyFiles.has(pascalCase),
+      resourceArity,
+      implemented,
       registeredInProviders: providerRegs.bindings.has(pascalCase),
       registeredInIndex: indexExports.has(pascalCase),
     };
-  });
+  }));
 
   // Group by category
   const implementedBindings = operations.filter(
@@ -662,7 +724,7 @@ function formatReport(report: AuditReport): string {
     lines.push("IMPLEMENTED BINDINGS");
     lines.push(`${"─".repeat(80)}`);
     for (const op of report.implementedBindings) {
-      const arity = `[arity=${op.resourceArity}]`;
+      const arity = `[${formatArity(op.resourceArity)}]`;
       const regStatus = op.registeredInProviders
         ? "✓ registered"
         : "⚠ NOT in Providers.ts";
@@ -687,6 +749,9 @@ function formatReport(report: AuditReport): string {
     const arity2 = report.missingBindings.filter(
       (op) => op.resourceArity === 2,
     );
+    const arityN = report.missingBindings.filter(
+      (op) => op.resourceArity === "n",
+    );
 
     if (arity1.length > 0) {
       lines.push("  Single-resource bindings (arity=1):");
@@ -706,8 +771,15 @@ function formatReport(report: AuditReport): string {
     }
 
     if (arity2.length > 0) {
-      lines.push("  Multi-resource bindings (arity=2+):");
+      lines.push("  Fixed multi-resource bindings (arity=2):");
       for (const op of arity2) {
+        lines.push(`    • ${op.pascalCase} (${op.camelCase})`);
+      }
+    }
+
+    if (arityN.length > 0) {
+      lines.push("  Variadic resource bindings (arity=n):");
+      for (const op of arityN) {
         lines.push(`    • ${op.pascalCase} (${op.camelCase})`);
       }
     }
@@ -786,7 +858,7 @@ function formatReport(report: AuditReport): string {
     lines.push(`${"─".repeat(80)}`);
     for (const warning of report.leastPrivilegeWarnings) {
       lines.push(
-        `  ⚠ ${warning.binding}.ts [arity=${warning.resourceArity}] (${warning.file})`,
+        `  ⚠ ${warning.binding}.ts [${formatArity(warning.resourceArity)}] (${warning.file})`,
       );
       lines.push(`    ${warning.message}`);
     }
@@ -800,7 +872,7 @@ function formatReport(report: AuditReport): string {
     lines.push(`${"─".repeat(80)}`);
     for (const op of report.helperCandidates) {
       const impl = op.implemented ? "✓" : "○";
-      lines.push(`  ${impl} ${op.camelCase} [arity=${op.resourceArity}]`);
+      lines.push(`  ${impl} ${op.camelCase} [${formatArity(op.resourceArity)}]`);
     }
     lines.push("");
   }

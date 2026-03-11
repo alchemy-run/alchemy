@@ -12,7 +12,7 @@ export * from "./PutItem.ts";
 export * from "./Query.ts";
 export * from "./RestoreTableToPointInTime.ts";
 export * from "./Scan.ts";
-export * from "./SecondaryIndex.ts";
+export * from "./Stream.ts";
 export * from "./Table.ts";
 export * from "./UpdateItem.ts";
 export * from "./UpdateTimeToLive.ts";

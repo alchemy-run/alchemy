@@ -1,3 +1,4 @@
+import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -107,6 +108,9 @@ export const Policy =
           service
             ? Effect.succeed(service)
             : Effect.all([CurrentStack, ALCHEMY_PHASE.asEffect()]).pipe(
+                Effect.tap((f) =>
+                  Console.log(`Binding.Policy ${Identifier}`, f),
+                ),
                 Effect.flatMap(([stack, phase]) =>
                   stack && phase === "plan"
                     ? Effect.die(
@@ -174,12 +178,11 @@ export const Policy =
           Layer.effect(
             self,
             // @ts-expect-error
-            fn.pipe(
-              Effect.map(
-                (fn) =>
-                  (...args: Parameters<Shape>) =>
-                    Self.asEffect().pipe(Effect.map((ctx) => fn(ctx, ...args))),
-              ),
+            Effect.map(
+              fn,
+              (fn) =>
+                (...args: Parameters<Shape>) =>
+                  Effect.flatMap(Self.asEffect(), (ctx) => fn(ctx, ...args)),
             ),
           ),
       },

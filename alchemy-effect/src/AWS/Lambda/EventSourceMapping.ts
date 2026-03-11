@@ -177,6 +177,14 @@ export const EventSourceMappingProvider = () =>
       const region = yield* Region;
       const accountId = yield* Account;
 
+      const createEventSourceMappingTags = Effect.fn(function* (id: string) {
+        const internalTags = yield* createInternalTags(id);
+        return {
+          ...internalTags,
+          "alchemy::id": sanitizeAwsTagValue(internalTags["alchemy::id"]),
+        };
+      });
+
       const toCreateRequest = (
         props: EventSourceMappingProps,
         tags: Record<string, string>,
@@ -280,8 +288,8 @@ export const EventSourceMappingProvider = () =>
           }
         }),
         create: Effect.fn(function* ({ id, news, session }) {
-          const internalTags = yield* createInternalTags(id);
-          const allTags = { ...internalTags, ...news.tags };
+          const expectedInternalTags = yield* createEventSourceMappingTags(id);
+          const allTags = { ...expectedInternalTags, ...news.tags };
 
           const functionName = news.functionName as string;
           const eventSourceArn = news.eventSourceArn as string;
@@ -309,7 +317,8 @@ export const EventSourceMappingProvider = () =>
                                 Resource: `arn:aws:lambda:${region}:${accountId}:event-source-mapping:${mapping.UUID}`,
                               })
                               .pipe(retryTransient);
-                            if (hasTags(yield* createInternalTags(id), Tags)) {
+
+                            if (hasTags(expectedInternalTags, Tags)) {
                               return mapping;
                             }
                           }
@@ -355,7 +364,7 @@ export const EventSourceMappingProvider = () =>
               retryTransient,
             );
 
-          const internalTags = yield* createInternalTags(id);
+          const internalTags = yield* createEventSourceMappingTags(id);
           const oldTags = { ...internalTags, ...olds.tags };
           const newTags = { ...internalTags, ...news.tags };
           const { removed, upsert } = diffTags(oldTags, newTags);
@@ -422,4 +431,7 @@ const retryPermissionsPropagation = Effect.retry({
       e.message?.includes("Cannot access stream") ||
       e.message?.includes("Please ensure the role can perform the GetRecords")),
   schedule: Schedule.exponential(100).pipe(Schedule.both(Schedule.recurs(30))),
-});
+}) as <A, R, Err>(self: Effect.Effect<A, Err, R>) => Effect.Effect<A, Err, R>;
+
+const sanitizeAwsTagValue = (value: string) =>
+  value.replace(/[^\p{L}\p{Z}\p{N}_.:/=+\-@]/gu, "-");
