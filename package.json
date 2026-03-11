@@ -65,6 +65,7 @@
     "install:clean": "rm -rf bun.lock && bun clean . && bun i",
     "opencode": "OPENCODE_EXPERIMENTAL_OXFMT=true opencode",
     "setup": "effect-language-service patch && bun run download:external",
+    "sync:submodules": "git submodule sync --recursive && git submodule update --init --recursive",
     "publish:npm": "bun run build && bun run --filter alchemy-effect publish:npm",
     "test:benchmark": "bun run --filter alchemy-effect test:benchmark",
     "test:fast": "FAST=1 bun run test:live",
