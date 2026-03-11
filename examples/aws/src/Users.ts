@@ -48,7 +48,7 @@ export const UsersDurableObject = Layer.effect(
         return yield* user.getProfile();
       }),
       createUser: Effect.fnUntraced(function* (firstName, lastName) {
-        const userId = yield* Effect.sync(uuidv4);
+        const userId = yield* Effect.sync(() => uuidv4());
         const user = yield* users.getByName(userId);
         yield* user.setProfile(firstName, lastName);
         return userId;

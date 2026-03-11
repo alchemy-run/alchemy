@@ -107,7 +107,7 @@ export class NoContentGeneratedError extends Data.TaggedError(
 export class NoSuchModelError extends Data.TaggedError("NoSuchModelError")<{
   readonly message: string;
   readonly modelId: string;
-  readonly modelType: "languageModel" | "textEmbeddingModel" | "imageModel";
+  readonly modelType: string;
   readonly cause?: unknown;
 }> {}
 
