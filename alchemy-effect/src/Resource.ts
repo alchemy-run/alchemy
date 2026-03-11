@@ -220,10 +220,8 @@ export const Resource = <R extends ResourceLike>(
       return pipeArguments(this.asEffect(), arguments);
     },
     asEffect() {
-      return Effect.map(
-        Effect.services(),
-        (services) => (id: string, props: R["Props"]) =>
-          constructor(id, props).pipe(Effect.provide(services)),
+      return Effect.succeed((id: string, props: R["Props"]) =>
+        constructor(id, props),
       );
     },
     provider: {
