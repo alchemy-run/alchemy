@@ -46,7 +46,6 @@ export const QueueSinkPolicyLive = QueueSinkPolicy.layer.succeed(
       yield* host.bind`Allow(${host}, AWS.SQS.QueueSink(${queue}))`({
         policyStatements: [
           {
-            Sid: "QueueSink",
             Effect: "Allow",
             Action: ["sqs:SendMessage"],
             Resource: [Output.interpolate`${queue.queueArn}`],

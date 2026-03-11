@@ -79,7 +79,19 @@ export const resources = () =>
 
 export const bindings = () =>
   Layer.mergeAll(
+    DynamoDB.DeleteItemPolicyLive,
+    DynamoDB.DescribeTablePolicyLive,
+    DynamoDB.DescribeTimeToLivePolicyLive,
+    DynamoDB.ExecuteTransactionPolicyLive,
     DynamoDB.GetItemPolicyLive,
+    DynamoDB.ListTablesPolicyLive,
+    DynamoDB.ListTagsOfResourcePolicyLive,
+    DynamoDB.PutItemPolicyLive,
+    DynamoDB.QueryPolicyLive,
+    DynamoDB.RestoreTableToPointInTimePolicyLive,
+    DynamoDB.ScanPolicyLive,
+    DynamoDB.UpdateItemPolicyLive,
+    DynamoDB.UpdateTimeToLivePolicyLive,
     Kinesis.PutRecordPolicyLive,
     Kinesis.PutRecordsPolicyLive,
     Lambda.BucketEventSourcePolicyLive,

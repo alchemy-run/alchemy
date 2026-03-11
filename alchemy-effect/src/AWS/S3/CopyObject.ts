@@ -53,7 +53,6 @@ export const CopyObjectPolicyLive = CopyObjectPolicy.layer.succeed(
       yield* host.bind`Allow(${host}, AWS.S3.CopyObject(${bucket}))`({
         policyStatements: [
           {
-            Sid: "CopyObject",
             Effect: "Allow",
             Action: ["s3:PutObject", "s3:GetObject"],
             Resource: [Output.interpolate`${bucket.bucketArn}/*`],

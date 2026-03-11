@@ -13,6 +13,10 @@ import * as Scope from "effect/Scope";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as NodePath from "node:path";
+import {
+  afterAll as vitestAfterAll,
+  beforeAll as vitestBeforeAll,
+} from "vitest";
 import * as AWS from "../AWS/index.ts";
 
 import { apply } from "../Apply.ts";
@@ -64,7 +68,109 @@ type Provided =
   | aws.Region.Region
   | Cli
   | ExecutionContext
-  | AWS.StageConfig;
+  | AWS.StageConfig
+  | Layer.Success<ReturnType<typeof AWS.providers>>;
+
+const platform = Layer.mergeAll(
+  NodeServices.layer,
+  FetchHttpClient.layer,
+  Logger.layer([Logger.consolePretty()]),
+);
+
+const awsProviders = Layer.provideMerge(
+  AWS.providers(),
+  Layer.mergeAll(Credentials.fromStageConfig(), Region.fromStageConfig()),
+);
+
+const awsStageConfig = Layer.effect(
+  AWS.StageConfig,
+  Effect.gen(function* () {
+    const AWS_PROFILE = yield* Config.string("AWS_PROFILE").pipe(
+      Config.withDefault("default"),
+    );
+
+    const LOCAL = yield* Config.boolean("LOCAL").pipe(
+      Config.withDefault(false),
+    );
+
+    const LOCALSTACK_ENDPOINT = yield* Config.string(
+      "LOCALSTACK_ENDPOINT",
+    ).pipe(Config.withDefault("http://localhost.localstack.cloud:4566"));
+
+    return AWS.StageConfig.of({
+      profile: LOCAL ? undefined : AWS_PROFILE,
+      region: LOCAL ? "us-east-1" : undefined,
+      credentials: LOCAL
+        ? {
+            accessKeyId: "test",
+            secretAccessKey: "test",
+            sessionToken: "test",
+          }
+        : undefined,
+      endpoint: LOCAL ? LOCALSTACK_ENDPOINT : undefined,
+    });
+  }),
+);
+
+const deriveStackName = (testPath: string, suffix: string) => {
+  const testDir = testPath.includes("/test/")
+    ? (testPath.split("/test/").pop() ?? "")
+    : NodePath.basename(testPath);
+  const testPathWithoutExt = testDir.replace(/\.[^.]+$/, "");
+  return `${testPathWithoutExt}-${suffix}`
+    .replaceAll(/[^a-zA-Z0-9_]/g, "-")
+    .replace(/-+/g, "-");
+};
+
+const runWithContext = <A>(
+  stackName: string,
+  effect: Effect.Effect<A, any, Provided>,
+  options: { state?: Layer.Layer<State.State, never, Stack.Stack> } = {},
+) => {
+  const stack = Layer.effect(
+    Stack.Stack,
+    Effect.succeed({
+      name: stackName,
+      stage: "test",
+      resources: {},
+      bindings: {},
+    }),
+  );
+
+  const alchemy = Layer.provideMerge(
+    Layer.mergeAll(options.state ?? State.LocalState, TestCli),
+    Layer.mergeAll(awsStageConfig, stack, dotAlchemy),
+  );
+
+  return Effect.gen(function* () {
+    const configProvider = ConfigProvider.orElse(
+      yield* ConfigProvider.fromDotEnv({ path: ".env" }),
+      ConfigProvider.fromEnv(),
+    );
+    return yield* effect.pipe(
+      Effect.provideService(ConfigProvider.ConfigProvider, configProvider),
+    );
+  }).pipe(
+    Effect.provide(
+      Layer.provideMerge(awsProviders, Layer.provideMerge(alchemy, platform)),
+    ),
+    Effect.provideService(Stage.Stage, "test"),
+    Effect.provideService(ExecutionContext, {
+      type: "Test",
+      id: "Test",
+      env: {},
+      exports: {},
+      listen: () => Effect.void,
+      get: <T>(_key: string) => Effect.succeed<T>(undefined as T),
+      set: (id: string) => Effect.succeed(id),
+    }),
+    Effect.provideService(
+      MinimumLogLevel,
+      process.env.DEBUG ? "Debug" : "Info",
+    ),
+    Effect.provide(NodeServices.layer),
+  );
+};
 
 export function test(
   name: string,
@@ -96,108 +202,10 @@ export function test(
     args.length === 1 ? [undefined, args[0]] : args;
 
   const testPath = expect.getState().testPath ?? "";
-  const testDir = testPath.includes("/test/")
-    ? (testPath.split("/test/").pop() ?? "")
-    : NodePath.basename(testPath);
-  const testPathWithoutExt = testDir.replace(/\.[^.]+$/, "");
-  const stackName = `${testPathWithoutExt}-${name}`
-    .replaceAll(/[^a-zA-Z0-9_]/g, "-")
-    .replace(/-+/g, "-");
+  const stackName = deriveStackName(testPath, name);
+  const effect = runWithContext(stackName, testCase, options);
 
-  const platform = Layer.mergeAll(
-    NodeServices.layer,
-    FetchHttpClient.layer,
-    Logger.layer([Logger.consolePretty()]),
-  );
-  const aws = Layer.provideMerge(
-    AWS.providers(),
-    Layer.mergeAll(Credentials.fromStageConfig(), Region.fromStageConfig()),
-  );
-
-  const awsStageConfig = Layer.effect(
-    AWS.StageConfig,
-    Effect.gen(function* () {
-      const AWS_PROFILE = yield* Config.string("AWS_PROFILE").pipe(
-        Config.withDefault("default"),
-      );
-
-      const LOCAL = yield* Config.boolean("LOCAL").pipe(
-        Config.withDefault(false),
-      );
-
-      const LOCALSTACK_ENDPOINT = yield* Config.string(
-        "LOCALSTACK_ENDPOINT",
-      ).pipe(Config.withDefault("http://localhost.localstack.cloud:4566"));
-
-      return AWS.StageConfig.of({
-        profile: LOCAL ? undefined : AWS_PROFILE,
-        region: LOCAL ? "us-east-1" : undefined,
-        credentials: LOCAL
-          ? {
-              accessKeyId: "test",
-              secretAccessKey: "test",
-              sessionToken: "test",
-            }
-          : undefined,
-        endpoint: LOCAL
-          ? // use the default LOCALSTACK_ENDPOINT unless overridden
-            LOCALSTACK_ENDPOINT
-          : // if we tests are explicitly being run against a live AWS account, we don't need to use LocalStack
-            undefined,
-      });
-    }),
-  );
-  const stack = Layer.effect(
-    Stack.Stack,
-    Effect.succeed({
-      name: stackName,
-      stage: "test",
-      resources: {},
-      bindings: {},
-    }),
-  );
-
-  const alchemy = Layer.provideMerge(
-    Layer.mergeAll(options.state ?? State.LocalState, TestCli),
-    Layer.mergeAll(awsStageConfig, stack, dotAlchemy),
-  );
-
-  const test = Effect.gen(function* () {
-    const configProvider = ConfigProvider.orElse(
-      yield* ConfigProvider.fromDotEnv({ path: ".env" }),
-      ConfigProvider.fromEnv(),
-    );
-    return yield* testCase.pipe(
-      Effect.provideService(ConfigProvider.ConfigProvider, configProvider),
-    );
-  }).pipe(
-    Effect.provide(
-      Layer.provideMerge(aws, Layer.provideMerge(alchemy, platform)),
-    ),
-    Effect.provideService(Stage.Stage, "test"),
-    Effect.provideService(ExecutionContext, {
-      type: "Test",
-      id: "Test",
-      env: {},
-      exports: {},
-      listen: () => {
-        return Effect.void;
-      },
-      get: <T>(_key: string) => {
-        return Effect.succeed<T>(undefined as T);
-      },
-      set: (id: string) => {
-        return Effect.succeed(id);
-      },
-    }),
-    Effect.provideService(
-      MinimumLogLevel,
-      process.env.DEBUG ? "Debug" : "Info",
-    ),
-    Effect.provide(NodeServices.layer),
-  );
-
-  return it.live(name, () => test, options.timeout);
+  return it.live(name, () => effect, options.timeout);
 }
 
 export namespace test {
@@ -353,4 +361,36 @@ export function skipIf(condition: boolean) {
       test(name, ...(args as [Effect.Effect<void, any, Provided>]));
     }
   };
+}
+
+export function beforeAll<A, E, R>(
+  effect: Effect.Effect<A, E, R>,
+  options?: { timeout?: number; stackName?: string },
+): void {
+  const testPath = expect.getState().testPath ?? "";
+  const stackName = options?.stackName ?? deriveStackName(testPath, "suite");
+
+  vitestBeforeAll(
+    () =>
+      Effect.runPromise(
+        Effect.scoped(runWithContext(stackName, effect as any)),
+      ),
+    options?.timeout,
+  );
+}
+
+export function afterAll<A, E, R>(
+  effect: Effect.Effect<A, E, R>,
+  options?: { timeout?: number; stackName?: string },
+): void {
+  const testPath = expect.getState().testPath ?? "";
+  const stackName = options?.stackName ?? deriveStackName(testPath, "suite");
+
+  vitestAfterAll(
+    () =>
+      Effect.runPromise(
+        Effect.scoped(runWithContext(stackName, effect as any)),
+      ),
+    options?.timeout,
+  );
 }

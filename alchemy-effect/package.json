@@ -70,6 +70,11 @@
       "bun": "./src/AWS/Lambda/*.ts",
       "import": "./lib/AWS/Lambda/*.js"
     },
+    "./Build": {
+      "types": "./src/Build/index.d.ts",
+      "bun": "./src/Build/index.ts",
+      "import": "./lib/Build/index.js"
+    },
     "./Bundle": {
       "types": "./src/Bundle/index.d.ts",
       "bun": "./src/Bundle/index.ts",
@@ -156,6 +161,7 @@
     "distilled-aws": "catalog:",
     "distilled-cloudflare": "catalog:",
     "esbuild": "catalog:",
+    "fast-glob": "^3.3.2",
     "fast-xml-parser": "catalog:",
     "ignore": "^7.0.5",
     "jszip": "^3.10.1",

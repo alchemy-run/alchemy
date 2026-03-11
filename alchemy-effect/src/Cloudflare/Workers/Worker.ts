@@ -20,6 +20,7 @@ import {
   type ListenHandler,
   type ServerlessExecutionContext,
 } from "../../Host.ts";
+import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import { sha256 } from "../../Util/sha256.ts";
@@ -64,7 +65,17 @@ export const isWorkerEvent = (value: any): value is WorkerEvent =>
 
 export type WorkerProps = {
   name?: string;
-  assets?: string | Worker.AssetsProps;
+  /**
+   * Static assets to serve. Can be:
+   * - A string path to the assets directory
+   * - An AssetsProps object with directory and config
+   * - An object with path and hash (e.g., from a Build resource)
+   */
+  assets?:
+    | string
+    | Worker.AssetsProps
+    | Worker.AssetsWithHash
+    | (Worker.AssetsWithHash & { [K: string]: any });
   logpush?: boolean;
   observability?: Worker.Observability;
   subdomain?: Worker.Subdomain;
@@ -153,52 +164,49 @@ export const Worker = Host<
         }
         exports[name] = value;
       }),
-    exports: Effect.sync(() => ({
-      ...exports,
-      // construct an Effect that produces the Function's entrypoint
-      default: Effect.map(
-        Effect.all(listeners, {
-          concurrency: "unbounded",
-        }),
-        (handlers) => {
-          const handle =
-            (type: WorkerEvent["type"]) =>
-            (request: any, env: unknown, context: cf.ExecutionContext) => {
-              const event: WorkerEvent = {
-                kind: "Cloudflare.Workers.WorkerEvent",
-                type,
-                input: request,
-                env,
-                context,
-              };
-              for (const handler of handlers) {
-                const eff = handler(event);
-                if (Effect.isEffect(eff)) {
-                  return eff.pipe(
-                    Effect.provideService(ExecutionContext, context),
-                    Effect.provideService(
-                      WorkerEnvironment,
-                      env as Record<string, any>,
-                    ),
-                    Effect.runPromise,
-                  );
-                }
-              }
-              throw new Error("No event handler found");
-            };
-          return {
-            fetch: handle("fetch"),
-            email: handle("email"),
-            queue: handle("queue"),
-            scheduled: handle("scheduled"),
-            tail: handle("tail"),
-            trace: handle("trace"),
-            tailStream: handle("tailStream"),
-            test: handle("test"),
-          } satisfies Required<cf.ExportedHandler>;
-        },
-      ),
-    })),
+    exports: Effect.gen(function* () {
+      const handlers = yield* Effect.all(listeners, {
+        concurrency: "unbounded",
+      });
+      const handle =
+        (type: WorkerEvent["type"]) =>
+        (request: any, env: unknown, context: cf.ExecutionContext) => {
+          const event: WorkerEvent = {
+            kind: "Cloudflare.Workers.WorkerEvent",
+            type,
+            input: request,
+            env,
+            context,
+          };
+          for (const handler of handlers) {
+            const eff = handler(event);
+            if (Effect.isEffect(eff)) {
+              return eff.pipe(
+                Effect.provideService(ExecutionContext, context),
+                Effect.provideService(
+                  WorkerEnvironment,
+                  env as Record<string, any>,
+                ),
+                Effect.runPromise,
+              );
+            }
+          }
+          throw new Error("No event handler found");
+        };
+      return {
+        ...exports,
+        default: {
+          fetch: handle("fetch"),
+          email: handle("email"),
+          queue: handle("queue"),
+          scheduled: handle("scheduled"),
+          tail: handle("tail"),
+          trace: handle("trace"),
+          tailStream: handle("tailStream"),
+          test: handle("test"),
+        } satisfies Required<cf.ExportedHandler>,
+      };
+    }),
   } satisfies WorkerExecutionContext;
 });
 
@@ -216,6 +224,27 @@ export declare namespace Worker {
 
   export interface AssetsProps {
     directory: string;
+    config?: AssetsConfig;
+  }
+
+  /**
+   * Assets configuration that includes a pre-computed hash.
+   * When hash is provided, it's used directly for diffing instead of computing from directory contents.
+   * This is useful when integrating with Build resources that produce a deterministic hash.
+   */
+  export interface AssetsWithHash {
+    /**
+     * Path to the assets directory.
+     */
+    path: Input<string>;
+    /**
+     * Pre-computed hash of the assets. When provided, this hash is used for diffing
+     * to determine if the worker needs to be redeployed.
+     */
+    hash: Input<string>;
+    /**
+     * Optional assets configuration.
+     */
     config?: AssetsConfig;
   }
 }
@@ -295,6 +324,27 @@ export const WorkerProvider = () =>
         assets: WorkerProps["assets"],
       ) {
         if (!assets) return undefined;
+
+        // Handle AssetsWithHash (from Build resource)
+        // Props are resolved by Plan, so Input<string> values are already strings at runtime
+        if (
+          typeof assets === "object" &&
+          "path" in assets &&
+          "hash" in assets
+        ) {
+          const path = assets.path as string;
+          const hash = assets.hash as string;
+          const result = yield* read({
+            directory: path,
+            config: (assets as Worker.AssetsWithHash).config,
+          });
+          return {
+            ...result,
+            hash,
+          };
+        }
+
+        // Handle string path or AssetsProps
         const result = yield* read(
           typeof assets === "string" ? { directory: assets } : assets,
         );
@@ -310,11 +360,7 @@ export const WorkerProvider = () =>
       ) {
         const outfile = path.join(dotAlchemy, "out", `${id}.js`);
         const realMain = yield* fs.realPath(props.main);
-        const tempDir = yield* createTempBundleDir(
-          realMain,
-          dotAlchemy,
-          id,
-        );
+        const tempDir = yield* createTempBundleDir(realMain, dotAlchemy, id);
 
         const realTempDir = yield* fs.realPath(tempDir);
         const tempEntry = path.join(realTempDir, "__index.ts");
@@ -325,20 +371,36 @@ export const WorkerProvider = () =>
         importPath = importPath.replaceAll("\\", "/");
         const script = `
 import * as Effect from "effect/Effect";
-import workerEffect from "${importPath}";
+import workerExport from "${importPath}";
 
 let workerPromise;
 // don't initialize the workerEffect during module init because Cloudflare does not allow I/O during module init
 // we cache it synchronously (??=) to guarnatee only one initialization ever happens
-const worker = () => (workerPromise ??= Effect.runPromise(workerEffect))
+const resolveWorker = () => {
+  if (workerPromise) return workerPromise;
+  // Support both Effect-based workers and plain object exports
+  if (Effect.isEffect(workerExport)) {
+    workerPromise = Effect.runPromise(workerExport).then(result => result.exports?.default ?? result);
+  } else {
+    // Plain object export (e.g. { fetch, queue, ... })
+    workerPromise = Promise.resolve(workerExport);
+  }
+  return workerPromise;
+}
 
-export default new Proxy({}, {
-  get: (_, prop) => async (...args) => 
-    (await worker()).exports.default[prop](...args),
-});
+export default {
+  fetch: async (...args) => (await resolveWorker()).fetch?.(...args),
+  queue: async (...args) => (await resolveWorker()).queue?.(...args),
+  scheduled: async (...args) => (await resolveWorker()).scheduled?.(...args),
+  email: async (...args) => (await resolveWorker()).email?.(...args),
+  tail: async (...args) => (await resolveWorker()).tail?.(...args),
+  trace: async (...args) => (await resolveWorker()).trace?.(...args),
+  tailStream: async (...args) => (await resolveWorker()).tailStream?.(...args),
+  test: async (...args) => (await resolveWorker()).test?.(...args),
+};
 
-// export class proxy stubs that
-${props.exports?.map((id) => `class ${id} {}`).join("\n") ?? ""}
+// export class proxy stubs for Durable Objects
+${props.exports?.map((id) => `export class ${id} {}`).join("\n") ?? ""}
 `;
         yield* fs.writeFileString(tempEntry, script);
         return yield* Effect.gen(function* () {
@@ -355,9 +417,7 @@ ${props.exports?.map((id) => `class ${id} {}`).join("\n") ?? ""}
             code,
             hash: yield* sha256(code),
           };
-        }).pipe(
-          Effect.ensuring(cleanupBundleTempDir(tempDir)),
-        );
+        }).pipe(Effect.ensuring(cleanupBundleTempDir(tempDir)));
       });
 
       const prepareMetadata = Effect.fnUntraced(function* (props: WorkerProps) {

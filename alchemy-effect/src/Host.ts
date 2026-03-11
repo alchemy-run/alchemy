@@ -111,7 +111,6 @@ export const Host = <
                     ...props?.env,
                     ...executionContext.env,
                   },
-                  exports: Object.keys(executionContext.exports ?? {}),
                 })),
                 Effect.provide(
                   pipe(

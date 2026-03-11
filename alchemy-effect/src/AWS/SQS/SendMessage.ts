@@ -53,7 +53,6 @@ export const SendMessagePolicyLive = SendMessagePolicy.layer.succeed(
       yield* host.bind`Allow(${host}, AWS.SQS.SendMessage(${queue}))`({
         policyStatements: [
           {
-            Sid: "SendMessage",
             Effect: "Allow",
             Action: ["sqs:SendMessage"],
             Resource: [Output.interpolate`${queue.queueArn}`],

@@ -56,7 +56,6 @@ export const DeleteMessageBatchPolicyLive =
         yield* host.bind`Allow(${host}, AWS.SQS.DeleteMessageBatch(${queue}))`({
           policyStatements: [
             {
-              Sid: "DeleteMessageBatch",
               Effect: "Allow",
               Action: ["sqs:DeleteMessage"],
               Resource: [Output.interpolate`${queue.queueArn}`],

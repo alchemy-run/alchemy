@@ -579,13 +579,15 @@ test(
     const stack = yield* Stack.Stack;
     const state = yield* State;
 
-    yield* test.deploy(
-      Effect.gen(function* () {
-        yield* BindingTarget("A", {
-          name: "target",
-        });
-      }),
-    ).pipe(Effect.provide(TestLayers));
+    yield* test
+      .deploy(
+        Effect.gen(function* () {
+          yield* BindingTarget("A", {
+            name: "target",
+          });
+        }),
+      )
+      .pipe(Effect.provide(TestLayers));
 
     expect(
       yield* state.get({
@@ -1167,6 +1169,18 @@ describe("Outputs should resolve to old values", () => {
     {
       string: "TEST-STRING",
     },
+  );
+
+  test(
+    "resource object",
+    (A) => ({
+      object: A as any,
+    }),
+    {
+      object: {
+        string: "test-string",
+      },
+    } as any,
   );
 });
 

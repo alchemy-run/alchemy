@@ -64,7 +64,10 @@ test(
       }),
     );
 
-    const actualUpdatedWorker = yield* findWorker(updatedWorker.workerName, accountId);
+    const actualUpdatedWorker = yield* findWorker(
+      updatedWorker.workerName,
+      accountId,
+    );
     expect(actualUpdatedWorker?.scriptName).toEqual(updatedWorker.workerName);
     const actualUpdatedSubdomain = yield* workers.getScriptSubdomain({
       accountId,
@@ -128,7 +131,10 @@ test(
       }),
     );
 
-    const actualUpdatedWorker = yield* findWorker(updatedWorker.workerName, accountId);
+    const actualUpdatedWorker = yield* findWorker(
+      updatedWorker.workerName,
+      accountId,
+    );
     expect(actualUpdatedWorker?.scriptName).toEqual(updatedWorker.workerName);
     expect(updatedWorker.hash?.assets).toBeDefined();
 

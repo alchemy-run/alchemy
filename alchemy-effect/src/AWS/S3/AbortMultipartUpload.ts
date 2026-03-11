@@ -57,7 +57,6 @@ export const AbortMultipartUploadPolicyLive =
           {
             policyStatements: [
               {
-                Sid: "AbortMultipartUpload",
                 Effect: "Allow",
                 Action: ["s3:AbortMultipartUpload"],
                 Resource: [Output.interpolate`${bucket.bucketArn}/*`],

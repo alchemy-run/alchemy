@@ -50,7 +50,6 @@ export const PutObjectPolicyLive = PutObjectPolicy.layer.succeed(
       yield* host.bind`Allow(${host}, AWS.S3.PutObject(${bucket}))`({
         policyStatements: [
           {
-            Sid: "PutObject",
             Effect: "Allow",
             Action: ["s3:PutObject"],
             Resource: [Output.interpolate`${bucket.bucketArn}/*`],

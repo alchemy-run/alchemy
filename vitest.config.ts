@@ -2,7 +2,11 @@ import tsconfigPaths from "vite-tsconfig-paths";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  plugins: [tsconfigPaths() as any],
+  plugins: [
+    tsconfigPaths({
+      projects: ["alchemy-effect/tsconfig.test.json"],
+    }) as any,
+  ],
   test: {
     pool: "threads",
     maxWorkers: 32,
@@ -28,6 +32,7 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "json", "html"],
       exclude: [
+        ".distilled/**",
         "coverage/**",
         "dist/**",
         "lib/**",

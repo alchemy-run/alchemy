@@ -51,7 +51,6 @@ export const InvokeFunctionPolicyLive = InvokeFunctionPolicy.layer.succeed(
       yield* host.bind`Allow(${host}, AWS.Lambda.InvokeFunction(${func}))`({
         policyStatements: [
           {
-            Sid: "InvokeFunction",
             Effect: "Allow",
             Action: ["lambda:InvokeFunction"],
             Resource: [Output.interpolate`${func.functionArn}`],

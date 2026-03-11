@@ -52,7 +52,6 @@ export const ReceiveMessagePolicyLive = ReceiveMessagePolicy.layer.succeed(
       yield* host.bind`Allow(${host}, AWS.SQS.ReceiveMessage(${queue}))`({
         policyStatements: [
           {
-            Sid: "ReceiveMessage",
             Effect: "Allow",
             Action: ["sqs:ReceiveMessage"],
             Resource: [Output.interpolate`${queue.queueArn}`],

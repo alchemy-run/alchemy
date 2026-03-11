@@ -50,7 +50,9 @@ export const rolldown = () =>
             }
           });
 
-          yield* Effect.addFinalizer(() => Effect.promise(() => watcher.close()));
+          yield* Effect.addFinalizer(() =>
+            Effect.promise(() => watcher.close()),
+          );
 
           return { queue };
         }),

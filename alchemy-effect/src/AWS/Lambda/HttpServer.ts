@@ -110,15 +110,6 @@ const toLambdaFunctionURLResult = (
           ? new TextDecoder().decode(bytes)
           : Buffer.from(bytes).toString("base64");
 
-    console.log({
-      response,
-      statusCode: webResponse.status,
-      headers: Object.fromEntries(headers.entries()),
-      body,
-      cookies: cookies.length > 0 ? cookies : undefined,
-      isBase64Encoded: body !== undefined && !isTextual ? true : undefined,
-    });
-
     return {
       statusCode: webResponse.status,
       headers: Object.fromEntries(headers.entries()),

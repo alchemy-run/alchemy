@@ -57,7 +57,6 @@ export const CompleteMultipartUploadPolicyLive =
           {
             policyStatements: [
               {
-                Sid: "CompleteMultipartUpload",
                 Effect: "Allow",
                 Action: ["s3:PutObject"],
                 Resource: [Output.interpolate`${bucket.bucketArn}/*`],

@@ -52,7 +52,6 @@ export const HeadObjectPolicyLive = HeadObjectPolicy.layer.succeed(
       yield* host.bind`Allow(${host}, AWS.S3.HeadObject(${bucket}))`({
         policyStatements: [
           {
-            Sid: "HeadObject",
             Effect: "Allow",
             Action: ["s3:GetObject"],
             Resource: [Output.interpolate`${bucket.bucketArn}/*`],

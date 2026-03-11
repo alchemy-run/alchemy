@@ -65,7 +65,6 @@ export const QueueEventSourcePolicyLive = QueueEventSourcePolicy.layer.effect(
           {
             policyStatements: [
               {
-                Sid: "QueueEventSource",
                 Effect: "Allow",
                 Action: [
                   "sqs:ReceiveMessage",

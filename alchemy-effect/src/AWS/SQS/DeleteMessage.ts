@@ -52,7 +52,6 @@ export const DeleteMessagePolicyLive = DeleteMessagePolicy.layer.succeed(
       yield* host.bind`Allow(${host}, AWS.SQS.DeleteMessage(${queue}))`({
         policyStatements: [
           {
-            Sid: "DeleteMessage",
             Effect: "Allow",
             Action: ["sqs:DeleteMessage"],
             Resource: [Output.interpolate`${queue.queueArn}`],

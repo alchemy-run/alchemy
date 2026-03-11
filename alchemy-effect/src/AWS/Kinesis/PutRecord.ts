@@ -52,7 +52,6 @@ export const PutRecordPolicyLive = PutRecordPolicy.layer.succeed(
       yield* host.bind`Allow(${host}, AWS.Kinesis.PutRecord(${stream}))`({
         policyStatements: [
           {
-            Sid: "PutRecord",
             Effect: "Allow",
             Action: ["kinesis:PutRecord"],
             Resource: [Output.interpolate`${stream.streamArn}`],

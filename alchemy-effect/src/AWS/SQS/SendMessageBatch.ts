@@ -52,7 +52,6 @@ export const SendMessageBatchPolicyLive = SendMessageBatchPolicy.layer.succeed(
       yield* host.bind`Allow(${host}, AWS.SQS.SendMessageBatch(${queue}))`({
         policyStatements: [
           {
-            Sid: "SendMessageBatch",
             Effect: "Allow",
             Action: ["sqs:SendMessage"],
             Resource: [Output.interpolate`${queue.queueArn}`],

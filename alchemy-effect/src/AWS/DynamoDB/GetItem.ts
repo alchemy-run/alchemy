@@ -1,24 +1,14 @@
-import type { ConsumedCapacity } from "distilled-aws/dynamodb";
 import * as DynamoDB from "distilled-aws/dynamodb";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
-import * as Output from "../../Output.ts";
 import { isFunction } from "../Lambda/Function.ts";
-import { fromAttributeValue } from "./AttributeValue.ts";
 import type { Table } from "./Table.ts";
 
 export interface GetItemRequest extends Omit<
   DynamoDB.GetItemInput,
-  "TableName" | "Key"
-> {
-  Key: Record<string, any>;
-}
-
-export interface GetItemResult {
-  Item: Record<string, any> | undefined;
-  ConsumedCapacity?: ConsumedCapacity;
-}
+  "TableName"
+> {}
 
 export class GetItem extends Binding.Service<
   GetItem,
@@ -27,7 +17,7 @@ export class GetItem extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetItemRequest,
-    ) => Effect.Effect<GetItemResult, DynamoDB.GetItemError>
+    ) => Effect.Effect<DynamoDB.GetItemOutput, DynamoDB.GetItemError>
   >
 >()("AWS.DynamoDB.GetItem") {}
 
@@ -42,38 +32,10 @@ export const GetItemLive = Layer.effect(
       yield* Policy(table);
       return Effect.fn(function* (request: GetItemRequest) {
         const tableName = yield* TableName;
-        const { Item, ...rest } = yield* getItem({
+        return yield* getItem({
           ...request,
           TableName: tableName,
-          Key: {
-            [table.Props.partitionKey]: {
-              S: (request.Key as any)[table.Props.partitionKey] as string,
-            },
-            ...(table.Props.sortKey
-              ? {
-                  [table.Props.sortKey]: {
-                    S: (request.Key as any)[table.Props.sortKey] as string,
-                  },
-                }
-              : {}),
-          },
         });
-
-        return {
-          ...rest,
-          Item: Item
-            ? (Object.fromEntries(
-                yield* Effect.promise(() =>
-                  Promise.all(
-                    Object.entries(Item!).map(async ([key, value]) => [
-                      key,
-                      await fromAttributeValue(value!),
-                    ]),
-                  ),
-                ),
-              ) as any)
-            : undefined,
-        };
       });
     });
   }),
@@ -90,10 +52,9 @@ export const GetItemPolicyLive = GetItemPolicy.layer.succeed(
       yield* host.bind`Allow(${host}, AWS.DynamoDB.GetItem(${table}))`({
         policyStatements: [
           {
-            Sid: "GetItem",
             Effect: "Allow",
             Action: ["dynamodb:GetItem"],
-            Resource: [Output.interpolate`${table.tableArn}`],
+            Resource: [table.tableArn],
           },
         ],
       });

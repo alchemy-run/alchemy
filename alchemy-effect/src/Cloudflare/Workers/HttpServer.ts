@@ -16,7 +16,8 @@ export const HttpServer = Layer.effect(
           if (isWorkerEvent(event) && event.type === "fetch") {
             const webRequest = toWebRequest(event.input);
             const request = HttpServerRequest.fromWeb(webRequest).modify({
-              remoteAddress: webRequest.headers.get("cf-connecting-ip") ?? undefined,
+              remoteAddress:
+                webRequest.headers.get("cf-connecting-ip") ?? undefined,
             });
             return handler.pipe(
               Effect.provideService(

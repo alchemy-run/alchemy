@@ -52,7 +52,6 @@ export const DeleteObjectPolicyLive = DeleteObjectPolicy.layer.succeed(
       yield* host.bind`Allow(${host}, AWS.S3.DeleteObject(${bucket}))`({
         policyStatements: [
           {
-            Sid: "DeleteObject",
             Effect: "Allow",
             Action: ["s3:DeleteObject", "s3:DeleteObjectVersion"],
             Resource: [Output.interpolate`${bucket.bucketArn}/*`],

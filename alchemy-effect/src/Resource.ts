@@ -130,29 +130,49 @@ export const Resource = <R extends ResourceLike>(
               });
               return undefined;
             })
-          : (data: R["Binding"]) =>
-              bind(
+          : (data: R["Binding"]) => {
+              const stringifyBindArg = (arg: any): string | undefined => {
+                if (arg === undefined) {
+                  return undefined;
+                }
+
+                if (Array.isArray(arg)) {
+                  return arg
+                    .flatMap((item) => {
+                      const stringified = stringifyBindArg(item);
+                      return stringified === undefined ? [] : [stringified];
+                    })
+                    .join(", ");
+                }
+
+                if (
+                  arg &&
+                  (typeof arg === "object" || typeof arg === "function")
+                ) {
+                  if ("LogicalId" in arg && typeof arg.LogicalId === "string") {
+                    return arg.LogicalId;
+                  }
+
+                  if ("id" in arg && typeof arg.id === "string") {
+                    return arg.id;
+                  }
+                }
+
+                return String(arg);
+              };
+
+              return bind(
                 `${(args[0] as TemplateStringsArray)
                   .flatMap((text, i) => {
-                    const arg = args[i + 1];
-                    if (
-                      arg &&
-                      (typeof arg === "object" || typeof arg === "function")
-                    ) {
-                      if (
-                        "LogicalId" in arg &&
-                        typeof arg.LogicalId === "string"
-                      ) {
-                        return [text, arg.LogicalId];
-                      } else if ("id" in arg && typeof arg.id === "string") {
-                        return [text, arg.id];
-                      }
-                    }
-                    return arg !== undefined ? [text, arg] : [text];
+                    const stringified = stringifyBindArg(args[i + 1]);
+                    return stringified !== undefined
+                      ? [text, stringified]
+                      : [text];
                   })
                   .join("")}`,
                 data,
               );
+            };
 
       const namespace = yield* CurrentNamespace;
       const fqn = toFqn(namespace, id);

@@ -52,7 +52,6 @@ export const UploadPartPolicyLive = UploadPartPolicy.layer.succeed(
       yield* host.bind`Allow(${host}, AWS.S3.UploadPart(${bucket}))`({
         policyStatements: [
           {
-            Sid: "UploadPart",
             Effect: "Allow",
             Action: ["s3:PutObject"],
             Resource: [Output.interpolate`${bucket.bucketArn}/*`],

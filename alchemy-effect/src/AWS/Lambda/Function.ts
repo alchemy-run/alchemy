@@ -326,11 +326,7 @@ export const FunctionProvider = () =>
           `${stack.name}-${stage}-${id}.js`,
         );
         const realMain = yield* fs.realPath(props.main);
-        const tempDir = yield* createTempBundleDir(
-          realMain,
-          dotAlchemy,
-          id,
-        );
+        const tempDir = yield* createTempBundleDir(realMain, dotAlchemy, id);
 
         const realTempDir = yield* fs.realPath(tempDir);
         const tempEntry = path.join(realTempDir, "__index.ts");

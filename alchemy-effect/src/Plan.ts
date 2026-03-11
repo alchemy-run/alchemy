@@ -15,7 +15,11 @@ import {
   Provider,
   type ProviderService,
 } from "./Provider.ts";
-import type { ResourceBinding, ResourceLike } from "./Resource.ts";
+import {
+  isResource,
+  type ResourceBinding,
+  type ResourceLike,
+} from "./Resource.ts";
 import { type StackSpec } from "./Stack.ts";
 import {
   State,
@@ -267,6 +271,14 @@ export const make = <A>(
           return yield* Effect.all(input.map(resolveInput), {
             concurrency: "unbounded",
           });
+        } else if (isResource(input)) {
+          // Resource objects have dynamic properties (path, hash, etc.) that are
+          // created on-demand by a Proxy getter and aren't enumerable via Object.entries.
+          // Resolve the ResourceExpr to get the actual resource output, then continue
+          // resolving any nested outputs in the result.
+          const resourceExpr = Output.of(input);
+          const resolved = yield* resolveOutput(resourceExpr);
+          return yield* resolveInput(resolved);
         } else if (typeof input === "object") {
           return Object.fromEntries(
             yield* Effect.all(

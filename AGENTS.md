@@ -430,6 +430,20 @@ See the [VPC Smoke Test](./alchemy-effect/test/AWS/EC2/Vpc.smoke.test.ts) for an
 11. Write the usage patterns for the Resource in `alchemy-effect/docs/{Cloud}/{Service}/${Resource}.md`.
 12. Write the index for the Service in `alchemy-effect/docs/{Cloud}/{Service}/index.md`.
 
+# Spec-Driven Service Bring-Up
+
+Use @processes/AWS.md as the source of truth for bringing a single AWS service from zero to full coverage.
+
+That process covers:
+
+- deriving resources, bindings, event sources, and helpers from distilled
+- the audit-driven implementation loop
+- deterministic checks for registration and binding test coverage
+- Lambda fixture testing conventions
+- learned conventions like no auto-marshalling and one `describe("<BindingName>")` block per binding
+
+Keep `AGENTS.md` high-level and update @processes/AWS.md when the process evolves.
+
 # Build and Type Checking
 
 Always run type checking before committing changes:

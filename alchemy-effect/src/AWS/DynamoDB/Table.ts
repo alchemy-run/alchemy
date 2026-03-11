@@ -3,6 +3,7 @@ import type * as lambda from "aws-lambda";
 import type * as DynamoDB from "distilled-aws/dynamodb";
 import type { TimeToLiveSpecification } from "distilled-aws/dynamodb";
 import * as dynamodb from "distilled-aws/dynamodb";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
@@ -42,6 +43,7 @@ export type TableProps = {
   onDemandThroughput?: DynamoDB.OnDemandThroughput;
   provisionedThroughput?: DynamoDB.ProvisionedThroughput;
   sseSpecification?: DynamoDB.SSESpecification;
+  streamSpecification?: DynamoDB.StreamSpecification;
   timeToLiveSpecification?: DynamoDB.TimeToLiveSpecification;
   warmThroughput?: DynamoDB.WarmThroughput;
   tableClass?: DynamoDB.TableClass;
@@ -56,6 +58,8 @@ export interface Table extends Resource<
     tableArn: TableArn;
     partitionKey: string;
     sortKey: string | undefined;
+    latestStreamArn: string | undefined;
+    streamSpecification: DynamoDB.StreamSpecification | undefined;
   }
 > {}
 
@@ -148,6 +152,26 @@ export const TableProvider = () =>
             }),
           );
 
+      const waitForTableActive = (tableName: string) =>
+        Effect.gen(function* () {
+          const response = yield* dynamodb.describeTable({
+            TableName: tableName,
+          });
+          if (response.Table?.TableStatus !== "ACTIVE") {
+            return yield* Effect.fail(new TableNotActive());
+          }
+          return response.Table;
+        }).pipe(
+          Effect.retry({
+            while: (error) =>
+              error._tag === "TableNotActive" ||
+              error._tag === "ResourceNotFoundException",
+            schedule: Schedule.exponential(250).pipe(
+              Schedule.both(Schedule.recurs(40)),
+            ),
+          }),
+        );
+
       return Table.provider.of({
         stables: ["tableName", "tableId", "tableArn"],
         diff: Effect.fn(function* ({ news, olds }) {
@@ -180,6 +204,7 @@ export const TableProvider = () =>
               AttributeDefinitions: toAttributeDefinitions(news.attributes),
               BillingMode: news.billingMode ?? "PAY_PER_REQUEST",
               SSESpecification: news.sseSpecification,
+              StreamSpecification: news.streamSpecification,
               WarmThroughput: news.warmThroughput,
               DeletionProtectionEnabled: news.deletionProtectionEnabled,
               OnDemandThroughput: news.onDemandThroughput,
@@ -207,32 +232,49 @@ export const TableProvider = () =>
             yield* updateTimeToLive(tableName, news.timeToLiveSpecification);
           }
 
-          yield* session.note(response.TableArn!);
+          const active = yield* waitForTableActive(tableName);
+
+          yield* session.note(active.TableArn!);
 
           return {
             tableName,
-            tableId: response.TableId!,
-            tableArn: response.TableArn! as TableArn,
+            tableId: active.TableId!,
+            tableArn: active.TableArn! as TableArn,
             partitionKey: news.partitionKey,
             sortKey: news.sortKey,
+            latestStreamArn: active.LatestStreamArn,
+            streamSpecification: active.StreamSpecification,
           } as const;
         }),
 
         update: Effect.fn(function* ({ output, news, olds }) {
+          const streamViewTypeChanged =
+            olds.streamSpecification?.StreamEnabled === true &&
+            news.streamSpecification?.StreamEnabled === true &&
+            olds.streamSpecification.StreamViewType !==
+              news.streamSpecification.StreamViewType;
+
+          if (streamViewTypeChanged) {
+            yield* dynamodb.updateTable({
+              TableName: output.tableName,
+              StreamSpecification: {
+                StreamEnabled: false,
+              },
+            });
+            yield* waitForTableActive(output.tableName);
+          }
+
           yield* dynamodb.updateTable({
             TableName: output.tableName,
             TableClass: news.tableClass,
             AttributeDefinitions: toAttributeDefinitions(news.attributes),
             BillingMode: news.billingMode ?? "PAY_PER_REQUEST",
             SSESpecification: news.sseSpecification,
+            StreamSpecification: news.streamSpecification,
             WarmThroughput: news.warmThroughput,
             DeletionProtectionEnabled: news.deletionProtectionEnabled,
             OnDemandThroughput: news.onDemandThroughput,
             ProvisionedThroughput: news.provisionedThroughput,
-
-            //
-            // StreamSpecification: news.streamSpecification,
-            // TimeToLiveSpecification: news.timeToLiveSpecification,
 
             // TODO(sam): GSIs
             // GlobalSecondaryIndexUpdates
@@ -257,7 +299,13 @@ export const TableProvider = () =>
             );
           }
 
-          return output;
+          const active = yield* waitForTableActive(output.tableName);
+
+          return {
+            ...output,
+            latestStreamArn: active.LatestStreamArn,
+            streamSpecification: active.StreamSpecification,
+          };
         }),
 
         delete: Effect.fn(function* ({ output }) {
@@ -294,3 +342,5 @@ export const TableProvider = () =>
       });
     }),
   );
+
+class TableNotActive extends Data.TaggedError("TableNotActive") {}

@@ -8,9 +8,7 @@ import { describe, expect, it } from "vitest";
 
 describe("Http", () => {
   it("returns a 500 response for typed failures", async () => {
-    const response = await invoke(
-      Effect.fail({ message: "Boom" } as any),
-    );
+    const response = await invoke(Effect.fail({ message: "Boom" } as any));
 
     expect(response.status).toBe(500);
     expect(response.statusText).toBe("Boom");

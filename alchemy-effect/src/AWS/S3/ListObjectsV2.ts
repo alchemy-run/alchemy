@@ -52,7 +52,6 @@ export const ListObjectsV2PolicyLive = ListObjectsV2Policy.layer.succeed(
       yield* host.bind`Allow(${host}, AWS.S3.ListObjectsV2(${bucket}))`({
         policyStatements: [
           {
-            Sid: "ListObjectsV2",
             Effect: "Allow",
             Action: ["s3:ListBucket"],
             Resource: [Output.interpolate`${bucket.bucketArn}`],
