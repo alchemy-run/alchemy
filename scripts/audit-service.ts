@@ -107,6 +107,8 @@ const RESOURCE_LIFECYCLE_PATTERNS = [
   /^updateFunctionConfiguration$/,
   /^createStream$/,
   /^deleteStream$/,
+  /^createTopic$/,
+  /^deleteTopic$/,
   /^put[A-Z].*(?:Policy|Configuration|Settings)$/,
 ];
 
@@ -195,12 +197,35 @@ function matchesAnyPattern(name: string, patterns: RegExp[]): boolean {
   return patterns.some((p) => p.test(name));
 }
 
-function classifyOperation(name: string): {
+function classifyOperation(
+  serviceName: string,
+  name: string,
+): {
   category: OperationCategory;
   resourceArity: ResourceArity;
   impliesResource: boolean;
   impliesEventSource: boolean;
 } {
+  if (serviceName === "sns") {
+    if (name === "createTopic" || name === "deleteTopic") {
+      return {
+        category: "resource-lifecycle",
+        resourceArity: 1,
+        impliesResource: true,
+        impliesEventSource: false,
+      };
+    }
+
+    if (name === "subscribe" || name === "unsubscribe") {
+      return {
+        category: "resource-lifecycle",
+        resourceArity: 1,
+        impliesResource: true,
+        impliesEventSource: true,
+      };
+    }
+  }
+
   const impliesEventSource = matchesAnyPattern(name, EVENT_SOURCE_PATTERNS);
   const impliesResource = matchesAnyPattern(name, RESOURCE_LIFECYCLE_PATTERNS);
   const isCoreBinding = matchesAnyPattern(name, CORE_BINDING_PATTERNS);
@@ -551,6 +576,7 @@ async function auditService(serviceName: string): Promise<AuditReport> {
       kinesis: { distilled: "kinesis", alchemy: "Kinesis" },
       ec2: { distilled: "ec2", alchemy: "EC2" },
       iam: { distilled: "iam", alchemy: "IAM" },
+      sns: { distilled: "sns", alchemy: "SNS" },
     };
 
   const config = serviceConfig[serviceNameLower] || {
@@ -581,7 +607,7 @@ async function auditService(serviceName: string): Promise<AuditReport> {
   // Classify operations
   const operations: Operation[] = await Promise.all(distilledOps.map(async (name) => {
     const pascalCase = toPascalCase(name);
-    const classification = classifyOperation(name);
+    const classification = classifyOperation(serviceNameLower, name);
     const implemented = alchemyFiles.has(pascalCase);
     const resourceArity = implemented
       ? await inferImplementedResourceArity(

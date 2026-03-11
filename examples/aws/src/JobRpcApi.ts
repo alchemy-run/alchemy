@@ -6,6 +6,7 @@ import {
   RpcServer,
 } from "effect/unstable/rpc";
 import { Job, JobId } from "./Job.ts";
+import { JobNotifications } from "./JobNotifications.ts";
 import { JobStorage } from "./JobStorage.ts";
 
 export class JobNotFound extends Schema.TaggedClass<JobNotFound>()(
@@ -44,6 +45,7 @@ export class JobRpcs extends RpcGroup.make(getJob, createJob) {}
 export const JobRpcsLive = JobRpcs.toLayer(
   Effect.gen(function* () {
     const jobService = yield* JobStorage;
+    const notifications = yield* JobNotifications;
 
     return {
       getJob: ({ jobId }) =>
@@ -59,20 +61,22 @@ export const JobRpcsLive = JobRpcs.toLayer(
           ),
         ),
       createJob: ({ content }) =>
-        jobService
-          .putJob({
-            id: "TODO",
+        Effect.gen(function* () {
+          const jobId = crypto.randomUUID();
+          const job = yield* jobService.putJob({
+            id: jobId,
             content,
-          })
-          .pipe(
-            Effect.mapError(
-              (error) =>
-                new PutJobFailed({
-                  message: error.message,
-                }),
-            ),
-            Effect.map((job) => job.id),
+          });
+          yield* notifications.notifyJobCreated(job);
+          return job.id;
+        }).pipe(
+          Effect.mapError(
+            (error) =>
+              new PutJobFailed({
+                message: error.message,
+              }),
           ),
+        ),
     };
   }),
 );

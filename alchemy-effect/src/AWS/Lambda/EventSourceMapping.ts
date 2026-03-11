@@ -342,9 +342,7 @@ export const EventSourceMappingProvider = () =>
               retryTransient,
             );
 
-          yield* session.note(
-            `Created event source mapping ${config.UUID} (${eventSourceArn})`,
-          );
+          yield* session.note(config.EventSourceMappingArn!);
 
           return configToAttrs(config);
         }),

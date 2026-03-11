@@ -3,7 +3,8 @@ import * as Http from "alchemy-effect/Http";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { JobHttpEffect } from "./JobHttpApi.ts";
-import { JobStorage, JobStorageDynamoDB } from "./JobStorage.ts";
+import { JobNotificationsSNS } from "./JobNotifications.ts";
+import { JobStorageDynamoDB } from "./JobStorage.ts";
 
 // ## sync drift
 // alchemy sync
@@ -24,8 +25,6 @@ import { JobStorage, JobStorageDynamoDB } from "./JobStorage.ts";
 // alchemy deploy --dry-run --adopt JobsQueue,JobsDatabase
 
 const JobFunction = Effect.gen(function* () {
-  yield* JobStorage;
-
   // register a HTTP server in the Lambda Function runtime
   yield* Http.serve(yield* JobHttpEffect);
   // if you want to use RPC instead of HttpApi:
@@ -41,6 +40,7 @@ const JobFunction = Effect.gen(function* () {
     Layer.mergeAll(
       // Services go here
       JobStorageDynamoDB,
+      JobNotificationsSNS,
       // JobStorageS3,
       AWS.Lambda.HttpServer,
     ),

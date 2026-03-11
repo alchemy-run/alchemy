@@ -9,6 +9,7 @@ import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 import { Job, JobId } from "./Job.ts";
+import { JobNotifications, NotifyJobError } from "./JobNotifications.ts";
 import { GetJobError, JobStorage, PutJobError } from "./JobStorage.ts";
 
 export const getJob = HttpApiEndpoint.get("getJob", "/", {
@@ -60,9 +61,11 @@ const JobApiHandlers = HttpApiBuilder.group(JobApi, "Jobs", (handlers) =>
       "createJob",
       Effect.fn(function* (req) {
         const jobService = yield* JobStorage;
+        const notifications = yield* JobNotifications;
+        const jobId = crypto.randomUUID();
         const job = yield* jobService
           .putJob({
-            id: "TODO",
+            id: jobId,
             content: req.payload.content,
           })
           .pipe(
@@ -70,6 +73,14 @@ const JobApiHandlers = HttpApiBuilder.group(JobApi, "Jobs", (handlers) =>
           );
         if (job instanceof PutJobError) {
           return HttpServerResponse.text(job.message, { status: 500 });
+        }
+        const notificationResult = yield* notifications.notifyJobCreated(job).pipe(
+          Effect.catchTag("NotifyJobError", (error) => Effect.succeed(error)),
+        );
+        if (notificationResult instanceof NotifyJobError) {
+          return HttpServerResponse.text(notificationResult.message, {
+            status: 500,
+          });
         }
         return job.id;
       }),

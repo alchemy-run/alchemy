@@ -13,6 +13,7 @@ import * as Kinesis from "./Kinesis/index.ts";
 import * as Lambda from "./Lambda/index.ts";
 import * as Region from "./Region.ts";
 import * as S3 from "./S3/index.ts";
+import * as SNS from "./SNS/index.ts";
 import * as SQS from "./SQS/index.ts";
 import { loadDefaultStageConfig, StageConfig } from "./StageConfig.ts";
 
@@ -75,6 +76,8 @@ export const resources = () =>
     Lambda.FunctionProvider(),
     Lambda.PermissionProvider(),
     S3.BucketProvider(),
+    SNS.SubscriptionProvider(),
+    SNS.TopicProvider(),
     SQS.QueueProvider(),
   );
 
@@ -98,6 +101,7 @@ export const bindings = () =>
     Lambda.BucketEventSourcePolicyLive,
     Lambda.QueueEventSourcePolicyLive,
     Lambda.TableEventSourcePolicyLive,
+    Lambda.TopicEventSourcePolicyLive,
     S3.AbortMultipartUploadPolicyLive,
     S3.CompleteMultipartUploadPolicyLive,
     S3.CreateMultipartUploadPolicyLive,
@@ -107,6 +111,24 @@ export const bindings = () =>
     S3.ListObjectsV2PolicyLive,
     S3.PutObjectPolicyLive,
     S3.UploadPartPolicyLive,
+    SNS.AddPermissionPolicyLive,
+    SNS.ConfirmSubscriptionPolicyLive,
+    SNS.GetDataProtectionPolicyPolicyLive,
+    SNS.GetSubscriptionAttributesPolicyLive,
+    SNS.GetTopicAttributesPolicyLive,
+    SNS.ListSubscriptionsByTopicPolicyLive,
+    SNS.ListSubscriptionsPolicyLive,
+    SNS.ListTagsForResourcePolicyLive,
+    SNS.ListTopicsPolicyLive,
+    SNS.PublishBatchPolicyLive,
+    SNS.PublishPolicyLive,
+    SNS.PutDataProtectionPolicyPolicyLive,
+    SNS.RemovePermissionPolicyLive,
+    SNS.SetSubscriptionAttributesPolicyLive,
+    SNS.SetTopicAttributesPolicyLive,
+    SNS.TagResourcePolicyLive,
+    SNS.TopicSinkPolicyLive,
+    SNS.UntagResourcePolicyLive,
     SQS.DeleteMessageBatchPolicyLive,
     SQS.QueueSinkPolicyLive,
     SQS.SendMessageBatchPolicyLive,

@@ -293,6 +293,35 @@ Pattern:
 
 This keeps tests end-to-end while still giving fine-grained per-binding coverage.
 
+Layer provisioning rule:
+
+- when a Lambda fixture provides both composite layers and foundational binding layers, do not put them all in one flat `Layer.mergeAll(...)`
+- composite layers include event sources, sinks, and higher-level helpers that themselves depend on lower-level bindings
+- foundational layers include the binding/capability implementations such as `GetItemLive`, `PutObjectLive`, `PublishLive`, `PublishBatchLive`, and similar
+- use `Effect.provide(Layer.provideMerge(...))` so the foundational layer group is provided to the composite layer group
+- otherwise `Layer.mergeAll(...)` only unions outputs and requirements, and sibling layers do not satisfy each other's requirements
+
+Required shape:
+
+```ts
+Effect.provide(
+  Layer.provideMerge(
+    Layer.mergeAll(
+      // composite services: event sources, sinks, helpers
+    ),
+    Layer.mergeAll(
+      // foundational bindings/capabilities they depend on
+    ),
+  ),
+);
+```
+
+Example failure mode:
+
+- `TopicSinkLive` depends on `PublishBatch`
+- if `TopicSinkLive` and `PublishBatchLive` are only siblings in the same `Layer.mergeAll(...)`, the final Lambda effect still requires `PublishBatch`
+- grouping them with `Layer.provideMerge(...)` removes that leaked requirement
+
 ### Step 7: Make Setup Observable
 
 Fixture setup must log clearly:
@@ -342,6 +371,17 @@ For stream/notification services:
 2. add runtime-specific implementation(s)
 3. add helper surface
 4. add tests
+
+When the event source needs an intermediate canonical resource, the binding should
+create that resource automatically instead of forcing user code to instantiate it.
+SNS is the reference case:
+
+- the public binding is `notifications(topic).subscribe(...)`
+- the Lambda runtime policy creates the `Subscription` resource automatically
+- any service-to-Lambda invoke permission stays in the runtime policy layer that
+  wires the event source, not in user code
+- the canonical resource still exists and can be used directly when needed; the
+  helper just creates it on behalf of the user
 
 For DynamoDB-style changes this likely means:
 
