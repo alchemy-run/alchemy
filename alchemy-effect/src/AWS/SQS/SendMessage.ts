@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
+import { isInstance } from "../EC2/Instance.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Queue } from "./Queue.ts";
 
@@ -49,7 +50,7 @@ export class SendMessagePolicy extends Binding.Policy<
 
 export const SendMessagePolicyLive = SendMessagePolicy.layer.succeed(
   Effect.fn(function* (host, queue) {
-    if (isFunction(host)) {
+    if (isFunction(host) || isInstance(host)) {
       yield* host.bind`Allow(${host}, AWS.SQS.SendMessage(${queue}))`({
         policyStatements: [
           {
