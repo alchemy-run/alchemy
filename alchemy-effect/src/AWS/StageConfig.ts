@@ -2,6 +2,7 @@ import * as Auth from "@distilled.cloud/aws/Auth";
 import type { AwsCredentialIdentity } from "@smithy/types";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as ServiceMap from "effect/ServiceMap";
 import type { AccountID } from "./Account.ts";
 import { AWS_REGION, type RegionID } from "./Region.ts";
@@ -20,6 +21,11 @@ export class StageConfig extends ServiceMap.Service<
     endpoint?: string;
   }
 >()("AWS::StageConfig") {}
+
+export const DefaultStageConfig = Layer.effect(
+  StageConfig,
+  Effect.suspend(() => loadDefaultStageConfig()),
+).pipe(Layer.orDie);
 
 export const loadDefaultStageConfig = () =>
   Effect.gen(function* () {
