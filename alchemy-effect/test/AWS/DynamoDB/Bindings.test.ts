@@ -14,6 +14,7 @@ const readinessPolicy = Schedule.fixed("2 seconds").pipe(
 );
 
 let baseUrl: string;
+const sourceTableId = "TestTable";
 
 describe("DynamoDB Bindings", () => {
   beforeAll(
@@ -146,6 +147,101 @@ describe("DynamoDB Bindings", () => {
     );
   });
 
+  describe("BatchWriteItem", () => {
+    test(
+      "writes multiple items through the bound table",
+      Effect.gen(function* () {
+        const response = yield* HttpClient.execute(
+          HttpClientRequest.bodyJsonUnsafe(
+            HttpClientRequest.post(`${baseUrl}/batch-write`),
+            {
+              RequestItems: {
+                [sourceTableId]: [
+                  {
+                    PutRequest: {
+                      Item: {
+                        pk: { S: "batch-write#1" },
+                        sk: { S: "item" },
+                        data: { S: "first item" },
+                      },
+                    },
+                  },
+                  {
+                    PutRequest: {
+                      Item: {
+                        pk: { S: "batch-write#2" },
+                        sk: { S: "item" },
+                        data: { S: "second item" },
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          ),
+        ).pipe(Effect.flatMap((r) => r.json));
+
+        expect(Object.keys((response as any).unprocessedItems)).toHaveLength(0);
+      }),
+    );
+  });
+
+  describe("BatchGetItem", () => {
+    test(
+      "reads multiple items through the bound table",
+      Effect.gen(function* () {
+        yield* HttpClient.execute(
+          HttpClientRequest.bodyJsonUnsafe(
+            HttpClientRequest.post(`${baseUrl}/batch-write`),
+            {
+              RequestItems: {
+                [sourceTableId]: [
+                  {
+                    PutRequest: {
+                      Item: {
+                        pk: { S: "batch-get#1" },
+                        sk: { S: "item" },
+                        data: { S: "first item" },
+                      },
+                    },
+                  },
+                  {
+                    PutRequest: {
+                      Item: {
+                        pk: { S: "batch-get#2" },
+                        sk: { S: "item" },
+                        data: { S: "second item" },
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          ),
+        );
+
+        const response = yield* HttpClient.execute(
+          HttpClientRequest.bodyJsonUnsafe(
+            HttpClientRequest.post(`${baseUrl}/batch-get`),
+            {
+              RequestItems: {
+                [sourceTableId]: {
+                  Keys: [
+                    { pk: { S: "batch-get#1" }, sk: { S: "item" } },
+                    { pk: { S: "batch-get#2" }, sk: { S: "item" } },
+                  ],
+                },
+              },
+            },
+          ),
+        ).pipe(Effect.flatMap((r) => r.json));
+
+        const items = Object.values((response as any).responses).flat();
+        expect(items).toHaveLength(2);
+      }),
+    );
+  });
+
   describe("UpdateTimeToLive", () => {
     test(
       "updates table ttl configuration",
@@ -161,6 +257,79 @@ describe("DynamoDB Bindings", () => {
           AttributeName: "expiresAt",
           Enabled: true,
         });
+      }),
+    );
+  });
+
+  describe("ExecuteStatement", () => {
+    test(
+      "executes a PartiQL statement against the bound table",
+      Effect.gen(function* () {
+        yield* HttpClient.execute(
+          HttpClientRequest.bodyJsonUnsafe(
+            HttpClientRequest.post(`${baseUrl}/put`),
+            { pk: "statement#1", sk: "item", data: "statement data" },
+          ),
+        );
+
+        const response = yield* HttpClient.execute(
+          HttpClientRequest.bodyJsonUnsafe(
+            HttpClientRequest.post(`${baseUrl}/execute-statement`),
+            { pk: "statement#1", sk: "item" },
+          ),
+        ).pipe(Effect.flatMap((r) => r.json));
+
+        expect((response as any).items).toHaveLength(1);
+        expect((response as any).items[0].data.S).toBe("statement data");
+      }),
+    );
+  });
+
+  describe("BatchExecuteStatement", () => {
+    test(
+      "executes PartiQL statements against the bound table",
+      Effect.gen(function* () {
+        yield* HttpClient.execute(
+          HttpClientRequest.bodyJsonUnsafe(
+            HttpClientRequest.post(`${baseUrl}/batch-write`),
+            {
+              RequestItems: {
+                [sourceTableId]: [
+                  {
+                    PutRequest: {
+                      Item: {
+                        pk: { S: "batch-statement#1" },
+                        sk: { S: "item" },
+                        data: { S: "first item" },
+                      },
+                    },
+                  },
+                  {
+                    PutRequest: {
+                      Item: {
+                        pk: { S: "batch-statement#2" },
+                        sk: { S: "item" },
+                        data: { S: "second item" },
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          ),
+        );
+
+        const response = yield* HttpClient.execute(
+          HttpClientRequest.bodyJsonUnsafe(
+            HttpClientRequest.post(`${baseUrl}/batch-execute-statement`),
+            {
+              first: { pk: "batch-statement#1", sk: "item" },
+              second: { pk: "batch-statement#2", sk: "item" },
+            },
+          ),
+        ).pipe(Effect.flatMap((r) => r.json));
+
+        expect((response as any).responses).toHaveLength(2);
       }),
     );
   });
@@ -184,6 +353,112 @@ describe("DynamoDB Bindings", () => {
 
         const response = yield* HttpClient.execute(
           HttpClientRequest.post(`${baseUrl}/execute-transaction`),
+        ).pipe(Effect.flatMap((r) => r.json));
+
+        expect((response as any).responses).toHaveLength(2);
+      }),
+    );
+  });
+
+  describe("TransactWriteItems", () => {
+    test(
+      "writes items transactionally through the bound table",
+      Effect.gen(function* () {
+        const response = yield* HttpClient.execute(
+          HttpClientRequest.bodyJsonUnsafe(
+            HttpClientRequest.post(`${baseUrl}/transact-write`),
+            {
+              TransactItems: [
+                {
+                  Put: {
+                    Table: sourceTableId,
+                    Item: {
+                      pk: { S: "transact-write#1" },
+                      sk: { S: "item" },
+                      data: { S: "first item" },
+                    },
+                  },
+                },
+                {
+                  Put: {
+                    Table: sourceTableId,
+                    Item: {
+                      pk: { S: "transact-write#2" },
+                      sk: { S: "item" },
+                      data: { S: "second item" },
+                    },
+                  },
+                },
+              ],
+            },
+          ),
+        ).pipe(Effect.flatMap((r) => r.json));
+
+        expect((response as any).success).toBe(true);
+      }),
+    );
+  });
+
+  describe("TransactGetItems", () => {
+    test(
+      "reads items transactionally through the bound table",
+      Effect.gen(function* () {
+        yield* HttpClient.execute(
+          HttpClientRequest.bodyJsonUnsafe(
+            HttpClientRequest.post(`${baseUrl}/transact-write`),
+            {
+              TransactItems: [
+                {
+                  Put: {
+                    Table: sourceTableId,
+                    Item: {
+                      pk: { S: "transact-get#1" },
+                      sk: { S: "item" },
+                      data: { S: "first item" },
+                    },
+                  },
+                },
+                {
+                  Put: {
+                    Table: sourceTableId,
+                    Item: {
+                      pk: { S: "transact-get#2" },
+                      sk: { S: "item" },
+                      data: { S: "second item" },
+                    },
+                  },
+                },
+              ],
+            },
+          ),
+        );
+
+        const response = yield* HttpClient.execute(
+          HttpClientRequest.bodyJsonUnsafe(
+            HttpClientRequest.post(`${baseUrl}/transact-get`),
+            {
+              TransactItems: [
+                {
+                  Get: {
+                    Table: sourceTableId,
+                    Key: {
+                      pk: { S: "transact-get#1" },
+                      sk: { S: "item" },
+                    },
+                  },
+                },
+                {
+                  Get: {
+                    Table: sourceTableId,
+                    Key: {
+                      pk: { S: "transact-get#2" },
+                      sk: { S: "item" },
+                    },
+                  },
+                },
+              ],
+            },
+          ),
         ).pipe(Effect.flatMap((r) => r.json));
 
         expect((response as any).responses).toHaveLength(2);

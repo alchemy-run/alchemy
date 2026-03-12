@@ -22,9 +22,14 @@ const DynamoDBHttpEffect = Effect.gen(function* () {
   });
 
   const getItem = yield* DynamoDB.GetItem.bind(sourceTable);
+  const batchGetItem = yield* DynamoDB.BatchGetItem.bind(sourceTable);
+  const batchWriteItem = yield* DynamoDB.BatchWriteItem.bind(sourceTable);
+  const batchExecuteStatement =
+    yield* DynamoDB.BatchExecuteStatement.bind(sourceTable);
   const describeTable = yield* DynamoDB.DescribeTable.bind(sourceTable);
   const describeTimeToLive =
     yield* DynamoDB.DescribeTimeToLive.bind(sourceTable);
+  const executeStatement = yield* DynamoDB.ExecuteStatement.bind(sourceTable);
   const executeTransaction =
     yield* DynamoDB.ExecuteTransaction.bind(sourceTable);
   const putItem = yield* DynamoDB.PutItem.bind(sourceTable);
@@ -42,6 +47,9 @@ const DynamoDBHttpEffect = Effect.gen(function* () {
       sourceTable,
       restoreTargetTable,
     );
+  const transactGetItems = yield* DynamoDB.TransactGetItems.bind(sourceTable);
+  const transactWriteItems =
+    yield* DynamoDB.TransactWriteItems.bind(sourceTable);
 
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest;
@@ -146,6 +154,40 @@ const DynamoDBHttpEffect = Effect.gen(function* () {
       });
     }
 
+    if (request.method === "POST" && pathname === "/batch-write") {
+      const body = (yield* request.json) as DynamoDB.BatchWriteItemRequest;
+      const result = yield* batchWriteItem(body);
+      return yield* HttpServerResponse.json({
+        unprocessedItems: result.UnprocessedItems ?? {},
+      });
+    }
+
+    if (request.method === "POST" && pathname === "/batch-get") {
+      const body = (yield* request.json) as DynamoDB.BatchGetItemRequest;
+      const result = yield* batchGetItem(body);
+      return yield* HttpServerResponse.json({
+        responses: result.Responses ?? {},
+        unprocessedKeys: result.UnprocessedKeys ?? {},
+      });
+    }
+
+    if (request.method === "POST" && pathname === "/transact-write") {
+      const body = (yield* request.json) as DynamoDB.TransactWriteItemsRequest;
+      const result = yield* transactWriteItems(body);
+      return yield* HttpServerResponse.json({
+        success: true,
+        result,
+      });
+    }
+
+    if (request.method === "POST" && pathname === "/transact-get") {
+      const body = (yield* request.json) as DynamoDB.TransactGetItemsRequest;
+      const result = yield* transactGetItems(body);
+      return yield* HttpServerResponse.json({
+        responses: result.Responses ?? [],
+      });
+    }
+
     if (request.method === "POST" && pathname === "/execute-transaction") {
       const tableName = yield* TableName;
       const result = yield* executeTransaction({
@@ -162,6 +204,41 @@ const DynamoDBHttpEffect = Effect.gen(function* () {
       });
       return yield* HttpServerResponse.json({
         responses: result.Responses,
+      });
+    }
+
+    if (request.method === "POST" && pathname === "/execute-statement") {
+      const body = (yield* request.json) as { pk: string; sk: string };
+      const tableName = yield* TableName;
+      const result = yield* executeStatement({
+        Statement: `SELECT * FROM "${tableName}" WHERE pk=? AND sk=?`,
+        Parameters: [{ S: body.pk }, { S: body.sk }],
+      });
+      return yield* HttpServerResponse.json({
+        items: result.Items ?? [],
+      });
+    }
+
+    if (request.method === "POST" && pathname === "/batch-execute-statement") {
+      const body = (yield* request.json) as {
+        first: { pk: string; sk: string };
+        second: { pk: string; sk: string };
+      };
+      const sourceTableName = yield* TableName;
+      const result = yield* batchExecuteStatement({
+        Statements: [
+          {
+            Statement: `SELECT * FROM "${sourceTableName}" WHERE pk=? AND sk=?`,
+            Parameters: [{ S: body.first.pk }, { S: body.first.sk }],
+          },
+          {
+            Statement: `SELECT * FROM "${sourceTableName}" WHERE pk=? AND sk=?`,
+            Parameters: [{ S: body.second.pk }, { S: body.second.sk }],
+          },
+        ],
+      });
+      return yield* HttpServerResponse.json({
+        responses: result.Responses ?? [],
       });
     }
 
@@ -245,9 +322,13 @@ export default Effect.gen(function* () {
 }).pipe(
   Effect.provide(
     Layer.mergeAll(
+      DynamoDB.BatchExecuteStatementLive,
+      DynamoDB.BatchGetItemLive,
+      DynamoDB.BatchWriteItemLive,
       Lambda.HttpServer,
       DynamoDB.DescribeTableLive,
       DynamoDB.DescribeTimeToLiveLive,
+      DynamoDB.ExecuteStatementLive,
       DynamoDB.ExecuteTransactionLive,
       DynamoDB.GetItemLive,
       DynamoDB.ListTablesLive,
@@ -259,6 +340,8 @@ export default Effect.gen(function* () {
       DynamoDB.QueryLive,
       DynamoDB.RestoreTableToPointInTimeLive,
       DynamoDB.ScanLive,
+      DynamoDB.TransactGetItemsLive,
+      DynamoDB.TransactWriteItemsLive,
     ),
   ),
   Lambda.Function("DynamoDBTestFunction"),
