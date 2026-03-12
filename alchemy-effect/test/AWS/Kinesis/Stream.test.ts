@@ -436,6 +436,103 @@ describe("AWS.Kinesis.Stream", () => {
     }).pipe(Effect.provide(AWS.providers())),
   );
 
+  test(
+    "update stream resource policy and max record size",
+    { timeout: 240_000 },
+    Effect.gen(function* () {
+      const stream = yield* test.deploy(
+        Effect.gen(function* () {
+          return yield* Stream("PolicyStream", {
+            streamMode: "PROVISIONED",
+            shardCount: 1,
+          });
+        }),
+      );
+
+      const policy = JSON.stringify({
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Sid: "AllowSameAccountDescribe",
+            Effect: "Allow",
+            Principal: {
+              AWS: `arn:aws:iam::${stream.streamArn.split(":")[4]}:root`,
+            },
+            Action: ["kinesis:DescribeStreamSummary"],
+            Resource: stream.streamArn,
+          },
+        ],
+      });
+
+      const updated = yield* test.deploy(
+        Effect.gen(function* () {
+          return yield* Stream("PolicyStream", {
+            streamMode: "PROVISIONED",
+            shardCount: 1,
+            resourcePolicy: policy,
+            maxRecordSizeInKiB: 2048,
+          });
+        }),
+      );
+
+      expect(updated.resourcePolicy).toContain("AllowSameAccountDescribe");
+      expect(updated.maxRecordSizeInKiB).toEqual(2048);
+
+      const policyResponse = yield* Kinesis.getResourcePolicy({
+        ResourceARN: stream.streamArn,
+      });
+      expect(policyResponse.Policy).toContain("AllowSameAccountDescribe");
+
+      const summary = yield* Kinesis.describeStreamSummary({
+        StreamName: stream.streamName,
+      });
+      expect(summary.StreamDescriptionSummary.MaxRecordSizeInKiB).toEqual(2048);
+
+      yield* destroy();
+      yield* assertStreamDeleted(stream.streamName);
+    }).pipe(Effect.provide(AWS.providers())),
+  );
+
+  test(
+    "update warm throughput when account supports it",
+    { timeout: 240_000 },
+    Effect.gen(function* () {
+      const accountSettings = yield* Kinesis.describeAccountSettings({});
+      const status =
+        accountSettings.MinimumThroughputBillingCommitment?.Status ?? "DISABLED";
+
+      if (status === "DISABLED") {
+        return;
+      }
+
+      const stream = yield* test.deploy(
+        Effect.gen(function* () {
+          return yield* Stream("WarmThroughputStream");
+        }),
+      );
+
+      const updated = yield* test.deploy(
+        Effect.gen(function* () {
+          return yield* Stream("WarmThroughputStream", {
+            warmThroughputMiBps: 10,
+          });
+        }),
+      );
+
+      expect(updated.warmThroughput?.targetMiBps).toEqual(10);
+
+      const summary = yield* Kinesis.describeStreamSummary({
+        StreamName: stream.streamName,
+      });
+      expect(summary.StreamDescriptionSummary.WarmThroughput?.TargetMiBps).toEqual(
+        10,
+      );
+
+      yield* destroy();
+      yield* assertStreamDeleted(stream.streamName);
+    }).pipe(Effect.provide(AWS.providers())),
+  );
+
   class StreamStillExists extends Data.TaggedError("StreamStillExists") {}
 
   const assertStreamDeleted = Effect.fn(function* (streamName: string) {
