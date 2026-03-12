@@ -8,5 +8,12 @@
   "ternaries": true,
   "experimental_sort_imports": {
     "order": "asc"
-  }
+  },
+  "ignorePatterns": [
+    "dist/**",
+    "*.min.js",
+    "**/lib/**",
+    "**/mdx/**",
+    "**/vendor/**"
+  ]
 }
