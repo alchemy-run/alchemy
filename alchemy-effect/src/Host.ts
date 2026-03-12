@@ -5,6 +5,7 @@ import type { Scope } from "effect/Scope";
 import * as ServiceMap from "effect/ServiceMap";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import type { PolicyLike } from "./Binding.ts";
+import type { Input } from "./Input.ts";
 import type { Output } from "./Output.ts";
 import type { Provider } from "./Provider.ts";
 import {
@@ -36,7 +37,7 @@ export type HostConstructor<Self extends ResourceLike, RuntimeServices> = {
   >;
   <Req extends HostServices | RuntimeServices = never>(
     id: string,
-    eff: Effect.Effect<Self["Props"], never, Req>,
+    eff: Effect.Effect<Input<Self["Props"]>, never, Req>,
   ): Effect.Effect<
     Self,
     never,
@@ -52,7 +53,7 @@ export type HostConstructor<Self extends ResourceLike, RuntimeServices> = {
       | HostRuntimeServices
       | HttpClient = never,
   >(
-    eff: Effect.Effect<Self["Props"], never, Req>,
+    eff: Effect.Effect<Input<Self["Props"]>, never, Req>,
   ) => Effect.Effect<
     Self,
     never,
