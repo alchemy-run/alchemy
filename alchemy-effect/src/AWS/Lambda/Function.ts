@@ -71,6 +71,13 @@ export interface FunctionProps {
   uploadSourceMap?: boolean;
   env?: Record<string, any>;
   exports?: string[];
+  /**
+   * Attach the function to a VPC for private AWS connectivity such as Aurora.
+   */
+  vpc?: {
+    subnetIds: string[];
+    securityGroupIds: string[];
+  };
 }
 
 export interface Function extends Resource<
@@ -296,9 +303,11 @@ export const FunctionProvider = () =>
       const createRoleIfNotExists = Effect.fnUntraced(function* ({
         id,
         roleName,
+        vpc,
       }: {
         id: string;
         roleName: string;
+        vpc?: FunctionProps["vpc"];
       }) {
         yield* Effect.logDebug(`creating role ${id}`);
         const tags = yield* createInternalTags(id);
@@ -345,6 +354,16 @@ export const FunctionProvider = () =>
               "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
           })
           .pipe(Effect.tapError(Effect.logDebug), Effect.tap(Effect.logDebug));
+
+        if (vpc) {
+          yield* iam
+            .attachRolePolicy({
+              RoleName: roleName,
+              PolicyArn:
+                "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
+            })
+            .pipe(Effect.tapError(Effect.logDebug), Effect.tap(Effect.logDebug));
+        }
 
         yield* Effect.logDebug(`attached policy ${id}`);
         return role;
@@ -583,6 +602,12 @@ export default await Effect.runPromise(handlerEffect)
               }
             : undefined,
           Tags: tags,
+          VpcConfig: news.vpc
+            ? {
+                SubnetIds: news.vpc.subnetIds,
+                SecurityGroupIds: news.vpc.securityGroupIds,
+              }
+            : undefined,
         };
 
         const getAndUpdate = Lambda.getFunction({
@@ -840,7 +865,7 @@ export default await Effect.runPromise(handlerEffect)
             news.functionName,
           );
 
-          const role = yield* createRoleIfNotExists({ id, roleName });
+          const role = yield* createRoleIfNotExists({ id, roleName, vpc: news.vpc });
 
           // mock code
           const code = new TextEncoder().encode("export default () => {}");
@@ -880,7 +905,8 @@ export default await Effect.runPromise(handlerEffect)
 
           const roleArn =
             output?.roleArn ??
-            (yield* createRoleIfNotExists({ id, roleName })).Role.Arn;
+            (yield* createRoleIfNotExists({ id, roleName, vpc: news.vpc })).Role
+              .Arn;
 
           const env = yield* attachBindings({
             roleName,
