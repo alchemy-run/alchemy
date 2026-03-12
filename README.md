@@ -439,7 +439,7 @@ This separation means your Lambda bundle only includes the code it needs, while 
 A `Binding.Service` wraps an SDK client and exposes a `.bind(resource)` method that returns a typed function for runtime use.
 
 ```typescript
-import * as Kinesis from "distilled-aws/kinesis";
+import * as Kinesis from "@distilled.cloud/aws/kinesis";
 import * as Binding from "alchemy-effect/Binding";
 
 export class PutRecord extends Binding.Service<

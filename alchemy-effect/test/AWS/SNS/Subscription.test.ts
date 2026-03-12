@@ -1,8 +1,8 @@
 import * as AWS from "@/AWS";
 import { destroy } from "@/Destroy";
 import { test } from "@/Test/Vitest";
+import * as SNS from "@distilled.cloud/aws/sns";
 import { expect } from "@effect/vitest";
-import * as SNS from "distilled-aws/sns";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

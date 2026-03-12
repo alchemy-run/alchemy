@@ -581,7 +581,7 @@ async function auditService(serviceName: string): Promise<AuditReport> {
   };
 
   const distilledPath = path.resolve(
-    `.vendor/distilled/distilled-aws/src/services/${config.distilled}.ts`,
+    `.vendor/distilled/@distilled.cloud/aws/src/services/${config.distilled}.ts`,
   );
   const alchemyPath = path.resolve(`alchemy-effect/src/AWS/${config.alchemy}`);
   const bindingTestPath = path.resolve(

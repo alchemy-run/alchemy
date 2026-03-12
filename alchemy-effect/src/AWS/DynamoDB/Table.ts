@@ -1,11 +1,11 @@
 import type * as lambda from "aws-lambda";
 
-import type * as DynamoDB from "distilled-aws/dynamodb";
+import type * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import type {
   PointInTimeRecoverySpecification,
   TimeToLiveSpecification,
-} from "distilled-aws/dynamodb";
-import * as dynamodb from "distilled-aws/dynamodb";
+} from "@distilled.cloud/aws/dynamodb";
+import * as dynamodb from "@distilled.cloud/aws/dynamodb";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

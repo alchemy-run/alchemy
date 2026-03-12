@@ -1,4 +1,4 @@
-import * as Kinesis from "distilled-aws/kinesis";
+import * as Kinesis from "@distilled.cloud/aws/kinesis";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";

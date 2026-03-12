@@ -1,10 +1,10 @@
 import * as AWS from "@/AWS";
 import { destroy } from "@/Destroy";
 import { test } from "@/Test/Vitest";
+import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
+import * as Lambda from "@distilled.cloud/aws/lambda";
+import * as SQS from "@distilled.cloud/aws/sqs";
 import { describe, expect } from "@effect/vitest";
-import * as DynamoDB from "distilled-aws/dynamodb";
-import * as Lambda from "distilled-aws/lambda";
-import * as SQS from "distilled-aws/sqs";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

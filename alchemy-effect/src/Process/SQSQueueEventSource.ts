@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 
-import { Region } from "distilled-aws/Region";
+import { Region } from "@distilled.cloud/aws/Region";
 import * as SQS from "../AWS/SQS/index.ts";
 import { ProcessRuntime } from "./Runtime.ts";
 

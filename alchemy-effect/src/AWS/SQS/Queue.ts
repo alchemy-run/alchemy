@@ -1,5 +1,5 @@
-import { Region } from "distilled-aws/Region";
-import * as sqs from "distilled-aws/sqs";
+import { Region } from "@distilled.cloud/aws/Region";
+import * as sqs from "@distilled.cloud/aws/sqs";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

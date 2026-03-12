@@ -1,8 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-import { Credentials } from "distilled-aws/Credentials";
-import { Region } from "distilled-aws/Region";
+import { Credentials } from "@distilled.cloud/aws/Credentials";
+import { Region } from "@distilled.cloud/aws/Region";
 import { HttpClient } from "effect/unstable/http/HttpClient";
 
 export const withContext = Effect.fn(function* <

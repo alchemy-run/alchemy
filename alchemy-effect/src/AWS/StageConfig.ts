@@ -1,5 +1,5 @@
+import * as Auth from "@distilled.cloud/aws/Auth";
 import type { AwsCredentialIdentity } from "@smithy/types";
-import * as Auth from "distilled-aws/Auth";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as ServiceMap from "effect/ServiceMap";

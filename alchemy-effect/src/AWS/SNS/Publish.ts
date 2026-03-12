@@ -1,4 +1,4 @@
-import * as sns from "distilled-aws/sns";
+import * as sns from "@distilled.cloud/aws/sns";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";

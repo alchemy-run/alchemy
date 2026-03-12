@@ -1,5 +1,5 @@
-import * as Auth from "distilled-aws/Auth";
-import * as Region from "distilled-aws/Region";
+import * as Auth from "@distilled.cloud/aws/Auth";
+import * as Region from "@distilled.cloud/aws/Region";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

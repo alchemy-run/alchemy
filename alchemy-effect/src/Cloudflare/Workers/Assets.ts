@@ -1,4 +1,4 @@
-import * as workers from "distilled-cloudflare/workers";
+import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -188,7 +188,7 @@ export const AssetsProvider = () =>
             manifest: assets.manifest,
           });
           if (!session.buckets?.length) {
-            return { jwt: session.jwt };
+            return { jwt: session.jwt ?? undefined };
           }
           let uploaded = 0;
           const total = session.buckets.flat().length;
@@ -197,7 +197,7 @@ export const AssetsProvider = () =>
           for (const [name, { hash }] of Object.entries(assets.manifest)) {
             assetsByHash.set(hash, name);
           }
-          let jwt: string | undefined;
+          let jwt: string | undefined | null;
           const directory = path.resolve(assets.directory);
           yield* Effect.forEach(
             session.buckets,
@@ -240,7 +240,7 @@ export const AssetsProvider = () =>
               }
             }),
           );
-          return { jwt };
+          return { jwt: jwt ?? undefined };
         }),
       };
     }),

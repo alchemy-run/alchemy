@@ -1,6 +1,6 @@
+import type * as aws from "@distilled.cloud/aws";
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
-import type * as aws from "distilled-aws";
 import { Logger } from "effect";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -22,12 +22,12 @@ import * as AWS from "../AWS/index.ts";
 import { apply } from "../Apply.ts";
 import * as Credentials from "../AWS/Credentials.ts";
 import * as Region from "../AWS/Region.ts";
+import type { Cli } from "../Cli/index.ts";
 import {
   buildNamespaceTree,
   flattenTree,
   type DerivedAction,
 } from "../Cli/NamespaceTree.ts";
-import type { Cli } from "../Cli/index.ts";
 import { DotAlchemy, dotAlchemy } from "../Config.ts";
 import { ExecutionContext } from "../Host.ts";
 import type { Input } from "../Input.ts";

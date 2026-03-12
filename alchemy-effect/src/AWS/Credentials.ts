@@ -1,8 +1,8 @@
-import * as Auth from "distilled-aws/Auth";
+import * as Auth from "@distilled.cloud/aws/Auth";
 import {
   Credentials,
   fromAwsCredentialIdentity,
-} from "distilled-aws/Credentials";
+} from "@distilled.cloud/aws/Credentials";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";

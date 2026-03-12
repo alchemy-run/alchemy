@@ -1,3 +1,6 @@
-[submodule ".vendor/distilled"]
-	path = .vendor/distilled
+[submodule "vendor/distilled"]
+	path = vendor/distilled
 	url = git@github.com:alchemy-run/distilled.git
+[submodule "vendor/cloudflare-bundler"]
+	path = vendor/cloudflare-bundler
+	url = git@github.com:alchemy-run/cloudflare-bundler.git

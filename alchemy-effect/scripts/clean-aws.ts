@@ -2,10 +2,10 @@
 
 // @ts-nocheck
 
+import * as Credentials from "@distilled.cloud/aws/Credentials";
+import * as ec2 from "@distilled.cloud/aws/ec2";
+import { Region } from "@distilled.cloud/aws/Region";
 import { NodeServices } from "@effect/platform-node";
-import * as Credentials from "distilled-aws/Credentials";
-import * as ec2 from "distilled-aws/ec2";
-import { Region } from "distilled-aws/Region";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
@@ -25,7 +25,7 @@ const { values } = parseArgs({
 });
 
 const usage = `
-Best-effort EC2 regional cleanup using distilled-aws.
+Best-effort EC2 regional cleanup using @distilled.cloud/aws.
 
 Usage:
   bun alchemy-effect/scripts/clean-aws.ts --region us-east-1 [--profile dev]
