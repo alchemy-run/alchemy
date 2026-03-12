@@ -35,6 +35,7 @@
       "@distilled.cloud/aws": "^0.2.6",
       "@distilled.cloud/core": "^0.2.6",
       "@distilled.cloud/cloudflare": "^0.2.6",
+      "@distilled.cloud/cloudflare-bundler": "^0.0.2",
       "effect": "4.0.0-beta.30",
       "esbuild": "^0.25.12",
       "fast-xml-parser": "^5.3.4",

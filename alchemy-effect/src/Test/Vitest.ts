@@ -1,4 +1,5 @@
 import type * as aws from "@distilled.cloud/aws";
+import * as cf from "@distilled.cloud/cloudflare";
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Logger } from "effect";
@@ -18,10 +19,12 @@ import {
   beforeAll as vitestBeforeAll,
 } from "vitest";
 import * as AWS from "../AWS/index.ts";
+import * as Cloudflare from "../Cloudflare/index.ts";
 
 import { apply } from "../Apply.ts";
 import * as Credentials from "../AWS/Credentials.ts";
 import * as Region from "../AWS/Region.ts";
+import type { Build } from "../Build/Build.ts";
 import type { Cli } from "../Cli/index.ts";
 import {
   buildNamespaceTree,
@@ -32,6 +35,7 @@ import { DotAlchemy, dotAlchemy } from "../Config.ts";
 import { ExecutionContext } from "../Host.ts";
 import type { Input } from "../Input.ts";
 import * as Plan from "../Plan.ts";
+import type { Provider } from "../Provider.ts";
 import * as Stack from "../Stack.ts";
 import * as Stage from "../Stage.ts";
 import * as State from "../State/index.ts";
@@ -74,17 +78,14 @@ type Provided =
   | Cli
   | ExecutionContext
   | AWS.StageConfig
-  | Layer.Success<ReturnType<typeof AWS.providers>>;
+  | Provider<Build>
+  | Layer.Success<ReturnType<typeof AWS.providers>>
+  | Layer.Success<ReturnType<typeof Cloudflare.providers>>;
 
 const platform = Layer.mergeAll(
   NodeServices.layer,
   FetchHttpClient.layer,
   Logger.layer([Logger.consolePretty()]),
-);
-
-const awsProviders = Layer.provideMerge(
-  AWS.providers(),
-  Layer.mergeAll(Credentials.fromStageConfig(), Region.fromStageConfig()),
 );
 
 const awsStageConfig = Layer.effect(
@@ -115,6 +116,16 @@ const awsStageConfig = Layer.effect(
       endpoint: LOCAL ? LOCALSTACK_ENDPOINT : undefined,
     });
   }),
+);
+
+const awsProviders = Layer.provideMerge(
+  AWS.providers(),
+  Layer.mergeAll(Credentials.fromStageConfig(), Region.fromStageConfig()),
+);
+
+const cfProviders = Layer.provideMerge(
+  Cloudflare.providers(),
+  Layer.mergeAll(cf.CredentialsFromEnv, FetchHttpClient.layer),
 );
 
 const deriveStackName = (testPath: string, suffix: string) => {
@@ -157,7 +168,10 @@ const runWithContext = <A>(
     );
   }).pipe(
     Effect.provide(
-      Layer.provideMerge(awsProviders, Layer.provideMerge(alchemy, platform)),
+      Layer.provideMerge(
+        Layer.mergeAll(awsProviders, cfProviders),
+        Layer.provideMerge(alchemy, platform),
+      ),
     ),
     Effect.provideService(Stage.Stage, "test"),
     Effect.provideService(ExecutionContext, {
