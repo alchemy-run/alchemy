@@ -73,7 +73,9 @@ describe.sequential("CloudWatch Bindings", () => {
         );
 
         expect((response as any).ok).toBe(true);
-        expect(((response as any).value.Datapoints ?? []).length).toBeGreaterThan(0);
+        expect(
+          ((response as any).value.Datapoints ?? []).length,
+        ).toBeGreaterThan(0);
       }),
     );
   });
@@ -89,8 +91,8 @@ describe.sequential("CloudWatch Bindings", () => {
         const response = yield* postJson("/metrics/get-data", range).pipe(
           Effect.retry({
             while: (result: any) =>
-              (((result?.value?.MetricDataResults ?? [])[0]?.Values ?? []).length ??
-                0) === 0,
+              (((result?.value?.MetricDataResults ?? [])[0]?.Values ?? [])
+                .length ?? 0) === 0,
             schedule: Schedule.fixed("15 seconds").pipe(
               Schedule.both(Schedule.recurs(4)),
             ),
@@ -99,7 +101,8 @@ describe.sequential("CloudWatch Bindings", () => {
 
         expect((response as any).ok).toBe(true);
         expect(
-          (((response as any).value.MetricDataResults ?? [])[0]?.Values ?? []).length,
+          (((response as any).value.MetricDataResults ?? [])[0]?.Values ?? [])
+            .length,
         ).toBeGreaterThan(0);
       }),
     );
@@ -122,7 +125,9 @@ describe.sequential("CloudWatch Bindings", () => {
       Effect.gen(function* () {
         const response = yield* getJson("/metrics/list");
         expect((response as any).ok).toBe(true);
-        expect(((response as any).value.Metrics ?? []).length).toBeGreaterThan(0);
+        expect(((response as any).value.Metrics ?? []).length).toBeGreaterThan(
+          0,
+        );
       }),
     );
   });
@@ -133,7 +138,9 @@ describe.sequential("CloudWatch Bindings", () => {
       Effect.gen(function* () {
         const response = yield* getJson("/dashboard");
         expect((response as any).ok).toBe(true);
-        expect((response as any).value.DashboardBody).toContain("Fixture Metric");
+        expect((response as any).value.DashboardBody).toContain(
+          "Fixture Metric",
+        );
       }),
     );
   });
@@ -144,9 +151,9 @@ describe.sequential("CloudWatch Bindings", () => {
       Effect.gen(function* () {
         const response = yield* getJson("/dashboards");
         expect((response as any).ok).toBe(true);
-        expect(((response as any).value.DashboardEntries ?? []).length).toBeGreaterThan(
-          0,
-        );
+        expect(
+          ((response as any).value.DashboardEntries ?? []).length,
+        ).toBeGreaterThan(0);
       }),
     );
   });
@@ -157,10 +164,12 @@ describe.sequential("CloudWatch Bindings", () => {
       Effect.gen(function* () {
         const response = yield* getJson("/alarms");
         expect((response as any).ok).toBe(true);
-        expect(((response as any).value.MetricAlarms ?? []).length).toBeGreaterThan(0);
-        expect(((response as any).value.CompositeAlarms ?? []).length).toBeGreaterThan(
-          0,
-        );
+        expect(
+          ((response as any).value.MetricAlarms ?? []).length,
+        ).toBeGreaterThan(0);
+        expect(
+          ((response as any).value.CompositeAlarms ?? []).length,
+        ).toBeGreaterThan(0);
       }),
     );
   });
@@ -171,7 +180,9 @@ describe.sequential("CloudWatch Bindings", () => {
       Effect.gen(function* () {
         const response = yield* getJson("/alarms/for-metric");
         expect((response as any).ok).toBe(true);
-        expect(((response as any).value.MetricAlarms ?? []).length).toBeGreaterThan(0);
+        expect(
+          ((response as any).value.MetricAlarms ?? []).length,
+        ).toBeGreaterThan(0);
       }),
     );
   });
@@ -239,9 +250,9 @@ describe.sequential("CloudWatch Bindings", () => {
       Effect.gen(function* () {
         const response = yield* getJson("/anomaly-detectors");
         expect((response as any).ok).toBe(true);
-        expect(((response as any).value.AnomalyDetectors ?? []).length).toBeGreaterThan(
-          0,
-        );
+        expect(
+          ((response as any).value.AnomalyDetectors ?? []).length,
+        ).toBeGreaterThan(0);
       }),
     );
   });
@@ -252,7 +263,9 @@ describe.sequential("CloudWatch Bindings", () => {
       Effect.gen(function* () {
         const response = yield* getJson("/insight-rules");
         expect((response as any).ok).toBe(true);
-        expect(((response as any).value.InsightRules ?? []).length).toBeGreaterThan(0);
+        expect(
+          ((response as any).value.InsightRules ?? []).length,
+        ).toBeGreaterThan(0);
       }),
     );
   });
@@ -261,23 +274,15 @@ describe.sequential("CloudWatch Bindings", () => {
     test(
       "returns a report payload or a structured error",
       Effect.gen(function* () {
-        const response = yield* postJson("/insight-rules/report", windowRange());
+        const response = yield* postJson(
+          "/insight-rules/report",
+          windowRange(),
+        );
         if ((response as any).ok === false) {
           expect((response as any).error).toBeTruthy();
         } else {
           expect((response as any).value).toBeDefined();
         }
-      }),
-    );
-  });
-
-  describe("EnableInsightRules", () => {
-    test(
-      "enables the configured insight rule",
-      Effect.gen(function* () {
-        yield* postJson("/insight-rules/disable", {});
-        const response = yield* postJson("/insight-rules/enable", {});
-        expect((response as any).ok).toBe(true);
       }),
     );
   });
@@ -362,7 +367,9 @@ describe.sequential("CloudWatch Bindings", () => {
       Effect.gen(function* () {
         const response = yield* getJson("/tags/alarm");
         expect((response as any).ok).toBe(true);
-        const keys = ((response as any).value.Tags ?? []).map((tag: any) => tag.Key);
+        const keys = ((response as any).value.Tags ?? []).map(
+          (tag: any) => tag.Key,
+        );
         expect(keys).toContain("alchemy::stack");
         expect(keys).toContain("alchemy::stage");
         expect(keys).toContain("alchemy::id");

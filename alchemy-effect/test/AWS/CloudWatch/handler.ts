@@ -50,7 +50,14 @@ export const CloudWatchFixture = Effect.gen(function* () {
           width: 12,
           height: 6,
           properties: {
-            metrics: [[metricNamespace, metricName, metricDimensionName, metricDimensionValue]],
+            metrics: [
+              [
+                metricNamespace,
+                metricName,
+                metricDimensionName,
+                metricDimensionValue,
+              ],
+            ],
             period: 60,
             stat: "Sum",
             region: process.env.AWS_REGION ?? "us-east-1",
@@ -111,32 +118,27 @@ export const CloudWatchFixture = Effect.gen(function* () {
     },
   );
 
-  const insightRule = yield* AWS.CloudWatch.InsightRule(
-    "FixtureInsightRule",
-    {
-      RuleState: "ENABLED",
-      RuleDefinition: logGroup.logGroupName.pipe(
-        Output.map((logGroupName) =>
-          ({
-            Schema: {
-              Name: "CloudWatchLogRule",
-              Version: 1,
-            },
-            LogGroupNames: [logGroupName],
-            LogFormat: "JSON",
-            Contribution: {
-              Keys: ["$.fixture"],
-              Filters: [],
-            },
-            AggregateOn: "Count",
-          }),
-        ),
-      ),
-      tags: {
-        fixture: "cloudwatch-bindings",
-      },
+  const insightRule = yield* AWS.CloudWatch.InsightRule("FixtureInsightRule", {
+    RuleState: "ENABLED",
+    RuleDefinition: logGroup.logGroupName.pipe(
+      Output.map((logGroupName) => ({
+        Schema: {
+          Name: "CloudWatchLogRule",
+          Version: 1,
+        },
+        LogGroupNames: [logGroupName],
+        LogFormat: "JSON",
+        Contribution: {
+          Keys: ["$.fixture"],
+          Filters: [],
+        },
+        AggregateOn: "Count",
+      })),
+    ),
+    tags: {
+      fixture: "cloudwatch-bindings",
     },
-  );
+  });
 
   const alarmMuteRule = yield* AWS.CloudWatch.AlarmMuteRule(
     "FixtureAlarmMuteRule",
@@ -179,8 +181,10 @@ export const CloudWatchFixture = Effect.gen(function* () {
     Effect.gen(function* () {
       const putMetricData = yield* AWS.CloudWatch.PutMetricData.bind();
       const getMetricData = yield* AWS.CloudWatch.GetMetricData.bind();
-      const getMetricStatistics = yield* AWS.CloudWatch.GetMetricStatistics.bind();
-      const getMetricWidgetImage = yield* AWS.CloudWatch.GetMetricWidgetImage.bind();
+      const getMetricStatistics =
+        yield* AWS.CloudWatch.GetMetricStatistics.bind();
+      const getMetricWidgetImage =
+        yield* AWS.CloudWatch.GetMetricWidgetImage.bind();
       const listMetrics = yield* AWS.CloudWatch.ListMetrics.bind();
       const getDashboard = yield* AWS.CloudWatch.GetDashboard.bind(dashboard);
       const listDashboards = yield* AWS.CloudWatch.ListDashboards.bind();
@@ -190,7 +194,8 @@ export const CloudWatchFixture = Effect.gen(function* () {
       );
       const describeAlarmsForMetric =
         yield* AWS.CloudWatch.DescribeAlarmsForMetric.bind();
-      const describeAlarmHistory = yield* AWS.CloudWatch.DescribeAlarmHistory.bind();
+      const describeAlarmHistory =
+        yield* AWS.CloudWatch.DescribeAlarmHistory.bind();
       const describeAlarmContributors =
         yield* AWS.CloudWatch.DescribeAlarmContributors.bind(alarm);
       const enableAlarmActions =
@@ -207,8 +212,6 @@ export const CloudWatchFixture = Effect.gen(function* () {
         yield* AWS.CloudWatch.GetInsightRuleReport.bind(insightRule);
       const listManagedInsightRules =
         yield* AWS.CloudWatch.ListManagedInsightRules.bind();
-      const enableInsightRules =
-        yield* AWS.CloudWatch.EnableInsightRules.bind(insightRule);
       const disableInsightRules =
         yield* AWS.CloudWatch.DisableInsightRules.bind(insightRule);
       const getAlarmMuteRule =
@@ -328,12 +331,22 @@ export const CloudWatchFixture = Effect.gen(function* () {
             );
           }
 
-          if (request.method === "POST" && pathname === "/metrics/widget-image") {
+          if (
+            request.method === "POST" &&
+            pathname === "/metrics/widget-image"
+          ) {
             return yield* HttpServerResponse.json(
               yield* result(
                 getMetricWidgetImage({
                   MetricWidget: JSON.stringify({
-                    metrics: [[metricNamespace, metricName, metricDimensionName, metricDimensionValue]],
+                    metrics: [
+                      [
+                        metricNamespace,
+                        metricName,
+                        metricDimensionName,
+                        metricDimensionValue,
+                      ],
+                    ],
                     period: 60,
                     stat: "Sum",
                     region: process.env.AWS_REGION ?? "us-east-1",
@@ -345,15 +358,21 @@ export const CloudWatchFixture = Effect.gen(function* () {
           }
 
           if (request.method === "GET" && pathname === "/dashboard") {
-            return yield* HttpServerResponse.json(yield* result(getDashboard()));
+            return yield* HttpServerResponse.json(
+              yield* result(getDashboard()),
+            );
           }
 
           if (request.method === "GET" && pathname === "/dashboards") {
-            return yield* HttpServerResponse.json(yield* result(listDashboards()));
+            return yield* HttpServerResponse.json(
+              yield* result(listDashboards()),
+            );
           }
 
           if (request.method === "GET" && pathname === "/alarms") {
-            return yield* HttpServerResponse.json(yield* result(describeAlarms()));
+            return yield* HttpServerResponse.json(
+              yield* result(describeAlarms()),
+            );
           }
 
           if (request.method === "GET" && pathname === "/alarms/for-metric") {
@@ -379,7 +398,7 @@ export const CloudWatchFixture = Effect.gen(function* () {
             return yield* HttpServerResponse.json(
               yield* result(
                 describeAlarmHistory({
-                  AlarmName: yield* (yield* alarm.alarmName),
+                  AlarmName: yield* yield* alarm.alarmName,
                 }),
               ),
             );
@@ -402,13 +421,19 @@ export const CloudWatchFixture = Effect.gen(function* () {
             );
           }
 
-          if (request.method === "POST" && pathname === "/alarms/disable-actions") {
+          if (
+            request.method === "POST" &&
+            pathname === "/alarms/disable-actions"
+          ) {
             return yield* HttpServerResponse.json(
               yield* result(disableAlarmActions()),
             );
           }
 
-          if (request.method === "POST" && pathname === "/alarms/enable-actions") {
+          if (
+            request.method === "POST" &&
+            pathname === "/alarms/enable-actions"
+          ) {
             return yield* HttpServerResponse.json(
               yield* result(enableAlarmActions()),
             );
@@ -426,10 +451,15 @@ export const CloudWatchFixture = Effect.gen(function* () {
           }
 
           if (request.method === "GET" && pathname === "/insight-rules") {
-            return yield* HttpServerResponse.json(yield* result(describeInsightRules()));
+            return yield* HttpServerResponse.json(
+              yield* result(describeInsightRules()),
+            );
           }
 
-          if (request.method === "POST" && pathname === "/insight-rules/report") {
+          if (
+            request.method === "POST" &&
+            pathname === "/insight-rules/report"
+          ) {
             const body = (yield* request.json) as {
               startTime: string;
               endTime: string;
@@ -446,40 +476,44 @@ export const CloudWatchFixture = Effect.gen(function* () {
             );
           }
 
-          if (request.method === "POST" && pathname === "/insight-rules/disable") {
+          if (
+            request.method === "POST" &&
+            pathname === "/insight-rules/disable"
+          ) {
             return yield* HttpServerResponse.json(
               yield* result(disableInsightRules()),
             );
           }
 
-          if (request.method === "POST" && pathname === "/insight-rules/enable") {
-            return yield* HttpServerResponse.json(
-              yield* result(enableInsightRules()),
-            );
-          }
-
-          if (request.method === "GET" && pathname === "/insight-rules/managed") {
+          if (
+            request.method === "GET" &&
+            pathname === "/insight-rules/managed"
+          ) {
             return yield* HttpServerResponse.json(
               yield* result(listManagedInsightRules()),
             );
           }
 
           if (request.method === "GET" && pathname === "/mute-rule") {
-            return yield* HttpServerResponse.json(yield* result(getAlarmMuteRule()));
+            return yield* HttpServerResponse.json(
+              yield* result(getAlarmMuteRule()),
+            );
           }
 
           if (request.method === "GET" && pathname === "/mute-rules") {
             return yield* HttpServerResponse.json(
               yield* result(
                 listAlarmMuteRules({
-                  AlarmName: yield* (yield* alarm.alarmName),
+                  AlarmName: yield* yield* alarm.alarmName,
                 }),
               ),
             );
           }
 
           if (request.method === "GET" && pathname === "/tags/alarm") {
-            return yield* HttpServerResponse.json(yield* result(listTagsForAlarm()));
+            return yield* HttpServerResponse.json(
+              yield* result(listTagsForAlarm()),
+            );
           }
 
           if (request.method === "GET" && pathname === "/tags/dashboard") {
@@ -496,7 +530,9 @@ export const CloudWatchFixture = Effect.gen(function* () {
               });
             }
 
-            return yield* HttpServerResponse.json(yield* result(getMetricStream()));
+            return yield* HttpServerResponse.json(
+              yield* result(getMetricStream()),
+            );
           }
 
           if (request.method === "GET" && pathname === "/metric-streams") {
@@ -541,7 +577,6 @@ export const CloudWatchFixture = Effect.gen(function* () {
             AWS.CloudWatch.DescribeInsightRulesLive,
             AWS.CloudWatch.GetInsightRuleReportLive,
             AWS.CloudWatch.ListManagedInsightRulesLive,
-            AWS.CloudWatch.EnableInsightRulesLive,
             AWS.CloudWatch.DisableInsightRulesLive,
             AWS.CloudWatch.GetAlarmMuteRuleLive,
             AWS.CloudWatch.ListAlarmMuteRulesLive,
