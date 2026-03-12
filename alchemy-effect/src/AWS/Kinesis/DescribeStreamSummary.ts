@@ -5,8 +5,10 @@ import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Stream } from "./Stream.ts";
 
-export interface DescribeStreamSummaryRequest
-  extends Omit<Kinesis.DescribeStreamSummaryInput, "StreamName" | "StreamARN"> {}
+export interface DescribeStreamSummaryRequest extends Omit<
+  Kinesis.DescribeStreamSummaryInput,
+  "StreamName" | "StreamARN"
+> {}
 
 export class DescribeStreamSummary extends Binding.Service<
   DescribeStreamSummary,

@@ -6,7 +6,8 @@ import * as Output from "../../Output.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Table } from "./Table.ts";
 
-export interface ExecuteStatementRequest extends DynamoDB.ExecuteStatementInput {}
+export interface ExecuteStatementRequest
+  extends DynamoDB.ExecuteStatementInput {}
 
 /**
  * Runtime binding for DynamoDB PartiQL `ExecuteStatement`.
@@ -62,23 +63,25 @@ export class ExecuteStatementPolicy extends Binding.Policy<
 export const ExecuteStatementPolicyLive = ExecuteStatementPolicy.layer.succeed(
   Effect.fn(function* (host, table) {
     if (isFunction(host)) {
-      yield* host.bind`Allow(${host}, AWS.DynamoDB.ExecuteStatement(${table}))`({
-        policyStatements: [
-          {
-            Effect: "Allow",
-            Action: [
-              "dynamodb:PartiQLDelete",
-              "dynamodb:PartiQLInsert",
-              "dynamodb:PartiQLSelect",
-              "dynamodb:PartiQLUpdate",
-            ],
-            Resource: [
-              table.tableArn,
-              Output.interpolate`${table.tableArn}/index/*`,
-            ],
-          },
-        ],
-      });
+      yield* host.bind`Allow(${host}, AWS.DynamoDB.ExecuteStatement(${table}))`(
+        {
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [
+                "dynamodb:PartiQLDelete",
+                "dynamodb:PartiQLInsert",
+                "dynamodb:PartiQLSelect",
+                "dynamodb:PartiQLUpdate",
+              ],
+              Resource: [
+                table.tableArn,
+                Output.interpolate`${table.tableArn}/index/*`,
+              ],
+            },
+          ],
+        },
+      );
     } else {
       return yield* Effect.die(
         `ExecuteStatementPolicy does not support runtime '${host.Type}'`,

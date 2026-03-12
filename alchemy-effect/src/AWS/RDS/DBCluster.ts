@@ -131,8 +131,9 @@ const toTagRecord = (
 ): Record<string, string> =>
   Object.fromEntries(
     (tags ?? [])
-      .filter((tag): tag is { Key: string; Value: string } =>
-        typeof tag.Key === "string" && typeof tag.Value === "string",
+      .filter(
+        (tag): tag is { Key: string; Value: string } =>
+          typeof tag.Key === "string" && typeof tag.Value === "string",
       )
       .map((tag) => [tag.Key, tag.Value]),
   );
@@ -243,7 +244,10 @@ export const DBClusterProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const identifier =
             output?.dbClusterIdentifier ??
-            (yield* toIdentifier(id, olds ?? ({ engine: "" } as DBClusterProps)));
+            (yield* toIdentifier(
+              id,
+              olds ?? ({ engine: "" } as DBClusterProps),
+            ));
           const cluster = yield* readCluster(identifier);
           if (!cluster?.DBClusterArn) {
             return undefined;
@@ -282,7 +286,10 @@ export const DBClusterProvider = () =>
               StorageEncrypted: news.storageEncrypted,
               KmsKeyId: news.kmsKeyId,
               ManageMasterUserPassword: news.manageMasterUserPassword,
-              Tags: Object.entries(tags).map(([Key, Value]) => ({ Key, Value })),
+              Tags: Object.entries(tags).map(([Key, Value]) => ({
+                Key,
+                Value,
+              })),
               ...credentials,
             })
             .pipe(
@@ -345,9 +352,7 @@ export const DBClusterProvider = () =>
               DBClusterIdentifier: output.dbClusterIdentifier,
               SkipFinalSnapshot: true,
             })
-            .pipe(
-              Effect.catchTag("DBClusterNotFoundFault", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("DBClusterNotFoundFault", () => Effect.void));
         }),
       };
     }),

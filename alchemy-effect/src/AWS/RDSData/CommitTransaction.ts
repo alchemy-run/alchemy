@@ -10,8 +10,10 @@ export interface CommitTransactionOptions {
   secret: Secret;
 }
 
-export interface CommitTransactionRequest
-  extends Omit<rdsdata.CommitTransactionRequest, "resourceArn" | "secretArn"> {}
+export interface CommitTransactionRequest extends Omit<
+  rdsdata.CommitTransactionRequest,
+  "resourceArn" | "secretArn"
+> {}
 
 /**
  * Runtime binding for `rds-data:CommitTransaction`.
@@ -62,31 +64,39 @@ export class CommitTransactionPolicy extends Binding.Policy<
   (cluster: DBCluster, options: CommitTransactionOptions) => Effect.Effect<void>
 >()("AWS.RDSData.CommitTransaction") {}
 
-export const CommitTransactionPolicyLive = CommitTransactionPolicy.layer.succeed(
-  Effect.fn(function* (host, cluster, options) {
-    if (isFunction(host)) {
-      yield* host.bind`Allow(${host}, AWS.RDSData.CommitTransaction(${cluster}))`({
-        policyStatements: [
+export const CommitTransactionPolicyLive =
+  CommitTransactionPolicy.layer.succeed(
+    Effect.fn(function* (host, cluster, options) {
+      if (isFunction(host)) {
+        yield* host.bind`Allow(${host}, AWS.RDSData.CommitTransaction(${cluster}))`(
           {
-            Effect: "Allow",
-            Action: ["rds-data:CommitTransaction"],
-            Resource: [cluster.dbClusterArn, options.secret.secretArn],
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["rds-data:CommitTransaction"],
+                Resource: [cluster.dbClusterArn, options.secret.secretArn],
+              },
+            ],
           },
-        ],
-      });
-      yield* host.bind`Allow(${host}, AWS.SecretsManager.GetSecretValue(${options.secret}))`({
-        policyStatements: [
+        );
+        yield* host.bind`Allow(${host}, AWS.SecretsManager.GetSecretValue(${options.secret}))`(
           {
-            Effect: "Allow",
-            Action: ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
-            Resource: [options.secret.secretArn],
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [
+                  "secretsmanager:GetSecretValue",
+                  "secretsmanager:DescribeSecret",
+                ],
+                Resource: [options.secret.secretArn],
+              },
+            ],
           },
-        ],
-      });
-    } else {
-      return yield* Effect.die(
-        `CommitTransactionPolicy does not support runtime '${host.Type}'`,
-      );
-    }
-  }),
-);
+        );
+      } else {
+        return yield* Effect.die(
+          `CommitTransactionPolicy does not support runtime '${host.Type}'`,
+        );
+      }
+    }),
+  );

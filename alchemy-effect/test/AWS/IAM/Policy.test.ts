@@ -60,7 +60,9 @@ test(
       PolicyArn: policy.policyArn,
     });
     expect(
-      Object.fromEntries((updatedTags.Tags ?? []).map((tag) => [tag.Key, tag.Value])),
+      Object.fromEntries(
+        (updatedTags.Tags ?? []).map((tag) => [tag.Key, tag.Value]),
+      ),
     ).toMatchObject({
       env: "prod",
     });

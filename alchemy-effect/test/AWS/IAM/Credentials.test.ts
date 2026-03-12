@@ -10,10 +10,7 @@ import { test } from "@/Test/Vitest";
 import * as IAM from "@distilled.cloud/aws/iam";
 import { describe, expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import {
-  testCertificateBody,
-  testSshPublicKey,
-} from "./fixtures.ts";
+import { testCertificateBody, testSshPublicKey } from "./fixtures.ts";
 
 describe("AWS.IAM credential resources", () => {
   test(
@@ -24,11 +21,14 @@ describe("AWS.IAM credential resources", () => {
       const deployed = yield* test.deploy(
         Effect.gen(function* () {
           const user = yield* User("CredentialOwner", {});
-          const credential = yield* ServiceSpecificCredential("ServiceCredential", {
-            userName: user.userName,
-            serviceName: "codecommit.amazonaws.com",
-            status: "Active",
-          });
+          const credential = yield* ServiceSpecificCredential(
+            "ServiceCredential",
+            {
+              userName: user.userName,
+              serviceName: "codecommit.amazonaws.com",
+              status: "Active",
+            },
+          );
           return { user, credential };
         }),
       );

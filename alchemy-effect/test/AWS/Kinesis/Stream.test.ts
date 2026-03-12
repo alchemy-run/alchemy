@@ -499,7 +499,8 @@ describe("AWS.Kinesis.Stream", () => {
     Effect.gen(function* () {
       const accountSettings = yield* Kinesis.describeAccountSettings({});
       const status =
-        accountSettings.MinimumThroughputBillingCommitment?.Status ?? "DISABLED";
+        accountSettings.MinimumThroughputBillingCommitment?.Status ??
+        "DISABLED";
 
       if (status === "DISABLED") {
         return;
@@ -524,9 +525,9 @@ describe("AWS.Kinesis.Stream", () => {
       const summary = yield* Kinesis.describeStreamSummary({
         StreamName: stream.streamName,
       });
-      expect(summary.StreamDescriptionSummary.WarmThroughput?.TargetMiBps).toEqual(
-        10,
-      );
+      expect(
+        summary.StreamDescriptionSummary.WarmThroughput?.TargetMiBps,
+      ).toEqual(10);
 
       yield* destroy();
       yield* assertStreamDeleted(stream.streamName);

@@ -3,7 +3,12 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
-import { createInternalTags, createTagsList, diffTags, hasTags } from "../../Tags.ts";
+import {
+  createInternalTags,
+  createTagsList,
+  diffTags,
+  hasTags,
+} from "../../Tags.ts";
 import { toTagRecord } from "./common.ts";
 
 export interface ServerCertificateProps {
@@ -87,13 +92,19 @@ export const ServerCertificateProvider = () =>
             ServerCertificateName: name,
           })
           .pipe(
-            Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+            Effect.catchTag("NoSuchEntityException", () =>
+              Effect.succeed(undefined),
+            ),
           );
         return response?.ServerCertificate;
       });
 
       return {
-        stables: ["serverCertificateArn", "serverCertificateName", "serverCertificateId"],
+        stables: [
+          "serverCertificateArn",
+          "serverCertificateName",
+          "serverCertificateId",
+        ],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (
             (yield* toName(id, olds ?? ({} as ServerCertificateProps))) !==
@@ -120,7 +131,8 @@ export const ServerCertificateProvider = () =>
             serverCertificateArn: cert.ServerCertificateMetadata.Arn,
             serverCertificateName:
               cert.ServerCertificateMetadata.ServerCertificateName,
-            serverCertificateId: cert.ServerCertificateMetadata.ServerCertificateId,
+            serverCertificateId:
+              cert.ServerCertificateMetadata.ServerCertificateId,
             path: cert.ServerCertificateMetadata.Path,
             certificateBody: cert.CertificateBody,
             certificateChain: cert.CertificateChain,
@@ -165,7 +177,10 @@ export const ServerCertificateProvider = () =>
                       ),
                     );
                   }
-                  return { ServerCertificateMetadata: existing.ServerCertificateMetadata };
+                  return {
+                    ServerCertificateMetadata:
+                      existing.ServerCertificateMetadata,
+                  };
                 }),
               ),
             );
@@ -214,7 +229,8 @@ export const ServerCertificateProvider = () =>
           yield* session.note(output.serverCertificateArn);
           return {
             serverCertificateArn:
-              cert?.ServerCertificateMetadata?.Arn ?? output.serverCertificateArn,
+              cert?.ServerCertificateMetadata?.Arn ??
+              output.serverCertificateArn,
             serverCertificateName:
               cert?.ServerCertificateMetadata?.ServerCertificateName ??
               output.serverCertificateName,

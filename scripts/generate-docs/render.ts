@@ -53,11 +53,7 @@ function renderShape(
     ...rows,
   ].join("\n");
 
-  return [
-    `${level} ${heading}`,
-    shape.description ?? "",
-    table,
-  ]
+  return [`${level} ${heading}`, shape.description ?? "", table]
     .filter(Boolean)
     .join("\n\n");
 }
@@ -123,11 +119,18 @@ function renderExamples(fileDoc: FileDoc) {
 
   const sections = fileDoc.examples.flatMap((section) => [
     `### ${section.title}`,
-    ...section.examples.flatMap((example) => [`#### ${example.title}`, example.body]),
+    ...section.examples.flatMap((example) => [
+      `#### ${example.title}`,
+      example.body,
+    ]),
   ]);
 
   if (fileDoc.autoExample) {
-    sections.push("### Quick Start", `#### ${fileDoc.autoExample.title}`, fileDoc.autoExample.body);
+    sections.push(
+      "### Quick Start",
+      `#### ${fileDoc.autoExample.title}`,
+      fileDoc.autoExample.body,
+    );
   }
 
   return ["## Examples", ...sections].join("\n\n");
@@ -190,11 +193,16 @@ export function renderFileDoc(fileDoc: FileDoc) {
       ? [
           "## Reference",
           renderBindingGroup("Runtime Bindings", fileDoc.operation.services),
-          renderBindingGroup("Deploy-Time Policies", fileDoc.operation.policies),
+          renderBindingGroup(
+            "Deploy-Time Policies",
+            fileDoc.operation.policies,
+          ),
           fileDoc.operation.runtimeLayers.length > 0
             ? [
                 "### Live Layers",
-                fileDoc.operation.runtimeLayers.map((name) => `- \`${name}\``).join("\n"),
+                fileDoc.operation.runtimeLayers
+                  .map((name) => `- \`${name}\``)
+                  .join("\n"),
               ].join("\n\n")
             : "",
           fileDoc.operation.supportedHosts.length > 0
@@ -215,7 +223,9 @@ export function renderFileDoc(fileDoc: FileDoc) {
     fileDoc.provider
       ? [
           "## Provider Exports",
-          fileDoc.provider.exportedFactories.map((name) => `- \`${name}\``).join("\n"),
+          fileDoc.provider.exportedFactories
+            .map((name) => `- \`${name}\``)
+            .join("\n"),
         ].join("\n\n")
       : "",
     fileDoc.index && fileDoc.index.reExports.length > 0
@@ -257,7 +267,9 @@ function allDirectories(entries: SourceEntry[]) {
 }
 
 function hasSourceIndex(directory: string, entries: SourceEntry[]) {
-  return entries.some((entry) => entry.relativePath === path.join(directory, "index.ts"));
+  return entries.some(
+    (entry) => entry.relativePath === path.join(directory, "index.ts"),
+  );
 }
 
 export function syntheticIndexes(entries: SourceEntry[]) {
@@ -276,19 +288,26 @@ export function syntheticIndexes(entries: SourceEntry[]) {
             path.basename(entry.relativePath) !== "index.ts",
         )
         .map((entry) => ({
-      label: labelFromDocRelativePath(entry.relativePath),
+          label: labelFromDocRelativePath(entry.relativePath),
           href: relativeDocLink(outputPath, entry.outputPath),
         }))
         .sort((left, right) => left.label.localeCompare(right.label));
       const childDirectories = allDirectories(entries)
-        .filter((candidate) => candidate !== "." && path.dirname(candidate) === directory)
+        .filter(
+          (candidate) =>
+            candidate !== "." && path.dirname(candidate) === directory,
+        )
         .map((candidate) => ({
           label: path.basename(candidate),
-          href: relativeDocLink(outputPath, path.join(docsRoot, candidate, "index.md")),
+          href: relativeDocLink(
+            outputPath,
+            path.join(docsRoot, candidate, "index.md"),
+          ),
         }))
         .sort((left, right) => left.label.localeCompare(right.label));
 
-      const title = directory === "." ? "API Reference" : path.basename(directory);
+      const title =
+        directory === "." ? "API Reference" : path.basename(directory);
       const content = [
         "<!-- AUTO-GENERATED: DO NOT EDIT. Run `bun run generate:docs`. -->",
         "",

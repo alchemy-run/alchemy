@@ -17,12 +17,15 @@ describe("AWS.Kinesis.StreamConsumer", () => {
             shardCount: 1,
           });
 
-          const consumer = yield* AWS.Kinesis.StreamConsumer("AnalyticsConsumer", {
-            streamArn: stream.streamArn,
-            tags: {
-              fixture: "consumer-test",
+          const consumer = yield* AWS.Kinesis.StreamConsumer(
+            "AnalyticsConsumer",
+            {
+              streamArn: stream.streamArn,
+              tags: {
+                fixture: "consumer-test",
+              },
             },
-          });
+          );
 
           return { stream, consumer };
         }),
@@ -48,13 +51,16 @@ describe("AWS.Kinesis.StreamConsumer", () => {
             shardCount: 1,
           });
 
-          const consumer = yield* AWS.Kinesis.StreamConsumer("AnalyticsConsumer", {
-            streamArn: stream.streamArn,
-            tags: {
-              fixture: "consumer-test-updated",
-              team: "platform",
+          const consumer = yield* AWS.Kinesis.StreamConsumer(
+            "AnalyticsConsumer",
+            {
+              streamArn: stream.streamArn,
+              tags: {
+                fixture: "consumer-test-updated",
+                team: "platform",
+              },
             },
-          });
+          );
 
           return { stream, consumer };
         }),
@@ -78,7 +84,9 @@ describe("AWS.Kinesis.StreamConsumer", () => {
         ConsumerARN: updated.consumer.consumerArn,
       }).pipe(
         Effect.map(() => false),
-        Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
+        Effect.catchTag("ResourceNotFoundException", () =>
+          Effect.succeed(true),
+        ),
       );
       expect(deleted).toBe(true);
     }).pipe(Effect.provide(AWS.providers())),

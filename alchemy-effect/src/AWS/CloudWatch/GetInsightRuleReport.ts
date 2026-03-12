@@ -5,8 +5,10 @@ import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { InsightRule } from "./InsightRule.ts";
 
-export interface GetInsightRuleReportRequest
-  extends Omit<cloudwatch.GetInsightRuleReportInput, "RuleName"> {}
+export interface GetInsightRuleReportRequest extends Omit<
+  cloudwatch.GetInsightRuleReportInput,
+  "RuleName"
+> {}
 
 /**
  * Runtime binding for `cloudwatch:GetInsightRuleReport`.

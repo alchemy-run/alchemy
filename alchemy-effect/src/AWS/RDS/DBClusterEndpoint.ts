@@ -99,8 +99,10 @@ export const DBClusterEndpointProvider = () =>
         stables: ["dbClusterEndpointArn", "dbClusterEndpointIdentifier"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (
-            (yield* toIdentifier(id, olds ?? ({} as DBClusterEndpointProps))) !==
-            (yield* toIdentifier(id, news))
+            (yield* toIdentifier(
+              id,
+              olds ?? ({} as DBClusterEndpointProps),
+            )) !== (yield* toIdentifier(id, news))
           ) {
             return { action: "replace" } as const;
           }
@@ -138,15 +140,23 @@ export const DBClusterEndpointProvider = () =>
               EndpointType: news.endpointType,
               StaticMembers: news.staticMembers,
               ExcludedMembers: news.excludedMembers,
-              Tags: Object.entries(tags).map(([Key, Value]) => ({ Key, Value })),
+              Tags: Object.entries(tags).map(([Key, Value]) => ({
+                Key,
+                Value,
+              })),
             })
             .pipe(
-              Effect.catchTag("DBClusterEndpointAlreadyExistsFault", () => Effect.void),
+              Effect.catchTag(
+                "DBClusterEndpointAlreadyExistsFault",
+                () => Effect.void,
+              ),
             );
           const endpoint = yield* readEndpoint(identifier);
           if (!endpoint?.DBClusterEndpointIdentifier) {
             return yield* Effect.fail(
-              new Error(`DB cluster endpoint '${identifier}' not found after create`),
+              new Error(
+                `DB cluster endpoint '${identifier}' not found after create`,
+              ),
             );
           }
           yield* session.note(endpoint.DBClusterEndpointArn ?? identifier);
@@ -182,7 +192,9 @@ export const DBClusterEndpointProvider = () =>
             });
           }
 
-          const endpoint = yield* readEndpoint(output.dbClusterEndpointIdentifier);
+          const endpoint = yield* readEndpoint(
+            output.dbClusterEndpointIdentifier,
+          );
           if (!endpoint?.DBClusterEndpointIdentifier) {
             return yield* Effect.fail(
               new Error(
@@ -190,7 +202,9 @@ export const DBClusterEndpointProvider = () =>
               ),
             );
           }
-          yield* session.note(output.dbClusterEndpointArn ?? output.dbClusterEndpointIdentifier);
+          yield* session.note(
+            output.dbClusterEndpointArn ?? output.dbClusterEndpointIdentifier,
+          );
           return toAttrs({ endpoint, tags: newTags });
         }),
         delete: Effect.fn(function* ({ output }) {
@@ -199,7 +213,10 @@ export const DBClusterEndpointProvider = () =>
               DBClusterEndpointIdentifier: output.dbClusterEndpointIdentifier,
             })
             .pipe(
-              Effect.catchTag("DBClusterEndpointNotFoundFault", () => Effect.void),
+              Effect.catchTag(
+                "DBClusterEndpointNotFoundFault",
+                () => Effect.void,
+              ),
             );
         }),
       };

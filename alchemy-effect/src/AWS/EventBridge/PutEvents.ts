@@ -7,8 +7,10 @@ import { Account } from "../Account.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { EventBus } from "./EventBus.ts";
 
-export interface PutEventsRequest
-  extends Omit<eventbridge.PutEventsRequest, "Entries"> {
+export interface PutEventsRequest extends Omit<
+  eventbridge.PutEventsRequest,
+  "Entries"
+> {
   Entries: Array<Omit<eventbridge.PutEventsRequestEntry, "EventBusName">>;
 }
 
@@ -19,7 +21,10 @@ export class PutEvents extends Binding.Service<
   ) => Effect.Effect<
     (
       request: PutEventsRequest,
-    ) => Effect.Effect<eventbridge.PutEventsResponse, eventbridge.PutEventsError>
+    ) => Effect.Effect<
+      eventbridge.PutEventsResponse,
+      eventbridge.PutEventsError
+    >
   >
 >()("AWS.EventBridge.PutEvents") {}
 
@@ -62,7 +67,7 @@ export const PutEventsPolicyLive = PutEventsPolicy.layer.effect(
     return Effect.fn(function* (host, bus?: EventBus) {
       if (isFunction(host)) {
         const resource = bus
-          ? yield* (yield* bus.eventBusArn)
+          ? yield* yield* bus.eventBusArn
           : (`arn:aws:events:${region}:${accountId}:event-bus/default` as const);
 
         yield* host.bind`Allow(${host}, AWS.EventBridge.PutEvents(${bus ?? "default"}))`(

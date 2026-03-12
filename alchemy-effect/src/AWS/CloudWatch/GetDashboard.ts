@@ -5,8 +5,10 @@ import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Dashboard } from "./Dashboard.ts";
 
-export interface GetDashboardRequest
-  extends Omit<cloudwatch.GetDashboardInput, "DashboardName"> {}
+export interface GetDashboardRequest extends Omit<
+  cloudwatch.GetDashboardInput,
+  "DashboardName"
+> {}
 
 /**
  * Runtime binding for `cloudwatch:GetDashboard`.
@@ -18,7 +20,10 @@ export class GetDashboard extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetDashboardRequest,
-    ) => Effect.Effect<cloudwatch.GetDashboardOutput, cloudwatch.GetDashboardError>
+    ) => Effect.Effect<
+      cloudwatch.GetDashboardOutput,
+      cloudwatch.GetDashboardError
+    >
   >
 >()("AWS.CloudWatch.GetDashboard") {}
 
@@ -50,15 +55,17 @@ export class GetDashboardPolicy extends Binding.Policy<
 export const GetDashboardPolicyLive = GetDashboardPolicy.layer.succeed(
   Effect.fn(function* (host, dashboard) {
     if (isFunction(host)) {
-      yield* host.bind`Allow(${host}, AWS.CloudWatch.GetDashboard(${dashboard}))`({
-        policyStatements: [
-          {
-            Effect: "Allow",
-            Action: ["cloudwatch:GetDashboard"],
-            Resource: [dashboard.dashboardArn],
-          },
-        ],
-      });
+      yield* host.bind`Allow(${host}, AWS.CloudWatch.GetDashboard(${dashboard}))`(
+        {
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["cloudwatch:GetDashboard"],
+              Resource: [dashboard.dashboardArn],
+            },
+          ],
+        },
+      );
     } else {
       return yield* Effect.die(
         `GetDashboardPolicy does not support runtime '${host.Type}'`,

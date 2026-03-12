@@ -103,20 +103,13 @@ const toScheduleExpression = (value: string) =>
  * });
  * ```
  */
-export const every = (
-  id: string,
-  schedule: string,
-  props: ScheduleProps,
-) =>
-  Scheduler
-    .every(toScheduleExpression(schedule))
-    .named(id)
-    .toEcsTask({
-      cluster: props.cluster,
-      task: props.task,
-      subnets: props.subnets,
-      securityGroups: props.securityGroups,
-      assignPublicIp: props.assignPublicIp,
-      taskCount: props.taskCount,
-      input: props.input,
-    });
+export const every = (id: string, schedule: string, props: ScheduleProps) =>
+  Scheduler.every(toScheduleExpression(schedule)).named(id).toEcsTask({
+    cluster: props.cluster,
+    task: props.task,
+    subnets: props.subnets,
+    securityGroups: props.securityGroups,
+    assignPublicIp: props.assignPublicIp,
+    taskCount: props.taskCount,
+    input: props.input,
+  });

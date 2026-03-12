@@ -68,7 +68,9 @@ export const LoginProfileProvider = () =>
           UserName: output.userName,
         })
         .pipe(
-          Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NoSuchEntityException", () =>
+            Effect.succeed(undefined),
+          ),
         );
       if (!response?.LoginProfile) {
         return undefined;

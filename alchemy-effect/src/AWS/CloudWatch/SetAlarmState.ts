@@ -5,8 +5,10 @@ import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { AlarmResource } from "./binding-common.ts";
 
-export interface SetAlarmStateRequest
-  extends Omit<cloudwatch.SetAlarmStateInput, "AlarmName"> {}
+export interface SetAlarmStateRequest extends Omit<
+  cloudwatch.SetAlarmStateInput,
+  "AlarmName"
+> {}
 
 /**
  * Runtime binding for `cloudwatch:SetAlarmState`.
@@ -18,7 +20,10 @@ export class SetAlarmState extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SetAlarmStateRequest,
-    ) => Effect.Effect<cloudwatch.SetAlarmStateResponse, cloudwatch.SetAlarmStateError>
+    ) => Effect.Effect<
+      cloudwatch.SetAlarmStateResponse,
+      cloudwatch.SetAlarmStateError
+    >
   >
 >()("AWS.CloudWatch.SetAlarmState") {}
 

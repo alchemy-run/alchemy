@@ -118,15 +118,19 @@ export const TargetGroupProvider = () =>
           });
           const targetGroup = created.TargetGroups?.[0];
           if (!targetGroup?.TargetGroupArn) {
-            return yield* Effect.die(new Error("createTargetGroup returned no target group"));
+            return yield* Effect.die(
+              new Error("createTargetGroup returned no target group"),
+            );
           }
           if (news.attributes && Object.keys(news.attributes).length > 0) {
             yield* elbv2.modifyTargetGroupAttributes({
               TargetGroupArn: targetGroup.TargetGroupArn,
-              Attributes: Object.entries(news.attributes).map(([Key, Value]) => ({
-                Key,
-                Value,
-              })),
+              Attributes: Object.entries(news.attributes).map(
+                ([Key, Value]) => ({
+                  Key,
+                  Value,
+                }),
+              ),
             });
           }
           yield* session.note(targetGroup.TargetGroupArn);
@@ -154,10 +158,12 @@ export const TargetGroupProvider = () =>
           ) {
             yield* elbv2.modifyTargetGroupAttributes({
               TargetGroupArn: output.targetGroupArn,
-              Attributes: Object.entries(news.attributes ?? {}).map(([Key, Value]) => ({
-                Key,
-                Value,
-              })),
+              Attributes: Object.entries(news.attributes ?? {}).map(
+                ([Key, Value]) => ({
+                  Key,
+                  Value,
+                }),
+              ),
             });
           }
           const oldTags = {

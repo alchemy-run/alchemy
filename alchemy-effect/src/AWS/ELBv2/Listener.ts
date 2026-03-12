@@ -64,8 +64,8 @@ export const ListenerProvider = () =>
       return {
         listenerArn: listener.ListenerArn as ListenerArn,
         loadBalancerArn: listener.LoadBalancerArn as LoadBalancerArn,
-        targetGroupArn:
-          (defaultForward?.TargetGroupArn ?? output.targetGroupArn) as TargetGroupArn,
+        targetGroupArn: (defaultForward?.TargetGroupArn ??
+          output.targetGroupArn) as TargetGroupArn,
         port: listener.Port!,
         protocol: listener.Protocol!,
       };
@@ -88,7 +88,9 @@ export const ListenerProvider = () =>
       });
       const listener = created.Listeners?.[0];
       if (!listener?.ListenerArn) {
-        return yield* Effect.die(new Error("createListener returned no listener"));
+        return yield* Effect.die(
+          new Error("createListener returned no listener"),
+        );
       }
       yield* session.note(listener.ListenerArn);
       return {

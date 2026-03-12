@@ -35,7 +35,16 @@ test(
       Effect.gen(function* () {
         return yield* AWS.CloudWatch.Dashboard("ManagedDashboard", {
           DashboardBody: {
-            widgets: [{ type: "text", x: 0, y: 0, width: 6, height: 3, properties: { markdown: "updated" } }],
+            widgets: [
+              {
+                type: "text",
+                x: 0,
+                y: 0,
+                width: 6,
+                height: 3,
+                properties: { markdown: "updated" },
+              },
+            ],
           },
           tags: {
             fixture: "cloudwatch-resource-test",
@@ -54,7 +63,9 @@ test(
       ResourceARN: updated.dashboardArn,
     });
     expect(
-      (tags.Tags ?? []).some((tag) => tag.Key === "updated" && tag.Value === "true"),
+      (tags.Tags ?? []).some(
+        (tag) => tag.Key === "updated" && tag.Value === "true",
+      ),
     ).toBe(true);
 
     yield* destroy();
@@ -190,21 +201,19 @@ test(
           {
             RuleState: "ENABLED",
             RuleDefinition: logGroup.logGroupName.pipe(
-              Output.map((logGroupName) =>
-                ({
-                  Schema: {
-                    Name: "CloudWatchLogRule",
-                    Version: 1,
-                  },
-                  LogGroupNames: [logGroupName],
-                  LogFormat: "JSON",
-                  Contribution: {
-                    Keys: ["$.fixture"],
-                    Filters: [],
-                  },
-                  AggregateOn: "Count",
-                }),
-              ),
+              Output.map((logGroupName) => ({
+                Schema: {
+                  Name: "CloudWatchLogRule",
+                  Version: 1,
+                },
+                LogGroupNames: [logGroupName],
+                LogFormat: "JSON",
+                Contribution: {
+                  Keys: ["$.fixture"],
+                  Filters: [],
+                },
+                AggregateOn: "Count",
+              })),
             ),
           },
         );

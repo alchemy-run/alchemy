@@ -181,10 +181,10 @@ export const Task = Host<Task, ServerExecutionContext>("AWS.ECS.Task", (id) => {
             ),
           ),
         ),
-    run: (((effect: Effect.Effect<void, never, any>) =>
+    run: ((effect: Effect.Effect<void, never, any>) =>
       Effect.sync(() => {
         runners.push(effect);
-      })) as unknown) as ServerExecutionContext["run"],
+      })) as unknown as ServerExecutionContext["run"],
     exports: {
       program: Effect.all(runners, { concurrency: "unbounded" }).pipe(
         Effect.asVoid,
@@ -368,7 +368,10 @@ export const TaskProvider = () =>
             tags,
           })
           .pipe(
-            Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void),
+            Effect.catchTag(
+              "ResourceAlreadyExistsException",
+              () => Effect.void,
+            ),
           );
         return `arn:aws:logs:${region}:${accountId}:log-group:${logGroupName}`;
       });
@@ -383,9 +386,8 @@ export const TaskProvider = () =>
         bindings: ResourceBinding<Task["Binding"]>[];
       }) {
         const activeBindings = bindings.filter(
-          (
-            binding: ResourceBinding<Task["Binding"]> & { action?: string },
-          ) => binding.action !== "delete",
+          (binding: ResourceBinding<Task["Binding"]> & { action?: string }) =>
+            binding.action !== "delete",
         );
 
         const env = activeBindings
@@ -537,7 +539,11 @@ await Effect.runPromise(program);
         props: TaskProps;
       }) {
         const realMain = yield* fs.realPath(props.main);
-        const tempDir = yield* createTempBundleDir(realMain, dotAlchemy, `${id}-image`);
+        const tempDir = yield* createTempBundleDir(
+          realMain,
+          dotAlchemy,
+          `${id}-image`,
+        );
         const imageUri = `${repositoryUri}:${hash}`;
         const dockerfile = renderDockerfile({
           base: props.docker?.base,
@@ -545,12 +551,10 @@ await Effect.runPromise(program);
             ["workdir", "/app"],
             ["copy", "index.mjs", "/app/index.mjs"],
             ["entrypoint", "bun", "/app/index.mjs"],
-            ...(props.port ? [[
-              "env",
-              "PORT",
-              String(props.port),
-            ]] as const : []),
-            ...(props.port ? [["expose", props.port]] as const : []),
+            ...(props.port
+              ? ([["env", "PORT", String(props.port)]] as const)
+              : []),
+            ...(props.port ? ([["expose", props.port]] as const) : []),
             ...(props.docker?.instructions ?? []),
           ],
           entrypoint: props.docker?.entrypoint,
@@ -575,10 +579,19 @@ await Effect.runPromise(program);
             new Error("Failed to get ECR authorization token"),
           );
         }
-        const password = decodeAuthorizationToken(credentials.authorizationToken);
+        const password = decodeAuthorizationToken(
+          credentials.authorizationToken,
+        );
         const registry = credentials.proxyEndpoint.replace(/^https?:\/\//, "");
 
-        yield* runDockerCommand(["login", "-u", "AWS", "-p", password, registry]);
+        yield* runDockerCommand([
+          "login",
+          "-u",
+          "AWS",
+          "-p",
+          password,
+          registry,
+        ]);
         yield* runDockerCommand(["build", "-t", imageUri, tempDir]);
         yield* runDockerCommand(["push", imageUri]);
 
@@ -627,10 +640,13 @@ await Effect.runPromise(program);
                       },
                     ]
                   : undefined,
-              environment: Object.entries(props.env ?? {}).map(([name, value]) => ({
-                name,
-                value: typeof value === "string" ? value : JSON.stringify(value),
-              })),
+              environment: Object.entries(props.env ?? {}).map(
+                ([name, value]) => ({
+                  name,
+                  value:
+                    typeof value === "string" ? value : JSON.stringify(value),
+                }),
+              ),
               logConfiguration: {
                 logDriver: "awslogs",
                 options: {
@@ -673,13 +689,16 @@ await Effect.runPromise(program);
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const family = output?.taskFamily ?? (yield* toTaskFamily(id, olds ?? {}));
+          const family =
+            output?.taskFamily ?? (yield* toTaskFamily(id, olds ?? {}));
           const described = yield* ecs
             .describeTaskDefinition({
               taskDefinition: output?.taskDefinitionArn ?? family,
             })
             .pipe(
-              Effect.catchTag("ClientException", () => Effect.succeed(undefined)),
+              Effect.catchTag("ClientException", () =>
+                Effect.succeed(undefined),
+              ),
             );
           const taskDefinition = described?.taskDefinition;
           if (!taskDefinition?.taskDefinitionArn) {
@@ -693,26 +712,22 @@ await Effect.runPromise(program);
             taskDefinitionArn: taskDefinition.taskDefinitionArn,
             taskFamily: taskDefinition.family ?? family,
             containerName:
-              taskDefinition.containerDefinitions?.[0]?.name ?? output.containerName,
+              taskDefinition.containerDefinitions?.[0]?.name ??
+              output.containerName,
             port:
               taskDefinition.containerDefinitions?.[0]?.portMappings?.[0]
                 ?.containerPort ?? output.port,
           };
         }),
-        create: Effect.fn(function* ({
-          id,
-          news,
-          bindings,
-          output,
-          session,
-        }) {
+        create: Effect.fn(function* ({ id, news, bindings, output, session }) {
           const family = yield* toTaskFamily(id, news);
           const taskRoleName = yield* createRoleName(id, "task-role");
           const executionRoleName = yield* createRoleName(id, "execution-role");
           const taskPolicyName = yield* createPolicyName(id, "task-policy");
           const repositoryName =
             output?.repositoryName ?? (yield* createRepositoryName(id));
-          const logGroupName = output?.logGroupName ?? (yield* createLogGroupName(id));
+          const logGroupName =
+            output?.logGroupName ?? (yield* createLogGroupName(id));
           const tags = {
             ...(yield* createInternalTags(id)),
             ...(news.tags ?? {}),
@@ -747,10 +762,12 @@ await Effect.runPromise(program);
             repositoryName,
             tags,
           });
-          const logGroupArn = output?.logGroupArn ?? (yield* ensureLogGroup({
-            id,
-            logGroupName,
-          }));
+          const logGroupArn =
+            output?.logGroupArn ??
+            (yield* ensureLogGroup({
+              id,
+              logGroupName,
+            }));
 
           const { code, hash } = yield* bundleProgram(id, news);
           const imageUri = yield* buildAndPushImage({
@@ -804,13 +821,7 @@ await Effect.runPromise(program);
             },
           };
         }),
-        update: Effect.fn(function* ({
-          id,
-          news,
-          bindings,
-          output,
-          session,
-        }) {
+        update: Effect.fn(function* ({ id, news, bindings, output, session }) {
           const family = yield* toTaskFamily(id, news);
           const taskPolicyName = yield* createPolicyName(id, "task-policy");
 
@@ -887,7 +898,9 @@ await Effect.runPromise(program);
             .deleteLogGroup({
               logGroupName: output.logGroupName,
             })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
+            .pipe(
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            );
 
           yield* iam
             .listRolePolicies({
@@ -913,7 +926,10 @@ await Effect.runPromise(program);
               ),
             );
 
-          for (const roleName of [output.taskRoleName, output.executionRoleName]) {
+          for (const roleName of [
+            output.taskRoleName,
+            output.executionRoleName,
+          ]) {
             yield* iam
               .listAttachedRolePolicies({
                 RoleName: roleName,

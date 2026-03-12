@@ -2,7 +2,12 @@ import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
-import { createInternalTags, createTagsList, diffTags, hasTags } from "../../Tags.ts";
+import {
+  createInternalTags,
+  createTagsList,
+  diffTags,
+  hasTags,
+} from "../../Tags.ts";
 import type { AccountID } from "../Account.ts";
 import { Account } from "../Account.ts";
 import {
@@ -119,9 +124,13 @@ export const PolicyProvider = () =>
       });
 
       const readPolicy = Effect.fn(function* (policyArn: string) {
-        const response = yield* iam.getPolicy({ PolicyArn: policyArn }).pipe(
-          Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
-        );
+        const response = yield* iam
+          .getPolicy({ PolicyArn: policyArn })
+          .pipe(
+            Effect.catchTag("NoSuchEntityException", () =>
+              Effect.succeed(undefined),
+            ),
+          );
         return response?.Policy;
       });
 
@@ -141,7 +150,9 @@ export const PolicyProvider = () =>
             VersionId: versionId,
           })
           .pipe(
-            Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+            Effect.catchTag("NoSuchEntityException", () =>
+              Effect.succeed(undefined),
+            ),
           );
         return parsePolicyDocument(response?.PolicyVersion?.Document);
       });
@@ -175,13 +186,16 @@ export const PolicyProvider = () =>
           if ((olds?.path ?? "/") !== (news.path ?? "/")) {
             return { action: "replace" } as const;
           }
-          if ((olds?.description ?? undefined) !== (news.description ?? undefined)) {
+          if (
+            (olds?.description ?? undefined) !== (news.description ?? undefined)
+          ) {
             return { action: "replace" } as const;
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const policyArn =
-            output?.policyArn ?? (yield* toPolicyArn(id, olds ?? ({} as PolicyProps)));
+            output?.policyArn ??
+            (yield* toPolicyArn(id, olds ?? ({} as PolicyProps)));
           const policy = yield* readPolicy(policyArn);
           if (!policy?.Arn || !policy.PolicyName) {
             return undefined;
@@ -326,7 +340,8 @@ export const PolicyProvider = () =>
             policyName: output.policyName,
             policyId: policy?.PolicyId ?? output.policyId,
             path: policy?.Path ?? output.path,
-            defaultVersionId: policy?.DefaultVersionId ?? output.defaultVersionId,
+            defaultVersionId:
+              policy?.DefaultVersionId ?? output.defaultVersionId,
             attachmentCount: policy?.AttachmentCount ?? output.attachmentCount,
             permissionsBoundaryUsageCount:
               policy?.PermissionsBoundaryUsageCount ??
@@ -343,7 +358,9 @@ export const PolicyProvider = () =>
               PolicyArn: output.policyArn,
             })
             .pipe(
-              Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+              Effect.catchTag("NoSuchEntityException", () =>
+                Effect.succeed(undefined),
+              ),
             );
           for (const version of versions?.Versions ?? []) {
             if (!version.IsDefaultVersion && version.VersionId) {

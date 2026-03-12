@@ -62,7 +62,10 @@ export const LogGroupProvider = () =>
       const region = yield* Region;
       const accountId = yield* Account;
 
-      const toLogGroupName = (id: string, props: { logGroupName?: string } = {}) =>
+      const toLogGroupName = (
+        id: string,
+        props: { logGroupName?: string } = {},
+      ) =>
         props.logGroupName
           ? Effect.succeed(props.logGroupName)
           : createPhysicalName({ id, maxLength: 512 });
@@ -112,7 +115,10 @@ export const LogGroupProvider = () =>
               tags,
             })
             .pipe(
-              Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void),
+              Effect.catchTag(
+                "ResourceAlreadyExistsException",
+                () => Effect.void,
+              ),
             );
 
           if (news.retentionInDays !== undefined) {
@@ -142,7 +148,10 @@ export const LogGroupProvider = () =>
                   logGroupName: output.logGroupName,
                 })
                 .pipe(
-                  Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+                  Effect.catchTag(
+                    "ResourceNotFoundException",
+                    () => Effect.void,
+                  ),
                 );
             } else {
               yield* logs.putRetentionPolicy({
@@ -164,7 +173,9 @@ export const LogGroupProvider = () =>
           if (upsert.length > 0) {
             yield* logs.tagResource({
               resourceArn: output.logGroupArn,
-              tags: Object.fromEntries(upsert.map((tag) => [tag.Key, tag.Value])),
+              tags: Object.fromEntries(
+                upsert.map((tag) => [tag.Key, tag.Value]),
+              ),
             });
           }
           if (removed.length > 0) {
@@ -187,7 +198,9 @@ export const LogGroupProvider = () =>
             .deleteLogGroup({
               logGroupName: output.logGroupName,
             })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
+            .pipe(
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            );
         }),
       };
     }),

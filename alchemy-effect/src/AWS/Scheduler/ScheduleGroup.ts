@@ -2,7 +2,12 @@ import * as scheduler from "@distilled.cloud/aws/scheduler";
 import * as Effect from "effect/Effect";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
-import { createInternalTags, createTagsList, diffTags, hasTags } from "../../Tags.ts";
+import {
+  createInternalTags,
+  createTagsList,
+  diffTags,
+  hasTags,
+} from "../../Tags.ts";
 
 export interface ScheduleGroupProps {
   /**
@@ -41,7 +46,9 @@ export interface ScheduleGroup extends Resource<
   }
 > {}
 
-export const ScheduleGroup = Resource<ScheduleGroup>("AWS.Scheduler.ScheduleGroup");
+export const ScheduleGroup = Resource<ScheduleGroup>(
+  "AWS.Scheduler.ScheduleGroup",
+);
 
 export const ScheduleGroupProvider = () =>
   ScheduleGroup.provider.effect(
@@ -98,20 +105,22 @@ export const ScheduleGroupProvider = () =>
                 scheduler.getScheduleGroup({ Name: scheduleGroupName }).pipe(
                   Effect.flatMap((existing) =>
                     existing.Arn
-                      ? scheduler.listTagsForResource({
-                          ResourceArn: existing.Arn,
-                        }).pipe(
-                          Effect.filterOrFail(
-                            ({ Tags }) => hasTags(tags, Tags),
-                            () =>
-                              new Error(
-                                `ScheduleGroup '${scheduleGroupName}' already exists and is not managed by alchemy`,
-                              ),
-                          ),
-                          Effect.as({
-                            ScheduleGroupArn: existing.Arn,
-                          }),
-                        )
+                      ? scheduler
+                          .listTagsForResource({
+                            ResourceArn: existing.Arn,
+                          })
+                          .pipe(
+                            Effect.filterOrFail(
+                              ({ Tags }) => hasTags(tags, Tags),
+                              () =>
+                                new Error(
+                                  `ScheduleGroup '${scheduleGroupName}' already exists and is not managed by alchemy`,
+                                ),
+                            ),
+                            Effect.as({
+                              ScheduleGroupArn: existing.Arn,
+                            }),
+                          )
                       : Effect.fail(
                           new Error(
                             `ScheduleGroup '${scheduleGroupName}' already exists but could not be described`,

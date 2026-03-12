@@ -5,8 +5,10 @@ import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import { type AlarmResource, sortAlarmResources } from "./binding-common.ts";
 
-export interface DescribeAlarmsRequest
-  extends Omit<cloudwatch.DescribeAlarmsInput, "AlarmNames"> {}
+export interface DescribeAlarmsRequest extends Omit<
+  cloudwatch.DescribeAlarmsInput,
+  "AlarmNames"
+> {}
 
 type AlarmResources = [AlarmResource, ...AlarmResource[]];
 
@@ -39,7 +41,7 @@ export const DescribeAlarmsLive = Layer.effect(
           ...request,
           AlarmNames: yield* Effect.forEach(sorted, (alarm) =>
             Effect.gen(function* () {
-              return yield* (yield* alarm.alarmName);
+              return yield* yield* alarm.alarmName;
             }),
           ),
         });
@@ -57,15 +59,17 @@ export const DescribeAlarmsPolicyLive = DescribeAlarmsPolicy.layer.succeed(
   Effect.fn(function* (host, ...alarms: AlarmResources) {
     const sorted = sortAlarmResources(alarms);
     if (isFunction(host)) {
-      yield* host.bind`Allow(${host}, AWS.CloudWatch.DescribeAlarms(${sorted}))`({
-        policyStatements: [
-          {
-            Effect: "Allow",
-            Action: ["cloudwatch:DescribeAlarms"],
-            Resource: sorted.map((alarm) => alarm.alarmArn),
-          },
-        ],
-      });
+      yield* host.bind`Allow(${host}, AWS.CloudWatch.DescribeAlarms(${sorted}))`(
+        {
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["cloudwatch:DescribeAlarms"],
+              Resource: sorted.map((alarm) => alarm.alarmArn),
+            },
+          ],
+        },
+      );
     } else {
       return yield* Effect.die(
         `DescribeAlarmsPolicy does not support runtime '${host.Type}'`,

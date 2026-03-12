@@ -8,8 +8,10 @@ import type { StreamConsumer } from "./StreamConsumer.ts";
 
 type TaggableResource = Stream | StreamConsumer;
 
-export interface ListTagsForResourceRequest
-  extends Omit<Kinesis.ListTagsForResourceInput, "ResourceARN"> {}
+export interface ListTagsForResourceRequest extends Omit<
+  Kinesis.ListTagsForResourceInput,
+  "ResourceARN"
+> {}
 
 export class ListTagsForResource extends Binding.Service<
   ListTagsForResource,

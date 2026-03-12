@@ -21,10 +21,15 @@ import {
 } from "./ToQueue.ts";
 
 export type EventPattern = Record<string, any>;
-export type EventRecord<Detail = unknown> = lambda.EventBridgeEvent<string, Detail>;
+export type EventRecord<Detail = unknown> = lambda.EventBridgeEvent<
+  string,
+  Detail
+>;
 
-export interface EventRouteProps
-  extends Pick<RuleProps, "description" | "state"> {}
+export interface EventRouteProps extends Pick<
+  RuleProps,
+  "description" | "state"
+> {}
 
 export interface SubscribeProps extends EventRouteProps {}
 
@@ -44,7 +49,11 @@ export class EventSource extends Binding.Service<
   EventSourceService
 >()("AWS.EventBridge.EventSource") {}
 
-export type EventSourceService = <Detail = unknown, StreamReq = never, Req = never>(
+export type EventSourceService = <
+  Detail = unknown,
+  StreamReq = never,
+  Req = never,
+>(
   descriptor: EventDescriptor,
   process: (
     events: Stream.Stream<EventRecord<Detail>, never, StreamReq>,

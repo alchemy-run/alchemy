@@ -8,7 +8,8 @@ import { Account, type AccountID } from "../Account.ts";
 import type { RegionID } from "../Region.ts";
 
 export type ClusterName = string;
-export type ClusterArn = `arn:aws:ecs:${RegionID}:${AccountID}:cluster/${ClusterName}`;
+export type ClusterArn =
+  `arn:aws:ecs:${RegionID}:${AccountID}:cluster/${ClusterName}`;
 
 export interface ClusterProps {
   /**
@@ -162,13 +163,13 @@ export const ClusterProvider = () =>
           yield* applyCapacityProviders({
             cluster: clusterName,
             capacityProviders: news.capacityProviders,
-            defaultCapacityProviderStrategy: news.defaultCapacityProviderStrategy,
+            defaultCapacityProviderStrategy:
+              news.defaultCapacityProviderStrategy,
           });
 
           const cluster = created.cluster;
-          const clusterArn =
-            (cluster?.clusterArn ??
-              `arn:aws:ecs:${region}:${accountId}:cluster/${clusterName}`) as ClusterArn;
+          const clusterArn = (cluster?.clusterArn ??
+            `arn:aws:ecs:${region}:${accountId}:cluster/${clusterName}`) as ClusterArn;
           yield* session.note(clusterArn);
 
           return {
@@ -194,7 +195,8 @@ export const ClusterProvider = () =>
           yield* applyCapacityProviders({
             cluster: output.clusterArn,
             capacityProviders: news.capacityProviders,
-            defaultCapacityProviderStrategy: news.defaultCapacityProviderStrategy,
+            defaultCapacityProviderStrategy:
+              news.defaultCapacityProviderStrategy,
           });
 
           const oldTags = {
@@ -238,8 +240,14 @@ export const ClusterProvider = () =>
             })
             .pipe(
               Effect.catchTag("ClusterNotFoundException", () => Effect.void),
-              Effect.catchTag("ClusterContainsServicesException", () => Effect.void),
-              Effect.catchTag("ClusterContainsTasksException", () => Effect.void),
+              Effect.catchTag(
+                "ClusterContainsServicesException",
+                () => Effect.void,
+              ),
+              Effect.catchTag(
+                "ClusterContainsTasksException",
+                () => Effect.void,
+              ),
             );
         }),
       };

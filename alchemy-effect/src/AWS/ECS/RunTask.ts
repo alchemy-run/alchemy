@@ -6,8 +6,10 @@ import { isFunction } from "../Lambda/Function.ts";
 import { Task, isTask } from "./Task.ts";
 import type { Cluster } from "./Cluster.ts";
 
-export interface RunTaskRequest
-  extends Omit<ECS.RunTaskRequest, "cluster" | "taskDefinition"> {}
+export interface RunTaskRequest extends Omit<
+  ECS.RunTaskRequest,
+  "cluster" | "taskDefinition"
+> {}
 
 export class RunTask extends Binding.Service<
   RunTask,
@@ -15,7 +17,9 @@ export class RunTask extends Binding.Service<
     cluster: Cluster,
     task: Task,
   ) => Effect.Effect<
-    (request: RunTaskRequest) => Effect.Effect<ECS.RunTaskResponse, ECS.RunTaskError>
+    (
+      request: RunTaskRequest,
+    ) => Effect.Effect<ECS.RunTaskResponse, ECS.RunTaskError>
   >
 >()("AWS.ECS.RunTask") {}
 

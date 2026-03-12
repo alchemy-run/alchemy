@@ -10,11 +10,10 @@ export interface RollbackTransactionOptions {
   secret: Secret;
 }
 
-export interface RollbackTransactionRequest
-  extends Omit<
-    rdsdata.RollbackTransactionRequest,
-    "resourceArn" | "secretArn"
-  > {}
+export interface RollbackTransactionRequest extends Omit<
+  rdsdata.RollbackTransactionRequest,
+  "resourceArn" | "secretArn"
+> {}
 
 /**
  * Runtime binding for `rds-data:RollbackTransaction`.
@@ -72,27 +71,31 @@ export const RollbackTransactionPolicyLive =
   RollbackTransactionPolicy.layer.succeed(
     Effect.fn(function* (host, cluster, options) {
       if (isFunction(host)) {
-        yield* host.bind`Allow(${host}, AWS.RDSData.RollbackTransaction(${cluster}))`({
-          policyStatements: [
-            {
-              Effect: "Allow",
-              Action: ["rds-data:RollbackTransaction"],
-              Resource: [cluster.dbClusterArn, options.secret.secretArn],
-            },
-          ],
-        });
-        yield* host.bind`Allow(${host}, AWS.SecretsManager.GetSecretValue(${options.secret}))`({
-          policyStatements: [
-            {
-              Effect: "Allow",
-              Action: [
-                "secretsmanager:GetSecretValue",
-                "secretsmanager:DescribeSecret",
-              ],
-              Resource: [options.secret.secretArn],
-            },
-          ],
-        });
+        yield* host.bind`Allow(${host}, AWS.RDSData.RollbackTransaction(${cluster}))`(
+          {
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["rds-data:RollbackTransaction"],
+                Resource: [cluster.dbClusterArn, options.secret.secretArn],
+              },
+            ],
+          },
+        );
+        yield* host.bind`Allow(${host}, AWS.SecretsManager.GetSecretValue(${options.secret}))`(
+          {
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [
+                  "secretsmanager:GetSecretValue",
+                  "secretsmanager:DescribeSecret",
+                ],
+                Resource: [options.secret.secretArn],
+              },
+            ],
+          },
+        );
       } else {
         return yield* Effect.die(
           `RollbackTransactionPolicy does not support runtime '${host.Type}'`,

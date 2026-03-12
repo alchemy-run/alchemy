@@ -362,7 +362,10 @@ export const FunctionProvider = () =>
               PolicyArn:
                 "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
             })
-            .pipe(Effect.tapError(Effect.logDebug), Effect.tap(Effect.logDebug));
+            .pipe(
+              Effect.tapError(Effect.logDebug),
+              Effect.tap(Effect.logDebug),
+            );
         }
 
         yield* Effect.logDebug(`attached policy ${id}`);
@@ -865,7 +868,11 @@ export default await Effect.runPromise(handlerEffect)
             news.functionName,
           );
 
-          const role = yield* createRoleIfNotExists({ id, roleName, vpc: news.vpc });
+          const role = yield* createRoleIfNotExists({
+            id,
+            roleName,
+            vpc: news.vpc,
+          });
 
           // mock code
           const code = new TextEncoder().encode("export default () => {}");

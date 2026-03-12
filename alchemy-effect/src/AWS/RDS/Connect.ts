@@ -57,7 +57,9 @@ export const ConnectLive = Layer.effect(
       const SecretId = yield* options.secret.secretArn;
       const Host = yield* resource.endpoint;
       const Port =
-        resource.Type === "AWS.RDS.DBCluster" ? yield* resource.port : undefined;
+        resource.Type === "AWS.RDS.DBCluster"
+          ? yield* resource.port
+          : undefined;
       yield* Policy(resource, options);
 
       return Effect.fn(function* () {
@@ -78,7 +80,9 @@ export const ConnectLive = Layer.effect(
         };
 
         if (!host) {
-          return yield* Effect.fail(new Error(`RDS endpoint is not available yet`));
+          return yield* Effect.fail(
+            new Error(`RDS endpoint is not available yet`),
+          );
         }
 
         return {
@@ -106,7 +110,10 @@ export const ConnectPolicyLive = ConnectPolicy.layer.succeed(
         policyStatements: [
           {
             Effect: "Allow",
-            Action: ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
+            Action: [
+              "secretsmanager:GetSecretValue",
+              "secretsmanager:DescribeSecret",
+            ],
             Resource: [options.secret.secretArn],
           },
         ],

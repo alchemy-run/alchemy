@@ -5,8 +5,10 @@ import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Stream } from "./Stream.ts";
 
-export interface ListShardsRequest
-  extends Omit<Kinesis.ListShardsInput, "StreamName" | "StreamARN"> {}
+export interface ListShardsRequest extends Omit<
+  Kinesis.ListShardsInput,
+  "StreamName" | "StreamARN"
+> {}
 
 export class ListShards extends Binding.Service<
   ListShards,

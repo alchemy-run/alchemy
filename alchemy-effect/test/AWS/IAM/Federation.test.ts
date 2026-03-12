@@ -62,7 +62,9 @@ describe("AWS.IAM federation resources", () => {
         OpenIDConnectProviderArn: provider.openIDConnectProviderArn,
       });
       expect(
-        Object.fromEntries((tags.Tags ?? []).map((tag) => [tag.Key, tag.Value])),
+        Object.fromEntries(
+          (tags.Tags ?? []).map((tag) => [tag.Key, tag.Value]),
+        ),
       ).toMatchObject({
         env: "prod",
       });
@@ -121,7 +123,9 @@ describe("AWS.IAM federation resources", () => {
         SAMLProviderArn: provider.samlProviderArn,
       });
       expect(
-        Object.fromEntries((tags.Tags ?? []).map((tag) => [tag.Key, tag.Value])),
+        Object.fromEntries(
+          (tags.Tags ?? []).map((tag) => [tag.Key, tag.Value]),
+        ),
       ).toMatchObject({
         env: "prod",
       });

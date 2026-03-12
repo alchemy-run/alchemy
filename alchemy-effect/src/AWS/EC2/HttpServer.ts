@@ -13,8 +13,8 @@ export const HttpServer = Layer.effect(
 
     return Http.server({
       serve: (handler) =>
-        (instance.run(
-          (Effect.gen(function* () {
+        instance.run(
+          Effect.gen(function* () {
             const port = yield* Config.number("PORT").pipe(
               Config.withDefault(3000),
             );
@@ -37,10 +37,12 @@ export const HttpServer = Layer.effect(
                 ),
             });
 
-            yield* Effect.addFinalizer(() => Effect.sync(() => server.stop(true)));
+            yield* Effect.addFinalizer(() =>
+              Effect.sync(() => server.stop(true)),
+            );
             yield* Effect.never;
-          }) as Effect.Effect<void, never, any>),
-        ) as any),
+          }) as Effect.Effect<void, never, any>,
+        ) as any,
     });
   }),
 );

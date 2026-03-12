@@ -46,15 +46,17 @@ export const GetMetricWidgetImagePolicyLive =
   GetMetricWidgetImagePolicy.layer.succeed(
     Effect.fn(function* (host) {
       if (isFunction(host)) {
-        yield* host.bind`Allow(${host}, AWS.CloudWatch.GetMetricWidgetImage())`({
-          policyStatements: [
-            {
-              Effect: "Allow",
-              Action: ["cloudwatch:GetMetricWidgetImage"],
-              Resource: ["*"],
-            },
-          ],
-        });
+        yield* host.bind`Allow(${host}, AWS.CloudWatch.GetMetricWidgetImage())`(
+          {
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["cloudwatch:GetMetricWidgetImage"],
+                Resource: ["*"],
+              },
+            ],
+          },
+        );
       } else {
         return yield* Effect.die(
           `GetMetricWidgetImagePolicy does not support runtime '${host.Type}'`,

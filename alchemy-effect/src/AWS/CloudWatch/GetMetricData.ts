@@ -14,7 +14,10 @@ export class GetMetricData extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetMetricDataRequest,
-    ) => Effect.Effect<cloudwatch.GetMetricDataOutput, cloudwatch.GetMetricDataError>
+    ) => Effect.Effect<
+      cloudwatch.GetMetricDataOutput,
+      cloudwatch.GetMetricDataError
+    >
   >
 >()("AWS.CloudWatch.GetMetricData") {}
 

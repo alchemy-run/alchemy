@@ -23,8 +23,9 @@ export const toTagRecord = (
 ): OrganizationsTags =>
   Object.fromEntries(
     (tags ?? [])
-      .filter((tag): tag is { Key: string; Value: string } =>
-        typeof tag.Key === "string" && typeof tag.Value === "string",
+      .filter(
+        (tag): tag is { Key: string; Value: string } =>
+          typeof tag.Key === "string" && typeof tag.Value === "string",
       )
       .map((tag) => [tag.Key, tag.Value]),
   );
@@ -72,7 +73,8 @@ export const createManagedTags = Effect.fn(function* (
 
 export const readResourceTags = (resourceId: string) =>
   collectPages(
-    (NextToken) => organizations.listTagsForResource({ ResourceId: resourceId, NextToken }),
+    (NextToken) =>
+      organizations.listTagsForResource({ ResourceId: resourceId, NextToken }),
     (page) => page.Tags,
   ).pipe(Effect.map(toTagRecord));
 

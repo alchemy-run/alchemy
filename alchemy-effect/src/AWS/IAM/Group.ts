@@ -78,23 +78,29 @@ export const GroupProvider = () =>
         });
         const entries = yield* Effect.all(
           (listed.PolicyNames ?? []).map((policyName) =>
-            iam.getGroupPolicy({
-              GroupName: groupName,
-              PolicyName: policyName,
-            }).pipe(
-              Effect.map((response) => [
-                policyName,
-                parsePolicyDocument(response.PolicyDocument),
-              ] as const),
-              Effect.catchTag("NoSuchEntityException", () =>
-                Effect.succeed([policyName, undefined] as const),
+            iam
+              .getGroupPolicy({
+                GroupName: groupName,
+                PolicyName: policyName,
+              })
+              .pipe(
+                Effect.map(
+                  (response) =>
+                    [
+                      policyName,
+                      parsePolicyDocument(response.PolicyDocument),
+                    ] as const,
+                ),
+                Effect.catchTag("NoSuchEntityException", () =>
+                  Effect.succeed([policyName, undefined] as const),
+                ),
               ),
-            ),
           ),
         );
         return Object.fromEntries(
           entries.filter(
-            (entry): entry is [string, PolicyDocument] => entry[1] !== undefined,
+            (entry): entry is [string, PolicyDocument] =>
+              entry[1] !== undefined,
           ),
         );
       });
@@ -105,7 +111,9 @@ export const GroupProvider = () =>
         });
         return (listed.AttachedPolicies ?? [])
           .map((policy) => policy.PolicyArn)
-          .filter((policyArn): policyArn is string => typeof policyArn === "string");
+          .filter(
+            (policyArn): policyArn is string => typeof policyArn === "string",
+          );
       });
 
       const syncManagedPolicies = Effect.fn(function* ({
@@ -134,7 +142,9 @@ export const GroupProvider = () =>
                 GroupName: groupName,
                 PolicyArn: policyArn,
               })
-              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+              .pipe(
+                Effect.catchTag("NoSuchEntityException", () => Effect.void),
+              );
           }
         }
       });
@@ -150,7 +160,8 @@ export const GroupProvider = () =>
       }) {
         for (const [policyName, document] of Object.entries(news)) {
           if (
-            JSON.stringify(olds[policyName] ?? null) !== JSON.stringify(document)
+            JSON.stringify(olds[policyName] ?? null) !==
+            JSON.stringify(document)
           ) {
             yield* iam.putGroupPolicy({
               GroupName: groupName,
@@ -166,7 +177,9 @@ export const GroupProvider = () =>
                 GroupName: groupName,
                 PolicyName: policyName,
               })
-              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+              .pipe(
+                Effect.catchTag("NoSuchEntityException", () => Effect.void),
+              );
           }
         }
       });
@@ -186,13 +199,16 @@ export const GroupProvider = () =>
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const groupName =
-            output?.groupName ?? (yield* toName(id, olds ?? ({} as GroupProps)));
+            output?.groupName ??
+            (yield* toName(id, olds ?? ({} as GroupProps)));
           const response = yield* iam
             .getGroup({
               GroupName: groupName,
             })
             .pipe(
-              Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+              Effect.catchTag("NoSuchEntityException", () =>
+                Effect.succeed(undefined),
+              ),
             );
           if (!response?.Group?.Arn) {
             return undefined;
@@ -219,9 +235,11 @@ export const GroupProvider = () =>
             })
             .pipe(
               Effect.catchTag("EntityAlreadyExistsException", () =>
-                iam.getGroup({
-                  GroupName: groupName,
-                }).pipe(Effect.map((response) => ({ Group: response.Group }))),
+                iam
+                  .getGroup({
+                    GroupName: groupName,
+                  })
+                  .pipe(Effect.map((response) => ({ Group: response.Group }))),
               ),
             );
 
@@ -270,7 +288,9 @@ export const GroupProvider = () =>
               GroupName: output.groupName,
             })
             .pipe(
-              Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+              Effect.catchTag("NoSuchEntityException", () =>
+                Effect.succeed(undefined),
+              ),
             );
           for (const user of groupState?.Users ?? []) {
             if (user.UserName) {
@@ -279,7 +299,9 @@ export const GroupProvider = () =>
                   GroupName: output.groupName,
                   UserName: user.UserName,
                 })
-                .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+                .pipe(
+                  Effect.catchTag("NoSuchEntityException", () => Effect.void),
+                );
             }
           }
           const inlinePolicies = yield* iam
@@ -287,7 +309,9 @@ export const GroupProvider = () =>
               GroupName: output.groupName,
             })
             .pipe(
-              Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+              Effect.catchTag("NoSuchEntityException", () =>
+                Effect.succeed(undefined),
+              ),
             );
           for (const policyName of inlinePolicies?.PolicyNames ?? []) {
             yield* iam
@@ -295,14 +319,18 @@ export const GroupProvider = () =>
                 GroupName: output.groupName,
                 PolicyName: policyName,
               })
-              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+              .pipe(
+                Effect.catchTag("NoSuchEntityException", () => Effect.void),
+              );
           }
           const attachedPolicies = yield* iam
             .listAttachedGroupPolicies({
               GroupName: output.groupName,
             })
             .pipe(
-              Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+              Effect.catchTag("NoSuchEntityException", () =>
+                Effect.succeed(undefined),
+              ),
             );
           for (const policy of attachedPolicies?.AttachedPolicies ?? []) {
             if (policy.PolicyArn) {
@@ -311,7 +339,9 @@ export const GroupProvider = () =>
                   GroupName: output.groupName,
                   PolicyArn: policy.PolicyArn,
                 })
-                .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+                .pipe(
+                  Effect.catchTag("NoSuchEntityException", () => Effect.void),
+                );
             }
           }
           yield* iam

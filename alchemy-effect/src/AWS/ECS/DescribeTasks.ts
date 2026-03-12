@@ -6,8 +6,10 @@ import { isFunction } from "../Lambda/Function.ts";
 import { isTask } from "./Task.ts";
 import type { Cluster } from "./Cluster.ts";
 
-export interface DescribeTasksRequest
-  extends Omit<ECS.DescribeTasksRequest, "cluster"> {}
+export interface DescribeTasksRequest extends Omit<
+  ECS.DescribeTasksRequest,
+  "cluster"
+> {}
 
 export class DescribeTasks extends Binding.Service<
   DescribeTasks,

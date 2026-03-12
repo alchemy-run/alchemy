@@ -13,7 +13,9 @@ export class StopTask extends Binding.Service<
   (
     cluster: Cluster,
   ) => Effect.Effect<
-    (request: StopTaskRequest) => Effect.Effect<ECS.StopTaskResponse, ECS.StopTaskError>
+    (
+      request: StopTaskRequest,
+    ) => Effect.Effect<ECS.StopTaskResponse, ECS.StopTaskError>
   >
 >()("AWS.ECS.StopTask") {}
 

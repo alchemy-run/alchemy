@@ -76,13 +76,19 @@ export function chooseCanonicalEntries(sourceFiles: SourceFile[]) {
     if (sorted.length > 1) {
       duplicates.push({
         canonical: relativePath,
-        ignored: sorted.slice(1).map((file) => path.relative(srcRoot, file.getFilePath())),
+        ignored: sorted
+          .slice(1)
+          .map((file) => path.relative(srcRoot, file.getFilePath())),
       });
     }
   }
 
-  entries.sort((left, right) => left.relativePath.localeCompare(right.relativePath));
-  duplicates.sort((left, right) => left.canonical.localeCompare(right.canonical));
+  entries.sort((left, right) =>
+    left.relativePath.localeCompare(right.relativePath),
+  );
+  duplicates.sort((left, right) =>
+    left.canonical.localeCompare(right.canonical),
+  );
 
   return { entries, duplicates };
 }
@@ -95,17 +101,15 @@ export function getResourceFactory(
   sourceFile: SourceFile,
   factoryName: "Resource" | "Host",
 ) {
-  return sourceFile
-    .getVariableDeclarations()
-    .find((declaration) => {
-      if (!declaration.isExported()) {
-        return false;
-      }
-      const initializer = declaration.getInitializerIfKind(
-        SyntaxKind.CallExpression,
-      );
-      return initializer?.getExpression().getText() === factoryName;
-    });
+  return sourceFile.getVariableDeclarations().find((declaration) => {
+    if (!declaration.isExported()) {
+      return false;
+    }
+    const initializer = declaration.getInitializerIfKind(
+      SyntaxKind.CallExpression,
+    );
+    return initializer?.getExpression().getText() === factoryName;
+  });
 }
 
 export function getResourceTypeDetails(
@@ -116,7 +120,9 @@ export function getResourceTypeDetails(
   if (!declaration) {
     return undefined;
   }
-  const call = declaration.getInitializerIfKindOrThrow(SyntaxKind.CallExpression);
+  const call = declaration.getInitializerIfKindOrThrow(
+    SyntaxKind.CallExpression,
+  );
   const firstArg = call.getArguments()[0];
   return {
     declaration,
@@ -137,8 +143,7 @@ export function getBindingServiceClasses(sourceFile: SourceFile) {
     .getClasses()
     .filter(
       (declaration) =>
-        declaration.isExported() &&
-        extendsCall(declaration, "Binding.Service"),
+        declaration.isExported() && extendsCall(declaration, "Binding.Service"),
     );
 }
 
@@ -147,18 +152,32 @@ export function getBindingPolicyClasses(sourceFile: SourceFile) {
     .getClasses()
     .filter(
       (declaration) =>
-        declaration.isExported() &&
-        extendsCall(declaration, "Binding.Policy"),
+        declaration.isExported() && extendsCall(declaration, "Binding.Policy"),
     );
 }
 
 export function getExportedNames(sourceFile: SourceFile) {
   return [
-    ...sourceFile.getClasses().filter((item) => item.isExported()).map((item) => item.getName() ?? ""),
-    ...sourceFile.getFunctions().filter((item) => item.isExported()).map((item) => item.getName() ?? ""),
-    ...sourceFile.getInterfaces().filter((item) => item.isExported()).map((item) => item.getName()),
-    ...sourceFile.getTypeAliases().filter((item) => item.isExported()).map((item) => item.getName()),
-    ...sourceFile.getVariableDeclarations().filter((item) => item.isExported()).map((item) => item.getName()),
+    ...sourceFile
+      .getClasses()
+      .filter((item) => item.isExported())
+      .map((item) => item.getName() ?? ""),
+    ...sourceFile
+      .getFunctions()
+      .filter((item) => item.isExported())
+      .map((item) => item.getName() ?? ""),
+    ...sourceFile
+      .getInterfaces()
+      .filter((item) => item.isExported())
+      .map((item) => item.getName()),
+    ...sourceFile
+      .getTypeAliases()
+      .filter((item) => item.isExported())
+      .map((item) => item.getName()),
+    ...sourceFile
+      .getVariableDeclarations()
+      .filter((item) => item.isExported())
+      .map((item) => item.getName()),
   ].filter(Boolean);
 }
 
@@ -198,7 +217,9 @@ export function getFileKind(sourceFile: SourceFile): FileKind {
       .some(
         (declaration) =>
           declaration.isExported() &&
-          ["providers", "resources", "bindings"].includes(declaration.getName()),
+          ["providers", "resources", "bindings"].includes(
+            declaration.getName(),
+          ),
       )
   ) {
     return "provider";
@@ -220,7 +241,10 @@ export function getPrimaryNode(sourceFile: SourceFile, fileKind: FileKind) {
     case "host":
       return getResourceFactory(sourceFile, "Host")?.getVariableStatement();
     case "operation":
-      return getBindingServiceClasses(sourceFile)[0] ?? getBindingPolicyClasses(sourceFile)[0];
+      return (
+        getBindingServiceClasses(sourceFile)[0] ??
+        getBindingPolicyClasses(sourceFile)[0]
+      );
     case "event-source":
       return (
         sourceFile
@@ -240,12 +264,16 @@ export function getPrimaryNode(sourceFile: SourceFile, fileKind: FileKind) {
     case "index":
       return sourceFile.getExportDeclarations()[0];
     default:
-      return sourceFile.getStatements().find(
-        (statement) => Node.isExportable(statement) && statement.isExported(),
-      );
+      return sourceFile
+        .getStatements()
+        .find(
+          (statement) => Node.isExportable(statement) && statement.isExported(),
+        );
   }
 }
 
 export function titleForSourceFile(sourceFile: SourceFile) {
-  return titleFromRelativePath(path.relative(srcRoot, sourceFile.getFilePath()));
+  return titleFromRelativePath(
+    path.relative(srcRoot, sourceFile.getFilePath()),
+  );
 }

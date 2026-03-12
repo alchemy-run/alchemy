@@ -11,7 +11,10 @@ export class DescribeLimits extends Binding.Service<
   () => Effect.Effect<
     (
       request?: DescribeLimitsRequest,
-    ) => Effect.Effect<Kinesis.DescribeLimitsOutput, Kinesis.DescribeLimitsError>
+    ) => Effect.Effect<
+      Kinesis.DescribeLimitsOutput,
+      Kinesis.DescribeLimitsError
+    >
   >
 >()("AWS.Kinesis.DescribeLimits") {}
 

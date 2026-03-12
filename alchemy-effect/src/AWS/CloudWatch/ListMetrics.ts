@@ -14,7 +14,10 @@ export class ListMetrics extends Binding.Service<
   () => Effect.Effect<
     (
       request?: ListMetricsRequest,
-    ) => Effect.Effect<cloudwatch.ListMetricsOutput, cloudwatch.ListMetricsError>
+    ) => Effect.Effect<
+      cloudwatch.ListMetricsOutput,
+      cloudwatch.ListMetricsError
+    >
   >
 >()("AWS.CloudWatch.ListMetrics") {}
 

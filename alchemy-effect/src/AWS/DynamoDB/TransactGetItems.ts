@@ -12,15 +12,22 @@ type NativeTransactGet = NonNullable<
 >;
 
 const sortTables = (tables: TransactGetItemsTables) =>
-  [...new Map(tables.map((table) => [table.LogicalId, table] as const)).values()]
-    .sort((a, b) => a.LogicalId.localeCompare(b.LogicalId)) as TransactGetItemsTables;
+  [
+    ...new Map(
+      tables.map((table) => [table.LogicalId, table] as const),
+    ).values(),
+  ].sort((a, b) =>
+    a.LogicalId.localeCompare(b.LogicalId),
+  ) as TransactGetItemsTables;
 
 export interface TransactGet extends Omit<NativeTransactGet, "TableName"> {
   Table: string;
 }
 
-export interface TransactGetItemsRequest
-  extends Omit<DynamoDB.TransactGetItemsInput, "TransactItems"> {
+export interface TransactGetItemsRequest extends Omit<
+  DynamoDB.TransactGetItemsInput,
+  "TransactItems"
+> {
   TransactItems: Array<{
     Get: TransactGet;
   }>;

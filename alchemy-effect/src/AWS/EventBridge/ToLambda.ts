@@ -13,15 +13,22 @@ interface EventDescriptor {
   props?: Pick<RuleProps, "description" | "state">;
 }
 
-export interface LambdaRouteTargetProps
-  extends Pick<
-    RuleTarget,
-    "Input" | "InputPath" | "InputTransformer" | "RetryPolicy" | "DeadLetterConfig"
-  > {}
+export interface LambdaRouteTargetProps extends Pick<
+  RuleTarget,
+  | "Input"
+  | "InputPath"
+  | "InputTransformer"
+  | "RetryPolicy"
+  | "DeadLetterConfig"
+> {}
 
 export class ToLambdaPolicy extends Binding.Policy<
   ToLambdaPolicy,
-  (routeId: string, rule: { ruleArn: unknown }, fn: LambdaFunction) => Effect.Effect<void>
+  (
+    routeId: string,
+    rule: { ruleArn: unknown },
+    fn: LambdaFunction,
+  ) => Effect.Effect<void>
 >()("AWS.EventBridge.ToLambda") {}
 
 export const ToLambdaPolicyLive = ToLambdaPolicy.layer.succeed(

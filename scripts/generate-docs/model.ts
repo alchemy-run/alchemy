@@ -90,9 +90,13 @@ function getShapeFromMembers(
 function resolveShapeDeclaration(
   symbol: Symbol | undefined,
 ): InterfaceDeclaration | TypeAliasDeclaration | undefined {
-  return symbol?.getDeclarations().find((declaration) =>
-    Node.isInterfaceDeclaration(declaration) || Node.isTypeAliasDeclaration(declaration),
-  ) as InterfaceDeclaration | TypeAliasDeclaration | undefined;
+  return symbol
+    ?.getDeclarations()
+    .find(
+      (declaration) =>
+        Node.isInterfaceDeclaration(declaration) ||
+        Node.isTypeAliasDeclaration(declaration),
+    ) as InterfaceDeclaration | TypeAliasDeclaration | undefined;
 }
 
 function getShapeFromTypeNode(
@@ -105,7 +109,9 @@ function getShapeFromTypeNode(
   }
 
   if (Node.isTypeReference(typeNode)) {
-    const declaration = resolveShapeDeclaration(typeNode.getTypeName().getSymbol());
+    const declaration = resolveShapeDeclaration(
+      typeNode.getTypeName().getSymbol(),
+    );
     if (declaration) {
       return getShapeFromDeclaration(title, declaration);
     }
@@ -124,7 +130,11 @@ function getShapeFromDeclaration(
   declaration: InterfaceDeclaration | TypeAliasDeclaration,
 ): ShapeDoc | undefined {
   if (Node.isInterfaceDeclaration(declaration)) {
-    return getShapeFromMembers(title, declaration.getMembers(), getSummary(declaration));
+    return getShapeFromMembers(
+      title,
+      declaration.getMembers(),
+      getSummary(declaration),
+    );
   }
 
   const typeNode = declaration.getTypeNode();
@@ -145,7 +155,10 @@ function signatureForDeclaration(declaration: Node) {
   }
 
   if (Node.isFunctionDeclaration(declaration)) {
-    const params = declaration.getParameters().map((param) => param.getText()).join(", ");
+    const params = declaration
+      .getParameters()
+      .map((param) => param.getText())
+      .join(", ");
     const returnType = declaration.getReturnTypeNode()?.getText();
     return `function ${declaration.getName() ?? "anonymous"}(${params})${returnType ? `: ${returnType}` : ""}`;
   }
@@ -161,7 +174,8 @@ function signatureForDeclaration(declaration: Node) {
   }
 
   if (Node.isVariableDeclaration(declaration)) {
-    const kind = declaration.getVariableStatement()?.getDeclarationKind() ?? "const";
+    const kind =
+      declaration.getVariableStatement()?.getDeclarationKind() ?? "const";
     const initializer = declaration.getInitializer()?.getText();
     return `${kind} ${declaration.getName()}${initializer ? ` = ${truncateInline(initializer)}` : ""}`;
   }
@@ -180,7 +194,9 @@ function signatureForDeclaration(declaration: Node) {
 function getLocalExports(sourceFile: SourceFile): ExportDoc[] {
   const exports: ExportDoc[] = [];
 
-  for (const declaration of sourceFile.getClasses().filter((item) => item.isExported())) {
+  for (const declaration of sourceFile
+    .getClasses()
+    .filter((item) => item.isExported())) {
     exports.push({
       name: declaration.getName() ?? "Anonymous",
       kind: "class",
@@ -189,7 +205,9 @@ function getLocalExports(sourceFile: SourceFile): ExportDoc[] {
     });
   }
 
-  for (const declaration of sourceFile.getFunctions().filter((item) => item.isExported())) {
+  for (const declaration of sourceFile
+    .getFunctions()
+    .filter((item) => item.isExported())) {
     exports.push({
       name: declaration.getName() ?? "anonymous",
       kind: "function",
@@ -198,7 +216,9 @@ function getLocalExports(sourceFile: SourceFile): ExportDoc[] {
     });
   }
 
-  for (const declaration of sourceFile.getInterfaces().filter((item) => item.isExported())) {
+  for (const declaration of sourceFile
+    .getInterfaces()
+    .filter((item) => item.isExported())) {
     exports.push({
       name: declaration.getName(),
       kind: "interface",
@@ -208,7 +228,9 @@ function getLocalExports(sourceFile: SourceFile): ExportDoc[] {
     });
   }
 
-  for (const declaration of sourceFile.getTypeAliases().filter((item) => item.isExported())) {
+  for (const declaration of sourceFile
+    .getTypeAliases()
+    .filter((item) => item.isExported())) {
     exports.push({
       name: declaration.getName(),
       kind: "type",
@@ -218,7 +240,9 @@ function getLocalExports(sourceFile: SourceFile): ExportDoc[] {
     });
   }
 
-  for (const declaration of sourceFile.getVariableDeclarations().filter((item) => item.isExported())) {
+  for (const declaration of sourceFile
+    .getVariableDeclarations()
+    .filter((item) => item.isExported())) {
     exports.push({
       name: declaration.getName(),
       kind: "const",
@@ -227,7 +251,9 @@ function getLocalExports(sourceFile: SourceFile): ExportDoc[] {
     });
   }
 
-  for (const declaration of sourceFile.getEnums().filter((item) => item.isExported())) {
+  for (const declaration of sourceFile
+    .getEnums()
+    .filter((item) => item.isExported())) {
     exports.push({
       name: declaration.getName(),
       kind: "enum",
@@ -236,7 +262,9 @@ function getLocalExports(sourceFile: SourceFile): ExportDoc[] {
     });
   }
 
-  for (const declaration of sourceFile.getModules().filter((item) => item.isExported())) {
+  for (const declaration of sourceFile
+    .getModules()
+    .filter((item) => item.isExported())) {
     exports.push({
       name: declaration.getName(),
       kind: "namespace",
@@ -314,7 +342,9 @@ function getResourceDoc(sourceFile: SourceFile, fileKind: FileKind) {
   const resourceDoc: ResourceDoc = {
     name: details.name,
     resourceType: details.resourceType,
-    props: props ? getShapeFromDeclaration(`${details.name} Props`, props) : undefined,
+    props: props
+      ? getShapeFromDeclaration(`${details.name} Props`, props)
+      : undefined,
     attributes,
     binding,
     lifecycleOperations: getLifecycleOperations(sourceFile, details.name),
@@ -342,12 +372,22 @@ function getRequestShapes(sourceFile: SourceFile) {
   return [
     ...sourceFile
       .getInterfaces()
-      .filter((item) => item.isExported() && /Request|Props|Options|Input$/.test(item.getName())),
+      .filter(
+        (item) =>
+          item.isExported() &&
+          /Request|Props|Options|Input$/.test(item.getName()),
+      ),
     ...sourceFile
       .getTypeAliases()
-      .filter((item) => item.isExported() && /Request|Props|Options|Input$/.test(item.getName())),
+      .filter(
+        (item) =>
+          item.isExported() &&
+          /Request|Props|Options|Input$/.test(item.getName()),
+      ),
   ]
-    .map((declaration) => getShapeFromDeclaration(declaration.getName(), declaration))
+    .map((declaration) =>
+      getShapeFromDeclaration(declaration.getName(), declaration),
+    )
     .filter((shape): shape is ShapeDoc => shape !== undefined)
     .sort((left, right) => left.title.localeCompare(right.title));
 }
@@ -368,14 +408,18 @@ function parameterToUsage(parameter: ParameterDeclaration) {
   return {
     name: parameter.getName(),
     type: formatTypeText(
-      parameter.getTypeNode()?.getText() ?? parameter.getType().getText(parameter),
+      parameter.getTypeNode()?.getText() ??
+        parameter.getType().getText(parameter),
     ),
     optional: parameter.isOptional(),
     rest: parameter.isRestParameter(),
   };
 }
 
-function getOperationUsage(sourceFile: SourceFile, serviceName: string | undefined) {
+function getOperationUsage(
+  sourceFile: SourceFile,
+  serviceName: string | undefined,
+) {
   if (!serviceName) {
     return undefined;
   }
@@ -460,7 +504,9 @@ function getIndexDoc(sourceFile: SourceFile, outputPath: string) {
               outputPath,
               path.join(
                 docsRoot,
-                path.relative(srcRoot, target.getFilePath()).replace(/\.ts$/, ".md"),
+                path
+                  .relative(srcRoot, target.getFilePath())
+                  .replace(/\.ts$/, ".md"),
               ),
             )
           : undefined;
@@ -493,16 +539,23 @@ function getProviderDoc(sourceFile: SourceFile) {
     .map((declaration) => declaration.getName())
     .filter(
       (name) =>
-        ["providers", "resources", "bindings", "credentials", "stageConfig"].includes(
-          name,
-        ) || /Provider/.test(name),
+        [
+          "providers",
+          "resources",
+          "bindings",
+          "credentials",
+          "stageConfig",
+        ].includes(name) || /Provider/.test(name),
     )
     .sort();
 
   return exportedFactories.length > 0 ? { exportedFactories } : undefined;
 }
 
-function buildRelatedLinks(sourceFile: SourceFile, outputPath: string): LinkDoc[] {
+function buildRelatedLinks(
+  sourceFile: SourceFile,
+  outputPath: string,
+): LinkDoc[] {
   const links = new Map<string, LinkDoc>();
 
   const maybeAdd = (target: SourceFile | undefined, label: string) => {
@@ -512,10 +565,7 @@ function buildRelatedLinks(sourceFile: SourceFile, outputPath: string): LinkDoc[
     const relativeTargetPath = path.relative(srcRoot, target.getFilePath());
     const href = relativeDocLink(
       outputPath,
-      path.join(
-        docsRoot,
-        relativeTargetPath.replace(/\.ts$/, ".md"),
-      ),
+      path.join(docsRoot, relativeTargetPath.replace(/\.ts$/, ".md")),
     );
     links.set(`${label}:${href}`, {
       label:
@@ -541,39 +591,47 @@ function buildRelatedLinks(sourceFile: SourceFile, outputPath: string): LinkDoc[
     );
   }
 
-  return [...links.values()].sort((left, right) => left.label.localeCompare(right.label));
+  return [...links.values()].sort((left, right) =>
+    left.label.localeCompare(right.label),
+  );
 }
 
-function buildDirectoryCatalog(entry: SourceEntry, entries: SourceEntry[]): DirectoryCatalog {
+function buildDirectoryCatalog(
+  entry: SourceEntry,
+  entries: SourceEntry[],
+): DirectoryCatalog {
   const directory = path.dirname(entry.relativePath);
   const isIndexPage = path.basename(entry.relativePath) === "index.ts";
-  const parent =
-    !isIndexPage
-      ? {
-          label: directory === "." ? "API Reference" : path.basename(directory),
+  const parent = !isIndexPage
+    ? {
+        label: directory === "." ? "API Reference" : path.basename(directory),
+        href: relativeDocLink(
+          entry.outputPath,
+          path.join(
+            docsRoot,
+            directory === "." ? "index.md" : directory,
+            "index.md",
+          ),
+        ),
+      }
+    : directory === "."
+      ? undefined
+      : {
+          label:
+            path.dirname(directory) === "."
+              ? "API Reference"
+              : path.basename(path.dirname(directory)),
           href: relativeDocLink(
             entry.outputPath,
-            path.join(docsRoot, directory === "." ? "index.md" : directory, "index.md"),
-          ),
-        }
-      : directory === "."
-        ? undefined
-        : {
-            label:
+            path.join(
+              docsRoot,
               path.dirname(directory) === "."
-                ? "API Reference"
-                : path.basename(path.dirname(directory)),
-            href: relativeDocLink(
-              entry.outputPath,
-              path.join(
-                docsRoot,
-                path.dirname(directory) === "."
-                  ? "index.md"
-                  : path.dirname(directory),
-                "index.md",
-              ),
+                ? "index.md"
+                : path.dirname(directory),
+              "index.md",
             ),
-          };
+          ),
+        };
 
   const siblings = entries
     .filter(
@@ -620,7 +678,10 @@ function buildRequestBlock(shape: ShapeDoc | undefined) {
   }
 
   const required = shape.properties.filter((property) => !property.optional);
-  const properties = (required.length > 0 ? required : shape.properties).slice(0, 4);
+  const properties = (required.length > 0 ? required : shape.properties).slice(
+    0,
+    4,
+  );
 
   if (properties.length === 0) {
     return "{}";
@@ -645,7 +706,10 @@ function buildAutoExample(
       required.length === 0
         ? "{}"
         : `{\n${required
-            .map((property) => `  ${property.name}: ${guessExampleValue(property)},`)
+            .map(
+              (property) =>
+                `  ${property.name}: ${guessExampleValue(property)},`,
+            )
             .join("\n")}\n}`;
     return {
       title: `Create ${title}`,
@@ -664,7 +728,9 @@ function buildAutoExample(
         guessBindingArgument(parameter.name, parameter.rest),
       ) ?? [];
     const bindCall =
-      bindArguments.length > 0 ? `.bind(${bindArguments.join(", ")})` : ".bind()";
+      bindArguments.length > 0
+        ? `.bind(${bindArguments.join(", ")})`
+        : ".bind()";
     const invokeParameter = operation?.usage?.invokeParameters[0];
     const requestShape = operation?.requestShapes[0];
     const invocation = invokeParameter
@@ -701,7 +767,11 @@ function buildAutoExample(
   return undefined;
 }
 
-export function buildFileDoc(project: import("ts-morph").Project, entry: SourceEntry, entries: SourceEntry[]): FileDoc {
+export function buildFileDoc(
+  project: import("ts-morph").Project,
+  entry: SourceEntry,
+  entries: SourceEntry[],
+): FileDoc {
   const sourceFile = project.getSourceFileOrThrow(entry.sourcePath);
   const fileKind = getFileKind(sourceFile);
   const title = titleFromRelativePath(entry.relativePath);
@@ -728,11 +798,16 @@ export function buildFileDoc(project: import("ts-morph").Project, entry: SourceE
     exports: getLocalExports(sourceFile),
     resource,
     operation,
-    index: fileKind === "index" ? getIndexDoc(sourceFile, entry.outputPath) : undefined,
+    index:
+      fileKind === "index"
+        ? getIndexDoc(sourceFile, entry.outputPath)
+        : undefined,
     provider: fileKind === "provider" ? getProviderDoc(sourceFile) : undefined,
     examples,
     autoExample:
-      examples.length === 0 ? buildAutoExample(fileKind, title, resource, operation) : undefined,
+      examples.length === 0
+        ? buildAutoExample(fileKind, title, resource, operation)
+        : undefined,
     relatedLinks: buildRelatedLinks(sourceFile, entry.outputPath),
     directoryCatalog: buildDirectoryCatalog(entry, entries),
   };

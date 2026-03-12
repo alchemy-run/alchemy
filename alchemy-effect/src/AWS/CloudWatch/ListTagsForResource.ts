@@ -3,10 +3,15 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
-import { getTaggableResourceArn, type TaggableResource } from "./binding-common.ts";
+import {
+  getTaggableResourceArn,
+  type TaggableResource,
+} from "./binding-common.ts";
 
-export interface ListTagsForResourceRequest
-  extends Omit<cloudwatch.ListTagsForResourceInput, "ResourceARN"> {}
+export interface ListTagsForResourceRequest extends Omit<
+  cloudwatch.ListTagsForResourceInput,
+  "ResourceARN"
+> {}
 
 /**
  * Runtime binding for `cloudwatch:ListTagsForResource`.

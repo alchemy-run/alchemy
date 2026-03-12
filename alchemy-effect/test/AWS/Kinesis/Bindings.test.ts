@@ -162,7 +162,9 @@ describe.sequential("Kinesis Bindings", () => {
         const response = yield* getJson("/stream-consumers");
         const consumers = (response as any).Consumers ?? [];
         expect(
-          consumers.some((consumer: any) => consumer.ConsumerName === consumerName),
+          consumers.some(
+            (consumer: any) => consumer.ConsumerName === consumerName,
+          ),
         ).toBe(true);
       }),
     );
@@ -225,8 +227,14 @@ describe.sequential("Kinesis Bindings", () => {
       Effect.gen(function* () {
         const response = yield* postJson("/put-records", {
           records: [
-            { partitionKey: "put-records", data: `batch-1-${crypto.randomUUID()}` },
-            { partitionKey: "put-records", data: `batch-2-${crypto.randomUUID()}` },
+            {
+              partitionKey: "put-records",
+              data: `batch-1-${crypto.randomUUID()}`,
+            },
+            {
+              partitionKey: "put-records",
+              data: `batch-2-${crypto.randomUUID()}`,
+            },
           ],
         });
         expect((response as any).FailedRecordCount ?? 0).toBe(0);

@@ -68,12 +68,14 @@ export const KinesisFixture = Effect.gen(function* () {
       const listShards = yield* AWS.Kinesis.ListShards.bind(stream);
       const getShardIterator = yield* AWS.Kinesis.GetShardIterator.bind(stream);
       const getRecords = yield* AWS.Kinesis.GetRecords.bind(stream);
-      const getResourcePolicy = yield* AWS.Kinesis.GetResourcePolicy.bind(stream);
+      const getResourcePolicy =
+        yield* AWS.Kinesis.GetResourcePolicy.bind(stream);
       const listStreamConsumers =
         yield* AWS.Kinesis.ListStreamConsumers.bind(stream);
       const describeStreamConsumer =
         yield* AWS.Kinesis.DescribeStreamConsumer.bind(consumer);
-      const subscribeToShard = yield* AWS.Kinesis.SubscribeToShard.bind(consumer);
+      const subscribeToShard =
+        yield* AWS.Kinesis.SubscribeToShard.bind(consumer);
       const listTagsForResource =
         yield* AWS.Kinesis.ListTagsForResource.bind(stream);
       const putRecord = yield* AWS.Kinesis.PutRecord.bind(stream);

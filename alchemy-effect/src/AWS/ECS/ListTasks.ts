@@ -6,14 +6,19 @@ import { isFunction } from "../Lambda/Function.ts";
 import { isTask } from "./Task.ts";
 import type { Cluster } from "./Cluster.ts";
 
-export interface ListTasksRequest extends Omit<ECS.ListTasksRequest, "cluster"> {}
+export interface ListTasksRequest extends Omit<
+  ECS.ListTasksRequest,
+  "cluster"
+> {}
 
 export class ListTasks extends Binding.Service<
   ListTasks,
   (
     cluster: Cluster,
   ) => Effect.Effect<
-    (request: ListTasksRequest) => Effect.Effect<ECS.ListTasksResponse, ECS.ListTasksError>
+    (
+      request: ListTasksRequest,
+    ) => Effect.Effect<ECS.ListTasksResponse, ECS.ListTasksError>
   >
 >()("AWS.ECS.ListTasks") {}
 

@@ -28,7 +28,13 @@ export {
   ServiceSpecificCredential,
   ServiceSpecificCredentialProvider,
 } from "./ServiceSpecificCredential.ts";
-export { SigningCertificate, SigningCertificateProvider } from "./SigningCertificate.ts";
+export {
+  SigningCertificate,
+  SigningCertificateProvider,
+} from "./SigningCertificate.ts";
 export { SSHPublicKey, SSHPublicKeyProvider } from "./SSHPublicKey.ts";
 export { User, UserProvider } from "./User.ts";
-export { VirtualMFADevice, VirtualMFADeviceProvider } from "./VirtualMFADevice.ts";
+export {
+  VirtualMFADevice,
+  VirtualMFADeviceProvider,
+} from "./VirtualMFADevice.ts";

@@ -81,11 +81,14 @@ const createConsumerName = (
     });
   });
 
-const toTagRecord = (tags: Array<{ Key: string; Value?: string }> | undefined) =>
+const toTagRecord = (
+  tags: Array<{ Key: string; Value?: string }> | undefined,
+) =>
   Object.fromEntries(
     (tags ?? [])
-      .filter((tag): tag is { Key: string; Value: string } =>
-        typeof tag.Value === "string",
+      .filter(
+        (tag): tag is { Key: string; Value: string } =>
+          typeof tag.Value === "string",
       )
       .map((tag) => [tag.Key, tag.Value]),
   );
@@ -120,7 +123,11 @@ const readConsumer = Effect.fn(function* ({
       ConsumerName: consumerName,
       ConsumerARN: consumerArn,
     })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(
+      Effect.catchTag("ResourceNotFoundException", () =>
+        Effect.succeed(undefined),
+      ),
+    );
 
   if (!response) {
     return undefined;
@@ -309,9 +316,7 @@ export const StreamConsumerProvider = () =>
         .deregisterStreamConsumer({
           ConsumerARN: output.consumerArn,
         })
-        .pipe(
-          Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-        );
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
 
       yield* waitForConsumerDeleted(output.consumerArn);
     }),

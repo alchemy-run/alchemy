@@ -50,8 +50,9 @@ export interface GroupMembership extends Resource<
  * });
  * ```
  */
-export const GroupMembership =
-  Resource<GroupMembership>("AWS.IAM.GroupMembership");
+export const GroupMembership = Resource<GroupMembership>(
+  "AWS.IAM.GroupMembership",
+);
 
 export const GroupMembershipProvider = () =>
   GroupMembership.provider.succeed({
@@ -70,7 +71,9 @@ export const GroupMembershipProvider = () =>
           GroupName: output.groupName,
         })
         .pipe(
-          Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NoSuchEntityException", () =>
+            Effect.succeed(undefined),
+          ),
         );
       if (!response?.Group?.GroupName) {
         return undefined;
@@ -79,7 +82,9 @@ export const GroupMembershipProvider = () =>
         groupName: response.Group.GroupName,
         userNames: (response.Users ?? [])
           .map((user) => user.UserName)
-          .filter((userName): userName is string => typeof userName === "string"),
+          .filter(
+            (userName): userName is string => typeof userName === "string",
+          ),
       };
     }),
     create: Effect.fn(function* ({ news, session }) {

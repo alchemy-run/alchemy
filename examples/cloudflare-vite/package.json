@@ -17,9 +17,9 @@
     "destroy": "bun ../../alchemy-effect/bin/alchemy-effect.ts destroy"
   },
   "dependencies": {
+    "@distilled.cloud/cloudflare": "catalog:",
     "@effect/platform-node": "catalog:",
     "alchemy-effect": "workspace:*",
-    "@distilled.cloud/cloudflare": "catalog:",
     "effect": "catalog:"
   },
   "devDependencies": {

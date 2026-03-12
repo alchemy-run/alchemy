@@ -473,18 +473,19 @@ export const InstanceProvider = () =>
               );
             }),
             Stream.runCollect,
-            Effect.map((instances) =>
-              [...instances].sort((a, b) => {
-                const aTime =
-                  a.LaunchTime instanceof Date
-                    ? a.LaunchTime.getTime()
-                    : Date.parse(String(a.LaunchTime ?? 0));
-                const bTime =
-                  b.LaunchTime instanceof Date
-                    ? b.LaunchTime.getTime()
-                    : Date.parse(String(b.LaunchTime ?? 0));
-                return bTime - aTime;
-              })[0],
+            Effect.map(
+              (instances) =>
+                [...instances].sort((a, b) => {
+                  const aTime =
+                    a.LaunchTime instanceof Date
+                      ? a.LaunchTime.getTime()
+                      : Date.parse(String(a.LaunchTime ?? 0));
+                  const bTime =
+                    b.LaunchTime instanceof Date
+                      ? b.LaunchTime.getTime()
+                      : Date.parse(String(b.LaunchTime ?? 0));
+                  return bTime - aTime;
+                })[0],
             ),
           );
       });

@@ -104,10 +104,18 @@ export const DBProxyTargetGroupProvider = () =>
         const oldInstances = new Set(olds?.dbInstanceIdentifiers ?? []);
         const newInstances = new Set(news.dbInstanceIdentifiers ?? []);
 
-        const addClusters = [...newClusters].filter((id) => !oldClusters.has(id));
-        const removeClusters = [...oldClusters].filter((id) => !newClusters.has(id));
-        const addInstances = [...newInstances].filter((id) => !oldInstances.has(id));
-        const removeInstances = [...oldInstances].filter((id) => !newInstances.has(id));
+        const addClusters = [...newClusters].filter(
+          (id) => !oldClusters.has(id),
+        );
+        const removeClusters = [...oldClusters].filter(
+          (id) => !newClusters.has(id),
+        );
+        const addInstances = [...newInstances].filter(
+          (id) => !oldInstances.has(id),
+        );
+        const removeInstances = [...oldInstances].filter(
+          (id) => !newInstances.has(id),
+        );
 
         if (news.connectionPoolConfig) {
           yield* rds.modifyDBProxyTargetGroup({
@@ -221,7 +229,10 @@ export const DBProxyTargetGroupProvider = () =>
                     : undefined,
               })
               .pipe(
-                Effect.catchTag("DBProxyTargetGroupNotFoundFault", () => Effect.void),
+                Effect.catchTag(
+                  "DBProxyTargetGroupNotFoundFault",
+                  () => Effect.void,
+                ),
               );
           }
         }),

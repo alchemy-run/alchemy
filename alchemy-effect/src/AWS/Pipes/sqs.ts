@@ -6,8 +6,7 @@ import type { Function } from "../Lambda/Function.ts";
 import type { Queue } from "../SQS/Queue.ts";
 import { Pipe } from "./Pipe.ts";
 
-export interface QueueSourceProps
-  extends pipes.PipeSourceSqsQueueParameters {}
+export interface QueueSourceProps extends pipes.PipeSourceSqsQueueParameters {}
 
 export interface LambdaEnrichmentProps {
   inputTemplate?: string;

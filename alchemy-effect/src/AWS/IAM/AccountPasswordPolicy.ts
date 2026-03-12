@@ -37,9 +37,13 @@ export const AccountPasswordPolicy = Resource<AccountPasswordPolicy>(
 export const AccountPasswordPolicyProvider = () =>
   AccountPasswordPolicy.provider.succeed({
     read: Effect.fn(function* () {
-      const response = yield* iam.getAccountPasswordPolicy({}).pipe(
-        Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
-      );
+      const response = yield* iam
+        .getAccountPasswordPolicy({})
+        .pipe(
+          Effect.catchTag("NoSuchEntityException", () =>
+            Effect.succeed(undefined),
+          ),
+        );
       return response?.PasswordPolicy;
     }),
     create: Effect.fn(function* ({ news, session }) {

@@ -46,15 +46,17 @@ export const DescribeAlarmHistoryPolicyLive =
   DescribeAlarmHistoryPolicy.layer.succeed(
     Effect.fn(function* (host) {
       if (isFunction(host)) {
-        yield* host.bind`Allow(${host}, AWS.CloudWatch.DescribeAlarmHistory())`({
-          policyStatements: [
-            {
-              Effect: "Allow",
-              Action: ["cloudwatch:DescribeAlarmHistory"],
-              Resource: ["*"],
-            },
-          ],
-        });
+        yield* host.bind`Allow(${host}, AWS.CloudWatch.DescribeAlarmHistory())`(
+          {
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["cloudwatch:DescribeAlarmHistory"],
+                Resource: ["*"],
+              },
+            ],
+          },
+        );
       } else {
         return yield* Effect.die(
           `DescribeAlarmHistoryPolicy does not support runtime '${host.Type}'`,

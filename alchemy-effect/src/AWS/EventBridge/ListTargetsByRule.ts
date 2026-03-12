@@ -5,8 +5,10 @@ import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Rule } from "./Rule.ts";
 
-export interface ListTargetsByRuleRequest
-  extends Omit<eventbridge.ListTargetsByRuleRequest, "Rule" | "EventBusName"> {}
+export interface ListTargetsByRuleRequest extends Omit<
+  eventbridge.ListTargetsByRuleRequest,
+  "Rule" | "EventBusName"
+> {}
 
 export class ListTargetsByRule extends Binding.Service<
   ListTargetsByRule,
@@ -38,8 +40,7 @@ export const ListTargetsByRuleLive = Layer.effect(
         return yield* listTargetsByRule({
           ...request,
           Rule: ruleName,
-          EventBusName:
-            eventBusName !== "default" ? eventBusName : undefined,
+          EventBusName: eventBusName !== "default" ? eventBusName : undefined,
         });
       });
     });
@@ -51,24 +52,25 @@ export class ListTargetsByRulePolicy extends Binding.Policy<
   (rule: Rule) => Effect.Effect<void>
 >()("AWS.EventBridge.ListTargetsByRule") {}
 
-export const ListTargetsByRulePolicyLive = ListTargetsByRulePolicy.layer.succeed(
-  Effect.fn(function* (host, rule) {
-    if (isFunction(host)) {
-      yield* host.bind`Allow(${host}, AWS.EventBridge.ListTargetsByRule(${rule}))`(
-        {
-          policyStatements: [
-            {
-              Effect: "Allow",
-              Action: ["events:ListTargetsByRule"],
-              Resource: [rule.ruleArn],
-            },
-          ],
-        },
-      );
-    } else {
-      return yield* Effect.die(
-        `ListTargetsByRulePolicy does not support runtime '${host.Type}'`,
-      );
-    }
-  }),
-);
+export const ListTargetsByRulePolicyLive =
+  ListTargetsByRulePolicy.layer.succeed(
+    Effect.fn(function* (host, rule) {
+      if (isFunction(host)) {
+        yield* host.bind`Allow(${host}, AWS.EventBridge.ListTargetsByRule(${rule}))`(
+          {
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["events:ListTargetsByRule"],
+                Resource: [rule.ruleArn],
+              },
+            ],
+          },
+        );
+      } else {
+        return yield* Effect.die(
+          `ListTargetsByRulePolicy does not support runtime '${host.Type}'`,
+        );
+      }
+    }),
+  );

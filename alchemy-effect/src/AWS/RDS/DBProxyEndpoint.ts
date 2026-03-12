@@ -119,7 +119,9 @@ export const DBProxyEndpointProvider = () =>
             endpoint?.DBProxyEndpointArn
               ? Effect.succeed(endpoint)
               : Effect.fail(
-                  new Error(`DB proxy endpoint '${props.dbProxyEndpointName}' not ready`),
+                  new Error(
+                    `DB proxy endpoint '${props.dbProxyEndpointName}' not ready`,
+                  ),
                 ),
           ),
           Effect.retry({ schedule: readinessPolicy }),
@@ -173,17 +175,25 @@ export const DBProxyEndpointProvider = () =>
               VpcSecurityGroupIds: news.vpcSecurityGroupIds,
               TargetRole: news.targetRole,
               EndpointNetworkType: news.endpointNetworkType,
-              Tags: Object.entries(tags).map(([Key, Value]) => ({ Key, Value })),
+              Tags: Object.entries(tags).map(([Key, Value]) => ({
+                Key,
+                Value,
+              })),
             })
             .pipe(
-              Effect.catchTag("DBProxyEndpointAlreadyExistsFault", () => Effect.void),
+              Effect.catchTag(
+                "DBProxyEndpointAlreadyExistsFault",
+                () => Effect.void,
+              ),
             );
 
           const endpoint = yield* waitForEndpoint({
             dbProxyName: news.dbProxyName,
             dbProxyEndpointName,
           });
-          yield* session.note(endpoint.DBProxyEndpointArn ?? dbProxyEndpointName);
+          yield* session.note(
+            endpoint.DBProxyEndpointArn ?? dbProxyEndpointName,
+          );
           return toAttrs({ endpoint, tags });
         }),
         update: Effect.fn(function* ({ id, news, olds, output, session }) {
@@ -232,7 +242,10 @@ export const DBProxyEndpointProvider = () =>
               DBProxyEndpointName: output.dbProxyEndpointName,
             })
             .pipe(
-              Effect.catchTag("DBProxyEndpointNotFoundFault", () => Effect.void),
+              Effect.catchTag(
+                "DBProxyEndpointNotFoundFault",
+                () => Effect.void,
+              ),
             );
         }),
       };

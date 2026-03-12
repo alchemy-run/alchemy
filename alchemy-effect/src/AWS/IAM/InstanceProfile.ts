@@ -3,7 +3,12 @@ import * as Effect from "effect/Effect";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
-import { createInternalTags, createTagsList, diffTags, hasTags } from "../../Tags.ts";
+import {
+  createInternalTags,
+  createTagsList,
+  diffTags,
+  hasTags,
+} from "../../Tags.ts";
 import { toTagRecord } from "./common.ts";
 
 export interface InstanceProfileProps {
@@ -64,7 +69,9 @@ export interface InstanceProfile extends Resource<
  * });
  * ```
  */
-export const InstanceProfile = Resource<InstanceProfile>("AWS.IAM.InstanceProfile");
+export const InstanceProfile = Resource<InstanceProfile>(
+  "AWS.IAM.InstanceProfile",
+);
 
 export const InstanceProfileProvider = () =>
   InstanceProfile.provider.effect(
@@ -80,7 +87,9 @@ export const InstanceProfileProvider = () =>
             InstanceProfileName: name,
           })
           .pipe(
-            Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+            Effect.catchTag("NoSuchEntityException", () =>
+              Effect.succeed(undefined),
+            ),
           );
         return response?.InstanceProfile;
       });
@@ -111,7 +120,11 @@ export const InstanceProfileProvider = () =>
       });
 
       return {
-        stables: ["instanceProfileArn", "instanceProfileName", "instanceProfileId"],
+        stables: [
+          "instanceProfileArn",
+          "instanceProfileName",
+          "instanceProfileId",
+        ],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (
             (yield* toName(id, olds ?? ({} as InstanceProfileProps))) !==
@@ -183,7 +196,9 @@ export const InstanceProfileProvider = () =>
           const profile = yield* readInstanceProfile(name);
           if (!profile?.Arn || !profile.InstanceProfileName) {
             return yield* Effect.fail(
-              new Error(`Instance profile '${name}' was not readable after create`),
+              new Error(
+                `Instance profile '${name}' was not readable after create`,
+              ),
             );
           }
 
@@ -226,20 +241,25 @@ export const InstanceProfileProvider = () =>
             });
           }
 
-          const profile = yield* readInstanceProfile(output.instanceProfileName);
+          const profile = yield* readInstanceProfile(
+            output.instanceProfileName,
+          );
           yield* session.note(output.instanceProfileArn);
           return {
             instanceProfileArn: profile?.Arn ?? output.instanceProfileArn,
             instanceProfileName:
               profile?.InstanceProfileName ?? output.instanceProfileName,
-            instanceProfileId: profile?.InstanceProfileId ?? output.instanceProfileId,
+            instanceProfileId:
+              profile?.InstanceProfileId ?? output.instanceProfileId,
             path: profile?.Path ?? output.path,
             roleName: profile?.Roles?.[0]?.RoleName,
             tags: newTags,
           };
         }),
         delete: Effect.fn(function* ({ output }) {
-          const profile = yield* readInstanceProfile(output.instanceProfileName);
+          const profile = yield* readInstanceProfile(
+            output.instanceProfileName,
+          );
           for (const role of profile?.Roles ?? []) {
             if (role.RoleName) {
               yield* iam
@@ -247,7 +267,9 @@ export const InstanceProfileProvider = () =>
                   InstanceProfileName: output.instanceProfileName,
                   RoleName: role.RoleName,
                 })
-                .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+                .pipe(
+                  Effect.catchTag("NoSuchEntityException", () => Effect.void),
+                );
             }
           }
           yield* iam

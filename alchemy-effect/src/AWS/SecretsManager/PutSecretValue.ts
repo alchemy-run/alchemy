@@ -5,8 +5,10 @@ import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Secret } from "./Secret.ts";
 
-export interface PutSecretValueRequest
-  extends Omit<secretsmanager.PutSecretValueRequest, "SecretId"> {}
+export interface PutSecretValueRequest extends Omit<
+  secretsmanager.PutSecretValueRequest,
+  "SecretId"
+> {}
 
 /**
  * Runtime binding for `secretsmanager:PutSecretValue`.
@@ -53,15 +55,20 @@ export class PutSecretValuePolicy extends Binding.Policy<
 export const PutSecretValuePolicyLive = PutSecretValuePolicy.layer.succeed(
   Effect.fn(function* (host, secret) {
     if (isFunction(host)) {
-      yield* host.bind`Allow(${host}, AWS.SecretsManager.PutSecretValue(${secret}))`({
-        policyStatements: [
-          {
-            Effect: "Allow",
-            Action: ["secretsmanager:PutSecretValue", "secretsmanager:DescribeSecret"],
-            Resource: [secret.secretArn],
-          },
-        ],
-      });
+      yield* host.bind`Allow(${host}, AWS.SecretsManager.PutSecretValue(${secret}))`(
+        {
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [
+                "secretsmanager:PutSecretValue",
+                "secretsmanager:DescribeSecret",
+              ],
+              Resource: [secret.secretArn],
+            },
+          ],
+        },
+      );
     } else {
       return yield* Effect.die(
         `PutSecretValuePolicy does not support runtime '${host.Type}'`,

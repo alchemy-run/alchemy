@@ -30,7 +30,9 @@ export const ListManagedInsightRulesLive = Layer.effect(
 
     return Effect.fn(function* () {
       yield* Policy();
-      return Effect.fn(function* (request: ListManagedInsightRulesRequest = {}) {
+      return Effect.fn(function* (
+        request: ListManagedInsightRulesRequest = {},
+      ) {
         return yield* listManagedInsightRules(request);
       });
     });

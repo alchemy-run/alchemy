@@ -11,17 +11,26 @@ type NativeTransactWriteItem = NonNullable<
   DynamoDB.TransactWriteItemsInput["TransactItems"]
 >[number];
 
-type NativeConditionCheck = NonNullable<NativeTransactWriteItem["ConditionCheck"]>;
+type NativeConditionCheck = NonNullable<
+  NativeTransactWriteItem["ConditionCheck"]
+>;
 type NativeDelete = NonNullable<NativeTransactWriteItem["Delete"]>;
 type NativePut = NonNullable<NativeTransactWriteItem["Put"]>;
 type NativeUpdate = NonNullable<NativeTransactWriteItem["Update"]>;
 
 const sortTables = (tables: TransactWriteItemsTables) =>
-  [...new Map(tables.map((table) => [table.LogicalId, table] as const)).values()]
-    .sort((a, b) => a.LogicalId.localeCompare(b.LogicalId)) as TransactWriteItemsTables;
+  [
+    ...new Map(
+      tables.map((table) => [table.LogicalId, table] as const),
+    ).values(),
+  ].sort((a, b) =>
+    a.LogicalId.localeCompare(b.LogicalId),
+  ) as TransactWriteItemsTables;
 
-export interface BoundConditionCheck
-  extends Omit<NativeConditionCheck, "TableName"> {
+export interface BoundConditionCheck extends Omit<
+  NativeConditionCheck,
+  "TableName"
+> {
   Table: string;
 }
 
@@ -44,8 +53,10 @@ export interface BoundTransactWriteItem {
   Update?: BoundUpdate;
 }
 
-export interface TransactWriteItemsRequest
-  extends Omit<DynamoDB.TransactWriteItemsInput, "TransactItems"> {
+export interface TransactWriteItemsRequest extends Omit<
+  DynamoDB.TransactWriteItemsInput,
+  "TransactItems"
+> {
   TransactItems: Array<BoundTransactWriteItem>;
 }
 

@@ -12,11 +12,18 @@ type BatchWriteRequests = NonNullable<
 >[string];
 
 const sortTables = (tables: BatchWriteItemTables) =>
-  [...new Map(tables.map((table) => [table.LogicalId, table] as const)).values()]
-    .sort((a, b) => a.LogicalId.localeCompare(b.LogicalId)) as BatchWriteItemTables;
+  [
+    ...new Map(
+      tables.map((table) => [table.LogicalId, table] as const),
+    ).values(),
+  ].sort((a, b) =>
+    a.LogicalId.localeCompare(b.LogicalId),
+  ) as BatchWriteItemTables;
 
-export interface BatchWriteItemRequest
-  extends Omit<DynamoDB.BatchWriteItemInput, "RequestItems"> {
+export interface BatchWriteItemRequest extends Omit<
+  DynamoDB.BatchWriteItemInput,
+  "RequestItems"
+> {
   RequestItems: Record<string, BatchWriteRequests>;
 }
 

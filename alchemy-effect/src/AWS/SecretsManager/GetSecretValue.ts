@@ -5,8 +5,10 @@ import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Secret } from "./Secret.ts";
 
-export interface GetSecretValueRequest
-  extends Omit<secretsmanager.GetSecretValueRequest, "SecretId"> {}
+export interface GetSecretValueRequest extends Omit<
+  secretsmanager.GetSecretValueRequest,
+  "SecretId"
+> {}
 
 /**
  * Runtime binding for `secretsmanager:GetSecretValue`.
@@ -53,15 +55,20 @@ export class GetSecretValuePolicy extends Binding.Policy<
 export const GetSecretValuePolicyLive = GetSecretValuePolicy.layer.succeed(
   Effect.fn(function* (host, secret) {
     if (isFunction(host)) {
-      yield* host.bind`Allow(${host}, AWS.SecretsManager.GetSecretValue(${secret}))`({
-        policyStatements: [
-          {
-            Effect: "Allow",
-            Action: ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
-            Resource: [secret.secretArn],
-          },
-        ],
-      });
+      yield* host.bind`Allow(${host}, AWS.SecretsManager.GetSecretValue(${secret}))`(
+        {
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [
+                "secretsmanager:GetSecretValue",
+                "secretsmanager:DescribeSecret",
+              ],
+              Resource: [secret.secretArn],
+            },
+          ],
+        },
+      );
     } else {
       return yield* Effect.die(
         `GetSecretValuePolicy does not support runtime '${host.Type}'`,

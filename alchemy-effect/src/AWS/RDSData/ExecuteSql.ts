@@ -12,11 +12,10 @@ export interface ExecuteSqlOptions {
   schema?: string;
 }
 
-export interface ExecuteSqlRequest
-  extends Omit<
-    rdsdata.ExecuteSqlRequest,
-    "dbClusterOrInstanceArn" | "awsSecretStoreArn" | "database" | "schema"
-  > {}
+export interface ExecuteSqlRequest extends Omit<
+  rdsdata.ExecuteSqlRequest,
+  "dbClusterOrInstanceArn" | "awsSecretStoreArn" | "database" | "schema"
+> {}
 
 /**
  * Runtime binding for the deprecated `rds-data:ExecuteSql` API.
@@ -39,7 +38,10 @@ export const ExecuteSqlLive = Layer.effect(
     const Policy = yield* ExecuteSqlPolicy;
     const executeSql = yield* rdsdata.executeSql;
 
-    return Effect.fn(function* (cluster: DBCluster, options: ExecuteSqlOptions) {
+    return Effect.fn(function* (
+      cluster: DBCluster,
+      options: ExecuteSqlOptions,
+    ) {
       const clusterArn = yield* cluster.dbClusterArn;
       const secretArn = yield* options.secret.secretArn;
       yield* Policy(cluster, options);
@@ -73,15 +75,20 @@ export const ExecuteSqlPolicyLive = ExecuteSqlPolicy.layer.succeed(
           },
         ],
       });
-      yield* host.bind`Allow(${host}, AWS.SecretsManager.GetSecretValue(${options.secret}))`({
-        policyStatements: [
-          {
-            Effect: "Allow",
-            Action: ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
-            Resource: [options.secret.secretArn],
-          },
-        ],
-      });
+      yield* host.bind`Allow(${host}, AWS.SecretsManager.GetSecretValue(${options.secret}))`(
+        {
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [
+                "secretsmanager:GetSecretValue",
+                "secretsmanager:DescribeSecret",
+              ],
+              Resource: [options.secret.secretArn],
+            },
+          ],
+        },
+      );
     } else {
       return yield* Effect.die(
         `ExecuteSqlPolicy does not support runtime '${host.Type}'`,

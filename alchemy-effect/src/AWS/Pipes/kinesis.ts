@@ -7,8 +7,10 @@ import type { Function } from "../Lambda/Function.ts";
 import type { Queue } from "../SQS/Queue.ts";
 import { Pipe } from "./Pipe.ts";
 
-export interface KinesisSourceProps
-  extends Omit<pipes.PipeSourceKinesisStreamParameters, "StartingPosition"> {
+export interface KinesisSourceProps extends Omit<
+  pipes.PipeSourceKinesisStreamParameters,
+  "StartingPosition"
+> {
   startingPosition?: pipes.PipeSourceKinesisStreamParameters["StartingPosition"];
 }
 

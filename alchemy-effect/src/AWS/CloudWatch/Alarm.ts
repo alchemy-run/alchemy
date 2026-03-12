@@ -89,7 +89,9 @@ export const AlarmProvider = () =>
         }
 
         const tags = yield* readResourceTags(metricAlarm.AlarmArn).pipe(
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed({})),
+          Effect.catchTag("ResourceNotFoundException", () =>
+            Effect.succeed({}),
+          ),
         );
 
         return {
@@ -113,7 +115,8 @@ export const AlarmProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name = output?.alarmName ?? (yield* createAlarmName(id, olds ?? {}));
+          const name =
+            output?.alarmName ?? (yield* createAlarmName(id, olds ?? {}));
           return yield* readAlarm(name);
         }),
         create: Effect.fn(function* ({ id, news, session }) {
@@ -142,7 +145,9 @@ export const AlarmProvider = () =>
 
           const state = yield* readAlarm(name);
           if (!state) {
-            return yield* Effect.fail(new Error(`failed to read created alarm '${name}'`));
+            return yield* Effect.fail(
+              new Error(`failed to read created alarm '${name}'`),
+            );
           }
 
           return {

@@ -88,7 +88,8 @@ export const ServiceSpecificCredentialProvider = () =>
       });
       const metadata = listed.ServiceSpecificCredentials?.find(
         (entry) =>
-          entry.ServiceSpecificCredentialId === output.serviceSpecificCredentialId,
+          entry.ServiceSpecificCredentialId ===
+          output.serviceSpecificCredentialId,
       );
       if (!metadata?.ServiceSpecificCredentialId) {
         return undefined;
@@ -115,13 +116,12 @@ export const ServiceSpecificCredentialProvider = () =>
       const credential = created.ServiceSpecificCredential;
       if (!credential?.ServiceSpecificCredentialId) {
         return yield* Effect.fail(
-          new Error(`createServiceSpecificCredential returned no credential id`),
+          new Error(
+            `createServiceSpecificCredential returned no credential id`,
+          ),
         );
       }
-      if (
-        news.status !== undefined &&
-        credential.Status !== news.status
-      ) {
+      if (news.status !== undefined && credential.Status !== news.status) {
         yield* iam.updateServiceSpecificCredential({
           UserName: news.userName,
           ServiceSpecificCredentialId: credential.ServiceSpecificCredentialId,

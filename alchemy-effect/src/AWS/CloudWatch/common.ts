@@ -2,7 +2,12 @@ import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import {
+  createInternalTags,
+  createTagsList,
+  diffTags,
+  hasAlchemyTags,
+} from "../../Tags.ts";
 
 export type CloudWatchTags = Record<string, string>;
 
@@ -18,11 +23,14 @@ export const createName = (
         maxLength,
       });
 
-export const toTagRecord = (tags: cloudwatch.Tag[] | undefined): CloudWatchTags =>
+export const toTagRecord = (
+  tags: cloudwatch.Tag[] | undefined,
+): CloudWatchTags =>
   Object.fromEntries(
     (tags ?? [])
-      .filter((tag): tag is { Key: string; Value: string } =>
-        typeof tag.Key === "string" && typeof tag.Value === "string",
+      .filter(
+        (tag): tag is { Key: string; Value: string } =>
+          typeof tag.Key === "string" && typeof tag.Value === "string",
       )
       .map((tag) => [tag.Key, tag.Value]),
   );
@@ -85,11 +93,14 @@ export const updateResourceTags = Effect.fn(function* ({
 });
 
 export const readResourceTags = (resourceArn: string) =>
-  cloudwatch.listTagsForResource({
-    ResourceARN: resourceArn,
-  }).pipe(Effect.map((response) => toTagRecord(response.Tags)));
+  cloudwatch
+    .listTagsForResource({
+      ResourceARN: resourceArn,
+    })
+    .pipe(Effect.map((response) => toTagRecord(response.Tags)));
 
-export const createTagList = (tags: Record<string, string>) => createTagsList(tags);
+export const createTagList = (tags: Record<string, string>) =>
+  createTagsList(tags);
 
 export const retryConcurrent = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
@@ -127,8 +138,7 @@ export const detectorIdentity = (
 export const matchesDetectorIdentity = (
   detector: cloudwatch.AnomalyDetector,
   input: cloudwatch.PutAnomalyDetectorInput,
-) =>
-  detectorIdentity(detector) === detectorIdentity(input);
+) => detectorIdentity(detector) === detectorIdentity(input);
 
 export const sortByLogicalId = <T extends { LogicalId: string }>(items: T[]) =>
   [...items].sort((a, b) => a.LogicalId.localeCompare(b.LogicalId));

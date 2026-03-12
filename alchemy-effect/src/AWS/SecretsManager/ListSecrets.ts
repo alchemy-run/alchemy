@@ -27,7 +27,9 @@ export const ListSecretsLive = Layer.effect(
 
     return Effect.fn(function* () {
       yield* Policy();
-      return Effect.fn(function* (request: secretsmanager.ListSecretsRequest = {}) {
+      return Effect.fn(function* (
+        request: secretsmanager.ListSecretsRequest = {},
+      ) {
         return yield* listSecrets(request);
       });
     });

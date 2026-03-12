@@ -9,8 +9,13 @@ import type { Table } from "./Table.ts";
 type BatchExecuteStatementTables = [Table, ...Table[]];
 
 const sortTables = (tables: BatchExecuteStatementTables) =>
-  [...new Map(tables.map((table) => [table.LogicalId, table] as const)).values()]
-    .sort((a, b) => a.LogicalId.localeCompare(b.LogicalId)) as BatchExecuteStatementTables;
+  [
+    ...new Map(
+      tables.map((table) => [table.LogicalId, table] as const),
+    ).values(),
+  ].sort((a, b) =>
+    a.LogicalId.localeCompare(b.LogicalId),
+  ) as BatchExecuteStatementTables;
 
 export interface BatchExecuteStatementRequest
   extends DynamoDB.BatchExecuteStatementInput {}

@@ -17,8 +17,11 @@ import * as Lambda from "./Function.ts";
 /**
  * Narrow an arbitrary Lambda invocation payload to an EventBridge event.
  */
-export const isEventBridgeEvent = (event: any): event is lambda.EventBridgeEvent<string, any> =>
-  typeof event?.source === "string" && typeof event?.["detail-type"] === "string";
+export const isEventBridgeEvent = (
+  event: any,
+): event is lambda.EventBridgeEvent<string, any> =>
+  typeof event?.source === "string" &&
+  typeof event?.["detail-type"] === "string";
 
 /**
  * Lambda runtime implementation for `AWS.EventBridge.events(...).subscribe(...)`.
@@ -112,7 +115,11 @@ export const EventSource = Layer.effect(
     const host = yield* Lambda.Function.Runtime;
     const bind = yield* EventSourcePolicy;
 
-    return Effect.fn(function* <Detail = unknown, StreamReq = never, Req = never>(
+    return Effect.fn(function* <
+      Detail = unknown,
+      StreamReq = never,
+      Req = never,
+    >(
       descriptor: {
         id?: string;
         bus?: any;
@@ -127,10 +134,13 @@ export const EventSource = Layer.effect(
 
       yield* host.listen(
         Effect.sync(() => (event: any) => {
-          if (isEventBridgeEvent(event) && matchesEventPattern(descriptor.pattern, event)) {
-            return process(
-              Stream.succeed(event as EventRecord<Detail>),
-            ).pipe(Effect.orDie);
+          if (
+            isEventBridgeEvent(event) &&
+            matchesEventPattern(descriptor.pattern, event)
+          ) {
+            return process(Stream.succeed(event as EventRecord<Detail>)).pipe(
+              Effect.orDie,
+            );
           }
         }),
       );
@@ -146,7 +156,9 @@ export const EventSource = Layer.effect(
  */
 export class EventSourcePolicy extends Binding.Policy<
   EventSourcePolicy,
-  (descriptor: Parameters<EventSourceService>[0]) => Effect.Effect<void, never, any>
+  (
+    descriptor: Parameters<EventSourceService>[0],
+  ) => Effect.Effect<void, never, any>
 >()("AWS.EventBridge.EventSource") {}
 
 /**

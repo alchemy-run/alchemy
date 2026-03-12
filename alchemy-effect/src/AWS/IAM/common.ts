@@ -52,8 +52,7 @@ export const policyArnFromParts = ({
   accountId: string;
   path: string | undefined;
   policyName: string;
-}) =>
-  `arn:aws:iam::${accountId}:policy${normalizeIamPath(path)}${policyName}`;
+}) => `arn:aws:iam::${accountId}:policy${normalizeIamPath(path)}${policyName}`;
 
 export const oldestNondefaultPolicyVersion = (
   versions: iam.PolicyVersion[] | undefined,
@@ -61,8 +60,7 @@ export const oldestNondefaultPolicyVersion = (
   [...(versions ?? [])]
     .filter((version) => !version.IsDefaultVersion && version.VersionId)
     .sort(
-      (a, b) =>
-        (a.CreateDate?.getTime() ?? 0) - (b.CreateDate?.getTime() ?? 0),
+      (a, b) => (a.CreateDate?.getTime() ?? 0) - (b.CreateDate?.getTime() ?? 0),
     )[0];
 
 export const toRedactedString = (

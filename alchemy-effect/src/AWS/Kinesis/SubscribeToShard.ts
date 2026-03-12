@@ -5,8 +5,10 @@ import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { StreamConsumer } from "./StreamConsumer.ts";
 
-export interface SubscribeToShardRequest
-  extends Omit<Kinesis.SubscribeToShardInput, "ConsumerARN"> {}
+export interface SubscribeToShardRequest extends Omit<
+  Kinesis.SubscribeToShardInput,
+  "ConsumerARN"
+> {}
 
 export class SubscribeToShard extends Binding.Service<
   SubscribeToShard,
@@ -46,25 +48,24 @@ export class SubscribeToShardPolicy extends Binding.Policy<
   (consumer: StreamConsumer) => Effect.Effect<void>
 >()("AWS.Kinesis.SubscribeToShard") {}
 
-export const SubscribeToShardPolicyLive =
-  SubscribeToShardPolicy.layer.succeed(
-    Effect.fn(function* (host, consumer) {
-      if (isFunction(host)) {
-        yield* host.bind`Allow(${host}, AWS.Kinesis.SubscribeToShard(${consumer}))`(
-          {
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: ["kinesis:SubscribeToShard"],
-                Resource: [consumer.consumerArn],
-              },
-            ],
-          },
-        );
-      } else {
-        return yield* Effect.die(
-          `SubscribeToShardPolicy does not support runtime '${host.Type}'`,
-        );
-      }
-    }),
-  );
+export const SubscribeToShardPolicyLive = SubscribeToShardPolicy.layer.succeed(
+  Effect.fn(function* (host, consumer) {
+    if (isFunction(host)) {
+      yield* host.bind`Allow(${host}, AWS.Kinesis.SubscribeToShard(${consumer}))`(
+        {
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["kinesis:SubscribeToShard"],
+              Resource: [consumer.consumerArn],
+            },
+          ],
+        },
+      );
+    } else {
+      return yield* Effect.die(
+        `SubscribeToShardPolicy does not support runtime '${host.Type}'`,
+      );
+    }
+  }),
+);

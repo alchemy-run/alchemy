@@ -12,7 +12,9 @@ type AlarmResources = [AlarmResource, ...AlarmResource[]];
  */
 export class DisableAlarmActions extends Binding.Service<
   DisableAlarmActions,
-  (...alarms: AlarmResources) => Effect.Effect<
+  (
+    ...alarms: AlarmResources
+  ) => Effect.Effect<
     () => Effect.Effect<cloudwatch.DisableAlarmActionsResponse, any>
   >
 >()("AWS.CloudWatch.DisableAlarmActions") {}
@@ -31,7 +33,7 @@ export const DisableAlarmActionsLive = Layer.effect(
         return yield* disableAlarmActions({
           AlarmNames: yield* Effect.forEach(sorted, (alarm) =>
             Effect.gen(function* () {
-              return yield* (yield* alarm.alarmName);
+              return yield* yield* alarm.alarmName;
             }),
           ),
         });

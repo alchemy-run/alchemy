@@ -52,7 +52,13 @@ export const LoadBalancerProvider = () =>
           : createPhysicalName({ id, maxLength: 32, lowercase: true });
 
       return {
-        stables: ["loadBalancerArn", "loadBalancerName", "dnsName", "canonicalHostedZoneId", "vpcId"],
+        stables: [
+          "loadBalancerArn",
+          "loadBalancerName",
+          "dnsName",
+          "canonicalHostedZoneId",
+          "vpcId",
+        ],
         diff: Effect.fn(function* ({ id, olds, news }) {
           const oldName = yield* toName(id, olds ?? {});
           const newName = yield* toName(id, news ?? {});
@@ -126,15 +132,19 @@ export const LoadBalancerProvider = () =>
           });
           const loadBalancer = created.LoadBalancers?.[0];
           if (!loadBalancer?.LoadBalancerArn) {
-            return yield* Effect.die(new Error("createLoadBalancer returned no load balancer"));
+            return yield* Effect.die(
+              new Error("createLoadBalancer returned no load balancer"),
+            );
           }
           if (news.attributes && Object.keys(news.attributes).length > 0) {
             yield* elbv2.modifyLoadBalancerAttributes({
               LoadBalancerArn: loadBalancer.LoadBalancerArn,
-              Attributes: Object.entries(news.attributes).map(([Key, Value]) => ({
-                Key,
-                Value,
-              })),
+              Attributes: Object.entries(news.attributes).map(
+                ([Key, Value]) => ({
+                  Key,
+                  Value,
+                }),
+              ),
             });
           }
           yield* session.note(loadBalancer.LoadBalancerArn);
@@ -161,10 +171,12 @@ export const LoadBalancerProvider = () =>
           ) {
             yield* elbv2.modifyLoadBalancerAttributes({
               LoadBalancerArn: output.loadBalancerArn,
-              Attributes: Object.entries(news.attributes ?? {}).map(([Key, Value]) => ({
-                Key,
-                Value,
-              })),
+              Attributes: Object.entries(news.attributes ?? {}).map(
+                ([Key, Value]) => ({
+                  Key,
+                  Value,
+                }),
+              ),
             });
           }
           const oldTags = {
@@ -200,7 +212,10 @@ export const LoadBalancerProvider = () =>
               LoadBalancerArn: output.loadBalancerArn,
             })
             .pipe(
-              Effect.catchTag("LoadBalancerNotFoundException", () => Effect.void),
+              Effect.catchTag(
+                "LoadBalancerNotFoundException",
+                () => Effect.void,
+              ),
             );
         }),
       };

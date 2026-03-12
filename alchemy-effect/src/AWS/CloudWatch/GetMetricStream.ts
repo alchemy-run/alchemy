@@ -5,8 +5,10 @@ import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { MetricStream } from "./MetricStream.ts";
 
-export interface GetMetricStreamRequest
-  extends Omit<cloudwatch.GetMetricStreamInput, "Name"> {}
+export interface GetMetricStreamRequest extends Omit<
+  cloudwatch.GetMetricStreamInput,
+  "Name"
+> {}
 
 /**
  * Runtime binding for `cloudwatch:GetMetricStream`.

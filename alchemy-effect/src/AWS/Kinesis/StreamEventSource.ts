@@ -53,7 +53,7 @@ export interface StreamEventSourceProps {
   /**
    * A list of current response type enums applied to the event source mapping.
    */
-  functionResponseTypes?: ("ReportBatchItemFailures")[];
+  functionResponseTypes?: "ReportBatchItemFailures"[];
   /**
    * A destination for records that failed processing.
    */

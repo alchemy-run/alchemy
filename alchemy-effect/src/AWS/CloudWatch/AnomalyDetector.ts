@@ -9,7 +9,8 @@ import {
   retryConcurrent,
 } from "./common.ts";
 
-export interface AnomalyDetectorProps extends cloudwatch.PutAnomalyDetectorInput {}
+export interface AnomalyDetectorProps
+  extends cloudwatch.PutAnomalyDetectorInput {}
 
 export interface AnomalyDetector extends Resource<
   "AWS.CloudWatch.AnomalyDetector",
@@ -90,7 +91,9 @@ export const AnomalyDetectorProvider = () =>
       const detector = yield* cloudwatch.describeAnomalyDetectors
         .items(toDescribeRequest(props))
         .pipe(
-          Stream.filter((candidate) => matchesDetectorIdentity(candidate, props)),
+          Stream.filter((candidate) =>
+            matchesDetectorIdentity(candidate, props),
+          ),
           Stream.runHead,
           Effect.map(Option.getOrUndefined),
         );
@@ -112,7 +115,9 @@ export const AnomalyDetectorProvider = () =>
       const state = yield* cloudwatch.describeAnomalyDetectors
         .items(toDescribeRequest(news))
         .pipe(
-          Stream.filter((candidate) => matchesDetectorIdentity(candidate, news)),
+          Stream.filter((candidate) =>
+            matchesDetectorIdentity(candidate, news),
+          ),
           Stream.runHead,
           Effect.map(Option.getOrUndefined),
         );
@@ -136,7 +141,9 @@ export const AnomalyDetectorProvider = () =>
       const state = yield* cloudwatch.describeAnomalyDetectors
         .items(toDescribeRequest(news))
         .pipe(
-          Stream.filter((candidate) => matchesDetectorIdentity(candidate, news)),
+          Stream.filter((candidate) =>
+            matchesDetectorIdentity(candidate, news),
+          ),
           Stream.runHead,
           Effect.map(Option.getOrUndefined),
         );
@@ -154,9 +161,9 @@ export const AnomalyDetectorProvider = () =>
     }),
     delete: Effect.fn(function* ({ output }) {
       yield* retryConcurrent(
-        cloudwatch.deleteAnomalyDetector(toDeleteRequest(output.anomalyDetector)),
-      ).pipe(
-        Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-      );
+        cloudwatch.deleteAnomalyDetector(
+          toDeleteRequest(output.anomalyDetector),
+        ),
+      ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
     }),
   });

@@ -236,11 +236,14 @@ const assertProvisionedProps = (props: StreamProps) =>
       )
     : Effect.void;
 
-const toTagRecord = (tags: Array<{ Key: string; Value?: string }> | undefined) =>
+const toTagRecord = (
+  tags: Array<{ Key: string; Value?: string }> | undefined,
+) =>
   Object.fromEntries(
     (tags ?? [])
-      .filter((tag): tag is { Key: string; Value: string } =>
-        typeof tag.Value === "string",
+      .filter(
+        (tag): tag is { Key: string; Value: string } =>
+          typeof tag.Value === "string",
       )
       .map((tag) => [tag.Key, tag.Value]),
   );
@@ -258,7 +261,11 @@ const toWarmThroughput = (
 const toShardLevelMetrics = (
   monitoring: kinesis.EnhancedMetrics[] | undefined,
 ): ShardLevelMetric[] =>
-  [...new Set((monitoring ?? []).flatMap((metric) => metric.ShardLevelMetrics ?? []))] as ShardLevelMetric[];
+  [
+    ...new Set(
+      (monitoring ?? []).flatMap((metric) => metric.ShardLevelMetrics ?? []),
+    ),
+  ] as ShardLevelMetric[];
 
 const toAttrs = ({
   summary,
@@ -301,7 +308,11 @@ const readStream = Effect.fn(function* ({
       StreamName: streamName,
       StreamARN: streamArn,
     })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(
+      Effect.catchTag("ResourceNotFoundException", () =>
+        Effect.succeed(undefined),
+      ),
+    );
 
   if (!response) {
     return undefined;
@@ -315,7 +326,11 @@ const readStream = Effect.fn(function* ({
     .getResourcePolicy({
       ResourceARN: summary.StreamARN,
     })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(
+      Effect.catchTag("ResourceNotFoundException", () =>
+        Effect.succeed(undefined),
+      ),
+    );
 
   return toAttrs({
     summary,
@@ -324,7 +339,10 @@ const readStream = Effect.fn(function* ({
   });
 });
 
-const resolveOwnedStream = Effect.fn(function* (id: string, streamName: string) {
+const resolveOwnedStream = Effect.fn(function* (
+  id: string,
+  streamName: string,
+) {
   const state = yield* readStream({ streamName });
 
   if (!state) {
@@ -443,7 +461,8 @@ export const StreamProvider = () =>
             yield* waitForStreamActive(streamName);
           }
 
-          const retention = news.retentionPeriodHours ?? defaultRetentionPeriodHours;
+          const retention =
+            news.retentionPeriodHours ?? defaultRetentionPeriodHours;
           if (retention !== defaultRetentionPeriodHours) {
             if (retention > defaultRetentionPeriodHours) {
               yield* kinesis.increaseStreamRetentionPeriod({
@@ -529,8 +548,10 @@ export const StreamProvider = () =>
             yield* session.note(`Updated shard count to ${news.shardCount}`);
           }
 
-          const oldRetention = olds.retentionPeriodHours ?? defaultRetentionPeriodHours;
-          const newRetention = news.retentionPeriodHours ?? defaultRetentionPeriodHours;
+          const oldRetention =
+            olds.retentionPeriodHours ?? defaultRetentionPeriodHours;
+          const newRetention =
+            news.retentionPeriodHours ?? defaultRetentionPeriodHours;
           if (oldRetention !== newRetention) {
             if (newRetention > oldRetention) {
               yield* kinesis.increaseStreamRetentionPeriod({

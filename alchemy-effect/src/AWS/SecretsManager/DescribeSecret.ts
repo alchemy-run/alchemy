@@ -46,15 +46,17 @@ export class DescribeSecretPolicy extends Binding.Policy<
 export const DescribeSecretPolicyLive = DescribeSecretPolicy.layer.succeed(
   Effect.fn(function* (host, secret) {
     if (isFunction(host)) {
-      yield* host.bind`Allow(${host}, AWS.SecretsManager.DescribeSecret(${secret}))`({
-        policyStatements: [
-          {
-            Effect: "Allow",
-            Action: ["secretsmanager:DescribeSecret"],
-            Resource: [secret.secretArn],
-          },
-        ],
-      });
+      yield* host.bind`Allow(${host}, AWS.SecretsManager.DescribeSecret(${secret}))`(
+        {
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["secretsmanager:DescribeSecret"],
+              Resource: [secret.secretArn],
+            },
+          ],
+        },
+      );
     } else {
       return yield* Effect.die(
         `DescribeSecretPolicy does not support runtime '${host.Type}'`,

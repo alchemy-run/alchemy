@@ -1,7 +1,11 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 
-import { chooseCanonicalEntries, createProject, discoverSourceFiles } from "./generate-docs/discovery.ts";
+import {
+  chooseCanonicalEntries,
+  createProject,
+  discoverSourceFiles,
+} from "./generate-docs/discovery.ts";
 import { buildFileDoc } from "./generate-docs/model.ts";
 import { renderFileDoc, syntheticIndexes } from "./generate-docs/render.ts";
 import { docsRoot } from "./generate-docs/utils.ts";

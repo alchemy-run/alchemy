@@ -117,7 +117,9 @@ export const DBProxyProvider = () =>
             DBProxyName: name,
           })
           .pipe(
-            Effect.catchTag("DBProxyNotFoundFault", () => Effect.succeed(undefined)),
+            Effect.catchTag("DBProxyNotFoundFault", () =>
+              Effect.succeed(undefined),
+            ),
           );
         return response?.DBProxies?.[0];
       });
@@ -187,7 +189,10 @@ export const DBProxyProvider = () =>
               DebugLogging: news.debugLogging,
               EndpointNetworkType: news.endpointNetworkType,
               TargetConnectionNetworkType: news.targetConnectionNetworkType,
-              Tags: Object.entries(tags).map(([Key, Value]) => ({ Key, Value })),
+              Tags: Object.entries(tags).map(([Key, Value]) => ({
+                Key,
+                Value,
+              })),
             })
             .pipe(
               Effect.catchTag("DBProxyAlreadyExistsFault", () => Effect.void),

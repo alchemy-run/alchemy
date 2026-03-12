@@ -13,11 +13,14 @@ interface EventDescriptor {
   props?: Pick<RuleProps, "description" | "state">;
 }
 
-export interface QueueRouteTargetProps
-  extends Pick<
-    RuleTarget,
-    "Input" | "InputPath" | "InputTransformer" | "RetryPolicy" | "DeadLetterConfig"
-  > {
+export interface QueueRouteTargetProps extends Pick<
+  RuleTarget,
+  | "Input"
+  | "InputPath"
+  | "InputTransformer"
+  | "RetryPolicy"
+  | "DeadLetterConfig"
+> {
   sqsParameters?: RuleTarget["SqsParameters"];
 }
 

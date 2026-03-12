@@ -15,7 +15,9 @@ type InsightRules = [InsightRuleResource, ...InsightRuleResource[]];
  */
 export class DisableInsightRules extends Binding.Service<
   DisableInsightRules,
-  (...rules: InsightRules) => Effect.Effect<
+  (
+    ...rules: InsightRules
+  ) => Effect.Effect<
     () => Effect.Effect<cloudwatch.DisableInsightRulesOutput, any>
   >
 >()("AWS.CloudWatch.DisableInsightRules") {}
@@ -34,7 +36,7 @@ export const DisableInsightRulesLive = Layer.effect(
         return yield* disableInsightRules({
           RuleNames: yield* Effect.forEach(sorted, (rule) =>
             Effect.gen(function* () {
-              return yield* (yield* rule.ruleName);
+              return yield* yield* rule.ruleName;
             }),
           ),
         });

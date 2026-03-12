@@ -12,11 +12,18 @@ type BatchGetItemKeysAndAttributes = NonNullable<
 >[string];
 
 const sortTables = (tables: BatchGetItemTables) =>
-  [...new Map(tables.map((table) => [table.LogicalId, table] as const)).values()]
-    .sort((a, b) => a.LogicalId.localeCompare(b.LogicalId)) as BatchGetItemTables;
+  [
+    ...new Map(
+      tables.map((table) => [table.LogicalId, table] as const),
+    ).values(),
+  ].sort((a, b) =>
+    a.LogicalId.localeCompare(b.LogicalId),
+  ) as BatchGetItemTables;
 
-export interface BatchGetItemRequest
-  extends Omit<DynamoDB.BatchGetItemInput, "RequestItems"> {
+export interface BatchGetItemRequest extends Omit<
+  DynamoDB.BatchGetItemInput,
+  "RequestItems"
+> {
   RequestItems: Record<string, BatchGetItemKeysAndAttributes>;
 }
 
@@ -51,10 +58,7 @@ export class BatchGetItem extends Binding.Service<
   ) => Effect.Effect<
     (
       request: BatchGetItemRequest,
-    ) => Effect.Effect<
-      DynamoDB.BatchGetItemOutput,
-      DynamoDB.BatchGetItemError
-    >
+    ) => Effect.Effect<DynamoDB.BatchGetItemOutput, DynamoDB.BatchGetItemError>
   >
 >()("AWS.DynamoDB.BatchGetItem") {}
 

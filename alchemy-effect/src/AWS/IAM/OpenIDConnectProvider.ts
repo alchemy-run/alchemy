@@ -69,7 +69,9 @@ export const OpenIDConnectProviderProvider = () =>
             OpenIDConnectProviderArn: providerArn,
           })
           .pipe(
-            Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+            Effect.catchTag("NoSuchEntityException", () =>
+              Effect.succeed(undefined),
+            ),
           );
         return response;
       });
@@ -150,7 +152,10 @@ export const OpenIDConnectProviderProvider = () =>
             });
           }
 
-          const { removed, upsert } = diffTags(olds.tags ?? {}, news.tags ?? {});
+          const { removed, upsert } = diffTags(
+            olds.tags ?? {},
+            news.tags ?? {},
+          );
           if (upsert.length > 0) {
             yield* iam.tagOpenIDConnectProvider({
               OpenIDConnectProviderArn: output.openIDConnectProviderArn,

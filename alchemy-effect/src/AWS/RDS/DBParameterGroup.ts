@@ -82,7 +82,10 @@ export const DBParameterGroupProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =
             output?.dbParameterGroupName ??
-            (yield* toName(id, olds ?? ({ family: "" } as DBParameterGroupProps)));
+            (yield* toName(
+              id,
+              olds ?? ({ family: "" } as DBParameterGroupProps),
+            ));
           const group = yield* readGroup(name);
           if (!group?.DBParameterGroupName) {
             return undefined;
@@ -105,8 +108,12 @@ export const DBParameterGroupProvider = () =>
             .createDBParameterGroup({
               DBParameterGroupName: name,
               DBParameterGroupFamily: news.family,
-              Description: news.description ?? `Alchemy parameter group ${name}`,
-              Tags: Object.entries(tags).map(([Key, Value]) => ({ Key, Value })),
+              Description:
+                news.description ?? `Alchemy parameter group ${name}`,
+              Tags: Object.entries(tags).map(([Key, Value]) => ({
+                Key,
+                Value,
+              })),
             })
             .pipe(
               Effect.catchTag("DBParameterGroupAlreadyExistsFault", () =>
@@ -118,7 +125,8 @@ export const DBParameterGroupProvider = () =>
           const group =
             "DBParameterGroup" in created
               ? created.DBParameterGroup
-              : (created as rds.DBParameterGroupsMessage).DBParameterGroups?.[0];
+              : (created as rds.DBParameterGroupsMessage)
+                  .DBParameterGroups?.[0];
           if (!group?.DBParameterGroupName) {
             return yield* Effect.fail(
               new Error(`Failed to create DB parameter group '${name}'`),
@@ -155,7 +163,9 @@ export const DBParameterGroupProvider = () =>
               TagKeys: removed,
             });
           }
-          yield* session.note(output.dbParameterGroupArn ?? output.dbParameterGroupName);
+          yield* session.note(
+            output.dbParameterGroupArn ?? output.dbParameterGroupName,
+          );
           return {
             ...output,
             tags: newTags,
@@ -167,7 +177,10 @@ export const DBParameterGroupProvider = () =>
               DBParameterGroupName: output.dbParameterGroupName,
             })
             .pipe(
-              Effect.catchTag("DBParameterGroupNotFoundFault", () => Effect.void),
+              Effect.catchTag(
+                "DBParameterGroupNotFoundFault",
+                () => Effect.void,
+              ),
             );
         }),
       };

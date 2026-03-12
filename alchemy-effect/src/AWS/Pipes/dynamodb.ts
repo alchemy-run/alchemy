@@ -7,10 +7,16 @@ import type { Function } from "../Lambda/Function.ts";
 import type { Queue } from "../SQS/Queue.ts";
 import { Pipe } from "./Pipe.ts";
 
-export interface DynamoDBSourceProps
-  extends Omit<pipes.PipeSourceDynamoDBStreamParameters, "StartingPosition"> {
+export interface DynamoDBSourceProps extends Omit<
+  pipes.PipeSourceDynamoDBStreamParameters,
+  "StartingPosition"
+> {
   startingPosition?: pipes.PipeSourceDynamoDBStreamParameters["StartingPosition"];
-  streamViewType?: "KEYS_ONLY" | "NEW_IMAGE" | "OLD_IMAGE" | "NEW_AND_OLD_IMAGES";
+  streamViewType?:
+    | "KEYS_ONLY"
+    | "NEW_IMAGE"
+    | "OLD_IMAGE"
+    | "NEW_AND_OLD_IMAGES";
 }
 
 export interface LambdaEnrichmentProps {

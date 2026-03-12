@@ -2,7 +2,12 @@ import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
-import { createInternalTags, createTagsList, diffTags, hasTags } from "../../Tags.ts";
+import {
+  createInternalTags,
+  createTagsList,
+  diffTags,
+  hasTags,
+} from "../../Tags.ts";
 import type { AccountID } from "../Account.ts";
 import { Account } from "../Account.ts";
 import type { PolicyDocument } from "./Policy.ts";
@@ -109,23 +114,29 @@ export const RoleProvider = () =>
         });
         const entries = yield* Effect.all(
           (listed.PolicyNames ?? []).map((policyName) =>
-            iam.getRolePolicy({
-              RoleName: roleName,
-              PolicyName: policyName,
-            }).pipe(
-              Effect.map((response) => [
-                policyName,
-                parsePolicyDocument(response.PolicyDocument),
-              ] as const),
-              Effect.catchTag("NoSuchEntityException", () =>
-                Effect.succeed([policyName, undefined] as const),
+            iam
+              .getRolePolicy({
+                RoleName: roleName,
+                PolicyName: policyName,
+              })
+              .pipe(
+                Effect.map(
+                  (response) =>
+                    [
+                      policyName,
+                      parsePolicyDocument(response.PolicyDocument),
+                    ] as const,
+                ),
+                Effect.catchTag("NoSuchEntityException", () =>
+                  Effect.succeed([policyName, undefined] as const),
+                ),
               ),
-            ),
           ),
         );
         return Object.fromEntries(
           entries.filter(
-            (entry): entry is [string, PolicyDocument] => entry[1] !== undefined,
+            (entry): entry is [string, PolicyDocument] =>
+              entry[1] !== undefined,
           ),
         );
       });
@@ -136,7 +147,9 @@ export const RoleProvider = () =>
         });
         return (listed.AttachedPolicies ?? [])
           .map((policy) => policy.PolicyArn)
-          .filter((policyArn): policyArn is string => typeof policyArn === "string");
+          .filter(
+            (policyArn): policyArn is string => typeof policyArn === "string",
+          );
       });
 
       const readTags = Effect.fn(function* (roleName: string) {
@@ -192,7 +205,8 @@ export const RoleProvider = () =>
       }) {
         for (const [policyName, document] of Object.entries(news)) {
           if (
-            JSON.stringify(olds[policyName] ?? null) !== JSON.stringify(document)
+            JSON.stringify(olds[policyName] ?? null) !==
+            JSON.stringify(document)
           ) {
             yield* iam.putRolePolicy({
               RoleName: roleName,
@@ -220,7 +234,8 @@ export const RoleProvider = () =>
         stables: ["roleArn", "roleName"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (
-            (yield* toRoleName(id, olds ?? {})) !== (yield* toRoleName(id, news ?? {}))
+            (yield* toRoleName(id, olds ?? {})) !==
+            (yield* toRoleName(id, news ?? {}))
           ) {
             return { action: "replace" } as const;
           }
@@ -265,7 +280,8 @@ export const RoleProvider = () =>
             inlinePolicies,
             description: role.Role.Description,
             maxSessionDuration: role.Role.MaxSessionDuration,
-            permissionsBoundary: role.Role.PermissionsBoundary?.PermissionsBoundaryArn,
+            permissionsBoundary:
+              role.Role.PermissionsBoundary?.PermissionsBoundaryArn,
             tags,
           };
         }),
@@ -334,7 +350,9 @@ export const RoleProvider = () =>
         update: Effect.fn(function* ({ id, news, olds, output, session }) {
           yield* iam.updateAssumeRolePolicy({
             RoleName: output.roleName,
-            PolicyDocument: stringifyPolicyDocument(news.assumeRolePolicyDocument),
+            PolicyDocument: stringifyPolicyDocument(
+              news.assumeRolePolicyDocument,
+            ),
           });
 
           if (
@@ -427,27 +445,25 @@ export const RoleProvider = () =>
             })
             .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
 
-          yield* iam
-            .listRolePolicies({ RoleName: output.roleName })
-            .pipe(
-              Effect.flatMap((policies) =>
-                Effect.all(
-                  (policies.PolicyNames ?? []).map((policyName) =>
-                    iam
-                      .deleteRolePolicy({
-                        RoleName: output.roleName,
-                        PolicyName: policyName,
-                      })
-                      .pipe(
-                        Effect.catchTag(
-                          "NoSuchEntityException",
-                          () => Effect.void,
-                        ),
+          yield* iam.listRolePolicies({ RoleName: output.roleName }).pipe(
+            Effect.flatMap((policies) =>
+              Effect.all(
+                (policies.PolicyNames ?? []).map((policyName) =>
+                  iam
+                    .deleteRolePolicy({
+                      RoleName: output.roleName,
+                      PolicyName: policyName,
+                    })
+                    .pipe(
+                      Effect.catchTag(
+                        "NoSuchEntityException",
+                        () => Effect.void,
                       ),
-                  ),
+                    ),
                 ),
               ),
-            );
+            ),
+          );
 
           yield* iam
             .listAttachedRolePolicies({ RoleName: output.roleName })

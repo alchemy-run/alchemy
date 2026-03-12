@@ -63,24 +63,31 @@ export class BeginTransactionPolicy extends Binding.Policy<
 export const BeginTransactionPolicyLive = BeginTransactionPolicy.layer.succeed(
   Effect.fn(function* (host, cluster, options) {
     if (isFunction(host)) {
-      yield* host.bind`Allow(${host}, AWS.RDSData.BeginTransaction(${cluster}))`({
-        policyStatements: [
-          {
-            Effect: "Allow",
-            Action: ["rds-data:BeginTransaction"],
-            Resource: [cluster.dbClusterArn, options.secret.secretArn],
-          },
-        ],
-      });
-      yield* host.bind`Allow(${host}, AWS.SecretsManager.GetSecretValue(${options.secret}))`({
-        policyStatements: [
-          {
-            Effect: "Allow",
-            Action: ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
-            Resource: [options.secret.secretArn],
-          },
-        ],
-      });
+      yield* host.bind`Allow(${host}, AWS.RDSData.BeginTransaction(${cluster}))`(
+        {
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["rds-data:BeginTransaction"],
+              Resource: [cluster.dbClusterArn, options.secret.secretArn],
+            },
+          ],
+        },
+      );
+      yield* host.bind`Allow(${host}, AWS.SecretsManager.GetSecretValue(${options.secret}))`(
+        {
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [
+                "secretsmanager:GetSecretValue",
+                "secretsmanager:DescribeSecret",
+              ],
+              Resource: [options.secret.secretArn],
+            },
+          ],
+        },
+      );
     } else {
       return yield* Effect.die(
         `BeginTransactionPolicy does not support runtime '${host.Type}'`,

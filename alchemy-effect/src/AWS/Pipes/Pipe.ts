@@ -125,7 +125,9 @@ export const PipeProvider = () =>
               Name: pipeName,
             })
             .pipe(
-              Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+              Effect.catchTag("NotFoundException", () =>
+                Effect.succeed(undefined),
+              ),
             );
 
           if (!described?.Arn || !described.Name) {
@@ -179,7 +181,9 @@ export const PipeProvider = () =>
                     (existing) =>
                       hasTags(
                         allTags,
-                        existing.Tags as Record<string, string | undefined> | undefined,
+                        existing.Tags as
+                          | Record<string, string | undefined>
+                          | undefined,
                       ),
                     () =>
                       new Error(
@@ -275,9 +279,7 @@ export const PipeProvider = () =>
             .deletePipe({
               Name: output.pipeName,
             })
-            .pipe(
-              Effect.catchTag("NotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
         }),
       };
     }),

@@ -75,7 +75,9 @@ export const SAMLProviderProvider = () =>
           SAMLProviderArn: output.samlProviderArn,
         })
         .pipe(
-          Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NoSuchEntityException", () =>
+            Effect.succeed(undefined),
+          ),
         );
       if (!response) {
         return undefined;
@@ -100,7 +102,10 @@ export const SAMLProviderProvider = () =>
         AddPrivateKey: news.addPrivateKey
           ? unwrapRedactedString(news.addPrivateKey)
           : undefined,
-        Tags: Object.entries(news.tags ?? {}).map(([Key, Value]) => ({ Key, Value })),
+        Tags: Object.entries(news.tags ?? {}).map(([Key, Value]) => ({
+          Key,
+          Value,
+        })),
       });
       const samlProviderArn = response.SAMLProviderArn ?? news.name;
       yield* session.note(samlProviderArn);

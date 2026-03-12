@@ -2,7 +2,12 @@ import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
-import { createInternalTags, createTagsList, diffTags, hasTags } from "../../Tags.ts";
+import {
+  createInternalTags,
+  createTagsList,
+  diffTags,
+  hasTags,
+} from "../../Tags.ts";
 import type { PolicyDocument } from "./Policy.ts";
 import {
   parsePolicyDocument,
@@ -86,7 +91,9 @@ export const UserProvider = () =>
         });
         return (listed.AttachedPolicies ?? [])
           .map((policy) => policy.PolicyArn)
-          .filter((policyArn): policyArn is string => typeof policyArn === "string");
+          .filter(
+            (policyArn): policyArn is string => typeof policyArn === "string",
+          );
       });
 
       const readInlinePolicies = Effect.fn(function* (userName: string) {
@@ -95,23 +102,29 @@ export const UserProvider = () =>
         });
         const entries = yield* Effect.all(
           (listed.PolicyNames ?? []).map((policyName) =>
-            iam.getUserPolicy({
-              UserName: userName,
-              PolicyName: policyName,
-            }).pipe(
-              Effect.map((response) => [
-                policyName,
-                parsePolicyDocument(response.PolicyDocument),
-              ] as const),
-              Effect.catchTag("NoSuchEntityException", () =>
-                Effect.succeed([policyName, undefined] as const),
+            iam
+              .getUserPolicy({
+                UserName: userName,
+                PolicyName: policyName,
+              })
+              .pipe(
+                Effect.map(
+                  (response) =>
+                    [
+                      policyName,
+                      parsePolicyDocument(response.PolicyDocument),
+                    ] as const,
+                ),
+                Effect.catchTag("NoSuchEntityException", () =>
+                  Effect.succeed([policyName, undefined] as const),
+                ),
               ),
-            ),
           ),
         );
         return Object.fromEntries(
           entries.filter(
-            (entry): entry is [string, PolicyDocument] => entry[1] !== undefined,
+            (entry): entry is [string, PolicyDocument] =>
+              entry[1] !== undefined,
           ),
         );
       });
@@ -149,7 +162,9 @@ export const UserProvider = () =>
                 UserName: userName,
                 PolicyArn: policyArn,
               })
-              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+              .pipe(
+                Effect.catchTag("NoSuchEntityException", () => Effect.void),
+              );
           }
         }
       });
@@ -165,7 +180,8 @@ export const UserProvider = () =>
       }) {
         for (const [policyName, document] of Object.entries(news)) {
           if (
-            JSON.stringify(olds[policyName] ?? null) !== JSON.stringify(document)
+            JSON.stringify(olds[policyName] ?? null) !==
+            JSON.stringify(document)
           ) {
             yield* iam.putUserPolicy({
               UserName: userName,
@@ -181,7 +197,9 @@ export const UserProvider = () =>
                 UserName: userName,
                 PolicyName: policyName,
               })
-              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+              .pipe(
+                Effect.catchTag("NoSuchEntityException", () => Effect.void),
+              );
           }
         }
       });
@@ -207,7 +225,9 @@ export const UserProvider = () =>
               UserName: userName,
             })
             .pipe(
-              Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+              Effect.catchTag("NoSuchEntityException", () =>
+                Effect.succeed(undefined),
+              ),
             );
           if (!response?.User?.Arn) {
             return undefined;
@@ -244,17 +264,19 @@ export const UserProvider = () =>
             })
             .pipe(
               Effect.catchTag("EntityAlreadyExistsException", () =>
-                iam.getUser({
-                  UserName: userName,
-                }).pipe(
-                  Effect.filterOrFail(
-                    (existing) => hasTags(tags, existing.User?.Tags),
-                    () =>
-                      new Error(
-                        `User '${userName}' already exists and is not managed by alchemy`,
-                      ),
+                iam
+                  .getUser({
+                    UserName: userName,
+                  })
+                  .pipe(
+                    Effect.filterOrFail(
+                      (existing) => hasTags(tags, existing.User?.Tags),
+                      () =>
+                        new Error(
+                          `User '${userName}' already exists and is not managed by alchemy`,
+                        ),
+                    ),
                   ),
-                ),
               ),
             );
 
@@ -295,7 +317,9 @@ export const UserProvider = () =>
                 .deleteUserPermissionsBoundary({
                   UserName: output.userName,
                 })
-                .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+                .pipe(
+                  Effect.catchTag("NoSuchEntityException", () => Effect.void),
+                );
             }
           }
 
@@ -362,7 +386,9 @@ export const UserProvider = () =>
               UserName: output.userName,
             })
             .pipe(
-              Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+              Effect.catchTag("NoSuchEntityException", () =>
+                Effect.succeed(undefined),
+              ),
             );
           for (const policyName of inlinePolicies?.PolicyNames ?? []) {
             yield* iam
@@ -370,7 +396,9 @@ export const UserProvider = () =>
                 UserName: output.userName,
                 PolicyName: policyName,
               })
-              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+              .pipe(
+                Effect.catchTag("NoSuchEntityException", () => Effect.void),
+              );
           }
 
           const attachedPolicies = yield* iam
@@ -378,7 +406,9 @@ export const UserProvider = () =>
               UserName: output.userName,
             })
             .pipe(
-              Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+              Effect.catchTag("NoSuchEntityException", () =>
+                Effect.succeed(undefined),
+              ),
             );
           for (const policy of attachedPolicies?.AttachedPolicies ?? []) {
             if (policy.PolicyArn) {
@@ -387,7 +417,9 @@ export const UserProvider = () =>
                   UserName: output.userName,
                   PolicyArn: policy.PolicyArn,
                 })
-                .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+                .pipe(
+                  Effect.catchTag("NoSuchEntityException", () => Effect.void),
+                );
             }
           }
 

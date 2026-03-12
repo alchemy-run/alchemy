@@ -93,9 +93,14 @@ export const OrganizationResourcePolicyProvider = () =>
         }),
         delete: Effect.fn(function* () {
           yield* retryOrganizations(
-            organizations.deleteResourcePolicy({}).pipe(
-              Effect.catchTag("ResourcePolicyNotFoundException", () => Effect.void),
-            ),
+            organizations
+              .deleteResourcePolicy({})
+              .pipe(
+                Effect.catchTag(
+                  "ResourcePolicyNotFoundException",
+                  () => Effect.void,
+                ),
+              ),
           );
         }),
       };

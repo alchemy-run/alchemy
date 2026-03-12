@@ -75,7 +75,10 @@ export const PermissionProvider = () =>
             return { action: "replace" } as const;
           }
 
-          if ((olds.eventBusName ?? "default") !== (news.eventBusName ?? "default")) {
+          if (
+            (olds.eventBusName ?? "default") !==
+            (news.eventBusName ?? "default")
+          ) {
             return { action: "replace" } as const;
           }
         }),
@@ -102,7 +105,9 @@ export const PermissionProvider = () =>
           yield* eventbridge
             .removePermission({
               EventBusName:
-                output.eventBusName !== "default" ? output.eventBusName : undefined,
+                output.eventBusName !== "default"
+                  ? output.eventBusName
+                  : undefined,
               StatementId: output.statementId,
             })
             .pipe(
@@ -111,14 +116,18 @@ export const PermissionProvider = () =>
 
           yield* eventbridge.putPermission({
             EventBusName:
-              output.eventBusName !== "default" ? output.eventBusName : undefined,
+              output.eventBusName !== "default"
+                ? output.eventBusName
+                : undefined,
             Action: news.action ?? "events:PutEvents",
             Principal: news.principal,
             StatementId: output.statementId,
             Condition: news.condition,
           });
 
-          yield* session.note(`Updated EventBridge permission ${output.statementId}`);
+          yield* session.note(
+            `Updated EventBridge permission ${output.statementId}`,
+          );
 
           return output;
         }),
@@ -126,7 +135,9 @@ export const PermissionProvider = () =>
           yield* eventbridge
             .removePermission({
               EventBusName:
-                output.eventBusName !== "default" ? output.eventBusName : undefined,
+                output.eventBusName !== "default"
+                  ? output.eventBusName
+                  : undefined,
               StatementId: output.statementId,
             })
             .pipe(

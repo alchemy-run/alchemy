@@ -12,11 +12,14 @@ interface EventDescriptor {
   props?: Pick<RuleProps, "description" | "state">;
 }
 
-export interface EcsRouteTargetProps
-  extends Pick<
-    RuleTarget,
-    "Input" | "InputPath" | "InputTransformer" | "RetryPolicy" | "DeadLetterConfig"
-  > {
+export interface EcsRouteTargetProps extends Pick<
+  RuleTarget,
+  | "Input"
+  | "InputPath"
+  | "InputTransformer"
+  | "RetryPolicy"
+  | "DeadLetterConfig"
+> {
   task: {
     taskDefinitionArn: string;
     taskRoleArn: string;

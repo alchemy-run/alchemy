@@ -2,7 +2,12 @@ import * as path from "node:path";
 
 import { Node, type JSDoc } from "ts-morph";
 
-import type { ExampleDoc, ExampleSection, JSDocInfo, PropertyDoc } from "./types.ts";
+import type {
+  ExampleDoc,
+  ExampleSection,
+  JSDocInfo,
+  PropertyDoc,
+} from "./types.ts";
 
 export const repoRoot = path.resolve(import.meta.dir, "../..");
 export const packageRoot = path.join(repoRoot, "alchemy-effect");

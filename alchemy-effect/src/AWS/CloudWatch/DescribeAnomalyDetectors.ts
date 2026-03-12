@@ -30,7 +30,9 @@ export const DescribeAnomalyDetectorsLive = Layer.effect(
 
     return Effect.fn(function* () {
       yield* Policy();
-      return Effect.fn(function* (request: DescribeAnomalyDetectorsRequest = {}) {
+      return Effect.fn(function* (
+        request: DescribeAnomalyDetectorsRequest = {},
+      ) {
         return yield* describeAnomalyDetectors(request);
       });
     });

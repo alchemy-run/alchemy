@@ -110,7 +110,9 @@ export const VirtualMFADeviceProvider = () =>
             UserName: userName,
           })
           .pipe(
-            Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+            Effect.catchTag("NoSuchEntityException", () =>
+              Effect.succeed(undefined),
+            ),
           );
       });
 
@@ -240,7 +242,9 @@ export const VirtualMFADeviceProvider = () =>
                 UserName: output.userName,
                 SerialNumber: output.serialNumber,
               })
-              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+              .pipe(
+                Effect.catchTag("NoSuchEntityException", () => Effect.void),
+              );
           }
           yield* iam
             .deleteVirtualMFADevice({

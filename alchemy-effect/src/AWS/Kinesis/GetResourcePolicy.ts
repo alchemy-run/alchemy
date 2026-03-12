@@ -5,8 +5,10 @@ import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Stream } from "./Stream.ts";
 
-export interface GetResourcePolicyRequest
-  extends Omit<Kinesis.GetResourcePolicyInput, "ResourceARN"> {}
+export interface GetResourcePolicyRequest extends Omit<
+  Kinesis.GetResourcePolicyInput,
+  "ResourceARN"
+> {}
 
 export class GetResourcePolicy extends Binding.Service<
   GetResourcePolicy,
@@ -46,24 +48,25 @@ export class GetResourcePolicyPolicy extends Binding.Policy<
   (stream: Stream) => Effect.Effect<void>
 >()("AWS.Kinesis.GetResourcePolicy") {}
 
-export const GetResourcePolicyPolicyLive = GetResourcePolicyPolicy.layer.succeed(
-  Effect.fn(function* (host, stream) {
-    if (isFunction(host)) {
-      yield* host.bind`Allow(${host}, AWS.Kinesis.GetResourcePolicy(${stream}))`(
-        {
-          policyStatements: [
-            {
-              Effect: "Allow",
-              Action: ["kinesis:GetResourcePolicy"],
-              Resource: [stream.streamArn],
-            },
-          ],
-        },
-      );
-    } else {
-      return yield* Effect.die(
-        `GetResourcePolicyPolicy does not support runtime '${host.Type}'`,
-      );
-    }
-  }),
-);
+export const GetResourcePolicyPolicyLive =
+  GetResourcePolicyPolicy.layer.succeed(
+    Effect.fn(function* (host, stream) {
+      if (isFunction(host)) {
+        yield* host.bind`Allow(${host}, AWS.Kinesis.GetResourcePolicy(${stream}))`(
+          {
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["kinesis:GetResourcePolicy"],
+                Resource: [stream.streamArn],
+              },
+            ],
+          },
+        );
+      } else {
+        return yield* Effect.die(
+          `GetResourcePolicyPolicy does not support runtime '${host.Type}'`,
+        );
+      }
+    }),
+  );

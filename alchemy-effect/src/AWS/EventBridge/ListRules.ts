@@ -8,8 +8,10 @@ import { Account } from "../Account.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { EventBus } from "./EventBus.ts";
 
-export interface ListRulesRequest
-  extends Omit<eventbridge.ListRulesRequest, "EventBusName"> {}
+export interface ListRulesRequest extends Omit<
+  eventbridge.ListRulesRequest,
+  "EventBusName"
+> {}
 
 export class ListRules extends Binding.Service<
   ListRules,
@@ -18,7 +20,10 @@ export class ListRules extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListRulesRequest,
-    ) => Effect.Effect<eventbridge.ListRulesResponse, eventbridge.ListRulesError>
+    ) => Effect.Effect<
+      eventbridge.ListRulesResponse,
+      eventbridge.ListRulesError
+    >
   >
 >()("AWS.EventBridge.ListRules") {}
 
@@ -36,7 +41,9 @@ export const ListRulesLive = Layer.effect(
         return yield* listRules({
           ...request,
           EventBusName:
-            eventBusName && eventBusName !== "default" ? eventBusName : undefined,
+            eventBusName && eventBusName !== "default"
+              ? eventBusName
+              : undefined,
         });
       });
     });

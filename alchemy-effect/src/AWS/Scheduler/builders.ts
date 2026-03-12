@@ -65,7 +65,9 @@ export interface EcsTaskTargetProps {
 export const every = (value: string, options: ScheduleOptions = {}) =>
   makeBuilder({
     expression:
-      value.startsWith("rate(") || value.startsWith("cron(") ? value : `rate(${value})`,
+      value.startsWith("rate(") || value.startsWith("cron(")
+        ? value
+        : `rate(${value})`,
     ...options,
   });
 
@@ -89,64 +91,83 @@ const makeBuilder = (state: ScheduleBuilderState) => ({
     }),
 
   toLambda: (fn: Function, props: LambdaTargetProps = {}) =>
-    materializeSchedule(state, fn.LogicalId, [
+    materializeSchedule(
+      state,
+      fn.LogicalId,
+      [
+        {
+          Effect: "Allow",
+          Action: ["lambda:InvokeFunction"],
+          Resource: [fn.functionArn],
+        },
+      ],
       {
-        Effect: "Allow",
-        Action: ["lambda:InvokeFunction"],
-        Resource: [fn.functionArn],
+        Arn: fn.functionArn as any,
+        Input: toInput(props.input),
+        RetryPolicy: props.retryPolicy,
+        DeadLetterConfig: props.deadLetterConfig,
       },
-    ], {
-      Arn: fn.functionArn as any,
-      Input: toInput(props.input),
-      RetryPolicy: props.retryPolicy,
-      DeadLetterConfig: props.deadLetterConfig,
-    }),
+    ),
 
-  toQueue: (queue: Queue, payload?: unknown, props: Omit<QueueTargetProps, "input"> = {}) =>
-    materializeSchedule(state, queue.LogicalId, [
+  toQueue: (
+    queue: Queue,
+    payload?: unknown,
+    props: Omit<QueueTargetProps, "input"> = {},
+  ) =>
+    materializeSchedule(
+      state,
+      queue.LogicalId,
+      [
+        {
+          Effect: "Allow",
+          Action: ["sqs:SendMessage"],
+          Resource: [queue.queueArn],
+        },
+      ],
       {
-        Effect: "Allow",
-        Action: ["sqs:SendMessage"],
-        Resource: [queue.queueArn],
+        Arn: queue.queueArn as any,
+        Input: toInput(payload),
+        RetryPolicy: props.retryPolicy,
+        DeadLetterConfig: props.deadLetterConfig,
+        SqsParameters: props.sqs,
       },
-    ], {
-      Arn: queue.queueArn as any,
-      Input: toInput(payload),
-      RetryPolicy: props.retryPolicy,
-      DeadLetterConfig: props.deadLetterConfig,
-      SqsParameters: props.sqs,
-    }),
+    ),
 
   toEcsTask: (props: EcsTaskTargetProps) =>
-    materializeSchedule(state, props.cluster.LogicalId, [
+    materializeSchedule(
+      state,
+      props.cluster.LogicalId,
+      [
+        {
+          Effect: "Allow",
+          Action: ["ecs:RunTask"],
+          Resource: [props.task.taskDefinitionArn],
+        },
+        {
+          Effect: "Allow",
+          Action: ["iam:PassRole"],
+          Resource: [props.task.taskRoleArn, props.task.executionRoleArn],
+        },
+      ],
       {
-        Effect: "Allow",
-        Action: ["ecs:RunTask"],
-        Resource: [props.task.taskDefinitionArn],
-      },
-      {
-        Effect: "Allow",
-        Action: ["iam:PassRole"],
-        Resource: [props.task.taskRoleArn, props.task.executionRoleArn],
-      },
-    ], {
-      Arn: props.cluster.clusterArn as any,
-      Input: toInput(props.input),
-      RetryPolicy: props.retryPolicy,
-      DeadLetterConfig: props.deadLetterConfig,
-      EcsParameters: {
-        TaskDefinitionArn: props.task.taskDefinitionArn,
-        TaskCount: props.taskCount ?? 1,
-        LaunchType: "FARGATE",
-        NetworkConfiguration: {
-          awsvpcConfiguration: {
-            Subnets: props.subnets,
-            SecurityGroups: props.securityGroups,
-            AssignPublicIp: props.assignPublicIp ? "ENABLED" : "DISABLED",
+        Arn: props.cluster.clusterArn as any,
+        Input: toInput(props.input),
+        RetryPolicy: props.retryPolicy,
+        DeadLetterConfig: props.deadLetterConfig,
+        EcsParameters: {
+          TaskDefinitionArn: props.task.taskDefinitionArn,
+          TaskCount: props.taskCount ?? 1,
+          LaunchType: "FARGATE",
+          NetworkConfiguration: {
+            awsvpcConfiguration: {
+              Subnets: props.subnets,
+              SecurityGroups: props.securityGroups,
+              AssignPublicIp: props.assignPublicIp ? "ENABLED" : "DISABLED",
+            },
           },
         },
       },
-    }),
+    ),
 });
 
 const materializeSchedule = (

@@ -248,7 +248,7 @@ export const ServiceProvider = () =>
       const clusterArnOf = (cluster: ServiceProps["cluster"] | ClusterArn) =>
         typeof cluster === "string"
           ? cluster
-          : ((cluster as any).clusterArn ?? cluster) as string;
+          : (((cluster as any).clusterArn ?? cluster) as string);
       const toEcsTags = (tags: Record<string, string>): ecs.Tag[] =>
         Object.entries(tags).map(([key, value]) => ({ key, value }));
 
@@ -305,7 +305,9 @@ export const ServiceProvider = () =>
         });
         const lb = loadBalancer.LoadBalancers?.[0];
         if (!lb?.LoadBalancerArn || !lb.DNSName) {
-          return yield* Effect.die(new Error("Failed to create ECS service load balancer"));
+          return yield* Effect.die(
+            new Error("Failed to create ECS service load balancer"),
+          );
         }
 
         const targetGroup = yield* elbv2.createTargetGroup({
@@ -319,7 +321,9 @@ export const ServiceProvider = () =>
         });
         const tg = targetGroup.TargetGroups?.[0];
         if (!tg?.TargetGroupArn) {
-          return yield* Effect.die(new Error("Failed to create ECS service target group"));
+          return yield* Effect.die(
+            new Error("Failed to create ECS service target group"),
+          );
         }
 
         const listener = yield* elbv2.createListener({
@@ -338,7 +342,9 @@ export const ServiceProvider = () =>
         });
         const ls = listener.Listeners?.[0];
         if (!ls?.ListenerArn) {
-          return yield* Effect.die(new Error("Failed to create ECS service listener"));
+          return yield* Effect.die(
+            new Error("Failed to create ECS service listener"),
+          );
         }
 
         return {
@@ -349,7 +355,10 @@ export const ServiceProvider = () =>
         };
       });
 
-      const serviceInput = (news: ServiceProps, output?: Service["Attributes"]) => ({
+      const serviceInput = (
+        news: ServiceProps,
+        output?: Service["Attributes"],
+      ) => ({
         cluster: clusterArnOf(news.cluster),
         service: output?.serviceName,
         serviceName: output?.serviceName,
@@ -433,7 +442,9 @@ export const ServiceProvider = () =>
         }),
         create: Effect.fn(function* ({ id, news, session }) {
           const serviceName = yield* toServiceName(id, news);
-          const ingress = news.public ? yield* createIngress({ id, news }) : undefined;
+          const ingress = news.public
+            ? yield* createIngress({ id, news })
+            : undefined;
           const tags = {
             ...(yield* createInternalTags(id)),
             ...(news.tags ?? {}),
@@ -457,7 +468,9 @@ export const ServiceProvider = () =>
           });
           const service = created.service;
           if (!service?.serviceArn) {
-            return yield* Effect.die(new Error("createService returned no service"));
+            return yield* Effect.die(
+              new Error("createService returned no service"),
+            );
           }
           yield* session.note(service.serviceArn);
 
@@ -493,7 +506,8 @@ export const ServiceProvider = () =>
           yield* session.note(output.serviceArn);
           return {
             ...output,
-            taskDefinitionArn: service?.taskDefinition ?? output.taskDefinitionArn,
+            taskDefinitionArn:
+              service?.taskDefinition ?? output.taskDefinitionArn,
             status: service?.status ?? output.status,
           };
         }),
@@ -542,7 +556,10 @@ export const ServiceProvider = () =>
                 LoadBalancerArn: output.loadBalancerArn,
               })
               .pipe(
-                Effect.catchTag("LoadBalancerNotFoundException", () => Effect.void),
+                Effect.catchTag(
+                  "LoadBalancerNotFoundException",
+                  () => Effect.void,
+                ),
               );
           }
         }),

@@ -83,7 +83,12 @@ export const RepositoryProvider = () =>
             });
 
       return {
-        stables: ["repositoryArn", "repositoryName", "repositoryUri", "registryId"],
+        stables: [
+          "repositoryArn",
+          "repositoryName",
+          "repositoryUri",
+          "registryId",
+        ],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (
             (yield* toRepositoryName(id, olds ?? {})) !==
@@ -134,7 +139,10 @@ export const RepositoryProvider = () =>
               imageScanningConfiguration: news.scanOnPush
                 ? { scanOnPush: true }
                 : undefined,
-              tags: Object.entries(tags).map(([Key, Value]) => ({ Key, Value })),
+              tags: Object.entries(tags).map(([Key, Value]) => ({
+                Key,
+                Value,
+              })),
             })
             .pipe(
               Effect.catchTag("RepositoryAlreadyExistsException", () =>
@@ -145,7 +153,9 @@ export const RepositoryProvider = () =>
                   const repo = existing.repositories?.[0];
                   if (!repo?.repositoryArn) {
                     return yield* Effect.fail(
-                      new Error(`Repository '${repositoryName}' already exists`),
+                      new Error(
+                        `Repository '${repositoryName}' already exists`,
+                      ),
                     );
                   }
                   const listedTags = yield* ecr.listTagsForResource({
@@ -221,7 +231,8 @@ export const RepositoryProvider = () =>
           yield* session.note(output.repositoryArn);
           return {
             ...output,
-            imageTagMutability: news.imageTagMutability ?? output.imageTagMutability,
+            imageTagMutability:
+              news.imageTagMutability ?? output.imageTagMutability,
             lifecyclePolicyText: news.lifecyclePolicyText,
             tags: newTags,
           };

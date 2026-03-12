@@ -45,15 +45,17 @@ export const GetRandomPasswordPolicyLive =
   GetRandomPasswordPolicy.layer.succeed(
     Effect.fn(function* (host) {
       if (isFunction(host)) {
-        yield* host.bind`Allow(${host}, AWS.SecretsManager.GetRandomPassword())`({
-          policyStatements: [
-            {
-              Effect: "Allow",
-              Action: ["secretsmanager:GetRandomPassword"],
-              Resource: ["*"],
-            },
-          ],
-        });
+        yield* host.bind`Allow(${host}, AWS.SecretsManager.GetRandomPassword())`(
+          {
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["secretsmanager:GetRandomPassword"],
+                Resource: ["*"],
+              },
+            ],
+          },
+        );
       } else {
         return yield* Effect.die(
           `GetRandomPasswordPolicy does not support runtime '${host.Type}'`,

@@ -1,9 +1,5 @@
 import * as AWS from "@/AWS";
-import {
-  AccessKey,
-  LoginProfile,
-  User,
-} from "@/AWS/IAM";
+import { AccessKey, LoginProfile, User } from "@/AWS/IAM";
 import { destroy } from "@/Destroy";
 import { test } from "@/Test/Vitest";
 import * as IAM from "@distilled.cloud/aws/iam";
@@ -62,5 +58,4 @@ describe("AWS.IAM sensitive resources", () => {
       yield* destroy();
     }).pipe(Effect.provide(AWS.providers())),
   );
-
 });

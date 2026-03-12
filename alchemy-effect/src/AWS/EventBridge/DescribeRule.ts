@@ -5,8 +5,10 @@ import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Rule } from "./Rule.ts";
 
-export interface DescribeRuleRequest
-  extends Omit<eventbridge.DescribeRuleRequest, "Name" | "EventBusName"> {}
+export interface DescribeRuleRequest extends Omit<
+  eventbridge.DescribeRuleRequest,
+  "Name" | "EventBusName"
+> {}
 
 export class DescribeRule extends Binding.Service<
   DescribeRule,
@@ -38,8 +40,7 @@ export const DescribeRuleLive = Layer.effect(
         return yield* describeRule({
           ...request,
           Name: name,
-          EventBusName:
-            eventBusName !== "default" ? eventBusName : undefined,
+          EventBusName: eventBusName !== "default" ? eventBusName : undefined,
         });
       });
     });

@@ -17,8 +17,9 @@ export type TaggableResource =
   | InsightRule
   | AlarmMuteRule;
 
-export const sortAlarmResources = (alarms: [AlarmResource, ...AlarmResource[]]) =>
-  sortByLogicalId(alarms) as [AlarmResource, ...AlarmResource[]];
+export const sortAlarmResources = (
+  alarms: [AlarmResource, ...AlarmResource[]],
+) => sortByLogicalId(alarms) as [AlarmResource, ...AlarmResource[]];
 
 export const sortInsightRuleResources = (
   rules: [InsightRuleResource, ...InsightRuleResource[]],

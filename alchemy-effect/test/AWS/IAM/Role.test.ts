@@ -83,7 +83,9 @@ test(
       RoleName: role.roleName,
     });
     expect(
-      Object.fromEntries((updatedTags.Tags ?? []).map((tag) => [tag.Key, tag.Value])),
+      Object.fromEntries(
+        (updatedTags.Tags ?? []).map((tag) => [tag.Key, tag.Value]),
+      ),
     ).toMatchObject({
       env: "prod",
     });
@@ -92,9 +94,7 @@ test(
 
     const deleted = yield* IAM.getRole({
       RoleName: role.roleName,
-    }).pipe(
-      Effect.option,
-    );
+    }).pipe(Effect.option);
     expect(deleted._tag).toBe("None");
   }).pipe(Effect.provide(AWS.providers())),
 );

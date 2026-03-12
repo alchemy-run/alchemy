@@ -29,7 +29,8 @@ describe("AWS.IAM device and server certificate resources", () => {
         ServerCertificateName: certificate.serverCertificateName,
       });
       expect(
-        created.ServerCertificate.ServerCertificateMetadata.ServerCertificateName,
+        created.ServerCertificate.ServerCertificateMetadata
+          .ServerCertificateName,
       ).toBe(certificate.serverCertificateName);
 
       yield* test.deploy(
@@ -48,7 +49,9 @@ describe("AWS.IAM device and server certificate resources", () => {
         ServerCertificateName: certificate.serverCertificateName,
       });
       expect(
-        Object.fromEntries((updatedTags.Tags ?? []).map((tag) => [tag.Key, tag.Value])),
+        Object.fromEntries(
+          (updatedTags.Tags ?? []).map((tag) => [tag.Key, tag.Value]),
+        ),
       ).toMatchObject({
         env: "prod",
       });
@@ -103,7 +106,9 @@ describe("AWS.IAM device and server certificate resources", () => {
         SerialNumber: device.serialNumber,
       });
       expect(
-        Object.fromEntries((updatedTags.Tags ?? []).map((tag) => [tag.Key, tag.Value])),
+        Object.fromEntries(
+          (updatedTags.Tags ?? []).map((tag) => [tag.Key, tag.Value]),
+        ),
       ).toMatchObject({
         env: "prod",
       });

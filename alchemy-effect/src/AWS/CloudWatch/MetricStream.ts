@@ -60,7 +60,9 @@ export interface MetricStream extends Resource<
  * });
  * ```
  */
-export const MetricStream = Resource<MetricStream>("AWS.CloudWatch.MetricStream");
+export const MetricStream = Resource<MetricStream>(
+  "AWS.CloudWatch.MetricStream",
+);
 
 export const MetricStreamProvider = () =>
   MetricStream.provider.effect(
@@ -95,8 +97,12 @@ export const MetricStreamProvider = () =>
         }
 
         const tags = yield* readResourceTags(output.Arn).pipe(
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed({})),
-          Effect.catchTag("InvalidParameterValueException", () => Effect.succeed({})),
+          Effect.catchTag("ResourceNotFoundException", () =>
+            Effect.succeed({}),
+          ),
+          Effect.catchTag("InvalidParameterValueException", () =>
+            Effect.succeed({}),
+          ),
         );
 
         return {
@@ -152,7 +158,12 @@ export const MetricStreamProvider = () =>
           const existing = yield* readMetricStream(name);
 
           if (existing) {
-            yield* ensureOwnedByAlchemy(id, name, existing.tags, "metric stream");
+            yield* ensureOwnedByAlchemy(
+              id,
+              name,
+              existing.tags,
+              "metric stream",
+            );
           }
 
           yield* retryConcurrent(
@@ -233,7 +244,10 @@ export const MetricStreamProvider = () =>
               Name: output.metricStreamName,
             }),
           ).pipe(
-            Effect.catchTag("InvalidParameterValueException", () => Effect.void),
+            Effect.catchTag(
+              "InvalidParameterValueException",
+              () => Effect.void,
+            ),
           );
         }),
       };

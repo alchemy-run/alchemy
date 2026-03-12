@@ -5,8 +5,10 @@ import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Stream } from "./Stream.ts";
 
-export interface DescribeStreamRequest
-  extends Omit<Kinesis.DescribeStreamInput, "StreamName" | "StreamARN"> {}
+export interface DescribeStreamRequest extends Omit<
+  Kinesis.DescribeStreamInput,
+  "StreamName" | "StreamARN"
+> {}
 
 export class DescribeStream extends Binding.Service<
   DescribeStream,
@@ -15,7 +17,10 @@ export class DescribeStream extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: DescribeStreamRequest,
-    ) => Effect.Effect<Kinesis.DescribeStreamOutput, Kinesis.DescribeStreamError>
+    ) => Effect.Effect<
+      Kinesis.DescribeStreamOutput,
+      Kinesis.DescribeStreamError
+    >
   >
 >()("AWS.Kinesis.DescribeStream") {}
 

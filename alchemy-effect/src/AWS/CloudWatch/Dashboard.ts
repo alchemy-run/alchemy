@@ -12,7 +12,8 @@ import {
 } from "./common.ts";
 
 export type DashboardName = string;
-export type DashboardArn = `arn:aws:cloudwatch::${AccountID}:dashboard/${string}`;
+export type DashboardArn =
+  `arn:aws:cloudwatch::${AccountID}:dashboard/${string}`;
 
 export type DashboardPeriodOverride = "inherit" | "auto";
 export type DashboardMetricRow = (string | number | boolean | null)[];

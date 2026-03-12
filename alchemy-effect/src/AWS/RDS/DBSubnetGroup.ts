@@ -49,8 +49,9 @@ const toTagRecord = (
 ): Record<string, string> =>
   Object.fromEntries(
     (tags ?? [])
-      .filter((tag): tag is { Key: string; Value: string } =>
-        typeof tag.Key === "string" && typeof tag.Value === "string",
+      .filter(
+        (tag): tag is { Key: string; Value: string } =>
+          typeof tag.Key === "string" && typeof tag.Value === "string",
       )
       .map((tag) => [tag.Key, tag.Value]),
   );
@@ -79,14 +80,19 @@ export const DBSubnetGroupProvider = () =>
       return {
         stables: ["dbSubnetGroupArn", "dbSubnetGroupName", "vpcId"],
         diff: Effect.fn(function* ({ id, olds, news }) {
-          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
+          if (
+            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
+          ) {
             return { action: "replace" } as const;
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =
             output?.dbSubnetGroupName ??
-            (yield* toName(id, olds ?? ({ subnetIds: [] } as DBSubnetGroupProps)));
+            (yield* toName(
+              id,
+              olds ?? ({ subnetIds: [] } as DBSubnetGroupProps),
+            ));
           const group = yield* readGroup(name);
           if (!group?.DBSubnetGroupName) {
             return undefined;
@@ -117,7 +123,10 @@ export const DBSubnetGroupProvider = () =>
               DBSubnetGroupDescription:
                 news.description ?? "Managed by Alchemy",
               SubnetIds: news.subnetIds,
-              Tags: Object.entries(tags).map(([Key, Value]) => ({ Key, Value })),
+              Tags: Object.entries(tags).map(([Key, Value]) => ({
+                Key,
+                Value,
+              })),
             })
             .pipe(
               Effect.catchTag("DBSubnetGroupAlreadyExistsFault", () =>
@@ -133,7 +142,9 @@ export const DBSubnetGroupProvider = () =>
               : (created as rds.DBSubnetGroupMessage).DBSubnetGroups?.[0];
           if (!group?.DBSubnetGroupName) {
             return yield* Effect.fail(
-              new Error(`Failed to create DB subnet group '${dbSubnetGroupName}'`),
+              new Error(
+                `Failed to create DB subnet group '${dbSubnetGroupName}'`,
+              ),
             );
           }
 
@@ -151,8 +162,7 @@ export const DBSubnetGroupProvider = () =>
         update: Effect.fn(function* ({ id, news, olds, output, session }) {
           yield* rds.modifyDBSubnetGroup({
             DBSubnetGroupName: output.dbSubnetGroupName,
-            DBSubnetGroupDescription:
-              news.description ?? "Managed by Alchemy",
+            DBSubnetGroupDescription: news.description ?? "Managed by Alchemy",
             SubnetIds: news.subnetIds,
           });
 
@@ -179,10 +189,13 @@ export const DBSubnetGroupProvider = () =>
           }
 
           const group = yield* readGroup(output.dbSubnetGroupName);
-          yield* session.note(output.dbSubnetGroupArn ?? output.dbSubnetGroupName);
+          yield* session.note(
+            output.dbSubnetGroupArn ?? output.dbSubnetGroupName,
+          );
           return {
             dbSubnetGroupName: output.dbSubnetGroupName,
-            dbSubnetGroupArn: group?.DBSubnetGroupArn ?? output.dbSubnetGroupArn,
+            dbSubnetGroupArn:
+              group?.DBSubnetGroupArn ?? output.dbSubnetGroupArn,
             vpcId: group?.VpcId ?? output.vpcId,
             subnetIds: news.subnetIds,
             status: group?.SubnetGroupStatus ?? output.status,

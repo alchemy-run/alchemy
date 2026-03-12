@@ -295,7 +295,10 @@ function classifyOperation(
   }
 
   if (serviceName === "kinesis") {
-    if (name === "registerStreamConsumer" || name === "deregisterStreamConsumer") {
+    if (
+      name === "registerStreamConsumer" ||
+      name === "deregisterStreamConsumer"
+    ) {
       return {
         category: "resource-lifecycle",
         resourceArity: 1,
@@ -584,13 +587,14 @@ function classifyOperation(
       };
     }
 
-    if (["listSchedules", "listScheduleGroups", "listTagsForResource"].includes(name)) {
+    if (
+      ["listSchedules", "listScheduleGroups", "listTagsForResource"].includes(
+        name,
+      )
+    ) {
       return {
         category: "binding",
-        resourceArity:
-          name === "listTagsForResource"
-            ? 1
-            : 0,
+        resourceArity: name === "listTagsForResource" ? 1 : 0,
         impliesResource: false,
         impliesEventSource: false,
       };
@@ -848,10 +852,9 @@ function inferCanonicalResources(
       let resourceName: string | undefined;
 
       if (
-        [
-          "registerStreamConsumer",
-          "deregisterStreamConsumer",
-        ].includes(op.camelCase)
+        ["registerStreamConsumer", "deregisterStreamConsumer"].includes(
+          op.camelCase,
+        )
       ) {
         resourceName = "StreamConsumer";
       } else if (["putRule", "deleteRule"].includes(op.camelCase)) {
@@ -888,12 +891,17 @@ function inferCanonicalResources(
       // Extract resource name from operation like createTable -> Table
       const match =
         resourceName === undefined
-          ? op.camelCase.match(/^(create|delete|update|describe)([A-Z][a-zA-Z]+)/)
+          ? op.camelCase.match(
+              /^(create|delete|update|describe)([A-Z][a-zA-Z]+)/,
+            )
           : undefined;
       if (resourceName || match) {
         const resolvedResourceName = resourceName ?? match![2];
         if (!resourceMap.has(resolvedResourceName)) {
-          resourceMap.set(resolvedResourceName, { operations: [], bindings: [] });
+          resourceMap.set(resolvedResourceName, {
+            operations: [],
+            bindings: [],
+          });
         }
         resourceMap.get(resolvedResourceName)!.operations.push(op.camelCase);
       }

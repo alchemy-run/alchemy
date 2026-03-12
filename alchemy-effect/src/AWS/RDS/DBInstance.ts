@@ -91,8 +91,9 @@ const toTagRecord = (
 ): Record<string, string> =>
   Object.fromEntries(
     (tags ?? [])
-      .filter((tag): tag is { Key: string; Value: string } =>
-        typeof tag.Key === "string" && typeof tag.Value === "string",
+      .filter(
+        (tag): tag is { Key: string; Value: string } =>
+          typeof tag.Key === "string" && typeof tag.Value === "string",
       )
       .map((tag) => [tag.Key, tag.Value]),
   );
@@ -170,7 +171,10 @@ export const DBInstanceProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const identifier =
             output?.dbInstanceIdentifier ??
-            (yield* toIdentifier(id, olds ?? ({ dbInstanceClass: "", engine: "" })));
+            (yield* toIdentifier(
+              id,
+              olds ?? { dbInstanceClass: "", engine: "" },
+            ));
           const instance = yield* readInstance(identifier);
           if (!instance?.DBInstanceArn) {
             return undefined;
@@ -197,10 +201,16 @@ export const DBInstanceProvider = () =>
               PromotionTier: news.promotionTier,
               AutoMinorVersionUpgrade: news.autoMinorVersionUpgrade,
               CopyTagsToSnapshot: news.copyTagsToSnapshot,
-              Tags: Object.entries(tags).map(([Key, Value]) => ({ Key, Value })),
+              Tags: Object.entries(tags).map(([Key, Value]) => ({
+                Key,
+                Value,
+              })),
             })
             .pipe(
-              Effect.catchTag("DBInstanceAlreadyExistsFault", () => Effect.void),
+              Effect.catchTag(
+                "DBInstanceAlreadyExistsFault",
+                () => Effect.void,
+              ),
             );
 
           const instance = yield* waitForInstance(identifier);

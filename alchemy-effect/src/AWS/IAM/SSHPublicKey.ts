@@ -74,7 +74,9 @@ export const SSHPublicKeyProvider = () =>
           Encoding: "SSH",
         })
         .pipe(
-          Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NoSuchEntityException", () =>
+            Effect.succeed(undefined),
+          ),
         );
       if (!response?.SSHPublicKey?.SSHPublicKeyId) {
         return undefined;

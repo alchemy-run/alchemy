@@ -3,7 +3,12 @@ import * as Effect from "effect/Effect";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
-import { createInternalTags, createTagsList, diffTags, hasTags } from "../../Tags.ts";
+import {
+  createInternalTags,
+  createTagsList,
+  diffTags,
+  hasTags,
+} from "../../Tags.ts";
 
 export interface ScheduleProps {
   /**
@@ -115,8 +120,12 @@ export const ScheduleProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const scheduleName = output?.scheduleName ?? (yield* toName(id, olds));
-          const groupName = output?.groupName ?? (olds.groupName as string | undefined) ?? "default";
+          const scheduleName =
+            output?.scheduleName ?? (yield* toName(id, olds));
+          const groupName =
+            output?.groupName ??
+            (olds.groupName as string | undefined) ??
+            "default";
           const described = yield* scheduler
             .getSchedule({
               Name: scheduleName,
@@ -159,11 +168,11 @@ export const ScheduleProvider = () =>
               State: news.state,
               KmsKeyArn: news.kmsKeyArn as string | undefined,
               Target: news.target as scheduler.Target,
-              FlexibleTimeWindow:
-                (news.flexibleTimeWindow as scheduler.FlexibleTimeWindow | undefined) ??
-                {
-                  Mode: "OFF",
-                },
+              FlexibleTimeWindow: (news.flexibleTimeWindow as
+                | scheduler.FlexibleTimeWindow
+                | undefined) ?? {
+                Mode: "OFF",
+              },
               ActionAfterCompletion: news.actionAfterCompletion,
             })
             .pipe(
@@ -176,20 +185,22 @@ export const ScheduleProvider = () =>
                   .pipe(
                     Effect.flatMap((existing) =>
                       existing.Arn
-                        ? scheduler.listTagsForResource({
-                            ResourceArn: existing.Arn,
-                          }).pipe(
-                            Effect.filterOrFail(
-                              ({ Tags }) => hasTags(tags, Tags),
-                              () =>
-                                new Error(
-                                  `Schedule '${scheduleName}' already exists and is not managed by alchemy`,
-                                ),
-                            ),
-                            Effect.as({
-                              ScheduleArn: existing.Arn,
-                            }),
-                          )
+                        ? scheduler
+                            .listTagsForResource({
+                              ResourceArn: existing.Arn,
+                            })
+                            .pipe(
+                              Effect.filterOrFail(
+                                ({ Tags }) => hasTags(tags, Tags),
+                                () =>
+                                  new Error(
+                                    `Schedule '${scheduleName}' already exists and is not managed by alchemy`,
+                                  ),
+                              ),
+                              Effect.as({
+                                ScheduleArn: existing.Arn,
+                              }),
+                            )
                         : Effect.fail(
                             new Error(
                               `Schedule '${scheduleName}' already exists but could not be described`,
@@ -219,7 +230,8 @@ export const ScheduleProvider = () =>
         update: Effect.fn(function* ({ id, olds, news, output, session }) {
           yield* scheduler.updateSchedule({
             Name: output.scheduleName,
-            GroupName: output.groupName !== "default" ? output.groupName : undefined,
+            GroupName:
+              output.groupName !== "default" ? output.groupName : undefined,
             ScheduleExpression: news.scheduleExpression,
             StartDate: news.startDate,
             EndDate: news.endDate,
@@ -228,11 +240,11 @@ export const ScheduleProvider = () =>
             State: news.state,
             KmsKeyArn: news.kmsKeyArn as string | undefined,
             Target: news.target as scheduler.Target,
-            FlexibleTimeWindow:
-              (news.flexibleTimeWindow as scheduler.FlexibleTimeWindow | undefined) ??
-              {
-                Mode: "OFF",
-              },
+            FlexibleTimeWindow: (news.flexibleTimeWindow as
+              | scheduler.FlexibleTimeWindow
+              | undefined) ?? {
+              Mode: "OFF",
+            },
             ActionAfterCompletion: news.actionAfterCompletion,
           });
 
@@ -270,7 +282,8 @@ export const ScheduleProvider = () =>
           yield* scheduler
             .deleteSchedule({
               Name: output.scheduleName,
-              GroupName: output.groupName !== "default" ? output.groupName : undefined,
+              GroupName:
+                output.groupName !== "default" ? output.groupName : undefined,
             })
             .pipe(
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),

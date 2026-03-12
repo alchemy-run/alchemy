@@ -41,8 +41,7 @@ export type {
 
 export type RuleName = string;
 
-export type RuleArn =
-  `arn:aws:events:${RegionID}:${AccountID}:rule/${string}`;
+export type RuleArn = `arn:aws:events:${RegionID}:${AccountID}:rule/${string}`;
 
 export interface RuleTarget {
   /** Unique identifier for this target within the rule. */
@@ -296,12 +295,15 @@ export const RuleProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const ruleName = output?.ruleName ?? (yield* createRuleName(id, olds));
-          const eventBusName = output?.eventBusName ?? olds.eventBusName ?? "default";
+          const ruleName =
+            output?.ruleName ?? (yield* createRuleName(id, olds));
+          const eventBusName =
+            output?.eventBusName ?? olds.eventBusName ?? "default";
           const described = yield* eventbridge
             .describeRule({
               Name: ruleName,
-              EventBusName: eventBusName !== "default" ? eventBusName : undefined,
+              EventBusName:
+                eventBusName !== "default" ? eventBusName : undefined,
             })
             .pipe(
               Effect.catchTag("ResourceNotFoundException", () =>
@@ -340,7 +342,8 @@ export const RuleProvider = () =>
           const existing = yield* eventbridge
             .describeRule({
               Name: ruleName,
-              EventBusName: eventBusName !== "default" ? eventBusName : undefined,
+              EventBusName:
+                eventBusName !== "default" ? eventBusName : undefined,
             })
             .pipe(
               Effect.catchTag("ResourceNotFoundException", () =>

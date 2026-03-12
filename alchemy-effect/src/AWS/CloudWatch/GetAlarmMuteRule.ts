@@ -5,8 +5,10 @@ import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { AlarmMuteRule } from "./AlarmMuteRule.ts";
 
-export interface GetAlarmMuteRuleRequest
-  extends Omit<cloudwatch.GetAlarmMuteRuleInput, "AlarmMuteRuleName"> {}
+export interface GetAlarmMuteRuleRequest extends Omit<
+  cloudwatch.GetAlarmMuteRuleInput,
+  "AlarmMuteRuleName"
+> {}
 
 /**
  * Runtime binding for `cloudwatch:GetAlarmMuteRule`.
@@ -50,25 +52,24 @@ export class GetAlarmMuteRulePolicy extends Binding.Policy<
   (rule: AlarmMuteRule) => Effect.Effect<void>
 >()("AWS.CloudWatch.GetAlarmMuteRule") {}
 
-export const GetAlarmMuteRulePolicyLive =
-  GetAlarmMuteRulePolicy.layer.succeed(
-    Effect.fn(function* (host, rule) {
-      if (isFunction(host)) {
-        yield* host.bind`Allow(${host}, AWS.CloudWatch.GetAlarmMuteRule(${rule}))`(
-          {
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: ["cloudwatch:GetAlarmMuteRule"],
-                Resource: [rule.alarmMuteRuleArn],
-              },
-            ],
-          },
-        );
-      } else {
-        return yield* Effect.die(
-          `GetAlarmMuteRulePolicy does not support runtime '${host.Type}'`,
-        );
-      }
-    }),
-  );
+export const GetAlarmMuteRulePolicyLive = GetAlarmMuteRulePolicy.layer.succeed(
+  Effect.fn(function* (host, rule) {
+    if (isFunction(host)) {
+      yield* host.bind`Allow(${host}, AWS.CloudWatch.GetAlarmMuteRule(${rule}))`(
+        {
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["cloudwatch:GetAlarmMuteRule"],
+              Resource: [rule.alarmMuteRuleArn],
+            },
+          ],
+        },
+      );
+    } else {
+      return yield* Effect.die(
+        `GetAlarmMuteRulePolicy does not support runtime '${host.Type}'`,
+      );
+    }
+  }),
+);
