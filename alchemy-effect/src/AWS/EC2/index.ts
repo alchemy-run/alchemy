@@ -1,10 +1,21 @@
 export {
+  amazonLinux,
+  amazonLinux2,
+  amazonLinux2023,
+  image,
+  ubuntu2204,
+  ubuntu2404,
+} from "./Image.ts";
+export {
   EgressOnlyInternetGateway,
   EgressOnlyInternetGatewayProvider,
 } from "./EgressOnlyInternetGateway.ts";
 export { EIP, EIPProvider } from "./EIP.ts";
+export { HttpServer } from "./HttpServer.ts";
+export { Instance, InstanceProvider } from "./Instance.ts";
 export { InternetGateway, InternetGatewayProvider } from "./InternetGateway.ts";
 export { NatGateway, NatGatewayProvider } from "./NatGateway.ts";
+export { Network } from "./Network.ts";
 export { NetworkAcl, NetworkAclProvider } from "./NetworkAcl.ts";
 export {
   NetworkAclAssociation,
