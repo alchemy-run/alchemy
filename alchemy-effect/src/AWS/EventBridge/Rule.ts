@@ -1,5 +1,5 @@
-import { Region } from "distilled-aws/Region";
-import * as eventbridge from "distilled-aws/eventbridge";
+import { Region } from "@distilled.cloud/aws/Region";
+import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as Effect from "effect/Effect";
 
 import type { Input } from "../../Input.ts";
@@ -32,7 +32,7 @@ export type {
   SageMakerPipelineParameter,
   SageMakerPipelineParameters,
   SqsParameters,
-} from "distilled-aws/eventbridge";
+} from "@distilled.cloud/aws/eventbridge";
 
 export type RuleName = string;
 

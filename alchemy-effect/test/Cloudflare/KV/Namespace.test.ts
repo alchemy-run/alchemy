@@ -1,10 +1,10 @@
+import * as Cloudflare from "@/Cloudflare";
 import { Account } from "@/Cloudflare/Account";
 import * as KV from "@/Cloudflare/KV/index";
-import * as Cloudflare from "@/Cloudflare";
 import { destroy } from "@/Destroy";
 import { test } from "@/Test/Vitest";
+import * as kv from "@distilled.cloud/cloudflare/kv";
 import { expect } from "@effect/vitest";
-import * as kv from "distilled-cloudflare/kv";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";

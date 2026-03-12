@@ -1,7 +1,7 @@
 import type {
   AttributeValue,
   ScalarAttributeType,
-} from "distilled-aws/dynamodb";
+} from "@distilled.cloud/aws/dynamodb";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as S from "effect/Schema";

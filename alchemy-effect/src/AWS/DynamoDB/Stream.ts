@@ -1,4 +1,4 @@
-import type * as DynamoDB from "distilled-aws/dynamodb";
+import type * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import * as Binding from "../../Binding.ts";

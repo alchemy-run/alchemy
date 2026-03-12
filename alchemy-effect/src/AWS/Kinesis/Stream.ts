@@ -1,9 +1,9 @@
-// required to avoid this error in consumers: "The inferred type of 'Messages' cannot be named without a reference to '../../distilled-aws/node_modules/@types/aws-lambda'. This is likely not portable. A type annotation is necessary.ts(2742)"
+// required to avoid this error in consumers: "The inferred type of 'Messages' cannot be named without a reference to '../../@distilled.cloud/aws/node_modules/@types/aws-lambda'. This is likely not portable. A type annotation is necessary.ts(2742)"
 export type * as lambda from "aws-lambda";
 
+import { Region } from "@distilled.cloud/aws/Region";
+import * as kinesis from "@distilled.cloud/aws/kinesis";
 import type * as lambda from "aws-lambda";
-import { Region } from "distilled-aws/Region";
-import * as kinesis from "distilled-aws/kinesis";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { createPhysicalName } from "../../PhysicalName.ts";

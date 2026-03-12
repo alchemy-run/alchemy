@@ -1,4 +1,4 @@
-import * as Lambda from "distilled-aws/lambda";
+import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";

@@ -1,10 +1,10 @@
-import type * as lambda from "distilled-aws/lambda";
-import * as Lambda from "distilled-aws/lambda";
+import type * as lambda from "@distilled.cloud/aws/lambda";
+import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as Effect from "effect/Effect";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 
-export type { FunctionUrlAuthType } from "distilled-aws/lambda";
+export type { FunctionUrlAuthType } from "@distilled.cloud/aws/lambda";
 
 export interface PermissionProps {
   /**

@@ -1,4 +1,4 @@
-import * as Auth from "distilled-cloudflare/Auth";
+import * as Auth from "@distilled.cloud/cloudflare/Auth";
 import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";

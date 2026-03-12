@@ -1,5 +1,5 @@
-import * as lambda from "distilled-aws/lambda";
-import { Region } from "distilled-aws/Region";
+import * as lambda from "@distilled.cloud/aws/lambda";
+import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";

@@ -1,6 +1,6 @@
-import type * as EC2 from "distilled-aws/ec2";
-import * as ec2 from "distilled-aws/ec2";
-import { Region } from "distilled-aws/Region";
+import type * as EC2 from "@distilled.cloud/aws/ec2";
+import * as ec2 from "@distilled.cloud/aws/ec2";
+import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

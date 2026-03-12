@@ -1,5 +1,5 @@
-import { Region } from "distilled-aws/Region";
-import * as eventbridge from "distilled-aws/eventbridge";
+import { Region } from "@distilled.cloud/aws/Region";
+import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as Effect from "effect/Effect";
 
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -17,7 +17,7 @@ export type {
   IncludeDetail,
   Level,
   LogConfig,
-} from "distilled-aws/eventbridge";
+} from "@distilled.cloud/aws/eventbridge";
 
 export type EventBusName = string;
 export type EventBusArn =

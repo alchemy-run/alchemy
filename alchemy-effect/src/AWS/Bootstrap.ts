@@ -1,6 +1,6 @@
-import { Region } from "distilled-aws/Region";
-import type { BucketLocationConstraint } from "distilled-aws/s3";
-import * as s3 from "distilled-aws/s3";
+import { Region } from "@distilled.cloud/aws/Region";
+import type { BucketLocationConstraint } from "@distilled.cloud/aws/s3";
+import * as s3 from "@distilled.cloud/aws/s3";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { base32 } from "..//Util/base32.ts";

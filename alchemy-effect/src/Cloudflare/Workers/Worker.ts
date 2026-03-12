@@ -1,6 +1,6 @@
 import type * as cf from "@cloudflare/workers-types";
+import * as workers from "@distilled.cloud/cloudflare/workers";
 import type { Workers } from "cloudflare/resources";
-import * as workers from "distilled-cloudflare/workers";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -502,7 +502,7 @@ ${props.exports?.map((id) => `export class ${id} {}`).join("\n") ?? ""}
         return {
           workerId: worker.id ?? name,
           workerName: name,
-          logpush: worker.logpush,
+          logpush: worker.logpush ?? undefined,
           url:
             news.subdomain?.enabled !== false
               ? `https://${name}.${yield* getAccountSubdomain(accountId)}.workers.dev`

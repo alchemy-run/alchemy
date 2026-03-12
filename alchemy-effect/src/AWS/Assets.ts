@@ -1,6 +1,6 @@
-import type { Credentials } from "distilled-aws/Credentials";
-import { Region } from "distilled-aws/Region";
-import * as s3 from "distilled-aws/s3";
+import type { Credentials } from "@distilled.cloud/aws/Credentials";
+import { Region } from "@distilled.cloud/aws/Region";
+import * as s3 from "@distilled.cloud/aws/s3";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";

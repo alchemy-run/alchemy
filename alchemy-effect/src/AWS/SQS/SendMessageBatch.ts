@@ -1,4 +1,4 @@
-import * as sqs from "distilled-aws/sqs";
+import * as sqs from "@distilled.cloud/aws/sqs";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";

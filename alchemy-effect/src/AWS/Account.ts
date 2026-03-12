@@ -1,5 +1,5 @@
-import * as Auth from "distilled-aws/Auth";
-import * as STS from "distilled-aws/sts";
+import * as Auth from "@distilled.cloud/aws/Auth";
+import * as STS from "@distilled.cloud/aws/sts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

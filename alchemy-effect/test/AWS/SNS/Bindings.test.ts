@@ -1,7 +1,7 @@
 import { destroy } from "@/Destroy";
 import { afterAll, beforeAll, test } from "@/Test/Vitest";
+import * as SQS from "@distilled.cloud/aws/sqs";
 import { expect } from "@effect/vitest";
-import * as SQS from "distilled-aws/sqs";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

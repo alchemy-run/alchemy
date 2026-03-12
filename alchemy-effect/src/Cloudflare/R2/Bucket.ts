@@ -1,4 +1,4 @@
-import * as r2 from "distilled-cloudflare/r2";
+import * as r2 from "@distilled.cloud/cloudflare/r2";
 import * as Effect from "effect/Effect";
 
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -68,7 +68,7 @@ export const BucketProvider = () =>
         });
 
       const normalizeLocation = (
-        location: string | undefined,
+        location: string | undefined | null,
       ): Bucket.Location | undefined => {
         if (!location) return undefined;
         return location.toLowerCase() as Bucket.Location;

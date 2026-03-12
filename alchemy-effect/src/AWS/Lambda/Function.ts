@@ -1,9 +1,9 @@
+import type { Credentials } from "@distilled.cloud/aws/Credentials";
+import * as iam from "@distilled.cloud/aws/iam";
+import type { CreateFunctionRequest } from "@distilled.cloud/aws/lambda";
+import * as Lambda from "@distilled.cloud/aws/lambda";
+import { Region } from "@distilled.cloud/aws/Region";
 import type * as lambda from "aws-lambda";
-import type { Credentials } from "distilled-aws/Credentials";
-import * as iam from "distilled-aws/iam";
-import type { CreateFunctionRequest } from "distilled-aws/lambda";
-import * as Lambda from "distilled-aws/lambda";
-import { Region } from "distilled-aws/Region";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -342,12 +342,12 @@ import { NodeServices } from "@effect/platform-node";
 import { Stack } from "alchemy-effect/Stack";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
-import * as Credentials from "distilled-aws/Credentials";
+import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
-import * as Region from "distilled-aws/Region";
+import * as Region from "@distilled.cloud/aws/Region";
 
 import { ${handler} as handler } from "${file}";
 

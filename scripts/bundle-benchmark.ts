@@ -581,11 +581,11 @@ async function main() {
     ),
     buildMicroEntry(
       "distilled-get-object",
-      'import { getObject } from "distilled-aws/s3";\nconsole.log(getObject);\n',
+      'import { getObject } from "@distilled.cloud/aws/s3";\nconsole.log(getObject);\n',
     ),
     buildMicroEntry(
       "distilled-put-object",
-      'import { putObject } from "distilled-aws/s3";\nconsole.log(putObject);\n',
+      'import { putObject } from "@distilled.cloud/aws/s3";\nconsole.log(putObject);\n',
     ),
   ]);
   printMicroResults(microResults);

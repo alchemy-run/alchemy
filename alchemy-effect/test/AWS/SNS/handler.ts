@@ -29,14 +29,7 @@ export const SNSFixture = Effect.gen(function* () {
       return {
         main,
       } as const satisfies AWS.Lambda.FunctionProps;
-    }).pipe(
-      Effect.provide(
-        Layer.provideMerge(
-          Layer.mergeAll(AWS.Lambda.TopicEventSource, AWS.SQS.QueueSinkLive),
-          Layer.mergeAll(AWS.SQS.SendMessageBatchLive),
-        ),
-      ),
-    ),
+    }),
   );
 
   // create a subscription so we can test the subscription APIs
