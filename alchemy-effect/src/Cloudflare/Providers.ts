@@ -1,4 +1,5 @@
 import * as Auth from "@distilled.cloud/cloudflare/Auth";
+import { BundleLive } from "@distilled.cloud/cloudflare-bundler";
 import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
@@ -57,4 +58,4 @@ export const bindings = () =>
     Workers.DurableObjectPolicyLive,
   );
 
-const utils = () => Layer.mergeAll(esbuild(), AssetsProvider());
+const utils = () => Layer.mergeAll(BundleLive, esbuild(), AssetsProvider());

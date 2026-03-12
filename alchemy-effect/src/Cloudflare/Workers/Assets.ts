@@ -1,3 +1,4 @@
+import { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -6,6 +7,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import * as ServiceMap from "effect/ServiceMap";
+import { HttpClient } from "effect/unstable/http/HttpClient";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { sha256 } from "../../Util/index.ts";
 import { Worker } from "./Worker.ts";
@@ -73,16 +75,28 @@ export class FailedToReadAssetError extends Data.TaggedError(
   cause: PlatformError;
 }> {}
 
+const getContentType = (name: string) => {
+  if (name.endsWith(".html")) return "text/html";
+  if (name.endsWith(".txt")) return "text/plain";
+  if (name.endsWith(".sql")) return "text/sql";
+  if (name.endsWith(".json")) return "application/json";
+  if (name.endsWith(".js") || name.endsWith(".mjs")) {
+    return "application/javascript+module";
+  }
+  if (name.endsWith(".css")) return "text/css";
+  if (name.endsWith(".wasm")) return "application/wasm";
+  return "application/octet-stream";
+};
+
 export const AssetsProvider = () =>
   Layer.effect(
     Assets,
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
+      const httpClient = yield* HttpClient;
 
       const createScriptAssetUpload = yield* workers.createScriptAssetUpload;
-      const createAssetUpload = yield* workers.createAssetUpload;
-
       const maybeReadString = Effect.fnUntraced(function* (file: string) {
         return yield* fs.readFileString(file).pipe(
           Effect.catchIf(
@@ -190,6 +204,10 @@ export const AssetsProvider = () =>
           if (!session.buckets?.length) {
             return { jwt: session.jwt ?? undefined };
           }
+          if (!session.jwt) {
+            return { jwt: undefined };
+          }
+          const uploadJwt = session.jwt;
           let uploaded = 0;
           const total = session.buckets.flat().length;
           yield* note(`Uploaded ${uploaded} of ${total} assets...`);
@@ -202,7 +220,7 @@ export const AssetsProvider = () =>
           yield* Effect.forEach(
             session.buckets,
             Effect.fnUntraced(function* (bucket) {
-              const body: Record<string, string> = {};
+              const body: Record<string, File> = {};
               yield* Effect.forEach(
                 bucket,
                 Effect.fnUntraced(function* (hash) {
@@ -225,14 +243,24 @@ export const AssetsProvider = () =>
                           }),
                       ),
                     );
-                  body[hash] = Buffer.from(file).toString("base64");
+                  body[hash] = new File([Buffer.from(file).toString("base64")], hash, {
+                    type: getContentType(name),
+                  });
                 }),
               );
-              const result = yield* createAssetUpload({
+              const result = yield* workers
+                .createAssetUpload({
                 accountId,
                 base64: true,
                 body,
-              });
+                })
+                .pipe(
+                  Effect.provideService(HttpClient, httpClient),
+                  Effect.provideService(Credentials, {
+                    apiToken: uploadJwt,
+                    apiBaseUrl: "https://api.cloudflare.com/client/v4",
+                  }),
+                );
               uploaded += bucket.length;
               yield* note(`Uploaded ${uploaded} of ${total} assets...`);
               if (result.jwt) {

@@ -28,8 +28,7 @@ test(
 
     const worker = yield* test.deploy(
       Effect.gen(function* () {
-        const bucket = yield* R2.Bucket("Bucket", {
-          name: "test-bucket-worker",
+        yield* R2.Bucket("Bucket", {
           storageClass: "Standard",
         });
 
@@ -95,7 +94,6 @@ test(
       Effect.gen(function* () {
         return yield* Worker.Worker("TestWorkerWithAssets", {
           main,
-          name: "test-worker-with-assets",
           assets: pathe.resolve(import.meta.dirname, "assets"),
           subdomain: { enabled: true, previews_enabled: true },
           compatibility: {
@@ -121,7 +119,6 @@ test(
       Effect.gen(function* () {
         return yield* Worker.Worker("TestWorkerWithAssets", {
           main,
-          name: "test-worker-with-assets",
           assets: pathe.resolve(import.meta.dirname, "assets"),
           subdomain: { enabled: true, previews_enabled: true },
           compatibility: {
@@ -143,7 +140,6 @@ test(
       Effect.gen(function* () {
         return yield* Worker.Worker("TestWorkerWithAssets", {
           main,
-          name: "test-worker-with-assets",
           assets: pathe.resolve(import.meta.dirname, "assets"),
           subdomain: { enabled: true, previews_enabled: true },
           compatibility: {

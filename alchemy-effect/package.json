@@ -160,6 +160,7 @@
     "cloudflare": "catalog:",
     "@distilled.cloud/aws": "catalog:",
     "@distilled.cloud/cloudflare": "catalog:",
+    "@distilled.cloud/cloudflare-bundler": "catalog:",
     "@distilled.cloud/core": "catalog:",
     "esbuild": "catalog:",
     "fast-glob": "^3.3.2",
