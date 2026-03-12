@@ -115,6 +115,11 @@
       "bun": "./src/Output.ts",
       "import": "./lib/Output.js"
     },
+    "./Process": {
+      "types": "./src/Process/index.d.ts",
+      "bun": "./src/Process/index.ts",
+      "import": "./lib/Process/index.js"
+    },
     "./TUI": {
       "types": "./src/TUI/index.d.ts",
       "bun": "./src/TUI/index.ts",
