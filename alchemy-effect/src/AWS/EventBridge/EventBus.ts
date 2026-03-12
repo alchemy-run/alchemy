@@ -12,6 +12,7 @@ import {
 } from "../../Tags.ts";
 import { Account, type AccountID } from "../Account.ts";
 import type { RegionID } from "../Region.ts";
+import type { QueueArn } from "../SQS/Queue.ts";
 
 export type {
   IncludeDetail,
@@ -25,7 +26,7 @@ export type EventBusArn =
 
 export interface EventBusDeadLetterConfig {
   /** ARN of the SQS queue used as the dead-letter queue. */
-  Arn?: EventBusArn;
+  Arn?: QueueArn;
 }
 
 export interface EventBusProps {
@@ -138,6 +139,29 @@ export const EventBusProvider = () =>
           if ((olds.eventSourceName ?? "") !== (news.eventSourceName ?? "")) {
             return { action: "replace" } as const;
           }
+        }),
+        read: Effect.fn(function* ({ id, olds, output }) {
+          const eventBusName =
+            output?.eventBusName ?? (yield* createEventBusName(id, olds ?? {}));
+          const described = yield* eventbridge
+            .describeEventBus({
+              Name: eventBusName,
+            })
+            .pipe(
+              Effect.catchTag("ResourceNotFoundException", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+
+          if (!described?.Arn || !described.Name) {
+            return undefined;
+          }
+
+          return {
+            eventBusName: described.Name,
+            eventBusArn: described.Arn as EventBusArn,
+            description: described.Description,
+          };
         }),
         create: Effect.fn(function* ({ id, news = {}, session }) {
           const eventBusName = yield* createEventBusName(id, news);
