@@ -90,6 +90,20 @@ export interface OperationDoc {
   runtimeLayers: string[];
   supportedHosts: string[];
   requestShapes: ShapeDoc[];
+  usage?: {
+    bindParameters: Array<{
+      name: string;
+      type: string;
+      optional: boolean;
+      rest: boolean;
+    }>;
+    invokeParameters: Array<{
+      name: string;
+      type: string;
+      optional: boolean;
+      rest: boolean;
+    }>;
+  };
 }
 
 export interface ReExportDoc {

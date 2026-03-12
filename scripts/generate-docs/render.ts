@@ -13,7 +13,6 @@ import {
   escapeMarkdown,
   relativeDocLink,
   labelFromDocRelativePath,
-  titleFromRelativePath,
 } from "./utils.ts";
 
 function renderLinks(links: LinkDoc[]) {
@@ -48,12 +47,16 @@ function renderShape(
       )} | ${escapeMarkdown(property.description ?? "-")} |`,
   );
 
-  return [
-    `${level} ${heading}`,
-    shape.description ?? "",
+  const table = [
     "| Property | Type | Flags | Default | Description |",
     "| --- | --- | --- | --- | --- |",
     ...rows,
+  ].join("\n");
+
+  return [
+    `${level} ${heading}`,
+    shape.description ?? "",
+    table,
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -68,9 +71,9 @@ function renderBindingGroup(heading: string, items: BindingClassDoc[]) {
     `### ${heading}`,
     ...items.map((item) =>
       [
-        `#### \`${item.name}\`${item.identifier ? ` as \`${item.identifier}\`` : ""}`,
+        `#### \`${item.name}\``,
+        item.identifier ? `Identifier: \`${item.identifier}\`` : "",
         item.summary ?? "",
-        ["```ts", item.signature, "```"].join("\n"),
       ]
         .filter(Boolean)
         .join("\n\n"),
@@ -142,11 +145,18 @@ function renderCatalog(catalog: DirectoryCatalog) {
   return parts.join("\n");
 }
 
+function isPrimaryReferencePage(fileDoc: FileDoc) {
+  return ["resource", "host", "operation", "event-source"].includes(
+    fileDoc.fileKind,
+  );
+}
+
 export function renderFileDoc(fileDoc: FileDoc) {
   const sourceHref = relativeDocLink(
     fileDoc.outputPath,
     path.join(docsRoot, "..", fileDoc.sourcePath),
   );
+  const primaryReferencePage = isPrimaryReferencePage(fileDoc);
 
   return [
     "<!-- AUTO-GENERATED: DO NOT EDIT. Run `bun run generate:docs`. -->",
@@ -156,10 +166,8 @@ export function renderFileDoc(fileDoc: FileDoc) {
     fileDoc.summary,
     "",
     `- Source: [\`${fileDoc.sourcePath}\`](${sourceHref})`,
-    `- Doc Kind: \`${fileDoc.fileKind}\``,
-    fileDoc.resource ? `- Domain Identifier: \`${fileDoc.resource.resourceType}\`` : "",
-    "",
-    fileDoc.resource
+    renderExamples(fileDoc),
+    fileDoc.resource && !primaryReferencePage
       ? [
           "## Resource Model",
           `- Resource Type: \`${fileDoc.resource.resourceType}\``,
@@ -180,8 +188,8 @@ export function renderFileDoc(fileDoc: FileDoc) {
     renderShape(fileDoc.resource?.binding, "Binding Contract"),
     fileDoc.operation
       ? [
-          `## ${fileDoc.fileKind === "event-source" ? "Binding Model" : "Operation Model"}`,
-          renderBindingGroup("Runtime Services", fileDoc.operation.services),
+          "## Reference",
+          renderBindingGroup("Runtime Bindings", fileDoc.operation.services),
           renderBindingGroup("Deploy-Time Policies", fileDoc.operation.policies),
           fileDoc.operation.runtimeLayers.length > 0
             ? [
@@ -223,12 +231,11 @@ export function renderFileDoc(fileDoc: FileDoc) {
           }),
         ].join("\n")
       : "",
-    renderExamples(fileDoc),
-    renderExports(fileDoc),
-    fileDoc.relatedLinks.length > 0
+    !primaryReferencePage ? renderExports(fileDoc) : "",
+    !primaryReferencePage && fileDoc.relatedLinks.length > 0
       ? ["## Related Files", renderLinks(fileDoc.relatedLinks)].join("\n\n")
       : "",
-    renderCatalog(fileDoc.directoryCatalog),
+    !primaryReferencePage ? renderCatalog(fileDoc.directoryCatalog) : "",
   ]
     .filter((part) => part && part.trim().length > 0)
     .join("\n\n");

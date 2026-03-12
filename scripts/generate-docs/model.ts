@@ -2,8 +2,10 @@ import * as path from "node:path";
 
 import {
   Node,
+  SyntaxKind,
   type ClassDeclaration,
   type InterfaceDeclaration,
+  type ParameterDeclaration,
   type SourceFile,
   type Symbol,
   type TypeAliasDeclaration,
@@ -362,6 +364,53 @@ function getSupportedHosts(sourceFile: SourceFile) {
   return [...hosts].sort();
 }
 
+function parameterToUsage(parameter: ParameterDeclaration) {
+  return {
+    name: parameter.getName(),
+    type: formatTypeText(
+      parameter.getTypeNode()?.getText() ?? parameter.getType().getText(parameter),
+    ),
+    optional: parameter.isOptional(),
+    rest: parameter.isRestParameter(),
+  };
+}
+
+function getOperationUsage(sourceFile: SourceFile, serviceName: string | undefined) {
+  if (!serviceName) {
+    return undefined;
+  }
+
+  const live = sourceFile.getVariableDeclaration(`${serviceName}Live`);
+  const initializer = live?.getInitializer();
+  if (!initializer) {
+    return undefined;
+  }
+
+  const effectFns = initializer
+    .getDescendantsOfKind(SyntaxKind.CallExpression)
+    .filter((call) => call.getExpression().getText() === "Effect.fn");
+
+  const [bindFn, invokeFn] = effectFns.map((call) => {
+    const firstArg = call.getArguments()[0];
+    if (
+      firstArg &&
+      (Node.isFunctionExpression(firstArg) || Node.isArrowFunction(firstArg))
+    ) {
+      return firstArg;
+    }
+    return undefined;
+  });
+
+  if (!bindFn && !invokeFn) {
+    return undefined;
+  }
+
+  return {
+    bindParameters: bindFn?.getParameters().map(parameterToUsage) ?? [],
+    invokeParameters: invokeFn?.getParameters().map(parameterToUsage) ?? [],
+  };
+}
+
 function getOperationDoc(sourceFile: SourceFile): OperationDoc | undefined {
   const services = getBindingServiceClasses(sourceFile).map(bindingDocForClass);
   const policies = getBindingPolicyClasses(sourceFile).map(bindingDocForClass);
@@ -392,6 +441,7 @@ function getOperationDoc(sourceFile: SourceFile): OperationDoc | undefined {
     runtimeLayers,
     supportedHosts: getSupportedHosts(sourceFile),
     requestShapes,
+    usage: getOperationUsage(sourceFile, services[0]?.name),
   };
 }
 
@@ -546,21 +596,47 @@ function buildSummary(sourceFile: SourceFile, fileKind: FileKind) {
   if (summary) {
     return summary;
   }
-
-  const title = titleFromRelativePath(path.relative(srcRoot, sourceFile.getFilePath()));
-  const fallback: Record<FileKind, string> = {
-    resource: `Static API reference for the ${title} resource module.`,
-    host: `Static API reference for the ${title} host module.`,
-    operation: `Static API reference for the ${title} operation module.`,
-    "event-source": `Static API reference for the ${title} event source module.`,
-    provider: `Static API reference for the ${title} provider module.`,
-    index: `Static API reference for the ${title} barrel module.`,
-    helper: `Static API reference for the ${title} module.`,
-  };
-  return fallback[fileKind];
+  return "";
 }
 
-function buildAutoExample(fileKind: FileKind, title: string, resource?: ResourceDoc, operation?: OperationDoc) {
+function singularize(name: string) {
+  return name.endsWith("ies")
+    ? `${name.slice(0, -3)}y`
+    : name.endsWith("ses")
+      ? name.slice(0, -2)
+      : name.endsWith("s") && name.length > 1
+        ? name.slice(0, -1)
+        : name;
+}
+
+function guessBindingArgument(name: string, rest: boolean) {
+  const base = rest ? singularize(name) : name;
+  return lowerCamel(base || "resource");
+}
+
+function buildRequestBlock(shape: ShapeDoc | undefined) {
+  if (!shape) {
+    return "{\n  // request fields\n}";
+  }
+
+  const required = shape.properties.filter((property) => !property.optional);
+  const properties = (required.length > 0 ? required : shape.properties).slice(0, 4);
+
+  if (properties.length === 0) {
+    return "{}";
+  }
+
+  return `{\n${properties
+    .map((property) => `  ${property.name}: ${guessExampleValue(property)},`)
+    .join("\n")}\n}`;
+}
+
+function buildAutoExample(
+  fileKind: FileKind,
+  title: string,
+  resource?: ResourceDoc,
+  operation?: OperationDoc,
+) {
   if (fileKind === "resource" || fileKind === "host") {
     const required = (resource?.props?.properties ?? []).filter(
       (property) => !property.optional,
@@ -583,15 +659,27 @@ function buildAutoExample(fileKind: FileKind, title: string, resource?: Resource
 
   if (fileKind === "operation") {
     const service = operation?.services[0]?.name ?? title;
+    const bindArguments =
+      operation?.usage?.bindParameters.map((parameter) =>
+        guessBindingArgument(parameter.name, parameter.rest),
+      ) ?? [];
+    const bindCall =
+      bindArguments.length > 0 ? `.bind(${bindArguments.join(", ")})` : ".bind()";
+    const invokeParameter = operation?.usage?.invokeParameters[0];
+    const requestShape = operation?.requestShapes[0];
+    const invocation = invokeParameter
+      ? invokeParameter.optional
+        ? `const response = yield* ${lowerCamel(service)}();`
+        : `const response = yield* ${lowerCamel(service)}(${buildRequestBlock(requestShape)});`
+      : `const response = yield* ${lowerCamel(service)}();`;
+
     return {
       title: `Use ${service}`,
       body: [
         "```typescript",
-        `const ${lowerCamel(service)} = yield* ${service}.bind(resource);`,
+        `const ${lowerCamel(service)} = yield* ${service}${bindCall};`,
         "",
-        `yield* ${lowerCamel(service)}({`,
-        "  // request fields",
-        "});",
+        invocation,
         "```",
       ].join("\n"),
     };
