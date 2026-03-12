@@ -9,6 +9,24 @@ import type { Bucket } from "./Bucket.ts";
 
 export interface PutObjectRequest extends Omit<S3.PutObjectRequest, "Bucket"> {}
 
+/**
+ * Runtime binding for `s3:PutObject`.
+ *
+ * Bind this operation to a bucket to get a callable that writes objects without
+ * manually supplying the bucket name on every request.
+ *
+ * @section Writing Objects
+ * @example Put an Object
+ * ```typescript
+ * const putObject = yield* PutObject.bind(bucket);
+ *
+ * yield* putObject({
+ *   Key: "hello.txt",
+ *   Body: "Hello, world!",
+ *   ContentType: "text/plain",
+ * });
+ * ```
+ */
 export class PutObject extends Binding.Service<
   PutObject,
   (

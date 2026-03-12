@@ -66,6 +66,10 @@ export const isWorkerEvent = (value: any): value is WorkerEvent =>
   value?.kind === "Cloudflare.Workers.WorkerEvent";
 
 export type WorkerProps = {
+  /**
+   * Worker name override. If omitted, Alchemy derives a deterministic physical
+   * name from the stack, stage, and logical ID.
+   */
   name?: string;
   /**
    * Static assets to serve. Can be:
@@ -117,6 +121,22 @@ export interface Worker extends Resource<
   }
 > {}
 
+/**
+ * A Cloudflare Worker host with deploy-time binding support and runtime export
+ * collection.
+ *
+ * `Worker` behaves like a resource during deploy, but it also carries a runtime
+ * execution context so KV, R2, Durable Objects, assets, and service bindings
+ * can be inferred from the worker program itself.
+ *
+ * @section Creating Workers
+ * @example Basic Worker
+ * ```typescript
+ * const worker = yield* Worker("ApiWorker", {
+ *   main: "./src/worker.ts",
+ * });
+ * ```
+ */
 export const Worker = Host<
   Worker,
   WorkerExecutionContext,

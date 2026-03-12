@@ -42,9 +42,22 @@ export type TableEvent<Data> = Omit<lambda.DynamoDBStreamEvent, "Records"> & {
 export type ScalarAttributeType = "S" | "N" | "B";
 
 export type TableProps = {
+  /**
+   * Name of the table. If omitted, Alchemy generates a deterministic physical
+   * name from the stack, stage, and logical ID.
+   */
   tableName?: string;
+  /**
+   * Partition key attribute name for the table.
+   */
   partitionKey: string;
+  /**
+   * Optional sort key attribute name for the table.
+   */
   sortKey?: string;
+  /**
+   * Attribute definitions used by the primary key and any secondary indexes.
+   */
   attributes: Record<string, ScalarAttributeType>;
   localSecondaryIndexes?: DynamoDB.LocalSecondaryIndex[];
   globalSecondaryIndexes?: DynamoDB.GlobalSecondaryIndex[];
@@ -89,6 +102,55 @@ export interface Table extends Resource<
   TableBinding
 > {}
 
+/**
+ * An Amazon DynamoDB table with optional indexes, PITR, TTL, and stream-aware
+ * binding support.
+ *
+ * `Table` owns the lifecycle of the physical table while the binding contract
+ * allows runtime-specific integrations such as Lambda table event sources to
+ * request stream configuration without forcing a circular input prop.
+ *
+ * @section Creating Tables
+ * @example Basic Table
+ * ```typescript
+ * const table = yield* Table("UsersTable", {
+ *   partitionKey: "pk",
+ *   attributes: {
+ *     pk: "S",
+ *   },
+ * });
+ * ```
+ *
+ * @example Table with Sort Key and TTL
+ * ```typescript
+ * const table = yield* Table("SessionsTable", {
+ *   partitionKey: "userId",
+ *   sortKey: "sessionId",
+ *   attributes: {
+ *     userId: "S",
+ *     sessionId: "S",
+ *     expiresAt: "N",
+ *   },
+ *   timeToLiveSpecification: {
+ *     Enabled: true,
+ *     AttributeName: "expiresAt",
+ *   },
+ * });
+ * ```
+ *
+ * @section Runtime Operations
+ * @example Read an Item
+ * ```typescript
+ * const getItem = yield* GetItem.bind(table);
+ *
+ * const response = yield* getItem({
+ *   Key: {
+ *     pk: { S: "user#123" },
+ *   },
+ *   ConsistentRead: true,
+ * });
+ * ```
+ */
 export const Table = Resource<Table>("AWS.DynamoDB.Table");
 
 export const TableProvider = () =>

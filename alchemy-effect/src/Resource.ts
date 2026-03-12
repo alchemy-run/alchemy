@@ -99,6 +99,14 @@ export type Resource<
     [attr in keyof Attributes]-?: Output.Output<Attributes[attr], never>;
   };
 
+/**
+ * Creates a resource constructor for a concrete resource type.
+ *
+ * The returned constructor registers the resource on the current stack,
+ * resolves input props, exposes output attributes as `Output` expressions, and
+ * records bindings contributed by policies and event sources. Resource
+ * providers are attached separately through `.provider`.
+ */
 export const Resource = <R extends ResourceLike>(
   type: R["Type"],
 ): ResourceClass<R> => {

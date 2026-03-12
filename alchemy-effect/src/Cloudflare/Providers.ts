@@ -18,6 +18,9 @@ export type Providers = Extract<
   Provider<any>
 >;
 
+/**
+ * Cloudflare providers, bindings, and credentials for Worker-based stacks.
+ */
 export const providers = () =>
   pipe(
     resources(),
@@ -27,12 +30,18 @@ export const providers = () =>
     Layer.orDie,
   );
 
+/**
+ * Cloudflare account credentials and auth context.
+ */
 export const credentials = () =>
   Layer.mergeAll(
     Account.fromStageConfig(),
     Layer.provideMerge(Auth.fromEnv(), FetchHttpClient.layer),
   );
 
+/**
+ * All Cloudflare resource providers.
+ */
 export const resources = () =>
   Layer.mergeAll(
     BuildProvider(),
@@ -41,6 +50,9 @@ export const resources = () =>
     R2.BucketProvider(),
   );
 
+/**
+ * All Cloudflare binding policies.
+ */
 export const bindings = () =>
   Layer.mergeAll(
     R2.GetObjectPolicyLive,

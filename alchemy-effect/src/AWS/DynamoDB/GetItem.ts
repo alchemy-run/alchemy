@@ -10,6 +10,24 @@ export interface GetItemRequest extends Omit<
   "TableName"
 > {}
 
+/**
+ * Runtime binding for `dynamodb:GetItem`.
+ *
+ * Bind this operation to a `Table` inside a function runtime to get a callable
+ * that automatically injects the table name.
+ *
+ * @section Reading Data
+ * @example Read a Single Item
+ * ```typescript
+ * const getItem = yield* GetItem.bind(table);
+ *
+ * const response = yield* getItem({
+ *   Key: {
+ *     pk: { S: "user#123" },
+ *   },
+ * });
+ * ```
+ */
 export class GetItem extends Binding.Service<
   GetItem,
   <T extends Table>(

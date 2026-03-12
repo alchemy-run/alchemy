@@ -44,6 +44,10 @@ export const providers = () =>
 export const stageConfig = () =>
   Layer.effect(StageConfig, Effect.suspend(loadDefaultStageConfig));
 
+/**
+ * Minimal AWS credential and account context without registering any resource
+ * providers.
+ */
 export const credentials = () =>
   pipe(
     Account.fromStageConfig(),
@@ -53,6 +57,12 @@ export const credentials = () =>
     Layer.provideMerge(stageConfig()),
   );
 
+/**
+ * All AWS resource providers.
+ *
+ * This layer registers the lifecycle providers that can create, read, update,
+ * and delete AWS resources during plan and deploy.
+ */
 export const resources = () =>
   Layer.mergeAll(
     DynamoDB.TableProvider(),
@@ -81,6 +91,13 @@ export const resources = () =>
     SQS.QueueProvider(),
   );
 
+/**
+ * All AWS binding policies.
+ *
+ * These layers attach IAM statements and event-source bindings to functions at
+ * deploy time so runtime bindings like `PutObject.bind(bucket)` can execute
+ * with the required permissions.
+ */
 export const bindings = () =>
   Layer.mergeAll(
     DynamoDB.DeleteItemPolicyLive,
