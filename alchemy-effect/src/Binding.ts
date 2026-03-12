@@ -37,6 +37,14 @@ export interface Service<
   >;
 }
 
+/**
+ * Creates a runtime binding service.
+ *
+ * A `Binding.Service` is the runtime-facing half of an operation such as
+ * `GetItem`, `PutObject`, or `Fetch`. It is provided on the function or worker
+ * effect so user code can call `.bind(resource)` and receive a typed runtime
+ * API that already knows how to talk to the target resource.
+ */
 export const Service =
   <Self, Shape extends (...args: any[]) => Effect.Effect<any, any, any>>() =>
   <Identifier extends string>(id: Identifier) => {
@@ -91,6 +99,14 @@ export interface Policy<
   >;
 }
 
+/**
+ * Creates a deploy-time binding policy.
+ *
+ * A `Binding.Policy` attaches the infrastructure-side permissions or bindings
+ * that make a runtime binding usable. At deploy time it records IAM statements
+ * or host bindings on the target function/worker. At runtime the layer is
+ * absent, so the policy gracefully becomes a no-op.
+ */
 export const Policy =
   <Self, Shape extends (...args: any[]) => Effect.Effect<void, any, any>>() =>
   <Identifier extends string>(

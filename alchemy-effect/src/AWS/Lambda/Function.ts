@@ -50,8 +50,19 @@ export const isFunction = (value: any): value is Function => {
 };
 
 export interface FunctionProps {
+  /**
+   * Entry module for the bundled Lambda function.
+   */
   main: string;
+  /**
+   * Exported handler symbol inside the bundled module.
+   * @default "handler"
+   */
   handler?: string;
+  /**
+   * Whether to create a public Lambda function URL.
+   * @default false
+   */
   url?: boolean;
   functionName?: string;
   // TODO(sam): use a Layer instead so we can manage Effect platform?
@@ -81,6 +92,30 @@ export interface Function extends Resource<
   }
 > {}
 
+/**
+ * An AWS Lambda host resource that combines code bundling, IAM role
+ * provisioning, and runtime binding collection.
+ *
+ * `Function` is the canonical runtime host for AWS. Resource bindings attach
+ * environment variables and IAM statements during deployment, while the runtime
+ * execution context collects listeners and exports from the Effect program.
+ *
+ * @section Creating Functions
+ * @example Basic Function
+ * ```typescript
+ * const func = yield* Function("OrdersFunction", {
+ *   main: "./src/orders.ts",
+ * });
+ * ```
+ *
+ * @example Function with URL
+ * ```typescript
+ * const func = yield* Function("ApiFunction", {
+ *   main: "./src/api.ts",
+ *   url: true,
+ * });
+ * ```
+ */
 export const Function = Host<
   Function,
   ServerlessExecutionContext,

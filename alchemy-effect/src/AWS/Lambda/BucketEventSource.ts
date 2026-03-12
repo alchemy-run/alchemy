@@ -17,6 +17,23 @@ import type { S3EventType } from "../S3/S3Event.ts";
 import * as Lambda from "./Function.ts";
 import { Permission as LambdaPermission } from "./Permission.ts";
 
+/**
+ * Connects an S3 bucket notification stream to the current Lambda function.
+ *
+ * This layer listens for bucket notifications routed through the Lambda runtime
+ * and exposes them as an `Effect.Stream`, while the companion policy configures
+ * the invoke permission and bucket notification binding during deployment.
+ *
+ * @section Wiring Events
+ * @example Listen for Object Created Events
+ * ```typescript
+ * yield* BucketEventSource.bind(
+ *   bucket,
+ *   { events: ["s3:ObjectCreated:*"] },
+ *   (events) => Stream.runForEach(events, (event) => Effect.log(event.key)),
+ * );
+ * ```
+ */
 export const BucketEventSource = Layer.effect(
   S3BucketEventSource,
   Effect.gen(function* () {
@@ -76,6 +93,9 @@ const isS3Event = (event: any): event is lambda.S3Event =>
   Array.isArray(event.Records) &&
   event.Records.some((record: any) => record.s3);
 
+/**
+ * Deploy-time policy for attaching an S3 bucket as a Lambda event source.
+ */
 export class BucketEventSourcePolicy extends Binding.Policy<
   BucketEventSourcePolicy,
   (

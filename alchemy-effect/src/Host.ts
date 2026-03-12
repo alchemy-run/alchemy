@@ -75,6 +75,14 @@ export type HostClass<
     Runtime: ServiceMap.Service<Host<Self>, Runtime>;
   };
 
+/**
+ * Creates a runtime-capable resource constructor.
+ *
+ * `Host` extends the normal resource model with an execution context so that
+ * serverless and long-running runtimes can collect listeners, exports,
+ * environment variables, and runtime-specific bindings while still deploying as
+ * normal resources.
+ */
 export const Host = <
   R extends ResourceLike<
     string,
