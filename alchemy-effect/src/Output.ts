@@ -45,6 +45,7 @@ export interface Output<A = any, Req = any> extends Pipeable {
     void
   >;
   bind(id: string): Effect.Effect<Effect.Effect<A>, never, ExecutionContext>;
+  asEffect(): Effect.Effect<Accessor<A>, never, Req>;
 }
 
 export interface Accessor<A> extends Effect.Effect<A> {}
@@ -93,11 +94,11 @@ export abstract class BaseExpr<A = any, Req = any> implements Output<A, Req> {
     return new SingleShotGen(this);
   }
 
-  asEffect() {
+  asEffect(): any {
     return this.bind(this.toString());
   }
 
-  public bind(id: string) {
+  public bind(id: string): any {
     return ExecutionContext.asEffect().pipe(
       Effect.flatMap((ctx) =>
         Effect.map(ctx.set(id, this), (key) => ctx.get<A>(key)),
