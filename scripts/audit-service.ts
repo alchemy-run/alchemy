@@ -107,8 +107,16 @@ const RESOURCE_LIFECYCLE_PATTERNS = [
   /^updateFunctionConfiguration$/,
   /^createStream$/,
   /^deleteStream$/,
+  /^createPipe$/,
+  /^deletePipe$/,
+  /^updatePipe$/,
   /^createTopic$/,
   /^deleteTopic$/,
+  /^createSchedule$/,
+  /^deleteSchedule$/,
+  /^updateSchedule$/,
+  /^createScheduleGroup$/,
+  /^deleteScheduleGroup$/,
   /^put[A-Z].*(?:Policy|Configuration|Settings)$/,
 ];
 
@@ -202,6 +210,70 @@ function classifyOperation(
   impliesResource: boolean;
   impliesEventSource: boolean;
 } {
+  if (serviceName === "iam") {
+    const lifecycleIamOps = new Set([
+      "createAccessKey",
+      "deleteAccessKey",
+      "updateAccessKey",
+      "createAccountAlias",
+      "deleteAccountAlias",
+      "updateAccountPasswordPolicy",
+      "deleteAccountPasswordPolicy",
+      "createGroup",
+      "deleteGroup",
+      "updateGroup",
+      "createInstanceProfile",
+      "deleteInstanceProfile",
+      "createLoginProfile",
+      "deleteLoginProfile",
+      "updateLoginProfile",
+      "createOpenIDConnectProvider",
+      "deleteOpenIDConnectProvider",
+      "createPolicy",
+      "deletePolicy",
+      "createRole",
+      "deleteRole",
+      "updateRole",
+      "createSAMLProvider",
+      "deleteSAMLProvider",
+      "updateSAMLProvider",
+      "deleteServerCertificate",
+      "updateServerCertificate",
+      "createServiceSpecificCredential",
+      "deleteServiceSpecificCredential",
+      "updateServiceSpecificCredential",
+      "deleteSigningCertificate",
+      "updateSigningCertificate",
+      "deleteSSHPublicKey",
+      "updateSSHPublicKey",
+      "createUser",
+      "deleteUser",
+      "updateUser",
+      "createVirtualMFADevice",
+      "deleteVirtualMFADevice",
+    ]);
+
+    if (lifecycleIamOps.has(name)) {
+      return {
+        category: "resource-lifecycle",
+        resourceArity:
+          name === "updateAccountPasswordPolicy" ||
+          name === "deleteAccountPasswordPolicy"
+            ? 0
+            : 1,
+        impliesResource: true,
+        impliesEventSource: false,
+      };
+    }
+
+    return {
+      category: "internal",
+      resourceArity: matchesAnyPattern(name, ZERO_ARITY_PATTERNS) ? 0 : 1,
+      impliesResource: false,
+      impliesEventSource: false,
+    };
+  }
+
   if (serviceName === "sns") {
     if (name === "createTopic" || name === "deleteTopic") {
       return {
@@ -218,6 +290,309 @@ function classifyOperation(
         resourceArity: 1,
         impliesResource: true,
         impliesEventSource: true,
+      };
+    }
+  }
+
+  if (serviceName === "kinesis") {
+    if (name === "registerStreamConsumer" || name === "deregisterStreamConsumer") {
+      return {
+        category: "resource-lifecycle",
+        resourceArity: 1,
+        impliesResource: true,
+        impliesEventSource: false,
+      };
+    }
+
+    if (
+      [
+        "addTagsToStream",
+        "decreaseStreamRetentionPeriod",
+        "deleteResourcePolicy",
+        "disableEnhancedMonitoring",
+        "enableEnhancedMonitoring",
+        "increaseStreamRetentionPeriod",
+        "mergeShards",
+        "putResourcePolicy",
+        "removeTagsFromStream",
+        "splitShard",
+        "startStreamEncryption",
+        "stopStreamEncryption",
+        "tagResource",
+        "untagResource",
+        "updateMaxRecordSize",
+        "updateShardCount",
+        "updateStreamMode",
+        "updateStreamWarmThroughput",
+      ].includes(name)
+    ) {
+      return {
+        category: "resource-lifecycle",
+        resourceArity: 1,
+        impliesResource: true,
+        impliesEventSource: false,
+      };
+    }
+
+    if (
+      [
+        "describeAccountSettings",
+        "describeLimits",
+        "describeStream",
+        "describeStreamConsumer",
+        "describeStreamSummary",
+        "getRecords",
+        "getResourcePolicy",
+        "getShardIterator",
+        "listShards",
+        "listStreamConsumers",
+        "listStreams",
+        "listTagsForResource",
+        "putRecord",
+        "putRecords",
+        "subscribeToShard",
+      ].includes(name)
+    ) {
+      return {
+        category: "binding",
+        resourceArity: matchesAnyPattern(name, ZERO_ARITY_PATTERNS) ? 0 : 1,
+        impliesResource: false,
+        impliesEventSource: false,
+      };
+    }
+
+    if (name === "listTagsForStream" || name === "updateAccountSettings") {
+      return {
+        category: "internal",
+        resourceArity: 1,
+        impliesResource: false,
+        impliesEventSource: false,
+      };
+    }
+  }
+
+  if (serviceName === "rds-data") {
+    return {
+      category: "binding",
+      resourceArity: 1,
+      impliesResource: false,
+      impliesEventSource: false,
+    };
+  }
+
+  if (serviceName === "secrets-manager") {
+    if (["createSecret", "deleteSecret", "updateSecret"].includes(name)) {
+      return {
+        category: "resource-lifecycle",
+        resourceArity: 1,
+        impliesResource: true,
+        impliesEventSource: false,
+      };
+    }
+
+    if (name === "listSecrets" || name === "getRandomPassword") {
+      return {
+        category: "binding",
+        resourceArity: 0,
+        impliesResource: false,
+        impliesEventSource: false,
+      };
+    }
+
+    if (
+      [
+        "getSecretValue",
+        "putSecretValue",
+        "describeSecret",
+        "listSecretVersionIds",
+        "getResourcePolicy",
+        "putResourcePolicy",
+        "deleteResourcePolicy",
+        "updateSecretVersionStage",
+        "validateResourcePolicy",
+      ].includes(name)
+    ) {
+      return {
+        category: "binding",
+        resourceArity: 1,
+        impliesResource: false,
+        impliesEventSource: false,
+      };
+    }
+  }
+
+  if (serviceName === "rds") {
+    if (
+      [
+        "createDBCluster",
+        "deleteDBCluster",
+        "modifyDBCluster",
+        "enableHttpEndpoint",
+        "disableHttpEndpoint",
+        "startDBCluster",
+        "stopDBCluster",
+        "rebootDBCluster",
+        "createDBClusterEndpoint",
+        "deleteDBClusterEndpoint",
+        "modifyDBClusterEndpoint",
+        "createDBClusterParameterGroup",
+        "deleteDBClusterParameterGroup",
+        "modifyDBClusterParameterGroup",
+        "createDBInstance",
+        "deleteDBInstance",
+        "modifyDBInstance",
+        "createDBParameterGroup",
+        "deleteDBParameterGroup",
+        "modifyDBParameterGroup",
+        "createDBProxy",
+        "deleteDBProxy",
+        "modifyDBProxy",
+        "createDBProxyEndpoint",
+        "deleteDBProxyEndpoint",
+        "modifyDBProxyEndpoint",
+        "modifyDBProxyTargetGroup",
+        "registerDBProxyTargets",
+        "deregisterDBProxyTargets",
+        "createDBSubnetGroup",
+        "deleteDBSubnetGroup",
+        "modifyDBSubnetGroup",
+        "createGlobalCluster",
+        "deleteGlobalCluster",
+        "modifyGlobalCluster",
+      ].includes(name)
+    ) {
+      return {
+        category: "resource-lifecycle",
+        resourceArity: 1,
+        impliesResource: true,
+        impliesEventSource: false,
+      };
+    }
+
+    if (
+      [
+        "describeDBClusters",
+        "describeDBInstances",
+        "describeDBSubnetGroups",
+        "describeDBClusterParameterGroups",
+        "describeDBParameterGroups",
+        "describeDBProxies",
+        "describeDBProxyEndpoints",
+        "describeDBProxyTargetGroups",
+        "describeDBProxyTargets",
+        "listTagsForResource",
+      ].includes(name)
+    ) {
+      return {
+        category: "binding",
+        resourceArity: 1,
+        impliesResource: false,
+        impliesEventSource: false,
+      };
+    }
+  }
+
+  if (serviceName === "eventbridge") {
+    if (
+      [
+        "createEventBus",
+        "deleteEventBus",
+        "updateEventBus",
+        "putRule",
+        "deleteRule",
+        "putPermission",
+        "removePermission",
+      ].includes(name)
+    ) {
+      return {
+        category: "resource-lifecycle",
+        resourceArity:
+          name === "putPermission" || name === "removePermission" ? 1 : 1,
+        impliesResource: true,
+        impliesEventSource: name === "putRule" || name === "deleteRule",
+      };
+    }
+
+    if (
+      [
+        "describeEventBus",
+        "listEventBuses",
+        "describeRule",
+        "listRules",
+        "listTargetsByRule",
+        "listRuleNamesByTarget",
+        "putEvents",
+        "testEventPattern",
+      ].includes(name)
+    ) {
+      return {
+        category: "binding",
+        resourceArity:
+          name === "listEventBuses" || name === "testEventPattern" ? 0 : 1,
+        impliesResource: false,
+        impliesEventSource: false,
+      };
+    }
+  }
+
+  if (serviceName === "pipes") {
+    if (
+      [
+        "createPipe",
+        "describePipe",
+        "updatePipe",
+        "deletePipe",
+        "startPipe",
+        "stopPipe",
+      ].includes(name)
+    ) {
+      return {
+        category: "resource-lifecycle",
+        resourceArity: 1,
+        impliesResource: true,
+        impliesEventSource: true,
+      };
+    }
+
+    if (["listPipes", "listTagsForResource"].includes(name)) {
+      return {
+        category: "binding",
+        resourceArity: name === "listPipes" ? 0 : 1,
+        impliesResource: false,
+        impliesEventSource: false,
+      };
+    }
+  }
+
+  if (serviceName === "scheduler") {
+    if (
+      [
+        "createSchedule",
+        "getSchedule",
+        "updateSchedule",
+        "deleteSchedule",
+        "createScheduleGroup",
+        "getScheduleGroup",
+        "deleteScheduleGroup",
+      ].includes(name)
+    ) {
+      return {
+        category: "resource-lifecycle",
+        resourceArity: 1,
+        impliesResource: true,
+        impliesEventSource: true,
+      };
+    }
+
+    if (["listSchedules", "listScheduleGroups", "listTagsForResource"].includes(name)) {
+      return {
+        category: "binding",
+        resourceArity:
+          name === "listTagsForResource"
+            ? 1
+            : 0,
+        impliesResource: false,
+        impliesEventSource: false,
       };
     }
   }
@@ -305,18 +680,29 @@ function formatArity(arity: ResourceArity): string {
 
 async function extractDistilledOperations(
   distilledPath: string,
+  moduleSpecifier?: string,
 ): Promise<string[]> {
-  const content = await fs.readFile(distilledPath, "utf-8");
+  try {
+    const content = await fs.readFile(distilledPath, "utf-8");
+    const operations: string[] = [];
+    const regex = /^export const ([a-z][a-zA-Z0-9]*): API\.OperationMethod</gm;
 
-  const operations: string[] = [];
-  const regex = /^export const ([a-z][a-zA-Z0-9]*): API\.OperationMethod</gm;
+    let match;
+    while ((match = regex.exec(content)) !== null) {
+      operations.push(match[1]);
+    }
 
-  let match;
-  while ((match = regex.exec(content)) !== null) {
-    operations.push(match[1]);
+    return operations;
+  } catch {
+    if (!moduleSpecifier) {
+      throw new Error(`Could not read distilled spec: ${distilledPath}`);
+    }
+
+    const mod = await import(moduleSpecifier);
+    return Object.keys(mod)
+      .filter((key) => /^[a-z]/.test(key))
+      .sort();
   }
-
-  return operations;
 }
 
 async function getAlchemyFiles(alchemyPath: string): Promise<Set<string>> {
@@ -459,16 +845,57 @@ function inferCanonicalResources(
 
   for (const op of operations) {
     if (op.category === "resource-lifecycle") {
+      let resourceName: string | undefined;
+
+      if (
+        [
+          "registerStreamConsumer",
+          "deregisterStreamConsumer",
+        ].includes(op.camelCase)
+      ) {
+        resourceName = "StreamConsumer";
+      } else if (["putRule", "deleteRule"].includes(op.camelCase)) {
+        resourceName = "Rule";
+      } else if (["putPermission", "removePermission"].includes(op.camelCase)) {
+        resourceName = "Permission";
+      } else if (
+        [
+          "addTagsToStream",
+          "createStream",
+          "decreaseStreamRetentionPeriod",
+          "deleteResourcePolicy",
+          "deleteStream",
+          "disableEnhancedMonitoring",
+          "enableEnhancedMonitoring",
+          "increaseStreamRetentionPeriod",
+          "mergeShards",
+          "putResourcePolicy",
+          "removeTagsFromStream",
+          "splitShard",
+          "startStreamEncryption",
+          "stopStreamEncryption",
+          "tagResource",
+          "untagResource",
+          "updateMaxRecordSize",
+          "updateShardCount",
+          "updateStreamMode",
+          "updateStreamWarmThroughput",
+        ].includes(op.camelCase)
+      ) {
+        resourceName = "Stream";
+      }
+
       // Extract resource name from operation like createTable -> Table
-      const match = op.camelCase.match(
-        /^(create|delete|update|describe)([A-Z][a-zA-Z]+)/,
-      );
-      if (match) {
-        const resourceName = match[2];
-        if (!resourceMap.has(resourceName)) {
-          resourceMap.set(resourceName, { operations: [], bindings: [] });
+      const match =
+        resourceName === undefined
+          ? op.camelCase.match(/^(create|delete|update|describe)([A-Z][a-zA-Z]+)/)
+          : undefined;
+      if (resourceName || match) {
+        const resolvedResourceName = resourceName ?? match![2];
+        if (!resourceMap.has(resolvedResourceName)) {
+          resourceMap.set(resolvedResourceName, { operations: [], bindings: [] });
         }
-        resourceMap.get(resourceName)!.operations.push(op.camelCase);
+        resourceMap.get(resolvedResourceName)!.operations.push(op.camelCase);
       }
     } else if (op.category === "binding" && op.resourceArity === 1) {
       // Associate binding with likely resource
@@ -571,8 +998,18 @@ async function auditService(serviceName: string): Promise<AuditReport> {
       lambda: { distilled: "lambda", alchemy: "Lambda" },
       kinesis: { distilled: "kinesis", alchemy: "Kinesis" },
       ec2: { distilled: "ec2", alchemy: "EC2" },
+      ecs: { distilled: "ecs", alchemy: "ECS" },
+      eventbridge: { distilled: "eventbridge", alchemy: "EventBridge" },
       iam: { distilled: "iam", alchemy: "IAM" },
+      pipes: { distilled: "pipes", alchemy: "Pipes" },
       sns: { distilled: "sns", alchemy: "SNS" },
+      scheduler: { distilled: "scheduler", alchemy: "Scheduler" },
+      rds: { distilled: "rds", alchemy: "RDS" },
+      "rds-data": { distilled: "rds-data", alchemy: "RDSData" },
+      "secrets-manager": {
+        distilled: "secrets-manager",
+        alchemy: "SecretsManager",
+      },
     };
 
   const config = serviceConfig[serviceNameLower] || {
@@ -580,9 +1017,23 @@ async function auditService(serviceName: string): Promise<AuditReport> {
     alchemy: serviceNameUpper,
   };
 
-  const distilledPath = path.resolve(
+  const preferredDistilledPath = path.resolve(
     `.vendor/distilled/@distilled.cloud/aws/src/services/${config.distilled}.ts`,
   );
+  const fallbackDistilledPath = path.resolve(
+    `vendor/distilled/packages/aws/src/services/${config.distilled}.ts`,
+  );
+  const resolvedDistilledPath = await fs
+    .access(preferredDistilledPath)
+    .then(() => preferredDistilledPath)
+    .catch(() =>
+      fs
+        .access(fallbackDistilledPath)
+        .then(() => fallbackDistilledPath)
+        .catch(() => undefined),
+    );
+  const distilledPath =
+    resolvedDistilledPath ?? `@distilled.cloud/aws/${config.distilled}`;
   const alchemyPath = path.resolve(`alchemy-effect/src/AWS/${config.alchemy}`);
   const bindingTestPath = path.resolve(
     `alchemy-effect/test/AWS/${config.alchemy}/Bindings.test.ts`,
@@ -591,7 +1042,10 @@ async function auditService(serviceName: string): Promise<AuditReport> {
   const providersPath = path.resolve("alchemy-effect/src/AWS/Providers.ts");
 
   // Extract data
-  const distilledOps = await extractDistilledOperations(distilledPath);
+  const distilledOps = await extractDistilledOperations(
+    resolvedDistilledPath ?? preferredDistilledPath,
+    `@distilled.cloud/aws/${config.distilled}`,
+  );
   const alchemyFiles = await getAlchemyFiles(alchemyPath);
   const indexExports = await getIndexExports(indexPath);
   const providerRegs = await getProvidersRegistrations(
