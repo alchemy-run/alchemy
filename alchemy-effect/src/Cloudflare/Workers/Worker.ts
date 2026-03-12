@@ -337,28 +337,6 @@ const hashBundleFiles = (files: ReadonlyArray<PreparedBundleFile>) =>
     return yield* sha256(JSON.stringify(parts));
   });
 
-const resolveBundledEntrypointPath = (
-  bundle: {
-    main: string;
-    outputDir: string;
-  },
-) =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-
-    if (yield* fs.exists(bundle.main)) {
-      return bundle.main;
-    }
-
-    const fallback = path.join(bundle.outputDir, path.basename(bundle.main));
-    if (yield* fs.exists(fallback)) {
-      return fallback;
-    }
-
-    return bundle.main;
-  });
-
 export const WorkerProvider = () =>
   Worker.provider.effect(
     Effect.gen(function* () {
@@ -410,7 +388,9 @@ export const WorkerProvider = () =>
         let current = path.dirname(entry);
         while (true) {
           if (yield* fs.exists(path.join(current, "package.json"))) {
-            const relativeEntry = path.relative(current, entry).replaceAll("\\", "/");
+            const relativeEntry = path
+              .relative(current, entry)
+              .replaceAll("\\", "/");
             const tsconfigCandidates = relativeEntry.startsWith("test/")
               ? ["tsconfig.test.json", "tsconfig.json"]
               : ["tsconfig.json", "tsconfig.test.json"];
@@ -534,9 +514,8 @@ ${props.exports?.map((id) => `export class ${id} {}`).join("\n") ?? ""}
             tsconfig,
           });
           const mainModule = "worker.js";
-          const bundleMainPath = yield* resolveBundledEntrypointPath(bundle);
           const code = stripSourceMapComment(
-            yield* fs.readFileString(bundleMainPath),
+            yield* fs.readFileString(bundle.main),
           );
           const files: Array<PreparedBundleFile> = [
             {
@@ -697,7 +676,7 @@ ${props.exports?.map((id) => `export class ${id} {}`).join("\n") ?? ""}
                 accountId,
               }).pipe(
                 Effect.map((workers) =>
-                  workers.find((worker) => worker.id === workerName),
+                  workers.result.find((worker) => worker.id === workerName),
                 ),
               ),
               getScriptSubdomain({
