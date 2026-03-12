@@ -1,4 +1,3 @@
-import { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -7,7 +6,6 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import * as ServiceMap from "effect/ServiceMap";
-import { HttpClient } from "effect/unstable/http/HttpClient";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { sha256 } from "../../Util/index.ts";
 import { Worker } from "./Worker.ts";
@@ -94,9 +92,9 @@ export const AssetsProvider = () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const httpClient = yield* HttpClient;
-
+      const createAssetUpload = yield* workers.createAssetUpload;
       const createScriptAssetUpload = yield* workers.createScriptAssetUpload;
+
       const maybeReadString = Effect.fnUntraced(function* (file: string) {
         return yield* fs.readFileString(file).pipe(
           Effect.catchIf(
@@ -243,24 +241,22 @@ export const AssetsProvider = () =>
                           }),
                       ),
                     );
-                  body[hash] = new File([Buffer.from(file).toString("base64")], hash, {
-                    type: getContentType(name),
-                  });
+                  body[hash] = new File(
+                    [Buffer.from(file).toString("base64")],
+                    hash,
+                    {
+                      type: getContentType(name),
+                    },
+                  );
                 }),
               );
-              const result = yield* workers
-                .createAssetUpload({
+              const result = yield* createAssetUpload({
                 accountId,
                 base64: true,
                 body,
-                })
-                .pipe(
-                  Effect.provideService(HttpClient, httpClient),
-                  Effect.provideService(Credentials, {
-                    apiToken: uploadJwt,
-                    apiBaseUrl: "https://api.cloudflare.com/client/v4",
-                  }),
-                );
+                jwtToken: uploadJwt,
+              });
+
               uploaded += bucket.length;
               yield* note(`Uploaded ${uploaded} of ${total} assets...`);
               if (result.jwt) {
