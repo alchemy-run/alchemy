@@ -72,7 +72,9 @@ export const NamespaceProvider = (): Layer<
             Effect.catchTag("NamespaceTitleAlreadyExists", () =>
               Effect.gen(function* () {
                 const namespaces = yield* listNamespaces({ accountId });
-                const match = namespaces.find((ns) => ns.title === title);
+                const match = namespaces.result.find(
+                  (ns) => ns.title === title,
+                );
                 if (match) {
                   return match;
                 }
@@ -128,7 +130,7 @@ export const NamespaceProvider = (): Layer<
           }
           const title = yield* createTitle(id, olds?.title);
           const namespaces = yield* listNamespaces({ accountId });
-          const match = namespaces.find((ns) => ns.title === title);
+          const match = namespaces.result.find((ns) => ns.title === title);
           if (match) {
             return {
               title: match.title,
