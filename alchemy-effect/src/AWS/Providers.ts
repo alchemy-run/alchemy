@@ -3,18 +3,23 @@ import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
 import { rolldown } from "../Bundle/Rolldown.ts";
 import type { Provider } from "../Provider.ts";
+import * as ACM from "./ACM/index.ts";
 import * as Account from "./Account.ts";
 import * as Assets from "./Assets.ts";
+import * as AutoScaling from "./AutoScaling/index.ts";
+import * as CloudFront from "./CloudFront/index.ts";
 import * as CloudWatch from "./CloudWatch/index.ts";
 import * as Credentials from "./Credentials.ts";
 import * as DynamoDB from "./DynamoDB/index.ts";
 import * as EC2 from "./EC2/index.ts";
 import * as ECR from "./ECR/index.ts";
 import * as ECS from "./ECS/index.ts";
+import * as EKS from "./EKS/index.ts";
 import * as ELBv2 from "./ELBv2/index.ts";
 import * as Endpoint from "./Endpoint.ts";
 import * as EventBridge from "./EventBridge/index.ts";
 import * as IAM from "./IAM/index.ts";
+import * as IdentityCenter from "./IdentityCenter/index.ts";
 import * as Kinesis from "./Kinesis/index.ts";
 import * as Lambda from "./Lambda/index.ts";
 import * as Logs from "./Logs/index.ts";
@@ -23,12 +28,14 @@ import * as Pipes from "./Pipes/index.ts";
 import * as RDS from "./RDS/index.ts";
 import * as RDSData from "./RDSData/index.ts";
 import * as Region from "./Region.ts";
+import * as Route53 from "./Route53/index.ts";
 import * as S3 from "./S3/index.ts";
 import * as Scheduler from "./Scheduler/index.ts";
 import * as SecretsManager from "./SecretsManager/index.ts";
 import * as SNS from "./SNS/index.ts";
 import * as SQS from "./SQS/index.ts";
 import { loadDefaultStageConfig, StageConfig } from "./StageConfig.ts";
+import * as Website from "./Website/index.ts";
 
 export type Providers = Extract<
   Layer.Success<ReturnType<typeof providers>>,
@@ -78,6 +85,15 @@ export const credentials = () =>
  */
 export const resources = () =>
   Layer.mergeAll(
+    ACM.CertificateProvider(),
+    AutoScaling.AutoScalingGroupProvider(),
+    AutoScaling.LaunchTemplateProvider(),
+    AutoScaling.ScalingPolicyProvider(),
+    CloudFront.DistributionProvider(),
+    CloudFront.FunctionProvider(),
+    CloudFront.InvalidationProvider(),
+    CloudFront.KeyValueStoreProvider(),
+    CloudFront.OriginAccessControlProvider(),
     CloudWatch.AlarmMuteRuleProvider(),
     CloudWatch.AlarmProvider(),
     CloudWatch.AnomalyDetectorProvider(),
@@ -106,6 +122,10 @@ export const resources = () =>
     ECS.ClusterProvider(),
     ECS.ServiceProvider(),
     ECS.TaskProvider(),
+    EKS.AccessEntryProvider(),
+    EKS.AddonProvider(),
+    EKS.ClusterProvider(),
+    EKS.PodIdentityAssociationProvider(),
     ELBv2.ListenerProvider(),
     ELBv2.LoadBalancerProvider(),
     ELBv2.TargetGroupProvider(),
@@ -129,6 +149,10 @@ export const resources = () =>
     IAM.SSHPublicKeyProvider(),
     IAM.UserProvider(),
     IAM.VirtualMFADeviceProvider(),
+    IdentityCenter.AccountAssignmentProvider(),
+    IdentityCenter.GroupProvider(),
+    IdentityCenter.InstanceProvider(),
+    IdentityCenter.PermissionSetProvider(),
     Kinesis.StreamProvider(),
     Kinesis.StreamConsumerProvider(),
     Lambda.EventSourceMappingProvider(),
@@ -155,6 +179,7 @@ export const resources = () =>
     RDS.DBProxyProvider(),
     RDS.DBProxyTargetGroupProvider(),
     RDS.DBSubnetGroupProvider(),
+    Route53.RecordProvider(),
     S3.BucketProvider(),
     Scheduler.ScheduleGroupProvider(),
     Scheduler.ScheduleProvider(),
@@ -162,6 +187,7 @@ export const resources = () =>
     SNS.SubscriptionProvider(),
     SNS.TopicProvider(),
     SQS.QueueProvider(),
+    Website.AssetDeploymentProvider(),
   );
 
 /**

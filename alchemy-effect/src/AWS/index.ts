@@ -9,14 +9,19 @@ export * from "./StageConfig.ts";
 
 export { Region } from "@distilled.cloud/aws/Region";
 
+export * as ACM from "./ACM/index.ts";
+export * as AutoScaling from "./AutoScaling/index.ts";
+export * as CloudFront from "./CloudFront/index.ts";
 export * as CloudWatch from "./CloudWatch/index.ts";
 export * as DynamoDB from "./DynamoDB/index.ts";
 export * as EC2 from "./EC2/index.ts";
 export * as ECR from "./ECR/index.ts";
 export * as ECS from "./ECS/index.ts";
+export * as EKS from "./EKS/index.ts";
 export * as ELBv2 from "./ELBv2/index.ts";
 export * as EventBridge from "./EventBridge/index.ts";
 export * as IAM from "./IAM/index.ts";
+export * as IdentityCenter from "./IdentityCenter/index.ts";
 export * as Kinesis from "./Kinesis/index.ts";
 export * as Lambda from "./Lambda/index.ts";
 export * as Logs from "./Logs/index.ts";
@@ -29,3 +34,5 @@ export * as Scheduler from "./Scheduler/index.ts";
 export * as SecretsManager from "./SecretsManager/index.ts";
 export * as SNS from "./SNS/index.ts";
 export * as SQS from "./SQS/index.ts";
+export * as Route53 from "./Route53/index.ts";
+export * as Website from "./Website/index.ts";
