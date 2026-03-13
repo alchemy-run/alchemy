@@ -1,7 +1,7 @@
 import type * as pipes from "@distilled.cloud/aws/pipes";
 import * as Effect from "effect/Effect";
-import * as IAM from "../IAM/index.ts";
 import type { EventBus } from "../EventBridge/EventBus.ts";
+import * as IAM from "../IAM/index.ts";
 import type { Function } from "../Lambda/Function.ts";
 import type { Queue } from "../SQS/Queue.ts";
 import { Pipe } from "./Pipe.ts";
