@@ -1,17 +1,17 @@
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as Effect from "effect/Effect";
+import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
-import type { Input } from "../../Input.ts";
 import type { AccountID } from "../Account.ts";
-import type { RegionID } from "../Region.ts";
 import type { SecurityGroupId } from "../EC2/SecurityGroup.ts";
 import type { SubnetId } from "../EC2/Subnet.ts";
+import type { RegionID } from "../Region.ts";
 
 export type LoadBalancerName = string;
 export type LoadBalancerArn =
-  `arn:aws:elasticloadbalancing:${RegionID}:${AccountID}:loadbalancer/app/${string}`;
+  `arn:aws:elasticloadbalancing:${RegionID}:${AccountID}:loadbalancer/${string}`;
 
 export interface LoadBalancerProps {
   name?: string;
@@ -119,7 +119,7 @@ export const LoadBalancerProvider = () =>
           const name = yield* toName(id, news);
           const tags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
           const created = yield* elbv2.createLoadBalancer({
             Name: name,
@@ -181,11 +181,11 @@ export const LoadBalancerProvider = () =>
           }
           const oldTags = {
             ...(yield* createInternalTags(id)),
-            ...(olds.tags ?? {}),
+            ...olds.tags,
           };
           const newTags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
           const { removed, upsert } = diffTags(oldTags, newTags);
           if (upsert.length > 0) {

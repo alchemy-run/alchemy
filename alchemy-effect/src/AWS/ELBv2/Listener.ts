@@ -14,7 +14,7 @@ export interface ListenerProps {
   loadBalancerArn: Input<LoadBalancerArn> | LoadBalancer;
   targetGroupArn: Input<TargetGroupArn> | TargetGroup;
   port: number;
-  protocol?: "HTTP" | "HTTPS";
+  protocol?: "HTTP" | "HTTPS" | "TCP";
   certificateArn?: string;
   sslPolicy?: string;
 }
