@@ -4,3 +4,9 @@
 [submodule "vendor/cloudflare-bundler"]
 	path = vendor/cloudflare-bundler
 	url = git@github.com:alchemy-run/cloudflare-bundler.git
+[submodule "vendor/sst"]
+	path = vendor/sst
+	url = git@github.com:anomalyco/sst.git
+[submodule "vendor/alchemy"]
+	path = vendor/alchemy
+	url = git@github.com:alchemy-run/alchemy.git

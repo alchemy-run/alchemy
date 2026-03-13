@@ -1,0 +1,108 @@
+# aws-nuke config for cleaning up straggler test resources
+# https://github.com/ekristen/aws-nuke
+#
+# Install: brew install ekristen/tap/aws-nuke
+#
+# Usage:
+#   bun run nuke:aws          # dry-run (shows what would be deleted)
+#   bun run nuke:aws:run      # actually delete resources
+#
+# Set AWS_NUKE_ACCOUNT_ID in your .env or environment before running.
+
+regions:
+  - all
+
+blocklist:
+  - "000000000000" # placeholder — add production account IDs here
+
+resource-types:
+  excludes:
+    - S3Object # S3 bucket removal handles objects
+    - ServiceCatalogTagOption
+    - ServiceCatalogTagOptionPortfolioAttachment
+    - FMSNotificationChannel
+    - FMSPolicy
+    - MachineLearningMLModel
+    - MachineLearningDataSource
+    - MachineLearningBranchPrediction
+    - MachineLearningEvaluation
+    - RoboMakerDeploymentJob
+    - RoboMakerFleet
+    - RoboMakerRobot
+    - RoboMakerSimulationJob
+    - RoboMakerRobotApplication
+    - RoboMakerSimulationApplication
+    - OpsWorksApp
+    - OpsWorksInstance
+    - OpsWorksLayer
+    - OpsWorksUserProfile
+    - OpsWorksCMBackup
+    - OpsWorksCMServer
+    - OpsWorksCMServerState
+    - CodeStarProject
+    - CodeStarConnection
+    - CodeStarNotification
+    - Cloud9Environment
+    - CloudSearchDomain
+    - RedshiftServerlessSnapshot
+    - RedshiftServerlessNamespace
+    - RedshiftServerlessWorkgroup
+
+settings:
+  EC2Instance:
+    DisableStopProtection: true
+    DisableDeletionProtection: true
+  EC2Image:
+    IncludeDisabled: true
+    IncludeDeprecated: true
+    DisableDeregistrationProtection: true
+  RDSInstance:
+    DisableDeletionProtection: true
+  CloudFormationStack:
+    DisableDeletionProtection: true
+  DynamoDBTable:
+    DisableDeletionProtection: true
+
+presets:
+  defaults:
+    filters:
+      EC2Subnet:
+        - property: DefaultVPC
+          value: "true"
+      EC2DefaultSecurityGroupRule:
+        - property: DefaultVPC
+          value: "true"
+      EC2DHCPOption:
+        - property: DefaultVPC
+          value: "true"
+      EC2VPC:
+        - property: IsDefault
+          value: "true"
+      EC2InternetGateway:
+        - property: DefaultVPC
+          value: "true"
+      EC2InternetGatewayAttachment:
+        - property: DefaultVPC
+          value: "true"
+
+  organization:
+    filters:
+      IAMSAMLProvider:
+        - property: ARN
+          type: contains
+          value: "AWSSSO"
+      IAMRole:
+        - property: Name
+          type: contains
+          value: "OrganizationAccountAccessRole"
+      IAMRolePolicyAttachment:
+        - property: RoleName
+          value: "OrganizationAccountAccessRole"
+
+# Add your AWS account ID(s) here.
+# You can find it with: aws sts get-caller-identity --query Account --output text
+accounts:
+  "123456789012": # <-- replace with your actual account ID
+    presets:
+      - defaults
+      - organization
