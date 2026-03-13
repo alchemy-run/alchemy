@@ -241,6 +241,19 @@ const toTagsRecord = (tags: cloudfront.Tag[] | undefined) =>
       .map((tag) => [tag.Key, tag.Value]),
   );
 
+const isAccessDenied = (error: unknown) => {
+  const tag = (error as { _tag?: string; name?: string })?._tag;
+  const name = (error as { _tag?: string; name?: string })?.name;
+  const text = String(error);
+  return (
+    tag === "AccessDenied" ||
+    tag === "AccessDeniedException" ||
+    name === "AccessDenied" ||
+    name === "AccessDeniedException" ||
+    text.includes("AccessDenied")
+  );
+};
+
 const toBehavior = (
   behavior: DistributionBehavior & {
     pathPattern?: string;
@@ -477,18 +490,45 @@ export const DistributionProvider = () =>
           };
 
           const callerReference = instanceId;
-          const created = yield* cloudfront.createDistributionWithTags({
-            DistributionConfigWithTags: {
-              DistributionConfig: toConfig(callerReference, news),
-              Tags: {
-                Items: createTagsList(tags),
+          const config = toConfig(callerReference, news);
+          const created = yield* cloudfront
+            .createDistributionWithTags({
+              DistributionConfigWithTags: {
+                DistributionConfig: config,
+                Tags: {
+                  Items: createTagsList(tags),
+                },
               },
-            },
-          });
+            })
+            .pipe(
+              Effect.catch((error) =>
+                isAccessDenied(error)
+                  ? Effect.gen(function* () {
+                      const created = yield* cloudfront.createDistribution({
+                        DistributionConfig: config,
+                      });
+
+                      if (
+                        created.Distribution?.ARN &&
+                        Object.keys(tags).length > 0
+                      ) {
+                        yield* cloudfront.tagResource({
+                          Resource: created.Distribution.ARN,
+                          Tags: {
+                            Items: createTagsList(tags),
+                          },
+                        });
+                      }
+
+                      return created;
+                    })
+                  : Effect.fail(error),
+              ),
+            );
 
           if (!created.Distribution?.Id) {
             return yield* Effect.fail(
-              new Error("createDistributionWithTags returned no distribution"),
+              new Error("createDistribution returned no distribution"),
             );
           }
 
