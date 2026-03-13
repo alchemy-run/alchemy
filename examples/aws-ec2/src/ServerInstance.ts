@@ -1,6 +1,6 @@
 import { AWS } from "alchemy-effect";
 import * as Http from "alchemy-effect/Http";
-import * as Process from "alchemy-effect/Process";
+import { SQSQueueEventSource } from "alchemy-effect/Process/SQSQueueEventSource";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
@@ -27,23 +27,13 @@ const ServerInstance = Effect.gen(function* () {
     main: import.meta.path,
     imageId,
     instanceType: "t3.small",
-    subnetId: network.publicSubnetId,
-    securityGroupIds: network.securityGroupIds,
-    associatePublicIpAddress: true,
+    securityGroupIds: [network.appSecurityGroupId],
     port: 3000,
-    env: {
-      QUEUE_URL: queue.queueUrl,
-    },
-    roleManagedPolicyArns: ["arn:aws:iam::aws:policy/AmazonSQSFullAccess"],
   };
 }).pipe(
   Effect.provide(
     Layer.provideMerge(
-      Layer.mergeAll(
-        NetworkLive,
-        Process.SQSQueueEventSource,
-        AWS.EC2.HttpServer,
-      ),
+      Layer.mergeAll(NetworkLive, SQSQueueEventSource, AWS.EC2.HttpServer),
       Layer.mergeAll(
         AWS.SQS.DeleteMessageBatchLive,
         AWS.SQS.ReceiveMessageLive,
@@ -51,7 +41,7 @@ const ServerInstance = Effect.gen(function* () {
       ),
     ),
   ),
-  AWS.EC2.Instance("ServerInstance"),
+  AWS.AutoScaling.LaunchTemplate("ServerInstance"),
 );
 
 export default ServerInstance;
