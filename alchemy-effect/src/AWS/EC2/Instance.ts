@@ -1,9 +1,6 @@
 import type { Credentials } from "@distilled.cloud/aws/Credentials";
 import * as ec2 from "@distilled.cloud/aws/ec2";
-import * as iam from "@distilled.cloud/aws/iam";
 import { Region } from "@distilled.cloud/aws/Region";
-import * as s3 from "@distilled.cloud/aws/s3";
-import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -12,29 +9,19 @@ import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Bundler, type BundleOptions } from "../../Bundle/Bundler.ts";
-import {
-  cleanupBundleTempDir,
-  createTempBundleDir,
-} from "../../Bundle/TempRoot.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { DotAlchemy } from "../../Config.ts";
 import { Host, type ServerExecutionContext } from "../../Host.ts";
 import type { Input } from "../../Input.ts";
-import * as Output from "../../Output.ts";
-import { createPhysicalName } from "../../PhysicalName.ts";
 import type { ProcessRuntime } from "../../Process/Runtime.ts";
-import { Resource, type ResourceBinding } from "../../Resource.ts";
+import { Resource } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import {
   createAlchemyTagFilters,
   createInternalTags,
-  createTagsList,
   diffTags,
-  hasTags,
 } from "../../Tags.ts";
-import { sha256 } from "../../Util/sha256.ts";
-import { zipCode } from "../../Util/zip.ts";
 import type { AccountID } from "../Account.ts";
 import { Account } from "../Account.ts";
 import { Assets } from "../Assets.ts";
@@ -43,6 +30,10 @@ import type { RegionID } from "../Region.ts";
 import type { SecurityGroupId } from "./SecurityGroup.ts";
 import type { SubnetId } from "./Subnet.ts";
 import type { VpcId } from "./Vpc.ts";
+import {
+  createEc2HostExecutionContext,
+  createEc2HostedSupport,
+} from "./hosted.ts";
 
 export type InstanceId<ID extends string = string> = `i-${ID}`;
 export const InstanceId = <ID extends string>(id: ID): ID & InstanceId<ID> =>
@@ -302,49 +293,7 @@ export const Instance = Host<
   Instance,
   ServerExecutionContext,
   Credentials | Region | ProcessRuntime
->("AWS.EC2.Instance", (id) => {
-  const runners: Effect.Effect<void, never, any>[] = [];
-  const env: Record<string, any> = {};
-
-  return {
-    type: "AWS.EC2.Instance",
-    id,
-    env,
-    set: (bindingId: string, output: Output.Output) =>
-      Effect.sync(() => {
-        const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
-        env[key] = output.pipe(Output.map((value) => JSON.stringify(value)));
-        return key;
-      }),
-    get: <T>(key: string) =>
-      Config.string(key)
-        .asEffect()
-        .pipe(
-          Effect.flatMap((value) =>
-            Effect.try({
-              try: () => JSON.parse(value) as T,
-              catch: (error) => error as Error,
-            }),
-          ),
-          Effect.catch((cause) =>
-            Effect.die(
-              new Error(`Failed to get environment variable: ${key}`, {
-                cause,
-              }),
-            ),
-          ),
-        ),
-    run: ((effect: Effect.Effect<void, never, any>) =>
-      Effect.sync(() => {
-        runners.push(effect);
-      })) as unknown as ServerExecutionContext["run"],
-    exports: {
-      program: Effect.all(runners, { concurrency: "unbounded" }).pipe(
-        Effect.asVoid,
-      ),
-    },
-  } satisfies ServerExecutionContext;
-});
+>("AWS.EC2.Instance", (id) => createEc2HostExecutionContext("AWS.EC2.Instance", id));
 
 export const InstanceProvider = () =>
   Instance.provider.effect(
@@ -361,39 +310,21 @@ export const InstanceProvider = () =>
         Option.getOrUndefined,
       );
 
-      const alchemyEnv = {
-        ALCHEMY_STACK_NAME: stack.name,
-        ALCHEMY_STAGE: stack.stage,
-        ALCHEMY_PHASE: "runtime",
-      };
-
       const toInstanceArn = (instanceId: InstanceId) =>
         `arn:aws:ec2:${region}:${accountId}:instance/${instanceId}` as InstanceArn;
 
-      const createRoleName = (id: string) =>
-        createPhysicalName({
-          id: `${id}-role`,
-          maxLength: 64,
-        });
-
-      const createPolicyName = (id: string) =>
-        createPhysicalName({
-          id: `${id}-policy`,
-          maxLength: 128,
-        });
-
-      const createManagedProfileName = (id: string) =>
-        createPhysicalName({
-          id: `${id}-profile`,
-          maxLength: 128,
-        });
-
-      const createRuntimeUnitName = (id: string) =>
-        createPhysicalName({
-          id: `${id}-instance`,
-          maxLength: 64,
-          lowercase: true,
-        }).pipe(Effect.map((name) => name.replaceAll(/[^a-z0-9-]/g, "-")));
+      const hosted = createEc2HostedSupport({
+        accountId,
+        region,
+        stackName: stack.name,
+        stage,
+        dotAlchemy,
+        fs,
+        path,
+        bundler,
+        assets,
+        resourceType: "EC2.Instance",
+      });
 
       const toTagRecord = (tags?: Array<{ Key?: string; Value?: string }>) =>
         Object.fromEntries(
@@ -552,557 +483,9 @@ export const InstanceProvider = () =>
         );
       });
 
-      const normalizeSecurityGroups = (groups?: readonly string[]) =>
-        [...(groups ?? [])].sort((a, b) => a.localeCompare(b));
-      const resolvedSubnetId = (subnetId?: InstanceProps["subnetId"]) =>
-        subnetId as SubnetId | undefined;
       const resolvedSecurityGroups = (
         groups?: InstanceProps["securityGroupIds"],
-      ) => normalizeSecurityGroups(groups as string[] | undefined);
-
-      const bundleProgram = Effect.fn(function* (
-        id: string,
-        props: InstanceProps,
-      ) {
-        if (!props.main) {
-          return yield* Effect.fail(
-            new Error(
-              `EC2.Instance '${id}' requires 'main' when bundling a hosted process`,
-            ),
-          );
-        }
-
-        const handler = props.handler ?? "default";
-        const outfile = path.join(
-          dotAlchemy,
-          "out",
-          `${stack.name}-${stage}-${id}.mjs`,
-        );
-        const realMain = yield* fs.realPath(props.main);
-        const tempDir = yield* createTempBundleDir(realMain, dotAlchemy, id);
-        const realTempDir = yield* fs.realPath(tempDir);
-        const tempEntry = path.join(realTempDir, "__index.ts");
-        let file = path.relative(realTempDir, realMain);
-        if (!file.startsWith(".")) {
-          file = `./${file}`;
-        }
-        file = file.replaceAll("\\", "/");
-
-        yield* fs.writeFileString(
-          tempEntry,
-          `
-import { NodeServices } from "@effect/platform-node";
-import { Stack } from "alchemy-effect/Stack";
-import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Credentials from "@distilled.cloud/aws/Credentials";
-import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
-import * as Region from "@distilled.cloud/aws/Region";
-
-import { ${handler} as handler } from "${file}";
-
-const platform = Layer.mergeAll(
-  NodeServices.layer,
-  FetchHttpClient.layer,
-  Logger.layer([Logger.consolePretty()]),
-);
-
-const program = handler.pipe(
-  Effect.flatMap((instance) => instance.ExecutionContext.exports.program),
-  Effect.provide(
-    Layer.effect(
-      Stack,
-      Effect.all([
-        Config.string("ALCHEMY_STACK_NAME").asEffect(),
-        Config.string("ALCHEMY_STAGE").asEffect()
-      ]).pipe(
-        Effect.map(([name, stage]) => ({
-          name,
-          stage,
-          bindings: {},
-          resources: {}
-        }))
-      )
-    ).pipe(
-      Layer.provideMerge(Credentials.fromEnv()),
-      Layer.provideMerge(Region.fromEnv()),
-      Layer.provideMerge(platform),
-      Layer.provideMerge(
-        Layer.succeed(
-          ConfigProvider.ConfigProvider,
-          ConfigProvider.fromEnv()
-        )
-      ),
-    )
-  ),
-  Effect.scoped
-);
-
-await Effect.runPromise(program);
-`,
-        );
-
-        return yield* Effect.gen(function* () {
-          yield* bundler.build({
-            ...props.build,
-            entry: tempEntry,
-            outfile,
-            format: "esm",
-            platform: "node",
-            target: "node22",
-            sourcemap: props.build?.sourcemap ?? false,
-            treeshake: props.build?.treeshake ?? true,
-            minify: props.build?.minify ?? true,
-            external: props.build?.external ?? [],
-          });
-          const code = yield* fs.readFile(outfile).pipe(Effect.orDie);
-          const archive = yield* zipCode(code);
-          const hash = yield* sha256(archive);
-          return { archive, hash };
-        }).pipe(Effect.ensuring(cleanupBundleTempDir(tempDir)));
-      });
-
-      const quoteEnvValue = (value: any) => {
-        const text =
-          typeof value === "string" ? value : JSON.stringify(value ?? null);
-        return `'${text.replaceAll(/'/g, `'""'`).replaceAll(/\n/g, "\\n")}'`;
-      };
-
-      const renderEnvFile = (env: Record<string, any>) =>
-        Object.entries(env)
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([key, value]) => `${key}=${quoteEnvValue(value)}`)
-          .join("\n");
-
-      const renderHostedUserData = ({
-        unitName,
-        bundleKey,
-        envKey,
-      }: {
-        unitName: string;
-        bundleKey: string;
-        envKey: string;
-      }) => {
-        const appDir = `/opt/${unitName}`;
-        return `#!/bin/bash
-set -euo pipefail
-
-PKG_INSTALL=""
-if command -v dnf >/dev/null 2>&1; then
-  PKG_INSTALL="dnf install -y"
-elif command -v yum >/dev/null 2>&1; then
-  PKG_INSTALL="yum install -y"
-fi
-
-if [ -n "$PKG_INSTALL" ]; then
-  $PKG_INSTALL unzip curl awscli
-fi
-
-mkdir -p "${appDir}"
-
-export HOME=/root
-if [ ! -x /root/.bun/bin/bun ]; then
-  curl -fsSL https://bun.sh/install | bash
-fi
-
-cat >/usr/local/bin/${unitName}-sync.sh <<'EOF'
-#!/bin/bash
-set -euo pipefail
-mkdir -p "${appDir}"
-aws s3 cp "s3://${assets?.bucketName}/${bundleKey}" "${appDir}/bundle.zip" --region "${region}"
-aws s3 cp "s3://${assets?.bucketName}/${envKey}" "${appDir}/env" --region "${region}"
-rm -f "${appDir}/index.mjs"
-unzip -o "${appDir}/bundle.zip" -d "${appDir}"
-EOF
-chmod +x /usr/local/bin/${unitName}-sync.sh
-
-cat >/etc/systemd/system/${unitName}.service <<'EOF'
-[Unit]
-Description=Alchemy EC2 instance runtime ${unitName}
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-WorkingDirectory=${appDir}
-ExecStartPre=/usr/local/bin/${unitName}-sync.sh
-EnvironmentFile=${appDir}/env
-ExecStart=/root/.bun/bin/bun ${appDir}/index.mjs
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-/usr/local/bin/${unitName}-sync.sh
-systemctl daemon-reload
-systemctl enable --now ${unitName}.service
-`;
-      };
-
-      const mergeUserData = (hosted: string, userData?: string) => {
-        if (!userData) {
-          return hosted;
-        }
-        return `${hosted}\n\n# User supplied bootstrap\n${userData.replace(
-          /^#!\/bin\/bash\s*/,
-          "",
-        )}`;
-      };
-
-      const listAttachedPolicyArns = (roleName: string) =>
-        iam
-          .listAttachedRolePolicies({
-            RoleName: roleName,
-          })
-          .pipe(
-            Effect.map((result) =>
-              (result.AttachedPolicies ?? [])
-                .map((policy) => policy.PolicyArn)
-                .filter((policyArn): policyArn is string => Boolean(policyArn)),
-            ),
-          );
-
-      const attachManagedPolicies = Effect.fn(function* ({
-        roleName,
-        managedPolicyArns,
-      }: {
-        roleName: string;
-        managedPolicyArns: string[];
-      }) {
-        const attached = new Set(yield* listAttachedPolicyArns(roleName));
-        for (const policyArn of managedPolicyArns) {
-          if (!attached.has(policyArn)) {
-            yield* iam.attachRolePolicy({
-              RoleName: roleName,
-              PolicyArn: policyArn,
-            });
-          }
-        }
-      });
-
-      const ensureManagedRole = Effect.fn(function* ({
-        id,
-        roleName,
-        managedPolicyArns,
-      }: {
-        id: string;
-        roleName: string;
-        managedPolicyArns: string[];
-      }) {
-        const tags = yield* createInternalTags(id);
-        const role = yield* iam
-          .createRole({
-            RoleName: roleName,
-            AssumeRolePolicyDocument: JSON.stringify({
-              Version: "2012-10-17",
-              Statement: [
-                {
-                  Effect: "Allow",
-                  Principal: {
-                    Service: "ec2.amazonaws.com",
-                  },
-                  Action: "sts:AssumeRole",
-                },
-              ],
-            }),
-            Tags: createTagsList(tags),
-          })
-          .pipe(
-            Effect.catchTag("EntityAlreadyExistsException", () =>
-              iam.getRole({ RoleName: roleName }).pipe(
-                Effect.filterOrFail(
-                  (existing) => hasTags(tags, existing.Role?.Tags),
-                  () =>
-                    new Error(
-                      `Role '${roleName}' already exists and is not managed by alchemy`,
-                    ),
-                ),
-              ),
-            ),
-          );
-
-        yield* attachManagedPolicies({
-          roleName,
-          managedPolicyArns,
-        });
-
-        return role.Role?.Arn ?? `arn:aws:iam::${accountId}:role/${roleName}`;
-      });
-
-      const ensureManagedInstanceProfile = Effect.fn(function* ({
-        id,
-        profileName,
-        roleName,
-      }: {
-        id: string;
-        profileName: string;
-        roleName: string;
-      }) {
-        const tags = yield* createInternalTags(id);
-        yield* iam
-          .createInstanceProfile({
-            InstanceProfileName: profileName,
-            Tags: createTagsList(tags),
-          })
-          .pipe(
-            Effect.catchTag("EntityAlreadyExistsException", () => Effect.void),
-          );
-
-        const profile = yield* iam.getInstanceProfile({
-          InstanceProfileName: profileName,
-        });
-        const currentRoleName = profile.InstanceProfile.Roles?.[0]?.RoleName;
-
-        if (currentRoleName && currentRoleName !== roleName) {
-          yield* iam.removeRoleFromInstanceProfile({
-            InstanceProfileName: profileName,
-            RoleName: currentRoleName,
-          });
-        }
-
-        if (currentRoleName !== roleName) {
-          yield* iam.addRoleToInstanceProfile({
-            InstanceProfileName: profileName,
-            RoleName: roleName,
-          });
-        }
-
-        const refreshed = yield* iam.getInstanceProfile({
-          InstanceProfileName: profileName,
-        });
-        return {
-          instanceProfileName: refreshed.InstanceProfile.InstanceProfileName,
-          instanceProfileArn: refreshed.InstanceProfile.Arn,
-        };
-      });
-
-      const attachHostedBindings = Effect.fn(function* ({
-        roleName,
-        policyName,
-        assetPrefix,
-        bindings,
-      }: {
-        roleName: string;
-        policyName: string;
-        assetPrefix: string;
-        bindings: ResourceBinding<Instance["Binding"]>[];
-      }) {
-        const activeBindings = bindings.filter(
-          (
-            binding: ResourceBinding<Instance["Binding"]> & { action?: string },
-          ) => binding.action !== "delete",
-        );
-
-        const env = activeBindings
-          .map((binding) => binding?.data?.env)
-          .reduce((acc, value) => ({ ...acc, ...value }), {});
-
-        const policyStatements = activeBindings.flatMap(
-          (binding) =>
-            binding?.data?.policyStatements?.map((statement) => ({
-              ...statement,
-              Sid: statement.Sid?.replace(/[^A-Za-z0-9]+/gi, ""),
-            })) ?? [],
-        );
-
-        policyStatements.push({
-          Sid: undefined,
-          Effect: "Allow",
-          Action: ["s3:GetObject"],
-          Resource: [`arn:aws:s3:::${assets?.bucketName}/${assetPrefix}/*`],
-        });
-
-        yield* iam.putRolePolicy({
-          RoleName: roleName,
-          PolicyName: policyName,
-          PolicyDocument: JSON.stringify({
-            Version: "2012-10-17",
-            Statement: policyStatements,
-          }),
-        });
-
-        return env;
-      });
-
-      const uploadHostedArtifacts = Effect.fn(function* ({
-        bundleKey,
-        envKey,
-        archive,
-        env,
-      }: {
-        bundleKey: string;
-        envKey: string;
-        archive: Uint8Array<ArrayBufferLike>;
-        env: Record<string, any>;
-      }) {
-        if (!assets) {
-          return yield* Effect.fail(
-            new Error(
-              "EC2.Instance host mode requires the AWS assets bucket. Run bootstrap first.",
-            ),
-          );
-        }
-
-        const contentHash = yield* sha256(archive);
-        const uploadedAssetKey = yield* assets.uploadAsset(
-          contentHash,
-          archive,
-        );
-        yield* s3.copyObject({
-          Bucket: assets.bucketName,
-          Key: bundleKey,
-          CopySource: `${assets.bucketName}/${uploadedAssetKey}`,
-        });
-        yield* s3.putObject({
-          Bucket: assets.bucketName,
-          Key: envKey,
-          Body: renderEnvFile(env),
-          ContentType: "text/plain; charset=utf-8",
-        });
-      });
-
-      const resolveHostedRuntime = Effect.fn(function* ({
-        id,
-        news,
-        bindings,
-        output,
-      }: {
-        id: string;
-        news: InstanceProps;
-        bindings: ResourceBinding<Instance["Binding"]>[];
-        output?: Instance["Attributes"];
-      }) {
-        if (!news.main) {
-          return {
-            userData: news.userData,
-            roleName: output?.roleName,
-            roleArn: output?.roleArn,
-            policyName: output?.policyName,
-            instanceProfileName:
-              news.instanceProfileName ?? output?.instanceProfileName,
-            instanceProfileArn: output?.instanceProfileArn,
-            managedIam: output?.managedIam ?? false,
-            runtimeUnitName: output?.runtimeUnitName,
-            assetPrefix: output?.assetPrefix,
-            code: output?.code,
-          };
-        }
-
-        if (
-          news.instanceProfileName &&
-          (news.roleManagedPolicyArns?.length ?? 0) > 0
-        ) {
-          return yield* Effect.fail(
-            new Error(
-              "EC2.Instance does not support roleManagedPolicyArns with a custom instanceProfileName in host mode",
-            ),
-          );
-        }
-        if (!assets) {
-          return yield* Effect.fail(
-            new Error(
-              "EC2.Instance host mode requires the AWS assets bucket. Run bootstrap first.",
-            ),
-          );
-        }
-
-        const runtimeUnitName =
-          output?.runtimeUnitName ?? (yield* createRuntimeUnitName(id));
-        const assetPrefix = output?.assetPrefix ?? `ec2/${runtimeUnitName}`;
-        const bundleKey = `${assetPrefix}/bundle.zip`;
-        const envKey = `${assetPrefix}/env`;
-        const policyName = output?.policyName ?? (yield* createPolicyName(id));
-
-        const managedIam = !news.instanceProfileName;
-        let roleName: string;
-        let roleArn: string | undefined;
-        let instanceProfileName: string | undefined;
-        let instanceProfileArn: string | undefined;
-
-        if (managedIam) {
-          roleName = output?.roleName ?? (yield* createRoleName(id));
-          roleArn =
-            output?.roleArn ??
-            (yield* ensureManagedRole({
-              id,
-              roleName,
-              managedPolicyArns: news.roleManagedPolicyArns ?? [],
-            }));
-          const profileName =
-            output?.instanceProfileName ??
-            (yield* createManagedProfileName(id));
-          const profile = yield* ensureManagedInstanceProfile({
-            id,
-            profileName,
-            roleName,
-          });
-          instanceProfileName = profile.instanceProfileName;
-          instanceProfileArn = profile.instanceProfileArn;
-        } else {
-          const profile = yield* iam.getInstanceProfile({
-            InstanceProfileName: news.instanceProfileName!,
-          });
-          const role = profile.InstanceProfile.Roles?.[0];
-          if (!role?.RoleName) {
-            return yield* Effect.fail(
-              new Error(
-                `Instance profile '${news.instanceProfileName}' must have a role attached for host mode`,
-              ),
-            );
-          }
-          roleName = role.RoleName;
-          roleArn = role.Arn;
-          instanceProfileName = profile.InstanceProfile.InstanceProfileName;
-          instanceProfileArn = profile.InstanceProfile.Arn;
-        }
-
-        const bindingEnv = yield* attachHostedBindings({
-          roleName,
-          policyName,
-          assetPrefix,
-          bindings,
-        });
-        const env = {
-          ...bindingEnv,
-          ...alchemyEnv,
-          ...(news.port !== undefined ? { PORT: news.port } : {}),
-          ...news.env,
-        };
-
-        const { archive, hash } = yield* bundleProgram(id, news);
-        yield* uploadHostedArtifacts({
-          bundleKey,
-          envKey,
-          archive,
-          env,
-        });
-
-        const hostedUserData = renderHostedUserData({
-          unitName: runtimeUnitName,
-          bundleKey,
-          envKey,
-        });
-
-        return {
-          userData: mergeUserData(hostedUserData, news.userData),
-          roleName,
-          roleArn,
-          policyName,
-          instanceProfileName,
-          instanceProfileArn,
-          managedIam,
-          runtimeUnitName,
-          assetPrefix,
-          code: {
-            hash,
-          },
-        };
-      });
+      ) => hosted.normalizeSecurityGroups(groups as string[] | undefined);
 
       const buildRunInstancesRequest = (
         news: InstanceProps,
@@ -1112,58 +495,23 @@ systemctl enable --now ${unitName}.service
         },
         tags: Record<string, string>,
       ): ec2.RunInstancesRequest => {
-        const encodedUserData = runtime.userData
-          ? Buffer.from(runtime.userData).toString("base64")
-          : undefined;
-        const usePrimaryNetworkInterface =
-          news.subnetId !== undefined ||
-          news.associatePublicIpAddress !== undefined ||
-          news.privateIpAddress !== undefined;
-
         return {
-          ImageId: news.imageId,
-          InstanceType: news.instanceType as ec2.InstanceType,
+          ...hosted.buildLaunchTemplateData(
+            {
+              imageId: news.imageId,
+              instanceType: news.instanceType,
+              keyName: news.keyName,
+              subnetId: news.subnetId as string | undefined,
+              securityGroupIds: news.securityGroupIds as string[] | undefined,
+              associatePublicIpAddress: news.associatePublicIpAddress,
+              privateIpAddress: news.privateIpAddress,
+              availabilityZone: news.availabilityZone,
+              tags,
+            },
+            runtime,
+          ),
           MinCount: 1,
           MaxCount: 1,
-          KeyName: news.keyName,
-          IamInstanceProfile: runtime.instanceProfileName
-            ? {
-                Name: runtime.instanceProfileName,
-              }
-            : undefined,
-          UserData: encodedUserData,
-          Placement: news.availabilityZone
-            ? {
-                AvailabilityZone: news.availabilityZone,
-              }
-            : undefined,
-          NetworkInterfaces: usePrimaryNetworkInterface
-            ? [
-                {
-                  DeviceIndex: 0,
-                  SubnetId: resolvedSubnetId(news.subnetId),
-                  Groups: resolvedSecurityGroups(news.securityGroupIds),
-                  AssociatePublicIpAddress: news.associatePublicIpAddress,
-                  PrivateIpAddress: news.privateIpAddress,
-                  DeleteOnTermination: true,
-                },
-              ]
-            : undefined,
-          SubnetId: usePrimaryNetworkInterface
-            ? undefined
-            : resolvedSubnetId(news.subnetId),
-          SecurityGroupIds: usePrimaryNetworkInterface
-            ? undefined
-            : resolvedSecurityGroups(news.securityGroupIds),
-          PrivateIpAddress: usePrimaryNetworkInterface
-            ? undefined
-            : news.privateIpAddress,
-          TagSpecifications: [
-            {
-              ResourceType: "instance",
-              Tags: createTagsList(tags),
-            },
-          ],
         };
       };
 
@@ -1236,7 +584,7 @@ systemctl enable --now ${unitName}.service
             ...(yield* createInternalTags(id)),
             ...news.tags,
           };
-          const runtime = yield* resolveHostedRuntime({
+          const runtime = yield* hosted.resolveHostedRuntime({
             id,
             news,
             bindings,
@@ -1336,7 +684,7 @@ systemctl enable --now ${unitName}.service
             ...(yield* createInternalTags(id)),
             ...news.tags,
           };
-          const runtime = yield* resolveHostedRuntime({
+          const runtime = yield* hosted.resolveHostedRuntime({
             id,
             news,
             bindings,
@@ -1452,72 +800,7 @@ systemctl enable --now ${unitName}.service
             session,
           });
 
-          if (output.roleName && output.policyName) {
-            yield* iam
-              .deleteRolePolicy({
-                RoleName: output.roleName,
-                PolicyName: output.policyName,
-              })
-              .pipe(
-                Effect.catchTag("NoSuchEntityException", () => Effect.void),
-              );
-          }
-
-          if (
-            output.managedIam &&
-            output.instanceProfileName &&
-            output.roleName
-          ) {
-            const attachedPolicyArns = yield* listAttachedPolicyArns(
-              output.roleName,
-            ).pipe(Effect.catch(() => Effect.succeed([])));
-            yield* iam
-              .removeRoleFromInstanceProfile({
-                InstanceProfileName: output.instanceProfileName,
-                RoleName: output.roleName,
-              })
-              .pipe(
-                Effect.catchTag("NoSuchEntityException", () => Effect.void),
-              );
-            yield* iam
-              .deleteInstanceProfile({
-                InstanceProfileName: output.instanceProfileName,
-              })
-              .pipe(
-                Effect.catchTag("NoSuchEntityException", () => Effect.void),
-              );
-            for (const policyArn of attachedPolicyArns) {
-              yield* iam
-                .detachRolePolicy({
-                  RoleName: output.roleName,
-                  PolicyArn: policyArn,
-                })
-                .pipe(
-                  Effect.catchTag("NoSuchEntityException", () => Effect.void),
-                );
-            }
-            yield* iam
-              .deleteRole({
-                RoleName: output.roleName,
-              })
-              .pipe(
-                Effect.catchTag("NoSuchEntityException", () => Effect.void),
-              );
-          }
-
-          if (assets && output.assetPrefix) {
-            for (const key of [
-              `${output.assetPrefix}/bundle.zip`,
-              `${output.assetPrefix}/env`,
-            ]) {
-              yield* s3
-                .deleteObject({
-                  Bucket: assets.bucketName,
-                  Key: key,
-                })
-                .pipe(Effect.catchTag("NotFound", () => Effect.void));
-            }
-          }
+          yield* hosted.cleanupHostedRuntime({ output });
         }),
       };
     }),
