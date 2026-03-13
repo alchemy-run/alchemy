@@ -8,3 +8,4 @@ export * from "./PolicyAttachment.ts";
 export * from "./Root.ts";
 export * from "./RootPolicyType.ts";
 export * from "./TrustedServiceAccess.ts";
+export * from "./TenantRoot.ts";

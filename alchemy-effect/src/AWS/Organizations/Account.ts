@@ -1,3 +1,4 @@
+import * as accountManagement from "@distilled.cloud/aws/account";
 import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -70,6 +71,9 @@ export const AccountProvider = () =>
         diff: Effect.fn(function* ({ olds, news }) {
           if (olds?.email !== news.email) {
             return { action: "replace" } as const;
+          }
+          if (olds?.name !== news.name) {
+            return { action: "update" } as const;
           }
         }),
         read: Effect.fn(function* ({ olds, output }) {
@@ -152,6 +156,15 @@ export const AccountProvider = () =>
           };
         }),
         update: Effect.fn(function* ({ id, news, olds, output, session }) {
+          if (output.name !== news.name) {
+            yield* retryAccountManagement(
+              accountManagement.putAccountName({
+                AccountId: output.accountId,
+                AccountName: news.name,
+              }),
+            );
+          }
+
           if (output.parentId && output.parentId !== news.parentId) {
             yield* retryOrganizations(
               organizations.moveAccount({
@@ -296,6 +309,18 @@ const waitForCreateAccount = (requestId: string) =>
       while: (error: any) => error?._tag === "CreateAccountInProgress",
       schedule: Schedule.spaced("2 seconds").pipe(
         Schedule.both(Schedule.recurs(120)),
+      ),
+    }),
+  );
+
+const retryAccountManagement = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(
+    Effect.retry({
+      while: (error: any) =>
+        error?._tag === "TooManyRequestsException" ||
+        error?._tag === "InternalServerException",
+      schedule: Schedule.exponential(200).pipe(
+        Schedule.both(Schedule.recurs(8)),
       ),
     }),
   );
