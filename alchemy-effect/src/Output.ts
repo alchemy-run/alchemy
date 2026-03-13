@@ -376,10 +376,10 @@ export class InvalidReferenceError extends Data.TaggedError(
   resourceId: string;
 }> {}
 
-export const evaluate: <A, Upstream extends ResourceLike, Req = never>(
+export const evaluate: <A, Req = never>(
   expr: Output<A, Req> | A,
   upstream: {
-    [Id in Upstream["LogicalId"]]: Extract<Upstream, { id: Id }>["Attributes"];
+    [Id in string]: any;
   },
 ) => Effect.Effect<
   A,

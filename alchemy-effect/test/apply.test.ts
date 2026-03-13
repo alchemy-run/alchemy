@@ -13,13 +13,14 @@ import { describe, expect } from "@effect/vitest";
 import { Data, Layer } from "effect";
 import * as Effect from "effect/Effect";
 import {
+  BindingTarget,
   DeletedBindingRegressionTarget,
-  type TestResourceProps,
   InMemoryTestLayers,
   StaticStablesResource,
   TestLayers,
   TestResource,
   TestResourceHooks,
+  type TestResourceProps,
 } from "./test.resources.ts";
 
 const testStack = "test";
@@ -242,6 +243,466 @@ describe("basic operations", () => {
       });
     }).pipe(Effect.provide(MockLayers())),
   );
+
+  test(
+    "should create a resource with a binding that references its own output",
+    {
+      timeout: 10_000,
+    },
+    Effect.gen(function* () {
+      const created = yield* test.deploy(
+        Effect.gen(function* () {
+          const target = yield* DeletedBindingRegressionTarget("A", {
+            name: "target",
+          });
+          yield* target.bind("SelfBinding", {
+            env: {
+              SELF_NAME: target.name,
+            },
+          });
+          return target;
+        }),
+      );
+
+      expect(created.env).toEqual({
+        SELF_NAME: "target",
+      });
+    }).pipe(Effect.provide(MockLayers())),
+  );
+});
+
+describe("circularity via bindings", () => {
+  const selfBoundStack = (props: {
+    string: string;
+    replaceString?: string;
+    includeD?: boolean;
+  }) =>
+    Effect.gen(function* () {
+      const A = yield* BindingTarget("A", {
+        name: "a",
+        string: props.string,
+        replaceString: props.replaceString,
+      });
+      yield* A.bind("SelfBinding", {
+        env: {
+          SELF: A.string,
+        },
+      });
+      const B = yield* TestResource("B", { string: A.string });
+      if (props.includeD) {
+        const D = yield* TestResource("D", { string: B.string });
+        return { A, B, D };
+      }
+      return { A, B };
+    });
+
+  const mutualBindingStack = (props: {
+    aString: string;
+    aReplaceString?: string;
+    bString?: string;
+    includeD?: boolean;
+  }) =>
+    Effect.gen(function* () {
+      const A = yield* BindingTarget("A", {
+        name: "a",
+        string: props.aString,
+        replaceString: props.aReplaceString,
+      });
+      const B = yield* BindingTarget("B", {
+        name: "b",
+        string: props.bString ?? "b-value",
+      });
+      yield* A.bind("FromB", {
+        env: {
+          PEER: B.string,
+        },
+      });
+      yield* B.bind("FromA", {
+        env: {
+          PEER: A.string,
+        },
+      });
+      if (props.includeD) {
+        const D = yield* TestResource("D", {
+          string: Output.interpolate`${A.string}-${B.string}`,
+        });
+        return { A, B, D };
+      }
+      return { A, B };
+    });
+
+  describe("self-referential bindings", () => {
+    test(
+      "create succeeds with self binding",
+      Effect.gen(function* () {
+        const output = yield* test.deploy(
+          selfBoundStack({
+            string: "a-value",
+            replaceString: "original",
+          }),
+        );
+
+        expect(output.A.env).toEqual({ SELF: "a-value" });
+        expect(output.B.string).toEqual("a-value");
+        expect((yield* getState("A"))?.status).toEqual("created");
+        expect((yield* getState("B"))?.status).toEqual("created");
+      }).pipe(Effect.provide(MockLayers())),
+    );
+
+    test(
+      "replacing state noop replay recovers and creates downstream resources",
+      Effect.gen(function* () {
+        yield* selfBoundStack({
+          string: "a-value",
+          replaceString: "original",
+        }).pipe(test.deploy);
+
+        const stack = selfBoundStack({
+          string: "a-value-replaced",
+          replaceString: "changed",
+          includeD: true,
+        });
+
+        yield* stack.pipe(test.deploy, hook(failOn("A", "create")));
+
+        expect((yield* getState<ReplacingResourceState>("A"))?.status).toEqual(
+          "replacing",
+        );
+        expect((yield* getState("B"))?.status).toEqual("created");
+        expect(yield* getState("D")).toBeUndefined();
+
+        const output = yield* stack.pipe(test.deploy);
+        expect((yield* getState("A"))?.status).toEqual("created");
+        expect((yield* getState("B"))?.status).toEqual("updated");
+        expect((yield* getState("D"))?.status).toEqual("created");
+        expect(output.A.env).toEqual({ SELF: "a-value-replaced" });
+        expect(output.D!.string).toEqual("a-value-replaced");
+      }).pipe(Effect.provide(MockLayers())),
+    );
+
+    test(
+      "replacing state update replay updates replacement and creates downstream resources",
+      Effect.gen(function* () {
+        yield* selfBoundStack({
+          string: "a-value",
+          replaceString: "original",
+        }).pipe(test.deploy);
+
+        yield* selfBoundStack({
+          string: "a-value-replaced",
+          replaceString: "changed",
+          includeD: true,
+        }).pipe(test.deploy, hook(failOn("A", "create")));
+
+        expect((yield* getState<ReplacingResourceState>("A"))?.status).toEqual(
+          "replacing",
+        );
+        expect((yield* getState("B"))?.status).toEqual("created");
+        expect(yield* getState("D")).toBeUndefined();
+
+        const output = yield* selfBoundStack({
+          string: "a-value-updated-during-recovery",
+          replaceString: "changed",
+          includeD: true,
+        }).pipe(test.deploy);
+
+        expect((yield* getState("A"))?.status).toEqual("created");
+        expect((yield* getState("B"))?.status).toEqual("updated");
+        expect((yield* getState("D"))?.status).toEqual("created");
+        expect(output.A.env).toEqual({
+          SELF: "a-value-replaced",
+        });
+        expect(output.D!.string).toEqual("a-value-updated-during-recovery");
+      }).pipe(Effect.provide(MockLayers())),
+    );
+
+    test(
+      "replaced state noop replay finishes cleanup and creates downstream resources",
+      Effect.gen(function* () {
+        yield* selfBoundStack({
+          string: "a-value",
+          replaceString: "original",
+        }).pipe(test.deploy);
+
+        const stack = selfBoundStack({
+          string: "a-value-replaced",
+          replaceString: "changed",
+          includeD: true,
+        });
+
+        yield* stack.pipe(test.deploy, hook(failOn("B", "update")));
+
+        expect((yield* getState<ReplacedResourceState>("A"))?.status).toEqual(
+          "replaced",
+        );
+        expect((yield* getState("B"))?.status).toEqual("updating");
+        expect(yield* getState("D")).toBeUndefined();
+
+        const output = yield* stack.pipe(test.deploy);
+        expect((yield* getState("A"))?.status).toEqual("created");
+        expect((yield* getState("B"))?.status).toEqual("updated");
+        expect((yield* getState("D"))?.status).toEqual("created");
+        expect(output.A.env).toEqual({ SELF: "a-value-replaced" });
+        expect(output.D!.string).toEqual("a-value-replaced");
+      }).pipe(Effect.provide(MockLayers())),
+    );
+
+    test(
+      "replaced state update replay updates replacement and downstream resources",
+      Effect.gen(function* () {
+        yield* selfBoundStack({
+          string: "a-value",
+          replaceString: "original",
+        }).pipe(test.deploy);
+
+        yield* selfBoundStack({
+          string: "a-value-replaced",
+          replaceString: "changed",
+          includeD: true,
+        }).pipe(test.deploy, hook(failOn("B", "update")));
+
+        expect((yield* getState<ReplacedResourceState>("A"))?.status).toEqual(
+          "replaced",
+        );
+        expect((yield* getState("B"))?.status).toEqual("updating");
+        expect(yield* getState("D")).toBeUndefined();
+
+        const output = yield* selfBoundStack({
+          string: "a-value-updated-after-replace",
+          replaceString: "changed",
+          includeD: true,
+        }).pipe(test.deploy);
+
+        expect((yield* getState("A"))?.status).toEqual("created");
+        expect((yield* getState("B"))?.status).toEqual("updated");
+        expect((yield* getState("D"))?.status).toEqual("created");
+        expect(output.A.env).toEqual({ SELF: "a-value-replaced" });
+        expect(output.D!.string).toEqual("a-value-updated-after-replace");
+      }).pipe(Effect.provide(MockLayers())),
+    );
+  });
+
+  describe("mutual A <-> B bindings", () => {
+    test(
+      "create succeeds with mutual bindings",
+      Effect.gen(function* () {
+        const output = yield* test.deploy(
+          mutualBindingStack({
+            aString: "a-value",
+          }),
+        );
+
+        expect(output.A.env).toEqual({ PEER: "b-value" });
+        expect(output.B.env).toEqual({ PEER: "a-value" });
+        expect((yield* getState("A"))?.status).toEqual("created");
+        expect((yield* getState("B"))?.status).toEqual("created");
+      }).pipe(Effect.provide(MockLayers())),
+    );
+
+    describe("from replacing state", () => {
+      test(
+        "replacing noop recovery creates downstream resources",
+        Effect.gen(function* () {
+          yield* mutualBindingStack({
+            aString: "a-value",
+            aReplaceString: "original",
+          }).pipe(test.deploy);
+
+          const stack = mutualBindingStack({
+            aString: "a-value-replaced",
+            aReplaceString: "changed",
+            includeD: true,
+          });
+
+          yield* stack.pipe(test.deploy, hook(failOn("A", "create")));
+
+          expect(
+            (yield* getState<ReplacingResourceState>("A"))?.status,
+          ).toEqual("replacing");
+          expect((yield* getState("B"))?.status).toEqual("created");
+          expect(yield* getState("D")).toBeUndefined();
+
+          const output = yield* stack.pipe(test.deploy);
+          expect((yield* getState("A"))?.status).toEqual("created");
+          expect((yield* getState("B"))?.status).toEqual("updated");
+          expect((yield* getState("D"))?.status).toEqual("created");
+          expect(output.A.env).toEqual({ PEER: "b-value" });
+          expect(output.B.env).toEqual({ PEER: "a-value-replaced" });
+          expect(output.D!.string).toEqual("a-value-replaced-b-value");
+        }).pipe(Effect.provide(MockLayers())),
+      );
+
+      test(
+        "replacing update recovery creates downstream resources",
+        Effect.gen(function* () {
+          yield* mutualBindingStack({
+            aString: "a-value",
+            aReplaceString: "original",
+          }).pipe(test.deploy);
+
+          yield* mutualBindingStack({
+            aString: "a-value-replaced",
+            aReplaceString: "changed",
+            includeD: true,
+          }).pipe(test.deploy, hook(failOn("A", "create")));
+
+          expect(
+            (yield* getState<ReplacingResourceState>("A"))?.status,
+          ).toEqual("replacing");
+          expect((yield* getState("B"))?.status).toEqual("created");
+          expect(yield* getState("D")).toBeUndefined();
+
+          const output = yield* mutualBindingStack({
+            aString: "a-value-updated-during-recovery",
+            aReplaceString: "changed",
+            includeD: true,
+          }).pipe(test.deploy);
+
+          expect((yield* getState("A"))?.status).toEqual("created");
+          expect((yield* getState("B"))?.status).toEqual("updated");
+          expect((yield* getState("D"))?.status).toEqual("created");
+          expect(output.A.env).toEqual({ PEER: "b-value" });
+          expect(output.B.env).toEqual({
+            PEER: "a-value-updated-during-recovery",
+          });
+          expect(output.D!.string).toEqual(
+            "a-value-updated-during-recovery-b-value",
+          );
+        }).pipe(Effect.provide(MockLayers())),
+      );
+
+      test(
+        "replacing replace recovery is rejected",
+        Effect.gen(function* () {
+          yield* mutualBindingStack({
+            aString: "a-value",
+            aReplaceString: "original",
+          }).pipe(test.deploy);
+
+          yield* mutualBindingStack({
+            aString: "a-value-replaced",
+            aReplaceString: "changed",
+            includeD: true,
+          }).pipe(test.deploy, hook(failOn("A", "create")));
+
+          const result = yield* mutualBindingStack({
+            aString: "a-value-another-replacement",
+            aReplaceString: "another-change",
+            includeD: true,
+          }).pipe(test.deploy, Effect.result);
+
+          expect(result._tag).toEqual("Failure");
+          if (result._tag === "Failure") {
+            expect(result.failure).toBeInstanceOf(
+              CannotReplacePartiallyReplacedResource,
+            );
+          }
+        }).pipe(Effect.provide(MockLayers())),
+      );
+    });
+
+    describe("from replaced state", () => {
+      test(
+        "replaced noop recovery updates downstream then creates downstream resources",
+        Effect.gen(function* () {
+          yield* mutualBindingStack({
+            aString: "a-value",
+            aReplaceString: "original",
+          }).pipe(test.deploy);
+
+          const stack = mutualBindingStack({
+            aString: "a-value-replaced",
+            aReplaceString: "changed",
+            includeD: true,
+          });
+
+          yield* stack.pipe(test.deploy, hook(failOn("B", "update")));
+
+          expect((yield* getState<ReplacedResourceState>("A"))?.status).toEqual(
+            "replaced",
+          );
+          expect((yield* getState("B"))?.status).toEqual("updating");
+          expect(yield* getState("D")).toBeUndefined();
+
+          const output = yield* stack.pipe(test.deploy);
+          expect((yield* getState("A"))?.status).toEqual("created");
+          expect((yield* getState("B"))?.status).toEqual("updated");
+          expect((yield* getState("D"))?.status).toEqual("created");
+          expect(output.A.env).toEqual({ PEER: "b-value" });
+          expect(output.B.env).toEqual({ PEER: "a-value-replaced" });
+          expect(output.D!.string).toEqual("a-value-replaced-b-value");
+        }).pipe(Effect.provide(MockLayers())),
+      );
+
+      test(
+        "replaced with update recovery updates replacement and downstream resources",
+        Effect.gen(function* () {
+          yield* mutualBindingStack({
+            aString: "a-value",
+            aReplaceString: "original",
+          }).pipe(test.deploy);
+
+          yield* mutualBindingStack({
+            aString: "a-value-replaced",
+            aReplaceString: "changed",
+            includeD: true,
+          }).pipe(test.deploy, hook(failOn("B", "update")));
+
+          expect((yield* getState<ReplacedResourceState>("A"))?.status).toEqual(
+            "replaced",
+          );
+          expect((yield* getState("B"))?.status).toEqual("updating");
+          expect(yield* getState("D")).toBeUndefined();
+
+          const output = yield* mutualBindingStack({
+            aString: "a-value-updated-after-replace",
+            aReplaceString: "changed",
+            includeD: true,
+          }).pipe(test.deploy);
+
+          expect((yield* getState("A"))?.status).toEqual("created");
+          expect((yield* getState("B"))?.status).toEqual("updated");
+          expect((yield* getState("D"))?.status).toEqual("created");
+          expect(output.A.env).toEqual({ PEER: "b-value" });
+          expect(output.B.env).toEqual({
+            PEER: "a-value-updated-after-replace",
+          });
+          expect(output.D!.string).toEqual(
+            "a-value-updated-after-replace-b-value",
+          );
+        }).pipe(Effect.provide(MockLayers())),
+      );
+
+      test(
+        "replaced replace recovery is rejected",
+        Effect.gen(function* () {
+          yield* mutualBindingStack({
+            aString: "a-value",
+            aReplaceString: "original",
+          }).pipe(test.deploy);
+
+          yield* mutualBindingStack({
+            aString: "a-value-replaced",
+            aReplaceString: "changed",
+            includeD: true,
+          }).pipe(test.deploy, hook(failOn("B", "update")));
+
+          const result = yield* mutualBindingStack({
+            aString: "a-value-another-replacement",
+            aReplaceString: "another-change",
+            includeD: true,
+          }).pipe(test.deploy, Effect.result);
+
+          expect(result._tag).toEqual("Failure");
+          if (result._tag === "Failure") {
+            expect(result.failure).toBeInstanceOf(
+              CannotReplacePartiallyReplacedResource,
+            );
+          }
+        }).pipe(Effect.provide(MockLayers())),
+      );
+    });
+  });
 });
 
 describe("from created state", () => {
@@ -1874,6 +2335,131 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
         expect((yield* getState("C"))?.status).toEqual("updated");
         expect((yield* getState("D"))?.status).toEqual("updated");
         expect(output.D.string).toEqual("updated-updated");
+      }).pipe(Effect.provide(MockLayers())),
+    );
+
+    test(
+      "add D while B replaces and C noops",
+      Effect.gen(function* () {
+        yield* Effect.gen(function* () {
+          const A = yield* TestResource("A", { string: "a-value" });
+          yield* TestResource("B", {
+            string: Output.interpolate`${A.string}-b`,
+            replaceString: "b-original",
+          });
+          yield* TestResource("C", {
+            string: Output.interpolate`${A.string}-c`,
+            replaceString: "c-original",
+          });
+        }).pipe(test.deploy);
+
+        const output = yield* Effect.gen(function* () {
+          const A = yield* TestResource("A", { string: "a-value" });
+          const B = yield* TestResource("B", {
+            string: Output.interpolate`${A.string}-b-replaced`,
+            replaceString: "b-changed",
+          });
+          const C = yield* TestResource("C", {
+            string: Output.interpolate`${A.string}-c`,
+            replaceString: "c-original",
+          });
+          const D = yield* TestResource("D", {
+            string: Output.interpolate`${B.string}-${C.string}`,
+          });
+          return { A, B, C, D };
+        }).pipe(test.deploy);
+
+        expect((yield* getState("A"))?.status).toEqual("created");
+        expect((yield* getState("B"))?.status).toEqual("created");
+        expect((yield* getState("C"))?.status).toEqual("created");
+        expect((yield* getState("D"))?.status).toEqual("created");
+        expect(output.B.replaceString).toEqual("b-changed");
+        expect(output.C.replaceString).toEqual("c-original");
+        expect(output.D.string).toEqual("a-value-b-replaced-a-value-c");
+      }).pipe(Effect.provide(MockLayers())),
+    );
+
+    test(
+      "add D while C replaces and B noops",
+      Effect.gen(function* () {
+        yield* Effect.gen(function* () {
+          const A = yield* TestResource("A", { string: "a-value" });
+          yield* TestResource("B", {
+            string: Output.interpolate`${A.string}-b`,
+            replaceString: "b-original",
+          });
+          yield* TestResource("C", {
+            string: Output.interpolate`${A.string}-c`,
+            replaceString: "c-original",
+          });
+        }).pipe(test.deploy);
+
+        const output = yield* Effect.gen(function* () {
+          const A = yield* TestResource("A", { string: "a-value" });
+          const B = yield* TestResource("B", {
+            string: Output.interpolate`${A.string}-b`,
+            replaceString: "b-original",
+          });
+          const C = yield* TestResource("C", {
+            string: Output.interpolate`${A.string}-c-replaced`,
+            replaceString: "c-changed",
+          });
+          const D = yield* TestResource("D", {
+            string: Output.interpolate`${B.string}-${C.string}`,
+          });
+          return { A, B, C, D };
+        }).pipe(test.deploy);
+
+        expect((yield* getState("A"))?.status).toEqual("created");
+        expect((yield* getState("B"))?.status).toEqual("created");
+        expect((yield* getState("C"))?.status).toEqual("created");
+        expect((yield* getState("D"))?.status).toEqual("created");
+        expect(output.B.replaceString).toEqual("b-original");
+        expect(output.C.replaceString).toEqual("c-changed");
+        expect(output.D.string).toEqual("a-value-b-a-value-c-replaced");
+      }).pipe(Effect.provide(MockLayers())),
+    );
+
+    test(
+      "add D while both B and C replace",
+      Effect.gen(function* () {
+        yield* Effect.gen(function* () {
+          const A = yield* TestResource("A", { string: "a-value" });
+          yield* TestResource("B", {
+            string: Output.interpolate`${A.string}-b`,
+            replaceString: "b-original",
+          });
+          yield* TestResource("C", {
+            string: Output.interpolate`${A.string}-c`,
+            replaceString: "c-original",
+          });
+        }).pipe(test.deploy);
+
+        const output = yield* Effect.gen(function* () {
+          const A = yield* TestResource("A", { string: "a-value" });
+          const B = yield* TestResource("B", {
+            string: Output.interpolate`${A.string}-b-replaced`,
+            replaceString: "b-changed",
+          });
+          const C = yield* TestResource("C", {
+            string: Output.interpolate`${A.string}-c-replaced`,
+            replaceString: "c-changed",
+          });
+          const D = yield* TestResource("D", {
+            string: Output.interpolate`${B.string}-${C.string}`,
+          });
+          return { A, B, C, D };
+        }).pipe(test.deploy);
+
+        expect((yield* getState("A"))?.status).toEqual("created");
+        expect((yield* getState("B"))?.status).toEqual("created");
+        expect((yield* getState("C"))?.status).toEqual("created");
+        expect((yield* getState("D"))?.status).toEqual("created");
+        expect(output.B.replaceString).toEqual("b-changed");
+        expect(output.C.replaceString).toEqual("c-changed");
+        expect(output.D.string).toEqual(
+          "a-value-b-replaced-a-value-c-replaced",
+        );
       }).pipe(Effect.provide(MockLayers())),
     );
 

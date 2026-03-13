@@ -1,5 +1,6 @@
-import { Layer } from "effect";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Simplify } from "effect/Types";
 import {
   type PlanStatusSession,
@@ -7,11 +8,19 @@ import {
   Cli,
 } from "./Cli/Cli.ts";
 import type { ApplyStatus } from "./Cli/Event.ts";
+import { havePropsChanged } from "./Diff.ts";
 import { toFqn } from "./FQN.ts";
 import type { Input } from "./Input.ts";
 import { generateInstanceId, InstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
-import { type Apply, type Delete, type Plan } from "./Plan.ts";
+import {
+  type Apply,
+  type Create,
+  type Delete,
+  type Plan,
+  type Replace,
+  type Update,
+} from "./Plan.ts";
 import { getProviderByType } from "./Provider.ts";
 import type { ResourceBinding } from "./Resource.ts";
 import { Stack } from "./Stack.ts";
@@ -77,11 +86,7 @@ export const apply = <P extends Plan>(
       return undefined;
     }
 
-    const output = yield* Output.evaluate(plan.output, resources);
-    return output;
-    // return resources as {
-    //   [k in keyof AppliedPlan<P>]: AppliedPlan<P>[k];
-    // };
+    return yield* Output.evaluate(plan.output, resources);
   });
 
 const expandAndPivot = Effect.fnUntraced(function* (
@@ -92,18 +97,86 @@ const expandAndPivot = Effect.fnUntraced(function* (
   const stack = yield* Stack;
   const stackName = stack.name;
   const stage = yield* Stage;
+  const makeDeferred = Effect.all(
+    Object.keys(plan.resources).map((id) =>
+      Effect.map(Deferred.make<any>(), (output) => [id, output]),
+    ),
+  ).pipe(
+    Effect.map(
+      (e) => Object.fromEntries(e) as Record<string, Deferred.Deferred<any>>,
+    ),
+  );
 
+  const precreateOutputs = yield* makeDeferred;
+  const postcreateOutputs = yield* makeDeferred;
   const outputs = {} as Record<string, Effect.Effect<any, any, State>>;
-  const resolveUpstream = Effect.fn(function* (resourceId: string) {
+
+  const resolveUpstream = Effect.fn(function* (
+    resourceId: string,
+    phase: "pre" | "post" | "bindings",
+  ) {
     const upstreamNode = plan.resources[resourceId];
-    const upstreamAttr = upstreamNode
-      ? yield* apply(upstreamNode)
-      : yield* Effect.die(`Resource ${resourceId} not found`);
+    if (!upstreamNode) {
+      return yield* Effect.die(`Resource ${resourceId} not found`);
+    }
     return {
       resourceId,
-      upstreamAttr,
       upstreamNode,
+      upstreamAttr: yield* phase === "post"
+        ? Deferred.await(postcreateOutputs[resourceId])
+        : Effect.race(
+            Deferred.await(precreateOutputs[resourceId]),
+            Deferred.await(postcreateOutputs[resourceId]),
+          ),
     };
+  });
+
+  const resolveNodeUpstream = Effect.fn(function* (
+    node: Create | Update | Replace,
+    phase: "pre" | "post" | "bindings",
+  ) {
+    const upstreamDeps = {
+      ...Output.resolveUpstream(node.props),
+      ...(phase === "pre" ? {} : Output.resolveUpstream(node.bindings)),
+    };
+    const nodes = yield* Effect.all(
+      Object.entries(upstreamDeps).map(([id]) => resolveUpstream(id, phase)),
+    );
+    return Object.fromEntries(
+      nodes
+        .filter((node) => node !== undefined)
+        .map((node) => [node.resourceId, node.upstreamAttr]),
+    );
+  });
+
+  const resolveBindingUpstream = Effect.fn(function* (
+    node: Create | Update | Replace,
+    phase: "post" | "bindings",
+  ) {
+    const upstreamDeps = Output.resolveUpstream(node.bindings);
+    const nodes = yield* Effect.all(
+      Object.entries(upstreamDeps).map(([id]) => resolveUpstream(id, phase)),
+    );
+    return Object.fromEntries(
+      nodes
+        .filter((node) => node !== undefined)
+        .map((node) => [node.resourceId, node.upstreamAttr]),
+    );
+  });
+
+  const resolvePropUpstream = Effect.fn(function* (
+    node: Create | Update | Replace,
+    phase: "pre" | "post",
+  ) {
+    const upstreamDeps = Output.resolveUpstream(node.props);
+    const nodes = yield* Effect.all(
+      Object.entries(upstreamDeps).map(([id]) => resolveUpstream(id, phase)),
+    );
+    return Object.fromEntries(
+      nodes
+        .filter((node) => node !== undefined)
+        .map((node) => [node.resourceId, node.upstreamAttr]),
+    );
   });
 
   const apply: (node: Apply) => Effect.Effect<any, never, never> = (node) =>
@@ -130,6 +203,45 @@ const expandAndPivot = Effect.fnUntraced(function* (
           }),
       } satisfies ScopedPlanStatusSession;
 
+      const preOutput = precreateOutputs[logicalId];
+
+      const succeedPre = Effect.fn(function* (attr: any) {
+        // console.log("succeedPre", logicalId);
+        yield* Deferred.succeed(preOutput, attr);
+      });
+      const succeedPost = Effect.fn(function* (attr: any) {
+        // console.log("succeedPost", logicalId);
+        yield* Deferred.succeed(postcreateOutputs[logicalId], attr);
+      });
+      const resolvePre = (node: Create | Update | Replace, attr: any) =>
+        resolvePropUpstream(node, "pre").pipe(
+          Effect.map((upstream) => ({
+            ...upstream,
+            ...(attr ? { [logicalId]: attr } : {}),
+          })),
+        );
+      const resolvePropsPost = (node: Create | Update | Replace, attr: any) =>
+        resolvePropUpstream(node, "post").pipe(
+          Effect.map((upstream) => ({
+            ...upstream,
+            ...(attr ? { [logicalId]: attr } : {}),
+          })),
+        );
+      const resolvePost = (node: Create | Update | Replace, attr: any) =>
+        resolveNodeUpstream(node, "post").pipe(
+          Effect.map((upstream) => ({
+            ...upstream,
+            ...(attr ? { [logicalId]: attr } : {}),
+          })),
+        );
+      const resolveBindings = (node: Create | Update | Replace, attr: any) =>
+        resolveBindingUpstream(node, "bindings").pipe(
+          Effect.map((upstream) => ({
+            ...upstream,
+            ...(attr ? { [logicalId]: attr } : {}),
+          })),
+        );
+
       return yield* (outputs[logicalId] ??= yield* Effect.cached(
         Effect.gen(function* () {
           const report = (status: ApplyStatus) =>
@@ -141,28 +253,10 @@ const expandAndPivot = Effect.fnUntraced(function* (
             });
 
           if (node.action === "noop") {
+            yield* Deferred.succeed(preOutput, node.state.attr);
+            yield* succeedPost(node.state.attr);
             return node.state.attr;
           }
-
-          const resolveNodeUpstream = Effect.fn(function* () {
-            const upstreamDeps = {
-              ...Output.resolveUpstream(node.props),
-              ...Output.resolveUpstream(node.bindings),
-            };
-            return Object.fromEntries(
-              yield* Effect.all(
-                Object.entries(upstreamDeps).map(([id]) =>
-                  resolveUpstream(id).pipe(
-                    Effect.map(({ upstreamAttr }) => [id, upstreamAttr]),
-                  ),
-                ),
-                { concurrency: "unbounded" },
-              ),
-            );
-          });
-
-          // resolve upstream dependencies before committing any changes to state
-          const upstream = yield* resolveNodeUpstream();
 
           const instanceId = yield* Effect.gen(function* () {
             if (node.action === "create" && !node.state?.instanceId) {
@@ -216,6 +310,8 @@ const expandAndPivot = Effect.fnUntraced(function* (
 
           const apply = Effect.gen(function* () {
             if (node.action === "create") {
+              const upstream = yield* resolvePropsPost(node, undefined);
+
               const news = (yield* Output.evaluate(
                 node.props,
                 upstream,
@@ -240,12 +336,15 @@ const expandAndPivot = Effect.fnUntraced(function* (
                 yield* checkpoint(undefined);
               }
 
-              let attr: any;
+              let attr: any = node.state?.attr;
+              if (attr !== undefined) {
+                yield* succeedPre(attr);
+              }
               if (
                 node.action === "create" &&
                 node.provider.precreate &&
                 // pre-create is only designed to ensure the resource exists, if we have state.attr, then it already exists and should be skipped
-                node.state?.attr === undefined
+                attr === undefined
               ) {
                 yield* report("pre-creating");
 
@@ -258,13 +357,16 @@ const expandAndPivot = Effect.fnUntraced(function* (
                 });
 
                 yield* checkpoint(attr);
+
+                yield* succeedPre(attr);
               }
 
               yield* report("creating");
 
-              const bindingOutputs = excludeDeletedBindings(
-                yield* Output.evaluate(node.bindings, upstream),
-              );
+              const bindingOutputs = yield* Output.evaluate(
+                node.bindings,
+                yield* resolveBindings(node, attr),
+              ).pipe(Effect.map(excludeDeletedBindings));
 
               attr = yield* node.provider.create({
                 id: logicalId,
@@ -288,11 +390,16 @@ const expandAndPivot = Effect.fnUntraced(function* (
                 downstream: node.downstream,
                 removalPolicy: node.resource.RemovalPolicy,
               });
+              // emit the output to downstream dependencies
+              // we do this after committing to mitigate risk of state corruption
+              yield* succeedPost(attr);
 
               yield* report("created");
 
               return attr;
             } else if (node.action === "update") {
+              const upstream = yield* resolvePropsPost(node, node.state.attr);
+
               const news = (yield* Output.evaluate(
                 node.props,
                 upstream,
@@ -322,11 +429,23 @@ const expandAndPivot = Effect.fnUntraced(function* (
                     removalPolicy: node.resource.RemovalPolicy,
                   });
 
+              yield* succeedPre(node.state.attr);
+
               yield* report("updating");
 
-              const bindingOutputs = excludeDeletedBindings(
-                yield* Output.evaluate(node.bindings, upstream),
-              );
+              const previousProps =
+                node.state.status === "created" ||
+                node.state.status === "updated" ||
+                node.state.status === "replaced"
+                  ? node.state.props
+                  : node.state.old.props;
+              const bindingInputs = yield* havePropsChanged(previousProps, news)
+                ? resolveBindings(node, node.state.attr)
+                : resolvePost(node, node.state.attr);
+              const bindingOutputs = yield* Output.evaluate(
+                node.bindings,
+                bindingInputs,
+              ).pipe(Effect.map(excludeDeletedBindings));
 
               const attr = yield* node.provider.update({
                 id: logicalId,
@@ -334,14 +453,11 @@ const expandAndPivot = Effect.fnUntraced(function* (
                 instanceId,
                 bindings: bindingOutputs,
                 session: scopedSession,
-                olds:
-                  node.state.status === "created" ||
-                  node.state.status === "updated" ||
-                  node.state.status === "replaced"
-                    ? node.state.props
-                    : node.state.old.props,
+                olds: previousProps,
                 output: node.state.attr,
               });
+
+              yield* succeedPost(attr);
 
               if (node.state.status === "replaced") {
                 yield* commit<ReplacedResourceState>({
@@ -369,39 +485,6 @@ const expandAndPivot = Effect.fnUntraced(function* (
 
               return attr;
             } else if (node.action === "replace") {
-              if (node.state.status === "replaced") {
-                // we've already created the replacement resource, return the output
-                return node.state.attr;
-              }
-              let state: ReplacingResourceState;
-              if (node.state.status !== "replacing") {
-                state = yield* commit<ReplacingResourceState>({
-                  status: "replacing",
-                  fqn,
-                  logicalId,
-                  instanceId,
-                  resourceType: node.resource.Type,
-                  props: node.props,
-                  bindings: excludeDeletedBindings(node.bindings),
-                  attr: node.state.attr,
-                  providerVersion: node.provider.version ?? 0,
-                  deleteFirst: node.deleteFirst,
-                  old: node.state,
-                  downstream: node.downstream,
-                  removalPolicy: node.resource.RemovalPolicy,
-                });
-              } else {
-                state = node.state;
-              }
-              const news = (yield* Output.evaluate(
-                node.props,
-                upstream,
-              )) as Record<string, any>;
-
-              const bindings = excludeDeletedBindings(
-                yield* Output.evaluate(node.bindings, upstream),
-              );
-
               const checkpoint = <
                 S extends ReplacingResourceState | ReplacedResourceState,
               >({
@@ -424,11 +507,45 @@ const expandAndPivot = Effect.fnUntraced(function* (
                   removalPolicy: node.resource.RemovalPolicy,
                 } as S);
 
-              let attr: any;
+              if (node.state.status === "replaced") {
+                yield* succeedPost(node.state.attr);
+                // we've already created the replacement resource, return the output
+                return node.state.attr;
+              }
+              let state: ReplacingResourceState;
+              if (node.state.status !== "replacing") {
+                state = yield* commit<ReplacingResourceState>({
+                  status: "replacing",
+                  fqn,
+                  logicalId,
+                  instanceId,
+                  resourceType: node.resource.Type,
+                  props: node.props,
+                  bindings: excludeDeletedBindings(node.bindings),
+                  attr: undefined,
+                  providerVersion: node.provider.version ?? 0,
+                  deleteFirst: node.deleteFirst,
+                  old: node.state,
+                  downstream: node.downstream,
+                  removalPolicy: node.resource.RemovalPolicy,
+                });
+              } else {
+                state = node.state;
+              }
+
+              const news = (yield* Output.evaluate(
+                node.props,
+                yield* resolvePropsPost(node, state.attr),
+              )) as Record<string, any>;
+
+              let attr: any = state.attr;
+              if (attr !== undefined) {
+                yield* succeedPre(attr);
+              }
               if (
                 node.provider.precreate &&
                 // pre-create is only designed to ensure the resource exists, if we have state.attr, then it already exists and should be skipped
-                node.state?.attr === undefined
+                attr === undefined
               ) {
                 yield* report("pre-creating");
 
@@ -440,6 +557,8 @@ const expandAndPivot = Effect.fnUntraced(function* (
                   instanceId,
                 });
 
+                yield* succeedPre(attr);
+
                 yield* checkpoint({
                   status: "replacing",
                   attr,
@@ -447,6 +566,17 @@ const expandAndPivot = Effect.fnUntraced(function* (
               }
 
               yield* report("creating replacement");
+
+              // let bindings = excludeDeletedBindings(
+              //   yield* Output.evaluate(node.bindings, upstream),
+              // );
+
+              const bindings = excludeDeletedBindings(
+                yield* Output.evaluate(
+                  node.bindings,
+                  yield* resolveBindings(node, attr),
+                ),
+              );
 
               attr = yield* node.provider.create({
                 id: logicalId,
@@ -456,6 +586,8 @@ const expandAndPivot = Effect.fnUntraced(function* (
                 session: scopedSession,
                 output: attr,
               });
+
+              yield* succeedPost(attr);
 
               yield* checkpoint<ReplacedResourceState>({
                 status: "replaced",
@@ -588,7 +720,7 @@ const collectGarbage = Effect.fnUntraced(function* (
         Effect.gen(function* () {
           yield* Effect.all(
             downstream.map((dep) =>
-              dep in deletionGraph
+              dep !== fqn && dep in deletionGraph
                 ? deleteResource(deletionGraph[dep] as Delete)
                 : Effect.void,
             ),

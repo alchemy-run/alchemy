@@ -82,10 +82,14 @@ type Provided =
   | Layer.Success<ReturnType<typeof AWS.providers>>
   | Layer.Success<ReturnType<typeof Cloudflare.providers>>;
 
+const quietLogger = Logger.make(() => {
+  // console.log(options.message);
+});
+
 const platform = Layer.mergeAll(
   NodeServices.layer,
   FetchHttpClient.layer,
-  Logger.layer([Logger.consolePretty()]),
+  Logger.layer([process.env.VERBOSE ? Logger.consolePretty() : quietLogger]),
 );
 
 const awsStageConfig = Layer.effect(

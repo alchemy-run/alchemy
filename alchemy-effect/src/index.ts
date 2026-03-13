@@ -11,6 +11,7 @@ export * from "./Host.ts";
 export * as Http from "./Http.ts";
 export * from "./Input.ts";
 export * from "./InstanceId.ts";
+export * as Kubernetes from "./Kubernetes/index.ts";
 export * from "./Namespace.ts";
 export * as Output from "./Output.ts";
 export * from "./PhysicalName.ts";

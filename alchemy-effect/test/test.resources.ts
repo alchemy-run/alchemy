@@ -111,6 +111,8 @@ export const functionProvider = Function.provider.succeed({
 
 export type BindingTargetProps = {
   name?: string;
+  string?: string;
+  replaceString?: string;
 };
 
 export interface BindingTarget extends Resource<
@@ -118,7 +120,9 @@ export interface BindingTarget extends Resource<
   BindingTargetProps,
   {
     name: string;
+    string: string;
     env: Record<string, string>;
+    replaceString: BindingTargetProps["replaceString"];
   },
   {
     env?: Record<string, string>;
@@ -127,22 +131,80 @@ export interface BindingTarget extends Resource<
 
 export const BindingTarget = Resource<BindingTarget>("Test.BindingTarget");
 
-export const bindingTargetProvider = BindingTarget.provider.succeed({
-  diff: Effect.fn(function* ({ id, news, output }) {}),
-  create: Effect.fn(function* ({ id, news = {}, bindings }) {
+export const bindingTargetProvider = BindingTarget.provider.effect(
+  Effect.gen(function* () {
     return {
-      name: news.name ?? id,
-      env: Object.assign({}, ...bindings.map((binding) => binding.env ?? {})),
+      diff: Effect.fn(function* ({ news = {}, olds = {} }) {
+        if (news.replaceString !== olds.replaceString) {
+          return {
+            action: "replace",
+          };
+        }
+        if (news.name !== olds.name || news.string !== olds.string) {
+          return {
+            action: "update",
+          };
+        }
+        return undefined;
+      }),
+      precreate: Effect.fn(function* ({ id, news = {} }) {
+        return {
+          name: news.name ?? id,
+          string: news.string ?? id,
+          env: {},
+          replaceString: news.replaceString,
+        };
+      }),
+      create: Effect.fn(function* ({ id, news = {}, bindings }) {
+        const hooks = Option.getOrUndefined(
+          yield* Effect.serviceOption(TestResourceHooks),
+        );
+        if (hooks?.create) {
+          yield* hooks.create(id, news as TestResourceProps);
+        }
+        return {
+          name: news.name ?? id,
+          string: news.string ?? id,
+          env: Object.assign(
+            {},
+            ...bindings.map(
+              (binding: any) => binding.env ?? binding.data?.env ?? {},
+            ),
+          ),
+          replaceString: news.replaceString,
+        };
+      }),
+      update: Effect.fn(function* ({ id, news = {}, bindings }) {
+        const hooks = Option.getOrUndefined(
+          yield* Effect.serviceOption(TestResourceHooks),
+        );
+        if (hooks?.update) {
+          yield* hooks.update(id, news as TestResourceProps);
+        }
+        return {
+          name: news.name ?? id,
+          string: news.string ?? id,
+          env: Object.assign(
+            {},
+            ...bindings.map(
+              (binding: any) => binding.env ?? binding.data?.env ?? {},
+            ),
+          ),
+          replaceString: news.replaceString,
+        };
+      }),
+      delete: Effect.fn(function* ({ id }) {
+        const hooks = Option.getOrUndefined(
+          yield* Effect.serviceOption(TestResourceHooks),
+        );
+        if (hooks?.delete) {
+          yield* hooks.delete(id);
+        }
+        return;
+      }),
     };
   }),
-  update: Effect.fn(function* ({ id, news = {}, bindings }) {
-    return {
-      name: news.name ?? id,
-      env: Object.assign({}, ...bindings.map((binding) => binding.env ?? {})),
-    };
-  }),
-  delete: Effect.fn(function* ({ output }) {}),
-});
+);
 
 export type DeletedBindingRegressionProps = {
   name?: string;
@@ -168,6 +230,12 @@ export const DeletedBindingRegressionTarget =
 export const deletedBindingRegressionProvider =
   DeletedBindingRegressionTarget.provider.succeed({
     diff: Effect.fn(function* () {}),
+    precreate: Effect.fn(function* ({ id, news = {} }) {
+      return {
+        name: news.name ?? id,
+        env: {},
+      };
+    }),
     create: Effect.fn(function* ({ id, news = {}, bindings }) {
       return {
         name: news.name ?? id,

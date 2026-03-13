@@ -36,3 +36,4 @@ smoke
 .cache
 .external
 .bundle-benchmark
+alchemy-effect/docs
