@@ -120,6 +120,7 @@ export interface Replace<
   action: "replace";
   props: any;
   deleteFirst: boolean;
+  restart?: boolean;
   state:
     | CreatingResourceState
     | CreatedResourceState
@@ -188,17 +189,9 @@ export const make = <A>(
               }
 
               const oldProps =
-                oldState.status === "created" ||
-                oldState.status === "updated" ||
-                oldState.status === "replaced"
-                  ? // if we're in a stable state, then just use the props
-                    oldState.props
-                  : // if we failed to update or replace, compare with the last known stable props
-                    oldState.status === "updating" ||
-                      oldState.status === "replacing"
-                    ? oldState.old.props
-                    : // TODO(sam): it kinda doesn't make sense to diff with a "deleting" state
-                      oldState.props;
+                oldState.status === "updating"
+                  ? oldState.old.props
+                  : oldState.props;
 
               const oldBindings = oldState.bindings ?? [];
               const newBindings = stack.bindings[resource.FQN] ?? [];
@@ -384,7 +377,9 @@ export const make = <A>(
                 downstream,
               }) as any as T;
 
-            // handle empty and intermediate (non-final) states:
+            // Plan against the persisted state we have, not the ideal final state we
+            // hoped to reach last time. Recovery is expressed by mapping each
+            // intermediate state back onto a fresh CRUD action.
             if (oldState === undefined) {
               return Node<Create>({
                 action: "create",
@@ -395,6 +390,9 @@ export const make = <A>(
               oldState.status === "creating" &&
               oldState.attr === undefined
             ) {
+              // A create may have succeeded before state persistence failed. If the
+              // provider can recover an attribute snapshot, keep driving the same
+              // create instead of starting over blindly.
               if (provider.read) {
                 const attr = yield* provider
                   .read({
@@ -414,7 +412,9 @@ export const make = <A>(
               }
             }
 
-            // TODO(sam): is this correct for all possible states a resource can be in?
+            // Diff against whatever props represent the best-known current attempt.
+            // For replacement recovery that means the top-level replacement props,
+            // not the older generations stored under `old`.
             const oldProps = oldState.props;
 
             const diff = yield* asEffect(
@@ -473,7 +473,9 @@ export const make = <A>(
                 });
               }
             } else if (oldState.status === "updating") {
-              // we started to update a resource but did not complete
+              // Updating already targets the live resource, so noop/update both mean
+              // "finish the interrupted update". Only a replace diff escalates it
+              // into a fresh replacement.
               if (diff.action === "update" || diff.action === "noop") {
                 // we can continue where we left off
                 return Node<Update>({
@@ -493,7 +495,9 @@ export const make = <A>(
                 });
               }
             } else if (oldState.status === "replacing") {
-              // resource replacement started, but the replacement may or may not have been created
+              // The replacement candidate is still being created. Noop/update keep
+              // driving the same generation; replace means that candidate itself is
+              // now obsolete and must be wrapped in a new outer generation.
               if (diff.action === "noop") {
                 // this is the stable case - noop means just continue with the replacement
                 return Node<Replace>({
@@ -514,19 +518,21 @@ export const make = <A>(
                   state: oldState,
                 });
               } else {
-                // ah shit, so we tried to replace the resource and then crashed
-                // now the props have changed again in such a way that the (maybe, maybe not)
-                // created resource should also be replaced
-
-                // TODO(sam): what should we do?
-                // 1. trigger a deletion of the potentially created resource
-                // 2. expect the resource provider to handle it idempotently?
-                // -> i don't think this case is fair to put on the resource provider
-                //    because if the resource was created, it's in a state that can't be updated
-                return yield* new CannotReplacePartiallyReplacedResource(id);
+                // The in-flight replacement candidate itself now needs replacement.
+                // Mark this as a restart so Apply creates a fresh generation instead
+                // of resuming the old replacement instance.
+                return Node<Replace>({
+                  restart: true,
+                  action: "replace",
+                  deleteFirst: diff.deleteFirst ?? oldState.deleteFirst,
+                  props: news,
+                  state: oldState,
+                });
               }
             } else if (oldState.status === "replaced") {
-              // replacement has been created but we're not done cleaning up the old state
+              // The new resource already exists. Noop means "just let GC finish",
+              // update means "mutate the current replacement before GC finishes",
+              // and replace means "the current replacement also became obsolete".
               if (diff.action === "noop") {
                 // this is the stable case - noop means just continue cleaning up the replacement
                 return Node<Replace>({
@@ -546,28 +552,31 @@ export const make = <A>(
                   state: oldState,
                 });
               } else {
-                // the replacement has been created but now it needs to be replaced
-                // this is the worst-case scenario because downstream resources
-                // could have been been updated to point to the replaced resources
-                return yield* new CannotReplacePartiallyReplacedResource(id);
+                // Cleanup is still pending, but the current "new" resource has already
+                // become obsolete. Start another replacement generation and preserve
+                // the existing replaced node as part of the recursive old chain.
+                return Node<Replace>({
+                  restart: true,
+                  action: "replace",
+                  deleteFirst: diff.deleteFirst ?? oldState.deleteFirst,
+                  props: news,
+                  state: oldState,
+                });
               }
             } else if (oldState.status === "deleting") {
-              if (diff.action === "noop" || diff.action === "update") {
-                // we're in a partially deleted state, it is unclear whether it was or was not deleted
-                // it should be safe to re-create it with the same instanceId?
-                return Node<Create>({
-                  action: "create",
+              // we're in a partially deleted state, it is unclear whether it was or was not deleted
+              // so continue by re-creating it with the same instanceId and desired props
+              return Node<Create>({
+                action: "create",
+                props: news,
+                state: {
+                  ...oldState,
+                  status: "creating",
                   props: news,
-                  state: {
-                    ...oldState,
-                    status: "creating",
-                    props: news,
-                  },
-                });
-              } else {
-                return yield* new CannotReplacePartiallyReplacedResource(id);
-              }
+                },
+              });
             } else if (diff.action === "update") {
+              // Stable created/updated resources follow the normal CRUD mapping.
               return Node<Update>({
                 action: "update",
                 props: news,
@@ -678,23 +687,6 @@ export const make = <A>(
       output: stack.output,
     } satisfies Plan<A> as Plan<A>;
   });
-
-export class CannotReplacePartiallyReplacedResource extends Data.TaggedError(
-  "CannotReplacePartiallyReplacedResource",
-)<{
-  message: string;
-  logicalId: string;
-}> {
-  constructor(logicalId: string) {
-    super({
-      message:
-        `Resource '${logicalId}' did not finish being replaced in a previous deployment ` +
-        `and is expected to be replaced again in this deployment. ` +
-        `You should revert its properties and try again after a successful deployment.`,
-      logicalId,
-    });
-  }
-}
 
 export class DeleteResourceHasDownstreamDependencies extends Data.TaggedError(
   "DeleteResourceHasDownstreamDependencies",

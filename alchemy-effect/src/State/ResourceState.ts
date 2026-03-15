@@ -15,6 +15,16 @@ export type Props = Record<string, any>;
 export type Attr = Record<string, any>;
 
 export type ResourceStatus = ResourceState["status"];
+export type ReplacementResourceState =
+  | ReplacingResourceState
+  | ReplacedResourceState;
+export type ReplacementOldResourceState =
+  | CreatingResourceState
+  | CreatedResourceState
+  | UpdatingReourceState
+  | UpdatedResourceState
+  | DeletingResourceState
+  | ReplacementResourceState;
 
 interface BaseResourceState {
   /** Type of the Resource (e.g. AWS.Lambda.Function) */
@@ -92,12 +102,7 @@ export interface ReplacingResourceState extends BaseResourceState {
   /** Desired properties of the new resource (the replacement) */
   props: Props;
   /** Reference to the state of the old resource (the one being replaced) */
-  old:
-    | CreatedResourceState
-    | UpdatedResourceState
-    | CreatingResourceState
-    | UpdatingReourceState
-    | DeletingResourceState;
+  old: ReplacementOldResourceState;
   /** Whether the resource should be deleted before or after replacements */
   deleteFirst: boolean;
 }
@@ -109,12 +114,7 @@ export interface ReplacedResourceState extends BaseResourceState {
   /** Output attributes of the new resource (the replacement) */
   attr: Attr;
   /** Reference to the state of the old resource (the one being replaced) */
-  old:
-    | CreatingResourceState
-    | CreatedResourceState
-    | UpdatingReourceState
-    | UpdatedResourceState
-    | DeletingResourceState;
+  old: ReplacementOldResourceState;
   /** Whether the resource should be deleted before or after replacements */
   deleteFirst: boolean;
   // .. will (finally) transition to `CreatedResourceState` after finalizing

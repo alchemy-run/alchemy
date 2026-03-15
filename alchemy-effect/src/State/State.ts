@@ -31,10 +31,16 @@ export interface StateService {
     stage: string;
     fqn: string;
   }): Effect.Effect<ResourceState | undefined, StateStoreError, never>;
+  /**
+   * List top-level resources that are still in replacement cleanup.
+   *
+   * Any additional backlog from repeated replacements is stored recursively
+   * in the returned state's `old` chain.
+   */
   getReplacedResources(request: {
     stack: string;
     stage: string;
-  }): Effect.Effect<ReplacedResourceState[], StateStoreError, never>;
+  }): Effect.Effect<ReadonlyArray<ReplacedResourceState>, StateStoreError, never>;
   /**
    * Set a resource by its FQN (namespace-qualified key).
    */

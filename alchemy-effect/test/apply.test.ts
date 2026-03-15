@@ -1,6 +1,5 @@
 import { destroy } from "@/Destroy";
 import * as Output from "@/Output";
-import { CannotReplacePartiallyReplacedResource } from "@/Plan";
 import * as Stack from "@/Stack";
 import * as Construct from "@/Construct";
 import { Cli } from "@/Cli/Cli";
@@ -666,7 +665,7 @@ describe("circularity via bindings", () => {
       );
 
       test(
-        "replacing replace recovery is rejected",
+        "replacing replace recovery nests another replacement",
         Effect.gen(function* () {
           yield* mutualBindingStack({
             aString: "a-value",
@@ -679,18 +678,16 @@ describe("circularity via bindings", () => {
             includeD: true,
           }).pipe(test.deploy, hook(failOn("A", "create")));
 
-          const result = yield* mutualBindingStack({
+          const output = yield* mutualBindingStack({
             aString: "a-value-another-replacement",
             aReplaceString: "another-change",
             includeD: true,
-          }).pipe(test.deploy, Effect.result);
+          }).pipe(test.deploy);
 
-          expect(result._tag).toEqual("Failure");
-          if (result._tag === "Failure") {
-            expect(result.failure).toBeInstanceOf(
-              CannotReplacePartiallyReplacedResource,
-            );
-          }
+          expectConvergedStatus((yield* getState("A"))?.status);
+          expect((yield* getState("B"))?.status).toEqual("updated");
+          expect((yield* getState("D"))?.status).toEqual("created");
+          expect(output.B.env).toEqual({ PEER: "a-value-another-replacement" });
         }).pipe(Effect.provide(MockLayers())),
       );
     });
@@ -768,7 +765,7 @@ describe("circularity via bindings", () => {
       );
 
       test(
-        "replaced replace recovery is rejected",
+        "replaced replace recovery nests another replacement",
         Effect.gen(function* () {
           yield* mutualBindingStack({
             aString: "a-value",
@@ -781,18 +778,16 @@ describe("circularity via bindings", () => {
             includeD: true,
           }).pipe(test.deploy, hook(failOn("B", "update")));
 
-          const result = yield* mutualBindingStack({
+          const output = yield* mutualBindingStack({
             aString: "a-value-another-replacement",
             aReplaceString: "another-change",
             includeD: true,
-          }).pipe(test.deploy, Effect.result);
+          }).pipe(test.deploy);
 
-          expect(result._tag).toEqual("Failure");
-          if (result._tag === "Failure") {
-            expect(result.failure).toBeInstanceOf(
-              CannotReplacePartiallyReplacedResource,
-            );
-          }
+          expectConvergedStatus((yield* getState("A"))?.status);
+          expect((yield* getState("B"))?.status).toEqual("updated");
+          expect((yield* getState("D"))?.status).toEqual("created");
+          expect(output.B.env).toEqual({ PEER: "a-value-another-replacement" });
         }).pipe(Effect.provide(MockLayers())),
       );
     });
@@ -1461,7 +1456,7 @@ describe("from replacing state", () => {
   );
 
   test(
-    "error when props trigger another replacement",
+    "continue replacement when props trigger another replacement",
     Effect.gen(function* () {
       // 1. Create initial resource
       yield* Effect.gen(function* () {
@@ -1484,18 +1479,15 @@ describe("from replacing state", () => {
       );
       expect((yield* getState("A"))?.status).toEqual("replacing");
 
-      // 3. Try to replace again with another replacement - should fail
-      const result = yield* Effect.gen(function* () {
-        yield* TestResource("A", {
+      // 3. Replace again with another replacement - should converge
+      const output = yield* Effect.gen(function* () {
+        const A = yield* TestResource("A", {
           replaceString: "another-replacement",
         });
-      }).pipe(test.deploy, Effect.result);
-      expect(result._tag).toEqual("Failure");
-      if (result._tag === "Failure") {
-        expect(result.failure).toBeInstanceOf(
-          CannotReplacePartiallyReplacedResource,
-        );
-      }
+        return A.replaceString;
+      }).pipe(test.deploy);
+      expectConvergedStatus((yield* getState("A"))?.status);
+      expect(output).toEqual("another-replacement");
     }).pipe(Effect.provide(MockLayers())),
   );
 });
@@ -1582,7 +1574,7 @@ describe("from replaced state", () => {
   );
 
   test(
-    "error when props trigger another replacement",
+    "continue cleanup when props trigger another replacement",
     Effect.gen(function* () {
       // 1. Create initial resource
       yield* Effect.gen(function* () {
@@ -1605,18 +1597,15 @@ describe("from replaced state", () => {
       );
       expect((yield* getState("A"))?.status).toEqual("replaced");
 
-      // 3. Try to replace again - should fail
-      const result = yield* Effect.gen(function* () {
-        yield* TestResource("A", {
+      // 3. Replace again and continue cleanup of the older generations
+      const output = yield* Effect.gen(function* () {
+        const A = yield* TestResource("A", {
           replaceString: "another-replacement",
         });
-      }).pipe(test.deploy, Effect.result);
-      expect(result._tag).toEqual("Failure");
-      if (result._tag === "Failure") {
-        expect(result.failure).toBeInstanceOf(
-          CannotReplacePartiallyReplacedResource,
-        );
-      }
+        return A.replaceString;
+      }).pipe(test.deploy);
+      expectConvergedStatus((yield* getState("A"))?.status);
+      expect(output).toEqual("another-replacement");
     }).pipe(Effect.provide(MockLayers())),
   );
 });
@@ -1652,7 +1641,7 @@ describe("from deleting state", () => {
   );
 
   test(
-    "error when props trigger replacement",
+    "create when props trigger replacement",
     Effect.gen(function* () {
       // 1. Create initial resource
       yield* Effect.gen(function* () {
@@ -1670,18 +1659,15 @@ describe("from deleting state", () => {
       );
       expect((yield* getState("A"))?.status).toEqual("deleting");
 
-      // 3. Try to re-apply with props that trigger replacement - should fail
-      const result = yield* Effect.gen(function* () {
-        yield* TestResource("A", {
+      // 3. Re-apply with props that trigger replacement - should recreate
+      const output = yield* Effect.gen(function* () {
+        const A = yield* TestResource("A", {
           replaceString: "new",
         });
-      }).pipe(test.deploy, Effect.result);
-      expect(result._tag).toEqual("Failure");
-      if (result._tag === "Failure") {
-        expect(result.failure).toBeInstanceOf(
-          CannotReplacePartiallyReplacedResource,
-        );
-      }
+        return A.replaceString;
+      }).pipe(test.deploy);
+      expect((yield* getState("A"))?.status).toEqual("created");
+      expect(output).toEqual("new");
     }).pipe(Effect.provide(MockLayers())),
   );
 });
@@ -3444,6 +3430,64 @@ describe("multiple resources replacing", () => {
       expect((yield* getState("B"))?.status).toEqual("created");
       expect(output.A.replaceString).toEqual("a-new");
       expect(output.B.replaceString).toEqual("b-new");
+    }).pipe(Effect.provide(MockLayers())),
+  );
+});
+
+describe("repeated replacements", () => {
+  test(
+    "resource can be replaced again while still in replacing state",
+    Effect.gen(function* () {
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "a-original" });
+      }).pipe(test.deploy);
+
+      const firstReplacement = Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "a-first" });
+      });
+
+      yield* firstReplacement.pipe(test.deploy, hook(failOn("A", "create")));
+
+      const replacingState = yield* getState<ReplacingResourceState>("A");
+      expect(replacingState?.status).toEqual("replacing");
+
+      const secondReplacement = Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "a-second" });
+      });
+
+      yield* secondReplacement.pipe(test.deploy);
+
+      const finalState = yield* getState("A");
+      expectConvergedStatus(finalState?.status);
+      expect(finalState?.props?.replaceString).toEqual("a-second");
+    }).pipe(Effect.provide(MockLayers())),
+  );
+
+  test(
+    "resource can be replaced again while still in replaced state",
+    Effect.gen(function* () {
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "a-original" });
+      }).pipe(test.deploy);
+
+      const firstReplacement = Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "a-first" });
+      });
+
+      yield* firstReplacement.pipe(test.deploy, hook(failOn("A", "delete")));
+
+      const replacedState = yield* getState<ReplacedResourceState>("A");
+      expect(replacedState?.status).toEqual("replaced");
+
+      const secondReplacement = Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "a-second" });
+      });
+
+      yield* secondReplacement.pipe(test.deploy);
+
+      const finalState = yield* getState("A");
+      expectConvergedStatus(finalState?.status);
+      expect(finalState?.props?.replaceString).toEqual("a-second");
     }).pipe(Effect.provide(MockLayers())),
   );
 });

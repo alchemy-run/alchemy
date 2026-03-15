@@ -767,6 +767,38 @@ const createTestResourceState = (options: {
     namespace: undefined,
   }) as ResourceState;
 
+const createReplacingState = (options: {
+  logicalId: string;
+  props: TestResourceProps;
+  old: ResourceState;
+  attr?: {};
+}) => ({
+  ...createTestResourceState({
+    logicalId: options.logicalId,
+    status: "replacing",
+    props: options.props,
+    attr: options.attr,
+  }),
+  old: options.old,
+  deleteFirst: false,
+}) as Extract<ResourceState, { status: "replacing" }>;
+
+const createReplacedState = (options: {
+  logicalId: string;
+  props: TestResourceProps;
+  old: ResourceState;
+  attr?: {};
+}) => ({
+  ...createTestResourceState({
+    logicalId: options.logicalId,
+    status: "replaced",
+    props: options.props,
+    attr: options.attr,
+  }),
+  old: options.old,
+  deleteFirst: false,
+}) as Extract<ResourceState, { status: "replaced" }>;
+
 const testSimple = (
   title: string,
   testCase: {
@@ -1051,13 +1083,9 @@ describe("prior crash in 'replacing' state", () => {
     {
       old,
       plan,
-      fail,
     }: {
-      old: {
-        status: ResourceStatus;
-      };
-      plan?: any;
-      fail?: string;
+      old: ResourceState;
+      plan: any;
     },
   ) =>
     testSimple(title, {
@@ -1072,17 +1100,135 @@ describe("prior crash in 'replacing' state", () => {
         replaceString: "B",
       },
       plan,
-      fail,
     });
 
   (["replaced", "replacing"] as const).forEach((status) =>
     testReplacement(
-      `fail if trying to replace a partially replaced resource in state '${status}'`,
+      `continue 'replace' if trying to replace a partially replaced resource in state '${status}'`,
       {
-        old: {
-          status,
+        old:
+          status === "replaced"
+            ? createReplacedState({
+                logicalId: "A_old1",
+                props: {
+                  replaceString: "A1",
+                },
+                old: createTestResourceState({
+                  logicalId: "A_old0",
+                  status: "created",
+                  props: {
+                    replaceString: "A0",
+                  },
+                }),
+              })
+            : createReplacingState({
+                logicalId: "A_old1",
+                props: {
+                  replaceString: "A1",
+                },
+                old: createTestResourceState({
+                  logicalId: "A_old0",
+                  status: "created",
+                  props: {
+                    replaceString: "A0",
+                  },
+                }),
+              }),
+        plan: {
+          action: "replace",
+          props: {
+            replaceString: "B",
+          },
+          state: {
+            status: "replacing",
+            props: {
+              replaceString: "A",
+            },
+            old: expect.objectContaining({
+              status,
+              props: {
+                replaceString: "A1",
+              },
+              old: expect.objectContaining({
+                status: "created",
+                props: {
+                  replaceString: "A0",
+                },
+              }),
+            }),
+          },
         },
-        fail: "CannotReplacePartiallyReplacedResource",
+      },
+    ),
+  );
+});
+
+describe("prior crash in 'replaced' state", () => {
+  (["replaced", "replacing"] as const).forEach((status) =>
+    testSimple(
+      `continue 'replace' if a replaced resource must be replaced again and previous state is '${status}'`,
+      {
+        state: {
+          status: "replaced",
+          props: {
+            replaceString: "A1",
+          },
+          old:
+            status === "replaced"
+              ? createReplacedState({
+                  logicalId: "A_old0",
+                  props: {
+                    replaceString: "A0",
+                  },
+                  old: createTestResourceState({
+                    logicalId: "A_old-1",
+                    status: "created",
+                    props: {
+                      replaceString: "A-1",
+                    },
+                  }),
+                })
+              : createReplacingState({
+                  logicalId: "A_old0",
+                  props: {
+                    replaceString: "A0",
+                  },
+                  old: createTestResourceState({
+                    logicalId: "A_old-1",
+                    status: "created",
+                    props: {
+                      replaceString: "A-1",
+                    },
+                  }),
+                }),
+        },
+        props: {
+          replaceString: "B",
+        },
+        plan: {
+          action: "replace",
+          props: {
+            replaceString: "B",
+          },
+          state: {
+            status: "replaced",
+            props: {
+              replaceString: "A1",
+            },
+            old: expect.objectContaining({
+              status,
+              props: {
+                replaceString: "A0",
+              },
+              old: expect.objectContaining({
+                status: "created",
+                props: {
+                  replaceString: "A-1",
+                },
+              }),
+            }),
+          },
+        },
       },
     ),
   );
