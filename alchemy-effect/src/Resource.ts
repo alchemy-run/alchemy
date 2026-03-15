@@ -107,9 +107,9 @@ export type Resource<
  * records bindings contributed by policies and event sources. Resource
  * providers are attached separately through `.provider`.
  */
-export const Resource = <R extends ResourceLike>(
+export function Resource<R extends ResourceLike>(
   type: R["Type"],
-): ResourceClass<R> => {
+): ResourceClass<R> {
   type Props = Input<R["Props"]>;
   const constructor = (
     id: string,
@@ -117,11 +117,13 @@ export const Resource = <R extends ResourceLike>(
   ) =>
     Effect.gen(function* () {
       const stack = yield* Stack;
+      const namespace = yield* CurrentNamespace;
+      const fqn = toFqn(namespace, id);
 
-      const existing = stack.resources[id];
+      const existing = stack.resources[fqn];
       if (existing) {
         // TODO(sam): check if props are same and allow duplicates
-        return yield* Effect.die(new Error(`Resource ${id} already exists`));
+        return yield* Effect.die(new Error(`Resource ${fqn} already exists`));
       }
       const bind = (
         ...args:
@@ -131,7 +133,7 @@ export const Resource = <R extends ResourceLike>(
         typeof args[0] === "string"
           ? Effect.gen(function* () {
               const [sid, data] = args as [sid: string, data: R["Binding"]];
-              (stack.bindings[id] ??= []).push({
+              (stack.bindings[fqn] ??= []).push({
                 namespace: yield* CurrentNamespace,
                 sid,
                 data,
@@ -182,10 +184,7 @@ export const Resource = <R extends ResourceLike>(
               );
             };
 
-      const namespace = yield* CurrentNamespace;
-      const fqn = toFqn(namespace, id);
-
-      const Resource: R = (stack.resources[id] = new Proxy(
+      const Resource: R = (stack.resources[fqn] = new Proxy(
         {
           Type: type,
           Namespace: namespace,
@@ -241,7 +240,7 @@ export const Resource = <R extends ResourceLike>(
   };
 
   return Object.assign(constructor, Service) as any as ResourceClass<R>;
-};
+}
 
 export interface ResourceProviders<Resource extends ResourceLike> {
   effect<

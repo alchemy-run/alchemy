@@ -472,6 +472,101 @@ export const staticStablesResourceProvider =
     }),
   });
 
+export type PhasedTargetProps = {
+  desired: string;
+  replaceKey?: string;
+};
+
+export interface PhasedTarget extends Resource<
+  "Test.PhasedTarget",
+  PhasedTargetProps,
+  {
+    stableId: string;
+    value: string;
+    env: Record<string, string>;
+    replaceKey: string | undefined;
+  },
+  {
+    env?: Record<string, string>;
+  }
+> {}
+
+export const PhasedTarget = Resource<PhasedTarget>("Test.PhasedTarget");
+
+const phasedStableId = (replaceKey?: string) =>
+  `stable:${replaceKey ?? "default"}`;
+
+const mergeBindingEnv = (bindings: Array<any>) =>
+  Object.assign(
+    {},
+    ...bindings.map((binding) => binding.env ?? binding.data?.env ?? {}),
+  );
+
+export const phasedTargetProvider = PhasedTarget.provider.effect(
+  Effect.gen(function* () {
+    return {
+      diff: Effect.fn(function* ({ news, olds }) {
+        if (news.replaceKey !== olds.replaceKey) {
+          return { action: "replace" } as const;
+        }
+        if (news.desired !== olds.desired) {
+          return { action: "update" } as const;
+        }
+      }),
+      precreate: Effect.fn(function* ({ news }) {
+        return {
+          stableId: phasedStableId(news.replaceKey),
+          value: `pre:${news.desired}`,
+          env: {},
+          replaceKey: news.replaceKey,
+        };
+      }),
+      create: Effect.fn(function* ({ id, news, bindings }) {
+        const hooks = Option.getOrUndefined(
+          yield* Effect.serviceOption(TestResourceHooks),
+        );
+        if (hooks?.create) {
+          yield* hooks.create(id, {
+            string: news.desired,
+            replaceString: news.replaceKey,
+          });
+        }
+        return {
+          stableId: phasedStableId(news.replaceKey),
+          value: news.desired,
+          env: mergeBindingEnv(bindings),
+          replaceKey: news.replaceKey,
+        };
+      }),
+      update: Effect.fn(function* ({ id, news, bindings }) {
+        const hooks = Option.getOrUndefined(
+          yield* Effect.serviceOption(TestResourceHooks),
+        );
+        if (hooks?.update) {
+          yield* hooks.update(id, {
+            string: news.desired,
+            replaceString: news.replaceKey,
+          });
+        }
+        return {
+          stableId: phasedStableId(news.replaceKey),
+          value: news.desired,
+          env: mergeBindingEnv(bindings),
+          replaceKey: news.replaceKey,
+        };
+      }),
+      delete: Effect.fn(function* ({ id }) {
+        const hooks = Option.getOrUndefined(
+          yield* Effect.serviceOption(TestResourceHooks),
+        );
+        if (hooks?.delete) {
+          yield* hooks.delete(id);
+        }
+      }),
+    };
+  }),
+);
+
 // Layers
 export const TestLayers = Layer.mergeAll(
   bucketProvider,
@@ -481,6 +576,7 @@ export const TestLayers = Layer.mergeAll(
   deletedBindingRegressionProvider,
   testResourceProvider,
   staticStablesResourceProvider,
+  phasedTargetProvider,
 );
 
 export const InMemoryTestLayers = () =>

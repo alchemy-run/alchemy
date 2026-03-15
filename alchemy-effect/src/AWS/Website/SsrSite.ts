@@ -1,7 +1,8 @@
 import type * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as Effect from "effect/Effect";
-import * as Output from "../../Output.ts";
+import * as Construct from "../../Construct.ts";
 import type { Input } from "../../Input.ts";
+import * as Output from "../../Output.ts";
 import { Certificate } from "../ACM/Certificate.ts";
 import { Distribution } from "../CloudFront/Distribution.ts";
 import { Invalidation } from "../CloudFront/Invalidation.ts";
@@ -12,6 +13,7 @@ import {
 } from "../CloudFront/ManagedPolicies.ts";
 import { OriginAccessControl } from "../CloudFront/OriginAccessControl.ts";
 import type { Service } from "../ECS/Service.ts";
+import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Function } from "../Lambda/Function.ts";
 import { Record as Route53Record } from "../Route53/Record.ts";
 import { Bucket } from "../S3/Bucket.ts";
@@ -128,7 +130,9 @@ const serverUrlOf = (server: SsrSiteServerOrigin): Input<string> => {
 };
 
 const serverOriginOf = (server: SsrSiteServerOrigin): Input<string> =>
-  Output.map((url: string) => new URL(url).hostname)(serverUrlOf(server) as any) as any;
+  Output.map((url: string) => new URL(url).hostname)(
+    serverUrlOf(server) as any,
+  ) as any;
 
 /**
  * A server-rendered website behind CloudFront.
@@ -160,13 +164,16 @@ const serverOriginOf = (server: SsrSiteServerOrigin): Input<string> =>
  * });
  * ```
  */
-export const SsrSite = Effect.fn(function* (id: string, props: SsrSiteProps) {
+export const SsrSite = Construct.fn(function* (
+  id: string,
+  props: SsrSiteProps,
+) {
   const assetPattern = props.assets?.pathPattern ?? "/_assets/*";
   const serverUrl = serverUrlOf(props.server);
   const serverOriginHost = serverOriginOf(props.server);
 
   const assetBucket = props.assets
-    ? yield* Bucket(`${id}AssetsBucket`, {
+    ? yield* Bucket("AssetsBucket", {
         bucketName: props.assets.bucketName,
         tags: props.tags,
       })
@@ -174,7 +181,7 @@ export const SsrSite = Effect.fn(function* (id: string, props: SsrSiteProps) {
 
   const assetFiles =
     props.assets && assetBucket
-      ? yield* AssetDeployment(`${id}AssetsFiles`, {
+      ? yield* AssetDeployment("AssetsFiles", {
           bucket: assetBucket,
           sourcePath: props.assets.sourcePath,
           prefix: props.assets.prefix,
@@ -185,7 +192,7 @@ export const SsrSite = Effect.fn(function* (id: string, props: SsrSiteProps) {
 
   const assetOac =
     props.assets && assetBucket
-      ? yield* OriginAccessControl(`${id}AssetsOriginAccessControl`, {
+      ? yield* OriginAccessControl("AssetsOriginAccessControl", {
           originType: "s3",
           description: `${id} SSR asset origin access control`,
         })
@@ -224,16 +231,28 @@ export const SsrSite = Effect.fn(function* (id: string, props: SsrSiteProps) {
     };
   }
 
-  const certificate = props.domain
-    ? yield* Certificate(`${id}Certificate`, {
-        domainName: props.domain.name,
-        subjectAlternativeNames: props.domain.aliases,
-        hostedZoneId: props.domain.hostedZoneId,
-        tags: props.tags,
-      })
-    : undefined;
+  if (props.domain && props.domain.dns === false && !props.domain.cert) {
+    return yield* Effect.fail(
+      new Error("SsrSite domain configuration with `dns: false` requires `cert`."),
+    );
+  }
 
-  const distribution = yield* Distribution(`${id}Distribution`, {
+  const certificate =
+    !props.domain || props.domain.cert
+      ? props.domain?.cert
+        ? { certificateArn: props.domain.cert }
+        : undefined
+      : yield* Certificate("Certificate", {
+          domainName: props.domain.name,
+          subjectAlternativeNames: [
+            ...(props.domain.aliases ?? []),
+            ...(props.domain.redirects ?? []),
+          ],
+          hostedZoneId: props.domain.hostedZoneId,
+          tags: props.tags,
+        });
+
+  const distribution = yield* Distribution("Distribution", {
     aliases: props.domain
       ? [props.domain.name, ...(props.domain.aliases ?? [])]
       : undefined,
@@ -242,7 +261,8 @@ export const SsrSite = Effect.fn(function* (id: string, props: SsrSiteProps) {
         id: "server",
         domainName: serverOriginHost,
         customOriginConfig: {
-          originProtocolPolicy: props.server.originProtocolPolicy ?? "https-only",
+          originProtocolPolicy:
+            props.server.originProtocolPolicy ?? "https-only",
         },
       },
       ...(assetBucket && assetOac
@@ -261,7 +281,15 @@ export const SsrSite = Effect.fn(function* (id: string, props: SsrSiteProps) {
       targetOriginId: "server",
       viewerProtocolPolicy: "redirect-to-https",
       compress: true,
-      allowedMethods: ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"],
+      allowedMethods: [
+        "DELETE",
+        "GET",
+        "HEAD",
+        "OPTIONS",
+        "PATCH",
+        "POST",
+        "PUT",
+      ],
       cachedMethods: ["GET", "HEAD"],
       cachePolicyId: props.cachePolicyId ?? MANAGED_CACHING_DISABLED_POLICY_ID,
       originRequestPolicyId: MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID,
@@ -282,7 +310,7 @@ export const SsrSite = Effect.fn(function* (id: string, props: SsrSiteProps) {
         : undefined,
     viewerCertificate: certificate
       ? {
-          acmCertificateArn: certificate.certificateArn,
+          acmCertificateArn: (certificate as any).certificateArn,
           sslSupportMethod: "sni-only",
           minimumProtocolVersion: "TLSv1.2_2021",
         }
@@ -290,12 +318,36 @@ export const SsrSite = Effect.fn(function* (id: string, props: SsrSiteProps) {
     tags: props.tags,
   });
 
-  const records = props.domain
+  if (assetBucket && assetOac) {
+    const bucketPolicy: PolicyStatement = {
+      Effect: "Allow",
+      Principal: {
+        Service: "cloudfront.amazonaws.com",
+      },
+      Action: ["s3:GetObject"],
+      Resource: [Output.interpolate`${assetBucket.bucketArn}/*` as any],
+      Condition: {
+        StringEquals: {
+          "AWS:SourceArn": distribution.distributionArn as any,
+        },
+      },
+    };
+
+    yield* assetBucket.bind`AWS.S3.Policy(${distribution}, ${assetBucket})`({
+      policyStatements: [bucketPolicy],
+    });
+  }
+
+  const records = props.domain?.hostedZoneId && props.domain.dns !== false
     ? yield* Effect.forEach(
-        [props.domain.name, ...(props.domain.aliases ?? [])],
+        [
+          props.domain.name,
+          ...(props.domain.aliases ?? []),
+          ...(props.domain.redirects ?? []),
+        ],
         (name, index) =>
-          Route53Record(`${id}AliasRecord${index + 1}`, {
-            hostedZoneId: props.domain!.hostedZoneId,
+          Route53Record(`AliasRecord${index + 1}`, {
+            hostedZoneId: props.domain!.hostedZoneId!,
             name,
             type: "A",
             aliasTarget: {
@@ -310,7 +362,7 @@ export const SsrSite = Effect.fn(function* (id: string, props: SsrSiteProps) {
   const invalidation =
     props.invalidate === false || !assetFiles
       ? undefined
-      : yield* Invalidation(`${id}Invalidation`, {
+      : yield* Invalidation("Invalidation", {
           distributionId: distribution.distributionId,
           version: assetFiles.version,
           wait: props.invalidate?.wait,

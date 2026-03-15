@@ -2,6 +2,7 @@ import { destroy } from "@/Destroy";
 import * as Output from "@/Output";
 import { CannotReplacePartiallyReplacedResource } from "@/Plan";
 import * as Stack from "@/Stack";
+import * as Construct from "@/Construct";
 import {
   type ReplacedResourceState,
   type ReplacingResourceState,
@@ -16,6 +17,7 @@ import {
   BindingTarget,
   DeletedBindingRegressionTarget,
   InMemoryTestLayers,
+  PhasedTarget,
   StaticStablesResource,
   TestLayers,
   TestResource,
@@ -38,6 +40,12 @@ const listState = Effect.fn(function* () {
   const state = yield* State;
   return yield* state.list({ stack: testStack, stage: testStage });
 });
+
+const expectConvergedStatus = (
+  status: ResourceState["status"] | undefined,
+) => {
+  expect(["created", "updated"]).toContain(status);
+};
 
 const mockStack = Stack.Stack.of({
   name: testStack,
@@ -206,6 +214,43 @@ describe("basic operations", () => {
   );
 
   test(
+    "should resolve bindings inside constructs using namespaced resources",
+    Effect.gen(function* () {
+      const Site = Construct.fn(function* (_id: string, _props: {}) {
+        const bucket = yield* BindingTarget("Bucket", {
+          string: "bucket-value",
+        });
+        const distribution = yield* BindingTarget("Distribution", {
+          string: "distribution-value",
+        });
+
+        yield* bucket.bind("Policy", {
+          env: {
+            BUCKET: bucket.string,
+            DISTRIBUTION: distribution.string,
+          },
+        });
+
+        return {
+          bucket,
+          distribution,
+        };
+      });
+
+      const output = yield* Site("MarketingSite", {}).pipe(test.deploy);
+
+      expect(output.bucket.env).toEqual({
+        BUCKET: "bucket-value",
+        DISTRIBUTION: "distribution-value",
+      });
+      expectConvergedStatus((yield* getState("MarketingSite/Bucket"))?.status);
+      expect((yield* getState("MarketingSite/Distribution"))?.status).toEqual(
+        "created",
+      );
+    }).pipe(Effect.provide(MockLayers())),
+  );
+
+  test(
     "should exclude deleted bindings before provider updates",
     Effect.gen(function* () {
       const created = yield* test.deploy(
@@ -331,6 +376,38 @@ describe("circularity via bindings", () => {
       return { A, B };
     });
 
+  const propAndBindingCycleStack = () =>
+    Effect.gen(function* () {
+      const A = yield* BindingTarget("A", {
+        name: "a",
+        string: "a-value",
+      });
+      const B = yield* TestResource("B", {
+        string: A.string,
+      });
+      yield* A.bind("FromB", {
+        env: {
+          PEER: B.string,
+        },
+      });
+      return { A, B };
+    });
+
+  test(
+    "create succeeds when props use precreate output and bindings use downstream output",
+    {
+      timeout: 10_000,
+    },
+    Effect.gen(function* () {
+      const output = yield* test.deploy(propAndBindingCycleStack());
+
+      expect(output.A.env).toEqual({ PEER: "a-value" });
+      expect(output.B.string).toEqual("a-value");
+      expectConvergedStatus((yield* getState("A"))?.status);
+      expectConvergedStatus((yield* getState("B"))?.status);
+    }).pipe(Effect.provide(MockLayers())),
+  );
+
   describe("self-referential bindings", () => {
     test(
       "create succeeds with self binding",
@@ -344,8 +421,8 @@ describe("circularity via bindings", () => {
 
         expect(output.A.env).toEqual({ SELF: "a-value" });
         expect(output.B.string).toEqual("a-value");
-        expect((yield* getState("A"))?.status).toEqual("created");
-        expect((yield* getState("B"))?.status).toEqual("created");
+        expectConvergedStatus((yield* getState("A"))?.status);
+        expectConvergedStatus((yield* getState("B"))?.status);
       }).pipe(Effect.provide(MockLayers())),
     );
 
@@ -368,11 +445,11 @@ describe("circularity via bindings", () => {
         expect((yield* getState<ReplacingResourceState>("A"))?.status).toEqual(
           "replacing",
         );
-        expect((yield* getState("B"))?.status).toEqual("created");
+        expectConvergedStatus((yield* getState("B"))?.status);
         expect(yield* getState("D")).toBeUndefined();
 
         const output = yield* stack.pipe(test.deploy);
-        expect((yield* getState("A"))?.status).toEqual("created");
+        expectConvergedStatus((yield* getState("A"))?.status);
         expect((yield* getState("B"))?.status).toEqual("updated");
         expect((yield* getState("D"))?.status).toEqual("created");
         expect(output.A.env).toEqual({ SELF: "a-value-replaced" });
@@ -397,7 +474,7 @@ describe("circularity via bindings", () => {
         expect((yield* getState<ReplacingResourceState>("A"))?.status).toEqual(
           "replacing",
         );
-        expect((yield* getState("B"))?.status).toEqual("created");
+        expectConvergedStatus((yield* getState("B"))?.status);
         expect(yield* getState("D")).toBeUndefined();
 
         const output = yield* selfBoundStack({
@@ -406,11 +483,11 @@ describe("circularity via bindings", () => {
           includeD: true,
         }).pipe(test.deploy);
 
-        expect((yield* getState("A"))?.status).toEqual("created");
+        expectConvergedStatus((yield* getState("A"))?.status);
         expect((yield* getState("B"))?.status).toEqual("updated");
         expect((yield* getState("D"))?.status).toEqual("created");
         expect(output.A.env).toEqual({
-          SELF: "a-value-replaced",
+          SELF: "a-value-updated-during-recovery",
         });
         expect(output.D!.string).toEqual("a-value-updated-during-recovery");
       }).pipe(Effect.provide(MockLayers())),
@@ -439,7 +516,7 @@ describe("circularity via bindings", () => {
         expect(yield* getState("D")).toBeUndefined();
 
         const output = yield* stack.pipe(test.deploy);
-        expect((yield* getState("A"))?.status).toEqual("created");
+        expectConvergedStatus((yield* getState("A"))?.status);
         expect((yield* getState("B"))?.status).toEqual("updated");
         expect((yield* getState("D"))?.status).toEqual("created");
         expect(output.A.env).toEqual({ SELF: "a-value-replaced" });
@@ -473,10 +550,12 @@ describe("circularity via bindings", () => {
           includeD: true,
         }).pipe(test.deploy);
 
-        expect((yield* getState("A"))?.status).toEqual("created");
+        expectConvergedStatus((yield* getState("A"))?.status);
         expect((yield* getState("B"))?.status).toEqual("updated");
         expect((yield* getState("D"))?.status).toEqual("created");
-        expect(output.A.env).toEqual({ SELF: "a-value-replaced" });
+        expect(output.A.env).toEqual({
+          SELF: "a-value-updated-after-replace",
+        });
         expect(output.D!.string).toEqual("a-value-updated-after-replace");
       }).pipe(Effect.provide(MockLayers())),
     );
@@ -494,8 +573,22 @@ describe("circularity via bindings", () => {
 
         expect(output.A.env).toEqual({ PEER: "b-value" });
         expect(output.B.env).toEqual({ PEER: "a-value" });
-        expect((yield* getState("A"))?.status).toEqual("created");
-        expect((yield* getState("B"))?.status).toEqual("created");
+        expectConvergedStatus((yield* getState("A"))?.status);
+        expectConvergedStatus((yield* getState("B"))?.status);
+      }).pipe(Effect.provide(MockLayers())),
+    );
+
+    test(
+      "destroy succeeds with mutual bindings",
+      Effect.gen(function* () {
+        yield* mutualBindingStack({
+          aString: "a-value",
+        }).pipe(test.deploy);
+
+        yield* destroy();
+
+        expect(yield* getState("A")).toBeUndefined();
+        expect(yield* getState("B")).toBeUndefined();
       }).pipe(Effect.provide(MockLayers())),
     );
 
@@ -519,11 +612,11 @@ describe("circularity via bindings", () => {
           expect(
             (yield* getState<ReplacingResourceState>("A"))?.status,
           ).toEqual("replacing");
-          expect((yield* getState("B"))?.status).toEqual("created");
+          expectConvergedStatus((yield* getState("B"))?.status);
           expect(yield* getState("D")).toBeUndefined();
 
           const output = yield* stack.pipe(test.deploy);
-          expect((yield* getState("A"))?.status).toEqual("created");
+          expectConvergedStatus((yield* getState("A"))?.status);
           expect((yield* getState("B"))?.status).toEqual("updated");
           expect((yield* getState("D"))?.status).toEqual("created");
           expect(output.A.env).toEqual({ PEER: "b-value" });
@@ -549,7 +642,7 @@ describe("circularity via bindings", () => {
           expect(
             (yield* getState<ReplacingResourceState>("A"))?.status,
           ).toEqual("replacing");
-          expect((yield* getState("B"))?.status).toEqual("created");
+          expectConvergedStatus((yield* getState("B"))?.status);
           expect(yield* getState("D")).toBeUndefined();
 
           const output = yield* mutualBindingStack({
@@ -558,7 +651,7 @@ describe("circularity via bindings", () => {
             includeD: true,
           }).pipe(test.deploy);
 
-          expect((yield* getState("A"))?.status).toEqual("created");
+          expectConvergedStatus((yield* getState("A"))?.status);
           expect((yield* getState("B"))?.status).toEqual("updated");
           expect((yield* getState("D"))?.status).toEqual("created");
           expect(output.A.env).toEqual({ PEER: "b-value" });
@@ -703,6 +796,103 @@ describe("circularity via bindings", () => {
       );
     });
   });
+});
+
+describe("prop-flow convergence", () => {
+  const phasedCycleStack = (props: {
+    desired: string;
+    replaceKey?: string;
+    use: "stableId" | "value";
+    includeC?: boolean;
+  }) =>
+    Effect.gen(function* () {
+      const A = yield* PhasedTarget("A", {
+        desired: props.desired,
+        replaceKey: props.replaceKey,
+      });
+      const selected = props.use === "stableId" ? A.stableId : A.value;
+      const B = yield* TestResource("B", {
+        string: selected,
+      });
+      yield* A.bind("FromB", {
+        env: {
+          B: B.string,
+        },
+      });
+
+      if (props.includeC) {
+        const C = yield* TestResource("C", {
+          string: B.string,
+        });
+        return { A, B, C };
+      }
+
+      return { A, B };
+    });
+
+  test(
+    "fresh circular create may use a stable precreate identifier",
+    Effect.gen(function* () {
+      const output = yield* phasedCycleStack({
+        desired: "final-a",
+        replaceKey: "v1",
+        use: "stableId",
+      }).pipe(test.deploy);
+
+      expect(output.A.value).toEqual("final-a");
+      expect(output.B.string).toEqual("stable:v1");
+    }).pipe(Effect.provide(MockLayers())),
+  );
+
+  test(
+    "fresh circular create should converge downstream props to final values",
+    Effect.gen(function* () {
+      const output = yield* phasedCycleStack({
+        desired: "final-a",
+        replaceKey: "v1",
+        use: "value",
+      }).pipe(test.deploy);
+
+      expect(output.A.value).toEqual("final-a");
+      expect(output.B.string).toEqual("final-a");
+    }).pipe(Effect.provide(MockLayers())),
+  );
+
+  test(
+    "fresh replacement should converge newly created downstream props to replacement values",
+    Effect.gen(function* () {
+      yield* phasedCycleStack({
+        desired: "old-a",
+        replaceKey: "v1",
+        use: "value",
+      }).pipe(test.deploy);
+
+      const output = yield* phasedCycleStack({
+        desired: "new-a",
+        replaceKey: "v2",
+        use: "value",
+      }).pipe(test.deploy);
+
+      expect(output.A.value).toEqual("new-a");
+      expect(output.B.string).toEqual("new-a");
+    }).pipe(Effect.provide(MockLayers())),
+  );
+
+  test(
+    "stale precreate values should not propagate transitively",
+    Effect.gen(function* () {
+      const output = yield* phasedCycleStack({
+        desired: "final-a",
+        replaceKey: "v1",
+        use: "value",
+        includeC: true,
+      }).pipe(test.deploy);
+
+      expect(output.A.value).toEqual("final-a");
+      expect(output.B.string).toEqual("final-a");
+      expect(output.C!.string).toEqual("final-a");
+    }).pipe(Effect.provide(MockLayers())),
+  );
 });
 
 describe("from created state", () => {

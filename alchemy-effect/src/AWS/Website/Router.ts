@@ -1,8 +1,14 @@
-import { createHash } from "node:crypto";
 import * as Effect from "effect/Effect";
+import { createHash } from "node:crypto";
+import * as Construct from "../../Construct.ts";
+import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
 import { Certificate } from "../ACM/Certificate.ts";
-import { Distribution, type DistributionBehavior, type DistributionOrigin } from "../CloudFront/Distribution.ts";
+import {
+  Distribution,
+  type DistributionBehavior,
+  type DistributionOrigin,
+} from "../CloudFront/Distribution.ts";
 import { Function as CloudFrontFunction } from "../CloudFront/Function.ts";
 import { Invalidation } from "../CloudFront/Invalidation.ts";
 import {
@@ -22,7 +28,9 @@ import type {
 const isUrlRoute = (route: RouterRoute): route is RouterUrlRouteProps =>
   typeof route === "string" || "url" in (route as any);
 
-const normalizeRoute = (route: RouterRoute): RouterUrlRouteProps | RouterBucketRouteProps =>
+const normalizeRoute = (
+  route: RouterRoute,
+): RouterUrlRouteProps | RouterBucketRouteProps =>
   typeof route === "string" ? { url: route } : route;
 
 const normalizePattern = (pattern: string) => {
@@ -45,7 +53,9 @@ const bucketDomainNameOf = (bucket: RouterBucketRouteProps["bucket"]) =>
     ? bucket
     : (((bucket as any).bucketRegionalDomainName ?? bucket) as string);
 
-const toAllowedMethods = (route: RouterUrlRouteProps | RouterBucketRouteProps) =>
+const toAllowedMethods = (
+  route: RouterUrlRouteProps | RouterBucketRouteProps,
+) =>
   isUrlRoute(route)
     ? (route.allowedMethods ?? [
         "DELETE",
@@ -59,7 +69,9 @@ const toAllowedMethods = (route: RouterUrlRouteProps | RouterBucketRouteProps) =
     : ["GET", "HEAD", "OPTIONS"];
 
 const toCachedMethods = (route: RouterUrlRouteProps | RouterBucketRouteProps) =>
-  isUrlRoute(route) ? (route.cachedMethods ?? ["GET", "HEAD"]) : ["GET", "HEAD"];
+  isUrlRoute(route)
+    ? (route.cachedMethods ?? ["GET", "HEAD"])
+    : ["GET", "HEAD"];
 
 const buildViewerRequestCode = (
   route: RouterUrlRouteProps | RouterBucketRouteProps,
@@ -126,34 +138,45 @@ const toInvalidationPaths = (
  * });
  * ```
  */
-export const Router = Effect.fn(function* (id: string, props: RouterProps) {
-  const normalizedEntries = Object.entries(props.routes).map(([pattern, route]) => [
-    normalizePattern(pattern),
-    normalizeRoute(route),
-  ] as const);
+export const Router = Construct.fn(function* (id: string, props: RouterProps) {
+  const normalizedEntries = Object.entries(props.routes).map(
+    ([pattern, route]) =>
+      [normalizePattern(pattern), normalizeRoute(route)] as const,
+  );
 
   const needsBucketOac = normalizedEntries.some(
     ([, route]) => !isUrlRoute(route) && !route.originAccessControlId,
   );
 
   const sharedBucketOac = needsBucketOac
-    ? yield* OriginAccessControl(`${id}OriginAccessControl`, {
+    ? yield* OriginAccessControl("OriginAccessControl", {
         originType: "s3",
         description: `${id} router origin access control`,
       })
     : undefined;
 
-  const certificate = props.domain
-    ? yield* Certificate(`${id}Certificate`, {
-        domainName: props.domain.name,
-        subjectAlternativeNames: [
-          ...(props.domain.aliases ?? []),
-          ...(props.domain.redirects ?? []),
-        ],
-        hostedZoneId: props.domain.hostedZoneId,
-        tags: props.tags,
-      })
-    : undefined;
+  if (props.domain && props.domain.dns === false && !props.domain.cert) {
+    return yield* Effect.fail(
+      new Error(
+        "Router domain configuration with `dns: false` requires `cert`.",
+      ),
+    );
+  }
+
+  const certificate =
+    !props.domain || props.domain.cert
+      ? props.domain?.cert
+        ? { certificateArn: props.domain.cert }
+        : undefined
+      : yield* Certificate("Certificate", {
+          domainName: props.domain.name,
+          subjectAlternativeNames: [
+            ...(props.domain.aliases ?? []),
+            ...(props.domain.redirects ?? []),
+          ],
+          hostedZoneId: props.domain.hostedZoneId,
+          tags: props.tags,
+        });
 
   const routeSpecs = yield* Effect.forEach(
     normalizedEntries,
@@ -162,7 +185,7 @@ export const Router = Effect.fn(function* (id: string, props: RouterProps) {
         const routeId = `route${index + 1}`;
         const viewerRequestFn =
           route.edge?.viewerRequest || route.rewrite
-            ? yield* CloudFrontFunction(`${id}${routeId}ViewerRequest`, {
+            ? yield* CloudFrontFunction(`${routeId}ViewerRequest`, {
                 comment: `${id} ${pattern} viewer request`,
                 code: buildViewerRequestCode(route),
                 keyValueStoreArns: route.edge?.viewerRequest?.keyValueStoreArn
@@ -172,7 +195,7 @@ export const Router = Effect.fn(function* (id: string, props: RouterProps) {
             : undefined;
 
         const viewerResponseFn = route.edge?.viewerResponse
-          ? yield* CloudFrontFunction(`${id}${routeId}ViewerResponse`, {
+          ? yield* CloudFrontFunction(`${routeId}ViewerResponse`, {
               comment: `${id} ${pattern} viewer response`,
               code: buildViewerResponseCode(route),
               keyValueStoreArns: route.edge?.viewerResponse?.keyValueStoreArn
@@ -190,7 +213,8 @@ export const Router = Effect.fn(function* (id: string, props: RouterProps) {
               customOriginConfig: {
                 httpPort: 80,
                 httpsPort: 443,
-                originProtocolPolicy: route.originProtocolPolicy ?? "https-only",
+                originProtocolPolicy:
+                  route.originProtocolPolicy ?? "https-only",
                 originReadTimeout: route.originReadTimeout ?? 20,
                 originKeepaliveTimeout: route.originKeepaliveTimeout,
                 originSslProtocols: route.originSslProtocols ?? ["TLSv1.2"],
@@ -214,8 +238,10 @@ export const Router = Effect.fn(function* (id: string, props: RouterProps) {
           cachedMethods: toCachedMethods(route),
           compress: true,
           cachePolicyId: isUrlRoute(route)
-            ? (route.cachePolicyId as any) ?? MANAGED_CACHING_DISABLED_POLICY_ID
-            : (route.cachePolicyId as any) ?? MANAGED_CACHING_OPTIMIZED_POLICY_ID,
+            ? ((route.cachePolicyId as any) ??
+              MANAGED_CACHING_DISABLED_POLICY_ID)
+            : ((route.cachePolicyId as any) ??
+              MANAGED_CACHING_OPTIMIZED_POLICY_ID),
           originRequestPolicyId: isUrlRoute(route)
             ? MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID
             : undefined,
@@ -274,7 +300,7 @@ export const Router = Effect.fn(function* (id: string, props: RouterProps) {
   const { pathPattern: _defaultPathPattern, ...defaultBehavior } =
     defaultRoute.behavior;
 
-  const distribution = yield* Distribution(`${id}Distribution`, {
+  const distribution = yield* Distribution("Distribution", {
     aliases: props.domain
       ? [
           props.domain.name,
@@ -282,10 +308,9 @@ export const Router = Effect.fn(function* (id: string, props: RouterProps) {
           ...(props.domain.redirects ?? []),
         ]
       : undefined,
-    defaultRootObject:
-      !isUrlRoute(defaultRoute.route)
-        ? defaultRoute.route.defaultRootObject
-        : undefined,
+    defaultRootObject: !isUrlRoute(defaultRoute.route)
+      ? defaultRoute.route.defaultRootObject
+      : undefined,
     origins: routeSpecs.map((spec) => spec.origin),
     defaultCacheBehavior: defaultBehavior,
     orderedCacheBehaviors: routeSpecs
@@ -294,7 +319,7 @@ export const Router = Effect.fn(function* (id: string, props: RouterProps) {
     customErrorResponses,
     viewerCertificate: certificate
       ? {
-          acmCertificateArn: certificate.certificateArn,
+          acmCertificateArn: (certificate as any).certificateArn,
           sslSupportMethod: "sni-only",
           minimumProtocolVersion: "TLSv1.2_2021",
         }
@@ -302,30 +327,61 @@ export const Router = Effect.fn(function* (id: string, props: RouterProps) {
     tags: props.tags,
   });
 
-  const records = props.domain
-    ? yield* Effect.forEach(
-        [
-          props.domain.name,
-          ...(props.domain.aliases ?? []),
-          ...(props.domain.redirects ?? []),
-        ],
-        (name, index) =>
-          Route53Record(`${id}AliasRecord${index + 1}`, {
-            hostedZoneId: props.domain!.hostedZoneId,
-            name,
-            type: "A",
-            aliasTarget: {
-              hostedZoneId: distribution.hostedZoneId,
-              dnsName: distribution.domainName,
+  yield* Effect.forEach(
+    routeSpecs.filter(
+      (spec): spec is typeof spec & { route: RouterBucketRouteProps } =>
+        !isUrlRoute(spec.route),
+    ),
+    (spec) =>
+      Effect.gen(function* () {
+        const bucket = spec.route.bucket;
+
+        yield* bucket.bind`AWS.S3.GetObject(${bucket})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Principal: {
+                Service: "cloudfront.amazonaws.com",
+              },
+              Action: ["s3:GetObject"],
+              Resource: [Output.interpolate`${bucket.bucketArn}/*` as any],
+              Condition: {
+                StringEquals: {
+                  "AWS:SourceArn": distribution.distributionArn as any,
+                },
+              },
             },
-          }),
-        { concurrency: "unbounded" },
-      )
-    : [];
+          ],
+        }).pipe(Namespace.push(id));
+      }),
+  );
+
+  const records =
+    props.domain?.hostedZoneId && props.domain.dns !== false
+      ? yield* Effect.forEach(
+          [
+            props.domain.name,
+            ...(props.domain.aliases ?? []),
+            ...(props.domain.redirects ?? []),
+          ],
+          (name, index) =>
+            Route53Record(`AliasRecord${index + 1}`, {
+              hostedZoneId: props.domain!.hostedZoneId!,
+              name,
+              type: "A",
+              aliasTarget: {
+                hostedZoneId: distribution.hostedZoneId,
+                dnsName: distribution.domainName,
+              },
+            }),
+          { concurrency: "unbounded" },
+        )
+      : [];
 
   const routeVersions = Output.all(
-    ...(routeSpecs.map((spec) =>
-      Output.interpolate`${spec.route.version ?? `${spec.pattern}:${isUrlRoute(spec.route) ? "url" : "bucket"}`}`,
+    ...(routeSpecs.map(
+      (spec) =>
+        Output.interpolate`${spec.route.version ?? `${spec.pattern}:${isUrlRoute(spec.route) ? "url" : "bucket"}`}`,
     ) as any),
   ) as any;
 
@@ -336,7 +392,7 @@ export const Router = Effect.fn(function* (id: string, props: RouterProps) {
   const invalidation =
     props.invalidation === false || !props.invalidation
       ? undefined
-      : yield* Invalidation(`${id}Invalidation`, {
+      : yield* Invalidation("Invalidation", {
           distributionId: distribution.distributionId,
           version: invalidationVersion as any,
           wait: props.invalidation.wait,

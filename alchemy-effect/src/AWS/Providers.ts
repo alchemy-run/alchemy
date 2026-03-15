@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
+import { BuildProvider } from "../Build/Build.ts";
 import { rolldown } from "../Bundle/Rolldown.ts";
 import type { Provider } from "../Provider.ts";
 import * as ACM from "./ACM/index.ts";
@@ -85,6 +86,7 @@ export const credentials = () =>
  */
 export const resources = () =>
   Layer.mergeAll(
+    BuildProvider(),
     ACM.CertificateProvider(),
     AutoScaling.AutoScalingGroupProvider(),
     AutoScaling.LaunchTemplateProvider(),

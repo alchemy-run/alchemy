@@ -10,7 +10,7 @@ export interface WebsiteDomainProps {
   /**
    * Hosted zone used for Route 53 automation.
    */
-  hostedZoneId: string;
+  hostedZoneId?: string;
   /**
    * Additional aliases that should point at the same distribution.
    */
@@ -19,6 +19,14 @@ export interface WebsiteDomainProps {
    * Optional aliases that should redirect to the primary domain.
    */
   redirects?: string[];
+  /**
+   * Existing ACM certificate ARN to use instead of creating one.
+   */
+  cert?: Input<string>;
+  /**
+   * Disable Route 53 automation. When set, no DNS records are created.
+   */
+  dns?: false;
 }
 
 export interface WebsiteRewrite {
@@ -65,6 +73,70 @@ export interface WebsiteInvalidationProps {
    * @default "all"
    */
   paths?: "all" | "versioned" | string[];
+}
+
+export type WebsiteTextEncoding =
+  | "utf-8"
+  | "iso-8859-1"
+  | "windows-1252"
+  | "ascii"
+  | "none";
+
+export interface StaticSiteBuildProps {
+  /**
+   * Command used to build the site before upload.
+   */
+  command: string;
+  /**
+   * Directory containing the build output, relative to `path`.
+   */
+  output: string;
+  /**
+   * Optional glob list used to hash build inputs.
+   * @default all files under `path`
+   */
+  include?: string[];
+  /**
+   * Optional glob list excluded from build input hashing.
+   */
+  exclude?: string[];
+}
+
+export interface StaticSiteAssetsProps {
+  /**
+   * Existing bucket used for asset uploads.
+   * When a string bucket name is provided, bucket policies must be managed
+   * separately because Alchemy cannot bind to an external bucket resource.
+   */
+  bucket?: Bucket;
+  /**
+   * Optional path prefix inside the bucket.
+   */
+  path?: string;
+  /**
+   * Remove stale files under the bucket path prefix.
+   * @default true
+   */
+  purge?: boolean;
+  /**
+   * Additional route prefixes that should be served directly from the bucket.
+   */
+  routes?: string[];
+  /**
+   * Character encoding used for text-based assets.
+   * @default "utf-8"
+   */
+  textEncoding?: WebsiteTextEncoding;
+}
+
+export interface StaticSiteRouterProps {
+  /**
+   * Optional path prefix used when composing with `AWS.Website.Router`.
+   * This is metadata only; `StaticSite` still returns `routeTarget` for
+   * explicit router composition.
+   * @default "/"
+   */
+  path?: string;
 }
 
 export interface RouterCommonRouteProps {
@@ -123,7 +195,7 @@ export interface RouterBucketRouteProps extends RouterCommonRouteProps {
   /**
    * Bucket or bucket regional domain name served by the route.
    */
-  bucket: Bucket | Input<string> | { bucketRegionalDomainName: Input<string> };
+  bucket: Bucket;
   /**
    * Optional CloudFront OAC to attach to the S3 origin.
    */

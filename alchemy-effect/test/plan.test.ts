@@ -4,6 +4,7 @@ import * as Plan from "@/Plan";
 import * as Stack from "@/Stack";
 import { State, type ResourceState, type ResourceStatus } from "@/State";
 import { test } from "@/Test/Vitest";
+import * as Construct from "@/Construct";
 import { describe, expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -24,7 +25,7 @@ const instanceId = "852f6ec2e19b66589825efe14dca2971";
 
 const makePlan = <A, Err = never, Req = never>(
   effect: Effect.Effect<A, Err, Req>,
-): Effect.Effect<Stack.StackSpec & { output: A }, Err, never> =>
+): Effect.Effect<Plan.Plan<A>, Err, never> =>
   // @ts-expect-error
   Effect.gen(function* () {
     const stack = yield* Stack.Stack;
@@ -616,6 +617,137 @@ test(
     });
   }),
 );
+
+describe("construct namespaces", () => {
+  test(
+    "namespaced construct bindings resolve into the plan graph",
+    Effect.gen(function* () {
+      const Site = Construct.fn(function* (_id: string, _props: {}) {
+        const bucket = yield* BindingTarget("Bucket", {
+          name: "bucket",
+        });
+        const distribution = yield* BindingTarget("Distribution", {
+          name: "distribution",
+        });
+        yield* bucket.bind("Policy", {
+          env: {
+            BUCKET: bucket.string,
+            DISTRIBUTION: distribution.string,
+          },
+        });
+        return { bucket, distribution };
+      });
+
+      const plan = yield* Effect.gen(function* () {
+        yield* Site("MarketingSite", {});
+      }).pipe(makePlan);
+
+      expect(plan).toMatchObject({
+        resources: {
+          "MarketingSite/Bucket": {
+            action: "create",
+            bindings: [
+              {
+                action: "create",
+                sid: "Policy",
+                data: {
+                  env: {
+                    BUCKET: expect.propExpr(
+                      "string",
+                      plan.resources["MarketingSite/Bucket"]!.resource,
+                    ),
+                    DISTRIBUTION: expect.propExpr(
+                      "string",
+                      plan.resources["MarketingSite/Distribution"]!.resource,
+                    ),
+                  },
+                },
+              },
+            ],
+          },
+          "MarketingSite/Distribution": {
+            action: "create",
+            bindings: [],
+          },
+        },
+        deletions: expect.emptyObject(),
+      });
+    }),
+  );
+
+  test(
+    "same child logical ids in different constructs do not collide",
+    Effect.gen(function* () {
+      const Site = Construct.fn(function* (_id: string, props: { name: string }) {
+        return yield* Bucket("Bucket", {
+          name: props.name,
+        });
+      });
+
+      const plan = yield* Effect.gen(function* () {
+        yield* Site("MarketingSite", {
+          name: "marketing-bucket",
+        });
+        yield* Site("DocsSite", {
+          name: "docs-bucket",
+        });
+      }).pipe(makePlan);
+
+      expect(plan).toMatchObject({
+        resources: {
+          "MarketingSite/Bucket": {
+            action: "create",
+            props: {
+              name: "marketing-bucket",
+            },
+          },
+          "DocsSite/Bucket": {
+            action: "create",
+            props: {
+              name: "docs-bucket",
+            },
+          },
+        },
+        deletions: expect.emptyObject(),
+      });
+    }),
+  );
+
+  test(
+    "binding-only cycles inside a construct do not become downstream edges",
+    Effect.gen(function* () {
+      const Site = Construct.fn(function* (_id: string, _props: {}) {
+        const A = yield* BindingTarget("A", {
+          string: "a-value",
+        });
+        const B = yield* BindingTarget("B", {
+          string: "b-value",
+        });
+
+        yield* A.bind("FromB", {
+          env: {
+            PEER: B.string,
+          },
+        });
+        yield* B.bind("FromA", {
+          env: {
+            PEER: A.string,
+          },
+        });
+
+        return { A, B };
+      });
+
+      const plan = yield* Effect.gen(function* () {
+        yield* Site("MarketingSite", {});
+      }).pipe(makePlan);
+
+      expect(plan.resources["MarketingSite/A"]?.downstream).toEqual([]);
+      expect(plan.resources["MarketingSite/B"]?.downstream).toEqual([]);
+      expect(plan.deletions).toEqual({});
+    }),
+  );
+});
 
 const createTestResourceState = (options: {
   logicalId: string;

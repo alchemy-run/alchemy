@@ -1,13 +1,11 @@
 import * as AWS from "alchemy-effect/AWS";
-import * as Build from "alchemy-effect/Build";
 import * as Output from "alchemy-effect/Output";
 import * as Stack from "alchemy-effect/Stack";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 
-const aws = Layer.mergeAll(AWS.providers(), Build.BuildProvider()) as any;
+const aws = AWS.providers() as any;
 
 const WEBSITE_DOMAIN = Config.string("WEBSITE_DOMAIN").pipe(
   Config.option,
@@ -54,21 +52,15 @@ const stack = Effect.gen(function* () {
         }
       : undefined;
 
-  const build = yield* Build.Build("FrontendBuild", {
-    command: "bun run build",
-    cwd: ".",
-    include: [
-      "index.html",
-      "package.json",
-      "vite.config.ts",
-      "src/**/*.ts",
-      "src/**/*.css",
-    ],
-    output: "dist",
-  });
-
   const site = yield* AWS.Website.StaticSite("FrontendSite", {
-    sourcePath: build.path,
+    path: ".",
+    build: {
+      command: "bun run build",
+      output: "dist",
+    },
+    environment: {
+      VITE_STAGE: "test",
+    },
     spa: true,
     cdn: false,
     tags: {
@@ -97,7 +89,7 @@ const stack = Effect.gen(function* () {
     cloudFrontDomain: router.distribution.domainName,
     distributionId: router.distribution.distributionId,
     bucketName: site.bucket.bucketName,
-    buildHash: build.hash,
+    buildHash: site.build?.hash,
     assetVersion: site.files.version,
     certificateArn: router.certificate?.certificateArn as any,
     customDomain: websiteDomain?.name,

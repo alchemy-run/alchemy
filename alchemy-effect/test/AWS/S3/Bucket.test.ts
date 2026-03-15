@@ -266,6 +266,88 @@ test(
   }).pipe(Effect.provide(AWS.providers())),
 );
 
+test(
+  "create and remove bucket policy from bindings",
+  Effect.gen(function* () {
+    yield* destroy();
+
+    const distributionArn =
+      "arn:aws:cloudfront::123456789012:distribution/TESTDIST";
+    const bucketArn = "arn:aws:s3:::alchemy-test-bucket-policy-bindings";
+
+    const bucket = yield* test.deploy(
+      Effect.gen(function* () {
+        const bucket = yield* Bucket("PolicyBucket", {
+          bucketName: "alchemy-test-bucket-policy-bindings",
+          forceDestroy: true,
+        });
+
+        yield* bucket.bind("AWS.S3.Policy(TestDistribution, PolicyBucket)", {
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Principal: {
+                Service: "cloudfront.amazonaws.com",
+              },
+              Action: ["s3:GetObject"],
+              Resource: [`${bucketArn}/*`],
+              Condition: {
+                StringEquals: {
+                  "AWS:SourceArn": distributionArn,
+                },
+              },
+            },
+          ],
+        });
+
+        return bucket;
+      }),
+    );
+
+    const bucketPolicy = yield* S3.getBucketPolicy({
+      Bucket: bucket.bucketName,
+    }).pipe(Effect.map((response) => JSON.parse(response.Policy!)));
+    const statement = bucketPolicy.Statement[0];
+
+    expect(bucketPolicy.Version).toEqual("2012-10-17");
+    expect(statement.Effect).toEqual("Allow");
+    expect(statement.Principal).toEqual({
+      Service: "cloudfront.amazonaws.com",
+    });
+    expect(statement.Action).toEqual("s3:GetObject");
+    expect(statement.Resource).toEqual(`${bucketArn}/*`);
+    expect(statement.Condition).toEqual({
+      StringEquals: {
+        "AWS:SourceArn": distributionArn,
+      },
+    });
+
+    yield* test.deploy(
+      Effect.gen(function* () {
+        return yield* Bucket("PolicyBucket", {
+          bucketName: "alchemy-test-bucket-policy-bindings",
+          forceDestroy: true,
+        });
+      }),
+    );
+
+    const policyAfterRemoval = yield* S3.getBucketPolicy({
+      Bucket: bucket.bucketName,
+    }).pipe(
+      Effect.map(() => "has-policy" as const),
+      Effect.catchTag("NoSuchBucketPolicy", () =>
+        Effect.succeed("no-policy" as const),
+      ),
+    );
+
+    expect(policyAfterRemoval).toEqual("no-policy");
+
+    yield* destroy();
+
+    yield* assertBucketDeleted(bucket.bucketName);
+  }).pipe(Effect.provide(AWS.providers())),
+);
+
 class BucketStillExists extends Data.TaggedError("BucketStillExists") {}
 
 const assertBucketDeleted = Effect.fn(function* (bucketName: string) {

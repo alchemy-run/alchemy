@@ -17,6 +17,7 @@ import {
   type Apply,
   type Create,
   type Delete,
+  make as makePlan,
   type Plan,
   type Replace,
   type Update,
@@ -59,6 +60,30 @@ export type AppliedPlan<P extends Plan> = {
     : Simplify<P["resources"][id]["resource"]["attr"]>;
 };
 
+const toStackSpec = (plan: Plan, stackName: string, stage: string) => ({
+  name: stackName,
+  stage,
+  output: plan.output,
+  resources: Object.fromEntries(
+    Object.values(plan.resources).map((node) => [node.resource.FQN, node.resource]),
+  ),
+  bindings: Object.fromEntries(
+    Object.values(plan.resources).map((node) => [
+      node.resource.FQN,
+      node.bindings
+        .filter((binding) => binding.action !== "delete")
+        .map(
+          ({ namespace, sid, data }) =>
+            ({
+              namespace,
+              sid,
+              data,
+            }) satisfies ResourceBinding,
+        ),
+    ]),
+  ),
+});
+
 export const apply = <P extends Plan>(
   plan: P,
 ): Effect.Effect<
@@ -69,15 +94,41 @@ export const apply = <P extends Plan>(
   Effect.gen(function* () {
     const cli = yield* Cli;
     const session = yield* cli.startApplySession(plan);
+    const stack = yield* Stack;
+    const stage = yield* Stage;
+    const desiredStack = toStackSpec(plan, stack.name, stage);
 
-    // 1. expand the graph (create new resources, update existing and create replacements)
-    const resources = yield* expandAndPivot(plan, session);
-    // TODO(sam): support roll back to previous state if errors occur during expansion
-    // -> RISK: some UPDATEs may not be reverisble (i.e. trigger replacements)
-    // TODO(sam): should pivot be done separately? E.g shift traffic?
+    const hasPendingChanges = (candidate: Plan) =>
+      Object.values(candidate.resources).some((node) => node.action !== "noop") ||
+      Object.keys(candidate.deletions).length > 0;
 
-    // 2. delete orphans and replaced resources
-    yield* collectGarbage(plan, session);
+    let currentPlan: Plan = plan;
+    let resources = {} as Record<string, any>;
+
+    // A first pass may intentionally use precreate output to break cycles.
+    // Re-plan against the updated state so stale prop/binding consumers can
+    // converge to the upstream resource's final post-create output.
+    for (let pass = 0; pass < 3; pass++) {
+      // 1. expand the graph (create new resources, update existing and create replacements)
+      resources = {
+        ...resources,
+        ...(yield* expandAndPivot(currentPlan, session)),
+      };
+      // TODO(sam): support roll back to previous state if errors occur during expansion
+      // -> RISK: some UPDATEs may not be reverisble (i.e. trigger replacements)
+      // TODO(sam): should pivot be done separately? E.g shift traffic?
+
+      // 2. delete orphans and replaced resources
+      yield* collectGarbage(currentPlan, session);
+
+      const nextPlan = yield* makePlan(desiredStack);
+
+      if (!hasPendingChanges(nextPlan)) {
+        break;
+      }
+
+      currentPlan = nextPlan;
+    }
 
     yield* session.done();
 
@@ -123,11 +174,30 @@ const expandAndPivot = Effect.fnUntraced(function* (
       resourceId,
       upstreamNode,
       upstreamAttr: yield* phase === "post"
+        // Consumers in the post phase need the fully settled upstream output.
         ? Deferred.await(postcreateOutputs[resourceId])
-        : Effect.race(
-            Deferred.await(precreateOutputs[resourceId]),
-            Deferred.await(postcreateOutputs[resourceId]),
-          ),
+        : phase === "bindings"
+          // Bindings may attach to a precreated stub to break cycles like
+          // Bucket -> Distribution -> BucketPolicy, but can also use the final
+          // output if it wins the race.
+          ? Effect.race(
+              Deferred.await(precreateOutputs[resourceId]),
+              Deferred.await(postcreateOutputs[resourceId]),
+            )
+          : upstreamNode.action === "create" ||
+              (upstreamNode.action === "replace" &&
+                upstreamNode.state.status !== "replacing" &&
+                upstreamNode.state.status !== "replaced")
+            // Create-time props may use precreate output for fresh creates and
+            // fresh replacements so downstream resources can resolve stable
+            // identifiers without waiting on the upstream's own bindings.
+            ? Effect.race(
+                Deferred.await(precreateOutputs[resourceId]),
+                Deferred.await(postcreateOutputs[resourceId]),
+              )
+            // Replayed replacements must wait for the recovered replacement's
+            // final output because any earlier precreated attr may be stale.
+            : Deferred.await(postcreateOutputs[resourceId]),
     };
   });
 
@@ -203,7 +273,7 @@ const expandAndPivot = Effect.fnUntraced(function* (
           }),
       } satisfies ScopedPlanStatusSession;
 
-      const preOutput = precreateOutputs[logicalId];
+      const preOutput = precreateOutputs[fqn];
 
       const succeedPre = Effect.fn(function* (attr: any) {
         // console.log("succeedPre", logicalId);
@@ -211,17 +281,18 @@ const expandAndPivot = Effect.fnUntraced(function* (
       });
       const succeedPost = Effect.fn(function* (attr: any) {
         // console.log("succeedPost", logicalId);
-        yield* Deferred.succeed(postcreateOutputs[logicalId], attr);
+        yield* Deferred.succeed(postcreateOutputs[fqn], attr);
       });
-      const resolvePre = (node: Create | Update | Replace, attr: any) =>
-        resolvePropUpstream(node, "pre").pipe(
+
+      const resolvePropsPost = (node: Create | Update | Replace, attr: any) =>
+        resolvePropUpstream(node, "post").pipe(
           Effect.map((upstream) => ({
             ...upstream,
             ...(attr ? { [logicalId]: attr } : {}),
           })),
         );
-      const resolvePropsPost = (node: Create | Update | Replace, attr: any) =>
-        resolvePropUpstream(node, "post").pipe(
+      const resolvePropsPre = (node: Create | Update | Replace, attr: any) =>
+        resolvePropUpstream(node, "pre").pipe(
           Effect.map((upstream) => ({
             ...upstream,
             ...(attr ? { [logicalId]: attr } : {}),
@@ -242,7 +313,7 @@ const expandAndPivot = Effect.fnUntraced(function* (
           })),
         );
 
-      return yield* (outputs[logicalId] ??= yield* Effect.cached(
+      return yield* (outputs[fqn] ??= yield* Effect.cached(
         Effect.gen(function* () {
           const report = (status: ApplyStatus) =>
             session.emit({
@@ -310,7 +381,10 @@ const expandAndPivot = Effect.fnUntraced(function* (
 
           const apply = Effect.gen(function* () {
             if (node.action === "create") {
-              const upstream = yield* resolvePropsPost(node, undefined);
+              // Create-time props can safely consume upstream precreate outputs.
+              // This is what allows a resource with `precreate` to break a
+              // prop<->binding cycle like Bucket -> Distribution -> BucketPolicy.
+              const upstream = yield* resolvePropsPre(node, undefined);
 
               const news = (yield* Output.evaluate(
                 node.props,
@@ -398,6 +472,12 @@ const expandAndPivot = Effect.fnUntraced(function* (
 
               return attr;
             } else if (node.action === "update") {
+              // Publish the last known attr before waiting on upstream post
+              // outputs so replacement creates can break binding cycles against
+              // an updating resource. A later re-plan/re-apply pass reconciles
+              // any consumers that observed stale update-time values.
+              yield* succeedPre(node.state.attr);
+
               const upstream = yield* resolvePropsPost(node, node.state.attr);
 
               const news = (yield* Output.evaluate(
@@ -428,8 +508,6 @@ const expandAndPivot = Effect.fnUntraced(function* (
                         : node.state,
                     removalPolicy: node.resource.RemovalPolicy,
                   });
-
-              yield* succeedPre(node.state.attr);
 
               yield* report("updating");
 
@@ -535,7 +613,7 @@ const expandAndPivot = Effect.fnUntraced(function* (
 
               const news = (yield* Output.evaluate(
                 node.props,
-                yield* resolvePropsPost(node, state.attr),
+                yield* resolvePropsPre(node, state.attr),
               )) as Record<string, any>;
 
               let attr: any = state.attr;
@@ -649,10 +727,11 @@ const collectGarbage = Effect.fnUntraced(function* (
     ),
   };
 
-  const deleteResource: (
+  const deleteResource = (
     node: Delete | ReplacedResourceState,
-  ) => Effect.Effect<void, StateStoreError, never> = Effect.fnUntraced(
-    function* (node: Delete | ReplacedResourceState) {
+    ancestors: ReadonlySet<string> = new Set(),
+  ): Effect.Effect<void, StateStoreError, never> =>
+    Effect.gen(function* () {
       const isDeleteNode = (
         node: Delete | ReplacedResourceState,
       ): node is Delete => "action" in node;
@@ -689,6 +768,7 @@ const collectGarbage = Effect.fnUntraced(function* (
           };
 
       const fqn = toFqn(namespace, logicalId);
+      const nextAncestors = new Set(ancestors).add(fqn);
 
       const commit = <S extends ResourceState>(value: Omit<S, "namespace">) =>
         state.set({
@@ -720,8 +800,8 @@ const collectGarbage = Effect.fnUntraced(function* (
         Effect.gen(function* () {
           yield* Effect.all(
             downstream.map((dep) =>
-              dep !== fqn && dep in deletionGraph
-                ? deleteResource(deletionGraph[dep] as Delete)
+              dep !== fqn && dep in deletionGraph && !ancestors.has(dep)
+                ? deleteResource(deletionGraph[dep] as Delete, nextAncestors)
                 : Effect.void,
             ),
             { concurrency: "unbounded" },
@@ -790,13 +870,12 @@ const collectGarbage = Effect.fnUntraced(function* (
           }
         }).pipe(Effect.provide(Layer.succeed(InstanceId, instanceId))),
       ));
-    },
-  );
+    });
 
   yield* Effect.all(
     Object.values(deletionGraph)
       .filter((node) => node !== undefined)
-      .map(deleteResource),
+      .map((node) => deleteResource(node)),
     { concurrency: "unbounded" },
   );
 });

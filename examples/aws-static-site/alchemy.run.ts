@@ -53,11 +53,13 @@ const stack = Effect.gen(function* () {
       : undefined;
 
   const site = yield* AWS.Website.StaticSite("MarketingSite", {
-    sourcePath: "./site",
+    path: "./site",
     spa: true,
     domain: websiteDomain,
     forceDestroy: true,
-    invalidate: true,
+    invalidation: {
+      paths: "all",
+    },
     tags: {
       Example: "aws-static-site",
       Surface: "website",

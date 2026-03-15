@@ -22,7 +22,7 @@ import * as AWSCredentials from "../src/AWS/Credentials.ts";
 import * as AWSEndpoint from "../src/AWS/Endpoint.ts";
 import * as AWSRegion from "../src/AWS/Region.ts";
 import * as CLI from "../src/Cli/index.ts";
-import { dotAlchemy } from "../src/Config.ts";
+import { DotAlchemy, dotAlchemy } from "../src/Config.ts";
 import * as Plan from "../src/Plan.ts";
 import * as Stack from "../src/Stack.ts";
 import { Stage } from "../src/Stage.ts";
@@ -87,20 +87,22 @@ const yes = Flag.boolean("yes").pipe(
   Flag.withDefault(false),
 );
 
-const fileLogger = (...segments: ReadonlyArray<string>) =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path;
-    const logFile = path.join(process.cwd(), ".alchemy", "log", ...segments);
+const fileLogger = Effect.fnUntraced(function* (
+  ...segments: ReadonlyArray<string>
+) {
+  const dotAlchemy = yield* DotAlchemy;
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path;
+  const logFile = path.join(dotAlchemy, "log", ...segments);
 
-    yield* fs.makeDirectory(path.dirname(logFile), { recursive: true });
+  yield* fs.makeDirectory(path.dirname(logFile), { recursive: true });
 
-    return yield* Logger.formatLogFmt.pipe(
-      Logger.toFile(logFile, {
-        flag: "a",
-      }),
-    );
-  });
+  return yield* Logger.formatLogFmt.pipe(
+    Logger.toFile(logFile, {
+      flag: "a",
+    }),
+  );
+});
 
 const main = Argument.file("main", {
   mustExist: true,
@@ -273,16 +275,16 @@ const execStack = Effect.fn(function* ({
   // TODO(sam): implement local and watch
   const platform = Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer);
 
+  const rootLogger = Logger.layer([fileLogger("out")]);
+
   // override alchemy state store, CLI/reporting and dotAlchemy
   const alchemy = Layer.mergeAll(
     // TODO(sam): support overriding these
     State.LocalState,
     CLI.inkCLI(),
     // optional
-    dotAlchemy,
+    Layer.provideMerge(rootLogger, dotAlchemy),
   );
-
-  const rootLogger = Logger.layer([fileLogger("out")]);
 
   yield* Effect.gen(function* () {
     const cli = yield* CLI.Cli;
@@ -315,10 +317,9 @@ const execStack = Effect.fn(function* ({
       }
     }).pipe(
       Effect.provide(stack.services),
-      Effect.provide(Logger.layer([fileLogger("stacks", stack.name, stage)])),
+      // Effect.provide(Logger.layer([fileLogger("stacks", stack.name, stage)])),
     );
   }).pipe(
-    Effect.provide(rootLogger),
     Effect.provide(
       Layer.provideMerge(
         alchemy,

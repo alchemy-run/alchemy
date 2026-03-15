@@ -388,7 +388,7 @@ export const evaluate: <A, Req = never>(
 > = (expr, upstream) =>
   Effect.gen(function* () {
     if (isResource(expr)) {
-      const srcId = expr.LogicalId;
+      const srcId = expr.FQN;
       const src = upstream[srcId as keyof typeof upstream];
       if (!src) {
         // type-safety should prevent this but let the caller decide how to handle it
@@ -400,7 +400,7 @@ export const evaluate: <A, Req = never>(
       return src;
     } else if (isOutput(expr)) {
       if (isResourceExpr(expr)) {
-        const srcId = expr.src.LogicalId;
+        const srcId = expr.src.FQN;
         const src = upstream[srcId as keyof typeof upstream];
         if (!src) {
           // type-safety should prevent this but let the caller decide how to handle it
@@ -495,7 +495,7 @@ export const upstreamAny = (
 export const upstream = <E extends Output<any, any>>(expr: E): any => {
   if (isResourceExpr(expr)) {
     return {
-      [expr.src.LogicalId]: expr.src,
+      [expr.src.FQN]: expr.src,
     };
   } else if (isPropExpr(expr)) {
     return upstream(expr.expr);

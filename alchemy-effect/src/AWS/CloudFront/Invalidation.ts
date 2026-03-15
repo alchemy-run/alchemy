@@ -64,6 +64,9 @@ export const InvalidationProvider = () =>
         distributionId: string,
         invalidationId: string,
       ) {
+        yield* Effect.logInfo(
+          `CloudFront Invalidation wait: polling ${invalidationId} for distribution ${distributionId}`,
+        );
         return yield* cloudfront.getInvalidation({
           DistributionId: distributionId,
           Id: invalidationId,
@@ -71,8 +74,20 @@ export const InvalidationProvider = () =>
           Effect.map((response) => response.Invalidation),
           Effect.flatMap((invalidation) =>
             invalidation?.Status === "Completed"
-              ? Effect.succeed(invalidation)
-              : Effect.fail(new Error("InvalidationInProgress"))
+              ? Effect.gen(function* () {
+                  yield* Effect.logInfo(
+                    `CloudFront Invalidation wait: ${invalidationId} completed`,
+                  );
+                  return invalidation;
+                })
+              : Effect.gen(function* () {
+                  yield* Effect.logInfo(
+                    `CloudFront Invalidation wait: ${invalidationId} status=${invalidation?.Status ?? "unknown"}`,
+                  );
+                  return yield* Effect.fail(
+                    new Error("InvalidationInProgress"),
+                  );
+                })
           ),
           Effect.retry({
             while: (error) =>
@@ -85,6 +100,9 @@ export const InvalidationProvider = () =>
       });
 
       const createInvalidation = Effect.fn(function* (props: InvalidationProps) {
+        yield* Effect.logInfo(
+          `CloudFront Invalidation create: distribution=${props.distributionId} version=${props.version} paths=${(props.paths ?? defaultPaths).length} wait=${props.wait ?? false}`,
+        );
         const response = yield* cloudfront.createInvalidation({
           DistributionId: props.distributionId,
           InvalidationBatch: {
@@ -96,6 +114,9 @@ export const InvalidationProvider = () =>
           },
         });
 
+        yield* Effect.logInfo(
+          `CloudFront Invalidation create: created ${response.Invalidation?.Id ?? "missing"} status=${response.Invalidation?.Status ?? "unknown"}`,
+        );
         const invalidation = props.wait
           ? yield* waitForCompletion(
               props.distributionId,
@@ -115,15 +136,24 @@ export const InvalidationProvider = () =>
       return {
         stables: ["distributionId", "version"],
         diff: Effect.fn(function* ({ olds, news }) {
+          yield* Effect.logInfo(
+            `CloudFront Invalidation diff: oldDistribution=${olds.distributionId} newDistribution=${news.distributionId} oldVersion=${olds.version} newVersion=${news.version}`,
+          );
           if (
             olds.distributionId !== news.distributionId ||
             olds.version !== news.version
           ) {
+            yield* Effect.logInfo(
+              `CloudFront Invalidation diff: replacing invalidation for distribution=${news.distributionId}`,
+            );
             return { action: "replace" } as const;
           }
         }),
         create: Effect.fn(function* ({ news, session }) {
           const invalidation = yield* createInvalidation(news);
+          yield* Effect.logInfo(
+            `CloudFront Invalidation create: storing ${invalidation.Id} for distribution=${news.distributionId}`,
+          );
           yield* session.note(invalidation.Id);
           return {
             invalidationId: invalidation.Id,
@@ -136,6 +166,9 @@ export const InvalidationProvider = () =>
         }),
         update: Effect.fn(function* ({ news, session }) {
           const invalidation = yield* createInvalidation(news);
+          yield* Effect.logInfo(
+            `CloudFront Invalidation update: storing ${invalidation.Id} for distribution=${news.distributionId}`,
+          );
           yield* session.note(invalidation.Id);
           return {
             invalidationId: invalidation.Id,

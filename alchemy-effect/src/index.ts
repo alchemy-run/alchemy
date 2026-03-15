@@ -24,3 +24,5 @@ export * as Schema from "./Schema.ts";
 export * as Stack from "./Stack.ts";
 export * from "./Stage.ts";
 export * from "./Trait.ts";
+
+export * as Construct from "./Construct.ts";

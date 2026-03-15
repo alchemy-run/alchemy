@@ -170,7 +170,7 @@ export const make = <A>(
     ): Effect.Effect<any> =>
       Effect.gen(function* () {
         // @ts-expect-error
-        return yield* (resolvedResources[resourceExpr.src.LogicalId] ??=
+        return yield* (resolvedResources[resourceExpr.src.FQN] ??=
           yield* Effect.cached(
             Effect.gen(function* () {
               const resource = resourceExpr.src;
@@ -201,7 +201,7 @@ export const make = <A>(
                       oldState.props;
 
               const oldBindings = oldState.bindings ?? [];
-              const newBindings = stack.bindings[resource.LogicalId] ?? [];
+              const newBindings = stack.bindings[resource.FQN] ?? [];
 
               const diff = yield* provider.diff
                 ? provider
@@ -330,16 +330,7 @@ export const make = <A>(
     } = Object.fromEntries(
       resources.map((resource) => [
         resource.FQN,
-        [
-          ...Object.values(Output.upstreamAny(resource.Props)).map(
-            (r) => r.FQN,
-          ),
-          // TODO(sam): are we sure we want bindings to be included as upstream dependencies?
-          // this kind of breaks their purpose of enabling circularity between resources
-          ...Object.values(
-            Output.upstreamAny(stack.bindings[resource.LogicalId] ?? []),
-          ).map((r) => r.FQN),
-        ],
+        Object.values(Output.upstreamAny(resource.Props)).map((r) => r.FQN),
       ]),
     );
 
@@ -369,7 +360,7 @@ export const make = <A>(
             const downstream = newDownstreamDependencies[fqn] ?? [];
 
             const newBindings: ResourceBinding[] = yield* resolveInput(
-              stack.bindings[id] ?? [],
+              stack.bindings[fqn] ?? [],
             );
             const oldState = yield* state.get({
               stack: stackName,

@@ -75,6 +75,11 @@
       "bun": "./src/Build/index.ts",
       "import": "./lib/Build/index.js"
     },
+    "./Construct": {
+      "types": "./src/Construct/index.d.ts",
+      "bun": "./src/Construct/index.ts",
+      "import": "./lib/Construct/index.js"
+    },
     "./Kubernetes": {
       "types": "./src/Kubernetes/index.d.ts",
       "bun": "./src/Kubernetes/index.ts",

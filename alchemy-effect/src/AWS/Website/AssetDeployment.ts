@@ -6,6 +6,7 @@ import path from "node:path";
 import type { Input } from "../../Input.ts";
 import { Resource } from "../../Resource.ts";
 import type { Bucket, BucketName } from "../S3/Bucket.ts";
+import type { WebsiteTextEncoding } from "./shared.ts";
 
 export interface AssetFileOption {
   /**
@@ -20,6 +21,10 @@ export interface AssetFileOption {
    * Override `Cache-Control` for matched files.
    */
   cacheControl?: string;
+  /**
+   * Optional glob or globs excluded from this rule.
+   */
+  ignore?: string | string[];
 }
 
 export interface AssetDeploymentProps {
@@ -44,6 +49,11 @@ export interface AssetDeploymentProps {
    * Optional per-file overrides.
    */
   fileOptions?: AssetFileOption[];
+  /**
+   * Character encoding applied to inferred text-based asset content types.
+   * @default "utf-8"
+   */
+  textEncoding?: WebsiteTextEncoding;
 }
 
 export interface AssetDeployment extends Resource<
@@ -91,18 +101,24 @@ const normalizePrefix = (prefix: string | undefined) =>
 
 const toPosix = (value: string) => value.split(path.sep).join("/");
 
-const inferContentType = (file: string) => {
+const withCharset = (mimeType: string, textEncoding: WebsiteTextEncoding) =>
+  textEncoding === "none" ? mimeType : `${mimeType}; charset=${textEncoding}`;
+
+const inferContentType = (
+  file: string,
+  textEncoding: WebsiteTextEncoding = "utf-8",
+) => {
   const ext = path.extname(file).toLowerCase();
   switch (ext) {
     case ".html":
-      return "text/html; charset=utf-8";
+      return withCharset("text/html", textEncoding);
     case ".css":
-      return "text/css; charset=utf-8";
+      return withCharset("text/css", textEncoding);
     case ".js":
     case ".mjs":
-      return "application/javascript; charset=utf-8";
+      return withCharset("application/javascript", textEncoding);
     case ".json":
-      return "application/json; charset=utf-8";
+      return withCharset("application/json", textEncoding);
     case ".svg":
       return "image/svg+xml";
     case ".png":
@@ -117,9 +133,9 @@ const inferContentType = (file: string) => {
     case ".ico":
       return "image/x-icon";
     case ".txt":
-      return "text/plain; charset=utf-8";
+      return withCharset("text/plain", textEncoding);
     case ".xml":
-      return "application/xml; charset=utf-8";
+      return withCharset("application/xml", textEncoding);
     case ".woff":
       return "font/woff";
     case ".woff2":
@@ -153,16 +169,19 @@ const matchesAny = (file: string, globs: string | string[]) =>
 const getFileOptions = (
   file: string,
   options: AssetFileOption[] | undefined,
+  textEncoding: WebsiteTextEncoding | undefined,
 ): {
   contentType: string;
   cacheControl: string;
 } => {
   const matched = [...(options ?? [])].reverse().find((option) =>
-    matchesAny(file, option.files),
+    matchesAny(file, option.files) &&
+    !(option.ignore && matchesAny(file, option.ignore)),
   );
 
   return {
-    contentType: matched?.contentType ?? inferContentType(file),
+    contentType:
+      matched?.contentType ?? inferContentType(file, textEncoding ?? "utf-8"),
     cacheControl: matched?.cacheControl ?? defaultCacheControlFor(file),
   };
 };
@@ -233,7 +252,11 @@ export const AssetDeploymentProvider = () =>
           const key = prefix
             ? `${prefix}/${normalizedRelativePath}`
             : normalizedRelativePath;
-          const options = getFileOptions(normalizedRelativePath, news.fileOptions);
+          const options = getFileOptions(
+            normalizedRelativePath,
+            news.fileOptions,
+            news.textEncoding,
+          );
 
           hash.update(normalizedRelativePath);
           hash.update(body);

@@ -1,4 +1,5 @@
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Input } from "../../Input.ts";
@@ -229,7 +230,9 @@ export interface Distribution extends Resource<
  * });
  * ```
  */
-export const Distribution = Resource<Distribution>("AWS.CloudFront.Distribution");
+export const Distribution = Resource<Distribution>(
+  "AWS.CloudFront.Distribution",
+);
 
 const toTagsRecord = (tags: cloudfront.Tag[] | undefined) =>
   Object.fromEntries(
@@ -317,12 +320,14 @@ const toOrigin = (origin: DistributionOrigin): cloudfront.Origin => ({
         OriginProtocolPolicy:
           origin.customOriginConfig?.originProtocolPolicy ?? "https-only",
         OriginSslProtocols: {
-          Quantity: (origin.customOriginConfig?.originSslProtocols ?? ["TLSv1.2"])
-            .length,
+          Quantity: (
+            origin.customOriginConfig?.originSslProtocols ?? ["TLSv1.2"]
+          ).length,
           Items: origin.customOriginConfig?.originSslProtocols ?? ["TLSv1.2"],
         },
         OriginReadTimeout: origin.customOriginConfig?.originReadTimeout,
-        OriginKeepaliveTimeout: origin.customOriginConfig?.originKeepaliveTimeout,
+        OriginKeepaliveTimeout:
+          origin.customOriginConfig?.originKeepaliveTimeout,
       },
 });
 
@@ -347,20 +352,27 @@ const toConfig = (
   ) as cloudfront.DefaultCacheBehavior,
   CacheBehaviors: props.orderedCacheBehaviors
     ? {
-        Quantity: (props.orderedCacheBehaviors as Array<
-          DistributionBehavior & { pathPattern: string }
-        >).length,
-        Items: (props.orderedCacheBehaviors as Array<
-          DistributionBehavior & { pathPattern: string }
-        >).map((behavior) =>
-          toBehavior(behavior as DistributionBehavior & { pathPattern: string }),
+        Quantity: (
+          props.orderedCacheBehaviors as Array<
+            DistributionBehavior & { pathPattern: string }
+          >
+        ).length,
+        Items: (
+          props.orderedCacheBehaviors as Array<
+            DistributionBehavior & { pathPattern: string }
+          >
+        ).map((behavior) =>
+          toBehavior(
+            behavior as DistributionBehavior & { pathPattern: string },
+          ),
         ) as cloudfront.CacheBehavior[],
       }
     : undefined,
   CustomErrorResponses: props.customErrorResponses
     ? {
-        Quantity: (props.customErrorResponses as cloudfront.CustomErrorResponse[])
-          .length,
+        Quantity: (
+          props.customErrorResponses as cloudfront.CustomErrorResponse[]
+        ).length,
         Items: props.customErrorResponses as cloudfront.CustomErrorResponse[],
       }
     : undefined,
@@ -368,13 +380,15 @@ const toConfig = (
   Enabled: props.enabled ?? true,
   ViewerCertificate: props.viewerCertificate
     ? {
-        CloudFrontDefaultCertificate:
-          (props.viewerCertificate as DistributionViewerCertificate)
-            .cloudFrontDefaultCertificate,
-        ACMCertificateArn: (props.viewerCertificate as DistributionViewerCertificate)
-          .acmCertificateArn,
-        SSLSupportMethod: (props.viewerCertificate as DistributionViewerCertificate)
-          .sslSupportMethod,
+        CloudFrontDefaultCertificate: (
+          props.viewerCertificate as DistributionViewerCertificate
+        ).cloudFrontDefaultCertificate,
+        ACMCertificateArn: (
+          props.viewerCertificate as DistributionViewerCertificate
+        ).acmCertificateArn,
+        SSLSupportMethod: (
+          props.viewerCertificate as DistributionViewerCertificate
+        ).sslSupportMethod,
         MinimumProtocolVersion: (
           props.viewerCertificate as DistributionViewerCertificate
         ).minimumProtocolVersion,
@@ -422,12 +436,27 @@ export const DistributionProvider = () =>
   Distribution.provider.effect(
     Effect.gen(function* () {
       const waitForDeployment = Effect.fn(function* (distributionId: string) {
+        yield* Effect.logInfo(
+          `CloudFront Distribution wait: polling deployment for ${distributionId}`,
+        );
         return yield* cloudfront.getDistribution({ Id: distributionId }).pipe(
           Effect.map((response) => response.Distribution),
           Effect.flatMap((distribution) =>
             distribution?.Status === "Deployed"
-              ? Effect.succeed(distribution)
-              : Effect.fail(new Error("DistributionPendingDeployment"))
+              ? Effect.gen(function* () {
+                  yield* Effect.logInfo(
+                    `CloudFront Distribution wait: ${distributionId} deployed`,
+                  );
+                  return distribution;
+                })
+              : Effect.gen(function* () {
+                  yield* Effect.logInfo(
+                    `CloudFront Distribution wait: ${distributionId} status=${distribution?.Status ?? "unknown"}`,
+                  );
+                  return yield* Effect.fail(
+                    new Error("DistributionPendingDeployment"),
+                  );
+                }),
           ),
           Effect.retry({
             while: (error) =>
@@ -441,17 +470,28 @@ export const DistributionProvider = () =>
       });
 
       const getCurrent = Effect.fn(function* (distributionId: string) {
+        yield* Effect.logInfo(
+          `CloudFront Distribution read: loading distribution ${distributionId}`,
+        );
         const distribution = yield* cloudfront
           .getDistribution({ Id: distributionId })
           .pipe(
             Effect.map((response) => response.Distribution),
-            Effect.catchTag("NoSuchDistribution", () => Effect.succeed(undefined)),
+            Effect.catchTag("NoSuchDistribution", () =>
+              Effect.succeed(undefined),
+            ),
           );
 
         if (!distribution?.Id) {
+          yield* Effect.logInfo(
+            `CloudFront Distribution read: distribution ${distributionId} not found`,
+          );
           return undefined;
         }
 
+        yield* Effect.logInfo(
+          `CloudFront Distribution read: loading config and tags for ${distributionId}`,
+        );
         const config = yield* cloudfront.getDistributionConfig({
           Id: distributionId,
         });
@@ -461,6 +501,9 @@ export const DistributionProvider = () =>
           })
           .pipe(Effect.map((response) => toTagsRecord(response.Tags.Items)));
 
+        yield* Effect.logInfo(
+          `CloudFront Distribution read: loaded ${distributionId} status=${distribution.Status} enabled=${config.DistributionConfig?.Enabled ?? "unknown"} etag=${config.ETag ?? "missing"} tags=${Object.keys(tags).length}`,
+        );
         return {
           distribution,
           config: config.DistributionConfig!,
@@ -469,8 +512,68 @@ export const DistributionProvider = () =>
         };
       });
 
+      const waitForDeletionReady = Effect.fn(function* (
+        distributionId: string,
+      ) {
+        class DistributionPendingDeletionReadiness extends Data.TaggedError(
+          "DistributionPendingDeletionReadiness",
+        )<{
+          message: string;
+        }> {}
+
+        yield* Effect.logInfo(
+          `CloudFront Distribution delete: waiting for ${distributionId} to become disabled and deployed`,
+        );
+        return yield* Effect.logInfo(
+          `CloudFront Distribution delete: waiting for ${distributionId} to become disabled and deployed`,
+        ).pipe(
+          Effect.andThen(() => getCurrent(distributionId)),
+          Effect.flatMap(
+            Effect.fnUntraced(function* (current) {
+              if (!current) {
+                yield* Effect.logInfo(
+                  `CloudFront Distribution delete: ${distributionId} already absent while waiting`,
+                );
+                return undefined;
+              }
+
+              if (
+                current.config.Enabled ||
+                current.distribution.Status !== "Deployed"
+              ) {
+                yield* Effect.logInfo(
+                  `CloudFront Distribution delete: ${distributionId} not ready enabled=${current.config.Enabled} status=${current.distribution.Status}`,
+                );
+                return yield* Effect.fail(
+                  new DistributionPendingDeletionReadiness({
+                    message: `Distribution ${distributionId} is not yet ready for deletion`,
+                  }),
+                );
+              }
+
+              yield* Effect.logInfo(
+                `CloudFront Distribution delete: ${distributionId} ready for delete with etag=${current.etag ?? "missing"}`,
+              );
+              return current;
+            }),
+          ),
+          Effect.retry({
+            while: (error) =>
+              error._tag === "DistributionPendingDeletionReadiness",
+            schedule: Schedule.fixed("10 seconds").pipe(
+              Schedule.both(Schedule.recurs(60)),
+            ),
+          }),
+        );
+      });
+
       return {
-        stables: ["distributionId", "distributionArn", "domainName", "hostedZoneId"],
+        stables: [
+          "distributionId",
+          "distributionArn",
+          "domainName",
+          "hostedZoneId",
+        ],
         read: Effect.fn(function* ({ output }) {
           if (!output?.distributionId) {
             return undefined;
@@ -486,11 +589,17 @@ export const DistributionProvider = () =>
         create: Effect.fn(function* ({ id, instanceId, news, session }) {
           const tags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
 
           const callerReference = instanceId;
           const config = toConfig(callerReference, news);
+          yield* Effect.logInfo(
+            `CloudFront Distribution create: callerReference=${callerReference} aliases=${news.aliases?.length ?? 0} origins=${(news.origins as DistributionOrigin[]).length} tags=${Object.keys(tags).length}`,
+          );
+          yield* Effect.logInfo(
+            `CloudFront Distribution create: creating distribution with tags for callerReference=${callerReference}`,
+          );
           const created = yield* cloudfront
             .createDistributionWithTags({
               DistributionConfigWithTags: {
@@ -504,6 +613,9 @@ export const DistributionProvider = () =>
               Effect.catch((error) =>
                 isAccessDenied(error)
                   ? Effect.gen(function* () {
+                      yield* Effect.logInfo(
+                        `CloudFront Distribution create: createDistributionWithTags denied, retrying without tags for callerReference=${callerReference}`,
+                      );
                       const created = yield* cloudfront.createDistribution({
                         DistributionConfig: config,
                       });
@@ -512,6 +624,9 @@ export const DistributionProvider = () =>
                         created.Distribution?.ARN &&
                         Object.keys(tags).length > 0
                       ) {
+                        yield* Effect.logInfo(
+                          `CloudFront Distribution create: tagging distribution ${created.Distribution.Id} after fallback`,
+                        );
                         yield* cloudfront.tagResource({
                           Resource: created.Distribution.ARN,
                           Tags: {
@@ -522,7 +637,12 @@ export const DistributionProvider = () =>
 
                       return created;
                     })
-                  : Effect.fail(error),
+                  : Effect.gen(function* () {
+                      yield* Effect.logInfo(
+                        `CloudFront Distribution create: createDistributionWithTags failed for callerReference=${callerReference} error=${String(error)}`,
+                      );
+                      return yield* Effect.fail(error);
+                    }),
               ),
             );
 
@@ -532,11 +652,20 @@ export const DistributionProvider = () =>
             );
           }
 
+          yield* Effect.logInfo(
+            `CloudFront Distribution create: created ${created.Distribution.Id} etag=${created.ETag ?? "missing"}, waiting for deployment`,
+          );
           const deployed = yield* waitForDeployment(created.Distribution.Id);
+          yield* Effect.logInfo(
+            `CloudFront Distribution create: deployed ${created.Distribution.Id} domain=${deployed.DomainName}`,
+          );
           yield* session.note(created.Distribution.Id);
           return toAttrs(deployed, created.ETag, tags);
         }),
         update: Effect.fn(function* ({ id, news, olds, output, session }) {
+          yield* Effect.logInfo(
+            `CloudFront Distribution update: distribution=${output.distributionId} aliases=${news.aliases?.length ?? 0}`,
+          );
           const current = yield* getCurrent(output.distributionId);
           if (!current) {
             return yield* Effect.fail(
@@ -546,26 +675,33 @@ export const DistributionProvider = () =>
             );
           }
 
+          yield* Effect.logInfo(
+            `CloudFront Distribution update: updating config for ${output.distributionId} with etag=${current.etag ?? "missing"}`,
+          );
           const updated = yield* cloudfront.updateDistribution({
             Id: output.distributionId,
             IfMatch: current.etag,
-            DistributionConfig: toConfig(
-              current.config.CallerReference,
-              news,
-            ),
+            DistributionConfig: toConfig(current.config.CallerReference, news),
           });
 
           const oldTags = {
             ...(yield* createInternalTags(id)),
-            ...(olds.tags ?? {}),
+            ...olds.tags,
           };
           const newTags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
           const { removed, upsert } = diffTags(oldTags, newTags);
 
+          yield* Effect.logInfo(
+            `CloudFront Distribution update: distribution=${output.distributionId} upsertTags=${upsert.length} removedTags=${removed.length}`,
+          );
+
           if (upsert.length > 0) {
+            yield* Effect.logInfo(
+              `CloudFront Distribution update: tagging ${output.distributionId} with ${upsert.length} tag(s)`,
+            );
             yield* cloudfront.tagResource({
               Resource: output.distributionArn,
               Tags: {
@@ -575,6 +711,9 @@ export const DistributionProvider = () =>
           }
 
           if (removed.length > 0) {
+            yield* Effect.logInfo(
+              `CloudFront Distribution update: removing ${removed.length} tag(s) from ${output.distributionId}`,
+            );
             yield* cloudfront.untagResource({
               Resource: output.distributionArn,
               TagKeys: {
@@ -589,17 +728,32 @@ export const DistributionProvider = () =>
             );
           }
 
+          yield* Effect.logInfo(
+            `CloudFront Distribution update: updated ${output.distributionId} etag=${updated.ETag ?? "missing"}, waiting for deployment`,
+          );
           const deployed = yield* waitForDeployment(updated.Distribution.Id);
+          yield* Effect.logInfo(
+            `CloudFront Distribution update: deployed ${output.distributionId} domain=${deployed.DomainName}`,
+          );
           yield* session.note(output.distributionId);
           return toAttrs(deployed, updated.ETag, newTags);
         }),
         delete: Effect.fn(function* ({ output }) {
+          yield* Effect.logInfo(
+            `CloudFront Distribution delete: distribution=${output.distributionId}`,
+          );
           const current = yield* getCurrent(output.distributionId);
           if (!current) {
+            yield* Effect.logInfo(
+              `CloudFront Distribution delete: ${output.distributionId} already absent`,
+            );
             return;
           }
 
           if (current.config.Enabled) {
+            yield* Effect.logInfo(
+              `CloudFront Distribution delete: disabling ${output.distributionId} before delete`,
+            );
             yield* cloudfront.updateDistribution({
               Id: output.distributionId,
               IfMatch: current.etag,
@@ -608,22 +762,25 @@ export const DistributionProvider = () =>
                 Enabled: false,
               },
             });
-            yield* waitForDeployment(output.distributionId);
           }
 
-          const latest = yield* getCurrent(output.distributionId);
+          const latest = yield* waitForDeletionReady(output.distributionId);
           if (!latest) {
+            yield* Effect.logInfo(
+              `CloudFront Distribution delete: ${output.distributionId} disappeared before delete`,
+            );
             return;
           }
 
+          yield* Effect.logInfo(
+            `CloudFront Distribution delete: deleting ${output.distributionId} with etag=${latest.etag ?? "missing"}`,
+          );
           yield* cloudfront
             .deleteDistribution({
               Id: output.distributionId,
               IfMatch: latest.etag,
             })
-            .pipe(
-              Effect.catchTag("NoSuchDistribution", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("NoSuchDistribution", () => Effect.void));
         }),
       };
     }),
