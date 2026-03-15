@@ -82,40 +82,15 @@ export const OriginAccessControl = Resource<OriginAccessControl>(
   "AWS.CloudFront.OriginAccessControl",
 );
 
-const createName = (id: string, props: OriginAccessControlProps) =>
-  props.name
-    ? Effect.succeed(props.name)
-    : createPhysicalName({
-        id,
-        maxLength: 64,
-        lowercase: true,
-      });
-
-const toAttrs = (
-  oac: cloudfront.OriginAccessControl,
-  etag: string | undefined,
-  fallbackName: string,
-) => ({
-  originAccessControlId: oac.Id,
-  name: oac.OriginAccessControlConfig?.Name ?? fallbackName,
-  description: oac.OriginAccessControlConfig?.Description,
-  originType:
-    oac.OriginAccessControlConfig?.OriginAccessControlOriginType ?? "s3",
-  signingBehavior:
-    oac.OriginAccessControlConfig?.SigningBehavior ?? "always",
-  signingProtocol:
-    oac.OriginAccessControlConfig?.SigningProtocol ?? "sigv4",
-  etag,
-});
-
 export const OriginAccessControlProvider = () =>
   OriginAccessControl.provider.effect(
     Effect.gen(function* () {
       const getByName = Effect.fn(function* (name: string) {
         const listed = yield* cloudfront.listOriginAccessControls({});
         const summary =
-          listed.OriginAccessControlList?.Items?.find((item) => item.Name === name) ??
-          undefined;
+          listed.OriginAccessControlList?.Items?.find(
+            (item) => item.Name === name,
+          ) ?? undefined;
         if (!summary?.Id) {
           return undefined;
         }
@@ -163,7 +138,10 @@ export const OriginAccessControlProvider = () =>
       return {
         stables: ["originAccessControlId"],
         diff: Effect.fn(function* ({ id, olds, news }) {
-          if ((yield* createName(id, olds ?? {})) !== (yield* createName(id, news))) {
+          if (
+            (yield* createName(id, olds ?? {})) !==
+            (yield* createName(id, news))
+          ) {
             return { action: "replace" } as const;
           }
         }),
@@ -226,7 +204,8 @@ export const OriginAccessControlProvider = () =>
             OriginAccessControlConfig: {
               Name: output.name,
               Description: news.description,
-              OriginAccessControlOriginType: news.originType ?? output.originType,
+              OriginAccessControlOriginType:
+                news.originType ?? output.originType,
               SigningBehavior: news.signingBehavior ?? output.signingBehavior,
               SigningProtocol: news.signingProtocol ?? output.signingProtocol,
             },
@@ -239,7 +218,11 @@ export const OriginAccessControlProvider = () =>
           }
 
           yield* session.note(output.originAccessControlId);
-          return toAttrs(updated.OriginAccessControl, updated.ETag, output.name);
+          return toAttrs(
+            updated.OriginAccessControl,
+            updated.ETag,
+            output.name,
+          );
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* cloudfront
@@ -254,3 +237,27 @@ export const OriginAccessControlProvider = () =>
       };
     }),
   );
+
+const createName = (id: string, props: OriginAccessControlProps) =>
+  props.name
+    ? Effect.succeed(props.name)
+    : createPhysicalName({
+        id,
+        maxLength: 64,
+        lowercase: true,
+      });
+
+const toAttrs = (
+  oac: cloudfront.OriginAccessControl,
+  etag: string | undefined,
+  fallbackName: string,
+) => ({
+  originAccessControlId: oac.Id,
+  name: oac.OriginAccessControlConfig?.Name ?? fallbackName,
+  description: oac.OriginAccessControlConfig?.Description,
+  originType:
+    oac.OriginAccessControlConfig?.OriginAccessControlOriginType ?? "s3",
+  signingBehavior: oac.OriginAccessControlConfig?.SigningBehavior ?? "always",
+  signingProtocol: oac.OriginAccessControlConfig?.SigningProtocol ?? "sigv4",
+  etag,
+});

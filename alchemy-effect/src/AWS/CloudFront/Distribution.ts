@@ -234,204 +234,6 @@ export const Distribution = Resource<Distribution>(
   "AWS.CloudFront.Distribution",
 );
 
-const toTagsRecord = (tags: cloudfront.Tag[] | undefined) =>
-  Object.fromEntries(
-    (tags ?? [])
-      .filter(
-        (tag): tag is { Key: string; Value: string } =>
-          typeof tag.Key === "string" && typeof tag.Value === "string",
-      )
-      .map((tag) => [tag.Key, tag.Value]),
-  );
-
-const isAccessDenied = (error: unknown) => {
-  const tag = (error as { _tag?: string; name?: string })?._tag;
-  const name = (error as { _tag?: string; name?: string })?.name;
-  const text = String(error);
-  return (
-    tag === "AccessDenied" ||
-    tag === "AccessDeniedException" ||
-    name === "AccessDenied" ||
-    name === "AccessDeniedException" ||
-    text.includes("AccessDenied")
-  );
-};
-
-const toBehavior = (
-  behavior: DistributionBehavior & {
-    pathPattern?: string;
-  },
-): cloudfront.CacheBehavior | cloudfront.DefaultCacheBehavior => ({
-  ...(behavior.pathPattern ? { PathPattern: behavior.pathPattern } : undefined),
-  TargetOriginId: behavior.targetOriginId,
-  ViewerProtocolPolicy: behavior.viewerProtocolPolicy ?? "redirect-to-https",
-  AllowedMethods: behavior.allowedMethods
-    ? {
-        Quantity: behavior.allowedMethods.length,
-        Items: behavior.allowedMethods,
-        CachedMethods: behavior.cachedMethods
-          ? {
-              Quantity: behavior.cachedMethods.length,
-              Items: behavior.cachedMethods,
-            }
-          : undefined,
-      }
-    : undefined,
-  Compress: behavior.compress ?? true,
-  CachePolicyId: behavior.cachePolicyId,
-  OriginRequestPolicyId: behavior.originRequestPolicyId,
-  ResponseHeadersPolicyId: behavior.responseHeadersPolicyId,
-  ForwardedValues: behavior.forwardedValues,
-  MinTTL: behavior.minTtl,
-  DefaultTTL: behavior.defaultTtl,
-  MaxTTL: behavior.maxTtl,
-  FunctionAssociations: behavior.functionAssociations
-    ? {
-        Quantity: behavior.functionAssociations.length,
-        Items: behavior.functionAssociations.map((association) => ({
-          FunctionARN: association.functionArn,
-          EventType: association.eventType,
-        })),
-      }
-    : undefined,
-  LambdaFunctionAssociations: behavior.lambdaFunctionAssociations
-    ? {
-        Quantity: behavior.lambdaFunctionAssociations.length,
-        Items: behavior.lambdaFunctionAssociations.map((association) => ({
-          LambdaFunctionARN: association.lambdaFunctionArn,
-          EventType: association.eventType,
-          IncludeBody: association.includeBody,
-        })),
-      }
-    : undefined,
-});
-
-const toOrigin = (origin: DistributionOrigin): cloudfront.Origin => ({
-  Id: origin.id,
-  DomainName: origin.domainName as string,
-  OriginPath: origin.originPath as string | undefined,
-  OriginAccessControlId: origin.originAccessControlId as string | undefined,
-  S3OriginConfig: origin.s3Origin ? { OriginAccessIdentity: "" } : undefined,
-  CustomOriginConfig: origin.s3Origin
-    ? undefined
-    : {
-        HTTPPort: origin.customOriginConfig?.httpPort ?? 80,
-        HTTPSPort: origin.customOriginConfig?.httpsPort ?? 443,
-        OriginProtocolPolicy:
-          origin.customOriginConfig?.originProtocolPolicy ?? "https-only",
-        OriginSslProtocols: {
-          Quantity: (
-            origin.customOriginConfig?.originSslProtocols ?? ["TLSv1.2"]
-          ).length,
-          Items: origin.customOriginConfig?.originSslProtocols ?? ["TLSv1.2"],
-        },
-        OriginReadTimeout: origin.customOriginConfig?.originReadTimeout,
-        OriginKeepaliveTimeout:
-          origin.customOriginConfig?.originKeepaliveTimeout,
-      },
-});
-
-const toConfig = (
-  callerReference: string,
-  props: DistributionProps,
-): cloudfront.DistributionConfig => ({
-  CallerReference: callerReference,
-  Aliases: props.aliases
-    ? {
-        Quantity: props.aliases.length,
-        Items: props.aliases,
-      }
-    : undefined,
-  DefaultRootObject: props.defaultRootObject,
-  Origins: {
-    Quantity: (props.origins as DistributionOrigin[]).length,
-    Items: (props.origins as DistributionOrigin[]).map(toOrigin),
-  },
-  DefaultCacheBehavior: toBehavior(
-    props.defaultCacheBehavior as DistributionBehavior,
-  ) as cloudfront.DefaultCacheBehavior,
-  CacheBehaviors: props.orderedCacheBehaviors
-    ? {
-        Quantity: (
-          props.orderedCacheBehaviors as Array<
-            DistributionBehavior & { pathPattern: string }
-          >
-        ).length,
-        Items: (
-          props.orderedCacheBehaviors as Array<
-            DistributionBehavior & { pathPattern: string }
-          >
-        ).map((behavior) =>
-          toBehavior(
-            behavior as DistributionBehavior & { pathPattern: string },
-          ),
-        ) as cloudfront.CacheBehavior[],
-      }
-    : undefined,
-  CustomErrorResponses: props.customErrorResponses
-    ? {
-        Quantity: (
-          props.customErrorResponses as cloudfront.CustomErrorResponse[]
-        ).length,
-        Items: props.customErrorResponses as cloudfront.CustomErrorResponse[],
-      }
-    : undefined,
-  Comment: props.comment ?? "",
-  Enabled: props.enabled ?? true,
-  ViewerCertificate: props.viewerCertificate
-    ? {
-        CloudFrontDefaultCertificate: (
-          props.viewerCertificate as DistributionViewerCertificate
-        ).cloudFrontDefaultCertificate,
-        ACMCertificateArn: (
-          props.viewerCertificate as DistributionViewerCertificate
-        ).acmCertificateArn,
-        SSLSupportMethod: (
-          props.viewerCertificate as DistributionViewerCertificate
-        ).sslSupportMethod,
-        MinimumProtocolVersion: (
-          props.viewerCertificate as DistributionViewerCertificate
-        ).minimumProtocolVersion,
-      }
-    : props.aliases && props.aliases.length > 0
-      ? undefined
-      : {
-          CloudFrontDefaultCertificate: true,
-        },
-  Restrictions: {
-    GeoRestriction: {
-      RestrictionType: "none",
-      Quantity: 0,
-    },
-  },
-  PriceClass: props.priceClass,
-  WebACLId: props.webAclId,
-  HttpVersion: props.httpVersion ?? "http2",
-  IsIPV6Enabled: props.isIpv6Enabled ?? true,
-});
-
-const toAttrs = (
-  distribution: cloudfront.Distribution,
-  etag: string | undefined,
-  tags: Record<string, string>,
-): Distribution["Attributes"] => ({
-  distributionId: distribution.Id,
-  distributionArn: distribution.ARN,
-  domainName: distribution.DomainName,
-  hostedZoneId: CLOUDFRONT_HOSTED_ZONE_ID,
-  status: distribution.Status,
-  aliases: distribution.DistributionConfig.Aliases?.Items ?? [],
-  comment:
-    typeof distribution.DistributionConfig.Comment === "string"
-      ? distribution.DistributionConfig.Comment
-      : "",
-  enabled: distribution.DistributionConfig.Enabled,
-  etag,
-  inProgressInvalidationBatches: distribution.InProgressInvalidationBatches,
-  lastModifiedTime: distribution.LastModifiedTime,
-  tags,
-});
-
 export const DistributionProvider = () =>
   Distribution.provider.effect(
     Effect.gen(function* () {
@@ -785,3 +587,201 @@ export const DistributionProvider = () =>
       };
     }),
   );
+
+const toTagsRecord = (tags: cloudfront.Tag[] | undefined) =>
+  Object.fromEntries(
+    (tags ?? [])
+      .filter(
+        (tag): tag is { Key: string; Value: string } =>
+          typeof tag.Key === "string" && typeof tag.Value === "string",
+      )
+      .map((tag) => [tag.Key, tag.Value]),
+  );
+
+const isAccessDenied = (error: unknown) => {
+  const tag = (error as { _tag?: string; name?: string })?._tag;
+  const name = (error as { _tag?: string; name?: string })?.name;
+  const text = String(error);
+  return (
+    tag === "AccessDenied" ||
+    tag === "AccessDeniedException" ||
+    name === "AccessDenied" ||
+    name === "AccessDeniedException" ||
+    text.includes("AccessDenied")
+  );
+};
+
+const toBehavior = (
+  behavior: DistributionBehavior & {
+    pathPattern?: string;
+  },
+): cloudfront.CacheBehavior | cloudfront.DefaultCacheBehavior => ({
+  ...(behavior.pathPattern ? { PathPattern: behavior.pathPattern } : undefined),
+  TargetOriginId: behavior.targetOriginId,
+  ViewerProtocolPolicy: behavior.viewerProtocolPolicy ?? "redirect-to-https",
+  AllowedMethods: behavior.allowedMethods
+    ? {
+        Quantity: behavior.allowedMethods.length,
+        Items: behavior.allowedMethods,
+        CachedMethods: behavior.cachedMethods
+          ? {
+              Quantity: behavior.cachedMethods.length,
+              Items: behavior.cachedMethods,
+            }
+          : undefined,
+      }
+    : undefined,
+  Compress: behavior.compress ?? true,
+  CachePolicyId: behavior.cachePolicyId,
+  OriginRequestPolicyId: behavior.originRequestPolicyId,
+  ResponseHeadersPolicyId: behavior.responseHeadersPolicyId,
+  ForwardedValues: behavior.forwardedValues,
+  MinTTL: behavior.minTtl,
+  DefaultTTL: behavior.defaultTtl,
+  MaxTTL: behavior.maxTtl,
+  FunctionAssociations: behavior.functionAssociations
+    ? {
+        Quantity: behavior.functionAssociations.length,
+        Items: behavior.functionAssociations.map((association) => ({
+          FunctionARN: association.functionArn,
+          EventType: association.eventType,
+        })),
+      }
+    : undefined,
+  LambdaFunctionAssociations: behavior.lambdaFunctionAssociations
+    ? {
+        Quantity: behavior.lambdaFunctionAssociations.length,
+        Items: behavior.lambdaFunctionAssociations.map((association) => ({
+          LambdaFunctionARN: association.lambdaFunctionArn,
+          EventType: association.eventType,
+          IncludeBody: association.includeBody,
+        })),
+      }
+    : undefined,
+});
+
+const toOrigin = (origin: DistributionOrigin): cloudfront.Origin => ({
+  Id: origin.id,
+  DomainName: origin.domainName as string,
+  OriginPath: origin.originPath as string | undefined,
+  OriginAccessControlId: origin.originAccessControlId as string | undefined,
+  S3OriginConfig: origin.s3Origin ? { OriginAccessIdentity: "" } : undefined,
+  CustomOriginConfig: origin.s3Origin
+    ? undefined
+    : {
+        HTTPPort: origin.customOriginConfig?.httpPort ?? 80,
+        HTTPSPort: origin.customOriginConfig?.httpsPort ?? 443,
+        OriginProtocolPolicy:
+          origin.customOriginConfig?.originProtocolPolicy ?? "https-only",
+        OriginSslProtocols: {
+          Quantity: (
+            origin.customOriginConfig?.originSslProtocols ?? ["TLSv1.2"]
+          ).length,
+          Items: origin.customOriginConfig?.originSslProtocols ?? ["TLSv1.2"],
+        },
+        OriginReadTimeout: origin.customOriginConfig?.originReadTimeout,
+        OriginKeepaliveTimeout:
+          origin.customOriginConfig?.originKeepaliveTimeout,
+      },
+});
+
+const toConfig = (
+  callerReference: string,
+  props: DistributionProps,
+): cloudfront.DistributionConfig => ({
+  CallerReference: callerReference,
+  Aliases: props.aliases
+    ? {
+        Quantity: props.aliases.length,
+        Items: props.aliases,
+      }
+    : undefined,
+  DefaultRootObject: props.defaultRootObject,
+  Origins: {
+    Quantity: (props.origins as DistributionOrigin[]).length,
+    Items: (props.origins as DistributionOrigin[]).map(toOrigin),
+  },
+  DefaultCacheBehavior: toBehavior(
+    props.defaultCacheBehavior as DistributionBehavior,
+  ) as cloudfront.DefaultCacheBehavior,
+  CacheBehaviors: props.orderedCacheBehaviors
+    ? {
+        Quantity: (
+          props.orderedCacheBehaviors as Array<
+            DistributionBehavior & { pathPattern: string }
+          >
+        ).length,
+        Items: (
+          props.orderedCacheBehaviors as Array<
+            DistributionBehavior & { pathPattern: string }
+          >
+        ).map((behavior) =>
+          toBehavior(
+            behavior as DistributionBehavior & { pathPattern: string },
+          ),
+        ) as cloudfront.CacheBehavior[],
+      }
+    : undefined,
+  CustomErrorResponses: props.customErrorResponses
+    ? {
+        Quantity: (
+          props.customErrorResponses as cloudfront.CustomErrorResponse[]
+        ).length,
+        Items: props.customErrorResponses as cloudfront.CustomErrorResponse[],
+      }
+    : undefined,
+  Comment: props.comment ?? "",
+  Enabled: props.enabled ?? true,
+  ViewerCertificate: props.viewerCertificate
+    ? {
+        CloudFrontDefaultCertificate: (
+          props.viewerCertificate as DistributionViewerCertificate
+        ).cloudFrontDefaultCertificate,
+        ACMCertificateArn: (
+          props.viewerCertificate as DistributionViewerCertificate
+        ).acmCertificateArn,
+        SSLSupportMethod: (
+          props.viewerCertificate as DistributionViewerCertificate
+        ).sslSupportMethod,
+        MinimumProtocolVersion: (
+          props.viewerCertificate as DistributionViewerCertificate
+        ).minimumProtocolVersion,
+      }
+    : props.aliases && props.aliases.length > 0
+      ? undefined
+      : {
+          CloudFrontDefaultCertificate: true,
+        },
+  Restrictions: {
+    GeoRestriction: {
+      RestrictionType: "none",
+      Quantity: 0,
+    },
+  },
+  PriceClass: props.priceClass,
+  WebACLId: props.webAclId,
+  HttpVersion: props.httpVersion ?? "http2",
+  IsIPV6Enabled: props.isIpv6Enabled ?? true,
+});
+
+const toAttrs = (
+  distribution: cloudfront.Distribution,
+  etag: string | undefined,
+  tags: Record<string, string>,
+): Distribution["Attributes"] => ({
+  distributionId: distribution.Id,
+  distributionArn: distribution.ARN,
+  domainName: distribution.DomainName,
+  hostedZoneId: CLOUDFRONT_HOSTED_ZONE_ID,
+  status: distribution.Status,
+  aliases: distribution.DistributionConfig.Aliases?.Items ?? [],
+  comment:
+    typeof distribution.DistributionConfig.Comment === "string"
+      ? distribution.DistributionConfig.Comment
+      : "",
+  enabled: distribution.DistributionConfig.Enabled,
+  etag,
+  inProgressInvalidationBatches: distribution.InProgressInvalidationBatches,
+  lastModifiedTime: distribution.LastModifiedTime,
+  tags,
+});

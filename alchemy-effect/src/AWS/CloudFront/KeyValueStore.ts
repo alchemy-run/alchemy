@@ -67,36 +67,14 @@ export const KeyValueStore = Resource<KeyValueStore>(
   "AWS.CloudFront.KeyValueStore",
 );
 
-const createName = (id: string, props: KeyValueStoreProps) =>
-  props.name
-    ? Effect.succeed(props.name)
-    : createPhysicalName({
-        id,
-        maxLength: 64,
-        lowercase: true,
-      });
-
-const toAttrs = (
-  store: cloudfront.KeyValueStore,
-  etag: string | undefined,
-  fallbackName: string,
-): KeyValueStore["Attributes"] => ({
-  keyValueStoreId: store.Id,
-  keyValueStoreArn: store.ARN,
-  keyValueStoreName: store.Name || fallbackName,
-  comment: store.Comment,
-  status: store.Status ?? "UNKNOWN",
-  lastModifiedTime: store.LastModifiedTime,
-  etag,
-});
-
 export const KeyValueStoreProvider = () =>
   KeyValueStore.provider.effect(
     Effect.gen(function* () {
       const getByName = Effect.fn(function* (name: string) {
         const listed = yield* cloudfront.listKeyValueStores({});
         const store =
-          listed.KeyValueStoreList?.Items?.find((item) => item.Name === name) ?? undefined;
+          listed.KeyValueStoreList?.Items?.find((item) => item.Name === name) ??
+          undefined;
         if (!store?.Name) {
           return undefined;
         }
@@ -112,19 +90,21 @@ export const KeyValueStoreProvider = () =>
       return {
         stables: ["keyValueStoreId", "keyValueStoreArn", "keyValueStoreName"],
         diff: Effect.fn(function* ({ id, olds, news }) {
-          if ((yield* createName(id, olds ?? {})) !== (yield* createName(id, news))) {
+          if (
+            (yield* createName(id, olds ?? {})) !==
+            (yield* createName(id, news))
+          ) {
             return { action: "replace" } as const;
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name = output?.keyValueStoreName ?? (yield* createName(id, olds ?? {}));
+          const name =
+            output?.keyValueStoreName ?? (yield* createName(id, olds ?? {}));
           const current = yield* cloudfront
             .describeKeyValueStore({
               Name: name,
             })
-            .pipe(
-              Effect.catchTag("EntityNotFound", () => getByName(name)),
-            );
+            .pipe(Effect.catchTag("EntityNotFound", () => getByName(name)));
           if (!current?.KeyValueStore) {
             return undefined;
           }
@@ -172,7 +152,11 @@ export const KeyValueStoreProvider = () =>
             );
           }
           yield* session.note(output.keyValueStoreId);
-          return toAttrs(updated.KeyValueStore, updated.ETag, output.keyValueStoreName);
+          return toAttrs(
+            updated.KeyValueStore,
+            updated.ETag,
+            output.keyValueStoreName,
+          );
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* cloudfront
@@ -180,10 +164,31 @@ export const KeyValueStoreProvider = () =>
               Name: output.keyValueStoreName,
               IfMatch: output.etag!,
             })
-            .pipe(
-              Effect.catchTag("EntityNotFound", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("EntityNotFound", () => Effect.void));
         }),
       };
     }),
   );
+
+const createName = (id: string, props: KeyValueStoreProps) =>
+  props.name
+    ? Effect.succeed(props.name)
+    : createPhysicalName({
+        id,
+        maxLength: 64,
+        lowercase: true,
+      });
+
+const toAttrs = (
+  store: cloudfront.KeyValueStore,
+  etag: string | undefined,
+  fallbackName: string,
+): KeyValueStore["Attributes"] => ({
+  keyValueStoreId: store.Id,
+  keyValueStoreArn: store.ARN,
+  keyValueStoreName: store.Name || fallbackName,
+  comment: store.Comment,
+  status: store.Status ?? "UNKNOWN",
+  lastModifiedTime: store.LastModifiedTime,
+  etag,
+});
