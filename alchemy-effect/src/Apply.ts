@@ -17,7 +17,6 @@ import {
   type Apply,
   type Create,
   type Delete,
-  make as makePlan,
   type Plan,
   type Replace,
   type Update,
@@ -60,29 +59,12 @@ export type AppliedPlan<P extends Plan> = {
     : Simplify<P["resources"][id]["resource"]["attr"]>;
 };
 
-const toStackSpec = (plan: Plan, stackName: string, stage: string) => ({
-  name: stackName,
-  stage,
-  output: plan.output,
-  resources: Object.fromEntries(
-    Object.values(plan.resources).map((node) => [node.resource.FQN, node.resource]),
-  ),
-  bindings: Object.fromEntries(
-    Object.values(plan.resources).map((node) => [
-      node.resource.FQN,
-      node.bindings
-        .filter((binding) => binding.action !== "delete")
-        .map(
-          ({ namespace, sid, data }) =>
-            ({
-              namespace,
-              sid,
-              data,
-            }) satisfies ResourceBinding,
-        ),
-    ]),
-  ),
-});
+interface ResourceTracker {
+  output: any;
+  props: any;
+  bindings: ResourceBinding[];
+  instanceId: string;
+}
 
 export const apply = <P extends Plan>(
   plan: P,
@@ -94,608 +76,737 @@ export const apply = <P extends Plan>(
   Effect.gen(function* () {
     const cli = yield* Cli;
     const session = yield* cli.startApplySession(plan);
+    const state = yield* State;
     const stack = yield* Stack;
     const stage = yield* Stage;
-    const desiredStack = toStackSpec(plan, stack.name, stage);
+    const stackName = stack.name;
 
-    const hasPendingChanges = (candidate: Plan) =>
-      Object.values(candidate.resources).some((node) => node.action !== "noop") ||
-      Object.keys(candidate.deletions).length > 0;
-
-    let currentPlan: Plan = plan;
-    let resources = {} as Record<string, any>;
-
-    // A first pass may intentionally use precreate output to break cycles.
-    // Re-plan against the updated state so stale prop/binding consumers can
-    // converge to the upstream resource's final post-create output.
-    for (let pass = 0; pass < 3; pass++) {
-      // 1. expand the graph (create new resources, update existing and create replacements)
-      resources = {
-        ...resources,
-        ...(yield* expandAndPivot(currentPlan, session)),
-      };
-      // TODO(sam): support roll back to previous state if errors occur during expansion
-      // -> RISK: some UPDATEs may not be reverisble (i.e. trigger replacements)
-      // TODO(sam): should pivot be done separately? E.g shift traffic?
-
-      // 2. delete orphans and replaced resources
-      yield* collectGarbage(currentPlan, session);
-
-      const nextPlan = yield* makePlan(desiredStack);
-
-      if (!hasPendingChanges(nextPlan)) {
-        break;
+    const tracker: Record<string, ResourceTracker> = {};
+    const terminalStatuses = new Map<
+      string,
+      {
+        id: string;
+        type: string;
+        status: Extract<ApplyStatus, "created" | "updated">;
       }
+    >();
 
-      currentPlan = nextPlan;
-    }
+    yield* executePlan(
+      plan,
+      tracker,
+      terminalStatuses,
+      session,
+      state,
+      stackName,
+      stage,
+    );
+
+    // TODO(sam): support roll back to previous state if errors occur during expansion
+    // -> RISK: some UPDATEs may not be reversible (i.e. trigger replacements)
+    // TODO(sam): should pivot be done separately? E.g shift traffic?
+
+    yield* collectGarbage(plan, session);
+
+    yield* converge(
+      plan,
+      tracker,
+      terminalStatuses,
+      session,
+      state,
+      stackName,
+      stage,
+    );
+
+    yield* Effect.forEach(
+      Array.from(terminalStatuses.values()),
+      ({ id, type, status }) =>
+        session.emit({ kind: "status-change", id, type, status }),
+      { concurrency: "unbounded" },
+    );
 
     yield* session.done();
 
     if (Object.keys(plan.resources).length === 0) {
-      // all resources are deleted, return undefined
       return undefined;
     }
 
-    return yield* Output.evaluate(plan.output, resources);
+    const outputs = Object.fromEntries(
+      Object.entries(tracker).map(([fqn, t]) => [fqn, t.output]),
+    );
+    return yield* Output.evaluate(plan.output, outputs);
   });
 
-const expandAndPivot = Effect.fnUntraced(function* (
+// ── Phase 1: concurrent initial execution ──────────────────────────────────
+//
+// Each resource gets a Deferred<void> that signals "I have some output
+// available in `tracker`." Resources with `precreate` signal early so that
+// downstream resources can resolve stable identifiers without deadlocking.
+// The actual output lives in the mutable `tracker` map, not in the Deferred.
+
+const executePlan = Effect.fnUntraced(function* (
   plan: Plan,
-  session: PlanStatusSession,
-) {
-  const state = yield* State;
-  const stack = yield* Stack;
-  const stackName = stack.name;
-  const stage = yield* Stage;
-  const makeDeferred = Effect.all(
-    Object.keys(plan.resources).map((id) =>
-      Effect.map(Deferred.make<any>(), (output) => [id, output]),
-    ),
-  ).pipe(
-    Effect.map(
-      (e) => Object.fromEntries(e) as Record<string, Deferred.Deferred<any>>,
-    ),
-  );
-
-  const precreateOutputs = yield* makeDeferred;
-  const postcreateOutputs = yield* makeDeferred;
-  const outputs = {} as Record<string, Effect.Effect<any, any, State>>;
-
-  const resolveUpstream = Effect.fn(function* (
-    resourceId: string,
-    phase: "pre" | "post" | "bindings",
-  ) {
-    const upstreamNode = plan.resources[resourceId];
-    if (!upstreamNode) {
-      return yield* Effect.die(`Resource ${resourceId} not found`);
+  tracker: Record<string, ResourceTracker>,
+  terminalStatuses: Map<
+    string,
+    {
+      id: string;
+      type: string;
+      status: Extract<ApplyStatus, "created" | "updated">;
     }
-    return {
-      resourceId,
-      upstreamNode,
-      upstreamAttr: yield* phase === "post"
-        // Consumers in the post phase need the fully settled upstream output.
-        ? Deferred.await(postcreateOutputs[resourceId])
-        : phase === "bindings"
-          // Bindings may attach to a precreated stub to break cycles like
-          // Bucket -> Distribution -> BucketPolicy, but can also use the final
-          // output if it wins the race.
-          ? Effect.race(
-              Deferred.await(precreateOutputs[resourceId]),
-              Deferred.await(postcreateOutputs[resourceId]),
-            )
-          : upstreamNode.action === "create" ||
-              (upstreamNode.action === "replace" &&
-                upstreamNode.state.status !== "replacing" &&
-                upstreamNode.state.status !== "replaced")
-            // Create-time props may use precreate output for fresh creates and
-            // fresh replacements so downstream resources can resolve stable
-            // identifiers without waiting on the upstream's own bindings.
-            ? Effect.race(
-                Deferred.await(precreateOutputs[resourceId]),
-                Deferred.await(postcreateOutputs[resourceId]),
-              )
-            // Replayed replacements must wait for the recovered replacement's
-            // final output because any earlier precreated attr may be stale.
-            : Deferred.await(postcreateOutputs[resourceId]),
+  >,
+  session: PlanStatusSession,
+  state: {
+    set: <V extends ResourceState>(req: {
+      stack: string;
+      stage: string;
+      fqn: string;
+      value: V;
+    }) => Effect.Effect<V, StateStoreError, never>;
+  },
+  stackName: string,
+  stage: string,
+) {
+  const ready = Object.fromEntries(
+    yield* Effect.all(
+      Object.keys(plan.resources).map((fqn) =>
+        Effect.map(Deferred.make<void>(), (d) => [fqn, d] as const),
+      ),
+    ),
+  ) as Record<string, Deferred.Deferred<void>>;
+
+  const getOutputs = (): Record<string, any> =>
+    Object.fromEntries(
+      Object.entries(tracker).map(([fqn, t]) => [fqn, t.output]),
+    );
+
+  const waitForDeps = (fqns: string[]) =>
+    Effect.all(
+      fqns
+        .filter((fqn) => fqn in ready)
+        .map((fqn) => Deferred.await(ready[fqn])),
+    );
+
+  yield* Effect.all(
+    Object.entries(plan.resources).map(([fqn, node]) =>
+      executeNode(
+        fqn,
+        node,
+        tracker,
+        ready,
+        terminalStatuses,
+        session,
+        state,
+        stackName,
+        stage,
+        getOutputs,
+        waitForDeps,
+      ),
+    ),
+    { concurrency: "unbounded" },
+  );
+});
+
+const executeNode = (
+  fqn: string,
+  node: Apply,
+  tracker: Record<string, ResourceTracker>,
+  ready: Record<string, Deferred.Deferred<void>>,
+  terminalStatuses: Map<
+    string,
+    {
+      id: string;
+      type: string;
+      status: Extract<ApplyStatus, "created" | "updated">;
+    }
+  >,
+  session: PlanStatusSession,
+  state: {
+    set: <V extends ResourceState>(req: {
+      stack: string;
+      stage: string;
+      fqn: string;
+      value: V;
+    }) => Effect.Effect<V, StateStoreError, never>;
+  },
+  stackName: string,
+  stage: string,
+  getOutputs: () => Record<string, any>,
+  waitForDeps: (fqns: string[]) => Effect.Effect<void[], never, never>,
+): Effect.Effect<void, never, never> =>
+  Effect.gen(function* () {
+    const logicalId = node.resource.LogicalId;
+    const namespace = node.resource.Namespace;
+
+    const commit = <S extends ResourceState>(value: Omit<S, "namespace">) =>
+      state.set({
+        stack: stackName,
+        stage,
+        fqn,
+        value: { ...value, namespace } as S,
+      });
+
+    const scopedSession = {
+      ...session,
+      note: (note: string) =>
+        session.emit({ id: logicalId, kind: "annotate", message: note }),
+    } satisfies ScopedPlanStatusSession;
+
+    const report = (status: ApplyStatus) =>
+      session.emit({
+        kind: "status-change",
+        id: logicalId,
+        type: node.resource.Type,
+        status,
+      });
+
+    const markTerminal = (status: "created" | "updated") =>
+      Effect.sync(() => {
+        terminalStatuses.set(fqn, {
+          id: logicalId,
+          type: node.resource.Type,
+          status,
+        });
+      });
+
+    const signalReady = Deferred.succeed(ready[fqn], void 0);
+
+    const storeAndSignal = (t: ResourceTracker) =>
+      Effect.gen(function* () {
+        tracker[fqn] = t;
+        yield* signalReady;
+      });
+
+    // ── noop ──
+
+    if (node.action === "noop") {
+      yield* storeAndSignal({
+        output: node.state.attr,
+        props: node.state.props,
+        bindings: node.state.bindings ?? [],
+        instanceId: node.state.instanceId,
+      });
+      return;
+    }
+
+    const allUpstreamFqns = () => {
+      const propDeps = Object.keys(Output.resolveUpstream(node.props));
+      const bindingDeps = Object.keys(Output.resolveUpstream(node.bindings));
+      return [...new Set([...propDeps, ...bindingDeps])];
     };
-  });
 
-  const resolveNodeUpstream = Effect.fn(function* (
-    node: Create | Update | Replace,
-    phase: "pre" | "post" | "bindings",
-  ) {
-    const upstreamDeps = {
-      ...Output.resolveUpstream(node.props),
-      ...(phase === "pre" ? {} : Output.resolveUpstream(node.bindings)),
-    };
-    const nodes = yield* Effect.all(
-      Object.entries(upstreamDeps).map(([id]) => resolveUpstream(id, phase)),
-    );
-    return Object.fromEntries(
-      nodes
-        .filter((node) => node !== undefined)
-        .map((node) => [node.resourceId, node.upstreamAttr]),
-    );
-  });
+    // ── instance ID ──
 
-  const resolveBindingUpstream = Effect.fn(function* (
-    node: Create | Update | Replace,
-    phase: "post" | "bindings",
-  ) {
-    const upstreamDeps = Output.resolveUpstream(node.bindings);
-    const nodes = yield* Effect.all(
-      Object.entries(upstreamDeps).map(([id]) => resolveUpstream(id, phase)),
-    );
-    return Object.fromEntries(
-      nodes
-        .filter((node) => node !== undefined)
-        .map((node) => [node.resourceId, node.upstreamAttr]),
-    );
-  });
+    const instanceId = yield* Effect.gen(function* () {
+      if (node.action === "create" && !node.state?.instanceId) {
+        const id = yield* generateInstanceId();
+        yield* commit<CreatingResourceState>({
+          status: "creating",
+          fqn,
+          logicalId,
+          instanceId: id,
+          downstream: node.downstream,
+          props: node.props,
+          providerVersion: node.provider.version ?? 0,
+          resourceType: node.resource.Type,
+          bindings: excludeDeletedBindings(node.bindings),
+          removalPolicy: node.resource.RemovalPolicy,
+        });
+        return id;
+      } else if (node.action === "replace") {
+        if (
+          node.state.status === "replaced" ||
+          node.state.status === "replacing"
+        ) {
+          return node.state.instanceId;
+        }
+        const id = yield* generateInstanceId();
+        yield* commit<ReplacingResourceState>({
+          status: "replacing",
+          fqn,
+          logicalId,
+          instanceId: id,
+          downstream: node.downstream,
+          props: node.props,
+          providerVersion: node.provider.version ?? 0,
+          resourceType: node.resource.Type,
+          bindings: excludeDeletedBindings(node.bindings),
+          old: node.state,
+          deleteFirst: node.deleteFirst,
+          removalPolicy: node.resource.RemovalPolicy,
+        });
+        return id;
+      } else if (node.state?.instanceId) {
+        return node.state.instanceId;
+      }
+      return yield* Effect.die(
+        `Instance ID not found for resource '${logicalId}' and action is '${node.action}'`,
+      );
+    });
 
-  const resolvePropUpstream = Effect.fn(function* (
-    node: Create | Update | Replace,
-    phase: "pre" | "post",
-  ) {
-    const upstreamDeps = Output.resolveUpstream(node.props);
-    const nodes = yield* Effect.all(
-      Object.entries(upstreamDeps).map(([id]) => resolveUpstream(id, phase)),
-    );
-    return Object.fromEntries(
-      nodes
-        .filter((node) => node !== undefined)
-        .map((node) => [node.resourceId, node.upstreamAttr]),
-    );
-  });
+    // ── lifecycle ──
 
-  const apply: (node: Apply) => Effect.Effect<any, never, never> = (node) =>
-    Effect.gen(function* () {
+    yield* Effect.gen(function* () {
+      // ── create ──
+      if (node.action === "create") {
+        if (!node.state) {
+          yield* commit<CreatingResourceState>({
+            status: "creating",
+            fqn,
+            logicalId,
+            instanceId,
+            resourceType: node.resource.Type,
+            props: node.props,
+            attr: undefined,
+            providerVersion: node.provider.version ?? 0,
+            bindings: excludeDeletedBindings(node.bindings),
+            downstream: node.downstream,
+            removalPolicy: node.resource.RemovalPolicy,
+          });
+        }
+
+        let attr: any = node.state?.attr;
+
+        if (attr !== undefined) {
+          yield* storeAndSignal({
+            output: attr,
+            props: {},
+            bindings: [],
+            instanceId,
+          });
+        }
+
+        if (node.provider.precreate && attr === undefined) {
+          yield* report("pre-creating");
+          attr = yield* node.provider.precreate({
+            id: logicalId,
+            news: node.props,
+            session: scopedSession,
+            instanceId,
+          });
+          yield* commit<CreatingResourceState>({
+            status: "creating",
+            fqn,
+            logicalId,
+            instanceId,
+            resourceType: node.resource.Type,
+            props: node.props,
+            attr,
+            providerVersion: node.provider.version ?? 0,
+            bindings: excludeDeletedBindings(node.bindings),
+            downstream: node.downstream,
+            removalPolicy: node.resource.RemovalPolicy,
+          });
+          yield* storeAndSignal({
+            output: attr,
+            props: {},
+            bindings: [],
+            instanceId,
+          });
+        }
+
+        yield* report("creating");
+
+        yield* waitForDeps(allUpstreamFqns());
+        const outputs = getOutputs();
+
+        const news = (yield* Output.evaluate(
+          node.props,
+          outputs,
+        )) as Record<string, any>;
+
+        const bindingOutputs = excludeDeletedBindings(
+          yield* Output.evaluate(node.bindings, outputs),
+        );
+
+        attr = yield* node.provider.create({
+          id: logicalId,
+          news,
+          instanceId,
+          bindings: bindingOutputs,
+          session: scopedSession,
+          output: attr,
+        });
+
+        yield* commit<CreatedResourceState>({
+          status: "created",
+          fqn,
+          logicalId,
+          instanceId,
+          resourceType: node.resource.Type,
+          props: news,
+          attr,
+          bindings: excludeDeletedBindings(node.bindings),
+          providerVersion: node.provider.version ?? 0,
+          downstream: node.downstream,
+          removalPolicy: node.resource.RemovalPolicy,
+        });
+
+        tracker[fqn] = {
+          output: attr,
+          props: news,
+          bindings: bindingOutputs,
+          instanceId,
+        };
+        yield* signalReady;
+
+        yield* markTerminal("created");
+        return;
+      }
+
+      // ── update ──
+      if (node.action === "update") {
+        yield* storeAndSignal({
+          output: node.state.attr,
+          props: node.state.props,
+          bindings: node.state.bindings ?? [],
+          instanceId,
+        });
+
+        yield* waitForDeps(allUpstreamFqns());
+        const outputs = getOutputs();
+
+        const news = (yield* Output.evaluate(
+          node.props,
+          outputs,
+        )) as Record<string, any>;
+
+        yield* node.state.status === "replaced"
+          ? commit<ReplacedResourceState>({
+              ...node.state,
+              attr: node.state.attr,
+              props: news,
+            })
+          : commit<UpdatingReourceState>({
+              status: "updating",
+              fqn,
+              logicalId,
+              instanceId,
+              resourceType: node.resource.Type,
+              props: news,
+              attr: node.state.attr,
+              providerVersion: node.provider.version ?? 0,
+              bindings: excludeDeletedBindings(node.bindings),
+              downstream: node.downstream,
+              old:
+                node.state.status === "updating"
+                  ? node.state.old
+                  : node.state,
+              removalPolicy: node.resource.RemovalPolicy,
+            });
+
+        yield* report("updating");
+
+        const previousProps =
+          node.state.status === "created" ||
+          node.state.status === "updated" ||
+          node.state.status === "replaced"
+            ? node.state.props
+            : node.state.old.props;
+
+        const bindingOutputs = excludeDeletedBindings(
+          yield* Output.evaluate(node.bindings, outputs),
+        );
+
+        const attr = yield* node.provider.update({
+          id: logicalId,
+          news,
+          instanceId,
+          bindings: bindingOutputs,
+          session: scopedSession,
+          olds: previousProps,
+          output: node.state.attr,
+        });
+
+        if (node.state.status === "replaced") {
+          yield* commit<ReplacedResourceState>({
+            ...node.state,
+            attr,
+            props: news,
+          });
+        } else {
+          yield* commit<UpdatedResourceState>({
+            status: "updated",
+            fqn,
+            logicalId,
+            instanceId,
+            resourceType: node.resource.Type,
+            props: news,
+            attr,
+            bindings: excludeDeletedBindings(node.bindings),
+            providerVersion: node.provider.version ?? 0,
+            downstream: node.downstream,
+            removalPolicy: node.resource.RemovalPolicy,
+          });
+        }
+
+        tracker[fqn] = {
+          output: attr,
+          props: news,
+          bindings: bindingOutputs,
+          instanceId,
+        };
+
+        yield* markTerminal("updated");
+        return;
+      }
+
+      // ── replace ──
+      if (node.action === "replace") {
+        if (node.state.status === "replaced") {
+          tracker[fqn] = {
+            output: node.state.attr,
+            props: node.state.props,
+            bindings: node.state.bindings ?? [],
+            instanceId,
+          };
+          yield* signalReady;
+          yield* markTerminal("created");
+          return;
+        }
+
+        let replState: ReplacingResourceState;
+        if (node.state.status !== "replacing") {
+          replState = yield* commit<ReplacingResourceState>({
+            status: "replacing",
+            fqn,
+            logicalId,
+            instanceId,
+            resourceType: node.resource.Type,
+            props: node.props,
+            bindings: excludeDeletedBindings(node.bindings),
+            attr: undefined,
+            providerVersion: node.provider.version ?? 0,
+            deleteFirst: node.deleteFirst,
+            old: node.state,
+            downstream: node.downstream,
+            removalPolicy: node.resource.RemovalPolicy,
+          });
+        } else {
+          replState = node.state;
+        }
+
+        let attr: any = replState.attr;
+
+        if (attr !== undefined) {
+          yield* storeAndSignal({
+            output: attr,
+            props: {},
+            bindings: [],
+            instanceId,
+          });
+        }
+
+        if (node.provider.precreate && attr === undefined) {
+          yield* report("pre-creating");
+          attr = yield* node.provider.precreate({
+            id: logicalId,
+            news: node.props,
+            session: scopedSession,
+            instanceId,
+          });
+          yield* commit<ReplacingResourceState>({
+            status: "replacing",
+            fqn,
+            logicalId,
+            instanceId,
+            resourceType: node.resource.Type,
+            props: node.props,
+            attr,
+            providerVersion: node.provider.version ?? 0,
+            bindings: excludeDeletedBindings(node.bindings),
+            downstream: node.downstream,
+            old: replState.old,
+            deleteFirst: node.deleteFirst,
+            removalPolicy: node.resource.RemovalPolicy,
+          });
+          yield* storeAndSignal({
+            output: attr,
+            props: {},
+            bindings: [],
+            instanceId,
+          });
+        }
+
+        yield* report("creating replacement");
+
+        yield* waitForDeps(allUpstreamFqns());
+        const outputs = getOutputs();
+
+        const news = (yield* Output.evaluate(
+          node.props,
+          outputs,
+        )) as Record<string, any>;
+
+        const bindingOutputs = excludeDeletedBindings(
+          yield* Output.evaluate(node.bindings, outputs),
+        );
+
+        attr = yield* node.provider.create({
+          id: logicalId,
+          news,
+          instanceId,
+          bindings: bindingOutputs,
+          session: scopedSession,
+          output: attr,
+        });
+
+        yield* commit<ReplacedResourceState>({
+          status: "replaced",
+          fqn,
+          logicalId,
+          instanceId,
+          resourceType: node.resource.Type,
+          props: news,
+          attr,
+          providerVersion: node.provider.version ?? 0,
+          bindings: excludeDeletedBindings(node.bindings),
+          downstream: node.downstream,
+          old: replState.old,
+          deleteFirst: node.deleteFirst,
+          removalPolicy: node.resource.RemovalPolicy,
+        });
+
+        tracker[fqn] = {
+          output: attr,
+          props: news,
+          bindings: bindingOutputs,
+          instanceId,
+        };
+        yield* signalReady;
+
+        yield* markTerminal("created");
+        return;
+      }
+
+      // @ts-expect-error - node is never, this should be unreachable
+      return yield* Effect.die(`Unknown action: ${node.action}`);
+    }).pipe(Effect.provide(Layer.succeed(InstanceId, instanceId)));
+  }) as Effect.Effect<void, never, never>;
+
+// ── Phase 3: imperative convergence loop ───────────────────────────────────
+//
+// After the initial concurrent pass, some resources may have been created
+// with stale upstream values (e.g. a precreate stub instead of the final
+// output). Walk the plan and re-evaluate each resource's props/bindings
+// against the current tracker outputs. Call provider.update for any
+// resource whose resolved inputs differ from what it was last applied with.
+// Repeat until no resource needs updating.
+
+const converge = Effect.fnUntraced(function* (
+  plan: Plan,
+  tracker: Record<string, ResourceTracker>,
+  terminalStatuses: Map<
+    string,
+    {
+      id: string;
+      type: string;
+      status: Extract<ApplyStatus, "created" | "updated">;
+    }
+  >,
+  session: PlanStatusSession,
+  state: {
+    set: <V extends ResourceState>(req: {
+      stack: string;
+      stage: string;
+      fqn: string;
+      value: V;
+    }) => Effect.Effect<V, StateStoreError, never>;
+  },
+  stackName: string,
+  stage: string,
+) {
+  for (let pass = 0; pass < 10; pass++) {
+    let anyUpdated = false;
+
+    for (const [fqn, node] of Object.entries(plan.resources)) {
+      if (node.action === "noop") continue;
+      if (!tracker[fqn]) continue;
+
+      const outputs = Object.fromEntries(
+        Object.entries(tracker).map(([k, t]) => [k, t.output]),
+      );
+
+      const newProps = (yield* Output.evaluate(
+        node.props,
+        outputs,
+      )) as Record<string, any>;
+
+      const newBindings = excludeDeletedBindings(
+        yield* Output.evaluate(node.bindings, outputs),
+      );
+
+      const oldProps = tracker[fqn].props;
+      const oldBindings = tracker[fqn].bindings;
+
+      const propsChanged = havePropsChanged(oldProps, newProps);
+      const bindingsChanged =
+        JSON.stringify(oldBindings) !== JSON.stringify(newBindings);
+
+      if (!propsChanged && !bindingsChanged) continue;
+
+      anyUpdated = true;
+
       const logicalId = node.resource.LogicalId;
       const namespace = node.resource.Namespace;
-      const fqn = node.resource.FQN;
-
-      const commit = <S extends ResourceState>(value: Omit<S, "namespace">) =>
-        state.set({
-          stack: stackName,
-          stage: stage,
-          fqn,
-          value: { ...value, namespace } as S,
-        });
+      const instanceId = tracker[fqn].instanceId;
 
       const scopedSession = {
         ...session,
         note: (note: string) =>
-          session.emit({
-            id: logicalId,
-            kind: "annotate",
-            message: note,
-          }),
+          session.emit({ id: logicalId, kind: "annotate", message: note }),
       } satisfies ScopedPlanStatusSession;
 
-      const preOutput = precreateOutputs[fqn];
+      const attr = yield* node.provider
+        .update({
+          id: logicalId,
+          news: newProps,
+          instanceId,
+          bindings: newBindings,
+          session: scopedSession,
+          olds: oldProps,
+          output: tracker[fqn].output,
+        })
+        .pipe(Effect.provide(Layer.succeed(InstanceId, instanceId)));
 
-      const succeedPre = Effect.fn(function* (attr: any) {
-        // console.log("succeedPre", logicalId);
-        yield* Deferred.succeed(preOutput, attr);
+      tracker[fqn] = {
+        output: attr,
+        props: newProps,
+        bindings: newBindings,
+        instanceId,
+      };
+
+      yield* state.set({
+        stack: stackName,
+        stage,
+        fqn,
+        value: {
+          status: "updated",
+          fqn,
+          logicalId,
+          instanceId,
+          resourceType: node.resource.Type,
+          props: newProps,
+          attr,
+          providerVersion: node.provider.version ?? 0,
+          bindings: excludeDeletedBindings(node.bindings),
+          downstream: node.downstream,
+          namespace,
+          removalPolicy: node.resource.RemovalPolicy,
+        } as UpdatedResourceState,
       });
-      const succeedPost = Effect.fn(function* (attr: any) {
-        // console.log("succeedPost", logicalId);
-        yield* Deferred.succeed(postcreateOutputs[fqn], attr);
+
+      terminalStatuses.set(fqn, {
+        id: logicalId,
+        type: node.resource.Type,
+        status: "updated",
       });
+    }
 
-      const resolvePropsPost = (node: Create | Update | Replace, attr: any) =>
-        resolvePropUpstream(node, "post").pipe(
-          Effect.map((upstream) => ({
-            ...upstream,
-            ...(attr ? { [logicalId]: attr } : {}),
-          })),
-        );
-      const resolvePropsPre = (node: Create | Update | Replace, attr: any) =>
-        resolvePropUpstream(node, "pre").pipe(
-          Effect.map((upstream) => ({
-            ...upstream,
-            ...(attr ? { [logicalId]: attr } : {}),
-          })),
-        );
-      const resolvePost = (node: Create | Update | Replace, attr: any) =>
-        resolveNodeUpstream(node, "post").pipe(
-          Effect.map((upstream) => ({
-            ...upstream,
-            ...(attr ? { [logicalId]: attr } : {}),
-          })),
-        );
-      const resolveBindings = (node: Create | Update | Replace, attr: any) =>
-        resolveBindingUpstream(node, "bindings").pipe(
-          Effect.map((upstream) => ({
-            ...upstream,
-            ...(attr ? { [logicalId]: attr } : {}),
-          })),
-        );
-
-      return yield* (outputs[fqn] ??= yield* Effect.cached(
-        Effect.gen(function* () {
-          const report = (status: ApplyStatus) =>
-            session.emit({
-              kind: "status-change",
-              id: logicalId,
-              type: node.resource.Type,
-              status,
-            });
-
-          if (node.action === "noop") {
-            yield* Deferred.succeed(preOutput, node.state.attr);
-            yield* succeedPost(node.state.attr);
-            return node.state.attr;
-          }
-
-          const instanceId = yield* Effect.gen(function* () {
-            if (node.action === "create" && !node.state?.instanceId) {
-              const instanceId = yield* generateInstanceId();
-              yield* commit<CreatingResourceState>({
-                status: "creating",
-                fqn,
-                instanceId,
-                logicalId,
-                downstream: node.downstream,
-                props: node.props,
-                providerVersion: node.provider.version ?? 0,
-                resourceType: node.resource.Type,
-                bindings: excludeDeletedBindings(node.bindings),
-                removalPolicy: node.resource.RemovalPolicy,
-              });
-              return instanceId;
-            } else if (node.action === "replace") {
-              if (
-                node.state.status === "replaced" ||
-                node.state.status === "replacing"
-              ) {
-                // replace has already begun and we have the new instanceId, do not re-create it
-                return node.state.instanceId;
-              }
-              const instanceId = yield* generateInstanceId();
-              yield* commit<ReplacingResourceState>({
-                status: "replacing",
-                fqn,
-                instanceId,
-                logicalId,
-                downstream: node.downstream,
-                props: node.props,
-                providerVersion: node.provider.version ?? 0,
-                resourceType: node.resource.Type,
-                bindings: excludeDeletedBindings(node.bindings),
-                old: node.state,
-                deleteFirst: node.deleteFirst,
-                removalPolicy: node.resource.RemovalPolicy,
-              });
-              return instanceId;
-            } else if (node.state?.instanceId) {
-              // we're in a create, update or delete state with a stable instanceId, use it
-              return node.state.instanceId;
-            }
-            // this should never happen
-            return yield* Effect.die(
-              `Instance ID not found for resource '${logicalId}' and action is '${node.action}'`,
-            );
-          });
-
-          const apply = Effect.gen(function* () {
-            if (node.action === "create") {
-              // Create-time props can safely consume upstream precreate outputs.
-              // This is what allows a resource with `precreate` to break a
-              // prop<->binding cycle like Bucket -> Distribution -> BucketPolicy.
-              const upstream = yield* resolvePropsPre(node, undefined);
-
-              const news = (yield* Output.evaluate(
-                node.props,
-                upstream,
-              )) as Record<string, any>;
-
-              const checkpoint = (attr: any) =>
-                commit<CreatingResourceState>({
-                  status: "creating",
-                  fqn,
-                  logicalId,
-                  instanceId,
-                  resourceType: node.resource.Type,
-                  props: news,
-                  attr,
-                  providerVersion: node.provider.version ?? 0,
-                  bindings: excludeDeletedBindings(node.bindings),
-                  downstream: node.downstream,
-                  removalPolicy: node.resource.RemovalPolicy,
-                });
-
-              if (!node.state) {
-                yield* checkpoint(undefined);
-              }
-
-              let attr: any = node.state?.attr;
-              if (attr !== undefined) {
-                yield* succeedPre(attr);
-              }
-              if (
-                node.action === "create" &&
-                node.provider.precreate &&
-                // pre-create is only designed to ensure the resource exists, if we have state.attr, then it already exists and should be skipped
-                attr === undefined
-              ) {
-                yield* report("pre-creating");
-
-                // stub the resource prior to resolving upstream resources or bindings if a stub is available
-                attr = yield* node.provider.precreate({
-                  id: logicalId,
-                  news: node.props,
-                  session: scopedSession,
-                  instanceId,
-                });
-
-                yield* checkpoint(attr);
-
-                yield* succeedPre(attr);
-              }
-
-              yield* report("creating");
-
-              const bindingOutputs = yield* Output.evaluate(
-                node.bindings,
-                yield* resolveBindings(node, attr),
-              ).pipe(Effect.map(excludeDeletedBindings));
-
-              attr = yield* node.provider.create({
-                id: logicalId,
-                news,
-                instanceId,
-                bindings: bindingOutputs,
-                session: scopedSession,
-                output: attr,
-              });
-
-              yield* commit<CreatedResourceState>({
-                status: "created",
-                fqn,
-                logicalId,
-                instanceId,
-                resourceType: node.resource.Type,
-                props: news,
-                attr,
-                bindings: excludeDeletedBindings(node.bindings),
-                providerVersion: node.provider.version ?? 0,
-                downstream: node.downstream,
-                removalPolicy: node.resource.RemovalPolicy,
-              });
-              // emit the output to downstream dependencies
-              // we do this after committing to mitigate risk of state corruption
-              yield* succeedPost(attr);
-
-              yield* report("created");
-
-              return attr;
-            } else if (node.action === "update") {
-              // Publish the last known attr before waiting on upstream post
-              // outputs so replacement creates can break binding cycles against
-              // an updating resource. A later re-plan/re-apply pass reconciles
-              // any consumers that observed stale update-time values.
-              yield* succeedPre(node.state.attr);
-
-              const upstream = yield* resolvePropsPost(node, node.state.attr);
-
-              const news = (yield* Output.evaluate(
-                node.props,
-                upstream,
-              )) as Record<string, any>;
-
-              yield* node.state.status === "replaced"
-                ? commit<ReplacedResourceState>({
-                    ...node.state,
-                    attr: node.state.attr,
-                    props: news,
-                  })
-                : commit<UpdatingReourceState>({
-                    status: "updating",
-                    fqn,
-                    logicalId,
-                    instanceId,
-                    resourceType: node.resource.Type,
-                    props: news,
-                    attr: node.state.attr,
-                    providerVersion: node.provider.version ?? 0,
-                    bindings: excludeDeletedBindings(node.bindings),
-                    downstream: node.downstream,
-                    old:
-                      node.state.status === "updating"
-                        ? node.state.old
-                        : node.state,
-                    removalPolicy: node.resource.RemovalPolicy,
-                  });
-
-              yield* report("updating");
-
-              const previousProps =
-                node.state.status === "created" ||
-                node.state.status === "updated" ||
-                node.state.status === "replaced"
-                  ? node.state.props
-                  : node.state.old.props;
-              const bindingInputs = yield* havePropsChanged(previousProps, news)
-                ? resolveBindings(node, node.state.attr)
-                : resolvePost(node, node.state.attr);
-              const bindingOutputs = yield* Output.evaluate(
-                node.bindings,
-                bindingInputs,
-              ).pipe(Effect.map(excludeDeletedBindings));
-
-              const attr = yield* node.provider.update({
-                id: logicalId,
-                news,
-                instanceId,
-                bindings: bindingOutputs,
-                session: scopedSession,
-                olds: previousProps,
-                output: node.state.attr,
-              });
-
-              yield* succeedPost(attr);
-
-              if (node.state.status === "replaced") {
-                yield* commit<ReplacedResourceState>({
-                  ...node.state,
-                  attr,
-                  props: news,
-                });
-              } else {
-                yield* commit<UpdatedResourceState>({
-                  status: "updated",
-                  fqn,
-                  logicalId,
-                  instanceId,
-                  resourceType: node.resource.Type,
-                  props: news,
-                  attr,
-                  bindings: excludeDeletedBindings(node.bindings),
-                  providerVersion: node.provider.version ?? 0,
-                  downstream: node.downstream,
-                  removalPolicy: node.resource.RemovalPolicy,
-                });
-              }
-
-              yield* report("updated");
-
-              return attr;
-            } else if (node.action === "replace") {
-              const checkpoint = <
-                S extends ReplacingResourceState | ReplacedResourceState,
-              >({
-                status,
-                attr,
-              }: Pick<S, "status" | "attr">) =>
-                commit<S>({
-                  status,
-                  fqn,
-                  logicalId,
-                  instanceId,
-                  resourceType: node.resource.Type,
-                  props: news,
-                  attr,
-                  providerVersion: node.provider.version ?? 0,
-                  bindings: excludeDeletedBindings(node.bindings),
-                  downstream: node.downstream,
-                  old: state.old,
-                  deleteFirst: node.deleteFirst,
-                  removalPolicy: node.resource.RemovalPolicy,
-                } as S);
-
-              if (node.state.status === "replaced") {
-                yield* succeedPost(node.state.attr);
-                // we've already created the replacement resource, return the output
-                return node.state.attr;
-              }
-              let state: ReplacingResourceState;
-              if (node.state.status !== "replacing") {
-                state = yield* commit<ReplacingResourceState>({
-                  status: "replacing",
-                  fqn,
-                  logicalId,
-                  instanceId,
-                  resourceType: node.resource.Type,
-                  props: node.props,
-                  bindings: excludeDeletedBindings(node.bindings),
-                  attr: undefined,
-                  providerVersion: node.provider.version ?? 0,
-                  deleteFirst: node.deleteFirst,
-                  old: node.state,
-                  downstream: node.downstream,
-                  removalPolicy: node.resource.RemovalPolicy,
-                });
-              } else {
-                state = node.state;
-              }
-
-              const news = (yield* Output.evaluate(
-                node.props,
-                yield* resolvePropsPre(node, state.attr),
-              )) as Record<string, any>;
-
-              let attr: any = state.attr;
-              if (attr !== undefined) {
-                yield* succeedPre(attr);
-              }
-              if (
-                node.provider.precreate &&
-                // pre-create is only designed to ensure the resource exists, if we have state.attr, then it already exists and should be skipped
-                attr === undefined
-              ) {
-                yield* report("pre-creating");
-
-                // stub the resource prior to resolving upstream resources or bindings if a stub is available
-                attr = yield* node.provider.precreate({
-                  id: logicalId,
-                  news: node.props,
-                  session: scopedSession,
-                  instanceId,
-                });
-
-                yield* succeedPre(attr);
-
-                yield* checkpoint({
-                  status: "replacing",
-                  attr,
-                });
-              }
-
-              yield* report("creating replacement");
-
-              // let bindings = excludeDeletedBindings(
-              //   yield* Output.evaluate(node.bindings, upstream),
-              // );
-
-              const bindings = excludeDeletedBindings(
-                yield* Output.evaluate(
-                  node.bindings,
-                  yield* resolveBindings(node, attr),
-                ),
-              );
-
-              attr = yield* node.provider.create({
-                id: logicalId,
-                news,
-                instanceId,
-                bindings,
-                session: scopedSession,
-                output: attr,
-              });
-
-              yield* succeedPost(attr);
-
-              yield* checkpoint<ReplacedResourceState>({
-                status: "replaced",
-                attr,
-              });
-
-              yield* report("created");
-              return attr;
-            }
-            // @ts-expect-error - node is never, this should be unreachable
-            return yield* Effect.die(`Unknown action: ${node.action}`);
-          });
-
-          // provide the resource-specific context (InstanceId, etc.)
-          return yield* apply.pipe(
-            Effect.provide(Layer.succeed(InstanceId, instanceId)),
-          );
-        }),
-      ));
-    }) as Effect.Effect<any, never, never>;
-
-  return Object.fromEntries(
-    yield* Effect.all(
-      Object.entries(plan.resources).map(([id, node]) =>
-        Effect.map(apply(node), (attr) => [id, attr]),
-      ),
-      { concurrency: "unbounded" },
-    ),
-  );
+    if (!anyUpdated) break;
+  }
 });
+
+// ── Phase 2: delete orphans and old replaced resources ─────────────────────
 
 const collectGarbage = Effect.fnUntraced(function* (
   plan: Plan,
@@ -710,13 +821,11 @@ const collectGarbage = Effect.fnUntraced(function* (
     [fqn in string]: Effect.Effect<void, StateStoreError, never>;
   } = {};
 
-  // delete all replaced resources
   const replacedResources = yield* state.getReplacedResources({
     stack: stackName,
-    stage: stage,
+    stage,
   });
 
-  // deletionGraph is keyed by FQN for consistent lookup
   const deletionGraph = {
     ...plan.deletions,
     ...Object.fromEntries(
@@ -773,7 +882,7 @@ const collectGarbage = Effect.fnUntraced(function* (
       const commit = <S extends ResourceState>(value: Omit<S, "namespace">) =>
         state.set({
           stack: stackName,
-          stage: stage,
+          stage,
           fqn,
           value: { ...value, namespace } as S,
         });
@@ -813,7 +922,7 @@ const collectGarbage = Effect.fnUntraced(function* (
             if (node.resource.RemovalPolicy === "retain") {
               yield* state.delete({
                 stack: stackName,
-                stage: stage,
+                stage,
                 fqn,
               });
               yield* report("deleted");
@@ -848,7 +957,7 @@ const collectGarbage = Effect.fnUntraced(function* (
           if (isDeleteNode(node)) {
             yield* state.delete({
               stack: stackName,
-              stage: stage,
+              stage,
               fqn,
             });
             yield* report("deleted");

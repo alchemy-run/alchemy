@@ -3,6 +3,7 @@ import * as Output from "@/Output";
 import { CannotReplacePartiallyReplacedResource } from "@/Plan";
 import * as Stack from "@/Stack";
 import * as Construct from "@/Construct";
+import { Cli } from "@/Cli/Cli";
 import {
   type ReplacedResourceState,
   type ReplacingResourceState,
@@ -891,6 +892,94 @@ describe("prop-flow convergence", () => {
       expect(output.A.value).toEqual("final-a");
       expect(output.B.string).toEqual("final-a");
       expect(output.C!.string).toEqual("final-a");
+    }).pipe(Effect.provide(MockLayers())),
+  );
+
+  test(
+    "binding feedback converges across an A -> B -> A fixed point",
+    Effect.gen(function* () {
+      const output = yield* Effect.gen(function* () {
+        const A = yield* PhasedTarget("A", {
+          desired: "final-a",
+          replaceKey: "v1",
+        });
+        const B = yield* TestResource("B", {
+          string: A.value,
+        });
+        yield* A.bind("FromB", {
+          env: {
+            B: B.string,
+          },
+        });
+        return { A, B };
+      }).pipe(test.deploy);
+
+      expect(output.A.value).toEqual("final-a");
+      expect(output.B.string).toEqual("final-a");
+      expect(output.A.env).toEqual({
+        B: "final-a",
+      });
+    }).pipe(Effect.provide(MockLayers())),
+  );
+
+  test(
+    "terminal created or updated status is delayed until fixed-point convergence finishes",
+    Effect.gen(function* () {
+      const events: Array<{ id: string; status: string }> = [];
+      const cli = Cli.of({
+        approvePlan: () => Effect.succeed(true),
+        displayPlan: () => Effect.void,
+        startApplySession: () =>
+          Effect.succeed({
+            done: () => Effect.void,
+            emit: (event) =>
+              Effect.sync(() => {
+                if (event.kind === "status-change") {
+                  events.push({
+                    id: event.id,
+                    status: event.status,
+                  });
+                }
+              }),
+          }),
+      });
+
+      const output = yield* Effect.gen(function* () {
+        const A = yield* PhasedTarget("A", {
+          desired: "final-a",
+          replaceKey: "v1",
+        });
+        const B = yield* TestResource("B", {
+          string: A.value,
+        });
+        yield* A.bind("FromB", {
+          env: {
+            B: B.string,
+          },
+        });
+        return { A, B };
+      }).pipe(test.deploy, Effect.provide(Layer.succeed(Cli, cli)));
+
+      expect(output.A.env).toEqual({
+        B: "final-a",
+      });
+
+      const statusesById = events.reduce(
+        (acc, event: { id: string; status: string }) => {
+          (acc[event.id] ??= []).push(event);
+          return acc;
+        },
+        {} as Record<string, Array<{ id: string; status: string }>>,
+      );
+      const terminal = (id: string) =>
+        (statusesById[id] ?? [])
+          .map((event: { id: string; status: string }) => event.status)
+          .filter(
+            (status: string) => status === "created" || status === "updated",
+          );
+
+      expect(terminal("A")).toEqual(["updated"]);
+      expect(terminal("B")).toEqual(["updated"]);
     }).pipe(Effect.provide(MockLayers())),
   );
 });
