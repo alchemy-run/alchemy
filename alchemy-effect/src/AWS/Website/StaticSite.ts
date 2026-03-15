@@ -4,8 +4,12 @@ import { readdirSync } from "node:fs";
 import path from "node:path";
 import { Build } from "../../Build/Build.ts";
 import * as Construct from "../../Construct.ts";
+import { toPath } from "../../FQN.ts";
 import type { Input } from "../../Input.ts";
+import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
+import { Stack } from "../../Stack.ts";
+import { Stage } from "../../Stage.ts";
 import { Certificate } from "../ACM/Certificate.ts";
 import { Distribution } from "../CloudFront/Distribution.ts";
 import { Function as CloudFrontFunction } from "../CloudFront/Function.ts";
@@ -222,8 +226,12 @@ export const StaticSite = Construct.fn(function* (
     textEncoding: props.assets?.textEncoding,
   });
 
+  const stack = yield* Stack;
+  const stage = yield* Stage;
+  const ns = yield* Namespace.CurrentNamespace;
+  const fqn = ns ? toPath(ns).join("/") : id;
   const kvNamespace = createHash("md5")
-    .update(`${id}`)
+    .update(`${stack.name}-${stage}-${fqn}`)
     .digest("hex")
     .substring(0, 4);
 

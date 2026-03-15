@@ -1,8 +1,12 @@
 import { createHash } from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as Construct from "../../Construct.ts";
+import { toPath } from "../../FQN.ts";
 import type { Input } from "../../Input.ts";
+import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
+import { Stack } from "../../Stack.ts";
+import { Stage } from "../../Stage.ts";
 import { Certificate } from "../ACM/Certificate.ts";
 import {
   Distribution,
@@ -81,8 +85,12 @@ export const Router = Construct.fn(function* (id: string, props: RouterProps) {
           tags: props.tags,
         });
 
+  const stack = yield* Stack;
+  const stage = yield* Stage;
+  const ns = yield* Namespace.CurrentNamespace;
+  const fqn = ns ? toPath(ns).join("/") : id;
   const kvNamespace = createHash("md5")
-    .update(`${id}`)
+    .update(`${stack.name}-${stage}-${fqn}`)
     .digest("hex")
     .substring(0, 4);
 
@@ -132,7 +140,7 @@ export const Router = Construct.fn(function* (id: string, props: RouterProps) {
     for (const [pattern, route] of Object.entries(props.routes)) {
       routeIndex++;
       const routeNs = createHash("md5")
-        .update(`${id}:route:${routeIndex}`)
+        .update(`${stack.name}-${stage}-${fqn}:route:${routeIndex}`)
         .digest("hex")
         .substring(0, 4);
 
