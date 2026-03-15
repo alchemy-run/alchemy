@@ -8,38 +8,30 @@ import * as Schedule from "effect/Schedule";
 
 describe("AWS.Website.Router", () => {
   test(
-    "create router for a static-site route with edge functions and invalidation",
+    "create router with static-site attached via KV routing",
     { timeout: 600_000 },
     Effect.gen(function* () {
       yield* destroy();
 
       const deployed = yield* test.deploy(
         Effect.gen(function* () {
-          const site = yield* AWS.Website.StaticSite("DocsSite", {
-            path: "examples/aws-static-site/site",
-            cdn: false,
-            forceDestroy: true,
+          const router = yield* AWS.Website.Router("Router", {
+            invalidation: {
+              paths: "all",
+              wait: true,
+            },
           });
 
-          const router = yield* AWS.Website.Router("Router", {
-            routes: {
-              "/*": {
-                ...site.routeTarget,
-                edge: {
-                  viewerRequest: {
-                    injection:
-                      'request.headers["x-router"] = { value: "docs" };',
-                  },
-                  viewerResponse: {
-                    injection:
-                      'response.headers["x-router-response"] = { value: "docs" };',
-                  },
-                },
+          const site = yield* AWS.Website.StaticSite("DocsSite", {
+            path: "examples/aws-static-site/site",
+            forceDestroy: true,
+            router: {
+              instance: {
+                kvStoreArn: router.kvStoreArn,
+                kvNamespace: router.kvNamespace,
+                distributionId: router.distributionId,
+                url: router.url,
               },
-            },
-            invalidation: {
-              paths: "versioned",
-              wait: true,
             },
           });
 
@@ -51,7 +43,7 @@ describe("AWS.Website.Router", () => {
       );
 
       expect(deployed.router.distribution.distributionId).toBeDefined();
-      expect(deployed.router.invalidation?.invalidationId).toBeDefined();
+      expect(deployed.router.kvStoreArn).toBeDefined();
 
       const config = yield* cloudfront.getDistributionConfig({
         Id: deployed.router.distribution.distributionId,
@@ -59,7 +51,7 @@ describe("AWS.Website.Router", () => {
       expect(
         config.DistributionConfig?.DefaultCacheBehavior?.FunctionAssociations
           ?.Quantity,
-      ).toEqual(2);
+      ).toBeGreaterThanOrEqual(1);
 
       yield* destroy();
       yield* assertDistributionDeleted(

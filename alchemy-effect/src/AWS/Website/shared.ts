@@ -1,4 +1,3 @@
-import type * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import type { Input } from "../../Input.ts";
 import type { Bucket } from "../S3/Bucket.ts";
 
@@ -139,80 +138,50 @@ export interface StaticSiteRouterProps {
   path?: string;
 }
 
-export interface RouterCommonRouteProps {
-  /**
-   * Optional version token used to trigger invalidations when the route's
-   * underlying content changes.
-   */
-  version?: Input<string>;
-  /**
-   * CloudFront cache policy ID used by the route.
-   */
-  cachePolicyId?: Input<string>;
-  /**
-   * Optional path rewrite performed before the request hits the origin.
-   */
-  rewrite?: WebsiteRewrite;
-  /**
-   * Optional edge customizations for the route.
-   */
-  edge?: WebsiteEdgeProps;
-}
-
-export interface RouterUrlRouteProps extends RouterCommonRouteProps {
+export interface RouterUrlRouteProps {
   /**
    * Destination URL.
    */
   url: Input<string>;
   /**
-   * Origin protocol policy between CloudFront and the origin.
-   * @default "https-only"
+   * Optional rewrite applied before forwarding.
    */
-  originProtocolPolicy?: cloudfront.OriginProtocolPolicy;
+  rewrite?: WebsiteRewrite;
   /**
-   * Origin read timeout in seconds.
+   * Optional origin override configuration.
    */
-  originReadTimeout?: number;
+  origin?: Record<string, any>;
   /**
-   * Origin keepalive timeout in seconds.
+   * Origin protocol policy (used by SsrSite for server origins).
    */
-  originKeepaliveTimeout?: number;
-  /**
-   * Supported origin TLS versions.
-   */
-  originSslProtocols?: cloudfront.SslProtocol[];
-  /**
-   * Allowed methods forwarded to the origin.
-   */
-  allowedMethods?: cloudfront.Method[];
-  /**
-   * Cached methods.
-   */
-  cachedMethods?: cloudfront.Method[];
+  originProtocolPolicy?: string;
 }
 
-export interface RouterBucketRouteProps extends RouterCommonRouteProps {
+export interface RouterBucketRouteProps {
   /**
    * Bucket or bucket regional domain name served by the route.
    */
-  bucket: Bucket;
+  bucket: Bucket | string;
   /**
-   * Optional CloudFront OAC to attach to the S3 origin.
+   * Optional rewrite applied before forwarding.
+   */
+  rewrite?: WebsiteRewrite;
+  /**
+   * Optional origin override configuration.
+   */
+  origin?: Record<string, any>;
+  /**
+   * Optional CloudFront OAC to attach to the S3 origin (used by SsrSite).
    */
   originAccessControlId?: Input<string>;
   /**
-   * Additional origin path prefix.
+   * Additional origin path prefix (used by SsrSite).
    */
   originPath?: Input<string>;
   /**
-   * Root object served for directory requests.
+   * Version token for invalidation (used by SsrSite).
    */
-  defaultRootObject?: string;
-  /**
-   * Whether the route should use SPA-style error rewrites.
-   * @default false
-   */
-  spa?: boolean;
+  version?: Input<string>;
 }
 
 export type RouterRoute = string | RouterUrlRouteProps | RouterBucketRouteProps;
@@ -223,9 +192,11 @@ export interface RouterProps {
    */
   domain?: WebsiteDomainProps;
   /**
-   * Route map keyed by CloudFront path pattern.
+   * Optional inline routes keyed by path pattern.
+   * Sites register lazily via the KV store; inline routes are for
+   * URL-based or bucket-based origins that aren't managed by StaticSite.
    */
-  routes: Record<string, RouterRoute>;
+  routes?: Record<string, RouterRoute>;
   /**
    * Optional edge behavior shared by the router's default behavior.
    */

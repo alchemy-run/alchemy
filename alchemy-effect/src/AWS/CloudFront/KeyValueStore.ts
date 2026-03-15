@@ -123,18 +123,16 @@ export const KeyValueStoreProvider = () =>
                   Effect.flatMap((existing) =>
                     existing
                       ? Effect.succeed(existing)
-                      : Effect.fail(
-                          new Error(
-                            `CloudFront KeyValueStore '${name}' already exists but could not be recovered`,
-                          ),
+                      : Effect.die(
+                          `CloudFront KeyValueStore '${name}' already exists but could not be recovered`,
                         ),
                   ),
                 ),
               ),
             );
           if (!created.KeyValueStore) {
-            return yield* Effect.fail(
-              new Error("createKeyValueStore returned no key value store"),
+            return yield* Effect.die(
+              "createKeyValueStore returned no key value store",
             );
           }
           yield* session.note(created.KeyValueStore.Id);
@@ -147,8 +145,8 @@ export const KeyValueStoreProvider = () =>
             IfMatch: output.etag!,
           });
           if (!updated.KeyValueStore) {
-            return yield* Effect.fail(
-              new Error("updateKeyValueStore returned no key value store"),
+            return yield* Effect.die(
+              "updateKeyValueStore returned no key value store",
             );
           }
           yield* session.note(output.keyValueStoreId);

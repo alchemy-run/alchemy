@@ -95,6 +95,8 @@ export const resources = () =>
     CloudFront.FunctionProvider(),
     CloudFront.InvalidationProvider(),
     CloudFront.KeyValueStoreProvider(),
+    CloudFront.KvEntriesProvider(),
+    CloudFront.KvRoutesUpdateProvider(),
     CloudFront.OriginAccessControlProvider(),
     CloudWatch.AlarmMuteRuleProvider(),
     CloudWatch.AlarmProvider(),

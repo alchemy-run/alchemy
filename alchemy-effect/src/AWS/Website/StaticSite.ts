@@ -1,4 +1,7 @@
 import * as Effect from "effect/Effect";
+import { createHash } from "node:crypto";
+import { readdirSync } from "node:fs";
+import path from "node:path";
 import { Build } from "../../Build/Build.ts";
 import * as Construct from "../../Construct.ts";
 import type { Input } from "../../Input.ts";
@@ -7,17 +10,21 @@ import { Certificate } from "../ACM/Certificate.ts";
 import { Distribution } from "../CloudFront/Distribution.ts";
 import { Function as CloudFrontFunction } from "../CloudFront/Function.ts";
 import { Invalidation } from "../CloudFront/Invalidation.ts";
+import { KeyValueStore } from "../CloudFront/KeyValueStore.ts";
+import { KvEntries } from "../CloudFront/KvEntries.ts";
+import { KvRoutesUpdate } from "../CloudFront/KvRoutesUpdate.ts";
 import { MANAGED_CACHING_OPTIMIZED_POLICY_ID } from "../CloudFront/ManagedPolicies.ts";
-import { OriginAccessControl } from "../CloudFront/OriginAccessControl.ts";
 import { Record as Route53Record } from "../Route53/Record.ts";
 import { Bucket } from "../S3/Bucket.ts";
 import type { AssetFileOption } from "./AssetDeployment.ts";
 import { AssetDeployment } from "./AssetDeployment.ts";
+import {
+  CF_BLOCK_CLOUDFRONT_URL_INJECTION,
+  CF_ROUTER_INJECTION,
+} from "./cfcode.ts";
 import type {
   StaticSiteAssetsProps,
   StaticSiteBuildProps,
-  StaticSiteRouteTarget,
-  StaticSiteRouterProps,
   WebsiteDomainProps,
   WebsiteEdgeProps,
   WebsiteInvalidationProps,
@@ -25,16 +32,23 @@ import type {
 
 type StaticSiteDomainInput = string | WebsiteDomainProps;
 
+export interface StaticSiteRouterAttachment {
+  instance: {
+    kvStoreArn: Input<string>;
+    kvNamespace: Input<string>;
+    distributionId: Input<string>;
+    url: Input<string>;
+  };
+  domain?: string;
+  path?: string;
+}
+
 export interface StaticSiteProps {
   /**
    * Path to the local site directory.
    * @default "."
    */
   path?: Input<string>;
-  /**
-   * Deprecated alias for `path` or a prebuilt directory to upload.
-   */
-  sourcePath?: Input<string>;
   /**
    * Optional build configuration executed before upload.
    */
@@ -54,9 +68,10 @@ export interface StaticSiteProps {
    */
   domain?: StaticSiteDomainInput;
   /**
-   * Path metadata used when composing the site with a router.
+   * Serve this site through an existing Router instead of creating a standalone
+   * CloudFront distribution.
    */
-  router?: StaticSiteRouterProps;
+  router?: StaticSiteRouterAttachment;
   /**
    * Additional CloudFront Function customizations.
    */
@@ -68,18 +83,9 @@ export interface StaticSiteProps {
   indexPage?: string;
   /**
    * Error page returned for 403/404 requests.
-   * When omitted and `spa` is true, this defaults to `indexPage`.
+   * When set, CloudFront customErrorResponses are created.
    */
   errorPage?: string;
-  /**
-   * Whether to configure SPA-style 403/404 rewrites to the index page.
-   * @default false
-   */
-  spa?: boolean;
-  /**
-   * Deprecated alias for `indexPage`.
-   */
-  defaultRootObject?: string;
   /**
    * Optional deterministic S3 bucket name for newly created buckets.
    */
@@ -90,113 +96,23 @@ export interface StaticSiteProps {
    */
   forceDestroy?: boolean;
   /**
-   * Deprecated alias for `assets.path`.
-   */
-  prefix?: string;
-  /**
-   * Deprecated alias for `assets.purge`.
-   */
-  purge?: boolean;
-  /**
-   * Deprecated alias for `assets.fileOptions`.
-   */
-  fileOptions?: AssetFileOption[];
-  /**
-   * Deprecated boolean invalidation flag.
-   */
-  invalidate?: boolean;
-  /**
    * CloudFront invalidation behavior.
    * @default { paths: "all", wait: false }
    */
   invalidation?: false | WebsiteInvalidationProps;
-  /**
-   * Whether to create a standalone CloudFront distribution for the site.
-   * Set this to `false` when composing the site manually with `routeTarget`.
-   * @default true
-   */
-  cdn?: boolean;
   /**
    * User-defined tags applied to created resources.
    */
   tags?: Record<string, string>;
 }
 
-const buildViewerRequestCode = ({
-  indexPage,
-  assetRoutes,
-  redirectPrimaryDomain,
-  redirectHosts,
-  userInjection,
-}: {
-  indexPage: string;
-  assetRoutes: string[];
-  redirectPrimaryDomain?: string;
-  redirectHosts: string[];
-  userInjection?: string;
-}) => `async function handler(event) {
-  const request = event.request;
-  const host = request.headers.host?.value ?? "";
-  const uri = request.uri || "/";
-  const assetRoutes = ${JSON.stringify(assetRoutes)};
-  const redirectHosts = ${JSON.stringify(redirectHosts)};
-
-${userInjection ? `  ${userInjection}\n` : ""}  if (${redirectPrimaryDomain ? "redirectHosts.includes(host)" : "false"}) {
-    const toQueryString = (query) => {
-      const parts = [];
-      for (const [key, value] of Object.entries(query || {})) {
-        if (value && typeof value === "object" && "multiValue" in value) {
-          for (const item of value.multiValue || []) {
-            parts.push(\`\${encodeURIComponent(key)}=\${encodeURIComponent(item.value ?? "")}\`);
-          }
-          continue;
-        }
-        parts.push(\`\${encodeURIComponent(key)}=\${encodeURIComponent(value?.value ?? "")}\`);
-      }
-      return parts.length > 0 ? \`?\${parts.join("&")}\` : "";
-    };
-
-    return {
-      statusCode: 308,
-      statusDescription: "Permanent Redirect",
-      headers: {
-        location: {
-          value: "https://${redirectPrimaryDomain ?? ""}" + uri + toQueryString(request.querystring),
-        },
-      },
-    };
-  }
-
-  const isAssetRoute = assetRoutes.some((route) => uri === route || uri.startsWith(route + "/"));
-  if (!isAssetRoute) {
-    if (uri.endsWith("/")) {
-      request.uri = uri + ${JSON.stringify(indexPage.replace(/^\/+/, ""))};
-    } else {
-      const lastSegment = uri.split("/").pop() ?? "";
-      if (!lastSegment.includes(".")) {
-        request.uri = uri + ".html";
-      }
-    }
-  }
-
-  return request;
-}
-`;
-
-const buildViewerResponseCode = (
-  userInjection?: string,
-) => `async function handler(event) {
-  const response = event.response;
-${userInjection ? `  ${userInjection}\n` : ""}  return response;
-}
-`;
-
 /**
- * Deploy a static website to S3 and CloudFront.
+ * Deploy a static website to S3 and CloudFront using KV-based edge routing.
  *
- * `StaticSite` uploads site files to a private S3 bucket, serves them through
- * CloudFront, can optionally build the site first, and returns a `routeTarget`
- * for manual composition with `AWS.Website.Router`.
+ * `StaticSite` uploads site files to a private S3 bucket, creates a CloudFront
+ * KeyValueStore with a file manifest for edge routing, and optionally builds
+ * the site first. Supports standalone distribution or composition with
+ * `AWS.Website.Router`.
  *
  * @section Basic Sites
  * @example Simple Static Site
@@ -222,16 +138,13 @@ ${userInjection ? `  ${userInjection}\n` : ""}  return response;
  * ```
  *
  * @section Router Composition
- * @example Return A Route Target
+ * @example Serve Through A Router
  * ```typescript
  * const site = yield* StaticSite("Docs", {
  *   path: "./docs",
- *   cdn: false,
- * });
- *
- * yield* Router("WebRouter", {
- *   routes: {
- *     "/docs*": site.routeTarget,
+ *   router: {
+ *     instance: router,
+ *     path: "/docs",
  *   },
  * });
  * ```
@@ -241,10 +154,9 @@ export const StaticSite = Construct.fn(function* (
   props: StaticSiteProps,
 ) {
   const domain = normalizeDomain(props.domain);
-  const path = props.path ?? props.sourcePath ?? ".";
-  const indexPage = props.indexPage ?? props.defaultRootObject ?? "index.html";
-  const errorPage = props.errorPage ?? (props.spa ? indexPage : undefined);
-  const assetPrefix = normalizePrefix(props.assets?.path ?? props.prefix);
+  const sitePath = (props.path ?? ".") as string;
+  const indexPage = props.indexPage ?? "index.html";
+  const assetPrefix = normalizePrefix(props.assets?.path);
   const assetRoutes = [...(props.assets?.routes ?? [])]
     .map((value) => value.trim())
     .filter(Boolean)
@@ -252,22 +164,30 @@ export const StaticSite = Construct.fn(function* (
   const invalidationProps =
     props.invalidation !== undefined
       ? props.invalidation
-      : props.invalidate === false
-        ? false
-        : {
-            paths: "all" as const,
-            wait: false,
-          };
+      : { paths: "all" as const, wait: false };
+
+  if (props.router && props.domain) {
+    return yield* Effect.fail(
+      new Error(
+        `Cannot provide both "domain" and "router". Use the "domain" prop on the Router component.`,
+      ),
+    );
+  }
+  if (props.router && props.edge) {
+    return yield* Effect.fail(
+      new Error(
+        `Cannot provide both "edge" and "router". Use the "edge" prop on the Router component.`,
+      ),
+    );
+  }
 
   const build = props.build
     ? yield* Build("Build", {
         command: props.build.command,
-        cwd: path as any,
-        include: (props.build as StaticSiteBuildProps & { include?: string[] })
-          .include ?? ["**/*"],
+        cwd: sitePath as any,
+        include: props.build.include ?? ["**/*"],
         exclude: [
-          ...((props.build as StaticSiteBuildProps & { exclude?: string[] })
-            .exclude ?? []),
+          ...(props.build.exclude ?? []),
           `**/${props.build.output}/**`,
           "**/node_modules/**",
           "**/.git/**",
@@ -277,7 +197,7 @@ export const StaticSite = Construct.fn(function* (
       })
     : undefined;
 
-  const uploadSourcePath = build?.path ?? path;
+  const uploadSourcePath = (build?.path ?? sitePath) as string;
 
   const providedBucket = props.assets?.bucket;
   const bucket =
@@ -288,254 +208,380 @@ export const StaticSite = Construct.fn(function* (
       tags: props.tags,
     }));
 
+  const routerAttachment = props.router;
+  const routerPathPrefix = routerAttachment?.path
+    ? "/" + routerAttachment.path.replace(/^\//, "").replace(/\/$/, "")
+    : undefined;
+
   const files = yield* AssetDeployment("Files", {
     bucket: bucket,
     sourcePath: uploadSourcePath as any,
-    prefix: assetPrefix,
-    purge: props.assets?.purge ?? props.purge ?? true,
-    fileOptions: props.assets?.fileOptions ?? props.fileOptions,
+    prefix: normalizeUploadPrefix(assetPrefix, routerPathPrefix),
+    purge: props.assets?.purge ?? true,
+    fileOptions: props.assets?.fileOptions,
     textEncoding: props.assets?.textEncoding,
   });
 
-  const oac = yield* OriginAccessControl("OriginAccessControl", {
-    originType: "s3",
-    description: `${id} static site origin access control`,
-  });
+  const kvNamespace = createHash("md5")
+    .update(`${id}`)
+    .digest("hex")
+    .substring(0, 4);
 
-  const routeTarget: StaticSiteRouteTarget = {
-    bucket: bucket as any,
-    originAccessControlId: oac.originAccessControlId,
-    originPath: assetPrefix ? `/${assetPrefix}` : undefined,
-    defaultRootObject: indexPage,
-    spa: props.spa,
-    version: files.version,
-  };
+  const kvEntries = buildKvEntries(
+    uploadSourcePath,
+    bucket,
+    assetPrefix,
+    assetRoutes,
+    indexPage,
+    props.errorPage,
+    routerPathPrefix,
+  );
 
-  if (props.cdn === false) {
-    return {
-      bucket: bucket as any,
-      build,
-      files,
-      originAccessControl: oac,
-      certificate: undefined,
-      distribution: undefined,
-      records: [],
-      invalidation: undefined,
-      routeTarget,
-      url: undefined,
-    };
-  }
+  let distributionId: Input<string>;
+  let kvStoreArn: Input<string>;
+  let distribution: Distribution | undefined;
+  let prodUrl: Input<string> | undefined;
 
-  if (domain && !domain.cert && !domain.hostedZoneId && domain.dns === false) {
-    return yield* Effect.fail(
-      new Error(
-        "StaticSite domain configuration with `dns: false` requires `cert`.",
-      ),
-    );
-  }
+  if (routerAttachment) {
+    kvStoreArn = routerAttachment.instance.kvStoreArn;
+    distributionId = routerAttachment.instance.distributionId;
+    const hostPattern = routerAttachment.domain
+      ? routerAttachment.domain
+          .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
+          .replace(/\*/g, ".*")
+      : undefined;
+    yield* KvRoutesUpdate("RoutesUpdate", {
+      store: kvStoreArn as any,
+      namespace: routerAttachment.instance.kvNamespace as any,
+      key: "routes",
+      entry: [
+        "site",
+        kvNamespace,
+        hostPattern ?? "",
+        routerPathPrefix ?? "/",
+      ].join(","),
+    });
+    prodUrl = routerAttachment.domain
+      ? `https://${routerAttachment.domain}${routerPathPrefix ?? ""}`
+      : (Output.interpolate`${routerAttachment.instance.url}${routerPathPrefix ?? ""}` as any);
+  } else {
+    if (
+      domain &&
+      !domain.cert &&
+      !domain.hostedZoneId &&
+      domain.dns === false
+    ) {
+      return yield* Effect.fail(
+        new Error(
+          "StaticSite domain configuration with `dns: false` requires `cert`.",
+        ),
+      );
+    }
 
-  const certificate =
-    !domain || domain.cert
-      ? domain?.cert
-        ? { certificateArn: domain.cert }
-        : undefined
-      : yield* Certificate("Certificate", {
-          domainName: domain.name,
-          subjectAlternativeNames: [
-            ...(domain.aliases ?? []),
-            ...(domain.redirects ?? []),
-          ],
-          hostedZoneId: domain.hostedZoneId,
-          tags: props.tags,
-        });
+    const certificate =
+      !domain || domain.cert
+        ? domain?.cert
+          ? { certificateArn: domain.cert }
+          : undefined
+        : yield* Certificate("Certificate", {
+            domainName: domain.name,
+            subjectAlternativeNames: [
+              ...(domain.aliases ?? []),
+              ...(domain.redirects ?? []),
+            ],
+            hostedZoneId: domain.hostedZoneId,
+            tags: props.tags,
+          });
 
-  const viewerRequest = yield* CloudFrontFunction("ViewerRequest", {
-    comment: `${id} viewer request`,
-    code: buildViewerRequestCode({
-      indexPage,
-      assetRoutes,
-      redirectPrimaryDomain: domain?.name,
-      redirectHosts: domain?.redirects ?? [],
-      userInjection: props.edge?.viewerRequest?.injection,
-    }),
-    keyValueStoreArns: props.edge?.viewerRequest?.keyValueStoreArn
-      ? [props.edge.viewerRequest.keyValueStoreArn as any]
-      : undefined,
-  });
+    const kvStore = yield* KeyValueStore("KvStore", {});
+    kvStoreArn = kvStore.keyValueStoreArn;
 
-  const viewerResponse = props.edge?.viewerResponse
-    ? yield* CloudFrontFunction("ViewerResponse", {
-        comment: `${id} viewer response`,
-        code: buildViewerResponseCode(props.edge.viewerResponse.injection),
-        keyValueStoreArns: props.edge.viewerResponse.keyValueStoreArn
-          ? [props.edge.viewerResponse.keyValueStoreArn as any]
-          : undefined,
-      })
-    : undefined;
+    const viewerRequest = yield* CloudFrontFunction("ViewerRequest", {
+      comment: `${id} viewer request`,
+      code: buildRequestFunctionCode({
+        kvNamespace,
+        userInjection: props.edge?.viewerRequest?.injection,
+        blockCloudfrontUrl: !!domain,
+      }),
+      keyValueStoreArns: [kvStore.keyValueStoreArn],
+    });
 
-  const functionAssociations = [
-    {
-      eventType: "viewer-request" as const,
-      functionArn: viewerRequest.functionArn as any,
-    },
-    ...(viewerResponse
-      ? [
-          {
-            eventType: "viewer-response" as const,
-            functionArn: viewerResponse.functionArn as any,
-          },
-        ]
-      : []),
-  ];
+    const viewerResponse = props.edge?.viewerResponse
+      ? yield* CloudFrontFunction("ViewerResponse", {
+          comment: `${id} viewer response`,
+          code: buildResponseFunctionCode(props.edge.viewerResponse.injection),
+          keyValueStoreArns: props.edge.viewerResponse.keyValueStoreArn
+            ? [props.edge.viewerResponse.keyValueStoreArn as any]
+            : undefined,
+        })
+      : undefined;
 
-  const distribution = yield* Distribution("Distribution", {
-    aliases: domain
-      ? [domain.name, ...(domain.aliases ?? []), ...(domain.redirects ?? [])]
-      : undefined,
-    defaultRootObject: indexPage,
-    origins: [
+    const functionAssociations = [
       {
-        id: "site",
-        domainName: bucket.bucketRegionalDomainName,
-        originPath: assetPrefix ? `/${assetPrefix}` : undefined,
-        s3Origin: true,
-        originAccessControlId: oac.originAccessControlId,
+        eventType: "viewer-request" as const,
+        functionArn: viewerRequest.functionArn as any,
       },
-    ],
-    defaultCacheBehavior: {
-      targetOriginId: "site",
-      viewerProtocolPolicy: "redirect-to-https",
-      compress: true,
-      allowedMethods: ["GET", "HEAD", "OPTIONS"],
-      cachedMethods: ["GET", "HEAD"],
-      cachePolicyId: MANAGED_CACHING_OPTIMIZED_POLICY_ID,
-      functionAssociations,
-    },
-    orderedCacheBehaviors: assetRoutes.map((route) => ({
-      pathPattern: normalizeRoutePattern(route),
-      targetOriginId: "site",
-      viewerProtocolPolicy: "redirect-to-https",
-      compress: true,
-      allowedMethods: ["GET", "HEAD", "OPTIONS"],
-      cachedMethods: ["GET", "HEAD"],
-      cachePolicyId: MANAGED_CACHING_OPTIMIZED_POLICY_ID,
-      functionAssociations,
-    })),
-    customErrorResponses: errorPage
+      ...(viewerResponse
+        ? [
+            {
+              eventType: "viewer-response" as const,
+              functionArn: viewerResponse.functionArn as any,
+            },
+          ]
+        : []),
+    ];
+
+    const errorPage = "/" + (props.errorPage ?? indexPage).replace(/^\//, "");
+    const customErrorResponses = props.errorPage
       ? [
           {
             ErrorCode: 403,
-            ResponseCode: props.spa ? "200" : "404",
-            ResponsePagePath: `/${errorPage.replace(/^\/+/, "")}`,
+            ResponseCode: "404",
+            ResponsePagePath: errorPage,
             ErrorCachingMinTTL: 0,
           },
           {
             ErrorCode: 404,
-            ResponseCode: props.spa ? "200" : "404",
-            ResponsePagePath: `/${errorPage.replace(/^\/+/, "")}`,
+            ResponseCode: "404",
+            ResponsePagePath: errorPage,
             ErrorCachingMinTTL: 0,
           },
         ]
-      : undefined,
-    viewerCertificate: certificate
-      ? {
-          acmCertificateArn: (certificate as any).certificateArn,
-          sslSupportMethod: "sni-only",
-          minimumProtocolVersion: "TLSv1.2_2021",
-        }
-      : undefined,
-    tags: props.tags,
-  });
+      : undefined;
 
-  yield* bucket.bind`Allow(cloudfront.amazonaws.com, AWS.S3.GetObject(${bucket}), {
-  Source: ${distribution},
-})`({
-    policyStatements: [
-      {
-        Effect: "Allow",
-        Principal: {
-          Service: "cloudfront.amazonaws.com",
-        },
-        Action: ["s3:GetObject"],
-        Resource: [Output.interpolate`${bucket.bucketArn}/*` as any],
-        Condition: {
-          StringEquals: {
-            "AWS:SourceArn": distribution.distributionArn as any,
+    distribution = yield* Distribution("Distribution", {
+      aliases: domain
+        ? [domain.name, ...(domain.aliases ?? []), ...(domain.redirects ?? [])]
+        : undefined,
+      origins: [
+        {
+          id: "default",
+          domainName: "placeholder.alchemy.run",
+          customOriginConfig: {
+            httpPort: 80,
+            httpsPort: 443,
+            originProtocolPolicy: "https-only",
+            originReadTimeout: 20,
+            originSslProtocols: ["TLSv1.2"],
           },
         },
+      ],
+      defaultCacheBehavior: {
+        targetOriginId: "default",
+        viewerProtocolPolicy: "redirect-to-https",
+        allowedMethods: [
+          "DELETE",
+          "GET",
+          "HEAD",
+          "OPTIONS",
+          "PATCH",
+          "POST",
+          "PUT",
+        ],
+        cachedMethods: ["GET", "HEAD"],
+        compress: true,
+        cachePolicyId: MANAGED_CACHING_OPTIMIZED_POLICY_ID,
+        functionAssociations,
       },
-    ],
-  });
+      customErrorResponses,
+      viewerCertificate: certificate
+        ? {
+            acmCertificateArn: (certificate as any).certificateArn,
+            sslSupportMethod: "sni-only",
+            minimumProtocolVersion: "TLSv1.2_2021",
+          }
+        : undefined,
+      tags: props.tags,
+    });
 
-  const records =
-    domain?.hostedZoneId && domain.dns !== false
-      ? yield* Effect.forEach(
-          [domain.name, ...(domain.aliases ?? []), ...(domain.redirects ?? [])],
-          (name, index) =>
-            Route53Record(`AliasRecord${index + 1}`, {
-              hostedZoneId: domain.hostedZoneId!,
-              name,
-              type: "A",
-              aliasTarget: {
-                hostedZoneId: distribution.hostedZoneId,
-                dnsName: distribution.domainName,
-              },
-            }),
-          { concurrency: "unbounded" },
-        )
-      : [];
+    const dist = distribution;
+    distributionId = dist.distributionId;
+
+    const records =
+      domain?.hostedZoneId && domain.dns !== false
+        ? yield* Effect.forEach(
+            [
+              domain.name,
+              ...(domain.aliases ?? []),
+              ...(domain.redirects ?? []),
+            ],
+            (name, index) =>
+              Route53Record(`AliasRecord${index + 1}`, {
+                hostedZoneId: domain.hostedZoneId!,
+                name,
+                type: "A",
+                aliasTarget: {
+                  hostedZoneId: dist.hostedZoneId,
+                  dnsName: dist.domainName,
+                },
+              }),
+            { concurrency: "unbounded" },
+          )
+        : [];
+
+    prodUrl = domain
+      ? Output.interpolate`https://${domain.name}`
+      : Output.interpolate`https://${dist.domainName}`;
+  }
+
+  const kvUpdated = yield* KvEntries("KvEntries", {
+    store: kvStoreArn as any,
+    namespace: kvNamespace,
+    entries: kvEntries,
+    purge: props.assets?.purge ?? true,
+  });
 
   const invalidation =
     invalidationProps === false
       ? undefined
       : yield* Invalidation("Invalidation", {
-          distributionId: distribution.distributionId,
+          distributionId: distributionId as any,
           version: files.version,
           wait: invalidationProps?.wait,
-          paths: toInvalidationPaths(indexPage, invalidationProps?.paths),
+          paths:
+            invalidationProps?.paths === "all" || !invalidationProps?.paths
+              ? ["/*"]
+              : invalidationProps.paths === "versioned"
+                ? [`/${indexPage.replace(/^\/+/, "")}`]
+                : invalidationProps.paths,
         });
 
   return {
     bucket: bucket as any,
     build,
     files,
-    originAccessControl: oac,
-    certificate,
     distribution,
-    records,
     invalidation,
-    routeTarget,
-    url: domain
-      ? Output.interpolate`https://${domain.name}`
-      : Output.interpolate`https://${distribution.domainName}`,
+    kvNamespace,
+    url: prodUrl,
   };
 });
+
+const buildKvEntries = (
+  outputPath: string,
+  bucket: any,
+  assetPrefix: string,
+  assetRoutes: string[],
+  indexPage: string,
+  errorPage: string | undefined,
+  routerPathPrefix: string | undefined,
+): Record<string, string> => {
+  const entries: Record<string, string> = {};
+  const dirs: string[] = [];
+  const expandDirs = [".well-known"];
+
+  const processDir = (childPath = "", level = 0) => {
+    let currentPath: string;
+    try {
+      currentPath = path.join(outputPath, childPath);
+    } catch {
+      return;
+    }
+    let items: { name: string; isFile(): boolean; isDirectory(): boolean }[];
+    try {
+      items = readdirSync(currentPath, { withFileTypes: true }) as any;
+    } catch {
+      return;
+    }
+    for (const item of items) {
+      const name = String(item.name);
+      if (item.isFile()) {
+        const filePath = path.posix.join("/", childPath, name);
+        entries[filePath] = "s3";
+      } else if (item.isDirectory()) {
+        if (level === 0 && expandDirs.includes(name)) {
+          processDir(path.join(childPath, name), level + 1);
+        } else {
+          dirs.push(path.posix.join("/", childPath, name));
+        }
+      }
+    }
+  };
+  processDir();
+
+  const errorPagePath = "/" + (errorPage ?? indexPage).replace(/^\//, "");
+  const metadata: KvSiteMetadata = {
+    base:
+      routerPathPrefix && routerPathPrefix !== "/"
+        ? routerPathPrefix
+        : undefined,
+    custom404: errorPage ? undefined : errorPagePath,
+    errorResponseCode: errorPage ? 404 : undefined,
+    s3: {
+      domain:
+        typeof bucket === "object" && "bucketRegionalDomainName" in bucket
+          ? bucket.bucketRegionalDomainName
+          : bucket,
+      dir: assetPrefix ? "/" + assetPrefix : "",
+      routes: [...assetRoutes, ...dirs],
+    },
+  };
+
+  entries["metadata"] = JSON.stringify(metadata);
+
+  return entries;
+};
+
+interface KvSiteMetadata {
+  base?: string;
+  custom404?: string;
+  errorResponseCode?: number;
+  s3: {
+    domain: any;
+    dir: string;
+    routes: string[];
+  };
+}
+
+const buildRequestFunctionCode = ({
+  kvNamespace,
+  userInjection,
+  blockCloudfrontUrl,
+}: {
+  kvNamespace: string;
+  userInjection?: string;
+  blockCloudfrontUrl: boolean;
+}) => `import cf from "cloudfront";
+async function handler(event) {
+  ${userInjection ?? ""}
+  ${blockCloudfrontUrl ? CF_BLOCK_CLOUDFRONT_URL_INJECTION : ""}
+  ${CF_ROUTER_INJECTION}
+
+  const kvNamespace = "${kvNamespace}";
+
+  let metadata;
+  try {
+    const v = await cf.kvs().get(kvNamespace + ":metadata");
+    metadata = JSON.parse(v);
+  } catch (e) {}
+
+  const response = await routeSite(kvNamespace, metadata);
+  return response || event.request;
+}`;
+
+const buildResponseFunctionCode = (
+  userInjection?: string,
+) => `import cf from "cloudfront";
+async function handler(event) {
+  ${userInjection ?? ""}
+  return event.response;
+}`;
 
 const normalizePrefix = (prefix: string | undefined) =>
   prefix ? prefix.replace(/^\/+|\/+$/g, "") : "";
 
-const normalizeRoutePath = (value: string) => {
-  const normalized = `/${value.replace(/^\/+|\/+$/g, "")}`;
-  return normalized === "/" ? normalized : normalized;
-};
-
-const normalizeRoutePattern = (value: string) => {
-  const normalized = normalizeRoutePath(value);
-  return normalized === "/" ? "/*" : `${normalized}/*`;
-};
-
-const toInvalidationPaths = (
-  indexPage: string,
-  paths?: "all" | "versioned" | string[],
+const normalizeUploadPrefix = (
+  assetPrefix: string,
+  routerPathPrefix: string | undefined,
 ) => {
-  if (paths === "versioned") {
-    return [`/${indexPage.replace(/^\/+/, "")}`];
-  }
-  if (!paths || paths === "all") {
-    return ["/*"];
-  }
-  return paths;
+  const parts = [assetPrefix, routerPathPrefix?.replace(/^\//, "")].filter(
+    Boolean,
+  );
+  return parts.join("/") || "";
 };
+
+const normalizeRoutePath = (value: string) =>
+  `/${value.replace(/^\/+|\/+$/g, "")}`;
 
 const normalizeDomain = (
   domain: StaticSiteProps["domain"],
