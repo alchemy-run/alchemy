@@ -24,7 +24,7 @@ export const StreamFixture = Effect.gen(function* () {
 
         yield* AWS.DynamoDB.stream(table, {
           streamViewType: "NEW_AND_OLD_IMAGES",
-          startingPosition: "LATEST",
+          startingPosition: "TRIM_HORIZON",
           batchSize: 10,
         }).process((stream) =>
           stream.pipe(
