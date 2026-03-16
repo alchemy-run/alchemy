@@ -133,7 +133,7 @@ export const Router = Construct.fn(function* (id: string, props: RouterProps) {
       : []),
   ];
 
-  const inlineRouteEntries: Record<string, string> = {};
+  const inlineRouteEntries: Record<string, Input<string>> = {};
 
   if (props.routes) {
     let routeIndex = 0;
@@ -148,11 +148,15 @@ export const Router = Construct.fn(function* (id: string, props: RouterProps) {
         const url = typeof route === "string" ? route : (route as any).url;
         const host =
           typeof url === "string" ? new URL(url).host : url;
-        inlineRouteEntries[`${routeNs}:metadata`] = JSON.stringify({
+        inlineRouteEntries[`${routeNs}:metadata`] = stringifyResolvedString(
           host,
-          origin: (route as any).origin,
-          rewrite: (route as any).rewrite,
-        });
+          (resolvedHost) =>
+            JSON.stringify({
+              host: resolvedHost,
+              origin: (route as any).origin,
+              rewrite: (route as any).rewrite,
+            }),
+        );
         yield* KvRoutesUpdate(`Route${routeIndex}`, {
           store: kvStore.keyValueStoreArn as any,
           namespace: kvNamespace,
@@ -164,13 +168,16 @@ export const Router = Construct.fn(function* (id: string, props: RouterProps) {
         const bucketDomain =
           typeof bucketRoute.bucket === "string"
             ? bucketRoute.bucket
-            : bucketRoute.bucket.bucketRegionalDomainName ??
-              bucketRoute.bucket;
-        inlineRouteEntries[`${routeNs}:metadata`] = JSON.stringify({
-          domain: bucketDomain,
-          origin: bucketRoute.origin,
-          rewrite: bucketRoute.rewrite,
-        });
+            : bucketRoute.bucket.bucketRegionalDomainName;
+        inlineRouteEntries[`${routeNs}:metadata`] = stringifyResolvedString(
+          bucketDomain,
+          (resolvedDomain) =>
+            JSON.stringify({
+              domain: resolvedDomain,
+              origin: bucketRoute.origin,
+              rewrite: bucketRoute.rewrite,
+            }),
+        );
         yield* KvRoutesUpdate(`Route${routeIndex}`, {
           store: kvStore.keyValueStoreArn as any,
           namespace: kvNamespace,
@@ -378,3 +385,11 @@ const normalizePattern = (pattern: string) => {
   if (pattern === "/" || pattern === "/*") return "/";
   return pattern.replace(/\/?\*$/, "");
 };
+
+const stringifyResolvedString = (
+  value: Input<string>,
+  build: (resolved: string) => string,
+): Input<string> =>
+  typeof value === "string"
+    ? build(value)
+    : value.pipe(Output.map((resolved) => build(resolved)));

@@ -1,7 +1,14 @@
 import * as kvs from "@distilled.cloud/aws/cloudfront-keyvaluestore";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
+import type { Input } from "../../Input.ts";
 import { Resource } from "../../Resource.ts";
+import {
+  extractValue,
+  getKvsEtag,
+  isKvsPreconditionFailed,
+  retryForKvsReadiness,
+  withKvsRegionFn,
+} from "./common.ts";
 
 export interface KvEntriesProps {
   /** ARN of the CloudFront KeyValueStore. */
@@ -9,7 +16,7 @@ export interface KvEntriesProps {
   /** Namespace prefix for all keys. Keys are stored as `{namespace}:{key}`. */
   namespace: string;
   /** Map of key → value entries to manage. */
-  entries: Record<string, string>;
+  entries: Record<string, Input<string>>;
   /** Whether to delete keys under this namespace that are not in `entries`. @default false */
   purge?: boolean;
 }
@@ -61,15 +68,18 @@ export interface KvEntries
 export const KvEntries = Resource<KvEntries>("AWS.CloudFront.KvEntries");
 
 const BATCH_SIZE = 50;
+type ResolvedEntries = {
+  [key: string]: Input.Resolve<KvEntriesProps["entries"][string]>;
+};
+
+const resolveEntries = (entries: KvEntriesProps["entries"]): ResolvedEntries =>
+  Object.fromEntries(
+    Object.entries(entries).map(([key, value]) => [key, value]),
+  ) as ResolvedEntries;
 
 export const KvEntriesProvider = () =>
   KvEntries.provider.effect(
     Effect.gen(function* () {
-      const getEtag = Effect.fn(function* (store: string) {
-        const resp = yield* kvs.describeKeyValueStore({ KvsARN: store });
-        return resp.ETag;
-      });
-
       const collectAllKeys = Effect.fn(function* (store: string) {
         const keys: { Key: string; Value: string }[] = [];
         let nextToken: string | undefined;
@@ -79,21 +89,15 @@ export const KvEntriesProvider = () =>
             NextToken: nextToken,
           });
           for (const item of resp.Items ?? []) {
-            const v = item.Value;
             keys.push({
               Key: item.Key,
-              Value: typeof v === "string" ? v : Redacted.value(v),
+              Value: extractValue(item.Value),
             });
           }
           nextToken = resp.NextToken;
         } while (nextToken);
         return keys;
       });
-
-      const isPreconditionFailed = (err: kvs.ValidationException) =>
-        "Message" in err &&
-        typeof err.Message === "string" &&
-        err.Message.includes("Pre-Condition failed");
 
       const sendBatch = Effect.fn(function* (
         store: string,
@@ -117,7 +121,7 @@ export const KvEntriesProvider = () =>
       ) {
         let remainingPuts = puts;
         let remainingDeletes = deletes;
-        let currentEtag = etag ?? (yield* getEtag(store));
+        let currentEtag = etag ?? (yield* getKvsEtag(store));
 
         while (remainingPuts.length > 0 || remainingDeletes.length > 0) {
           const batchPuts = remainingPuts.slice(0, BATCH_SIZE);
@@ -133,11 +137,11 @@ export const KvEntriesProvider = () =>
             batchDeletes,
           ).pipe(
             Effect.catchTag("ValidationException", (err) =>
-              isPreconditionFailed(err)
+              isKvsPreconditionFailed(err)
                 ? Effect.sleep(
                     `${Math.floor(Math.random() * 400) + 100} millis`,
                   ).pipe(
-                    Effect.andThen(getEtag(store)),
+                    Effect.andThen(getKvsEtag(store)),
                     Effect.andThen((freshEtag) =>
                       sendBatch(store, freshEtag, batchPuts, batchDeletes),
                     ),
@@ -155,8 +159,8 @@ export const KvEntriesProvider = () =>
       const upload = Effect.fn(function* (
         store: string,
         namespace: string,
-        entries: Record<string, string>,
-        oldEntries: Record<string, string> | undefined,
+        entries: ResolvedEntries,
+        oldEntries: ResolvedEntries | undefined,
       ) {
         const puts: kvs.PutKeyRequestListItem[] = [];
         for (const [key, value] of Object.entries(entries)) {
@@ -172,7 +176,7 @@ export const KvEntriesProvider = () =>
       const purge = Effect.fn(function* (
         store: string,
         namespace: string,
-        keepEntries: Record<string, string> | undefined,
+        keepEntries: ResolvedEntries | undefined,
       ) {
         const allKeys = yield* collectAllKeys(store);
         const prefix = `${namespace}:`;
@@ -189,34 +193,68 @@ export const KvEntriesProvider = () =>
       });
 
       return {
-        read: Effect.fn(function* ({ output }) {
-          return output;
-        }),
-        create: Effect.fn(function* ({ news }) {
-          yield* upload(news.store, news.namespace, news.entries, undefined);
-          return {
-            store: news.store,
-            namespace: news.namespace,
-            entries: news.entries,
-          };
-        }),
-        update: Effect.fn(function* ({ news, olds, output }) {
-          const oldEntries =
-            news.store !== olds.store ? undefined : olds.entries;
-          yield* upload(news.store, news.namespace, news.entries, oldEntries);
-          if (news.purge) {
-            yield* purge(news.store, news.namespace, news.entries);
-          }
-          return {
-            store: news.store,
-            namespace: news.namespace,
-            entries: news.entries,
-          };
-        }),
-        delete: Effect.fn(function* ({ output }) {
-          if (!output.store) return;
-          yield* purge(output.store, output.namespace, undefined);
-        }),
+        read: withKvsRegionFn(
+          Effect.fn(function* ({ output }) {
+            return output;
+          }),
+        ),
+        create: withKvsRegionFn(
+          Effect.fn(function* ({ news }) {
+            return yield* retryForKvsReadiness(
+              Effect.gen(function* () {
+                const entries = resolveEntries(news.entries);
+                yield* upload(
+                  news.store,
+                  news.namespace,
+                  entries,
+                  undefined,
+                );
+                return {
+                  store: news.store,
+                  namespace: news.namespace,
+                  entries,
+                };
+              }),
+            );
+          }),
+        ),
+        update: withKvsRegionFn(
+          Effect.fn(function* ({ news, olds, output }) {
+            return yield* retryForKvsReadiness(
+              Effect.gen(function* () {
+                const entries = resolveEntries(news.entries);
+                const oldEntries =
+                  news.store !== olds.store
+                    ? undefined
+                    : resolveEntries(olds.entries);
+                yield* upload(
+                  news.store,
+                  news.namespace,
+                  entries,
+                  oldEntries,
+                );
+                if (news.purge) {
+                  yield* purge(news.store, news.namespace, entries);
+                }
+                return {
+                  store: news.store,
+                  namespace: news.namespace,
+                  entries,
+                };
+              }),
+            );
+          }),
+        ),
+        delete: withKvsRegionFn(
+          Effect.fn(function* ({ output }) {
+            if (!output.store) return;
+            yield* retryForKvsReadiness(
+              purge(output.store, output.namespace, undefined),
+            ).pipe(
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            );
+          }),
+        ),
       };
     }),
   );

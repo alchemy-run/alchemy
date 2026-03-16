@@ -1,7 +1,13 @@
 import * as kvs from "@distilled.cloud/aws/cloudfront-keyvaluestore";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
 import { Resource } from "../../Resource.ts";
+import {
+  extractValue,
+  getKvsEtag,
+  isKvsPreconditionFailed,
+  retryForKvsReadiness,
+  withKvsRegionFn,
+} from "./common.ts";
 
 export interface KvRoutesUpdateProps {
   /** ARN of the CloudFront KeyValueStore. */
@@ -49,17 +55,9 @@ export const KvRoutesUpdate = Resource<KvRoutesUpdate>(
 
 const CHUNK_SIZE = 1000;
 
-const extractValue = (v: string | Redacted.Redacted<string>): string =>
-  typeof v === "string" ? v : Redacted.value(v);
-
 export const KvRoutesUpdateProvider = () =>
   KvRoutesUpdate.provider.effect(
     Effect.gen(function* () {
-      const getEtag = Effect.fn(function* (store: string) {
-        const res = yield* kvs.describeKeyValueStore({ KvsARN: store });
-        return res.ETag;
-      });
-
       const getRoutes = Effect.fn(function* (store: string, fullKey: string) {
         const res = yield* kvs
           .getKey({ KvsARN: store, Key: fullKey })
@@ -167,7 +165,7 @@ export const KvRoutesUpdateProvider = () =>
       ): Effect.Effect<void, any, any> =>
         Effect.gen(function* () {
           const fullKey = `${props.namespace}:${props.key}`;
-          const etag = yield* getEtag(props.store);
+          const etag = yield* getKvsEtag(props.store);
           const { routes, chunkNum } = yield* getRoutes(props.store, fullKey);
           if (!routes.includes(props.entry)) {
             routes.push(props.entry);
@@ -177,7 +175,7 @@ export const KvRoutesUpdateProvider = () =>
           Effect.catchTag("ValidationException", (err) =>
             "Message" in err &&
             typeof err.Message === "string" &&
-            err.Message.includes("Pre-Condition failed")
+            isKvsPreconditionFailed(err)
               ? Effect.sleep(
                   `${Math.floor(Math.random() * 400) + 100} millis`,
                 ).pipe(Effect.andThen(createOp(props)))
@@ -190,7 +188,7 @@ export const KvRoutesUpdateProvider = () =>
       ): Effect.Effect<void, any, any> =>
         Effect.gen(function* () {
           const fullKey = `${props.namespace}:${props.key}`;
-          const etag = yield* getEtag(props.store);
+          const etag = yield* getKvsEtag(props.store);
           const { routes, chunkNum } = yield* getRoutes(props.store, fullKey);
           const filtered = routes.filter((r) => r !== props.entry);
           if (filtered.length === 0) {
@@ -202,7 +200,7 @@ export const KvRoutesUpdateProvider = () =>
           Effect.catchTag("ValidationException", (err) =>
             "Message" in err &&
             typeof err.Message === "string" &&
-            err.Message.includes("Pre-Condition failed")
+            isKvsPreconditionFailed(err)
               ? Effect.sleep(
                   `${Math.floor(Math.random() * 400) + 100} millis`,
                 ).pipe(Effect.andThen(deleteOp(props)))
@@ -211,74 +209,94 @@ export const KvRoutesUpdateProvider = () =>
         );
 
       return {
-        read: Effect.fn(function* ({ output }) {
-          return output;
-        }),
-        create: Effect.fn(function* ({ news }) {
-          yield* createOp(news);
-          return {
-            store: news.store,
-            namespace: news.namespace,
-            key: news.key,
-            entry: news.entry,
-          };
-        }),
-        update: Effect.fn(function* ({ news, olds }) {
-          if (
-            news.store !== olds.store ||
-            news.namespace !== olds.namespace ||
-            news.key !== olds.key
-          ) {
-            yield* deleteOp(olds);
-            yield* createOp(news);
-          } else {
-            const fullKey = `${news.namespace}:${news.key}`;
-            const updateInPlace = (): Effect.Effect<void, any, any> =>
+        read: withKvsRegionFn(
+          Effect.fn(function* ({ output }) {
+            return output;
+          }),
+        ),
+        create: withKvsRegionFn(
+          Effect.fn(function* ({ news }) {
+            return yield* retryForKvsReadiness(
               Effect.gen(function* () {
-                const etag = yield* getEtag(news.store);
-                const { routes, chunkNum } = yield* getRoutes(
-                  news.store,
-                  fullKey,
-                );
-                const filtered = routes.filter((r) => r !== olds.entry);
-                if (!filtered.includes(news.entry)) {
-                  filtered.push(news.entry);
+                yield* createOp(news);
+                return {
+                  store: news.store,
+                  namespace: news.namespace,
+                  key: news.key,
+                  entry: news.entry,
+                };
+              }),
+            );
+          }),
+        ),
+        update: withKvsRegionFn(
+          Effect.fn(function* ({ news, olds }) {
+            return yield* retryForKvsReadiness(
+              Effect.gen(function* () {
+                if (
+                  news.store !== olds.store ||
+                  news.namespace !== olds.namespace ||
+                  news.key !== olds.key
+                ) {
+                  yield* deleteOp(olds);
+                  yield* createOp(news);
+                } else {
+                  const fullKey = `${news.namespace}:${news.key}`;
+                  const updateInPlace = (): Effect.Effect<void, any, any> =>
+                    Effect.gen(function* () {
+                      const etag = yield* getKvsEtag(news.store);
+                      const { routes, chunkNum } = yield* getRoutes(
+                        news.store,
+                        fullKey,
+                      );
+                      const filtered = routes.filter((r) => r !== olds.entry);
+                      if (!filtered.includes(news.entry)) {
+                        filtered.push(news.entry);
+                      }
+                      yield* setRoutes(
+                        news.store,
+                        etag,
+                        fullKey,
+                        filtered,
+                        chunkNum,
+                      );
+                    }).pipe(
+                      Effect.catchTag("ValidationException", (err) =>
+                        "Message" in err &&
+                        typeof err.Message === "string" &&
+                        isKvsPreconditionFailed(err)
+                          ? Effect.sleep(
+                              `${Math.floor(Math.random() * 400) + 100} millis`,
+                            ).pipe(Effect.andThen(updateInPlace()))
+                          : Effect.fail(err),
+                      ),
+                    );
+                  yield* updateInPlace();
                 }
-                yield* setRoutes(
-                  news.store,
-                  etag,
-                  fullKey,
-                  filtered,
-                  chunkNum,
-                );
-              }).pipe(
-                Effect.catchTag("ValidationException", (err) =>
-                  "Message" in err &&
-                  typeof err.Message === "string" &&
-                  err.Message.includes("Pre-Condition failed")
-                    ? Effect.sleep(
-                        `${Math.floor(Math.random() * 400) + 100} millis`,
-                      ).pipe(Effect.andThen(updateInPlace()))
-                    : Effect.fail(err),
-                ),
-              );
-            yield* updateInPlace();
-          }
-          return {
-            store: news.store,
-            namespace: news.namespace,
-            key: news.key,
-            entry: news.entry,
-          };
-        }),
-        delete: Effect.fn(function* ({ output }) {
-          yield* deleteOp({
-            store: output.store,
-            namespace: output.namespace,
-            key: output.key,
-            entry: output.entry,
-          });
-        }),
+                return {
+                  store: news.store,
+                  namespace: news.namespace,
+                  key: news.key,
+                  entry: news.entry,
+                };
+              }),
+            );
+          }),
+        ),
+        delete: withKvsRegionFn(
+          Effect.fn(function* ({ output }) {
+            yield* retryForKvsReadiness(
+              deleteOp({
+                store: output.store,
+                namespace: output.namespace,
+                key: output.key,
+                entry: output.entry,
+              }),
+            ).pipe(
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            );
+          }),
+        ),
       };
     }),
   );

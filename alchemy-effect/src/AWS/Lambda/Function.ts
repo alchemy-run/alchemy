@@ -746,13 +746,31 @@ export default await Effect.runPromise(handlerEffect)
           } satisfies
             | Lambda.CreateFunctionUrlConfigRequest
             | Lambda.UpdateFunctionUrlConfigRequest;
-          const permission = {
+          const urlPermission = {
             FunctionName: functionName,
             StatementId: "FunctionURLAllowPublicAccess",
             Action: "lambda:InvokeFunctionUrl",
             Principal: "*",
             FunctionUrlAuthType: "NONE",
           } as const;
+          const invokePermission = {
+            FunctionName: functionName,
+            StatementId: "FunctionURLAllowPublicInvoke",
+            Action: "lambda:InvokeFunction",
+            Principal: "*",
+          } as const;
+          const upsertPermission = (permission: Lambda.AddPermissionRequest) =>
+            Lambda.addPermission(permission).pipe(
+              Effect.catchTag("ResourceConflictException", () =>
+                Effect.gen(function* () {
+                  yield* Lambda.removePermission({
+                    FunctionName: functionName,
+                    StatementId: permission.StatementId,
+                  });
+                  yield* Lambda.addPermission(permission);
+                }),
+              ),
+            );
           const [{ FunctionUrl }] = yield* Effect.all([
             Lambda.createFunctionUrlConfig(config).pipe(
               Effect.catchTag("ResourceConflictException", () =>
@@ -760,18 +778,12 @@ export default await Effect.runPromise(handlerEffect)
               ),
             ),
             authType === "NONE"
-              ? Lambda.addPermission(permission).pipe(
-                  Effect.catchTag("ResourceConflictException", () =>
-                    Effect.gen(function* () {
-                      yield* Lambda.removePermission({
-                        FunctionName: functionName,
-                        StatementId: "FunctionURLAllowPublicAccess",
-                      });
-                      yield* Lambda.addPermission(permission);
-                    }),
-                  ),
-                )
-              : Effect.void,
+              ? Effect.all([
+                  upsertPermission(urlPermission),
+                  upsertPermission(invokePermission),
+                ])
+              : // TODO(sam): support AWS_IAM
+                Effect.void,
           ]);
           yield* Effect.logDebug(`created function url config ${functionName}`);
           return FunctionUrl;
@@ -788,6 +800,12 @@ export default await Effect.runPromise(handlerEffect)
             Lambda.removePermission({
               FunctionName: functionName,
               StatementId: "FunctionURLAllowPublicAccess",
+            }).pipe(
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            ),
+            Lambda.removePermission({
+              FunctionName: functionName,
+              StatementId: "FunctionURLAllowPublicInvoke",
             }).pipe(
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             ),

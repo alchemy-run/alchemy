@@ -1,4 +1,5 @@
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { Resource } from "../../Resource.ts";
@@ -57,6 +58,12 @@ export const Invalidation = Resource<Invalidation>("AWS.CloudFront.Invalidation"
 
 const defaultPaths = ["/*"];
 
+class InvalidationInProgress extends Data.TaggedError(
+  "InvalidationInProgress",
+)<{
+  message: string;
+}> {}
+
 export const InvalidationProvider = () =>
   Invalidation.provider.effect(
     Effect.gen(function* () {
@@ -85,13 +92,14 @@ export const InvalidationProvider = () =>
                     `CloudFront Invalidation wait: ${invalidationId} status=${invalidation?.Status ?? "unknown"}`,
                   );
                   return yield* Effect.fail(
-                    new Error("InvalidationInProgress"),
+                    new InvalidationInProgress({
+                      message: `Invalidation ${invalidationId} is still in progress`,
+                    }),
                   );
                 })
           ),
           Effect.retry({
-            while: (error) =>
-              error instanceof Error && error.message === "InvalidationInProgress",
+            while: (error) => error._tag === "InvalidationInProgress",
             schedule: Schedule.fixed("2 seconds").pipe(
               Schedule.both(Schedule.recurs(120)),
             ),

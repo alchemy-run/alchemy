@@ -467,14 +467,16 @@ export const StaticSite = Construct.fn(function* (
 
 const buildKvEntries = (
   outputPath: string,
-  bucket: any,
+  bucket: {
+    bucketRegionalDomainName: Input<string>;
+  },
   assetPrefix: string,
   assetRoutes: string[],
   indexPage: string,
   errorPage: string | undefined,
   routerPathPrefix: string | undefined,
-): Record<string, string> => {
-  const entries: Record<string, string> = {};
+): Record<string, Input<string>> => {
+  const entries: Record<string, Input<string>> = {};
   const dirs: string[] = [];
   const expandDirs = [".well-known"];
 
@@ -508,7 +510,10 @@ const buildKvEntries = (
   processDir();
 
   const errorPagePath = "/" + (errorPage ?? indexPage).replace(/^\//, "");
-  const metadata: KvSiteMetadata = {
+  const bucketDomain = bucket.bucketRegionalDomainName;
+  const metadata: Omit<KvSiteMetadata, "s3"> & {
+    s3: Omit<KvSiteMetadata["s3"], "domain">;
+  } = {
     base:
       routerPathPrefix && routerPathPrefix !== "/"
         ? routerPathPrefix
@@ -516,16 +521,20 @@ const buildKvEntries = (
     custom404: errorPage ? undefined : errorPagePath,
     errorResponseCode: errorPage ? 404 : undefined,
     s3: {
-      domain:
-        typeof bucket === "object" && "bucketRegionalDomainName" in bucket
-          ? bucket.bucketRegionalDomainName
-          : bucket,
       dir: assetPrefix ? "/" + assetPrefix : "",
       routes: [...assetRoutes, ...dirs],
     },
   };
 
-  entries["metadata"] = JSON.stringify(metadata);
+  entries["metadata"] = stringifyResolvedString(bucketDomain, (domain) =>
+    JSON.stringify({
+      ...metadata,
+      s3: {
+        ...metadata.s3,
+        domain,
+      },
+    }),
+  );
 
   return entries;
 };
@@ -535,11 +544,19 @@ interface KvSiteMetadata {
   custom404?: string;
   errorResponseCode?: number;
   s3: {
-    domain: any;
+    domain: string;
     dir: string;
     routes: string[];
   };
 }
+
+const stringifyResolvedString = (
+  value: Input<string>,
+  build: (resolved: string) => string,
+): Input<string> =>
+  typeof value === "string"
+    ? build(value)
+    : value.pipe(Output.map((resolved) => build(resolved)));
 
 const buildRequestFunctionCode = ({
   kvNamespace,

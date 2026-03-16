@@ -157,10 +157,27 @@ export const KeyValueStoreProvider = () =>
           );
         }),
         delete: Effect.fn(function* ({ output }) {
+          const current = yield* cloudfront
+            .describeKeyValueStore({
+              Name: output.keyValueStoreName,
+            })
+            .pipe(Effect.catchTag("EntityNotFound", () => Effect.succeed(undefined)));
+
+          const etag = current?.ETag;
+          if (!etag) {
+            yield* Effect.logInfo(
+              `CloudFront KeyValueStore delete: ${output.keyValueStoreName} already absent`,
+            );
+            return;
+          }
+
+          yield* Effect.logInfo(
+            `CloudFront KeyValueStore delete: deleting ${output.keyValueStoreName} with etag=${etag}`,
+          );
           yield* cloudfront
             .deleteKeyValueStore({
               Name: output.keyValueStoreName,
-              IfMatch: output.etag!,
+              IfMatch: etag,
             })
             .pipe(Effect.catchTag("EntityNotFound", () => Effect.void));
         }),
@@ -185,7 +202,7 @@ const toAttrs = (
   keyValueStoreId: store.Id,
   keyValueStoreArn: store.ARN,
   keyValueStoreName: store.Name || fallbackName,
-  comment: store.Comment,
+  comment: store.Comment ?? "",
   status: store.Status ?? "UNKNOWN",
   lastModifiedTime: store.LastModifiedTime,
   etag,

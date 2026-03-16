@@ -426,6 +426,8 @@ const retryPermissionsPropagation = Effect.retry({
     (e.message?.includes(
       "The function execution role does not have permissions to call",
     ) ||
+      e.message?.includes("cannot be assumed by Lambda") ||
+      e.message?.includes("Please add Lambda as a Trusted Entity") ||
       e.message?.includes("Cannot access stream") ||
       e.message?.includes("Please ensure the role can perform the GetRecords")),
   schedule: Schedule.exponential(100).pipe(Schedule.both(Schedule.recurs(30))),

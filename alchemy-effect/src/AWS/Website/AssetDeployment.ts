@@ -1,11 +1,11 @@
 import * as s3 from "@distilled.cloud/aws/s3";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import type { Input } from "../../Input.ts";
 import { Resource } from "../../Resource.ts";
-import type { Bucket, BucketName } from "../S3/Bucket.ts";
 import type { WebsiteTextEncoding } from "./shared.ts";
 
 export interface AssetFileOption {
@@ -31,11 +31,13 @@ export interface AssetDeploymentProps {
   /**
    * Destination bucket.
    */
-  bucket: Input<BucketName> | Bucket | { bucketName: Input<BucketName> };
+  bucket: {
+    bucketName: string;
+  };
   /**
    * Local directory to upload.
    */
-  sourcePath: Input<string>;
+  sourcePath: string;
   /**
    * Optional key prefix within the bucket.
    */
@@ -91,10 +93,97 @@ export const AssetDeployment = Resource<AssetDeployment>(
 const defaultHtmlCacheControl = "max-age=0,no-cache,no-store,must-revalidate";
 const defaultAssetCacheControl = "max-age=31536000,public,immutable";
 
-const bucketNameOf = (bucket: AssetDeploymentProps["bucket"]) =>
-  typeof bucket === "string"
-    ? bucket
-    : (((bucket as any).bucketName ?? bucket) as string);
+export const AssetDeploymentProvider = () =>
+  AssetDeployment.provider.effect(
+    Effect.gen(function* () {
+      const sync = Effect.fn(function* (news: AssetDeploymentProps) {
+        const bucketName = news.bucket.bucketName;
+        const prefix = normalizePrefix(news.prefix);
+        const root = news.sourcePath;
+        const files = yield* Effect.tryPromise(() => walk(root));
+        const hash = createHash("sha256");
+        const desiredKeys = new Set<string>();
+
+        for (const relativePath of files.sort((a, b) => a.localeCompare(b))) {
+          const body = yield* Effect.tryPromise(() =>
+            readFile(path.join(root, relativePath)),
+          );
+          const normalizedRelativePath = toPosix(relativePath);
+          const key = prefix
+            ? `${prefix}/${normalizedRelativePath}`
+            : normalizedRelativePath;
+          const options = getFileOptions(
+            normalizedRelativePath,
+            news.fileOptions,
+            news.textEncoding,
+          );
+
+          hash.update(normalizedRelativePath);
+          hash.update(body);
+          hash.update(options.contentType);
+          hash.update(options.cacheControl);
+
+          desiredKeys.add(key);
+
+          yield* s3.putObject({
+            Bucket: bucketName,
+            Key: key,
+            Body: body,
+            ContentType: options.contentType,
+            CacheControl: options.cacheControl,
+          });
+        }
+
+        if (news.purge ?? false) {
+          const existingKeys = yield* listKeys(
+            bucketName,
+            prefix ? `${prefix}/` : prefix,
+          );
+          const staleKeys = existingKeys.filter((key) => !desiredKeys.has(key));
+          yield* deleteKeys(bucketName, staleKeys);
+        }
+
+        return {
+          bucketName,
+          prefix,
+          version: hash.digest("hex"),
+          fileCount: files.length,
+        };
+      });
+
+      return {
+        read: Effect.fn(function* ({ output }) {
+          return output;
+        }),
+        create: Effect.fn(function* ({ news, session }) {
+          const output = yield* retryForBucketReadiness(sync(news));
+          yield* session.note(
+            `Uploaded ${output.fileCount} file(s) to s3://${output.bucketName}/${output.prefix}`,
+          );
+          return output;
+        }),
+        update: Effect.fn(function* ({ news, session }) {
+          const output = yield* retryForBucketReadiness(sync(news));
+          yield* session.note(
+            `Uploaded ${output.fileCount} file(s) to s3://${output.bucketName}/${output.prefix}`,
+          );
+          return output;
+        }),
+        delete: Effect.fn(function* ({ olds, output }) {
+          if (!(olds.purge ?? false)) {
+            return;
+          }
+          const prefix = output.prefix ? `${output.prefix}/` : output.prefix;
+          yield* retryForBucketReadiness(
+            Effect.gen(function* () {
+              const existingKeys = yield* listKeys(output.bucketName, prefix);
+              yield* deleteKeys(output.bucketName, existingKeys);
+            }),
+          ).pipe(Effect.catchTag("NoSuchBucket", () => Effect.void));
+        }),
+      };
+    }),
+  );
 
 const normalizePrefix = (prefix: string | undefined) =>
   prefix ? prefix.replace(/^\/+|\/+$/g, "") : "";
@@ -174,10 +263,13 @@ const getFileOptions = (
   contentType: string;
   cacheControl: string;
 } => {
-  const matched = [...(options ?? [])].reverse().find((option) =>
-    matchesAny(file, option.files) &&
-    !(option.ignore && matchesAny(file, option.ignore)),
-  );
+  const matched = [...(options ?? [])]
+    .reverse()
+    .find(
+      (option) =>
+        matchesAny(file, option.files) &&
+        !(option.ignore && matchesAny(file, option.ignore)),
+    );
 
   return {
     contentType:
@@ -210,7 +302,11 @@ const listKeys = Effect.fn(function* (bucketName: string, prefix: string) {
       Prefix: prefix || undefined,
       ContinuationToken: continuationToken,
     });
-    keys.push(...(response.Contents ?? []).flatMap((item) => (item.Key ? [item.Key] : [])));
+    keys.push(
+      ...(response.Contents ?? []).flatMap((item) =>
+        item.Key ? [item.Key] : [],
+      ),
+    );
     continuationToken = response.NextContinuationToken;
   } while (continuationToken);
 
@@ -233,90 +329,20 @@ const deleteKeys = Effect.fn(function* (bucketName: string, keys: string[]) {
   }
 });
 
-export const AssetDeploymentProvider = () =>
-  AssetDeployment.provider.effect(
-    Effect.gen(function* () {
-      const sync = Effect.fn(function* (news: AssetDeploymentProps) {
-        const bucketName = bucketNameOf(news.bucket);
-        const prefix = normalizePrefix(news.prefix);
-        const root = news.sourcePath as string;
-        const files = yield* Effect.tryPromise(() => walk(root));
-        const hash = createHash("sha256");
-        const desiredKeys = new Set<string>();
+const isMissingBucket = (error: unknown) =>
+  (error as { _tag?: string })._tag === "NoSuchBucket";
 
-        for (const relativePath of files.sort((a, b) => a.localeCompare(b))) {
-          const body = yield* Effect.tryPromise(() =>
-            readFile(path.join(root, relativePath)),
-          );
-          const normalizedRelativePath = toPosix(relativePath);
-          const key = prefix
-            ? `${prefix}/${normalizedRelativePath}`
-            : normalizedRelativePath;
-          const options = getFileOptions(
-            normalizedRelativePath,
-            news.fileOptions,
-            news.textEncoding,
-          );
-
-          hash.update(normalizedRelativePath);
-          hash.update(body);
-          hash.update(options.contentType);
-          hash.update(options.cacheControl);
-
-          desiredKeys.add(key);
-
-          yield* s3.putObject({
-            Bucket: bucketName,
-            Key: key,
-            Body: body,
-            ContentType: options.contentType,
-            CacheControl: options.cacheControl,
-          });
-        }
-
-        if (news.purge ?? false) {
-          const existingKeys = yield* listKeys(
-            bucketName,
-            prefix ? `${prefix}/` : prefix,
-          );
-          const staleKeys = existingKeys.filter((key) => !desiredKeys.has(key));
-          yield* deleteKeys(bucketName, staleKeys);
-        }
-
-        return {
-          bucketName,
-          prefix,
-          version: hash.digest("hex"),
-          fileCount: files.length,
-        };
-      });
-
-      return {
-        read: Effect.fn(function* ({ output }) {
-          return output;
-        }),
-        create: Effect.fn(function* ({ news, session }) {
-          const output = yield* sync(news);
-          yield* session.note(
-            `Uploaded ${output.fileCount} file(s) to s3://${output.bucketName}/${output.prefix}`,
-          );
-          return output;
-        }),
-        update: Effect.fn(function* ({ news, session }) {
-          const output = yield* sync(news);
-          yield* session.note(
-            `Uploaded ${output.fileCount} file(s) to s3://${output.bucketName}/${output.prefix}`,
-          );
-          return output;
-        }),
-        delete: Effect.fn(function* ({ olds, output }) {
-          if (!(olds.purge ?? false)) {
-            return;
-          }
-          const prefix = output.prefix ? `${output.prefix}/` : output.prefix;
-          const existingKeys = yield* listKeys(output.bucketName, prefix);
-          yield* deleteKeys(output.bucketName, existingKeys);
-        }),
-      };
+const retryForBucketReadiness = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(
+    Effect.retry({
+      while: isMissingBucket,
+      schedule: Schedule.exponential("100 millis").pipe(
+        Schedule.both(Schedule.recurs(30)),
+        Schedule.map(([duration]) =>
+          Duration.isGreaterThan(duration, Duration.seconds(2))
+            ? Duration.seconds(2)
+            : duration,
+        ),
+      ),
     }),
   );
