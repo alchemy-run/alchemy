@@ -1,3 +1,4 @@
+import * as Auth from "@distilled.cloud/aws/Auth";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -17,9 +18,11 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import packageJson from "../package.json" with { type: "json" };
 import { apply } from "../src/Apply.ts";
 import * as AWSAccount from "../src/AWS/Account.ts";
-import { bootstrap as bootstrapAws } from "../src/AWS/Bootstrap.ts";
+import {
+  bootstrap as bootstrapAws,
+  destroyBootstrap as destroyBootstrapAws,
+} from "../src/AWS/Bootstrap.ts";
 import * as AWSCredentials from "../src/AWS/Credentials.ts";
-import * as AWSEndpoint from "../src/AWS/Endpoint.ts";
 import * as AWSRegion from "../src/AWS/Region.ts";
 import * as CLI from "../src/Cli/index.ts";
 import { DotAlchemy, dotAlchemy } from "../src/Config.ts";
@@ -157,7 +160,7 @@ const planCommand = Command.make(
 const awsProfile = Flag.string("profile").pipe(
   Flag.withDescription("AWS profile to use for credentials"),
   Flag.optional,
-  Flag.map(Option.getOrUndefined),
+  Flag.map(Option.getOrElse(() => "default")),
 );
 
 const awsRegion = Flag.string("region").pipe(
@@ -168,69 +171,85 @@ const awsRegion = Flag.string("region").pipe(
   Flag.map(Option.getOrUndefined),
 );
 
+const bootstrapDestroy = Flag.boolean("destroy").pipe(
+  Flag.withDescription(
+    "Destroy all bootstrap buckets in the selected region",
+  ),
+  Flag.withDefault(false),
+);
+
 const bootstrapCommand = Command.make(
   "bootstrap",
   {
     envFile,
     profile: awsProfile,
     region: awsRegion,
+    destroy: bootstrapDestroy,
   },
-  (args) => {
-    // Create a minimal app config for bootstrap
-    // Use "default" profile if none specified
-
-    const awsLayers = Layer.mergeAll(
-      AWSAccount.fromStageConfig(),
-      AWSRegion.fromStageConfig(),
-      AWSCredentials.fromStageConfig(),
-      AWSEndpoint.fromStageConfig(),
-    ).pipe(
-      Layer.provideMerge(
-        Layer.succeed(
-          Stack.Stack,
-          Stack.Stack.of({
-            name: "bootstrap",
-            stage: "bootstrap",
-            bindings: {},
-            resources: {},
-          }),
-        ),
-      ),
-    );
-
+  Effect.fnUntraced(function* ({ envFile, profile, region, destroy }) {
     const platform = Layer.mergeAll(
       NodeServices.layer,
       FetchHttpClient.layer,
-      Logger.layer([fileLogger("bootstrap.txt")]),
+      Layer.provideMerge(
+        Logger.layer([fileLogger("bootstrap.txt")]),
+        dotAlchemy,
+      ),
     );
 
-    // Build configProvider effect that requires platform (for fromDotEnv)
-    const configProviderEffect = Option.isSome(args.envFile)
-      ? Effect.map(
-          PlatformConfigProvider.fromDotEnv({
-            path: args.envFile.value,
-          }),
-          (dotEnv) => ConfigProvider.orElse(dotEnv, ConfigProvider.fromEnv()),
-        )
-      : Effect.succeed(ConfigProvider.fromEnv());
+    return yield* Effect.gen(function* () {
+      const ssoProfile = yield* Auth.loadProfile(profile);
 
-    return Effect.gen(function* () {
-      const provider = yield* configProviderEffect;
-      yield* bootstrapAws().pipe(
-        Effect.tap(({ bucketName, created }) =>
-          created
-            ? Effect.logInfo(`✓ Created assets bucket: ${bucketName}`)
-            : Effect.logInfo(`✓ Assets bucket already exists: ${bucketName}`),
+      const credentials = yield* Auth.loadProfileCredentials(profile);
+
+      const awsLayers = Layer.mergeAll(
+        Layer.succeed(AWSAccount.Account, profile),
+        Layer.succeed(
+          AWSRegion.Region,
+          region ?? ssoProfile.region ?? "us-east-1",
         ),
-        Effect.provide(
-          Layer.provide(
-            awsLayers,
-            Layer.succeed(ConfigProvider.ConfigProvider, provider),
-          ),
-        ),
+        Layer.succeed(AWSCredentials.Credentials, Effect.succeed(credentials)),
       );
+
+      // Build configProvider effect that requires platform (for fromDotEnv)
+      const configProviderEffect = Option.isSome(envFile)
+        ? Effect.map(
+            PlatformConfigProvider.fromDotEnv({
+              path: envFile.value,
+            }),
+            (dotEnv) => ConfigProvider.orElse(dotEnv, ConfigProvider.fromEnv()),
+          )
+        : Effect.succeed(ConfigProvider.fromEnv());
+
+      return yield* Effect.gen(function* () {
+        const provider = yield* configProviderEffect;
+        const bootstrapLayer = Layer.provide(
+          awsLayers,
+          Layer.succeed(ConfigProvider.ConfigProvider, provider),
+        );
+        if (destroy) {
+          yield* destroyBootstrapAws().pipe(
+            Effect.tap((result) =>
+              result.destroyed === 0
+                ? Console.log("✓ No bootstrap buckets found to destroy")
+                : Console.log(
+                    `✓ Destroyed ${result.destroyed} bootstrap bucket(s): ${result.bucketNames.join(", ")}`,
+                  ),
+            ),
+            Effect.provide(bootstrapLayer),
+          );
+          return;
+        }
+        yield* bootstrapAws().pipe(
+          Effect.tap(({ bucketName, created }) =>
+            created
+              ? Console.log(`✓ Created assets bucket: ${bucketName}`)
+              : Console.log(`✓ Assets bucket already exists: ${bucketName}`),
+          ),
+          Effect.provide(bootstrapLayer),
+        );
+      });
     }).pipe(Effect.provide(platform)) as Effect.Effect<void, any, never>;
-  },
+  }),
 );
 
 const execStack = Effect.fn(function* ({
