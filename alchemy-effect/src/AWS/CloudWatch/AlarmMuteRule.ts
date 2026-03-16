@@ -5,11 +5,9 @@ import { Resource } from "../../Resource.ts";
 import { Account, type AccountID } from "../Account.ts";
 import type { RegionID } from "../Region.ts";
 import {
+  createManagedTags,
   createName,
-  ensureOwnedByAlchemy,
-  readResourceTags,
   retryConcurrent,
-  updateResourceTags,
 } from "./common.ts";
 
 export type AlarmMuteRuleName = string;
@@ -90,19 +88,13 @@ export const AlarmMuteRuleProvider = () =>
           return undefined;
         }
 
-        const tags = yield* readResourceTags(output.AlarmMuteRuleArn).pipe(
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed({}),
-          ),
-        );
-
         return {
           alarmMuteRuleName: output.Name,
           alarmMuteRuleArn: output.AlarmMuteRuleArn as AlarmMuteRuleArn,
           status: output.Status,
           muteType: output.MuteType,
           alarmMuteRule: output,
-          tags,
+          tags: {},
         };
       });
 
@@ -124,30 +116,15 @@ export const AlarmMuteRuleProvider = () =>
         }),
         create: Effect.fn(function* ({ id, news, session }) {
           const name = yield* createMuteRuleName(id, news);
-          const existing = yield* readAlarmMuteRule(name);
-
-          if (existing) {
-            yield* ensureOwnedByAlchemy(
-              id,
-              name,
-              existing.tags,
-              "alarm mute rule",
-            );
-          }
+          const tags = yield* createManagedTags(id, news.tags);
 
           yield* retryConcurrent(
             cloudwatch.putAlarmMuteRule({
               ...news,
               Name: name,
+              Tags: Object.entries(tags).map(([Key, Value]) => ({ Key, Value })),
             }),
           );
-
-          const tags = yield* updateResourceTags({
-            id,
-            resourceArn: alarmMuteRuleArn(name),
-            olds: existing?.tags,
-            news: news.tags,
-          });
 
           yield* session.note(alarmMuteRuleArn(name));
 
@@ -163,20 +140,16 @@ export const AlarmMuteRuleProvider = () =>
             tags,
           };
         }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
+        update: Effect.fn(function* ({ id, news, output, session }) {
+          const tags = yield* createManagedTags(id, news.tags);
+
           yield* retryConcurrent(
             cloudwatch.putAlarmMuteRule({
               ...news,
               Name: output.alarmMuteRuleName,
+              Tags: Object.entries(tags).map(([Key, Value]) => ({ Key, Value })),
             }),
           );
-
-          const tags = yield* updateResourceTags({
-            id,
-            resourceArn: output.alarmMuteRuleArn,
-            olds: olds.tags,
-            news: news.tags,
-          });
 
           yield* session.note(output.alarmMuteRuleArn);
 

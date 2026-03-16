@@ -3,12 +3,8 @@ import * as Effect from "effect/Effect";
 import { Resource } from "../../Resource.ts";
 import { Account, type AccountID } from "../Account.ts";
 import {
-  createManagedTags,
   createName,
-  ensureOwnedByAlchemy,
-  readResourceTags,
   retryConcurrent,
-  updateResourceTags,
 } from "./common.ts";
 
 export type DashboardName = string;
@@ -118,6 +114,10 @@ export interface DashboardProps extends Omit<
   DashboardBody: DashboardBody;
   /**
    * Optional tags to apply to the dashboard.
+   *
+   * CloudWatch dashboards do not currently support the generic CloudWatch
+   * tagging APIs, so these values are accepted for API consistency but are not
+   * persisted remotely.
    */
   tags?: Record<string, string>;
 }
@@ -183,18 +183,11 @@ export const DashboardProvider = () =>
           return undefined;
         }
 
-        const arn = dashboardArn(output.DashboardName);
-        const tags = yield* readResourceTags(arn).pipe(
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed({}),
-          ),
-        );
-
         return {
           dashboardName: output.DashboardName,
-          dashboardArn: arn,
+          dashboardArn: dashboardArn(output.DashboardName),
           dashboardBody: parseDashboardBody(output.DashboardBody),
-          tags,
+          tags: {},
         };
       });
 
@@ -216,11 +209,6 @@ export const DashboardProvider = () =>
         }),
         create: Effect.fn(function* ({ id, news, session }) {
           const name = yield* createDashboardName(id, news);
-          const existing = yield* readDashboard(name);
-
-          if (existing) {
-            yield* ensureOwnedByAlchemy(id, name, existing.tags, "dashboard");
-          }
 
           yield* retryConcurrent(
             cloudwatch.putDashboard({
@@ -228,17 +216,6 @@ export const DashboardProvider = () =>
               DashboardBody: serializeDashboardBody(news.DashboardBody),
             }),
           );
-
-          const tags = yield* createManagedTags(id, news.tags);
-          if (Object.keys(tags).length > 0) {
-            yield* cloudwatch.tagResource({
-              ResourceARN: dashboardArn(name),
-              Tags: Object.entries(tags).map(([Key, Value]) => ({
-                Key,
-                Value,
-              })),
-            });
-          }
 
           yield* session.note(dashboardArn(name));
 
@@ -249,7 +226,10 @@ export const DashboardProvider = () =>
             );
           }
 
-          return state;
+          return {
+            ...state,
+            tags: {},
+          };
         }),
         update: Effect.fn(function* ({ id, news, olds, output, session }) {
           yield* retryConcurrent(
@@ -259,19 +239,12 @@ export const DashboardProvider = () =>
             }),
           );
 
-          const tags = yield* updateResourceTags({
-            id,
-            resourceArn: output.dashboardArn,
-            olds: olds.tags,
-            news: news.tags,
-          });
-
           yield* session.note(output.dashboardArn);
 
           return {
             ...output,
             dashboardBody: news.DashboardBody,
-            tags,
+            tags: {},
           };
         }),
         delete: Effect.fn(function* ({ output }) {

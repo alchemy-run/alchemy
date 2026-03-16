@@ -27,15 +27,14 @@ export const EnableAlarmActionsLive = Layer.effect(
 
     return Effect.fn(function* (...alarms: AlarmResources) {
       const sorted = sortAlarmResources(alarms);
+      const AlarmNames = yield* Effect.forEach(sorted, (alarm) =>
+        alarm.alarmName.asEffect(),
+      );
       yield* Policy(...sorted);
 
       return Effect.fn(function* () {
         return yield* enableAlarmActions({
-          AlarmNames: yield* Effect.forEach(sorted, (alarm) =>
-            Effect.gen(function* () {
-              return yield* yield* alarm.alarmName;
-            }),
-          ),
+          AlarmNames: yield* Effect.forEach(AlarmNames, (alarmName) => alarmName),
         });
       });
     });

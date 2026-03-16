@@ -30,15 +30,14 @@ export const DisableInsightRulesLive = Layer.effect(
 
     return Effect.fn(function* (...rules: InsightRules) {
       const sorted = sortInsightRuleResources(rules);
+      const RuleNames = yield* Effect.forEach(sorted, (rule) =>
+        rule.ruleName.asEffect(),
+      );
       yield* Policy(...sorted);
 
       return Effect.fn(function* () {
         return yield* disableInsightRules({
-          RuleNames: yield* Effect.forEach(sorted, (rule) =>
-            Effect.gen(function* () {
-              return yield* yield* rule.ruleName;
-            }),
-          ),
+          RuleNames: yield* Effect.forEach(RuleNames, (ruleName) => ruleName),
         });
       });
     });

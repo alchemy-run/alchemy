@@ -26,15 +26,40 @@ const windowRange = () => {
 describe.sequential("CloudWatch Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
+      yield* Effect.logInfo("CloudWatch test setup: destroying previous resources");
       yield* destroy();
+      yield* Effect.logInfo("CloudWatch test setup: deploying fixture");
       const deployed = yield* test.deploy(CloudWatchFixture);
       baseUrl = deployed.apiFunction.functionUrl!.replace(/\/+$/, "");
+      const readinessUrl = `${baseUrl}/ready`;
 
-      yield* HttpClient.get(`${baseUrl}/ready`).pipe(
+      yield* Effect.logInfo(
+        `CloudWatch test setup: probing readiness at ${readinessUrl} (20s budget)`,
+      );
+
+      yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
             ? Effect.succeed(response)
-            : Effect.fail(new Error(`Function not ready: ${response.status}`)),
+            : response.text.pipe(
+                Effect.flatMap((body) =>
+                  Effect.fail(
+                    new Error(
+                      `Function not ready: ${response.status}${
+                        body ? ` ${body}` : ""
+                      }`,
+                    ),
+                  ),
+                ),
+              ),
+        ),
+        Effect.tap(() =>
+          Effect.logInfo("CloudWatch test setup: fixture responded successfully"),
+        ),
+        Effect.tapError((error) =>
+          Effect.logWarning(
+            `CloudWatch test setup: fixture not ready yet (${String(error)})`,
+          ),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );

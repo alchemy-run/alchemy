@@ -19,9 +19,6 @@ test(
       Effect.gen(function* () {
         return yield* AWS.CloudWatch.Dashboard("ManagedDashboard", {
           DashboardBody: { widgets: [] },
-          tags: {
-            fixture: "cloudwatch-resource-test",
-          },
         });
       }),
     );
@@ -46,10 +43,6 @@ test(
               },
             ],
           },
-          tags: {
-            fixture: "cloudwatch-resource-test",
-            updated: "true",
-          },
         });
       }),
     );
@@ -58,15 +51,6 @@ test(
       DashboardName: updated.dashboardName,
     });
     expect(afterUpdate.DashboardBody).toContain("updated");
-
-    const tags = yield* cloudwatch.listTagsForResource({
-      ResourceARN: updated.dashboardArn,
-    });
-    expect(
-      (tags.Tags ?? []).some(
-        (tag) => tag.Key === "updated" && tag.Value === "true",
-      ),
-    ).toBe(true);
 
     yield* destroy();
   }).pipe(Effect.provide(AWS.providers())),
@@ -113,11 +97,23 @@ test(
       }),
     );
 
+    const describedMetric = yield* cloudwatch.describeAlarms({
+      AlarmNames: [deployed.alarm.alarmName],
+      AlarmTypes: ["MetricAlarm"],
+    });
+    expect((describedMetric.MetricAlarms ?? []).length).toBeGreaterThan(0);
+
+    const describedComposite = yield* cloudwatch.describeAlarms({
+      AlarmNames: [deployed.compositeAlarm.alarmName],
+      AlarmTypes: ["CompositeAlarm"],
+    });
+    expect((describedComposite.CompositeAlarms ?? []).length).toBeGreaterThan(0);
+
     const described = yield* cloudwatch.describeAlarms({
       AlarmNames: [deployed.alarm.alarmName, deployed.compositeAlarm.alarmName],
+      AlarmTypes: ["MetricAlarm"],
     });
     expect((described.MetricAlarms ?? []).length).toBeGreaterThan(0);
-    expect((described.CompositeAlarms ?? []).length).toBeGreaterThan(0);
 
     yield* test.deploy(
       Effect.gen(function* () {
@@ -223,7 +219,7 @@ test(
           {
             Rule: {
               Schedule: {
-                Expression: "cron(0 0 1 1 ? 2099)",
+                Expression: "at(2099-01-01T00:00)",
                 Duration: "PT1H",
               },
             },

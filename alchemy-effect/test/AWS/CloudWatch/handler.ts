@@ -9,7 +9,7 @@ import path from "pathe";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-const metricNamespace = "Alchemy/CloudWatchFixture";
+const metricNamespace = "alchemy-cloudwatch-fixture";
 const metricName = "FixtureMetric";
 const metricDimensionName = "Fixture";
 const metricDimensionValue = "CloudWatch";
@@ -17,20 +17,42 @@ const metricDimensionValue = "CloudWatch";
 const firehoseArn = process.env.TEST_CLOUDWATCH_METRIC_STREAM_FIREHOSE_ARN;
 const metricStreamRoleArn = process.env.TEST_CLOUDWATCH_METRIC_STREAM_ROLE_ARN;
 
+const serializeError = (error: unknown) => {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      ...(typeof error === "object" && error !== null ? error : {}),
+    };
+  }
+
+  if (typeof error === "object" && error !== null) {
+    return error;
+  }
+
+  return { message: String(error) };
+};
+
 const result = <A, E>(effect: Effect.Effect<A, E>) =>
   effect.pipe(
-    Effect.match({
-      onFailure: (error) => ({
-        ok: false as const,
-        error:
-          typeof error === "object" && error !== null && "_tag" in error
-            ? (error as { _tag: string })._tag
-            : `${error}`,
-      }),
-      onSuccess: (value) => ({
-        ok: true as const,
-        value,
-      }),
+    Effect.matchEffect({
+      onFailure: (error) =>
+        Effect.logError("CloudWatch fixture route failed", serializeError(error)).pipe(
+          Effect.as({
+            ok: false as const,
+            error:
+              typeof error === "object" && error !== null && "_tag" in error
+                ? (error as { _tag: string })._tag
+                : `${error}`,
+            details: serializeError(error),
+          }),
+        ),
+      onSuccess: (value) =>
+        Effect.succeed({
+          ok: true as const,
+          value,
+        }),
     }),
   );
 
@@ -146,7 +168,7 @@ export const CloudWatchFixture = Effect.gen(function* () {
       Description: "Fixture mute rule",
       Rule: {
         Schedule: {
-          Expression: "cron(0 0 1 1 ? 2099)",
+          Expression: "at(2099-01-01T00:00)",
           Duration: "PT1H",
         },
       },
@@ -202,6 +224,7 @@ export const CloudWatchFixture = Effect.gen(function* () {
         yield* AWS.CloudWatch.EnableAlarmActions.bind(alarm);
       const disableAlarmActions =
         yield* AWS.CloudWatch.DisableAlarmActions.bind(alarm);
+      const alarmName = yield* alarm.alarmName;
       const setAlarmState = yield* AWS.CloudWatch.SetAlarmState.bind(alarm);
       const describeAnomalyDetectors =
         yield* AWS.CloudWatch.DescribeAnomalyDetectors.bind();
@@ -398,7 +421,7 @@ export const CloudWatchFixture = Effect.gen(function* () {
             return yield* HttpServerResponse.json(
               yield* result(
                 describeAlarmHistory({
-                  AlarmName: yield* yield* alarm.alarmName,
+                  AlarmName: yield* alarmName,
                 }),
               ),
             );
@@ -504,7 +527,7 @@ export const CloudWatchFixture = Effect.gen(function* () {
             return yield* HttpServerResponse.json(
               yield* result(
                 listAlarmMuteRules({
-                  AlarmName: yield* yield* alarm.alarmName,
+                  AlarmName: yield* alarmName,
                 }),
               ),
             );

@@ -71,7 +71,7 @@ export const updateResourceTags = Effect.fn(function* ({
   olds: Record<string, string> | undefined;
   news: Record<string, string> | undefined;
 }) {
-  const oldTags = yield* createManagedTags(id, olds);
+  const oldTags = olds ? yield* createManagedTags(id, olds) : {};
   const newTags = yield* createManagedTags(id, news);
   const { removed, upsert } = diffTags(oldTags, newTags);
 
@@ -115,6 +115,32 @@ export const retryConcurrent = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     }),
   );
 
+const normalizeDimensions = (dimensions: cloudwatch.Dimension[] | undefined) =>
+  [...(dimensions ?? [])].sort((a, b) =>
+    `${a.Name ?? ""}:${a.Value ?? ""}`.localeCompare(
+      `${b.Name ?? ""}:${b.Value ?? ""}`,
+    ),
+  );
+
+const normalizeSingleMetricDetector = (
+  input: Pick<
+    cloudwatch.PutAnomalyDetectorInput,
+    | "Namespace"
+    | "MetricName"
+    | "Dimensions"
+    | "Stat"
+    | "SingleMetricAnomalyDetector"
+  >,
+) => {
+  const singleMetric = input.SingleMetricAnomalyDetector;
+  return {
+    Namespace: singleMetric?.Namespace ?? input.Namespace,
+    MetricName: singleMetric?.MetricName ?? input.MetricName,
+    Dimensions: normalizeDimensions(singleMetric?.Dimensions ?? input.Dimensions),
+    Stat: singleMetric?.Stat ?? input.Stat,
+  };
+};
+
 export const detectorIdentity = (
   input: Pick<
     cloudwatch.PutAnomalyDetectorInput,
@@ -127,11 +153,7 @@ export const detectorIdentity = (
   >,
 ) =>
   JSON.stringify({
-    Namespace: input.Namespace,
-    MetricName: input.MetricName,
-    Dimensions: input.Dimensions,
-    Stat: input.Stat,
-    SingleMetricAnomalyDetector: input.SingleMetricAnomalyDetector,
+    SingleMetric: normalizeSingleMetricDetector(input),
     MetricMathAnomalyDetector: input.MetricMathAnomalyDetector,
   });
 

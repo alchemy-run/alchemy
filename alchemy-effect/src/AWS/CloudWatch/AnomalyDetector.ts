@@ -1,13 +1,19 @@
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import * as Stream from "effect/Stream";
+import * as Schedule from "effect/Schedule";
 import { Resource } from "../../Resource.ts";
 import {
   detectorIdentity,
   matchesDetectorIdentity,
   retryConcurrent,
 } from "./common.ts";
+
+class AnomalyDetectorNotVisible extends Data.TaggedError(
+  "AnomalyDetectorNotVisible",
+)<{
+  message: string;
+}> {}
 
 export interface AnomalyDetectorProps
   extends cloudwatch.PutAnomalyDetectorInput {}
@@ -65,13 +71,68 @@ const toDeleteRequest = (
     | "SingleMetricAnomalyDetector"
     | "MetricMathAnomalyDetector"
   >,
-): cloudwatch.DeleteAnomalyDetectorInput => ({
-  Namespace: input.Namespace,
-  MetricName: input.MetricName,
-  Dimensions: input.Dimensions,
-  Stat: input.Stat,
-  SingleMetricAnomalyDetector: input.SingleMetricAnomalyDetector,
-  MetricMathAnomalyDetector: input.MetricMathAnomalyDetector,
+): cloudwatch.DeleteAnomalyDetectorInput => {
+  if (input.MetricMathAnomalyDetector) {
+    return {
+      MetricMathAnomalyDetector: input.MetricMathAnomalyDetector,
+    };
+  }
+
+  if (input.SingleMetricAnomalyDetector) {
+    return {
+      SingleMetricAnomalyDetector: input.SingleMetricAnomalyDetector,
+    };
+  }
+
+  return {
+    Namespace: input.Namespace,
+    MetricName: input.MetricName,
+    Dimensions: input.Dimensions,
+    Stat: input.Stat,
+  };
+};
+
+const detectorReadinessSchedule = Schedule.exponential(200).pipe(
+  Schedule.both(Schedule.recurs(8)),
+);
+
+const describeDetector = Effect.fn(function* (
+  props: cloudwatch.PutAnomalyDetectorInput,
+  options?: {
+    resourceId?: string;
+    attempt?: number;
+    logMisses?: boolean;
+  },
+) {
+  const request = toDescribeRequest(props);
+  const response = yield* cloudwatch.describeAnomalyDetectors(request);
+  const detectors = response.AnomalyDetectors ?? [];
+  const detector = detectors.find((candidate) =>
+    matchesDetectorIdentity(candidate, props),
+  );
+
+  if (!detector && options?.logMisses) {
+    const prefix = options.resourceId
+      ? `${options.resourceId}: anomaly detector not yet visible`
+      : "anomaly detector not yet visible";
+    const attempt =
+      options.attempt === undefined ? "" : ` (attempt ${options.attempt})`;
+
+    yield* Effect.logInfo(
+      `${prefix}${attempt}; request=${JSON.stringify(request)} candidates=${JSON.stringify(
+        detectors.map((candidate) => ({
+          identity: detectorIdentity(candidate),
+          Namespace: candidate.Namespace,
+          MetricName: candidate.MetricName,
+          Stat: candidate.Stat,
+          SingleMetricAnomalyDetector: candidate.SingleMetricAnomalyDetector,
+          MetricMathAnomalyDetector: candidate.MetricMathAnomalyDetector,
+        })),
+      )}`,
+    );
+  }
+
+  return detector;
 });
 
 export const AnomalyDetectorProvider = () =>
@@ -88,15 +149,7 @@ export const AnomalyDetectorProvider = () =>
         return undefined;
       }
 
-      const detector = yield* cloudwatch.describeAnomalyDetectors
-        .items(toDescribeRequest(props))
-        .pipe(
-          Stream.filter((candidate) =>
-            matchesDetectorIdentity(candidate, props),
-          ),
-          Stream.runHead,
-          Effect.map(Option.getOrUndefined),
-        );
+      const detector = yield* describeDetector(props);
 
       if (!detector) {
         return undefined;
@@ -112,21 +165,30 @@ export const AnomalyDetectorProvider = () =>
       const detectorId = detectorIdentity(news);
       yield* session.note(detectorId);
 
-      const state = yield* cloudwatch.describeAnomalyDetectors
-        .items(toDescribeRequest(news))
-        .pipe(
-          Stream.filter((candidate) =>
-            matchesDetectorIdentity(candidate, news),
+      let attempt = 0;
+      const state = yield* Effect.suspend(() => {
+        attempt += 1;
+        return describeDetector(news, {
+          resourceId: "AnomalyDetector",
+          attempt,
+          logMisses: true,
+        }).pipe(
+          Effect.flatMap((state) =>
+            state
+              ? Effect.succeed(state)
+              : Effect.fail(
+                  new AnomalyDetectorNotVisible({
+                    message: "Anomaly detector not yet visible",
+                  }),
+                ),
           ),
-          Stream.runHead,
-          Effect.map(Option.getOrUndefined),
         );
-
-      if (!state) {
-        return yield* Effect.fail(
-          new Error(`failed to read created anomaly detector '${detectorId}'`),
-        );
-      }
+      }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "AnomalyDetectorNotVisible",
+          schedule: detectorReadinessSchedule,
+        }),
+      );
 
       return {
         detectorId,
@@ -138,21 +200,30 @@ export const AnomalyDetectorProvider = () =>
       const detectorId = detectorIdentity(news);
       yield* session.note(detectorId);
 
-      const state = yield* cloudwatch.describeAnomalyDetectors
-        .items(toDescribeRequest(news))
-        .pipe(
-          Stream.filter((candidate) =>
-            matchesDetectorIdentity(candidate, news),
+      let attempt = 0;
+      const state = yield* Effect.suspend(() => {
+        attempt += 1;
+        return describeDetector(news, {
+          resourceId: "AnomalyDetector",
+          attempt,
+          logMisses: true,
+        }).pipe(
+          Effect.flatMap((state) =>
+            state
+              ? Effect.succeed(state)
+              : Effect.fail(
+                  new AnomalyDetectorNotVisible({
+                    message: "Anomaly detector not yet visible",
+                  }),
+                ),
           ),
-          Stream.runHead,
-          Effect.map(Option.getOrUndefined),
         );
-
-      if (!state) {
-        return yield* Effect.fail(
-          new Error(`failed to read updated anomaly detector '${detectorId}'`),
-        );
-      }
+      }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "AnomalyDetectorNotVisible",
+          schedule: detectorReadinessSchedule,
+        }),
+      );
 
       return {
         detectorId,

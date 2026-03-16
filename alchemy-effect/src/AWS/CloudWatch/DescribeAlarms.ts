@@ -12,6 +12,17 @@ export interface DescribeAlarmsRequest extends Omit<
 
 type AlarmResources = [AlarmResource, ...AlarmResource[]];
 
+const getAlarmTypes = (alarms: AlarmResources) =>
+  [
+    ...new Set(
+      alarms.map((alarm) =>
+        alarm.Type === "AWS.CloudWatch.CompositeAlarm"
+          ? "CompositeAlarm"
+          : "MetricAlarm",
+      ),
+    ),
+  ] as cloudwatch.AlarmType[];
+
 /**
  * Runtime binding for `cloudwatch:DescribeAlarms`.
  */
@@ -34,16 +45,16 @@ export const DescribeAlarmsLive = Layer.effect(
 
     return Effect.fn(function* (...alarms: AlarmResources) {
       const sorted = sortAlarmResources(alarms);
+      const AlarmNames = yield* Effect.forEach(sorted, (alarm) =>
+        alarm.alarmName.asEffect(),
+      );
       yield* Policy(...sorted);
 
       return Effect.fn(function* (request: DescribeAlarmsRequest = {}) {
         return yield* describeAlarms({
           ...request,
-          AlarmNames: yield* Effect.forEach(sorted, (alarm) =>
-            Effect.gen(function* () {
-              return yield* yield* alarm.alarmName;
-            }),
-          ),
+          AlarmTypes: getAlarmTypes(sorted),
+          AlarmNames: yield* Effect.forEach(AlarmNames, (alarmName) => alarmName),
         });
       });
     });
@@ -65,7 +76,8 @@ export const DescribeAlarmsPolicyLive = DescribeAlarmsPolicy.layer.succeed(
             {
               Effect: "Allow",
               Action: ["cloudwatch:DescribeAlarms"],
-              Resource: sorted.map((alarm) => alarm.alarmArn),
+              // AWS requires "*" here to return composite alarms.
+              Resource: ["*"],
             },
           ],
         },
