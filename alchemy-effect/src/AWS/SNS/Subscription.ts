@@ -62,124 +62,14 @@ export interface Subscription extends Resource<
  */
 export const Subscription = Resource<Subscription>("AWS.SNS.Subscription");
 
-const isPendingConfirmation = (subscriptionArn: string | undefined) =>
-  subscriptionArn === undefined ||
-  subscriptionArn.toLowerCase() === "pending confirmation";
-
-const toAttributeMap = (
-  attributes: Record<string, string | undefined> | undefined,
-): Record<string, string> =>
-  Object.fromEntries(
-    Object.entries(attributes ?? {}).filter(
-      (entry): entry is [string, string] => typeof entry[1] === "string",
-    ),
-  );
-
-const findSubscription = Effect.fn(function* ({
-  topicArn,
-  protocol,
-  endpoint,
-}: {
-  topicArn: string;
-  protocol: string;
-  endpoint: string | undefined;
-}) {
-  let nextToken: string | undefined;
-
-  while (true) {
-    const response = yield* sns.listSubscriptionsByTopic({
-      TopicArn: topicArn,
-      NextToken: nextToken,
-    });
-
-    const match = response.Subscriptions?.find(
-      (subscription) =>
-        subscription.Protocol === protocol &&
-        subscription.Endpoint === endpoint,
-    );
-
-    if (match?.SubscriptionArn) {
-      return match.SubscriptionArn;
-    }
-
-    if (!response.NextToken) {
-      return undefined;
-    }
-
-    nextToken = response.NextToken;
-  }
-});
-
-const readSubscription = Effect.fn(function* ({
-  subscriptionArn,
-  topicArn,
-  protocol,
-  endpoint,
-}: {
-  subscriptionArn?: string;
-  topicArn: string;
-  protocol: string;
-  endpoint: string | undefined;
-}) {
-  const resolvedSubscriptionArn =
-    subscriptionArn && !isPendingConfirmation(subscriptionArn)
-      ? subscriptionArn
-      : yield* findSubscription({
-          topicArn,
-          protocol,
-          endpoint,
-        });
-
-  if (!resolvedSubscriptionArn) {
-    return {
-      subscriptionArn: subscriptionArn ?? "pending confirmation",
-      topicArn,
-      protocol,
-      endpoint,
-      owner: undefined,
-      pendingConfirmation: true,
-      attributes: {},
-    };
-  }
-
-  const response = yield* sns
-    .getSubscriptionAttributes({
-      SubscriptionArn: resolvedSubscriptionArn,
-    })
-    .pipe(
-      Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
-      Effect.catchTag("InvalidParameterException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
-
-  if (!response) {
-    return undefined;
-  }
-
-  const attributes = toAttributeMap(response.Attributes);
-
-  return {
-    subscriptionArn: resolvedSubscriptionArn,
-    topicArn: attributes.TopicArn ?? topicArn,
-    protocol: attributes.Protocol ?? protocol,
-    endpoint: attributes.Endpoint ?? endpoint,
-    owner: attributes.Owner,
-    pendingConfirmation:
-      attributes.PendingConfirmation === "true" ||
-      isPendingConfirmation(resolvedSubscriptionArn),
-    attributes,
-  };
-});
-
 export const SubscriptionProvider = () =>
   Subscription.provider.succeed({
     read: Effect.fn(function* ({ olds, output }) {
       return yield* readSubscription({
         subscriptionArn: output?.subscriptionArn,
-        topicArn: olds.topicArn as string,
-        protocol: olds.protocol,
-        endpoint: olds.endpoint as string | undefined,
+        topicArn: (output?.topicArn ?? olds.topicArn) as string | undefined,
+        protocol: output?.protocol ?? olds.protocol,
+        endpoint: (output?.endpoint ?? olds.endpoint) as string | undefined,
       });
     }),
     stables: ["subscriptionArn"],
@@ -267,9 +157,9 @@ export const SubscriptionProvider = () =>
     delete: Effect.fn(function* ({ olds, output }) {
       const subscriptionArn = isPendingConfirmation(output.subscriptionArn)
         ? yield* findSubscription({
-            topicArn: olds.topicArn as string,
-            protocol: olds.protocol,
-            endpoint: olds.endpoint as string | undefined,
+            topicArn: (output.topicArn ?? olds.topicArn) as string | undefined,
+            protocol: output.protocol ?? olds.protocol,
+            endpoint: (output.endpoint ?? olds.endpoint) as string | undefined,
           })
         : output.subscriptionArn;
 
@@ -287,3 +177,127 @@ export const SubscriptionProvider = () =>
         );
     }),
   });
+
+const isPendingConfirmation = (subscriptionArn: string | undefined) =>
+  subscriptionArn === undefined ||
+  subscriptionArn.toLowerCase() === "pending confirmation";
+
+const toAttributeMap = (
+  attributes: Record<string, string | undefined> | undefined,
+): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(attributes ?? {}).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    ),
+  );
+
+const findSubscription = Effect.fn(function* ({
+  topicArn,
+  protocol,
+  endpoint,
+}: {
+  topicArn: string | undefined;
+  protocol: string | undefined;
+  endpoint: string | undefined;
+}) {
+  if (!topicArn || !protocol) {
+    return undefined;
+  }
+
+  let nextToken: string | undefined;
+
+  while (true) {
+    const response = yield* sns.listSubscriptionsByTopic({
+      TopicArn: topicArn,
+      NextToken: nextToken,
+    });
+
+    const match = response.Subscriptions?.find(
+      (subscription) =>
+        subscription.Protocol === protocol &&
+        subscription.Endpoint === endpoint,
+    );
+
+    if (match?.SubscriptionArn) {
+      return match.SubscriptionArn;
+    }
+
+    if (!response.NextToken) {
+      return undefined;
+    }
+
+    nextToken = response.NextToken;
+  }
+});
+
+const readSubscription = Effect.fn(function* ({
+  subscriptionArn,
+  topicArn,
+  protocol,
+  endpoint,
+}: {
+  subscriptionArn?: string;
+  topicArn?: string;
+  protocol?: string;
+  endpoint: string | undefined;
+}) {
+  const resolvedSubscriptionArn =
+    subscriptionArn && !isPendingConfirmation(subscriptionArn)
+      ? subscriptionArn
+      : yield* findSubscription({
+          topicArn,
+          protocol,
+          endpoint,
+        });
+
+  if (!resolvedSubscriptionArn) {
+    if (!topicArn || !protocol) {
+      return undefined;
+    }
+
+    return {
+      subscriptionArn: subscriptionArn ?? "pending confirmation",
+      topicArn,
+      protocol,
+      endpoint,
+      owner: undefined,
+      pendingConfirmation: true,
+      attributes: {},
+    };
+  }
+
+  const response = yield* sns
+    .getSubscriptionAttributes({
+      SubscriptionArn: resolvedSubscriptionArn,
+    })
+    .pipe(
+      Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+      Effect.catchTag("InvalidParameterException", () =>
+        Effect.succeed(undefined),
+      ),
+    );
+
+  if (!response) {
+    return undefined;
+  }
+
+  const attributes = toAttributeMap(response.Attributes);
+  const resolvedTopicArn = attributes.TopicArn ?? topicArn;
+  const resolvedProtocol = attributes.Protocol ?? protocol;
+
+  if (!resolvedTopicArn || !resolvedProtocol) {
+    return undefined;
+  }
+
+  return {
+    subscriptionArn: resolvedSubscriptionArn,
+    topicArn: resolvedTopicArn,
+    protocol: resolvedProtocol,
+    endpoint: attributes.Endpoint ?? endpoint,
+    owner: attributes.Owner,
+    pendingConfirmation:
+      attributes.PendingConfirmation === "true" ||
+      isPendingConfirmation(resolvedSubscriptionArn),
+    attributes,
+  };
+});
