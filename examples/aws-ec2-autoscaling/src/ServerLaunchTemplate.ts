@@ -15,7 +15,9 @@ export default Effect.gen(function* () {
     visibilityTimeout: 60,
   });
 
-  yield* Http.serve(yield* HttpServer(queue));
+  const server = yield* HttpServer(queue);
+
+  yield* Http.serve(server);
 
   yield* AWS.SQS.messages(queue).subscribe((stream) =>
     stream.pipe(Stream.mapEffect(Effect.logInfo), Stream.runDrain),
@@ -25,9 +27,7 @@ export default Effect.gen(function* () {
     main: import.meta.path,
     imageId,
     instanceType: "t3.small",
-    subnetId: network.publicSubnetIds[0],
     securityGroupIds: [network.appSecurityGroupId],
-    associatePublicIpAddress: true,
     port: 3000,
   };
 }).pipe(
@@ -41,5 +41,5 @@ export default Effect.gen(function* () {
       ),
     ),
   ),
-  AWS.EC2.Instance("ServerInstance"),
+  AWS.AutoScaling.LaunchTemplate("Server"),
 );

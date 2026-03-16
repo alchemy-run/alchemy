@@ -1,20 +1,19 @@
-import * as ecs from "@distilled.cloud/aws/ecs";
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as ecr from "@distilled.cloud/aws/ecr";
+import * as ecs from "@distilled.cloud/aws/ecs";
 import * as iam from "@distilled.cloud/aws/iam";
 import { Region } from "@distilled.cloud/aws/Region";
-import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as ServiceMap from "effect/ServiceMap";
 import { Bundler, type BundleOptions } from "../../Bundle/Bundler.ts";
 import {
-  type DockerImageSpec,
   renderDockerfile,
   runDockerCommand,
   writeDockerContext,
+  type DockerImageSpec,
 } from "../../Bundle/Docker.ts";
 import {
   cleanupBundleTempDir,
@@ -149,48 +148,51 @@ export interface Task extends Resource<
   }
 > {}
 
-export const Task = Host<Task, ServerExecutionContext>("AWS.ECS.Task", (id) => {
-  const runners: Effect.Effect<void, never, any>[] = [];
-  const env: Record<string, any> = {};
+export const Task = Host<Task, ServerExecutionContext>("AWS.ECS.Task", {
+  kind: "server",
+  runtime: (id) => {
+    const runners: Effect.Effect<void, never, any>[] = [];
+    const env: Record<string, any> = {};
 
-  return {
-    type: "AWS.ECS.Task",
-    id,
-    env,
-    set: (bindingId: string, output: Output.Output) =>
-      Effect.sync(() => {
-        const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
-        env[key] = output.pipe(Output.map((value) => JSON.stringify(value)));
-        return key;
-      }),
-    get: <T>(key: string) =>
-      Config.string(key)
-        .asEffect()
-        .pipe(
-          Effect.flatMap((value) =>
-            Effect.try({
-              try: () => JSON.parse(value) as T,
-              catch: (error) => error as Error,
-            }),
-          ),
-          Effect.catch((cause) =>
-            Effect.die(
-              new Error(`Failed to get environment variable: ${key}`, {
-                cause,
+    return {
+      type: "AWS.ECS.Task",
+      id,
+      env,
+      set: (bindingId: string, output: Output.Output) =>
+        Effect.sync(() => {
+          const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
+          env[key] = output.pipe(Output.map((value) => JSON.stringify(value)));
+          return key;
+        }),
+      get: <T>(key: string) =>
+        Config.string(key)
+          .asEffect()
+          .pipe(
+            Effect.flatMap((value) =>
+              Effect.try({
+                try: () => JSON.parse(value) as T,
+                catch: (error) => error as Error,
               }),
             ),
+            Effect.catch((cause) =>
+              Effect.die(
+                new Error(`Failed to get environment variable: ${key}`, {
+                  cause,
+                }),
+              ),
+            ),
           ),
+      run: ((effect: Effect.Effect<void, never, any>) =>
+        Effect.sync(() => {
+          runners.push(effect);
+        })) as unknown as ServerExecutionContext["run"],
+      exports: {
+        program: Effect.all(runners, { concurrency: "unbounded" }).pipe(
+          Effect.asVoid,
         ),
-    run: ((effect: Effect.Effect<void, never, any>) =>
-      Effect.sync(() => {
-        runners.push(effect);
-      })) as unknown as ServerExecutionContext["run"],
-    exports: {
-      program: Effect.all(runners, { concurrency: "unbounded" }).pipe(
-        Effect.asVoid,
-      ),
-    },
-  } satisfies ServerExecutionContext;
+      },
+    } satisfies ServerExecutionContext;
+  },
 });
 
 export const TaskProvider = () =>
@@ -313,7 +315,6 @@ export const TaskProvider = () =>
       });
 
       const ensureRepository = Effect.fn(function* ({
-        id,
         repositoryName,
         tags,
       }: {
@@ -730,7 +731,7 @@ await Effect.runPromise(program);
             output?.logGroupName ?? (yield* createLogGroupName(id));
           const tags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
 
           const taskRoleArn =

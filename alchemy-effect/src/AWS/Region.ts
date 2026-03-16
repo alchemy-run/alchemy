@@ -7,6 +7,8 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { StageConfig } from "./StageConfig.ts";
 
+export { Region } from "@distilled.cloud/aws/Region";
+
 export const AWS_REGION = Config.string("AWS_REGION");
 
 export type RegionID = string;

@@ -1,16 +1,19 @@
-import * as ec2 from "@distilled.cloud/aws/ec2";
 import type { Credentials } from "@distilled.cloud/aws/Credentials";
 import { Region } from "@distilled.cloud/aws/Region";
+import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import { Bundler, type BundleOptions } from "../../Bundle/Bundler.ts";
 import { DotAlchemy } from "../../Config.ts";
-import { Host, type ServerExecutionContext } from "../../Host.ts";
+import {
+  ExecutionContext,
+  Host,
+  type ServerExecutionContext,
+} from "../../Host.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import type { ProcessRuntime } from "../../Process/Runtime.ts";
 import { Resource } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
@@ -18,13 +21,13 @@ import { createInternalTags, diffTags, hasTags } from "../../Tags.ts";
 import type { AccountID } from "../Account.ts";
 import { Account } from "../Account.ts";
 import { Assets } from "../Assets.ts";
-import type { PolicyStatement } from "../IAM/Policy.ts";
-import type { RegionID } from "../Region.ts";
 import type { SecurityGroupId } from "../EC2/SecurityGroup.ts";
 import {
   createEc2HostExecutionContext,
   createEc2HostedSupport,
 } from "../EC2/hosted.ts";
+import type { PolicyStatement } from "../IAM/Policy.ts";
+import type { RegionID } from "../Region.ts";
 
 export type LaunchTemplateId = `lt-${string}`;
 export type LaunchTemplateName = string;
@@ -151,31 +154,11 @@ export interface LaunchTemplate extends Resource<
 export const LaunchTemplate = Host<
   LaunchTemplate,
   ServerExecutionContext,
-  Credentials | Region | ProcessRuntime
->(
-  "AWS.AutoScaling.LaunchTemplate",
-  (id) => createEc2HostExecutionContext("AWS.AutoScaling.LaunchTemplate", id),
-);
-
-const isLaunchTemplateNotFound = (error: unknown) => {
-  const tag = (error as { _tag?: string })?._tag;
-  return (
-    tag === "InvalidLaunchTemplateNameNotFoundException" ||
-    tag === "InvalidLaunchTemplateIdNotFoundException" ||
-    tag === "InvalidLaunchTemplateId.Malformed" ||
-    tag === "InvalidLaunchTemplateId.NotFound"
-  );
-};
-
-const toTagRecord = (tags?: Array<{ Key?: string; Value?: string }>) =>
-  Object.fromEntries(
-    (tags ?? [])
-      .filter(
-        (tag): tag is { Key: string; Value: string } =>
-          Boolean(tag.Key && tag.Value !== undefined),
-      )
-      .map((tag) => [tag.Key, tag.Value]),
-  );
+  Credentials | Region | ExecutionContext.Server
+>("AWS.AutoScaling.LaunchTemplate", {
+  kind: "server",
+  runtime: createEc2HostExecutionContext("AWS.AutoScaling.LaunchTemplate"),
+});
 
 export const LaunchTemplateProvider = () =>
   LaunchTemplate.provider.effect(
@@ -205,7 +188,10 @@ export const LaunchTemplateProvider = () =>
         resourceType: "AWS.AutoScaling.LaunchTemplate",
       });
 
-      const toName = (id: string, props: { launchTemplateName?: string } = {}) =>
+      const toName = (
+        id: string,
+        props: { launchTemplateName?: string } = {},
+      ) =>
         props.launchTemplateName
           ? Effect.succeed(props.launchTemplateName)
           : createPhysicalName({ id, maxLength: 128, lowercase: true });
@@ -335,7 +321,11 @@ export const LaunchTemplateProvider = () =>
       });
 
       return {
-        stables: ["launchTemplateId", "launchTemplateArn", "launchTemplateName"],
+        stables: [
+          "launchTemplateId",
+          "launchTemplateArn",
+          "launchTemplateName",
+        ],
         diff: Effect.fn(function* ({ id, olds, news }) {
           const oldName = yield* toName(id, olds ?? {});
           const newName = yield* toName(id, news ?? {});
@@ -346,7 +336,11 @@ export const LaunchTemplateProvider = () =>
           if (JSON.stringify(olds) !== JSON.stringify(news)) {
             return {
               action: "update",
-              stables: ["launchTemplateId", "launchTemplateArn", "launchTemplateName"],
+              stables: [
+                "launchTemplateId",
+                "launchTemplateArn",
+                "launchTemplateName",
+              ],
             } as const;
           }
         }),
@@ -372,7 +366,7 @@ export const LaunchTemplateProvider = () =>
           const launchTemplateName = yield* toName(id, news);
           const tags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
           const runtime = yield* hosted.resolveHostedRuntime({
             id,
@@ -421,7 +415,10 @@ export const LaunchTemplateProvider = () =>
             TagSpecifications: [
               {
                 ResourceType: "launch-template",
-                Tags: Object.entries(tags).map(([Key, Value]) => ({ Key, Value })),
+                Tags: Object.entries(tags).map(([Key, Value]) => ({
+                  Key,
+                  Value,
+                })),
               },
             ],
             LaunchTemplateData: hosted.buildLaunchTemplateData(
@@ -458,11 +455,11 @@ export const LaunchTemplateProvider = () =>
         }) {
           const tags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
           const oldTags = {
             ...(yield* createInternalTags(id)),
-            ...(olds.tags ?? {}),
+            ...olds.tags,
           };
           const runtime = yield* hosted.resolveHostedRuntime({
             id,
@@ -511,4 +508,23 @@ export const LaunchTemplateProvider = () =>
         }),
       };
     }),
+  );
+
+const isLaunchTemplateNotFound = (error: unknown) => {
+  const tag = (error as { _tag?: string })?._tag;
+  return (
+    tag === "InvalidLaunchTemplateNameNotFoundException" ||
+    tag === "InvalidLaunchTemplateIdNotFoundException" ||
+    tag === "InvalidLaunchTemplateId.Malformed" ||
+    tag === "InvalidLaunchTemplateId.NotFound"
+  );
+};
+
+const toTagRecord = (tags?: Array<{ Key?: string; Value?: string }>) =>
+  Object.fromEntries(
+    (tags ?? [])
+      .filter((tag): tag is { Key: string; Value: string } =>
+        Boolean(tag.Key && tag.Value !== undefined),
+      )
+      .map((tag) => [tag.Key, tag.Value]),
   );

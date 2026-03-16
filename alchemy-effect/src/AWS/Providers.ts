@@ -4,8 +4,8 @@ import * as Layer from "effect/Layer";
 import { BuildProvider } from "../Build/Build.ts";
 import { rolldown } from "../Bundle/Rolldown.ts";
 import type { Provider } from "../Provider.ts";
-import * as ACM from "./ACM/index.ts";
 import * as Account from "./Account.ts";
+import * as ACM from "./ACM/index.ts";
 import * as Assets from "./Assets.ts";
 import * as AutoScaling from "./AutoScaling/index.ts";
 import * as CloudFront from "./CloudFront/index.ts";
@@ -25,7 +25,6 @@ import * as Kinesis from "./Kinesis/index.ts";
 import * as Lambda from "./Lambda/index.ts";
 import * as Logs from "./Logs/index.ts";
 import * as Organizations from "./Organizations/index.ts";
-import * as Pipes from "./Pipes/index.ts";
 import * as RDS from "./RDS/index.ts";
 import * as RDSData from "./RDSData/index.ts";
 import * as Region from "./Region.ts";
@@ -157,26 +156,25 @@ export const resources = () =>
     IdentityCenter.GroupProvider(),
     IdentityCenter.InstanceProvider(),
     IdentityCenter.PermissionSetProvider(),
-    Kinesis.StreamProvider(),
     Kinesis.StreamConsumerProvider(),
+    Kinesis.StreamProvider(),
     Lambda.EventSourceMappingProvider(),
     Lambda.FunctionProvider(),
     Lambda.PermissionProvider(),
     Logs.LogGroupProvider(),
     Organizations.AccountProvider(),
     Organizations.DelegatedAdministratorProvider(),
-    Organizations.OrganizationProvider(),
     Organizations.OrganizationalUnitProvider(),
+    Organizations.OrganizationProvider(),
     Organizations.OrganizationResourcePolicyProvider(),
     Organizations.PolicyAttachmentProvider(),
     Organizations.PolicyProvider(),
     Organizations.RootPolicyTypeProvider(),
     Organizations.RootProvider(),
     Organizations.TrustedServiceAccessProvider(),
-    Pipes.PipeProvider(),
+    RDS.DBClusterEndpointProvider(),
     RDS.DBClusterParameterGroupProvider(),
     RDS.DBClusterProvider(),
-    RDS.DBClusterEndpointProvider(),
     RDS.DBInstanceProvider(),
     RDS.DBParameterGroupProvider(),
     RDS.DBProxyEndpointProvider(),
@@ -261,8 +259,8 @@ export const bindings = () =>
     EventBridge.ToQueuePolicyLive,
     Kinesis.DescribeAccountSettingsPolicyLive,
     Kinesis.DescribeLimitsPolicyLive,
-    Kinesis.DescribeStreamPolicyLive,
     Kinesis.DescribeStreamConsumerPolicyLive,
+    Kinesis.DescribeStreamPolicyLive,
     Kinesis.DescribeStreamSummaryPolicyLive,
     Kinesis.GetRecordsPolicyLive,
     Kinesis.GetResourcePolicyPolicyLive,
@@ -297,8 +295,8 @@ export const bindings = () =>
     S3.PutObjectPolicyLive,
     S3.UploadPartPolicyLive,
     SecretsManager.DescribeSecretPolicyLive,
-    SecretsManager.GetSecretValuePolicyLive,
     SecretsManager.GetRandomPasswordPolicyLive,
+    SecretsManager.GetSecretValuePolicyLive,
     SecretsManager.ListSecretsPolicyLive,
     SecretsManager.PutSecretValuePolicyLive,
     SNS.AddPermissionPolicyLive,
@@ -321,6 +319,7 @@ export const bindings = () =>
     SNS.UntagResourcePolicyLive,
     SQS.DeleteMessageBatchPolicyLive,
     SQS.QueueSinkPolicyLive,
+    SQS.ReceiveMessagePolicyLive,
     SQS.SendMessageBatchPolicyLive,
     SQS.SendMessagePolicyLive,
     // SQS.QueueEventSourcePolicyLive,

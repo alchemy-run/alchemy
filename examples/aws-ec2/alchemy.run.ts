@@ -3,17 +3,17 @@ import * as Stack from "alchemy-effect/Stack";
 import * as Output from "alchemy-effect/Output";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import WebFleet from "./src/WebFleet.ts";
+import ServerInstance from "./src/ServerInstance.ts";
 
 const aws = AWS.providers().pipe(Layer.provide(AWS.DefaultStageConfig));
 
 export default Effect.gen(function* () {
-  const web = yield* WebFleet;
+  const instance = yield* ServerInstance;
 
   return {
-    albUrl: Output.interpolate`http://${web.albDnsName}`,
-    nlbUrl: Output.interpolate`http://${web.nlbDnsName}`,
-    enqueueExample: Output.interpolate`http://${web.albDnsName}/enqueue?message=hello`,
-    autoScalingGroupName: web.autoScalingGroupName,
+    instanceId: instance.instanceId,
+    publicIpAddress: instance.publicIpAddress,
+    instanceUrl: Output.interpolate`http://${instance.publicIpAddress}:3000`,
+    enqueueExample: Output.interpolate`http://${instance.publicIpAddress}:3000/enqueue?message=hello`,
   };
 }).pipe(Stack.make("AwsEc2Example", aws));

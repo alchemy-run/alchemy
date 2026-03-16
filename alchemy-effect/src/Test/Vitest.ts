@@ -142,11 +142,15 @@ const deriveStackName = (testPath: string, suffix: string) => {
     .replace(/-+/g, "-");
 };
 
-const runWithContext = <A>(
+const runWithContext = <A, Err>(
   stackName: string,
-  effect: Effect.Effect<A, any, Provided>,
+  effect: Effect.Effect<A, Err, Provided>,
   options: { state?: Layer.Layer<State.State, never, Stack.Stack> } = {},
-) => {
+): Effect.Effect<
+  A,
+  aws.Credentials.CredentialsError | Config.ConfigError | Err,
+  never
+> => {
   const stack = Layer.effect(
     Stack.Stack,
     Effect.succeed({
@@ -162,6 +166,7 @@ const runWithContext = <A>(
     Layer.mergeAll(awsStageConfig, stack, dotAlchemy),
   );
 
+  // @ts-expect-error
   return Effect.gen(function* () {
     const configProvider = ConfigProvider.orElse(
       yield* ConfigProvider.fromDotEnv({ path: ".env" }),
@@ -457,7 +462,7 @@ export function skipIf(condition: boolean) {
   };
 }
 
-export function beforeAll<A, E, R>(
+export function beforeAll<A, E = never, R extends Provided = never>(
   effect: Effect.Effect<A, E, R>,
   options?: { timeout?: number; stackName?: string },
 ): void {
@@ -465,15 +470,12 @@ export function beforeAll<A, E, R>(
   const stackName = options?.stackName ?? deriveStackName(testPath, "suite");
 
   vitestBeforeAll(
-    () =>
-      Effect.runPromise(
-        Effect.scoped(runWithContext(stackName, effect as any)),
-      ),
+    () => Effect.runPromise(Effect.scoped(runWithContext(stackName, effect))),
     options?.timeout,
   );
 }
 
-export function afterAll<A, E, R>(
+export function afterAll<A, E, R extends Provided = never>(
   effect: Effect.Effect<A, E, R>,
   options?: { timeout?: number; stackName?: string },
 ): void {
@@ -481,10 +483,7 @@ export function afterAll<A, E, R>(
   const stackName = options?.stackName ?? deriveStackName(testPath, "suite");
 
   vitestAfterAll(
-    () =>
-      Effect.runPromise(
-        Effect.scoped(runWithContext(stackName, effect as any)),
-      ),
+    () => Effect.runPromise(Effect.scoped(runWithContext(stackName, effect))),
     options?.timeout,
   );
 }

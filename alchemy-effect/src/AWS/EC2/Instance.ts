@@ -11,9 +11,12 @@ import * as Stream from "effect/Stream";
 import { Bundler, type BundleOptions } from "../../Bundle/Bundler.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { DotAlchemy } from "../../Config.ts";
-import { Host, type ServerExecutionContext } from "../../Host.ts";
+import {
+  ExecutionContext,
+  Host,
+  type ServerExecutionContext,
+} from "../../Host.ts";
 import type { Input } from "../../Input.ts";
-import type { ProcessRuntime } from "../../Process/Runtime.ts";
 import { Resource } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
@@ -27,13 +30,13 @@ import { Account } from "../Account.ts";
 import { Assets } from "../Assets.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { RegionID } from "../Region.ts";
-import type { SecurityGroupId } from "./SecurityGroup.ts";
-import type { SubnetId } from "./Subnet.ts";
-import type { VpcId } from "./Vpc.ts";
 import {
   createEc2HostExecutionContext,
   createEc2HostedSupport,
 } from "./hosted.ts";
+import type { SecurityGroupId } from "./SecurityGroup.ts";
+import type { SubnetId } from "./Subnet.ts";
+import type { VpcId } from "./Vpc.ts";
 
 export type InstanceId<ID extends string = string> = `i-${ID}`;
 export const InstanceId = <ID extends string>(id: ID): ID & InstanceId<ID> =>
@@ -292,8 +295,11 @@ export interface Instance extends Resource<
 export const Instance = Host<
   Instance,
   ServerExecutionContext,
-  Credentials | Region | ProcessRuntime
->("AWS.EC2.Instance", (id) => createEc2HostExecutionContext("AWS.EC2.Instance", id));
+  Credentials | Region | ExecutionContext.Server
+>("AWS.EC2.Instance", {
+  kind: "server",
+  runtime: createEc2HostExecutionContext("AWS.EC2.Instance"),
+});
 
 export const InstanceProvider = () =>
   Instance.provider.effect(
@@ -325,6 +331,44 @@ export const InstanceProvider = () =>
         assets,
         resourceType: "EC2.Instance",
       });
+
+      const isPendingInstanceProfileError = (error: unknown) => {
+        const tag = (error as { _tag?: string })?._tag;
+        if (
+          tag === "InvalidIAMInstanceProfile.NotFound" ||
+          tag === "InvalidParameterValue"
+        ) {
+          return true;
+        }
+        if (tag !== "UnknownAwsError") {
+          return false;
+        }
+        const unknown = error as {
+          errorTag?: string;
+          message?: string;
+          errorData?: {
+            message?: string;
+            Message?: string;
+          };
+        };
+        const message =
+          unknown.message ??
+          unknown.errorData?.message ??
+          unknown.errorData?.Message ??
+          "";
+        return (
+          unknown.errorTag === "InvalidParameterValue" &&
+          message.includes("iamInstanceProfile.name") &&
+          message.includes("Invalid IAM Instance Profile name")
+        );
+      };
+
+      const isPendingInstanceLookupError = (error: unknown) => {
+        const tag = (error as { _tag?: string })?._tag;
+        return (
+          error instanceof InstanceNotFound || tag === "InvalidInstanceID.NotFound"
+        );
+      };
 
       const toTagRecord = (tags?: Array<{ Key?: string; Value?: string }>) =>
         Object.fromEntries(
@@ -446,7 +490,9 @@ export const InstanceProvider = () =>
               }),
           ),
           Effect.retry({
-            while: (error) => error instanceof InstanceStateMismatch,
+            while: (error) =>
+              error instanceof InstanceStateMismatch ||
+              isPendingInstanceLookupError(error),
             schedule: Schedule.exponential("250 millis").pipe(
               Schedule.compose(Schedule.recurs(8)),
             ),
@@ -621,13 +667,7 @@ export const InstanceProvider = () =>
             .runInstances(buildRunInstancesRequest(news, runtime, tags))
             .pipe(
               Effect.retry({
-                while: (error) => {
-                  const tag = (error as { _tag?: string })._tag;
-                  return (
-                    tag === "InvalidIAMInstanceProfile.NotFound" ||
-                    tag === "InvalidParameterValue"
-                  );
-                },
+                while: isPendingInstanceProfileError,
                 schedule: Schedule.exponential("500 millis").pipe(
                   Schedule.compose(Schedule.recurs(8)),
                 ),
@@ -659,7 +699,12 @@ export const InstanceProvider = () =>
             });
           }
 
-          const refreshed = yield* describeInstance(instanceId);
+          const refreshed = yield* describeInstance(instanceId).pipe(
+            Effect.catchTag("InvalidInstanceID.NotFound", () =>
+              Effect.succeed(undefined),
+            ),
+            Effect.catchTag("InstanceNotFound", () => Effect.succeed(undefined)),
+          );
           return {
             ...toAttributes(refreshed ?? instance),
             instanceProfileName: runtime.instanceProfileName,

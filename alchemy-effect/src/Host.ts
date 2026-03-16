@@ -97,7 +97,13 @@ export const Host = <
   Services = never,
 >(
   type: R["Type"],
-  runtime: (id: string) => Runtime,
+  {
+    runtime,
+    kind,
+  }: {
+    kind: "serverless" | "server";
+    runtime: (id: string) => Runtime;
+  },
 ): HostClass<R, Runtime, Services | HostRuntimeServices> => {
   type Eff = Effect.Effect<R["Props"], never, Services | Runtime>;
 
@@ -124,6 +130,18 @@ export const Host = <
                 Effect.provide(
                   pipe(
                     Layer.succeed(ExecutionContext, executionContext),
+                    Layer.provideMerge(
+                      // @ts-expect-error
+                      kind === "serverless"
+                        ? Layer.succeed(
+                            ExecutionContext.Serverless,
+                            executionContext as ServerlessExecutionContext,
+                          )
+                        : Layer.succeed(
+                            ExecutionContext.Server,
+                            executionContext as ServerExecutionContext,
+                          ),
+                    ),
                     Layer.provideMerge(Layer.succeed(host, executionContext)),
                     Layer.provideMerge(Layer.succeedServices(services)),
                   ),
@@ -152,6 +170,17 @@ export class ExecutionContext extends ServiceMap.Service<
   ExecutionContext,
   ServerlessExecutionContext | ServerExecutionContext
 >()("Alchemy::ExecutionContext") {}
+
+export namespace ExecutionContext {
+  export class Serverless extends ServiceMap.Service<
+    Serverless,
+    ServerlessExecutionContext
+  >()("Alchemy::ServerlessExecutionContext") {}
+  export class Server extends ServiceMap.Service<
+    Server,
+    ServerExecutionContext
+  >()("Alchemy::ServerExecutionContext") {}
+}
 
 export type ExecutionContextService =
   | ServerlessExecutionContext

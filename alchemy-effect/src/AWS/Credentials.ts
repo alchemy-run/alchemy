@@ -10,6 +10,8 @@ import { Profile } from "./Profile.ts";
 
 import { StageConfig } from "./StageConfig.ts";
 
+export { Credentials } from "@distilled.cloud/aws/Credentials";
+
 /**
  * Create a lazy credentials layer from stage config.
  * Credentials are resolved on first access, not during layer construction.

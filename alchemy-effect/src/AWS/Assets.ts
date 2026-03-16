@@ -7,8 +7,7 @@ import * as Option from "effect/Option";
 import * as ServiceMap from "effect/ServiceMap";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 
-import { Account } from "./Account.ts";
-import { ASSETS_BUCKET_TAG, getAssetsBucketName } from "./Bootstrap.ts";
+import { lookupAssetsBucket } from "./Bootstrap.ts";
 
 /**
  * Error type for Assets service operations.
@@ -74,42 +73,10 @@ const LAMBDA_PREFIX = "lambda";
 const getLambdaAssetKey = (hash: string) => `${LAMBDA_PREFIX}/${hash}.zip`;
 
 /**
- * Look up the assets bucket by checking if it exists and has the correct tag.
+ * Look up the assets bucket by scanning for the bootstrap tags.
  * Returns Option.some(bucketName) if found, Option.none() otherwise.
  */
-export const lookupAssetsBucket = Effect.gen(function* () {
-  const region = yield* Region;
-  const accountId = yield* Account;
-  const bucketName = getAssetsBucketName(accountId, region);
-
-  // Check if the bucket exists
-  const exists = yield* s3.headBucket({ Bucket: bucketName }).pipe(
-    Effect.map(() => true),
-    Effect.catchTag("NotFound", () => Effect.succeed(false)),
-    Effect.catch(() => Effect.succeed(false)),
-  );
-
-  if (!exists) {
-    return Option.none<string>();
-  }
-
-  // Verify it has our tag
-  const tagging = yield* s3
-    .getBucketTagging({ Bucket: bucketName })
-    .pipe(
-      Effect.catchTag("NoSuchTagSet", () => Effect.succeed({ TagSet: [] })),
-    );
-
-  const hasAssetsTag = tagging.TagSet?.some(
-    (tag) => tag.Key === ASSETS_BUCKET_TAG && tag.Value === "true",
-  );
-
-  if (!hasAssetsTag) {
-    return Option.none<string>();
-  }
-
-  return Option.some(bucketName);
-});
+export { lookupAssetsBucket };
 
 /**
  * Create the Assets service implementation for a given bucket.

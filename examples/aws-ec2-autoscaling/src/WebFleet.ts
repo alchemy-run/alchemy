@@ -2,7 +2,7 @@ import { AWS } from "alchemy-effect";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Network, NetworkLive } from "./Network.ts";
-import ServerInstance from "./ServerInstance.ts";
+import ServerInstance from "./ServerLaunchTemplate.ts";
 
 const WebFleet = Effect.gen(function* () {
   const network = yield* Network;

@@ -4,24 +4,17 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import { Bundler, type BundleOptions } from "../../Bundle/Bundler.ts";
+import {
+  cleanupBundleTempDir,
+  createTempBundleDir,
+} from "../../Bundle/TempRoot.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import type { ServerExecutionContext } from "../../Host.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import type { ResourceBinding } from "../../Resource.ts";
-import {
-  Bundler,
-  type BundleOptions,
-} from "../../Bundle/Bundler.ts";
-import {
-  cleanupBundleTempDir,
-  createTempBundleDir,
-} from "../../Bundle/TempRoot.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  hasTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, hasTags } from "../../Tags.ts";
 import { sha256 } from "../../Util/sha256.ts";
 import { zipCode } from "../../Util/zip.ts";
 import { Assets } from "../Assets.ts";
@@ -75,52 +68,51 @@ export interface Ec2HostedCleanupState {
   assetPrefix?: string;
 }
 
-export const createEc2HostExecutionContext = (
-  type: string,
-  id: string,
-): ServerExecutionContext => {
-  const runners: Effect.Effect<void, never, any>[] = [];
-  const env: Record<string, any> = {};
+export const createEc2HostExecutionContext =
+  (type: string) =>
+  (id: string): ServerExecutionContext => {
+    const runners: Effect.Effect<void, never, any>[] = [];
+    const env: Record<string, any> = {};
 
-  return {
-    type,
-    id,
-    env,
-    set: (bindingId: string, output: Output.Output) =>
-      Effect.sync(() => {
-        const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
-        env[key] = output.pipe(Output.map((value) => JSON.stringify(value)));
-        return key;
-      }),
-    get: <T>(key: string) =>
-      Config.string(key)
-        .asEffect()
-        .pipe(
-          Effect.flatMap((value) =>
-            Effect.try({
-              try: () => JSON.parse(value) as T,
-              catch: (error) => error as Error,
-            }),
-          ),
-          Effect.catch((cause) =>
-            Effect.die(
-              new Error(`Failed to get environment variable: ${key}`, {
-                cause,
+    return {
+      type,
+      id,
+      env,
+      set: (bindingId: string, output: Output.Output) =>
+        Effect.sync(() => {
+          const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
+          env[key] = output.pipe(Output.map((value) => JSON.stringify(value)));
+          return key;
+        }),
+      get: <T>(key: string) =>
+        Config.string(key)
+          .asEffect()
+          .pipe(
+            Effect.flatMap((value) =>
+              Effect.try({
+                try: () => JSON.parse(value) as T,
+                catch: (error) => error as Error,
               }),
             ),
+            Effect.catch((cause) =>
+              Effect.die(
+                new Error(`Failed to get environment variable: ${key}`, {
+                  cause,
+                }),
+              ),
+            ),
           ),
+      run: ((effect: Effect.Effect<void, never, any>) =>
+        Effect.sync(() => {
+          runners.push(effect);
+        })) as unknown as ServerExecutionContext["run"],
+      exports: {
+        program: Effect.all(runners, { concurrency: "unbounded" }).pipe(
+          Effect.asVoid,
         ),
-    run: ((effect: Effect.Effect<void, never, any>) =>
-      Effect.sync(() => {
-        runners.push(effect);
-      })) as unknown as ServerExecutionContext["run"],
-    exports: {
-      program: Effect.all(runners, { concurrency: "unbounded" }).pipe(
-        Effect.asVoid,
-      ),
-    },
-  } satisfies ServerExecutionContext;
-};
+      },
+    } satisfies ServerExecutionContext;
+  };
 
 export const createEc2HostedSupport = ({
   accountId,
@@ -179,7 +171,10 @@ export const createEc2HostedSupport = ({
   const normalizeSecurityGroups = (groups?: readonly string[]) =>
     [...(groups ?? [])].sort((a, b) => a.localeCompare(b));
 
-  const bundleProgram = Effect.fn(function* (id: string, props: Ec2HostedProps) {
+  const bundleProgram = Effect.fn(function* (
+    id: string,
+    props: Ec2HostedProps,
+  ) {
     if (!props.main) {
       return yield* Effect.fail(
         new Error(
@@ -189,7 +184,11 @@ export const createEc2HostedSupport = ({
     }
 
     const handler = props.handler ?? "default";
-    const outfile = path.join(dotAlchemy, "out", `${stackName}-${stage}-${id}.mjs`);
+    const outfile = path.join(
+      dotAlchemy,
+      "out",
+      `${stackName}-${stage}-${id}.mjs`,
+    );
     const realMain = yield* fs.realPath(props.main);
     const tempDir = yield* createTempBundleDir(realMain, dotAlchemy, id);
     const realTempDir = yield* fs.realPath(tempDir);
@@ -601,7 +600,10 @@ systemctl enable --now ${unitName}.service
       } satisfies Ec2HostedRuntimeState;
     }
 
-    if (news.instanceProfileName && (news.roleManagedPolicyArns?.length ?? 0) > 0) {
+    if (
+      news.instanceProfileName &&
+      (news.roleManagedPolicyArns?.length ?? 0) > 0
+    ) {
       return yield* Effect.fail(
         new Error(
           `${resourceType} does not support roleManagedPolicyArns with a custom instanceProfileName in host mode`,
@@ -725,9 +727,9 @@ systemctl enable --now ${unitName}.service
     }
 
     if (output.managedIam && output.instanceProfileName && output.roleName) {
-      const attachedPolicyArns = yield* listAttachedPolicyArns(output.roleName).pipe(
-        Effect.catch(() => Effect.succeed([])),
-      );
+      const attachedPolicyArns = yield* listAttachedPolicyArns(
+        output.roleName,
+      ).pipe(Effect.catch(() => Effect.succeed([])));
       yield* iam
         .removeRoleFromInstanceProfile({
           InstanceProfileName: output.instanceProfileName,
@@ -829,7 +831,7 @@ systemctl enable --now ${unitName}.service
       : undefined;
     const network = buildEc2NetworkData(news);
     const instanceTags = {
-      ...(news.tags ?? {}),
+      ...news.tags,
     };
 
     return {

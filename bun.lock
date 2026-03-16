@@ -105,6 +105,16 @@
         "effect": "catalog:",
       },
     },
+    "examples/aws-ec2-autoscaling": {
+      "name": "aws-ec2-autoscaling-example",
+      "version": "0.0.0",
+      "dependencies": {
+        "@distilled.cloud/aws": "catalog:",
+        "@effect/platform-node": "catalog:",
+        "alchemy-effect": "workspace:*",
+        "effect": "catalog:",
+      },
+    },
     "examples/aws-ecs": {
       "name": "aws-ecs-example",
       "version": "0.0.0",
@@ -944,6 +954,8 @@
     "asynckit": ["asynckit@0.4.0", "", {}, "sha512-Oei9OH4tRh0YqU3GxhX79dM/mwVgvbZJaSNaRk+bshkj0S5cfHcgYakreBjrHwatXKbz+IoIdYLxrKim2MjW0Q=="],
 
     "auto-bind": ["auto-bind@5.0.1", "", {}, "sha512-ooviqdwwgfIfNmDwo94wlshcdzfO64XV0Cg6oDsDYBJfITDz1EngD2z7DkbvCWn+XIMsIqW27sEVF6qcpJrRcg=="],
+
+    "aws-ec2-autoscaling-example": ["aws-ec2-autoscaling-example@workspace:examples/aws-ec2-autoscaling"],
 
     "aws-ec2-example": ["aws-ec2-example@workspace:examples/aws-ec2"],
 
