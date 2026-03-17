@@ -61,9 +61,7 @@ const stack = Effect.gen(function* () {
               region: dashboardRegion,
               stat: "Average",
               period: 300,
-              metrics: [
-                ["AWS/Lambda", "Duration", "FunctionName", functionName],
-              ],
+              metrics: [["AWS/Lambda", "Duration", "FunctionName", functionName]],
             },
           },
         ],
@@ -94,7 +92,7 @@ const stack = Effect.gen(function* () {
   };
 }).pipe(
   Stack.make(
-    "JobLambda",
+    "JobLambdaHttpApi",
     Layer.mergeAll(
       // Fully configured cloud provider Layers go here:
       aws,

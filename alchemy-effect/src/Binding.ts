@@ -1,4 +1,3 @@
-import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -124,9 +123,6 @@ export const Policy =
           service
             ? Effect.succeed(service)
             : Effect.all([CurrentStack, ALCHEMY_PHASE.asEffect()]).pipe(
-                Effect.tap((f) =>
-                  Console.log(`Binding.Policy ${Identifier}`, f),
-                ),
                 Effect.flatMap(([stack, phase]) =>
                   stack && phase === "plan"
                     ? Effect.die(

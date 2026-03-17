@@ -1,6 +1,6 @@
 import { AWS } from "alchemy-effect";
 import * as Http from "alchemy-effect/Http";
-import { SQSQueueEventSource } from "alchemy-effect/Process/SQSQueueEventSource";
+import { SQSQueueEventSource } from "alchemy-effect/Server/SQSQueueEventSource";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";

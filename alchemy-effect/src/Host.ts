@@ -1,9 +1,11 @@
 import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import type { Scope } from "effect/Scope";
 import * as ServiceMap from "effect/ServiceMap";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
+
 import type { PolicyLike } from "./Binding.ts";
 import type { Input } from "./Input.ts";
 import type { Output } from "./Output.ts";
@@ -27,17 +29,10 @@ export type HostServices =
 export type HostRuntimeServices = ExecutionContext | HttpClient | Scope;
 
 export type HostConstructor<Self extends ResourceLike, RuntimeServices> = {
+  Props: Self["Props"];
   <Req extends HostServices | RuntimeServices = never>(
     id: string,
     eff: Self["Props"],
-  ): Effect.Effect<
-    Self,
-    never,
-    Provider<Self> | Exclude<Req, RuntimeServices | HostRuntimeServices>
-  >;
-  <Req extends HostServices | RuntimeServices = never>(
-    id: string,
-    eff: Effect.Effect<Input<Self["Props"]>, never, Req>,
   ): Effect.Effect<
     Self,
     never,
@@ -170,6 +165,10 @@ export class ExecutionContext extends ServiceMap.Service<
   ExecutionContext,
   ServerlessExecutionContext | ServerExecutionContext
 >()("Alchemy::ExecutionContext") {}
+
+export const CurrentExecutionContext = Effect.serviceOption(
+  ExecutionContext,
+).pipe(Effect.map(Option.getOrUndefined));
 
 export namespace ExecutionContext {
   export class Serverless extends ServiceMap.Service<

@@ -39,7 +39,8 @@
   },
   "files.exclude": {
     "**/__pycache__": true,
-    "**/*.pyc": true
+    "**/*.pyc": true,
+    "**/vendor": true
   },
   "[typescript]": {
     "editor.indentSize": 2,

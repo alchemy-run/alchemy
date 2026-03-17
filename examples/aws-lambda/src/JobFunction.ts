@@ -1,40 +1,99 @@
 import { AWS } from "alchemy-effect";
-import * as Http from "alchemy-effect/Http";
+import { Stack } from "alchemy-effect/Stack";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { JobHttpEffect } from "./JobHttpApi.ts";
-import { JobNotificationsSNS } from "./JobNotifications.ts";
-import { JobStorageDynamoDB } from "./JobStorage.ts";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import {
+  JobNotifications,
+  JobNotificationsSNS,
+  NotifyJobError,
+} from "./JobNotifications.ts";
+import {
+  GetJobError,
+  JobStorage,
+  JobStorageDynamoDB,
+  PutJobError,
+} from "./JobStorage.ts";
 
-// ## sync drift
-// alchemy sync
-// alchemy sync ./alchemy.run.ts
-// alchemy sync ./alchemy.run.ts --no-adopt (default)
-// alchemy sync ./alchemy.run.ts --stack
+export default Effect.gen(function* () {
+  const jobStorage = yield* JobStorage;
+  const notifications = yield* JobNotifications;
 
-// ## adopt resources
-// alchemy sync
-// alchemy sync --adopt (all)
-// alchemy sync ./alchemy.run.ts --adopt (all)
-// alchemy sync ./alchemy.run.ts --adopt JobsQueue,JobsDatabase
+  return Effect.gen(function* () {
+    const request = yield* HttpServerRequest;
+    const url = new URL(request.url);
 
-// ## deploy
-// alchemy deploy
-// alchemy deploy --adopt
-// alchemy deploy --dry-run --adopt
-// alchemy deploy --dry-run --adopt JobsQueue,JobsDatabase
+    if (request.method === "GET" && url.pathname === "/") {
+      const jobId = url.searchParams.get("jobId");
+      if (!jobId) {
+        return HttpServerResponse.text("Job ID is required", {
+          status: 400,
+        });
+      }
 
-const JobFunction = Effect.gen(function* () {
-  // register a HTTP server in the Lambda Function runtime
-  yield* Http.serve(yield* JobHttpEffect);
-  // if you want to use RPC instead of HttpApi:
-  // yield* Http.serve(yield* JobRpcHttpEffect);
+      const job = yield* jobStorage.getJob(jobId).pipe(
+        Effect.match({
+          onFailure: (error) => error,
+          onSuccess: (job) => job,
+        }),
+      );
 
-  // return the Function properties for this stage
-  return {
-    main: import.meta.path,
-    url: true,
-  } as const satisfies AWS.Lambda.FunctionProps;
+      if (job instanceof GetJobError) {
+        return HttpServerResponse.text(job.message, { status: 500 });
+      }
+
+      if (!job) {
+        return HttpServerResponse.text("Job not found", { status: 404 });
+      }
+
+      return yield* HttpServerResponse.json(job);
+    }
+
+    if (request.method === "POST" && url.pathname === "/") {
+      const content = yield* request.text;
+      if (!content) {
+        return HttpServerResponse.text("Job content is required", {
+          status: 400,
+        });
+      }
+
+      const job = yield* jobStorage
+        .putJob({
+          id: crypto.randomUUID(),
+          content,
+        })
+        .pipe(
+          Effect.match({
+            onFailure: (error) => error,
+            onSuccess: (job) => job,
+          }),
+        );
+
+      if (job instanceof PutJobError) {
+        return HttpServerResponse.text(job.message, { status: 500 });
+      }
+
+      const notificationResult = yield* notifications
+        .notifyJobCreated(job)
+        .pipe(
+          Effect.match({
+            onFailure: (error) => error,
+            onSuccess: () => undefined,
+          }),
+        );
+
+      if (notificationResult instanceof NotifyJobError) {
+        return HttpServerResponse.text(notificationResult.message, {
+          status: 500,
+        });
+      }
+
+      return yield* HttpServerResponse.json({ jobId: job.id }, { status: 201 });
+    }
+
+    return HttpServerResponse.text("Not found", { status: 404 });
+  });
 }).pipe(
   Effect.provide(
     Layer.mergeAll(
@@ -45,7 +104,11 @@ const JobFunction = Effect.gen(function* () {
       AWS.Lambda.HttpServer,
     ),
   ),
-  AWS.Lambda.Function("JobFunction"),
+  AWS.Lambda.Function(
+    "JobFunction",
+    Effect.map(Stack.asEffect(), (stack) => ({
+      main: import.meta.path,
+      memory: stack.stage === "prod" ? 1024 : 512,
+    })),
+  ),
 );
-
-export default JobFunction;

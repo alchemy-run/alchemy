@@ -89,7 +89,7 @@ export type WorkerProps = {
   main: string;
   compatibility?: {
     date?: string;
-    flags?: string[];
+    flags?: ("nodejs_compat" | "nodejs_als" | (string & {}))[];
   };
   limits?: Worker.Limits;
   placement?: Worker.Placement;
@@ -120,6 +120,10 @@ export interface Worker extends Resource<
     bindings: Worker.Binding[];
   }
 > {}
+
+export declare namespace Worker {
+  export type Props = typeof Worker.Props;
+}
 
 /**
  * A Cloudflare Worker host with deploy-time binding support and runtime export

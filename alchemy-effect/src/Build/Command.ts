@@ -1,19 +1,10 @@
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Stream from "effect/Stream";
+import { ChildProcess } from "effect/unstable/process";
 import { Resource } from "../Resource.ts";
-import { sha256 } from "../Util/sha256.ts";
-
-/**
- * Error thrown when a build command fails.
- */
-export class BuildCommandError extends Data.TaggedError("BuildCommandError")<{
-  message: string;
-  command: string;
-  exitCode: number;
-  stderr: string;
-}> {}
+import { sha256, sha256Object } from "../Util/sha256.ts";
 
 export interface BuildProps {
   /**
@@ -32,7 +23,7 @@ export interface BuildProps {
    * When the hash of matched files changes, the build will re-run.
    * @example ["src/*.ts", "src/*.tsx", "package.json"]
    */
-  include: string[];
+  hash: string[];
   /**
    * Glob patterns to exclude from input hashing.
    * Defaults to node_modules and .git directories.
@@ -49,6 +40,21 @@ export interface BuildProps {
    */
   env?: Record<string, string>;
 }
+
+export interface Command extends Resource<
+  "Build.Command",
+  BuildProps,
+  {
+    /**
+     * Absolute path to the build output.
+     */
+    path: string;
+    /**
+     * Hash of the input files that produced this build.
+     */
+    hash: string;
+  }
+> {}
 
 /**
  * A Build resource that runs a shell command and produces an output asset.
@@ -82,109 +88,42 @@ export interface BuildProps {
  * });
  * ```
  */
-export interface Build extends Resource<
-  "Build",
-  BuildProps,
-  {
-    /**
-     * Absolute path to the build output.
-     */
-    path: string;
-    /**
-     * Hash of the input files that produced this build.
-     */
-    hash: string;
-  }
-> {}
-
-export const Build = Resource<Build>("Build");
+export const Command = Resource<Command>("Build.Command");
 
 export const BuildProvider = () =>
-  Build.provider.effect(
+  Command.provider.effect(
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const pathModule = yield* Path.Path;
 
-      const hashFile = (file: string) =>
-        fs.readFile(file).pipe(
-          Effect.flatMap((content) =>
-            sha256(content).pipe(Effect.map((hash) => ({ file, hash }))),
-          ),
-          Effect.catch(() => Effect.succeed(null)),
-        );
-
       const computeInputHash = (props: BuildProps) =>
         Effect.gen(function* () {
           const cwd = props.cwd ? pathModule.resolve(props.cwd) : process.cwd();
-          const exclude = props.exclude ?? ["**/node_modules/**", "**/.git/**"];
-
-          const fg = yield* Effect.promise(() => import("fast-glob"));
-
-          const files = yield* Effect.promise(() =>
-            fg.glob(props.include, {
-              cwd,
-              ignore: exclude,
-              absolute: true,
-              onlyFiles: true,
-              dot: true,
-            }),
-          );
-
-          files.sort();
-
-          const results = yield* Effect.all(files.map(hashFile), {
-            concurrency: 10,
+          const files = yield* listBuildFiles({
+            cwd,
+            include: props.hash,
+            exclude: props.exclude ?? defaultBuildExclude,
           });
-          const fileHashes = results.filter(
-            (result): result is { file: string; hash: string } =>
-              result !== null,
-          );
-
-          const hash = yield* sha256(
-            JSON.stringify({
-              command: props.command,
-              env: props.env,
-              files: fileHashes.map(({ file, hash }) => `${file}:${hash}`),
-            }),
-          );
+          const fileHashes = yield* hashBuildFiles({
+            cwd,
+            files,
+          });
+          const hash = yield* sha256Object({
+            command: props.command,
+            env: props.env,
+            files: fileHashes,
+          });
           return hash;
         });
 
       const runBuild = (props: BuildProps) =>
         Effect.gen(function* () {
           const cwd = props.cwd ? pathModule.resolve(props.cwd) : process.cwd();
-          const env = { ...process.env, ...props.env };
-
-          const { exec } = yield* Effect.promise(() => import("child_process"));
-          const { promisify } = yield* Effect.promise(() => import("util"));
-          const execAsync = promisify(exec);
-
-          const result = yield* Effect.tryPromise({
-            try: () =>
-              execAsync(props.command, {
-                cwd,
-                env,
-                maxBuffer: 1024 * 1024 * 50,
-              }),
-            catch: (error: unknown) => {
-              const e = error as {
-                message?: string;
-                code?: number;
-                stderr?: string;
-              };
-              return new BuildCommandError({
-                message: `Build command failed: ${e.message ?? "Unknown error"}`,
-                command: props.command,
-                exitCode: e.code ?? 1,
-                stderr: e.stderr ?? "",
-              });
-            },
+          yield* runBuildCommand({
+            command: props.command,
+            cwd,
+            env: props.env,
           });
-
-          yield* Effect.logDebug("Build output", result.stdout);
-          if (result.stderr) {
-            yield* Effect.logDebug("Build stderr", result.stderr);
-          }
         });
 
       const getOutputPath = (props: BuildProps) => {
@@ -192,7 +131,7 @@ export const BuildProvider = () =>
         return pathModule.resolve(cwd, props.output);
       };
 
-      return Build.provider.of({
+      return Command.provider.of({
         stables: ["path"],
         diff: Effect.fnUntraced(function* ({ news, output }) {
           if (!output) {
@@ -224,9 +163,7 @@ export const BuildProvider = () =>
           const exists = yield* fs.exists(outputPath);
           if (!exists) {
             return yield* Effect.die(
-              new Error(
-                `Build completed but output path does not exist: ${outputPath}`,
-              ),
+              `Build completed but output path does not exist: ${outputPath}`,
             );
           }
 
@@ -247,9 +184,7 @@ export const BuildProvider = () =>
           const exists = yield* fs.exists(outputPath);
           if (!exists) {
             return yield* Effect.die(
-              new Error(
-                `Build completed but output path does not exist: ${outputPath}`,
-              ),
+              `Build completed but output path does not exist: ${outputPath}`,
             );
           }
 
@@ -270,3 +205,115 @@ export const BuildProvider = () =>
       });
     }),
   );
+
+export const defaultBuildExclude = ["**/node_modules/**", "**/.git/**"];
+
+export interface BuildFileGlobOptions {
+  cwd: string;
+  include: ReadonlyArray<string>;
+  exclude?: ReadonlyArray<string>;
+}
+
+export const listBuildFiles = Effect.fnUntraced(function* ({
+  cwd,
+  include,
+  exclude = defaultBuildExclude,
+}: BuildFileGlobOptions) {
+  const fg = yield* Effect.promise(() => import("fast-glob"));
+  const files = yield* Effect.promise(() =>
+    fg.glob(Array.from(include), {
+      cwd,
+      ignore: Array.from(exclude),
+      onlyFiles: true,
+      dot: true,
+    }),
+  );
+  files.sort();
+  return files.map((file) => file.replaceAll("\\", "/"));
+});
+
+export interface HashBuildFilesOptions {
+  cwd: string;
+  files: ReadonlyArray<string>;
+}
+
+export const hashBuildFiles = Effect.fnUntraced(function* ({
+  cwd,
+  files,
+}: HashBuildFilesOptions) {
+  const fs = yield* FileSystem.FileSystem;
+  const pathModule = yield* Path.Path;
+  const parts = yield* Effect.all(
+    files.map((file) =>
+      fs.readFile(pathModule.join(cwd, file)).pipe(
+        Effect.flatMap((content) =>
+          sha256(content).pipe(Effect.map((hash) => `${file}:${hash}`)),
+        ),
+        Effect.catch(() => Effect.succeed(undefined)),
+      ),
+    ),
+    { concurrency: 10 },
+  );
+  return parts.filter((part): part is string => part !== undefined);
+});
+
+export const hashBuildDirectory = Effect.fnUntraced(function* (
+  directory: string,
+) {
+  const files = yield* listBuildFiles({
+    cwd: directory,
+    include: ["**/*"],
+    exclude: [],
+  });
+  return yield* hashBuildFiles({ cwd: directory, files });
+});
+
+export interface RunBuildCommandOptions {
+  command: string;
+  cwd?: string;
+  env?: Record<string, string>;
+}
+
+export const execBuildCommand = Effect.fnUntraced(function* (
+  command: ChildProcess.Command,
+) {
+  const handle = yield* command;
+  const [exitCode, stdout, stderr] = yield* Effect.all(
+    [
+      handle.exitCode,
+      Stream.mkString(Stream.decodeText(handle.stdout)),
+      Stream.mkString(Stream.decodeText(handle.stderr)),
+    ] as const,
+    { concurrency: 3 },
+  );
+  return { exitCode, stdout, stderr };
+});
+
+export const runBuildCommand = Effect.fnUntraced(function* ({
+  command,
+  cwd,
+  env,
+}: RunBuildCommandOptions) {
+  const child = ChildProcess.setCwd(
+    ChildProcess.make(command, [], {
+      shell: true,
+      env: { ...process.env, ...env },
+    }),
+    cwd ?? process.cwd(),
+  );
+
+  const result = yield* execBuildCommand(child).pipe(Effect.orDie);
+
+  if (result.exitCode !== 0) {
+    return yield* Effect.die(
+      `Build command failed with exit code ${result.exitCode}${result.stderr ? `\n${result.stderr}` : ""}`,
+    );
+  }
+
+  yield* Effect.logDebug("Build output", result.stdout);
+  if (result.stderr) {
+    yield* Effect.logDebug("Build stderr", result.stderr);
+  }
+
+  return result;
+});

@@ -9,6 +9,27 @@ export const sha256 = (input: Input) =>
     return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
   });
 
+export const sha256Object = (input: object) =>
+  sha256(JSON.stringify(stableValue(input)));
+
+const stableValue = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map(stableValue);
+  }
+  if (
+    value &&
+    typeof value === "object" &&
+    Object.getPrototypeOf(value) === Object.prototype
+  ) {
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, nested]) => [key, stableValue(nested)]),
+    );
+  }
+  return value;
+};
+
 const toArrayBuffer = (input: Input) => {
   if (input instanceof ArrayBuffer) {
     return input;

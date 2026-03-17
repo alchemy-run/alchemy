@@ -32,6 +32,8 @@ export const DatabaseAurora = Layer.effect(
 
     const connect = yield* AWS.RDS.Connect.bind(database.cluster, {
       secret: database.secret,
+      securityGroupIds: [databaseSecurityGroup.groupId],
+      subnetIds: vpc.privateSubnetIds,
     });
 
     return Database.of({

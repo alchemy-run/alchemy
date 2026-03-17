@@ -1,5 +1,5 @@
 {
-  "name": "aws-vite-example",
+  "name": "aws-lambda-rpc",
   "version": "0.0.0",
   "private": true,
   "license": "Apache-2.0",
@@ -7,11 +7,8 @@
     "type": "git",
     "url": "https://github.com/alchemy-run/alchemy-effect"
   },
-  "type": "module",
   "scripts": {
-    "build": "vite build",
-    "dev:vite": "vite",
-    "preview": "vite preview",
+    "build": "tsc -b",
     "deploy": "alchemy deploy",
     "dev": "alchemy dev",
     "destroy": "alchemy destroy"
@@ -19,12 +16,7 @@
   "dependencies": {
     "@distilled.cloud/aws": "catalog:",
     "@effect/platform-node": "catalog:",
-    "@cloudflare/vite-plugin": "catalog:",
     "alchemy-effect": "workspace:*",
     "effect": "catalog:"
-  },
-  "devDependencies": {
-    "typescript": "catalog:",
-    "vite": "catalog:"
   }
 }

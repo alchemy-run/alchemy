@@ -24,7 +24,7 @@ import * as Cloudflare from "../Cloudflare/index.ts";
 import { apply } from "../Apply.ts";
 import * as Credentials from "../AWS/Credentials.ts";
 import * as Region from "../AWS/Region.ts";
-import type { Build } from "../Build/Build.ts";
+import type { Command } from "../Build/Command.ts";
 import type { Cli } from "../Cli/index.ts";
 import {
   buildNamespaceTree,
@@ -78,7 +78,7 @@ type Provided =
   | Cli
   | ExecutionContext
   | AWS.StageConfig
-  | Provider<Build>
+  | Provider<Command>
   | Layer.Success<ReturnType<typeof AWS.providers>>
   | Layer.Success<ReturnType<typeof Cloudflare.providers>>;
 

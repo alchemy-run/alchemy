@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import { createHash } from "node:crypto";
 import { readdirSync } from "node:fs";
 import path from "node:path";
-import { Build } from "../../Build/Build.ts";
+import { Command } from "../../Build/Command.ts";
 import * as Construct from "../../Construct.ts";
 import { toPath } from "../../FQN.ts";
 import type { Input } from "../../Input.ts";
@@ -186,10 +186,10 @@ export const StaticSite = Construct.fn(function* (
   }
 
   const build = props.build
-    ? yield* Build("Build", {
+    ? yield* Command("Build", {
         command: props.build.command,
-        cwd: sitePath as any,
-        include: props.build.include ?? ["**/*"],
+        cwd: sitePath,
+        hash: props.build.include ?? ["**/*"],
         exclude: [
           ...(props.build.exclude ?? []),
           `**/${props.build.output}/**`,
@@ -197,7 +197,7 @@ export const StaticSite = Construct.fn(function* (
           "**/.git/**",
         ],
         output: props.build.output,
-        env: props.environment as any,
+        env: props.environment,
       })
     : undefined;
 
@@ -219,7 +219,7 @@ export const StaticSite = Construct.fn(function* (
 
   const files = yield* AssetDeployment("Files", {
     bucket: bucket,
-    sourcePath: uploadSourcePath as any,
+    sourcePath: uploadSourcePath,
     prefix: normalizeUploadPrefix(assetPrefix, routerPathPrefix),
     purge: props.assets?.purge ?? true,
     fileOptions: props.assets?.fileOptions,
@@ -259,7 +259,7 @@ export const StaticSite = Construct.fn(function* (
           .replace(/\*/g, ".*")
       : undefined;
     yield* KvRoutesUpdate("RoutesUpdate", {
-      store: kvStoreArn as any,
+      store: kvStoreArn,
       namespace: routerAttachment.instance.kvNamespace as any,
       key: "routes",
       entry: [
@@ -271,7 +271,7 @@ export const StaticSite = Construct.fn(function* (
     });
     prodUrl = routerAttachment.domain
       ? `https://${routerAttachment.domain}${routerPathPrefix ?? ""}`
-      : (Output.interpolate`${routerAttachment.instance.url}${routerPathPrefix ?? ""}` as any);
+      : Output.interpolate`${routerAttachment.instance.url}${routerPathPrefix ?? ""}`;
   } else {
     if (
       domain &&
@@ -319,7 +319,7 @@ export const StaticSite = Construct.fn(function* (
           comment: `${id} viewer response`,
           code: buildResponseFunctionCode(props.edge.viewerResponse.injection),
           keyValueStoreArns: props.edge.viewerResponse.keyValueStoreArn
-            ? [props.edge.viewerResponse.keyValueStoreArn as any]
+            ? [props.edge.viewerResponse.keyValueStoreArn]
             : undefined,
         })
       : undefined;
@@ -327,13 +327,13 @@ export const StaticSite = Construct.fn(function* (
     const functionAssociations = [
       {
         eventType: "viewer-request" as const,
-        functionArn: viewerRequest.functionArn as any,
+        functionArn: viewerRequest.functionArn,
       },
       ...(viewerResponse
         ? [
             {
               eventType: "viewer-response" as const,
-              functionArn: viewerResponse.functionArn as any,
+              functionArn: viewerResponse.functionArn,
             },
           ]
         : []),
@@ -394,7 +394,7 @@ export const StaticSite = Construct.fn(function* (
       customErrorResponses,
       viewerCertificate: certificate
         ? {
-            acmCertificateArn: (certificate as any).certificateArn,
+            acmCertificateArn: certificate.certificateArn,
             sslSupportMethod: "sni-only",
             minimumProtocolVersion: "TLSv1.2_2021",
           }
@@ -432,8 +432,8 @@ export const StaticSite = Construct.fn(function* (
       : Output.interpolate`https://${dist.domainName}`;
   }
 
-  const kvUpdated = yield* KvEntries("KvEntries", {
-    store: kvStoreArn as any,
+  yield* KvEntries("KvEntries", {
+    store: kvStoreArn,
     namespace: kvNamespace,
     entries: kvEntries,
     purge: props.assets?.purge ?? true,
@@ -443,7 +443,7 @@ export const StaticSite = Construct.fn(function* (
     invalidationProps === false
       ? undefined
       : yield* Invalidation("Invalidation", {
-          distributionId: distributionId as any,
+          distributionId: distributionId,
           version: files.version,
           wait: invalidationProps?.wait,
           paths:
@@ -455,7 +455,7 @@ export const StaticSite = Construct.fn(function* (
         });
 
   return {
-    bucket: bucket as any,
+    bucket: bucket,
     build,
     files,
     distribution,

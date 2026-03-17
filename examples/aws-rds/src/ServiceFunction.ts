@@ -1,27 +1,52 @@
 import { AWS } from "alchemy-effect";
-import * as Http from "alchemy-effect/Http";
-import type { Input } from "alchemy-effect/Input";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { DatabaseAurora } from "./Database.ts";
-import { HttpServer } from "./HttpServer.ts";
-import { Network, NetworkLive } from "./Network.ts";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Database, DatabaseAurora } from "./Database.ts";
+import { NetworkLive } from "./Network.ts";
 
-export default Effect.gen(function* () {
-  const network = yield* Network;
+const ServiceFunction = Effect.gen(function* () {
+  const db = yield* Database;
 
-  yield* Http.serve(yield* HttpServer);
+  return Effect.gen(function* () {
+    const request = yield* HttpServerRequest;
 
-  return {
-    main: import.meta.path,
-    url: true,
-    vpc: {
-      subnetIds: network.vpc.privateSubnets.map((subnet) => subnet.subnetId),
-      securityGroupIds: network.privateSecurityGroups.map(
-        (securityGroup) => securityGroup.groupId,
-      ),
-    },
-  } satisfies Input<AWS.Lambda.FunctionProps>;
+    if (request.method === "GET" && new URL(request.url).pathname === "/") {
+      const response = yield* db
+        .query<{
+          database: string;
+          current_time: string;
+          current_user: string;
+        }>(
+          "select current_database() as database, now()::text as current_time, current_user::text as current_user",
+        )
+        .pipe(
+          Effect.match({
+            onFailure: (error) => ({
+              status: 500 as const,
+              body: {
+                ok: false,
+                error: error.message,
+              },
+            }),
+            onSuccess: (rows) => ({
+              status: 200 as const,
+              body: {
+                ok: true,
+                connection: rows[0] ?? null,
+              },
+            }),
+          }),
+        );
+
+      return yield* HttpServerResponse.json(response.body, {
+        status: response.status,
+      });
+    }
+
+    return HttpServerResponse.text("Not found", { status: 404 });
+  });
 }).pipe(
   Effect.provide(
     Layer.provideMerge(
@@ -29,5 +54,15 @@ export default Effect.gen(function* () {
       Layer.mergeAll(NetworkLive, AWS.RDS.ConnectLive),
     ),
   ),
-  AWS.Lambda.Function("ServiceFunction"),
+);
+
+export default ServiceFunction.pipe(
+  AWS.Lambda.Function(
+    "ServiceFunction",
+    Effect.map(Stack.asEffect(), (stack) => ({
+      main: import.meta.path,
+      memory: stack.stage === "prod" ? 1024 : 512,
+      runtime: stack.stage === "prod" ? "nodejs24.x" : "nodejs22.x",
+    })),
+  ),
 );

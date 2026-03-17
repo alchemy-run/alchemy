@@ -14,16 +14,25 @@ import { RemovalPolicy } from "./RemovalPolicy.ts";
 import { Stack } from "./Stack.ts";
 
 export type ResourceConstructor<R extends ResourceLike, Req = never> = {
+  Props: R["Props"];
   (
     id: string,
     ...args: {} extends R["Props"]
-      ? [props?: Input<R["Props"]>]
-      : [props: Input<R["Props"]>]
+      ? [
+          props?: {
+            [prop in keyof R["Props"]]: Input<R["Props"][prop]>;
+          },
+        ]
+      : [
+          props: {
+            [prop in keyof R["Props"]]: Input<R["Props"][prop]>;
+          },
+        ]
   ): Effect.Effect<R, never, Req>;
-  <PropsReq = never>(
-    id: string,
-    props: Effect.Effect<Input<R["Props"]>, never, PropsReq>,
-  ): Effect.Effect<R, never, PropsReq | Req>;
+  // <PropsReq = never>(
+  //   id: string,
+  //   props: Effect.Effect<Input<R["Props"]>, never, PropsReq>,
+  // ): Effect.Effect<R, never, PropsReq | Req>;
 };
 
 export type ResourceClass<Self extends ResourceLike> = ResourceConstructor<
