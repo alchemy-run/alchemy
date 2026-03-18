@@ -3,7 +3,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as ServiceMap from "effect/ServiceMap";
 import { SingleShotGen } from "effect/Utils";
-import { ExecutionContext, Self } from "./Host.ts";
+import { ExecutionContext, Self } from "./ExecutionContext.ts";
 import * as Namespace from "./Namespace.ts";
 import { ALCHEMY_PHASE } from "./Phase.ts";
 import type { ResourceLike } from "./Resource.ts";

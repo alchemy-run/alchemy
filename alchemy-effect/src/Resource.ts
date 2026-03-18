@@ -3,8 +3,8 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { pipeArguments, type Pipeable } from "effect/Pipeable";
 import { SingleShotGen } from "effect/Utils";
+import { Self } from "./ExecutionContext.ts";
 import { toFqn } from "./FQN.ts";
-import { Self } from "./Host.ts";
 import type { Input } from "./Input.ts";
 import type { InstanceId } from "./InstanceId.ts";
 import { CurrentNamespace, type NamespaceNode } from "./Namespace.ts";
@@ -54,7 +54,7 @@ export interface ResourceBinding<Data = any> {
 export interface ResourceLike<
   Type extends string = any,
   Props extends object | undefined = any,
-  Attributes extends object = any,
+  Attributes extends object = object,
   Binding = any,
 > {
   /**

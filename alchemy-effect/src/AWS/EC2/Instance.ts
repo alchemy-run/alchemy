@@ -11,13 +11,10 @@ import * as Stream from "effect/Stream";
 import { Bundler, type BundleOptions } from "../../Bundle/Bundler.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { DotAlchemy } from "../../Config.ts";
-import {
-  ExecutionContext,
-  Host,
-  type ServerExecutionContext,
-} from "../../Host.ts";
 import type { Input } from "../../Input.ts";
 import { Resource } from "../../Resource.ts";
+import * as Server from "../../Server/Process.ts";
+import type { ServerExecutionContext } from "../../Server/ExecutionContext.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import {
@@ -292,14 +289,9 @@ export interface Instance extends Resource<
  * );
  * ```
  */
-export const Instance = Host<
-  Instance,
-  ServerExecutionContext,
-  Credentials | Region | ExecutionContext.Server
->("AWS.EC2.Instance", {
-  kind: "server",
-  runtime: createEc2HostExecutionContext("AWS.EC2.Instance"),
-});
+export const Instance = Server.Process<Instance, Credentials | Region>(
+  "AWS.EC2.Instance",
+)(createEc2HostExecutionContext("AWS.EC2.Instance"));
 
 export const InstanceProvider = () =>
   Instance.provider.effect(

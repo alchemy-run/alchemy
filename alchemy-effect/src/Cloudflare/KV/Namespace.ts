@@ -54,12 +54,13 @@ export const NamespaceProvider = (): Layer<
 
       return {
         stables: ["namespaceId", "accountId"],
-        diff: Effect.fn(function* ({ id, news = {}, output }) {
-          if (output.accountId !== accountId) {
+        diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
+          if ((output?.accountId ?? accountId) !== accountId) {
             return { action: "replace" } as const;
           }
           const title = yield* createTitle(id, news.title);
-          if (title !== output.title) {
+          const oldTitle = output?.title ?? (yield* createTitle(id, olds.title));
+          if (title !== oldTitle) {
             return { action: "update" } as const;
           }
         }),

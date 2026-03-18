@@ -298,7 +298,10 @@ export const SecurityGroupProvider = () =>
 
           // Group name change requires replacement
           const newGroupName = yield* createGroupName(id, news.groupName);
-          if (newGroupName !== output.groupName) {
+          const oldGroupName = output?.groupName
+            ? output.groupName
+            : yield* createGroupName(id, olds.groupName);
+          if (newGroupName !== oldGroupName) {
             return { action: "replace" };
           }
 

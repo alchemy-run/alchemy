@@ -7,6 +7,7 @@ import * as workers from "@distilled.cloud/cloudflare/workers";
 import type { Workers } from "cloudflare/resources";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as ServiceMap from "effect/ServiceMap";
@@ -16,11 +17,8 @@ import {
 } from "../../Bundle/TempRoot.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/index.ts";
 import { DotAlchemy } from "../../Config.ts";
-import {
-  Host,
-  type ListenHandler,
-  type ServerlessExecutionContext,
-} from "../../Host.ts";
+import * as Serverless from "../../Serverless/index.ts";
+
 import type { Input } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -28,21 +26,27 @@ import { Resource } from "../../Resource.ts";
 import { sha256 } from "../../Util/sha256.ts";
 import { Account } from "../Account.ts";
 import * as Assets from "./Assets.ts";
-import type { DurableObjectState } from "./DurableObject.ts";
+import { HttpServer } from "./HttpServer.ts";
+import cloudflare_workers from "./cloudflare:workers.ts";
 
-export const isWorker = <T>(value: T): value is T & Worker => {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "type" in value &&
-    value.type === "Cloudflare.Worker"
-  );
-};
+const TypeId = "Cloudflare.Worker";
+type TypeId = typeof TypeId;
+
+export const isWorker = <T>(value: T): value is T & Worker =>
+  typeof value === "object" &&
+  value !== null &&
+  "Type" in value &&
+  value.Type === TypeId;
 
 export class WorkerEnvironment extends ServiceMap.Service<
   WorkerEnvironment,
   Record<string, any>
 >()("Cloudflare.Workers.WorkerEnvironment") {}
+
+export const WorkerEnvironmentLive = Layer.effect(
+  WorkerEnvironment,
+  cloudflare_workers.pipe(Effect.map((m) => m.env)),
+);
 
 export class ExecutionContext extends ServiceMap.Service<
   ExecutionContext,
@@ -97,12 +101,12 @@ export type WorkerProps = {
   exports?: string[];
 };
 
-export interface WorkerExecutionContext extends ServerlessExecutionContext {
+export interface WorkerExecutionContext extends Serverless.ExecutionContext {
   export(name: string, value: any): Effect.Effect<void>;
 }
 
 export interface Worker extends Resource<
-  "Cloudflare.Workers.Worker",
+  TypeId,
   WorkerProps,
   {
     workerId: string;
@@ -141,102 +145,105 @@ export declare namespace Worker {
  * });
  * ```
  */
-export const Worker = Host<
-  Worker,
-  WorkerExecutionContext,
-  DurableObjectState | WorkerEnvironment | ExecutionContext
->("Cloudflare.Workers.Worker", {
-  kind: "serverless",
-  runtime: (id: string) => {
-    const listeners: Effect.Effect<ListenHandler>[] = [];
-    const exports: Record<string, any> = {};
-    const env: Record<string, any> = {};
+export const Worker = Serverless.Function<Worker, WorkerEnvironment>(TypeId)((
+  id: string,
+): WorkerExecutionContext => {
+  const listeners: Effect.Effect<Serverless.Listener>[] = [];
+  const exports: Record<string, any> = {};
+  const env: Record<string, any> = {};
 
-    return {
-      type: "Cloudflare.Workers.Worker",
-      id,
-      run: undefined!,
-      env,
-      get: (key: string) =>
-        Effect.serviceOption(WorkerEnvironment).pipe(
-          Effect.map(Option.getOrUndefined),
-          Effect.flatMap((env) =>
-            env
-              ? Effect.succeed(env[key])
-              : Effect.die("WorkerEnvironment not found"),
-          ),
-          Effect.flatMap((value) =>
-            value
-              ? Effect.succeed(value)
-              : Effect.die(`Environment variable '${key}' not found`),
-          ),
-        ) as any,
-      set: (id: string, output: Output.Output) =>
-        Effect.sync(() => {
-          const key = id.replaceAll(/[^a-zA-Z0-9]/g, "_");
-          env[key] = output.pipe(Output.map((value) => JSON.stringify(value)));
-          return key;
-        }),
-      listen: ((handler: ListenHandler | Effect.Effect<ListenHandler>) =>
-        Effect.sync(() =>
-          Effect.isEffect(handler)
-            ? listeners.push(handler)
-            : listeners.push(Effect.succeed(handler)),
-        )) as any as ServerlessExecutionContext["listen"],
-      export: (name: string, value: any) =>
-        Effect.gen(function* () {
-          if (name in exports) {
-            return yield* Effect.die(
-              new Error(`Worker export '${name}' already exists`),
-            );
-          }
-          exports[name] = value;
-        }),
-      exports: Effect.gen(function* () {
-        const handlers = yield* Effect.all(listeners, {
-          concurrency: "unbounded",
-        });
-        const handle =
-          (type: WorkerEvent["type"]) =>
-          (request: any, env: unknown, context: cf.ExecutionContext) => {
-            const event: WorkerEvent = {
-              kind: "Cloudflare.Workers.WorkerEvent",
-              type,
-              input: request,
-              env,
-              context,
-            };
-            for (const handler of handlers) {
-              const eff = handler(event);
-              if (Effect.isEffect(eff)) {
-                return eff.pipe(
-                  Effect.provideService(ExecutionContext, context),
-                  Effect.provideService(
-                    WorkerEnvironment,
-                    env as Record<string, any>,
-                  ),
-                  Effect.runPromise,
-                );
-              }
-            }
-            throw new Error("No event handler found");
-          };
-        return {
-          ...exports,
-          default: {
-            fetch: handle("fetch"),
-            email: handle("email"),
-            queue: handle("queue"),
-            scheduled: handle("scheduled"),
-            tail: handle("tail"),
-            trace: handle("trace"),
-            tailStream: handle("tailStream"),
-            test: handle("test"),
-          } satisfies Required<cf.ExportedHandler>,
-        };
+  return {
+    type: TypeId,
+    id,
+    env,
+    get: (key: string) =>
+      Effect.serviceOption(WorkerEnvironment).pipe(
+        Effect.map(Option.getOrUndefined),
+        Effect.flatMap((env) =>
+          env
+            ? Effect.succeed(env[key])
+            : Effect.die("WorkerEnvironment not found"),
+        ),
+        Effect.flatMap((value) =>
+          value
+            ? Effect.succeed(value)
+            : Effect.die(`Environment variable '${key}' not found`),
+        ),
+      ) as any,
+    set: (id: string, output: Output.Output) =>
+      Effect.sync(() => {
+        const key = id.replaceAll(/[^a-zA-Z0-9]/g, "_");
+        env[key] = output.pipe(Output.map((value) => JSON.stringify(value)));
+        return key;
       }),
-    } satisfies WorkerExecutionContext;
-  },
+    listen: ((
+      handler: Serverless.Listener | Effect.Effect<Serverless.Listener>,
+    ) =>
+      Effect.sync(() =>
+        Effect.isEffect(handler)
+          ? listeners.push(handler)
+          : listeners.push(Effect.succeed(handler)),
+      )) as any as Serverless.ExecutionContext["listen"],
+    export: (name: string, value: any) =>
+      Effect.gen(function* () {
+        if (name in exports) {
+          return yield* Effect.die(
+            new Error(`Worker export '${name}' already exists`),
+          );
+        }
+        exports[name] = value;
+      }),
+    exports: Effect.gen(function* () {
+      const handlers = yield* Effect.all(listeners, {
+        concurrency: "unbounded",
+      });
+      const handle =
+        (type: WorkerEvent["type"]) =>
+        (request: any, env: unknown, context: cf.ExecutionContext) => {
+          const event: WorkerEvent = {
+            kind: "Cloudflare.Workers.WorkerEvent",
+            type,
+            input: request,
+            env,
+            context,
+          };
+          for (const handler of handlers) {
+            const eff = handler(event);
+            if (Effect.isEffect(eff)) {
+              return eff.pipe(
+                Effect.provide(
+                  Layer.provideMerge(
+                    Layer.mergeAll(
+                      Layer.succeed(ExecutionContext, context),
+                      HttpServer,
+                    ),
+                    Layer.succeed(
+                      WorkerEnvironment,
+                      env as Record<string, any>,
+                    ),
+                  ),
+                ),
+                Effect.runPromise,
+              );
+            }
+          }
+          return Promise.reject(new Error("No event handler found"));
+        };
+      return {
+        ...exports,
+        default: {
+          fetch: handle("fetch"),
+          email: handle("email"),
+          queue: handle("queue"),
+          scheduled: handle("scheduled"),
+          tail: handle("tail"),
+          trace: handle("trace"),
+          tailStream: handle("tailStream"),
+          test: handle("test"),
+        } satisfies Required<cf.ExportedHandler>,
+      };
+    }),
+  };
 });
 
 export declare namespace Worker {
@@ -649,13 +656,19 @@ ${props.exports?.map((id) => `export class ${id} {}`).join("\n") ?? ""}
 
       return Worker.provider.of({
         stables: ["workerId"],
-        diff: Effect.fnUntraced(function* ({ id, news, output }) {
-          if (output.accountId !== accountId) {
+        diff: Effect.fnUntraced(function* ({ id, news, olds, output }) {
+          if ((output?.accountId ?? accountId) !== accountId) {
             return { action: "replace" };
           }
           const workerName = yield* createWorkerName(id, news.name);
-          if (workerName !== output.workerName) {
+          const oldWorkerName = output?.workerName
+            ? output.workerName
+            : yield* createWorkerName(id, olds?.name);
+          if (workerName !== oldWorkerName) {
             return { action: "replace" };
+          }
+          if (!output) {
+            return;
           }
           const [assets, bundle] = yield* Effect.all([
             prepareAssets(news.assets),
@@ -667,7 +680,7 @@ ${props.exports?.map((id) => `export class ${id} {}`).join("\n") ?? ""}
           ) {
             return {
               action: "update",
-              stables: output.workerName === workerName ? ["name"] : undefined,
+              stables: oldWorkerName === workerName ? ["name"] : undefined,
             };
           }
         }),

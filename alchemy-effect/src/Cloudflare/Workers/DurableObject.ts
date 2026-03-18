@@ -2,13 +2,44 @@ import type * as cf from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as ServiceMap from "effect/ServiceMap";
+import type { HttpServerError } from "effect/unstable/http/HttpServerError";
+import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import type * as Socket from "effect/unstable/socket/Socket";
 import * as Binding from "../../Binding.ts";
+import type { HttpEffect } from "../../Http.ts";
+import { serveWebRequest } from "./HttpServer.ts";
 import { isWorker, Worker, WorkerEnvironment } from "./Worker.ts";
+import cloudflare_workers from "./cloudflare:workers.ts";
 
 export type DurableObjectId = cf.DurableObjectId;
 export type DurableObjectJurisdiction = cf.DurableObjectJurisdiction;
 export type DurableObjectNamespaceGetDurableObjectOptions =
   cf.DurableObjectNamespaceGetDurableObjectOptions;
+
+export interface DurableWebSocket extends Socket.Socket {
+  close: (
+    code: number,
+    reason: string,
+  ) => Effect.Effect<void, Socket.SocketError>;
+  serializeAttachment: <T>(value: T) => Effect.Effect<void>;
+  deserializeAttachment: <T>() => Effect.Effect<T>;
+}
+
+export interface WebSocketHttpResponse
+  extends HttpServerResponse.HttpServerResponse {
+  webSocket: DurableWebSocket;
+}
+
+export const upgrade: (
+  request: HttpServerRequest.HttpServerRequest,
+) => Effect.Effect<[WebSocketHttpResponse, DurableWebSocket]> =
+  Effect.fnUntraced(function* (request) {
+    const socket = yield* request.upgrade;
+    // TODO(sam): implement hibernation logic
+    // TODO(sam): add serialize and deserialize attachments
+    return socket;
+  });
 
 export interface DurableObjectNamespace<Name extends string, Shape> {
   name: Name;
@@ -25,33 +56,82 @@ export interface DurableObjectNamespace<Name extends string, Shape> {
   ) => Effect.Effect<DurableObjectNamespace<Name, Shape>>;
 }
 
-export const DurableObjectNamespace = Effect.fnUntraced(function* <
-  const Name extends string,
-  Shape extends Record<string, any>,
-  Req = never,
->(namespace: Name, eff: Effect.Effect<Shape, never, Req>) {
+export interface DurableObjectShape {
+  fetch: HttpEffect;
+  webSocketMessage?: (
+    socket: DurableWebSocket,
+    message: string | Uint8Array,
+  ) => Effect.Effect<void, Socket.SocketError>;
+  webSocketClose?: (
+    socket: DurableWebSocket,
+    code: number,
+    reason: string,
+    wasClean: boolean,
+  ) => Effect.Effect<void, Socket.SocketError>;
+
+  // [key in string]?: key extends "fetch"
+  //   ? HttpEffect
+  //   :
+  //       | Effect.Effect<any, any, HttpServerRequest.HttpServerRequest | Scope>
+  //       | ((
+  //           ...args: any[]
+  //         ) => Effect.Effect<any, any> | Stream.Stream<any, any>);
+}
+
+export const DurableObjectNamespace: {
+  <Name extends string, Shape extends DurableObjectShape, Req = never>(
+    namespace: Name,
+    eff: Effect.Effect<Effect.Effect<Shape, never, Req>>,
+  ): Effect.Effect<
+    DurableObjectNamespace<
+      Name,
+      {
+        [k in keyof Omit<
+          Shape,
+          "fetch" | "webSocketMessage" | "webSocketClose"
+        >]: Omit<Shape, "fetch" | "webSocketMessage" | "webSocketClose">[k];
+      }
+    >,
+    never,
+    Exclude<Req, DurableObjectState> | DurableObjectPolicy
+  >;
+} = Effect.fnUntraced(function* (
+  namespace,
+  eff: Effect.Effect<DurableObjectShape>,
+) {
   const worker = yield* Worker.Runtime;
 
   yield* DurableObjectPolicy.bind(namespace);
 
-  const DurableObject = yield* Effect.promise(() =>
-    // @ts-expect-error
-    import("cloudflare:workers").then((m) => m.DurableObject),
+  const DurableObject = yield* cloudflare_workers.pipe(
+    Effect.map((m) => m.DurableObject),
   );
 
-  const services = yield* Effect.services<Req>();
+  const services = yield* Effect.services<Effect.Services<typeof eff>>();
 
   yield* worker.export(
     namespace,
     class extends DurableObject {
-      constructor(state: cf.DurableObjectState, env: any) {
+      constructor(
+        state: cf.DurableObjectState,
+        env: any,
+        ctx: cf.DurableObject,
+      ) {
         super(state, env);
 
-        const methods = state.waitUntil(
-          Effect.runPromise(eff.pipe(Effect.provide(services))),
-        );
+        const runtimeState = fromDurableObjectState(state);
 
-        Object.assign(this, methods);
+        state.blockConcurrencyWhile(async () => {
+          const methods = await Effect.runPromise(
+            eff.pipe(
+              Effect.provideServices(services),
+              Effect.provideService(DurableObjectState, runtimeState),
+              Effect.provideService(WorkerEnvironment, env),
+            ),
+          );
+
+          Object.assign(this, wrapDurableObjectShape(methods, state));
+        });
       }
     },
   );
@@ -84,19 +164,19 @@ export const DurableObjectNamespace = Effect.fnUntraced(function* <
 
   return {
     name: namespace,
-    // @ts-expect-error - TODO(sam): we need to build a proxy around Cloudflare RPC
-    getByName: (name: string) => use((ns) => ns.getByName(name) as Shape),
+    getByName: (name: string) =>
+      use((ns) => wrapDurableObjectStub(ns.getByName(name))),
     newUniqueId: () => use((ns) => ns.newUniqueId()),
     idFromName: (name: string) => use((ns) => ns.idFromName(name)),
     idFromString: (id: string) => use((ns) => ns.idFromString(id)),
     get: (
       id: cf.DurableObjectId,
       options?: cf.DurableObjectNamespaceGetDurableObjectOptions,
-    ) => use((ns) => ns.get(id, options)),
+    ) => use((ns) => wrapDurableObjectStub(ns.get(id, options))),
     jurisdiction: (jurisdiction: cf.DurableObjectJurisdiction) =>
       use((ns) => ns.jurisdiction(jurisdiction)),
-  } as unknown as DurableObjectNamespace<Name, Shape>;
-});
+  };
+}) as any;
 
 export class DurableObjectPolicy extends Binding.Policy<
   DurableObjectPolicy,
@@ -124,9 +204,7 @@ export const DurableObjectPolicyLive = DurableObjectPolicy.layer.succeed(
       });
     } else {
       return yield* Effect.die(
-        new Error(
-          `DurableObjectPolicy does not support runtime '${host.Type}'`,
-        ),
+        `DurableObjectPolicy does not support runtime '${host.Type}'`,
       );
     }
   }),
@@ -135,6 +213,14 @@ export const DurableObjectPolicyLive = DurableObjectPolicy.layer.succeed(
 export type DurableObjectStub<Shape> = {
   // TODO(sam): do we need to transform? hopefully not
   [key in keyof Shape]: Shape[key];
+} & {
+  fetch: (
+    request: HttpServerRequest.HttpServerRequest,
+  ) => Effect.Effect<
+    HttpServerResponse.HttpServerResponse,
+    HttpServerError,
+    never
+  >;
 };
 
 export class DurableObjectState extends ServiceMap.Service<
@@ -149,12 +235,12 @@ export class DurableObjectState extends ServiceMap.Service<
     readonly id: cf.DurableObjectId;
     readonly storage: DurableObjectStorage;
     // TODO(sam): effect-native interface for container
-    // container?: ToEffect<cf.Container>;
+    container?: cf.Container;
     blockConcurrencyWhile<T>(
       callback: () => Effect.Effect<T>,
     ): Effect.Effect<T>;
-    acceptWebSocket(ws: cf.WebSocket, tags?: string[]): Effect.Effect<void>;
-    getWebSockets(tag?: string): Effect.Effect<cf.WebSocket[]>;
+    // acceptWebSocket(ws: cf.WebSocket, tags?: string[]): Effect.Effect<void>;
+    getWebSockets(tag?: string): Effect.Effect<DurableWebSocket[]>;
     setWebSocketAutoResponse(
       maybeReqResp?: cf.WebSocketRequestResponsePair,
     ): Effect.Effect<void>;
@@ -259,3 +345,185 @@ export interface DurableObjectStorage {
   getBookmarkForTime(timestamp: number | Date): Effect.Effect<string>;
   onNextSessionRestoreBookmark(bookmark: string): Effect.Effect<string>;
 }
+
+const wrapDurableObjectShape = (
+  shape: DurableObjectShape,
+  state: cf.DurableObjectState,
+) =>
+  Object.fromEntries(
+    Object.entries(shape).map(([key, value]) => [
+      key,
+      key === "fetch"
+        ? wrapFetch(value as HttpEffect, state)
+        : wrapMethod(value as DurableObjectShape[string]),
+    ]),
+  );
+
+const wrapFetch =
+  (handler: HttpEffect, state: cf.DurableObjectState) =>
+  (request: cf.Request): Promise<Response> =>
+    Effect.runPromise(
+      serveWebRequest(request, handler, {
+        remoteAddress: request.headers.get("cf-connecting-ip") ?? undefined,
+        acceptWebSocket: (socket) => state.acceptWebSocket(socket),
+      }),
+    );
+
+const wrapMethod = (value: DurableObjectShape[string]) => {
+  if (Effect.isEffect(value)) {
+    return () => Effect.runPromise(value as Effect.Effect<any>);
+  }
+  if (typeof value === "function") {
+    return (...args: ReadonlyArray<any>) => {
+      const result = value(...args);
+      return Effect.isEffect(result) ? Effect.runPromise(result) : result;
+    };
+  }
+  return value;
+};
+
+const wrapDurableObjectStub = <Shape>(stub: cf.DurableObjectStub): Shape =>
+  new Proxy(stub as object, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver);
+      if (typeof value !== "function") {
+        return value;
+      }
+      if (property === "fetch") {
+        return (request: HttpServerRequest.HttpServerRequest) =>
+          HttpServerRequest.toWeb(request).pipe(
+            Effect.flatMap((webRequest) =>
+              Effect.tryPromise(() =>
+                (value as (request: Request) => Promise<Response>).call(
+                  target,
+                  webRequest,
+                ),
+              ),
+            ),
+            Effect.map(HttpServerResponse.fromWeb),
+          );
+      }
+      return (...args: ReadonlyArray<any>) =>
+        Effect.tryPromise(() => Promise.resolve(value.apply(target, args)));
+    },
+  }) as Shape;
+
+const fromDurableObjectState = (
+  state: cf.DurableObjectState,
+): DurableObjectState["Service"] => ({
+  id: state.id,
+  storage: fromDurableObjectStorage(state.storage),
+  blockConcurrencyWhile: <T>(callback: () => Effect.Effect<T>) =>
+    Effect.tryPromise(() =>
+      state.blockConcurrencyWhile(() => Effect.runPromise(callback())),
+    ),
+  acceptWebSocket: (ws: cf.WebSocket, tags?: string[]) =>
+    Effect.sync(() => state.acceptWebSocket(ws, tags)),
+  getWebSockets: (tag?: string) => Effect.sync(() => state.getWebSockets(tag)),
+  setWebSocketAutoResponse: (maybeReqResp?: cf.WebSocketRequestResponsePair) =>
+    Effect.sync(() => state.setWebSocketAutoResponse(maybeReqResp)),
+  getWebSocketAutoResponse: () =>
+    Effect.sync(() => state.getWebSocketAutoResponse()),
+  getWebSocketAutoResponseTimestamp: (ws: cf.WebSocket) =>
+    Effect.sync(() => state.getWebSocketAutoResponseTimestamp(ws)),
+  setHibernatableWebSocketEventTimeout: (timeoutMs?: number) =>
+    Effect.sync(() => state.setHibernatableWebSocketEventTimeout(timeoutMs)),
+  getHibernatableWebSocketEventTimeout: () =>
+    Effect.sync(() => state.getHibernatableWebSocketEventTimeout()),
+  getTags: (ws: cf.WebSocket) => Effect.sync(() => state.getTags(ws)),
+  abort: (reason?: string) => Effect.sync(() => state.abort(reason)),
+});
+
+const fromDurableObjectTransaction = (
+  txn: cf.DurableObjectTransaction,
+): DurableObjectTransaction => ({
+  get: ((keyOrKeys: string | string[], options?: cf.DurableObjectGetOptions) =>
+    Effect.tryPromise(() => txn.get(keyOrKeys as any, options))) as any,
+  list: (options?: cf.DurableObjectListOptions) =>
+    Effect.tryPromise(() => txn.list(options)),
+  put: ((
+    keyOrEntries: string | Record<string, unknown>,
+    valueOrOptions?: unknown,
+    maybeOptions?: cf.DurableObjectPutOptions,
+  ) =>
+    typeof keyOrEntries === "string"
+      ? Effect.tryPromise(() =>
+          txn.put(keyOrEntries, valueOrOptions, maybeOptions),
+        )
+      : Effect.tryPromise(() =>
+          txn.put(
+            keyOrEntries,
+            valueOrOptions as cf.DurableObjectPutOptions | undefined,
+          ),
+        )) as any,
+  delete: ((
+    keyOrKeys: string | string[],
+    options?: cf.DurableObjectPutOptions,
+  ) => Effect.tryPromise(() => txn.delete(keyOrKeys as any, options))) as any,
+  rollback: () => Effect.sync(() => txn.rollback()),
+  getAlarm: (options?: cf.DurableObjectGetAlarmOptions) =>
+    Effect.tryPromise(() => txn.getAlarm(options)),
+  setAlarm: (
+    scheduledTime: number | Date,
+    options?: cf.DurableObjectSetAlarmOptions,
+  ) => Effect.tryPromise(() => txn.setAlarm(scheduledTime, options)),
+  deleteAlarm: (options?: cf.DurableObjectSetAlarmOptions) =>
+    Effect.tryPromise(() => txn.deleteAlarm(options)),
+});
+
+const fromDurableObjectStorage = (
+  storage: cf.DurableObjectStorage,
+): DurableObjectStorage => ({
+  get: ((keyOrKeys: string | string[], options?: cf.DurableObjectGetOptions) =>
+    Effect.tryPromise(() => storage.get(keyOrKeys as any, options))) as any,
+  list: (options?: cf.DurableObjectListOptions) =>
+    Effect.tryPromise(() => storage.list(options)),
+  put: ((
+    keyOrEntries: string | Record<string, unknown>,
+    valueOrOptions?: unknown,
+    maybeOptions?: cf.DurableObjectPutOptions,
+  ) =>
+    typeof keyOrEntries === "string"
+      ? Effect.tryPromise(() =>
+          storage.put(keyOrEntries, valueOrOptions, maybeOptions),
+        )
+      : Effect.tryPromise(() =>
+          storage.put(
+            keyOrEntries,
+            valueOrOptions as cf.DurableObjectPutOptions | undefined,
+          ),
+        )) as any,
+  delete: ((
+    keyOrKeys: string | string[],
+    options?: cf.DurableObjectPutOptions,
+  ) =>
+    Effect.tryPromise(() => storage.delete(keyOrKeys as any, options))) as any,
+  deleteAll: (options?: cf.DurableObjectPutOptions) =>
+    Effect.tryPromise(() => storage.deleteAll(options)),
+  transaction: <T>(
+    closure: (txn: DurableObjectTransaction) => Effect.Effect<T>,
+  ) =>
+    Effect.tryPromise(() =>
+      storage.transaction((txn) =>
+        Effect.runPromise(closure(fromDurableObjectTransaction(txn))),
+      ),
+    ),
+  getAlarm: (options?: cf.DurableObjectGetAlarmOptions) =>
+    Effect.tryPromise(() => storage.getAlarm(options)),
+  setAlarm: (
+    scheduledTime: number | Date,
+    options?: cf.DurableObjectSetAlarmOptions,
+  ) => Effect.tryPromise(() => storage.setAlarm(scheduledTime, options)),
+  deleteAlarm: (options?: cf.DurableObjectSetAlarmOptions) =>
+    Effect.tryPromise(() => storage.deleteAlarm(options)),
+  sync: () => Effect.tryPromise(() => storage.sync()),
+  sql: storage.sql,
+  kv: storage.kv,
+  transactionSync: <T>(closure: () => T) => storage.transactionSync(closure),
+  getCurrentBookmark: () =>
+    Effect.tryPromise(() => storage.getCurrentBookmark()),
+  getBookmarkForTime: (timestamp: number | Date) =>
+    Effect.tryPromise(() => storage.getBookmarkForTime(timestamp)),
+  onNextSessionRestoreBookmark: (bookmark: string) =>
+    Effect.tryPromise(() => storage.onNextSessionRestoreBookmark(bookmark)),
+});

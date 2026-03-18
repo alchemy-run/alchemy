@@ -19,7 +19,8 @@ export type StackServices =
   | Path
   | DotAlchemy
   | HttpClient
-  | ChildProcessSpawner;
+  | ChildProcessSpawner
+  | ResourceLike;
 
 export class Stack extends ServiceMap.Service<
   Stack,

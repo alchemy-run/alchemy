@@ -7,14 +7,10 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import { Bundler, type BundleOptions } from "../../Bundle/Bundler.ts";
 import { DotAlchemy } from "../../Config.ts";
-import {
-  ExecutionContext,
-  Host,
-  type ServerExecutionContext,
-} from "../../Host.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
+import * as Server from "../../Server/Process.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import { createInternalTags, diffTags, hasTags } from "../../Tags.ts";
@@ -151,14 +147,12 @@ export interface LaunchTemplate extends Resource<
  * );
  * ```
  */
-export const LaunchTemplate = Host<
+export const LaunchTemplate = Server.Process<
   LaunchTemplate,
-  ServerExecutionContext,
-  Credentials | Region | ExecutionContext.Server
->("AWS.AutoScaling.LaunchTemplate", {
-  kind: "server",
-  runtime: createEc2HostExecutionContext("AWS.AutoScaling.LaunchTemplate"),
-});
+  Credentials | Region
+>("AWS.AutoScaling.LaunchTemplate")(
+  createEc2HostExecutionContext("AWS.AutoScaling.LaunchTemplate"),
+);
 
 export const LaunchTemplateProvider = () =>
   LaunchTemplate.provider.effect(

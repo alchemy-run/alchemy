@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
 import type { Pipeable } from "effect/Pipeable";
 import { SingleShotGen } from "effect/Utils";
-import { ExecutionContext } from "./Host.ts";
+import { ExecutionContext } from "./ExecutionContext.ts";
 import { getRefMetadata, isRef, ref as stageRef, type Ref } from "./Ref.ts";
 import { isResource, type Resource, type ResourceLike } from "./Resource.ts";
 import { Stack } from "./Stack.ts";

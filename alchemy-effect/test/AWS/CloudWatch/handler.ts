@@ -1,5 +1,4 @@
 import * as AWS from "@/AWS";
-import * as Http from "@/Http";
 import * as Output from "@/Output";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -38,7 +37,10 @@ const result = <A, E>(effect: Effect.Effect<A, E>) =>
   effect.pipe(
     Effect.matchEffect({
       onFailure: (error) =>
-        Effect.logError("CloudWatch fixture route failed", serializeError(error)).pipe(
+        Effect.logError(
+          "CloudWatch fixture route failed",
+          serializeError(error),
+        ).pipe(
           Effect.as({
             ok: false as const,
             error:
@@ -198,8 +200,10 @@ export const CloudWatchFixture = Effect.gen(function* () {
         })
       : undefined;
 
-  const apiFunction = yield* AWS.Lambda.Function(
-    "CloudWatchApiFunction",
+  const apiFunction = yield* AWS.Lambda.Function("CloudWatchApiFunction", {
+    main,
+    url: true,
+  })(
     Effect.gen(function* () {
       const putMetricData = yield* AWS.CloudWatch.PutMetricData.bind();
       const getMetricData = yield* AWS.CloudWatch.GetMetricData.bind();
@@ -249,332 +253,314 @@ export const CloudWatchFixture = Effect.gen(function* () {
         metricStream &&
         (yield* AWS.CloudWatch.GetMetricStream.bind(metricStream));
 
-      yield* Http.serve(
-        Effect.gen(function* () {
-          const request = yield* HttpServerRequest;
-          const url = new URL(request.originalUrl);
-          const pathname = url.pathname;
+      return Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const url = new URL(request.originalUrl);
+        const pathname = url.pathname;
 
-          if (request.method === "GET" && pathname === "/ready") {
-            return yield* HttpServerResponse.json({ ok: true });
-          }
+        if (request.method === "GET" && pathname === "/ready") {
+          return yield* HttpServerResponse.json({ ok: true });
+        }
 
-          if (request.method === "POST" && pathname === "/metrics/put") {
-            const body = (yield* request.json) as { value?: number };
-            return yield* HttpServerResponse.json(
-              yield* result(
-                putMetricData({
-                  Namespace: metricNamespace,
-                  MetricData: [
-                    {
-                      MetricName: metricName,
-                      Dimensions: [
-                        {
-                          Name: metricDimensionName,
-                          Value: metricDimensionValue,
-                        },
-                      ],
-                      Timestamp: new Date(),
-                      Value: body.value ?? 1,
-                      Unit: "Count",
-                    },
-                  ],
-                }),
-              ),
-            );
-          }
-
-          if (request.method === "POST" && pathname === "/metrics/get-data") {
-            const body = (yield* request.json) as {
-              startTime: string;
-              endTime: string;
-            };
-            return yield* HttpServerResponse.json(
-              yield* result(
-                getMetricData({
-                  StartTime: new Date(body.startTime),
-                  EndTime: new Date(body.endTime),
-                  MetricDataQueries: [
-                    {
-                      Id: "fixture",
-                      MetricStat: {
-                        Metric: {
-                          Namespace: metricNamespace,
-                          MetricName: metricName,
-                          Dimensions: [
-                            {
-                              Name: metricDimensionName,
-                              Value: metricDimensionValue,
-                            },
-                          ],
-                        },
-                        Period: 60,
-                        Stat: "Sum",
+        if (request.method === "POST" && pathname === "/metrics/put") {
+          const body = (yield* request.json) as { value?: number };
+          return yield* HttpServerResponse.json(
+            yield* result(
+              putMetricData({
+                Namespace: metricNamespace,
+                MetricData: [
+                  {
+                    MetricName: metricName,
+                    Dimensions: [
+                      {
+                        Name: metricDimensionName,
+                        Value: metricDimensionValue,
                       },
-                    },
-                  ],
-                }),
-              ),
-            );
-          }
-
-          if (request.method === "POST" && pathname === "/metrics/get-stats") {
-            const body = (yield* request.json) as {
-              startTime: string;
-              endTime: string;
-            };
-            return yield* HttpServerResponse.json(
-              yield* result(
-                getMetricStatistics({
-                  Namespace: metricNamespace,
-                  MetricName: metricName,
-                  Dimensions: [
-                    {
-                      Name: metricDimensionName,
-                      Value: metricDimensionValue,
-                    },
-                  ],
-                  StartTime: new Date(body.startTime),
-                  EndTime: new Date(body.endTime),
-                  Period: 60,
-                  Statistics: ["Sum"],
-                }),
-              ),
-            );
-          }
-
-          if (request.method === "GET" && pathname === "/metrics/list") {
-            return yield* HttpServerResponse.json(
-              yield* result(
-                listMetrics({
-                  Namespace: metricNamespace,
-                  MetricName: metricName,
-                }),
-              ),
-            );
-          }
-
-          if (
-            request.method === "POST" &&
-            pathname === "/metrics/widget-image"
-          ) {
-            return yield* HttpServerResponse.json(
-              yield* result(
-                getMetricWidgetImage({
-                  MetricWidget: JSON.stringify({
-                    metrics: [
-                      [
-                        metricNamespace,
-                        metricName,
-                        metricDimensionName,
-                        metricDimensionValue,
-                      ],
                     ],
-                    period: 60,
-                    stat: "Sum",
-                    region: process.env.AWS_REGION ?? "us-east-1",
-                  }),
-                  OutputFormat: "png",
-                }),
-              ),
-            );
-          }
+                    Timestamp: new Date(),
+                    Value: body.value ?? 1,
+                    Unit: "Count",
+                  },
+                ],
+              }),
+            ),
+          );
+        }
 
-          if (request.method === "GET" && pathname === "/dashboard") {
-            return yield* HttpServerResponse.json(
-              yield* result(getDashboard()),
-            );
-          }
-
-          if (request.method === "GET" && pathname === "/dashboards") {
-            return yield* HttpServerResponse.json(
-              yield* result(listDashboards()),
-            );
-          }
-
-          if (request.method === "GET" && pathname === "/alarms") {
-            return yield* HttpServerResponse.json(
-              yield* result(describeAlarms()),
-            );
-          }
-
-          if (request.method === "GET" && pathname === "/alarms/for-metric") {
-            return yield* HttpServerResponse.json(
-              yield* result(
-                describeAlarmsForMetric({
-                  Namespace: metricNamespace,
-                  MetricName: metricName,
-                  Dimensions: [
-                    {
-                      Name: metricDimensionName,
-                      Value: metricDimensionValue,
+        if (request.method === "POST" && pathname === "/metrics/get-data") {
+          const body = (yield* request.json) as {
+            startTime: string;
+            endTime: string;
+          };
+          return yield* HttpServerResponse.json(
+            yield* result(
+              getMetricData({
+                StartTime: new Date(body.startTime),
+                EndTime: new Date(body.endTime),
+                MetricDataQueries: [
+                  {
+                    Id: "fixture",
+                    MetricStat: {
+                      Metric: {
+                        Namespace: metricNamespace,
+                        MetricName: metricName,
+                        Dimensions: [
+                          {
+                            Name: metricDimensionName,
+                            Value: metricDimensionValue,
+                          },
+                        ],
+                      },
+                      Period: 60,
+                      Stat: "Sum",
                     },
+                  },
+                ],
+              }),
+            ),
+          );
+        }
+
+        if (request.method === "POST" && pathname === "/metrics/get-stats") {
+          const body = (yield* request.json) as {
+            startTime: string;
+            endTime: string;
+          };
+          return yield* HttpServerResponse.json(
+            yield* result(
+              getMetricStatistics({
+                Namespace: metricNamespace,
+                MetricName: metricName,
+                Dimensions: [
+                  {
+                    Name: metricDimensionName,
+                    Value: metricDimensionValue,
+                  },
+                ],
+                StartTime: new Date(body.startTime),
+                EndTime: new Date(body.endTime),
+                Period: 60,
+                Statistics: ["Sum"],
+              }),
+            ),
+          );
+        }
+
+        if (request.method === "GET" && pathname === "/metrics/list") {
+          return yield* HttpServerResponse.json(
+            yield* result(
+              listMetrics({
+                Namespace: metricNamespace,
+                MetricName: metricName,
+              }),
+            ),
+          );
+        }
+
+        if (request.method === "POST" && pathname === "/metrics/widget-image") {
+          return yield* HttpServerResponse.json(
+            yield* result(
+              getMetricWidgetImage({
+                MetricWidget: JSON.stringify({
+                  metrics: [
+                    [
+                      metricNamespace,
+                      metricName,
+                      metricDimensionName,
+                      metricDimensionValue,
+                    ],
                   ],
-                  Period: 60,
-                  Statistic: "Sum",
+                  period: 60,
+                  stat: "Sum",
+                  region: process.env.AWS_REGION ?? "us-east-1",
                 }),
-              ),
-            );
-          }
+                OutputFormat: "png",
+              }),
+            ),
+          );
+        }
 
-          if (request.method === "GET" && pathname === "/alarms/history") {
-            return yield* HttpServerResponse.json(
-              yield* result(
-                describeAlarmHistory({
-                  AlarmName: yield* alarmName,
-                }),
-              ),
-            );
-          }
+        if (request.method === "GET" && pathname === "/dashboard") {
+          return yield* HttpServerResponse.json(yield* result(getDashboard()));
+        }
 
-          if (request.method === "GET" && pathname === "/alarms/contributors") {
-            return yield* HttpServerResponse.json(
-              yield* result(describeAlarmContributors()),
-            );
-          }
+        if (request.method === "GET" && pathname === "/dashboards") {
+          return yield* HttpServerResponse.json(
+            yield* result(listDashboards()),
+          );
+        }
 
-          if (request.method === "POST" && pathname === "/alarms/set-state") {
-            return yield* HttpServerResponse.json(
-              yield* result(
-                setAlarmState({
-                  StateValue: "ALARM",
-                  StateReason: "fixture test",
-                }),
-              ),
-            );
-          }
+        if (request.method === "GET" && pathname === "/alarms") {
+          return yield* HttpServerResponse.json(
+            yield* result(describeAlarms()),
+          );
+        }
 
-          if (
-            request.method === "POST" &&
-            pathname === "/alarms/disable-actions"
-          ) {
-            return yield* HttpServerResponse.json(
-              yield* result(disableAlarmActions()),
-            );
-          }
+        if (request.method === "GET" && pathname === "/alarms/for-metric") {
+          return yield* HttpServerResponse.json(
+            yield* result(
+              describeAlarmsForMetric({
+                Namespace: metricNamespace,
+                MetricName: metricName,
+                Dimensions: [
+                  {
+                    Name: metricDimensionName,
+                    Value: metricDimensionValue,
+                  },
+                ],
+                Period: 60,
+                Statistic: "Sum",
+              }),
+            ),
+          );
+        }
 
-          if (
-            request.method === "POST" &&
-            pathname === "/alarms/enable-actions"
-          ) {
-            return yield* HttpServerResponse.json(
-              yield* result(enableAlarmActions()),
-            );
-          }
+        if (request.method === "GET" && pathname === "/alarms/history") {
+          return yield* HttpServerResponse.json(
+            yield* result(
+              describeAlarmHistory({
+                AlarmName: yield* alarmName,
+              }),
+            ),
+          );
+        }
 
-          if (request.method === "GET" && pathname === "/anomaly-detectors") {
-            return yield* HttpServerResponse.json(
-              yield* result(
-                describeAnomalyDetectors({
-                  Namespace: metricNamespace,
-                  MetricName: metricName,
-                }),
-              ),
-            );
-          }
+        if (request.method === "GET" && pathname === "/alarms/contributors") {
+          return yield* HttpServerResponse.json(
+            yield* result(describeAlarmContributors()),
+          );
+        }
 
-          if (request.method === "GET" && pathname === "/insight-rules") {
-            return yield* HttpServerResponse.json(
-              yield* result(describeInsightRules()),
-            );
-          }
+        if (request.method === "POST" && pathname === "/alarms/set-state") {
+          return yield* HttpServerResponse.json(
+            yield* result(
+              setAlarmState({
+                StateValue: "ALARM",
+                StateReason: "fixture test",
+              }),
+            ),
+          );
+        }
 
-          if (
-            request.method === "POST" &&
-            pathname === "/insight-rules/report"
-          ) {
-            const body = (yield* request.json) as {
-              startTime: string;
-              endTime: string;
-            };
-            return yield* HttpServerResponse.json(
-              yield* result(
-                getInsightRuleReport({
-                  StartTime: new Date(body.startTime),
-                  EndTime: new Date(body.endTime),
-                  Period: 60,
-                  MaxContributorCount: 5,
-                }),
-              ),
-            );
-          }
+        if (
+          request.method === "POST" &&
+          pathname === "/alarms/disable-actions"
+        ) {
+          return yield* HttpServerResponse.json(
+            yield* result(disableAlarmActions()),
+          );
+        }
 
-          if (
-            request.method === "POST" &&
-            pathname === "/insight-rules/disable"
-          ) {
-            return yield* HttpServerResponse.json(
-              yield* result(disableInsightRules()),
-            );
-          }
+        if (
+          request.method === "POST" &&
+          pathname === "/alarms/enable-actions"
+        ) {
+          return yield* HttpServerResponse.json(
+            yield* result(enableAlarmActions()),
+          );
+        }
 
-          if (
-            request.method === "GET" &&
-            pathname === "/insight-rules/managed"
-          ) {
-            return yield* HttpServerResponse.json(
-              yield* result(listManagedInsightRules()),
-            );
-          }
+        if (request.method === "GET" && pathname === "/anomaly-detectors") {
+          return yield* HttpServerResponse.json(
+            yield* result(
+              describeAnomalyDetectors({
+                Namespace: metricNamespace,
+                MetricName: metricName,
+              }),
+            ),
+          );
+        }
 
-          if (request.method === "GET" && pathname === "/mute-rule") {
-            return yield* HttpServerResponse.json(
-              yield* result(getAlarmMuteRule()),
-            );
-          }
+        if (request.method === "GET" && pathname === "/insight-rules") {
+          return yield* HttpServerResponse.json(
+            yield* result(describeInsightRules()),
+          );
+        }
 
-          if (request.method === "GET" && pathname === "/mute-rules") {
-            return yield* HttpServerResponse.json(
-              yield* result(
-                listAlarmMuteRules({
-                  AlarmName: yield* alarmName,
-                }),
-              ),
-            );
-          }
+        if (request.method === "POST" && pathname === "/insight-rules/report") {
+          const body = (yield* request.json) as {
+            startTime: string;
+            endTime: string;
+          };
+          return yield* HttpServerResponse.json(
+            yield* result(
+              getInsightRuleReport({
+                StartTime: new Date(body.startTime),
+                EndTime: new Date(body.endTime),
+                Period: 60,
+                MaxContributorCount: 5,
+              }),
+            ),
+          );
+        }
 
-          if (request.method === "GET" && pathname === "/tags/alarm") {
-            return yield* HttpServerResponse.json(
-              yield* result(listTagsForAlarm()),
-            );
-          }
+        if (
+          request.method === "POST" &&
+          pathname === "/insight-rules/disable"
+        ) {
+          return yield* HttpServerResponse.json(
+            yield* result(disableInsightRules()),
+          );
+        }
 
-          if (request.method === "GET" && pathname === "/tags/dashboard") {
-            return yield* HttpServerResponse.json(
-              yield* result(listTagsForDashboard()),
-            );
-          }
+        if (request.method === "GET" && pathname === "/insight-rules/managed") {
+          return yield* HttpServerResponse.json(
+            yield* result(listManagedInsightRules()),
+          );
+        }
 
-          if (request.method === "GET" && pathname === "/metric-stream") {
-            if (!getMetricStream) {
-              return yield* HttpServerResponse.json({
-                ok: true,
-                skipped: true,
-              });
-            }
+        if (request.method === "GET" && pathname === "/mute-rule") {
+          return yield* HttpServerResponse.json(
+            yield* result(getAlarmMuteRule()),
+          );
+        }
 
-            return yield* HttpServerResponse.json(
-              yield* result(getMetricStream()),
-            );
-          }
+        if (request.method === "GET" && pathname === "/mute-rules") {
+          return yield* HttpServerResponse.json(
+            yield* result(
+              listAlarmMuteRules({
+                AlarmName: yield* alarmName,
+              }),
+            ),
+          );
+        }
 
-          if (request.method === "GET" && pathname === "/metric-streams") {
-            return yield* HttpServerResponse.json(
-              yield* result(listMetricStreams()),
-            );
+        if (request.method === "GET" && pathname === "/tags/alarm") {
+          return yield* HttpServerResponse.json(
+            yield* result(listTagsForAlarm()),
+          );
+        }
+
+        if (request.method === "GET" && pathname === "/tags/dashboard") {
+          return yield* HttpServerResponse.json(
+            yield* result(listTagsForDashboard()),
+          );
+        }
+
+        if (request.method === "GET" && pathname === "/metric-stream") {
+          if (!getMetricStream) {
+            return yield* HttpServerResponse.json({
+              ok: true,
+              skipped: true,
+            });
           }
 
           return yield* HttpServerResponse.json(
-            { error: "Not found", method: request.method, pathname },
-            { status: 404 },
+            yield* result(getMetricStream()),
           );
-        }).pipe(Effect.orDie),
-      );
+        }
 
-      return {
-        main,
-        url: true,
-      } as const satisfies AWS.Lambda.FunctionProps;
+        if (request.method === "GET" && pathname === "/metric-streams") {
+          return yield* HttpServerResponse.json(
+            yield* result(listMetricStreams()),
+          );
+        }
+
+        return yield* HttpServerResponse.json(
+          { error: "Not found", method: request.method, pathname },
+          { status: 404 },
+        );
+      }).pipe(Effect.orDie);
     }).pipe(
       Effect.provide(
         Layer.provideMerge(

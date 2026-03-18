@@ -32,14 +32,17 @@ import {
   type DerivedAction,
 } from "../Cli/NamespaceTree.ts";
 import { DotAlchemy, dotAlchemy } from "../Config.ts";
-import { ExecutionContext } from "../Host.ts";
+import { ExecutionContext } from "../ExecutionContext.ts";
 import type { Input } from "../Input.ts";
 import * as Plan from "../Plan.ts";
 import type { Provider } from "../Provider.ts";
+import * as Server from "../Server/index.ts";
+import * as Serverless from "../Serverless/index.ts";
 import * as Stack from "../Stack.ts";
 import * as Stage from "../Stage.ts";
 import * as State from "../State/index.ts";
 import { TestCli } from "./TestCli.ts";
+import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 
 declare module "@effect/vitest" {
   interface ExpectStatic {
@@ -77,10 +80,13 @@ type Provided =
   | aws.Region.Region
   | Cli
   | ExecutionContext
+  | Server.ServerExecutionContext
+  | Serverless.ExecutionContext
   | AWS.StageConfig
   | Provider<Command>
   | Layer.Success<ReturnType<typeof AWS.providers>>
-  | Layer.Success<ReturnType<typeof Cloudflare.providers>>;
+  | Layer.Success<ReturnType<typeof Cloudflare.providers>>
+  | ChildProcessSpawner;
 
 const quietLogger = Logger.make(() => {
   // console.log(options.message);
@@ -166,6 +172,16 @@ const runWithContext = <A, Err>(
     Layer.mergeAll(awsStageConfig, stack, dotAlchemy),
   );
 
+  const context = {
+    type: "Test",
+    id: "Test",
+    env: {},
+    exports: {},
+    listen: () => Effect.void,
+    get: <T>(_key: string) => Effect.succeed<T>(undefined as T),
+    set: (id: string) => Effect.succeed(id),
+  };
+
   // @ts-expect-error
   return Effect.gen(function* () {
     const configProvider = ConfigProvider.orElse(
@@ -183,15 +199,8 @@ const runWithContext = <A, Err>(
       ),
     ),
     Effect.provideService(Stage.Stage, "test"),
-    Effect.provideService(ExecutionContext, {
-      type: "Test",
-      id: "Test",
-      env: {},
-      exports: {},
-      listen: () => Effect.void,
-      get: <T>(_key: string) => Effect.succeed<T>(undefined as T),
-      set: (id: string) => Effect.succeed(id),
-    }),
+    Effect.provideService(ExecutionContext, context),
+    Effect.provideService(Serverless.Context, context),
     Effect.provideService(
       MinimumLogLevel,
       process.env.DEBUG ? "Debug" : "Info",

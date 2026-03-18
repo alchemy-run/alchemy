@@ -19,6 +19,14 @@ const logLevel = Effect.provideService(
 
 const main = pathe.resolve(import.meta.dirname, "worker.ts");
 
+const worker = Worker.Worker("TestWorker", {
+  main,
+  subdomain: { enabled: true, previews_enabled: true },
+  compatibility: {
+    date: "2024-01-01",
+  },
+});
+
 test(
   "create, update, delete worker",
   Effect.gen(function* () {

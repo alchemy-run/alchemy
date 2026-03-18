@@ -10,7 +10,7 @@ import {
   createTempBundleDir,
 } from "../../Bundle/TempRoot.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
-import type { ServerExecutionContext } from "../../Host.ts";
+import type { ServerExecutionContext } from "../../Server/ExecutionContext.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import type { ResourceBinding } from "../../Resource.ts";

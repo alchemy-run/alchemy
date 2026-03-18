@@ -3,7 +3,7 @@ import * as Auth from "@distilled.cloud/cloudflare/Auth";
 import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import { BuildProvider } from "../Build/Command.ts";
+import { CommandProvider } from "../Build/Command.ts";
 import { esbuild } from "../Bundle/ESBuild.ts";
 import type { Provider } from "../Provider.ts";
 import * as Account from "./Account.ts";
@@ -44,7 +44,7 @@ export const credentials = () =>
  */
 export const resources = () =>
   Layer.mergeAll(
-    BuildProvider(),
+    CommandProvider(),
     WorkerProvider(),
     KV.NamespaceProvider(),
     R2.BucketProvider(),

@@ -14,38 +14,39 @@ const isFunctionURLEvent = (event: any): event is LambdaFunctionURLEvent => {
   return event.requestContext?.http?.method !== undefined;
 };
 
-export const HttpServer = Layer.effect(
-  Http.HttpServer,
-  Effect.gen(function* () {
-    const func = yield* Function.Runtime;
-    return Http.server({
-      serve: (handler) =>
-        func.listen((event) => {
-          if (isFunctionURLEvent(event)) {
-            const request = HttpServerRequest.fromWeb(
-              toWebRequest(event),
-            ).modify({
-              remoteAddress: event.requestContext.http.sourceIp,
-            });
-            return handler.pipe(
-              Effect.provideService(
-                HttpServerRequest.HttpServerRequest,
-                request,
-              ),
-              Effect.flatMap(toLambdaFunctionURLResult),
-            ) as Effect.Effect<
-              LambdaFunctionURLResult,
-              never,
-              Exclude<
-                Effect.Services<typeof handler>,
-                HttpServerRequest.HttpServerRequest | Scope
-              >
-            >;
-          }
-        }),
-    });
-  }),
-);
+export const HttpServer: Layer.Layer<Http.HttpServer, never, Function> =
+  Layer.effect(
+    Http.HttpServer,
+    Effect.gen(function* () {
+      const func = yield* Function.Runtime;
+      return Http.server({
+        serve: (handler) =>
+          func.listen((event) => {
+            if (isFunctionURLEvent(event)) {
+              const request = HttpServerRequest.fromWeb(
+                toWebRequest(event),
+              ).modify({
+                remoteAddress: event.requestContext.http.sourceIp,
+              });
+              return handler.pipe(
+                Effect.provideService(
+                  HttpServerRequest.HttpServerRequest,
+                  request,
+                ),
+                Effect.flatMap(toLambdaFunctionURLResult),
+              ) as Effect.Effect<
+                LambdaFunctionURLResult,
+                never,
+                Exclude<
+                  Effect.Services<typeof handler>,
+                  HttpServerRequest.HttpServerRequest | Scope
+                >
+              >;
+            }
+          }),
+      });
+    }),
+  );
 
 const toWebRequest = (event: LambdaFunctionURLEvent): Request => {
   const protocol =

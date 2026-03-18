@@ -1,9 +1,9 @@
 import { Cloudflare, Stack } from "alchemy-effect";
 import * as Effect from "effect/Effect";
 
-import Worker from "./src/Worker.ts";
+import Api from "./src/Api.ts";
 
 export default Effect.all([
-  Worker,
+  Api,
   // other workers go here
 ]).pipe(Stack.make("CloudflareWorker", Cloudflare.providers()));

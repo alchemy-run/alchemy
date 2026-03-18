@@ -8,13 +8,23 @@ import type { HttpServerError } from "effect/unstable/http/HttpServerError";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
+export type HttpEffect = Effect.Effect<
+  HttpServerResponse.HttpServerResponse,
+  HttpServerError | HttpBodyError,
+  HttpServerRequest | Scope
+>;
+
 export const serve = <Req = never>(
   handler: Effect.Effect<
     HttpServerResponse.HttpServerResponse,
     HttpServerError | HttpBodyError,
     HttpServerRequest | Scope | Req
   >,
-) => HttpServer.use((http) => http.serve(handler));
+) =>
+  Effect.serviceOption(HttpServer).pipe(
+    Effect.map(Option.getOrUndefined),
+    Effect.flatMap((http) => (http ? http.serve(handler) : Effect.void)),
+  );
 
 export class HttpServer extends ServiceMap.Service<
   HttpServer,

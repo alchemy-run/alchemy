@@ -78,18 +78,23 @@ export const BucketProvider = () =>
         stables: ["bucketName", "accountId"],
         diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
           const name = yield* createBucketName(id, news.name);
+          const oldName = output?.bucketName
+            ? output.bucketName
+            : yield* createBucketName(id, olds.name);
+          const oldJurisdiction = output?.jurisdiction ?? olds.jurisdiction ?? "default";
+          const oldStorageClass = output?.storageClass ?? olds.storageClass ?? "Standard";
           if (
-            output.accountId !== accountId ||
-            output.bucketName !== name ||
-            output.jurisdiction !== (news.jurisdiction ?? "default") ||
+            (output?.accountId ?? accountId) !== accountId ||
+            oldName !== name ||
+            oldJurisdiction !== (news.jurisdiction ?? "default") ||
             olds.locationHint !== news.locationHint
           ) {
             return { action: "replace" } as const;
           }
-          if (output.storageClass !== (news.storageClass ?? "Standard")) {
+          if (oldStorageClass !== (news.storageClass ?? "Standard")) {
             return {
               action: "update",
-              stables: output.bucketName === name ? ["bucketName"] : undefined,
+              stables: oldName === name ? ["bucketName"] : undefined,
             } as const;
           }
         }),

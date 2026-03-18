@@ -16,7 +16,7 @@ import {
   PutJobError,
 } from "./JobStorage.ts";
 
-export default Effect.gen(function* () {
+export const JobFunction = Effect.gen(function* () {
   const jobStorage = yield* JobStorage;
   const notifications = yield* JobNotifications;
 
@@ -112,3 +112,5 @@ export default Effect.gen(function* () {
     })),
   ),
 );
+
+export default JobFunction;

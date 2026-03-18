@@ -20,10 +20,11 @@ import {
   createTempBundleDir,
 } from "../../Bundle/TempRoot.ts";
 import { DotAlchemy } from "../../Config.ts";
-import { Host, type ServerExecutionContext } from "../../Host.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
+import * as Server from "../../Server/Process.ts";
+import type { ServerExecutionContext } from "../../Server/ExecutionContext.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import { createInternalTags, createTagsList, hasTags } from "../../Tags.ts";
@@ -148,51 +149,48 @@ export interface Task extends Resource<
   }
 > {}
 
-export const Task = Host<Task, ServerExecutionContext>("AWS.ECS.Task", {
-  kind: "server",
-  runtime: (id) => {
-    const runners: Effect.Effect<void, never, any>[] = [];
-    const env: Record<string, any> = {};
+export const Task = Server.Process<Task>("AWS.ECS.Task")((id) => {
+  const runners: Effect.Effect<void, never, any>[] = [];
+  const env: Record<string, any> = {};
 
-    return {
-      type: "AWS.ECS.Task",
-      id,
-      env,
-      set: (bindingId: string, output: Output.Output) =>
-        Effect.sync(() => {
-          const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
-          env[key] = output.pipe(Output.map((value) => JSON.stringify(value)));
-          return key;
-        }),
-      get: <T>(key: string) =>
-        Config.string(key)
-          .asEffect()
-          .pipe(
-            Effect.flatMap((value) =>
-              Effect.try({
-                try: () => JSON.parse(value) as T,
-                catch: (error) => error as Error,
+  return {
+    type: "AWS.ECS.Task",
+    id,
+    env,
+    set: (bindingId: string, output: Output.Output) =>
+      Effect.sync(() => {
+        const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
+        env[key] = output.pipe(Output.map((value) => JSON.stringify(value)));
+        return key;
+      }),
+    get: <T>(key: string) =>
+      Config.string(key)
+        .asEffect()
+        .pipe(
+          Effect.flatMap((value) =>
+            Effect.try({
+              try: () => JSON.parse(value) as T,
+              catch: (error) => error as Error,
+            }),
+          ),
+          Effect.catch((cause) =>
+            Effect.die(
+              new Error(`Failed to get environment variable: ${key}`, {
+                cause,
               }),
             ),
-            Effect.catch((cause) =>
-              Effect.die(
-                new Error(`Failed to get environment variable: ${key}`, {
-                  cause,
-                }),
-              ),
-            ),
           ),
-      run: ((effect: Effect.Effect<void, never, any>) =>
-        Effect.sync(() => {
-          runners.push(effect);
-        })) as unknown as ServerExecutionContext["run"],
-      exports: {
-        program: Effect.all(runners, { concurrency: "unbounded" }).pipe(
-          Effect.asVoid,
         ),
-      },
-    } satisfies ServerExecutionContext;
-  },
+    run: ((effect: Effect.Effect<void, never, any>) =>
+      Effect.sync(() => {
+        runners.push(effect);
+      })) as unknown as ServerExecutionContext["run"],
+    exports: {
+      program: Effect.all(runners, { concurrency: "unbounded" }).pipe(
+        Effect.asVoid,
+      ),
+    },
+  } satisfies ServerExecutionContext;
 });
 
 export const TaskProvider = () =>

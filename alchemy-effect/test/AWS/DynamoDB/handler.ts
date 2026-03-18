@@ -1,6 +1,5 @@
 import * as DynamoDB from "@/AWS/DynamoDB";
 import * as Lambda from "@/AWS/Lambda";
-import * as Http from "@/Http";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -9,7 +8,7 @@ import path from "pathe";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-const DynamoDBHttpEffect = Effect.gen(function* () {
+export default Effect.gen(function* () {
   const sourceTable = yield* DynamoDB.Table("TestTable", {
     partitionKey: "pk",
     sortKey: "sk",
@@ -310,15 +309,6 @@ const DynamoDBHttpEffect = Effect.gen(function* () {
       { status: 404 },
     );
   }).pipe(Effect.orDie);
-});
-
-export default Effect.gen(function* () {
-  yield* Http.serve(yield* DynamoDBHttpEffect);
-
-  return {
-    main,
-    url: true,
-  } as const;
 }).pipe(
   Effect.provide(
     Layer.mergeAll(
@@ -344,5 +334,8 @@ export default Effect.gen(function* () {
       DynamoDB.TransactWriteItemsLive,
     ),
   ),
-  Lambda.Function("DynamoDBTestFunction"),
+  Lambda.Function("DynamoDBTestFunction", {
+    main,
+    url: true,
+  }),
 );

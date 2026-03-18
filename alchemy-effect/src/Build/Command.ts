@@ -90,7 +90,7 @@ export interface Command extends Resource<
  */
 export const Command = Resource<Command>("Build.Command");
 
-export const BuildProvider = () =>
+export const CommandProvider = () =>
   Command.provider.effect(
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;

@@ -17,14 +17,10 @@ import {
   createTempBundleDir,
 } from "../../Bundle/TempRoot.ts";
 import { DotAlchemy } from "../../Config.ts";
-import {
-  Host,
-  type ListenHandler,
-  type ServerlessExecutionContext,
-} from "../../Host.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
+import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import { createInternalTags, createTagsList, hasTags } from "../../Tags.ts";
@@ -123,76 +119,72 @@ export interface Function extends Resource<
  * });
  * ```
  */
-export const Function = Host<
-  Function,
-  ServerlessExecutionContext,
-  Credentials | Region
->("AWS.Lambda.Function", {
-  kind: "serverless",
-  runtime: (id: string) => {
-    const listeners: Effect.Effect<ListenHandler>[] = [];
-    const env: Record<string, any> = {};
+export const Function = Serverless.Function<Function, Credentials | Region>(
+  "AWS.Lambda.Function",
+)((id: string): Serverless.ExecutionContext => {
+  const listeners: Effect.Effect<Serverless.Listener>[] = [];
+  const env: Record<string, any> = {};
 
-    return {
-      type: "AWS.Lambda.Function",
-      run: undefined!,
-      id,
-      env,
-      set: (id: string, output: Output.Output) =>
-        Effect.sync(() => {
-          const key = id.replaceAll(/[^a-zA-Z0-9]/g, "_");
-          env[key] = output.pipe(Output.map((value) => JSON.stringify(value)));
-          return key;
-        }),
-      get: <T>(key: string) =>
-        Config.string(key)
-          .asEffect()
-          .pipe(
-            Effect.flatMap((val) =>
-              Effect.try({
-                try: () => JSON.parse(val) as T,
-                catch: (error) => error as Error,
+  return {
+    type: "AWS.Lambda.Function",
+    id,
+    env,
+    set: (id: string, output: Output.Output) =>
+      Effect.sync(() => {
+        const key = id.replaceAll(/[^a-zA-Z0-9]/g, "_");
+        env[key] = output.pipe(Output.map((value) => JSON.stringify(value)));
+        return key;
+      }),
+    get: <T>(key: string) =>
+      Config.string(key)
+        .asEffect()
+        .pipe(
+          Effect.flatMap((val) =>
+            Effect.try({
+              try: () => JSON.parse(val) as T,
+              catch: (error) => error as Error,
+            }),
+          ),
+          Effect.catch((cause) =>
+            Effect.die(
+              new Error(`Failed to get environment variable: ${key}`, {
+                cause,
               }),
             ),
-            Effect.catch((cause) =>
-              Effect.die(
-                new Error(`Failed to get environment variable: ${key}`, {
-                  cause,
-                }),
-              ),
-            ),
           ),
-      listen: ((handler: ListenHandler | Effect.Effect<ListenHandler>) =>
-        Effect.sync(() =>
-          Effect.isEffect(handler)
-            ? listeners.push(handler)
-            : listeners.push(Effect.succeed(handler)),
-        )) as any as ServerlessExecutionContext["listen"],
-      exports: {
-        // construct an Effect that produces the Function's entrypoint
-        // Effect<(event, context) => Promise<any>>
-        handler: Effect.map(
-          Effect.all(listeners, {
-            concurrency: "unbounded",
-          }),
-          (handlers) =>
-            (event: any, context: lambda.Context): Promise<any> => {
-              for (const handler of handlers) {
-                const eff = handler(event);
-                if (Effect.isEffect(eff)) {
-                  return eff.pipe(
-                    Effect.provideService(HandlerContext, context),
-                    Effect.tap(Effect.logDebug),
-                    Effect.runPromise,
-                  );
-                }
-              }
-              throw new Error("No event handler found");
-            },
         ),
-      },
-    } satisfies ServerlessExecutionContext;
-  },
+    listen: ((
+      handler: Serverless.Listener | Effect.Effect<Serverless.Listener>,
+    ) =>
+      Effect.sync(() =>
+        Effect.isEffect(handler)
+          ? listeners.push(handler)
+          : listeners.push(Effect.succeed(handler)),
+      )) as any as Serverless.ExecutionContext["listen"],
+    exports: {
+      // construct an Effect that produces the Function's entrypoint
+      // Effect<(event, context) => Promise<any>>
+      handler: Effect.map(
+        Effect.all(listeners, {
+          concurrency: "unbounded",
+        }),
+        (handlers) =>
+          (event: any, context: lambda.Context): Promise<any> => {
+            for (const handler of handlers) {
+              const eff = handler(event);
+              if (Effect.isEffect(eff)) {
+                return eff.pipe(
+                  Effect.provideService(HandlerContext, context),
+                  Effect.tap(Effect.logDebug),
+                  Effect.runPromise,
+                );
+              }
+            }
+            throw new Error("No event handler found");
+          },
+      ),
+    },
+  };
 });
 
 export const FunctionProvider = () =>
