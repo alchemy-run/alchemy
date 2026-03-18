@@ -10,9 +10,9 @@ export const Sandbox = Cloudflare.Container(
   {
     instanceType: "standard-1",
     dockerfile: `
-          FROM alpine:latest
-          RUN apk add --no-cache ffmpeg
-        `,
+      FROM alpine:latest
+      RUN apk add --no-cache ffmpeg
+    `,
   },
   // http effec
   Effect.gen(function* () {

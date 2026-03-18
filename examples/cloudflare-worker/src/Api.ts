@@ -14,8 +14,6 @@ export const Api = Cloudflare.Worker(
   Effect.gen(function* () {
     // bind the Agent DO to the Worker
     const agent = yield* Agent;
-
-    // return the HTTP effect
     return Effect.gen(function* () {
       const request = yield* HttpServerRequest;
       if (request.url.startsWith("/connect/")) {
