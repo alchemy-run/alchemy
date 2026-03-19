@@ -20,7 +20,7 @@ export default [
   // bundlde the cli entrypoint so that react does not end up in our dependencies
   // problem‼️ this means react is bundled twice in our tar.gz. Should we have bin/alchemy-effect.ts import the cli entrypoint instead?
   defineConfig({
-    entry: ["src/cli/index.ts"],
+    entry: ["src/Cli/index.ts"],
     format: ["esm"],
     clean: false,
     shims: true,
