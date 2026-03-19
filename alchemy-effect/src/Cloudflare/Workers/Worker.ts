@@ -23,7 +23,7 @@ import type { Input } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
-import { sha256 } from "../../Util/sha256.ts";
+import { sha256, toCamelCase } from "../../Util/index.ts";
 import { Account } from "../Account.ts";
 import * as Assets from "./Assets.ts";
 import { HttpServer } from "./HttpServer.ts";
@@ -153,7 +153,7 @@ export const Worker = Serverless.Function<Worker, WorkerEnvironment>(TypeId)((
   const env: Record<string, any> = {};
 
   return {
-    type: TypeId,
+    Type: TypeId,
     id,
     env,
     get: (key: string) =>
@@ -285,51 +285,10 @@ export declare namespace Worker {
   }
 }
 
-const camelCaseKey = (key: string) =>
-  key
-    .replace(/^_+/, "")
-    .replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
-
-const toCamelCase = <T>(value: unknown): T => {
-  if (Array.isArray(value)) {
-    return value.map((item) => toCamelCase(item)) as T;
-  }
-  if (
-    value &&
-    typeof value === "object" &&
-    Object.getPrototypeOf(value) === Object.prototype
-  ) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, nested]) => [
-        camelCaseKey(key),
-        toCamelCase(nested),
-      ]),
-    ) as T;
-  }
-  return value as T;
-};
-
 type PreparedBundleFile = {
   name: string;
   content: string | ArrayBuffer;
   contentType: string;
-};
-
-const stripSourceMapComment = (code: string) =>
-  code.replace(/\n?\/\/# sourceMappingURL=.*$/gm, "");
-
-const getModuleContentType = (module: BundledModule) => {
-  switch (module.type) {
-    case "CompiledWasm":
-      return "application/wasm";
-    case "Data":
-      return "application/octet-stream";
-    case "Text":
-      if (module.name.endsWith(".html")) return "text/html";
-      if (module.name.endsWith(".sql")) return "text/sql";
-      return "text/plain";
-  }
-  return "application/octet-stream";
 };
 
 const hashBundleFiles = (files: ReadonlyArray<PreparedBundleFile>) =>
@@ -763,3 +722,20 @@ ${props.exports?.map((id) => `export class ${id} {}`).join("\n") ?? ""}
       });
     }),
   );
+
+const stripSourceMapComment = (code: string) =>
+  code.replace(/\n?\/\/# sourceMappingURL=.*$/gm, "");
+
+const getModuleContentType = (module: BundledModule) => {
+  switch (module.type) {
+    case "CompiledWasm":
+      return "application/wasm";
+    case "Data":
+      return "application/octet-stream";
+    case "Text":
+      if (module.name.endsWith(".html")) return "text/html";
+      if (module.name.endsWith(".sql")) return "text/sql";
+      return "text/plain";
+  }
+  return "application/octet-stream";
+};

@@ -66,6 +66,8 @@ export const Agent = Cloudflare.DurableObjectNamespace(
             write: yield* socket.writer,
           });
 
+          const container = yield* sandbox.getInstance(id);
+
           return response;
         }),
         // maybe have a WebSocketEffect type?

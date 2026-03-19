@@ -1,4 +1,5 @@
 import type * as cf from "@cloudflare/workers-types";
+import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as ServiceMap from "effect/ServiceMap";
@@ -8,41 +9,27 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type * as Socket from "effect/unstable/socket/Socket";
 import * as Binding from "../../Binding.ts";
 import type { HttpEffect } from "../../Http.ts";
-import { serveWebRequest } from "./HttpServer.ts";
-import { isWorker, Worker, WorkerEnvironment } from "./Worker.ts";
+import * as Output from "../../Output.ts";
+import { Self } from "../../Self.ts";
+import { Account } from "../Account.ts";
 import cloudflare_workers from "./cloudflare:workers.ts";
+import { serveWebRequest } from "./HttpServer.ts";
+import type { DurableWebSocket } from "./WebSocket.ts";
+import { isWorker, Worker, WorkerEnvironment } from "./Worker.ts";
 
 export type DurableObjectId = cf.DurableObjectId;
 export type DurableObjectJurisdiction = cf.DurableObjectJurisdiction;
 export type DurableObjectNamespaceGetDurableObjectOptions =
   cf.DurableObjectNamespaceGetDurableObjectOptions;
+const DurableObjectNamespaceType = "Cloudflare.Workers.DurableObjectNamespace";
 
-export interface DurableWebSocket extends Socket.Socket {
-  close: (
-    code: number,
-    reason: string,
-  ) => Effect.Effect<void, Socket.SocketError>;
-  serializeAttachment: <T>(value: T) => Effect.Effect<void>;
-  deserializeAttachment: <T>() => Effect.Effect<T>;
-}
-
-export interface WebSocketHttpResponse
-  extends HttpServerResponse.HttpServerResponse {
-  webSocket: DurableWebSocket;
-}
-
-export const upgrade: (
-  request: HttpServerRequest.HttpServerRequest,
-) => Effect.Effect<[WebSocketHttpResponse, DurableWebSocket]> =
-  Effect.fnUntraced(function* (request) {
-    const socket = yield* request.upgrade;
-    // TODO(sam): implement hibernation logic
-    // TODO(sam): add serialize and deserialize attachments
-    return socket;
-  });
-
-export interface DurableObjectNamespace<Name extends string, Shape> {
+export interface DurableObjectNamespace<
+  Name extends string = string,
+  Shape = any,
+> {
+  Type: "Cloudflare.Workers.DurableObjectNamespace";
   name: Name;
+  namespaceId: Output.Output<string>;
   getByName: (name: string) => Effect.Effect<DurableObjectStub<Shape>>;
   newUniqueId: () => Effect.Effect<DurableObjectId>;
   idFromName: (name: string) => Effect.Effect<DurableObjectId>;
@@ -68,20 +55,21 @@ export interface DurableObjectShape {
     reason: string,
     wasClean: boolean,
   ) => Effect.Effect<void, Socket.SocketError>;
-
-  // [key in string]?: key extends "fetch"
-  //   ? HttpEffect
-  //   :
-  //       | Effect.Effect<any, any, HttpServerRequest.HttpServerRequest | Scope>
-  //       | ((
-  //           ...args: any[]
-  //         ) => Effect.Effect<any, any> | Stream.Stream<any, any>);
 }
 
 export const DurableObjectNamespace: {
-  <Name extends string, Shape extends DurableObjectShape, Req = never>(
-    namespace: Name,
-    eff: Effect.Effect<Effect.Effect<Shape, never, Req>>,
+  <
+    Name extends string,
+    Shape extends DurableObjectShape,
+    NamespaceReq = never,
+    InstanceReq = never,
+  >(
+    name: Name,
+    eff: Effect.Effect<
+      Effect.Effect<Shape, never, InstanceReq>,
+      never,
+      NamespaceReq
+    >,
   ): Effect.Effect<
     DurableObjectNamespace<
       Name,
@@ -93,90 +81,138 @@ export const DurableObjectNamespace: {
       }
     >,
     never,
-    Exclude<Req, DurableObjectState> | DurableObjectPolicy
+    | Exclude<
+        NamespaceReq | InstanceReq,
+        DurableObjectState | Self<DurableObjectNamespace>
+      >
+    | DurableObjectPolicy
   >;
-} = Effect.fnUntraced(function* (
-  namespace,
-  eff: Effect.Effect<DurableObjectShape>,
-) {
-  const worker = yield* Worker.Runtime;
+  Self: Self<DurableObjectNamespace>;
+} = Object.assign(
+  Effect.fnUntraced(function* (
+    name,
+    eff: Effect.Effect<Effect.Effect<DurableObjectShape>>,
+  ) {
+    const worker = yield* Worker.Self;
+    const runtime = yield* Worker.Context;
 
-  yield* DurableObjectPolicy.bind(namespace);
+    yield* DurableObjectPolicy.bind(name);
 
-  const DurableObject = yield* cloudflare_workers.pipe(
-    Effect.map((m) => m.DurableObject),
-  );
+    const DurableObject = yield* cloudflare_workers.pipe(
+      Effect.map((m) => m.DurableObject),
+    );
 
-  const services = yield* Effect.services<Effect.Services<typeof eff>>();
+    const services = yield* Effect.services<Effect.Services<typeof eff>>();
 
-  yield* worker.export(
-    namespace,
-    class extends DurableObject {
-      constructor(
-        state: cf.DurableObjectState,
-        env: any,
-        ctx: cf.DurableObject,
-      ) {
-        super(state, env);
+    yield* runtime.export(
+      name,
+      class extends DurableObject {
+        constructor(state: cf.DurableObjectState, env: any) {
+          super(state, env);
 
-        const runtimeState = fromDurableObjectState(state);
+          const runtimeState = fromDurableObjectState(state);
 
-        state.blockConcurrencyWhile(async () => {
-          const methods = await Effect.runPromise(
-            eff.pipe(
-              Effect.provideServices(services),
-              Effect.provideService(DurableObjectState, runtimeState),
-              Effect.provideService(WorkerEnvironment, env),
+          state.blockConcurrencyWhile(async () => {
+            const methods = await Effect.runPromise(
+              constructor.pipe(
+                Effect.provideServices(services),
+                Effect.provideService(DurableObjectState, runtimeState),
+                Effect.provideService(WorkerEnvironment, env),
+              ),
+            );
+
+            Object.assign(this, wrapDurableObjectShape(methods, state));
+          });
+        }
+      },
+    );
+
+    const binding = Effect.serviceOption(WorkerEnvironment).pipe(
+      Effect.map(Option.getOrUndefined),
+      Effect.flatMap((env) => {
+        if (env === undefined) {
+          // should be fine to return undefined here (it is only undefined at plantime)
+          return undefined!;
+        }
+        const ns = env[name];
+        if (!ns) {
+          return Effect.die(
+            new Error(`DurableObjectNamespace '${name}' not found`),
+          );
+        } else if (typeof ns.getByName === "function") {
+          return Effect.succeed(ns);
+        } else {
+          return Effect.die(
+            new Error(
+              `DurableObjectNamespace '${name}' is not a DurableObjectNamespace`,
             ),
           );
+        }
+      }),
+    );
 
-          Object.assign(this, wrapDurableObjectShape(methods, state));
-        });
-      }
-    },
-  );
+    const use = <T>(fn: (ns: cf.DurableObjectNamespace) => T) =>
+      binding.pipe(Effect.map((ns) => fn(ns)));
 
-  const DurableObjectNamespace = Effect.serviceOption(WorkerEnvironment).pipe(
-    Effect.map(Option.getOrUndefined),
-    Effect.flatMap((env) => {
-      if (env === undefined) {
-        // should be fine to return undefined here (it is only undefined at plantime)
-        return undefined!;
-      }
-      const ns = env[namespace];
-      if (!ns) {
-        return Effect.die(
-          new Error(`DurableObjectNamespace '${namespace}' not found`),
-        );
-      } else if (typeof ns.getByName === "function") {
-        return Effect.succeed(ns);
-      } else {
-        return Effect.die(
-          new Error(
-            `DurableObjectNamespace '${namespace}' is not a DurableObjectNamespace`,
+    const namespaceId = worker.workerName.pipe(
+      // TODO(sam): move out to a plantime function
+      Output.mapEffect((scriptName) =>
+        Account.asEffect().pipe(
+          Effect.flatMap((accountId) =>
+            workers.getScriptScriptAndVersionSetting({
+              accountId: accountId.toString(),
+              scriptName,
+            }),
           ),
-        );
-      }
-    }),
-  );
-  const use = <T>(fn: (ns: cf.DurableObjectNamespace) => T) =>
-    DurableObjectNamespace.pipe(Effect.map((ns) => fn(ns)));
+          Effect.flatMap((setting) => {
+            const namespaceId = setting.bindings?.find(
+              (
+                binding,
+              ): binding is typeof binding & {
+                type: "dispatch_namespace";
+                namespaceId: string;
+              } =>
+                binding.type === "durable_object_namespace" &&
+                binding.className === name,
+            )?.namespaceId;
+            return namespaceId
+              ? Effect.succeed(namespaceId)
+              : Effect.die(
+                  new Error(`DurableObjectNamespace '${name}' not found`),
+                );
+          }),
+          Effect.orDie,
+        ),
+      ),
+    );
 
-  return {
-    name: namespace,
-    getByName: (name: string) =>
-      use((ns) => wrapDurableObjectStub(ns.getByName(name))),
-    newUniqueId: () => use((ns) => ns.newUniqueId()),
-    idFromName: (name: string) => use((ns) => ns.idFromName(name)),
-    idFromString: (id: string) => use((ns) => ns.idFromString(id)),
-    get: (
-      id: cf.DurableObjectId,
-      options?: cf.DurableObjectNamespaceGetDurableObjectOptions,
-    ) => use((ns) => wrapDurableObjectStub(ns.get(id, options))),
-    jurisdiction: (jurisdiction: cf.DurableObjectJurisdiction) =>
-      use((ns) => ns.jurisdiction(jurisdiction)),
-  };
-}) as any;
+    const self: DurableObjectNamespace<any, any> = {
+      Type: DurableObjectNamespaceType,
+      name: name,
+      namespaceId,
+      getByName: (name: string) =>
+        use((ns) => wrapDurableObjectStub(ns.getByName(name))),
+      newUniqueId: () => use((ns) => ns.newUniqueId()),
+      idFromName: (name: string) => use((ns) => ns.idFromName(name)),
+      idFromString: (id: string) => use((ns) => ns.idFromString(id)),
+      get: (
+        id: cf.DurableObjectId,
+        options?: cf.DurableObjectNamespaceGetDurableObjectOptions,
+      ) => use((ns) => wrapDurableObjectStub(ns.get(id, options))),
+      jurisdiction: (jurisdiction: cf.DurableObjectJurisdiction) =>
+        use((ns) => ns.jurisdiction(jurisdiction)),
+    };
+
+    const constructor = yield* eff.pipe(
+      Effect.provideService(DurableObjectNamespace.Self, self),
+    );
+
+    return self;
+  }),
+  {
+    Self: Self<DurableObjectNamespace<any, any>>(DurableObjectNamespaceType),
+  },
+) as any;
 
 export class DurableObjectPolicy extends Binding.Policy<
   DurableObjectPolicy,
@@ -355,7 +391,7 @@ const wrapDurableObjectShape = (
       key,
       key === "fetch"
         ? wrapFetch(value as HttpEffect, state)
-        : wrapMethod(value as DurableObjectShape[string]),
+        : wrapMethod(value as DurableObjectShape[keyof DurableObjectShape]),
     ]),
   );
 
@@ -369,7 +405,7 @@ const wrapFetch =
       }),
     );
 
-const wrapMethod = (value: DurableObjectShape[string]) => {
+const wrapMethod = (value: DurableObjectShape[keyof DurableObjectShape]) => {
   if (Effect.isEffect(value)) {
     return () => Effect.runPromise(value as Effect.Effect<any>);
   }

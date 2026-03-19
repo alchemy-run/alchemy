@@ -3,10 +3,11 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as ServiceMap from "effect/ServiceMap";
 import { SingleShotGen } from "effect/Utils";
-import { ExecutionContext, Self } from "./ExecutionContext.ts";
+import { ExecutionContext } from "./ExecutionContext.ts";
 import * as Namespace from "./Namespace.ts";
 import { ALCHEMY_PHASE } from "./Phase.ts";
 import type { ResourceLike } from "./Resource.ts";
+import { Self } from "./Self.ts";
 import { CurrentStack } from "./Stack.ts";
 
 export interface ServiceLike {
@@ -177,7 +178,9 @@ export const Policy =
             self,
             // @ts-expect-error
             (...args: Parameters<Shape>) =>
-              Self.asEffect().pipe(Effect.flatMap((self) => fn(self, ...args))),
+              Self.asEffect().pipe(
+                Effect.flatMap((self) => fn(self as ResourceLike, ...args)),
+              ),
           ),
         effect: (
           fn: Effect.Effect<
@@ -194,7 +197,9 @@ export const Policy =
               fn,
               (fn) =>
                 (...args: Parameters<Shape>) =>
-                  Effect.flatMap(Self.asEffect(), (ctx) => fn(ctx, ...args)),
+                  Effect.flatMap(Self.asEffect(), (self) =>
+                    fn(self as ResourceLike, ...args),
+                  ),
             ),
           ),
       },

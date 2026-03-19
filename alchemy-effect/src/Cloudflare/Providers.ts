@@ -7,6 +7,7 @@ import { CommandProvider } from "../Build/Command.ts";
 import { esbuild } from "../Bundle/ESBuild.ts";
 import type { Provider } from "../Provider.ts";
 import * as Account from "./Account.ts";
+import { ContainerProvider } from "./Container/index.ts";
 import * as KV from "./KV/index.ts";
 import * as R2 from "./R2/index.ts";
 import { AssetsProvider } from "./Workers/Assets.ts";
@@ -45,6 +46,7 @@ export const credentials = () =>
 export const resources = () =>
   Layer.mergeAll(
     CommandProvider(),
+    ContainerProvider(),
     WorkerProvider(),
     KV.NamespaceProvider(),
     R2.BucketProvider(),

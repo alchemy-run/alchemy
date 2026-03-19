@@ -16,6 +16,7 @@ import {
   type ResourceLike,
   type ResourceProviders,
 } from "../Resource.ts";
+import { Self } from "../Self.ts";
 import type { Stack, StackServices } from "../Stack.ts";
 import type { Stage } from "../Stage.ts";
 import * as Serverless from "./ExecutionContext.ts";
@@ -78,6 +79,26 @@ export type FunctionConstructor<
     Provider<Self> | Exclude<Req, RuntimeServices | ProvidedServices | Self>
   >;
 
+  <Req = never>(
+    id: string,
+    props:
+      | {
+          [prop in keyof Self["Props"]]: Input<Self["Props"][prop]>;
+        }
+      | Effect.Effect<
+          {
+            [prop in keyof Self["Props"]]: Input<Self["Props"][prop]>;
+          },
+          never,
+          Req
+        >,
+    impl: Effect.Effect<Http.HttpEffect, never, Req>,
+  ): Effect.Effect<
+    Self,
+    never,
+    Provider<Self> | Exclude<Req, RuntimeServices | ProvidedServices | Self>
+  >;
+
   asEffect(): Effect.Effect<Self, never, Provider<Self>>;
 
   [Symbol.iterator](): Effect.Yieldable<
@@ -95,7 +116,8 @@ export type FunctionClass<
 > = FunctionConstructor<Self, Services> &
   Effect.Effect<FunctionConstructor<Self, Services>> & {
     provider: ResourceProviders<Self>;
-    Runtime: ServiceMap.Service<Self, Runtime>;
+    Self: ServiceMap.Service<Self, Self>;
+    Context: ServiceMap.Service<Self, Runtime>;
   };
 
 export const Function =
@@ -112,9 +134,9 @@ export const Function =
   >(
     type: R["Type"],
   ) =>
-  <Runtime extends Serverless.ExecutionContext>(
-    createExecutionContext: (id: string) => Runtime,
-  ): FunctionClass<R, Runtime, Services | RuntimeServices> => {
+  <context extends Serverless.ExecutionContext>(
+    createExecutionContext: (id: string) => context,
+  ): FunctionClass<R, context, Services | RuntimeServices> => {
     type PropsShape =
       | {
           [prop in keyof Exclude<R["Props"], undefined>]: Input<
@@ -124,58 +146,64 @@ export const Function =
       | undefined;
     type Props =
       | PropsShape
-      | Effect.Effect<PropsShape, never, Services | Runtime>;
-    type Impl = Effect.Effect<Http.HttpEffect, never, Services | Runtime>;
+      | Effect.Effect<PropsShape, never, Services | context>;
+    type Impl = Effect.Effect<Http.HttpEffect, never, Services | context>;
 
     const resource = Resource(type);
-    const host = ServiceMap.Service<R, Runtime>(`Host<${type}>`);
-    const constructor = (id: string, props?: Props) => (impl: Impl) =>
-      Effect.flatMap(
-        Effect.all([
-          Effect.isEffect(props)
-            ? props
-            : Effect.succeed(props ?? ({} as PropsShape)),
-          Effect.sync(() => createExecutionContext(id)),
-          Effect.services<never>(),
-        ]),
-        ([props, executionContext, outerServices]) =>
-          resource(
-            id,
-            // @ts-expect-error
-            impl.pipe(
-              Effect.flatMap((httpEffect) =>
-                Effect.andThen(Http.serve(httpEffect), () =>
-                  Effect.succeed({
-                    ...props,
-                    env: {
-                      ...props?.env,
-                      ...executionContext.env,
-                    },
-                  }),
-                ),
-              ),
-              Effect.provide(
-                Layer.provideMerge(
-                  Layer.mergeAll(
-                    Layer.succeed(host, executionContext),
-                    Layer.succeed(ExecutionContext, executionContext),
-                    Layer.succeed(Serverless.Context, executionContext),
+    const context = ExecutionContext<Serverless.ExecutionContext>(type);
+    const self = Self<R>(type);
+    const constructor = (id: string, props: Props, impl?: Impl) =>
+      !impl
+        ? (impl: Impl) => constructor(id, props, impl)
+        : Effect.flatMap(
+            Effect.all([
+              Effect.isEffect(props)
+                ? props
+                : Effect.succeed(props ?? ({} as PropsShape)),
+              Effect.sync(() => createExecutionContext(id)),
+              Effect.services<never>(),
+            ]),
+            Effect.fnUntraced(function* ([
+              props,
+              executionContext,
+              outerServices,
+            ]) {
+              // @ts-expect-error
+              const instance = yield* resource(id, props);
+
+              yield* impl.pipe(
+                Effect.flatMap(Http.serve),
+                Effect.provide(
+                  Layer.provideMerge(
+                    Layer.mergeAll(
+                      Layer.succeed(context, executionContext),
+                      Layer.succeed(ExecutionContext, executionContext),
+                      Layer.succeed(Serverless.Context, executionContext),
+                      Layer.succeed(resource.Self, instance),
+                      Layer.succeed(Self, instance),
+                    ),
+                    Layer.succeedServices(outerServices),
                   ),
-                  Layer.succeedServices(outerServices),
                 ),
-              ),
-            ),
-          ).pipe(
-            Effect.map(
-              (resource) =>
-                Object.assign(resource, {
-                  ExecutionContext: executionContext,
-                }) as R,
-            ),
-          ),
-      );
+              );
+
+              // @ts-expect-error
+              instance.Props = {
+                ...props,
+                env: {
+                  ...props?.env,
+                  ...executionContext.env,
+                },
+              } as PropsShape;
+
+              return Object.assign(instance, {
+                ExecutionContext: executionContext,
+              }) as R;
+            }),
+          );
 
     return Object.assign(constructor, resource, {
-      Runtime: host,
+      Context: context,
+      Self: self,
     }) as any;
   };

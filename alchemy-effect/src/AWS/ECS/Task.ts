@@ -23,8 +23,8 @@ import { DotAlchemy } from "../../Config.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
-import * as Server from "../../Server/Process.ts";
 import type { ServerExecutionContext } from "../../Server/ExecutionContext.ts";
+import * as Server from "../../Server/Process.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import { createInternalTags, createTagsList, hasTags } from "../../Tags.ts";
@@ -154,7 +154,7 @@ export const Task = Server.Process<Task>("AWS.ECS.Task")((id) => {
   const env: Record<string, any> = {};
 
   return {
-    type: "AWS.ECS.Task",
+    Type: "AWS.ECS.Task",
     id,
     env,
     set: (bindingId: string, output: Output.Output) =>

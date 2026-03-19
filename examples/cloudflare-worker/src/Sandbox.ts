@@ -1,34 +1,52 @@
 import * as Cloudflare from "alchemy-effect/Cloudflare";
+import { Stack } from "alchemy-effect/Stack";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 
-export const Sandbox = Cloudflare.Container(
-  "Sandbox",
-  {
-    instanceType: "standard-1",
-    dockerfile: `
-      FROM alpine:latest
-      RUN apk add --no-cache ffmpeg
-    `,
-  },
-  // http effec
-  Effect.gen(function* () {
-    const request = yield* HttpServerRequest;
-    const socket = yield* request.upgrade;
+export const Sandbox = Effect.gen(function* () {
+  const stack = yield* Stack;
 
-    const cmd = yield* ChildProcess.make("ffmpeg", ["-version"]);
-    const [exitCode, stdout, stderr] = yield* Effect.all(
-      [
-        cmd.exitCode,
-        Stream.mkString(Stream.decodeText(cmd.stdout)),
-        Stream.mkString(Stream.decodeText(cmd.stderr)),
-      ] as const,
-      { concurrency: "unbounded" },
-    );
+  return yield* Cloudflare.Container(
+    "Sandbox",
+    {
+      instanceType: stack.stage === "prod" ? "standard-1" : "dev",
+      dockerfile: `
+        FROM alpine:latest
+        RUN apk add --no-cache ffmpeg
+      `,
+    },
+    Effect.gen(function* () {
+      // declare dependencies
 
-    return yield* HttpServerResponse.json({ stdout, stderr, exitCode });
-  }),
-);
+      // return http effect
+      return Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        // upgrade to web socket
+        const socket = yield* request.upgrade;
+        const writeMessage = yield* socket.writer;
+        const cmd = yield* ChildProcess.make("ffmpeg", ["-version"]);
+        const [exitCode] = yield* Effect.all(
+          [
+            cmd.exitCode,
+            // pipe stdout to the websocket
+            cmd.stdout.pipe(
+              Stream.tap(writeMessage),
+              Stream.decodeText,
+              Stream.mkString,
+            ),
+          ] as const,
+          { concurrency: "unbounded" },
+        );
+
+        return HttpServerResponse.empty({
+          status: exitCode === 0 ? 200 : 500,
+        });
+      }).pipe(Effect.orDie);
+    }),
+  );
+});
+
+export default Sandbox;

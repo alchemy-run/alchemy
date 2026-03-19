@@ -126,7 +126,7 @@ export const Function = Serverless.Function<Function, Credentials | Region>(
   const env: Record<string, any> = {};
 
   return {
-    type: "AWS.Lambda.Function",
+    Type: "AWS.Lambda.Function",
     id,
     env,
     set: (id: string, output: Output.Output) =>

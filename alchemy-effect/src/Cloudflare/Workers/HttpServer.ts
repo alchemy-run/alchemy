@@ -19,7 +19,7 @@ export const HttpServer: Layer.Layer<
 > = Layer.effect(
   Http.HttpServer,
   Effect.gen(function* () {
-    const worker = yield* Worker.Runtime;
+    const worker = yield* Worker.Context;
     return Http.server({
       serve: (handler) =>
         worker.listen((event) => {

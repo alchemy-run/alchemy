@@ -3,7 +3,6 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { pipeArguments, type Pipeable } from "effect/Pipeable";
 import { SingleShotGen } from "effect/Utils";
-import { Self } from "./ExecutionContext.ts";
 import { toFqn } from "./FQN.ts";
 import type { Input } from "./Input.ts";
 import type { InstanceId } from "./InstanceId.ts";
@@ -11,6 +10,7 @@ import { CurrentNamespace, type NamespaceNode } from "./Namespace.ts";
 import * as Output from "./Output.ts";
 import { Provider, type ProviderService } from "./Provider.ts";
 import { RemovalPolicy } from "./RemovalPolicy.ts";
+import { Self } from "./Self.ts";
 import { Stack } from "./Stack.ts";
 
 export type ResourceConstructor<R extends ResourceLike, Req = never> = {
@@ -35,12 +35,13 @@ export type ResourceConstructor<R extends ResourceLike, Req = never> = {
   // ): Effect.Effect<R, never, PropsReq | Req>;
 };
 
-export type ResourceClass<Self extends ResourceLike> = ResourceConstructor<
-  Self,
-  Provider<Self>
+export type ResourceClass<R extends ResourceLike> = ResourceConstructor<
+  R,
+  Provider<R>
 > &
-  Effect.Effect<ResourceConstructor<Self>> & {
-    provider: ResourceProviders<Self>;
+  Effect.Effect<ResourceConstructor<R>> & {
+    provider: ResourceProviders<R>;
+    Self: Self<R>;
   };
 
 export type LogicalId = string;
@@ -52,7 +53,7 @@ export interface ResourceBinding<Data = any> {
 }
 
 export interface ResourceLike<
-  Type extends string = any,
+  Type extends string = string,
   Props extends object | undefined = any,
   Attributes extends object = object,
   Binding = any,
@@ -120,6 +121,7 @@ export function Resource<R extends ResourceLike>(
   type: R["Type"],
 ): ResourceClass<R> {
   type Props = Input<R["Props"]>;
+  const self = Self<R>(type);
   const constructor = (
     id: string,
     props: Props | Effect.Effect<Props> | undefined,
@@ -204,23 +206,19 @@ export function Resource<R extends ResourceLike>(
           RemovalPolicy: yield* Effect.serviceOption(RemovalPolicy).pipe(
             Effect.map(Option.getOrElse(() => "destroy" as const)),
           ),
-
           bind,
         } as any,
         {
           get: (target, prop) =>
             typeof prop === "symbol" || prop in target
               ? target[prop as keyof typeof target]
-              : new Output.PropExpr(Output.of(Resource), prop),
+              : new Output.PropExpr<any, string>(Output.of(Resource), prop),
         },
       )) as R;
       Resource.Props = Effect.isEffect(props)
         ? yield* props.pipe(
             Effect.provideService(Self, Resource),
-            // Effect.provideService(Namespace, {
-            //   Id: id,
-            //   Parent: namespace,
-            // }),
+            Effect.provideService(Self(type), Resource),
           )
         : props;
       return Resource;
@@ -246,6 +244,7 @@ export function Resource<R extends ResourceLike>(
       effect: Layer.effect(ProviderTag),
       succeed: Layer.succeed(ProviderTag),
     },
+    Self: self,
   };
 
   return Object.assign(constructor, Service) as any as ResourceClass<R>;

@@ -18,7 +18,7 @@ export const HttpServer: Layer.Layer<Http.HttpServer, never, Function> =
   Layer.effect(
     Http.HttpServer,
     Effect.gen(function* () {
-      const func = yield* Function.Runtime;
+      const func = yield* Function.Context;
       return Http.server({
         serve: (handler) =>
           func.listen((event) => {

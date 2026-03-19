@@ -8,10 +8,10 @@ import type { HttpServerError } from "effect/unstable/http/HttpServerError";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
-export type HttpEffect = Effect.Effect<
+export type HttpEffect<Req = never> = Effect.Effect<
   HttpServerResponse.HttpServerResponse,
   HttpServerError | HttpBodyError,
-  HttpServerRequest | Scope
+  HttpServerRequest | Scope | Req
 >;
 
 export const serve = <Req = never>(

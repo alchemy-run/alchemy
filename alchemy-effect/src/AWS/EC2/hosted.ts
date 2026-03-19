@@ -10,10 +10,10 @@ import {
   createTempBundleDir,
 } from "../../Bundle/TempRoot.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
-import type { ServerExecutionContext } from "../../Server/ExecutionContext.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import type { ResourceBinding } from "../../Resource.ts";
+import type { ServerExecutionContext } from "../../Server/ExecutionContext.ts";
 import { createInternalTags, createTagsList, hasTags } from "../../Tags.ts";
 import { sha256 } from "../../Util/sha256.ts";
 import { zipCode } from "../../Util/zip.ts";
@@ -75,7 +75,7 @@ export const createEc2HostExecutionContext =
     const env: Record<string, any> = {};
 
     return {
-      type,
+      Type: type,
       id,
       env,
       set: (bindingId: string, output: Output.Output) =>
