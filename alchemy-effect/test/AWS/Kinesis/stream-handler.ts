@@ -8,7 +8,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 export class KinesisStreamFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
   "KinesisStreamFunction",
   {
-    main: import.meta.filename,
+    main: import.meta.path,
     url: true,
   },
 ) {}

@@ -1,4 +1,5 @@
 import { AWS } from "alchemy-effect";
+import { Stack } from "alchemy-effect/Stack";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -6,63 +7,65 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Database, DatabaseAurora } from "./Database.ts";
 import { NetworkLive } from "./Network.ts";
 
-const ServiceFunction = Effect.gen(function* () {
-  const db = yield* Database;
+export class ServiceFunction extends AWS.Lambda.Function<ServiceFunction>()(
+  "ServiceFunction",
+  Stack.useSync((stack) => ({
+    main: import.meta.path,
+    memory: stack.stage === "prod" ? 1024 : 512,
+    runtime: stack.stage === "prod" ? "nodejs24.x" : "nodejs22.x",
+  })),
+) {}
 
-  return Effect.gen(function* () {
-    const request = yield* HttpServerRequest;
+export const ServiceFunctionLive = ServiceFunction.make(
+  Effect.gen(function* () {
+    const db = yield* Database;
 
-    if (request.method === "GET" && new URL(request.url).pathname === "/") {
-      const response = yield* db
-        .query<{
-          database: string;
-          current_time: string;
-          current_user: string;
-        }>(
-          "select current_database() as database, now()::text as current_time, current_user::text as current_user",
-        )
-        .pipe(
-          Effect.match({
-            onFailure: (error) => ({
-              status: 500 as const,
-              body: {
-                ok: false,
-                error: error.message,
-              },
+    return Effect.gen(function* () {
+      const request = yield* HttpServerRequest;
+
+      if (request.method === "GET" && new URL(request.url).pathname === "/") {
+        const response = yield* db
+          .query<{
+            database: string;
+            current_time: string;
+            current_user: string;
+          }>(
+            "select current_database() as database, now()::text as current_time, current_user::text as current_user",
+          )
+          .pipe(
+            Effect.match({
+              onFailure: (error) => ({
+                status: 500 as const,
+                body: {
+                  ok: false,
+                  error: error.message,
+                },
+              }),
+              onSuccess: (rows) => ({
+                status: 200 as const,
+                body: {
+                  ok: true,
+                  connection: rows[0] ?? null,
+                },
+              }),
             }),
-            onSuccess: (rows) => ({
-              status: 200 as const,
-              body: {
-                ok: true,
-                connection: rows[0] ?? null,
-              },
-            }),
-          }),
-        );
+          );
 
-      return yield* HttpServerResponse.json(response.body, {
-        status: response.status,
-      });
-    }
+        return yield* HttpServerResponse.json(response.body, {
+          status: response.status,
+        });
+      }
 
-    return HttpServerResponse.text("Not found", { status: 404 });
-  });
-}).pipe(
-  Effect.provide(
-    Layer.provideMerge(
-      Layer.mergeAll(DatabaseAurora, AWS.Lambda.HttpServer),
-      Layer.mergeAll(NetworkLive, AWS.RDS.ConnectLive),
+      return HttpServerResponse.text("Not found", { status: 404 });
+    });
+  }).pipe(
+    Effect.provide(
+      Layer.provideMerge(
+        Layer.mergeAll(DatabaseAurora, AWS.Lambda.HttpServer),
+        Layer.mergeAll(NetworkLive, AWS.RDS.ConnectLive),
+      ),
     ),
   ),
 );
 
-export default ServiceFunction.pipe(
-  AWS.Lambda.Function(
-    "ServiceFunction",
-    Effect.map(Stack.asEffect(), (stack) => ({
-      main: import.meta.path,
-      memory: stack.stage === "prod" ? 1024 : 512,
-      runtime: stack.stage === "prod" ? "nodejs24.x" : "nodejs22.x",
-    })),
-  ),
-);
+export default ServiceFunctionLive;

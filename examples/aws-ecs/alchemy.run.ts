@@ -60,8 +60,8 @@ const stack = Effect.gen(function* () {
   });
 
   const cluster = yield* AWS.ECS.Cluster("ExampleCluster", {});
-  const apiTask = yield* ApiTask(queue);
-  const queuePollerTask = yield* QueuePollerTask(queue);
+  const apiTask = yield* ApiTask;
+  const queuePollerTask = yield* QueuePollerTask;
 
   const apiService = yield* AWS.ECS.Service("ExampleApiService", {
     cluster,
@@ -169,6 +169,6 @@ const stack = Effect.gen(function* () {
     dashboardName: dashboard.dashboardName,
     alarmName: alarm.alarmName,
   };
-}).pipe(Stack.make("AwsEcsExample", aws));
+});
 
-export default stack;
+export default stack.pipe(Stack.make("AwsEcsExample", aws));

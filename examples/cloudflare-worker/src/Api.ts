@@ -8,7 +8,7 @@ import { Agent, AgentLive } from "./Agent.ts";
 
 // declare the Api service with a tag + props
 export class Api extends Cloudflare.Worker<Api>()("Api", {
-  main: import.meta.filename,
+  main: import.meta.path,
 }) {}
 
 export const ApiLive = Api.make(

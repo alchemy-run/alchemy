@@ -8,82 +8,86 @@ import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Network, NetworkLive } from "./Network.ts";
 
-export default Effect.gen(function* () {
-  const queue = yield* AWS.SQS.Queue("JobsQueue", {
-    receiveMessageWaitTimeSeconds: 20,
-    visibilityTimeout: 60,
-  });
+export class ServerInstance extends AWS.EC2.Instance<ServerInstance>()(
+  "ServerInstance",
+  Effect.gen(function* () {
+    const imageId = yield* AWS.EC2.amazonLinux();
+    const network = yield* Network;
 
-  yield* AWS.SQS.messages(queue).subscribe((stream) =>
-    stream.pipe(Stream.mapEffect(Effect.logInfo), Stream.runDrain),
-  );
+    return {
+      main: import.meta.path,
+      imageId,
+      instanceType: "t3.small",
+      subnetId: network.publicSubnetIds[0],
+      securityGroupIds: [network.appSecurityGroupId],
+      associatePublicIpAddress: true,
+      port: 3000,
+    };
+  }),
+) {}
 
-  const sendMessage = yield* AWS.SQS.SendMessage.bind(queue);
+export const ServerInstanceLive = ServerInstance.make(
+  Effect.gen(function* () {
+    const queue = yield* AWS.SQS.Queue("JobsQueue", {
+      receiveMessageWaitTimeSeconds: 20,
+      visibilityTimeout: 60,
+    });
 
-  yield* Http.serve(
-    Effect.gen(function* () {
-      const request = yield* HttpServerRequest.HttpServerRequest;
-      const url = new URL(request.url);
+    yield* AWS.SQS.messages(queue).subscribe((stream) =>
+      stream.pipe(Stream.mapEffect(Effect.logInfo), Stream.runDrain),
+    );
 
-      if (request.method === "GET" && url.pathname === "/") {
-        return yield* HttpServerResponse.json({
-          ok: true,
-          routes: ["GET /", "GET /enqueue?message=hello"],
-        });
-      }
+    const sendMessage = yield* AWS.SQS.SendMessage.bind(queue);
 
-      if (request.method === "GET" && url.pathname === "/enqueue") {
-        const message = url.searchParams.get("message") ?? "hello from EC2";
-        const body = JSON.stringify({
-          message,
-          enqueuedAt: new Date().toISOString(),
-        });
+    yield* Http.serve(
+      Effect.gen(function* () {
+        const request = yield* HttpServerRequest.HttpServerRequest;
+        const url = new URL(request.url);
 
-        const result = yield* sendMessage({
-          MessageBody: body,
-        });
+        if (request.method === "GET" && url.pathname === "/") {
+          return yield* HttpServerResponse.json({
+            ok: true,
+            routes: ["GET /", "GET /enqueue?message=hello"],
+          });
+        }
 
-        return yield* HttpServerResponse.json({
-          ok: true,
-          message,
-          messageId: result.MessageId,
-        });
-      }
+        if (request.method === "GET" && url.pathname === "/enqueue") {
+          const message = url.searchParams.get("message") ?? "hello from EC2";
+          const body = JSON.stringify({
+            message,
+            enqueuedAt: new Date().toISOString(),
+          });
 
-      return HttpServerResponse.text("Not found", { status: 404 });
-    }).pipe(
-      Effect.catch(() =>
-        Effect.succeed(
-          HttpServerResponse.text("Internal server error", { status: 500 }),
+          const result = yield* sendMessage({
+            MessageBody: body,
+          });
+
+          return yield* HttpServerResponse.json({
+            ok: true,
+            message,
+            messageId: result.MessageId,
+          });
+        }
+
+        return HttpServerResponse.text("Not found", { status: 404 });
+      }).pipe(
+        Effect.catch(() =>
+          Effect.succeed(
+            HttpServerResponse.text("Internal server error", { status: 500 }),
+          ),
+        ),
+      ),
+    );
+  }).pipe(
+    Effect.provide(
+      Layer.provideMerge(
+        Layer.mergeAll(NetworkLive, SQSQueueEventSource, AWS.EC2.HttpServer),
+        Layer.mergeAll(
+          AWS.SQS.DeleteMessageBatchLive,
+          AWS.SQS.ReceiveMessageLive,
+          AWS.SQS.SendMessageLive,
         ),
       ),
     ),
-  );
-}).pipe(
-  Effect.provide(
-    Layer.provideMerge(
-      Layer.mergeAll(NetworkLive, SQSQueueEventSource, AWS.EC2.HttpServer),
-      Layer.mergeAll(
-        AWS.SQS.DeleteMessageBatchLive,
-        AWS.SQS.ReceiveMessageLive,
-        AWS.SQS.SendMessageLive,
-      ),
-    ),
-  ),
-  AWS.EC2.Instance(
-    "ServerInstance",
-    Effect.gen(function* () {
-      const imageId = yield* AWS.EC2.amazonLinux();
-      const network = yield* Network;
-      return {
-        main: import.meta.path,
-        imageId,
-        instanceType: "t3.small",
-        subnetId: network.publicSubnetIds[0],
-        securityGroupIds: [network.appSecurityGroupId],
-        associatePublicIpAddress: true,
-        port: 3000,
-      };
-    }),
   ),
 );

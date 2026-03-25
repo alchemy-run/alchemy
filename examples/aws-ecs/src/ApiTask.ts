@@ -1,27 +1,26 @@
-import * as Credentials from "@distilled.cloud/aws/Credentials";
-import * as Region from "@distilled.cloud/aws/Region";
-import * as sqs from "@distilled.cloud/aws/sqs";
-import { NodeServices } from "@effect/platform-node";
 import * as AWS from "alchemy-effect/AWS";
 import * as Http from "alchemy-effect/Http";
-import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { JobsQueue, JobsQueueLive } from "./JobsQueue.ts";
 
-const runtime = Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer).pipe(
-  Layer.provideMerge(Credentials.fromEnv()),
-  Layer.provideMerge(Region.fromEnv()),
-  Layer.provideMerge(
-    Layer.succeed(ConfigProvider.ConfigProvider, ConfigProvider.fromEnv()),
-  ),
-);
+export class ApiTask extends AWS.ECS.Task<ApiTask>()("ApiTask", {
+  main: import.meta.path,
+  cpu: 512,
+  memory: 1024,
+  port: 3000,
+  docker: {
+    instructions: [["workdir", "/app"] as const],
+  },
+}) {}
 
-export const ApiTask = (queue: Pick<AWS.SQS.Queue, "queueUrl">) =>
+export const ApiTaskLive = ApiTask.make(
   Effect.gen(function* () {
+    const queue = yield* JobsQueue;
+    const sendMessage = yield* AWS.SQS.SendMessage.bind(queue);
+
     yield* Http.serve(
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
@@ -35,15 +34,13 @@ export const ApiTask = (queue: Pick<AWS.SQS.Queue, "queueUrl">) =>
         }
 
         if (request.method === "GET" && url.pathname === "/enqueue") {
-          const queueUrl = yield* Config.string("QUEUE_URL");
           const message = url.searchParams.get("message") ?? "hello from ECS";
           const body = JSON.stringify({
             message,
             enqueuedAt: new Date().toISOString(),
           });
 
-          const result = yield* sqs.sendMessage({
-            QueueUrl: queueUrl,
+          const result = yield* sendMessage({
             MessageBody: body,
           });
 
@@ -56,7 +53,6 @@ export const ApiTask = (queue: Pick<AWS.SQS.Queue, "queueUrl">) =>
 
         return HttpServerResponse.text("Not found", { status: 404 });
       }).pipe(
-        Effect.provide(runtime),
         Effect.catch(() =>
           Effect.succeed(
             HttpServerResponse.text("Internal server error", { status: 500 }),
@@ -64,20 +60,13 @@ export const ApiTask = (queue: Pick<AWS.SQS.Queue, "queueUrl">) =>
         ),
       ),
     );
-
-    return {
-      main: import.meta.path,
-      cpu: 512,
-      memory: 1024,
-      port: 3000,
-      env: {
-        QUEUE_URL: queue.queueUrl,
-      },
-      taskRoleManagedPolicyArns: [
-        "arn:aws:iam::aws:policy/AmazonSQSFullAccess",
-      ],
-      docker: {
-        instructions: [["workdir", "/app"] as const],
-      },
-    };
-  }).pipe(Effect.provide(AWS.ECS.HttpServer), AWS.ECS.Task("ApiTask"));
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        AWS.ECS.HttpServer,
+        JobsQueueLive,
+        AWS.SQS.SendMessageLive,
+      ),
+    ),
+  ),
+);
