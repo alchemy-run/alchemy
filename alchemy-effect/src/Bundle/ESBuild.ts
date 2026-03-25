@@ -79,14 +79,17 @@ const fromESBuildResult = (result: _esbuild.BuildResult): BundleOutput => ({
     })) ?? [],
 });
 
-const fromESBuildError = (error: _esbuild.BuildFailure): BundleError =>
-  new BundleError({
-    message: error.message,
-    errors: error.errors.map((e) => ({
-      message: e.text,
-      file: e.location?.file,
-      line: e.location?.line,
-      column: e.location?.column,
-    })),
+const fromESBuildError = (error: unknown): BundleError => {
+  const failure = error as _esbuild.BuildFailure | undefined;
+  return new BundleError({
+    message: failure?.message ?? String(error),
+    errors:
+      failure?.errors?.map((e) => ({
+        message: e.text,
+        file: e.location?.file,
+        line: e.location?.line,
+        column: e.location?.column,
+      })) ?? [],
     cause: error,
   });
+};

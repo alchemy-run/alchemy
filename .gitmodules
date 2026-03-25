@@ -10,3 +10,6 @@
 [submodule "vendor/alchemy"]
 	path = vendor/alchemy
 	url = git@github.com:alchemy-run/alchemy.git
+[submodule "vendor/containers"]
+	path = vendor/containers
+	url = git@github.com:cloudflare/containers.git

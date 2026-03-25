@@ -1,16 +1,32 @@
-// @ts-nocheck
 import * as Cloudflare from "alchemy-effect/Cloudflare";
 import * as Effect from "effect/Effect";
+import * as HttpBody from "effect/unstable/http/HttpBody";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as Socket from "effect/unstable/socket/Socket";
 import { Sandbox } from "./Sandbox.ts";
 
-export const Agent = Cloudflare.DurableObjectNamespace(
-  "Users",
+export class Agent extends Cloudflare.DurableObjectNamespace<
+  Agent,
+  {
+    eval(code: string): Effect.Effect<string>;
+    getProfile(): Effect.Effect<string | undefined>;
+    putProfile(value: string): Effect.Effect<void>;
+  }
+>()("Agents") {}
+
+export const AgentLive = Agent.make(
   Effect.gen(function* () {
     // bind the Sandbox Container to the Agent DO
     const sandbox = yield* Sandbox;
 
     return Effect.gen(function* () {
       const state = yield* Cloudflare.DurableObjectState;
+
+      // get the container instance
+      const container = yield* Cloudflare.initContainer(sandbox);
+
+      const connection = yield* container.getTcpSocket(1080);
 
       const sessions = new Map<
         string,
@@ -39,34 +55,27 @@ export const Agent = Cloudflare.DurableObjectNamespace(
         putProfile: Effect.fnUntraced(function* (value: string) {
           yield* state.storage.put("Profile", value);
         }),
+        eval: (code: string) =>
+          connection
+            .fetch(
+              HttpClientRequest.post("/eval", {
+                body: HttpBody.text(code),
+              }),
+            )
+            .pipe(
+              Effect.flatMap((response) => response.text),
+              Effect.orDie,
+            ),
         // http (websocket connections)
         fetch: Effect.gen(function* () {
-          // HttpEffect
           const request = yield* HttpServerRequest;
-
-          // Deferred
-          // promise = Effect.runPromise(Deferred.await(deferred))
-          // ctx.waitUntil(promise)
-
-          // new Response(null, { status: 101, webSocket: client })
-          // const socket = yield* request.upgrade; // footgun, must die
-
-          // yielding this return new Response(null, { status: 101, webSocket: client })
-          // forces you to use hibernation
-
           const [response, socket] = yield* Cloudflare.upgrade(request);
-
-          // TODO(sam): can you write to the socket from ctx.waitUntil?
-
-          // will this wake back up? this is not guaranteed to run in the case where th DO is hibernated.
           const id = "TODO";
           yield* socket.serializeAttachment({ id });
           sessions.set(id, {
             socket,
             write: yield* socket.writer,
           });
-
-          const container = yield* sandbox.getInstance(id);
 
           return response;
         }),

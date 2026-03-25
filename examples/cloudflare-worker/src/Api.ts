@@ -3,33 +3,34 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { Agent } from "./Agent.ts";
 
-export const Api = Cloudflare.Worker(
-  "Worker",
-  {
-    main: import.meta.filename,
-  },
-  // @ts-expect-error
+import { Agent, AgentLive } from "./Agent.ts";
+
+// declare the Api service with a tag + props
+export class Api extends Cloudflare.Worker<Api>()("Api", {
+  main: import.meta.filename,
+}) {}
+
+export const ApiLive = Api.make(
   Effect.gen(function* () {
+    // (Infrastructure dependencies are bound here)
+
     // bind the Agent DO to the Worker
-    const agent = yield* Agent;
+    const agents = yield* Agent;
 
     return Effect.gen(function* () {
+      // (Business logic is implemented here and can reference bound infrastructure above)
       const request = yield* HttpServerRequest;
       if (request.url.startsWith("/connect/")) {
         // connect to a Durable Object web socket
-        const roomId = request.url.split("/").pop()!;
-        const room = yield* agent.getByName(roomId);
-        const response = yield* room.fetch(request);
+        const agentId = request.url.split("/").pop()!;
+        const agent = yield* agents.getByName(agentId);
+        const response = yield* agent.fetch(request);
         return response;
-      } else if (request.url.includes("/sandbox")) {
-        // connect to a Container web socket
-        return yield* sandbox.fetch(request);
       } else if (request.url.startsWith("/profile/")) {
         // call RPC methods on a Durable Object
         const key = request.url.split("/").pop()!;
-        const user = yield* agent.getByName(key);
+        const agent = yield* agents.getByName(key);
         if (request.method == "GET") {
           const item = yield* agent.getProfile();
           if (item) {
@@ -39,7 +40,9 @@ export const Api = Cloudflare.Worker(
           yield* agent.putProfile(yield* request.text);
           return HttpServerResponse.text("OK", { status: 200 });
         } else {
-          return HttpServerResponse.text("Method not allowed", { status: 405 });
+          return HttpServerResponse.text("Method not allowed", {
+            status: 405,
+          });
         }
       }
       return HttpServerResponse.text("Not found", { status: 404 });
@@ -48,10 +51,10 @@ export const Api = Cloudflare.Worker(
     Effect.provide(
       Layer.mergeAll(
         //
-        Cloudflare.HttpServer,
+        AgentLive,
       ),
     ),
   ),
 );
 
-export default Api;
+export default ApiLive;

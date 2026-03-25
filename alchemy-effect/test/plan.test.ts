@@ -1,18 +1,22 @@
 import type { Input, InputProps } from "@/Input";
 import * as Output from "@/Output";
 import * as Plan from "@/Plan";
+import { UnsatisfiedResourceCycle } from "@/Plan";
 import * as Stack from "@/Stack";
 import { State, type ResourceState, type ResourceStatus } from "@/State";
 import { test } from "@/Test/Vitest";
 import * as Construct from "@/Construct";
 import { describe, expect } from "@effect/vitest";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import { Stage } from "../src/Stage.ts";
 import {
   BindingTarget,
   Bucket,
   Function,
+  NoPrecreateBindingTarget,
   Queue,
   TestLayers,
   TestResource,
@@ -1575,4 +1579,148 @@ describe("stable properties should not cause downstream changes", () => {
       ),
     ),
   }));
+});
+
+describe("unsatisfied cycle detection", () => {
+  const extractCycleDefect = <A, E>(
+    exit: Exit.Exit<A, E>,
+  ): UnsatisfiedResourceCycle | undefined => {
+    if (!Exit.isFailure(exit)) return undefined;
+    const die = exit.cause.reasons.find(Cause.isDieReason);
+    return die?.defect as UnsatisfiedResourceCycle | undefined;
+  };
+
+  test(
+    "binding cycle between resources without precreate dies",
+    {
+      state: test.state(),
+    },
+    Effect.gen(function* () {
+      const exit = yield* makePlan(
+        Effect.gen(function* () {
+          const A = yield* NoPrecreateBindingTarget("A", {
+            string: "a-value",
+          });
+          const B = yield* NoPrecreateBindingTarget("B", {
+            string: "b-value",
+          });
+
+          yield* A.bind("FromB", { env: { PEER: B.string } });
+          yield* B.bind("FromA", { env: { PEER: A.string } });
+
+          return { A, B };
+        }),
+      ).pipe(Effect.exit);
+
+      const err = extractCycleDefect(exit);
+      expect(err).toBeDefined();
+      expect(err!._tag).toBe("UnsatisfiedResourceCycle");
+      expect(err!.cycle.sort()).toEqual(["A", "B"]);
+      expect(err!.missingPrecreate.sort()).toEqual(["A", "B"]);
+    }),
+  );
+
+  test(
+    "binding cycle with all precreate resources succeeds",
+    {
+      state: test.state(),
+    },
+    Effect.gen(function* () {
+      const exit = yield* makePlan(
+        Effect.gen(function* () {
+          const A = yield* BindingTarget("A", { string: "a-value" });
+          const B = yield* BindingTarget("B", { string: "b-value" });
+
+          yield* A.bind("FromB", {
+            env: { PEER: B.string },
+          });
+          yield* B.bind("FromA", {
+            env: { PEER: A.string },
+          });
+
+          return { A, B };
+        }),
+      ).pipe(Effect.exit);
+
+      expect(Exit.isSuccess(exit)).toBe(true);
+    }),
+  );
+
+  test(
+    "mixed cycle succeeds when precreate resource breaks it",
+    {
+      state: test.state(),
+    },
+    Effect.gen(function* () {
+      const exit = yield* makePlan(
+        Effect.gen(function* () {
+          const A = yield* BindingTarget("A", { string: "a-value" });
+          const B = yield* NoPrecreateBindingTarget("B", {
+            string: A.string,
+          });
+
+          yield* A.bind("FromB", {
+            env: { PEER: B.string },
+          });
+
+          return { A, B };
+        }),
+      ).pipe(Effect.exit);
+
+      expect(Exit.isSuccess(exit)).toBe(true);
+    }),
+  );
+
+  test(
+    "three-node binding cycle dies when none have precreate",
+    {
+      state: test.state(),
+    },
+    Effect.gen(function* () {
+      const exit = yield* makePlan(
+        Effect.gen(function* () {
+          const A = yield* NoPrecreateBindingTarget("A", { string: "a" });
+          const B = yield* NoPrecreateBindingTarget("B", { string: "b" });
+          const C = yield* NoPrecreateBindingTarget("C", { string: "c" });
+
+          yield* A.bind("FromC", { env: { PEER: C.string } });
+          yield* B.bind("FromA", { env: { PEER: A.string } });
+          yield* C.bind("FromB", { env: { PEER: B.string } });
+
+          return { A, B, C };
+        }),
+      ).pipe(Effect.exit);
+
+      const err = extractCycleDefect(exit);
+      expect(err).toBeDefined();
+      expect(err!._tag).toBe("UnsatisfiedResourceCycle");
+      expect(err!.cycle.sort()).toEqual(["A", "B", "C"]);
+      expect(err!.missingPrecreate.sort()).toEqual(["A", "B", "C"]);
+    }),
+  );
+
+  test(
+    "acyclic binding graph succeeds even without precreate",
+    {
+      state: test.state(),
+    },
+    Effect.gen(function* () {
+      const exit = yield* makePlan(
+        Effect.gen(function* () {
+          const A = yield* NoPrecreateBindingTarget("A", {
+            string: "a-value",
+          });
+          const B = yield* NoPrecreateBindingTarget("B", {
+            string: A.string,
+          });
+
+          yield* B.bind("FromA", { env: { PEER: A.string } });
+
+          return { A, B };
+        }),
+      ).pipe(Effect.exit);
+
+      expect(Exit.isSuccess(exit)).toBe(true);
+    }),
+  );
 });

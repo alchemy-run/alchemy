@@ -2,7 +2,6 @@ import type * as lambda from "aws-lambda";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import * as Binding from "../../Binding.ts";
-import type { Function as LambdaFunction } from "../Lambda/Function.ts";
 import type { Cluster } from "../ECS/Cluster.ts";
 import type { Queue } from "../SQS/Queue.ts";
 import type { EventBus } from "./EventBus.ts";

@@ -10,7 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import { QueueSinkFixture } from "./sink-handler";
+import { QueueSinkFunction, QueueSinkFunctionLive } from "./sink-handler";
 
 test(
   "create and delete queue with default props",
@@ -67,13 +67,11 @@ test(
       }),
     );
 
-    // Verify the queue was updated
-    const updatedAttributes = yield* SQS.getQueueAttributes({
-      QueueUrl: updatedQueue.queueUrl,
-      AttributeNames: ["All"],
+    // Verify the queue was updated (reads can lag briefly after SetQueueAttributes)
+    yield* waitForQueueAttributeMatch(updatedQueue.queueUrl, {
+      VisibilityTimeout: "60",
+      DelaySeconds: "5",
     });
-    expect(updatedAttributes.Attributes?.VisibilityTimeout).toEqual("60");
-    expect(updatedAttributes.Attributes?.DelaySeconds).toEqual("5");
 
     yield* destroy();
 
@@ -118,15 +116,11 @@ test(
       }),
     );
 
-    // Verify the queue was updated
-    const updatedAttributes = yield* SQS.getQueueAttributes({
-      QueueUrl: updatedQueue.queueUrl,
-      AttributeNames: ["All"],
+    // Verify the queue was updated (reads can lag briefly after SetQueueAttributes)
+    yield* waitForQueueAttributeMatch(updatedQueue.queueUrl, {
+      ContentBasedDeduplication: "true",
+      VisibilityTimeout: "60",
     });
-    expect(updatedAttributes.Attributes?.ContentBasedDeduplication).toEqual(
-      "true",
-    );
-    expect(updatedAttributes.Attributes?.VisibilityTimeout).toEqual("60");
 
     yield* destroy();
 
@@ -167,10 +161,12 @@ test(
   Effect.gen(function* () {
     // yield* destroy();
 
-    const { queue, apiFunction } = yield* test.deploy(QueueSinkFixture);
+    const apiFunction = yield* test.deploy(
+      QueueSinkFunction.asEffect().pipe(Effect.provide(QueueSinkFunctionLive)),
+    );
     const baseUrl = apiFunction.functionUrl!.replace(/\/+$/, "");
 
-    yield* waitForFunctionReady(`${baseUrl}/ready`);
+    const { queueUrl } = yield* waitForFunctionReady(`${baseUrl}/ready`);
 
     const messages = [
       `sink-${crypto.randomUUID()}`,
@@ -198,16 +194,13 @@ test(
     expect((response as any).ok).toBe(true);
     expect((response as any).count).toBe(messages.length);
 
-    const received = yield* waitForQueueMessages(
-      queue.queueUrl,
-      messages.length,
-    );
+    const received = yield* waitForQueueMessages(queueUrl, messages.length);
 
     expect(received.sort()).toEqual([...messages].sort());
 
     yield* destroy();
 
-    yield* assertQueueDeleted(queue.queueUrl);
+    yield* assertQueueDeleted(queueUrl);
   }).pipe(Effect.provide(AWS.providers())),
 );
 
@@ -217,13 +210,20 @@ class FunctionNotReady extends Data.TaggedError("FunctionNotReady") {}
 
 class QueueMessageNotReady extends Data.TaggedError("QueueMessageNotReady") {}
 
+class QueueAttributesNotReady extends Data.TaggedError(
+  "QueueAttributesNotReady",
+) {}
+
 const waitForFunctionReady = (url: string) =>
   HttpClient.get(url).pipe(
     Effect.flatMap((response) =>
       response.status === 200
-        ? Effect.void
+        ? (response.json as Effect.Effect<{ queueUrl: string }>)
         : Effect.fail(new FunctionNotReady()),
     ),
+    Effect.map((json: any) => ({
+      queueUrl: json.queueUrl as string,
+    })),
     Effect.retry({
       while: (error) => error._tag === "FunctionNotReady",
       schedule: Schedule.fixed("2 seconds").pipe(
@@ -231,6 +231,32 @@ const waitForFunctionReady = (url: string) =>
       ),
     }),
   );
+
+/** Poll until GetQueueAttributes reflects SetQueueAttributes (SQS is eventually consistent). */
+const waitForQueueAttributeMatch = Effect.fn(function* (
+  queueUrl: string,
+  expected: Record<string, string>,
+) {
+  yield* Effect.gen(function* () {
+    const result = yield* SQS.getQueueAttributes({
+      QueueUrl: queueUrl,
+      AttributeNames: ["All"],
+    });
+    const attrs = result.Attributes ?? {};
+    for (const [name, value] of Object.entries(expected)) {
+      if (attrs[name] !== value) {
+        return yield* Effect.fail(new QueueAttributesNotReady());
+      }
+    }
+  }).pipe(
+    Effect.retry({
+      while: (e) => e._tag === "QueueAttributesNotReady",
+      schedule: Schedule.fixed("500 millis").pipe(
+        Schedule.both(Schedule.recurs(40)),
+      ),
+    }),
+  );
+});
 
 const waitForQueueMessages = Effect.fn(function* (
   queueUrl: string,

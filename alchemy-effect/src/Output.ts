@@ -26,6 +26,13 @@ export const of = <R extends ResourceLike>(
   return new ResourceExpr(resource) as any;
 };
 
+export const asOutput = <T>(t: T | Output<T> | Effect.Effect<T>): Output<T> =>
+  isOutput(t)
+    ? t
+    : Effect.isEffect(t)
+      ? new EffectExpr(VoidExpr, () => t)
+      : new LiteralExpr(t);
+
 export const isOutput = (value: any): value is Output<any> =>
   value &&
   (typeof value === "object" || typeof value === "function") &&
@@ -182,6 +189,8 @@ export class LiteralExpr<A> extends BaseExpr<A, never> {
   }
 }
 
+export const VoidExpr = new LiteralExpr(void 0);
+
 export const map =
   <A, B>(fn: (value: A) => B) =>
   <Req>(output: Output<A, Req>): ToOutput<B, Req> =>
@@ -318,7 +327,7 @@ export const interpolate = <Args extends any[]>(
     ),
   ) as any;
 
-const proxy = (self: any): any => {
+function proxy(self: any): any {
   const target = Object.assign(() => {}, self);
   if (inspect in self) {
     Object.defineProperty(target, inspect, {
@@ -358,7 +367,7 @@ const proxy = (self: any): any => {
     },
   });
   return proxy;
-};
+}
 
 /// Evaluation
 

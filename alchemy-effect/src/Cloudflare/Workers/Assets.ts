@@ -8,24 +8,33 @@ import type { PlatformError } from "effect/PlatformError";
 import * as ServiceMap from "effect/ServiceMap";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { sha256 } from "../../Util/index.ts";
-import { Worker } from "./Worker.ts";
 
 const MAX_ASSET_SIZE = 1024 * 1024 * 25; // 25MB
 const MAX_ASSET_COUNT = 20_000;
 
+export interface AssetsConfig extends Exclude<
+  Exclude<workers.PutScriptRequest["metadata"]["assets"], undefined>["config"],
+  undefined
+> {}
+
 export interface AssetReadResult {
   directory: string;
-  config: Worker.AssetsConfig | undefined;
+  config: AssetsConfig | undefined;
   manifest: Record<string, { hash: string; size: number }>;
   _headers: string | undefined;
   _redirects: string | undefined;
+}
+
+export interface AssetsProps {
+  directory: string;
+  config?: AssetsConfig;
 }
 
 export class Assets extends ServiceMap.Service<
   Assets,
   {
     read(
-      directory: Worker.AssetsProps,
+      directory: AssetsProps,
     ): Effect.Effect<AssetReadResult, PlatformError | ValidationError>;
     upload(
       accountId: string,
@@ -118,7 +127,7 @@ export const AssetsProvider = () =>
       });
 
       return {
-        read: Effect.fnUntraced(function* (props: Worker.AssetsProps) {
+        read: Effect.fnUntraced(function* (props: AssetsProps) {
           const resolvedDirectory = path.resolve(props.directory);
           const [files, ignore, _headers, _redirects] = yield* Effect.all([
             fs.readDirectory(resolvedDirectory, { recursive: true }),

@@ -567,6 +567,56 @@ export const phasedTargetProvider = PhasedTarget.provider.effect(
   }),
 );
 
+// NoPrecreateBindingTarget - like BindingTarget but without precreate,
+// used to test cycle detection for resources that cannot break cycles.
+
+export type NoPrecreateBindingTargetProps = {
+  string?: string;
+};
+
+export interface NoPrecreateBindingTarget extends Resource<
+  "Test.NoPrecreateBindingTarget",
+  NoPrecreateBindingTargetProps,
+  {
+    string: string;
+    env: Record<string, string>;
+  },
+  {
+    env?: Record<string, string>;
+  }
+> {}
+
+export const NoPrecreateBindingTarget =
+  Resource<NoPrecreateBindingTarget>("Test.NoPrecreateBindingTarget");
+
+export const noPrecreateBindingTargetProvider =
+  NoPrecreateBindingTarget.provider.succeed({
+    diff: Effect.fn(function* () {}),
+    create: Effect.fn(function* ({ id, news = {}, bindings }) {
+      return {
+        string: news.string ?? id,
+        env: Object.assign(
+          {},
+          ...bindings.map(
+            (binding: any) => binding.env ?? binding.data?.env ?? {},
+          ),
+        ),
+      };
+    }),
+    update: Effect.fn(function* ({ id, news = {}, bindings }) {
+      return {
+        string: news.string ?? id,
+        env: Object.assign(
+          {},
+          ...bindings.map(
+            (binding: any) => binding.env ?? binding.data?.env ?? {},
+          ),
+        ),
+      };
+    }),
+    delete: Effect.fn(function* () {}),
+  });
+
 // Layers
 export const TestLayers = Layer.mergeAll(
   bucketProvider,
@@ -577,6 +627,7 @@ export const TestLayers = Layer.mergeAll(
   testResourceProvider,
   staticStablesResourceProvider,
   phasedTargetProvider,
+  noPrecreateBindingTargetProvider,
 );
 
 export const InMemoryTestLayers = () =>

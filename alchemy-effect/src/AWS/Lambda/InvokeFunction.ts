@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isFunction, type Function } from "./Function.ts";
+import { isFunction } from "./Function.ts";
 
 export interface InvokeFunctionRequest extends Omit<
   Lambda.InvocationRequest,

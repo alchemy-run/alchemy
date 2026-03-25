@@ -1,10 +1,9 @@
 import type * as cf from "@cloudflare/workers-types";
 import {
-  Bundle,
+  Bundler,
   type Module as BundledModule,
 } from "@distilled.cloud/cloudflare-bundler";
 import * as workers from "@distilled.cloud/cloudflare/workers";
-import type { Workers } from "cloudflare/resources";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -19,14 +18,16 @@ import type { ScopedPlanStatusSession } from "../../Cli/index.ts";
 import { DotAlchemy } from "../../Config.ts";
 import * as Serverless from "../../Serverless/index.ts";
 
+import type { HttpEffect } from "../../Http.ts";
 import type { Input } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
-import { sha256, toCamelCase } from "../../Util/index.ts";
+import { sha256 } from "../../Util/index.ts";
 import { Account } from "../Account.ts";
+import type { AssetsConfig, AssetsProps } from "./Assets.ts";
 import * as Assets from "./Assets.ts";
-import { HttpServer } from "./HttpServer.ts";
+import { HttpServer, workersHttpHandler } from "./HttpServer.ts";
 import cloudflare_workers from "./cloudflare:workers.ts";
 
 const TypeId = "Cloudflare.Worker";
@@ -69,12 +70,66 @@ export type WorkerEvent = Exclude<
 export const isWorkerEvent = (value: any): value is WorkerEvent =>
   value?.kind === "Cloudflare.Workers.WorkerEvent";
 
+/**
+ * Assets configuration that includes a pre-computed hash.
+ * When hash is provided, it's used directly for diffing instead of computing from directory contents.
+ * This is useful when integrating with Build resources that produce a deterministic hash.
+ */
+export interface AssetsWithHash {
+  /**
+   * Path to the assets directory.
+   */
+  path: Input<string>;
+  /**
+   * Pre-computed hash of the assets. When provided, this hash is used for diffing
+   * to determine if the worker needs to be redeployed.
+   */
+  hash: Input<string>;
+  /**
+   * Optional assets configuration.
+   */
+  config?: AssetsConfig;
+}
+
+type PreparedBundleFile = {
+  name: string;
+  content: string | ArrayBuffer;
+  contentType: string;
+};
+
+export interface Observability extends Exclude<
+  workers.PutScriptRequest["metadata"]["observability"],
+  undefined
+> {}
+
+export interface Limits extends Exclude<
+  workers.PutScriptRequest["metadata"]["limits"],
+  undefined
+> {}
+
+export type Placement = Exclude<
+  workers.PutScriptRequest["metadata"]["placement"],
+  undefined
+>;
+
+// export type Subdomain = Exclude<workers.PutScriptRequest["metadata"]["subdomain"], undefined> {}
+
+export type WorkerBinding = Exclude<
+  workers.PutScriptRequest["metadata"]["bindings"],
+  undefined
+>[number];
+
 export type WorkerProps = {
   /**
    * Worker name override. If omitted, Alchemy derives a deterministic physical
    * name from the stack, stage, and logical ID.
    */
   name?: string;
+  /**
+   * Whether to enable a workers.dev URL for this worker
+   * @default true
+   */
+  url?: boolean;
   /**
    * Static assets to serve. Can be:
    * - A string path to the assets directory
@@ -83,20 +138,19 @@ export type WorkerProps = {
    */
   assets?:
     | string
-    | Worker.AssetsProps
-    | Worker.AssetsWithHash
-    | (Worker.AssetsWithHash & { [K: string]: any });
+    | AssetsProps
+    | AssetsWithHash
+    | (AssetsWithHash & { [K: string]: any });
   logpush?: boolean;
-  observability?: Worker.Observability;
-  subdomain?: Worker.Subdomain;
+  observability?: Observability;
   tags?: string[];
   main: string;
   compatibility?: {
     date?: string;
     flags?: ("nodejs_compat" | "nodejs_als" | (string & {}))[];
   };
-  limits?: Worker.Limits;
-  placement?: Worker.Placement;
+  limits?: Limits;
+  placement?: Placement;
   env?: Record<string, any>;
   exports?: string[];
 };
@@ -121,7 +175,7 @@ export interface Worker extends Resource<
     };
   },
   {
-    bindings: Worker.Binding[];
+    bindings: WorkerBinding[];
   }
 > {}
 
@@ -152,7 +206,7 @@ export const Worker = Serverless.Function<Worker, WorkerEnvironment>(TypeId)((
   const exports: Record<string, any> = {};
   const env: Record<string, any> = {};
 
-  return {
+  const ctx = {
     Type: TypeId,
     id,
     env,
@@ -170,6 +224,8 @@ export const Worker = Serverless.Function<Worker, WorkerEnvironment>(TypeId)((
             : Effect.die(`Environment variable '${key}' not found`),
         ),
       ) as any,
+    serve: <Req = never>(handler: HttpEffect<Req>) =>
+      ctx.listen(workersHttpHandler(handler)),
     set: (id: string, output: Output.Output) =>
       Effect.sync(() => {
         const key = id.replaceAll(/[^a-zA-Z0-9]/g, "_");
@@ -244,71 +300,8 @@ export const Worker = Serverless.Function<Worker, WorkerEnvironment>(TypeId)((
       };
     }),
   };
+  return ctx;
 });
-
-export declare namespace Worker {
-  export type Observability = Workers.ScriptUpdateParams.Metadata.Observability;
-  export type Subdomain = Workers.Beta.Workers.Worker.Subdomain;
-  export type Binding = NonNullable<
-    Workers.Beta.Workers.VersionCreateParams["bindings"]
-  >[number];
-  export type Limits = Workers.Beta.Workers.Version.Limits;
-  export type Placement = Workers.Beta.Workers.Version.Placement;
-  export type Assets = Workers.Beta.Workers.Version.Assets;
-  export type AssetsConfig = Workers.Beta.Workers.Version.Assets.Config;
-  export type Module = Workers.Beta.Workers.Version.Module;
-
-  export interface AssetsProps {
-    directory: string;
-    config?: AssetsConfig;
-  }
-
-  /**
-   * Assets configuration that includes a pre-computed hash.
-   * When hash is provided, it's used directly for diffing instead of computing from directory contents.
-   * This is useful when integrating with Build resources that produce a deterministic hash.
-   */
-  export interface AssetsWithHash {
-    /**
-     * Path to the assets directory.
-     */
-    path: Input<string>;
-    /**
-     * Pre-computed hash of the assets. When provided, this hash is used for diffing
-     * to determine if the worker needs to be redeployed.
-     */
-    hash: Input<string>;
-    /**
-     * Optional assets configuration.
-     */
-    config?: AssetsConfig;
-  }
-}
-
-type PreparedBundleFile = {
-  name: string;
-  content: string | ArrayBuffer;
-  contentType: string;
-};
-
-const hashBundleFiles = (files: ReadonlyArray<PreparedBundleFile>) =>
-  Effect.gen(function* () {
-    const parts = yield* Effect.all(
-      files.map((file) =>
-        sha256(file.content).pipe(
-          Effect.map((hash) => ({
-            name: file.name,
-            contentType: file.contentType,
-            hash,
-          })),
-        ),
-      ),
-      {
-        concurrency: "unbounded",
-      },
-    );
-    return yield* sha256(JSON.stringify(parts));
-  });
 
 export const WorkerProvider = () =>
   Worker.provider.effect(
@@ -322,40 +315,30 @@ export const WorkerProvider = () =>
       const getScriptSubdomain = yield* workers.getScriptSubdomain;
       const createScriptSubdomain = yield* workers.createScriptSubdomain;
       const { read, upload } = yield* Assets.Assets;
-      const { build } = yield* Bundle;
+      const bundler = yield* Bundler;
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const dotAlchemy = yield* DotAlchemy;
 
-      const getAccountSubdomain = Effect.fnUntraced(function* (
-        accountId: string,
-      ) {
-        const { subdomain } = yield* getSubdomain({
+      const getAccountSubdomain = (accountId: string) =>
+        getSubdomain({
           accountId,
-        });
-        return subdomain;
-      });
+        }).pipe(Effect.map((result) => result.subdomain));
 
-      const setWorkerSubdomain = Effect.fnUntraced(function* (
-        name: string,
-        enabled: boolean,
-      ) {
-        const subdomain = yield* createScriptSubdomain({
+      const setWorkerSubdomain = (name: string, enabled: boolean) =>
+        createScriptSubdomain({
           accountId,
           scriptName: name,
           enabled,
         });
-        yield* Effect.logDebug("setWorkerSubdomain", subdomain);
-      });
 
       const createWorkerName = (id: string, name: string | undefined) =>
-        Effect.gen(function* () {
-          if (name) return name;
-          return (yield* createPhysicalName({
-            id,
-            maxLength: 54,
-          })).toLowerCase();
-        });
+        name
+          ? Effect.succeed(name)
+          : createPhysicalName({
+              id,
+              maxLength: 54,
+            }).pipe(Effect.map((name) => name.toLowerCase()));
 
       const findBundleProject = Effect.fnUntraced(function* (entry: string) {
         let current = path.dirname(entry);
@@ -408,7 +391,7 @@ export const WorkerProvider = () =>
           const hash = assets.hash as string;
           const result = yield* read({
             directory: path,
-            config: (assets as Worker.AssetsWithHash).config,
+            config: assets.config,
           });
           return {
             ...result,
@@ -476,72 +459,38 @@ ${props.exports?.map((id) => `export class ${id} {}`).join("\n") ?? ""}
         yield* fs.writeFileString(tempEntry, script);
         return yield* Effect.gen(function* () {
           const { projectRoot, tsconfig } = yield* findBundleProject(realMain);
-          const bundle = yield* build({
+          const bundle = yield* bundler.build({
             main: tempEntry,
-            projectRoot,
-            outputDir,
-            compatibilityDate: props.compatibility?.date,
-            compatibilityFlags: props.compatibility?.flags,
-            format: "modules",
+            rootDir: projectRoot,
+            outDir: outputDir,
             minify: true,
             tsconfig,
-          });
-          const mainModule = "worker.js";
-          const code = stripSourceMapComment(
-            yield* fs.readFileString(bundle.main),
-          );
-          const files: Array<PreparedBundleFile> = [
-            {
-              name: mainModule,
-              content: code,
-              contentType: "application/javascript+module",
+            cloudflare: {
+              compatibilityDate: props.compatibility?.date,
+              compatibilityFlags: props.compatibility?.flags,
             },
-            ...bundle.modules.map((module) => ({
+          });
+          const files: Array<PreparedBundleFile> = bundle.modules.map(
+            (module: BundledModule) => ({
               name: module.name,
-              content: module.content.buffer.slice(
-                module.content.byteOffset,
-                module.content.byteOffset + module.content.byteLength,
-              ) as ArrayBuffer,
+              content:
+                module.name === bundle.main && module.type === "ESModule"
+                  ? stripSourceMapComment(
+                      Buffer.from(module.content).toString("utf8"),
+                    )
+                  : (module.content.buffer.slice(
+                      module.content.byteOffset,
+                      module.content.byteOffset + module.content.byteLength,
+                    ) as ArrayBuffer),
               contentType: getModuleContentType(module),
-            })),
-          ];
+            }),
+          );
           return {
             files,
-            mainModule,
+            mainModule: bundle.main,
             hash: yield* hashBundleFiles(files),
           };
         }).pipe(Effect.ensuring(cleanupBundleTempDir(tempDir)));
-      });
-
-      const prepareMetadata = Effect.fnUntraced(function* (
-        props: WorkerProps,
-        mainModule: string,
-      ) {
-        const metadata: Workers.ScriptUpdateParams.Metadata = {
-          assets: undefined,
-          bindings: [],
-          body_part: undefined,
-          compatibility_date: props.compatibility?.date,
-          compatibility_flags: props.compatibility?.flags,
-          keep_assets: undefined,
-          keep_bindings: undefined,
-          limits: props.limits,
-          logpush: props.logpush,
-          main_module: mainModule,
-          migrations: undefined,
-          observability: props.observability ?? {
-            enabled: true,
-            logs: {
-              enabled: true,
-              invocation_logs: true,
-            },
-          },
-          placement: props.placement,
-          tags: props.tags,
-          tail_consumers: undefined,
-          usage_model: undefined,
-        };
-        return metadata;
       });
 
       const putWorker = Effect.fnUntraced(function* (
@@ -553,35 +502,74 @@ ${props.exports?.map((id) => `export class ${id} {}`).join("\n") ?? ""}
         session: ScopedPlanStatusSession,
       ) {
         const name = yield* createWorkerName(id, news.name);
+        yield* Effect.logInfo(
+          `Cloudflare Worker ${olds ? "update" : "create"}: preparing bundle for ${name}`,
+        );
         const [assets, bundle] = yield* Effect.all([
           prepareAssets(news.assets),
           prepareBundle(id, news),
         ]);
-        const metadata = yield* prepareMetadata(news, bundle.mainModule);
-        metadata.bindings = bindings.flatMap((binding) => binding.bindings);
+        const metadataBindings = bindings.flatMap((b) => b.bindings);
+        let metadataAssets:
+          | workers.PutScriptRequest["metadata"]["assets"]
+          | undefined;
+        let keepAssets = false;
         if (assets) {
           if (output?.hash?.assets !== assets.hash) {
+            yield* Effect.logInfo(
+              `Cloudflare Worker ${olds ? "update" : "create"}: uploading assets for ${name}`,
+            );
             const { jwt } = yield* upload(accountId, name, assets, session);
-            metadata.assets = {
+            metadataAssets = {
               jwt,
               config: assets.config,
             };
           } else {
-            metadata.assets = {
+            yield* Effect.logInfo(
+              `Cloudflare Worker update: reusing existing assets for ${name}`,
+            );
+            metadataAssets = {
               config: assets.config,
             };
-            metadata.keep_assets = true;
+            keepAssets = true;
           }
-          metadata.bindings.push({
+          metadataBindings.push({
             type: "assets",
             name: "ASSETS",
           });
         }
+        yield* Effect.logInfo(
+          `Cloudflare Worker ${olds ? "update" : "create"}: uploading script for ${name}`,
+        );
         yield* session.note("Uploading worker...");
+        const metadata = {
+          assets: metadataAssets,
+          bindings: metadataBindings,
+          bodyPart: undefined,
+          compatibilityDate: news.compatibility?.date,
+          compatibilityFlags: news.compatibility?.flags,
+          keepAssets,
+          keepBindings: undefined,
+          limits: news.limits,
+          logpush: news.logpush,
+          mainModule: bundle.mainModule,
+          migrations: undefined,
+          observability: news.observability ?? {
+            enabled: true,
+            logs: {
+              enabled: true,
+              invocationLogs: true,
+            },
+          },
+          placement: news.placement,
+          tags: news.tags,
+          tailConsumers: undefined,
+          usageModel: undefined,
+        };
         const worker = yield* putScript({
           accountId,
           scriptName: name,
-          metadata: toCamelCase<workers.PutScriptRequest["metadata"]>(metadata),
+          metadata,
           files: bundle.files.map(
             (file) =>
               new File([file.content], file.name, {
@@ -589,8 +577,8 @@ ${props.exports?.map((id) => `export class ${id} {}`).join("\n") ?? ""}
               }),
           ),
         });
-        if (!olds || news.subdomain?.enabled !== olds.subdomain?.enabled) {
-          const enable = news.subdomain?.enabled !== false;
+        if (!olds || news.url !== olds.url) {
+          const enable = news.url !== false;
           yield* session.note(
             `${enable ? "Enabling" : "Disabling"} workers.dev subdomain...`,
           );
@@ -601,7 +589,7 @@ ${props.exports?.map((id) => `export class ${id} {}`).join("\n") ?? ""}
           workerName: name,
           logpush: worker.logpush ?? undefined,
           url:
-            news.subdomain?.enabled !== false
+            news.url !== false
               ? `https://${name}.${yield* getAccountSubdomain(accountId)}.workers.dev`
               : undefined,
           tags: metadata.tags,
@@ -645,6 +633,9 @@ ${props.exports?.map((id) => `export class ${id} {}`).join("\n") ?? ""}
         }),
         read: Effect.fnUntraced(function* ({ id, output }) {
           const workerName = yield* createWorkerName(id, output?.workerName);
+          yield* Effect.logInfo(
+            `Cloudflare Worker read: checking ${workerName}`,
+          );
           return yield* Effect.gen(function* () {
             yield* getScript({
               accountId,
@@ -664,8 +655,14 @@ ${props.exports?.map((id) => `export class ${id} {}`).join("\n") ?? ""}
               }),
             ]);
             if (!worker) {
+              yield* Effect.logInfo(
+                `Cloudflare Worker read: ${workerName} not found in script list`,
+              );
               return undefined;
             }
+            yield* Effect.logInfo(
+              `Cloudflare Worker read: found ${workerName}`,
+            );
             return {
               accountId,
               workerId: worker.id ?? workerName,
@@ -682,6 +679,7 @@ ${props.exports?.map((id) => `export class ${id} {}`).join("\n") ?? ""}
         }),
         create: Effect.fnUntraced(function* ({ id, news, bindings, session }) {
           const name = yield* createWorkerName(id, news.name);
+          yield* Effect.logInfo(`Cloudflare Worker create: starting ${name}`);
           const existing = yield* getScript({
             accountId,
             scriptName: name,
@@ -690,6 +688,9 @@ ${props.exports?.map((id) => `export class ${id} {}`).join("\n") ?? ""}
             Effect.catchTag("WorkerNotFound", () => Effect.succeed(false)),
           );
           if (existing) {
+            yield* Effect.logInfo(
+              `Cloudflare Worker create: ${name} already exists`,
+            );
             return yield* Effect.fail(
               new Error(`Worker "${name}" already exists`),
             );
@@ -711,9 +712,15 @@ ${props.exports?.map((id) => `export class ${id} {}`).join("\n") ?? ""}
           bindings,
           session,
         }) {
+          yield* Effect.logInfo(
+            `Cloudflare Worker update: starting ${output.workerName}`,
+          );
           return yield* putWorker(id, news, bindings, olds, output, session);
         }),
         delete: Effect.fnUntraced(function* ({ output }) {
+          yield* Effect.logInfo(
+            `Cloudflare Worker delete: deleting ${output.workerName}`,
+          );
           yield* deleteScript({
             accountId: output.accountId,
             scriptName: output.workerName,
@@ -728,6 +735,8 @@ const stripSourceMapComment = (code: string) =>
 
 const getModuleContentType = (module: BundledModule) => {
   switch (module.type) {
+    case "ESModule":
+      return "application/javascript+module";
     case "CompiledWasm":
       return "application/wasm";
     case "Data":
@@ -736,6 +745,26 @@ const getModuleContentType = (module: BundledModule) => {
       if (module.name.endsWith(".html")) return "text/html";
       if (module.name.endsWith(".sql")) return "text/sql";
       return "text/plain";
+    case "SourceMap":
+      return "application/source-map";
   }
-  return "application/octet-stream";
 };
+
+const hashBundleFiles = (files: ReadonlyArray<PreparedBundleFile>) =>
+  Effect.gen(function* () {
+    const parts = yield* Effect.all(
+      files.map((file) =>
+        sha256(file.content).pipe(
+          Effect.map((hash) => ({
+            name: file.name,
+            contentType: file.contentType,
+            hash,
+          })),
+        ),
+      ),
+      {
+        concurrency: "unbounded",
+      },
+    );
+    return yield* sha256(JSON.stringify(parts));
+  });

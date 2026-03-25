@@ -24,66 +24,67 @@ export class JobNotifications extends ServiceMap.Service<
   }
 >()("JobNotifications") {}
 
-export const JobNotificationsSNS = Layer.provideMerge(
-  Layer.effect(
-    JobNotifications,
-    Effect.gen(function* () {
-      const topic = yield* AWS.SNS.Topic("JobNotificationsTopic", {
-        attributes: {
-          DisplayName: "job-notifications",
-        },
-      });
+export const JobNotificationsSNS = Layer.effect(
+  JobNotifications,
+  Effect.gen(function* () {
+    const topic = yield* AWS.SNS.Topic("JobNotificationsTopic", {
+      attributes: {
+        DisplayName: "job-notifications",
+      },
+    });
 
-      const publish = yield* AWS.SNS.Publish.bind(topic);
+    const publish = yield* AWS.SNS.Publish.bind(topic);
 
-      yield* AWS.SNS.notifications(topic).subscribe((stream) =>
-        stream.pipe(
-          Stream.mapEffect((notification) =>
-            Effect.try({
-              try: () => JSON.parse(notification.Message) as JobNotification,
-              catch: (cause) =>
-                new NotifyJobError({
-                  message: "Failed to parse SNS job notification",
-                  cause,
-                }),
-            }).pipe(
-              Effect.flatMap((payload) =>
-                Effect.logInfo(
-                  `Job notification received: ${payload.type} (${payload.job.id})`,
-                ),
-              ),
-              // Keep the example resilient to malformed demo messages.
-              Effect.catchTag("NotifyJobError", (error) =>
-                Effect.logWarning(error.message),
+    yield* AWS.SNS.notifications(topic).subscribe((stream) =>
+      stream.pipe(
+        Stream.mapEffect((notification) =>
+          Effect.try({
+            try: () => JSON.parse(notification.Message) as JobNotification,
+            catch: (cause) =>
+              new NotifyJobError({
+                message: "Failed to parse SNS job notification",
+                cause,
+              }),
+          }).pipe(
+            Effect.flatMap((payload) =>
+              Effect.logInfo(
+                `Job notification received: ${payload.type} (${payload.job.id})`,
               ),
             ),
+            // Keep the example resilient to malformed demo messages.
+            Effect.catchTag("NotifyJobError", (error) =>
+              Effect.logWarning(error.message),
+            ),
           ),
-          Stream.runDrain,
+        ),
+        Stream.runDrain,
+      ),
+    );
+
+    const notifyJobCreated = (job: Job) =>
+      publish({
+        Subject: "JobCreated",
+        Message: JSON.stringify({
+          type: "job.created",
+          job,
+        } satisfies JobNotification),
+      }).pipe(
+        Effect.asVoid,
+        Effect.mapError(
+          (cause) =>
+            new NotifyJobError({
+              message: `Failed to publish job notification for "${job.id}"`,
+              cause,
+            }),
         ),
       );
 
-      const notifyJobCreated = (job: Job) =>
-        publish({
-          Subject: "JobCreated",
-          Message: JSON.stringify({
-            type: "job.created",
-            job,
-          } satisfies JobNotification),
-        }).pipe(
-          Effect.asVoid,
-          Effect.mapError(
-            (cause) =>
-              new NotifyJobError({
-                message: `Failed to publish job notification for "${job.id}"`,
-                cause,
-              }),
-          ),
-        );
-
-      return JobNotifications.of({
-        notifyJobCreated,
-      });
-    }),
+    return JobNotifications.of({
+      notifyJobCreated,
+    });
+  }),
+).pipe(
+  Layer.provideMerge(
+    Layer.mergeAll(AWS.Lambda.TopicEventSource, AWS.SNS.PublishLive),
   ),
-  Layer.mergeAll(AWS.Lambda.TopicEventSource, AWS.SNS.PublishLive),
 );

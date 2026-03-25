@@ -1,7 +1,6 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type { Scope } from "effect/Scope";
 import type { HttpBodyError } from "effect/unstable/http/HttpBody";
@@ -10,30 +9,44 @@ import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as Socket from "effect/unstable/socket/Socket";
 import * as Http from "../../Http.ts";
-import { isWorkerEvent, Worker, WorkerEnvironment } from "./Worker.ts";
+import { isWorkerEvent } from "./Worker.ts";
 
-export const HttpServer: Layer.Layer<
-  Http.HttpServer,
-  never,
-  WorkerEnvironment
-> = Layer.effect(
-  Http.HttpServer,
-  Effect.gen(function* () {
-    const worker = yield* Worker.Context;
-    return Http.server({
-      serve: (handler) =>
-        worker.listen((event) => {
-          if (isWorkerEvent(event) && event.type === "fetch") {
-            const webRequest = event.input;
-            return serveWebRequest(webRequest, handler, {
-              remoteAddress:
-                webRequest.headers.get("cf-connecting-ip") ?? undefined,
-            });
-          }
-        }),
-    });
-  }),
-) as any;
+// export const HttpServer: Layer.Layer<
+//   Http.HttpServer,
+//   never,
+//   WorkerEnvironment
+// > = Layer.effect(
+//   Http.HttpServer,
+//   Effect.gen(function* () {
+//     const worker = yield* Worker.Context;
+//     return Http.server({
+//       serve: (handler) =>
+//         worker.listen((event) => {
+//           if (isWorkerEvent(event) && event.type === "fetch") {
+//             const webRequest = event.input;
+//             return serveWebRequest(webRequest, handler, {
+//               remoteAddress:
+//                 webRequest.headers.get("cf-connecting-ip") ?? undefined,
+//             });
+//           }
+//         }),
+//     });
+//   }),
+// ) as any;
+
+export const workersHttpHandler = <Req = never>(
+  handler: Http.HttpEffect<Req>,
+) => {
+  const safeHandler = Http.serveSafe(handler);
+  return (event: any) => {
+    if (isWorkerEvent(event) && event.type === "fetch") {
+      const webRequest = event.input;
+      return serveWebRequest(webRequest, safeHandler, {
+        remoteAddress: webRequest.headers.get("cf-connecting-ip") ?? undefined,
+      });
+    }
+  };
+};
 
 export const serveWebRequest = <Req = never>(
   webRequest: cf.Request,

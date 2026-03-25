@@ -5,19 +5,16 @@ import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-
-import Function from "./handler";
+import { TestFunction, TestFunctionLive } from "./handler.ts";
 
 test(
   "create, update, delete function",
   { timeout: 180_000 },
   Effect.gen(function* () {
-    yield* destroy();
+    // yield* destroy();
 
     const { functionUrl } = yield* test.deploy(
-      Effect.gen(function* () {
-        return yield* Function;
-      }),
+      TestFunction.asEffect().pipe(Effect.provide(TestFunctionLive)),
     );
 
     expect(functionUrl).toBeTruthy();

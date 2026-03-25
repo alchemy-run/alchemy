@@ -155,7 +155,7 @@ export const Policy =
                     .join(", ")})`,
                 ),
                 // place all of a Host's Bindings in the Host's namespace
-                Namespace.push(ctx.id),
+                Namespace.set(ctx.id), // TODO(sam): .set here is hacky, we have a bit of a mess when it comes to namespaces
               ),
         ),
       );

@@ -6,7 +6,7 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { describe } from "vitest";
-import { KinesisFixture } from "./handler";
+import KinesisApiFunctionLive, { KinesisApiFunction } from "./handler.ts";
 
 const readinessPolicy = Schedule.fixed("2 seconds").pipe(
   Schedule.both(Schedule.recurs(9)),
@@ -20,17 +20,29 @@ describe.sequential("Kinesis Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
       yield* destroy();
-      const deployed = yield* test.deploy(KinesisFixture);
+      const deployed = yield* test.deploy(
+        Effect.gen(function* () {
+          return yield* KinesisApiFunction;
+        }).pipe(Effect.provide(KinesisApiFunctionLive)),
+      );
 
-      baseUrl = deployed.apiFunction.functionUrl!.replace(/\/+$/, "");
-      streamName = deployed.stream.streamName;
-      consumerName = deployed.consumer.consumerName;
+      baseUrl = deployed.functionUrl!.replace(/\/+$/, "");
 
       yield* HttpClient.get(`${baseUrl}/ready`).pipe(
         Effect.flatMap((response) =>
           response.status === 200
             ? Effect.succeed(response)
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
+        ),
+        Effect.tap((response) =>
+          response.json.pipe(
+            Effect.tap((json) => {
+              streamName = (json as any).streamName;
+              consumerName = (json as any).consumerName;
+
+              return Effect.void;
+            }),
+          ),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );

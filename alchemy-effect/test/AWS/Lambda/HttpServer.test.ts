@@ -1,13 +1,9 @@
-import { Function as LambdaFunction } from "@/AWS/Lambda/Function";
-import { HttpServer as LambdaHttpServer } from "@/AWS/Lambda/HttpServer";
-import type { ListenHandler, ServerlessExecutionContext } from "@/Host";
-import * as Http from "@/Http";
+import { makeFunctionHttpHandler } from "@/AWS/Lambda/HttpServer";
 import type {
   LambdaFunctionURLEvent,
   LambdaFunctionURLResult,
 } from "aws-lambda";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import type { Scope } from "effect/Scope";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -150,55 +146,11 @@ const invoke = async (
     HttpServerRequest.HttpServerRequest | Scope
   > = TestHttpEffect,
 ): Promise<LambdaFunctionURLResult> => {
-  const { listeners, runtime } = makeRuntime();
-
-  await Effect.runPromise(
-    Http.serve(handler).pipe(
-      Effect.provide(
-        LambdaHttpServer.pipe(
-          Layer.provide(Layer.succeed(LambdaFunction.Runtime, runtime)),
-        ),
-      ),
-    ),
-  );
-
-  const handlers = await Effect.runPromise(
-    Effect.all(listeners, { concurrency: "unbounded" }),
-  );
-
-  for (const handler of handlers) {
-    const response = handler(event);
-    if (Effect.isEffect(response)) {
-      return await Effect.runPromise(response);
-    }
+  const out = makeFunctionHttpHandler(handler)(event);
+  if (!Effect.isEffect(out)) {
+    throw new Error("Expected Effect from Function URL handler");
   }
-
-  throw new Error("No Lambda handler was registered");
-};
-
-const makeRuntime = (): {
-  listeners: Array<Effect.Effect<ListenHandler>>;
-  runtime: ServerlessExecutionContext;
-} => {
-  const listeners: Array<Effect.Effect<ListenHandler>> = [];
-
-  return {
-    listeners,
-    runtime: {
-      type: "AWS.Lambda.Function",
-      id: "TestFunction",
-      env: {},
-      exports: {},
-      get: <T>() => Effect.succeed(undefined as T),
-      set: () => Effect.succeed("TEST_VALUE"),
-      listen: ((handler: ListenHandler | Effect.Effect<ListenHandler>) =>
-        Effect.sync(() => {
-          listeners.push(
-            Effect.isEffect(handler) ? handler : Effect.succeed(handler),
-          );
-        })) as ServerlessExecutionContext["listen"],
-    },
-  };
+  return Effect.runPromise(out);
 };
 
 const makeEvent = (

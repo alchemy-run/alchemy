@@ -17,47 +17,42 @@ import {
 } from "./Bundler.ts";
 
 export const rolldown = () =>
-  Layer.effect(
-    Bundler,
-    Effect.succeed({
-      build: (options) =>
-        Effect.tryPromise({
-          try: async () => {
-            const { input, output } = toRolldownOptions(options);
-            const bundle = await _rolldown.rolldown(input);
-            const result = await bundle.write(output);
-            await bundle.close();
-            return fromRolldownOutput(result);
-          },
-          catch: fromRolldownError,
-        }),
+  Layer.succeed(Bundler, {
+    build: (options) =>
+      Effect.tryPromise({
+        try: async () => {
+          const { input, output } = toRolldownOptions(options);
+          const bundle = await _rolldown.rolldown(input);
+          const result = await bundle.write(output);
+          await bundle.close();
+          return fromRolldownOutput(result);
+        },
+        catch: fromRolldownError,
+      }),
 
-      watch: (options) =>
-        Effect.gen(function* () {
-          const queue = yield* Queue.unbounded<WatchOutput>();
-          const watcher = _rolldown.watch(toRolldownWatchOptions(options));
+    watch: (options) =>
+      Effect.gen(function* () {
+        const queue = yield* Queue.unbounded<WatchOutput>();
+        const watcher = _rolldown.watch(toRolldownWatchOptions(options));
 
-          watcher.on("event", (event) => {
-            if (event.code === "BUNDLE_END") {
-              Queue.offerUnsafe(queue, {
-                outputs: event.output.map((p) => ({
-                  path: p,
-                  size: 0,
-                })),
-                duration: event.duration,
-              });
-              event.result.close().catch(() => {});
-            }
-          });
+        watcher.on("event", (event) => {
+          if (event.code === "BUNDLE_END") {
+            Queue.offerUnsafe(queue, {
+              outputs: event.output.map((p) => ({
+                path: p,
+                size: 0,
+              })),
+              duration: event.duration,
+            });
+            event.result.close().catch(() => {});
+          }
+        });
 
-          yield* Effect.addFinalizer(() =>
-            Effect.promise(() => watcher.close()),
-          );
+        yield* Effect.addFinalizer(() => Effect.promise(() => watcher.close()));
 
-          return { queue };
-        }),
-    }),
-  );
+        return { queue };
+      }),
+  });
 
 function toRolldownOptions(options: BundleOptions): {
   input: InputOptions;

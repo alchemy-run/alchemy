@@ -19,8 +19,7 @@ export type StackServices =
   | Path
   | DotAlchemy
   | HttpClient
-  | ChildProcessSpawner
-  | ResourceLike;
+  | ChildProcessSpawner;
 
 export class Stack extends ServiceMap.Service<
   Stack,
@@ -46,6 +45,8 @@ export const make =
   <const Name extends string, ROut = never>(
     name: Name,
     providers: Layer.Layer<ROut, never, StackServices>,
+    /** @internal */
+    stack?: StackSpec,
   ) =>
   <A, Err = never, Req extends ROut | StackServices = never>(
     effect: Effect.Effect<A, Err, Req>,
@@ -66,13 +67,14 @@ export const make =
         Stage.asEffect().pipe(
           Effect.map(
             (stage) =>
-              ({
+              (stack ?? {
                 name,
                 stage,
                 resources: {},
                 bindings: {},
               }) satisfies Stack["Service"],
           ),
+          Effect.tap(Effect.logInfo),
         ),
       ),
     );

@@ -1,8 +1,8 @@
 import * as AWS from "@/AWS";
-import * as Http from "@/Http";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as ServiceMap from "effect/ServiceMap";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -10,70 +10,76 @@ import path from "pathe";
 
 const main = path.resolve(import.meta.dirname, "sink-handler.ts");
 
-export const QueueSinkFixture = Effect.gen(function* () {
-  const queue = yield* AWS.SQS.Queue("QueueSinkQueue");
+export class TestQueue extends ServiceMap.Service<
+  TestQueue,
+  { queue: AWS.SQS.Queue }
+>()("TestQueue") {}
 
-  const apiFunction = yield* AWS.Lambda.Function(
-    "QueueSinkFunction",
-    Effect.gen(function* () {
-      const sink = yield* AWS.SQS.QueueSink.bind(queue);
+export const TestQueueLive = Layer.effect(
+  TestQueue,
+  Effect.gen(function* () {
+    const queue = yield* AWS.SQS.Queue("QueueSinkQueue");
+    return { queue };
+  }),
+);
 
-      yield* Http.serve(
-        Effect.gen(function* () {
-          const request = yield* HttpServerRequest;
-          yield* Console.log(request);
-          const pathname = new URL(request.originalUrl).pathname;
+export class QueueSinkFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
+  "QueueSinkFunction",
+  {
+    main,
+    url: true,
+  },
+) {}
 
-          if (request.method === "GET" && pathname === "/ready") {
-            return yield* HttpServerResponse.json({ ok: true });
-          }
+export const QueueSinkFunctionLive = QueueSinkFunction.make(
+  Effect.gen(function* () {
+    const { queue } = yield* TestQueue;
+    const sink = yield* AWS.SQS.QueueSink.bind(queue);
+    const queueUrl = yield* queue.queueUrl;
 
-          if (request.method === "POST" && pathname === "/sink") {
-            const body = (yield* request.json) as { messages: string[] };
+    return Effect.gen(function* () {
+      const request = yield* HttpServerRequest;
+      yield* Console.log(request);
+      const pathname = new URL(request.originalUrl).pathname;
 
-            yield* Stream.fromIterable(body.messages).pipe(Stream.run(sink));
+      if (request.method === "GET" && pathname === "/ready") {
+        return yield* HttpServerResponse.json({
+          ok: true,
+          queueUrl: yield* queueUrl,
+        });
+      }
 
-            return yield* HttpServerResponse.json({
-              ok: true,
-              count: body.messages.length,
-            });
-          }
+      if (request.method === "POST" && pathname === "/sink") {
+        const body = (yield* request.json) as { messages: string[] };
 
-          return yield* HttpServerResponse.json(
-            { error: "Not found", method: request.method, pathname },
-            { status: 404 },
-          );
-        }).pipe(
-          Effect.tapError(Console.log),
-          Effect.tap(Console.log),
-          Effect.catch(() =>
-            Effect.succeed(
-              HttpServerResponse.text("Internal server error", { status: 500 }),
-            ),
-          ),
-        ),
+        yield* Stream.fromIterable(body.messages).pipe(Stream.run(sink));
+
+        return yield* HttpServerResponse.json({
+          ok: true,
+          count: body.messages.length,
+        });
+      }
+
+      return yield* HttpServerResponse.json(
+        { error: "Not found", method: request.method, pathname },
+        { status: 404 },
       );
-
-      return {
-        main,
-        url: true,
-      } as const satisfies AWS.Lambda.FunctionProps;
     }).pipe(
-      Effect.provide(
-        Layer.provideMerge(
-          Layer.mergeAll(AWS.Lambda.HttpServer, AWS.SQS.QueueSinkLive),
-          Layer.mergeAll(AWS.SQS.SendMessageBatchLive),
+      Effect.tapError(Console.log),
+      Effect.tap(Console.log),
+      Effect.catch(() =>
+        Effect.succeed(
+          HttpServerResponse.text("Internal server error", { status: 500 }),
         ),
       ),
+    );
+  }).pipe(
+    Effect.provide(
+      Layer.provideMerge(
+        Layer.mergeAll(TestQueueLive, AWS.SQS.QueueSinkLive),
+        Layer.mergeAll(AWS.SQS.SendMessageBatchLive),
+      ),
     ),
-  );
-
-  return {
-    queue,
-    apiFunction,
-  };
-});
-
-export default QueueSinkFixture.pipe(
-  Effect.map(({ apiFunction }) => apiFunction),
+  ),
 );
+export default QueueSinkFunctionLive;

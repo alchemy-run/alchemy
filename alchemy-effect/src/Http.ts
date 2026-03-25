@@ -23,6 +23,7 @@ export const serve = <Req = never>(
 ) =>
   Effect.serviceOption(HttpServer).pipe(
     Effect.map(Option.getOrUndefined),
+    Effect.tap((http) => Effect.logInfo("http", http)),
     Effect.flatMap((http) => (http ? http.serve(handler) : Effect.void)),
   );
 
@@ -45,20 +46,19 @@ export const server = (http: {
   ) => Effect.Effect<void, never, Exclude<Req, HttpServerRequest | Scope>>;
 }) =>
   HttpServer.of({
-    serve: (handler) =>
-      http.serve(
-        Effect.catchCause(handler, (cause) => {
-          const message = Option.match(Cause.findErrorOption(cause), {
-            onNone: () => "Internal Server Error",
-            onSome: (error) => error.message ?? "Internal Server Error",
-          });
+    serve: (handler) => http.serve(serveSafe(handler)),
+  });
 
-          return Effect.succeed(
-            HttpServerResponse.text(message, {
-              status: 500,
-              statusText: message,
-            }),
-          );
-        }),
-      ),
+export const serveSafe = <Req = never>(handler: HttpEffect<Req>) =>
+  Effect.catchCause(handler, (cause) => {
+    const message = Option.match(Cause.findErrorOption(cause), {
+      onNone: () => "Internal Server Error",
+      onSome: (error) => error.message ?? "Internal Server Error",
+    });
+    return Effect.map(Effect.logDebug(message), () =>
+      HttpServerResponse.text(message, {
+        status: 500,
+        statusText: message,
+      }),
+    );
   });

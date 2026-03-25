@@ -7,7 +7,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { describe } from "vitest";
 
-import Function from "./handler";
+import DynamoDBTestFunctionLive, { DynamoDBTestFunction } from "./handler";
 
 const readinessPolicy = Schedule.fixed("2 seconds").pipe(
   Schedule.both(Schedule.recurs(9)),
@@ -27,8 +27,8 @@ describe("DynamoDB Bindings", () => {
       yield* Effect.logInfo("DynamoDB test setup: deploying fixture");
       const { functionUrl } = yield* test.deploy(
         Effect.gen(function* () {
-          return yield* Function;
-        }),
+          return yield* DynamoDBTestFunction;
+        }).pipe(Effect.provide(DynamoDBTestFunctionLive)),
       );
 
       expect(functionUrl).toBeTruthy();

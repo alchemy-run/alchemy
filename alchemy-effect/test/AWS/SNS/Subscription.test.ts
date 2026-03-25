@@ -7,7 +7,11 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
-import { SNSFixture } from "./handler";
+import {
+  SNSApiFunction,
+  SNSApiFunctionLive,
+  TopicAndQueue,
+} from "./handler.ts";
 
 test(
   "create and delete lambda subscription",
@@ -15,15 +19,28 @@ test(
   Effect.gen(function* () {
     yield* destroy();
 
-    const fixture = yield* test.deploy(SNSFixture);
+    const deployed = yield* test.deploy(
+      Effect.gen(function* () {
+        const { topic, queue, subscription } = yield* TopicAndQueue;
 
-    expect(fixture.subscription.subscriptionArn).toBeDefined();
+        const apiFunction = yield* SNSApiFunction;
+
+        return {
+          apiFunction,
+          topic,
+          queue,
+          subscription,
+        };
+      }).pipe(Effect.provide(SNSApiFunctionLive)),
+    );
+
+    expect(deployed.subscription.subscriptionArn).toBeDefined();
 
     const attributes = yield* SNS.getSubscriptionAttributes({
-      SubscriptionArn: fixture.subscription.subscriptionArn,
+      SubscriptionArn: deployed.subscription.subscriptionArn,
     }).pipe(
       Effect.tapError((err) =>
-        Effect.logError(fixture.subscription.subscriptionArn, err),
+        Effect.logError(deployed.subscription.subscriptionArn, err),
       ),
       Effect.retry({
         while: (error) => error._tag === "NotFoundException",
@@ -31,10 +48,10 @@ test(
       }),
     );
     expect(attributes.Attributes?.Protocol).toBe("lambda");
-    expect(attributes.Attributes?.TopicArn).toBe(fixture.topic.topicArn);
+    expect(attributes.Attributes?.TopicArn).toBe(deployed.topic.topicArn);
 
     yield* destroy();
-    yield* assertSubscriptionDeleted(fixture.subscription.subscriptionArn);
+    yield* assertSubscriptionDeleted(deployed.subscription.subscriptionArn);
   }).pipe(Effect.provide(AWS.providers())),
 );
 

@@ -119,7 +119,7 @@ export const apply = <P extends Plan>(
 
     yield* session.done();
 
-    if (Object.keys(plan.resources).length === 0) {
+    if (!plan.output) {
       return undefined;
     }
 
@@ -177,6 +177,7 @@ const executePlan = Effect.fnUntraced(function* (
       fqns
         .filter((fqn) => fqn in ready)
         .map((fqn) => Deferred.await(ready[fqn])),
+      { concurrency: "unbounded" },
     );
 
   yield* Effect.all(

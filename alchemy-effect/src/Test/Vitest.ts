@@ -21,6 +21,7 @@ import {
 import * as AWS from "../AWS/index.ts";
 import * as Cloudflare from "../Cloudflare/index.ts";
 
+import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import { apply } from "../Apply.ts";
 import * as Credentials from "../AWS/Credentials.ts";
 import * as Region from "../AWS/Region.ts";
@@ -42,7 +43,6 @@ import * as Stack from "../Stack.ts";
 import * as Stage from "../Stage.ts";
 import * as State from "../State/index.ts";
 import { TestCli } from "./TestCli.ts";
-import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 
 declare module "@effect/vitest" {
   interface ExpectStatic {
@@ -336,15 +336,20 @@ export namespace test {
   export const deploy = <A, Err = never, Req = any>(
     effect: Effect.Effect<A, Err, Req>,
   ): Effect.Effect<Input.Resolve<A>, Err, Req | Stack.Stack> =>
-    Stack.Stack.use((stack) =>
-      effect.pipe(
+    Stack.Stack.use((stack) => {
+      return effect.pipe(
+        // Effect.tap(Effect.logInfo),
         // @ts-expect-error
-        Stack.make(stack.name, Layer.effectServices(Effect.services<never>())),
+        Stack.make(stack.name, Layer.effectServices(Effect.services<never>()), {
+          ...stack,
+          resources: {},
+          bindings: {},
+        }),
         Effect.flatMap(Plan.make),
         Effect.tap((plan) => Effect.logInfo(formatPlan(plan))),
         Effect.flatMap(apply),
-      ),
-    );
+      );
+    });
 }
 
 type AnyAction = Plan.CRUD["action"] | Plan.BindingAction | DerivedAction;
