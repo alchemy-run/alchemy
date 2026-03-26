@@ -14,10 +14,7 @@ export class Sandbox extends Cloudflare.Container<Sandbox>()(
         main: import.meta.path,
         // handler: "SandboxLive",
         instanceType: stack.stage === "prod" ? "standard-1" : "dev",
-        dockerfile: `
-          FROM alpine:latest
-          RUN apk add --no-cache ffmpeg
-        `,
+        dockerfile: `FROM alpine:latest`,
       }) satisfies Cloudflare.ContainerProps,
   ),
 ) {}
@@ -29,6 +26,9 @@ export const SandboxLive = Sandbox.make(
   Effect.gen(function* () {
     // bind dependencies
     // yield* Cloudflare.Queue()
+
+    // TODO(sam): support programmatic docker commands (that append to the Dockerfile)
+    // yield* Docker.RUN("apk add --no-cache ffmpeg");
 
     // return http effect
     return Effect.gen(function* () {
