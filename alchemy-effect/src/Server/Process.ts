@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import { FileSystem } from "effect/FileSystem";
 import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
 import type { Path } from "effect/Path";
@@ -47,56 +48,61 @@ type ProcessRuntimeServices =
   | Terminal
   | Scope;
 
-export type ProcessConstructor<
+type ProcessArgs<
+  Res extends ResourceLike,
+  Req,
+> = undefined extends Res["Props"]
+  ? [
+      props?:
+        | {
+            [prop in keyof Res["Props"]]: Input<Res["Props"][prop]>;
+          }
+        | Effect.Effect<
+            {
+              [prop in keyof Res["Props"]]: Input<Res["Props"][prop]>;
+            },
+            never,
+            Req
+          >,
+    ]
+  : [
+      props:
+        | {
+            [prop in keyof Res["Props"]]: Input<Res["Props"][prop]>;
+          }
+        | Effect.Effect<
+            {
+              [prop in keyof Res["Props"]]: Input<Res["Props"][prop]>;
+            },
+            never,
+            Req
+          >,
+    ];
+
+type ProcessReq<Resource extends ResourceLike, ProvidedServices = never> =
+  | ProcessServices
+  | ProvidedServices
+  | Self
+  | Resource
+  | ServiceMap.Service<Resource, Resource>;
+
+export interface ProcessConstructor<
   Resource extends ResourceLike,
   ProvidedServices = never,
-> = {
+> {
   Props: Resource["Props"];
-  <SelfTag>(): <const Id extends string, Req = never>(
+  Req: ProcessReq<Resource, ProvidedServices>;
+  <SelfTag>(): <
+    const Id extends string,
+    PropsReq = never,
+  >(
     id: Id,
-    ...props: undefined extends Resource["Props"]
-      ? [
-          props?:
-            | {
-                [prop in keyof Resource["Props"]]: Input<
-                  Resource["Props"][prop]
-                >;
-              }
-            | Effect.Effect<
-                {
-                  [prop in keyof Resource["Props"]]: Input<
-                    Resource["Props"][prop]
-                  >;
-                },
-                never,
-                Req
-              >,
-        ]
-      : [
-          props:
-            | {
-                [prop in keyof Resource["Props"]]: Input<
-                  Resource["Props"][prop]
-                >;
-              }
-            | Effect.Effect<
-                {
-                  [prop in keyof Resource["Props"]]: Input<
-                    Resource["Props"][prop]
-                  >;
-                },
-                never,
-                Req
-              >,
-        ]
+    ...props: ProcessArgs<Resource, PropsReq>
   ) => Effect.Effect<Resource, never, Provider<Resource> | SelfTag> & {
     new (_: never): {
       LogicalId: Id;
     };
-    make<
-      Req extends ProcessServices | ProvidedServices | SelfTag | Resource =
-        never,
-    >(
+    make<Req extends ProcessReq<Resource, ProvidedServices> = never>(
       impl: Effect.Effect<void, never, Req>,
     ): Layer.Layer<
       SelfTag,
@@ -109,6 +115,44 @@ export type ProcessConstructor<
     >;
   };
 
+  <const Id extends string, PropsReq = never>(
+    id: Id,
+    ...props: ProcessArgs<Resource, PropsReq>
+  ): <Req extends this["Req"] = never>(
+    impl: Effect.Effect<void, never, Req>,
+  ) => ProcessEffect<
+    Resource,
+    Exclude<Req, ProcessRuntimeServices | ProvidedServices | Resource | Self>
+  >;
+
+  <
+    const Id extends string,
+    PropsReq = never,
+    Req extends ProcessReq<Resource, ProvidedServices> = never,
+  >(
+    id: Id,
+    props:
+      | {
+          [prop in keyof Resource["Props"]]: Input<Resource["Props"][prop]>;
+        }
+      | Effect.Effect<
+          | {
+              [prop in keyof Resource["Props"]]: Input<Resource["Props"][prop]>;
+            }
+          | (undefined extends Resource["Props"] ? undefined : never),
+          never,
+          PropsReq
+        >
+      | (undefined extends Resource["Props"] ? undefined : never),
+    impl: Effect.Effect<void, never, Req>,
+  ): ProcessEffect<
+    Resource,
+    Exclude<
+      PropsReq | Req,
+      ProcessRuntimeServices | ProcessReq<Resource, ProvidedServices>
+    >
+  >;
+
   asEffect(): Effect.Effect<Resource, never, Provider<Resource>>;
 
   [Symbol.iterator](): Effect.Yieldable<
@@ -117,7 +161,13 @@ export type ProcessConstructor<
     never,
     Provider<Resource>
   >;
-};
+}
+
+export type ProcessEffect<Resource extends ResourceLike, Req> = Effect.Effect<
+  Resource,
+  never,
+  Provider<Resource> | Req
+>;
 
 export type ProcessClass<
   R extends ResourceLike,

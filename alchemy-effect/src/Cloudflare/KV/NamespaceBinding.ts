@@ -13,7 +13,7 @@ export const NamespaceBinding = Effect.fn(function* (
         {
           type: "kv_namespace",
           name: namespace.LogicalId,
-          namespace_id: namespace.namespaceId,
+          namespaceId: namespace.namespaceId,
         },
       ],
     });

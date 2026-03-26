@@ -526,6 +526,7 @@ const executeNode = (
           bindings: bindingOutputs,
           session: scopedSession,
           olds: previousProps,
+          // @ts-expect-error - type system says this can be undefined, can it be?
           output: node.state.attr,
         });
 

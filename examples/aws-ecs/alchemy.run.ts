@@ -4,8 +4,8 @@ import * as Stack from "alchemy-effect/Stack";
 import { Stage } from "alchemy-effect/Stage";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { ApiTask } from "./src/ApiTask.ts";
-import { QueuePollerTask } from "./src/QueuePollerTask.ts";
+import { ApiTask, ApiTaskLive } from "./src/ApiTask.ts";
+import { QueuePollerTask, QueuePollerTaskLive } from "./src/QueuePollerTask.ts";
 
 const awsConfig = Layer.effect(
   AWS.StageConfig,
@@ -169,6 +169,14 @@ const stack = Effect.gen(function* () {
     dashboardName: dashboard.dashboardName,
     alarmName: alarm.alarmName,
   };
-});
+}).pipe(
+  Stack.make(
+    "AwsEcsExample",
+    Layer.provideMerge(
+      Layer.mergeAll(ApiTaskLive, QueuePollerTaskLive),
+      aws,
+    ),
+  ),
+);
 
-export default stack.pipe(Stack.make("AwsEcsExample", aws));
+export default stack;

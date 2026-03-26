@@ -236,13 +236,19 @@ export interface FunctionConstructor<
   <const Id extends string, Req = never>(
     id: Id,
     ...props: FunctionArgs<Resource, Req>
-  ): <Shape extends FunctionMain | void, Req extends this["Req"] = never>(
+  ): (<Shape extends FunctionMain | void, Req extends this["Req"] = never>(
     impl: Effect.Effect<Shape, never, Req>,
   ) => FunctionEffect<
     Resource,
     Shape,
     Exclude<Req, RuntimeServices | ProvidedServices | Resource | Self>
-  >;
+  >) &
+    // if yielded directly, then this is an external function (no generator to run, only a main entrypoint to bundle)
+    FunctionEffect<
+      Resource,
+      any, // TODO(sam): allow this to be set (e.g. to typeof import("./worker.ts"))
+      Exclude<Req, RuntimeServices | ProvidedServices | Resource | Self>
+    >;
 
   <
     const Id extends string,
@@ -287,7 +293,7 @@ export interface FunctionConstructor<
 export type FunctionEffect<
   Resource extends ResourceLike,
   Shape extends FunctionMain | void,
-  Req,
+  Req = never,
 > = Effect.Effect<
   void extends Shape ? Resource : Rpc<Resource, Shape>,
   never,

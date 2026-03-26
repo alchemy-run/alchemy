@@ -19,14 +19,6 @@ const logLevel = Effect.provideService(
 
 const main = pathe.resolve(import.meta.dirname, "worker.ts");
 
-const worker = Worker.Worker("TestWorker", {
-  main,
-  subdomain: { enabled: true, previews_enabled: true },
-  compatibility: {
-    date: "2024-01-01",
-  },
-});
-
 test(
   "create, update, delete worker",
   Effect.gen(function* () {
@@ -36,17 +28,19 @@ test(
 
     const worker = yield* test.deploy(
       Effect.gen(function* () {
-        yield* R2.Bucket("Bucket", {
+        const bucket = yield* R2.Bucket("Bucket", {
           storageClass: "Standard",
         });
 
-        return yield* Worker.Worker("TestWorker", {
+        const worker = yield* Worker.Worker("TestWorker", {
           main,
-          subdomain: { enabled: true, previews_enabled: true },
+          subdomain: { enabled: true, previewsEnabled: true },
           compatibility: {
             date: "2024-01-01",
           },
         });
+
+        return worker;
       }),
     );
 
@@ -63,7 +57,7 @@ test(
       Effect.gen(function* () {
         return yield* Worker.Worker("TestWorker", {
           main,
-          subdomain: { enabled: true, previews_enabled: true },
+          subdomain: { enabled: true, previewsEnabled: true },
           compatibility: {
             date: "2024-01-01",
           },
@@ -103,7 +97,7 @@ test(
         return yield* Worker.Worker("TestWorkerWithAssets", {
           main,
           assets: pathe.resolve(import.meta.dirname, "assets"),
-          subdomain: { enabled: true, previews_enabled: true },
+          subdomain: { enabled: true, previewsEnabled: true },
           compatibility: {
             date: "2024-01-01",
           },
@@ -128,7 +122,7 @@ test(
         return yield* Worker.Worker("TestWorkerWithAssets", {
           main,
           assets: pathe.resolve(import.meta.dirname, "assets"),
-          subdomain: { enabled: true, previews_enabled: true },
+          subdomain: { enabled: true, previewsEnabled: true },
           compatibility: {
             date: "2024-01-01",
           },
@@ -148,8 +142,9 @@ test(
       Effect.gen(function* () {
         return yield* Worker.Worker("TestWorkerWithAssets", {
           main,
+          url: true,
           assets: pathe.resolve(import.meta.dirname, "assets"),
-          subdomain: { enabled: true, previews_enabled: true },
+          subdomain: { enabled: true, previewsEnabled: true },
           compatibility: {
             date: "2024-01-01",
           },

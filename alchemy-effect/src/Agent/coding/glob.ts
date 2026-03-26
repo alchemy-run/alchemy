@@ -72,7 +72,7 @@ Given a ${pattern} and optional ${path}:
     if (!stats) continue;
     fileList.push({
       path: filePath,
-      mtime: stats.mtime?.getTime() || 0,
+      mtime: stats.mtime.pipe(Option.getOrElse(() => new Date(0))).getTime(),
     });
   }
 

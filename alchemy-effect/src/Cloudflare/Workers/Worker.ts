@@ -139,6 +139,10 @@ export type WorkerProps = {
     | AssetsProps
     | AssetsWithHash
     | (AssetsWithHash & { [K: string]: any });
+  subdomain?: {
+    enabled?: boolean;
+    previewsEnabled?: boolean;
+  };
   logpush?: boolean;
   observability?: WorkerObservability;
   tags?: string[];
