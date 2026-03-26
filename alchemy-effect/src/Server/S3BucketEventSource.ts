@@ -10,6 +10,7 @@ import * as S3 from "../AWS/S3/index.ts";
 import type { S3EventType } from "../AWS/S3/S3Event.ts";
 import * as SQS from "../AWS/SQS/index.ts";
 import * as Binding from "../Binding.ts";
+import { SQSQueueEventSource } from "./SQSQueueEventSource.ts";
 
 export const S3BucketEventSource = Layer.effect(
   S3.BucketEventSource,
@@ -52,7 +53,7 @@ export const S3BucketEventSource = Layer.effect(
       );
     }) as S3.BucketEventSourceService;
   }),
-);
+).pipe(Layer.provideMerge(SQSQueueEventSource));
 
 export class S3BucketEventSourcePolicy extends Binding.Policy<
   S3BucketEventSourcePolicy,

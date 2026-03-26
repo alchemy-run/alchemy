@@ -16,7 +16,7 @@ export const isFunctionURLEvent = (
 };
 
 export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
-  const safeHandler = Http.serveSafe(handler);
+  const safeHandler = Http.safeHttpEffect(handler);
   return (event: any) => {
     if (isFunctionURLEvent(event)) {
       const request = HttpServerRequest.fromWeb(toWebRequest(event)).modify({

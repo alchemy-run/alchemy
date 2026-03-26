@@ -1,7 +1,7 @@
 import * as Cloudflare from "alchemy-effect/Cloudflare";
 import * as Effect from "effect/Effect";
 
-const gen = Effect.gen(function* () {
+export default Effect.gen(function* () {
   const users = yield* Cloudflare.DurableObjectNamespace(
     "Users",
     Effect.gen(function* () {
@@ -19,8 +19,4 @@ const gen = Effect.gen(function* () {
     putProfile: (name: string, value: string) =>
       Effect.flatMap(users.getByName(name), (user) => user.putProfile(value)),
   };
-});
-
-const Website = Cloudflare.TanstackStart("Website")(gen);
-
-export default Website;
+}).pipe(Cloudflare.TanstackStart("Website"));

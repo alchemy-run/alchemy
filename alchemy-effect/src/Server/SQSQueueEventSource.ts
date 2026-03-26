@@ -4,7 +4,7 @@ import * as Stream from "effect/Stream";
 
 import { Region } from "@distilled.cloud/aws/Region";
 import * as SQS from "../AWS/SQS/index.ts";
-import { ServerContext } from "./ExecutionContext.ts";
+import { Context as ServerContext } from "./ExecutionContext.ts";
 
 export const SQSQueueEventSource = Layer.effect(
   SQS.QueueEventSource,

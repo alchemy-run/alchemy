@@ -46,10 +46,10 @@ export const server = (http: {
   ) => Effect.Effect<void, never, Exclude<Req, HttpServerRequest | Scope>>;
 }) =>
   HttpServer.of({
-    serve: (handler) => http.serve(serveSafe(handler)),
+    serve: (handler) => http.serve(safeHttpEffect(handler)),
   });
 
-export const serveSafe = <Req = never>(handler: HttpEffect<Req>) =>
+export const safeHttpEffect = <Req = never>(handler: HttpEffect<Req>) =>
   Effect.catchCause(handler, (cause) => {
     const message = Option.match(Cause.findErrorOption(cause), {
       onNone: () => "Internal Server Error",

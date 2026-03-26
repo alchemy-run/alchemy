@@ -37,7 +37,7 @@ import { isWorkerEvent } from "./Worker.ts";
 export const workersHttpHandler = <Req = never>(
   handler: Http.HttpEffect<Req>,
 ) => {
-  const safeHandler = Http.serveSafe(handler);
+  const safeHandler = Http.safeHttpEffect(handler);
   return (event: any) => {
     if (isWorkerEvent(event) && event.type === "fetch") {
       const webRequest = event.input;
