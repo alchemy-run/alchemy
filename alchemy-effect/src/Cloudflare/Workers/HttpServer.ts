@@ -78,7 +78,7 @@ export const serveWebRequest = <Req = never>(
       base = HttpServerRequest.fromWeb(
         webRequest as any as globalThis.Request,
       ).modify({
-        remoteAddress: options.remoteAddress,
+        remoteAddress: Option.fromUndefinedOr(options.remoteAddress),
       }),
     ): HttpServerRequest.HttpServerRequest => {
       const request = Object.create(

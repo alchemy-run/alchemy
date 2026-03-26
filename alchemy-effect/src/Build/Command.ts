@@ -6,7 +6,7 @@ import { ChildProcess } from "effect/unstable/process";
 import { Resource } from "../Resource.ts";
 import { sha256, sha256Object } from "../Util/sha256.ts";
 
-export interface BuildProps {
+export interface CommandProps {
   /**
    * The shell command to run for the build.
    * @example "npm run build"
@@ -34,7 +34,7 @@ export interface BuildProps {
    * This path is relative to the working directory.
    * @example "dist"
    */
-  output: string;
+  outdir: string;
   /**
    * Environment variables to pass to the build command.
    */
@@ -43,12 +43,12 @@ export interface BuildProps {
 
 export interface Command extends Resource<
   "Build.Command",
-  BuildProps,
+  CommandProps,
   {
     /**
      * Absolute path to the build output.
      */
-    path: string;
+    outdir: string;
     /**
      * Hash of the input files that produced this build.
      */
@@ -96,7 +96,7 @@ export const CommandProvider = () =>
       const fs = yield* FileSystem.FileSystem;
       const pathModule = yield* Path.Path;
 
-      const computeInputHash = (props: BuildProps) =>
+      const computeInputHash = (props: CommandProps) =>
         Effect.gen(function* () {
           const cwd = props.cwd ? pathModule.resolve(props.cwd) : process.cwd();
           const files = yield* listBuildFiles({
@@ -116,7 +116,7 @@ export const CommandProvider = () =>
           return hash;
         });
 
-      const runBuild = (props: BuildProps) =>
+      const runBuild = (props: CommandProps) =>
         Effect.gen(function* () {
           const cwd = props.cwd ? pathModule.resolve(props.cwd) : process.cwd();
           yield* runBuildCommand({
@@ -126,13 +126,13 @@ export const CommandProvider = () =>
           });
         });
 
-      const getOutputPath = (props: BuildProps) => {
+      const getOutputPath = (props: CommandProps) => {
         const cwd = props.cwd ? pathModule.resolve(props.cwd) : process.cwd();
-        return pathModule.resolve(cwd, props.output);
+        return pathModule.resolve(cwd, props.outdir);
       };
 
       return Command.provider.of({
-        stables: ["path"],
+        stables: ["outdir"],
         diff: Effect.fnUntraced(function* ({ news, output }) {
           if (!output) {
             return undefined;
@@ -170,7 +170,7 @@ export const CommandProvider = () =>
           yield* session.note(`Build completed: ${outputPath}`);
 
           return {
-            path: outputPath,
+            outdir: outputPath,
             hash,
           };
         }),
@@ -191,15 +191,15 @@ export const CommandProvider = () =>
           yield* session.note(`Rebuild completed: ${outputPath}`);
 
           return {
-            path: outputPath,
+            outdir: outputPath,
             hash,
           };
         }),
         delete: Effect.fnUntraced(function* ({ output, session }) {
-          const exists = yield* fs.exists(output.path);
+          const exists = yield* fs.exists(output.outdir);
           if (exists) {
-            yield* fs.remove(output.path, { recursive: true });
-            yield* session.note(`Removed build output: ${output.path}`);
+            yield* fs.remove(output.outdir, { recursive: true });
+            yield* session.note(`Removed build output: ${output.outdir}`);
           }
         }),
       });

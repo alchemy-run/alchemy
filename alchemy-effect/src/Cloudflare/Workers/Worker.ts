@@ -27,7 +27,7 @@ import { sha256 } from "../../Util/index.ts";
 import { Account } from "../Account.ts";
 import type { AssetsConfig, AssetsProps } from "./Assets.ts";
 import * as Assets from "./Assets.ts";
-import { HttpServer, workersHttpHandler } from "./HttpServer.ts";
+import { workersHttpHandler } from "./HttpServer.ts";
 import cloudflare_workers from "./cloudflare:workers.ts";
 
 const TypeId = "Cloudflare.Worker";
@@ -97,22 +97,20 @@ type PreparedBundleFile = {
   contentType: string;
 };
 
-export interface Observability extends Exclude<
+export interface WorkerObservability extends Exclude<
   workers.PutScriptRequest["metadata"]["observability"],
   undefined
 > {}
 
-export interface Limits extends Exclude<
+export interface WorkerLimits extends Exclude<
   workers.PutScriptRequest["metadata"]["limits"],
   undefined
 > {}
 
-export type Placement = Exclude<
+export type WorkerPlacement = Exclude<
   workers.PutScriptRequest["metadata"]["placement"],
   undefined
 >;
-
-// export type Subdomain = Exclude<workers.PutScriptRequest["metadata"]["subdomain"], undefined> {}
 
 export type WorkerBinding = Exclude<
   workers.PutScriptRequest["metadata"]["bindings"],
@@ -142,15 +140,15 @@ export type WorkerProps = {
     | AssetsWithHash
     | (AssetsWithHash & { [K: string]: any });
   logpush?: boolean;
-  observability?: Observability;
+  observability?: WorkerObservability;
   tags?: string[];
   main: string;
   compatibility?: {
     date?: string;
     flags?: ("nodejs_compat" | "nodejs_als" | (string & {}))[];
   };
-  limits?: Limits;
-  placement?: Placement;
+  limits?: WorkerLimits;
+  placement?: WorkerPlacement;
   env?: Record<string, any>;
   exports?: string[];
 };
@@ -180,6 +178,8 @@ export interface Worker extends Resource<
 > {}
 
 export declare namespace Worker {
+  export type Req = typeof Worker.Req;
+  export type Self = typeof Worker.Self;
   export type Props = typeof Worker.Props;
 }
 
@@ -224,14 +224,14 @@ export const Worker = Serverless.Function<Worker, WorkerEnvironment>(TypeId)((
             : Effect.die(`Environment variable '${key}' not found`),
         ),
       ) as any,
-    serve: <Req = never>(handler: HttpEffect<Req>) =>
-      ctx.listen(workersHttpHandler(handler)),
     set: (id: string, output: Output.Output) =>
       Effect.sync(() => {
         const key = id.replaceAll(/[^a-zA-Z0-9]/g, "_");
         env[key] = output.pipe(Output.map((value) => JSON.stringify(value)));
         return key;
       }),
+    serve: <Req = never>(handler: HttpEffect<Req>) =>
+      ctx.listen(workersHttpHandler(handler)),
     listen: ((
       handler: Serverless.Listener | Effect.Effect<Serverless.Listener>,
     ) =>
@@ -269,10 +269,7 @@ export const Worker = Serverless.Function<Worker, WorkerEnvironment>(TypeId)((
               return eff.pipe(
                 Effect.provide(
                   Layer.provideMerge(
-                    Layer.mergeAll(
-                      Layer.succeed(ExecutionContext, context),
-                      HttpServer,
-                    ),
+                    Layer.mergeAll(Layer.succeed(ExecutionContext, context)),
                     Layer.succeed(
                       WorkerEnvironment,
                       env as Record<string, any>,

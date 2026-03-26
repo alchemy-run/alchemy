@@ -4,7 +4,7 @@ import * as Stack from "alchemy-effect/Stack";
 import { Stage } from "alchemy-effect/Stage";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import JobFunction from "./src/JobFunction.ts";
+import JobFunctionLive, { JobFunction } from "./src/JobFunction.ts";
 
 const awsConfig = Layer.effect(
   AWS.StageConfig,
@@ -19,8 +19,8 @@ const awsConfig = Layer.effect(
       };
     }
 
-    return yield* AWS.loadDefaultStageConfig();
-  }).pipe(Effect.orDie),
+    return yield* AWS.loadDefaultStageConfig().pipe(Effect.orDie);
+  }),
 );
 
 // const aws = AWS.providers() // <- can also use the default aws stage config by omitting
@@ -95,9 +95,12 @@ const stack = Effect.gen(function* () {
 }).pipe(
   Stack.make(
     "JobLambda",
-    Layer.mergeAll(
-      // Fully configured cloud provider Layers go here:
-      aws,
+    Layer.provideMerge(
+      JobFunctionLive,
+      Layer.mergeAll(
+        // Fully configured cloud provider Layers go here:
+        aws,
+      ),
     ),
   ),
 );

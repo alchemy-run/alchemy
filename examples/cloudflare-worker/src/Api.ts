@@ -18,35 +18,37 @@ export const ApiLive = Api.make(
     // bind the Agent DO to the Worker
     const agents = yield* Agent;
 
-    return Effect.gen(function* () {
-      // (Business logic is implemented here and can reference bound infrastructure above)
-      const request = yield* HttpServerRequest;
-      if (request.url.startsWith("/connect/")) {
-        // connect to a Durable Object web socket
-        const agentId = request.url.split("/").pop()!;
-        const agent = yield* agents.getByName(agentId);
-        const response = yield* agent.fetch(request);
-        return response;
-      } else if (request.url.startsWith("/profile/")) {
-        // call RPC methods on a Durable Object
-        const key = request.url.split("/").pop()!;
-        const agent = yield* agents.getByName(key);
-        if (request.method == "GET") {
-          const item = yield* agent.getProfile();
-          if (item) {
-            return HttpServerResponse.text(item);
+    return {
+      fetch: Effect.gen(function* () {
+        // (Business logic is implemented here and can reference bound infrastructure above)
+        const request = yield* HttpServerRequest;
+        if (request.url.startsWith("/connect/")) {
+          // connect to a Durable Object web socket
+          const agentId = request.url.split("/").pop()!;
+          const agent = yield* agents.getByName(agentId);
+          const response = yield* agent.fetch(request);
+          return response;
+        } else if (request.url.startsWith("/profile/")) {
+          // call RPC methods on a Durable Object
+          const key = request.url.split("/").pop()!;
+          const agent = yield* agents.getByName(key);
+          if (request.method == "GET") {
+            const item = yield* agent.getProfile();
+            if (item) {
+              return HttpServerResponse.text(item);
+            }
+          } else if (request.method == "PUT") {
+            yield* agent.putProfile(yield* request.text);
+            return HttpServerResponse.text("OK", { status: 200 });
+          } else {
+            return HttpServerResponse.text("Method not allowed", {
+              status: 405,
+            });
           }
-        } else if (request.method == "PUT") {
-          yield* agent.putProfile(yield* request.text);
-          return HttpServerResponse.text("OK", { status: 200 });
-        } else {
-          return HttpServerResponse.text("Method not allowed", {
-            status: 405,
-          });
         }
-      }
-      return HttpServerResponse.text("Not found", { status: 404 });
-    });
+        return HttpServerResponse.text("Not found", { status: 404 });
+      }),
+    };
   }).pipe(
     Effect.provide(
       Layer.mergeAll(

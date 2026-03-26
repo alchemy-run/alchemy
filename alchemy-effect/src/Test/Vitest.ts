@@ -199,8 +199,8 @@ const runWithContext = <A, Err>(
       ),
     ),
     Effect.provideService(Stage.Stage, "test"),
-    Effect.provideService(ExecutionContext, context),
-    Effect.provideService(Serverless.Context, context),
+    Effect.provideService(ExecutionContext, context as any),
+    Effect.provideService(Serverless.Context, context as any),
     Effect.provideService(
       MinimumLogLevel,
       process.env.DEBUG ? "Debug" : "Info",

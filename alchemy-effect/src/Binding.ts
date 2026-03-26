@@ -54,7 +54,7 @@ export const Service =
       Shape
     >;
     return Object.assign(self, {
-      bind: (...args: any[]) => self.use((f) => f(...args)),
+      bind: (...args: Parameters<Shape>) => self.use((f) => f(...args)),
     });
   };
 

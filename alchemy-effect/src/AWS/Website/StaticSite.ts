@@ -196,12 +196,12 @@ export const StaticSite = Construct.fn(function* (
           "**/node_modules/**",
           "**/.git/**",
         ],
-        output: props.build.output,
+        outdir: props.build.output,
         env: props.environment,
       })
     : undefined;
 
-  const uploadSourcePath = (build?.path ?? sitePath) as string;
+  const uploadSourcePath = (build?.outdir ?? sitePath) as string;
 
   const providedBucket = props.assets?.bucket;
   const bucket =
@@ -405,27 +405,22 @@ export const StaticSite = Construct.fn(function* (
     const dist = distribution;
     distributionId = dist.distributionId;
 
-    const records =
-      domain?.hostedZoneId && domain.dns !== false
-        ? yield* Effect.forEach(
-            [
-              domain.name,
-              ...(domain.aliases ?? []),
-              ...(domain.redirects ?? []),
-            ],
-            (name, index) =>
-              Route53Record(`AliasRecord${index + 1}`, {
-                hostedZoneId: domain.hostedZoneId!,
-                name,
-                type: "A",
-                aliasTarget: {
-                  hostedZoneId: dist.hostedZoneId,
-                  dnsName: dist.domainName,
-                },
-              }),
-            { concurrency: "unbounded" },
-          )
-        : [];
+    if (domain?.hostedZoneId && domain.dns !== false) {
+      yield* Effect.forEach(
+        [domain.name, ...(domain.aliases ?? []), ...(domain.redirects ?? [])],
+        (name, index) =>
+          Route53Record(`AliasRecord${index + 1}`, {
+            hostedZoneId: domain.hostedZoneId!,
+            name,
+            type: "A",
+            aliasTarget: {
+              hostedZoneId: dist.hostedZoneId,
+              dnsName: dist.domainName,
+            },
+          }),
+        { concurrency: "unbounded" },
+      );
+    }
 
     prodUrl = domain
       ? Output.interpolate`https://${domain.name}`
@@ -556,7 +551,9 @@ const stringifyResolvedString = (
 ): Input<string> =>
   typeof value === "string"
     ? build(value)
-    : value.pipe(Output.map((resolved) => build(resolved)));
+    : Effect.isEffect(value)
+      ? value.pipe(Effect.map((resolved) => build(resolved)))
+      : value.pipe(Output.map((resolved) => build(resolved)));
 
 const buildRequestFunctionCode = ({
   kvNamespace,

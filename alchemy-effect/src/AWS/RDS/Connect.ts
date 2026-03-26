@@ -3,6 +3,9 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Binding from "../../Binding.ts";
+import type { Input } from "../../Input.ts";
+import type { SecurityGroupId } from "../EC2/SecurityGroup.ts";
+import type { SubnetId } from "../EC2/Subnet.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Secret } from "../SecretsManager/Secret.ts";
 import type { DBCluster } from "./DBCluster.ts";
@@ -25,6 +28,8 @@ export interface ConnectOptions {
   database?: string;
   port?: number;
   ssl?: boolean;
+  subnetIds?: Input<SubnetId[]>;
+  securityGroupIds?: Input<SecurityGroupId[]>;
 }
 
 /**
@@ -37,10 +42,7 @@ export class Connect extends Binding.Service<
     resource: ConnectResource,
     options: ConnectOptions,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      ConnectionInfo,
-      Error | secretsmanager.GetSecretValueError
-    >
+    Effect.Effect<ConnectionInfo, secretsmanager.GetSecretValueError>
   >
 >()("AWS.RDS.Connect") {}
 
@@ -62,7 +64,7 @@ export const ConnectLive = Layer.effect(
           : undefined;
       yield* Policy(resource, options);
 
-      return Effect.fn(function* () {
+      return Effect.gen(function* () {
         const secretId = yield* SecretId;
         const host = yield* Host;
         const port = Port ? yield* Port : undefined;
@@ -80,9 +82,7 @@ export const ConnectLive = Layer.effect(
         };
 
         if (!host) {
-          return yield* Effect.fail(
-            new Error(`RDS endpoint is not available yet`),
-          );
+          return yield* Effect.die(`RDS endpoint is not available yet`);
         }
 
         return {

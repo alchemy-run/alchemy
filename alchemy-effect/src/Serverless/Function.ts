@@ -39,74 +39,6 @@ type RuntimeServices =
   | HttpClient
   | Scope;
 
-export type FunctionConstructor<
-  Resource extends ResourceLike,
-  ProvidedServices = never,
-> = {
-  Props: Resource["Props"];
-  <Self>(): <const Id extends string, Req = never>(
-    id: Id,
-    ...props: undefined extends Resource["Props"]
-      ? [
-          props?:
-            | {
-                [prop in keyof Resource["Props"]]: Input<
-                  Resource["Props"][prop]
-                >;
-              }
-            | Effect.Effect<
-                {
-                  [prop in keyof Resource["Props"]]: Input<
-                    Resource["Props"][prop]
-                  >;
-                },
-                never,
-                Req
-              >,
-        ]
-      : [
-          props:
-            | {
-                [prop in keyof Resource["Props"]]: Input<
-                  Resource["Props"][prop]
-                >;
-              }
-            | Effect.Effect<
-                {
-                  [prop in keyof Resource["Props"]]: Input<
-                    Resource["Props"][prop]
-                  >;
-                },
-                never,
-                Req
-              >,
-        ]
-  ) => Effect.Effect<Resource, never, Provider<Resource> | Self> & {
-    new (_: never): {
-      LogicalId: Id;
-    };
-    make<
-      Req extends FunctionServices | ProvidedServices | Self | Resource = never,
-    >(
-      impl: Effect.Effect<Http.HttpEffect | void, never, Req>,
-    ): Layer.Layer<
-      Self,
-      never,
-      | Provider<Resource>
-      | Exclude<Req, RuntimeServices | ProvidedServices | Resource | Self>
-    >;
-  };
-
-  asEffect(): Effect.Effect<Resource, never, Provider<Resource>>;
-
-  [Symbol.iterator](): Effect.Yieldable<
-    Effect.Effect<Resource, never, Provider<Resource>>,
-    Resource,
-    never,
-    Provider<Resource>
-  >;
-};
-
 export type FunctionClass<
   Self extends ResourceLike,
   Runtime extends BaseExecutionContext,
@@ -132,9 +64,9 @@ export const Function =
   >(
     type: R["Type"],
   ) =>
-  <context extends Serverless.ExecutionContext>(
-    createExecutionContext: (id: string) => context,
-  ): FunctionClass<R, context, Services | RuntimeServices> => {
+  <Ctx extends Serverless.ExecutionContext>(
+    createExecutionContext: (id: string) => Ctx,
+  ): FunctionClass<R, Ctx, Services | RuntimeServices> => {
     type PropsShape =
       | {
           [prop in keyof Exclude<R["Props"], undefined>]: Input<
@@ -142,13 +74,17 @@ export const Function =
           >;
         }
       | undefined;
-    type Props =
-      | PropsShape
-      | Effect.Effect<PropsShape, never, Services | context>;
-    type Impl = Effect.Effect<Http.HttpEffect, never, Services | context>;
+    type Props = PropsShape | Effect.Effect<PropsShape, never, Services | Ctx>;
+    type Impl = Effect.Effect<
+      {
+        fetch: Http.HttpEffect;
+      },
+      never,
+      Services | Ctx
+    >;
 
     const resource = Resource(type);
-    const context = ExecutionContext<Serverless.ExecutionContext>(type);
+    const Ctx = ExecutionContext<Serverless.ExecutionContext>(type);
     const self = Self<R>(type);
 
     const constructor = () => (id: string, props: Props) => {
@@ -186,12 +122,12 @@ export const Function =
 
                 yield* impl.pipe(
                   Effect.flatMap((impl) =>
-                    impl ? executionContext.serve(impl) : Effect.void,
+                    impl ? executionContext.serve(impl.fetch) : Effect.void,
                   ),
                   Effect.provide(
                     Layer.provideMerge(
                       Layer.mergeAll(
-                        Layer.succeed(context, executionContext),
+                        Layer.succeed(Ctx, executionContext),
                         Layer.succeed(ExecutionContext, executionContext),
                         Layer.succeed(Serverless.Context, executionContext),
                         Layer.succeed(resource.Self, instance),
@@ -221,7 +157,141 @@ export const Function =
     };
 
     return Object.assign(constructor, resource, {
-      Context: context,
+      Context: Ctx,
       Self: self,
     }) as any;
   };
+
+type FunctionArgs<
+  Resource extends ResourceLike,
+  Req,
+> = undefined extends Resource["Props"]
+  ? [
+      props?:
+        | {
+            [prop in keyof Resource["Props"]]: Input<Resource["Props"][prop]>;
+          }
+        | Effect.Effect<
+            {
+              [prop in keyof Resource["Props"]]: Input<Resource["Props"][prop]>;
+            },
+            never,
+            Req
+          >,
+    ]
+  : [
+      props:
+        | {
+            [prop in keyof Resource["Props"]]: Input<Resource["Props"][prop]>;
+          }
+        | Effect.Effect<
+            {
+              [prop in keyof Resource["Props"]]: Input<Resource["Props"][prop]>;
+            },
+            never,
+            Req
+          >,
+    ];
+
+export interface FunctionMain {
+  fetch?: Http.HttpEffect;
+  [key: string]: any;
+}
+
+export type Rpc<Resource extends ResourceLike, Shape> = Resource & Shape;
+
+type FunctionReq<Resource extends ResourceLike, ProvidedServices = never> =
+  | FunctionServices
+  | ProvidedServices
+  | Self
+  | Resource
+  | ServiceMap.Service<Resource, Resource>;
+
+export interface FunctionConstructor<
+  Resource extends ResourceLike,
+  ProvidedServices = never,
+> {
+  Props: Resource["Props"];
+  Req: FunctionReq<Resource, ProvidedServices>;
+  <Self, Shape extends FunctionMain | void = FunctionMain>(): <
+    const Id extends string,
+    Req = never,
+  >(
+    id: Id,
+    ...props: FunctionArgs<Resource, Req>
+  ) => Effect.Effect<Resource, never, Provider<Resource> | Self> & {
+    new (_: never): {
+      LogicalId: Id;
+    };
+    make<Req extends FunctionReq<Resource, ProvidedServices> = never>(
+      impl: Effect.Effect<Shape, never, Req>,
+    ): Layer.Layer<
+      Self,
+      never,
+      | Provider<Resource>
+      | Exclude<Req, RuntimeServices | ProvidedServices | Resource | Self>
+    >;
+  };
+
+  <const Id extends string, Req = never>(
+    id: Id,
+    ...props: FunctionArgs<Resource, Req>
+  ): <Shape extends FunctionMain | void, Req extends this["Req"] = never>(
+    impl: Effect.Effect<Shape, never, Req>,
+  ) => FunctionEffect<
+    Resource,
+    Shape,
+    Exclude<Req, RuntimeServices | ProvidedServices | Resource | Self>
+  >;
+
+  <
+    const Id extends string,
+    Shape extends FunctionMain | void,
+    PropsReq = never,
+    Req extends FunctionReq<Resource, ProvidedServices> = never,
+  >(
+    id: Id,
+    props:
+      | {
+          [prop in keyof Resource["Props"]]: Input<Resource["Props"][prop]>;
+        }
+      | Effect.Effect<
+          | {
+              [prop in keyof Resource["Props"]]: Input<Resource["Props"][prop]>;
+            }
+          | (undefined extends Resource["Props"] ? undefined : never),
+          never,
+          PropsReq
+        >
+      | (undefined extends Resource["Props"] ? undefined : never),
+    impl: Effect.Effect<Shape, never, Req>,
+  ): FunctionEffect<
+    Resource,
+    Shape,
+    Exclude<
+      PropsReq | Req,
+      RuntimeServices | FunctionReq<Resource, ProvidedServices>
+    >
+  >;
+
+  asEffect(): Effect.Effect<Resource, never, Provider<Resource>>;
+
+  [Symbol.iterator](): Effect.Yieldable<
+    Effect.Effect<Resource, never, Provider<Resource>>,
+    Resource,
+    never,
+    Provider<Resource>
+  >;
+}
+
+export type FunctionEffect<
+  Resource extends ResourceLike,
+  Shape extends FunctionMain | void,
+  Req,
+> = Effect.Effect<
+  void extends Shape ? Resource : Rpc<Resource, Shape>,
+  never,
+  Provider<Resource> | Req
+> & {
+  initPromise(): Promise<void extends Shape ? never : Shape>;
+};

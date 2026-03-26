@@ -20,48 +20,50 @@ export const ServiceFunctionLive = ServiceFunction.make(
   Effect.gen(function* () {
     const db = yield* Database;
 
-    return Effect.gen(function* () {
-      const request = yield* HttpServerRequest;
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
 
-      if (request.method === "GET" && new URL(request.url).pathname === "/") {
-        const response = yield* db
-          .query<{
-            database: string;
-            current_time: string;
-            current_user: string;
-          }>(
-            "select current_database() as database, now()::text as current_time, current_user::text as current_user",
-          )
-          .pipe(
-            Effect.match({
-              onFailure: (error) => ({
-                status: 500 as const,
-                body: {
-                  ok: false,
-                  error: error.message,
-                },
+        if (request.method === "GET" && new URL(request.url).pathname === "/") {
+          const response = yield* db
+            .query<{
+              database: string;
+              current_time: string;
+              current_user: string;
+            }>(
+              "select current_database() as database, now()::text as current_time, current_user::text as current_user",
+            )
+            .pipe(
+              Effect.match({
+                onFailure: (error) => ({
+                  status: 500 as const,
+                  body: {
+                    ok: false,
+                    error: error.message,
+                  },
+                }),
+                onSuccess: (rows) => ({
+                  status: 200 as const,
+                  body: {
+                    ok: true,
+                    connection: rows[0] ?? null,
+                  },
+                }),
               }),
-              onSuccess: (rows) => ({
-                status: 200 as const,
-                body: {
-                  ok: true,
-                  connection: rows[0] ?? null,
-                },
-              }),
-            }),
-          );
+            );
 
-        return yield* HttpServerResponse.json(response.body, {
-          status: response.status,
-        });
-      }
+          return yield* HttpServerResponse.json(response.body, {
+            status: response.status,
+          });
+        }
 
-      return HttpServerResponse.text("Not found", { status: 404 });
-    });
+        return HttpServerResponse.text("Not found", { status: 404 });
+      }),
+    };
   }).pipe(
     Effect.provide(
       Layer.provideMerge(
-        Layer.mergeAll(DatabaseAurora, AWS.Lambda.HttpServer),
+        Layer.mergeAll(DatabaseAurora),
         Layer.mergeAll(NetworkLive, AWS.RDS.ConnectLive),
       ),
     ),

@@ -21,19 +21,18 @@ export interface KvEntriesProps {
   purge?: boolean;
 }
 
-export interface KvEntries
-  extends Resource<
-    "AWS.CloudFront.KvEntries",
-    KvEntriesProps,
-    {
-      /** ARN of the CloudFront KeyValueStore. */
-      store: string;
-      /** Namespace prefix used for keys. */
-      namespace: string;
-      /** Current entries managed under the namespace. */
-      entries: Record<string, string>;
-    }
-  > {}
+export interface KvEntries extends Resource<
+  "AWS.CloudFront.KvEntries",
+  KvEntriesProps,
+  {
+    /** ARN of the CloudFront KeyValueStore. */
+    store: string;
+    /** Namespace prefix used for keys. */
+    namespace: string;
+    /** Current entries managed under the namespace. */
+    entries: Record<string, string>;
+  }
+> {}
 
 /**
  * Manages namespaced key-value entries in a CloudFront KeyValueStore.
@@ -79,6 +78,7 @@ const resolveEntries = (entries: KvEntriesProps["entries"]): ResolvedEntries =>
 
 export const KvEntriesProvider = () =>
   KvEntries.provider.effect(
+    // @ts-expect-error
     Effect.gen(function* () {
       const collectAllKeys = Effect.fn(function* (store: string) {
         const keys: { Key: string; Value: string }[] = [];
@@ -165,7 +165,7 @@ export const KvEntriesProvider = () =>
         const puts: kvs.PutKeyRequestListItem[] = [];
         for (const [key, value] of Object.entries(entries)) {
           if (oldEntries === undefined || oldEntries[key] !== value) {
-            puts.push({ Key: `${namespace}:${key}`, Value: value });
+            puts.push({ Key: `${namespace}:${key}`, Value: value as any });
           }
         }
         if (puts.length > 0) {
@@ -203,12 +203,7 @@ export const KvEntriesProvider = () =>
             return yield* retryForKvsReadiness(
               Effect.gen(function* () {
                 const entries = resolveEntries(news.entries);
-                yield* upload(
-                  news.store,
-                  news.namespace,
-                  entries,
-                  undefined,
-                );
+                yield* upload(news.store, news.namespace, entries, undefined);
                 return {
                   store: news.store,
                   namespace: news.namespace,
@@ -219,7 +214,7 @@ export const KvEntriesProvider = () =>
           }),
         ),
         update: withKvsRegionFn(
-          Effect.fn(function* ({ news, olds, output }) {
+          Effect.fn(function* ({ news, olds }) {
             return yield* retryForKvsReadiness(
               Effect.gen(function* () {
                 const entries = resolveEntries(news.entries);
@@ -227,12 +222,7 @@ export const KvEntriesProvider = () =>
                   news.store !== olds.store
                     ? undefined
                     : resolveEntries(olds.entries);
-                yield* upload(
-                  news.store,
-                  news.namespace,
-                  entries,
-                  oldEntries,
-                );
+                yield* upload(news.store, news.namespace, entries, oldEntries);
                 if (news.purge) {
                   yield* purge(news.store, news.namespace, entries);
                 }

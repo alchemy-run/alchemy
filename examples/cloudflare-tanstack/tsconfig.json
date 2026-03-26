@@ -1,6 +1,10 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"],
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "vite.config.ts"
+  ],
   "compilerOptions": {
     "rootDir": ".",
     "module": "ESNext",
@@ -10,6 +14,13 @@
     "noEmit": true,
     "skipLibCheck": true,
     "strict": true,
-    "types": ["vite/client"]
-  }
+    "types": [
+      "vite/client"
+    ]
+  },
+  "references": [
+    {
+      "path": "../../alchemy-effect/tsconfig.json"
+    }
+  ]
 }

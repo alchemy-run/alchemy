@@ -14,6 +14,7 @@ import {
 import { OriginAccessControl } from "../CloudFront/OriginAccessControl.ts";
 import type { Service } from "../ECS/Service.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import { Function } from "../Lambda/Function.ts";
 import { Record as Route53Record } from "../Route53/Record.ts";
 import { Bucket } from "../S3/Bucket.ts";
 import type { AssetFileOption } from "./AssetDeployment.ts";

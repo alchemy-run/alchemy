@@ -1373,7 +1373,9 @@ describe("Outputs should resolve to old values", () => {
     },
   });
 
-  const expected = (props: TestResourceProps) => ({
+  const expected = (
+    props: Input.Resolve<InputProps<TestResourceProps>>,
+  ) => ({
     resources: {
       A: {
         action: "noop",
@@ -1469,7 +1471,7 @@ describe("Outputs should resolve to old values", () => {
 describe("stable properties should not cause downstream changes", () => {
   const test = (
     description: string,
-    input: (A: TestResource) => Input<TestResourceProps>,
+    input: (A: TestResource) => InputProps<TestResourceProps>,
   ) => {
     // @ts-expect-error - get the keys
     const props = input(Output.of({}));

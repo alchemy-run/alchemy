@@ -3,6 +3,7 @@ import type {
   LambdaFunctionURLResult,
 } from "aws-lambda";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import type { Scope } from "effect/Scope";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -19,7 +20,7 @@ export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
   return (event: any) => {
     if (isFunctionURLEvent(event)) {
       const request = HttpServerRequest.fromWeb(toWebRequest(event)).modify({
-        remoteAddress: event.requestContext.http.sourceIp,
+        remoteAddress: Option.some(event.requestContext.http.sourceIp),
       });
       return safeHandler.pipe(
         Effect.provideService(HttpServerRequest.HttpServerRequest, request),
