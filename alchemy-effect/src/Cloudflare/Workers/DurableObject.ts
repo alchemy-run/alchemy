@@ -18,7 +18,7 @@ import { Self as _Self } from "../../Self.ts";
 import { Account } from "../Account.ts";
 import cloudflare_workers from "./cloudflare:workers.ts";
 import { serveWebRequest } from "./HttpServer.ts";
-import type { DurableWebSocket } from "./WebSocket.ts";
+import { fromWebSocket, type DurableWebSocket } from "./WebSocket.ts";
 import { Worker, WorkerEnvironment, isWorker } from "./Worker.ts";
 
 export type DurableObjectId = cf.DurableObjectId;
@@ -193,7 +193,7 @@ export function DurableObjectNamespace(
     const [name, impl] = args;
     return Effect.gen(function* () {
       const worker = yield* Worker.Self;
-      const runtime = yield* Worker.Context;
+      const runtime = yield* Worker.Platform;
 
       yield* DurableObjectPolicy.bind(name);
 
@@ -379,7 +379,7 @@ export class DurableObjectState extends ServiceMap.Service<
     blockConcurrencyWhile<T>(
       callback: () => Effect.Effect<T>,
     ): Effect.Effect<T>;
-    // acceptWebSocket(ws: cf.WebSocket, tags?: string[]): Effect.Effect<void>;
+    acceptWebSocket(ws: DurableWebSocket, tags?: string[]): Effect.Effect<void>;
     getWebSockets(tag?: string): Effect.Effect<DurableWebSocket[]>;
     setWebSocketAutoResponse(
       maybeReqResp?: cf.WebSocketRequestResponsePair,
@@ -561,9 +561,12 @@ const fromDurableObjectState = (
     Effect.tryPromise(() =>
       state.blockConcurrencyWhile(() => Effect.runPromise(callback())),
     ),
-  acceptWebSocket: (ws: cf.WebSocket, tags?: string[]) =>
-    Effect.sync(() => state.acceptWebSocket(ws, tags)),
-  getWebSockets: (tag?: string) => Effect.sync(() => state.getWebSockets(tag)),
+  acceptWebSocket: (ws: DurableWebSocket, tags?: string[]) =>
+    Effect.sync(() => state.acceptWebSocket(ws.ws, tags)),
+  getWebSockets: (tag?: string) =>
+    Effect.sync(() => state.getWebSockets(tag)).pipe(
+      Effect.flatMap(Effect.forEach(fromWebSocket)),
+    ),
   setWebSocketAutoResponse: (maybeReqResp?: cf.WebSocketRequestResponsePair) =>
     Effect.sync(() => state.setWebSocketAutoResponse(maybeReqResp)),
   getWebSocketAutoResponse: () =>

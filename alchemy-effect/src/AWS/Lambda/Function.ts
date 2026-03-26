@@ -121,8 +121,8 @@ export interface Function extends Resource<
  */
 export const Function = Serverless.Function<Function, Credentials | Region>(
   FunctionTypeId,
-)((id: string): Serverless.ExecutionContext => {
-  const listeners: Effect.Effect<Serverless.Listener>[] = [];
+)((id: string): Serverless.FunctionContext => {
+  const listeners: Effect.Effect<Serverless.FunctionListener>[] = [];
   const env: Record<string, any> = {};
 
   const ctx = {
@@ -156,13 +156,15 @@ export const Function = Serverless.Function<Function, Credentials | Region>(
     serve: (handler: HttpEffect) =>
       ctx.listen(makeFunctionHttpHandler(handler)),
     listen: ((
-      handler: Serverless.Listener | Effect.Effect<Serverless.Listener>,
+      handler:
+        | Serverless.FunctionListener
+        | Effect.Effect<Serverless.FunctionListener>,
     ) =>
       Effect.sync(() =>
         Effect.isEffect(handler)
           ? listeners.push(handler)
           : listeners.push(Effect.succeed(handler)),
-      )) as any as Serverless.ExecutionContext["listen"],
+      )) as any as Serverless.FunctionContext["listen"],
     exports: {
       // construct an Effect that produces the Function's entrypoint
       // Effect<(event, context) => Promise<any>>

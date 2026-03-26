@@ -1,10 +1,10 @@
 import * as Effect from "effect/Effect";
-import type { FunctionMain } from "../../Serverless/Function.ts";
+import type { PlatformMain } from "../../Platform.ts";
 import { Worker } from "../Workers/Worker.ts";
 
 export const TanstackStart =
   (id: string) =>
-  <Shape extends FunctionMain, Req extends Worker.Req = never>(
+  <Shape extends PlatformMain, Req extends Worker.Services = never>(
     eff: Effect.Effect<Shape, never, Req>,
   ) =>
     Worker(

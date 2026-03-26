@@ -81,7 +81,7 @@ type Provided =
   | Cli
   | ExecutionContext
   | Server.ServerExecutionContext
-  | Serverless.ExecutionContext
+  | Serverless.FunctionContext
   | AWS.StageConfig
   | Provider<Command>
   | Layer.Success<ReturnType<typeof AWS.providers>>
@@ -200,7 +200,7 @@ const runWithContext = <A, Err>(
     ),
     Effect.provideService(Stage.Stage, "test"),
     Effect.provideService(ExecutionContext, context as any),
-    Effect.provideService(Serverless.Context, context as any),
+    Effect.provideService(Serverless.FunctionPlatform, context as any),
     Effect.provideService(
       MinimumLogLevel,
       process.env.DEBUG ? "Debug" : "Info",

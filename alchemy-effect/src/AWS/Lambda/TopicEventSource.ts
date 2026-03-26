@@ -21,7 +21,7 @@ export const isSNSEvent = (event: any): event is lambda.SNSEvent =>
 export const TopicEventSource = Layer.effect(
   SNSTopicEventSource,
   Effect.gen(function* () {
-    const host = yield* Lambda.Function.Context;
+    const host = yield* Lambda.Function.Platform;
     const bind = yield* TopicEventSourcePolicy;
 
     return Effect.fn(function* <StreamReq = never, Req = never>(

@@ -14,7 +14,6 @@ import { DotAlchemy } from "../../Config.ts";
 import type { Input } from "../../Input.ts";
 import { Resource } from "../../Resource.ts";
 import * as Server from "../../Server/Process.ts";
-import type { ServerExecutionContext } from "../../Server/ExecutionContext.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import {
@@ -358,7 +357,8 @@ export const InstanceProvider = () =>
       const isPendingInstanceLookupError = (error: unknown) => {
         const tag = (error as { _tag?: string })?._tag;
         return (
-          error instanceof InstanceNotFound || tag === "InvalidInstanceID.NotFound"
+          error instanceof InstanceNotFound ||
+          tag === "InvalidInstanceID.NotFound"
         );
       };
 
@@ -695,7 +695,9 @@ export const InstanceProvider = () =>
             Effect.catchTag("InvalidInstanceID.NotFound", () =>
               Effect.succeed(undefined),
             ),
-            Effect.catchTag("InstanceNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("InstanceNotFound", () =>
+              Effect.succeed(undefined),
+            ),
           );
           return {
             ...toAttributes(refreshed ?? instance),

@@ -157,8 +157,15 @@ export type WorkerProps = {
   exports?: string[];
 };
 
-export interface WorkerExecutionContext extends Serverless.ExecutionContext {
+export interface WorkerExecutionContext extends Serverless.FunctionContext {
   export(name: string, value: any): Effect.Effect<void>;
+}
+
+export declare namespace Worker {
+  export type Platform = typeof Worker.Platform;
+  export type Props = typeof Worker.Props;
+  export type Self = typeof Worker.Self;
+  export type Services = typeof Worker.Services;
 }
 
 export interface Worker extends Resource<
@@ -181,12 +188,6 @@ export interface Worker extends Resource<
   }
 > {}
 
-export declare namespace Worker {
-  export type Req = typeof Worker.Req;
-  export type Self = typeof Worker.Self;
-  export type Props = typeof Worker.Props;
-}
-
 /**
  * A Cloudflare Worker host with deploy-time binding support and runtime export
  * collection.
@@ -206,7 +207,7 @@ export declare namespace Worker {
 export const Worker = Serverless.Function<Worker, WorkerEnvironment>(TypeId)((
   id: string,
 ): WorkerExecutionContext => {
-  const listeners: Effect.Effect<Serverless.Listener>[] = [];
+  const listeners: Effect.Effect<Serverless.FunctionListener>[] = [];
   const exports: Record<string, any> = {};
   const env: Record<string, any> = {};
 
@@ -237,13 +238,15 @@ export const Worker = Serverless.Function<Worker, WorkerEnvironment>(TypeId)((
     serve: <Req = never>(handler: HttpEffect<Req>) =>
       ctx.listen(workersHttpHandler(handler)),
     listen: ((
-      handler: Serverless.Listener | Effect.Effect<Serverless.Listener>,
+      handler:
+        | Serverless.FunctionListener
+        | Effect.Effect<Serverless.FunctionListener>,
     ) =>
       Effect.sync(() =>
         Effect.isEffect(handler)
           ? listeners.push(handler)
           : listeners.push(Effect.succeed(handler)),
-      )) as any as Serverless.ExecutionContext["listen"],
+      )) as any as Serverless.FunctionContext["listen"],
     export: (name: string, value: any) =>
       Effect.gen(function* () {
         if (name in exports) {

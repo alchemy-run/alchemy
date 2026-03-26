@@ -22,7 +22,7 @@ export const QueueEventSource = Layer.effect(
   SQSQueueEventSource,
   // @ts-expect-error
   Effect.gen(function* () {
-    const host = yield* Lambda.Function.Context;
+    const host = yield* Lambda.Function.Platform;
     const Policy = yield* QueueEventSourcePolicy;
 
     return Effect.fn(function* <StreamReq = never, Req = never>(

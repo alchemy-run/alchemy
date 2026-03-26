@@ -7,6 +7,10 @@ import Worker from "../worker.ts";
 // bridge from TanstackStart to the Alchemy Effect Worker
 export const worker = await Worker.initPromise();
 
+export const getProfile = createServerFn({
+  method: "GET",
+}).handler(() => Effect.runPromise(worker.getProfile("John Doe")));
+
 export const getServerTime = createServerFn({
   method: "GET",
 }).handler(() => {
@@ -14,12 +18,6 @@ export const getServerTime = createServerFn({
     message: "Hello from a TanStack Start server function.",
     time: new Date().toISOString(),
   };
-});
-
-export const getProfile = createServerFn({
-  method: "GET",
-}).handler(async () => {
-  return await Effect.runPromise(worker.getProfile("John Doe"));
 });
 
 export const Route = createFileRoute("/")({

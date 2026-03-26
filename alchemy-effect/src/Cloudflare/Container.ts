@@ -365,19 +365,12 @@ export const initContainer = Effect.fnUntraced(function* (
             | HttpClientRequest.HttpClientRequest
             | HttpServerRequest.HttpServerRequest,
         ) =>
-          HttpClientRequest.isHttpClientRequest(request)
-            ? port.fetch(request).pipe(
-                Effect.tapError((err) => Effect.logDebug(err)),
-                Effect.retry({
-                  schedule: backoff,
-                }),
-              )
-            : port.fetch(request).pipe(
-                Effect.tapError((err) => Effect.logDebug(err)),
-                Effect.retry({
-                  schedule: backoff,
-                }),
-              )) as {
+          port.fetch(request as any).pipe(
+            Effect.tapError((err) => Effect.logDebug(err)),
+            Effect.retry({
+              schedule: backoff,
+            }),
+          )) as {
           (
             request: HttpClientRequest.HttpClientRequest,
           ): Effect.Effect<HttpClientResponse.HttpClientResponse>;
