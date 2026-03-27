@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "alchemy-effect": "workspace:*",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "@effect/platform-node": "catalog:"
   }
 }

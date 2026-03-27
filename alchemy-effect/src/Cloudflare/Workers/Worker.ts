@@ -22,7 +22,7 @@ import type { HttpEffect } from "../../Http.ts";
 import type { Input } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import { Resource } from "../../Resource.ts";
+import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { sha256 } from "../../Util/index.ts";
 import { Account } from "../Account.ts";
 import type { AssetsConfig, AssetsProps } from "./Assets.ts";
@@ -30,14 +30,14 @@ import * as Assets from "./Assets.ts";
 import { workersHttpHandler } from "./HttpServer.ts";
 import cloudflare_workers from "./cloudflare:workers.ts";
 
-const TypeId = "Cloudflare.Worker";
-type TypeId = typeof TypeId;
+const WorkerTypeId = "Cloudflare.Worker";
+type WorkerTypeId = typeof WorkerTypeId;
 
 export const isWorker = <T>(value: T): value is T & Worker =>
   typeof value === "object" &&
   value !== null &&
   "Type" in value &&
-  value.Type === TypeId;
+  value.Type === WorkerTypeId;
 
 export class WorkerEnvironment extends ServiceMap.Service<
   WorkerEnvironment,
@@ -169,7 +169,7 @@ export declare namespace Worker {
 }
 
 export interface Worker extends Resource<
-  TypeId,
+  WorkerTypeId,
   WorkerProps,
   {
     workerId: string;
@@ -204,15 +204,15 @@ export interface Worker extends Resource<
  * });
  * ```
  */
-export const Worker = Serverless.Function<Worker, WorkerEnvironment>(TypeId)((
-  id: string,
-): WorkerExecutionContext => {
+export const Worker = Serverless.Function<Worker, WorkerEnvironment>(
+  WorkerTypeId,
+)((id: string): WorkerExecutionContext => {
   const listeners: Effect.Effect<Serverless.FunctionListener>[] = [];
   const exports: Record<string, any> = {};
   const env: Record<string, any> = {};
 
   const ctx = {
-    Type: TypeId,
+    Type: WorkerTypeId,
     id,
     env,
     get: (key: string) =>
@@ -428,8 +428,68 @@ export const WorkerProvider = () =>
         }
         importPath = importPath.replaceAll("\\", "/");
         const script = `
+import { NodeServices } from "@effect/platform-node";
+import { Stack } from "alchemy-effect/Stack";
+import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as Region from "@distilled.cloud/aws/Region";
+import * as ServiceMap from "effect/ServiceMap";
+import { MinimumLogLevel } from "effect/References";
+
 import workerExport from "${importPath}";
+
+const tag = ServiceMap.Service("${WorkerTypeId}<${id}>")
+
+const platform = Layer.mergeAll(
+  NodeServices.layer,
+  FetchHttpClient.layer,
+  // TODO(sam): wire this up to telemetry more directly
+  Logger.layer([Logger.consolePretty()]),
+);
+
+const stack = Layer.effect(
+  Stack,
+  Effect.all([
+    Config.string("ALCHEMY_STACK_NAME").asEffect(),
+    Config.string("ALCHEMY_STAGE").asEffect()
+  ]).pipe(
+    Effect.map(([name, stage]) => ({
+      name,
+      stage,
+      bindings: {},
+      resources: {}
+    }))
+  )
+);
+
+const handlerEffect = tag.asEffect().pipe(
+  Effect.flatMap(func => func.ExecutionContext.exports.handler),
+  Effect.provide(
+    layer.pipe(
+      Layer.provideMerge(stack),
+      // TODO(sam): additional credentials?
+      Layer.provideMerge(platform),
+      Layer.provideMerge(
+        Layer.succeed(
+          ConfigProvider.ConfigProvider,
+          ConfigProvider.fromEnv()
+        )
+      ),
+      Layer.provideMerge(
+        Layer.succeed(
+          MinimumLogLevel,
+          process.env.DEBUG ? "Debug" : "Info",
+        )
+      ),
+    )
+  ),
+  Effect.scoped
+);
 
 let workerPromise;
 // don't initialize the workerEffect during module init because Cloudflare does not allow I/O during module init
@@ -437,17 +497,20 @@ let workerPromise;
 const resolveWorker = () => {
   if (workerPromise) return workerPromise;
   // Support both Effect-based workers and plain object exports
-  if (Effect.isEffect(workerExport)) {
-    workerPromise = Effect.runPromise(workerExport).then(result => result.exports?.default ?? result);
-  } else {
-    // Plain object export (e.g. { fetch, queue, ... })
-    workerPromise = Promise.resolve(workerExport);
-  }
-  return workerPromise;
+  workerPromise = Effect.runPromise(handlerEffect);
 }
 
 export default {
-  fetch: async (...args) => (await resolveWorker()).fetch?.(...args),
+  fetch: async (...args) => {
+    console.log("workerExport", Object.keys(workerExport));
+    const worker = await resolveWorker();
+    console.log("worker", worker, worker.fetch, JSON.stringify(worker));
+    const response = worker.fetch?.(...args) ?? Promise.resolve(new Response("Not Found", { status: 404 }));
+    console.log("response", response, typeof response);
+    return response
+      .then(result => { console.log("fetch success", result); return result; })
+      .catch(error => { console.error("fetch error", error); throw error; })
+  },
   queue: async (...args) => (await resolveWorker()).queue?.(...args),
   scheduled: async (...args) => (await resolveWorker()).scheduled?.(...args),
   email: async (...args) => (await resolveWorker()).email?.(...args),
@@ -470,7 +533,7 @@ ${props.exports?.map((id) => `export class ${id} {}`).join("\n") ?? ""}
             minify: true,
             tsconfig,
             cloudflare: {
-              compatibilityDate: props.compatibility?.date,
+              compatibilityDate: props.compatibility?.date ?? "2026-03-10",
               compatibilityFlags: props.compatibility?.flags,
             },
           });
@@ -500,7 +563,7 @@ ${props.exports?.map((id) => `export class ${id} {}`).join("\n") ?? ""}
       const putWorker = Effect.fnUntraced(function* (
         id: string,
         news: WorkerProps,
-        bindings: Worker["Binding"][],
+        bindings: ResourceBinding<Worker["Binding"]>[],
         olds: WorkerProps | undefined,
         output: Worker["Attributes"] | undefined,
         session: ScopedPlanStatusSession,
@@ -513,7 +576,7 @@ ${props.exports?.map((id) => `export class ${id} {}`).join("\n") ?? ""}
           prepareAssets(news.assets),
           prepareBundle(id, news),
         ]);
-        const metadataBindings = bindings.flatMap((b) => b.bindings);
+        const metadataBindings = bindings.flatMap((b) => b.data.bindings);
         let metadataAssets:
           | workers.PutScriptRequest["metadata"]["assets"]
           | undefined;

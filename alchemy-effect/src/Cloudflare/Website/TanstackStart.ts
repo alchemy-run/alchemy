@@ -4,7 +4,7 @@ import { Worker } from "../Workers/Worker.ts";
 
 export const TanstackStart =
   (id: string) =>
-  <Shape extends PlatformMain, Req extends Worker.Services = never>(
+  <Shape extends PlatformMain<never>, Req extends Worker.Services = never>(
     eff: Effect.Effect<Shape, never, Req>,
   ) =>
     Worker(

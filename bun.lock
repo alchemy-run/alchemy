@@ -71,6 +71,7 @@
       "devDependencies": {
         "@clack/prompts": "^0.11.0",
         "@cloudflare/workers-types": "catalog:",
+        "@effect/platform-bun": "catalog:",
         "@effect/platform-node": "catalog:",
         "@effect/platform-node-shared": "catalog:",
         "@types/aws-lambda": "catalog:",
@@ -87,26 +88,18 @@
         "typescript": "catalog:",
       },
       "peerDependencies": {
+        "@effect/platform-bun": "*",
         "@effect/platform-node": "*",
         "effect": "*",
       },
       "optionalPeers": [
+        "@effect/platform-bun",
         "@effect/platform-node",
         "effect",
       ],
     },
     "examples/aws-ec2": {
       "name": "aws-ec2-example",
-      "version": "0.0.0",
-      "dependencies": {
-        "@distilled.cloud/aws": "catalog:",
-        "@effect/platform-node": "catalog:",
-        "alchemy-effect": "workspace:*",
-        "effect": "catalog:",
-      },
-    },
-    "examples/aws-ec2-autoscaling": {
-      "name": "aws-ec2-autoscaling-example",
       "version": "0.0.0",
       "dependencies": {
         "@distilled.cloud/aws": "catalog:",
@@ -239,6 +232,7 @@
       "name": "cloudflare-worker",
       "version": "0.0.0",
       "dependencies": {
+        "@effect/platform-node": "catalog:",
         "alchemy-effect": "workspace:*",
         "effect": "catalog:",
       },
@@ -254,6 +248,7 @@
     "@distilled.cloud/cloudflare-bundler": "^0.1.1",
     "@distilled.cloud/core": "^0.7.3",
     "@effect/language-service": "4.0.0-beta.38",
+    "@effect/platform-bun": "4.0.0-beta.38",
     "@effect/platform-node": "4.0.0-beta.38",
     "@effect/platform-node-shared": "4.0.0-beta.38",
     "@effect/vitest": "4.0.0-beta.38",
@@ -441,6 +436,8 @@
     "@distilled.cloud/core": ["@distilled.cloud/core@0.7.3", "", { "dependencies": { "effect": "4.0.0-beta.38" } }, "sha512-C2J4fGbzqYvw4Wt9ItAKRK++NAGa3KRIwK7jQYJqm6rnDfHtavHZxUxQHMBpCkOShOG7p+jAedfjo39Ha9nlpA=="],
 
     "@effect/language-service": ["@effect/language-service@0.77.0", "", { "bin": { "effect-language-service": "cli.js" } }, "sha512-QP2bri8DdcK7Eo+SqFS2yNeD0Ch9kKHYxq2jeE9CaPpBknevCNFb3+hT6qSsPt2P6yOkhNP83KMy5Uk7DGBXlg=="],
+
+    "@effect/platform-bun": ["@effect/platform-bun@4.0.0-beta.38", "", { "dependencies": { "@effect/platform-node-shared": "^4.0.0-beta.38" }, "peerDependencies": { "effect": "^4.0.0-beta.38" } }, "sha512-KHf4uUOgHhJ4AbquUmr+j1jBFKZ38AgTOSzLi3ifAArjJ5G8iUfvthqDn8Kbr4y4eyedcWoDwOHoOsxfryS87A=="],
 
     "@effect/platform-node": ["@effect/platform-node@4.0.0-beta.38", "", { "dependencies": { "@effect/platform-node-shared": "^4.0.0-beta.38", "mime": "^4.1.0", "undici": "^7.24.0" }, "peerDependencies": { "effect": "^4.0.0-beta.38", "ioredis": "^5.7.0" } }, "sha512-uTcBIoH9rjmPbvl9axUHF5fACu/jjn4i/EbXVqych1zNw7XYjjAG3VrU7ypasAgAGvCRGUfLbfuAVrcMKaKDSg=="],
 
@@ -1149,8 +1146,6 @@
     "asynckit": ["asynckit@0.4.0", "", {}, "sha512-Oei9OH4tRh0YqU3GxhX79dM/mwVgvbZJaSNaRk+bshkj0S5cfHcgYakreBjrHwatXKbz+IoIdYLxrKim2MjW0Q=="],
 
     "auto-bind": ["auto-bind@5.0.1", "", {}, "sha512-ooviqdwwgfIfNmDwo94wlshcdzfO64XV0Cg6oDsDYBJfITDz1EngD2z7DkbvCWn+XIMsIqW27sEVF6qcpJrRcg=="],
-
-    "aws-ec2-autoscaling-example": ["aws-ec2-autoscaling-example@workspace:examples/aws-ec2-autoscaling"],
 
     "aws-ec2-example": ["aws-ec2-example@workspace:examples/aws-ec2"],
 

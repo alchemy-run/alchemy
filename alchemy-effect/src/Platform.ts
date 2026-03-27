@@ -60,18 +60,13 @@ export type PlatformDeclaration<
   Resource extends ResourceLike,
   PlatformContext extends BaseExecutionContext,
   PlatformServices,
-> = PlatformConstructor<Resource, PlatformServices> &
-  Effect.Effect<
-    PlatformConstructor<Resource, PlatformServices>,
-    never,
-    Self<Resource>
-  > & {
-    provider: ResourceProviders<Resource>;
-    Self: Self<Resource>;
-    Platform: ServiceMap.Service<Platform<Resource>, PlatformContext>;
-    Props: Resource["Props"];
-    Services: PlatformReq<Resource, PlatformServices>;
-  };
+> = PlatformConstructor<Resource, PlatformServices> & {
+  provider: ResourceProviders<Resource>;
+  Self: Self<Resource>;
+  Platform: ServiceMap.Service<Platform<Resource>, PlatformContext>;
+  Props: Resource["Props"];
+  Services: PlatformReq<Resource, PlatformServices>;
+};
 
 export interface PlatformConstructor<
   Resource extends ResourceLike,
@@ -86,10 +81,11 @@ export interface PlatformConstructor<
     Provider<Resource>
   >;
 
-  <Self, Shape extends PlatformMain | void = PlatformMain>(): <
-    const Id extends string,
-    Req = never,
-  >(
+  <
+    Self,
+    Shape extends PlatformMain<PlatformServices> | void =
+      PlatformMain<PlatformServices>,
+  >(): <const Id extends string, Req = never>(
     id: Id,
     ...props: PlatformArgs<Resource, Req>
   ) => Effect.Effect<Resource, never, Provider<Resource> | Self> & {
@@ -109,13 +105,14 @@ export interface PlatformConstructor<
     id: Id,
     ...props: PlatformArgs<Resource, Req>
   ): (<
-    Shape extends PlatformMain | void,
+    Shape extends PlatformMain<PlatformServices> | void,
     Req extends PlatformReq<Resource, PlatformServices> = never,
   >(
     impl: Effect.Effect<Shape, never, Req>,
   ) => PlatformEffect<
     Resource,
     Shape,
+    PlatformServices,
     Exclude<Req, PlatformServices | Resource | Self>
   >) &
     // if yielded directly, then this is an external Platform (no generator to run, only a main entrypoint to bundle)
@@ -127,7 +124,7 @@ export interface PlatformConstructor<
 
   <
     const Id extends string,
-    Shape extends PlatformMain | void,
+    Shape extends PlatformMain<PlatformServices> | void,
     PropsReq = never,
     Req extends PlatformReq<Resource, PlatformServices> = never,
   >(
@@ -137,6 +134,7 @@ export interface PlatformConstructor<
   ): PlatformEffect<
     Resource,
     Shape,
+    PlatformServices,
     Exclude<PropsReq | Req, PlatformReq<Resource, PlatformServices>>
   >;
 }
@@ -337,8 +335,8 @@ type RuntimeServices<
   SelfContext extends ServiceMap.Service<any, BaseExecutionContext>,
 > = ExecutionContext | SelfContext | HttpClient | Scope;
 
-export interface PlatformMain {
-  fetch?: Http.HttpEffect;
+export interface PlatformMain<Services> {
+  fetch?: Http.HttpEffect<Services>;
   [key: string]: any;
 }
 
@@ -346,7 +344,8 @@ export type Rpc<Resource extends ResourceLike, Shape> = Resource & Shape;
 
 export type PlatformEffect<
   Resource extends ResourceLike,
-  Shape extends PlatformMain | void,
+  Shape extends PlatformMain<PlatformServices> | void,
+  PlatformServices = never,
   Services = never,
 > = Effect.Effect<
   void extends Shape ? Resource : Rpc<Resource, Shape>,

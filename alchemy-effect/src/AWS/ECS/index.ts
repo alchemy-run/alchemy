@@ -5,7 +5,6 @@ export {
   DescribeTasksPolicy,
   DescribeTasksPolicyLive,
 } from "./DescribeTasks.ts";
-export { HttpServer } from "./HttpServer.ts";
 export {
   ListTasks,
   ListTasksLive,
@@ -26,4 +25,4 @@ export {
   StopTaskPolicy,
   StopTaskPolicyLive,
 } from "./StopTask.ts";
-export { Task, TaskProvider, isTask } from "./Task.ts";
+export { isTask, Task, TaskProvider } from "./Task.ts";

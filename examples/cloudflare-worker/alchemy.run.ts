@@ -1,10 +1,8 @@
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 
 import { Cloudflare, Stack } from "alchemy-effect";
 
 import { Api, ApiLive } from "./src/Api.ts";
-import { SandboxLive } from "./src/Sandbox.ts";
 
 const stack = Effect.gen(function* () {
   const api = yield* Api;
@@ -13,8 +11,10 @@ const stack = Effect.gen(function* () {
     url: api.url,
   };
 }).pipe(
-  Effect.provide(Layer.provideMerge(ApiLive, SandboxLive)),
-  Stack.make("CloudflareWorker", Cloudflare.providers()),
+  // Effect.provide(Layer.provideMerge(ApiLive, SandboxLive))
+  Effect.provide(ApiLive),
 );
 
-export default stack;
+export default stack.pipe(
+  Stack.make("CloudflareWorker", Cloudflare.providers()),
+);

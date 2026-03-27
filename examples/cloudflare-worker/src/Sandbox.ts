@@ -31,29 +31,31 @@ export const SandboxLive = Sandbox.make(
     // yield* Docker.RUN("apk add --no-cache ffmpeg");
 
     // return http effect
-    return Effect.gen(function* () {
-      const request = yield* HttpServerRequest;
-      // upgrade to web socket
-      const socket = yield* request.upgrade;
-      const writeMessage = yield* socket.writer;
-      const cmd = yield* ChildProcess.make("ffmpeg", ["-version"]);
-      const [exitCode] = yield* Effect.all(
-        [
-          cmd.exitCode,
-          // pipe stdout to the websocket
-          cmd.stdout.pipe(
-            Stream.tap(writeMessage),
-            Stream.decodeText,
-            Stream.mkString,
-          ),
-        ] as const,
-        { concurrency: "unbounded" },
-      );
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        // upgrade to web socket
+        const socket = yield* request.upgrade;
+        const writeMessage = yield* socket.writer;
+        const cmd = yield* ChildProcess.make("ffmpeg", ["-version"]);
+        const [exitCode] = yield* Effect.all(
+          [
+            cmd.exitCode,
+            // pipe stdout to the websocket
+            cmd.stdout.pipe(
+              Stream.tap(writeMessage),
+              Stream.decodeText,
+              Stream.mkString,
+            ),
+          ] as const,
+          { concurrency: "unbounded" },
+        );
 
-      return HttpServerResponse.empty({
-        status: exitCode === 0 ? 200 : 500,
-      });
-    }).pipe(Effect.orDie);
+        return HttpServerResponse.empty({
+          status: exitCode === 0 ? 200 : 500,
+        });
+      }).pipe(Effect.orDie),
+    };
   }),
 );
 

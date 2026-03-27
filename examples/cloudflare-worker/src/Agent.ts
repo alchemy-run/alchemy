@@ -18,15 +18,15 @@ export class Agent extends Cloudflare.DurableObjectNamespace<
 export const AgentLive = Agent.make(
   Effect.gen(function* () {
     // bind the Sandbox Container to the Agent DO
-    const sandbox = yield* Sandbox;
+    const sandbox = yield* Cloudflare.bindContainer(Sandbox);
 
     return Effect.gen(function* () {
       const state = yield* Cloudflare.DurableObjectState;
 
       // get the container instance
-      const container = yield* Cloudflare.initContainer(sandbox);
+      const container = yield* Cloudflare.runContainer(sandbox);
 
-      const connection = yield* container.getTcpSocket(1080);
+      const connection = yield* container.getTcpPort(1080);
 
       const sessions = new Map<
         string,

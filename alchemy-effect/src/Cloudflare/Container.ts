@@ -1,21 +1,21 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
+import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
+import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
+import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type { Fiber } from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Path from "effect/Path";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
-import * as ServiceMap from "effect/ServiceMap";
 import * as SynchronizedRef from "effect/SynchronizedRef";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { SingleShotGen } from "effect/Utils";
-import type { PolicyLike } from "../Binding.ts";
+import * as Http from "node:http";
 import { bundle } from "../Bundle/Bundle.ts";
 import {
   pushImageViaDockerApi,
@@ -27,13 +27,11 @@ import {
   createTempBundleDir,
 } from "../Bundle/TempRoot.ts";
 import { DotAlchemy } from "../Config.ts";
-import type { HttpEffect } from "../Http.ts";
-import type { Input } from "../Input.ts";
+import { HttpServer, type HttpEffect } from "../Http.ts";
 import * as Output from "../Output.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
-import type { Provider } from "../Provider.ts";
-import { Resource } from "../Resource.ts";
-import type { Self } from "../Self.ts";
+import { Resource, type ResourceBinding } from "../Resource.ts";
+import * as Server from "../Server/index.ts";
 import { sha256Object } from "../Util/sha256.ts";
 import { normalizeNulls, stableStringify } from "../Util/stable.ts";
 import { Account } from "./Account.ts";
@@ -45,14 +43,35 @@ import { fromCloudflareFetcher, type Fetcher } from "./Workers/Fetcher.ts";
 
 export { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 
-const TypeId = "Cloudflare.Container";
-type TypeId = typeof TypeId;
+const ContainerTypeId = "Cloudflare.Container";
+type ContainerTypeId = typeof ContainerTypeId;
 
 export const isContainer = <T>(value: T): value is T & Container =>
   typeof value === "object" &&
   value !== null &&
   "Type" in value &&
-  value.Type === TypeId;
+  value.Type === ContainerTypeId;
+
+export class ContainerError extends Data.TaggedError("ContainerError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export interface Container {
+  get running(): Effect.Effect<boolean>;
+  start(options?: cf.ContainerStartupOptions): Effect.Effect<void>;
+  monitor(): Effect.Effect<void, ContainerError>;
+  destroy(error?: any): Effect.Effect<void>;
+  signal(signo: number): Effect.Effect<void>;
+  getTcpPort(port: number): Effect.Effect<Fetcher>;
+  setInactivityTimeout(durationMs: number | bigint): Effect.Effect<void>;
+  interceptOutboundHttp(addr: string, binding: cf.Fetcher): Effect.Effect<void>;
+  interceptAllOutboundHttp(binding: cf.Fetcher): Effect.Effect<void>;
+}
+
+export interface ContainerProps extends ContainerApplicationProps {
+  main: string;
+}
 
 export interface ContainerApplicationProps {
   /**
@@ -60,6 +79,11 @@ export interface ContainerApplicationProps {
    * added to the Docker image as the container's entrypoint.
    */
   main?: string;
+  /**
+   * Exported handler symbol inside the bundled module.
+   * @default "default"
+   */
+  handler?: string;
   /**
    * Runtime environment for the container program.
    *
@@ -176,15 +200,17 @@ export interface ContainerApplicationProps {
    */
   registryId?: string;
   /**
-   * Durable Object namespace attached to the container application.
+   * Environment variables passed to the container runtime.
    */
-  durableObjects?: {
-    namespaceId: string;
-  };
+  env?: Record<string, any>;
+  /**
+   * Exports passed to the container runtime.
+   */
+  exports?: string[];
 }
 
 export type ContainerApplication = Resource<
-  TypeId,
+  ContainerTypeId,
   ContainerApplicationProps,
   {
     applicationId: string;
@@ -203,128 +229,142 @@ export type ContainerApplication = Resource<
       | undefined;
     createdAt: string;
     version: number;
+  },
+  {
+    /**
+     * Durable Object namespace attached to the container application.
+     */
+    durableObjects?: {
+      namespaceId: string;
+    };
+    env?: Record<string, any>;
   }
-> & {
-  container: Effect.Effect<Container, never, DurableObjectState>;
-};
+>;
 
-const ContainerApplication = Resource<ContainerApplication>(TypeId);
+export const Container = Server.Process<ContainerApplication>(
+  "Cloudflare.Container",
+)((id: string): Server.ProcessContext => {
+  const runners: Effect.Effect<void, never, any>[] = [];
+  const env: Record<string, any> = {};
 
-export class ContainerError extends Data.TaggedError("ContainerError")<{
-  readonly message: string;
-  readonly cause?: unknown;
-}> {}
-
-export interface Container {
-  get running(): Effect.Effect<boolean>;
-  start(options?: cf.ContainerStartupOptions): Effect.Effect<void>;
-  monitor(): Effect.Effect<void, ContainerError>;
-  destroy(error?: any): Effect.Effect<void>;
-  signal(signo: number): Effect.Effect<void>;
-  getTcpPort(port: number): Effect.Effect<Fetcher>;
-  setInactivityTimeout(durationMs: number | bigint): Effect.Effect<void>;
-  interceptOutboundHttp(addr: string, binding: cf.Fetcher): Effect.Effect<void>;
-  interceptAllOutboundHttp(binding: cf.Fetcher): Effect.Effect<void>;
-}
-
-export interface ContainerProps extends ContainerApplicationProps {
-  main: string;
-}
-
-export const Container =
-  <self>() =>
-  <LogicalId extends string = string>(
-    id: LogicalId,
-    props: Input<ContainerProps>,
-    // init: Effect.Effect<HttpEffect<RuntimeReq>, never, InfraReq>,
-  ): Effect.Effect<
-    ContainerApplication,
-    never,
-    self | Self<DurableObjectNamespace>
-  > & {
-    new (_: never): PolicyLike & {
-      LogicalId: LogicalId;
-    };
-    make<InfraReq = never, RuntimeReq = never>(
-      init: Effect.Effect<HttpEffect<RuntimeReq>, never, InfraReq>,
-    ): Layer.Layer<self, never, InfraReq | Provider<ContainerApplication>>;
-  } => {
-    class Self extends ServiceMap.Service<self, any>()(`Container<${id}>`) {}
-    return class {
-      static readonly make = <InfraReq = never, RuntimeReq = never>(
-        init: Effect.Effect<HttpEffect<RuntimeReq>, never, InfraReq>,
-      ): Layer.Layer<self, never, InfraReq> => Layer.effect(Self, init);
-
-      static [Symbol.iterator](): Iterator<
-        Effect.Yieldable<any, void, never, self>,
-        ContainerApplication,
-        void
-      > {
-        return new SingleShotGen(this) as any;
-      }
-
-      static asEffect() {
-        return Effect.gen(function* () {
-          const namespace = yield* DurableObjectNamespace.Self;
-
-          const containerProps = Output.asOutput(props).pipe(
-            Output.map((props) => ({
-              ...props,
-              durableObjects:
-                props.durableObjects ??
-                ({
-                  namespaceId: namespace.namespaceId,
-                } as const),
-            })),
+  const serve = <Req = never>(handler: HttpEffect<Req>) =>
+    Effect.sync(() => {
+      runners.push(
+        Effect.gen(function* () {
+          const httpServer = yield* Effect.serviceOption(HttpServer).pipe(
+            Effect.map(Option.getOrUndefined),
           );
+          if (httpServer) {
+            yield* httpServer.serve(handler);
+            const port = yield* Config.number("PORT").pipe(
+              Config.withDefault(3000),
+            );
 
-          const resource = yield* ContainerApplication(id, containerProps);
+            BunHttpServer.make({});
+            const server = yield* NodeHttpServer.make(Http.createServer, {
+              port,
+            });
+            yield* server.serve(handler as any);
+            yield* Effect.never;
+          } else {
+            // this should only happen at plantime, validate?
+          }
+        }).pipe(Effect.orDie),
+      );
+    });
 
-          // TODO(sam): register this in the Container Execution Context
-          // const _httpEffect = yield* init;
-          return Object.assign(resource, {
-            // fetch: httpEffect,
-            asEffect: () =>
-              Effect.gen(function* () {
-                const state = yield* DurableObjectState;
-                return {
-                  running: Effect.sync(() => state.container!.running ?? false),
-                  destroy: (error?: any) =>
-                    Effect.promise(() => state.container!.destroy(error)),
-                  signal: (signo: number) =>
-                    Effect.sync(() => state.container!.signal(signo)),
-                  getTcpPort: (port: number) =>
-                    Effect.sync(() =>
-                      fromCloudflareFetcher(state.container!.getTcpPort(port)),
-                    ),
-                  setInactivityTimeout: (durationMs: number | bigint) =>
-                    Effect.sync(() =>
-                      state.container!.setInactivityTimeout(durationMs),
-                    ),
-                  interceptOutboundHttp: (addr: string, binding: cf.Fetcher) =>
-                    Effect.sync(() =>
-                      state.container!.interceptOutboundHttp(addr, binding),
-                    ),
-                  interceptAllOutboundHttp: (binding: cf.Fetcher) =>
-                    Effect.sync(() =>
-                      state.container!.interceptAllOutboundHttp(binding),
-                    ),
-                  monitor: () => Effect.sync(() => state.container!.monitor()),
-                  start: (options?: cf.ContainerStartupOptions) =>
-                    Effect.sync(() => state.container!.start(options)),
-                } satisfies Container;
+  return {
+    Type: ContainerTypeId,
+    id,
+    env,
+    set: (bindingId: string, output: Output.Output) =>
+      Effect.sync(() => {
+        const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
+        env[key] = output.pipe(Output.map((value) => JSON.stringify(value)));
+        return key;
+      }),
+    get: <T>(key: string) =>
+      Config.string(key)
+        .asEffect()
+        .pipe(
+          Effect.flatMap((value) =>
+            Effect.try({
+              try: () => JSON.parse(value) as T,
+              catch: (error) => error as Error,
+            }),
+          ),
+          Effect.catch((cause) =>
+            Effect.die(
+              new Error(`Failed to get environment variable: ${key}`, {
+                cause,
               }),
-          }) as ContainerApplication;
-        });
-      }
-    };
+            ),
+          ),
+        ),
+    run: ((effect: Effect.Effect<void, never, any>) =>
+      Effect.sync(() => {
+        runners.push(effect);
+      })) as unknown as Server.ProcessContext["run"],
+    serve,
+  } as Server.ProcessContext & {
+    serve: typeof serve;
   };
+});
 
-export const initContainer = Effect.fnUntraced(function* (
-  containerApplication: ContainerApplication,
+export const bindContainer = Effect.fnUntraced(function* <Req = never>(
+  containerEff:
+    | ContainerApplication
+    | Effect.Effect<ContainerApplication, never, Req>,
+) {
+  const namespace = yield* DurableObjectNamespace.Self;
+
+  const container = Effect.isEffect(containerEff)
+    ? yield* containerEff
+    : containerEff;
+
+  yield* container.bind`DurableObject(${namespace})`({
+    durableObjects: {
+      namespaceId: namespace.namespaceId,
+    },
+  });
+
+  // TODO(sam): register this in the Container Execution Context
+  // const _httpEffect = yield* init;
+  return Effect.gen(function* () {
+    const state = yield* DurableObjectState;
+    return {
+      running: Effect.sync(() => state.container!.running ?? false),
+      destroy: (error?: any) =>
+        Effect.promise(() => state.container!.destroy(error)),
+      signal: (signo: number) =>
+        Effect.sync(() => state.container!.signal(signo)),
+      getTcpPort: (port: number) =>
+        Effect.sync(() =>
+          fromCloudflareFetcher(state.container!.getTcpPort(port)),
+        ),
+      setInactivityTimeout: (durationMs: number | bigint) =>
+        Effect.sync(() => state.container!.setInactivityTimeout(durationMs)),
+      interceptOutboundHttp: (addr: string, binding: cf.Fetcher) =>
+        Effect.sync(() =>
+          state.container!.interceptOutboundHttp(addr, binding),
+        ),
+      interceptAllOutboundHttp: (binding: cf.Fetcher) =>
+        Effect.sync(() => state.container!.interceptAllOutboundHttp(binding)),
+      monitor: () => Effect.sync(() => state.container!.monitor()),
+      start: (options?: cf.ContainerStartupOptions) =>
+        Effect.sync(() => state.container!.start(options)),
+    } satisfies Container;
+  });
+});
+
+/**
+ * Runs the Container in a Durable Object and monitors it, providing a durable fetch and RPC interface to it.
+ */
+export const runContainer = Effect.fnUntraced(function* <Req = never>(
+  containerEff: Effect.Effect<Container, never, Req | DurableObjectState>,
 ) {
   // get the container instance
-  const container = yield* containerApplication.container;
+  const container = yield* containerEff;
   const monitor = yield* SynchronizedRef.make<
     Fiber<void | void[], ContainerError> | undefined
   >(undefined);
@@ -358,7 +398,7 @@ export const initContainer = Effect.fnUntraced(function* (
 
   return {
     ...container,
-    getTcpSocket: (portNumber: number) =>
+    getTcpPort: (portNumber: number) =>
       Effect.map(container.getTcpPort(portNumber), (port) => ({
         fetch: ((
           request:
@@ -430,12 +470,11 @@ export interface Rollout {
 }
 
 export const ContainerProvider = () =>
-  ContainerApplication.provider.effect(
+  Container.provider.effect(
     Effect.gen(function* () {
       const accountId = yield* Account;
       const dotAlchemy = yield* DotAlchemy;
       const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
       const createContainerApplication =
         yield* Containers.createContainerApplication;
       const updateContainerApplication =
@@ -530,12 +569,83 @@ export const ContainerProvider = () =>
         return `${registryId}/${accountId}/${repositoryName}:${hash}`;
       });
 
-      const bundleProgram = (id: string, main: string) =>
+      const bundleProgram = ({
+        id,
+        main,
+        runtime,
+        handler = "default",
+      }: {
+        id: string;
+        main: string;
+        runtime: "bun" | "node";
+        handler: string | undefined;
+      }) =>
         bundle({
           id,
           main,
           entryContent: (importPath) =>
-            `export { default } from "${importPath}";\n`,
+            `
+${runtime === "bun" ? 'import { BunServices } from "@effect/platform-bun";' : 'import { NodeServices } from "@effect/platform-node";'}
+import { Stack } from "alchemy-effect/Stack";
+import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as ServiceMap from "effect/ServiceMap";
+import { MinimumLogLevel } from "effect/References";
+
+import { ${handler} as layer } from "${importPath}";
+
+const platform = Layer.mergeAll(
+  ${runtime === "bun" ? "BunServices.layer" : "NodeServices.layer"},
+  FetchHttpClient.layer,
+  // TODO(sam): wire this up to telemetry more directly
+  Logger.layer([Logger.consolePretty()]),
+);
+
+const tag = ServiceMap.Service("${ContainerTypeId}<${id}>")
+
+const stack = Layer.effect(
+  Stack,
+  Effect.all([
+    Config.string("ALCHEMY_STACK_NAME").asEffect(),
+    Config.string("ALCHEMY_STAGE").asEffect()
+  ]).pipe(
+    Effect.map(([name, stage]) => ({
+      name,
+      stage,
+      bindings: {},
+      resources: {}
+    }))
+  )
+);
+
+const handlerEffect = tag.asEffect().pipe(
+  Effect.flatMap(func => func.ExecutionContext.exports.handler),
+  Effect.provide(
+    layer.pipe(
+      Layer.provideMerge(stack),
+      Layer.provideMerge(platform),
+      Layer.provideMerge(
+        Layer.succeed(
+          ConfigProvider.ConfigProvider,
+          ConfigProvider.fromEnv()
+        )
+      ),
+      Layer.provideMerge(
+        Layer.succeed(
+          MinimumLogLevel,
+          process.env.DEBUG ? "Debug" : "Info",
+        )
+      ),
+    )
+  ),
+  Effect.scoped
+);
+
+export default await Effect.runPromise(handlerEffect)`,
           build: {
             format: "esm",
             platform: "node",
@@ -590,7 +700,12 @@ export const ContainerProvider = () =>
           yield* session.note(`Building container image ${imageRef}...`);
         }
 
-        const { code } = yield* bundleProgram(id, main);
+        const { code } = yield* bundleProgram({
+          id,
+          main,
+          runtime,
+          handler: props.handler,
+        });
 
         const registryId = props.registryId ?? "registry.cloudflare.com";
         const finalDockerfile = buildFinalDockerfile(props.dockerfile, runtime);
@@ -681,7 +796,11 @@ export const ContainerProvider = () =>
         news: ContainerApplicationProps;
         name: string;
         configuration: Configuration;
-        durableObjects: ContainerApplicationProps["durableObjects"];
+        durableObjects:
+          | {
+              namespaceId: string;
+            }
+          | undefined;
         session: { note: (message: string) => Effect.Effect<void> };
       }) {
         const describeError = (error: unknown) => {
@@ -854,13 +973,31 @@ export const ContainerProvider = () =>
         return updated;
       });
 
-      return ContainerApplication.provider.of({
+      const getDurableObjects = (
+        bindings: ResourceBinding<ContainerApplication["Binding"]>[],
+      ) => {
+        const dos = bindings.flatMap((b) =>
+          b.data.durableObjects ? [b.data.durableObjects] : [],
+        );
+        if (dos.length === 1) {
+          return Effect.succeed(dos[0]);
+        }
+        return Effect.die(
+          new Error(
+            `A Container can only be bound to one Durable Object namespace. Found ${dos.length} namespaces in bindings: ${bindings.map((b) => b.data.durableObjects?.namespaceId).join(", ")}`,
+          ),
+        );
+      };
+
+      return Container.provider.of({
         stables: ["applicationId", "accountId"],
         diff: Effect.fnUntraced(function* ({
           id,
           olds = {},
           news = {},
           output,
+          newBindings,
+          oldBindings,
         }) {
           const name = yield* createApplicationName(id, news.name);
           const oldName = output?.applicationName
@@ -874,9 +1011,8 @@ export const ContainerProvider = () =>
             return { action: "replace" } as const;
           }
 
-          const durableObjects = news.durableObjects;
-          const oldDurableObjects =
-            output?.durableObjects ?? olds.durableObjects;
+          const durableObjects = yield* getDurableObjects(newBindings);
+          const oldDurableObjects = yield* getDurableObjects(oldBindings);
           if (
             stableStringify(durableObjects) !==
             stableStringify(oldDurableObjects)
@@ -932,6 +1068,7 @@ export const ContainerProvider = () =>
         create: Effect.fnUntraced(function* ({
           id,
           news = {},
+          bindings,
           output,
           session,
         }) {
@@ -940,7 +1077,8 @@ export const ContainerProvider = () =>
           yield* Effect.logInfo(
             `Cloudflare Container create: starting ${name}${adopt ? " with adopt" : ""}`,
           );
-          const durableObjects = news.durableObjects;
+          // const durableObjects = news.durableObjects;
+          const durableObjects = yield* getDurableObjects(bindings);
           const configuration = yield* desiredConfiguration(id, news);
 
           if (
