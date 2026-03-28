@@ -176,7 +176,6 @@ export const Platform = <P extends Platform.Class<any, any, any>>(): P =>
 
       const resource = Resource(type);
       const Platform = ExecutionContext<Platform>(type);
-      const self = Self<R>(type);
 
       const constructor = (id?: string, props?: Props, impl?: Impl) => {
         if (!id) {
@@ -217,7 +216,7 @@ export const Platform = <P extends Platform.Class<any, any, any>>(): P =>
 
       const makeClass = (id: string, props: Props) => {
         return class Platform {
-          static readonly Self = ServiceMap.Service<Self, R>(`${type}<${id}>`);
+          static readonly Self = Self(`${type}<${id}>`);
           static readonly Platform = ServiceMap.Service<Platform, Platform>(
             `Platform<${type}<${id}>>`,
           );
@@ -233,8 +232,9 @@ export const Platform = <P extends Platform.Class<any, any, any>>(): P =>
             // @ts-expect-error
             return pipe(this.asEffect(), ...args);
           }
-          static make = (impl: Impl) =>
-            Layer.effect(
+          static make = (impl: Impl) => {
+            // build the Layer once for the root Self
+            const SelfLayer = Layer.effect(
               Self,
               Effect.flatMap(
                 Effect.all([
@@ -284,6 +284,21 @@ export const Platform = <P extends Platform.Class<any, any, any>>(): P =>
                 }),
               ),
             );
+            const self = Self.asEffect() as any; // TODO(sam): why do we need to cast?
+
+            return Layer.provideMerge(
+              Layer.mergeAll(
+                // sets the Context for all self-hierarchies
+                // Self
+                // Self<Cloudflare.Worker>
+                // Self<Cloudflare.Worker<Api>>
+                Layer.effect(Self<R>(type), self),
+                Layer.effect(Self<R>(`${type}<${id}>`), self),
+              ),
+              // provide here so we build once and just mirror
+              SelfLayer,
+            );
+          };
         };
       };
 

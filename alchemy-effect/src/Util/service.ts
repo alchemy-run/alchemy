@@ -8,8 +8,7 @@ export const GenericService =
   >() =>
   <Kind extends string>(Kind: string): ReturnType<Fn> & Fn => {
     const service = ServiceMap.Service<any, any>(Kind);
-    const make = ({ Type }: { Type: string }) =>
-      ServiceMap.Service(`${Kind}<${Type}>`);
+    const make = (Type: string) => ServiceMap.Service(`${Kind}<${Type}>`);
     return Object.assign(
       Object.setPrototypeOf(make, service),
       service,

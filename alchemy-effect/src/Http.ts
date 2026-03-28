@@ -13,6 +13,13 @@ import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as NodeHttp from "node:http";
 
+// TODO(sam): move to this https://github.com/Effect-TS/effect/blob/main/packages/platform/README.md#http-server
+// import * as HttpServer from "effect/unstable/http/HttpServer";
+
+// Effect.gen(function* () {
+//   yield* HttpServer.serve()()
+// });
+
 export type HttpEffect<Req = never> = Effect.Effect<
   HttpServerResponse.HttpServerResponse,
   HttpServerError | HttpBodyError,

@@ -11,29 +11,6 @@ import * as Socket from "effect/unstable/socket/Socket";
 import * as Http from "../../Http.ts";
 import { isWorkerEvent } from "./Worker.ts";
 
-// export const HttpServer: Layer.Layer<
-//   Http.HttpServer,
-//   never,
-//   WorkerEnvironment
-// > = Layer.effect(
-//   Http.HttpServer,
-//   Effect.gen(function* () {
-//     const worker = yield* Worker.Context;
-//     return Http.server({
-//       serve: (handler) =>
-//         worker.listen((event) => {
-//           if (isWorkerEvent(event) && event.type === "fetch") {
-//             const webRequest = event.input;
-//             return serveWebRequest(webRequest, handler, {
-//               remoteAddress:
-//                 webRequest.headers.get("cf-connecting-ip") ?? undefined,
-//             });
-//           }
-//         }),
-//     });
-//   }),
-// ) as any;
-
 export const workersHttpHandler = <Req = never>(
   handler: Http.HttpEffect<Req>,
 ) => {

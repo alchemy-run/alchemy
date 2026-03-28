@@ -49,7 +49,7 @@ export const ApiLive = Api.make(
         //     });
         //   }
         // }
-        return HttpServerResponse.text("Not found", { status: 404 });
+        return HttpServerResponse.text("Hello World", { status: 200 });
       }),
     };
   }).pipe(

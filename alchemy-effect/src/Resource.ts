@@ -13,6 +13,9 @@ import { RemovalPolicy } from "./RemovalPolicy.ts";
 import { Self } from "./Self.ts";
 import { Stack } from "./Stack.ts";
 
+/** Node/Bun `util.inspect` / `console.log` hook for Resource proxies */
+const nodeInspect = Symbol.for("nodejs.util.inspect.custom");
+
 export type ResourceConstructor<R extends ResourceLike, Req = never> = {
   Props: R["Props"];
   (
@@ -195,26 +198,53 @@ export function Resource<R extends ResourceLike>(
               );
             };
 
-      const Resource: R = (stack.resources[fqn] = new Proxy(
-        {
-          Type: type,
-          Namespace: namespace,
-          FQN: fqn,
-          LogicalId: id,
-          Props: props,
-          Provider: ProviderTag as Provider<any>,
-          RemovalPolicy: yield* Effect.serviceOption(RemovalPolicy).pipe(
-            Effect.map(Option.getOrElse(() => "destroy" as const)),
-          ),
-          bind,
-        } as any,
-        {
-          get: (target, prop) =>
-            typeof prop === "symbol" || prop in target
-              ? target[prop as keyof typeof target]
-              : new Output.PropExpr<any, string>(Output.of(Resource), prop),
+      const target: any = {
+        Type: type,
+        Namespace: namespace,
+        FQN: fqn,
+        LogicalId: id,
+        Props: props,
+        Provider: ProviderTag as Provider<any>,
+        RemovalPolicy: yield* Effect.serviceOption(RemovalPolicy).pipe(
+          Effect.map(Option.getOrElse(() => "destroy" as const)),
+        ),
+        bind,
+        toString(this: typeof target) {
+          return `Resource<${this.Type}>(${this.LogicalId})`;
         },
-      )) as R;
+        [Symbol.toPrimitive](this: typeof target, hint: string) {
+          return hint === "number" ? NaN : this.toString();
+        },
+        [nodeInspect](
+          depth: number,
+          options: { depth?: number | null } & Record<string, unknown>,
+          inspect: (value: unknown, opts?: unknown) => string,
+        ) {
+          if (depth < 0) {
+            return target.toString();
+          }
+          const nextDepth =
+            options.depth == null ? null : Math.max(0, options.depth - 1);
+          return inspect(
+            {
+              Type: target.Type,
+              Namespace: target.Namespace,
+              FQN: target.FQN,
+              LogicalId: target.LogicalId,
+              Props: target.Props,
+              RemovalPolicy: target.RemovalPolicy,
+            },
+            { ...options, depth: nextDepth },
+          );
+        },
+      };
+
+      const Resource: R = (stack.resources[fqn] = new Proxy(target, {
+        get: (t, prop) =>
+          typeof prop === "symbol" || prop in t
+            ? t[prop as keyof typeof t]
+            : new Output.PropExpr<any, string>(Output.of(Resource), prop),
+      })) as R;
       Resource.Props = Effect.isEffect(props)
         ? yield* props.pipe(
             Effect.provideService(Self, Resource),

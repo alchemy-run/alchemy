@@ -23,6 +23,8 @@ import type { Input } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
+import { Self } from "../../Self.ts";
+import { Stack } from "../../Stack.ts";
 import { sha256 } from "../../Util/index.ts";
 import { Account } from "../Account.ts";
 import type { AssetsConfig, AssetsProps } from "./Assets.ts";
@@ -310,6 +312,7 @@ export const Worker = Serverless.Function<Worker, WorkerEnvironment>(
 export const WorkerProvider = () =>
   Worker.provider.effect(
     Effect.gen(function* () {
+      const stack = yield* Stack;
       const accountId = yield* Account;
       const getSubdomain = yield* workers.getSubdomain;
       const getScript = yield* workers.getScript;
@@ -432,18 +435,19 @@ import { NodeServices } from "@effect/platform-node";
 import { Stack } from "alchemy-effect/Stack";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
-import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
-import * as Region from "@distilled.cloud/aws/Region";
 import * as ServiceMap from "effect/ServiceMap";
 import { MinimumLogLevel } from "effect/References";
+import * as Console from "effect/Console";
+import { WorkerConfigProvider } from "alchemy-effect/Cloudflare";
+import { env } from "cloudflare:workers";
 
-import workerExport from "${importPath}";
+import layer from "${importPath}";
 
-const tag = ServiceMap.Service("${WorkerTypeId}<${id}>")
+const tag = ServiceMap.Service("${Self.key}")
 
 const platform = Layer.mergeAll(
   NodeServices.layer,
@@ -452,38 +456,36 @@ const platform = Layer.mergeAll(
   Logger.layer([Logger.consolePretty()]),
 );
 
-const stack = Layer.effect(
+const stack = Layer.succeed(
   Stack,
-  Effect.all([
-    Config.string("ALCHEMY_STACK_NAME").asEffect(),
-    Config.string("ALCHEMY_STAGE").asEffect()
-  ]).pipe(
-    Effect.map(([name, stage]) => ({
-      name,
-      stage,
-      bindings: {},
-      resources: {}
-    }))
-  )
+  {
+    name: "${stack.name}",
+    stage: "${stack.stage}",
+    bindings: {},
+    resources: {}
+  }
 );
 
+import util from "node:util";
+
 const handlerEffect = tag.asEffect().pipe(
-  Effect.flatMap(func => func.ExecutionContext.exports.handler),
+  Effect.flatMap(func => func.ExecutionContext.exports),
+  Effect.map(exports => exports.default),
   Effect.provide(
     layer.pipe(
       Layer.provideMerge(stack),
       // TODO(sam): additional credentials?
       Layer.provideMerge(platform),
       Layer.provideMerge(
-        Layer.succeed(
+        Layer.effect(
           ConfigProvider.ConfigProvider,
-          ConfigProvider.fromEnv()
+          WorkerConfigProvider()
         )
       ),
       Layer.provideMerge(
         Layer.succeed(
           MinimumLogLevel,
-          process.env.DEBUG ? "Debug" : "Info",
+          env.DEBUG ? "Debug" : "Info",
         )
       ),
     )
@@ -491,33 +493,25 @@ const handlerEffect = tag.asEffect().pipe(
   Effect.scoped
 );
 
+// TODO(sam): we could kick this off during module init, but any I/O will break deploy
+// let workerPromise = Effect.runPromise(handlerEffect);
+
+// for now, we delay initializing the worker until the first request
 let workerPromise;
+
 // don't initialize the workerEffect during module init because Cloudflare does not allow I/O during module init
 // we cache it synchronously (??=) to guarnatee only one initialization ever happens
-const resolveWorker = () => {
-  if (workerPromise) return workerPromise;
-  // Support both Effect-based workers and plain object exports
-  workerPromise = Effect.runPromise(handlerEffect);
-}
+const worker = () => (workerPromise ??= Effect.runPromise(handlerEffect))
 
 export default {
-  fetch: async (...args) => {
-    console.log("workerExport", Object.keys(workerExport));
-    const worker = await resolveWorker();
-    console.log("worker", worker, worker.fetch, JSON.stringify(worker));
-    const response = worker.fetch?.(...args) ?? Promise.resolve(new Response("Not Found", { status: 404 }));
-    console.log("response", response, typeof response);
-    return response
-      .then(result => { console.log("fetch success", result); return result; })
-      .catch(error => { console.error("fetch error", error); throw error; })
-  },
-  queue: async (...args) => (await resolveWorker()).queue?.(...args),
-  scheduled: async (...args) => (await resolveWorker()).scheduled?.(...args),
-  email: async (...args) => (await resolveWorker()).email?.(...args),
-  tail: async (...args) => (await resolveWorker()).tail?.(...args),
-  trace: async (...args) => (await resolveWorker()).trace?.(...args),
-  tailStream: async (...args) => (await resolveWorker()).tailStream?.(...args),
-  test: async (...args) => (await resolveWorker()).test?.(...args),
+  fetch: async (...args) => (await worker()).fetch(...args),
+  queue: async (...args) => (await worker()).queue(...args),
+  scheduled: async (...args) => (await worker()).scheduled(...args),
+  email: async (...args) => (await worker()).email(...args),
+  tail: async (...args) => (await worker()).tail(...args),
+  trace: async (...args) => (await worker()).trace(...args),
+  tailStream: async (...args) => (await worker()).tailStream(...args),
+  test: async (...args) => (await worker()).test(...args),
 };
 
 // export class proxy stubs for Durable Objects
@@ -605,6 +599,18 @@ ${props.exports?.map((id) => `export class ${id} {}`).join("\n") ?? ""}
             name: "ASSETS",
           });
         }
+        metadataBindings.push(
+          {
+            type: "plain_text",
+            name: "ALCHEMY_STACK_NAME",
+            text: stack.name,
+          },
+          {
+            type: "plain_text",
+            name: "ALCHEMY_STAGE",
+            text: stack.stage,
+          },
+        );
         yield* Effect.logInfo(
           `Cloudflare Worker ${olds ? "update" : "create"}: uploading script for ${name}`,
         );
@@ -613,7 +619,7 @@ ${props.exports?.map((id) => `export class ${id} {}`).join("\n") ?? ""}
           assets: metadataAssets,
           bindings: metadataBindings,
           bodyPart: undefined,
-          compatibilityDate: news.compatibility?.date,
+          compatibilityDate: news.compatibility?.date ?? "2026-03-10",
           compatibilityFlags: news.compatibility?.flags,
           keepAssets,
           keepBindings: undefined,
