@@ -3,8 +3,11 @@ import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
-export default Cloudflare.TanstackStart(
-  "Website",
+export default class Backend extends Cloudflare.TanstackStart<Backend>()(
+  "Backend",
+  {
+    main: import.meta.path,
+  },
   Effect.gen(function* () {
     const users = yield* Users;
 
@@ -19,9 +22,9 @@ export default Cloudflare.TanstackStart(
       }),
     };
   }),
-);
+) {}
 
-export const Users = Cloudflare.DurableObjectNamespace(
+export class Users extends Cloudflare.DurableObjectNamespace<Users>()(
   "Users",
   Effect.gen(function* () {
     // Namespace
@@ -32,9 +35,9 @@ export const Users = Cloudflare.DurableObjectNamespace(
       // Instance
       const state = yield* Cloudflare.DurableObjectState;
       return {
-        getProfile: () => state.storage.get<any>("Profile"),
+        getProfile: () => state.storage.get<string>("Profile"),
         putProfile: (value: string) => state.storage.put("Profile", value),
       };
     });
   }),
-);
+) {}

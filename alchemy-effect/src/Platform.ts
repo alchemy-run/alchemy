@@ -10,6 +10,7 @@ import {
   ExecutionContext,
   type BaseExecutionContext,
 } from "./ExecutionContext.ts";
+import type { HttpEffect } from "./Http.ts";
 import type { Provider } from "./Provider.ts";
 import {
   Resource,
@@ -19,6 +20,10 @@ import {
 import { Self } from "./Self.ts";
 import type { Stack, StackServices } from "./Stack.ts";
 import type { Stage } from "./Stage.ts";
+
+export type Main<Services = never> = {
+  [key in string]?: key extends "fetch" ? HttpEffect<Services> : any;
+};
 
 export type Rpc<Shape> = {
   "~alchemy-effect/rpc": Shape;
@@ -63,6 +68,7 @@ export interface Platform<
         Provider<Resource> | Exclude<PropsReq | InitReq, Services>
       >;
       new (_: never): Shape & BaseShape;
+      promise(): Promise<Self>;
     };
   };
   <Self>(): {
@@ -78,6 +84,7 @@ export interface Platform<
       Provider<Resource> | PropsReq | Exclude<InitReq, Services>
     > & {
       new (_: never): Shape & BaseShape;
+      promise(): Promise<Self>;
     };
     <Shape, PropsReq = never>(
       id: string,
@@ -97,6 +104,7 @@ export interface Platform<
         Provider<Resource> | Exclude<PropsReq | InitReq, Services>
       >;
       new (_: never): Shape & BaseShape;
+      promise(): Promise<Self>;
     } & (<InitReq = never>(
         impl: Effect.Effect<Shape, never, InitReq>,
       ) => Effect.Effect<
@@ -115,7 +123,9 @@ export interface Platform<
     Resource & Rpc<Shape>,
     never,
     Provider<Resource> | PropsReq | Exclude<InitReq, Services>
-  >;
+  > & {
+    promise(): Promise<Shape>;
+  };
 }
 
 export const Platform = <

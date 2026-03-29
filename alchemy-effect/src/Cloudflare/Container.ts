@@ -30,7 +30,12 @@ import { DotAlchemy } from "../Config.ts";
 import { HttpServer, type HttpEffect } from "../Http.ts";
 import * as Output from "../Output.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
-import { Platform, type PlatformServices, type Rpc } from "../Platform.ts";
+import {
+  Platform,
+  type Main,
+  type PlatformServices,
+  type Rpc,
+} from "../Platform.ts";
 import { Resource, type ResourceBinding } from "../Resource.ts";
 import * as Server from "../Server/index.ts";
 import { sha256Object } from "../Util/sha256.ts";
@@ -215,9 +220,7 @@ export type ContainerServices =
   | PlatformServices
   | Server.ProcessServices;
 
-export type ContainerShape = {
-  fetch?: HttpEffect<ContainerServices>;
-};
+export type ContainerShape = Main<ContainerServices>;
 
 export interface ContainerApplication<Shape = unknown> extends Resource<
   ContainerTypeId,

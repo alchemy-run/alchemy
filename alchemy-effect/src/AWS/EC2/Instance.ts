@@ -11,9 +11,8 @@ import * as Stream from "effect/Stream";
 import { Bundler, type BundleOptions } from "../../Bundle/Bundler.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { DotAlchemy } from "../../Config.ts";
-import type { HttpEffect } from "../../Http.ts";
 import type { Input } from "../../Input.ts";
-import { Platform } from "../../Platform.ts";
+import { Platform, type Main } from "../../Platform.ts";
 import { Resource } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
@@ -255,9 +254,7 @@ export interface Instance extends Resource<
 
 export type InstanceServices = Credentials | Region;
 
-export type InstanceShape = {
-  fetch?: HttpEffect<InstanceServices>;
-};
+export type InstanceShape = Main<InstanceServices>;
 
 export type InstanceExecutionContext = Ec2HostExecutionContext;
 

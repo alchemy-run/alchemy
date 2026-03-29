@@ -22,9 +22,6 @@ export class JobFunction extends AWS.Lambda.Function<JobFunction>()(
     main: import.meta.path,
     memory: stack.stage === "prod" ? 1024 : 512,
   })),
-) {}
-
-export default JobFunction.make(
   Effect.gen(function* () {
     const jobStorage = yield* JobStorage;
     const notifications = yield* JobNotifications;
@@ -118,4 +115,4 @@ export default JobFunction.make(
       ),
     ),
   ),
-);
+) {}

@@ -1,28 +1,27 @@
 import * as AWS from "alchemy-effect/AWS";
-import * as Http from "alchemy-effect/Http";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { JobsQueue, JobsQueueLive } from "./JobsQueue.ts";
 
-export class ApiTask extends AWS.ECS.Task<ApiTask>()("ApiTask", {
-  main: import.meta.path,
-  cpu: 512,
-  memory: 1024,
-  port: 3000,
-  docker: {
-    instructions: [["workdir", "/app"] as const],
+export default class ApiTask extends AWS.ECS.Task<ApiTask>()(
+  "ApiTask",
+  {
+    main: import.meta.path,
+    cpu: 512,
+    memory: 1024,
+    port: 3000,
+    docker: {
+      instructions: [["workdir", "/app"] as const],
+    },
   },
-}) {}
-
-export const ApiTaskLive = ApiTask.make(
   Effect.gen(function* () {
     const queue = yield* JobsQueue;
     const sendMessage = yield* AWS.SQS.SendMessage.bind(queue);
 
-    yield* Http.serve(
-      Effect.gen(function* () {
+    return {
+      fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
         const url = new URL(request.url);
 
@@ -59,14 +58,8 @@ export const ApiTaskLive = ApiTask.make(
           ),
         ),
       ),
-    );
+    };
   }).pipe(
-    Effect.provide(
-      Layer.mergeAll(
-        AWS.ECS.HttpServer,
-        JobsQueueLive,
-        AWS.SQS.SendMessageLive,
-      ),
-    ),
+    Effect.provide(Layer.mergeAll(JobsQueueLive, AWS.SQS.SendMessageLive)),
   ),
-);
+) {}

@@ -21,7 +21,12 @@ import type { HttpEffect } from "../../Http.ts";
 import type { Input } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import { Platform, type PlatformServices, type Rpc } from "../../Platform.ts";
+import {
+  Platform,
+  type Main,
+  type PlatformServices,
+  type Rpc,
+} from "../../Platform.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
@@ -165,9 +170,7 @@ export interface WorkerExecutionContext extends Serverless.FunctionContext {
 
 export type WorkerServices = Worker | WorkerEnvironment | PlatformServices;
 
-export type WorkerShape = {
-  [key in string]?: key extends "fetch" ? HttpEffect<WorkerServices> : any;
-};
+export type WorkerShape = Main<WorkerServices>;
 
 export interface Worker extends Resource<
   WorkerTypeId,

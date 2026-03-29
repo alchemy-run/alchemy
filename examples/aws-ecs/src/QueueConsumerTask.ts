@@ -5,8 +5,8 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import { JobsQueue } from "./JobsQueue.ts";
 
-export class QueuePollerTask extends AWS.ECS.Task<QueuePollerTask>()(
-  "QueuePollerTask",
+export class QueueConsumerTask extends AWS.ECS.Task<QueueConsumerTask>()(
+  "QueueConsumerTask",
   {
     main: import.meta.path,
     cpu: 256,
@@ -18,8 +18,7 @@ export class QueuePollerTask extends AWS.ECS.Task<QueuePollerTask>()(
   },
 ) {}
 
-export const QueuePollerTaskLive = QueuePollerTask.make(
-  // @ts-expect-error
+export const QueueConsumerTaskLive = QueueConsumerTask.make(
   Effect.gen(function* () {
     const queue = yield* JobsQueue;
     yield* AWS.SQS.messages(queue, {

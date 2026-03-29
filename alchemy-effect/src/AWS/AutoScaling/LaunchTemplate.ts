@@ -7,9 +7,8 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import { Bundler, type BundleOptions } from "../../Bundle/Bundler.ts";
 import { DotAlchemy } from "../../Config.ts";
-import type { HttpEffect } from "../../Http.ts";
 import type { Input } from "../../Input.ts";
-import { Platform } from "../../Platform.ts";
+import { Platform, type Main } from "../../Platform.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
@@ -127,9 +126,7 @@ export interface LaunchTemplate extends Resource<
 
 export type LaunchTemplateServices = Credentials | Region;
 
-export type LaunchTemplateShape = {
-  fetch?: HttpEffect<LaunchTemplateServices>;
-};
+export type LaunchTemplateShape = Main<LaunchTemplateServices>;
 
 export type LaunchTemplateExecutionContext = Ec2HostExecutionContext;
 

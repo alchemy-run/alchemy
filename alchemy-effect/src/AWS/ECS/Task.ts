@@ -20,9 +20,8 @@ import {
   createTempBundleDir,
 } from "../../Bundle/TempRoot.ts";
 import { DotAlchemy } from "../../Config.ts";
-import type { HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
-import { Platform } from "../../Platform.ts";
+import { Platform, type Main } from "../../Platform.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import type { ProcessContext } from "../../Server/Process.ts";
@@ -153,9 +152,7 @@ export interface Task extends Resource<
 
 export type TaskServices = Credentials | Region;
 
-export type TaskShape = {
-  fetch?: HttpEffect<TaskServices>;
-};
+export type TaskShape = Main<TaskServices>;
 
 export interface TaskExecutionContext extends ProcessContext {
   readonly Type: "AWS.ECS.Task";

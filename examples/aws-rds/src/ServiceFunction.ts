@@ -7,16 +7,13 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Database, DatabaseAurora } from "./Database.ts";
 import { NetworkLive } from "./Network.ts";
 
-export class ServiceFunction extends AWS.Lambda.Function<ServiceFunction>()(
+export default class ServiceFunction extends AWS.Lambda.Function<ServiceFunction>()(
   "ServiceFunction",
   Stack.useSync((stack) => ({
     main: import.meta.path,
     memory: stack.stage === "prod" ? 1024 : 512,
-    runtime: stack.stage === "prod" ? "nodejs24.x" : "nodejs22.x",
+    runtime: "nodejs24.x",
   })),
-) {}
-
-export const ServiceFunctionLive = ServiceFunction.make(
   Effect.gen(function* () {
     const db = yield* Database;
 
@@ -68,6 +65,4 @@ export const ServiceFunctionLive = ServiceFunction.make(
       ),
     ),
   ),
-);
-
-export default ServiceFunctionLive;
+) {}

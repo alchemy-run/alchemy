@@ -35,19 +35,17 @@ export interface DurableObjectNamespace<Shape = unknown> {
   Type: TypeId;
   name: string;
   namespaceId: Output.Output<string>;
-  getByName: (
-    name: string,
-  ) => Effect.Effect<DurableObjectStub<Shape>, never, Worker>;
-  newUniqueId: () => Effect.Effect<DurableObjectId, never, Worker>;
-  idFromName: (name: string) => Effect.Effect<DurableObjectId, never, Worker>;
-  idFromString: (id: string) => Effect.Effect<DurableObjectId, never, Worker>;
+  getByName: (name: string) => Effect.Effect<DurableObjectStub<Shape>>;
+  newUniqueId: () => Effect.Effect<DurableObjectId>;
+  idFromName: (name: string) => Effect.Effect<DurableObjectId>;
+  idFromString: (id: string) => Effect.Effect<DurableObjectId>;
   get: (
     id: DurableObjectId,
     options?: DurableObjectNamespaceGetDurableObjectOptions,
-  ) => Effect.Effect<DurableObjectStub<Shape>, never, Worker>;
+  ) => Effect.Effect<DurableObjectStub<Shape>>;
   jurisdiction: (
     jurisdiction: DurableObjectJurisdiction,
-  ) => Effect.Effect<DurableObjectNamespace<Shape>, never, Worker>;
+  ) => Effect.Effect<DurableObjectNamespace<Shape>>;
 }
 
 export interface DurableObjectShape {
