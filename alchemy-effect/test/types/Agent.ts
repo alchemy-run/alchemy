@@ -6,6 +6,81 @@ import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as Socket from "effect/unstable/socket/Socket";
 import { Sandbox } from "./Sandbox.ts";
 
+const _agentEff = Effect.gen(function* () {
+  const agent1 = yield* Agent;
+  const _binding1 = yield* agent1.getByName("");
+  _binding1.getProfile();
+  const agent2 = yield* Agent2;
+  const _binding2 = yield* agent2.getByName("");
+  _binding2.getProfile();
+  const agent3 = yield* Agent3;
+  const _binding3 = yield* agent3.getByName("");
+  _binding3.getProfile();
+});
+
+const _gen = Effect.gen(function* () {
+  // bind the Sandbox Container to the Agent DO
+  const sandbox = yield* Cloudflare.bindContainer(Sandbox);
+
+  return Effect.gen(function* () {
+    const state = yield* Cloudflare.DurableObjectState;
+
+    // get the container instance
+    const container = yield* Cloudflare.runContainer(sandbox);
+
+    container.getTcpPort(1080);
+    container.getUser();
+
+    return {
+      getProfile: () => state.storage.get<string>("Profile"),
+    };
+  });
+});
+
+export const Agent2 = Cloudflare.DurableObjectNamespace(
+  "Agents",
+  Effect.gen(function* () {
+    // bind the Sandbox Container to the Agent DO
+    const sandbox = yield* Cloudflare.bindContainer(Sandbox);
+
+    return Effect.gen(function* () {
+      const state = yield* Cloudflare.DurableObjectState;
+
+      // get the container instance
+      const container = yield* Cloudflare.runContainer(sandbox);
+
+      container.getTcpPort(1080);
+      container.getUser();
+
+      return {
+        getProfile: () => state.storage.get<string>("Profile"),
+      };
+    });
+  }),
+);
+
+export class Agent3 extends Cloudflare.DurableObjectNamespace<Agent3>()(
+  "Agents",
+  Effect.gen(function* () {
+    // bind the Sandbox Container to the Agent DO
+    const sandbox = yield* Cloudflare.bindContainer(Sandbox);
+
+    return Effect.gen(function* () {
+      const state = yield* Cloudflare.DurableObjectState;
+
+      // get the container instance
+      const container = yield* Cloudflare.runContainer(sandbox);
+
+      container.getTcpPort(1080);
+      container.getUser();
+
+      return {
+        getProfile: () => state.storage.get<string>("Profile"),
+      };
+    });
+  }),
+) {}
+
 export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
   "Agents",
   Effect.gen(function* () {

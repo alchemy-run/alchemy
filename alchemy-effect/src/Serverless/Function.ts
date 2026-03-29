@@ -1,12 +1,6 @@
-import { Platform } from "../Platform.ts";
-
 import * as Effect from "effect/Effect";
 import type { BaseExecutionContext } from "../ExecutionContext.ts";
 import type { HttpEffect } from "../Http.ts";
-
-export interface Function extends Platform.Class<Function, FunctionContext> {}
-
-export const Function = Platform<Function>();
 
 export interface FunctionContext extends BaseExecutionContext {
   serve<Req = never>(handler: HttpEffect<Req>): Effect.Effect<void, never, Req>;

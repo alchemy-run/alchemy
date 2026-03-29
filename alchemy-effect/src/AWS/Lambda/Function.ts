@@ -16,6 +16,7 @@ import type { BundleOptions } from "../../Bundle/Bundler.ts";
 import type { HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import { Platform } from "../../Platform.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
@@ -95,6 +96,12 @@ export interface Function extends Resource<
   }
 > {}
 
+export type FunctionServices = Credentials | Region;
+
+export type FunctionShape = {
+  fetch?: HttpEffect<FunctionServices>;
+};
+
 /**
  * An AWS Lambda host resource that combines code bundling, IAM role
  * provisioning, and runtime binding collection.
@@ -119,9 +126,12 @@ export interface Function extends Resource<
  * });
  * ```
  */
-export const Function = Serverless.Function<Function, Credentials | Region>(
-  FunctionTypeId,
-)((id: string): Serverless.FunctionContext => {
+export const Function: Platform<
+  Function,
+  FunctionServices,
+  FunctionShape,
+  Serverless.FunctionContext
+> = Platform(FunctionTypeId, (id: string): Serverless.FunctionContext => {
   const listeners: Effect.Effect<Serverless.FunctionListener>[] = [];
   const env: Record<string, any> = {};
 

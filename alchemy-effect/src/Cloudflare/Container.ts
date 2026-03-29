@@ -30,6 +30,7 @@ import { DotAlchemy } from "../Config.ts";
 import { HttpServer, type HttpEffect } from "../Http.ts";
 import * as Output from "../Output.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
+import { Platform, type PlatformServices, type Rpc } from "../Platform.ts";
 import { Resource, type ResourceBinding } from "../Resource.ts";
 import * as Server from "../Server/index.ts";
 import { sha256Object } from "../Util/sha256.ts";
@@ -209,7 +210,16 @@ export interface ContainerApplicationProps {
   exports?: string[];
 }
 
-export type ContainerApplication = Resource<
+export type ContainerServices =
+  | ContainerApplication
+  | PlatformServices
+  | Server.ProcessServices;
+
+export type ContainerShape = {
+  fetch?: HttpEffect<ContainerServices>;
+};
+
+export interface ContainerApplication<Shape = unknown> extends Resource<
   ContainerTypeId,
   ContainerApplicationProps,
   {
@@ -239,11 +249,18 @@ export type ContainerApplication = Resource<
     };
     env?: Record<string, any>;
   }
->;
+> {
+  /** @internal phantom */
+  Shape: Shape;
+}
 
-export const Container = Server.Process<ContainerApplication>(
-  "Cloudflare.Container",
-)((id: string): Server.ProcessContext => {
+export const Container: Platform<
+  ContainerApplication,
+  ContainerServices,
+  ContainerShape,
+  Server.ProcessContext,
+  Container
+> = Platform("Cloudflare.Container", (id: string): Server.ProcessContext => {
   const runners: Effect.Effect<void, never, any>[] = [];
   const env: Record<string, any> = {};
 
@@ -311,12 +328,12 @@ export const Container = Server.Process<ContainerApplication>(
   };
 });
 
-export const bindContainer = Effect.fnUntraced(function* <Req = never>(
+export const bindContainer = Effect.fnUntraced(function* <Shape, Req = never>(
   containerEff:
-    | ContainerApplication
-    | Effect.Effect<ContainerApplication, never, Req>,
+    | (ContainerApplication & Rpc<Shape>)
+    | Effect.Effect<ContainerApplication & Rpc<Shape>, never, Req>,
 ) {
-  const namespace = yield* DurableObjectNamespace.Self;
+  const namespace = yield* DurableObjectNamespace;
 
   const container = Effect.isEffect(containerEff)
     ? yield* containerEff
@@ -353,16 +370,17 @@ export const bindContainer = Effect.fnUntraced(function* <Req = never>(
       monitor: () => Effect.sync(() => state.container!.monitor()),
       start: (options?: cf.ContainerStartupOptions) =>
         Effect.sync(() => state.container!.start(options)),
-    } satisfies Container;
+    } satisfies Container as Shape;
   });
 });
 
 /**
  * Runs the Container in a Durable Object and monitors it, providing a durable fetch and RPC interface to it.
  */
-export const runContainer = Effect.fnUntraced(function* <Req = never>(
-  containerEff: Effect.Effect<Container, never, Req | DurableObjectState>,
-) {
+export const runContainer = Effect.fnUntraced(function* <
+  Shape extends Container,
+  Req = never,
+>(containerEff: Effect.Effect<Shape, never, Req | DurableObjectState>) {
   // get the container instance
   const container = yield* containerEff;
   const monitor = yield* SynchronizedRef.make<

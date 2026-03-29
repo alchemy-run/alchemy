@@ -1,34 +1,33 @@
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+
 import type * as cf from "@cloudflare/workers-types";
-import {
-  Bundler,
-  type Module as BundledModule,
-} from "@distilled.cloud/cloudflare-bundler";
+import { type Module as BundledModule } from "@distilled.cloud/cloudflare-bundler";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Path from "effect/Path";
 import * as ServiceMap from "effect/ServiceMap";
+import * as Serverless from "../../Serverless/index.ts";
+import * as Assets from "./Assets.ts";
+
+import { Bundler } from "@distilled.cloud/cloudflare-bundler";
 import {
   cleanupBundleTempDir,
   createTempBundleDir,
 } from "../../Bundle/TempRoot.ts";
-import type { ScopedPlanStatusSession } from "../../Cli/index.ts";
+import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { DotAlchemy } from "../../Config.ts";
-import * as Serverless from "../../Serverless/index.ts";
-
 import type { HttpEffect } from "../../Http.ts";
 import type { Input } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import { Platform, type PlatformServices, type Rpc } from "../../Platform.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
-import { Self } from "../../Self.ts";
 import { Stack } from "../../Stack.ts";
 import { sha256 } from "../../Util/index.ts";
 import { Account } from "../Account.ts";
 import type { AssetsConfig, AssetsProps } from "./Assets.ts";
-import * as Assets from "./Assets.ts";
 import { workersHttpHandler } from "./HttpServer.ts";
 import cloudflare_workers from "./cloudflare:workers.ts";
 
@@ -163,12 +162,11 @@ export interface WorkerExecutionContext extends Serverless.FunctionContext {
   export(name: string, value: any): Effect.Effect<void>;
 }
 
-export declare namespace Worker {
-  export type Platform = typeof Worker.Platform;
-  export type Props = typeof Worker.Props;
-  export type Self = typeof Worker.Self;
-  export type Services = typeof Worker.Services;
-}
+export type WorkerServices = Worker | WorkerEnvironment | PlatformServices;
+
+export type WorkerShape = {
+  fetch?: HttpEffect<WorkerServices>;
+};
 
 export interface Worker extends Resource<
   WorkerTypeId,
@@ -206,9 +204,12 @@ export interface Worker extends Resource<
  * });
  * ```
  */
-export const Worker = Serverless.Function<Worker, WorkerEnvironment>(
-  WorkerTypeId,
-)((id: string): WorkerExecutionContext => {
+export const Worker: Platform<
+  Worker,
+  WorkerServices,
+  WorkerShape,
+  WorkerExecutionContext
+> = Platform(WorkerTypeId, (id: string): WorkerExecutionContext => {
   const listeners: Effect.Effect<Serverless.FunctionListener>[] = [];
   const exports: Record<string, any> = {};
   const env: Record<string, any> = {};
@@ -308,6 +309,12 @@ export const Worker = Serverless.Function<Worker, WorkerEnvironment>(
   };
   return ctx;
 });
+
+export const bindWorker = <Shape extends WorkerShape, Req = never>(
+  worker:
+    | (Worker & Rpc<Shape>)
+    | Effect.Effect<Worker & Rpc<Shape>, never, Req>,
+): Effect.Effect<Shape, never, Req> => {};
 
 export const WorkerProvider = () =>
   Worker.provider.effect(
