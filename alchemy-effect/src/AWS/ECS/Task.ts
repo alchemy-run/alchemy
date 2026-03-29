@@ -20,11 +20,12 @@ import {
   createTempBundleDir,
 } from "../../Bundle/TempRoot.ts";
 import { DotAlchemy } from "../../Config.ts";
+import type { HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
+import { Platform } from "../../Platform.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
-import type { PlatformContext as ServerExecutionContext } from "../../Server/ExecutionContext.ts";
-import * as Server from "../../Server/Process.ts";
+import type { ProcessContext } from "../../Server/Process.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import { createInternalTags, createTagsList, hasTags } from "../../Tags.ts";
@@ -150,9 +151,18 @@ export interface Task extends Resource<
   }
 > {}
 
-export const Task = Server.Process<Task, Credentials | Region>("AWS.ECS.Task")((
-  id,
-) => {
+export type TaskServices = Credentials | Region;
+
+export type TaskShape = {
+  fetch?: HttpEffect<TaskServices>;
+};
+
+export interface TaskExecutionContext extends ProcessContext {
+  readonly Type: "AWS.ECS.Task";
+}
+
+export const Task: Platform<Task, TaskServices, TaskShape, TaskExecutionContext> =
+  Platform("AWS.ECS.Task", (id): TaskExecutionContext => {
   const runners: Effect.Effect<void, never, any>[] = [];
   const env: Record<string, any> = {};
 
@@ -184,16 +194,16 @@ export const Task = Server.Process<Task, Credentials | Region>("AWS.ECS.Task")((
             ),
           ),
         ),
-    run: ((effect: Effect.Effect<void, never, any>) =>
+    run: (effect: Effect.Effect<void, never, any>) =>
       Effect.sync(() => {
         runners.push(effect);
-      })) as unknown as ServerExecutionContext["run"],
+      }),
     exports: {
       program: Effect.all(runners, { concurrency: "unbounded" }).pipe(
         Effect.asVoid,
       ),
     },
-  } satisfies ServerExecutionContext;
+  };
 });
 
 export const TaskProvider = () =>

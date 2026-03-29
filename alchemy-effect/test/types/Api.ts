@@ -40,53 +40,13 @@ const _____ = Effect.gen(function* () {
     const rpc2 = yield* Cloudflare.bindWorker(worker2);
     rpc2.getUser();
   });
+
+  const worker3 = yield* Api3;
+  const _eff3 = Effect.gen(function* () {
+    const rpc3 = yield* Cloudflare.bindWorker(worker3);
+    rpc3.getUser();
+  });
 });
-
-const _gen = Effect.gen(function* () {
-  // (Infrastructure dependencies are bound here)
-
-  // bind the Agent DO to the Worker
-  const agents = yield* Agent;
-
-  return {
-    fetch: Effect.gen(function* () {
-      // (Business logic is implemented here and can reference bound infrastructure above)
-      const request = yield* HttpServerRequest;
-      if (request.url.startsWith("/connect/")) {
-        // connect to a Durable Object web socket
-        const agentId = request.url.split("/").pop()!;
-        const agent = yield* agents.getByName(agentId);
-        const response = yield* agent.fetch(request);
-        return response;
-      } else if (request.url.startsWith("/profile/")) {
-        // call RPC methods on a Durable Object
-        const key = request.url.split("/").pop()!;
-        const agent = yield* agents.getByName(key);
-        if (request.method == "GET") {
-          const item = yield* agent.getProfile();
-          if (item) {
-            return HttpServerResponse.text(item);
-          }
-        } else if (request.method == "PUT") {
-          yield* agent.putProfile(yield* request.text);
-          return HttpServerResponse.text("OK", { status: 200 });
-        } else {
-          return HttpServerResponse.text("Method not allowed", {
-            status: 405,
-          });
-        }
-      }
-      return HttpServerResponse.text("Hello World", { status: 200 });
-    }),
-  };
-}).pipe(
-  // Effect.provide(
-  //   Layer.mergeAll(
-  //     //
-  //     // AgentLive,
-  //   ),
-  // ),
-);
 
 // declare the Api service with a tag + props
 export default class Api extends Cloudflare.Worker<Api>()(
@@ -147,3 +107,23 @@ export default class Api extends Cloudflare.Worker<Api>()(
     // ),
   ),
 ) {}
+
+export class Api3 extends Cloudflare.Worker<
+  Api3,
+  {
+    getUser: () => Effect.Effect<{ id: string; name: string }>;
+  }
+>()("Api3", {
+  main: import.meta.path,
+  observability: {
+    enabled: true,
+  },
+}) {}
+
+export const Api3Live = Api3.make(
+  Effect.gen(function* () {
+    return {
+      getUser: () => Effect.succeed({ id: "123", name: "John Doe" } as const),
+    };
+  }),
+);

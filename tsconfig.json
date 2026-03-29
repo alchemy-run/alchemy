@@ -15,9 +15,6 @@
       "path": "./alchemy-effect/tsconfig.test.json"
     },
     {
-      "path": "./examples/aws-ec2-autoscaling/tsconfig.json"
-    },
-    {
       "path": "./examples/aws-ec2/tsconfig.json"
     },
     {

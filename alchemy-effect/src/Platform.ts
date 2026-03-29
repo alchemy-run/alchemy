@@ -79,6 +79,31 @@ export interface Platform<
     > & {
       new (_: never): Shape & BaseShape;
     };
+    <Shape, PropsReq = never>(
+      id: string,
+      props:
+        | Resource["Props"]
+        | Effect.Effect<Resource["Props"], never, PropsReq>,
+    ): Effect.Effect<
+      Resource & Rpc<Self>,
+      never,
+      Provider<Resource> | PropsReq
+    > & {
+      make<InitReq = never>(
+        impl: Effect.Effect<Shape, never, InitReq>,
+      ): Layer.Layer<
+        Self,
+        never,
+        Provider<Resource> | Exclude<PropsReq | InitReq, Services>
+      >;
+      new (_: never): Shape & BaseShape;
+    } & (<InitReq = never>(
+        impl: Effect.Effect<Shape, never, InitReq>,
+      ) => Effect.Effect<
+        Resource & Rpc<Self>,
+        never,
+        Provider<Resource> | PropsReq | Exclude<InitReq, Services>
+      >);
   };
   <Shape extends MainShape, PropsReq = never, InitReq = never>(
     id: string,

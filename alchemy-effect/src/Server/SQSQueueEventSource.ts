@@ -4,12 +4,12 @@ import * as Stream from "effect/Stream";
 
 import { Region } from "@distilled.cloud/aws/Region";
 import * as SQS from "../AWS/SQS/index.ts";
-import { Process } from "./Process.ts";
+import { ServerHost } from "./Process.ts";
 
 export const SQSQueueEventSource = Layer.effect(
   SQS.QueueEventSource,
   Effect.gen(function* () {
-    const platform = yield* Process.Platform;
+    const { run } = yield* ServerHost;
     const region = yield* Region;
 
     const ReceiveMessage = yield* SQS.ReceiveMessage;
@@ -27,7 +27,7 @@ export const SQSQueueEventSource = Layer.effect(
       const receiveMessage = yield* ReceiveMessage(queue);
       const deleteMessageBatch = yield* DeleteMessageBatch(queue);
 
-      yield* platform.run(
+      yield* run(
         Effect.forever(
           Effect.gen(function* () {
             const queueArn = yield* QueueArn;

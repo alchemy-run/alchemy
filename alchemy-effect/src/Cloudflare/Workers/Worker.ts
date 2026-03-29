@@ -1,17 +1,16 @@
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-
 import type * as cf from "@cloudflare/workers-types";
-import { type Module as BundledModule } from "@distilled.cloud/cloudflare-bundler";
+import {
+  Bundler,
+  type Module as BundledModule,
+} from "@distilled.cloud/cloudflare-bundler";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as ServiceMap from "effect/ServiceMap";
-import * as Serverless from "../../Serverless/index.ts";
-import * as Assets from "./Assets.ts";
-
-import { Bundler } from "@distilled.cloud/cloudflare-bundler";
+import * as Binding from "../../Binding.ts";
 import {
   cleanupBundleTempDir,
   createTempBundleDir,
@@ -24,10 +23,12 @@ import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Platform, type PlatformServices, type Rpc } from "../../Platform.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
+import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
 import { sha256 } from "../../Util/index.ts";
 import { Account } from "../Account.ts";
 import type { AssetsConfig, AssetsProps } from "./Assets.ts";
+import * as Assets from "./Assets.ts";
 import { workersHttpHandler } from "./HttpServer.ts";
 import cloudflare_workers from "./cloudflare:workers.ts";
 
@@ -165,7 +166,7 @@ export interface WorkerExecutionContext extends Serverless.FunctionContext {
 export type WorkerServices = Worker | WorkerEnvironment | PlatformServices;
 
 export type WorkerShape = {
-  fetch?: HttpEffect<WorkerServices>;
+  [key in string]?: key extends "fetch" ? HttpEffect<WorkerServices> : any;
 };
 
 export interface Worker extends Resource<
@@ -316,23 +317,50 @@ export const bindWorker = <Shape extends WorkerShape, Req = never>(
     | Effect.Effect<Worker & Rpc<Shape>, never, Req>,
 ): Effect.Effect<Shape, never, Req> => {};
 
+export class BindWorkerPolicy extends Binding.Policy<
+  BindWorkerPolicy,
+  (worker: Worker) => Effect.Effect<void>
+>()("Cloudflare.Worker.Bind") {}
+
+export const BindWorkerPolicyLive = BindWorkerPolicy.layer.succeed(
+  Effect.fn(function* (host, worker: Worker) {
+    if (isWorker(host)) {
+      yield* host.bind`Bind(${worker})`({
+        bindings: [
+          {
+            type: "service",
+            name: worker.LogicalId,
+            service: worker.workerName,
+          },
+        ],
+      });
+    } else {
+      return yield* Effect.die(
+        new Error(`BindWorkerPolicy does not support runtime '${host.Type}'`),
+      );
+    }
+  }),
+);
+
 export const WorkerProvider = () =>
   Worker.provider.effect(
     Effect.gen(function* () {
-      const stack = yield* Stack;
-      const accountId = yield* Account;
-      const getSubdomain = yield* workers.getSubdomain;
-      const getScript = yield* workers.getScript;
-      const listScripts = yield* workers.listScripts;
-      const putScript = yield* workers.putScript;
-      const deleteScript = yield* workers.deleteScript;
-      const getScriptSubdomain = yield* workers.getScriptSubdomain;
-      const createScriptSubdomain = yield* workers.createScriptSubdomain;
-      const { read, upload } = yield* Assets.Assets;
-      const bundler = yield* Bundler;
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
+
+      const accountId = yield* Account;
+      const bundler = yield* Bundler;
       const dotAlchemy = yield* DotAlchemy;
+      const stack = yield* Stack;
+
+      const { read, upload } = yield* Assets.Assets;
+      const createScriptSubdomain = yield* workers.createScriptSubdomain;
+      const deleteScript = yield* workers.deleteScript;
+      const getScript = yield* workers.getScript;
+      const getScriptSubdomain = yield* workers.getScriptSubdomain;
+      const getSubdomain = yield* workers.getSubdomain;
+      const listScripts = yield* workers.listScripts;
+      const putScript = yield* workers.putScript;
 
       const getAccountSubdomain = (accountId: string) =>
         getSubdomain({

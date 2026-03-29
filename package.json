@@ -43,6 +43,7 @@
       "fast-xml-parser": "^5.3.4",
       "solid-js": "latest",
       "typescript": "^5.9.3",
+      "@typescript/native-preview": "latest",
       "vite": "^7.1.9",
       "web-tree-sitter": "0.25.10",
       "wrangler": "^4.42.2",

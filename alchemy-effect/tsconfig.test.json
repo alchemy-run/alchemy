@@ -30,6 +30,9 @@
   },
   "references": [
     {
+      "path": "./tsconfig.json"
+    },
+    {
       "path": "../alchemy-effect/tsconfig.json"
     }
   ]

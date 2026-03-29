@@ -7,10 +7,11 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import { Bundler, type BundleOptions } from "../../Bundle/Bundler.ts";
 import { DotAlchemy } from "../../Config.ts";
+import type { HttpEffect } from "../../Http.ts";
 import type { Input } from "../../Input.ts";
+import { Platform } from "../../Platform.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
-import * as Server from "../../Server/Process.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import { createInternalTags, diffTags, hasTags } from "../../Tags.ts";
@@ -21,6 +22,7 @@ import type { SecurityGroupId } from "../EC2/SecurityGroup.ts";
 import {
   createEc2HostExecutionContext,
   createEc2HostedSupport,
+  type Ec2HostExecutionContext,
 } from "../EC2/hosted.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { RegionID } from "../Region.ts";
@@ -123,6 +125,14 @@ export interface LaunchTemplate extends Resource<
   }
 > {}
 
+export type LaunchTemplateServices = Credentials | Region;
+
+export type LaunchTemplateShape = {
+  fetch?: HttpEffect<LaunchTemplateServices>;
+};
+
+export type LaunchTemplateExecutionContext = Ec2HostExecutionContext;
+
 /**
  * A launch template that preserves the `Host` authoring model used by
  * `AWS.EC2.Instance`, but packages that host configuration for use with an
@@ -147,10 +157,13 @@ export interface LaunchTemplate extends Resource<
  * );
  * ```
  */
-export const LaunchTemplate = Server.Process<
+export const LaunchTemplate: Platform<
   LaunchTemplate,
-  Credentials | Region
->("AWS.AutoScaling.LaunchTemplate")(
+  LaunchTemplateServices,
+  LaunchTemplateShape,
+  LaunchTemplateExecutionContext
+> = Platform(
+  "AWS.AutoScaling.LaunchTemplate",
   createEc2HostExecutionContext("AWS.AutoScaling.LaunchTemplate"),
 );
 

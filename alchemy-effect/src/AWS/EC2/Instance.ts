@@ -11,9 +11,10 @@ import * as Stream from "effect/Stream";
 import { Bundler, type BundleOptions } from "../../Bundle/Bundler.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { DotAlchemy } from "../../Config.ts";
+import type { HttpEffect } from "../../Http.ts";
 import type { Input } from "../../Input.ts";
+import { Platform } from "../../Platform.ts";
 import { Resource } from "../../Resource.ts";
-import * as Server from "../../Server/Process.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import {
@@ -29,6 +30,7 @@ import type { RegionID } from "../Region.ts";
 import {
   createEc2HostExecutionContext,
   createEc2HostedSupport,
+  type Ec2HostExecutionContext,
 } from "./hosted.ts";
 import type { SecurityGroupId } from "./SecurityGroup.ts";
 import type { SubnetId } from "./Subnet.ts";
@@ -251,6 +253,14 @@ export interface Instance extends Resource<
   }
 > {}
 
+export type InstanceServices = Credentials | Region;
+
+export type InstanceShape = {
+  fetch?: HttpEffect<InstanceServices>;
+};
+
+export type InstanceExecutionContext = Ec2HostExecutionContext;
+
 /**
  * An EC2 instance that can either act as a low-level compute primitive or run
  * a bundled long-lived Effect program directly on the machine.
@@ -288,9 +298,12 @@ export interface Instance extends Resource<
  * );
  * ```
  */
-export const Instance = Server.Process<Instance, Credentials | Region>(
-  "AWS.EC2.Instance",
-)(createEc2HostExecutionContext("AWS.EC2.Instance"));
+export const Instance: Platform<
+  Instance,
+  InstanceServices,
+  InstanceShape,
+  InstanceExecutionContext
+> = Platform("AWS.EC2.Instance", createEc2HostExecutionContext("AWS.EC2.Instance"));
 
 export const InstanceProvider = () =>
   Instance.provider.effect(

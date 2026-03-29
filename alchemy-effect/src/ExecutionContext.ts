@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as ServiceMap from "effect/ServiceMap";
+import type { HttpEffect } from "./Http.ts";
 import type { Output } from "./Output.ts";
 import { GenericService } from "./Util/service.ts";
 
@@ -11,6 +12,7 @@ export interface BaseExecutionContext {
   get<T>(key: string): Effect.Effect<T>;
   set(id: string, output: Output): Effect.Effect<string>;
   exports?: Record<string, any>;
+  serve?<Req = never>(handler: HttpEffect<Req>): Effect.Effect<void, never, Req>;
 }
 
 export interface ExecutionContext<

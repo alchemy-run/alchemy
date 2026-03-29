@@ -81,7 +81,7 @@ export const ServerInstanceLive = ServerInstance.make(
   }).pipe(
     Effect.provide(
       Layer.provideMerge(
-        Layer.mergeAll(NetworkLive, SQSQueueEventSource, AWS.EC2.HttpServer),
+        Layer.mergeAll(NetworkLive, SQSQueueEventSource),
         Layer.mergeAll(
           AWS.SQS.DeleteMessageBatchLive,
           AWS.SQS.ReceiveMessageLive,

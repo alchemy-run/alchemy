@@ -35,6 +35,7 @@ import {
 import { DotAlchemy, dotAlchemy } from "../Config.ts";
 import { ExecutionContext } from "../ExecutionContext.ts";
 import type { Input } from "../Input.ts";
+import type { Output } from "../Output.ts";
 import * as Plan from "../Plan.ts";
 import type { Provider } from "../Provider.ts";
 import * as Server from "../Server/index.ts";
@@ -80,7 +81,8 @@ type Provided =
   | aws.Region.Region
   | Cli
   | ExecutionContext
-  | Server.ServerExecutionContext
+  | Server.ProcessContext
+  | Server.ServerHost
   | Serverless.FunctionContext
   | AWS.StageConfig
   | Provider<Command>
@@ -173,16 +175,19 @@ const runWithContext = <A, Err>(
   );
 
   const context = {
-    type: "Test",
+    Type: "Test",
     id: "Test",
     env: {},
     exports: {},
     listen: () => Effect.void,
+    serve: () => Effect.void,
     get: <T>(_key: string) => Effect.succeed<T>(undefined as T),
-    set: (id: string) => Effect.succeed(id),
+    set: (_id: string, _output: Output) =>
+      Effect.sync(() => _id.replaceAll(/[^a-zA-Z0-9]/g, "_")),
   };
 
-  // @ts-expect-error
+  // Test harness does not fully close `Req`; runtime provides enough for tests.
+  // @ts-expect-error Residual requirement channel on `effect` after ConfigProvider.
   return Effect.gen(function* () {
     const configProvider = ConfigProvider.orElse(
       yield* ConfigProvider.fromDotEnv({ path: ".env" }),
@@ -200,7 +205,9 @@ const runWithContext = <A, Err>(
     ),
     Effect.provideService(Stage.Stage, "test"),
     Effect.provideService(ExecutionContext, context as any),
-    Effect.provideService(Serverless.FunctionPlatform, context as any),
+    Effect.provideService(Server.ServerHost, {
+      run: (_effect) => Effect.void,
+    }),
     Effect.provideService(
       MinimumLogLevel,
       process.env.DEBUG ? "Debug" : "Info",
