@@ -686,7 +686,7 @@ export default await Effect.runPromise(handlerEffect)`,
             sourcemap: false,
             treeshake: true,
             minify: true,
-            external: [],
+            external: ["cloudflare:workers", "cloudflare:workflows"],
           },
         });
 
@@ -1012,6 +1012,9 @@ export default await Effect.runPromise(handlerEffect)`,
         const dos = bindings.flatMap((b) =>
           b.data.durableObjects ? [b.data.durableObjects] : [],
         );
+        if (dos.length === 0) {
+          return Effect.succeed(undefined);
+        }
         if (dos.length === 1) {
           return Effect.succeed(dos[0]);
         }
