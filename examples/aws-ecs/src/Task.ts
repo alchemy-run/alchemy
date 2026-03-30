@@ -12,9 +12,6 @@ export default class ApiTask extends AWS.ECS.Task<ApiTask>()(
     cpu: 512,
     memory: 1024,
     port: 3000,
-    docker: {
-      instructions: [["workdir", "/app"] as const],
-    },
   },
   Effect.gen(function* () {
     const queue = yield* JobsQueue;

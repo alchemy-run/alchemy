@@ -26,9 +26,6 @@ export const SandboxLive = Sandbox.make(
     // bind dependencies
     // yield* Cloudflare.Queue()
 
-    // TODO(sam): support programmatic docker commands (that append to the Dockerfile)
-    // yield* Docker.RUN("apk add --no-cache ffmpeg");
-
     // return http effect
     return {
       getUser: () => Effect.succeed({ id: "123", name: "John Doe" } as const),

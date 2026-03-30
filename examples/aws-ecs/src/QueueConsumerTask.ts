@@ -12,9 +12,6 @@ export class QueueConsumerTask extends AWS.ECS.Task<QueueConsumerTask>()(
     cpu: 256,
     memory: 512,
     taskRoleManagedPolicyArns: ["arn:aws:iam::aws:policy/AmazonSQSFullAccess"],
-    docker: {
-      instructions: [["workdir", "/app"] as const],
-    },
   },
 ) {}
 

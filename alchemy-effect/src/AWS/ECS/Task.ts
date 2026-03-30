@@ -10,14 +10,15 @@ import * as Path from "effect/Path";
 import * as ServiceMap from "effect/ServiceMap";
 import { Bundler, type BundleOptions } from "../../Bundle/Bundler.ts";
 import {
-  renderDockerfile,
-  runDockerCommand,
-  writeDockerContext,
-  type DockerImageSpec,
+  dockerBuild,
+  materializeDockerfile,
+  pushImage,
+  writeContextFiles,
 } from "../../Bundle/Docker.ts";
 import {
   cleanupBundleTempDir,
   createTempBundleDir,
+  getStableContextDir,
 } from "../../Bundle/TempRoot.ts";
 import { DotAlchemy } from "../../Config.ts";
 import * as Output from "../../Output.ts";
@@ -86,9 +87,18 @@ export interface TaskProps {
    */
   build?: Partial<BundleOptions>;
   /**
-   * Container image customization expressed as typed Docker instructions.
+   * Docker image build: optional full {@link docker.dockerfile}. When omitted,
+   * Alchemy generates a Dockerfile for the bundled `index.mjs`.
    */
-  docker?: DockerImageSpec;
+  docker?: {
+    /**
+     * Base image when Alchemy generates the Dockerfile.
+     * @default public.ecr.aws/docker/library/bun:1
+     */
+    base?: string;
+    /** Full Dockerfile content (replaces generated Dockerfile). */
+    dockerfile?: string;
+  };
   /**
    * Container definition overrides applied after Alchemy's defaults.
    */
@@ -548,38 +558,32 @@ await Effect.runPromise(program);
         props: TaskProps;
       }) {
         const realMain = yield* fs.realPath(props.main);
-        const tempDir = yield* createTempBundleDir(
+        const contextDir = yield* getStableContextDir(
           realMain,
           dotAlchemy,
           `${id}-image`,
         );
         const imageUri = `${repositoryUri}:${hash}`;
-        const dockerfile = renderDockerfile({
-          base: props.docker?.base,
-          instructions: [
-            ["workdir", "/app"],
-            ["copy", "index.mjs", "/app/index.mjs"],
-            ["entrypoint", "bun", "/app/index.mjs"],
-            ...(props.port
-              ? ([["env", "PORT", String(props.port)]] as const)
-              : []),
-            ...(props.port ? ([["expose", props.port]] as const) : []),
-            ...(props.docker?.instructions ?? []),
-          ],
-          entrypoint: props.docker?.entrypoint,
-          cmd: props.docker?.cmd,
-        });
 
-        yield* writeDockerContext({
-          directory: tempDir,
-          dockerfile,
-          files: [
-            {
-              path: "index.mjs",
-              content: code,
-            },
-          ],
-        });
+        const generatedDockerfile = (() => {
+          const base =
+            props.docker?.base ?? "public.ecr.aws/docker/library/bun:1";
+          const lines = [
+            `FROM ${base}`,
+            `WORKDIR /app`,
+            `COPY index.mjs /app/index.mjs`,
+          ];
+          if (props.port !== undefined) {
+            lines.push(
+              `ENV PORT=${String(props.port)}`,
+              `EXPOSE ${String(props.port)}`,
+            );
+          }
+          lines.push(`ENTRYPOINT ["bun", "/app/index.mjs"]`);
+          return `${lines.join("\n")}\n`;
+        })();
+
+        const dockerfile = props.docker?.dockerfile ?? generatedDockerfile;
 
         const auth = yield* ecr.getAuthorizationToken({});
         const credentials = auth.authorizationData?.[0];
@@ -593,18 +597,19 @@ await Effect.runPromise(program);
         );
         const registry = credentials.proxyEndpoint.replace(/^https?:\/\//, "");
 
-        yield* runDockerCommand([
-          "login",
-          "-u",
-          "AWS",
-          "-p",
-          password,
-          registry,
+        yield* materializeDockerfile(dockerfile, contextDir);
+        yield* writeContextFiles(contextDir, [
+          { path: "index.mjs", content: code },
         ]);
-        yield* runDockerCommand(["build", "-t", imageUri, tempDir]);
-        yield* runDockerCommand(["push", imageUri]);
-
-        yield* cleanupBundleTempDir(tempDir);
+        yield* dockerBuild({
+          tag: imageUri,
+          context: contextDir,
+        });
+        yield* pushImage(imageUri, {
+          username: "AWS",
+          password,
+          server: registry,
+        });
 
         return imageUri;
       });

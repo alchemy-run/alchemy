@@ -30,6 +30,30 @@ export const createTempBundleDir = (
   });
 
 /**
+ * Returns a deterministic bundle staging directory without clearing it first.
+ * Useful for Docker build contexts where keeping the directory stable avoids
+ * unnecessary file churn between builds.
+ */
+export const getStableContextDir = (
+  entry: string,
+  dotAlchemy: string,
+  id: string,
+) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const stack = yield* Stack;
+    const stage = yield* Stage;
+    const tempRoot = yield* findBundleTempRoot(entry, dotAlchemy);
+    const bundleId = `${stack.name}-${stage}-${id}`;
+    const tempDir = path.join(tempRoot, bundleId);
+
+    yield* fs.makeDirectory(tempDir, { recursive: true });
+
+    return tempDir;
+  });
+
+/**
  * Cleans up a bundle's private temp directory.
  */
 export const cleanupBundleTempDir = (tempDir: string) =>

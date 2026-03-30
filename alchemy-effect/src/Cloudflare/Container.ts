@@ -18,14 +18,12 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as Http from "node:http";
 import { bundle } from "../Bundle/Bundle.ts";
 import {
-  pushImageViaDockerApi,
-  runDockerCommand,
-  writeDockerContext,
+  dockerBuild,
+  materializeDockerfile,
+  pushImage,
+  writeContextFiles,
 } from "../Bundle/Docker.ts";
-import {
-  cleanupBundleTempDir,
-  createTempBundleDir,
-} from "../Bundle/TempRoot.ts";
+import { getStableContextDir } from "../Bundle/TempRoot.ts";
 import { DotAlchemy } from "../Config.ts";
 import { HttpServer, type HttpEffect } from "../Http.ts";
 import * as Output from "../Output.ts";
@@ -616,6 +614,15 @@ export const ContainerProvider = () =>
         bundle({
           id,
           main,
+          build: {
+            format: "esm",
+            platform: "node",
+            target: "node22",
+            sourcemap: false,
+            treeshake: true,
+            minify: true,
+            external: ["cloudflare:workers", "cloudflare:workflows"],
+          },
           entryContent: (importPath) =>
             `
 ${runtime === "bun" ? 'import { BunServices } from "@effect/platform-bun";' : 'import { NodeServices } from "@effect/platform-node";'}
@@ -679,15 +686,6 @@ const handlerEffect = tag.asEffect().pipe(
 );
 
 export default await Effect.runPromise(handlerEffect)`,
-          build: {
-            format: "esm",
-            platform: "node",
-            target: "node22",
-            sourcemap: false,
-            treeshake: true,
-            minify: true,
-            external: ["cloudflare:workers", "cloudflare:workflows"],
-          },
         });
 
       const buildFinalDockerfile = (
@@ -758,36 +756,29 @@ export default await Effect.runPromise(handlerEffect)`,
           );
         }
 
-        const tempDir = yield* createTempBundleDir(
+        const contextDir = yield* getStableContextDir(
           process.cwd(),
           dotAlchemy,
           `${id}-container`,
         );
 
-        return yield* Effect.gen(function* () {
-          yield* writeDockerContext({
-            directory: tempDir,
-            dockerfile: finalDockerfile,
-            files: [{ path: "index.mjs", content: code }],
-          });
+        yield* materializeDockerfile(finalDockerfile, contextDir);
+        yield* writeContextFiles(contextDir, [
+          { path: "index.mjs", content: code },
+        ]);
+        yield* dockerBuild({
+          tag: imageRef,
+          context: contextDir,
+          platform: "linux/amd64",
+        });
 
-          yield* runDockerCommand([
-            "build",
-            "--platform",
-            "linux/amd64",
-            "-t",
-            imageRef,
-            tempDir,
-          ]);
+        yield* pushImage(imageRef, {
+          username,
+          password: credentials.password,
+          server: registryId,
+        });
 
-          yield* pushImageViaDockerApi(imageRef, {
-            username,
-            password: credentials.password,
-            serverAddress: registryId,
-          });
-
-          return imageRef;
-        }).pipe(Effect.ensuring(cleanupBundleTempDir(tempDir)));
+        return imageRef;
       });
 
       const maybeCreateRollout = Effect.fnUntraced(function* ({
