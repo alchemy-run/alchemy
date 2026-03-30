@@ -23,20 +23,22 @@ export default class Api extends Cloudflare.Worker<Api>()(
     const agents = yield* Agent;
 
     return {
-      getUser: () => Effect.succeed({ id: "123", name: "John Doe" } as const),
+      getAgent: Effect.fnUntraced(function* (agentName: string) {
+        return yield* agents.getByName(agentName).getProfile();
+      }),
       fetch: Effect.gen(function* () {
         // (Business logic is implemented here and can reference bound infrastructure above)
         const request = yield* HttpServerRequest;
         if (request.url.startsWith("/connect/")) {
           // connect to a Durable Object web socket
           const agentId = request.url.split("/").pop()!;
-          const agent = yield* agents.getByName(agentId);
+          const agent = agents.getByName(agentId);
           const response = yield* agent.fetch(request);
           return response;
         } else if (request.url.startsWith("/profile/")) {
           // call RPC methods on a Durable Object
           const key = request.url.split("/").pop()!;
-          const agent = yield* agents.getByName(key);
+          const agent = agents.getByName(key);
           if (request.method == "GET") {
             const item = yield* agent.getProfile();
             if (item) {

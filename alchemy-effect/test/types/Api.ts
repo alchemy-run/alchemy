@@ -122,8 +122,16 @@ export class Api3 extends Cloudflare.Worker<
 
 export const Api3Live = Api3.make(
   Effect.gen(function* () {
+    const agent = yield* Agent;
     return {
-      getUser: () => Effect.succeed({ id: "123", name: "John Doe" } as const),
+      getUser: Effect.fnUntraced(function* () {
+        const user = yield* agent.getByName("");
+
+        return {
+          id: "123",
+          name: "John Doe",
+        };
+      }),
     };
   }),
 );

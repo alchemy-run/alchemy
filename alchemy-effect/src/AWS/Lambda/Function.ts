@@ -16,7 +16,7 @@ import type { BundleOptions } from "../../Bundle/Bundler.ts";
 import type { HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import { Platform, type Main } from "../../Platform.ts";
+import { Platform, type Main, type PlatformServices } from "../../Platform.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
@@ -96,7 +96,7 @@ export interface Function extends Resource<
   }
 > {}
 
-export type FunctionServices = Credentials | Region;
+export type FunctionServices = PlatformServices | Credentials | Region;
 
 export type FunctionShape = Main<FunctionServices>;
 

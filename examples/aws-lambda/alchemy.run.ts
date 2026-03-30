@@ -4,7 +4,7 @@ import * as Stack from "alchemy-effect/Stack";
 import { Stage } from "alchemy-effect/Stage";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import JobFunctionLive, { JobFunction } from "./src/JobFunction.ts";
+import { JobFunction } from "./src/JobFunction.ts";
 
 const awsConfig = Layer.effect(
   AWS.StageConfig,
@@ -92,11 +92,13 @@ const stack = Effect.gen(function* () {
     dashboardName: dashboard.dashboardName,
     alarmName: alarm.alarmName,
   };
-}).pipe(
+});
+
+export default stack.pipe(
   Stack.make(
     "JobLambda",
     Layer.provideMerge(
-      JobFunctionLive,
+      Layer.empty,
       Layer.mergeAll(
         // Fully configured cloud provider Layers go here:
         aws,
@@ -104,5 +106,3 @@ const stack = Effect.gen(function* () {
     ),
   ),
 );
-
-export default stack;

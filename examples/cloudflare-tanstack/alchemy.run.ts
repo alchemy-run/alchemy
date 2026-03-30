@@ -3,7 +3,7 @@ import * as Cloudflare from "alchemy-effect/Cloudflare";
 // import * as GitHub from "alchemy-effect/GitHub";
 import * as Stack from "alchemy-effect/Stack";
 import * as Effect from "effect/Effect";
-import Worker from "./src/worker";
+import Worker from "./src/worker.ts";
 
 export default Stack.make(
   "CloudflareTanstackExample",

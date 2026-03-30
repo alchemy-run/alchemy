@@ -20,6 +20,7 @@ import {
 import { Self } from "./Self.ts";
 import type { Stack, StackServices } from "./Stack.ts";
 import type { Stage } from "./Stage.ts";
+import type { IsAny } from "./Util/types.ts";
 
 export type Main<Services = never> = {
   [key in string]?: key extends "fetch" ? HttpEffect<Services> : any;
@@ -68,7 +69,7 @@ export interface Platform<
         Provider<Resource> | Exclude<PropsReq | InitReq, Services>
       >;
       new (_: never): Shape & BaseShape;
-      promise(): Promise<Self>;
+      promise(): PlatformPromise<Self>;
     };
   };
   <Self>(): {
@@ -84,7 +85,7 @@ export interface Platform<
       Provider<Resource> | PropsReq | Exclude<InitReq, Services>
     > & {
       new (_: never): Shape & BaseShape;
-      promise(): Promise<Self>;
+      promise(): PlatformPromise<Self>;
     };
     <Shape, PropsReq = never>(
       id: string,
@@ -104,7 +105,7 @@ export interface Platform<
         Provider<Resource> | Exclude<PropsReq | InitReq, Services>
       >;
       new (_: never): Shape & BaseShape;
-      promise(): Promise<Self>;
+      promise(): PlatformPromise<Self>;
     } & (<InitReq = never>(
         impl: Effect.Effect<Shape, never, InitReq>,
       ) => Effect.Effect<
@@ -124,7 +125,7 @@ export interface Platform<
     never,
     Provider<Resource> | PropsReq | Exclude<InitReq, Services>
   > & {
-    promise(): Promise<Shape>;
+    promise(): PlatformPromise<Shape>;
   };
 }
 
@@ -275,3 +276,34 @@ export const Platform = <
   }) as any;
   return instance;
 };
+
+/**
+ * Bridge between the Effect and the Promise.
+ *
+ * Only map types if needed.
+ *
+ * TODO(sam): probably over engineering? Maybe just let the user run into the wall of Effect.runPromise and fix? Good friction is good!
+ */
+export type PlatformPromise<Shape> = [
+  HasRequirements<Extract<Shape[keyof Shape], Effect.Effect<any, any, any>>>,
+  Effect.Services<Extract<Shape[keyof Shape], Effect.Effect<any, any, any>>>,
+] extends [true, never]
+  ? Promise<Shape>
+  : Promise<{
+      [key in keyof Shape]: Shape[key] extends (
+        ...args: infer Args
+      ) => Effect.Effect<infer A, infer Err, any>
+        ? (...args: Args) => Effect.Effect<A, Err, never>
+        : Shape[key] extends Effect.Effect<infer A, infer Err, infer Req>
+          ? Req extends never
+            ? Shape[key]
+            : Effect.Effect<A, Err, never>
+          : Shape[key];
+    }>;
+
+type HasRequirements<E extends Effect.Effect<any, any, any>> =
+  IsAny<Effect.Services<E>> extends true
+    ? true
+    : Effect.Services<E> extends never
+      ? false
+      : true;

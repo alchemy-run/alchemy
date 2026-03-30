@@ -1,25 +1,21 @@
 import * as Cloudflare from "alchemy-effect/Cloudflare";
 import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
-export default class Backend extends Cloudflare.TanstackStart<Backend>()(
+// TODO(sam): support this: https://tanstack.com/start/latest/docs/framework/react/guide/server-entry-point
+export default class Worker extends Cloudflare.TanstackStart<Worker>()(
   "Backend",
+  // Effect<Rpc>
   {
     main: import.meta.path,
+    // projectDir: "./apps/frontend",
   },
   Effect.gen(function* () {
     const users = yield* Users;
 
     return {
-      getProfile: (name: string) =>
-        Effect.flatMap(users.getByName(name), (user) => user.getProfile()),
+      getProfile: (name: string) => users.getByName(name).getProfile(),
       putProfile: (name: string, value: string) =>
-        Effect.flatMap(users.getByName(name), (user) => user.putProfile(value)),
-      fetch: Effect.gen(function* () {
-        const request = yield* HttpServerRequest;
-        return HttpServerResponse.text(yield* request.text);
-      }),
+        users.getByName(name).putProfile(value),
     };
   }),
 ) {}

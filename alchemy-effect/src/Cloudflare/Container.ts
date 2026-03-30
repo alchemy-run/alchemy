@@ -45,7 +45,11 @@ import {
   DurableObjectNamespace,
   DurableObjectState,
 } from "./Workers/DurableObject.ts";
-import { fromCloudflareFetcher, type Fetcher } from "./Workers/Fetcher.ts";
+import {
+  fromCloudflareFetcher,
+  toCloudflareFetcher,
+  type Fetcher,
+} from "./Workers/Fetcher.ts";
 
 export { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 
@@ -63,16 +67,18 @@ export class ContainerError extends Data.TaggedError("ContainerError")<{
   readonly cause?: unknown;
 }> {}
 
+export interface ContainerStartupOptions extends cf.ContainerStartupOptions {}
+
 export interface Container {
   get running(): Effect.Effect<boolean>;
-  start(options?: cf.ContainerStartupOptions): Effect.Effect<void>;
+  start(options?: ContainerStartupOptions): Effect.Effect<void>;
   monitor(): Effect.Effect<void, ContainerError>;
   destroy(error?: any): Effect.Effect<void>;
   signal(signo: number): Effect.Effect<void>;
   getTcpPort(port: number): Effect.Effect<Fetcher>;
   setInactivityTimeout(durationMs: number | bigint): Effect.Effect<void>;
-  interceptOutboundHttp(addr: string, binding: cf.Fetcher): Effect.Effect<void>;
-  interceptAllOutboundHttp(binding: cf.Fetcher): Effect.Effect<void>;
+  interceptOutboundHttp(addr: string, binding: Fetcher): Effect.Effect<void>;
+  interceptAllOutboundHttp(binding: Fetcher): Effect.Effect<void>;
 }
 
 export interface ContainerProps extends ContainerApplicationProps {
@@ -364,14 +370,20 @@ export const bindContainer = Effect.fnUntraced(function* <Shape, Req = never>(
         ),
       setInactivityTimeout: (durationMs: number | bigint) =>
         Effect.sync(() => state.container!.setInactivityTimeout(durationMs)),
-      interceptOutboundHttp: (addr: string, binding: cf.Fetcher) =>
-        Effect.sync(() =>
-          state.container!.interceptOutboundHttp(addr, binding),
+      interceptOutboundHttp: (addr: string, binding: Fetcher) =>
+        toCloudflareFetcher(binding).pipe(
+          Effect.map((binding) =>
+            state.container!.interceptOutboundHttp(addr, binding),
+          ),
         ),
-      interceptAllOutboundHttp: (binding: cf.Fetcher) =>
-        Effect.sync(() => state.container!.interceptAllOutboundHttp(binding)),
-      monitor: () => Effect.sync(() => state.container!.monitor()),
-      start: (options?: cf.ContainerStartupOptions) =>
+      interceptAllOutboundHttp: (binding: Fetcher) =>
+        toCloudflareFetcher(binding).pipe(
+          Effect.map((binding) =>
+            state.container!.interceptAllOutboundHttp(binding),
+          ),
+        ),
+      monitor: () => Effect.sync(() => state.container?.monitor()),
+      start: (options?: ContainerStartupOptions) =>
         Effect.sync(() => state.container!.start(options)),
     } satisfies Container as Shape;
   });

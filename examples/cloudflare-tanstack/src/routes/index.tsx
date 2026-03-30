@@ -2,10 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import * as Effect from "effect/Effect";
 import { useState } from "react";
-import Backend from "../worker.ts";
+import Server from "../worker.ts";
 
 // bridge from TanstackStart to the Alchemy Effect Worker
-export const worker = await Backend.promise();
+export const worker = await Server.promise();
 
 export const getProfile = createServerFn({
   method: "GET",
@@ -13,12 +13,10 @@ export const getProfile = createServerFn({
 
 export const getServerTime = createServerFn({
   method: "GET",
-}).handler(() => {
-  return {
-    message: "Hello from a TanStack Start server function.",
-    time: new Date().toISOString(),
-  };
-});
+}).handler(() => ({
+  message: "Hello from a TanStack Start server function.",
+  time: new Date().toISOString(),
+}));
 
 export const Route = createFileRoute("/")({
   loader: () => getServerTime(),

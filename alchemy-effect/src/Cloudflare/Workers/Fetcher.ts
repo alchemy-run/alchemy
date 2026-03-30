@@ -17,6 +17,35 @@ export interface Fetcher {
   ): Effect.Effect<HttpServerResponse.HttpServerResponse, HttpServerError>;
 }
 
+export const toCloudflareFetcher = Effect.fnUntraced(function* (
+  fetcher: Fetcher,
+) {
+  const services = yield* Effect.services();
+  return {
+    fetch: (input, init) =>
+      fetcher
+        .fetch(
+          HttpServerRequest.fromWeb(
+            new Request(input as any, init as any) as any as Request,
+          ),
+        )
+        .pipe(
+          Effect.map(
+            (response) =>
+              HttpServerResponse.toWeb(response, {
+                services,
+              }) as any as cf.Response,
+          ),
+          Effect.provideServices(services),
+          Effect.runPromise,
+        ),
+    connect() {
+      // TODO
+      throw new Error("toCloudflareFetcher does not support connect()");
+    },
+  } satisfies cf.Fetcher;
+});
+
 export const fromCloudflareFetcher = (fetcher: cf.Fetcher): Fetcher => {
   const fetch = (request: Request) =>
     Effect.promise((signal) =>
