@@ -127,7 +127,7 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
             const [namespace, impl] = args;
             const worker = yield* Worker;
 
-            yield* worker.bind`${namespace} (Cloudflare.DurableObjectNamespace)`(
+            yield* worker.bind`Cloudflare.DurableObjectNamespace(${namespace})`(
               {
                 // TODO(sam): automate class migrations, probably in the provider
                 bindings: [

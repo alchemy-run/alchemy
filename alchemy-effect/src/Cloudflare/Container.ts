@@ -16,6 +16,7 @@ import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as Http from "node:http";
+import { AdoptPolicy } from "../AdoptPolicy.ts";
 import { bundle } from "../Bundle/Bundle.ts";
 import {
   dockerBuild,
@@ -48,6 +49,7 @@ import {
   toCloudflareFetcher,
   type Fetcher,
 } from "./Workers/Fetcher.ts";
+import { Worker } from "./Workers/Worker.ts";
 
 export { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 
@@ -199,11 +201,6 @@ export interface ContainerApplicationProps {
    * Progressive rollout settings applied after updates.
    */
   rollout?: Rollout;
-  /**
-   * Adopt an existing application with the same name instead of failing.
-   * @default false
-   */
-  adopt?: boolean;
   /**
    * Container registry host to use for generated Dockerfile builds.
    * @default "registry.cloudflare.com"
@@ -360,6 +357,13 @@ export const bindContainer = Effect.fnUntraced(function* <Shape, Req = never>(
     },
   });
 
+  const worker = yield* Worker;
+  const className = namespace.name;
+  yield* worker.bind`Container(${className})`({
+    bindings: [],
+    containers: [{ className }],
+  });
+
   // TODO(sam): register this in the Container Execution Context
   // const _httpEffect = yield* init;
   return Effect.gen(function* () {
@@ -512,6 +516,9 @@ export const ContainerProvider = () =>
   Container.provider.effect(
     Effect.gen(function* () {
       const accountId = yield* Account;
+      const adoptPolicy = yield* Effect.serviceOption(AdoptPolicy).pipe(
+        Effect.map(Option.getOrElse(() => false)),
+      );
       const dotAlchemy = yield* DotAlchemy;
       const fs = yield* FileSystem.FileSystem;
       const createContainerApplication =
@@ -851,8 +858,7 @@ export default await Effect.runPromise(handlerEffect)`,
           return String(error);
         };
 
-        const adopt = news.adopt ?? false;
-        const existingByName = adopt
+        const existingByName = adoptPolicy
           ? yield* findApplicationByName(name)
           : undefined;
 
@@ -904,7 +910,7 @@ export default await Effect.runPromise(handlerEffect)`,
           durableObjects,
         }).pipe(
           Effect.catchTag("DurableObjectAlreadyHasApplication", () =>
-            adopt && durableObjects
+            adoptPolicy && durableObjects
               ? Effect.gen(function* () {
                   const existing = yield* findApplicationByNamespace(
                     durableObjects.namespaceId,
@@ -932,7 +938,7 @@ export default await Effect.runPromise(handlerEffect)`,
                 })
               : Effect.fail(
                   new Error(
-                    `Durable Object namespace "${durableObjects?.namespaceId ?? "unknown"}" already has a container application. Use \`adopt: true\` to adopt it.`,
+                    `Durable Object namespace "${durableObjects?.namespaceId ?? "unknown"}" already has a container application. Set AdoptPolicy to adopt it.`,
                   ),
                 ),
           ),
@@ -1046,12 +1052,11 @@ export default await Effect.runPromise(handlerEffect)`,
             return { action: "replace" } as const;
           }
 
-          const durableObjects = yield* getDurableObjects(newBindings);
-          const oldDurableObjects = yield* getDurableObjects(oldBindings);
-          if (
-            stableStringify(durableObjects) !==
-            stableStringify(oldDurableObjects)
-          ) {
+          const hasDurableObjects =
+            (yield* getDurableObjects(newBindings)) !== undefined;
+          const hadDurableObjects =
+            (yield* getDurableObjects(oldBindings)) !== undefined;
+          if (hasDurableObjects !== hadDurableObjects) {
             return { action: "replace" } as const;
           }
 
@@ -1060,16 +1065,18 @@ export default await Effect.runPromise(handlerEffect)`,
           }
 
           const configuration = yield* desiredConfiguration(id, news);
+          const oldConfiguration = yield* desiredConfiguration(id, olds);
           if (
-            output.instances !== (news.instances ?? 1) ||
-            output.maxInstances !== (news.maxInstances ?? 1) ||
-            output.schedulingPolicy !== (news.schedulingPolicy ?? "default") ||
-            stableStringify(output.constraints) !==
-              stableStringify(news.constraints) ||
-            stableStringify(output.affinities) !==
-              stableStringify(news.affinities) ||
-            stableStringify(output.configuration) !==
-              stableStringify(configuration)
+            (news.instances ?? 1) !== (olds.instances ?? 1) ||
+            (news.maxInstances ?? 1) !== (olds.maxInstances ?? 1) ||
+            (news.schedulingPolicy ?? "default") !==
+              (olds.schedulingPolicy ?? "default") ||
+            stableStringify(news.constraints) !==
+              stableStringify(olds.constraints) ||
+            stableStringify(news.affinities) !==
+              stableStringify(olds.affinities) ||
+            stableStringify(configuration) !==
+              stableStringify(oldConfiguration)
           ) {
             return { action: "update" } as const;
           }
@@ -1108,17 +1115,15 @@ export default await Effect.runPromise(handlerEffect)`,
           session,
         }) {
           const name = yield* createApplicationName(id, news.name);
-          const adopt = news.adopt ?? false;
           yield* Effect.logInfo(
-            `Cloudflare Container create: starting ${name}${adopt ? " with adopt" : ""}`,
+            `Cloudflare Container create: starting ${name}${adoptPolicy ? " with adopt" : ""}`,
           );
-          // const durableObjects = news.durableObjects;
           const durableObjects = yield* getDurableObjects(bindings);
           const configuration = yield* desiredConfiguration(id, news);
 
           if (
             output &&
-            !adopt &&
+            !adoptPolicy &&
             stableStringify(output.durableObjects) !==
               stableStringify(durableObjects)
           ) {

@@ -190,6 +190,7 @@ export interface Worker extends Resource<
   },
   {
     bindings: WorkerBinding[];
+    containers?: { className: string }[];
   }
 > {}
 
@@ -698,7 +699,7 @@ ${
           Effect.catch(() => Effect.succeed(undefined)),
         );
 
-        const oldTags = Array.from(new Set([...(oldSettings?.tags ?? [])]));
+        const oldTags = Array.from(new Set(oldSettings?.tags ?? []));
         const oldBindings = oldSettings?.bindings ?? [];
 
         // Parse alchemy:do:{stableId}:{bindingName} tags
@@ -747,8 +748,16 @@ ${
           }
         }
 
+        // Collect container-backed class names so they go into newSqliteClasses
+        const containerClassNames = new Set(
+          bindings.flatMap((b) =>
+            (b.data.containers ?? []).map((c) => c.className),
+          ),
+        );
+
         // Compute new and renamed classes
         const newClasses: string[] = [];
+        const newSqliteClasses: string[] = [];
         const renamedClasses: { from: string; to: string }[] = [];
         for (const rb of bindings) {
           for (const b of rb.data.bindings) {
@@ -765,7 +774,11 @@ ${
                     (!bindingNameToStableId[ob.name] && ob.name === b.name)),
               );
               if (!prevOldBinding) {
-                newClasses.push(b.className);
+                if (containerClassNames.has(b.className)) {
+                  newSqliteClasses.push(b.className);
+                } else {
+                  newClasses.push(b.className);
+                }
               } else if (
                 "className" in prevOldBinding &&
                 prevOldBinding.className !== b.className
@@ -804,8 +817,12 @@ ${
           deletedClasses,
           renamedClasses,
           transferredClasses: [] as { from: string; to: string }[],
-          newSqliteClasses: [] as string[],
+          newSqliteClasses,
         };
+
+        const metadataContainers = [...containerClassNames].map((className) => ({
+          className,
+        }));
 
         const metadata = {
           assets: metadataAssets,
@@ -813,6 +830,8 @@ ${
           bodyPart: undefined,
           compatibilityDate: news.compatibility?.date ?? "2026-03-10",
           compatibilityFlags: news.compatibility?.flags,
+          containers:
+            metadataContainers.length > 0 ? metadataContainers : undefined,
           keepAssets,
           keepBindings: undefined,
           limits: news.limits,
@@ -900,7 +919,7 @@ ${
       });
 
       return Worker.provider.of({
-        stables: ["workerId"],
+        stables: ["workerId", "workerName"],
         diff: Effect.fnUntraced(function* ({ id, news, olds, output }) {
           if ((output?.accountId ?? accountId) !== accountId) {
             return { action: "replace" };
@@ -925,7 +944,7 @@ ${
           ) {
             return {
               action: "update",
-              stables: oldWorkerName === workerName ? ["name"] : undefined,
+              stables: oldWorkerName === workerName ? ["workerName"] : undefined,
             };
           }
         }),

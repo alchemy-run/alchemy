@@ -1,3 +1,4 @@
+export * as AdoptPolicy from "./AdoptPolicy.ts";
 export * from "./Apply.ts";
 export * as AWS from "./AWS/index.ts";
 export * from "./Binding.ts";

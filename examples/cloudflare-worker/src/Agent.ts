@@ -12,6 +12,7 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
     // bind the Sandbox Container to the Agent DO
     const sandbox = yield* Cloudflare.bindContainer(Sandbox);
 
+    // return an Effect that will be un once per instance of a Durable Object
     return Effect.gen(function* () {
       const state = yield* Cloudflare.DurableObjectState;
 
