@@ -135,8 +135,8 @@ export function Resource<R extends ResourceLike>(
 
       const existing = stack.resources[fqn];
       if (existing) {
-        // TODO(sam): check if props are same and allow duplicates
-        return yield* Effect.die(new Error(`Resource ${fqn} already exists`));
+        // // TODO(sam): check if props are different and die
+        return existing;
       }
       const bind = (
         ...args:

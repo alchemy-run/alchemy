@@ -1075,8 +1075,7 @@ export default await Effect.runPromise(handlerEffect)`,
               stableStringify(olds.constraints) ||
             stableStringify(news.affinities) !==
               stableStringify(olds.affinities) ||
-            stableStringify(configuration) !==
-              stableStringify(oldConfiguration)
+            stableStringify(configuration) !== stableStringify(oldConfiguration)
           ) {
             return { action: "update" } as const;
           }

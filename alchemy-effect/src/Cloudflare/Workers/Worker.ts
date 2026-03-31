@@ -495,9 +495,13 @@ import * as Console from "effect/Console";
 import { WorkerConfigProvider } from "alchemy-effect/Cloudflare";
 import { env } from "cloudflare:workers";
 
-import layer from "${importPath}";
+import entry from "${importPath}";
 
 const tag = ServiceMap.Service("${Self.key}")
+const layer =
+  typeof entry?.build === "function"
+    ? entry
+    : Layer.effect(tag, typeof entry?.asEffect === "function" ? entry.asEffect() : entry);
 
 const platform = Layer.mergeAll(
   NodeServices.layer,
@@ -820,9 +824,11 @@ ${
           newSqliteClasses,
         };
 
-        const metadataContainers = [...containerClassNames].map((className) => ({
-          className,
-        }));
+        const metadataContainers = [...containerClassNames].map(
+          (className) => ({
+            className,
+          }),
+        );
 
         const metadata = {
           assets: metadataAssets,
@@ -944,7 +950,8 @@ ${
           ) {
             return {
               action: "update",
-              stables: oldWorkerName === workerName ? ["workerName"] : undefined,
+              stables:
+                oldWorkerName === workerName ? ["workerName"] : undefined,
             };
           }
         }),

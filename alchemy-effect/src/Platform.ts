@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import type { Scope } from "effect/Scope";
 import * as ServiceMap from "effect/ServiceMap";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
@@ -178,6 +179,16 @@ export const Platform = <
       //   Cloudflare.Worker("id", { main: "./src/worker.ts" })
       // )
       const cls = makeClass(id, props);
+      const asEffect = () =>
+        Effect.serviceOption(cls.Self).pipe(
+          Effect.flatMap(
+            Option.match({
+              // we are likely running at runtime, so we create
+              onNone: () => resource(id, props),
+              onSome: Effect.succeed,
+            }),
+          ),
+        );
       return Object.assign(
         function (impl: Impl) {
           return cls.asEffect().pipe(Effect.provide(cls.make(impl)));
@@ -189,8 +200,8 @@ export const Platform = <
         // });
         cls,
         {
-          asEffect: () => cls.asEffect(),
-          [Symbol.iterator]: () => new SingleShotGen(cls),
+          asEffect,
+          [Symbol.iterator]: () => new SingleShotGen({ asEffect }),
         },
       );
     } else {
