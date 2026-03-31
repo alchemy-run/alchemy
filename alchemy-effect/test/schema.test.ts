@@ -1,6 +1,5 @@
 import { describe, expect, test } from "vitest";
 
-import * as S from "effect/Schema";
 import {
   getSetValueAST,
   isBooleanSchema,
@@ -13,7 +12,8 @@ import {
   isSetSchema,
   isStringSchema,
   isUndefinedSchema,
-} from "../src/Schema.ts";
+} from "@/Schema";
+import * as S from "effect/Schema";
 
 describe("isStringSchema", () => {
   test("string", () => {

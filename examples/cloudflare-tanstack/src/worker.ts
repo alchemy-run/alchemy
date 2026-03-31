@@ -6,7 +6,7 @@ export default class Worker extends Cloudflare.TanstackStart<Worker>()(
   "Backend",
   // Effect<Rpc>
   {
-    main: import.meta.path,
+    main: import.meta.filename,
     // projectDir: "./apps/frontend",
   },
   Effect.gen(function* () {

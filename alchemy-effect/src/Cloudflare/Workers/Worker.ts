@@ -21,12 +21,7 @@ import type { HttpEffect } from "../../Http.ts";
 import type { Input } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  Platform,
-  type Main,
-  type PlatformServices,
-  type Rpc,
-} from "../../Platform.ts";
+import { Platform, type Main, type Rpc } from "../../Platform.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { Self } from "../../Self.ts";
 import * as Serverless from "../../Serverless/index.ts";
@@ -169,7 +164,7 @@ export interface WorkerExecutionContext extends Serverless.FunctionContext {
   export(name: string, value: any): Effect.Effect<void>;
 }
 
-export type WorkerServices = Worker | WorkerEnvironment | PlatformServices;
+export type WorkerServices = Worker | WorkerEnvironment;
 
 export type WorkerShape = Main<WorkerServices>;
 
@@ -492,7 +487,6 @@ import * as Logger from "effect/Logger";
 import * as ServiceMap from "effect/ServiceMap";
 import { MinimumLogLevel } from "effect/References";
 import * as Console from "effect/Console";
-import { WorkerConfigProvider } from "alchemy-effect/Cloudflare";
 import { env } from "cloudflare:workers";
 
 import entry from "${importPath}";
@@ -531,9 +525,9 @@ const handlerEffect = tag.asEffect().pipe(
       // TODO(sam): additional credentials?
       Layer.provideMerge(platform),
       Layer.provideMerge(
-        Layer.effect(
+        Layer.succeed(
           ConfigProvider.ConfigProvider,
-          WorkerConfigProvider()
+          ConfigProvider.fromUnknown(env),
         )
       ),
       Layer.provideMerge(

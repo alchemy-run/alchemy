@@ -57,6 +57,12 @@ export default class ApiTask extends AWS.ECS.Task<ApiTask>()(
       ),
     };
   }).pipe(
-    Effect.provide(Layer.mergeAll(JobsQueueLive, AWS.SQS.SendMessageLive)),
+    Effect.provide(
+      Layer.mergeAll(
+        JobsQueueLive,
+        AWS.SQS.SendMessageLive,
+        AWS.SQS.DeleteMessageBatchLive,
+      ),
+    ),
   ),
 ) {}

@@ -74,7 +74,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
         if (request.url.startsWith("/connect/")) {
           // connect to a Durable Object web socket
           const agentId = request.url.split("/").pop()!;
-          const agent = yield* agents.getByName(agentId);
+          const agent = agents.getByName(agentId);
           const response = yield* agent.fetch(request);
           return response;
         } // else if (request.url.startsWith("/profile/")) {
@@ -125,11 +125,11 @@ export const Api3Live = Api3.make(
     const agent = yield* Agent;
     return {
       getUser: Effect.fnUntraced(function* () {
-        const user = yield* agent.getByName("");
+        const user = agent.getByName("");
 
         return {
           id: "123",
-          name: "John Doe",
+          name: (yield* user.getProfile())!,
         };
       }),
     };

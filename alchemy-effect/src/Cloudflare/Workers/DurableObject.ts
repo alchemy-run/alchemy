@@ -9,6 +9,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type * as Socket from "effect/unstable/socket/Socket";
 import type { HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
+import type { PlatformServices } from "../../Platform.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
 import { Account } from "../Account.ts";
 import cloudflare_workers from "./cloudflare:workers.ts";
@@ -63,7 +64,8 @@ export interface DurableObjectShape {
 export type DurableObjectServices =
   | DurableObjectNamespace
   | DurableObjectState
-  | WorkerServices;
+  | WorkerServices
+  | PlatformServices;
 
 export interface DurableObjectNamespaceClass extends Effect.Effect<
   DurableObjectNamespace,

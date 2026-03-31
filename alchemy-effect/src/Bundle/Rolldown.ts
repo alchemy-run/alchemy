@@ -67,7 +67,6 @@ function toRolldownOptions(options: BundleOptions): {
         typeof options.entry === "string" ? [options.entry] : options.entry,
       onLog(level, log, defaultHandler) {
         if (level === "warn" && log.code === "UNRESOLVED_IMPORT") {
-          defaultHandler("error", log);
           return;
         }
         defaultHandler(level, log);

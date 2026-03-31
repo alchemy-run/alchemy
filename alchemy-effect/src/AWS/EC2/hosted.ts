@@ -73,9 +73,9 @@ export interface Ec2HostedCleanupState {
  * long-lived program (`exports.program`) and collect background work via `run`.
  */
 export interface Ec2HostExecutionContext extends ProcessContext {
-  exports: {
+  exports: Effect.Effect<{
     readonly program: Effect.Effect<void, never, any>;
-  };
+  }>;
 }
 
 export const createEc2HostExecutionContext =
@@ -116,11 +116,9 @@ export const createEc2HostExecutionContext =
         Effect.sync(() => {
           runners.push(effect);
         }),
-      exports: {
-        program: Effect.all(runners, { concurrency: "unbounded" }).pipe(
-          Effect.asVoid,
-        ),
-      },
+      exports: Effect.sync(() => ({
+        program: Effect.all(runners, { concurrency: "unbounded" }),
+      })),
     } satisfies Ec2HostExecutionContext;
   };
 

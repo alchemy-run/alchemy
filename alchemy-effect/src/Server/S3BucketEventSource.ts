@@ -67,6 +67,7 @@ export class S3BucketEventSourcePolicy extends Binding.Policy<
 >()("Process.S3BucketEventSource") {}
 
 export const S3BucketEventSourcePolicyLive =
+  /** @__PURE__ */
   S3BucketEventSourcePolicy.layer.succeed(
     (_ctx, bucket, { queue, events: Events = ["s3:ObjectCreated:*"] }) =>
       Effect.all([

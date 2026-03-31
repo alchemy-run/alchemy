@@ -4,7 +4,7 @@ import * as Stack from "alchemy-effect/Stack";
 import { Stage } from "alchemy-effect/Stage";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { JobFunction, JobFunctionLive } from "./src/JobFunction.ts";
+import JobFunction from "./src/JobFunction.ts";
 
 const awsConfig = Layer.effect(
   AWS.StageConfig,
@@ -61,7 +61,9 @@ const stack = Effect.gen(function* () {
               region: dashboardRegion,
               stat: "Average",
               period: 300,
-              metrics: [["AWS/Lambda", "Duration", "FunctionName", functionName]],
+              metrics: [
+                ["AWS/Lambda", "Duration", "FunctionName", functionName],
+              ],
             },
           },
         ],
@@ -91,7 +93,6 @@ const stack = Effect.gen(function* () {
     alarmName: alarm.alarmName,
   };
 }).pipe(
-  Effect.provide(JobFunctionLive),
   Stack.make(
     "JobLambdaRpc",
     Layer.mergeAll(

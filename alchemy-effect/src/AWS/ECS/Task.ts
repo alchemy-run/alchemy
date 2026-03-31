@@ -22,10 +22,10 @@ import {
 } from "../../Bundle/TempRoot.ts";
 import { DotAlchemy } from "../../Config.ts";
 import * as Output from "../../Output.ts";
-import { Platform, type Main } from "../../Platform.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import { Platform, type Main } from "../../Platform.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
-import type { ProcessContext } from "../../Server/Process.ts";
+import type { ProcessContext, ServerHost } from "../../Server/Process.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import { createInternalTags, createTagsList, hasTags } from "../../Tags.ts";
@@ -160,7 +160,7 @@ export interface Task extends Resource<
   }
 > {}
 
-export type TaskServices = Credentials | Region;
+export type TaskServices = Credentials | Region | ServerHost;
 
 export type TaskShape = Main<TaskServices>;
 
@@ -168,8 +168,12 @@ export interface TaskExecutionContext extends ProcessContext {
   readonly Type: "AWS.ECS.Task";
 }
 
-export const Task: Platform<Task, TaskServices, TaskShape, TaskExecutionContext> =
-  Platform("AWS.ECS.Task", (id): TaskExecutionContext => {
+export const Task: Platform<
+  Task,
+  TaskServices,
+  TaskShape,
+  TaskExecutionContext
+> = Platform("AWS.ECS.Task", (id): TaskExecutionContext => {
   const runners: Effect.Effect<void, never, any>[] = [];
   const env: Record<string, any> = {};
 
@@ -205,11 +209,6 @@ export const Task: Platform<Task, TaskServices, TaskShape, TaskExecutionContext>
       Effect.sync(() => {
         runners.push(effect);
       }),
-    exports: {
-      program: Effect.all(runners, { concurrency: "unbounded" }).pipe(
-        Effect.asVoid,
-      ),
-    },
   };
 });
 

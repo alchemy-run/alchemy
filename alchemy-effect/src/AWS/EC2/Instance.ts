@@ -14,6 +14,7 @@ import { DotAlchemy } from "../../Config.ts";
 import type { Input } from "../../Input.ts";
 import { Platform, type Main } from "../../Platform.ts";
 import { Resource } from "../../Resource.ts";
+import type { ServerHost } from "../../Server/Process.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import {
@@ -252,7 +253,7 @@ export interface Instance extends Resource<
   }
 > {}
 
-export type InstanceServices = Credentials | Region;
+export type InstanceServices = ServerHost | Credentials | Region;
 
 export type InstanceShape = Main<InstanceServices>;
 
@@ -300,7 +301,10 @@ export const Instance: Platform<
   InstanceServices,
   InstanceShape,
   InstanceExecutionContext
-> = Platform("AWS.EC2.Instance", createEc2HostExecutionContext("AWS.EC2.Instance"));
+> = Platform(
+  "AWS.EC2.Instance",
+  createEc2HostExecutionContext("AWS.EC2.Instance"),
+);
 
 export const InstanceProvider = () =>
   Instance.provider.effect(

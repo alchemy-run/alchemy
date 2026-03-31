@@ -12,6 +12,7 @@ import {
   type BaseExecutionContext,
 } from "./ExecutionContext.ts";
 import type { HttpEffect } from "./Http.ts";
+import type { InputProps } from "./Input.ts";
 import type { Provider } from "./Provider.ts";
 import {
   Resource,
@@ -49,15 +50,19 @@ export interface Platform<
   MainShape,
   ExecutionContext extends BaseExecutionContext,
   BaseShape = {},
-> extends Effect.Effect<Resource & ExecutionContext, never, Services> {
+> extends Effect.Effect<
+  Resource & ExecutionContext,
+  never,
+  Services | PlatformServices
+> {
   provider: ResourceProviders<Resource>;
 
   <Self, Shape>(): {
     <PropsReq = never>(
       id: string,
       props:
-        | Resource["Props"]
-        | Effect.Effect<Resource["Props"], never, PropsReq>,
+        | InputProps<Resource["Props"]>
+        | Effect.Effect<InputProps<Resource["Props"]>, never, PropsReq>,
     ): Effect.Effect<
       Resource & Rpc<Self>,
       never,
@@ -68,78 +73,100 @@ export interface Platform<
       ): Layer.Layer<
         Self,
         never,
-        Provider<Resource> | Exclude<PropsReq | InitReq, Services>
+        | Provider<Resource>
+        | Exclude<PropsReq | InitReq, Services | PlatformServices>
       >;
-      new (_: never): Shape & BaseShape;
+      new (_: never): MakeShape<Shape, BaseShape>;
       promise(): PlatformPromise<Self>;
     };
   };
   <Self>(): {
-    <Shape, PropsReq = never, InitReq = never>(
+    <
+      Shape,
+      PropsReq = never,
+      InitReq extends Services | PlatformServices = never,
+    >(
       id: string,
       props:
-        | Resource["Props"]
+        | InputProps<Resource["Props"]>
         | Effect.Effect<Resource["Props"], never, PropsReq>,
       impl: Effect.Effect<Shape, never, InitReq>,
     ): Effect.Effect<
       Resource & Rpc<Self>,
       never,
-      Provider<Resource> | PropsReq | Exclude<InitReq, Services>
+      | Provider<Resource>
+      | PropsReq
+      | Exclude<InitReq, Services | PlatformServices>
     > & {
-      new (_: never): Shape & BaseShape;
+      new (_: never): MakeShape<Shape, BaseShape>;
       promise(): PlatformPromise<Self>;
     };
     <Shape, PropsReq = never>(
       id: string,
       props:
-        | Resource["Props"]
-        | Effect.Effect<Resource["Props"], never, PropsReq>,
+        | InputProps<Resource["Props"]>
+        | Effect.Effect<InputProps<Resource["Props"]>, never, PropsReq>,
     ): Effect.Effect<
       Resource & Rpc<Self>,
       never,
       Provider<Resource> | PropsReq
     > & {
-      make<InitReq = never>(
+      make<InitReq extends Services | PlatformServices = never>(
         impl: Effect.Effect<Shape, never, InitReq>,
       ): Layer.Layer<
         Self,
         never,
-        Provider<Resource> | Exclude<PropsReq | InitReq, Services>
+        | Provider<Resource>
+        | Exclude<PropsReq | InitReq, Services | PlatformServices>
       >;
-      new (_: never): Shape & BaseShape;
+      new (_: never): MakeShape<Shape, BaseShape>;
       promise(): PlatformPromise<Self>;
-    } & (<InitReq = never>(
+    } & (<InitReq extends Services | PlatformServices = never>(
         impl: Effect.Effect<Shape, never, InitReq>,
       ) => Effect.Effect<
         Resource & Rpc<Self>,
         never,
-        Provider<Resource> | PropsReq | Exclude<InitReq, Services>
+        | Provider<Resource>
+        | PropsReq
+        | Exclude<InitReq, Services | PlatformServices>
       >);
   };
-  <PropsReq = never, InitReq = never>(
+  <PropsReq = never, InitReq extends Services | PlatformServices = never>(
     id: string,
     props:
-      | Resource["Props"]
-      | Effect.Effect<Resource["Props"], never, PropsReq>,
+      | InputProps<Resource["Props"]>
+      | Effect.Effect<InputProps<Resource["Props"]>, never, PropsReq>,
   ): Effect.Effect<
     Resource,
     never,
-    Provider<Resource> | PropsReq | Exclude<InitReq, Services>
+    | Provider<Resource>
+    | PropsReq
+    | Exclude<InitReq, Services | PlatformServices>
   >;
-  <Shape extends MainShape, PropsReq = never, InitReq = never>(
+  <
+    Shape extends MainShape,
+    PropsReq = never,
+    InitReq extends Services | PlatformServices = never,
+  >(
     id: string,
     props:
-      | Resource["Props"]
-      | Effect.Effect<Resource["Props"], never, PropsReq>,
+      | InputProps<Resource["Props"]>
+      | Effect.Effect<InputProps<Resource["Props"]>, never, PropsReq>,
     impl: Effect.Effect<Shape, never, InitReq>,
   ): Effect.Effect<
     Resource & Rpc<Shape>,
     never,
-    Provider<Resource> | PropsReq | Exclude<InitReq, Services>
+    | Provider<Resource>
+    | PropsReq
+    | Exclude<InitReq, Services | PlatformServices>
   > & {
     promise(): PlatformPromise<Shape>;
   };
 }
+
+type MakeShape<Shape, BaseShape> = Shape extends never | undefined | void
+  ? BaseShape
+  : Shape & BaseShape;
 
 export const Platform = <
   R extends ResourceLike<
@@ -255,7 +282,10 @@ export const Platform = <
 
               yield* impl.pipe(
                 Effect.flatMap((impl) =>
-                  impl ? executionContext.serve(impl.fetch) : Effect.void,
+                  impl
+                    ? (executionContext.serve?.(impl.fetch) ??
+                      Effect.die("No serve handler"))
+                    : Effect.void,
                 ),
                 Effect.provide(
                   Layer.provideMerge(

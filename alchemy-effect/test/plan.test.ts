@@ -1,17 +1,17 @@
+import * as Construct from "@/Construct";
 import type { Input, InputProps } from "@/Input";
 import * as Output from "@/Output";
 import * as Plan from "@/Plan";
 import { UnsatisfiedResourceCycle } from "@/Plan";
 import * as Stack from "@/Stack";
+import { Stage } from "@/Stage";
 import { State, type ResourceState, type ResourceStatus } from "@/State";
 import { test } from "@/Test/Vitest";
-import * as Construct from "@/Construct";
 import { describe, expect } from "@effect/vitest";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
-import { Stage } from "../src/Stage.ts";
 import {
   BindingTarget,
   Bucket,
@@ -680,7 +680,10 @@ describe("construct namespaces", () => {
   test(
     "same child logical ids in different constructs do not collide",
     Effect.gen(function* () {
-      const Site = Construct.fn(function* (_id: string, props: { name: string }) {
+      const Site = Construct.fn(function* (
+        _id: string,
+        props: { name: string },
+      ) {
         return yield* Bucket("Bucket", {
           name: props.name,
         });
@@ -774,32 +777,34 @@ const createReplacingState = (options: {
   props: TestResourceProps;
   old: ResourceState;
   attr?: {};
-}) => ({
-  ...createTestResourceState({
-    logicalId: options.logicalId,
-    status: "replacing",
-    props: options.props,
-    attr: options.attr,
-  }),
-  old: options.old,
-  deleteFirst: false,
-}) as Extract<ResourceState, { status: "replacing" }>;
+}) =>
+  ({
+    ...createTestResourceState({
+      logicalId: options.logicalId,
+      status: "replacing",
+      props: options.props,
+      attr: options.attr,
+    }),
+    old: options.old,
+    deleteFirst: false,
+  }) as Extract<ResourceState, { status: "replacing" }>;
 
 const createReplacedState = (options: {
   logicalId: string;
   props: TestResourceProps;
   old: ResourceState;
   attr?: {};
-}) => ({
-  ...createTestResourceState({
-    logicalId: options.logicalId,
-    status: "replaced",
-    props: options.props,
-    attr: options.attr,
-  }),
-  old: options.old,
-  deleteFirst: false,
-}) as Extract<ResourceState, { status: "replaced" }>;
+}) =>
+  ({
+    ...createTestResourceState({
+      logicalId: options.logicalId,
+      status: "replaced",
+      props: options.props,
+      attr: options.attr,
+    }),
+    old: options.old,
+    deleteFirst: false,
+  }) as Extract<ResourceState, { status: "replaced" }>;
 
 const testSimple = (
   title: string,
@@ -1371,9 +1376,7 @@ describe("Outputs should resolve to old values", () => {
     },
   });
 
-  const expected = (
-    props: Input.Resolve<InputProps<TestResourceProps>>,
-  ) => ({
+  const expected = (props: Input.Resolve<InputProps<TestResourceProps>>) => ({
     resources: {
       A: {
         action: "noop",

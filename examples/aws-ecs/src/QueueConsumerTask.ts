@@ -3,9 +3,9 @@ import * as Server from "alchemy-effect/Server";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import { JobsQueue } from "./JobsQueue.ts";
+import { JobsQueue, JobsQueueLive } from "./JobsQueue.ts";
 
-export class QueueConsumerTask extends AWS.ECS.Task<QueueConsumerTask>()(
+export default class QueueConsumerTask extends AWS.ECS.Task<QueueConsumerTask>()(
   "QueueConsumerTask",
   {
     main: import.meta.path,
@@ -13,9 +13,6 @@ export class QueueConsumerTask extends AWS.ECS.Task<QueueConsumerTask>()(
     memory: 512,
     taskRoleManagedPolicyArns: ["arn:aws:iam::aws:policy/AmazonSQSFullAccess"],
   },
-) {}
-
-export const QueueConsumerTaskLive = QueueConsumerTask.make(
   Effect.gen(function* () {
     const queue = yield* JobsQueue;
     yield* AWS.SQS.messages(queue, {
@@ -32,11 +29,13 @@ export const QueueConsumerTaskLive = QueueConsumerTask.make(
     );
   }).pipe(
     Effect.provide(
-      Layer.mergeAll(
-        Server.SQSQueueEventSource,
-        AWS.SQS.ReceiveMessageLive,
-        AWS.SQS.DeleteMessageBatchLive,
+      Layer.provideMerge(
+        Layer.mergeAll(Server.SQSQueueEventSource, JobsQueueLive),
+        Layer.mergeAll(
+          AWS.SQS.ReceiveMessageLive,
+          AWS.SQS.DeleteMessageBatchLive,
+        ),
       ),
     ),
   ),
-);
+) {}
