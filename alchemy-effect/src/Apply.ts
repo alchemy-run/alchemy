@@ -577,6 +577,7 @@ const executeNode = (
             instanceId,
           };
           yield* signalReady;
+          yield* report("created");
           yield* markTerminal("created");
           return;
         }
@@ -702,6 +703,9 @@ const executeNode = (
         };
         yield* signalReady;
 
+        // Keep progress anchored to the live replacement while GC drains the
+        // previous generation(s) in the background.
+        yield* report("created");
         yield* markTerminal("created");
         return;
       }
@@ -935,9 +939,8 @@ const collectGarbage = Effect.fnUntraced(function* (
               { concurrency: "unbounded" },
             );
 
-            yield* report("deleting");
-
             if (isDeleteNode(node)) {
+              yield* report("deleting");
               if (node.resource.RemovalPolicy === "retain") {
                 yield* state.delete({
                   stack: stackName,
@@ -981,6 +984,7 @@ const collectGarbage = Effect.fnUntraced(function* (
               });
               yield* report("deleted");
             } else {
+              yield* scopedSession.note("Cleaning up replaced resource...");
               if (
                 node.old.status === "replacing" ||
                 node.old.status === "replaced"
@@ -1020,7 +1024,7 @@ const collectGarbage = Effect.fnUntraced(function* (
                   removalPolicy: node.removalPolicy,
                 });
               }
-              yield* report("replaced");
+              yield* scopedSession.note("Replaced resource cleanup complete.");
             }
           }).pipe(Effect.provide(Layer.succeed(InstanceId, instanceId))),
         ));

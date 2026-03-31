@@ -20,6 +20,7 @@ import {
 import { Self } from "./Self.ts";
 import type { Stack, StackServices } from "./Stack.ts";
 import type { Stage } from "./Stage.ts";
+import { effectClass } from "./Util/effect.ts";
 import type { IsAny } from "./Util/types.ts";
 
 export type Main<Services = never> = {
@@ -148,14 +149,14 @@ export const Platform = <
   const resource = Resource(type);
   const PlatformContext = ExecutionContext(type);
 
-  const constructor = (id?: string, props?: any, impl?: Impl) => {
+  const constructor = (id?: string, props?: any, impl?: Impl): any => {
     if (!id) {
       // impl was not provided inline, this is a tagged instance
       // e.g.
       // export class Sandbox extends Cloudflare.Container<Sandbox>()(..) {}
       //
       // export const SandboxLive = Sandbox.make(..)
-      return makeClass;
+      return constructor;
     } else if (!impl) {
       // this is a non-tagged, curried constructor
       // e.g.
@@ -168,20 +169,26 @@ export const Platform = <
       // )
       const cls = makeClass(id, props);
       return Object.assign(
-        (impl: Impl) => cls.asEffect().pipe(Effect.provide(cls.make(impl))),
+        function (impl: Impl) {
+          return cls.asEffect().pipe(Effect.provide(cls.make(impl)));
+        },
         // we splice in the Effect so this can be yielded to indicate a non-Effect native instance
         // e.g. here, we yield it - in this case we don't want to provide an implementation
         // const worker = yield* Cloudflare.Worker("id", {
         //  main: "./src/worker.ts"
         // });
         cls,
+        {
+          asEffect: () => cls.asEffect(),
+          [Symbol.iterator]: () => new SingleShotGen(cls),
+        },
       );
     } else {
       // impl was provided inline, this is a non-tagged eager instance
       // e.g.
       // export default Cloudflare.Worker("id", { main: "./src/worker.ts" }, Effect.gen(function* () { .. })
       const cls = makeClass(id, props);
-      return cls.asEffect().pipe(Effect.provide(cls.make(impl)));
+      return cls.asEffect().pipe(Effect.provide(cls.make(impl)), effectClass);
     }
   };
 
@@ -198,7 +205,9 @@ export const Platform = <
       > {
         return new SingleShotGen(this) as any;
       }
-      static asEffect = () => Self.asEffect();
+      static asEffect() {
+        return Self.asEffect();
+      }
       static pipe(...args: any[]) {
         // @ts-expect-error
         return pipe(this.asEffect(), ...args);
@@ -218,7 +227,10 @@ export const Platform = <
               executionContext,
               outerServices,
             ]) {
-              const instance = yield* resource(id, props as any);
+              const instance = Object.assign(
+                yield* resource(id, props as any),
+                executionContext,
+              );
 
               yield* impl.pipe(
                 Effect.flatMap((impl) =>
@@ -229,6 +241,7 @@ export const Platform = <
                     Layer.mergeAll(
                       Layer.succeed(Platform.Platform, executionContext),
                       Layer.succeed(PlatformContext, executionContext),
+                      Layer.succeed(ExecutionContext, executionContext),
                       Layer.succeed(resource.Self, instance),
                       Layer.succeed(Platform.Self, instance),
                       Layer.succeed(Self, instance),
@@ -272,7 +285,7 @@ export const Platform = <
 
   const instance = Object.assign(constructor, resource, {
     Platform: Platform,
-    Self: self,
+    asEffect: () => resource.Self.asEffect(),
   }) as any;
   return instance;
 };

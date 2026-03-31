@@ -172,9 +172,7 @@ const awsRegion = Flag.string("region").pipe(
 );
 
 const bootstrapDestroy = Flag.boolean("destroy").pipe(
-  Flag.withDescription(
-    "Destroy all bootstrap buckets in the selected region",
-  ),
+  Flag.withDescription("Destroy all bootstrap buckets in the selected region"),
   Flag.withDefault(false),
 );
 

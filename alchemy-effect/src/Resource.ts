@@ -215,31 +215,36 @@ export function Resource<R extends ResourceLike>(
         [Symbol.toPrimitive](this: typeof target, hint: string) {
           return hint === "number" ? NaN : this.toString();
         },
-        [nodeInspect](
-          depth: number,
-          options: { depth?: number | null } & Record<string, unknown>,
-          inspect: (value: unknown, opts?: unknown) => string,
-        ) {
-          if (depth < 0) {
-            return target.toString();
-          }
-          const nextDepth =
-            options.depth == null ? null : Math.max(0, options.depth - 1);
-          return inspect(
-            {
-              Type: target.Type,
-              Namespace: target.Namespace,
-              FQN: target.FQN,
-              LogicalId: target.LogicalId,
-              Props: target.Props,
-              RemovalPolicy: target.RemovalPolicy,
-            },
-            { ...options, depth: nextDepth },
-          );
-        },
+        // TODO(sam): figure out a better way to log things in cloudflare, this breaks indentation and is bloated
+        // [nodeInspect](
+        //   depth: number,
+        //   options: { depth?: number | null } & Record<string, unknown>,
+        //   inspect: (value: unknown, opts?: unknown) => string,
+        // ) {
+        //   if (depth < 0) {
+        //     return target.toString();
+        //   }
+        //   const nextDepth =
+        //     options.depth == null ? null : Math.max(0, options.depth - 1);
+        //   return inspect(
+        //     {
+        //       Type: target.Type,
+        //       Namespace: target.Namespace,
+        //       FQN: target.FQN,
+        //       LogicalId: target.LogicalId,
+        //       Props: target.Props,
+        //       RemovalPolicy: target.RemovalPolicy,
+        //     },
+        //     { ...options, depth: nextDepth },
+        //   );
+        // },
       };
 
       const Resource: R = (stack.resources[fqn] = new Proxy(target, {
+        set: (t, prop, value) => {
+          t[prop as keyof typeof t] = value;
+          return true;
+        },
         get: (t, prop) =>
           typeof prop === "symbol" || prop in t
             ? t[prop as keyof typeof t]

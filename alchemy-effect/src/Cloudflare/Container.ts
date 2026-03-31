@@ -299,6 +299,7 @@ export const Container: Platform<
 
   return {
     Type: ContainerTypeId,
+    LogicalId: id,
     id,
     env,
     set: (bindingId: string, output: Output.Output) =>
@@ -342,9 +343,12 @@ export const bindContainer = Effect.fnUntraced(function* <Shape, Req = never>(
 ) {
   const namespace = yield* DurableObjectNamespace;
 
-  const container = Effect.isEffect(containerEff)
-    ? yield* containerEff
-    : containerEff;
+  const container =
+    "asEffect" in containerEff
+      ? yield* (containerEff as any).asEffect() as Effect.Effect<
+          ContainerApplication & Rpc<Shape>
+        >
+      : containerEff;
 
   yield* container.bind`DurableObject(${namespace})`({
     durableObjects: {
