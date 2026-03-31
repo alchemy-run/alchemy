@@ -45,20 +45,13 @@ import * as Stage from "../Stage.ts";
 import * as State from "../State/index.ts";
 import { TestCli } from "./TestCli.ts";
 
-declare module "@effect/vitest" {
-  interface ExpectStatic {
-    emptyObject(): any;
-    propExpr(identifier: string, src: any): any;
-  }
-}
-
-expect.emptyObject = () =>
+export const expectEmptyObject = () =>
   expect.toSatisfy(
     (deletions) => Object.keys(deletions).length === 0,
     "empty object",
   );
 
-expect.propExpr = (identifier: string, src: any) =>
+export const expectPropExpr = (identifier: string, src: any) =>
   expect.objectContaining({
     kind: "PropExpr",
     identifier,

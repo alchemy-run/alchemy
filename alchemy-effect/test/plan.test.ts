@@ -6,7 +6,7 @@ import { UnsatisfiedResourceCycle } from "@/Plan";
 import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
 import { State, type ResourceState, type ResourceStatus } from "@/State";
-import { test } from "@/Test/Vitest";
+import { expectEmptyObject, expectPropExpr, test } from "@/Test/Vitest";
 import { describe, expect } from "@effect/vitest";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -82,7 +82,7 @@ test(
           state: undefined,
         },
       },
-      deletions: expect.emptyObject(),
+      deletions: expectEmptyObject(),
     });
   }),
 );
@@ -140,7 +140,7 @@ test(
           state: undefined,
         },
       },
-      deletions: expect.emptyObject(),
+      deletions: expectEmptyObject(),
     });
   }),
 );
@@ -184,7 +184,7 @@ test(
           },
         },
       },
-      deletions: expect.emptyObject(),
+      deletions: expectEmptyObject(),
     });
   }),
 );
@@ -244,7 +244,7 @@ test(
           },
         },
       },
-      deletions: expect.emptyObject(),
+      deletions: expectEmptyObject(),
     });
   }),
 );
@@ -371,7 +371,7 @@ describe("replace resource when replaceString changes", () => {
             action: "noop",
           },
         },
-        deletions: expect.emptyObject(),
+        deletions: expectEmptyObject(),
       });
 
       expect(
@@ -389,7 +389,7 @@ describe("replace resource when replaceString changes", () => {
             },
           },
         },
-        deletions: expect.emptyObject(),
+        deletions: expectEmptyObject(),
       });
     }),
   );
@@ -413,11 +413,11 @@ describe("replace resource when replaceString changes", () => {
           A: {
             action: "update",
             props: {
-              replaceString: expect.propExpr("string", B!),
+              replaceString: expectPropExpr("string", B!),
             },
           },
         },
-        deletions: expect.emptyObject(),
+        deletions: expectEmptyObject(),
       });
     }),
   );
@@ -479,7 +479,7 @@ test(
           },
         },
       },
-      deletions: expect.emptyObject(),
+      deletions: expectEmptyObject(),
     });
   }),
 );
@@ -546,7 +546,7 @@ test(
           },
         },
       },
-      deletions: expect.emptyObject(),
+      deletions: expectEmptyObject(),
     });
   }),
 );
@@ -623,7 +623,7 @@ test(
           bindings: [],
         },
       },
-      deletions: expect.emptyObject(),
+      deletions: expectEmptyObject(),
     });
   }),
 );
@@ -662,11 +662,11 @@ describe("construct namespaces", () => {
                 sid: "Policy",
                 data: {
                   env: {
-                    BUCKET: expect.propExpr(
+                    BUCKET: expectPropExpr(
                       "string",
                       plan.resources["MarketingSite/Bucket"]!.resource,
                     ),
-                    DISTRIBUTION: expect.propExpr(
+                    DISTRIBUTION: expectPropExpr(
                       "string",
                       plan.resources["MarketingSite/Distribution"]!.resource,
                     ),
@@ -680,7 +680,7 @@ describe("construct namespaces", () => {
             bindings: [],
           },
         },
-        deletions: expect.emptyObject(),
+        deletions: expectEmptyObject(),
       });
     }),
   );
@@ -721,7 +721,7 @@ describe("construct namespaces", () => {
             },
           },
         },
-        deletions: expect.emptyObject(),
+        deletions: expectEmptyObject(),
       });
     }),
   );
@@ -859,7 +859,7 @@ const testSimple = (
             resources: {
               A: testCase.plan,
             },
-            deletions: expect.emptyObject(),
+            deletions: expectEmptyObject(),
           });
         }
       }
@@ -1295,13 +1295,13 @@ test(
           props: {
             name: "test-function",
             env: {
-              QUEUE_URL: expect.propExpr("queueUrl", MyQueue!),
+              QUEUE_URL: expectPropExpr("queueUrl", MyQueue!),
             },
           },
           state: undefined,
         },
       },
-      deletions: expect.emptyObject(),
+      deletions: expectEmptyObject(),
     });
   }),
 );
@@ -1350,13 +1350,13 @@ test(
           props: {
             name: "test-function",
             env: {
-              QUEUE_URL: expect.propExpr("queueUrl", MyQueue!),
+              QUEUE_URL: expectPropExpr("queueUrl", MyQueue!),
             },
           },
           state: undefined,
         },
       },
-      deletions: expect.emptyObject(),
+      deletions: expectEmptyObject(),
     });
   }),
 );
@@ -1396,7 +1396,7 @@ describe("Outputs should resolve to old values", () => {
         props: props,
       },
     },
-    deletions: expect.emptyObject(),
+    deletions: expectEmptyObject(),
   });
 
   const test = <const I extends InputProps<TestResourceProps>>(
@@ -1549,7 +1549,7 @@ describe("stable properties should not cause downstream changes", () => {
               action: "noop",
             },
           },
-          deletions: expect.emptyObject(),
+          deletions: expectEmptyObject(),
         });
       }),
     );
