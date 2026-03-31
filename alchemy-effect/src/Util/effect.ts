@@ -44,12 +44,14 @@ export const taggedFunction = <
   fn: Fn,
 ): Tag & Fn =>
   Object.assign(fn, tag, {
-    asEffect: () => tag.asEffect().pipe(Effect.map(fn)),
+    asEffect() {
+      return tag.asEffect();
+    },
     [Symbol.iterator]() {
-      return new SingleShotGen(this);
+      return tag[Symbol.iterator]();
     },
     pipe() {
-      return pipeArguments(tag.asEffect().pipe(Effect.map(fn)), arguments);
+      return pipeArguments(tag.asEffect(), arguments);
     },
     toString: () => `${tag.toString()}.${fn.name}`,
   });

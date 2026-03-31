@@ -8,14 +8,13 @@ export interface TreeBinding {
 
 /**
  * A tree node representing a namespace.
- * Resources and bindings live directly inside the namespace where they were created.
+ * Resources live directly inside the namespace where they were created.
  */
 export interface TreeNode {
   id: string;
   path: string[];
   children: Map<string, TreeNode>;
   resources: CRUD[];
-  bindings: TreeBinding[];
 }
 
 export type DerivedAction =
@@ -32,7 +31,6 @@ export function buildNamespaceTree(items: CRUD[]): TreeNode {
     path: [],
     children: new Map(),
     resources: [],
-    bindings: [],
   };
 
   const getNode = (path: string[]) => {
@@ -46,7 +44,6 @@ export function buildNamespaceTree(items: CRUD[]): TreeNode {
           path: path.slice(0, i + 1),
           children: new Map(),
           resources: [],
-          bindings: [],
         };
         current.children.set(segment, child);
       }
@@ -57,12 +54,6 @@ export function buildNamespaceTree(items: CRUD[]): TreeNode {
 
   for (const item of items) {
     getNode(toPath(item.resource.Namespace)).resources.push(item);
-    for (const binding of item.bindings ?? []) {
-      getNode(toPath(binding.namespace)).bindings.push({
-        sid: binding.sid,
-        action: binding.action,
-      });
-    }
   }
 
   return root;
@@ -72,10 +63,7 @@ export function deriveNamespaceAction(node: TreeNode): DerivedAction {
   const actions = new Set<BindingAction | CRUD["action"] | DerivedAction>();
 
   for (const resource of node.resources) {
-    actions.add(resource.action);
-  }
-  for (const binding of node.bindings) {
-    actions.add(binding.action);
+    actions.add(deriveResourceChildrenAction(resource, node));
   }
   for (const child of node.children.values()) {
     const childAction = deriveNamespaceAction(child);
@@ -117,9 +105,6 @@ const flattenNamespace = (
   const sortedResources = [...node.resources].sort((a, b) =>
     a.resource.LogicalId.localeCompare(b.resource.LogicalId),
   );
-  const sortedBindings = [...node.bindings].sort((a, b) =>
-    a.sid.localeCompare(b.sid),
-  );
   const sortedChildren = Array.from(node.children.entries()).sort(([a], [b]) =>
     a.localeCompare(b),
   );
@@ -151,28 +136,28 @@ const flattenNamespace = (
       path: [...node.path, resource.resource.LogicalId],
       action: resource.action,
       resourceType: resource.resource.Type,
-      bindingCount: childNamespace ? countVisibleChildren(childNamespace) : 0,
+      bindingCount: resource.bindings.length,
     });
+    for (const binding of [...resource.bindings].sort((a, b) =>
+      a.sid.localeCompare(b.sid),
+    )) {
+      result.push({
+        type: "binding",
+        depth: depth + 1,
+        id: binding.sid,
+        path: [...node.path, resource.resource.LogicalId, binding.sid],
+        action: binding.action,
+        bindingSid: binding.sid,
+      });
+    }
     if (childNamespace) {
       flattenNamespace(childNamespace, depth + 1, result);
     }
-  }
-
-  for (const binding of sortedBindings) {
-    result.push({
-      type: "binding",
-      depth,
-      id: binding.sid,
-      path: [...node.path, binding.sid],
-      action: binding.action,
-      bindingSid: binding.sid,
-    });
   }
 };
 
 const isEmpty = (node: TreeNode) =>
   node.resources.length === 0 &&
-  node.bindings.length === 0 &&
   Array.from(node.children.values()).every(isEmpty);
 
 const countVisibleChildren = (node: TreeNode) => {
@@ -180,10 +165,26 @@ const countVisibleChildren = (node: TreeNode) => {
     node.resources.map((resource) => resource.resource.LogicalId),
   );
   return (
-    node.bindings.length +
     node.resources.length +
     Array.from(node.children.keys()).filter((id) => !resourceIds.has(id)).length
   );
+};
+
+const deriveResourceChildrenAction = (
+  resource: CRUD,
+  node: TreeNode,
+): DerivedAction => {
+  const actions = new Set<BindingAction | CRUD["action"] | DerivedAction>([
+    resource.action,
+  ]);
+  for (const binding of resource.bindings) {
+    actions.add(binding.action);
+  }
+  const childNamespace = node.children.get(resource.resource.LogicalId);
+  if (childNamespace) {
+    actions.add(deriveNamespaceAction(childNamespace));
+  }
+  return deriveAction(actions);
 };
 
 const deriveAction = (

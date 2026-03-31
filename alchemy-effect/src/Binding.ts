@@ -136,26 +136,12 @@ export const Policy =
       );
 
     const asEffect = () =>
-      Effect.all([ExecutionContext.asEffect(), Service]).pipe(
+      Effect.all([Self.asEffect(), Service]).pipe(
         Effect.map(
-          ([ctx, fn]) =>
+          ([resource, fn]) =>
             (...args: any[]) =>
               fn(...args).pipe(
-                // place all of this Binding's Resoruces and Policies in their own dedicated namespace
-                Namespace.push(
-                  `${Identifier}(${args
-                    .flatMap((arg) =>
-                      typeof arg === "object" && "LogicalId" in arg
-                        ? [arg.LogicalId]
-                        : ["string", "number", "boolean"].includes(typeof arg)
-                          ? [arg]
-                          : // TODO(sam): improve SID generation to support arrays and objects
-                            [],
-                    )
-                    .join(", ")})`,
-                ),
-                // place all of a Host's Bindings in the Host's namespace
-                Namespace.set(ctx.id), // TODO(sam): .set here is hacky, we have a bit of a mess when it comes to namespaces
+                Namespace.push((resource as ResourceLike).LogicalId),
               ),
         ),
       );

@@ -7,7 +7,6 @@ import type { HttpServerError } from "effect/unstable/http/HttpServerError";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type * as Socket from "effect/unstable/socket/Socket";
-import * as Binding from "../../Binding.ts";
 import type { HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
@@ -15,12 +14,7 @@ import { Account } from "../Account.ts";
 import cloudflare_workers from "./cloudflare:workers.ts";
 import { serveWebRequest } from "./HttpServer.ts";
 import { fromWebSocket, type DurableWebSocket } from "./WebSocket.ts";
-import {
-  Worker,
-  WorkerEnvironment,
-  isWorker,
-  type WorkerServices,
-} from "./Worker.ts";
+import { Worker, WorkerEnvironment, type WorkerServices } from "./Worker.ts";
 
 export type DurableObjectId = cf.DurableObjectId;
 export type DurableObjectJurisdiction = cf.DurableObjectJurisdiction;
@@ -106,10 +100,10 @@ export interface DurableObjectNamespaceClass extends Effect.Effect<
   >;
 }
 
-class DurableObjectNamespaceScope extends ServiceMap.Service<
+export class DurableObjectNamespaceScope extends ServiceMap.Service<
   DurableObjectNamespaceScope,
   DurableObjectNamespace
->()("Cloudflare.Workers.DurableObjectNamespace") {}
+>()("Cloudflare.DurableObjectNamespace") {}
 
 export const DurableObjectNamespace: DurableObjectNamespaceClass =
   taggedFunction(DurableObjectNamespaceScope, ((
@@ -130,10 +124,27 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
       ? DurableObjectNamespace
       : effectClass(
           Effect.gen(function* () {
-            const [name, impl] = args;
+            const [namespace, impl] = args;
             const worker = yield* Worker;
 
-            yield* DurableObjectPolicy.bind(name);
+            yield* worker.bind`${namespace} (Cloudflare.DurableObjectNamespace)`(
+              {
+                // TODO(sam): automate class migrations, probably in the provider
+                bindings: [
+                  {
+                    type: "durable_object_namespace",
+                    name: namespace,
+                    className: namespace,
+                    // scriptName:
+                    //   binding.scriptName === props.workerName
+                    //     ? undefined
+                    //     : binding.scriptName,
+                    // environment: binding.environment,
+                    // namespaceId: binding.namespaceId,
+                  },
+                ],
+              },
+            );
 
             const DurableObject = yield* cloudflare_workers.pipe(
               Effect.map((m) => m.DurableObject),
@@ -143,7 +154,7 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
               yield* Effect.services<Effect.Services<typeof impl>>();
 
             yield* worker.export(
-              name,
+              namespace,
               class extends DurableObject {
                 constructor(state: cf.DurableObjectState, env: any) {
                   super(state, env);
@@ -172,17 +183,19 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
                   // should be fine to return undefined here (it is only undefined at plantime)
                   return undefined!;
                 }
-                const ns = env[name];
+                const ns = env[namespace];
                 if (!ns) {
                   return Effect.die(
-                    new Error(`DurableObjectNamespace '${name}' not found`),
+                    new Error(
+                      `DurableObjectNamespace '${namespace}' not found`,
+                    ),
                   );
                 } else if (typeof ns.getByName === "function") {
                   return Effect.succeed(ns);
                 } else {
                   return Effect.die(
                     new Error(
-                      `DurableObjectNamespace '${name}' is not a DurableObjectNamespace`,
+                      `DurableObjectNamespace '${namespace}' is not a DurableObjectNamespace`,
                     ),
                   );
                 }
@@ -211,13 +224,13 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
                         namespaceId: string;
                       } =>
                         binding.type === "durable_object_namespace" &&
-                        binding.className === name,
+                        binding.className === namespace,
                     )?.namespaceId;
                     return namespaceId
                       ? Effect.succeed(namespaceId)
                       : Effect.die(
                           new Error(
-                            `DurableObjectNamespace '${name}' not found`,
+                            `DurableObjectNamespace '${namespace}' not found`,
                           ),
                         );
                   }),
@@ -228,7 +241,8 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
 
             const self = {
               Type: TypeId,
-              name: name,
+              LogicalId: namespace,
+              name: namespace,
               namespaceId,
               getByName: (name: string) =>
                 use((ns) => wrapDurableObjectStub(ns.getByName(name))),
@@ -250,38 +264,6 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
             return self;
           }),
         )) as any);
-
-export class DurableObjectPolicy extends Binding.Policy<
-  DurableObjectPolicy,
-  (namespace: string) => Effect.Effect<void>
->()("Cloudflare.Workers.DurableObject") {}
-
-export const DurableObjectPolicyLive = DurableObjectPolicy.layer.succeed(
-  Effect.fn(function* (host, namespace: string) {
-    if (isWorker(host)) {
-      yield* host.bind`Bind(DurableObject(${namespace}))`({
-        // TODO(sam): automate class migrations, probably in the provider
-        bindings: [
-          {
-            type: "durable_object_namespace",
-            name: namespace,
-            className: namespace,
-            // scriptName:
-            //   binding.scriptName === props.workerName
-            //     ? undefined
-            //     : binding.scriptName,
-            // environment: binding.environment,
-            // namespaceId: binding.namespaceId,
-          },
-        ],
-      });
-    } else {
-      return yield* Effect.die(
-        `DurableObjectPolicy does not support runtime '${host.Type}'`,
-      );
-    }
-  }),
-);
 
 export type DurableObjectStub<Shape> = {
   // TODO(sam): do we need to transform? hopefully not

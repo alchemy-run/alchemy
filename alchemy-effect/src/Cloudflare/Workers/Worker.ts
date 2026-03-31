@@ -28,6 +28,7 @@ import {
   type Rpc,
 } from "../../Platform.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
+import { Self } from "../../Self.ts";
 import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
 import { sha256 } from "../../Util/index.ts";
@@ -345,6 +346,15 @@ export const BindWorkerPolicyLive = BindWorkerPolicy.layer.succeed(
   }),
 );
 
+function bumpMigrationTagVersion(
+  oldTag: string | undefined,
+): string | undefined {
+  if (!oldTag) return undefined;
+  const version = oldTag.match(/^(alchemy:)?v(\d+)$/)?.[2];
+  if (!version) return "alchemy:v1";
+  return `alchemy:v${parseInt(version, 10) + 1}`;
+}
+
 export const WorkerProvider = () =>
   Worker.provider.effect(
     Effect.gen(function* () {
@@ -361,6 +371,7 @@ export const WorkerProvider = () =>
       const deleteScript = yield* workers.deleteScript;
       const getScript = yield* workers.getScript;
       const getScriptSubdomain = yield* workers.getScriptSubdomain;
+      const getScriptSettings = yield* workers.getScriptScriptAndVersionSetting;
       const getSubdomain = yield* workers.getSubdomain;
       const listScripts = yield* workers.listScripts;
       const putScript = yield* workers.putScript;
@@ -553,7 +564,13 @@ export default {
 };
 
 // export class proxy stubs for Durable Objects
-${props.exports?.map((id) => `export class ${id} {}`).join("\n") ?? ""}
+${
+  (Object.keys(props.exports ?? {}) ?? [])
+    .filter((id) => id !== "default")
+    // TODO(sam): proxy to the class in `await worker()`
+    .map((id) => `export class ${id} {}`)
+    .join("\n") ?? ""
+}
 `;
         yield* fs.writeFileString(tempEntry, script);
         return yield* Effect.gen(function* () {
@@ -653,6 +670,143 @@ ${props.exports?.map((id) => `export class ${id} {}`).join("\n") ?? ""}
           `Cloudflare Worker ${olds ? "update" : "create"}: uploading script for ${name}`,
         );
         yield* session.note("Uploading worker...");
+
+        // Collect new DO bindings from the metadata bindings list (keyed by binding name)
+        const newDoBindings = new Map<
+          string,
+          { className: string; scriptName?: string }
+        >();
+        for (const b of metadataBindings) {
+          if (
+            b.type === "durable_object_namespace" &&
+            "className" in b &&
+            b.className
+          ) {
+            newDoBindings.set(b.name, {
+              className: b.className,
+              scriptName: "scriptName" in b ? b.scriptName : undefined,
+            });
+          }
+        }
+
+        // Read existing worker settings for migration tracking
+        const oldSettings = yield* getScriptSettings({
+          accountId,
+          scriptName: name,
+        }).pipe(
+          Effect.map((s) => s as typeof s | undefined),
+          Effect.catch(() => Effect.succeed(undefined)),
+        );
+
+        const oldTags = Array.from(new Set([...(oldSettings?.tags ?? [])]));
+        const oldBindings = oldSettings?.bindings ?? [];
+
+        // Parse alchemy:do:{stableId}:{bindingName} tags
+        const bindingNameToStableId = Object.fromEntries(
+          oldTags.flatMap((tag) => {
+            if (tag.startsWith("alchemy:do:")) {
+              const parts = tag.split(":");
+              return [[parts[3], parts[2]]];
+            }
+            return [];
+          }),
+        );
+
+        // Parse alchemy:migration-tag:{version}
+        const oldMigrationTag = oldTags.flatMap((tag) =>
+          tag.startsWith("alchemy:migration-tag:")
+            ? [tag.slice("alchemy:migration-tag:".length)]
+            : [],
+        )[0];
+        const newMigrationTag = bumpMigrationTagVersion(oldMigrationTag);
+
+        // Compute deleted classes
+        const deletedClasses: string[] = [];
+        for (const oldBinding of oldBindings) {
+          if (
+            oldBinding.type === "durable_object_namespace" &&
+            "className" in oldBinding &&
+            oldBinding.className &&
+            (!("scriptName" in oldBinding) ||
+              !oldBinding.scriptName ||
+              oldBinding.scriptName === name)
+          ) {
+            const stableId = bindingNameToStableId[oldBinding.name];
+            if (stableId) {
+              const stillExists = [...bindings].some(
+                (rb) => rb.sid === stableId,
+              );
+              if (!stillExists) {
+                deletedClasses.push(oldBinding.className);
+              }
+            } else {
+              if (!newDoBindings.has(oldBinding.name)) {
+                deletedClasses.push(oldBinding.className);
+              }
+            }
+          }
+        }
+
+        // Compute new and renamed classes
+        const newClasses: string[] = [];
+        const renamedClasses: { from: string; to: string }[] = [];
+        for (const rb of bindings) {
+          for (const b of rb.data.bindings) {
+            if (
+              b.type === "durable_object_namespace" &&
+              "className" in b &&
+              b.className &&
+              (!("scriptName" in b) || !b.scriptName || b.scriptName === name)
+            ) {
+              const prevOldBinding = oldBindings.find(
+                (ob) =>
+                  ob.type === "durable_object_namespace" &&
+                  (bindingNameToStableId[ob.name] === rb.sid ||
+                    (!bindingNameToStableId[ob.name] && ob.name === b.name)),
+              );
+              if (!prevOldBinding) {
+                newClasses.push(b.className);
+              } else if (
+                "className" in prevOldBinding &&
+                prevOldBinding.className !== b.className
+              ) {
+                renamedClasses.push({
+                  from: prevOldBinding.className!,
+                  to: b.className,
+                });
+              }
+            }
+          }
+        }
+
+        // Build alchemy:do:{sid}:{bindingName} tags for each DO binding
+        const alchemyDoTags: string[] = [];
+        for (const rb of bindings) {
+          for (const b of rb.data.bindings) {
+            if (b.type === "durable_object_namespace" && "className" in b) {
+              alchemyDoTags.push(`alchemy:do:${rb.sid}:${b.name}`);
+            }
+          }
+        }
+
+        const metadataTags = [
+          ...alchemyDoTags,
+          ...(newMigrationTag
+            ? [`alchemy:migration-tag:${newMigrationTag}`]
+            : []),
+          ...(news.tags ?? []),
+        ];
+
+        const migrations = {
+          oldTag: oldMigrationTag,
+          newTag: newMigrationTag,
+          newClasses,
+          deletedClasses,
+          renamedClasses,
+          transferredClasses: [] as { from: string; to: string }[],
+          newSqliteClasses: [] as string[],
+        };
+
         const metadata = {
           assets: metadataAssets,
           bindings: metadataBindings,
@@ -664,7 +818,7 @@ ${props.exports?.map((id) => `export class ${id} {}`).join("\n") ?? ""}
           limits: news.limits,
           logpush: news.logpush,
           mainModule: bundle.mainModule,
-          migrations: undefined,
+          migrations,
           observability: news.observability ?? {
             enabled: true,
             logs: {
@@ -673,21 +827,54 @@ ${props.exports?.map((id) => `export class ${id} {}`).join("\n") ?? ""}
             },
           },
           placement: news.placement,
-          tags: news.tags,
+          tags: metadataTags,
           tailConsumers: undefined,
           usageModel: undefined,
         };
+        const scriptFiles = bundle.files.map(
+          (file) =>
+            new File([file.content], file.name, {
+              type: file.contentType,
+            }),
+        );
         const worker = yield* putScript({
           accountId,
           scriptName: name,
           metadata,
-          files: bundle.files.map(
-            (file) =>
-              new File([file.content], file.name, {
-                type: file.contentType,
-              }),
-          ),
-        });
+          files: scriptFiles,
+        }).pipe(
+          Effect.catch((err) => {
+            // When adopting a Worker managed by Wrangler (or after a previous
+            // deploy with mismatched migrations), the old_tag precondition
+            // fails. The only way to discover the actual tag is through the
+            // error message — getScriptSettings is meant to return it but
+            // doesn't at runtime.
+            const msg = String(
+              typeof err === "object" && err !== null && "message" in err
+                ? err.message
+                : err,
+            );
+            const expectedTag = msg.match(
+              /when expected tag is ['"]?([^'"]+)['"]?/,
+            )?.[1];
+            if (expectedTag) {
+              return putScript({
+                accountId,
+                scriptName: name,
+                metadata: {
+                  ...metadata,
+                  migrations: {
+                    ...migrations,
+                    oldTag: expectedTag,
+                    newTag: bumpMigrationTagVersion(expectedTag),
+                  },
+                },
+                files: scriptFiles,
+              });
+            }
+            return Effect.fail(err as any);
+          }),
+        );
         if (!olds || news.url !== olds.url) {
           const enable = news.url !== false;
           yield* session.note(

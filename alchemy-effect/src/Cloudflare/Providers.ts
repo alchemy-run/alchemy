@@ -11,7 +11,6 @@ import { ContainerProvider } from "./Container.ts";
 import * as KV from "./KV/index.ts";
 import * as R2 from "./R2/index.ts";
 import { AssetsProvider } from "./Workers/Assets.ts";
-import * as Workers from "./Workers/index.ts";
 import { WorkerProvider } from "./Workers/Worker.ts";
 
 export type Providers = Extract<
@@ -69,7 +68,6 @@ export const bindings = () =>
     KV.DeletePolicyLive,
     KV.ListPolicyLive,
     KV.GetWithMetadataPolicyLive,
-    Workers.DurableObjectPolicyLive,
   );
 
 const utils = () =>

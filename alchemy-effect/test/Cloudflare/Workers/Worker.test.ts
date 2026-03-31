@@ -1,7 +1,6 @@
-import * as Cloudflare from "@/Cloudflare";
 import { Account } from "@/Cloudflare/Account";
+import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as R2 from "@/Cloudflare/R2";
-import * as Worker from "@/Cloudflare/Workers";
 import { destroy } from "@/Destroy";
 import { test } from "@/Test/Vitest";
 import * as workers from "@distilled.cloud/cloudflare/workers";
@@ -32,7 +31,7 @@ test(
           storageClass: "Standard",
         });
 
-        const worker = yield* Worker.Worker("TestWorker", {
+        const worker = yield* Cloudflare.Worker("TestWorker", {
           main,
           subdomain: { enabled: true, previewsEnabled: true },
           compatibility: {
@@ -55,7 +54,7 @@ test(
     // Update the worker
     const updatedWorker = yield* test.deploy(
       Effect.gen(function* () {
-        return yield* Worker.Worker("TestWorker", {
+        return yield* Cloudflare.Worker("TestWorker", {
           main,
           subdomain: { enabled: true, previewsEnabled: true },
           compatibility: {
@@ -94,7 +93,7 @@ test(
 
     const worker = yield* test.deploy(
       Effect.gen(function* () {
-        return yield* Worker.Worker("TestWorkerWithAssets", {
+        return yield* Cloudflare.Worker("TestWorkerWithAssets", {
           main,
           assets: pathe.resolve(import.meta.dirname, "assets"),
           subdomain: { enabled: true, previewsEnabled: true },
@@ -119,7 +118,7 @@ test(
     // Update the worker
     const updatedWorker = yield* test.deploy(
       Effect.gen(function* () {
-        return yield* Worker.Worker("TestWorkerWithAssets", {
+        return yield* Cloudflare.Worker("TestWorkerWithAssets", {
           main,
           assets: pathe.resolve(import.meta.dirname, "assets"),
           subdomain: { enabled: true, previewsEnabled: true },
@@ -140,7 +139,7 @@ test(
     // Final update
     const finalWorker = yield* test.deploy(
       Effect.gen(function* () {
-        return yield* Worker.Worker("TestWorkerWithAssets", {
+        return yield* Cloudflare.Worker("TestWorkerWithAssets", {
           main,
           url: true,
           assets: pathe.resolve(import.meta.dirname, "assets"),

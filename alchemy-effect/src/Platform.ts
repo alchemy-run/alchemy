@@ -115,6 +115,16 @@ export interface Platform<
         Provider<Resource> | PropsReq | Exclude<InitReq, Services>
       >);
   };
+  <PropsReq = never, InitReq = never>(
+    id: string,
+    props:
+      | Resource["Props"]
+      | Effect.Effect<Resource["Props"], never, PropsReq>,
+  ): Effect.Effect<
+    Resource,
+    never,
+    Provider<Resource> | PropsReq | Exclude<InitReq, Services>
+  >;
   <Shape extends MainShape, PropsReq = never, InitReq = never>(
     id: string,
     props:
@@ -206,7 +216,7 @@ export const Platform = <
         return new SingleShotGen(this) as any;
       }
       static asEffect() {
-        return Self.asEffect();
+        return this.Self.asEffect();
       }
       static pipe(...args: any[]) {
         // @ts-expect-error
@@ -257,6 +267,9 @@ export const Platform = <
                   ...props?.env,
                   ...executionContext.env,
                 },
+                exports: executionContext.exports
+                  ? yield* executionContext.exports
+                  : undefined,
               };
 
               return Object.assign(instance, {

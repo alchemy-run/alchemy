@@ -33,10 +33,11 @@ export function push(id: string, eff?: Effect.Effect<any, any, any>) {
     : (eff: Effect.Effect<any, any, any>) => push(id, eff);
 }
 
-export const set = (id: string) =>
-  Effect.provideService(Namespace, {
-    Id: id,
-  });
+export const set = (namespace: string | NamespaceNode) =>
+  Effect.provideService(
+    Namespace,
+    typeof namespace === "string" ? { Id: namespace } : namespace,
+  );
 
 export const CurrentNamespace = Effect.serviceOption(Namespace)
   .asEffect()

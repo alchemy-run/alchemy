@@ -499,7 +499,6 @@ test(
         },
         bindings: [
           {
-            namespace: undefined,
             sid: "TestBinding",
             data: {
               env: {
@@ -567,7 +566,6 @@ test(
         },
         bindings: [
           {
-            namespace: undefined,
             sid: "TestBinding",
             data: {
               env: {

@@ -50,7 +50,6 @@ export type ResourceClass<R extends ResourceLike> = ResourceConstructor<
 export type LogicalId = string;
 
 export interface ResourceBinding<Data = any> {
-  namespace: NamespaceNode | undefined;
   sid: string;
   data: Data;
 }
@@ -148,7 +147,6 @@ export function Resource<R extends ResourceLike>(
           ? Effect.gen(function* () {
               const [sid, data] = args as [sid: string, data: R["Binding"]];
               (stack.bindings[fqn] ??= []).push({
-                namespace: yield* CurrentNamespace,
                 sid,
                 data,
               });

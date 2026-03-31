@@ -11,8 +11,10 @@ export interface BaseExecutionContext {
   env: Record<string, any>;
   get<T>(key: string): Effect.Effect<T>;
   set(id: string, output: Output): Effect.Effect<string>;
-  exports?: Record<string, any>;
-  serve?<Req = never>(handler: HttpEffect<Req>): Effect.Effect<void, never, Req>;
+  exports?: Effect.Effect<Record<string, any>>;
+  serve?<Req = never>(
+    handler: HttpEffect<Req>,
+  ): Effect.Effect<void, never, Req>;
 }
 
 export interface ExecutionContext<

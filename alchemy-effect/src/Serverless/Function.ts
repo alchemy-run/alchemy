@@ -10,7 +10,7 @@ export interface FunctionContext extends BaseExecutionContext {
   listen<A, Req = never, InitReq = never>(
     effect: Effect.Effect<FunctionListener<A, Req>, never, InitReq>,
   ): Effect.Effect<void, never, Req | InitReq>;
-  exports: Record<string, any>;
+  exports: Effect.Effect<Record<string, any>, never, never>;
 }
 
 export type FunctionListener<A = any, Req = never> = (

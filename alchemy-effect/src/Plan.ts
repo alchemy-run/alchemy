@@ -743,7 +743,6 @@ export const make = <A>(
                   downstream: oldDownstreamDependencies[fqn] ?? [],
                   bindings: oldState.bindings.map((binding) => ({
                     sid: binding.sid,
-                    namespace: binding.namespace,
                     action: "delete" as const,
                     data: binding.data,
                   })),

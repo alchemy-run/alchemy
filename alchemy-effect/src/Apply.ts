@@ -1067,6 +1067,6 @@ const collectGarbage = Effect.fnUntraced(function* (
 const excludeDeletedBindings = (
   bindings: ReadonlyArray<ResourceBinding & { action?: string }>,
 ): ResourceBinding[] =>
-  bindings.flatMap(({ action, namespace, sid, data }) =>
-    action === "delete" ? [] : [{ namespace, sid, data }],
+  bindings.flatMap(({ action, sid, data }) =>
+    action === "delete" ? [] : [{ sid, data }],
   );

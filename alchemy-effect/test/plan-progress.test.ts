@@ -3,6 +3,10 @@ import {
   buildProgressRows,
   toPlanTask,
 } from "../src/Cli/components/PlanProgress.tsx";
+import {
+  buildNamespaceTree,
+  flattenTree,
+} from "../src/Cli/NamespaceTree.ts";
 
 describe("toPlanTask", () => {
   test("uses resource.Type instead of proxy fallback properties", () => {
@@ -78,6 +82,49 @@ describe("buildProgressRows", () => {
       ["namespace", "JobFunction", 0],
       ["namespace", "AWS.DynamoDB.TableEventSource(JobsTable)", 1],
       ["resource", "EventSourceMapping", 2],
+    ]);
+  });
+});
+
+describe("flattenTree", () => {
+  test("renders bindings under their owning resource", () => {
+    const items = [
+      {
+        action: "create",
+        resource: {
+          LogicalId: "Sandbox",
+          Type: "Cloudflare.Container",
+          Namespace: undefined,
+        },
+        bindings: [{ sid: "Bind(DurableObject(Agents))", action: "create" }],
+        downstream: [],
+        props: {},
+        provider: {},
+        state: undefined,
+      },
+      {
+        action: "create",
+        resource: {
+          LogicalId: 'DurableObject(class { ... })',
+          Type: "Cloudflare.Workers.DurableObject",
+          Namespace: {
+            Id: "Sandbox",
+          },
+        },
+        bindings: [],
+        downstream: [],
+        props: {},
+        provider: {},
+        state: undefined,
+      },
+    ] as any;
+
+    const rows = flattenTree(buildNamespaceTree(items));
+
+    expect(rows.map((row) => [row.type, row.id, row.depth])).toEqual([
+      ["resource", "Sandbox", 0],
+      ["binding", "Bind(DurableObject(Agents))", 1],
+      ["resource", 'DurableObject(class { ... })', 1],
     ]);
   });
 });

@@ -85,7 +85,6 @@ export const diffBindings = (
       .filter(([sid]) => !newMap.has(sid))
       .map(([sid, old]) => ({
         sid,
-        namespace: old.namespace,
         action: "delete" as const,
         data: old.data,
       })),
@@ -93,7 +92,6 @@ export const diffBindings = (
       const old = oldMap.get(sid);
       return {
         sid,
-        namespace: binding.namespace,
         action: (!old
           ? "create"
           : havePropsChanged(old.data, binding.data)
