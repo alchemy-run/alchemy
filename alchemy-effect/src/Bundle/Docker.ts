@@ -115,7 +115,8 @@ export const runDockerCommand = Effect.fn(function* (
         command,
         stderr,
         exitCode,
-        message: `Docker command failed (${exitCode}): ${command}\n${stderr}`.trim(),
+        message:
+          `Docker command failed (${exitCode}): ${command}\n${stderr}`.trim(),
       }),
     );
   }
@@ -126,9 +127,7 @@ export const runDockerCommand = Effect.fn(function* (
 /**
  * Run `docker build` with standard flags from {@link DockerBuildOptions}.
  */
-export const dockerBuild = Effect.fn(function* (
-  options: DockerBuildOptions,
-) {
+export const dockerBuild = Effect.fn(function* (options: DockerBuildOptions) {
   const args: string[] = ["build", "-t", options.tag];
   if (options.platform) {
     args.push("--platform", options.platform);
@@ -175,16 +174,18 @@ export const pushImage = Effect.fn(function* (
 ) {
   if (auth) {
     const fs = yield* FileSystem.FileSystem;
-    const configDir = yield* fs.makeTempDirectory({ prefix: "alchemy-docker-" });
+    const configDir = yield* fs.makeTempDirectory({
+      prefix: "alchemy-docker-",
+    });
     const env = { ...process.env, DOCKER_CONFIG: configDir };
     return yield* Effect.gen(function* () {
       yield* dockerLogin(auth, { env });
       yield* runDockerCommand(["push", imageRef], { env });
     }).pipe(
       Effect.ensuring(
-        fs.remove(configDir, { recursive: true }).pipe(
-          Effect.catch(() => Effect.void),
-        ),
+        fs
+          .remove(configDir, { recursive: true })
+          .pipe(Effect.catch(() => Effect.void)),
       ),
     );
   }

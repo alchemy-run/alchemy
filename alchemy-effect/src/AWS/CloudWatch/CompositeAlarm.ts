@@ -1,9 +1,10 @@
 import { Region } from "@distilled.cloud/aws/Region";
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../../Diff.ts";
 import { Resource } from "../../Resource.ts";
-import type { AlarmArn } from "./Alarm.ts";
 import { Account } from "../Account.ts";
+import type { AlarmArn } from "./Alarm.ts";
 import {
   createName,
   ensureOwnedByAlchemy,
@@ -100,6 +101,7 @@ export const CompositeAlarmProvider = () =>
       return {
         stables: ["alarmName", "alarmArn"],
         diff: Effect.fn(function* ({ id, olds = {}, news = {} }) {
+          if (!isResolved(news)) return undefined;
           const oldName = yield* createAlarmName(id, olds);
           const newName = yield* createAlarmName(id, news);
 

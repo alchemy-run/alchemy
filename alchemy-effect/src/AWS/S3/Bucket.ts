@@ -4,6 +4,7 @@ import * as s3 from "@distilled.cloud/aws/s3";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { diffTags } from "../../Tags.ts";
@@ -278,7 +279,11 @@ export const BucketProvider = () =>
           `S3 Bucket ${operation}: bucket=${bucketName} removedTags=${removed.length} upsertTags=${Object.keys(upsert).length}`,
         );
 
-        if (canSkip && removed.length === 0 && Object.keys(upsert).length === 0) {
+        if (
+          canSkip &&
+          removed.length === 0 &&
+          Object.keys(upsert).length === 0
+        ) {
           return;
         }
 
@@ -372,6 +377,7 @@ export const BucketProvider = () =>
       return {
         stables: ["bucketName", "bucketArn", "region", "accountId"],
         diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
+          if (!isResolved(news)) return undefined;
           const oldBucketName = yield* createBucketName(id, olds);
           const newBucketName = yield* createBucketName(id, news);
           yield* Effect.logInfo(

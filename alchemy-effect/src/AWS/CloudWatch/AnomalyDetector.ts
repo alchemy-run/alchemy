@@ -2,6 +2,7 @@ import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { isResolved } from "../../Diff.ts";
 import { Resource } from "../../Resource.ts";
 import {
   detectorIdentity,
@@ -139,6 +140,7 @@ export const AnomalyDetectorProvider = () =>
   AnomalyDetector.provider.succeed({
     stables: ["detectorId"],
     diff: Effect.fn(function* ({ olds = {}, news = {} }) {
+      if (!isResolved(news)) return undefined;
       if (detectorIdentity(olds) !== detectorIdentity(news)) {
         return { action: "replace" } as const;
       }

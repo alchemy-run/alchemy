@@ -121,13 +121,16 @@ export const PodIdentityServiceAccount = (
             tags: props.tags,
           });
 
-      const serviceAccount = yield* Kubernetes.ServiceAccount("ServiceAccount", {
-        cluster: props.cluster,
-        namespace: props.namespace,
-        name: serviceAccountName,
-        labels: props.labels,
-        annotations: props.annotations,
-      });
+      const serviceAccount = yield* Kubernetes.ServiceAccount(
+        "ServiceAccount",
+        {
+          cluster: props.cluster,
+          namespace: props.namespace,
+          name: serviceAccountName,
+          labels: props.labels,
+          annotations: props.annotations,
+        },
+      );
 
       const podIdentityAssociation = yield* PodIdentityAssociation(
         "PodIdentityAssociation",

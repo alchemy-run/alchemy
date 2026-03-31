@@ -21,6 +21,7 @@ import {
   getStableContextDir,
 } from "../../Bundle/TempRoot.ts";
 import { DotAlchemy } from "../../Config.ts";
+import { isResolved } from "../../Diff.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Platform, type Main } from "../../Platform.ts";
@@ -694,6 +695,7 @@ await Effect.runPromise(program);
           "taskFamily",
         ],
         diff: Effect.fn(function* ({ id, olds, news }) {
+          if (!isResolved(news)) return;
           if (
             (yield* toTaskFamily(id, olds ?? {})) !==
             (yield* toTaskFamily(id, news ?? {}))

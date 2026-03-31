@@ -206,8 +206,8 @@
     "typescript": "catalog:"
   },
   "peerDependencies": {
-    "@effect/platform-node": "*",
     "@effect/platform-bun": "*",
+    "@effect/platform-node": "*",
     "effect": "*"
   },
   "peerDependenciesMeta": {

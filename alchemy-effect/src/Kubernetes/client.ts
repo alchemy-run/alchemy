@@ -15,9 +15,7 @@ import {
   type KubernetesObjectRef,
 } from "./types.ts";
 
-export class KubernetesApiError extends Data.TaggedError(
-  "KubernetesApiError",
-)<{
+export class KubernetesApiError extends Data.TaggedError("KubernetesApiError")<{
   method: string;
   path: string;
   statusCode: number;
@@ -33,7 +31,7 @@ export interface KubernetesClusterConnection {
 const fieldManager = "alchemy-effect";
 
 const createBearerToken = Effect.fn(function* (clusterName: string) {
-  const credentials = yield* (yield* Credentials);
+  const credentials = yield* yield* Credentials;
   const region = yield* Region;
 
   const client = new AwsClient({
@@ -103,9 +101,10 @@ const requestJson = Effect.fn(function* ({
                   }
                 : {}),
             },
-            ca: Buffer.from(connection.certificateAuthorityData, "base64").toString(
-              "utf8",
-            ),
+            ca: Buffer.from(
+              connection.certificateAuthorityData,
+              "base64",
+            ).toString("utf8"),
           },
           (response) => {
             const chunks: Buffer[] = [];
@@ -201,7 +200,8 @@ export const deleteObject = Effect.fn(function* ({
     path: buildKubernetesObjectPath(object),
   }).pipe(
     Effect.catchIf(
-      (error): error is KubernetesApiError => error instanceof KubernetesApiError,
+      (error): error is KubernetesApiError =>
+        error instanceof KubernetesApiError,
       (error) => (error.statusCode === 404 ? Effect.void : Effect.fail(error)),
     ),
   );

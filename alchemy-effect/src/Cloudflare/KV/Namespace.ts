@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import type { Credentials } from "@distilled.cloud/cloudflare";
 import type { Layer } from "effect/Layer";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import type { Provider } from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -55,11 +56,13 @@ export const NamespaceProvider = (): Layer<
       return {
         stables: ["namespaceId", "accountId"],
         diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
+          if (!isResolved(news)) return undefined;
           if ((output?.accountId ?? accountId) !== accountId) {
             return { action: "replace" } as const;
           }
           const title = yield* createTitle(id, news.title);
-          const oldTitle = output?.title ?? (yield* createTitle(id, olds.title));
+          const oldTitle =
+            output?.title ?? (yield* createTitle(id, olds.title));
           if (title !== oldTitle) {
             return { action: "update" } as const;
           }

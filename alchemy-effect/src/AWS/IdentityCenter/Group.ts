@@ -1,7 +1,12 @@
 import * as identitystore from "@distilled.cloud/aws/identitystore";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../../Diff.ts";
 import { Resource } from "../../Resource.ts";
-import { listGroups, resolveIdentityStoreId, retryIdentityCenter } from "./common.ts";
+import {
+  listGroups,
+  resolveIdentityStoreId,
+  retryIdentityCenter,
+} from "./common.ts";
 
 export interface GroupProps {
   /**
@@ -56,6 +61,7 @@ export const GroupProvider = () =>
       return {
         stables: ["identityStoreId", "groupId"],
         diff: Effect.fn(function* ({ olds, news }) {
+          if (!isResolved(news)) return;
           if (olds?.identityStoreId !== news.identityStoreId) {
             return { action: "replace" } as const;
           }
@@ -128,7 +134,10 @@ export const GroupProvider = () =>
             }),
           );
 
-          const updated = yield* readGroupById(output.identityStoreId, output.groupId);
+          const updated = yield* readGroupById(
+            output.identityStoreId,
+            output.groupId,
+          );
           if (!updated) {
             return yield* Effect.fail(
               new Error(`group '${output.groupId}' not found after update`),
@@ -140,12 +149,14 @@ export const GroupProvider = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* retryIdentityCenter(
-            identitystore.deleteGroup({
-              IdentityStoreId: output.identityStoreId,
-              GroupId: output.groupId,
-            }).pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            ),
+            identitystore
+              .deleteGroup({
+                IdentityStoreId: output.identityStoreId,
+                GroupId: output.groupId,
+              })
+              .pipe(
+                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              ),
           );
         }),
       };
@@ -157,12 +168,16 @@ const readGroupById = Effect.fn(function* (
   groupId: string,
 ) {
   const response = yield* retryIdentityCenter(
-    identitystore.describeGroup({
-      IdentityStoreId: identityStoreId,
-      GroupId: groupId,
-    }).pipe(
-      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-    ),
+    identitystore
+      .describeGroup({
+        IdentityStoreId: identityStoreId,
+        GroupId: groupId,
+      })
+      .pipe(
+        Effect.catchTag("ResourceNotFoundException", () =>
+          Effect.succeed(undefined),
+        ),
+      ),
   );
 
   if (!response?.GroupId || !response.IdentityStoreId) {

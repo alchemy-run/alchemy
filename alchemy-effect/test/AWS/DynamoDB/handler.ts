@@ -69,7 +69,7 @@ export default DynamoDBTestFunction.make(
       );
 
       if (request.method === "POST" && pathname === "/put") {
-        const body = (yield* request.json) as {
+        const body = (yield* request.json) as unknown as {
           pk: string;
           sk: string;
           data?: string;
@@ -114,7 +114,10 @@ export default DynamoDBTestFunction.make(
       }
 
       if (request.method === "DELETE" && pathname === "/delete") {
-        const body = (yield* request.json) as { pk: string; sk: string };
+        const body = (yield* request.json) as unknown as {
+          pk: string;
+          sk: string;
+        };
         const result = yield* deleteItem({
           Key: {
             pk: { S: body.pk },
@@ -125,7 +128,7 @@ export default DynamoDBTestFunction.make(
       }
 
       if (request.method === "POST" && pathname === "/update") {
-        const body = (yield* request.json) as {
+        const body = (yield* request.json) as unknown as {
           pk: string;
           sk: string;
           data: string;
@@ -147,7 +150,7 @@ export default DynamoDBTestFunction.make(
       }
 
       if (request.method === "POST" && pathname === "/update-ttl") {
-        const body = (yield* request.json) as {
+        const body = (yield* request.json) as unknown as {
           attributeName: string;
           enabled: boolean;
         };
@@ -163,7 +166,8 @@ export default DynamoDBTestFunction.make(
       }
 
       if (request.method === "POST" && pathname === "/batch-write") {
-        const body = (yield* request.json) as DynamoDB.BatchWriteItemRequest;
+        const body =
+          (yield* request.json) as unknown as DynamoDB.BatchWriteItemRequest;
         const result = yield* batchWriteItem(body);
         return yield* HttpServerResponse.json({
           unprocessedItems: result.UnprocessedItems ?? {},
@@ -171,7 +175,8 @@ export default DynamoDBTestFunction.make(
       }
 
       if (request.method === "POST" && pathname === "/batch-get") {
-        const body = (yield* request.json) as DynamoDB.BatchGetItemRequest;
+        const body =
+          (yield* request.json) as unknown as DynamoDB.BatchGetItemRequest;
         const result = yield* batchGetItem(body);
         return yield* HttpServerResponse.json({
           responses: result.Responses ?? {},
@@ -181,7 +186,7 @@ export default DynamoDBTestFunction.make(
 
       if (request.method === "POST" && pathname === "/transact-write") {
         const body =
-          (yield* request.json) as DynamoDB.TransactWriteItemsRequest;
+          (yield* request.json) as unknown as DynamoDB.TransactWriteItemsRequest;
         const result = yield* transactWriteItems(body);
         return yield* HttpServerResponse.json({
           success: true,
@@ -190,7 +195,8 @@ export default DynamoDBTestFunction.make(
       }
 
       if (request.method === "POST" && pathname === "/transact-get") {
-        const body = (yield* request.json) as DynamoDB.TransactGetItemsRequest;
+        const body =
+          (yield* request.json) as unknown as DynamoDB.TransactGetItemsRequest;
         const result = yield* transactGetItems(body);
         return yield* HttpServerResponse.json({
           responses: result.Responses ?? [],
@@ -217,7 +223,10 @@ export default DynamoDBTestFunction.make(
       }
 
       if (request.method === "POST" && pathname === "/execute-statement") {
-        const body = (yield* request.json) as { pk: string; sk: string };
+        const body = (yield* request.json) as unknown as {
+          pk: string;
+          sk: string;
+        };
         const tableName = yield* TableName;
         const result = yield* executeStatement({
           Statement: `SELECT * FROM "${tableName}" WHERE pk=? AND sk=?`,
@@ -232,7 +241,7 @@ export default DynamoDBTestFunction.make(
         request.method === "POST" &&
         pathname === "/batch-execute-statement"
       ) {
-        const body = (yield* request.json) as {
+        const body = (yield* request.json) as unknown as {
           first: { pk: string; sk: string };
           second: { pk: string; sk: string };
         };

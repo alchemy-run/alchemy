@@ -1,5 +1,6 @@
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 
@@ -68,6 +69,7 @@ export const PermissionProvider = () =>
       return {
         stables: ["statementId", "eventBusName"],
         diff: Effect.fn(function* ({ id, olds, news }) {
+          if (!isResolved(news)) return;
           const oldStatementId = yield* toStatementId(id, olds);
           const newStatementId = yield* toStatementId(id, news);
 

@@ -1,6 +1,7 @@
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
@@ -73,6 +74,7 @@ export const LogGroupProvider = () =>
       return {
         stables: ["logGroupArn", "logGroupName"],
         diff: Effect.fn(function* ({ id, olds, news }) {
+          if (!isResolved(news)) return;
           if (
             (yield* toLogGroupName(id, olds ?? {})) !==
             (yield* toLogGroupName(id, news ?? {}))
@@ -105,7 +107,7 @@ export const LogGroupProvider = () =>
           const logGroupName = yield* toLogGroupName(id, news);
           const tags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
 
           yield* logs
@@ -163,11 +165,11 @@ export const LogGroupProvider = () =>
 
           const oldTags = {
             ...(yield* createInternalTags(id)),
-            ...(olds.tags ?? {}),
+            ...olds.tags,
           };
           const newTags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
           const { removed, upsert } = diffTags(oldTags, newTags);
           if (upsert.length > 0) {

@@ -1,6 +1,7 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import { isResolved } from "../../Diff.ts";
 import { Resource } from "../../Resource.ts";
 import { toRedactedString } from "./common.ts";
 
@@ -57,6 +58,7 @@ export const AccessKeyProvider = () =>
   AccessKey.provider.succeed({
     stables: ["accessKeyId"],
     diff: Effect.fn(function* ({ olds, news }) {
+      if (!isResolved(news)) return;
       if (olds.userName !== news.userName) {
         return { action: "replace" } as const;
       }

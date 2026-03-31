@@ -1,6 +1,7 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import { isResolved } from "../../Diff.ts";
 import { Resource } from "../../Resource.ts";
 import { diffTags } from "../../Tags.ts";
 import { toTagRecord, unwrapRedactedString } from "./common.ts";
@@ -62,6 +63,7 @@ export const SAMLProviderProvider = () =>
   SAMLProvider.provider.succeed({
     stables: ["samlProviderArn"],
     diff: Effect.fn(function* ({ olds, news }) {
+      if (!isResolved(news)) return;
       if (olds.name !== news.name) {
         return { action: "replace" } as const;
       }

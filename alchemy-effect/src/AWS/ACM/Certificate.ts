@@ -3,6 +3,7 @@ import * as acm from "@distilled.cloud/aws/acm";
 import * as route53 from "@distilled.cloud/aws/route-53";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { deepEqual, isResolved } from "../../Diff.ts";
 import { Resource } from "../../Resource.ts";
 import {
   createInternalTags,
@@ -346,11 +347,15 @@ export const CertificateProvider = () =>
 
       return {
         stables: ["certificateArn"],
-        diff: Effect.fn(function* ({ olds, news }) {
+        diff: Effect.fn(function* ({ olds, news: _news }) {
+          if (!isResolved(_news)) return undefined;
+          const news = _news as typeof olds;
           if (
             olds.domainName !== news.domainName ||
-            JSON.stringify(normalizeSanList(olds.subjectAlternativeNames)) !==
-              JSON.stringify(normalizeSanList(news.subjectAlternativeNames)) ||
+            !deepEqual(
+              normalizeSanList(olds.subjectAlternativeNames),
+              normalizeSanList(news.subjectAlternativeNames),
+            ) ||
             (olds.validationMethod ?? defaultValidationMethod) !==
               (news.validationMethod ?? defaultValidationMethod) ||
             olds.hostedZoneId !== news.hostedZoneId ||

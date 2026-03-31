@@ -1,18 +1,9 @@
 {
-  "exclude": [
-    "node_modules",
-    "dist",
-    "vendor"
-  ],
+  "exclude": ["node_modules", "dist", "vendor"],
   "compilerOptions": {
-    "types": [
-      "bun"
-    ],
+    "types": ["bun"],
     // Enable latest features
-    "lib": [
-      "ESNext",
-      "DOM"
-    ],
+    "lib": ["ESNext", "DOM"],
     "target": "ESNext",
     "moduleDetection": "force",
     "jsx": "react-jsx",

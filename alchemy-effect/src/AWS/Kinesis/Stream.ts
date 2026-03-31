@@ -6,6 +6,7 @@ import * as kinesis from "@distilled.cloud/aws/kinesis";
 import type * as lambda from "aws-lambda";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import {
@@ -416,6 +417,7 @@ export const StreamProvider = () =>
           });
         }),
         diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
+          if (!isResolved(news)) return;
           const oldStreamName = yield* createStreamName(id, olds);
           const newStreamName = yield* createStreamName(id, news);
           if (oldStreamName !== newStreamName) {

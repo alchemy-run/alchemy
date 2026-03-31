@@ -41,9 +41,7 @@ const listState = Effect.fn(function* () {
   return yield* state.list({ stack: testStack, stage: testStage });
 });
 
-const expectConvergedStatus = (
-  status: ResourceState["status"] | undefined,
-) => {
+const expectConvergedStatus = (status: ResourceState["status"] | undefined) => {
   expect(["created", "updated"]).toContain(status);
 };
 

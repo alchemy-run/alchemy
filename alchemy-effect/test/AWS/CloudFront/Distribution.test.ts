@@ -67,9 +67,11 @@ describe("AWS.CloudFront.Distribution", () => {
             },
           };
 
-          yield* bucket.bind`Allow(${distribution}, CloudFront.Read(${bucket}))`({
-            policyStatements: [statement],
-          });
+          yield* bucket.bind`Allow(${distribution}, CloudFront.Read(${bucket}))`(
+            {
+              policyStatements: [statement],
+            },
+          );
 
           return {
             bucket,

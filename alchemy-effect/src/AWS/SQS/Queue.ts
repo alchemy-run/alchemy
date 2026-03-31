@@ -3,6 +3,7 @@ import * as sqs from "@distilled.cloud/aws/sqs";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { Account, type AccountID } from "../Account.ts";
@@ -144,6 +145,7 @@ export const QueueProvider = () =>
       return Queue.provider.of({
         stables: ["queueName", "queueUrl", "queueArn"],
         diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
+          if (!isResolved(news)) return undefined;
           const oldFifo = olds.fifo ?? false;
           const newFifo = news.fifo ?? false;
           if (oldFifo !== newFifo) {

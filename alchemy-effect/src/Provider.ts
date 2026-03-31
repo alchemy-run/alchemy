@@ -70,7 +70,7 @@ export interface ProviderService<
     olds: Props<Res>;
     // Note: we do not resolve (Res["Props"]) here because diff runs during plan
     // -> we need a way for the diff handlers to work with Outputs
-    news: Props<Res>;
+    news: Input<Props<Res>>;
     oldBindings: BindingData<Res>;
     newBindings: Input<BindingData<Res>>;
     output: Res["Attributes"] | undefined;

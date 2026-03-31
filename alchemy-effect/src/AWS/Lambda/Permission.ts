@@ -1,6 +1,7 @@
 import type * as lambda from "@distilled.cloud/aws/lambda";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 
@@ -123,6 +124,7 @@ export const PermissionProvider = () =>
       return {
         stables: ["statementId", "functionName"],
         diff: Effect.fn(function* ({ news, olds }) {
+          if (!isResolved(news)) return;
           if (news.functionName !== olds.functionName) {
             return { action: "replace" } as const;
           }

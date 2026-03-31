@@ -1,5 +1,6 @@
 import * as ssoAdmin from "@distilled.cloud/aws/sso-admin";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../../Diff.ts";
 import { Resource } from "../../Resource.ts";
 import {
   listInstances,
@@ -80,6 +81,7 @@ export const InstanceProvider = () =>
       return {
         stables: ["instanceArn", "identityStoreId", "ownerAccountId", "mode"],
         diff: Effect.fn(function* ({ olds, news }) {
+          if (!isResolved(news)) return;
           if (
             olds?.instanceArn !== news.instanceArn ||
             olds?.mode !== news.mode ||
@@ -127,7 +129,9 @@ export const InstanceProvider = () =>
           });
           if (!created) {
             return yield* Effect.fail(
-              new Error("failed to resolve Identity Center instance after create"),
+              new Error(
+                "failed to resolve Identity Center instance after create",
+              ),
             );
           }
 
@@ -146,7 +150,9 @@ export const InstanceProvider = () =>
             return;
           }
 
-          const existing = yield* readInstance({ instanceArn: output.instanceArn });
+          const existing = yield* readInstance({
+            instanceArn: output.instanceArn,
+          });
           if (!existing) {
             return;
           }

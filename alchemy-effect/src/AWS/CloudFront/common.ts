@@ -15,9 +15,10 @@ export const extractValue = (v: string | Redacted.Redacted<string>): string =>
 export const withKvsRegion = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(Effect.provideService(AwsRegion, KVS_REGION as any));
 
-export const withKvsRegionFn = <Args extends any[], A, E, R>(
-  fn: (...args: Args) => Effect.Effect<A, E, R>,
-) =>
+export const withKvsRegionFn =
+  <Args extends any[], A, E, R>(
+    fn: (...args: Args) => Effect.Effect<A, E, R>,
+  ) =>
   (...args: Args) =>
     withKvsRegion(fn(...args));
 

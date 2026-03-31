@@ -1,6 +1,7 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Effect from "effect/Effect";
 
+import { isResolved } from "../../Diff.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 import type { SecurityGroupId } from "./SecurityGroup.ts";
@@ -200,6 +201,7 @@ export const SecurityGroupRuleProvider = () =>
         }),
 
         diff: Effect.fn(function* ({ news, olds }) {
+          if (!isResolved(news)) return;
           // Most properties require replacement
           if (
             news.groupId !== olds.groupId ||

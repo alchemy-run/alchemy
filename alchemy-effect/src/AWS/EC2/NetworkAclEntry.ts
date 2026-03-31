@@ -2,6 +2,7 @@ import type * as EC2 from "@distilled.cloud/aws/ec2";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Effect from "effect/Effect";
 
+import { isResolved } from "../../Diff.ts";
 import { Resource } from "../../Resource.ts";
 import type { NetworkAclId } from "./NetworkAcl.ts";
 
@@ -168,6 +169,7 @@ export const NetworkAclEntryProvider = () =>
         }),
 
         diff: Effect.fn(function* ({ news, olds }) {
+          if (!isResolved(news)) return;
           // If network ACL, rule number, or egress changes, need to replace
           if (
             news.networkAclId !== olds.networkAclId ||

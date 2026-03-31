@@ -30,12 +30,12 @@ test(
           command: "bash build.sh",
           cwd: fixtureDir,
           hash: ["src/**/*.ts"],
-          output: "dist",
+          outdir: "dist",
         });
       }),
     );
 
-    expect(build1.path).toBe(distDir);
+    expect(build1.outdir).toBe(distDir);
     expect(build1.hash).toBeDefined();
     expect(typeof build1.hash).toBe("string");
     expect(build1.hash.length).toBeGreaterThan(0);
@@ -58,7 +58,7 @@ test(
           command: "bash build.sh",
           cwd: fixtureDir,
           hash: ["src/**/*.ts"],
-          output: "dist",
+          outdir: "dist",
         });
       }),
     );
@@ -81,7 +81,7 @@ test(
           command: "bash build.sh",
           cwd: fixtureDir,
           hash: ["src/**/*.ts"],
-          output: "dist",
+          outdir: "dist",
         });
       }),
     );

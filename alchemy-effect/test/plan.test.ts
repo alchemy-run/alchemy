@@ -336,84 +336,92 @@ test(
   }),
 );
 
-test(
-  "replace resource when replaceString changes",
-  {
-    state: test.state({
-      A: {
-        instanceId,
-        providerVersion: 0,
-        logicalId: "A",
-        fqn: "A",
-        namespace: undefined,
-        resourceType: "Test.TestResource",
-        status: "created",
-        props: {
-          replaceString: "A",
-        },
-        attr: {},
-        downstream: [],
-        bindings: [],
+describe("replace resource when replaceString changes", () => {
+  const state = test.state({
+    A: {
+      instanceId,
+      providerVersion: 0,
+      logicalId: "A",
+      fqn: "A",
+      namespace: undefined,
+      resourceType: "Test.TestResource",
+      status: "created",
+      props: {
+        replaceString: "A",
       },
-    }),
-  },
-  Effect.gen(function* () {
-    expect(
-      yield* Effect.gen(function* () {
-        yield* TestResource("A", {
-          replaceString: "A",
-        });
-      }).pipe(makePlan),
-    ).toMatchObject({
-      resources: {
-        A: {
-          action: "noop",
-        },
-      },
-      deletions: expect.emptyObject(),
-    });
+      attr: {},
+      downstream: [],
+      bindings: [],
+    },
+  });
 
-    expect(
-      yield* Effect.gen(function* () {
-        yield* TestResource("A", {
-          replaceString: "B",
-        });
-      }).pipe(makePlan),
-    ).toMatchObject({
-      resources: {
-        A: {
-          action: "replace",
-          props: {
+  test(
+    "noop and replace when replaceString is fully resolved at plan time",
+    { state },
+    Effect.gen(function* () {
+      expect(
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", {
+            replaceString: "A",
+          });
+        }).pipe(makePlan),
+      ).toMatchObject({
+        resources: {
+          A: {
+            action: "noop",
+          },
+        },
+        deletions: expect.emptyObject(),
+      });
+
+      expect(
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", {
             replaceString: "B",
+          });
+        }).pipe(makePlan),
+      ).toMatchObject({
+        resources: {
+          A: {
+            action: "replace",
+            props: {
+              replaceString: "B",
+            },
           },
         },
-      },
-      deletions: expect.emptyObject(),
-    });
+        deletions: expect.emptyObject(),
+      });
+    }),
+  );
 
-    let B: TestResource;
-    expect(
-      yield* Effect.gen(function* () {
-        B = yield* TestResource("B", {
-          string: "A",
-        });
-        yield* TestResource("A", {
-          replaceString: B.string,
-        });
-      }).pipe(makePlan),
-    ).toMatchObject({
-      resources: {
-        A: {
-          action: "replace",
-          props: {
-            replaceString: expect.propExpr("string", B!),
+  test(
+    "update when replaceString depends on unresolved output (diff short-circuits)",
+    { state },
+    Effect.gen(function* () {
+      let B: TestResource;
+      expect(
+        yield* Effect.gen(function* () {
+          B = yield* TestResource("B", {
+            string: "A",
+          });
+          yield* TestResource("A", {
+            replaceString: B.string,
+          });
+        }).pipe(makePlan),
+      ).toMatchObject({
+        resources: {
+          A: {
+            action: "update",
+            props: {
+              replaceString: expect.propExpr("string", B!),
+            },
           },
         },
-      },
-      deletions: expect.emptyObject(),
-    });
-  }),
-);
+        deletions: expect.emptyObject(),
+      });
+    }),
+  );
+});
 
 test(
   "update resource when a binding is added without prop changes",
@@ -1724,6 +1732,48 @@ describe("unsatisfied cycle detection", () => {
       ).pipe(Effect.exit);
 
       expect(Exit.isSuccess(exit)).toBe(true);
+    }),
+  );
+});
+
+describe("unresolved plan inputs in diff should conservatively update", () => {
+  test(
+    "update when upstream resource is new and downstream news contains exprs",
+    {
+      state: _test.state({
+        B: {
+          instanceId,
+          providerVersion: 0,
+          logicalId: "B",
+          fqn: "B",
+          namespace: undefined,
+          resourceType: "Test.TestResource",
+          status: "created",
+          props: {
+            string: "old-value",
+          },
+          attr: {
+            string: "old-value",
+            stableString: "B",
+            stableArray: ["B"],
+          },
+          downstream: [],
+          bindings: [],
+        },
+      }),
+    },
+    Effect.gen(function* () {
+      const plan = yield* Effect.gen(function* () {
+        const A = yield* TestResource("A", {
+          string: "hello",
+        });
+        yield* TestResource("B", {
+          string: A.string,
+        });
+      }).pipe(makePlan);
+
+      expect(plan.resources.A.action).toBe("create");
+      expect(plan.resources.B.action).toBe("update");
     }),
   );
 });

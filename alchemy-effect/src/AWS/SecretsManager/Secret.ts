@@ -1,6 +1,7 @@
 import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
@@ -165,6 +166,7 @@ export const SecretProvider = () =>
       return {
         stables: ["secretArn", "secretName"],
         diff: Effect.fn(function* ({ id, olds, news }) {
+          if (!isResolved(news)) return undefined;
           if (
             (yield* toSecretName(id, olds ?? {})) !==
             (yield* toSecretName(id, news ?? {}))
@@ -174,8 +176,7 @@ export const SecretProvider = () =>
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const secretName =
-            output?.secretName ??
-            (yield* toSecretName(id, olds ?? ({} as SecretProps)));
+            output?.secretName ?? (yield* toSecretName(id, olds ?? {}));
           const described = yield* readSecret(output?.secretArn ?? secretName);
           if (!described?.ARN || !described.Name) {
             return undefined;
@@ -194,7 +195,7 @@ export const SecretProvider = () =>
           const secretName = yield* toSecretName(id, news);
           const tags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
 
           const created = yield* secretsmanager
@@ -271,11 +272,11 @@ export const SecretProvider = () =>
 
           const oldTags = {
             ...(yield* createInternalTags(id)),
-            ...(olds.tags ?? {}),
+            ...olds.tags,
           };
           const newTags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
           const { removed, upsert } = diffTags(oldTags, newTags);
 

@@ -2,6 +2,7 @@ import * as eks from "@distilled.cloud/aws/eks";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { isResolved } from "../../Diff.ts";
 import {
   deleteObjects,
   reconcileObjects,
@@ -416,6 +417,7 @@ export const ClusterProvider = () =>
       return {
         stables: ["clusterArn", "clusterName"],
         diff: Effect.fn(function* ({ id, olds = {} as ClusterProps, news }) {
+          if (!isResolved(news)) return;
           if (
             (yield* toClusterName(id, olds)) !==
             (yield* toClusterName(id, news ?? {}))

@@ -1,6 +1,7 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
@@ -119,6 +120,7 @@ export const VirtualMFADeviceProvider = () =>
       return {
         stables: ["serialNumber"],
         diff: Effect.fn(function* ({ id, olds, news }) {
+          if (!isResolved(news)) return;
           if (
             (yield* toName(id, olds ?? ({} as VirtualMFADeviceProps))) !==
               (yield* toName(id, news)) ||
@@ -159,7 +161,7 @@ export const VirtualMFADeviceProvider = () =>
           const deviceName = yield* toName(id, news);
           const tags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
           const created = yield* iam.createVirtualMFADevice({
             Path: news.path,
@@ -202,11 +204,11 @@ export const VirtualMFADeviceProvider = () =>
         update: Effect.fn(function* ({ id, news, olds, output, session }) {
           const oldTags = {
             ...(yield* createInternalTags(id)),
-            ...(olds.tags ?? {}),
+            ...olds.tags,
           };
           const newTags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
           const { removed, upsert } = diffTags(oldTags, newTags);
           if (upsert.length > 0) {

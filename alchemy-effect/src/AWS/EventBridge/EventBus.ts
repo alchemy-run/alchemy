@@ -2,6 +2,7 @@ import { Region } from "@distilled.cloud/aws/Region";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as Effect from "effect/Effect";
 
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import {
@@ -130,7 +131,8 @@ export const EventBusProvider = () =>
 
       return {
         stables: ["eventBusName", "eventBusArn"],
-        diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
+        diff: Effect.fn(function* ({ id, news, olds }) {
+          if (!isResolved(news)) return;
           const oldName = yield* createEventBusName(id, olds);
           const newName = yield* createEventBusName(id, news);
           if (oldName !== newName) {

@@ -525,7 +525,8 @@ export const DistributionProvider = () =>
                   yield* Effect.logInfo(
                     `CloudFront Distribution create: callerReference=${callerReference} already exists, attempting recovery`,
                   );
-                  const recovered = yield* getByCallerReference(callerReference);
+                  const recovered =
+                    yield* getByCallerReference(callerReference);
                   if (!recovered?.distribution.Id) {
                     return yield* Effect.fail(
                       new Error(
@@ -546,7 +547,8 @@ export const DistributionProvider = () =>
                   error,
                 ): Effect.Effect<
                   never,
-                  cloudfront.InvalidArgument | DistributionFunctionAssociationPending
+                  | cloudfront.InvalidArgument
+                  | DistributionFunctionAssociationPending
                 > =>
                   isFunctionAssociationPending(error)
                     ? Effect.logInfo(
@@ -621,7 +623,8 @@ export const DistributionProvider = () =>
                   error,
                 ): Effect.Effect<
                   never,
-                  cloudfront.InvalidArgument | DistributionFunctionAssociationPending
+                  | cloudfront.InvalidArgument
+                  | DistributionFunctionAssociationPending
                 > =>
                   isFunctionAssociationPending(error)
                     ? Effect.logInfo(

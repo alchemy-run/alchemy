@@ -3,6 +3,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 import { ChildProcess } from "effect/unstable/process";
+import { isResolved } from "../Diff.ts";
 import { Resource } from "../Resource.ts";
 import { sha256, sha256Object } from "../Util/sha256.ts";
 
@@ -134,6 +135,7 @@ export const CommandProvider = () =>
       return Command.provider.of({
         stables: ["outdir"],
         diff: Effect.fnUntraced(function* ({ news, output }) {
+          if (!isResolved(news)) return undefined;
           if (!output) {
             return undefined;
           }

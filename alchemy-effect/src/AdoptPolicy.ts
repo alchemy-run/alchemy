@@ -1,10 +1,9 @@
 import * as Effect from "effect/Effect";
 import * as ServiceMap from "effect/ServiceMap";
 
-export class AdoptPolicy extends ServiceMap.Service<
-  AdoptPolicy,
-  boolean
->()("AdoptPolicy") {}
+export class AdoptPolicy extends ServiceMap.Service<AdoptPolicy, boolean>()(
+  "AdoptPolicy",
+) {}
 
 export const adopt: {
   (

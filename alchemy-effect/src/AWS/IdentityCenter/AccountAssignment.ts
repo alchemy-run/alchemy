@@ -2,6 +2,7 @@ import * as ssoAdmin from "@distilled.cloud/aws/sso-admin";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { isResolved } from "../../Diff.ts";
 import { Resource } from "../../Resource.ts";
 import { resolveInstance, retryIdentityCenter } from "./common.ts";
 
@@ -74,6 +75,7 @@ export const AccountAssignmentProvider = () =>
           "targetType",
         ],
         diff: Effect.fn(function* ({ olds, news }) {
+          if (!isResolved(news)) return;
           if (
             olds?.instanceArn !== news.instanceArn ||
             olds?.permissionSetArn !== news.permissionSetArn ||
@@ -155,18 +157,20 @@ export const AccountAssignmentProvider = () =>
           }
 
           const response = yield* retryIdentityCenter(
-            ssoAdmin.deleteAccountAssignment({
-              InstanceArn: output.instanceArn,
-              PermissionSetArn: output.permissionSetArn,
-              PrincipalId: output.principalId,
-              PrincipalType: output.principalType,
-              TargetId: output.targetId,
-              TargetType: "AWS_ACCOUNT",
-            }).pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
+            ssoAdmin
+              .deleteAccountAssignment({
+                InstanceArn: output.instanceArn,
+                PermissionSetArn: output.permissionSetArn,
+                PrincipalId: output.principalId,
+                PrincipalType: output.principalType,
+                TargetId: output.targetId,
+                TargetType: "AWS_ACCOUNT",
+              })
+              .pipe(
+                Effect.catchTag("ResourceNotFoundException", () =>
+                  Effect.succeed(undefined),
+                ),
               ),
-            ),
           );
 
           const requestId =
@@ -187,8 +191,7 @@ const readAssignment = Effect.fn(function* ({
   targetId,
 }: AccountAssignmentProps) {
   const instance = yield* resolveInstance(instanceArn);
-  const assignments = yield* ssoAdmin
-    .listAccountAssignments
+  const assignments = yield* ssoAdmin.listAccountAssignments
     .items({
       InstanceArn: instance.InstanceArn!,
       AccountId: targetId,
@@ -197,9 +200,7 @@ const readAssignment = Effect.fn(function* ({
     })
     .pipe(
       Stream.runCollect,
-      Effect.map(
-        (items) => Array.from(items) as ssoAdmin.AccountAssignment[],
-      ),
+      Effect.map((items) => Array.from(items) as ssoAdmin.AccountAssignment[]),
     );
 
   const match = assignments.find(
@@ -231,7 +232,9 @@ const waitForAssignmentCreation = (instanceArn: string, requestId: string) =>
     const status = response.AccountAssignmentCreationStatus;
 
     if (!status?.Status || status.Status === "IN_PROGRESS") {
-      return yield* Effect.fail({ _tag: "AssignmentCreationInProgress" as const });
+      return yield* Effect.fail({
+        _tag: "AssignmentCreationInProgress" as const,
+      });
     }
 
     if (status.Status === "FAILED") {
@@ -263,7 +266,9 @@ const waitForAssignmentDeletion = (instanceArn: string, requestId: string) =>
     const status = response.AccountAssignmentDeletionStatus;
 
     if (!status?.Status || status.Status === "IN_PROGRESS") {
-      return yield* Effect.fail({ _tag: "AssignmentDeletionInProgress" as const });
+      return yield* Effect.fail({
+        _tag: "AssignmentDeletionInProgress" as const,
+      });
     }
 
     if (status.Status === "FAILED") {

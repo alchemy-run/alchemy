@@ -17,6 +17,7 @@ import {
 } from "../../Bundle/TempRoot.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { DotAlchemy } from "../../Config.ts";
+import { isResolved } from "../../Diff.ts";
 import type { HttpEffect } from "../../Http.ts";
 import type { Input } from "../../Input.ts";
 import * as Output from "../../Output.ts";
@@ -921,6 +922,7 @@ ${
       return Worker.provider.of({
         stables: ["workerId", "workerName"],
         diff: Effect.fnUntraced(function* ({ id, news, olds, output }) {
+          if (!isResolved(news)) return undefined;
           if ((output?.accountId ?? accountId) !== accountId) {
             return { action: "replace" };
           }

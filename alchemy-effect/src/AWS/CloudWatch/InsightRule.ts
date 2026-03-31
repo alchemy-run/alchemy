@@ -3,6 +3,8 @@ import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
+import { isResolved } from "../../Diff.ts";
+import type { Input } from "../../Input.ts";
 import { Resource } from "../../Resource.ts";
 import { Account, type AccountID } from "../Account.ts";
 import type { RegionID } from "../Region.ts";
@@ -160,7 +162,12 @@ export const InsightRuleProvider = () =>
 
       return {
         stables: ["ruleName", "ruleArn"],
-        diff: Effect.fn(function* ({ id, olds = {}, news = {} }) {
+        diff: Effect.fn(function* ({
+          id,
+          olds = {},
+          news = {} as Input<InsightRuleProps>,
+        }) {
+          if (!isResolved(news)) return undefined;
           const oldName = yield* createRuleName(id, olds);
           const newName = yield* createRuleName(id, news);
 

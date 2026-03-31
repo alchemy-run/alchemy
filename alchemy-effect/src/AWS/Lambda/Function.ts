@@ -13,6 +13,7 @@ import * as Schedule from "effect/Schedule";
 import * as ServiceMap from "effect/ServiceMap";
 import { bundle } from "../../Bundle/Bundle.ts";
 import type { BundleOptions } from "../../Bundle/Bundler.ts";
+import { isResolved } from "../../Diff.ts";
 import type { HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -829,6 +830,7 @@ export default await Effect.runPromise(handlerEffect)
       return {
         stables: ["functionArn", "functionName", "roleName"],
         diff: Effect.fnUntraced(function* ({ id, olds, news, output }) {
+          if (!isResolved(news)) return;
           // If output is undefined (resource in creating state), defer to default diff
           if (!output) {
             return undefined;

@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
+import { isResolved } from "../../Diff.ts";
 import { Resource } from "../../Resource.ts";
 import {
   createAlchemyTagFilters,
@@ -252,6 +253,7 @@ export const NatGatewayProvider = () =>
         }),
 
         diff: Effect.fn(function* ({ news, olds }) {
+          if (!isResolved(news)) return;
           // NAT Gateway is mostly immutable - any change to core properties requires replacement
           if (
             news.subnetId !== olds.subnetId ||

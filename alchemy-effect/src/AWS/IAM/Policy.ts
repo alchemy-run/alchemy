@@ -1,5 +1,6 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import {
@@ -177,6 +178,7 @@ export const PolicyProvider = () =>
       return {
         stables: ["policyArn", "policyName", "policyId"],
         diff: Effect.fn(function* ({ id, olds, news }) {
+          if (!isResolved(news)) return;
           if (
             (yield* toPolicyName(id, olds ?? ({} as PolicyProps))) !==
             (yield* toPolicyName(id, news))
@@ -232,7 +234,7 @@ export const PolicyProvider = () =>
           const policyArn = yield* toPolicyArn(id, news);
           const tags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
 
           const created = yield* iam
@@ -307,11 +309,11 @@ export const PolicyProvider = () =>
 
           const oldTags = {
             ...(yield* createInternalTags(id)),
-            ...(olds.tags ?? {}),
+            ...olds.tags,
           };
           const newTags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
           const { removed, upsert } = diffTags(oldTags, newTags);
           if (upsert.length > 0) {

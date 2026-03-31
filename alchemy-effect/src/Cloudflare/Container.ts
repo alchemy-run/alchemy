@@ -26,6 +26,7 @@ import {
 } from "../Bundle/Docker.ts";
 import { getStableContextDir } from "../Bundle/TempRoot.ts";
 import { DotAlchemy } from "../Config.ts";
+import { deepEqual, isResolved } from "../Diff.ts";
 import { HttpServer, type HttpEffect } from "../Http.ts";
 import * as Output from "../Output.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
@@ -1040,6 +1041,10 @@ export default await Effect.runPromise(handlerEffect)`,
           newBindings,
           oldBindings,
         }) {
+          if (!isResolved(news) || !isResolved(newBindings)) {
+            return undefined;
+          }
+
           const name = yield* createApplicationName(id, news.name);
           const oldName = output?.applicationName
             ? output.applicationName
@@ -1071,11 +1076,9 @@ export default await Effect.runPromise(handlerEffect)`,
             (news.maxInstances ?? 1) !== (olds.maxInstances ?? 1) ||
             (news.schedulingPolicy ?? "default") !==
               (olds.schedulingPolicy ?? "default") ||
-            stableStringify(news.constraints) !==
-              stableStringify(olds.constraints) ||
-            stableStringify(news.affinities) !==
-              stableStringify(olds.affinities) ||
-            stableStringify(configuration) !== stableStringify(oldConfiguration)
+            !deepEqual(news.constraints, olds.constraints) ||
+            !deepEqual(news.affinities, olds.affinities) ||
+            !deepEqual(configuration, oldConfiguration)
           ) {
             return { action: "update" } as const;
           }

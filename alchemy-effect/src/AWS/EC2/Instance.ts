@@ -11,6 +11,7 @@ import * as Stream from "effect/Stream";
 import { Bundler, type BundleOptions } from "../../Bundle/Bundler.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { DotAlchemy } from "../../Config.ts";
+import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { Platform, type Main } from "../../Platform.ts";
 import { Resource } from "../../Resource.ts";
@@ -570,6 +571,7 @@ export const InstanceProvider = () =>
       return {
         stables: ["instanceId", "instanceArn", "vpcId", "subnetId"],
         diff: Effect.fn(function* ({ news, olds }) {
+          if (!isResolved(news)) return;
           const hostModeChanged = Boolean(olds.main) !== Boolean(news.main);
           if (
             hostModeChanged ||
@@ -591,14 +593,17 @@ export const InstanceProvider = () =>
             olds.main !== news.main ||
             olds.handler !== news.handler ||
             olds.port !== news.port ||
-            JSON.stringify(olds.env ?? {}) !== JSON.stringify(news.env ?? {}) ||
-            JSON.stringify(olds.build ?? {}) !==
-              JSON.stringify(news.build ?? {}) ||
-            JSON.stringify(olds.roleManagedPolicyArns ?? []) !==
-              JSON.stringify(news.roleManagedPolicyArns ?? []) ||
-            JSON.stringify(resolvedSecurityGroups(olds.securityGroupIds)) !==
-              JSON.stringify(resolvedSecurityGroups(news.securityGroupIds)) ||
-            JSON.stringify(olds.tags ?? {}) !== JSON.stringify(news.tags ?? {})
+            !deepEqual(olds.env ?? {}, news.env ?? {}) ||
+            !deepEqual(olds.build ?? {}, news.build ?? {}) ||
+            !deepEqual(
+              olds.roleManagedPolicyArns ?? [],
+              news.roleManagedPolicyArns ?? [],
+            ) ||
+            !deepEqual(
+              resolvedSecurityGroups(olds.securityGroupIds),
+              resolvedSecurityGroups(news.securityGroupIds),
+            ) ||
+            !deepEqual(olds.tags ?? {}, news.tags ?? {})
           ) {
             return {
               action: "update",

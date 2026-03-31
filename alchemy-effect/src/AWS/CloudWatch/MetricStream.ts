@@ -1,6 +1,8 @@
 import { Region } from "@distilled.cloud/aws/Region";
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../../Diff.ts";
+import type { Input } from "../../Input.ts";
 import { Resource } from "../../Resource.ts";
 import { Account, type AccountID } from "../Account.ts";
 import type { RegionID } from "../Region.ts";
@@ -139,7 +141,12 @@ export const MetricStreamProvider = () =>
 
       return {
         stables: ["metricStreamName", "metricStreamArn"],
-        diff: Effect.fn(function* ({ id, olds = {}, news = {} }) {
+        diff: Effect.fn(function* ({
+          id,
+          olds = {},
+          news = {} as Input<MetricStreamProps>,
+        }) {
+          if (!isResolved(news)) return undefined;
           const oldName = yield* createMetricStreamName(id, olds);
           const newName = yield* createMetricStreamName(id, news);
 

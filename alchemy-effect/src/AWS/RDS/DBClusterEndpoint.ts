@@ -1,5 +1,6 @@
 import * as rds from "@distilled.cloud/aws/rds";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
@@ -98,6 +99,7 @@ export const DBClusterEndpointProvider = () =>
       return {
         stables: ["dbClusterEndpointArn", "dbClusterEndpointIdentifier"],
         diff: Effect.fn(function* ({ id, olds, news }) {
+          if (!isResolved(news)) return;
           if (
             (yield* toIdentifier(
               id,
@@ -131,7 +133,7 @@ export const DBClusterEndpointProvider = () =>
           const identifier = yield* toIdentifier(id, news);
           const tags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
           yield* rds
             .createDBClusterEndpoint({
@@ -172,11 +174,11 @@ export const DBClusterEndpointProvider = () =>
 
           const oldTags = {
             ...(yield* createInternalTags(id)),
-            ...(olds.tags ?? {}),
+            ...olds.tags,
           };
           const newTags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
           const { removed, upsert } = diffTags(oldTags, newTags);
           if (upsert.length > 0 && output.dbClusterEndpointArn) {

@@ -1,5 +1,6 @@
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as Effect from "effect/Effect";
+import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
@@ -60,26 +61,29 @@ export const LoadBalancerProvider = () =>
           "vpcId",
         ],
         diff: Effect.fn(function* ({ id, olds, news }) {
+          if (!isResolved(news)) return;
           const oldName = yield* toName(id, olds ?? {});
           const newName = yield* toName(id, news ?? {});
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
           if (
-            JSON.stringify({
-              scheme: olds.scheme ?? "internet-facing",
-              type: olds.type ?? "application",
-              subnets: olds.subnets,
-              securityGroups: olds.securityGroups ?? [],
-              ipAddressType: olds.ipAddressType,
-            }) !==
-            JSON.stringify({
-              scheme: news.scheme ?? "internet-facing",
-              type: news.type ?? "application",
-              subnets: news.subnets,
-              securityGroups: news.securityGroups ?? [],
-              ipAddressType: news.ipAddressType,
-            })
+            !deepEqual(
+              {
+                scheme: olds.scheme ?? "internet-facing",
+                type: olds.type ?? "application",
+                subnets: olds.subnets,
+                securityGroups: olds.securityGroups ?? [],
+                ipAddressType: olds.ipAddressType,
+              },
+              {
+                scheme: news.scheme ?? "internet-facing",
+                type: news.type ?? "application",
+                subnets: news.subnets,
+                securityGroups: news.securityGroups ?? [],
+                ipAddressType: news.ipAddressType,
+              },
+            )
           ) {
             return { action: "replace" } as const;
           }

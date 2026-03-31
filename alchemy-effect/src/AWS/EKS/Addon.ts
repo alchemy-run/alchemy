@@ -3,6 +3,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
+import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
@@ -161,6 +162,7 @@ export const AddonProvider = () =>
       return {
         stables: ["addonArn"],
         diff: Effect.fn(function* ({ olds, news }) {
+          if (!isResolved(news)) return;
           if (olds.clusterName !== news.clusterName) {
             return { action: "replace" } as const;
           }
@@ -169,10 +171,7 @@ export const AddonProvider = () =>
             return { action: "replace" } as const;
           }
 
-          if (
-            JSON.stringify(olds.namespaceConfig) !==
-            JSON.stringify(news.namespaceConfig)
-          ) {
+          if (!deepEqual(olds.namespaceConfig, news.namespaceConfig)) {
             return { action: "replace" } as const;
           }
         }),

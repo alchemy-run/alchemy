@@ -26,15 +26,19 @@ import { TrustedServiceAccess as OrganizationsTrustedServiceAccess } from "./Tru
 
 export type TenantTargetKey = "root" | string;
 
-export interface TenantAccountSpec
-  extends Omit<AccountProps, "parentId" | "name" | "email"> {
+export interface TenantAccountSpec extends Omit<
+  AccountProps,
+  "parentId" | "name" | "email"
+> {
   key: string;
   name: string;
   email: string;
 }
 
-export interface TenantOrganizationalUnitSpec
-  extends Omit<OrganizationalUnitProps, "parentId" | "name"> {
+export interface TenantOrganizationalUnitSpec extends Omit<
+  OrganizationalUnitProps,
+  "parentId" | "name"
+> {
   key: string;
   name?: string;
   accounts?: TenantAccountSpec[];
@@ -215,10 +219,13 @@ export const TenantRoot = Effect.fn(function* (
   const policyTypes = yield* Effect.forEach(
     props.policyTypes ?? ["SERVICE_CONTROL_POLICY"],
     (policyType) =>
-      OrganizationsRootPolicyType(`${id}${toLogicalIdSegment(policyType)}PolicyType`, {
-        rootId: root.rootId,
-        policyType,
-      }),
+      OrganizationsRootPolicyType(
+        `${id}${toLogicalIdSegment(policyType)}PolicyType`,
+        {
+          rootId: root.rootId,
+          policyType,
+        },
+      ),
     { concurrency: "unbounded" },
   );
 
@@ -474,7 +481,9 @@ const createTenantIdentityCenter = Effect.fn(function* ({
         instanceArn: instance.instanceArn,
         permissionSetArn: permissionSet.permissionSetArn,
         principalId,
-        principalType: assignmentSpec.groupKey ? "GROUP" : assignmentSpec.principalType ?? "USER",
+        principalType: assignmentSpec.groupKey
+          ? "GROUP"
+          : (assignmentSpec.principalType ?? "USER"),
         targetId: account.accountId,
       },
     );

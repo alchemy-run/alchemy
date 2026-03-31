@@ -1,6 +1,7 @@
 import * as ecr from "@distilled.cloud/aws/ecr";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
@@ -90,6 +91,7 @@ export const RepositoryProvider = () =>
           "registryId",
         ],
         diff: Effect.fn(function* ({ id, olds, news }) {
+          if (!isResolved(news)) return;
           if (
             (yield* toRepositoryName(id, olds ?? {})) !==
             (yield* toRepositoryName(id, news ?? {}))

@@ -1,6 +1,7 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Effect from "effect/Effect";
 
+import { isResolved } from "../../Diff.ts";
 import { Resource } from "../../Resource.ts";
 import type { NetworkAclId } from "./NetworkAcl.ts";
 import type { SubnetId } from "./Subnet.ts";
@@ -82,6 +83,7 @@ export const NetworkAclAssociationProvider = () =>
         }),
 
         diff: Effect.fn(function* ({ news, olds }) {
+          if (!isResolved(news)) return;
           // Subnet change requires replacement
           if (news.subnetId !== olds.subnetId) {
             return { action: "replace" };

@@ -7,9 +7,10 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import { Bundler, type BundleOptions } from "../../Bundle/Bundler.ts";
 import { DotAlchemy } from "../../Config.ts";
+import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
-import { Platform, type Main } from "../../Platform.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import { Platform, type Main } from "../../Platform.ts";
 import { Resource } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
@@ -330,14 +331,16 @@ export const LaunchTemplateProvider = () =>
           "launchTemplateArn",
           "launchTemplateName",
         ],
-        diff: Effect.fn(function* ({ id, olds, news }) {
+        diff: Effect.fn(function* ({ id, olds, news: _news }) {
+          if (!isResolved(_news)) return undefined;
+          const news = _news as typeof olds;
           const oldName = yield* toName(id, olds ?? {});
           const newName = yield* toName(id, news ?? {});
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
 
-          if (JSON.stringify(olds) !== JSON.stringify(news)) {
+          if (!deepEqual(olds, news)) {
             return {
               action: "update",
               stables: [

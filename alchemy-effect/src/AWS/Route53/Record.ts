@@ -1,6 +1,7 @@
+import * as route53 from "@distilled.cloud/aws/route-53";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import * as route53 from "@distilled.cloud/aws/route-53";
+import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { Resource } from "../../Resource.ts";
 
@@ -163,7 +164,10 @@ const toRecordSet = (props: RecordProps): route53.ResourceRecordSet => ({
     : undefined,
 });
 
-const toAttrs = (recordSet: route53.ResourceRecordSet, hostedZoneId: string) => ({
+const toAttrs = (
+  recordSet: route53.ResourceRecordSet,
+  hostedZoneId: string,
+) => ({
   hostedZoneId: normalizeHostedZoneId(hostedZoneId),
   name: recordSet.Name,
   type: recordSet.Type,
@@ -182,11 +186,12 @@ export const RecordProvider = () =>
           Effect.flatMap((changeInfo) =>
             changeInfo.Status === "INSYNC"
               ? Effect.succeed(changeInfo)
-              : Effect.fail(new Error("Route53ChangePending"))
+              : Effect.die(new Error("Route53ChangePending")),
           ),
           Effect.retry({
             while: (error) =>
-              error instanceof Error && error.message === "Route53ChangePending",
+              error instanceof Error &&
+              error.message === "Route53ChangePending",
             schedule: Schedule.fixed("2 seconds").pipe(
               Schedule.both(Schedule.recurs(60)),
             ),
@@ -206,7 +211,9 @@ export const RecordProvider = () =>
             MaxItems: 100,
           })
           .pipe(
-            Effect.catchTag("NoSuchHostedZone", () => Effect.succeed(undefined)),
+            Effect.catchTag("NoSuchHostedZone", () =>
+              Effect.succeed(undefined),
+            ),
           );
 
         return response?.ResourceRecordSets.find(
@@ -237,6 +244,7 @@ export const RecordProvider = () =>
       return {
         stables: ["hostedZoneId", "name", "type", "setIdentifier"],
         diff: Effect.fn(function* ({ olds, news }) {
+          if (!isResolved(news)) return undefined;
           if (
             normalizeHostedZoneId(olds.hostedZoneId) !==
               normalizeHostedZoneId(news.hostedZoneId) ||
@@ -248,11 +256,14 @@ export const RecordProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ olds, output }) {
-          const recordSet = yield* findRecord(output?.hostedZoneId ?? olds!.hostedZoneId, {
-            name: output?.name ?? olds!.name,
-            type: output?.type ?? olds!.type,
-            setIdentifier: output?.setIdentifier ?? olds!.setIdentifier,
-          });
+          const recordSet = yield* findRecord(
+            output?.hostedZoneId ?? olds!.hostedZoneId,
+            {
+              name: output?.name ?? olds!.name,
+              type: output?.type ?? olds!.type,
+              setIdentifier: output?.setIdentifier ?? olds!.setIdentifier,
+            },
+          );
 
           if (!recordSet) {
             return undefined;
@@ -265,7 +276,9 @@ export const RecordProvider = () =>
           const recordSet = yield* findRecord(news.hostedZoneId, news);
 
           if (!recordSet) {
-            return yield* Effect.fail(new Error("Route53 record was not found after create"));
+            return yield* Effect.die(
+              new Error("Route53 record was not found after create"),
+            );
           }
 
           yield* session.note(`${news.type} ${normalizeName(news.name)}`);
@@ -276,7 +289,9 @@ export const RecordProvider = () =>
           const recordSet = yield* findRecord(news.hostedZoneId, news);
 
           if (!recordSet) {
-            return yield* Effect.fail(new Error("Route53 record was not found after update"));
+            return yield* Effect.die(
+              new Error("Route53 record was not found after update"),
+            );
           }
 
           yield* session.note(`${news.type} ${normalizeName(news.name)}`);
@@ -296,7 +311,9 @@ export const RecordProvider = () =>
                       Type: output.type,
                       SetIdentifier: output.setIdentifier,
                       TTL: output.aliasTarget ? undefined : output.ttl,
-                      ResourceRecords: output.records?.map((Value) => ({ Value })),
+                      ResourceRecords: output.records?.map((Value) => ({
+                        Value,
+                      })),
                       AliasTarget: output.aliasTarget
                         ? {
                             HostedZoneId: normalizeHostedZoneId(
@@ -313,7 +330,9 @@ export const RecordProvider = () =>
               },
             })
             .pipe(
-              Effect.flatMap((response) => waitForChange(response.ChangeInfo.Id)),
+              Effect.flatMap((response) =>
+                waitForChange(response.ChangeInfo.Id),
+              ),
               Effect.catchTag("NoSuchHostedZone", () => Effect.void),
               Effect.catchTag("InvalidChangeBatch", () => Effect.void),
             );

@@ -44,8 +44,13 @@ const normalizeBucketRegion = (location: string | undefined) => {
   return location;
 };
 
-const bucketMatchesRegion = (tags: Array<{ Key?: string; Value?: string }>, region: string) => {
-  const taggedRegion = tags.find((tag) => tag.Key === ASSETS_BUCKET_REGION_TAG)?.Value;
+const bucketMatchesRegion = (
+  tags: Array<{ Key?: string; Value?: string }>,
+  region: string,
+) => {
+  const taggedRegion = tags.find(
+    (tag) => tag.Key === ASSETS_BUCKET_REGION_TAG,
+  )?.Value;
   return taggedRegion === undefined ? undefined : taggedRegion === region;
 };
 
@@ -61,7 +66,9 @@ export const lookupAssetsBuckets = Effect.gen(function* () {
     }
 
     const tags = yield* getBucketTags(bucketName).pipe(
-      Effect.catch(() => Effect.succeed<Array<{ Key?: string; Value?: string }>>([])),
+      Effect.catch(() =>
+        Effect.succeed<Array<{ Key?: string; Value?: string }>>([]),
+      ),
     );
 
     if (!hasAssetsBucketTag(tags)) {
@@ -78,14 +85,12 @@ export const lookupAssetsBuckets = Effect.gen(function* () {
       continue;
     }
 
-    const location = yield* s3
-      .getBucketLocation({ Bucket: bucketName })
-      .pipe(
-        Effect.map((response) =>
-          normalizeBucketRegion(response.LocationConstraint),
-        ),
-        Effect.catch(() => Effect.succeed<string | undefined>(undefined)),
-      );
+    const location = yield* s3.getBucketLocation({ Bucket: bucketName }).pipe(
+      Effect.map((response) =>
+        normalizeBucketRegion(response.LocationConstraint),
+      ),
+      Effect.catch(() => Effect.succeed<string | undefined>(undefined)),
+    );
 
     if (location === region) {
       matchingBuckets.push(bucketName);
@@ -197,7 +202,9 @@ export const bootstrap = Effect.fn(function* () {
 
   if (Option.isSome(existingBucket)) {
     yield* ensureAssetsBucketTags(existingBucket.value, region);
-    yield* Effect.logInfo(`Assets bucket already exists: ${existingBucket.value}`);
+    yield* Effect.logInfo(
+      `Assets bucket already exists: ${existingBucket.value}`,
+    );
     return { bucketName: existingBucket.value, created: false };
   }
 
