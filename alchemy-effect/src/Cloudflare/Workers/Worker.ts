@@ -306,10 +306,7 @@ export const Worker: Platform<
   return ctx;
 });
 
-export const bindWorker = Effect.fnUntraced(function* <
-  Shape extends WorkerShape,
-  Req = never,
->(
+export const bindWorker = Effect.fnUntraced(function* <Shape, Req = never>(
   workerEff:
     | (Worker & Rpc<Shape>)
     | Effect.Effect<Worker & Rpc<Shape>, never, Req>,
@@ -332,7 +329,7 @@ export const bindWorker = Effect.fnUntraced(function* <
 
   const fetcher = workerBinding.pipe(Effect.map(fromCloudflareFetcher));
   // TODO(sam): update makeRpcStub to support lazily evaluating the Effect<Fetcher>
-  return makeRpcStub(fetcher);
+  return makeRpcStub<Shape>(fetcher);
 });
 
 export class BindWorkerPolicy extends Binding.Policy<

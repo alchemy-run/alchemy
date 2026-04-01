@@ -11,9 +11,8 @@ export default class JobFunction extends AWS.Lambda.Function<JobFunction>()(
     main: import.meta.path,
     url: true,
   },
-  Effect.succeed({
-    fetch: JobRpcHttpEffect,
-  }).pipe(
+  JobRpcHttpEffect.pipe(
+    Effect.map((fetch) => ({ fetch })),
     Effect.provide(Layer.mergeAll(JobStorageDynamoDB, JobNotificationsSNS)),
   ),
 ) {}

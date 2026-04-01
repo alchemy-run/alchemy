@@ -1,24 +1,19 @@
 import * as Cloudflare from "alchemy-effect/Cloudflare";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as Socket from "effect/unstable/socket/Socket";
-
-class MyError extends Data.TaggedError("MyError")<{
-  readonly message: string;
-}> {}
+import { Sandbox } from "./Sandbox.ts";
 
 export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
   "Agents",
   Effect.gen(function* () {
     // bind the Sandbox Container to the Agent DO
-    // const sandbox = yield* Cloudflare.bindContainer(Sandbox);
+    const sandbox = yield* Cloudflare.bindContainer(Sandbox);
 
     // return an Effect that will be un once per instance of a Durable Object
-    const eff = Effect.gen(function* () {
+    return Effect.gen(function* () {
       const state = yield* Cloudflare.DurableObjectState;
 
       // get the container instance
@@ -105,26 +100,6 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
           // Required by Cloudflare to complete the close handshake.
           yield* ws.close(code, reason);
         }),
-      };
-    });
-
-    return Effect.gen(function* () {
-      return {
-        getProfile: () => Effect.succeed("BOOF"),
-        getError: () => Effect.fail(new Error("BOOF")),
-        getMyError: () => Effect.fail(new MyError({ message: "BOOF" })),
-        getDie: () => Effect.die(new Error("BOOF")),
-        getStream: () =>
-          Effect.succeed(
-            Stream.forever(
-              Stream.fromEffect(
-                (() => {
-                  let i = 0;
-                  return Effect.sync(() => i++);
-                })(),
-              ),
-            ),
-          ),
       };
     });
   }),

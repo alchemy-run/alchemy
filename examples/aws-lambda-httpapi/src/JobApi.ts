@@ -31,75 +31,76 @@ export const JobApi = HttpApi.make("JobApi").add(
 export const JobApiLive = HttpApiBuilder.layer(JobApi).pipe(
   Layer.provide(
     HttpApiBuilder.group(JobApi, "Jobs", (handlers) =>
-      handlers
-        .handle(
-          "getJob",
-          Effect.fn(function* (req) {
-            const jobService = yield* JobStorage;
-            if (!req.query.jobId) {
-              return HttpServerResponse.text("Job ID is required", {
-                status: 400,
-              });
-            }
-            const job = yield* jobService.getJob(req.query.jobId).pipe(
-              Effect.catchTag("GetJobError", (error) =>
-                Effect.succeed(
-                  HttpServerResponse.text(error.message, {
-                    status: 500,
-                  }),
-                ),
-              ),
-            );
-            if (job instanceof GetJobError) {
-              return HttpServerResponse.text(job.message, {
-                status: 500,
-              });
-            }
-            if (!job) {
-              return HttpServerResponse.text("Job not found", {
-                status: 404,
-              });
-            }
-            return job!;
-          }),
-        )
-        .handle(
-          "createJob",
-          Effect.fn(function* (req) {
-            const jobService = yield* JobStorage;
-            const notifications = yield* JobNotifications;
+      Effect.gen(function* () {
+        const jobService = yield* JobStorage;
+        const notifications = yield* JobNotifications;
 
-            const jobId = crypto.randomUUID();
-            const job = yield* jobService
-              .putJob({
-                id: jobId,
-                content: req.payload.content,
-              })
-              .pipe(
-                Effect.catchTag("PutJobError", (error) =>
-                  Effect.succeed(error),
+        return handlers
+          .handle(
+            "getJob",
+            Effect.fn(function* (req) {
+              if (!req.query.jobId) {
+                return HttpServerResponse.text("Job ID is required", {
+                  status: 400,
+                });
+              }
+              const job = yield* jobService.getJob(req.query.jobId).pipe(
+                Effect.catchTag("GetJobError", (error) =>
+                  Effect.succeed(
+                    HttpServerResponse.text(error.message, {
+                      status: 500,
+                    }),
+                  ),
                 ),
               );
-            if (job instanceof PutJobError) {
-              return HttpServerResponse.text(job.message, {
-                status: 500,
-              });
-            }
-            const notificationResult = yield* notifications
-              .notifyJobCreated(job)
-              .pipe(
-                Effect.catchTag("NotifyJobError", (error) =>
-                  Effect.succeed(error),
-                ),
-              );
-            if (notificationResult instanceof NotifyJobError) {
-              return HttpServerResponse.text(notificationResult.message, {
-                status: 500,
-              });
-            }
-            return job.id;
-          }),
-        ),
+              if (job instanceof GetJobError) {
+                return HttpServerResponse.text(job.message, {
+                  status: 500,
+                });
+              }
+              if (!job) {
+                return HttpServerResponse.text("Job not found", {
+                  status: 404,
+                });
+              }
+              return job!;
+            }),
+          )
+          .handle(
+            "createJob",
+            Effect.fn(function* (req) {
+              const jobId = crypto.randomUUID();
+              const job = yield* jobService
+                .putJob({
+                  id: jobId,
+                  content: req.payload.content,
+                })
+                .pipe(
+                  Effect.catchTag("PutJobError", (error) =>
+                    Effect.succeed(error),
+                  ),
+                );
+              if (job instanceof PutJobError) {
+                return HttpServerResponse.text(job.message, {
+                  status: 500,
+                });
+              }
+              const notificationResult = yield* notifications
+                .notifyJobCreated(job)
+                .pipe(
+                  Effect.catchTag("NotifyJobError", (error) =>
+                    Effect.succeed(error),
+                  ),
+                );
+              if (notificationResult instanceof NotifyJobError) {
+                return HttpServerResponse.text(notificationResult.message, {
+                  status: 500,
+                });
+              }
+              return job.id;
+            }),
+          );
+      }),
     ),
   ),
 );

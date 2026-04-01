@@ -53,54 +53,9 @@ export default class Api extends Cloudflare.Worker<Api>()(
               status: 405,
             });
           }
-        } else if (request.url.startsWith("/stream/")) {
-          const key = request.url.split("/").pop()!;
-          const agent = agents.getByName(key);
-          const response = yield* agent.getStream();
-          return HttpServerResponse.stream(
-            response.pipe(
-              Stream.map((n) => `${n}\n`),
-              Stream.encodeText,
-            ),
-            {
-              contentType: "text/plain",
-            },
-          );
-        } else if (request.url.startsWith("/error")) {
-          const agent = agents.getByName("error");
-          const response = yield* agent.getError().pipe(Effect.flip);
-          return HttpServerResponse.text(JSON.stringify(response), {
-            status: 200,
-          });
-        } else if (request.url.startsWith("/my-error")) {
-          const agent = agents.getByName("my-error");
-          const response = yield* agent.getMyError().pipe(Effect.flip);
-          return HttpServerResponse.text(JSON.stringify(response), {
-            status: 200,
-          });
-        } else if (request.url.startsWith("/die")) {
-          const agent = agents.getByName("die");
-          yield* agent.getDie();
-          return HttpServerResponse.text("should not reach here", {
-            status: 200,
-          });
         }
         return HttpServerResponse.text("Hello World", { status: 200 });
       }),
     };
-  }).pipe(
-    // Effect.provide(
-    //   Layer.mergeAll(
-    //     //
-    //     // AgentLive,
-    //   ),
-    // ),
-  ),
+  }),
 ) {}
-
-import * as Stream from "effect/Stream";
-
-Effect.gen(function* () {
-  const stream = Stream.forever(Stream.fromArray([1]));
-  const s = Stream.toReadableStream(stream);
-});

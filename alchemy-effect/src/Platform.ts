@@ -25,7 +25,7 @@ import type { Stage } from "./Stage.ts";
 import { effectClass } from "./Util/effect.ts";
 import type { IsAny } from "./Util/types.ts";
 
-export type Main<Services = never> = {
+export type Main<Services = never> = void | {
   fetch: HttpEffect<Services>;
 };
 
