@@ -9,6 +9,7 @@ import { fromCloudflareFetcher } from "./Fetcher.ts";
 
 export const StreamTag = "~alchemy/rpc/stream";
 export const ErrorTag = "~alchemy/rpc/error";
+export const StreamErrorTag = "~alchemy/rpc/stream-error";
 
 type StreamEncoding = "bytes" | "jsonl";
 
@@ -39,10 +40,30 @@ export class RpcCallError extends Data.TaggedError("RpcCallError")<{
   }
 }
 
+export class RpcRemoteStreamError extends Data.TaggedError(
+  "RpcRemoteStreamError",
+)<{
+  readonly error: unknown;
+}> {}
+
 export type RpcErrorEnvelope = {
   _tag: typeof ErrorTag;
   error: unknown;
 };
+
+export type RpcStreamErrorMarker = {
+  _tag: typeof StreamErrorTag;
+  error: unknown;
+};
+
+export const isRpcStreamErrorMarker = (
+  value: unknown,
+): value is RpcStreamErrorMarker =>
+  typeof value === "object" &&
+  value !== null &&
+  "_tag" in value &&
+  value._tag === StreamErrorTag &&
+  "error" in value;
 
 export const isRpcErrorEnvelope = (value: unknown): value is RpcErrorEnvelope =>
   typeof value === "object" &&
@@ -94,7 +115,7 @@ export const isRpcStreamEnvelope = (
 export const fromRpcReadableStream = (
   body: ReadableStream<Uint8Array>,
   encoding: StreamEncoding,
-): Stream.Stream<any, Socket.SocketError | RpcDecodeError> => {
+): Stream.Stream<any, Socket.SocketError | RpcDecodeError | RpcRemoteStreamError> => {
   const stream = Stream.fromReadableStream({
     evaluate: () => body,
     onError: (cause) =>
@@ -119,12 +140,17 @@ export const fromRpcReadableStream = (
         catch: (cause) => new RpcDecodeError({ cause }),
       }),
     ),
+    Stream.flatMap((value) =>
+      isRpcStreamErrorMarker(value)
+        ? Stream.fail(new RpcRemoteStreamError({ error: value.error }))
+        : Stream.succeed(value),
+    ),
   );
 };
 
 export const fromRpcStreamEnvelope = (
   envelope: RpcStreamEnvelope,
-): Stream.Stream<any, Socket.SocketError | RpcDecodeError> =>
+): Stream.Stream<any, Socket.SocketError | RpcDecodeError | RpcRemoteStreamError> =>
   fromRpcReadableStream(envelope.body, envelope.encoding);
 
 export const decodeRpcValue = (value: unknown) => {
@@ -244,6 +270,21 @@ export const makeDurableObjectBridge = (
   };
 };
 
+const encodeStreamErrorMarker = (cause: Cause.Cause<unknown>): string => {
+  const failReason = cause.reasons.find(Cause.isFailReason);
+  const error = failReason ? encodeRpcError(failReason.error) : undefined;
+  return (
+    JSON.stringify({ _tag: StreamErrorTag, error } satisfies RpcStreamErrorMarker) + "\n"
+  );
+};
+
+const appendStreamErrors = (s: Stream.Stream<string, unknown>) =>
+  s.pipe(
+    Stream.catchCause((cause) =>
+      Stream.succeed(encodeStreamErrorMarker(cause)),
+    ),
+  );
+
 export const toRpcStream = (stream: Stream.Stream<any, any, any>) =>
   Effect.scoped(
     Effect.gen(function* () {
@@ -267,11 +308,26 @@ export const toRpcStream = (stream: Stream.Stream<any, any, any>) =>
         _tag: StreamTag,
         encoding: "jsonl",
         body: Stream.toReadableStream(
-          body.pipe(
-            Stream.map((value) => JSON.stringify(value) + "\n"),
-            Stream.encodeText,
-          ),
+          appendStreamErrors(
+            body.pipe(Stream.map((value) => JSON.stringify(value) + "\n")),
+          ).pipe(Stream.encodeText),
         ),
       } satisfies RpcStreamEnvelope;
+    }),
+  ).pipe(
+    Effect.catchCause((cause) => {
+      const failReason = cause.reasons.find(Cause.isFailReason);
+      if (failReason) {
+        return Effect.succeed({
+          _tag: StreamTag,
+          encoding: "jsonl",
+          body: Stream.toReadableStream(
+            Stream.succeed(encodeStreamErrorMarker(cause)).pipe(
+              Stream.encodeText,
+            ),
+          ),
+        } satisfies RpcStreamEnvelope);
+      }
+      return Effect.die(Cause.squash(cause));
     }),
   );

@@ -1,11 +1,13 @@
 import {
   RpcDecodeError,
   RpcCallError,
+  RpcRemoteStreamError,
   encodeRpcError,
   decodeRpcResult,
   decodeRpcValue,
   ErrorTag,
   StreamTag,
+  StreamErrorTag,
   isRpcErrorEnvelope,
   isRpcStreamEnvelope,
   fromRpcReadableStream,
@@ -16,6 +18,7 @@ import {
   type RpcStreamEnvelope,
 } from "@/Cloudflare/Workers/Rpc";
 import { describe, expect, it } from "@effect/vitest";
+import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -538,5 +541,139 @@ describe("makeRpcStub", () => {
       const chunks = yield* Stream.runCollect(stream);
       expect(chunks).toEqual([{ n: 42 }]);
     }),
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Stream error transport
+// ---------------------------------------------------------------------------
+
+describe("stream errors", () => {
+  it.effect("toRpcStream encodes a stream that fails immediately", () =>
+    Effect.gen(function* () {
+      const stream = Stream.fail(new MyError({ message: "immediate" }));
+      const envelope = yield* toRpcStream(stream);
+      expect(envelope._tag).toBe(StreamTag);
+      expect(envelope.encoding).toBe("jsonl");
+
+      const decoded = fromRpcReadableStream(envelope.body, "jsonl");
+      const exit = yield* Effect.exit(Stream.runCollect(decoded));
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const reason = exit.cause.reasons.find(Cause.isFailReason);
+        expect(reason).toBeDefined();
+        const err = reason!.error;
+        expect(err).toBeInstanceOf(RpcRemoteStreamError);
+        expect((err as RpcRemoteStreamError).error).toEqual({
+          _tag: "MyError",
+          message: "immediate",
+        });
+      }
+    }),
+  );
+
+  it.effect("toRpcStream encodes a stream that fails after elements", () =>
+    Effect.gen(function* () {
+      const stream = Stream.make(1, 2).pipe(
+        Stream.concat(Stream.fail(new MyError({ message: "mid" }))),
+      );
+      const envelope = yield* toRpcStream(stream);
+      expect(envelope._tag).toBe(StreamTag);
+      expect(envelope.encoding).toBe("jsonl");
+
+      const decoded = fromRpcReadableStream(envelope.body, "jsonl");
+      const exit = yield* Effect.exit(Stream.runCollect(decoded));
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const reason = exit.cause.reasons.find(Cause.isFailReason);
+        expect(reason).toBeDefined();
+        const err = reason!.error;
+        expect(err).toBeInstanceOf(RpcRemoteStreamError);
+        expect((err as RpcRemoteStreamError).error).toEqual({
+          _tag: "MyError",
+          message: "mid",
+        });
+      }
+    }),
+  );
+
+  it.effect("fromRpcReadableStream decodes error marker in JSONL", () =>
+    Effect.gen(function* () {
+      const errorLine = JSON.stringify({
+        _tag: StreamErrorTag,
+        error: { _tag: "MyError", message: "wire" },
+      });
+      const body = textToReadableStream(`${errorLine}\n`);
+      const stream = fromRpcReadableStream(body, "jsonl");
+      const exit = yield* Effect.exit(Stream.runCollect(stream));
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const reason = exit.cause.reasons.find(Cause.isFailReason);
+        const err = reason!.error;
+        expect(err).toBeInstanceOf(RpcRemoteStreamError);
+        expect((err as RpcRemoteStreamError).error).toEqual({
+          _tag: "MyError",
+          message: "wire",
+        });
+      }
+    }),
+  );
+
+  it.effect(
+    "fromRpcReadableStream yields elements before error marker",
+    () =>
+      Effect.gen(function* () {
+        const errorLine = JSON.stringify({
+          _tag: StreamErrorTag,
+          error: { message: "after elements" },
+        });
+        const body = textToReadableStream(
+          `{"v":1}\n{"v":2}\n${errorLine}\n`,
+        );
+        const stream = fromRpcReadableStream(body, "jsonl");
+        const collected: unknown[] = [];
+        const exit = yield* Effect.exit(
+          Stream.runForEach(stream, (item) =>
+            Effect.sync(() => {
+              collected.push(item);
+            }),
+          ),
+        );
+        expect(collected).toEqual([{ v: 1 }, { v: 2 }]);
+        expect(Exit.isFailure(exit)).toBe(true);
+      }),
+  );
+
+  it.effect(
+    "makeRpcStub preserves stream errors (not collapsed to RpcCallError)",
+    () =>
+      Effect.gen(function* () {
+        const errorLine = JSON.stringify({
+          _tag: StreamErrorTag,
+          error: { _tag: "MyError", message: "remote stream err" },
+        });
+        const body = textToReadableStream(
+          `{"n":1}\n${errorLine}\n`,
+        );
+        const mockStub = {
+          streamFail: async () => ({
+            _tag: StreamTag,
+            encoding: "jsonl" as const,
+            body,
+          }),
+        };
+        const stub = makeRpcStub<{
+          streamFail: () => Effect.Effect<Stream.Stream<unknown, RpcRemoteStreamError>>;
+        }>(mockStub);
+
+        const stream = yield* stub.streamFail();
+        const exit = yield* Effect.exit(Stream.runCollect(stream));
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+          const reason = exit.cause.reasons.find(Cause.isFailReason);
+          expect(reason).toBeDefined();
+          expect(reason!.error).toBeInstanceOf(RpcRemoteStreamError);
+        }
+      }),
   );
 });
