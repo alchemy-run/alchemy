@@ -773,7 +773,7 @@ ${
           }
         }
 
-        // Collect container-backed class names so they go into newSqliteClasses
+        // Collect container-backed class names so we can send container metadata
         const containerClassNames = new Set(
           bindings.flatMap((b) =>
             (b.data.containers ?? []).map((c) => c.className),
@@ -799,11 +799,10 @@ ${
                     (!bindingNameToStableId[ob.name] && ob.name === b.name)),
               );
               if (!prevOldBinding) {
-                if (containerClassNames.has(b.className)) {
-                  newSqliteClasses.push(b.className);
-                } else {
-                  newClasses.push(b.className);
-                }
+                // Default all new Durable Object classes to SQLite. Cloudflare
+                // recommends SQLite for new namespaces, and container-backed
+                // Durable Objects require it.
+                newSqliteClasses.push(b.className);
               } else if (
                 "className" in prevOldBinding &&
                 prevOldBinding.className !== b.className
