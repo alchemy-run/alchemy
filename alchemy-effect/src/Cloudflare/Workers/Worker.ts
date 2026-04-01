@@ -31,8 +31,9 @@ import { sha256 } from "../../Util/index.ts";
 import { Account } from "../Account.ts";
 import type { AssetsConfig, AssetsProps } from "./Assets.ts";
 import * as Assets from "./Assets.ts";
-import { workersHttpHandler } from "./HttpServer.ts";
 import cloudflare_workers from "./cloudflare:workers.ts";
+import { fromCloudflareFetcher } from "./Fetcher.ts";
+import { workersHttpHandler } from "./HttpServer.ts";
 
 const WorkerTypeId = "Cloudflare.Worker";
 type WorkerTypeId = typeof WorkerTypeId;
@@ -279,15 +280,7 @@ export const Worker: Platform<
             const eff = handler(event);
             if (Effect.isEffect(eff)) {
               return eff.pipe(
-                Effect.provide(
-                  Layer.provideMerge(
-                    Layer.mergeAll(Layer.succeed(ExecutionContext, context)),
-                    Layer.succeed(
-                      WorkerEnvironment,
-                      env as Record<string, any>,
-                    ),
-                  ),
-                ),
+                Effect.provide(Layer.succeed(ExecutionContext, context)),
                 Effect.runPromise,
               );
             }
@@ -312,11 +305,59 @@ export const Worker: Platform<
   return ctx;
 });
 
-export const bindWorker = <Shape extends WorkerShape, Req = never>(
-  worker:
+export const bindWorker = Effect.fnUntraced(function* <
+  Shape extends WorkerShape,
+  Req = never,
+>(
+  workerEff:
     | (Worker & Rpc<Shape>)
     | Effect.Effect<Worker & Rpc<Shape>, never, Req>,
-): Effect.Effect<Shape, never, Req> => {};
+) {
+  const worker = Effect.isEffect(workerEff) ? yield* workerEff : workerEff;
+  const self = yield* Worker;
+  yield* self.bind`Bind(${worker})`({
+    bindings: [
+      {
+        type: "service",
+        name: worker.LogicalId,
+        service: worker.workerName,
+      },
+    ],
+  });
+
+  const workerBinding = WorkerEnvironment.asEffect().pipe(
+    Effect.map((env) => env[worker.LogicalId]),
+  );
+
+  const fetcher = workerBinding.pipe(Effect.map(fromCloudflareFetcher));
+
+  return new Proxy(
+    {
+      fetch: (...args: any[]) =>
+        fetcher.pipe(
+          Effect.flatMap((fetcher) =>
+            fetcher.fetch(
+              // @ts-expect-error
+              ...args,
+            ),
+          ),
+        ),
+      connect: (...args: any[]) =>
+        fetcher.pipe(
+          Effect.map((fetcher) =>
+            fetcher.connect(
+              // @ts-expect-error
+              ...args,
+            ),
+          ),
+        ),
+    } as any,
+    {
+      get: (target, prop) =>
+        prop in target ? target[prop] : (...args: any[]) => {},
+    },
+  );
+});
 
 export class BindWorkerPolicy extends Binding.Policy<
   BindWorkerPolicy,
@@ -477,18 +518,21 @@ export const WorkerProvider = () =>
         }
         importPath = importPath.replaceAll("\\", "/");
         const script = `
-import { NodeServices } from "@effect/platform-node";
-import { Stack } from "alchemy-effect/Stack";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as ServiceMap from "effect/ServiceMap";
+import * as Stream from "effect/Stream";
+
+import { env, DurableObject } from "cloudflare:workers";
 import { MinimumLogLevel } from "effect/References";
-import * as Console from "effect/Console";
-import { env } from "cloudflare:workers";
+import { NodeServices } from "@effect/platform-node";
+import { Stack } from "alchemy-effect/Stack";
+import { WorkerEnvironment } from "alchemy-effect/Cloudflare";
 
 import entry from "${importPath}";
 
@@ -517,9 +561,9 @@ const stack = Layer.succeed(
 
 import util from "node:util";
 
-const handlerEffect = tag.asEffect().pipe(
+const exportsEffect = tag.asEffect().pipe(
   Effect.flatMap(func => func.ExecutionContext.exports),
-  Effect.map(exports => exports.default),
+  Effect.map(exports => exports),
   Effect.provide(
     layer.pipe(
       Layer.provideMerge(stack),
@@ -529,6 +573,12 @@ const handlerEffect = tag.asEffect().pipe(
         Layer.succeed(
           ConfigProvider.ConfigProvider,
           ConfigProvider.fromUnknown(env),
+        )
+      ),
+      Layer.provideMerge(
+        Layer.succeed(
+          WorkerEnvironment,
+          env,
         )
       ),
       Layer.provideMerge(
@@ -543,14 +593,16 @@ const handlerEffect = tag.asEffect().pipe(
 );
 
 // TODO(sam): we could kick this off during module init, but any I/O will break deploy
-// let workerPromise = Effect.runPromise(handlerEffect);
+// let exportsPromise = Effect.runPromise(exportsEffect);
 
 // for now, we delay initializing the worker until the first request
-let workerPromise;
+let exportsPromise;
 
 // don't initialize the workerEffect during module init because Cloudflare does not allow I/O during module init
 // we cache it synchronously (??=) to guarnatee only one initialization ever happens
-const worker = () => (workerPromise ??= Effect.runPromise(handlerEffect))
+const getExports = () => (exportsPromise ??= Effect.runPromise(exportsEffect))
+const worker = () => getExports().then(exports => exports.default)
+const getExport = (name: string) => getExports().then(exports => exports[name])
 
 export default {
   fetch: async (...args) => (await worker()).fetch(...args),
@@ -564,11 +616,43 @@ export default {
 };
 
 // export class proxy stubs for Durable Objects
+
+export class DurableObjectBridge extends DurableObject {
+  constructor(state, env) {
+    super(state, env);
+
+    const object = state.blockConcurrencyWhile(async () =>  {
+      const cls = await getExport(this.constructor.name);
+      return await Effect.runPromise(cls(state, env));
+    });
+
+    return new Proxy(this, {
+      get: (target, prop) => prop !== "fetch" && prop !== "connect"
+        ? async (...args) => {
+          const value = (await object)[prop](...args);
+          if (Effect.isEffect(value)) {
+            const val = await Effect.runPromise(value);
+            if (Stream.isStream(val)) {
+              return Stream.toReadableStream(val.pipe(
+                // TODO(sam): don't stringify Uint8Array
+                Stream.map((n) => JSON.stringify(n) + "\\n"),
+                Stream.encodeText,
+              ));
+            }
+            return val;
+          }
+          // TODO(sam): handle streams
+          return value;
+        }
+        : target[prop],
+    });
+  }
+}
 ${
   (Object.keys(props.exports ?? {}) ?? [])
     .filter((id) => id !== "default")
     // TODO(sam): proxy to the class in `await worker()`
-    .map((id) => `export class ${id} {}`)
+    .map((id) => `export class ${id} extends DurableObjectBridge {}`)
     .join("\n") ?? ""
 }
 `;
@@ -598,7 +682,8 @@ ${
                       module.content.byteOffset,
                       module.content.byteOffset + module.content.byteLength,
                     ) as ArrayBuffer),
-              contentType: getModuleContentType(module),
+              contentType:
+                getModuleContentType(module) ?? "application/octet-stream",
             }),
           );
           return {

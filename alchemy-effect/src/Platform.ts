@@ -26,7 +26,7 @@ import { effectClass } from "./Util/effect.ts";
 import type { IsAny } from "./Util/types.ts";
 
 export type Main<Services = never> = {
-  [key in string]?: key extends "fetch" ? HttpEffect<Services> : any;
+  fetch: HttpEffect<Services>;
 };
 
 export type Rpc<Shape> = {
@@ -82,7 +82,7 @@ export interface Platform<
   };
   <Self>(): {
     <
-      Shape,
+      Shape extends MainShape,
       PropsReq = never,
       InitReq extends Services | PlatformServices = never,
     >(

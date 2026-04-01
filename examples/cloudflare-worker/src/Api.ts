@@ -39,19 +39,34 @@ export default class Api extends Cloudflare.Worker<Api>()(
           // call RPC methods on a Durable Object
           const key = request.url.split("/").pop()!;
           const agent = agents.getByName(key);
+
           if (request.method == "GET") {
             const item = yield* agent.getProfile();
             if (item) {
               return HttpServerResponse.text(item);
             }
           } else if (request.method == "PUT") {
-            yield* agent.putProfile(yield* request.text);
-            return HttpServerResponse.text("OK", { status: 200 });
+            // yield* agent.putProfile(yield* request.text);
+            // return HttpServerResponse.text("OK", { status: 200 });
           } else {
             return HttpServerResponse.text("Method not allowed", {
               status: 405,
             });
           }
+        } else if (request.url.startsWith("/stream/")) {
+          const key = request.url.split("/").pop()!;
+          const agent = agents.getByName(key);
+          const response = yield* agent.getStream();
+          return HttpServerResponse.stream(
+            response.pipe(
+              Stream.map((n) => `${n}\n`),
+              Stream.encodeText,
+            ),
+            {
+              //
+              contentType: "text/plain",
+            },
+          );
         }
         return HttpServerResponse.text("Hello World", { status: 200 });
       }),
@@ -65,3 +80,10 @@ export default class Api extends Cloudflare.Worker<Api>()(
     // ),
   ),
 ) {}
+
+import * as Stream from "effect/Stream";
+
+Effect.gen(function* () {
+  const stream = Stream.forever(Stream.fromArray([1]));
+  const s = Stream.toReadableStream(stream);
+});

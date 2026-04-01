@@ -3,6 +3,7 @@ import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as ServiceMap from "effect/ServiceMap";
+import * as Stream from "effect/Stream";
 import type { HttpServerError } from "effect/unstable/http/HttpServerError";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -12,8 +13,7 @@ import * as Output from "../../Output.ts";
 import type { PlatformServices } from "../../Platform.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
 import { Account } from "../Account.ts";
-import cloudflare_workers from "./cloudflare:workers.ts";
-import { serveWebRequest } from "./HttpServer.ts";
+import { fromCloudflareFetcher } from "./Fetcher.ts";
 import { fromWebSocket, type DurableWebSocket } from "./WebSocket.ts";
 import { Worker, WorkerEnvironment, type WorkerServices } from "./Worker.ts";
 
@@ -148,42 +148,28 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
               },
             );
 
-            const DurableObject = yield* cloudflare_workers.pipe(
-              Effect.map((m) => m.DurableObject),
-            );
-
             const services =
               yield* Effect.services<Effect.Services<typeof impl>>();
 
             yield* worker.export(
               namespace,
-              class extends DurableObject {
-                constructor(state: cf.DurableObjectState, env: any) {
-                  super(state, env);
-
-                  const runtimeState = fromDurableObjectState(state);
-
-                  state.blockConcurrencyWhile(async () => {
-                    const methods: any = await Effect.runPromise(
-                      constructor.pipe(
-                        Effect.provideServices(services),
-                        Effect.provideService(DurableObjectState, runtimeState),
-                        Effect.provideService(WorkerEnvironment, env),
-                      ),
-                    );
-
-                    Object.assign(this, wrapDurableObjectShape(methods, state));
-                  });
-                }
-              },
+              (state: cf.DurableObjectState, env: any) =>
+                constructor.pipe(
+                  Effect.provideServices(services),
+                  Effect.provideService(
+                    DurableObjectState,
+                    fromDurableObjectState(state),
+                  ),
+                  Effect.provideService(WorkerEnvironment, env),
+                ),
             );
 
-            const binding = Effect.serviceOption(WorkerEnvironment).pipe(
+            const binding = yield* Effect.serviceOption(WorkerEnvironment).pipe(
               Effect.map(Option.getOrUndefined),
               Effect.flatMap((env) => {
                 if (env === undefined) {
                   // should be fine to return undefined here (it is only undefined at plantime)
-                  return undefined!;
+                  return Effect.succeed(undefined);
                 }
                 const ns = env[namespace];
                 if (!ns) {
@@ -203,9 +189,6 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
                 }
               }),
             );
-
-            const use = <T>(fn: (ns: cf.DurableObjectNamespace) => T) =>
-              binding.pipe(Effect.map((ns) => fn(ns)));
 
             const namespaceId = worker.workerName.pipe(
               // TODO(sam): move out to a plantime function
@@ -246,17 +229,50 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
               LogicalId: namespace,
               name: namespace,
               namespaceId,
-              getByName: (name: string) =>
-                use((ns) => wrapDurableObjectStub(ns.getByName(name))),
-              newUniqueId: () => use((ns) => ns.newUniqueId()),
-              idFromName: (name: string) => use((ns) => ns.idFromName(name)),
-              idFromString: (id: string) => use((ns) => ns.idFromString(id)),
-              get: (
-                id: cf.DurableObjectId,
-                options?: cf.DurableObjectNamespaceGetDurableObjectOptions,
-              ) => use((ns) => wrapDurableObjectStub(ns.get(id, options))),
-              jurisdiction: (jurisdiction: cf.DurableObjectJurisdiction) =>
-                use((ns) => ns.jurisdiction(jurisdiction) as any),
+              getByName: (name: string) => {
+                const stub = binding.getByName(name);
+                const fetcher = fromCloudflareFetcher(stub);
+                return new Proxy(fetcher, {
+                  get: (target: any, prop) =>
+                    prop in target
+                      ? target[prop]
+                      : (...args: any[]) =>
+                          Effect.tryPromise(async () => {
+                            try {
+                              const value = await stub[prop](...args);
+
+                              if (value instanceof ReadableStream) {
+                                return Stream.fromReadableStream({
+                                  evaluate: () => value,
+                                  onError: (error) => {
+                                    console.error("stream error", error);
+                                    return error;
+                                  },
+                                }).pipe(
+                                  // TODO(sam): what if the Stream was a Stream<Uint8Array>, how to tell?
+                                  Stream.decodeText,
+                                  Stream.splitLines,
+                                  Stream.filter((line) => line.length > 0),
+                                  Stream.map((line) => JSON.parse(line)),
+                                );
+                              }
+                              return value;
+                            } catch (error) {
+                              console.error("error", error);
+                              throw error;
+                            }
+                          }),
+                });
+              },
+              // newUniqueId: () => use((ns) => ns.newUniqueId()),
+              // idFromName: (name: string) => use((ns) => ns.idFromName(name)),
+              // idFromString: (id: string) => use((ns) => ns.idFromString(id)),
+              // get: (
+              //   id: cf.DurableObjectId,
+              //   options?: cf.DurableObjectNamespaceGetDurableObjectOptions,
+              // ) => use((ns) => wrapDurableObjectStub(ns.get(id, options))),
+              // jurisdiction: (jurisdiction: cf.DurableObjectJurisdiction) =>
+              //   use((ns) => ns.jurisdiction(jurisdiction) as any),
             };
 
             const constructor = yield* impl.pipe(
@@ -403,70 +419,44 @@ export interface DurableObjectStorage {
   onNextSessionRestoreBookmark(bookmark: string): Effect.Effect<string>;
 }
 
-const wrapDurableObjectShape = (
-  shape: DurableObjectShape,
-  state: cf.DurableObjectState,
-) =>
-  Object.fromEntries(
-    Object.entries(shape).map(([key, value]) => [
-      key,
-      key === "fetch"
-        ? wrapFetch(value as HttpEffect, state)
-        : wrapMethod(value as DurableObjectShape[keyof DurableObjectShape]),
-    ]),
-  );
+// const wrapDurableObjectShape = (
+//   shape: DurableObjectShape,
+//   state: cf.DurableObjectState,
+// ) =>
+//   Object.fromEntries(
+//     Object.entries(shape).map(([key, value]) => [
+//       key,
+//       key === "fetch"
+//         ? wrapFetch(value as HttpEffect, state)
+//         : wrapMethod(value as DurableObjectShape[keyof DurableObjectShape]),
+//     ]),
+//   );
 
-const wrapFetch =
-  (handler: HttpEffect, state: cf.DurableObjectState) =>
-  (request: cf.Request): Promise<Response> =>
-    Effect.runPromise(
-      serveWebRequest(request, handler, {
-        remoteAddress: request.headers.get("cf-connecting-ip") ?? undefined,
-        acceptWebSocket: (socket) => state.acceptWebSocket(socket),
-      }),
-    );
+// const wrapFetch =
+//   (handler: HttpEffect, state: cf.DurableObjectState) =>
+//   (request: cf.Request): Promise<Response> =>
+//     Effect.runPromise(
+//       serveWebRequest(request, handler, {
+//         remoteAddress: request.headers.get("cf-connecting-ip") ?? undefined,
+//         acceptWebSocket: (socket) => state.acceptWebSocket(socket),
+//       }),
+//     );
 
-const wrapMethod = (method: DurableObjectShape[keyof DurableObjectShape]) => {
-  if (Effect.isEffect(method)) {
-    return () => Effect.runPromise(method as Effect.Effect<any>);
-  }
-  if (typeof method === "function") {
-    return (...args: ReadonlyArray<any>) => {
-      const result = method(
-        // @ts-expect-error
-        ...args,
-      );
-      return Effect.isEffect(result) ? Effect.runPromise(result) : result;
-    };
-  }
-  return method;
-};
-
-const wrapDurableObjectStub = <Shape>(stub: cf.DurableObjectStub): Shape =>
-  new Proxy(stub as object, {
-    get(target, property, receiver) {
-      const value = Reflect.get(target, property, receiver);
-      if (typeof value !== "function") {
-        return value;
-      }
-      if (property === "fetch") {
-        return (request: HttpServerRequest.HttpServerRequest) =>
-          HttpServerRequest.toWeb(request).pipe(
-            Effect.flatMap((webRequest) =>
-              Effect.tryPromise(() =>
-                (value as (request: Request) => Promise<Response>).call(
-                  target,
-                  webRequest,
-                ),
-              ),
-            ),
-            Effect.map(HttpServerResponse.fromWeb),
-          );
-      }
-      return (...args: ReadonlyArray<any>) =>
-        Effect.tryPromise(() => Promise.resolve(value.apply(target, args)));
-    },
-  }) as Shape;
+// const wrapMethod = (method: DurableObjectShape[keyof DurableObjectShape]) => {
+//   if (Effect.isEffect(method)) {
+//     return () => Effect.runPromise(method as Effect.Effect<any>);
+//   }
+//   if (typeof method === "function") {
+//     return (...args: ReadonlyArray<any>) => {
+//       const result = method(
+//         // @ts-expect-error
+//         ...args,
+//       );
+//       return Effect.isEffect(result) ? Effect.runPromise(result) : result;
+//     };
+//   }
+//   return method;
+// };
 
 const fromDurableObjectState = (
   state: cf.DurableObjectState,
