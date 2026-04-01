@@ -532,7 +532,7 @@ import { env, DurableObject } from "cloudflare:workers";
 import { MinimumLogLevel } from "effect/References";
 import { NodeServices } from "@effect/platform-node";
 import { Stack } from "alchemy-effect/Stack";
-import { WorkerEnvironment } from "alchemy-effect/Cloudflare";
+import { WorkerEnvironment, toRpcStream } from "alchemy-effect/Cloudflare";
 
 import entry from "${importPath}";
 
@@ -633,11 +633,7 @@ export class DurableObjectBridge extends DurableObject {
           if (Effect.isEffect(value)) {
             const val = await Effect.runPromise(value);
             if (Stream.isStream(val)) {
-              return Stream.toReadableStream(val.pipe(
-                // TODO(sam): don't stringify Uint8Array
-                Stream.map((n) => JSON.stringify(n) + "\\n"),
-                Stream.encodeText,
-              ));
+              return await Effect.runPromise(toRpcStream(val));
             }
             return val;
           }

@@ -3,7 +3,6 @@ import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as ServiceMap from "effect/ServiceMap";
-import * as Stream from "effect/Stream";
 import type { HttpServerError } from "effect/unstable/http/HttpServerError";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -13,7 +12,7 @@ import * as Output from "../../Output.ts";
 import type { PlatformServices } from "../../Platform.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
 import { Account } from "../Account.ts";
-import { fromCloudflareFetcher } from "./Fetcher.ts";
+import { makeRpcStub } from "./Rpc.ts";
 import { fromWebSocket, type DurableWebSocket } from "./WebSocket.ts";
 import { Worker, WorkerEnvironment, type WorkerServices } from "./Worker.ts";
 
@@ -229,48 +228,15 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
               LogicalId: namespace,
               name: namespace,
               namespaceId,
-              getByName: (name: string) => {
-                const stub = binding.getByName(name);
-                const fetcher = fromCloudflareFetcher(stub);
-                return new Proxy(fetcher, {
-                  get: (target: any, prop) =>
-                    prop in target
-                      ? target[prop]
-                      : (...args: any[]) =>
-                          Effect.tryPromise(async () => {
-                            try {
-                              const value = await stub[prop](...args);
-
-                              if (value instanceof ReadableStream) {
-                                return Stream.fromReadableStream({
-                                  evaluate: () => value,
-                                  onError: (error) => {
-                                    console.error("stream error", error);
-                                    return error;
-                                  },
-                                }).pipe(
-                                  // TODO(sam): what if the Stream was a Stream<Uint8Array>, how to tell?
-                                  Stream.decodeText,
-                                  Stream.splitLines,
-                                  Stream.filter((line) => line.length > 0),
-                                  Stream.map((line) => JSON.parse(line)),
-                                );
-                              }
-                              return value;
-                            } catch (error) {
-                              console.error("error", error);
-                              throw error;
-                            }
-                          }),
-                });
-              },
+              getByName: (name: string) =>
+                makeRpcStub(binding.getByName(name)),
               // newUniqueId: () => use((ns) => ns.newUniqueId()),
               // idFromName: (name: string) => use((ns) => ns.idFromName(name)),
               // idFromString: (id: string) => use((ns) => ns.idFromString(id)),
               // get: (
               //   id: cf.DurableObjectId,
               //   options?: cf.DurableObjectNamespaceGetDurableObjectOptions,
-              // ) => use((ns) => wrapDurableObjectStub(ns.get(id, options))),
+              // ) => use((ns) => makeRpcStub(ns.get(id, options))),
               // jurisdiction: (jurisdiction: cf.DurableObjectJurisdiction) =>
               //   use((ns) => ns.jurisdiction(jurisdiction) as any),
             };
@@ -418,45 +384,6 @@ export interface DurableObjectStorage {
   getBookmarkForTime(timestamp: number | Date): Effect.Effect<string>;
   onNextSessionRestoreBookmark(bookmark: string): Effect.Effect<string>;
 }
-
-// const wrapDurableObjectShape = (
-//   shape: DurableObjectShape,
-//   state: cf.DurableObjectState,
-// ) =>
-//   Object.fromEntries(
-//     Object.entries(shape).map(([key, value]) => [
-//       key,
-//       key === "fetch"
-//         ? wrapFetch(value as HttpEffect, state)
-//         : wrapMethod(value as DurableObjectShape[keyof DurableObjectShape]),
-//     ]),
-//   );
-
-// const wrapFetch =
-//   (handler: HttpEffect, state: cf.DurableObjectState) =>
-//   (request: cf.Request): Promise<Response> =>
-//     Effect.runPromise(
-//       serveWebRequest(request, handler, {
-//         remoteAddress: request.headers.get("cf-connecting-ip") ?? undefined,
-//         acceptWebSocket: (socket) => state.acceptWebSocket(socket),
-//       }),
-//     );
-
-// const wrapMethod = (method: DurableObjectShape[keyof DurableObjectShape]) => {
-//   if (Effect.isEffect(method)) {
-//     return () => Effect.runPromise(method as Effect.Effect<any>);
-//   }
-//   if (typeof method === "function") {
-//     return (...args: ReadonlyArray<any>) => {
-//       const result = method(
-//         // @ts-expect-error
-//         ...args,
-//       );
-//       return Effect.isEffect(result) ? Effect.runPromise(result) : result;
-//     };
-//   }
-//   return method;
-// };
 
 const fromDurableObjectState = (
   state: cf.DurableObjectState,
