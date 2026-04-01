@@ -34,6 +34,7 @@ import * as Assets from "./Assets.ts";
 import cloudflare_workers from "./cloudflare:workers.ts";
 import { fromCloudflareFetcher } from "./Fetcher.ts";
 import { workersHttpHandler } from "./HttpServer.ts";
+import { makeRpcStub } from "./Rpc.ts";
 
 const WorkerTypeId = "Cloudflare.Worker";
 type WorkerTypeId = typeof WorkerTypeId;
@@ -330,33 +331,8 @@ export const bindWorker = Effect.fnUntraced(function* <
   );
 
   const fetcher = workerBinding.pipe(Effect.map(fromCloudflareFetcher));
-
-  return new Proxy(
-    {
-      fetch: (...args: any[]) =>
-        fetcher.pipe(
-          Effect.flatMap((fetcher) =>
-            fetcher.fetch(
-              // @ts-expect-error
-              ...args,
-            ),
-          ),
-        ),
-      connect: (...args: any[]) =>
-        fetcher.pipe(
-          Effect.map((fetcher) =>
-            fetcher.connect(
-              // @ts-expect-error
-              ...args,
-            ),
-          ),
-        ),
-    } as any,
-    {
-      get: (target, prop) =>
-        prop in target ? target[prop] : (...args: any[]) => {},
-    },
-  );
+  // TODO(sam): update makeRpcStub to support lazily evaluating the Effect<Fetcher>
+  return makeRpcStub(fetcher);
 });
 
 export class BindWorkerPolicy extends Binding.Policy<
@@ -517,6 +493,9 @@ export const WorkerProvider = () =>
           importPath = `./${importPath}`;
         }
         importPath = importPath.replaceAll("\\", "/");
+        const classes = (Object.keys(props.exports ?? {}) ?? []).filter(
+          (id) => id !== "default",
+        );
         const script = `
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -532,7 +511,7 @@ import { env, DurableObject } from "cloudflare:workers";
 import { MinimumLogLevel } from "effect/References";
 import { NodeServices } from "@effect/platform-node";
 import { Stack } from "alchemy-effect/Stack";
-import { WorkerEnvironment, toRpcStream } from "alchemy-effect/Cloudflare";
+import { WorkerEnvironment, makeDurableObjectBridge } from "alchemy-effect/Cloudflare";
 
 import entry from "${importPath}";
 
@@ -604,52 +583,21 @@ const getExports = () => (exportsPromise ??= Effect.runPromise(exportsEffect))
 const worker = () => getExports().then(exports => exports.default)
 const getExport = (name: string) => getExports().then(exports => exports[name])
 
-export default {
-  fetch: async (...args) => (await worker()).fetch(...args),
-  queue: async (...args) => (await worker()).queue(...args),
-  scheduled: async (...args) => (await worker()).scheduled(...args),
-  email: async (...args) => (await worker()).email(...args),
-  tail: async (...args) => (await worker()).tail(...args),
-  trace: async (...args) => (await worker()).trace(...args),
-  tailStream: async (...args) => (await worker()).tailStream(...args),
-  test: async (...args) => (await worker()).test(...args),
-};
+export default new Proxy({}, {
+  get: (target, prop) => 
+    prop in target 
+      ? target[prop] 
+      : async (...args) => (await worker())[prop](...args),
+});
 
-// export class proxy stubs for Durable Objects
-
-export class DurableObjectBridge extends DurableObject {
-  constructor(state, env) {
-    super(state, env);
-
-    const object = state.blockConcurrencyWhile(async () =>  {
-      const cls = await getExport(this.constructor.name);
-      return await Effect.runPromise(cls(state, env));
-    });
-
-    return new Proxy(this, {
-      get: (target, prop) => prop !== "fetch" && prop !== "connect"
-        ? async (...args) => {
-          const value = (await object)[prop](...args);
-          if (Effect.isEffect(value)) {
-            const val = await Effect.runPromise(value);
-            if (Stream.isStream(val)) {
-              return await Effect.runPromise(toRpcStream(val));
-            }
-            return val;
-          }
-          // TODO(sam): handle streams
-          return value;
-        }
-        : target[prop],
-    });
-  }
-}
+// export class proxy stubs for Durable Objects and Workflows
 ${
-  (Object.keys(props.exports ?? {}) ?? [])
-    .filter((id) => id !== "default")
-    // TODO(sam): proxy to the class in `await worker()`
-    .map((id) => `export class ${id} extends DurableObjectBridge {}`)
-    .join("\n") ?? ""
+  [
+    "const DurableObjectBridge = makeDurableObjectBridge(DurableObject, getExport);",
+    ...classes
+      // TODO(sam): differentiate Workflows from Durable Objects
+      .map((id) => `export class ${id} extends DurableObjectBridge {}`),
+  ].join("\n\n") ?? ""
 }
 `;
         yield* fs.writeFileString(tempEntry, script);

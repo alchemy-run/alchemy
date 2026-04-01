@@ -1,10 +1,15 @@
 import * as Cloudflare from "alchemy-effect/Cloudflare";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as Socket from "effect/unstable/socket/Socket";
+
+class MyError extends Data.TaggedError("MyError")<{
+  readonly message: string;
+}> {}
 
 export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
   "Agents",
@@ -106,6 +111,9 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
     return Effect.gen(function* () {
       return {
         getProfile: () => Effect.succeed("BOOF"),
+        getError: () => Effect.fail(new Error("BOOF")),
+        getMyError: () => Effect.fail(new MyError({ message: "BOOF" })),
+        getDie: () => Effect.die(new Error("BOOF")),
         getStream: () =>
           Effect.succeed(
             Stream.forever(
