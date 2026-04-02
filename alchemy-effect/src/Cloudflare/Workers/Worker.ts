@@ -123,6 +123,17 @@ export type WorkerBinding = Exclude<
   undefined
 >[number];
 
+export const ExportedHandlerMethods = [
+  "fetch",
+  "tail",
+  "trace",
+  "tailStream",
+  "scheduled",
+  "test",
+  "email",
+  "queue",
+] as const satisfies (keyof cf.ExportedHandler)[];
+
 export type WorkerProps = {
   /**
    * Worker name override. If omitted, Alchemy derives a deterministic physical
@@ -290,16 +301,9 @@ export const Worker: Platform<
         };
       return {
         ...exports,
-        default: {
-          fetch: handle("fetch"),
-          email: handle("email"),
-          queue: handle("queue"),
-          scheduled: handle("scheduled"),
-          tail: handle("tail"),
-          trace: handle("trace"),
-          tailStream: handle("tailStream"),
-          test: handle("test"),
-        } satisfies Required<cf.ExportedHandler>,
+        default: Object.fromEntries(
+          ExportedHandlerMethods.map((method) => [method, handle(method)]),
+        ),
       };
     }),
   };
@@ -508,7 +512,7 @@ import { env, DurableObject } from "cloudflare:workers";
 import { MinimumLogLevel } from "effect/References";
 import { NodeServices } from "@effect/platform-node";
 import { Stack } from "alchemy-effect/Stack";
-import { WorkerEnvironment, makeDurableObjectBridge } from "alchemy-effect/Cloudflare";
+import { WorkerEnvironment, makeDurableObjectBridge, ExportedHandlerMethods } from "alchemy-effect/Cloudflare";
 
 import entry from "${importPath}";
 
@@ -580,12 +584,9 @@ const getExports = () => (exportsPromise ??= Effect.runPromise(exportsEffect))
 const getExport = (name: string) => getExports().then(exports => exports[name])
 const worker = () => getExports().then(exports => exports.default)
 
-export default new Proxy({}, {
-  get: (target, prop) => 
-    prop in target 
-      ? target[prop] 
-      : async (...args) => (await worker())[prop](...args),
-});
+export default Object.fromEntries(ExportedHandlerMethods.map(
+  method => [method, async (...args) => (await worker())[method](...args)])
+) satisfies Required<cf.ExportedHandler>;
 
 // export class proxy stubs for Durable Objects and Workflows
 ${
@@ -603,6 +604,7 @@ ${
 }
 `;
         yield* fs.writeFileString(tempEntry, script);
+
         return yield* Effect.gen(function* () {
           const { projectRoot, tsconfig } = yield* findBundleProject(realMain);
           const bundle = yield* bundler.build({
