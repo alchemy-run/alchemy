@@ -149,6 +149,26 @@ export const dockerBuild = Effect.fn(function* (options: DockerBuildOptions) {
 });
 
 /**
+ * Get the image ID (content-addressable digest) of a locally-built image.
+ */
+export const getDockerImageId = Effect.fn(function* (tag: string) {
+  const { stdout } = yield* runDockerCommand([
+    "inspect",
+    "--format",
+    "{{.Id}}",
+    tag,
+  ]);
+  return stdout.trim();
+});
+
+/**
+ * Tag a local image with a new reference.
+ */
+export const dockerTag = Effect.fn(function* (source: string, target: string) {
+  yield* runDockerCommand(["tag", source, target]);
+});
+
+/**
  * Log in to a registry using `docker login --password-stdin` (no password on argv).
  */
 export const dockerLogin = Effect.fn(function* (

@@ -7,7 +7,6 @@ import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type { Fiber } from "effect/Fiber";
-import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as SynchronizedRef from "effect/SynchronizedRef";
@@ -26,7 +25,7 @@ import {
 } from "../Bundle/Docker.ts";
 import { getStableContextDir } from "../Bundle/TempRoot.ts";
 import { DotAlchemy } from "../Config.ts";
-import { deepEqual, isResolved } from "../Diff.ts";
+import { isResolved } from "../Diff.ts";
 import { HttpServer, type HttpEffect } from "../Http.ts";
 import * as Output from "../Output.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
@@ -244,6 +243,9 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
       | undefined;
     createdAt: string;
     version: number;
+    hash?: {
+      image: string;
+    };
   },
   {
     /**
@@ -329,9 +331,25 @@ export const Container: Platform<
         runners.push(effect);
       })) as unknown as Server.ProcessContext["run"],
     serve,
-  } as Server.ProcessContext & {
-    serve: typeof serve;
-  };
+    exports: Effect.sync(() => ({
+      default: Effect.all(
+        runners.map((eff) =>
+          Effect.forever(
+            eff.pipe(
+              // Log and ignore errors (daemon mode, it should just re-run)
+              Effect.tapError((err) => Effect.logError(err)),
+              Effect.ignore,
+              // TODO(sam): ignore cause? for now, let that actually kill the server
+              // Effect.ignoreCause
+            ),
+          ),
+        ),
+        {
+          concurrency: "unbounded",
+        },
+      ),
+    })),
+  } as Server.ProcessContext;
 });
 
 export const bindContainer = Effect.fnUntraced(function* <Shape, Req = never>(
@@ -521,7 +539,6 @@ export const ContainerProvider = () =>
         Effect.map(Option.getOrElse(() => false)),
       );
       const dotAlchemy = yield* DotAlchemy;
-      const fs = yield* FileSystem.FileSystem;
       const createContainerApplication =
         yield* Containers.createContainerApplication;
       const updateContainerApplication =
@@ -563,13 +580,12 @@ export const ContainerProvider = () =>
         );
       });
 
-      const desiredConfiguration = Effect.fnUntraced(function* (
-        id: string,
+      const desiredConfiguration = (
         props: ContainerApplicationProps,
-      ) {
-        const image = yield* resolveImageReference(id, props);
-        return normalizeNulls({
-          image,
+        imageRef: string,
+      ) =>
+        normalizeNulls({
+          image: imageRef,
           instanceType: props.instanceType,
           observability: props.observability,
           sshPublicKeyIds: props.sshPublicKeyIds,
@@ -586,9 +602,8 @@ export const ContainerProvider = () =>
           ports: props.ports,
           checks: props.checks,
         }) as Configuration;
-      });
 
-      const resolveImageReference = Effect.fnUntraced(function* (
+      const computeImageHash = Effect.fnUntraced(function* (
         id: string,
         props: ContainerApplicationProps,
       ) {
@@ -598,22 +613,26 @@ export const ContainerProvider = () =>
             new Error("Container requires a `main` entrypoint."),
           );
         }
-        const name = yield* createApplicationName(id, props.name);
-        const repositoryName = name.toLowerCase();
-        const registryId = props.registryId ?? "registry.cloudflare.com";
         const runtime = props.runtime ?? "bun";
-        const mainContent = yield* fs.readFileString(main).pipe(
-          Effect.catchIf(
-            () => true,
-            () => Effect.succeed(""),
-          ),
-        );
-        const hash = (yield* sha256Object({
-          dockerfile: props.dockerfile ?? "",
-          main: mainContent,
+        const { code, hash: bundleHash } = yield* bundleProgram({
+          id,
+          main,
           runtime,
+          handler: props.handler,
+        });
+
+        const finalDockerfile = buildFinalDockerfile(props.dockerfile, runtime);
+        const imageHash = (yield* sha256Object({
+          bundleHash,
+          dockerfile: finalDockerfile,
         })).slice(0, 16);
-        return `${registryId}/${accountId}/${repositoryName}:${hash}`;
+
+        const name = yield* createApplicationName(id, props.name);
+        const registryId = props.registryId ?? "registry.cloudflare.com";
+        const repositoryName = name.toLowerCase();
+        const imageRef = `${registryId}/${accountId}/${repositoryName}:${imageHash}`;
+
+        return { code, imageRef, imageHash };
       });
 
       const bundleProgram = ({
@@ -641,7 +660,19 @@ export const ContainerProvider = () =>
           },
           entryContent: (importPath) =>
             `
-${runtime === "bun" ? 'import { BunServices } from "@effect/platform-bun";' : 'import { NodeServices } from "@effect/platform-node";'}
+${
+  runtime === "bun"
+    ? `
+import { BunServices } from "@effect/platform-bun";
+import { BunHttpServer } from "alchemy-effect/Http";
+const HttpServer = BunHttpServer;
+`
+    : `
+import { NodeServices } from "@effect/platform-node";
+import { NodeHttpServer } from "alchemy-effect/Http";
+const HttpServer = NodeHttpServer;
+`
+}
 import { Stack } from "alchemy-effect/Stack";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -678,11 +709,13 @@ const stack = Layer.effect(
   )
 );
 
-const handlerEffect = tag.asEffect().pipe(
-  Effect.flatMap(func => func.ExecutionContext.exports.handler),
+const serverEffect = tag.asEffect().pipe(
+  Effect.flatMap(func => func.ExecutionContext.exports),
+  Effect.map(exports => exports.default),
   Effect.provide(
     layer.pipe(
       Layer.provideMerge(stack),
+      Layer.provideMerge(HttpServer()),
       Layer.provideMerge(platform),
       Layer.provideMerge(
         Layer.succeed(
@@ -701,7 +734,7 @@ const handlerEffect = tag.asEffect().pipe(
   Effect.scoped
 );
 
-export default await Effect.runPromise(handlerEffect)`,
+await Effect.runPromise(serverEffect)`,
         });
 
       const buildFinalDockerfile = (
@@ -726,19 +759,14 @@ export default await Effect.runPromise(handlerEffect)`,
         ].join("\n");
       };
 
-      const ensureImageAvailable = Effect.fnUntraced(function* (
+      const buildAndPushImage = Effect.fnUntraced(function* (
         id: string,
         props: ContainerApplicationProps,
+        code: Uint8Array,
+        imageRef: string,
         session?: { note: (message: string) => Effect.Effect<void> },
       ) {
-        const main = props.main;
-        if (!main) {
-          return yield* Effect.fail(
-            new Error("Container requires a `main` entrypoint."),
-          );
-        }
         const runtime = props.runtime ?? "bun";
-        const imageRef = yield* resolveImageReference(id, props);
 
         yield* Effect.logInfo(
           `Cloudflare Container image: building ${imageRef}`,
@@ -747,16 +775,30 @@ export default await Effect.runPromise(handlerEffect)`,
           yield* session.note(`Building container image ${imageRef}...`);
         }
 
-        const { code } = yield* bundleProgram({
-          id,
-          main,
-          runtime,
-          handler: props.handler,
+        const contextDir = yield* getStableContextDir(
+          process.cwd(),
+          dotAlchemy,
+          `${id}-container`,
+        );
+        const finalDockerfile = buildFinalDockerfile(props.dockerfile, runtime);
+        yield* materializeDockerfile(finalDockerfile, contextDir);
+        yield* writeContextFiles(contextDir, [
+          { path: "index.mjs", content: code },
+        ]);
+        yield* dockerBuild({
+          tag: imageRef,
+          context: contextDir,
+          platform: "linux/amd64",
         });
 
-        const registryId = props.registryId ?? "registry.cloudflare.com";
-        const finalDockerfile = buildFinalDockerfile(props.dockerfile, runtime);
+        yield* Effect.logInfo(
+          `Cloudflare Container image: pushing ${imageRef}`,
+        );
+        if (session) {
+          yield* session.note(`Pushing container image ${imageRef}...`);
+        }
 
+        const registryId = props.registryId ?? "registry.cloudflare.com";
         const credentials = yield* createContainerRegistryCredentials({
           accountId,
           registryId,
@@ -772,29 +814,11 @@ export default await Effect.runPromise(handlerEffect)`,
           );
         }
 
-        const contextDir = yield* getStableContextDir(
-          process.cwd(),
-          dotAlchemy,
-          `${id}-container`,
-        );
-
-        yield* materializeDockerfile(finalDockerfile, contextDir);
-        yield* writeContextFiles(contextDir, [
-          { path: "index.mjs", content: code },
-        ]);
-        yield* dockerBuild({
-          tag: imageRef,
-          context: contextDir,
-          platform: "linux/amd64",
-        });
-
         yield* pushImage(imageRef, {
           username,
           password: credentials.password,
           server: registryId,
         });
-
-        return imageRef;
       });
 
       const maybeCreateRollout = Effect.fnUntraced(function* ({
@@ -975,13 +999,13 @@ export default await Effect.runPromise(handlerEffect)`,
         yield* Effect.logInfo(
           `Cloudflare Container update: preparing ${existing.applicationName}`,
         );
-        const configuration = yield* desiredConfiguration(id, news);
-        if (
-          stableStringify(existing.configuration) !==
-          stableStringify(configuration)
-        ) {
-          yield* ensureImageAvailable(id, news, session);
+        const { code, imageRef, imageHash } = yield* computeImageHash(id, news);
+        const configuration = desiredConfiguration(news, imageRef);
+
+        if (imageHash !== existing.hash?.image) {
+          yield* buildAndPushImage(id, news, code, imageRef, session);
         }
+
         yield* session.note(
           `Updating container application ${existing.applicationName}...`,
         );
@@ -1009,7 +1033,7 @@ export default await Effect.runPromise(handlerEffect)`,
             rollout: news.rollout,
           });
         }
-        return updated;
+        return { ...updated, hash: { image: imageHash } };
       });
 
       const getDurableObjects = (
@@ -1069,17 +1093,8 @@ export default await Effect.runPromise(handlerEffect)`,
             return undefined;
           }
 
-          const configuration = yield* desiredConfiguration(id, news);
-          const oldConfiguration = yield* desiredConfiguration(id, olds);
-          if (
-            (news.instances ?? 1) !== (olds.instances ?? 1) ||
-            (news.maxInstances ?? 1) !== (olds.maxInstances ?? 1) ||
-            (news.schedulingPolicy ?? "default") !==
-              (olds.schedulingPolicy ?? "default") ||
-            !deepEqual(news.constraints, olds.constraints) ||
-            !deepEqual(news.affinities, olds.affinities) ||
-            !deepEqual(configuration, oldConfiguration)
-          ) {
+          const { imageHash } = yield* computeImageHash(id, news);
+          if (imageHash !== output.hash?.image) {
             return { action: "update" } as const;
           }
         }),
@@ -1089,14 +1104,18 @@ export default await Effect.runPromise(handlerEffect)`,
             `Cloudflare Container precreate: starting ${name}`,
           );
 
-          const configuration = yield* desiredConfiguration(id, news);
-          yield* ensureImageAvailable(id, news, session);
+          const { code, imageRef, imageHash } = yield* computeImageHash(
+            id,
+            news,
+          );
+          const configuration = desiredConfiguration(news, imageRef);
+          yield* buildAndPushImage(id, news, code, imageRef, session);
 
           // Precreate intentionally omits the Durable Object attachment so the
           // worker can bind to this application id and break the circular
           // dependency. The final create step recreates the application with the
           // resolved namespace when needed.
-          return yield* createApplication({
+          const result = yield* createApplication({
             id,
             news,
             name,
@@ -1108,6 +1127,10 @@ export default await Effect.runPromise(handlerEffect)`,
                 session.note(message.replace("Creating", "Pre-creating")),
             },
           });
+          return {
+            ...("applicationId" in result ? result : toAttributes(result)),
+            hash: { image: imageHash },
+          };
         }),
         create: Effect.fnUntraced(function* ({
           id,
@@ -1121,7 +1144,11 @@ export default await Effect.runPromise(handlerEffect)`,
             `Cloudflare Container create: starting ${name}${adoptPolicy ? " with adopt" : ""}`,
           );
           const durableObjects = yield* getDurableObjects(bindings);
-          const configuration = yield* desiredConfiguration(id, news);
+          const { code, imageRef, imageHash } = yield* computeImageHash(
+            id,
+            news,
+          );
+          const configuration = desiredConfiguration(news, imageRef);
 
           if (
             output &&
@@ -1144,13 +1171,10 @@ export default await Effect.runPromise(handlerEffect)`,
                 () => Effect.void,
               ),
             );
-            if (
-              stableStringify(output.configuration) !==
-              stableStringify(configuration)
-            ) {
-              yield* ensureImageAvailable(id, news, session);
+            if (imageHash !== output.hash?.image) {
+              yield* buildAndPushImage(id, news, code, imageRef, session);
             }
-            return yield* createApplication({
+            const result = yield* createApplication({
               id,
               news,
               name,
@@ -1158,6 +1182,10 @@ export default await Effect.runPromise(handlerEffect)`,
               durableObjects,
               session,
             });
+            return {
+              ...("applicationId" in result ? result : toAttributes(result)),
+              hash: { image: imageHash },
+            };
           }
 
           if (output) {
@@ -1169,9 +1197,9 @@ export default await Effect.runPromise(handlerEffect)`,
             });
           }
 
-          yield* ensureImageAvailable(id, news, session);
+          yield* buildAndPushImage(id, news, code, imageRef, session);
 
-          return yield* createApplication({
+          const result = yield* createApplication({
             id,
             news,
             name,
@@ -1179,6 +1207,10 @@ export default await Effect.runPromise(handlerEffect)`,
             durableObjects,
             session,
           });
+          return {
+            ...("applicationId" in result ? result : toAttributes(result)),
+            hash: { image: imageHash },
+          };
         }),
         update: Effect.fnUntraced(function* ({
           id,
@@ -1216,7 +1248,10 @@ export default await Effect.runPromise(handlerEffect)`,
               accountId: output.accountId,
               applicationId: output.applicationId,
             }).pipe(
-              Effect.map(toAttributes),
+              Effect.map((app) => ({
+                ...toAttributes(app),
+                hash: output.hash,
+              })),
               Effect.catchTag("ContainerApplicationNotFound", () =>
                 Effect.succeed(undefined),
               ),
@@ -1233,7 +1268,9 @@ export default await Effect.runPromise(handlerEffect)`,
               `Cloudflare Container read: ${name} not found`,
             );
           }
-          return existing ? toAttributes(existing) : undefined;
+          return existing
+            ? { ...toAttributes(existing), hash: output?.hash }
+            : undefined;
         }),
       });
     }),

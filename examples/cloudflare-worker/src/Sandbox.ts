@@ -1,15 +1,36 @@
 import * as Cloudflare from "alchemy-effect/Cloudflare";
 import { Stack } from "alchemy-effect/Stack";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import type { PlatformError } from "effect/PlatformError";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
+
+export class EvalError extends Data.TaggedError("EvalError")<{
+  message: string;
+}> {}
 
 export class Sandbox extends Cloudflare.Container<
   Sandbox,
   {
-    getUser: () => Effect.Effect<{ id: string; name: string }>;
+    /**
+     * Execute a command in a sandbox.
+     */
+    exec: (command: string) => Effect.Effect<
+      {
+        exitCode: number;
+        stdout: string;
+        stderr: string;
+      },
+      PlatformError
+    >;
+    /**
+     * Evaluate JavaScript code in a sandbox.
+     */
+    eval: (code: string) => Effect.Effect<any, EvalError>;
   }
 >()(
   "Sandbox",
@@ -23,12 +44,40 @@ export class Sandbox extends Cloudflare.Container<
 
 export const SandboxLive = Sandbox.make(
   Effect.gen(function* () {
-    // bind dependencies
-    // yield* Cloudflare.Queue()
+    const cp = yield* ChildProcessSpawner;
 
     // return http effect
-    return {
-      getUser: () => Effect.succeed({ id: "123", name: "John Doe" } as const),
+    return Sandbox.of({
+      exec: (command) =>
+        cp
+          .spawn(
+            ChildProcess.make(command, {
+              shell: true,
+            }),
+          )
+          .pipe(
+            Effect.flatMap((handle) =>
+              Effect.all(
+                [
+                  handle.exitCode,
+                  Stream.mkString(Stream.decodeText(handle.stdout)),
+                  Stream.mkString(Stream.decodeText(handle.stderr)),
+                ],
+                { concurrency: "unbounded" },
+              ),
+            ),
+            Effect.map(([exitCode, stdout, stderr]) => {
+              return { exitCode, stdout, stderr };
+            }),
+            Effect.scoped,
+          ),
+      eval: (code) =>
+        Effect.try({
+          // TODO(sam): evaluate in a sandbox
+          // oxlint-disable-next-line no-eval
+          try: () => eval(code),
+          catch: (error: any) => new EvalError({ message: error.message }),
+        }),
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         // upgrade to web socket
@@ -52,7 +101,7 @@ export const SandboxLive = Sandbox.make(
           status: exitCode === 0 ? 200 : 500,
         });
       }).pipe(Effect.orDie),
-    };
+    });
   }),
 );
 

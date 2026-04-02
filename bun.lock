@@ -195,6 +195,16 @@
         "vite": "catalog:",
       },
     },
+    "examples/cloudflare-scratchpad": {
+      "name": "cloudflare-scratchpad",
+      "version": "0.0.0",
+      "dependencies": {
+        "@effect/platform-bun": "catalog:",
+        "@effect/platform-node": "catalog:",
+        "alchemy-effect": "workspace:*",
+        "effect": "catalog:",
+      },
+    },
     "examples/cloudflare-static-site": {
       "name": "cloudflare-vite-example",
       "version": "0.0.0",
@@ -1240,6 +1250,8 @@
     "cliui": ["cliui@7.0.4", "", { "dependencies": { "string-width": "^4.2.0", "strip-ansi": "^6.0.0", "wrap-ansi": "^7.0.0" } }, "sha512-OcRE68cOsVMXp1Yvonl/fzkQOyjLSu/8bhPDfQt0e0/Eb283TKP20Fs2MqoPsr9SwA595rRCA+QMzYc9nBP+JQ=="],
 
     "cloudflare": ["cloudflare@5.2.0", "", { "dependencies": { "@types/node": "^18.11.18", "@types/node-fetch": "^2.6.4", "abort-controller": "^3.0.0", "agentkeepalive": "^4.2.1", "form-data-encoder": "1.7.2", "formdata-node": "^4.3.2", "node-fetch": "^2.6.7" } }, "sha512-dVzqDpPFYR9ApEC9e+JJshFJZXcw4HzM8W+3DHzO5oy9+8rLC53G7x6fEf9A7/gSuSCxuvndzui5qJKftfIM9A=="],
+
+    "cloudflare-scratchpad": ["cloudflare-scratchpad@workspace:examples/cloudflare-scratchpad"],
 
     "cloudflare-tanstack-example": ["cloudflare-tanstack-example@workspace:examples/cloudflare-tanstack"],
 

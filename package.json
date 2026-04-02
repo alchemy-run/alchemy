@@ -10,6 +10,7 @@
   "workspaces": {
     "packages": [
       "alchemy-effect",
+      "alchemy-effect-website",
       "examples/*"
     ],
     "catalog": {

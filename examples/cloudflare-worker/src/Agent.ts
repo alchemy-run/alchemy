@@ -1,7 +1,5 @@
 import * as Cloudflare from "alchemy-effect/Cloudflare";
 import * as Effect from "effect/Effect";
-import * as HttpBody from "effect/unstable/http/HttpBody";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { Sandbox } from "./Sandbox.ts";
 
 export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
@@ -13,7 +11,6 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
       const state = yield* Cloudflare.DurableObjectState;
 
       const container = yield* Cloudflare.runContainer(sandbox);
-      const connection = yield* container.getTcpPort(1080);
 
       const sessions = new Map<string, Cloudflare.DurableWebSocket>();
 
@@ -25,21 +22,8 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
       }
 
       return {
-        getProfile: () => Effect.succeed("TODO"),
-        putProfile: Effect.fnUntraced(function* (value: string) {
-          yield* state.storage.put("Profile", value);
-        }),
-        eval: (code: string) =>
-          connection
-            .fetch(
-              HttpClientRequest.post("/eval", {
-                body: HttpBody.text(code),
-              }),
-            )
-            .pipe(
-              Effect.flatMap((response) => response.text),
-              Effect.orDie,
-            ),
+        eval: (code: string) => container.eval(code),
+        exec: (command: string) => container.exec(command),
         fetch: Effect.gen(function* () {
           const [response, socket] = yield* Cloudflare.upgrade();
           const id = "TODO";

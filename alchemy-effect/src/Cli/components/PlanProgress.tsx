@@ -217,7 +217,8 @@ export function PlanProgress(props: PlanProgressProps): JSX.Element {
         }
 
         const task = tasks.get(row.key) ?? toPlanTask(row);
-        const color = statusColor(task.status);
+        const displayStatus = getDisplayStatus(row, task.status);
+        const color = statusColor(displayStatus);
         const icon = statusIcon(task.status, spinner);
 
         return (
@@ -229,7 +230,7 @@ export function PlanProgress(props: PlanProgressProps): JSX.Element {
               </Box>
               <Text bold>{task.id}</Text>
               <Text dimColor> ({task.type})</Text>
-              <Text color={color}> {task.status}</Text>
+              <Text color={color}> {displayStatus}</Text>
             </Box>
             {task.message ? (
               <Box paddingLeft={row.depth * 2 + 2}>
@@ -243,8 +244,23 @@ export function PlanProgress(props: PlanProgressProps): JSX.Element {
   );
 }
 
-function statusColor(status: ApplyStatus): Parameters<typeof Text>[0]["color"] {
+function getDisplayStatus(
+  row: ResourceProgressRow,
+  status: ApplyStatus,
+): ApplyStatus | "no change" {
+  if (row.action === "noop" && (status === "created" || status === "updated")) {
+    return "no change";
+  }
+
+  return status;
+}
+
+function statusColor(
+  status: ApplyStatus | "no change",
+): Parameters<typeof Text>[0]["color"] {
   switch (status) {
+    case "no change":
+      return "gray";
     case "pending":
       return "gray";
     case "creating":

@@ -78,6 +78,7 @@ export interface Platform<
       >;
       new (_: never): MakeShape<Shape, BaseShape>;
       promise(): PlatformPromise<Self>;
+      of(shape: Shape & MainShape): MakeShape<Shape, BaseShape>;
     };
   };
   <Self>(): {
@@ -260,6 +261,7 @@ export const Platform = <
         // @ts-expect-error
         return pipe(this.asEffect(), ...args);
       }
+      static of = (shape: any) => shape;
       static make = (impl: Impl) => {
         // build the Layer once for the root Self
         const SelfLayer = Layer.effect(

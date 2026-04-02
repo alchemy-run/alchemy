@@ -26,15 +26,28 @@ export default class Api extends Cloudflare.Worker<Api>()(
     const rooms = yield* Room;
 
     return {
-      getAgent: Effect.fnUntraced(function* (agentName: string) {
-        return yield* agents.getByName(agentName).getProfile();
-      }),
       fetch: Effect.gen(function* () {
         // (Business logic is implemented here and can reference bound infrastructure above)
         const request = yield* HttpServerRequest;
         console.log("[Api] fetch", request.method, request.url);
         console.log("[Api] headers", JSON.stringify(request.headers));
-        if (request.url.startsWith("/connect/")) {
+        if (request.url.startsWith("/eval")) {
+          if (request.method === "POST") {
+            const body = yield* request.text;
+
+            const agent = agents.getByName("sandbox");
+            return yield* agent.eval(body).pipe(
+              Effect.map((response) => HttpServerResponse.text(response)),
+              Effect.catch(() =>
+                Effect.succeed(
+                  HttpServerResponse.text("Internal Server Error", {
+                    status: 500,
+                  }),
+                ),
+              ),
+            );
+          }
+        } else if (request.url.startsWith("/connect/")) {
           // connect to a Durable Object web socket
           const agentId = request.url.split("/").pop()!;
           console.log("[Api] /connect/ agentId =", agentId);
@@ -44,7 +57,14 @@ export default class Api extends Cloudflare.Worker<Api>()(
         } else if (request.url.startsWith("/room/")) {
           const upgradeHeader = request.headers.upgrade;
           const roomId = request.url.split("/").pop()!;
-          console.log("[Api] /room/ roomId =", roomId, "upgrade =", upgradeHeader, "method =", request.method);
+          console.log(
+            "[Api] /room/ roomId =",
+            roomId,
+            "upgrade =",
+            upgradeHeader,
+            "method =",
+            request.method,
+          );
           if (!upgradeHeader || upgradeHeader !== "websocket") {
             console.log("[Api] rejecting: no upgrade header or not websocket");
             return HttpServerResponse.text(
@@ -64,24 +84,6 @@ export default class Api extends Cloudflare.Worker<Api>()(
           const response = yield* room.fetch(request);
           console.log("[Api] Room DO response status =", response.status);
           return response;
-        } else if (request.url.startsWith("/profile/")) {
-          // call RPC methods on a Durable Object
-          const key = request.url.split("/").pop()!;
-          const agent = agents.getByName(key);
-
-          if (request.method == "GET") {
-            const item = yield* agent.getProfile();
-            if (item) {
-              return HttpServerResponse.text(item);
-            }
-          } else if (request.method == "PUT") {
-            // yield* agent.putProfile(yield* request.text);
-            // return HttpServerResponse.text("OK", { status: 200 });
-          } else {
-            return HttpServerResponse.text("Method not allowed", {
-              status: 405,
-            });
-          }
         }
         return HttpServerResponse.text("Hello World", { status: 200 });
       }),

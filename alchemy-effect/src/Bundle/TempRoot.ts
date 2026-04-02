@@ -1,3 +1,4 @@
+import * as crypto from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -5,8 +6,10 @@ import { Stack } from "../Stack.ts";
 import { Stage } from "../Stage.ts";
 
 /**
- * Creates a deterministic bundle staging directory under the nearest
- * package-local `.alchemy/tmp` root so resolution matches the entry's package.
+ * Creates a unique bundle staging directory under the nearest package-local
+ * `.alchemy/tmp` root. Each invocation gets its own directory (via a random
+ * nonce) so concurrent bundle operations for the same resource never collide.
+ * Stale directories from previous crashed runs are cleaned up best-effort.
  */
 export const createTempBundleDir = (
   entry: string,
@@ -19,11 +22,11 @@ export const createTempBundleDir = (
     const stack = yield* Stack;
     const stage = yield* Stage;
     const tempRoot = yield* findBundleTempRoot(entry, dotAlchemy);
-    const bundleId = `${stack.name}-${stage}-${id}`;
-    const tempDir = path.join(tempRoot, bundleId);
-
     yield* fs.makeDirectory(tempRoot, { recursive: true });
-    yield* fs.remove(tempDir, { recursive: true }).pipe(Effect.ignore);
+
+    const nonce = crypto.randomUUID().slice(0, 8);
+    const bundleId = `${stack.name}-${stage}-${id}-${nonce}`;
+    const tempDir = path.join(tempRoot, bundleId);
     yield* fs.makeDirectory(tempDir, { recursive: true });
 
     return tempDir;
