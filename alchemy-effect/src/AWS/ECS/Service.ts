@@ -1,10 +1,11 @@
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as Effect from "effect/Effect";
+import { deepEqual, isResolved } from "../../Diff.ts";
+import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags } from "../../Tags.ts";
-import type { Input } from "../../Input.ts";
 import type { AccountID } from "../Account.ts";
 import type { RegionID } from "../Region.ts";
 import type { ClusterArn } from "./Cluster.ts";
@@ -380,6 +381,7 @@ export const ServiceProvider = () =>
       return {
         stables: ["serviceArn", "serviceName", "clusterArn"],
         diff: Effect.fn(function* ({ id, olds, news }) {
+          if (!isResolved(news)) return;
           if (
             (yield* toServiceName(id, olds ?? {})) !==
             (yield* toServiceName(id, news ?? {}))
@@ -387,28 +389,30 @@ export const ServiceProvider = () =>
             return { action: "replace", deleteFirst: true } as const;
           }
           if (
-            JSON.stringify({
-              cluster: olds.cluster,
-              vpcId: olds.vpcId,
-              subnets: olds.subnets,
-              securityGroups: olds.securityGroups ?? [],
-              assignPublicIp: olds.assignPublicIp ?? false,
-              public: olds.public ?? false,
-              listenerPort: olds.listenerPort,
-              certificateArn: olds.certificateArn,
-              healthCheckPath: olds.healthCheckPath,
-            }) !==
-            JSON.stringify({
-              cluster: news.cluster,
-              vpcId: news.vpcId,
-              subnets: news.subnets,
-              securityGroups: news.securityGroups ?? [],
-              assignPublicIp: news.assignPublicIp ?? false,
-              public: news.public ?? false,
-              listenerPort: news.listenerPort,
-              certificateArn: news.certificateArn,
-              healthCheckPath: news.healthCheckPath,
-            })
+            !deepEqual(
+              {
+                cluster: olds.cluster,
+                vpcId: olds.vpcId,
+                subnets: olds.subnets,
+                securityGroups: olds.securityGroups ?? [],
+                assignPublicIp: olds.assignPublicIp ?? false,
+                public: olds.public ?? false,
+                listenerPort: olds.listenerPort,
+                certificateArn: olds.certificateArn,
+                healthCheckPath: olds.healthCheckPath,
+              },
+              {
+                cluster: news.cluster,
+                vpcId: news.vpcId,
+                subnets: news.subnets,
+                securityGroups: news.securityGroups ?? [],
+                assignPublicIp: news.assignPublicIp ?? false,
+                public: news.public ?? false,
+                listenerPort: news.listenerPort,
+                certificateArn: news.certificateArn,
+                healthCheckPath: news.healthCheckPath,
+              },
+            )
           ) {
             return { action: "replace", deleteFirst: true } as const;
           }

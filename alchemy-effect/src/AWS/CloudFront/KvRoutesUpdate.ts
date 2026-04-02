@@ -20,17 +20,16 @@ export interface KvRoutesUpdateProps {
   entry: string;
 }
 
-export interface KvRoutesUpdate
-  extends Resource<
-    "AWS.CloudFront.KvRoutesUpdate",
-    KvRoutesUpdateProps,
-    {
-      store: string;
-      namespace: string;
-      key: string;
-      entry: string;
-    }
-  > {}
+export interface KvRoutesUpdate extends Resource<
+  "AWS.CloudFront.KvRoutesUpdate",
+  KvRoutesUpdateProps,
+  {
+    store: string;
+    namespace: string;
+    key: string;
+    entry: string;
+  }
+> {}
 
 /**
  * Manages a single route entry in a JSON array stored in a CloudFront KeyValueStore.

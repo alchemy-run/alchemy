@@ -1,5 +1,6 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { Resource } from "../../Resource.ts";
 
@@ -58,6 +59,7 @@ export const GroupMembershipProvider = () =>
   GroupMembership.provider.succeed({
     stables: ["groupName"],
     diff: Effect.fn(function* ({ olds, news }) {
+      if (!isResolved(news)) return;
       if (olds.groupName !== news.groupName) {
         return { action: "replace" } as const;
       }

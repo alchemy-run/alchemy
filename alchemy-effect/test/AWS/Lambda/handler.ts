@@ -1,20 +1,23 @@
 import * as Lambda from "@/AWS/Lambda";
-import { Http } from "@/index";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import path from "pathe";
 
-const main = path.resolve(import.meta.dirname, "handler.ts");
+const main = import.meta.path;
 
-export default Effect.gen(function* () {
-  yield* Http.serve(
-    Effect.gen(function* () {
-      return HttpServerResponse.text("Hello, world!");
-    }),
-  );
-
-  return {
+export class TestFunction extends Lambda.Function<Lambda.Function>()(
+  "TestFunction",
+  {
     main,
     url: true,
-  } as const;
-}).pipe(Effect.provide(Lambda.HttpServer), Lambda.Function("TestFunction"));
+  },
+) {}
+
+export const TestFunctionLive = TestFunction.make(
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      return HttpServerResponse.text("Hello, world!");
+    });
+  }),
+);
+
+export default TestFunctionLive;

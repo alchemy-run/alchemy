@@ -1,11 +1,9 @@
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../../Diff.ts";
 import { Resource } from "../../Resource.ts";
 import { Account, type AccountID } from "../Account.ts";
-import {
-  createName,
-  retryConcurrent,
-} from "./common.ts";
+import { createName, retryConcurrent } from "./common.ts";
 
 export type DashboardName = string;
 export type DashboardArn =
@@ -193,7 +191,12 @@ export const DashboardProvider = () =>
 
       return {
         stables: ["dashboardName", "dashboardArn"],
-        diff: Effect.fn(function* ({ id, olds = {}, news = {} }) {
+        diff: Effect.fn(function* ({
+          id,
+          olds = {},
+          news = {} as DashboardProps,
+        }) {
+          if (!isResolved(news)) return undefined;
           const oldName = yield* createDashboardName(id, olds);
           const newName = yield* createDashboardName(id, news);
 

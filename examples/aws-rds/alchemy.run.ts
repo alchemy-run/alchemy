@@ -7,5 +7,8 @@ import ServiceFunction from "./src/ServiceFunction.ts";
 const aws = AWS.providers().pipe(Layer.provide(AWS.DefaultStageConfig));
 
 export default Effect.gen(function* () {
-  yield* ServiceFunction;
+  const service = yield* ServiceFunction;
+  return {
+    url: service.functionUrl,
+  };
 }).pipe(Stack.make("AwsRdsExample", aws));

@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
 import * as Effect from "effect/Effect";
+import { createHash } from "node:crypto";
 import * as Construct from "../../Construct.ts";
 import { toPath } from "../../FQN.ts";
 import type { Input } from "../../Input.ts";
@@ -17,18 +17,13 @@ import { Invalidation } from "../CloudFront/Invalidation.ts";
 import { KeyValueStore } from "../CloudFront/KeyValueStore.ts";
 import { KvEntries } from "../CloudFront/KvEntries.ts";
 import { KvRoutesUpdate } from "../CloudFront/KvRoutesUpdate.ts";
-import {
-  MANAGED_CACHING_OPTIMIZED_POLICY_ID,
-} from "../CloudFront/ManagedPolicies.ts";
+import { MANAGED_CACHING_OPTIMIZED_POLICY_ID } from "../CloudFront/ManagedPolicies.ts";
 import { Record as Route53Record } from "../Route53/Record.ts";
-import type {
-  RouterProps,
-  WebsiteDomainProps,
-} from "./shared.ts";
 import {
   CF_BLOCK_CLOUDFRONT_URL_INJECTION,
   CF_ROUTER_INJECTION,
 } from "./cfcode.ts";
+import type { RouterProps } from "./shared.ts";
 
 /**
  * Shared CloudFront front door with KV-based dynamic routing.
@@ -146,8 +141,7 @@ export const Router = Construct.fn(function* (id: string, props: RouterProps) {
 
       if (typeof route === "string" || "url" in (route as any)) {
         const url = typeof route === "string" ? route : (route as any).url;
-        const host =
-          typeof url === "string" ? new URL(url).host : url;
+        const host = typeof url === "string" ? new URL(url).host : url;
         inlineRouteEntries[`${routeNs}:metadata`] = stringifyResolvedString(
           host,
           (resolvedHost) =>
@@ -198,11 +192,7 @@ export const Router = Construct.fn(function* (id: string, props: RouterProps) {
 
   const distribution = yield* Distribution("Distribution", {
     aliases: domain
-      ? [
-          domain.name,
-          ...(domain.aliases ?? []),
-          ...(domain.redirects ?? []),
-        ]
+      ? [domain.name, ...(domain.aliases ?? []), ...(domain.redirects ?? [])]
       : undefined,
     origins: [
       {
@@ -247,11 +237,7 @@ export const Router = Construct.fn(function* (id: string, props: RouterProps) {
   const records =
     domain?.hostedZoneId && domain.dns !== false
       ? yield* Effect.forEach(
-          [
-            domain.name,
-            ...(domain.aliases ?? []),
-            ...(domain.redirects ?? []),
-          ],
+          [domain.name, ...(domain.aliases ?? []), ...(domain.redirects ?? [])],
           (name, index) =>
             Route53Record(`AliasRecord${index + 1}`, {
               hostedZoneId: domain.hostedZoneId!,
@@ -275,11 +261,12 @@ export const Router = Construct.fn(function* (id: string, props: RouterProps) {
             .update(JSON.stringify(inlineRouteEntries))
             .digest("hex"),
           wait: props.invalidation.wait,
-          paths: props.invalidation.paths === "all" || !props.invalidation.paths
-            ? ["/*"]
-            : Array.isArray(props.invalidation.paths)
-              ? props.invalidation.paths
-              : ["/*"],
+          paths:
+            props.invalidation.paths === "all" || !props.invalidation.paths
+              ? ["/*"]
+              : Array.isArray(props.invalidation.paths)
+                ? props.invalidation.paths
+                : ["/*"],
         });
 
   return {
@@ -392,4 +379,6 @@ const stringifyResolvedString = (
 ): Input<string> =>
   typeof value === "string"
     ? build(value)
-    : value.pipe(Output.map((resolved) => build(resolved)));
+    : Effect.isEffect(value)
+      ? value.pipe(Effect.map((resolved) => build(resolved)))
+      : value.pipe(Output.map((resolved) => build(resolved)));

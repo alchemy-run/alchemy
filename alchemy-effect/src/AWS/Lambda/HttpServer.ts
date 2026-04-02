@@ -3,49 +3,39 @@ import type {
   LambdaFunctionURLResult,
 } from "aws-lambda";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import type { Scope } from "effect/Scope";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as Http from "../../Http.ts";
-import { Function } from "./Function.ts";
 
-const isFunctionURLEvent = (event: any): event is LambdaFunctionURLEvent => {
+export const isFunctionURLEvent = (
+  event: any,
+): event is LambdaFunctionURLEvent => {
   return event.requestContext?.http?.method !== undefined;
 };
 
-export const HttpServer = Layer.effect(
-  Http.HttpServer,
-  Effect.gen(function* () {
-    const func = yield* Function.Runtime;
-    return Http.server({
-      serve: (handler) =>
-        func.listen((event) => {
-          if (isFunctionURLEvent(event)) {
-            const request = HttpServerRequest.fromWeb(
-              toWebRequest(event),
-            ).modify({
-              remoteAddress: event.requestContext.http.sourceIp,
-            });
-            return handler.pipe(
-              Effect.provideService(
-                HttpServerRequest.HttpServerRequest,
-                request,
-              ),
-              Effect.flatMap(toLambdaFunctionURLResult),
-            ) as Effect.Effect<
-              LambdaFunctionURLResult,
-              never,
-              Exclude<
-                Effect.Services<typeof handler>,
-                HttpServerRequest.HttpServerRequest | Scope
-              >
-            >;
-          }
-        }),
-    });
-  }),
-);
+export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
+  const safeHandler = Http.safeHttpEffect(handler);
+  return (event: any) => {
+    if (isFunctionURLEvent(event)) {
+      const request = HttpServerRequest.fromWeb(toWebRequest(event)).modify({
+        remoteAddress: Option.some(event.requestContext.http.sourceIp),
+      });
+      return safeHandler.pipe(
+        Effect.provideService(HttpServerRequest.HttpServerRequest, request),
+        Effect.flatMap(toLambdaFunctionURLResult),
+      ) as Effect.Effect<
+        LambdaFunctionURLResult,
+        never,
+        Exclude<
+          Effect.Services<typeof handler>,
+          HttpServerRequest.HttpServerRequest | Scope
+        >
+      >;
+    }
+  };
+};
 
 const toWebRequest = (event: LambdaFunctionURLEvent): Request => {
   const protocol =

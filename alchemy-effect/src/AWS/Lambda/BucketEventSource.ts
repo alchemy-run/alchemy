@@ -38,7 +38,7 @@ export const BucketEventSource = Layer.effect(
   S3BucketEventSource,
   Effect.gen(function* () {
     // this layer can only be used in a Lambda Function
-    const func = yield* Lambda.Function.Runtime;
+    const func = yield* Lambda.Function;
 
     const bind = yield* BucketEventSourcePolicy;
 

@@ -1,5 +1,6 @@
 import * as eks from "@distilled.cloud/aws/eks";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
@@ -92,6 +93,7 @@ export const AccessEntryProvider = () =>
   AccessEntry.provider.succeed({
     stables: ["accessEntryArn"],
     diff: Effect.fn(function* ({ olds, news }) {
+      if (!isResolved(news)) return;
       if (olds.clusterName !== news.clusterName) {
         return { action: "replace" } as const;
       }

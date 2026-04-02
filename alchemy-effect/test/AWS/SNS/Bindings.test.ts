@@ -8,8 +8,11 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { describe } from "vitest";
-
-import { SNSFixture } from "./handler";
+import {
+  SNSApiFunction,
+  SNSApiFunctionLive,
+  TopicAndQueue,
+} from "./handler.ts";
 
 const readinessPolicy = Schedule.fixed("2 seconds").pipe(
   Schedule.both(Schedule.recurs(9)),
@@ -24,10 +27,25 @@ describe.sequential("SNS Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
       yield* Effect.logInfo("SNS test setup: destroying previous resources");
-      yield* destroy();
+      if (!process.env.NO_DESTROY) {
+        yield* destroy();
+      }
 
       yield* Effect.logInfo("SNS test setup: deploying fixture");
-      const deployed = yield* test.deploy(SNSFixture);
+      const deployed = yield* test.deploy(
+        Effect.gen(function* () {
+          const { topic, queue, subscription } = yield* TopicAndQueue;
+
+          const apiFunction = yield* SNSApiFunction;
+
+          return {
+            apiFunction,
+            topic,
+            queue,
+            subscription,
+          };
+        }).pipe(Effect.provide(SNSApiFunctionLive)),
+      );
 
       baseUrl = deployed.apiFunction.functionUrl!.replace(/\/+$/, "");
       queueUrl = deployed.queue.queueUrl;
@@ -59,7 +77,9 @@ describe.sequential("SNS Bindings", () => {
     { timeout: 120_000 },
   );
 
-  afterAll(destroy(), { timeout: 60_000 });
+  if (!process.env.NO_DESTROY) {
+    afterAll(destroy(), { timeout: 60_000 });
+  }
 
   describe("Publish", () => {
     test(
@@ -278,7 +298,7 @@ describe.sequential("SNS Bindings", () => {
       "gets the bound subscription attributes",
       Effect.gen(function* () {
         const response = yield* getJson("/subscription-attributes");
-        expect((response as any).Attributes.Protocol).toBe("lambda");
+        expect((response as any).Attributes.Protocol).toBe("sqs");
       }),
     );
   });
@@ -293,7 +313,14 @@ describe.sequential("SNS Bindings", () => {
         });
         const response = yield* getJson("/subscription-attributes");
         expect((response as any).Attributes.RawMessageDelivery).toBe("true");
-      }),
+      }).pipe(
+        Effect.ensuring(
+          postJson("/subscription-attributes", {
+            name: "RawMessageDelivery",
+            value: "false",
+          }).pipe(Effect.ignore),
+        ),
+      ),
     );
   });
 
@@ -342,7 +369,10 @@ const postJson = (path: string, body: unknown) =>
       HttpClientRequest.post(`${baseUrl}${path}`),
       body,
     ),
-  ).pipe(Effect.flatMap((response) => response.json));
+  ).pipe(
+    Effect.tap((response) => Effect.flatMap(response.text, Effect.logInfo)),
+    Effect.flatMap((response) => response.json),
+  );
 
 const deleteJson = (path: string, body: unknown) =>
   HttpClient.execute(

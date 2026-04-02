@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import { stableValue } from "./stable.ts";
 
 type Input = ArrayBuffer | Uint8Array | string;
 
@@ -8,6 +9,9 @@ export const sha256 = (input: Input) =>
     const hashArray = Array.from(new Uint8Array(digest));
     return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
   });
+
+export const sha256Object = (input: object) =>
+  sha256(JSON.stringify(stableValue(input)));
 
 const toArrayBuffer = (input: Input) => {
   if (input instanceof ArrayBuffer) {

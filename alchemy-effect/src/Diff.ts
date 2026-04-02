@@ -1,6 +1,9 @@
+import * as Effect from "effect/Effect";
+import type { Input } from "./Input.ts";
 import * as Output from "./Output.ts";
 import type { BindingNode } from "./Plan.ts";
 import type { ResourceBinding } from "./Resource.ts";
+import { isPrimitive } from "./Util/data.ts";
 
 export type Diff = NoopDiff | UpdateDiff | ReplaceDiff;
 
@@ -20,6 +23,34 @@ export interface ReplaceDiff {
   deleteFirst?: boolean;
   stables?: undefined;
 }
+
+/**
+ * Returns true when `value` (or any nested leaf) is still an unresolved
+ * plan-time expression — i.e. an `Output`/`Expr` or an `Effect` that was
+ * not fully evaluated by `resolveInput` in Plan.ts.
+ *
+ * Use at the top of a provider `diff` to short-circuit before field access:
+ *
+ * ```ts
+ * if (!isResolved(news)) return undefined;
+ * const resolved = news as MyProps;
+ * ```
+ */
+export const hasUnresolvedInputs = <T>(value: Input<NoInfer<T>>): value is T =>
+  _hasUnresolved(value);
+
+export const isResolved = <T>(value: Input<T>): value is T =>
+  !_hasUnresolved(value);
+
+const _hasUnresolved = (value: unknown): boolean => {
+  if (value == null || isPrimitive(value)) return false;
+  if (Output.isExpr(value) || Effect.isEffect(value)) return true;
+  if (Array.isArray(value)) return value.some(_hasUnresolved);
+  if (typeof value === "object") {
+    return Object.values(value as Record<string, unknown>).some(_hasUnresolved);
+  }
+  return false;
+};
 
 export const somePropsAreDifferent = <Props extends Record<string, any>>(
   olds: Props,
@@ -56,9 +87,16 @@ export const havePropsChanged = <Props extends object>(
   newProps: Props,
 ) =>
   Output.hasOutputs(newProps) ||
-  // TODO(sam): sort keys and deep compare
   JSON.stringify(canonicalize(oldProps ?? {})) !==
     JSON.stringify(canonicalize(newProps ?? {}));
+
+/**
+ * Sort-keys deep equality for plain data (objects, arrays, primitives).
+ * Use in provider `diff` handlers instead of ad-hoc `JSON.stringify` comparisons.
+ */
+export const deepEqual = (a: unknown, b: unknown): boolean =>
+  JSON.stringify(canonicalize(a ?? undefined)) ===
+  JSON.stringify(canonicalize(b ?? undefined));
 
 const canonicalize = (value: unknown): unknown => {
   if (Array.isArray(value)) {
@@ -85,7 +123,6 @@ export const diffBindings = (
       .filter(([sid]) => !newMap.has(sid))
       .map(([sid, old]) => ({
         sid,
-        namespace: old.namespace,
         action: "delete" as const,
         data: old.data,
       })),
@@ -93,7 +130,6 @@ export const diffBindings = (
       const old = oldMap.get(sid);
       return {
         sid,
-        namespace: binding.namespace,
         action: (!old
           ? "create"
           : havePropsChanged(old.data, binding.data)

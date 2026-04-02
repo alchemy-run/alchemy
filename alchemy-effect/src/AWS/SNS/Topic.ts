@@ -1,5 +1,6 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
@@ -103,6 +104,7 @@ export const TopicProvider = () =>
     }),
     stables: ["topicArn", "topicName", "fifo"],
     diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
+      if (!isResolved(news)) return undefined;
       if ((news.fifo ?? false) !== (olds.fifo ?? false)) {
         return { action: "replace" } as const;
       }

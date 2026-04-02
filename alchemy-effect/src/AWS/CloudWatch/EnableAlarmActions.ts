@@ -34,7 +34,10 @@ export const EnableAlarmActionsLive = Layer.effect(
 
       return Effect.fn(function* () {
         return yield* enableAlarmActions({
-          AlarmNames: yield* Effect.forEach(AlarmNames, (alarmName) => alarmName),
+          AlarmNames: yield* Effect.forEach(
+            AlarmNames,
+            (alarmName) => alarmName,
+          ),
         });
       });
     });

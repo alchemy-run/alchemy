@@ -1,5 +1,6 @@
 import * as scheduler from "@distilled.cloud/aws/scheduler";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import {
@@ -61,7 +62,11 @@ export const ScheduleGroupProvider = () =>
       return {
         stables: ["scheduleGroupArn", "scheduleGroupName"],
         diff: Effect.fn(function* ({ id, olds, news }) {
-          if ((yield* toName(id, olds)) !== (yield* toName(id, news))) {
+          if (!isResolved(news)) return undefined;
+          if (
+            (yield* toName(id, olds)) !==
+            (yield* toName(id, news as ScheduleGroupProps))
+          ) {
             return { action: "replace" } as const;
           }
         }),
@@ -92,7 +97,7 @@ export const ScheduleGroupProvider = () =>
           const scheduleGroupName = yield* toName(id, news);
           const tags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
 
           const created = yield* scheduler
@@ -142,11 +147,11 @@ export const ScheduleGroupProvider = () =>
         update: Effect.fn(function* ({ id, olds, news, output, session }) {
           const oldTags = {
             ...(yield* createInternalTags(id)),
-            ...(olds.tags ?? {}),
+            ...olds.tags,
           };
           const newTags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
           const { removed, upsert } = diffTags(oldTags, newTags);
 

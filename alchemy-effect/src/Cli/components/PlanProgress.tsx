@@ -3,12 +3,13 @@ import { useEffect, useMemo, useRef, useState, type JSX } from "react";
 
 import { Box, Text } from "ink";
 import type { CRUD, Plan } from "../../Plan.ts";
+
+import type { ApplyEvent, ApplyStatus, StatusChangeEvent } from "../Event.ts";
 import {
   buildNamespaceTree,
   flattenTree,
   type FlattenedItem,
 } from "../NamespaceTree.ts";
-import type { ApplyEvent, ApplyStatus, StatusChangeEvent } from "../Event.ts";
 
 interface ProgressEventSource {
   subscribe(listener: (event: ApplyEvent) => void): () => void;
@@ -44,6 +45,8 @@ export type ProgressRow =
       depth: number;
       resourceType: string;
       action: CRUD["action"];
+      /** For `noop` resources, persisted state status to show instead of `pending`. */
+      persistedApplyStatus?: "created" | "updated";
     };
 
 const getTaskKey = (item: FlattenedItem) => item.path.join("/");
@@ -77,6 +80,15 @@ export const buildProgressRows = (plan: Plan): ProgressRow[] => {
             depth: item.depth,
             resourceType: item.resourceType ?? "unknown",
             action: item.action as CRUD["action"],
+            persistedApplyStatus:
+              item.action === "noop"
+                ? (() => {
+                    const crud = findCrudByLogicalId(plan, item.id);
+                    return crud?.action === "noop"
+                      ? crud.state.status
+                      : undefined;
+                  })()
+                : undefined,
           },
     );
 };
@@ -106,7 +118,7 @@ export function toPlanTask(
       key: rowOrId,
       id: rowOrId,
       type: planItem!.resource.Type,
-      status: planItem!.action === "noop" ? "success" : "pending",
+      status: planItem!.action === "noop" ? planItem!.state.status : "pending",
       updatedAt: Date.now(),
     };
   }
@@ -115,7 +127,10 @@ export function toPlanTask(
     key: rowOrId.key,
     id: rowOrId.id,
     type: rowOrId.resourceType,
-    status: rowOrId.action === "noop" ? "success" : "pending",
+    status:
+      rowOrId.action === "noop"
+        ? (rowOrId.persistedApplyStatus ?? "created")
+        : "pending",
     updatedAt: Date.now(),
   };
 }
@@ -241,8 +256,6 @@ function statusColor(status: ApplyStatus): Parameters<typeof Text>[0]["color"] {
     case "deleting":
     case "deleted":
       return "red";
-    case "success":
-      return "green";
     case "fail":
       return "redBright";
     default:
@@ -253,7 +266,7 @@ function statusColor(status: ApplyStatus): Parameters<typeof Text>[0]["color"] {
 function statusIcon(status: ApplyStatus, spinnerChar: string): string {
   if (isInProgress(status)) return spinnerChar;
   if (status === "fail") return "✗";
-  return "✓"; // created/updated/deleted/success
+  return "✓"; // created/updated/deleted/replaced/etc.
 }
 
 function isInProgress(status: ApplyStatus): boolean {
@@ -277,3 +290,20 @@ function useGlobalSpinner(intervalMs = 80): string {
   }, [intervalMs]);
   return spinnerFrames[index];
 }
+
+const findCrudByLogicalId = (
+  plan: Plan,
+  logicalId: string,
+): CRUD | undefined => {
+  for (const node of Object.values(plan.resources)) {
+    if (node.resource.LogicalId === logicalId) {
+      return node;
+    }
+  }
+  for (const node of Object.values(plan.deletions)) {
+    if (node?.resource.LogicalId === logicalId) {
+      return node;
+    }
+  }
+  return undefined;
+};

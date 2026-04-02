@@ -1,5 +1,6 @@
 import * as rds from "@distilled.cloud/aws/rds";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
@@ -66,6 +67,7 @@ export const DBClusterParameterGroupProvider = () =>
       return {
         stables: ["dbClusterParameterGroupArn", "dbClusterParameterGroupName"],
         diff: Effect.fn(function* ({ id, olds, news }) {
+          if (!isResolved(news)) return;
           if (
             (yield* toName(
               id,
@@ -104,7 +106,7 @@ export const DBClusterParameterGroupProvider = () =>
           const name = yield* toName(id, news);
           const tags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
           const created = yield* rds
             .createDBClusterParameterGroup({
@@ -148,11 +150,11 @@ export const DBClusterParameterGroupProvider = () =>
         update: Effect.fn(function* ({ id, news, olds, output, session }) {
           const oldTags = {
             ...(yield* createInternalTags(id)),
-            ...(olds.tags ?? {}),
+            ...olds.tags,
           };
           const newTags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
           const { removed, upsert } = diffTags(oldTags, newTags);
           if (upsert.length > 0 && output.dbClusterParameterGroupArn) {

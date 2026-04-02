@@ -68,12 +68,15 @@ test.skipIf(process.env.ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS !== "true")(
           policyStatements: [statement],
         });
 
-        const invalidation = yield* AWS.CloudFront.Invalidation("InvalidateDocs", {
-          distributionId: distribution.distributionId,
-          version: "v2",
-          wait: true,
-          paths: ["/index.html", "/docs/*"],
-        });
+        const invalidation = yield* AWS.CloudFront.Invalidation(
+          "InvalidateDocs",
+          {
+            distributionId: distribution.distributionId,
+            version: "v2",
+            wait: true,
+            paths: ["/index.html", "/docs/*"],
+          },
+        );
 
         return {
           bucket,

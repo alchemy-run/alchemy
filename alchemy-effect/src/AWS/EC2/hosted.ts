@@ -10,10 +10,10 @@ import {
   createTempBundleDir,
 } from "../../Bundle/TempRoot.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
-import type { ServerExecutionContext } from "../../Host.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import type { ResourceBinding } from "../../Resource.ts";
+import type { ProcessContext } from "../../Server/Process.ts";
 import { createInternalTags, createTagsList, hasTags } from "../../Tags.ts";
 import { sha256 } from "../../Util/sha256.ts";
 import { zipCode } from "../../Util/zip.ts";
@@ -68,14 +68,24 @@ export interface Ec2HostedCleanupState {
   assetPrefix?: string;
 }
 
+/**
+ * Deploy-time / plan-time host context for EC2-backed platforms that bundle a
+ * long-lived program (`exports.program`) and collect background work via `run`.
+ */
+export interface Ec2HostExecutionContext extends ProcessContext {
+  exports: Effect.Effect<{
+    readonly program: Effect.Effect<void, never, any>;
+  }>;
+}
+
 export const createEc2HostExecutionContext =
   (type: string) =>
-  (id: string): ServerExecutionContext => {
+  (id: string): Ec2HostExecutionContext => {
     const runners: Effect.Effect<void, never, any>[] = [];
     const env: Record<string, any> = {};
 
     return {
-      type,
+      Type: type,
       id,
       env,
       set: (bindingId: string, output: Output.Output) =>
@@ -102,16 +112,14 @@ export const createEc2HostExecutionContext =
               ),
             ),
           ),
-      run: ((effect: Effect.Effect<void, never, any>) =>
+      run: (effect: Effect.Effect<void, never, any>) =>
         Effect.sync(() => {
           runners.push(effect);
-        })) as unknown as ServerExecutionContext["run"],
-      exports: {
-        program: Effect.all(runners, { concurrency: "unbounded" }).pipe(
-          Effect.asVoid,
-        ),
-      },
-    } satisfies ServerExecutionContext;
+        }),
+      exports: Effect.sync(() => ({
+        program: Effect.all(runners, { concurrency: "unbounded" }),
+      })),
+    } satisfies Ec2HostExecutionContext;
   };
 
 export const createEc2HostedSupport = ({

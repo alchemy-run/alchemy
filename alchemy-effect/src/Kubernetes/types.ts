@@ -64,8 +64,9 @@ const supportedKinds: Record<string, KubernetesObjectKindSpec> = {
   },
 };
 
-const objectTypeKey = (input: Pick<KubernetesObjectRef, "apiVersion" | "kind">) =>
-  `${input.apiVersion}/${input.kind}`;
+const objectTypeKey = (
+  input: Pick<KubernetesObjectRef, "apiVersion" | "kind">,
+) => `${input.apiVersion}/${input.kind}`;
 
 export const getKubernetesKindSpec = (
   input: Pick<KubernetesObjectRef, "apiVersion" | "kind">,
@@ -89,7 +90,10 @@ export const toKubernetesObjectRef = (
 });
 
 export const kubernetesObjectKey = (
-  input: Pick<KubernetesObjectRef, "apiVersion" | "kind" | "name" | "namespace">,
+  input: Pick<
+    KubernetesObjectRef,
+    "apiVersion" | "kind" | "name" | "namespace"
+  >,
 ) =>
   [
     input.apiVersion,
@@ -113,7 +117,9 @@ export const sortObjectsForApply = (
       compareRefs(toKubernetesObjectRef(a), toKubernetesObjectRef(b)),
   );
 
-export const sortRefsForDelete = (objects: ReadonlyArray<KubernetesObjectRef>) =>
+export const sortRefsForDelete = (
+  objects: ReadonlyArray<KubernetesObjectRef>,
+) =>
   [...objects].sort(
     (a, b) =>
       getKubernetesKindSpec(b).applyRank - getKubernetesKindSpec(a).applyRank ||
@@ -145,7 +151,10 @@ export const chunkByApplyRank = (
 };
 
 export const buildKubernetesObjectPath = (
-  input: Pick<KubernetesObjectRef, "apiVersion" | "kind" | "name" | "namespace">,
+  input: Pick<
+    KubernetesObjectRef,
+    "apiVersion" | "kind" | "name" | "namespace"
+  >,
 ) => {
   const spec = getKubernetesKindSpec(input);
   const [group, version] = input.apiVersion.includes("/")

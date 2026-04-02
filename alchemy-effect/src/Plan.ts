@@ -317,7 +317,10 @@ export const make = <A>(
         .map((resource) => [resource.fqn, resource.downstream]),
     );
 
-    // Map FQN -> list of upstream FQNs (resources this one depends on)
+    // Build a set of FQNs for the new resources to detect orphans
+    const newResourceFqns = new Set(resources.map((r) => r.FQN));
+
+    // Map FQN -> list of upstream FQNs (resources this one depends on via props)
     const newUpstreamDependencies: {
       [fqn: string]: string[];
     } = Object.fromEntries(
@@ -325,6 +328,35 @@ export const make = <A>(
         resource.FQN,
         Object.values(Output.upstreamAny(resource.Props)).map((r) => r.FQN),
       ]),
+    );
+
+    // Map FQN -> list of upstream FQNs from bindings
+    const bindingUpstreamDependencies: {
+      [fqn: string]: string[];
+    } = Object.fromEntries(
+      resources.map((resource) => [
+        resource.FQN,
+        Object.values(
+          Output.upstreamAny(stack.bindings[resource.FQN] ?? []),
+        ).map((r) => r.FQN),
+      ]),
+    );
+
+    // Combined prop + binding upstream, filtered to resources in this graph
+    const allUpstreamDependencies: {
+      [fqn: string]: string[];
+    } = Object.fromEntries(
+      resources.map((resource) => {
+        const fqn = resource.FQN;
+        const propDeps = newUpstreamDependencies[fqn] ?? [];
+        const bindDeps = bindingUpstreamDependencies[fqn] ?? [];
+        return [
+          fqn,
+          [...new Set([...propDeps, ...bindDeps])].filter((dep) =>
+            newResourceFqns.has(dep),
+          ),
+        ];
+      }),
     );
 
     // Map FQN -> list of downstream FQNs (resources that depend on this one)
@@ -338,9 +370,6 @@ export const make = <A>(
           .map(([depFqn]) => depFqn),
       ]),
     );
-
-    // Build a set of FQNs for the new resources to detect orphans
-    const newResourceFqns = new Set(resources.map((r) => r.FQN));
 
     const resourceGraph = Object.fromEntries(
       (yield* Effect.all(
@@ -601,6 +630,66 @@ export const make = <A>(
       )).map((update) => [update.resource.FQN, update]),
     ) as Plan["resources"];
 
+    // Detect unsatisfiable dependency cycles among create/replace nodes.
+    // Update/noop nodes signal their Deferred before waitForDeps so they
+    // cannot deadlock. Create/replace nodes only signal early when they
+    // have a precreate handler. Simulate the concurrent execution:
+    // precreate nodes are immediately "resolved", then iteratively resolve
+    // any node whose deps are all resolved. Remaining nodes would deadlock.
+    {
+      const createReplaceNodes = new Set(
+        Object.entries(resourceGraph)
+          .filter(
+            ([_, node]) =>
+              node.action === "create" || node.action === "replace",
+          )
+          .map(([fqn]) => fqn),
+      );
+
+      if (createReplaceNodes.size > 0) {
+        const hasPrecreate = new Set(
+          [...createReplaceNodes].filter(
+            (fqn) => !!resourceGraph[fqn]?.provider?.precreate,
+          ),
+        );
+
+        const resolved = new Set(hasPrecreate);
+        let changed = true;
+        while (changed) {
+          changed = false;
+          for (const fqn of createReplaceNodes) {
+            if (resolved.has(fqn)) continue;
+            const deps = (allUpstreamDependencies[fqn] ?? []).filter((dep) =>
+              createReplaceNodes.has(dep),
+            );
+            if (deps.every((dep) => resolved.has(dep))) {
+              resolved.add(fqn);
+              changed = true;
+            }
+          }
+        }
+
+        const deadlocked = [...createReplaceNodes].filter(
+          (fqn) => !resolved.has(fqn),
+        );
+        if (deadlocked.length > 0) {
+          const missingPrecreate = deadlocked.filter(
+            (fqn) => !hasPrecreate.has(fqn),
+          );
+          return yield* Effect.die(
+            new UnsatisfiedResourceCycle({
+              message:
+                `Circular dependency detected that cannot be resolved: [${deadlocked.join(", ")}]. ` +
+                `Resources lacking a precreate handler: [${missingPrecreate.join(", ")}]. ` +
+                `All resources in a dependency cycle must implement precreate to allow early signaling.`,
+              cycle: deadlocked,
+              missingPrecreate,
+            }),
+          );
+        }
+      }
+    }
+
     const deletions = Object.fromEntries(
       (yield* Effect.all(
         (yield* state.list({ stack: stackName, stage: stage })).map(
@@ -654,7 +743,6 @@ export const make = <A>(
                   downstream: oldDownstreamDependencies[fqn] ?? [],
                   bindings: oldState.bindings.map((binding) => ({
                     sid: binding.sid,
-                    namespace: binding.namespace,
                     action: "delete" as const,
                     data: binding.data,
                   })),
@@ -694,6 +782,14 @@ export class DeleteResourceHasDownstreamDependencies extends Data.TaggedError(
   message: string;
   resourceId: string;
   dependencies: string[];
+}> {}
+
+export class UnsatisfiedResourceCycle extends Data.TaggedError(
+  "UnsatisfiedResourceCycle",
+)<{
+  message: string;
+  cycle: string[];
+  missingPrecreate: string[];
 }> {}
 
 // TODO(sam): compare props

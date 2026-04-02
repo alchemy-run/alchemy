@@ -4,48 +4,60 @@ import * as Option from "effect/Option";
 import { pipeArguments, type Pipeable } from "effect/Pipeable";
 import { SingleShotGen } from "effect/Utils";
 import { toFqn } from "./FQN.ts";
-import { Self } from "./Host.ts";
 import type { Input } from "./Input.ts";
 import type { InstanceId } from "./InstanceId.ts";
 import { CurrentNamespace, type NamespaceNode } from "./Namespace.ts";
 import * as Output from "./Output.ts";
 import { Provider, type ProviderService } from "./Provider.ts";
 import { RemovalPolicy } from "./RemovalPolicy.ts";
+import { Self } from "./Self.ts";
 import { Stack } from "./Stack.ts";
 
+/** Node/Bun `util.inspect` / `console.log` hook for Resource proxies */
+const nodeInspect = Symbol.for("nodejs.util.inspect.custom");
+
 export type ResourceConstructor<R extends ResourceLike, Req = never> = {
+  Props: R["Props"];
   (
     id: string,
     ...args: {} extends R["Props"]
-      ? [props?: Input<R["Props"]>]
-      : [props: Input<R["Props"]>]
+      ? [
+          props?: {
+            [prop in keyof R["Props"]]: Input<R["Props"][prop]>;
+          },
+        ]
+      : [
+          props: {
+            [prop in keyof R["Props"]]: Input<R["Props"][prop]>;
+          },
+        ]
   ): Effect.Effect<R, never, Req>;
-  <PropsReq = never>(
-    id: string,
-    props: Effect.Effect<Input<R["Props"]>, never, PropsReq>,
-  ): Effect.Effect<R, never, PropsReq | Req>;
+  // <PropsReq = never>(
+  //   id: string,
+  //   props: Effect.Effect<Input<R["Props"]>, never, PropsReq>,
+  // ): Effect.Effect<R, never, PropsReq | Req>;
 };
 
-export type ResourceClass<Self extends ResourceLike> = ResourceConstructor<
-  Self,
-  Provider<Self>
+export type ResourceClass<R extends ResourceLike> = ResourceConstructor<
+  R,
+  Provider<R>
 > &
-  Effect.Effect<ResourceConstructor<Self>> & {
-    provider: ResourceProviders<Self>;
+  Effect.Effect<ResourceConstructor<R>> & {
+    provider: ResourceProviders<R>;
+    Self: Self<R>;
   };
 
 export type LogicalId = string;
 
 export interface ResourceBinding<Data = any> {
-  namespace: NamespaceNode | undefined;
   sid: string;
   data: Data;
 }
 
 export interface ResourceLike<
-  Type extends string = any,
+  Type extends string = string,
   Props extends object | undefined = any,
-  Attributes extends object = any,
+  Attributes extends object = object,
   Binding = any,
 > {
   /**
@@ -111,6 +123,7 @@ export function Resource<R extends ResourceLike>(
   type: R["Type"],
 ): ResourceClass<R> {
   type Props = Input<R["Props"]>;
+  const self = Self<R>(type);
   const constructor = (
     id: string,
     props: Props | Effect.Effect<Props> | undefined,
@@ -122,8 +135,8 @@ export function Resource<R extends ResourceLike>(
 
       const existing = stack.resources[fqn];
       if (existing) {
-        // TODO(sam): check if props are same and allow duplicates
-        return yield* Effect.die(new Error(`Resource ${fqn} already exists`));
+        // // TODO(sam): check if props are different and die
+        return existing;
       }
       const bind = (
         ...args:
@@ -134,7 +147,6 @@ export function Resource<R extends ResourceLike>(
           ? Effect.gen(function* () {
               const [sid, data] = args as [sid: string, data: R["Binding"]];
               (stack.bindings[fqn] ??= []).push({
-                namespace: yield* CurrentNamespace,
                 sid,
                 data,
               });
@@ -184,34 +196,62 @@ export function Resource<R extends ResourceLike>(
               );
             };
 
-      const Resource: R = (stack.resources[fqn] = new Proxy(
-        {
-          Type: type,
-          Namespace: namespace,
-          FQN: fqn,
-          LogicalId: id,
-          Props: props,
-          Provider: ProviderTag as Provider<any>,
-          RemovalPolicy: yield* Effect.serviceOption(RemovalPolicy).pipe(
-            Effect.map(Option.getOrElse(() => "destroy" as const)),
-          ),
-
-          bind,
-        } as any,
-        {
-          get: (target, prop) =>
-            typeof prop === "symbol" || prop in target
-              ? target[prop as keyof typeof target]
-              : new Output.PropExpr(Output.of(Resource), prop),
+      const target: any = {
+        Type: type,
+        Namespace: namespace,
+        FQN: fqn,
+        LogicalId: id,
+        Props: props,
+        Provider: ProviderTag as Provider<any>,
+        RemovalPolicy: yield* Effect.serviceOption(RemovalPolicy).pipe(
+          Effect.map(Option.getOrElse(() => "destroy" as const)),
+        ),
+        bind,
+        toString(this: typeof target) {
+          return `Resource<${this.Type}>(${this.LogicalId})`;
         },
-      )) as R;
+        [Symbol.toPrimitive](this: typeof target, hint: string) {
+          return hint === "number" ? NaN : this.toString();
+        },
+        // TODO(sam): figure out a better way to log things in cloudflare, this breaks indentation and is bloated
+        // [nodeInspect](
+        //   depth: number,
+        //   options: { depth?: number | null } & Record<string, unknown>,
+        //   inspect: (value: unknown, opts?: unknown) => string,
+        // ) {
+        //   if (depth < 0) {
+        //     return target.toString();
+        //   }
+        //   const nextDepth =
+        //     options.depth == null ? null : Math.max(0, options.depth - 1);
+        //   return inspect(
+        //     {
+        //       Type: target.Type,
+        //       Namespace: target.Namespace,
+        //       FQN: target.FQN,
+        //       LogicalId: target.LogicalId,
+        //       Props: target.Props,
+        //       RemovalPolicy: target.RemovalPolicy,
+        //     },
+        //     { ...options, depth: nextDepth },
+        //   );
+        // },
+      };
+
+      const Resource: R = (stack.resources[fqn] = new Proxy(target, {
+        set: (t, prop, value) => {
+          t[prop as keyof typeof t] = value;
+          return true;
+        },
+        get: (t, prop) =>
+          typeof prop === "symbol" || prop in t
+            ? t[prop as keyof typeof t]
+            : new Output.PropExpr<any, string>(Output.of(Resource), prop),
+      })) as R;
       Resource.Props = Effect.isEffect(props)
         ? yield* props.pipe(
             Effect.provideService(Self, Resource),
-            // Effect.provideService(Namespace, {
-            //   Id: id,
-            //   Parent: namespace,
-            // }),
+            Effect.provideService(Self(type), Resource),
           )
         : props;
       return Resource;
@@ -237,6 +277,7 @@ export function Resource<R extends ResourceLike>(
       effect: Layer.effect(ProviderTag),
       succeed: Layer.succeed(ProviderTag),
     },
+    Self: self,
   };
 
   return Object.assign(constructor, Service) as any as ResourceClass<R>;

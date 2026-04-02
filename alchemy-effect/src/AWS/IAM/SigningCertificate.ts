@@ -1,5 +1,6 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../../Diff.ts";
 import { Resource } from "../../Resource.ts";
 
 export interface SigningCertificateProps {
@@ -57,6 +58,7 @@ export const SigningCertificateProvider = () =>
   SigningCertificate.provider.succeed({
     stables: ["certificateId"],
     diff: Effect.fn(function* ({ olds, news }) {
+      if (!isResolved(news)) return;
       if (
         olds.userName !== news.userName ||
         olds.certificateBody !== news.certificateBody

@@ -3,6 +3,7 @@ import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
@@ -231,6 +232,7 @@ export const DBClusterProvider = () =>
       return {
         stables: ["dbClusterArn", "dbClusterIdentifier"],
         diff: Effect.fn(function* ({ id, olds, news }) {
+          if (!isResolved(news)) return;
           if (
             (yield* toIdentifier(id, olds ?? ({} as DBClusterProps))) !==
             (yield* toIdentifier(id, news))
@@ -261,7 +263,7 @@ export const DBClusterProvider = () =>
           const identifier = yield* toIdentifier(id, news);
           const tags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
           const credentials = yield* resolveMasterCredentials(news);
 
@@ -322,11 +324,11 @@ export const DBClusterProvider = () =>
 
           const oldTags = {
             ...(yield* createInternalTags(id)),
-            ...(olds.tags ?? {}),
+            ...olds.tags,
           };
           const newTags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
           const { removed, upsert } = diffTags(oldTags, newTags);
           if (upsert.length > 0) {

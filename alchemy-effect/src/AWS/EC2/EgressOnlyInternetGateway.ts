@@ -3,6 +3,7 @@ import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
+import { isResolved } from "../../Diff.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 import type { AccountID } from "../Account.ts";
@@ -127,6 +128,7 @@ export const EgressOnlyInternetGatewayProvider = () =>
         }),
 
         diff: Effect.fn(function* ({ news, olds }) {
+          if (!isResolved(news)) return;
           // VPC change requires replacement
           if (news.vpcId !== olds.vpcId) {
             return { action: "replace" };

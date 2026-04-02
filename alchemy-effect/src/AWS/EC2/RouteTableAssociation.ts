@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
+import { isResolved } from "../../Diff.ts";
 import { Resource } from "../../Resource.ts";
 import type { RouteTableId } from "./RouteTable.ts";
 import type { SubnetId } from "./Subnet.ts";
@@ -78,6 +79,7 @@ export const RouteTableAssociationProvider = () =>
       return {
         stables: ["associationId", "subnetId", "gatewayId"],
         diff: Effect.fn(function* ({ news, olds }) {
+          if (!isResolved(news)) return;
           // Subnet/Gateway change requires replacement (use ReplaceRouteTableAssociation internally)
           if (olds.subnetId !== news.subnetId) {
             return { action: "replace" };

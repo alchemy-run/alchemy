@@ -7,13 +7,10 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import { Bundler, type BundleOptions } from "../../Bundle/Bundler.ts";
 import { DotAlchemy } from "../../Config.ts";
-import {
-  ExecutionContext,
-  Host,
-  type ServerExecutionContext,
-} from "../../Host.ts";
+import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import { Platform, type Main } from "../../Platform.ts";
 import { Resource } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
@@ -25,6 +22,7 @@ import type { SecurityGroupId } from "../EC2/SecurityGroup.ts";
 import {
   createEc2HostExecutionContext,
   createEc2HostedSupport,
+  type Ec2HostExecutionContext,
 } from "../EC2/hosted.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { RegionID } from "../Region.ts";
@@ -127,6 +125,12 @@ export interface LaunchTemplate extends Resource<
   }
 > {}
 
+export type LaunchTemplateServices = Credentials | Region;
+
+export type LaunchTemplateShape = Main<LaunchTemplateServices>;
+
+export type LaunchTemplateExecutionContext = Ec2HostExecutionContext;
+
 /**
  * A launch template that preserves the `Host` authoring model used by
  * `AWS.EC2.Instance`, but packages that host configuration for use with an
@@ -151,14 +155,15 @@ export interface LaunchTemplate extends Resource<
  * );
  * ```
  */
-export const LaunchTemplate = Host<
+export const LaunchTemplate: Platform<
   LaunchTemplate,
-  ServerExecutionContext,
-  Credentials | Region | ExecutionContext.Server
->("AWS.AutoScaling.LaunchTemplate", {
-  kind: "server",
-  runtime: createEc2HostExecutionContext("AWS.AutoScaling.LaunchTemplate"),
-});
+  LaunchTemplateServices,
+  LaunchTemplateShape,
+  LaunchTemplateExecutionContext
+> = Platform(
+  "AWS.AutoScaling.LaunchTemplate",
+  createEc2HostExecutionContext("AWS.AutoScaling.LaunchTemplate"),
+);
 
 export const LaunchTemplateProvider = () =>
   LaunchTemplate.provider.effect(
@@ -326,14 +331,16 @@ export const LaunchTemplateProvider = () =>
           "launchTemplateArn",
           "launchTemplateName",
         ],
-        diff: Effect.fn(function* ({ id, olds, news }) {
+        diff: Effect.fn(function* ({ id, olds, news: _news }) {
+          if (!isResolved(_news)) return undefined;
+          const news = _news as typeof olds;
           const oldName = yield* toName(id, olds ?? {});
           const newName = yield* toName(id, news ?? {});
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
 
-          if (JSON.stringify(olds) !== JSON.stringify(news)) {
+          if (!deepEqual(olds, news)) {
             return {
               action: "update",
               stables: [

@@ -11,22 +11,16 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as ServiceMap from "effect/ServiceMap";
-import { Bundler, type BundleOptions } from "../../Bundle/Bundler.ts";
-import {
-  cleanupBundleTempDir,
-  createTempBundleDir,
-} from "../../Bundle/TempRoot.ts";
-import { DotAlchemy } from "../../Config.ts";
-import {
-  Host,
-  type ListenHandler,
-  type ServerlessExecutionContext,
-} from "../../Host.ts";
+import { bundle } from "../../Bundle/Bundle.ts";
+import type { BundleOptions } from "../../Bundle/Bundler.ts";
+import { isResolved } from "../../Diff.ts";
+import type { HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import { Platform, type Main } from "../../Platform.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
+import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
-import { Stage } from "../../Stage.ts";
 import { createInternalTags, createTagsList, hasTags } from "../../Tags.ts";
 import { sha256 } from "../../Util/sha256.ts";
 import { zipCode } from "../../Util/zip.ts";
@@ -34,6 +28,10 @@ import { Account } from "../Account.ts";
 import { Assets } from "../Assets.ts";
 import * as IAM from "../IAM/index.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import { makeFunctionHttpHandler } from "./HttpServer.ts";
+
+export const FunctionTypeId = "AWS.Lambda.Function" as const;
+export type FunctionTypeId = typeof FunctionTypeId;
 
 export class HandlerContext extends ServiceMap.Service<
   HandlerContext,
@@ -81,7 +79,7 @@ export interface FunctionProps {
 }
 
 export interface Function extends Resource<
-  "AWS.Lambda.Function",
+  FunctionTypeId,
   FunctionProps,
   {
     functionArn: string;
@@ -98,6 +96,10 @@ export interface Function extends Resource<
     policyStatements?: PolicyStatement[];
   }
 > {}
+
+export type FunctionServices = Credentials | Region;
+
+export type FunctionShape = Main<FunctionServices>;
 
 /**
  * An AWS Lambda host resource that combines code bundling, IAM role
@@ -123,89 +125,91 @@ export interface Function extends Resource<
  * });
  * ```
  */
-export const Function = Host<
+export const Function: Platform<
   Function,
-  ServerlessExecutionContext,
-  Credentials | Region
->("AWS.Lambda.Function", {
-  kind: "serverless",
-  runtime: (id: string) => {
-    const listeners: Effect.Effect<ListenHandler>[] = [];
-    const env: Record<string, any> = {};
+  FunctionServices,
+  FunctionShape,
+  Serverless.FunctionContext
+> = Platform(FunctionTypeId, (id: string): Serverless.FunctionContext => {
+  const listeners: Effect.Effect<Serverless.FunctionListener>[] = [];
+  const env: Record<string, any> = {};
 
-    return {
-      type: "AWS.Lambda.Function",
-      run: undefined!,
-      id,
-      env,
-      set: (id: string, output: Output.Output) =>
-        Effect.sync(() => {
-          const key = id.replaceAll(/[^a-zA-Z0-9]/g, "_");
-          env[key] = output.pipe(Output.map((value) => JSON.stringify(value)));
-          return key;
-        }),
-      get: <T>(key: string) =>
-        Config.string(key)
-          .asEffect()
-          .pipe(
-            Effect.flatMap((val) =>
-              Effect.try({
-                try: () => JSON.parse(val) as T,
-                catch: (error) => error as Error,
+  const ctx = {
+    Type: FunctionTypeId,
+    id,
+    env,
+    set: (id: string, output: Output.Output) =>
+      Effect.sync(() => {
+        const key = id.replaceAll(/[^a-zA-Z0-9]/g, "_");
+        env[key] = output.pipe(Output.map((value) => JSON.stringify(value)));
+        return key;
+      }),
+    get: <T>(key: string) =>
+      Config.string(key)
+        .asEffect()
+        .pipe(
+          Effect.flatMap((val) =>
+            Effect.try({
+              try: () => JSON.parse(val) as T,
+              catch: () => val, // assume it's just a string
+            }),
+          ),
+          Effect.catch((cause) =>
+            Effect.die(
+              new Error(`Failed to get environment variable: ${key}`, {
+                cause,
               }),
             ),
-            Effect.catch((cause) =>
-              Effect.die(
-                new Error(`Failed to get environment variable: ${key}`, {
-                  cause,
-                }),
-              ),
-            ),
           ),
-      listen: ((handler: ListenHandler | Effect.Effect<ListenHandler>) =>
-        Effect.sync(() =>
-          Effect.isEffect(handler)
-            ? listeners.push(handler)
-            : listeners.push(Effect.succeed(handler)),
-        )) as any as ServerlessExecutionContext["listen"],
-      exports: {
-        // construct an Effect that produces the Function's entrypoint
-        // Effect<(event, context) => Promise<any>>
-        handler: Effect.map(
-          Effect.all(listeners, {
-            concurrency: "unbounded",
-          }),
-          (handlers) =>
-            (event: any, context: lambda.Context): Promise<any> => {
-              for (const handler of handlers) {
-                const eff = handler(event);
-                if (Effect.isEffect(eff)) {
-                  return eff.pipe(
-                    Effect.provideService(HandlerContext, context),
-                    Effect.tap(Effect.logDebug),
-                    Effect.runPromise,
-                  );
-                }
-              }
-              throw new Error("No event handler found");
-            },
         ),
-      },
-    } satisfies ServerlessExecutionContext;
-  },
+    serve: (handler: HttpEffect) =>
+      ctx.listen(makeFunctionHttpHandler(handler)),
+    listen: ((
+      handler:
+        | Serverless.FunctionListener
+        | Effect.Effect<Serverless.FunctionListener>,
+    ) =>
+      Effect.sync(() =>
+        Effect.isEffect(handler)
+          ? listeners.push(handler)
+          : listeners.push(Effect.succeed(handler)),
+      )) as any as Serverless.FunctionContext["listen"],
+    exports: Effect.sync(() => ({
+      // construct an Effect that produces the Function's entrypoint
+      // Effect<(event, context) => Promise<any>>
+      handler: Effect.map(
+        Effect.all(listeners, {
+          concurrency: "unbounded",
+        }),
+        (handlers) =>
+          async (event: any, context: lambda.Context): Promise<any> => {
+            console.log({ event, handlers });
+            for (const handler of handlers) {
+              const eff = handler(event);
+              if (Effect.isEffect(eff)) {
+                return await eff.pipe(
+                  Effect.provideService(HandlerContext, context),
+                  Effect.tap(Effect.logDebug),
+                  Effect.runPromise,
+                );
+              }
+            }
+            throw new Error("No event handler found");
+          },
+      ),
+    })),
+  };
+  return ctx;
 });
 
 export const FunctionProvider = () =>
   Function.provider.effect(
     Effect.gen(function* () {
       const stack = yield* Stack;
-      const stage = yield* Stage;
       const accountId = yield* Account;
       const region = yield* Region;
-      const dotAlchemy = yield* DotAlchemy;
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const bundler = yield* Bundler;
       const alchemyEnv = {
         ALCHEMY_STACK_NAME: stack.name,
         ALCHEMY_STAGE: stack.stage,
@@ -380,24 +384,14 @@ export const FunctionProvider = () =>
         props: FunctionProps,
       ) {
         const handler = props.handler ?? "default";
-        const outfile = path.join(
-          dotAlchemy,
-          "out",
-          `${stack.name}-${stage}-${id}.js`,
-        );
-        const realMain = yield* fs.realPath(props.main);
-        const tempDir = yield* createTempBundleDir(realMain, dotAlchemy, id);
+        const sourcemap = props.build?.sourcemap ?? true;
+        const uploadSourceMap = props.uploadSourceMap ?? true;
 
-        const realTempDir = yield* fs.realPath(tempDir);
-        const tempEntry = path.join(realTempDir, "__index.ts");
-        let file = path.relative(realTempDir, realMain);
-        if (!file.startsWith(".")) {
-          file = `./${file}`;
-        }
-        file = file.replaceAll("\\", "/");
-        yield* fs.writeFileString(
-          tempEntry,
-          `
+        const { code, outfile } = yield* bundle({
+          id,
+          main: props.main,
+          outExtension: ".js",
+          entryContent: (importPath) => `
 import { NodeServices } from "@effect/platform-node";
 import { Stack } from "alchemy-effect/Stack";
 import * as Config from "effect/Config";
@@ -408,8 +402,10 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Region from "@distilled.cloud/aws/Region";
+import * as ServiceMap from "effect/ServiceMap";
+import { MinimumLogLevel } from "effect/References";
 
-import { ${handler} as handler } from "${file}";
+import { ${handler} as layer } from "${importPath}";
 
 const platform = Layer.mergeAll(
   NodeServices.layer,
@@ -418,23 +414,28 @@ const platform = Layer.mergeAll(
   Logger.layer([Logger.consolePretty()]),
 );
 
-const handlerEffect = handler.pipe(
+const tag = ServiceMap.Service("${FunctionTypeId}<${id}>")
+
+const stack = Layer.effect(
+  Stack,
+  Effect.all([
+    Config.string("ALCHEMY_STACK_NAME").asEffect(),
+    Config.string("ALCHEMY_STAGE").asEffect()
+  ]).pipe(
+    Effect.map(([name, stage]) => ({
+      name,
+      stage,
+      bindings: {},
+      resources: {}
+    }))
+  )
+);
+
+const handlerEffect = tag.asEffect().pipe(
   Effect.flatMap(func => func.ExecutionContext.exports.handler),
   Effect.provide(
-    Layer.effect(
-      Stack,
-      Effect.all([
-        Config.string("ALCHEMY_STACK_NAME").asEffect(),
-        Config.string("ALCHEMY_STAGE").asEffect()
-      ]).pipe(
-        Effect.map(([name, stage]) => ({
-          name,
-          stage,
-          bindings: {},
-          resources: {}
-        }))
-      )
-    ).pipe(
+    layer.pipe(
+      Layer.provideMerge(stack),
       Layer.provideMerge(Credentials.fromEnv()),
       Layer.provideMerge(Region.fromEnv()),
       Layer.provideMerge(platform),
@@ -444,6 +445,12 @@ const handlerEffect = handler.pipe(
           ConfigProvider.fromEnv()
         )
       ),
+      Layer.provideMerge(
+        Layer.succeed(
+          MinimumLogLevel,
+          process.env.DEBUG ? "Debug" : "Info",
+        )
+      ),
     )
   ),
   Effect.scoped
@@ -451,15 +458,8 @@ const handlerEffect = handler.pipe(
 
 export default await Effect.runPromise(handlerEffect)
 `,
-        );
-
-        return yield* Effect.gen(function* () {
-          const sourcemap = props.build?.sourcemap ?? true;
-          const uploadSourceMap = props.uploadSourceMap ?? true;
-          yield* bundler.build({
+          build: {
             ...props.build,
-            entry: tempEntry,
-            outfile,
             format: "esm",
             platform: "node",
             target: "node22",
@@ -471,37 +471,37 @@ export default await Effect.runPromise(handlerEffect)
               "@smithy/*",
               ...(props.build?.external ?? []),
             ],
-          });
-          const code = yield* fs.readFile(outfile).pipe(Effect.orDie);
-          const sourceMap =
-            uploadSourceMap && (sourcemap === true || sourcemap === "external")
-              ? yield* fs
-                  .exists(`${outfile}.map`)
-                  .pipe(
-                    Effect.flatMap((exists) =>
-                      exists
-                        ? fs.readFile(`${outfile}.map`).pipe(Effect.orDie)
-                        : Effect.succeed(undefined),
-                    ),
-                  )
-              : undefined;
-          const archive = yield* zipCode(
-            code,
-            sourceMap
-              ? [
-                  {
-                    path: `${path.basename(outfile)}.map`,
-                    content: sourceMap,
-                  },
-                ]
-              : undefined,
-          );
-          return {
-            archive,
-            code,
-            hash: yield* hashBundle(code, sourceMap),
-          };
-        }).pipe(Effect.ensuring(cleanupBundleTempDir(tempDir)));
+          },
+        });
+
+        const sourceMap =
+          uploadSourceMap && (sourcemap === true || sourcemap === "external")
+            ? yield* fs
+                .exists(`${outfile}.map`)
+                .pipe(
+                  Effect.flatMap((exists) =>
+                    exists
+                      ? fs.readFile(`${outfile}.map`)
+                      : Effect.succeed(undefined),
+                  ),
+                )
+            : undefined;
+        const archive = yield* zipCode(
+          code,
+          sourceMap
+            ? [
+                {
+                  path: `${path.basename(outfile)}.map`,
+                  content: sourceMap,
+                },
+              ]
+            : undefined,
+        );
+        return {
+          archive,
+          code,
+          hash: yield* hashBundle(code, sourceMap),
+        };
       });
 
       const withNodeSourceMaps = (
@@ -830,6 +830,7 @@ export default await Effect.runPromise(handlerEffect)
       return {
         stables: ["functionArn", "functionName", "roleName"],
         diff: Effect.fnUntraced(function* ({ id, olds, news, output }) {
+          if (!isResolved(news)) return;
           // If output is undefined (resource in creating state), defer to default diff
           if (!output) {
             return undefined;

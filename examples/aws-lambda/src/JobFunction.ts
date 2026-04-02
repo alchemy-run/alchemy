@@ -1,51 +1,118 @@
 import { AWS } from "alchemy-effect";
-import * as Http from "alchemy-effect/Http";
+import { Stack } from "alchemy-effect/Stack";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { JobHttpEffect } from "./JobHttpApi.ts";
-import { JobNotificationsSNS } from "./JobNotifications.ts";
-import { JobStorageDynamoDB } from "./JobStorage.ts";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import {
+  JobNotifications,
+  JobNotificationsSNS,
+  NotifyJobError,
+} from "./JobNotifications.ts";
+import {
+  GetJobError,
+  JobStorage,
+  JobStorageDynamoDB,
+  PutJobError,
+} from "./JobStorage.ts";
 
-// ## sync drift
-// alchemy sync
-// alchemy sync ./alchemy.run.ts
-// alchemy sync ./alchemy.run.ts --no-adopt (default)
-// alchemy sync ./alchemy.run.ts --stack
-
-// ## adopt resources
-// alchemy sync
-// alchemy sync --adopt (all)
-// alchemy sync ./alchemy.run.ts --adopt (all)
-// alchemy sync ./alchemy.run.ts --adopt JobsQueue,JobsDatabase
-
-// ## deploy
-// alchemy deploy
-// alchemy deploy --adopt
-// alchemy deploy --dry-run --adopt
-// alchemy deploy --dry-run --adopt JobsQueue,JobsDatabase
-
-const JobFunction = Effect.gen(function* () {
-  // register a HTTP server in the Lambda Function runtime
-  yield* Http.serve(yield* JobHttpEffect);
-  // if you want to use RPC instead of HttpApi:
-  // yield* Http.serve(yield* JobRpcHttpEffect);
-
-  // return the Function properties for this stage
-  return {
+export class JobFunction extends AWS.Lambda.Function<JobFunction>()(
+  "JobFunction",
+  Stack.useSync((stack) => ({
     main: import.meta.path,
-    url: true,
-  } as const satisfies AWS.Lambda.FunctionProps;
-}).pipe(
-  Effect.provide(
-    Layer.mergeAll(
-      // Services go here
-      JobStorageDynamoDB,
-      JobNotificationsSNS,
-      // JobStorageS3,
-      AWS.Lambda.HttpServer,
+    memory: stack.stage === "prod" ? 1024 : 512,
+  })),
+  Effect.gen(function* () {
+    const jobStorage = yield* JobStorage;
+    const notifications = yield* JobNotifications;
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const url = new URL(request.url);
+
+        if (request.method === "GET" && url.pathname === "/") {
+          const jobId = url.searchParams.get("jobId");
+          if (!jobId) {
+            return HttpServerResponse.text("Job ID is required", {
+              status: 400,
+            });
+          }
+
+          const job = yield* jobStorage.getJob(jobId).pipe(
+            Effect.match({
+              onFailure: (error) => error,
+              onSuccess: (job) => job,
+            }),
+          );
+
+          if (job instanceof GetJobError) {
+            return HttpServerResponse.text(job.message, { status: 500 });
+          }
+
+          if (!job) {
+            return HttpServerResponse.text("Job not found", { status: 404 });
+          }
+
+          return yield* HttpServerResponse.json(job);
+        }
+
+        if (request.method === "POST" && url.pathname === "/") {
+          const content = yield* request.text;
+          if (!content) {
+            return HttpServerResponse.text("Job content is required", {
+              status: 400,
+            });
+          }
+
+          const job = yield* jobStorage
+            .putJob({
+              id: crypto.randomUUID(),
+              content,
+            })
+            .pipe(
+              Effect.match({
+                onFailure: (error) => error,
+                onSuccess: (job) => job,
+              }),
+            );
+
+          if (job instanceof PutJobError) {
+            return HttpServerResponse.text(job.message, { status: 500 });
+          }
+
+          const notificationResult = yield* notifications
+            .notifyJobCreated(job)
+            .pipe(
+              Effect.match({
+                onFailure: (error) => error,
+                onSuccess: () => undefined,
+              }),
+            );
+
+          if (notificationResult instanceof NotifyJobError) {
+            return HttpServerResponse.text(notificationResult.message, {
+              status: 500,
+            });
+          }
+
+          return yield* HttpServerResponse.json(
+            { jobId: job.id },
+            { status: 201 },
+          );
+        }
+
+        return HttpServerResponse.text("Not found", { status: 404 });
+      }),
+    };
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        // Services go here
+        JobStorageDynamoDB,
+        JobNotificationsSNS,
+        // JobStorageS3,
+      ),
     ),
   ),
-  AWS.Lambda.Function("JobFunction"),
-);
-
-export default JobFunction;
+) {}

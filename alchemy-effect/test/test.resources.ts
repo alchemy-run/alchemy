@@ -1,3 +1,4 @@
+import { isResolved } from "@/Diff.ts";
 import { Resource } from "@/Resource";
 import * as State from "@/State/index";
 import { isUnknown } from "@/Util/unknown";
@@ -23,7 +24,9 @@ export interface Bucket extends Resource<
 export const Bucket = Resource<Bucket>("Test.Bucket");
 
 const bucketProvider = Bucket.provider.succeed({
-  diff: Effect.fn(function* ({ id, news, output }) {}),
+  diff: Effect.fn(function* ({ id, news, output }) {
+    if (!isResolved(news)) return undefined;
+  }),
   create: Effect.fn(function* ({ id, news = {} }) {
     return {
       name: news.name ?? id,
@@ -55,7 +58,9 @@ export interface Queue extends Resource<
 export const Queue = Resource<Queue>("Test.Queue");
 
 export const queueProvider = Queue.provider.succeed({
-  diff: Effect.fn(function* ({ id, news = {}, output }) {}),
+  diff: Effect.fn(function* ({ id, news = {}, output }) {
+    if (!isResolved(news)) return undefined;
+  }),
   create: Effect.fn(function* ({ id, news = {} }) {
     const name = news.name ?? id;
     return {
@@ -91,7 +96,9 @@ export interface Function extends Resource<
 export const Function = Resource<Function>("Test.Function");
 
 export const functionProvider = Function.provider.succeed({
-  diff: Effect.fn(function* ({ id, news, output }) {}),
+  diff: Effect.fn(function* ({ id, news, output }) {
+    if (!isResolved(news)) return undefined;
+  }),
   create: Effect.fn(function* ({ id, news = {} }) {
     return {
       name: news.name ?? id,
@@ -135,12 +142,15 @@ export const bindingTargetProvider = BindingTarget.provider.effect(
   Effect.gen(function* () {
     return {
       diff: Effect.fn(function* ({ news = {}, olds = {} }) {
-        if (news.replaceString !== olds.replaceString) {
+        if (!isResolved(news)) return undefined;
+        const n = news as BindingTargetProps;
+        const o = olds as BindingTargetProps;
+        if (n.replaceString !== o.replaceString) {
           return {
             action: "replace",
           };
         }
-        if (news.name !== olds.name || news.string !== olds.string) {
+        if (n.name !== o.name || n.string !== o.string) {
           return {
             action: "update",
           };
@@ -309,18 +319,21 @@ export const testResourceProvider = TestResource.provider.effect(
         return output;
       }),
       diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
-        if (news.replaceString !== olds.replaceString) {
+        if (!isResolved(news)) return undefined;
+        const n = news as TestResourceProps;
+        const o = olds as TestResourceProps;
+        if (n.replaceString !== o.replaceString) {
           return {
             action: "replace",
           };
         }
-        return isUnknown(news.string) ||
-          isUnknown(news.stringArray) ||
-          news.string !== olds.string ||
-          news.stringArray?.length !== olds.stringArray?.length ||
-          !!news.stringArray !== !!olds.stringArray ||
-          news.stringArray?.some(isUnknown) ||
-          news.stringArray?.some((s, i) => s !== olds.stringArray?.[i])
+        return isUnknown(n.string) ||
+          isUnknown(n.stringArray) ||
+          n.string !== o.string ||
+          n.stringArray?.length !== o.stringArray?.length ||
+          !!n.stringArray !== !!o.stringArray ||
+          n.stringArray?.some(isUnknown) ||
+          n.stringArray?.some((s, i) => s !== o.stringArray?.[i])
           ? {
               action: "update",
               stables: ["stableString", "stableArray"],
@@ -417,12 +430,15 @@ export const staticStablesResourceProvider =
     // These are always stable regardless of what diff() returns
     stables: ["stableId", "stableArn"],
     diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
+      if (!isResolved(news)) return undefined;
+      const n = news as StaticStablesResourceProps;
+      const o = olds as StaticStablesResourceProps;
       // Replace when replaceString changes
-      if (news.replaceString !== olds.replaceString) {
+      if (n.replaceString !== o.replaceString) {
         return { action: "replace" };
       }
       // For string changes, return update action
-      if (news.string !== olds.string) {
+      if (n.string !== o.string) {
         return { action: "update" };
       }
       // For tag-only changes, return undefined (no action)
@@ -506,10 +522,13 @@ export const phasedTargetProvider = PhasedTarget.provider.effect(
   Effect.gen(function* () {
     return {
       diff: Effect.fn(function* ({ news, olds }) {
-        if (news.replaceKey !== olds.replaceKey) {
+        if (!isResolved(news)) return undefined;
+        const n = news as PhasedTargetProps;
+        const o = olds as PhasedTargetProps;
+        if (n.replaceKey !== o.replaceKey) {
           return { action: "replace" } as const;
         }
-        if (news.desired !== olds.desired) {
+        if (n.desired !== o.desired) {
           return { action: "update" } as const;
         }
       }),
@@ -567,6 +586,57 @@ export const phasedTargetProvider = PhasedTarget.provider.effect(
   }),
 );
 
+// NoPrecreateBindingTarget - like BindingTarget but without precreate,
+// used to test cycle detection for resources that cannot break cycles.
+
+export type NoPrecreateBindingTargetProps = {
+  string?: string;
+};
+
+export interface NoPrecreateBindingTarget extends Resource<
+  "Test.NoPrecreateBindingTarget",
+  NoPrecreateBindingTargetProps,
+  {
+    string: string;
+    env: Record<string, string>;
+  },
+  {
+    env?: Record<string, string>;
+  }
+> {}
+
+export const NoPrecreateBindingTarget = Resource<NoPrecreateBindingTarget>(
+  "Test.NoPrecreateBindingTarget",
+);
+
+export const noPrecreateBindingTargetProvider =
+  NoPrecreateBindingTarget.provider.succeed({
+    diff: Effect.fn(function* () {}),
+    create: Effect.fn(function* ({ id, news = {}, bindings }) {
+      return {
+        string: news.string ?? id,
+        env: Object.assign(
+          {},
+          ...bindings.map(
+            (binding: any) => binding.env ?? binding.data?.env ?? {},
+          ),
+        ),
+      };
+    }),
+    update: Effect.fn(function* ({ id, news = {}, bindings }) {
+      return {
+        string: news.string ?? id,
+        env: Object.assign(
+          {},
+          ...bindings.map(
+            (binding: any) => binding.env ?? binding.data?.env ?? {},
+          ),
+        ),
+      };
+    }),
+    delete: Effect.fn(function* () {}),
+  });
+
 // Layers
 export const TestLayers = Layer.mergeAll(
   bucketProvider,
@@ -577,6 +647,7 @@ export const TestLayers = Layer.mergeAll(
   testResourceProvider,
   staticStablesResourceProvider,
   phasedTargetProvider,
+  noPrecreateBindingTargetProvider,
 );
 
 export const InMemoryTestLayers = () =>

@@ -3,13 +3,13 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import * as Binding from "../../Binding.ts";
+import type { Stream as KinesisStream } from "../Kinesis/Stream.ts";
 import {
   StreamEventSource as KinesisStreamEventSource,
+  type KinesisEventRecord,
   type StreamEventSourceProps,
   type StreamEventSourceService,
-  type KinesisEventRecord,
 } from "../Kinesis/StreamEventSource.ts";
-import type { Stream as KinesisStream } from "../Kinesis/Stream.ts";
 import { EventSourceMapping } from "./EventSourceMapping.ts";
 import * as Lambda from "./Function.ts";
 
@@ -23,7 +23,7 @@ export const isKinesisStreamEvent = (
 export const StreamEventSource = Layer.effect(
   KinesisStreamEventSource,
   Effect.gen(function* () {
-    const host = yield* Lambda.Function.Runtime;
+    const host = yield* Lambda.Function;
     const bind = yield* StreamEventSourcePolicy;
 
     return Effect.fn(function* <StreamReq = never, Req = never>(

@@ -1,5 +1,6 @@
 import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../../Diff.ts";
 import { Resource } from "../../Resource.ts";
 import { collectPages, retryOrganizations } from "./common.ts";
 
@@ -32,6 +33,7 @@ export const TrustedServiceAccessProvider = () =>
       return {
         stables: ["servicePrincipal"],
         diff: Effect.fn(function* ({ olds, news }) {
+          if (!isResolved(news)) return;
           if (olds?.servicePrincipal !== news.servicePrincipal) {
             return { action: "replace" } as const;
           }

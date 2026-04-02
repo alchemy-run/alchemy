@@ -1,15 +1,16 @@
 import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { deepEqual, isResolved } from "../../Diff.ts";
+import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
-import type { Input } from "../../Input.ts";
 import type { SubnetId } from "../EC2/Subnet.ts";
 import type {
-  LaunchTemplate as LaunchTemplateResource,
   LaunchTemplateId,
   LaunchTemplateName,
+  LaunchTemplate as LaunchTemplateResource,
 } from "./LaunchTemplate.ts";
 
 export type AutoScalingGroupName = string;
@@ -118,7 +119,10 @@ const sortStrings = (values: readonly string[] = []) =>
 export const AutoScalingGroupProvider = () =>
   AutoScalingGroup.provider.effect(
     Effect.gen(function* () {
-      const toName = (id: string, props: { autoScalingGroupName?: string } = {}) =>
+      const toName = (
+        id: string,
+        props: { autoScalingGroupName?: string } = {},
+      ) =>
         props.autoScalingGroupName
           ? Effect.succeed(props.autoScalingGroupName)
           : createPhysicalName({ id, maxLength: 255, lowercase: true });
@@ -143,11 +147,11 @@ export const AutoScalingGroupProvider = () =>
       };
 
       const describeGroup = (autoScalingGroupName: string) =>
-        autoscaling.describeAutoScalingGroups({
-          AutoScalingGroupNames: [autoScalingGroupName],
-        } as any).pipe(
-          Effect.map((result) => result.AutoScalingGroups?.[0]),
-        );
+        autoscaling
+          .describeAutoScalingGroups({
+            AutoScalingGroupNames: [autoScalingGroupName],
+          })
+          .pipe(Effect.map((result) => result.AutoScalingGroups?.[0]));
 
       const toTags = (name: string, tags: Record<string, string>) =>
         Object.entries(tags).map(([Key, Value]) => ({
@@ -243,9 +247,8 @@ export const AutoScalingGroupProvider = () =>
         terminationPolicies: group.TerminationPolicies ?? [],
         tags: Object.fromEntries(
           (group.Tags ?? [])
-            .filter(
-              (tag): tag is { Key: string; Value: string } =>
-                Boolean(tag.Key && tag.Value !== undefined),
+            .filter((tag): tag is { Key: string; Value: string } =>
+              Boolean(tag.Key && tag.Value !== undefined),
             )
             .map((tag) => [tag.Key, tag.Value]),
         ),
@@ -253,14 +256,16 @@ export const AutoScalingGroupProvider = () =>
 
       return {
         stables: ["autoScalingGroupArn", "autoScalingGroupName"],
-        diff: Effect.fn(function* ({ id, olds, news }) {
+        diff: Effect.fn(function* ({ id, olds, news: _news }) {
+          if (!isResolved(_news)) return undefined;
+          const news = _news as typeof olds;
           const oldName = yield* toName(id, olds ?? {});
           const newName = yield* toName(id, news ?? {});
           if (oldName !== newName) {
             return { action: "replace", deleteFirst: true } as const;
           }
 
-          if (JSON.stringify(olds) !== JSON.stringify(news)) {
+          if (!deepEqual(olds, news)) {
             return {
               action: "update",
               stables: ["autoScalingGroupArn", "autoScalingGroupName"],
@@ -277,9 +282,11 @@ export const AutoScalingGroupProvider = () =>
           const autoScalingGroupName = yield* toName(id, news);
           const tags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
-          const targetGroupArns = sortStrings((news.targetGroupArns ?? []) as string[]);
+          const targetGroupArns = sortStrings(
+            (news.targetGroupArns ?? []) as string[],
+          );
           const launchTemplate = toLaunchTemplateSpec(news.launchTemplate);
           const existing =
             output?.autoScalingGroupName === autoScalingGroupName
@@ -352,13 +359,15 @@ export const AutoScalingGroupProvider = () =>
         update: Effect.fn(function* ({ id, news, olds, output, session }) {
           const tags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
           const oldTags = {
             ...(yield* createInternalTags(id)),
-            ...(olds.tags ?? {}),
+            ...olds.tags,
           };
-          const targetGroupArns = sortStrings((news.targetGroupArns ?? []) as string[]);
+          const targetGroupArns = sortStrings(
+            (news.targetGroupArns ?? []) as string[],
+          );
 
           yield* autoscaling.updateAutoScalingGroup({
             AutoScalingGroupName: output.autoScalingGroupName,
@@ -377,7 +386,9 @@ export const AutoScalingGroupProvider = () =>
 
           yield* syncTargetGroups({
             autoScalingGroupName: output.autoScalingGroupName,
-            oldTargetGroupArns: sortStrings((olds.targetGroupArns ?? []) as string[]),
+            oldTargetGroupArns: sortStrings(
+              (olds.targetGroupArns ?? []) as string[],
+            ),
             newTargetGroupArns: targetGroupArns,
           });
           yield* syncTags({
@@ -411,10 +422,13 @@ export const AutoScalingGroupProvider = () =>
 
           yield* describeGroup(output.autoScalingGroupName).pipe(
             Effect.flatMap((group) =>
-              group ? Effect.fail(new Error("AutoScalingGroupStillExists")) : Effect.void,
+              group
+                ? Effect.fail(new Error("AutoScalingGroupStillExists"))
+                : Effect.void,
             ),
             Effect.retry({
-              while: (error) => (error as Error).message === "AutoScalingGroupStillExists",
+              while: (error) =>
+                (error as Error).message === "AutoScalingGroupStillExists",
               schedule: Schedule.recurs(12).pipe(
                 Schedule.compose(Schedule.exponential("250 millis")),
               ),

@@ -1,13 +1,13 @@
-import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as ServiceMap from "effect/ServiceMap";
 import { SingleShotGen } from "effect/Utils";
-import { ExecutionContext, Self } from "./Host.ts";
+import { ExecutionContext } from "./ExecutionContext.ts";
 import * as Namespace from "./Namespace.ts";
 import { ALCHEMY_PHASE } from "./Phase.ts";
 import type { ResourceLike } from "./Resource.ts";
+import { Self } from "./Self.ts";
 import { CurrentStack } from "./Stack.ts";
 
 export interface ServiceLike {
@@ -54,7 +54,7 @@ export const Service =
       Shape
     >;
     return Object.assign(self, {
-      bind: (...args: any[]) => self.use((f) => f(...args)),
+      bind: (...args: Parameters<Shape>) => self.use((f) => f(...args)),
     });
   };
 
@@ -124,9 +124,6 @@ export const Policy =
           service
             ? Effect.succeed(service)
             : Effect.all([CurrentStack, ALCHEMY_PHASE.asEffect()]).pipe(
-                Effect.tap((f) =>
-                  Console.log(`Binding.Policy ${Identifier}`, f),
-                ),
                 Effect.flatMap(([stack, phase]) =>
                   stack && phase === "plan"
                     ? Effect.die(
@@ -139,26 +136,12 @@ export const Policy =
       );
 
     const asEffect = () =>
-      Effect.all([ExecutionContext.asEffect(), Service]).pipe(
+      Effect.all([Self.asEffect(), Service]).pipe(
         Effect.map(
-          ([ctx, fn]) =>
+          ([resource, fn]) =>
             (...args: any[]) =>
               fn(...args).pipe(
-                // place all of this Binding's Resoruces and Policies in their own dedicated namespace
-                Namespace.push(
-                  `${Identifier}(${args
-                    .flatMap((arg) =>
-                      typeof arg === "object" && "LogicalId" in arg
-                        ? [arg.LogicalId]
-                        : ["string", "number", "boolean"].includes(typeof arg)
-                          ? [arg]
-                          : // TODO(sam): improve SID generation to support arrays and objects
-                            [],
-                    )
-                    .join(", ")})`,
-                ),
-                // place all of a Host's Bindings in the Host's namespace
-                Namespace.push(ctx.id),
+                Namespace.push((resource as ResourceLike).LogicalId),
               ),
         ),
       );
@@ -181,7 +164,9 @@ export const Policy =
             self,
             // @ts-expect-error
             (...args: Parameters<Shape>) =>
-              Self.asEffect().pipe(Effect.flatMap((self) => fn(self, ...args))),
+              Self.asEffect().pipe(
+                Effect.flatMap((self) => fn(self as ResourceLike, ...args)),
+              ),
           ),
         effect: (
           fn: Effect.Effect<
@@ -198,7 +183,9 @@ export const Policy =
               fn,
               (fn) =>
                 (...args: Parameters<Shape>) =>
-                  Effect.flatMap(Self.asEffect(), (ctx) => fn(ctx, ...args)),
+                  Effect.flatMap(Self.asEffect(), (self) =>
+                    fn(self as ResourceLike, ...args),
+                  ),
             ),
           ),
       },

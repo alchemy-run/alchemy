@@ -1,6 +1,7 @@
 import * as r2 from "@distilled.cloud/cloudflare/r2";
 import * as Effect from "effect/Effect";
 
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import { Account } from "../Account.ts";
@@ -77,19 +78,27 @@ export const BucketProvider = () =>
       return {
         stables: ["bucketName", "accountId"],
         diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
+          if (!isResolved(news)) return undefined;
           const name = yield* createBucketName(id, news.name);
+          const oldName = output?.bucketName
+            ? output.bucketName
+            : yield* createBucketName(id, olds.name);
+          const oldJurisdiction =
+            output?.jurisdiction ?? olds.jurisdiction ?? "default";
+          const oldStorageClass =
+            output?.storageClass ?? olds.storageClass ?? "Standard";
           if (
-            output.accountId !== accountId ||
-            output.bucketName !== name ||
-            output.jurisdiction !== (news.jurisdiction ?? "default") ||
+            (output?.accountId ?? accountId) !== accountId ||
+            oldName !== name ||
+            oldJurisdiction !== (news.jurisdiction ?? "default") ||
             olds.locationHint !== news.locationHint
           ) {
             return { action: "replace" } as const;
           }
-          if (output.storageClass !== (news.storageClass ?? "Standard")) {
+          if (oldStorageClass !== (news.storageClass ?? "Standard")) {
             return {
               action: "update",
-              stables: output.bucketName === name ? ["bucketName"] : undefined,
+              stables: oldName === name ? ["bucketName"] : undefined,
             } as const;
           }
         }),

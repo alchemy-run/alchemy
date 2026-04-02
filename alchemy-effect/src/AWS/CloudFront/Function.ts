@@ -3,6 +3,7 @@ import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 
@@ -204,7 +205,9 @@ export const FunctionProvider = () =>
 
       return {
         stables: ["functionArn", "functionName"],
-        diff: Effect.fn(function* ({ id, olds, news }) {
+        diff: Effect.fn(function* ({ id, olds, news: _news }) {
+          if (!isResolved(_news)) return undefined;
+          const news = _news as typeof olds;
           if (
             (yield* createName(id, olds ?? {})) !==
             (yield* createName(id, news))
@@ -294,7 +297,9 @@ export const FunctionProvider = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* Effect.gen(function* () {
-            const developmentEtag = yield* getDevelopmentEtag(output.functionName);
+            const developmentEtag = yield* getDevelopmentEtag(
+              output.functionName,
+            );
             if (!developmentEtag) {
               yield* Effect.logInfo(
                 `CloudFront Function delete: ${output.functionName} already absent`,

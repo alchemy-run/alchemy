@@ -1,6 +1,7 @@
 import * as ecs from "@distilled.cloud/aws/ecs";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
@@ -114,6 +115,7 @@ export const ClusterProvider = () =>
       return {
         stables: ["clusterArn", "clusterName"],
         diff: Effect.fn(function* ({ id, olds, news }) {
+          if (!isResolved(news)) return;
           if (
             (yield* toClusterName(id, olds ?? {})) !==
             (yield* toClusterName(id, news ?? {}))
@@ -151,7 +153,7 @@ export const ClusterProvider = () =>
           const clusterName = yield* toClusterName(id, news);
           const tags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
           const created = yield* ecs.createCluster({
             clusterName,
@@ -201,11 +203,11 @@ export const ClusterProvider = () =>
 
           const oldTags = {
             ...(yield* createInternalTags(id)),
-            ...(olds.tags ?? {}),
+            ...olds.tags,
           };
           const newTags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
           const { removed, upsert } = diffTags(oldTags, newTags);
           if (upsert.length > 0) {

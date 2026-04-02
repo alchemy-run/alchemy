@@ -34,8 +34,8 @@ test.skipIf(process.env.ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS !== "true")(
     });
     expect(current.FunctionSummary?.Name).toEqual(deployed.fn.functionName);
     expect(
-      current.FunctionSummary?.FunctionConfig.KeyValueStoreAssociations?.Items?.[0]
-        ?.KeyValueStoreARN,
+      current.FunctionSummary?.FunctionConfig.KeyValueStoreAssociations
+        ?.Items?.[0]?.KeyValueStoreARN,
     ).toEqual(deployed.store.keyValueStoreArn);
 
     yield* destroy();

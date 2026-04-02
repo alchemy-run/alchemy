@@ -40,7 +40,11 @@ export interface StateService {
   getReplacedResources(request: {
     stack: string;
     stage: string;
-  }): Effect.Effect<ReadonlyArray<ReplacedResourceState>, StateStoreError, never>;
+  }): Effect.Effect<
+    ReadonlyArray<ReplacedResourceState>,
+    StateStoreError,
+    never
+  >;
   /**
    * Set a resource by its FQN (namespace-qualified key).
    */

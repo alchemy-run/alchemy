@@ -1,5 +1,6 @@
 import * as eks from "@distilled.cloud/aws/eks";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
@@ -93,6 +94,7 @@ export const PodIdentityAssociationProvider = () =>
       return {
         stables: ["associationArn", "associationId"],
         diff: Effect.fn(function* ({ olds, news }) {
+          if (!isResolved(news)) return;
           if (olds.clusterName !== news.clusterName) {
             return { action: "replace" } as const;
           }

@@ -1,14 +1,11 @@
 import { Region } from "@distilled.cloud/aws/Region";
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../../Diff.ts";
 import { Resource } from "../../Resource.ts";
 import { Account, type AccountID } from "../Account.ts";
 import type { RegionID } from "../Region.ts";
-import {
-  createManagedTags,
-  createName,
-  retryConcurrent,
-} from "./common.ts";
+import { createManagedTags, createName, retryConcurrent } from "./common.ts";
 
 export type AlarmMuteRuleName = string;
 export type AlarmMuteRuleArn =
@@ -101,6 +98,7 @@ export const AlarmMuteRuleProvider = () =>
       return {
         stables: ["alarmMuteRuleName", "alarmMuteRuleArn"],
         diff: Effect.fn(function* ({ id, olds = {}, news = {} }) {
+          if (!isResolved(news)) return undefined;
           const oldName = yield* createMuteRuleName(id, olds);
           const newName = yield* createMuteRuleName(id, news);
 
@@ -122,7 +120,10 @@ export const AlarmMuteRuleProvider = () =>
             cloudwatch.putAlarmMuteRule({
               ...news,
               Name: name,
-              Tags: Object.entries(tags).map(([Key, Value]) => ({ Key, Value })),
+              Tags: Object.entries(tags).map(([Key, Value]) => ({
+                Key,
+                Value,
+              })),
             }),
           );
 
@@ -147,7 +148,10 @@ export const AlarmMuteRuleProvider = () =>
             cloudwatch.putAlarmMuteRule({
               ...news,
               Name: output.alarmMuteRuleName,
-              Tags: Object.entries(tags).map(([Key, Value]) => ({ Key, Value })),
+              Tags: Object.entries(tags).map(([Key, Value]) => ({
+                Key,
+                Value,
+              })),
             }),
           );
 

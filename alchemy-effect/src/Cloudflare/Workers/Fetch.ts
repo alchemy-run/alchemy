@@ -1,6 +1,7 @@
 import type * as runtime from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import * as HttpClientError from "effect/unstable/http/HttpClientError";
@@ -52,7 +53,7 @@ const doFetch = (
   const urlResult = UrlParams.makeUrl(
     request.url,
     request.urlParams,
-    request.hash,
+    request.hash.pipe(Option.getOrUndefined),
   );
   if (Result.isFailure(urlResult)) {
     return Effect.fail(

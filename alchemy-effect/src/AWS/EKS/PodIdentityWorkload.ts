@@ -4,9 +4,7 @@ import * as Kubernetes from "../../Kubernetes/index.ts";
 import type { Input } from "../../Input.ts";
 import type { PolicyDocument } from "../IAM/Policy.ts";
 import type { RoleArn, Role as RoleResource } from "../IAM/Role.ts";
-import type {
-  PodIdentityAssociation as PodIdentityAssociationResource,
-} from "./PodIdentityAssociation.ts";
+import type { PodIdentityAssociation as PodIdentityAssociationResource } from "./PodIdentityAssociation.ts";
 import type { Cluster } from "./Cluster.ts";
 import {
   PodIdentityServiceAccount,
@@ -133,7 +131,10 @@ export interface PodIdentityWorkloadResources {
  * });
  * ```
  */
-export const PodIdentityWorkload = (id: string, props: PodIdentityWorkloadProps) =>
+export const PodIdentityWorkload = (
+  id: string,
+  props: PodIdentityWorkloadProps,
+) =>
   Namespace.push(
     id,
     Effect.gen(function* () {

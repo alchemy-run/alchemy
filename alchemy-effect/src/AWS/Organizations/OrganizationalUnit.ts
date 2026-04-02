@@ -1,5 +1,6 @@
 import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../../Diff.ts";
 import { Resource } from "../../Resource.ts";
 import {
   collectPages,
@@ -62,6 +63,7 @@ export const OrganizationalUnitProvider = () =>
       return {
         stables: ["ouId", "ouArn"],
         diff: Effect.fn(function* ({ id, olds, news }) {
+          if (!isResolved(news)) return;
           const oldName = yield* toName(id, olds ?? {});
           const newName = yield* toName(id, news ?? {});
 

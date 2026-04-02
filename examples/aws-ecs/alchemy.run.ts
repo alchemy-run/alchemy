@@ -4,8 +4,8 @@ import * as Stack from "alchemy-effect/Stack";
 import { Stage } from "alchemy-effect/Stage";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { ApiTask } from "./src/ApiTask.ts";
-import { QueuePollerTask } from "./src/QueuePollerTask.ts";
+import QueueConsumerTask from "./src/QueueConsumerTask.ts";
+import ApiTask from "./src/Task.ts";
 
 const awsConfig = Layer.effect(
   AWS.StageConfig,
@@ -26,7 +26,6 @@ const awsConfig = Layer.effect(
 const aws = AWS.providers().pipe(Layer.provide(awsConfig));
 
 const stack = Effect.gen(function* () {
-  const dashboardRegion = yield* AWS.Region;
   const network = yield* AWS.EC2.Network("ExampleNetwork", {
     cidrBlock: "10.42.0.0/16",
     availabilityZones: 2,
@@ -60,8 +59,8 @@ const stack = Effect.gen(function* () {
   });
 
   const cluster = yield* AWS.ECS.Cluster("ExampleCluster", {});
-  const apiTask = yield* ApiTask(queue);
-  const queuePollerTask = yield* QueuePollerTask(queue);
+  const apiTask = yield* ApiTask;
+  const queuePollerTask = yield* QueueConsumerTask;
 
   const apiService = yield* AWS.ECS.Service("ExampleApiService", {
     cluster,
@@ -84,91 +83,11 @@ const stack = Effect.gen(function* () {
     desiredCount: 1,
   });
 
-  const dashboard = yield* AWS.CloudWatch.Dashboard("ExampleEcsDashboard", {
-    DashboardBody: Output.all(
-      cluster.clusterName,
-      apiService.serviceName,
-      queue.queueName,
-    ).pipe(
-      Output.map(([clusterName, serviceName, queueName]) => ({
-        widgets: [
-          {
-            type: "metric",
-            x: 0,
-            y: 0,
-            width: 12,
-            height: 6,
-            properties: {
-              title: "API Service CPU and Memory",
-              region: dashboardRegion,
-              period: 300,
-              stat: "Average",
-              metrics: [
-                [
-                  "AWS/ECS",
-                  "CPUUtilization",
-                  "ClusterName",
-                  clusterName,
-                  "ServiceName",
-                  serviceName,
-                ],
-                [".", "MemoryUtilization", ".", ".", ".", "."],
-              ],
-            },
-          },
-          {
-            type: "metric",
-            x: 12,
-            y: 0,
-            width: 12,
-            height: 6,
-            properties: {
-              title: "SQS Queue Backlog",
-              region: dashboardRegion,
-              period: 300,
-              stat: "Average",
-              metrics: [
-                [
-                  "AWS/SQS",
-                  "ApproximateNumberOfMessagesVisible",
-                  "QueueName",
-                  queueName,
-                ],
-                [".", "ApproximateAgeOfOldestMessage", ".", "."],
-              ],
-            },
-          },
-        ],
-      })),
-    ),
-  });
-
-  const alarm = yield* AWS.CloudWatch.Alarm("ExampleQueueBacklogAlarm", {
-    AlarmDescription:
-      "Alerts when the ECS example queue backlog grows beyond the expected steady state.",
-    MetricName: "ApproximateNumberOfMessagesVisible",
-    Namespace: "AWS/SQS",
-    Statistic: "Average",
-    Period: 300,
-    EvaluationPeriods: 1,
-    Threshold: 10,
-    ComparisonOperator: "GreaterThanOrEqualToThreshold",
-    TreatMissingData: "notBreaching",
-    Dimensions: [
-      {
-        Name: "QueueName",
-        Value: queue.queueName,
-      },
-    ],
-  });
-
   return {
     url: apiService.url,
     queueUrl: queue.queueUrl,
     enqueueExample: Output.interpolate`${apiService.url}/enqueue?message=hello`,
-    dashboardName: dashboard.dashboardName,
-    alarmName: alarm.alarmName,
   };
-}).pipe(Stack.make("AwsEcsExample", aws));
+});
 
-export default stack;
+export default stack.pipe(Stack.make("AwsEcsExample", aws));

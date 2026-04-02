@@ -1,5 +1,6 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
@@ -126,6 +127,7 @@ export const InstanceProfileProvider = () =>
           "instanceProfileId",
         ],
         diff: Effect.fn(function* ({ id, olds, news }) {
+          if (!isResolved(news)) return;
           if (
             (yield* toName(id, olds ?? ({} as InstanceProfileProps))) !==
             (yield* toName(id, news))
@@ -157,7 +159,7 @@ export const InstanceProfileProvider = () =>
           const name = yield* toName(id, news);
           const tags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
           yield* iam
             .createInstanceProfile({
@@ -221,11 +223,11 @@ export const InstanceProfileProvider = () =>
 
           const oldTags = {
             ...(yield* createInternalTags(id)),
-            ...(olds.tags ?? {}),
+            ...olds.tags,
           };
           const newTags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
           const { removed, upsert } = diffTags(oldTags, newTags);
           if (upsert.length > 0) {

@@ -11,13 +11,11 @@ import * as Stream from "effect/Stream";
 import { Bundler, type BundleOptions } from "../../Bundle/Bundler.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { DotAlchemy } from "../../Config.ts";
-import {
-  ExecutionContext,
-  Host,
-  type ServerExecutionContext,
-} from "../../Host.ts";
+import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
+import { Platform, type Main } from "../../Platform.ts";
 import { Resource } from "../../Resource.ts";
+import type { ServerHost } from "../../Server/Process.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import {
@@ -33,6 +31,7 @@ import type { RegionID } from "../Region.ts";
 import {
   createEc2HostExecutionContext,
   createEc2HostedSupport,
+  type Ec2HostExecutionContext,
 } from "./hosted.ts";
 import type { SecurityGroupId } from "./SecurityGroup.ts";
 import type { SubnetId } from "./Subnet.ts";
@@ -255,6 +254,12 @@ export interface Instance extends Resource<
   }
 > {}
 
+export type InstanceServices = ServerHost | Credentials | Region;
+
+export type InstanceShape = Main<InstanceServices>;
+
+export type InstanceExecutionContext = Ec2HostExecutionContext;
+
 /**
  * An EC2 instance that can either act as a low-level compute primitive or run
  * a bundled long-lived Effect program directly on the machine.
@@ -292,14 +297,15 @@ export interface Instance extends Resource<
  * );
  * ```
  */
-export const Instance = Host<
+export const Instance: Platform<
   Instance,
-  ServerExecutionContext,
-  Credentials | Region | ExecutionContext.Server
->("AWS.EC2.Instance", {
-  kind: "server",
-  runtime: createEc2HostExecutionContext("AWS.EC2.Instance"),
-});
+  InstanceServices,
+  InstanceShape,
+  InstanceExecutionContext
+> = Platform(
+  "AWS.EC2.Instance",
+  createEc2HostExecutionContext("AWS.EC2.Instance"),
+);
 
 export const InstanceProvider = () =>
   Instance.provider.effect(
@@ -366,7 +372,8 @@ export const InstanceProvider = () =>
       const isPendingInstanceLookupError = (error: unknown) => {
         const tag = (error as { _tag?: string })?._tag;
         return (
-          error instanceof InstanceNotFound || tag === "InvalidInstanceID.NotFound"
+          error instanceof InstanceNotFound ||
+          tag === "InvalidInstanceID.NotFound"
         );
       };
 
@@ -564,6 +571,7 @@ export const InstanceProvider = () =>
       return {
         stables: ["instanceId", "instanceArn", "vpcId", "subnetId"],
         diff: Effect.fn(function* ({ news, olds }) {
+          if (!isResolved(news)) return;
           const hostModeChanged = Boolean(olds.main) !== Boolean(news.main);
           if (
             hostModeChanged ||
@@ -585,14 +593,17 @@ export const InstanceProvider = () =>
             olds.main !== news.main ||
             olds.handler !== news.handler ||
             olds.port !== news.port ||
-            JSON.stringify(olds.env ?? {}) !== JSON.stringify(news.env ?? {}) ||
-            JSON.stringify(olds.build ?? {}) !==
-              JSON.stringify(news.build ?? {}) ||
-            JSON.stringify(olds.roleManagedPolicyArns ?? []) !==
-              JSON.stringify(news.roleManagedPolicyArns ?? []) ||
-            JSON.stringify(resolvedSecurityGroups(olds.securityGroupIds)) !==
-              JSON.stringify(resolvedSecurityGroups(news.securityGroupIds)) ||
-            JSON.stringify(olds.tags ?? {}) !== JSON.stringify(news.tags ?? {})
+            !deepEqual(olds.env ?? {}, news.env ?? {}) ||
+            !deepEqual(olds.build ?? {}, news.build ?? {}) ||
+            !deepEqual(
+              olds.roleManagedPolicyArns ?? [],
+              news.roleManagedPolicyArns ?? [],
+            ) ||
+            !deepEqual(
+              resolvedSecurityGroups(olds.securityGroupIds),
+              resolvedSecurityGroups(news.securityGroupIds),
+            ) ||
+            !deepEqual(olds.tags ?? {}, news.tags ?? {})
           ) {
             return {
               action: "update",
@@ -703,7 +714,9 @@ export const InstanceProvider = () =>
             Effect.catchTag("InvalidInstanceID.NotFound", () =>
               Effect.succeed(undefined),
             ),
-            Effect.catchTag("InstanceNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("InstanceNotFound", () =>
+              Effect.succeed(undefined),
+            ),
           );
           return {
             ...toAttributes(refreshed ?? instance),

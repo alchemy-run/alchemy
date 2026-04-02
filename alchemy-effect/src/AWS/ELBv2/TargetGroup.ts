@@ -1,5 +1,6 @@
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as Effect from "effect/Effect";
+import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
@@ -51,24 +52,27 @@ export const TargetGroupProvider = () =>
       return {
         stables: ["targetGroupArn", "targetGroupName", "vpcId"],
         diff: Effect.fn(function* ({ id, olds, news }) {
+          if (!isResolved(news)) return;
           if (
             (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
           ) {
             return { action: "replace" } as const;
           }
           if (
-            JSON.stringify({
-              vpcId: olds.vpcId,
-              protocol: olds.protocol ?? "HTTP",
-              port: olds.port,
-              targetType: olds.targetType ?? "ip",
-            }) !==
-            JSON.stringify({
-              vpcId: news.vpcId,
-              protocol: news.protocol ?? "HTTP",
-              port: news.port,
-              targetType: news.targetType ?? "ip",
-            })
+            !deepEqual(
+              {
+                vpcId: olds.vpcId,
+                protocol: olds.protocol ?? "HTTP",
+                port: olds.port,
+                targetType: olds.targetType ?? "ip",
+              },
+              {
+                vpcId: news.vpcId,
+                protocol: news.protocol ?? "HTTP",
+                port: news.port,
+                targetType: news.targetType ?? "ip",
+              },
+            )
           ) {
             return { action: "replace" } as const;
           }
@@ -102,7 +106,7 @@ export const TargetGroupProvider = () =>
           const name = yield* toName(id, news);
           const tags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
           const created = yield* elbv2.createTargetGroup({
             Name: name,
@@ -168,11 +172,11 @@ export const TargetGroupProvider = () =>
           }
           const oldTags = {
             ...(yield* createInternalTags(id)),
-            ...(olds.tags ?? {}),
+            ...olds.tags,
           };
           const newTags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
           const { removed, upsert } = diffTags(oldTags, newTags);
           if (upsert.length > 0) {

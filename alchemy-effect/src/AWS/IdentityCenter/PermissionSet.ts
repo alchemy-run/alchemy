@@ -1,6 +1,7 @@
 import * as ssoAdmin from "@distilled.cloud/aws/sso-admin";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
+import { isResolved } from "../../Diff.ts";
 import { Resource } from "../../Resource.ts";
 import { resolveInstance, retryIdentityCenter } from "./common.ts";
 
@@ -65,6 +66,7 @@ export const PermissionSetProvider = () =>
       return {
         stables: ["permissionSetArn", "instanceArn"],
         diff: Effect.fn(function* ({ olds, news }) {
+          if (!isResolved(news)) return;
           if (
             olds?.instanceArn !== news.instanceArn ||
             olds?.name !== news.name

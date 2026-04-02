@@ -3,7 +3,7 @@ import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
-import { somePropsAreDifferent } from "../../Diff.ts";
+import { isResolved, somePropsAreDifferent } from "../../Diff.ts";
 import { Resource } from "../../Resource.ts";
 import type { RouteTableId } from "./RouteTable.ts";
 
@@ -124,6 +124,7 @@ export const RouteProvider = () =>
     Effect.gen(function* () {
       return {
         diff: Effect.fn(function* ({ news, olds }) {
+          if (!isResolved(news)) return;
           // Route table change requires replacement
           if (olds.routeTableId !== news.routeTableId) {
             return { action: "replace" };

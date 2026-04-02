@@ -2,6 +2,7 @@ import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { isResolved } from "../../Diff.ts";
 import { Resource } from "../../Resource.ts";
 
 export interface InvalidationProps {
@@ -54,7 +55,9 @@ export interface Invalidation extends Resource<
  * });
  * ```
  */
-export const Invalidation = Resource<Invalidation>("AWS.CloudFront.Invalidation");
+export const Invalidation = Resource<Invalidation>(
+  "AWS.CloudFront.Invalidation",
+);
 
 const defaultPaths = ["/*"];
 
@@ -74,40 +77,44 @@ export const InvalidationProvider = () =>
         yield* Effect.logInfo(
           `CloudFront Invalidation wait: polling ${invalidationId} for distribution ${distributionId}`,
         );
-        return yield* cloudfront.getInvalidation({
-          DistributionId: distributionId,
-          Id: invalidationId,
-        }).pipe(
-          Effect.map((response) => response.Invalidation),
-          Effect.flatMap((invalidation) =>
-            invalidation?.Status === "Completed"
-              ? Effect.gen(function* () {
-                  yield* Effect.logInfo(
-                    `CloudFront Invalidation wait: ${invalidationId} completed`,
-                  );
-                  return invalidation;
-                })
-              : Effect.gen(function* () {
-                  yield* Effect.logInfo(
-                    `CloudFront Invalidation wait: ${invalidationId} status=${invalidation?.Status ?? "unknown"}`,
-                  );
-                  return yield* Effect.fail(
-                    new InvalidationInProgress({
-                      message: `Invalidation ${invalidationId} is still in progress`,
-                    }),
-                  );
-                })
-          ),
-          Effect.retry({
-            while: (error) => error._tag === "InvalidationInProgress",
-            schedule: Schedule.fixed("2 seconds").pipe(
-              Schedule.both(Schedule.recurs(120)),
+        return yield* cloudfront
+          .getInvalidation({
+            DistributionId: distributionId,
+            Id: invalidationId,
+          })
+          .pipe(
+            Effect.map((response) => response.Invalidation),
+            Effect.flatMap((invalidation) =>
+              invalidation?.Status === "Completed"
+                ? Effect.gen(function* () {
+                    yield* Effect.logInfo(
+                      `CloudFront Invalidation wait: ${invalidationId} completed`,
+                    );
+                    return invalidation;
+                  })
+                : Effect.gen(function* () {
+                    yield* Effect.logInfo(
+                      `CloudFront Invalidation wait: ${invalidationId} status=${invalidation?.Status ?? "unknown"}`,
+                    );
+                    return yield* Effect.fail(
+                      new InvalidationInProgress({
+                        message: `Invalidation ${invalidationId} is still in progress`,
+                      }),
+                    );
+                  }),
             ),
-          }),
-        );
+            Effect.retry({
+              while: (error) => error._tag === "InvalidationInProgress",
+              schedule: Schedule.fixed("2 seconds").pipe(
+                Schedule.both(Schedule.recurs(120)),
+              ),
+            }),
+          );
       });
 
-      const createInvalidation = Effect.fn(function* (props: InvalidationProps) {
+      const createInvalidation = Effect.fn(function* (
+        props: InvalidationProps,
+      ) {
         yield* Effect.logInfo(
           `CloudFront Invalidation create: distribution=${props.distributionId} version=${props.version} paths=${(props.paths ?? defaultPaths).length} wait=${props.wait ?? false}`,
         );
@@ -143,7 +150,9 @@ export const InvalidationProvider = () =>
 
       return {
         stables: ["distributionId", "version"],
-        diff: Effect.fn(function* ({ olds, news }) {
+        diff: Effect.fn(function* ({ olds, news: _news }) {
+          if (!isResolved(_news)) return undefined;
+          const news = _news as typeof olds;
           yield* Effect.logInfo(
             `CloudFront Invalidation diff: oldDistribution=${olds.distributionId} newDistribution=${news.distributionId} oldVersion=${olds.version} newVersion=${news.version}`,
           );

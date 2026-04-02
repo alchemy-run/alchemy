@@ -14,7 +14,7 @@ export const BucketBinding = Effect.fn(function* (
         {
           type: "r2_bucket",
           name: bucket.LogicalId,
-          bucket_name: bucket.bucketName,
+          bucketName: bucket.bucketName,
           jurisdiction: bucket.jurisdiction.pipe(
             Output.map((jurisdiction) =>
               jurisdiction === "default" ? undefined : jurisdiction,

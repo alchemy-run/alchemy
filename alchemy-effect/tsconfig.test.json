@@ -16,5 +16,13 @@
     "jsx": "react-jsx",
     "jsxImportSource": "@opentui/solid",
     "lib": ["DOM", "DOM.Iterable", "ES2023"]
-  }
+  },
+  "references": [
+    {
+      "path": "./tsconfig.json"
+    },
+    {
+      "path": "../alchemy-effect/tsconfig.json"
+    }
+  ]
 }

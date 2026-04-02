@@ -26,16 +26,16 @@ test(
 
     const build1 = yield* test.deploy(
       Effect.gen(function* () {
-        return yield* Build.Build("test-build", {
+        return yield* Build.Command("test-build", {
           command: "bash build.sh",
           cwd: fixtureDir,
-          include: ["src/**/*.ts"],
-          output: "dist",
+          hash: ["src/**/*.ts"],
+          outdir: "dist",
         });
       }),
     );
 
-    expect(build1.path).toBe(distDir);
+    expect(build1.outdir).toBe(distDir);
     expect(build1.hash).toBeDefined();
     expect(typeof build1.hash).toBe("string");
     expect(build1.hash.length).toBeGreaterThan(0);
@@ -54,11 +54,11 @@ test(
 
     const build2 = yield* test.deploy(
       Effect.gen(function* () {
-        return yield* Build.Build("test-build", {
+        return yield* Build.Command("test-build", {
           command: "bash build.sh",
           cwd: fixtureDir,
-          include: ["src/**/*.ts"],
-          output: "dist",
+          hash: ["src/**/*.ts"],
+          outdir: "dist",
         });
       }),
     );
@@ -77,11 +77,11 @@ test(
 
     const build3 = yield* test.deploy(
       Effect.gen(function* () {
-        return yield* Build.Build("test-build", {
+        return yield* Build.Command("test-build", {
           command: "bash build.sh",
           cwd: fixtureDir,
-          include: ["src/**/*.ts"],
-          output: "dist",
+          hash: ["src/**/*.ts"],
+          outdir: "dist",
         });
       }),
     );
@@ -102,5 +102,5 @@ test(
 
     const distExistsAfterDestroy = yield* fs.exists(distDir);
     expect(distExistsAfterDestroy).toBe(false);
-  }).pipe(Effect.provide(Layer.mergeAll(Build.BuildProvider()))),
+  }).pipe(Effect.provide(Layer.mergeAll(Build.CommandProvider()))),
 );

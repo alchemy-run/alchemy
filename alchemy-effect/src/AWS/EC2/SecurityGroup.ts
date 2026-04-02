@@ -2,6 +2,7 @@ import * as ec2 from "@distilled.cloud/aws/ec2";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
@@ -291,6 +292,7 @@ export const SecurityGroupProvider = () =>
         }),
 
         diff: Effect.fn(function* ({ id, news, olds, output }) {
+          if (!isResolved(news)) return;
           // VPC change requires replacement
           if (news.vpcId !== olds.vpcId) {
             return { action: "replace" };
@@ -298,7 +300,10 @@ export const SecurityGroupProvider = () =>
 
           // Group name change requires replacement
           const newGroupName = yield* createGroupName(id, news.groupName);
-          if (newGroupName !== output.groupName) {
+          const oldGroupName = output?.groupName
+            ? output.groupName
+            : yield* createGroupName(id, olds.groupName);
+          if (newGroupName !== oldGroupName) {
             return { action: "replace" };
           }
 

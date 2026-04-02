@@ -112,7 +112,7 @@ export const isEventBridgeEvent = (
 export const EventSource = Layer.effect(
   EventBridgeEventSource,
   Effect.gen(function* () {
-    const host = yield* Lambda.Function.Runtime;
+    const host = yield* Lambda.Function;
     const bind = yield* EventSourcePolicy;
 
     return Effect.fn(function* <

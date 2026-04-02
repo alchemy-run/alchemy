@@ -172,9 +172,7 @@ const awsRegion = Flag.string("region").pipe(
 );
 
 const bootstrapDestroy = Flag.boolean("destroy").pipe(
-  Flag.withDescription(
-    "Destroy all bootstrap buckets in the selected region",
-  ),
+  Flag.withDescription("Destroy all bootstrap buckets in the selected region"),
   Flag.withDefault(false),
 );
 
@@ -318,6 +316,7 @@ const execStack = Effect.fn(function* ({
               // TODO(sam): probably better to have Plan.destroy and Plan.update
               resources: {},
               bindings: {},
+              output: {},
             }
           : stack,
       );

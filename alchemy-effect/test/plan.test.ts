@@ -1,18 +1,22 @@
+import * as Construct from "@/Construct";
 import type { Input, InputProps } from "@/Input";
 import * as Output from "@/Output";
 import * as Plan from "@/Plan";
+import { UnsatisfiedResourceCycle } from "@/Plan";
 import * as Stack from "@/Stack";
+import { Stage } from "@/Stage";
 import { State, type ResourceState, type ResourceStatus } from "@/State";
-import { test } from "@/Test/Vitest";
-import * as Construct from "@/Construct";
+import { expectEmptyObject, expectPropExpr, test } from "@/Test/Vitest";
 import { describe, expect } from "@effect/vitest";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
-import { Stage } from "../src/Stage.ts";
 import {
   BindingTarget,
   Bucket,
   Function,
+  NoPrecreateBindingTarget,
   Queue,
   TestLayers,
   TestResource,
@@ -78,7 +82,7 @@ test(
           state: undefined,
         },
       },
-      deletions: expect.emptyObject(),
+      deletions: expectEmptyObject(),
     });
   }),
 );
@@ -136,7 +140,7 @@ test(
           state: undefined,
         },
       },
-      deletions: expect.emptyObject(),
+      deletions: expectEmptyObject(),
     });
   }),
 );
@@ -180,7 +184,7 @@ test(
           },
         },
       },
-      deletions: expect.emptyObject(),
+      deletions: expectEmptyObject(),
     });
   }),
 );
@@ -240,7 +244,7 @@ test(
           },
         },
       },
-      deletions: expect.emptyObject(),
+      deletions: expectEmptyObject(),
     });
   }),
 );
@@ -332,84 +336,92 @@ test(
   }),
 );
 
-test(
-  "replace resource when replaceString changes",
-  {
-    state: test.state({
-      A: {
-        instanceId,
-        providerVersion: 0,
-        logicalId: "A",
-        fqn: "A",
-        namespace: undefined,
-        resourceType: "Test.TestResource",
-        status: "created",
-        props: {
-          replaceString: "A",
-        },
-        attr: {},
-        downstream: [],
-        bindings: [],
+describe("replace resource when replaceString changes", () => {
+  const state = test.state({
+    A: {
+      instanceId,
+      providerVersion: 0,
+      logicalId: "A",
+      fqn: "A",
+      namespace: undefined,
+      resourceType: "Test.TestResource",
+      status: "created",
+      props: {
+        replaceString: "A",
       },
-    }),
-  },
-  Effect.gen(function* () {
-    expect(
-      yield* Effect.gen(function* () {
-        yield* TestResource("A", {
-          replaceString: "A",
-        });
-      }).pipe(makePlan),
-    ).toMatchObject({
-      resources: {
-        A: {
-          action: "noop",
-        },
-      },
-      deletions: expect.emptyObject(),
-    });
+      attr: {},
+      downstream: [],
+      bindings: [],
+    },
+  });
 
-    expect(
-      yield* Effect.gen(function* () {
-        yield* TestResource("A", {
-          replaceString: "B",
-        });
-      }).pipe(makePlan),
-    ).toMatchObject({
-      resources: {
-        A: {
-          action: "replace",
-          props: {
+  test(
+    "noop and replace when replaceString is fully resolved at plan time",
+    { state },
+    Effect.gen(function* () {
+      expect(
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", {
+            replaceString: "A",
+          });
+        }).pipe(makePlan),
+      ).toMatchObject({
+        resources: {
+          A: {
+            action: "noop",
+          },
+        },
+        deletions: expectEmptyObject(),
+      });
+
+      expect(
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", {
             replaceString: "B",
+          });
+        }).pipe(makePlan),
+      ).toMatchObject({
+        resources: {
+          A: {
+            action: "replace",
+            props: {
+              replaceString: "B",
+            },
           },
         },
-      },
-      deletions: expect.emptyObject(),
-    });
+        deletions: expectEmptyObject(),
+      });
+    }),
+  );
 
-    let B: TestResource;
-    expect(
-      yield* Effect.gen(function* () {
-        B = yield* TestResource("B", {
-          string: "A",
-        });
-        yield* TestResource("A", {
-          replaceString: B.string,
-        });
-      }).pipe(makePlan),
-    ).toMatchObject({
-      resources: {
-        A: {
-          action: "replace",
-          props: {
-            replaceString: expect.propExpr("string", B!),
+  test(
+    "update when replaceString depends on unresolved output (diff short-circuits)",
+    { state },
+    Effect.gen(function* () {
+      let B: TestResource;
+      expect(
+        yield* Effect.gen(function* () {
+          B = yield* TestResource("B", {
+            string: "A",
+          });
+          yield* TestResource("A", {
+            replaceString: B.string,
+          });
+        }).pipe(makePlan),
+      ).toMatchObject({
+        resources: {
+          A: {
+            action: "update",
+            props: {
+              replaceString: expectPropExpr("string", B!),
+            },
           },
         },
-      },
-      deletions: expect.emptyObject(),
-    });
-  }),
-);
+        deletions: expectEmptyObject(),
+      });
+    }),
+  );
+});
 
 test(
   "update resource when a binding is added without prop changes",
@@ -467,7 +479,7 @@ test(
           },
         },
       },
-      deletions: expect.emptyObject(),
+      deletions: expectEmptyObject(),
     });
   }),
 );
@@ -495,7 +507,6 @@ test(
         },
         bindings: [
           {
-            namespace: undefined,
             sid: "TestBinding",
             data: {
               env: {
@@ -535,7 +546,7 @@ test(
           },
         },
       },
-      deletions: expect.emptyObject(),
+      deletions: expectEmptyObject(),
     });
   }),
 );
@@ -563,7 +574,6 @@ test(
         },
         bindings: [
           {
-            namespace: undefined,
             sid: "TestBinding",
             data: {
               env: {
@@ -613,7 +623,7 @@ test(
           bindings: [],
         },
       },
-      deletions: expect.emptyObject(),
+      deletions: expectEmptyObject(),
     });
   }),
 );
@@ -652,11 +662,11 @@ describe("construct namespaces", () => {
                 sid: "Policy",
                 data: {
                   env: {
-                    BUCKET: expect.propExpr(
+                    BUCKET: expectPropExpr(
                       "string",
                       plan.resources["MarketingSite/Bucket"]!.resource,
                     ),
-                    DISTRIBUTION: expect.propExpr(
+                    DISTRIBUTION: expectPropExpr(
                       "string",
                       plan.resources["MarketingSite/Distribution"]!.resource,
                     ),
@@ -670,7 +680,7 @@ describe("construct namespaces", () => {
             bindings: [],
           },
         },
-        deletions: expect.emptyObject(),
+        deletions: expectEmptyObject(),
       });
     }),
   );
@@ -678,7 +688,10 @@ describe("construct namespaces", () => {
   test(
     "same child logical ids in different constructs do not collide",
     Effect.gen(function* () {
-      const Site = Construct.fn(function* (_id: string, props: { name: string }) {
+      const Site = Construct.fn(function* (
+        _id: string,
+        props: { name: string },
+      ) {
         return yield* Bucket("Bucket", {
           name: props.name,
         });
@@ -708,7 +721,7 @@ describe("construct namespaces", () => {
             },
           },
         },
-        deletions: expect.emptyObject(),
+        deletions: expectEmptyObject(),
       });
     }),
   );
@@ -772,32 +785,34 @@ const createReplacingState = (options: {
   props: TestResourceProps;
   old: ResourceState;
   attr?: {};
-}) => ({
-  ...createTestResourceState({
-    logicalId: options.logicalId,
-    status: "replacing",
-    props: options.props,
-    attr: options.attr,
-  }),
-  old: options.old,
-  deleteFirst: false,
-}) as Extract<ResourceState, { status: "replacing" }>;
+}) =>
+  ({
+    ...createTestResourceState({
+      logicalId: options.logicalId,
+      status: "replacing",
+      props: options.props,
+      attr: options.attr,
+    }),
+    old: options.old,
+    deleteFirst: false,
+  }) as Extract<ResourceState, { status: "replacing" }>;
 
 const createReplacedState = (options: {
   logicalId: string;
   props: TestResourceProps;
   old: ResourceState;
   attr?: {};
-}) => ({
-  ...createTestResourceState({
-    logicalId: options.logicalId,
-    status: "replaced",
-    props: options.props,
-    attr: options.attr,
-  }),
-  old: options.old,
-  deleteFirst: false,
-}) as Extract<ResourceState, { status: "replaced" }>;
+}) =>
+  ({
+    ...createTestResourceState({
+      logicalId: options.logicalId,
+      status: "replaced",
+      props: options.props,
+      attr: options.attr,
+    }),
+    old: options.old,
+    deleteFirst: false,
+  }) as Extract<ResourceState, { status: "replaced" }>;
 
 const testSimple = (
   title: string,
@@ -844,7 +859,7 @@ const testSimple = (
             resources: {
               A: testCase.plan,
             },
-            deletions: expect.emptyObject(),
+            deletions: expectEmptyObject(),
           });
         }
       }
@@ -1280,13 +1295,13 @@ test(
           props: {
             name: "test-function",
             env: {
-              QUEUE_URL: expect.propExpr("queueUrl", MyQueue!),
+              QUEUE_URL: expectPropExpr("queueUrl", MyQueue!),
             },
           },
           state: undefined,
         },
       },
-      deletions: expect.emptyObject(),
+      deletions: expectEmptyObject(),
     });
   }),
 );
@@ -1335,13 +1350,13 @@ test(
           props: {
             name: "test-function",
             env: {
-              QUEUE_URL: expect.propExpr("queueUrl", MyQueue!),
+              QUEUE_URL: expectPropExpr("queueUrl", MyQueue!),
             },
           },
           state: undefined,
         },
       },
-      deletions: expect.emptyObject(),
+      deletions: expectEmptyObject(),
     });
   }),
 );
@@ -1369,7 +1384,7 @@ describe("Outputs should resolve to old values", () => {
     },
   });
 
-  const expected = (props: TestResourceProps) => ({
+  const expected = (props: Input.Resolve<InputProps<TestResourceProps>>) => ({
     resources: {
       A: {
         action: "noop",
@@ -1381,7 +1396,7 @@ describe("Outputs should resolve to old values", () => {
         props: props,
       },
     },
-    deletions: expect.emptyObject(),
+    deletions: expectEmptyObject(),
   });
 
   const test = <const I extends InputProps<TestResourceProps>>(
@@ -1465,7 +1480,7 @@ describe("Outputs should resolve to old values", () => {
 describe("stable properties should not cause downstream changes", () => {
   const test = (
     description: string,
-    input: (A: TestResource) => Input<TestResourceProps>,
+    input: (A: TestResource) => InputProps<TestResourceProps>,
   ) => {
     // @ts-expect-error - get the keys
     const props = input(Output.of({}));
@@ -1534,7 +1549,7 @@ describe("stable properties should not cause downstream changes", () => {
               action: "noop",
             },
           },
-          deletions: expect.emptyObject(),
+          deletions: expectEmptyObject(),
         });
       }),
     );
@@ -1575,4 +1590,190 @@ describe("stable properties should not cause downstream changes", () => {
       ),
     ),
   }));
+});
+
+describe("unsatisfied cycle detection", () => {
+  const extractCycleDefect = <A, E>(
+    exit: Exit.Exit<A, E>,
+  ): UnsatisfiedResourceCycle | undefined => {
+    if (!Exit.isFailure(exit)) return undefined;
+    const die = exit.cause.reasons.find(Cause.isDieReason);
+    return die?.defect as UnsatisfiedResourceCycle | undefined;
+  };
+
+  test(
+    "binding cycle between resources without precreate dies",
+    {
+      state: test.state(),
+    },
+    Effect.gen(function* () {
+      const exit = yield* makePlan(
+        Effect.gen(function* () {
+          const A = yield* NoPrecreateBindingTarget("A", {
+            string: "a-value",
+          });
+          const B = yield* NoPrecreateBindingTarget("B", {
+            string: "b-value",
+          });
+
+          yield* A.bind("FromB", { env: { PEER: B.string } });
+          yield* B.bind("FromA", { env: { PEER: A.string } });
+
+          return { A, B };
+        }),
+      ).pipe(Effect.exit);
+
+      const err = extractCycleDefect(exit);
+      expect(err).toBeDefined();
+      expect(err!._tag).toBe("UnsatisfiedResourceCycle");
+      expect(err!.cycle.sort()).toEqual(["A", "B"]);
+      expect(err!.missingPrecreate.sort()).toEqual(["A", "B"]);
+    }),
+  );
+
+  test(
+    "binding cycle with all precreate resources succeeds",
+    {
+      state: test.state(),
+    },
+    Effect.gen(function* () {
+      const exit = yield* makePlan(
+        Effect.gen(function* () {
+          const A = yield* BindingTarget("A", { string: "a-value" });
+          const B = yield* BindingTarget("B", { string: "b-value" });
+
+          yield* A.bind("FromB", {
+            env: { PEER: B.string },
+          });
+          yield* B.bind("FromA", {
+            env: { PEER: A.string },
+          });
+
+          return { A, B };
+        }),
+      ).pipe(Effect.exit);
+
+      expect(Exit.isSuccess(exit)).toBe(true);
+    }),
+  );
+
+  test(
+    "mixed cycle succeeds when precreate resource breaks it",
+    {
+      state: test.state(),
+    },
+    Effect.gen(function* () {
+      const exit = yield* makePlan(
+        Effect.gen(function* () {
+          const A = yield* BindingTarget("A", { string: "a-value" });
+          const B = yield* NoPrecreateBindingTarget("B", {
+            string: A.string,
+          });
+
+          yield* A.bind("FromB", {
+            env: { PEER: B.string },
+          });
+
+          return { A, B };
+        }),
+      ).pipe(Effect.exit);
+
+      expect(Exit.isSuccess(exit)).toBe(true);
+    }),
+  );
+
+  test(
+    "three-node binding cycle dies when none have precreate",
+    {
+      state: test.state(),
+    },
+    Effect.gen(function* () {
+      const exit = yield* makePlan(
+        Effect.gen(function* () {
+          const A = yield* NoPrecreateBindingTarget("A", { string: "a" });
+          const B = yield* NoPrecreateBindingTarget("B", { string: "b" });
+          const C = yield* NoPrecreateBindingTarget("C", { string: "c" });
+
+          yield* A.bind("FromC", { env: { PEER: C.string } });
+          yield* B.bind("FromA", { env: { PEER: A.string } });
+          yield* C.bind("FromB", { env: { PEER: B.string } });
+
+          return { A, B, C };
+        }),
+      ).pipe(Effect.exit);
+
+      const err = extractCycleDefect(exit);
+      expect(err).toBeDefined();
+      expect(err!._tag).toBe("UnsatisfiedResourceCycle");
+      expect(err!.cycle.sort()).toEqual(["A", "B", "C"]);
+      expect(err!.missingPrecreate.sort()).toEqual(["A", "B", "C"]);
+    }),
+  );
+
+  test(
+    "acyclic binding graph succeeds even without precreate",
+    {
+      state: test.state(),
+    },
+    Effect.gen(function* () {
+      const exit = yield* makePlan(
+        Effect.gen(function* () {
+          const A = yield* NoPrecreateBindingTarget("A", {
+            string: "a-value",
+          });
+          const B = yield* NoPrecreateBindingTarget("B", {
+            string: A.string,
+          });
+
+          yield* B.bind("FromA", { env: { PEER: A.string } });
+
+          return { A, B };
+        }),
+      ).pipe(Effect.exit);
+
+      expect(Exit.isSuccess(exit)).toBe(true);
+    }),
+  );
+});
+
+describe("unresolved plan inputs in diff should conservatively update", () => {
+  test(
+    "update when upstream resource is new and downstream news contains exprs",
+    {
+      state: _test.state({
+        B: {
+          instanceId,
+          providerVersion: 0,
+          logicalId: "B",
+          fqn: "B",
+          namespace: undefined,
+          resourceType: "Test.TestResource",
+          status: "created",
+          props: {
+            string: "old-value",
+          },
+          attr: {
+            string: "old-value",
+            stableString: "B",
+            stableArray: ["B"],
+          },
+          downstream: [],
+          bindings: [],
+        },
+      }),
+    },
+    Effect.gen(function* () {
+      const plan = yield* Effect.gen(function* () {
+        const A = yield* TestResource("A", {
+          string: "hello",
+        });
+        yield* TestResource("B", {
+          string: A.string,
+        });
+      }).pipe(makePlan);
+
+      expect(plan.resources.A.action).toBe("create");
+      expect(plan.resources.B.action).toBe("update");
+    }),
+  );
 });

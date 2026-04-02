@@ -54,7 +54,10 @@ export const DescribeAlarmsLive = Layer.effect(
         return yield* describeAlarms({
           ...request,
           AlarmTypes: getAlarmTypes(sorted),
-          AlarmNames: yield* Effect.forEach(AlarmNames, (alarmName) => alarmName),
+          AlarmNames: yield* Effect.forEach(
+            AlarmNames,
+            (alarmName) => alarmName,
+          ),
         });
       });
     });

@@ -58,7 +58,7 @@ export const GetSubscriptionAttributesPolicyLive =
               {
                 Effect: "Allow",
                 Action: ["sns:GetSubscriptionAttributes"],
-                Resource: [subscription.subscriptionArn],
+                Resource: [subscription.topicArn],
               },
             ],
           },

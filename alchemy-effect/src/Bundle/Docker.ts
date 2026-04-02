@@ -2,85 +2,61 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-
-export type DockerInstruction =
-  | readonly ["run", string]
-  | readonly ["copy", string, string]
-  | readonly ["workdir", string]
-  | readonly ["env", string, string]
-  | readonly ["expose", string | number]
-  | readonly ["user", string]
-  | readonly ["cmd", ...string[]]
-  | readonly ["entrypoint", ...string[]];
-
-export interface DockerImageSpec {
-  base?: string;
-  instructions?: readonly DockerInstruction[];
-  entrypoint?: readonly string[];
-  cmd?: readonly string[];
-}
+import { ChildProcess } from "effect/unstable/process";
+import { exec } from "../Agent/util/exec.ts";
 
 export class DockerCommandError extends Data.TaggedError("DockerCommandError")<{
   readonly command: string;
   readonly stderr: string;
   readonly exitCode: number;
+  readonly message: string;
 }> {}
 
-const quote = (value: string) => JSON.stringify(value);
+export interface RegistryAuth {
+  readonly username: string;
+  readonly password: string;
+  /**
+   * Registry host only (no `https://`, no path), e.g. `123456789.dkr.ecr.us-east-1.amazonaws.com`.
+   */
+  readonly server: string;
+}
 
-const renderInstruction = (instruction: DockerInstruction): string => {
-  const [kind, ...args] = instruction;
-  switch (kind) {
-    case "run":
-      return `RUN ${args[0]}`;
-    case "copy":
-      return `COPY ${quote(String(args[0]))} ${quote(String(args[1]))}`;
-    case "workdir":
-      return `WORKDIR ${String(args[0])}`;
-    case "env":
-      return `ENV ${String(args[0])}=${quote(String(args[1]))}`;
-    case "expose":
-      return `EXPOSE ${String(args[0])}`;
-    case "user":
-      return `USER ${String(args[0])}`;
-    case "cmd":
-      return `CMD ${JSON.stringify(args)}`;
-    case "entrypoint":
-      return `ENTRYPOINT ${JSON.stringify(args)}`;
-  }
-};
+export interface DockerBuildOptions {
+  /** Image reference passed to `docker build -t`. */
+  readonly tag: string;
+  /** Build context directory (`.` argument to `docker build`). */
+  readonly context: string;
+  readonly platform?: string;
+  readonly target?: string;
+  readonly buildArgs?: Record<string, string>;
+  /** Appended to `docker build` before the final context path. */
+  readonly extraArgs?: ReadonlyArray<string>;
+  readonly env?: Record<string, string | undefined>;
+}
 
-export const renderDockerfile = (spec: DockerImageSpec): string => {
-  const lines = [`FROM ${spec.base ?? "public.ecr.aws/docker/library/bun:1"}`];
-  for (const instruction of spec.instructions ?? []) {
-    lines.push(renderInstruction(instruction));
-  }
-  if (spec.entrypoint && spec.entrypoint.length > 0) {
-    lines.push(`ENTRYPOINT ${JSON.stringify(spec.entrypoint)}`);
-  }
-  if (spec.cmd && spec.cmd.length > 0) {
-    lines.push(`CMD ${JSON.stringify(spec.cmd)}`);
-  }
-  return `${lines.join("\n")}\n`;
-};
-
-export const writeDockerContext = Effect.fn(function* ({
-  directory,
-  dockerfile,
-  files,
-}: {
-  directory: string;
-  dockerfile: string;
-  files: ReadonlyArray<{ path: string; content: string | Uint8Array }>;
-}) {
+export const materializeDockerfile = Effect.fn(function* (
+  dockerfile: string,
+  dir: string,
+) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  yield* fs.makeDirectory(dir, { recursive: true });
+  const target = path.join(dir, "Dockerfile");
+  yield* fs.writeFileString(target, dockerfile);
+  return target;
+});
 
-  yield* fs.makeDirectory(directory, { recursive: true });
-  yield* fs.writeFileString(path.join(directory, "Dockerfile"), dockerfile);
-
+export const writeContextFiles = Effect.fn(function* (
+  dir: string,
+  files: ReadonlyArray<{
+    readonly path: string;
+    readonly content: string | Uint8Array;
+  }>,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
   for (const file of files) {
-    const fullPath = path.join(directory, file.path);
+    const fullPath = path.join(dir, file.path);
     yield* fs.makeDirectory(path.dirname(fullPath), { recursive: true });
     if (typeof file.content === "string") {
       yield* fs.writeFileString(fullPath, file.content);
@@ -90,26 +66,48 @@ export const writeDockerContext = Effect.fn(function* ({
   }
 });
 
+const shellQuote = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`;
+
 export const runDockerCommand = Effect.fn(function* (
   args: ReadonlyArray<string>,
-  options?: { cwd?: string; env?: Record<string, string | undefined> },
+  options?: {
+    cwd?: string;
+    env?: Record<string, string | undefined>;
+    /** Passed to the process stdin (e.g. for `docker login --password-stdin`). */
+    stdin?: string;
+  },
 ) {
-  const command = `docker ${args.join(" ")}`;
-  const subprocess = Bun.spawn(["docker", ...args], {
-    cwd: options?.cwd,
-    env: {
-      ...process.env,
-      ...options?.env,
-    },
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  const command = `docker ${args.map(shellQuote).join(" ")}`;
+  const shellCommand =
+    options?.stdin === undefined
+      ? command
+      : `printf '%s' "$ALCHEMY_DOCKER_STDIN" | ${command}`;
+  const env = {
+    ...process.env,
+    ...options?.env,
+    ...(options?.stdin === undefined
+      ? {}
+      : { ALCHEMY_DOCKER_STDIN: options.stdin }),
+  };
+  const child = options?.cwd
+    ? ChildProcess.setCwd(
+        ChildProcess.make(shellCommand, [], { shell: true, env }),
+        options.cwd,
+      )
+    : ChildProcess.make(shellCommand, [], { shell: true, env });
 
-  const [stdout, stderr, exitCode] = yield* Effect.all([
-    Effect.promise(() => new Response(subprocess.stdout).text()),
-    Effect.promise(() => new Response(subprocess.stderr).text()),
-    Effect.promise(() => subprocess.exited),
-  ]);
+  const { stdout, stderr, exitCode } = yield* exec(child).pipe(
+    Effect.catch((e) =>
+      Effect.fail(
+        new DockerCommandError({
+          command,
+          stderr: e instanceof Error ? e.message : String(e),
+          exitCode: 1,
+          message: e instanceof Error ? e.message : String(e),
+        }),
+      ),
+    ),
+  );
 
   if (exitCode !== 0) {
     return yield* Effect.fail(
@@ -117,12 +115,79 @@ export const runDockerCommand = Effect.fn(function* (
         command,
         stderr,
         exitCode,
+        message:
+          `Docker command failed (${exitCode}): ${command}\n${stderr}`.trim(),
       }),
     );
   }
 
-  return {
-    stdout,
-    stderr,
-  };
+  return { stdout, stderr };
+});
+
+/**
+ * Run `docker build` with standard flags from {@link DockerBuildOptions}.
+ */
+export const dockerBuild = Effect.fn(function* (options: DockerBuildOptions) {
+  const args: string[] = ["build", "-t", options.tag];
+  if (options.platform) {
+    args.push("--platform", options.platform);
+  }
+  if (options.target) {
+    args.push("--target", options.target);
+  }
+  if (options.buildArgs) {
+    for (const [k, v] of Object.entries(options.buildArgs)) {
+      args.push("--build-arg", `${k}=${v}`);
+    }
+  }
+  if (options.extraArgs?.length) {
+    args.push(...options.extraArgs);
+  }
+  args.push(options.context);
+
+  yield* runDockerCommand(args, { env: options.env });
+});
+
+/**
+ * Log in to a registry using `docker login --password-stdin` (no password on argv).
+ */
+export const dockerLogin = Effect.fn(function* (
+  auth: RegistryAuth,
+  options?: { env?: Record<string, string | undefined> },
+) {
+  yield* runDockerCommand(
+    ["login", "-u", auth.username, "--password-stdin", auth.server],
+    {
+      env: options?.env,
+      stdin: auth.password,
+    },
+  );
+});
+
+/**
+ * Push an image ref. When `auth` is set, uses an isolated `DOCKER_CONFIG`
+ * directory so concurrent deploys do not race on global docker credentials.
+ */
+export const pushImage = Effect.fn(function* (
+  imageRef: string,
+  auth?: RegistryAuth,
+) {
+  if (auth) {
+    const fs = yield* FileSystem.FileSystem;
+    const configDir = yield* fs.makeTempDirectory({
+      prefix: "alchemy-docker-",
+    });
+    const env = { ...process.env, DOCKER_CONFIG: configDir };
+    return yield* Effect.gen(function* () {
+      yield* dockerLogin(auth, { env });
+      yield* runDockerCommand(["push", imageRef], { env });
+    }).pipe(
+      Effect.ensuring(
+        fs
+          .remove(configDir, { recursive: true })
+          .pipe(Effect.catch(() => Effect.void)),
+      ),
+    );
+  }
+  yield* runDockerCommand(["push", imageRef]);
 });

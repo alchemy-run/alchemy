@@ -33,9 +33,24 @@ export function push(id: string, eff?: Effect.Effect<any, any, any>) {
     : (eff: Effect.Effect<any, any, any>) => push(id, eff);
 }
 
+export const set = (namespace: string | NamespaceNode) =>
+  Effect.provideService(
+    Namespace,
+    typeof namespace === "string" ? { Id: namespace } : namespace,
+  );
+
 export const CurrentNamespace = Effect.serviceOption(Namespace)
   .asEffect()
   .pipe(Effect.map(Option.getOrUndefined));
+
+export const CurrentChain = CurrentNamespace.asEffect().pipe(
+  Effect.map(function findRoot(ns): string[] {
+    if (ns?.Parent) {
+      return [ns.Id, ...findRoot(ns.Parent)];
+    }
+    return ns ? [ns.Id] : [];
+  }),
+);
 
 export const Parent = Namespace.asEffect().pipe(Effect.map((ns) => ns?.Parent));
 

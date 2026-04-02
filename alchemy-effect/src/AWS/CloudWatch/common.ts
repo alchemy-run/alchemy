@@ -136,7 +136,9 @@ const normalizeSingleMetricDetector = (
   return {
     Namespace: singleMetric?.Namespace ?? input.Namespace,
     MetricName: singleMetric?.MetricName ?? input.MetricName,
-    Dimensions: normalizeDimensions(singleMetric?.Dimensions ?? input.Dimensions),
+    Dimensions: normalizeDimensions(
+      singleMetric?.Dimensions ?? input.Dimensions,
+    ),
     Stat: singleMetric?.Stat ?? input.Stat,
   };
 };

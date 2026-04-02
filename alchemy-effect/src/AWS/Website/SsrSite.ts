@@ -14,7 +14,7 @@ import {
 import { OriginAccessControl } from "../CloudFront/OriginAccessControl.ts";
 import type { Service } from "../ECS/Service.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
-import type { Function } from "../Lambda/Function.ts";
+import { Function } from "../Lambda/Function.ts";
 import { Record as Route53Record } from "../Route53/Record.ts";
 import { Bucket } from "../S3/Bucket.ts";
 import type { AssetFileOption } from "./AssetDeployment.ts";
@@ -233,7 +233,9 @@ export const SsrSite = Construct.fn(function* (
 
   if (props.domain && props.domain.dns === false && !props.domain.cert) {
     return yield* Effect.fail(
-      new Error("SsrSite domain configuration with `dns: false` requires `cert`."),
+      new Error(
+        "SsrSite domain configuration with `dns: false` requires `cert`.",
+      ),
     );
   }
 
@@ -338,26 +340,27 @@ export const SsrSite = Construct.fn(function* (
     });
   }
 
-  const records = props.domain?.hostedZoneId && props.domain.dns !== false
-    ? yield* Effect.forEach(
-        [
-          props.domain.name,
-          ...(props.domain.aliases ?? []),
-          ...(props.domain.redirects ?? []),
-        ],
-        (name, index) =>
-          Route53Record(`AliasRecord${index + 1}`, {
-            hostedZoneId: props.domain!.hostedZoneId!,
-            name,
-            type: "A",
-            aliasTarget: {
-              hostedZoneId: distribution.hostedZoneId,
-              dnsName: distribution.domainName,
-            },
-          }),
-        { concurrency: "unbounded" },
-      )
-    : [];
+  const records =
+    props.domain?.hostedZoneId && props.domain.dns !== false
+      ? yield* Effect.forEach(
+          [
+            props.domain.name,
+            ...(props.domain.aliases ?? []),
+            ...(props.domain.redirects ?? []),
+          ],
+          (name, index) =>
+            Route53Record(`AliasRecord${index + 1}`, {
+              hostedZoneId: props.domain!.hostedZoneId!,
+              name,
+              type: "A",
+              aliasTarget: {
+                hostedZoneId: distribution.hostedZoneId,
+                dnsName: distribution.domainName,
+              },
+            }),
+          { concurrency: "unbounded" },
+        )
+      : [];
 
   const invalidation =
     props.invalidate === false || !assetFiles

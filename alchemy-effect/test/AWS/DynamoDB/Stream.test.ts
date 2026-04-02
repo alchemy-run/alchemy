@@ -8,7 +8,10 @@ import { describe, expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { StreamFixture } from "./stream-handler";
+import DynamoDBStreamFunctionLive, {
+  DynamoDBStreamFunction,
+  TableAndQueue,
+} from "./stream-handler.ts";
 
 describe.sequential("AWS.DynamoDB.Stream", () => {
   test(
@@ -21,8 +24,17 @@ describe.sequential("AWS.DynamoDB.Stream", () => {
       yield* destroy();
 
       yield* Effect.logInfo("DynamoDB Stream test: deploying stream fixture");
-      const { table, queue, streamFunction } =
-        yield* test.deploy(StreamFixture);
+      const { table, queue, streamFunction } = yield* test
+        .deploy(
+          Effect.gen(function* () {
+            const { table, queue } = yield* TableAndQueue;
+
+            const func = yield* DynamoDBStreamFunction;
+
+            return { table, queue, streamFunction: func };
+          }),
+        )
+        .pipe(Effect.provide(DynamoDBStreamFunctionLive));
 
       const streamState = yield* waitForTableStreamSpecification(
         table.tableName,

@@ -1,5 +1,6 @@
 import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../../Diff.ts";
 import { Resource } from "../../Resource.ts";
 import type { PolicyDocument } from "../IAM/Policy.ts";
 import {
@@ -64,6 +65,7 @@ export const PolicyProvider = () =>
       return {
         stables: ["policyId", "policyArn"],
         diff: Effect.fn(function* ({ id, olds, news }) {
+          if (!isResolved(news)) return;
           if (olds?.type !== news.type) {
             return { action: "replace" } as const;
           }

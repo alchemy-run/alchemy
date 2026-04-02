@@ -12,7 +12,6 @@ export type ApplyStatus =
   | "deleted"
   | "replacing"
   | "replaced"
-  | "success"
   | "fail";
 
 export type ApplyEvent = AnnotateEvent | StatusChangeEvent;

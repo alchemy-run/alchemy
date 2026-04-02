@@ -3,7 +3,7 @@ import * as ServiceMap from "effect/ServiceMap";
 import type { ScopedPlanStatusSession } from "./Cli/index.ts";
 import type { Diff } from "./Diff.ts";
 import type { Input } from "./Input.ts";
-import type { ResourceLike } from "./Resource.ts";
+import type { ResourceBinding, ResourceLike } from "./Resource.ts";
 
 export interface Provider<
   R extends ResourceLike = ResourceLike,
@@ -23,9 +23,9 @@ export const Provider = <R extends ResourceLike>(
 ): Provider<R> => ServiceMap.Service<Provider<R>, ProviderService<R>>()(type);
 
 type BindingData<Res extends ResourceLike> = [Res] extends [
-  { binding: infer B },
+  { Binding: infer B },
 ]
-  ? B[]
+  ? ResourceBinding<B>[]
   : any[];
 
 type Props<Res extends ResourceLike> = keyof Res["Props"] extends never
@@ -70,10 +70,10 @@ export interface ProviderService<
     olds: Props<Res>;
     // Note: we do not resolve (Res["Props"]) here because diff runs during plan
     // -> we need a way for the diff handlers to work with Outputs
-    news: Props<Res>;
+    news: Input<Props<Res>>;
     oldBindings: BindingData<Res>;
     newBindings: Input<BindingData<Res>>;
-    output: Res["Attributes"];
+    output: Res["Attributes"] | undefined;
   }): Effect.Effect<Diff | void, any, DiffReq>;
   precreate?(input: {
     id: string;

@@ -5,6 +5,7 @@ import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
+import { deepEqual, isResolved } from "../../Diff.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasTags } from "../../Tags.ts";
 import { Account } from "../Account.ts";
@@ -266,6 +267,7 @@ export const EventSourceMappingProvider = () =>
       return {
         stables: ["uuid", "eventSourceMappingArn"],
         diff: Effect.fn(function* ({ news, olds }) {
+          if (!isResolved(news)) return;
           if (
             (news.eventSourceArn as string) !== (olds.eventSourceArn as string)
           ) {
@@ -281,8 +283,7 @@ export const EventSourceMappingProvider = () =>
             return { action: "replace" } as const;
           }
           if (
-            JSON.stringify(news.selfManagedEventSource) !==
-            JSON.stringify(olds.selfManagedEventSource)
+            !deepEqual(news.selfManagedEventSource, olds.selfManagedEventSource)
           ) {
             return { action: "replace" } as const;
           }

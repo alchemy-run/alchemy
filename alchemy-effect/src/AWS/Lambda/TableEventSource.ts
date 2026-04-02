@@ -25,7 +25,7 @@ export const isDynamoDBStreamEvent = (
 export const TableEventSource = Layer.effect(
   DynamoDBTableEventSource,
   Effect.gen(function* () {
-    const host = yield* Lambda.Function.Runtime;
+    const host = yield* Lambda.Function;
     const bind = yield* TableEventSourcePolicy;
 
     return Effect.fn(function* <Data = unknown, StreamReq = never, Req = never>(

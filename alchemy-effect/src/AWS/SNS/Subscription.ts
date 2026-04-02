@@ -1,5 +1,6 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { Resource } from "../../Resource.ts";
 
@@ -74,6 +75,7 @@ export const SubscriptionProvider = () =>
     }),
     stables: ["subscriptionArn"],
     diff: Effect.fn(function* ({ news, olds }) {
+      if (!isResolved(news)) return undefined;
       if (news.protocol !== olds.protocol) {
         return { action: "replace" } as const;
       }

@@ -1,5 +1,6 @@
 import * as rds from "@distilled.cloud/aws/rds";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../../Diff.ts";
 import { Resource } from "../../Resource.ts";
 
 export interface DBProxyTargetGroupProps {
@@ -151,6 +152,7 @@ export const DBProxyTargetGroupProvider = () =>
       return {
         stables: ["dbProxyName", "targetGroupArn", "targetGroupName"],
         diff: Effect.fn(function* ({ olds, news }) {
+          if (!isResolved(news)) return undefined;
           if (olds?.dbProxyName !== news.dbProxyName) {
             return { action: "replace" } as const;
           }

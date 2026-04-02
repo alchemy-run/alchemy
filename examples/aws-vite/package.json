@@ -17,6 +17,7 @@
     "destroy": "alchemy destroy"
   },
   "dependencies": {
+    "@cloudflare/vite-plugin": "catalog:",
     "@distilled.cloud/aws": "catalog:",
     "@effect/platform-node": "catalog:",
     "alchemy-effect": "workspace:*",

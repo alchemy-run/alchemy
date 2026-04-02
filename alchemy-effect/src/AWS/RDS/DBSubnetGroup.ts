@@ -1,5 +1,6 @@
 import * as rds from "@distilled.cloud/aws/rds";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
@@ -44,18 +45,6 @@ export interface DBSubnetGroup extends Resource<
  */
 export const DBSubnetGroup = Resource<DBSubnetGroup>("AWS.RDS.DBSubnetGroup");
 
-const toTagRecord = (
-  tags: Array<{ Key?: string; Value?: string }> | undefined,
-): Record<string, string> =>
-  Object.fromEntries(
-    (tags ?? [])
-      .filter(
-        (tag): tag is { Key: string; Value: string } =>
-          typeof tag.Key === "string" && typeof tag.Value === "string",
-      )
-      .map((tag) => [tag.Key, tag.Value]),
-  );
-
 export const DBSubnetGroupProvider = () =>
   DBSubnetGroup.provider.effect(
     Effect.gen(function* () {
@@ -80,6 +69,7 @@ export const DBSubnetGroupProvider = () =>
       return {
         stables: ["dbSubnetGroupArn", "dbSubnetGroupName", "vpcId"],
         diff: Effect.fn(function* ({ id, olds, news }) {
+          if (!isResolved(news)) return undefined;
           if (
             (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
           ) {
@@ -114,7 +104,7 @@ export const DBSubnetGroupProvider = () =>
           const dbSubnetGroupName = yield* toName(id, news);
           const tags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
 
           const created = yield* rds
@@ -168,11 +158,11 @@ export const DBSubnetGroupProvider = () =>
 
           const oldTags = {
             ...(yield* createInternalTags(id)),
-            ...(olds.tags ?? {}),
+            ...olds.tags,
           };
           const newTags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
           const { removed, upsert } = diffTags(oldTags, newTags);
           if (upsert.length > 0 && output.dbSubnetGroupArn) {

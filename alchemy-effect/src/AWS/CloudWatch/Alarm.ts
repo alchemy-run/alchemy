@@ -1,6 +1,7 @@
 import { Region } from "@distilled.cloud/aws/Region";
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../../Diff.ts";
 import { Resource } from "../../Resource.ts";
 import { Account, type AccountID } from "../Account.ts";
 import type { RegionID } from "../Region.ts";
@@ -107,6 +108,7 @@ export const AlarmProvider = () =>
       return {
         stables: ["alarmName", "alarmArn"],
         diff: Effect.fn(function* ({ id, olds = {}, news = {} }) {
+          if (!isResolved(news)) return undefined;
           const oldName = yield* createAlarmName(id, olds);
           const newName = yield* createAlarmName(id, news);
 

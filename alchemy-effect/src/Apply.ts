@@ -119,7 +119,7 @@ export const apply = <P extends Plan>(
 
     yield* session.done();
 
-    if (Object.keys(plan.resources).length === 0) {
+    if (!plan.output) {
       return undefined;
     }
 
@@ -177,6 +177,7 @@ const executePlan = Effect.fnUntraced(function* (
       fqns
         .filter((fqn) => fqn in ready)
         .map((fqn) => Deferred.await(ready[fqn])),
+      { concurrency: "unbounded" },
     );
 
   yield* Effect.all(
@@ -454,6 +455,7 @@ const executeNode = (
         };
         yield* signalReady;
 
+        yield* report("created");
         yield* markTerminal("created");
         return;
       }
@@ -525,6 +527,7 @@ const executeNode = (
           bindings: bindingOutputs,
           session: scopedSession,
           olds: previousProps,
+          // @ts-expect-error - type system says this can be undefined, can it be?
           output: node.state.attr,
         });
 
@@ -559,6 +562,7 @@ const executeNode = (
           instanceId,
         };
 
+        yield* report("updated");
         yield* markTerminal("updated");
         return;
       }
@@ -575,6 +579,7 @@ const executeNode = (
             instanceId,
           };
           yield* signalReady;
+          yield* report("created");
           yield* markTerminal("created");
           return;
         }
@@ -700,6 +705,9 @@ const executeNode = (
         };
         yield* signalReady;
 
+        // Keep progress anchored to the live replacement while GC drains the
+        // previous generation(s) in the background.
+        yield* report("created");
         yield* markTerminal("created");
         return;
       }
@@ -933,9 +941,8 @@ const collectGarbage = Effect.fnUntraced(function* (
               { concurrency: "unbounded" },
             );
 
-            yield* report("deleting");
-
             if (isDeleteNode(node)) {
+              yield* report("deleting");
               if (node.resource.RemovalPolicy === "retain") {
                 yield* state.delete({
                   stack: stackName,
@@ -979,6 +986,7 @@ const collectGarbage = Effect.fnUntraced(function* (
               });
               yield* report("deleted");
             } else {
+              yield* scopedSession.note("Cleaning up replaced resource...");
               if (
                 node.old.status === "replacing" ||
                 node.old.status === "replaced"
@@ -1018,7 +1026,7 @@ const collectGarbage = Effect.fnUntraced(function* (
                   removalPolicy: node.removalPolicy,
                 });
               }
-              yield* report("replaced");
+              yield* scopedSession.note("Replaced resource cleanup complete.");
             }
           }).pipe(Effect.provide(Layer.succeed(InstanceId, instanceId))),
         ));
@@ -1061,6 +1069,6 @@ const collectGarbage = Effect.fnUntraced(function* (
 const excludeDeletedBindings = (
   bindings: ReadonlyArray<ResourceBinding & { action?: string }>,
 ): ResourceBinding[] =>
-  bindings.flatMap(({ action, namespace, sid, data }) =>
-    action === "delete" ? [] : [{ namespace, sid, data }],
+  bindings.flatMap(({ action, sid, data }) =>
+    action === "delete" ? [] : [{ sid, data }],
   );

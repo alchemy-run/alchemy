@@ -1,5 +1,6 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import type { PolicyDocument } from "./Policy.ts";
@@ -187,6 +188,7 @@ export const GroupProvider = () =>
       return {
         stables: ["groupArn", "groupName", "groupId"],
         diff: Effect.fn(function* ({ id, olds, news }) {
+          if (!isResolved(news)) return;
           if (
             (yield* toName(id, olds ?? ({} as GroupProps))) !==
             (yield* toName(id, news))

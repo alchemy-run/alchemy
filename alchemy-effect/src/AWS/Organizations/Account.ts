@@ -2,6 +2,7 @@ import * as accountManagement from "@distilled.cloud/aws/account";
 import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { isResolved } from "../../Diff.ts";
 import { Resource } from "../../Resource.ts";
 import {
   collectPages,
@@ -69,6 +70,7 @@ export const AccountProvider = () =>
       return {
         stables: ["accountId", "accountArn", "joinedMethod", "joinedTimestamp"],
         diff: Effect.fn(function* ({ olds, news }) {
+          if (!isResolved(news)) return;
           if (olds?.email !== news.email) {
             return { action: "replace" } as const;
           }

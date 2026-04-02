@@ -1,3 +1,4 @@
+import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Sink from "effect/Sink";
@@ -29,7 +30,7 @@ export const QueueSinkLive = Layer.effect(
             Id: `${i}`,
             MessageBody: message,
           })),
-        }).pipe(Effect.orDie, Effect.asVoid),
+        }).pipe(Effect.tapError(Console.log), Effect.orDie, Effect.asVoid),
       );
     });
   }),
@@ -43,14 +44,11 @@ export class QueueSinkPolicy extends Binding.Policy<
 export const QueueSinkPolicyLive = QueueSinkPolicy.layer.succeed(
   Effect.fn(function* (host, queue) {
     if (isFunction(host)) {
-      yield* Effect.logInfo(
-        `QueueSinkPolicy: binding send permission for ${host.LogicalId} -> ${queue.LogicalId}`,
-      );
       yield* host.bind`Allow(${host}, AWS.SQS.QueueSink(${queue}))`({
         policyStatements: [
           {
             Effect: "Allow",
-            Action: ["sqs:SendMessage"],
+            Action: ["sqs:SendMessage", "sqs:SendMessageBatch"],
             Resource: [Output.interpolate`${queue.queueArn}`],
           },
         ],

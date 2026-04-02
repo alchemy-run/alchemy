@@ -1,5 +1,6 @@
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 
@@ -89,7 +90,9 @@ export const KeyValueStoreProvider = () =>
 
       return {
         stables: ["keyValueStoreId", "keyValueStoreArn", "keyValueStoreName"],
-        diff: Effect.fn(function* ({ id, olds, news }) {
+        diff: Effect.fn(function* ({ id, olds, news: _news }) {
+          if (!isResolved(_news)) return undefined;
+          const news = _news as typeof olds;
           if (
             (yield* createName(id, olds ?? {})) !==
             (yield* createName(id, news))
@@ -161,7 +164,11 @@ export const KeyValueStoreProvider = () =>
             .describeKeyValueStore({
               Name: output.keyValueStoreName,
             })
-            .pipe(Effect.catchTag("EntityNotFound", () => Effect.succeed(undefined)));
+            .pipe(
+              Effect.catchTag("EntityNotFound", () =>
+                Effect.succeed(undefined),
+              ),
+            );
 
           const etag = current?.ETag;
           if (!etag) {

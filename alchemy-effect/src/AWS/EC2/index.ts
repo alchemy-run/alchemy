@@ -1,6 +1,5 @@
 export * from "./EgressOnlyInternetGateway.ts";
 export * from "./EIP.ts";
-export * from "./HttpServer.ts";
 export * from "./Image.ts";
 export * from "./Instance.ts";
 export * from "./InternetGateway.ts";

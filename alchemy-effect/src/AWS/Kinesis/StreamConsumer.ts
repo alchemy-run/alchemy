@@ -1,6 +1,7 @@
 import * as kinesis from "@distilled.cloud/aws/kinesis";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
@@ -224,6 +225,7 @@ export const StreamConsumerProvider = () =>
       });
     }),
     diff: Effect.fn(function* ({ id, news, olds }) {
+      if (!isResolved(news)) return;
       const oldConsumerName = yield* createConsumerName(id, olds);
       const newConsumerName = yield* createConsumerName(id, news);
       if (oldConsumerName !== newConsumerName) {

@@ -3,8 +3,9 @@ import * as sqs from "@distilled.cloud/aws/sqs";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import { Resource } from "../../Resource.ts";
+import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { Account, type AccountID } from "../Account.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { RegionID } from "../Region.ts";
@@ -109,7 +110,7 @@ export const QueueProvider = () =>
       });
       const createAttributes = (
         props: QueueProps,
-        bindings: Queue["Binding"][],
+        bindings: ResourceBinding<Queue["Binding"]>[],
       ) => {
         const baseAttributes: Record<string, string | undefined> = {
           DelaySeconds: props.delaySeconds?.toString(),
@@ -122,7 +123,7 @@ export const QueueProvider = () =>
             bindings.length > 0
               ? JSON.stringify({
                   Version: "2012-10-17",
-                  Statement: bindings.flatMap((p) => p.policyStatements),
+                  Statement: bindings.flatMap((p) => p.data.policyStatements),
                 })
               : undefined,
         };
@@ -144,6 +145,7 @@ export const QueueProvider = () =>
       return Queue.provider.of({
         stables: ["queueName", "queueUrl", "queueArn"],
         diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
+          if (!isResolved(news)) return undefined;
           const oldFifo = olds.fifo ?? false;
           const newFifo = news.fifo ?? false;
           if (oldFifo !== newFifo) {

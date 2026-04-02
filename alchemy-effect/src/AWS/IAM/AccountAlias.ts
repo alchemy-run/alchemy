@@ -1,5 +1,6 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../../Diff.ts";
 import { Resource } from "../../Resource.ts";
 
 export interface AccountAliasProps {
@@ -42,6 +43,7 @@ export const AccountAliasProvider = () =>
   AccountAlias.provider.succeed({
     stables: ["accountAlias"],
     diff: Effect.fn(function* ({ olds, news }) {
+      if (!isResolved(news)) return;
       if (olds.accountAlias !== news.accountAlias) {
         return { action: "replace" } as const;
       }

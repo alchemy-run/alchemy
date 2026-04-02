@@ -10,25 +10,29 @@ import * as Path from "effect/Path";
 import * as ServiceMap from "effect/ServiceMap";
 import { Bundler, type BundleOptions } from "../../Bundle/Bundler.ts";
 import {
-  renderDockerfile,
-  runDockerCommand,
-  writeDockerContext,
-  type DockerImageSpec,
+  dockerBuild,
+  materializeDockerfile,
+  pushImage,
+  writeContextFiles,
 } from "../../Bundle/Docker.ts";
 import {
   cleanupBundleTempDir,
   createTempBundleDir,
+  getStableContextDir,
 } from "../../Bundle/TempRoot.ts";
 import { DotAlchemy } from "../../Config.ts";
-import { Host, type ServerExecutionContext } from "../../Host.ts";
+import { isResolved } from "../../Diff.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import { Platform, type Main } from "../../Platform.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
+import type { ProcessContext, ServerHost } from "../../Server/Process.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import { createInternalTags, createTagsList, hasTags } from "../../Tags.ts";
 import { sha256 } from "../../Util/sha256.ts";
 import { Account } from "../Account.ts";
+import type { Credentials } from "../Credentials.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 
 export const isTask = (value: any): value is Task => {
@@ -84,9 +88,18 @@ export interface TaskProps {
    */
   build?: Partial<BundleOptions>;
   /**
-   * Container image customization expressed as typed Docker instructions.
+   * Docker image build: optional full {@link docker.dockerfile}. When omitted,
+   * Alchemy generates a Dockerfile for the bundled `index.mjs`.
    */
-  docker?: DockerImageSpec;
+  docker?: {
+    /**
+     * Base image when Alchemy generates the Dockerfile.
+     * @default public.ecr.aws/docker/library/bun:1
+     */
+    base?: string;
+    /** Full Dockerfile content (replaces generated Dockerfile). */
+    dockerfile?: string;
+  };
   /**
    * Container definition overrides applied after Alchemy's defaults.
    */
@@ -148,51 +161,56 @@ export interface Task extends Resource<
   }
 > {}
 
-export const Task = Host<Task, ServerExecutionContext>("AWS.ECS.Task", {
-  kind: "server",
-  runtime: (id) => {
-    const runners: Effect.Effect<void, never, any>[] = [];
-    const env: Record<string, any> = {};
+export type TaskServices = Credentials | Region | ServerHost;
 
-    return {
-      type: "AWS.ECS.Task",
-      id,
-      env,
-      set: (bindingId: string, output: Output.Output) =>
-        Effect.sync(() => {
-          const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
-          env[key] = output.pipe(Output.map((value) => JSON.stringify(value)));
-          return key;
-        }),
-      get: <T>(key: string) =>
-        Config.string(key)
-          .asEffect()
-          .pipe(
-            Effect.flatMap((value) =>
-              Effect.try({
-                try: () => JSON.parse(value) as T,
-                catch: (error) => error as Error,
+export type TaskShape = Main<TaskServices>;
+
+export interface TaskExecutionContext extends ProcessContext {
+  readonly Type: "AWS.ECS.Task";
+}
+
+export const Task: Platform<
+  Task,
+  TaskServices,
+  TaskShape,
+  TaskExecutionContext
+> = Platform("AWS.ECS.Task", (id): TaskExecutionContext => {
+  const runners: Effect.Effect<void, never, any>[] = [];
+  const env: Record<string, any> = {};
+
+  return {
+    Type: "AWS.ECS.Task",
+    id,
+    env,
+    set: (bindingId: string, output: Output.Output) =>
+      Effect.sync(() => {
+        const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
+        env[key] = output.pipe(Output.map((value) => JSON.stringify(value)));
+        return key;
+      }),
+    get: <T>(key: string) =>
+      Config.string(key)
+        .asEffect()
+        .pipe(
+          Effect.flatMap((value) =>
+            Effect.try({
+              try: () => JSON.parse(value) as T,
+              catch: (error) => error as Error,
+            }),
+          ),
+          Effect.catch((cause) =>
+            Effect.die(
+              new Error(`Failed to get environment variable: ${key}`, {
+                cause,
               }),
             ),
-            Effect.catch((cause) =>
-              Effect.die(
-                new Error(`Failed to get environment variable: ${key}`, {
-                  cause,
-                }),
-              ),
-            ),
           ),
-      run: ((effect: Effect.Effect<void, never, any>) =>
-        Effect.sync(() => {
-          runners.push(effect);
-        })) as unknown as ServerExecutionContext["run"],
-      exports: {
-        program: Effect.all(runners, { concurrency: "unbounded" }).pipe(
-          Effect.asVoid,
         ),
-      },
-    } satisfies ServerExecutionContext;
-  },
+    run: (effect: Effect.Effect<void, never, any>) =>
+      Effect.sync(() => {
+        runners.push(effect);
+      }),
+  };
 });
 
 export const TaskProvider = () =>
@@ -540,38 +558,32 @@ await Effect.runPromise(program);
         props: TaskProps;
       }) {
         const realMain = yield* fs.realPath(props.main);
-        const tempDir = yield* createTempBundleDir(
+        const contextDir = yield* getStableContextDir(
           realMain,
           dotAlchemy,
           `${id}-image`,
         );
         const imageUri = `${repositoryUri}:${hash}`;
-        const dockerfile = renderDockerfile({
-          base: props.docker?.base,
-          instructions: [
-            ["workdir", "/app"],
-            ["copy", "index.mjs", "/app/index.mjs"],
-            ["entrypoint", "bun", "/app/index.mjs"],
-            ...(props.port
-              ? ([["env", "PORT", String(props.port)]] as const)
-              : []),
-            ...(props.port ? ([["expose", props.port]] as const) : []),
-            ...(props.docker?.instructions ?? []),
-          ],
-          entrypoint: props.docker?.entrypoint,
-          cmd: props.docker?.cmd,
-        });
 
-        yield* writeDockerContext({
-          directory: tempDir,
-          dockerfile,
-          files: [
-            {
-              path: "index.mjs",
-              content: code,
-            },
-          ],
-        });
+        const generatedDockerfile = (() => {
+          const base =
+            props.docker?.base ?? "public.ecr.aws/docker/library/bun:1";
+          const lines = [
+            `FROM ${base}`,
+            `WORKDIR /app`,
+            `COPY index.mjs /app/index.mjs`,
+          ];
+          if (props.port !== undefined) {
+            lines.push(
+              `ENV PORT=${String(props.port)}`,
+              `EXPOSE ${String(props.port)}`,
+            );
+          }
+          lines.push(`ENTRYPOINT ["bun", "/app/index.mjs"]`);
+          return `${lines.join("\n")}\n`;
+        })();
+
+        const dockerfile = props.docker?.dockerfile ?? generatedDockerfile;
 
         const auth = yield* ecr.getAuthorizationToken({});
         const credentials = auth.authorizationData?.[0];
@@ -585,18 +597,19 @@ await Effect.runPromise(program);
         );
         const registry = credentials.proxyEndpoint.replace(/^https?:\/\//, "");
 
-        yield* runDockerCommand([
-          "login",
-          "-u",
-          "AWS",
-          "-p",
-          password,
-          registry,
+        yield* materializeDockerfile(dockerfile, contextDir);
+        yield* writeContextFiles(contextDir, [
+          { path: "index.mjs", content: code },
         ]);
-        yield* runDockerCommand(["build", "-t", imageUri, tempDir]);
-        yield* runDockerCommand(["push", imageUri]);
-
-        yield* cleanupBundleTempDir(tempDir);
+        yield* dockerBuild({
+          tag: imageUri,
+          context: contextDir,
+        });
+        yield* pushImage(imageUri, {
+          username: "AWS",
+          password,
+          server: registry,
+        });
 
         return imageUri;
       });
@@ -682,6 +695,7 @@ await Effect.runPromise(program);
           "taskFamily",
         ],
         diff: Effect.fn(function* ({ id, olds, news }) {
+          if (!isResolved(news)) return;
           if (
             (yield* toTaskFamily(id, olds ?? {})) !==
             (yield* toTaskFamily(id, news ?? {}))

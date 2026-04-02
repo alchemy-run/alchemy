@@ -41,6 +41,6 @@ export default defineConfig({
         "**/*.config.*",
       ],
     },
-    setupFiles: ["./vitest.setup.ts"],
+    setupFiles: ["alchemy-effect/test/vitest.setup.ts"],
   },
 });

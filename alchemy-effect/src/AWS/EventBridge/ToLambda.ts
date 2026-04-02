@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
 import * as Effect from "effect/Effect";
+import { createHash } from "node:crypto";
 import * as Binding from "../../Binding.ts";
 import type { Function as LambdaFunction } from "../Lambda/Function.ts";
 import { Permission as LambdaPermission } from "../Lambda/Permission.ts";

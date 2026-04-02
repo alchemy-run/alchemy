@@ -4,6 +4,7 @@ import * as s3 from "@distilled.cloud/aws/s3";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { diffTags } from "../../Tags.ts";
@@ -77,6 +78,77 @@ export interface Bucket extends Resource<
   }
 > {}
 
+/**
+ * An S3 bucket for storing objects in AWS.
+ *
+ * A bucket name is auto-generated from the app, stage, and logical ID unless
+ * you provide one explicitly via `bucketName`. Enable `forceDestroy` to allow
+ * Alchemy to empty the bucket before deleting it.
+ *
+ * @section Creating a Bucket
+ * @example Basic Bucket
+ * ```typescript
+ * import * as S3 from "alchemy-effect/AWS/S3";
+ *
+ * const bucket = yield* S3.Bucket("my-bucket", {});
+ * ```
+ *
+ * @example Bucket with a custom name
+ * ```typescript
+ * const bucket = yield* S3.Bucket("my-bucket", {
+ *   bucketName: "my-company-assets",
+ * });
+ * ```
+ *
+ * @example Bucket with force destroy
+ * ```typescript
+ * const bucket = yield* S3.Bucket("my-bucket", {
+ *   forceDestroy: true,
+ * });
+ * ```
+ *
+ * @section Reading Objects
+ * @example Get an object from a bucket
+ * ```typescript
+ * const getObject = yield* S3.GetObject.bind(bucket);
+ *
+ * const response = yield* getObject({ Key: "hello.txt" });
+ * ```
+ *
+ * @section Writing Objects
+ * @example Put an object into a bucket
+ * ```typescript
+ * const putObject = yield* S3.PutObject.bind(bucket);
+ *
+ * yield* putObject({
+ *   Key: "hello.txt",
+ *   Body: "Hello, World!",
+ *   ContentType: "text/plain",
+ * });
+ * ```
+ *
+ * @section Deleting Objects
+ * @example Delete an object from a bucket
+ * ```typescript
+ * const deleteObject = yield* S3.DeleteObject.bind(bucket);
+ *
+ * yield* deleteObject({ Key: "hello.txt" });
+ * ```
+ *
+ * @section Event Notifications
+ * @example Process object creation events
+ * ```typescript
+ * yield* S3.notifications(bucket, {
+ *   events: ["s3:ObjectCreated:*"],
+ * }).subscribe((stream) =>
+ *   stream.pipe(
+ *     Stream.runForEach((event) =>
+ *       Effect.log(`New object: ${event.key}`),
+ *     ),
+ *   ),
+ * );
+ * ```
+ */
 export const Bucket = Resource<Bucket>("AWS.S3.Bucket");
 
 export const BucketProvider = () =>
@@ -278,7 +350,11 @@ export const BucketProvider = () =>
           `S3 Bucket ${operation}: bucket=${bucketName} removedTags=${removed.length} upsertTags=${Object.keys(upsert).length}`,
         );
 
-        if (canSkip && removed.length === 0 && Object.keys(upsert).length === 0) {
+        if (
+          canSkip &&
+          removed.length === 0 &&
+          Object.keys(upsert).length === 0
+        ) {
           return;
         }
 
@@ -372,6 +448,7 @@ export const BucketProvider = () =>
       return {
         stables: ["bucketName", "bucketArn", "region", "accountId"],
         diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
+          if (!isResolved(news)) return undefined;
           const oldBucketName = yield* createBucketName(id, olds);
           const newBucketName = yield* createBucketName(id, news);
           yield* Effect.logInfo(

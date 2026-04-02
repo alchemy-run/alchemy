@@ -97,7 +97,7 @@ Given a ${pattern} and optional ${path} and ${include}:
     if (!modTime) continue;
     matchList.push({
       path: filePath,
-      modTime: modTime.getTime(),
+      modTime: modTime.pipe(Option.getOrElse(() => new Date(0))).getTime(),
       lineNum,
       lineText,
     });

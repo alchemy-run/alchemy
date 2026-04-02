@@ -32,6 +32,8 @@ export const DatabaseAurora = Layer.effect(
 
     const connect = yield* AWS.RDS.Connect.bind(database.cluster, {
       secret: database.secret,
+      subnetIds: vpc.privateSubnetIds,
+      securityGroupIds: [databaseSecurityGroup.groupId],
     });
 
     return Database.of({
@@ -39,7 +41,7 @@ export const DatabaseAurora = Layer.effect(
         statement: string,
         values: ReadonlyArray<unknown> = [],
       ): Effect.Effect<ReadonlyArray<Row>, SqlError> =>
-        connect().pipe(
+        connect.pipe(
           Effect.catch((cause) =>
             Effect.fail(
               new SqlError({

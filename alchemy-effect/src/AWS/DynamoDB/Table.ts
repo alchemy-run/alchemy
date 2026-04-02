@@ -10,7 +10,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
-import { havePropsChanged } from "../../Diff.ts";
+import { havePropsChanged, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
@@ -799,6 +799,7 @@ export const TableProvider = () =>
           return toAttrs(state);
         }),
         diff: Effect.fn(function* ({ news, olds }) {
+          if (!isResolved(news)) return undefined;
           if (
             // TODO(sam): if the name is hard-coded, REPLACE is impossible - we need a suffix
             news.tableName !== olds.tableName ||

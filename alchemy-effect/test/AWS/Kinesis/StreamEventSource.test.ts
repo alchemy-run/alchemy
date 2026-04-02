@@ -7,7 +7,10 @@ import { describe, expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { StreamFixture } from "./stream-handler";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import KinesisStreamFunctionLive, {
+  KinesisStreamFunction,
+} from "./stream-handler.ts";
 
 describe.sequential("AWS.Kinesis.StreamEventSource", () => {
   test(
@@ -16,16 +19,34 @@ describe.sequential("AWS.Kinesis.StreamEventSource", () => {
     Effect.gen(function* () {
       yield* destroy();
 
-      const { stream, streamFunction } = yield* test.deploy(StreamFixture);
+      const streamFunction = yield* test.deploy(
+        KinesisStreamFunction.asEffect().pipe(
+          Effect.provide(KinesisStreamFunctionLive),
+        ),
+      );
+
+      const functionUrl = streamFunction.functionUrl!;
+
+      const { streamName, streamArn } = yield* HttpClient.get(functionUrl).pipe(
+        Effect.flatMap((response) =>
+          response.status === 200
+            ? (response.json as Effect.Effect<{
+                streamName: string;
+                streamArn: string;
+              }>)
+            : Effect.fail(new Error(`Function not ready: ${response.status}`)),
+        ),
+        Effect.retry({ schedule: Schedule.fixed("1 seconds") }),
+      );
 
       yield* waitForEventSourceMappingEnabled(
         streamFunction.functionName,
-        stream.streamArn,
+        streamArn,
       );
       yield* Effect.sleep("10 seconds");
 
       yield* Kinesis.putRecord({
-        StreamName: stream.streamName,
+        StreamName: streamName,
         PartitionKey: "stream-event-source",
         Data: new TextEncoder().encode("payload"),
       });
@@ -33,7 +54,7 @@ describe.sequential("AWS.Kinesis.StreamEventSource", () => {
 
       const mapping = yield* waitForEventSourceMappingEnabled(
         streamFunction.functionName,
-        stream.streamArn,
+        streamArn,
       );
       expect(mapping.State).toEqual("Enabled");
 

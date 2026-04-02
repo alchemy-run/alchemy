@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
+import { isResolved } from "../../Diff.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, createTagsList } from "../../Tags.ts";
 import type { AccountID } from "../Account.ts";
@@ -177,6 +178,7 @@ export const RouteTableProvider = () =>
       return {
         stables: ["routeTableId", "ownerId", "routeTableArn", "vpcId"],
         diff: Effect.fn(function* ({ news, olds }) {
+          if (!isResolved(news)) return;
           // VpcId change requires replacement
           if (olds.vpcId !== news.vpcId) {
             return { action: "replace" };

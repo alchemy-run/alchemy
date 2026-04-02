@@ -1,8 +1,9 @@
 import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
 import * as Effect from "effect/Effect";
+import { deepEqual, isResolved } from "../../Diff.ts";
+import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
-import type { Input } from "../../Input.ts";
 import type { AutoScalingGroup as AutoScalingGroupResource } from "./AutoScalingGroup.ts";
 
 export type ScalingPolicyName = string;
@@ -94,12 +95,12 @@ export const ScalingPolicyProvider = () =>
         autoScalingGroupName: string;
         policyName: string;
       }) =>
-        autoscaling.describePolicies({
-          AutoScalingGroupName: autoScalingGroupName,
-          PolicyNames: [policyName],
-        } as any).pipe(
-          Effect.map((result) => result.ScalingPolicies?.[0]),
-        );
+        autoscaling
+          .describePolicies({
+            AutoScalingGroupName: autoScalingGroupName,
+            PolicyNames: [policyName],
+          })
+          .pipe(Effect.map((result) => result.ScalingPolicies?.[0]));
 
       const toAttributes = (
         policy: autoscaling.ScalingPolicy,
@@ -122,7 +123,9 @@ export const ScalingPolicyProvider = () =>
 
       return {
         stables: ["policyArn", "policyName", "autoScalingGroupName"],
-        diff: Effect.fn(function* ({ id, olds, news }) {
+        diff: Effect.fn(function* ({ id, olds, news: _news }) {
+          if (!isResolved(_news)) return undefined;
+          const news = _news as typeof olds;
           const oldName = yield* toName(id, olds ?? {});
           const newName = yield* toName(id, news ?? {});
           if (
@@ -133,7 +136,7 @@ export const ScalingPolicyProvider = () =>
             return { action: "replace" } as const;
           }
 
-          if (JSON.stringify(olds) !== JSON.stringify(news)) {
+          if (!deepEqual(olds, news)) {
             return {
               action: "update",
               stables: ["policyArn", "policyName", "autoScalingGroupName"],
@@ -144,7 +147,8 @@ export const ScalingPolicyProvider = () =>
           const autoScalingGroupName =
             output?.autoScalingGroupName ??
             toAutoScalingGroupName(olds!.autoScalingGroup);
-          const policyName = output?.policyName ?? (yield* toName(id, olds ?? {}));
+          const policyName =
+            output?.policyName ?? (yield* toName(id, olds ?? {}));
           const policy = yield* describePolicy({
             autoScalingGroupName,
             policyName,
@@ -152,7 +156,9 @@ export const ScalingPolicyProvider = () =>
           return policy ? toAttributes(policy) : undefined;
         }),
         create: Effect.fn(function* ({ id, news, session }) {
-          const autoScalingGroupName = toAutoScalingGroupName(news.autoScalingGroup);
+          const autoScalingGroupName = toAutoScalingGroupName(
+            news.autoScalingGroup,
+          );
           const policyName = yield* toName(id, news);
           yield* autoscaling.putScalingPolicy({
             AutoScalingGroupName: autoScalingGroupName,

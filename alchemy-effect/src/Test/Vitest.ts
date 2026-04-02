@@ -21,10 +21,11 @@ import {
 import * as AWS from "../AWS/index.ts";
 import * as Cloudflare from "../Cloudflare/index.ts";
 
+import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import { apply } from "../Apply.ts";
 import * as Credentials from "../AWS/Credentials.ts";
 import * as Region from "../AWS/Region.ts";
-import type { Build } from "../Build/Build.ts";
+import type { Command } from "../Build/Command.ts";
 import type { Cli } from "../Cli/index.ts";
 import {
   buildNamespaceTree,
@@ -32,29 +33,25 @@ import {
   type DerivedAction,
 } from "../Cli/NamespaceTree.ts";
 import { DotAlchemy, dotAlchemy } from "../Config.ts";
-import { ExecutionContext } from "../Host.ts";
+import { ExecutionContext } from "../ExecutionContext.ts";
 import type { Input } from "../Input.ts";
+import type { Output } from "../Output.ts";
 import * as Plan from "../Plan.ts";
 import type { Provider } from "../Provider.ts";
+import * as Server from "../Server/index.ts";
+import * as Serverless from "../Serverless/index.ts";
 import * as Stack from "../Stack.ts";
 import * as Stage from "../Stage.ts";
 import * as State from "../State/index.ts";
 import { TestCli } from "./TestCli.ts";
 
-declare module "@effect/vitest" {
-  interface ExpectStatic {
-    emptyObject(): any;
-    propExpr(identifier: string, src: any): any;
-  }
-}
-
-expect.emptyObject = () =>
+export const expectEmptyObject = () =>
   expect.toSatisfy(
     (deletions) => Object.keys(deletions).length === 0,
     "empty object",
   );
 
-expect.propExpr = (identifier: string, src: any) =>
+export const expectPropExpr = (identifier: string, src: any) =>
   expect.objectContaining({
     kind: "PropExpr",
     identifier,
@@ -77,10 +74,14 @@ type Provided =
   | aws.Region.Region
   | Cli
   | ExecutionContext
+  | Server.ProcessContext
+  | Server.ServerHost
+  | Serverless.FunctionContext
   | AWS.StageConfig
-  | Provider<Build>
+  | Provider<Command>
   | Layer.Success<ReturnType<typeof AWS.providers>>
-  | Layer.Success<ReturnType<typeof Cloudflare.providers>>;
+  | Layer.Success<ReturnType<typeof Cloudflare.providers>>
+  | ChildProcessSpawner;
 
 const quietLogger = Logger.make(() => {
   // console.log(options.message);
@@ -166,7 +167,20 @@ const runWithContext = <A, Err>(
     Layer.mergeAll(awsStageConfig, stack, dotAlchemy),
   );
 
-  // @ts-expect-error
+  const context = {
+    Type: "Test",
+    id: "Test",
+    env: {},
+    exports: {},
+    listen: () => Effect.void,
+    serve: () => Effect.void,
+    get: <T>(_key: string) => Effect.succeed<T>(undefined as T),
+    set: (_id: string, _output: Output) =>
+      Effect.sync(() => _id.replaceAll(/[^a-zA-Z0-9]/g, "_")),
+  };
+
+  // Test harness does not fully close `Req`; runtime provides enough for tests.
+  // @ts-expect-error Residual requirement channel on `effect` after ConfigProvider.
   return Effect.gen(function* () {
     const configProvider = ConfigProvider.orElse(
       yield* ConfigProvider.fromDotEnv({ path: ".env" }),
@@ -183,14 +197,9 @@ const runWithContext = <A, Err>(
       ),
     ),
     Effect.provideService(Stage.Stage, "test"),
-    Effect.provideService(ExecutionContext, {
-      type: "Test",
-      id: "Test",
-      env: {},
-      exports: {},
-      listen: () => Effect.void,
-      get: <T>(_key: string) => Effect.succeed<T>(undefined as T),
-      set: (id: string) => Effect.succeed(id),
+    Effect.provideService(ExecutionContext, context as any),
+    Effect.provideService(Server.ServerHost, {
+      run: (_effect) => Effect.void,
     }),
     Effect.provideService(
       MinimumLogLevel,
@@ -327,15 +336,20 @@ export namespace test {
   export const deploy = <A, Err = never, Req = any>(
     effect: Effect.Effect<A, Err, Req>,
   ): Effect.Effect<Input.Resolve<A>, Err, Req | Stack.Stack> =>
-    Stack.Stack.use((stack) =>
-      effect.pipe(
+    Stack.Stack.use((stack) => {
+      return effect.pipe(
+        // Effect.tap(Effect.logInfo),
         // @ts-expect-error
-        Stack.make(stack.name, Layer.effectServices(Effect.services<never>())),
+        Stack.make(stack.name, Layer.effectServices(Effect.services<never>()), {
+          ...stack,
+          resources: {},
+          bindings: {},
+        }),
         Effect.flatMap(Plan.make),
         Effect.tap((plan) => Effect.logInfo(formatPlan(plan))),
         Effect.flatMap(apply),
-      ),
-    );
+      );
+    });
 }
 
 type AnyAction = Plan.CRUD["action"] | Plan.BindingAction | DerivedAction;

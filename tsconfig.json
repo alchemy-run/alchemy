@@ -1,9 +1,6 @@
 {
   "files": [],
-  "exclude": [
-    "node_modules",
-    "dist"
-  ],
+  "exclude": ["node_modules", "dist"],
   "references": [
     {
       "path": "./tsconfig.scripts.json"
@@ -14,6 +11,42 @@
     {
       "path": "./alchemy-effect/tsconfig.test.json"
     },
+    {
+      "path": "./examples/aws-ec2/tsconfig.json"
+    },
+    {
+      "path": "./examples/aws-ecs/tsconfig.json"
+    },
+    {
+      "path": "./examples/aws-eks/tsconfig.json"
+    },
+    {
+      "path": "./examples/aws-lambda-httpapi/tsconfig.json"
+    },
+    {
+      "path": "./examples/aws-lambda-rpc/tsconfig.json"
+    },
+    {
+      "path": "./examples/aws-lambda/tsconfig.json"
+    },
+    {
+      "path": "./examples/aws-rds/tsconfig.json"
+    },
+    {
+      "path": "./examples/aws-static-site/tsconfig.json"
+    },
+    {
+      "path": "./examples/aws-vite/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-static-site/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-tanstack/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-worker/tsconfig.json"
+    }
   ],
   "compilerOptions": {
     "plugins": [

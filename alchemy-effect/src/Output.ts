@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
 import type { Pipeable } from "effect/Pipeable";
 import { SingleShotGen } from "effect/Utils";
-import { ExecutionContext } from "./Host.ts";
+import { ExecutionContext } from "./ExecutionContext.ts";
 import { getRefMetadata, isRef, ref as stageRef, type Ref } from "./Ref.ts";
 import { isResource, type Resource, type ResourceLike } from "./Resource.ts";
 import { Stack } from "./Stack.ts";
@@ -25,6 +25,13 @@ export const of = <R extends ResourceLike>(
   }
   return new ResourceExpr(resource) as any;
 };
+
+export const asOutput = <T>(t: T | Output<T> | Effect.Effect<T>): Output<T> =>
+  isOutput(t)
+    ? t
+    : Effect.isEffect(t)
+      ? new EffectExpr(VoidExpr, () => t)
+      : new LiteralExpr(t);
 
 export const isOutput = (value: any): value is Output<any> =>
   value &&
@@ -182,10 +189,22 @@ export class LiteralExpr<A> extends BaseExpr<A, never> {
   }
 }
 
-export const map =
-  <A, B>(fn: (value: A) => B) =>
-  <Req>(output: Output<A, Req>): ToOutput<B, Req> =>
-    new ApplyExpr(output as Expr<A, Req>, fn) as any;
+export const VoidExpr = new LiteralExpr(void 0);
+
+export const map: {
+  <A, B>(
+    fn: (value: A) => B,
+  ): <Req>(output: Output<A, Req>) => ToOutput<B, Req>;
+  <A, B, Req>(output: Output<A, Req>, fn: (value: A) => B): ToOutput<B, Req>;
+} = (<A, B, Req>(
+  ...args: [fn: (value: A) => B] | [output: Output<A, Req>, fn: (value: A) => B]
+) =>
+  args.length === 1
+    ? <Req>(output: Output<A, Req>): ToOutput<B, Req> =>
+        new ApplyExpr(output as Expr<A, Req>, args[0]) as any
+    : new ApplyExpr(args[0] as any, args[1])) as any;
+
+type _ = Parameters<typeof map>;
 
 //Output.ApplyExpr<any, any, ResourceLike, any>
 export const isApplyExpr = <In = any, Out = any, Req = any>(
@@ -318,7 +337,7 @@ export const interpolate = <Args extends any[]>(
     ),
   ) as any;
 
-const proxy = (self: any): any => {
+function proxy(self: any): any {
   const target = Object.assign(() => {}, self);
   if (inspect in self) {
     Object.defineProperty(target, inspect, {
@@ -358,7 +377,7 @@ const proxy = (self: any): any => {
     },
   });
   return proxy;
-};
+}
 
 /// Evaluation
 

@@ -1,5 +1,6 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import {
@@ -233,6 +234,7 @@ export const RoleProvider = () =>
       return {
         stables: ["roleArn", "roleName"],
         diff: Effect.fn(function* ({ id, olds, news }) {
+          if (!isResolved(news)) return;
           if (
             (yield* toRoleName(id, olds ?? {})) !==
             (yield* toRoleName(id, news ?? {}))

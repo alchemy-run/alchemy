@@ -18,15 +18,14 @@ export const retryIdentityCenter = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   );
 
 export const listInstances = Effect.fn(function* () {
-  return yield* ssoAdmin
-    .listInstances
+  return yield* ssoAdmin.listInstances
     .items({
       MaxResults: 100,
     })
     .pipe(
       Stream.runCollect,
-      Effect.map((instances) =>
-        Array.from(instances) as ssoAdmin.InstanceMetadata[],
+      Effect.map(
+        (instances) => Array.from(instances) as ssoAdmin.InstanceMetadata[],
       ),
     );
 });
@@ -106,8 +105,7 @@ export const toInstanceAttributes = (
 });
 
 export const listGroups = Effect.fn(function* (identityStoreId: string) {
-  return yield* identitystore
-    .listGroups
+  return yield* identitystore.listGroups
     .items({
       IdentityStoreId: identityStoreId,
       MaxResults: 100,

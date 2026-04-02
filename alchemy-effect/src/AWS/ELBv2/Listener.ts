@@ -1,7 +1,8 @@
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as Effect from "effect/Effect";
-import { Resource } from "../../Resource.ts";
+import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
+import { Resource } from "../../Resource.ts";
 import type { AccountID } from "../Account.ts";
 import type { RegionID } from "../Region.ts";
 import type { LoadBalancer, LoadBalancerArn } from "./LoadBalancer.ts";
@@ -37,6 +38,7 @@ export const ListenerProvider = () =>
   Listener.provider.succeed({
     stables: ["listenerArn", "loadBalancerArn"],
     diff: Effect.fn(function* ({ olds, news }) {
+      if (!isResolved(news)) return;
       if (olds.loadBalancerArn !== news.loadBalancerArn) {
         return { action: "replace" } as const;
       }

@@ -1,0 +1,1264 @@
+import type * as cf from "@cloudflare/workers-types";
+import * as Containers from "@distilled.cloud/cloudflare/containers";
+import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
+import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
+import * as Config from "effect/Config";
+import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import type { Fiber } from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as Schedule from "effect/Schedule";
+import * as SynchronizedRef from "effect/SynchronizedRef";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Http from "node:http";
+import { AdoptPolicy } from "../AdoptPolicy.ts";
+import { bundle } from "../Bundle/Bundle.ts";
+import {
+  dockerBuild,
+  materializeDockerfile,
+  pushImage,
+  writeContextFiles,
+} from "../Bundle/Docker.ts";
+import { getStableContextDir } from "../Bundle/TempRoot.ts";
+import { DotAlchemy } from "../Config.ts";
+import { deepEqual, isResolved } from "../Diff.ts";
+import { HttpServer, type HttpEffect } from "../Http.ts";
+import * as Output from "../Output.ts";
+import { createPhysicalName } from "../PhysicalName.ts";
+import {
+  Platform,
+  type Main,
+  type PlatformServices,
+  type Rpc,
+} from "../Platform.ts";
+import { Resource, type ResourceBinding } from "../Resource.ts";
+import * as Server from "../Server/index.ts";
+import { sha256Object } from "../Util/sha256.ts";
+import { normalizeNulls, stableStringify } from "../Util/stable.ts";
+import { Account } from "./Account.ts";
+import {
+  DurableObjectNamespace,
+  DurableObjectState,
+} from "./Workers/DurableObject.ts";
+import {
+  fromCloudflareFetcher,
+  toCloudflareFetcher,
+  type Fetcher,
+} from "./Workers/Fetcher.ts";
+import { Worker } from "./Workers/Worker.ts";
+
+export { Credentials } from "@distilled.cloud/cloudflare/Credentials";
+
+const ContainerTypeId = "Cloudflare.Container";
+type ContainerTypeId = typeof ContainerTypeId;
+
+export const isContainer = <T>(value: T): value is T & Container =>
+  typeof value === "object" &&
+  value !== null &&
+  "Type" in value &&
+  value.Type === ContainerTypeId;
+
+export class ContainerError extends Data.TaggedError("ContainerError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export interface ContainerStartupOptions extends cf.ContainerStartupOptions {}
+
+export interface Container {
+  get running(): Effect.Effect<boolean>;
+  start(options?: ContainerStartupOptions): Effect.Effect<void>;
+  monitor(): Effect.Effect<void, ContainerError>;
+  destroy(error?: any): Effect.Effect<void>;
+  signal(signo: number): Effect.Effect<void>;
+  getTcpPort(port: number): Effect.Effect<Fetcher>;
+  setInactivityTimeout(durationMs: number | bigint): Effect.Effect<void>;
+  interceptOutboundHttp(addr: string, binding: Fetcher): Effect.Effect<void>;
+  interceptAllOutboundHttp(binding: Fetcher): Effect.Effect<void>;
+}
+
+export interface ContainerProps extends ContainerApplicationProps {
+  main: string;
+}
+
+export interface ContainerApplicationProps {
+  /**
+   * Main entrypoint for the container program. This file is bundled and
+   * added to the Docker image as the container's entrypoint.
+   */
+  main?: string;
+  /**
+   * Exported handler symbol inside the bundled module.
+   * @default "default"
+   */
+  handler?: string;
+  /**
+   * Runtime environment for the container program.
+   *
+   * @default "bun"
+   */
+  runtime?: "bun" | "node";
+  /**
+   * Human-readable application name. If omitted, Alchemy derives a deterministic
+   * physical name from the stack, stage, and logical ID.
+   */
+  name?: string;
+  /**
+   * Inline Dockerfile used as the base for building the container image.
+   * Alchemy appends statements to copy the bundled program and set the
+   * entrypoint. If omitted, a default base image matching the runtime is used.
+   */
+  dockerfile?: string;
+  /**
+   * Initial number of instances to maintain.
+   * @default 1
+   */
+  instances?: number;
+  /**
+   * Maximum number of instances the application may scale to.
+   * @default 1
+   */
+  maxInstances?: number;
+  /**
+   * Scheduling policy used by Cloudflare's containers control plane.
+   * @default "default"
+   */
+  schedulingPolicy?: SchedulingPolicy;
+  /**
+   * Instance type for each deployment.
+   * @default "dev"
+   */
+  instanceType?: InstanceType;
+  /**
+   * Observability settings for the deployment.
+   */
+  observability?: Observability;
+  /**
+   * SSH public keys to install into the deployment.
+   */
+  sshPublicKeyIds?: string[];
+  /**
+   * Secrets exposed to the container runtime as environment variables.
+   */
+  secrets?: Secret[];
+  /**
+   * CPU allocation override for each deployment.
+   */
+  vcpu?: number;
+  /**
+   * Memory allocation override for each deployment.
+   */
+  memory?: string;
+  /**
+   * Disk allocation override for each deployment.
+   */
+  disk?: Disk;
+  /**
+   * Plain environment variables passed to the container runtime.
+   */
+  environmentVariables?: EnvironmentVariable[];
+  /**
+   * Labels attached to the deployment.
+   */
+  labels?: Label[];
+  /**
+   * Network configuration for the deployment.
+   */
+  network?: Network;
+  /**
+   * Command override for the container image.
+   */
+  command?: string[];
+  /**
+   * Entrypoint override for the container image.
+   */
+  entrypoint?: string[];
+  /**
+   * DNS configuration for the deployment.
+   */
+  dns?: Dns;
+  /**
+   * Exposed ports for the deployment.
+   */
+  ports?: Port[];
+  /**
+   * Health and readiness checks for the deployment.
+   */
+  checks?: Check[];
+  /**
+   * Resource constraints for the application.
+   */
+  constraints?: Constraints;
+  /**
+   * Affinity hints for scheduling.
+   */
+  affinities?: Affinities;
+  /**
+   * Progressive rollout settings applied after updates.
+   */
+  rollout?: Rollout;
+  /**
+   * Container registry host to use for generated Dockerfile builds.
+   * @default "registry.cloudflare.com"
+   */
+  registryId?: string;
+  /**
+   * Environment variables passed to the container runtime.
+   */
+  env?: Record<string, any>;
+  /**
+   * Exports passed to the container runtime.
+   */
+  exports?: string[];
+}
+
+export type ContainerServices =
+  | ContainerApplication
+  | PlatformServices
+  | Server.ProcessServices;
+
+export type ContainerShape = Main<ContainerServices>;
+
+export interface ContainerApplication<Shape = unknown> extends Resource<
+  ContainerTypeId,
+  ContainerApplicationProps,
+  {
+    applicationId: string;
+    applicationName: string;
+    accountId: string;
+    schedulingPolicy: SchedulingPolicy;
+    instances: number;
+    maxInstances: number;
+    constraints: Constraints | undefined;
+    affinities: Affinities | undefined;
+    configuration: Configuration;
+    durableObjects:
+      | {
+          namespaceId: string;
+        }
+      | undefined;
+    createdAt: string;
+    version: number;
+  },
+  {
+    /**
+     * Durable Object namespace attached to the container application.
+     */
+    durableObjects?: {
+      namespaceId: string;
+    };
+    env?: Record<string, any>;
+  }
+> {
+  /** @internal phantom */
+  Shape: Shape;
+}
+
+export const Container: Platform<
+  ContainerApplication,
+  ContainerServices,
+  ContainerShape,
+  Server.ProcessContext,
+  Container
+> = Platform("Cloudflare.Container", (id: string): Server.ProcessContext => {
+  const runners: Effect.Effect<void, never, any>[] = [];
+  const env: Record<string, any> = {};
+
+  const serve = <Req = never>(handler: HttpEffect<Req>) =>
+    Effect.sync(() => {
+      runners.push(
+        Effect.gen(function* () {
+          const httpServer = yield* Effect.serviceOption(HttpServer).pipe(
+            Effect.map(Option.getOrUndefined),
+          );
+          if (httpServer) {
+            yield* httpServer.serve(handler);
+            const port = yield* Config.number("PORT").pipe(
+              Config.withDefault(3000),
+            );
+
+            BunHttpServer.make({});
+            const server = yield* NodeHttpServer.make(Http.createServer, {
+              port,
+            });
+            yield* server.serve(handler as any);
+            yield* Effect.never;
+          } else {
+            // this should only happen at plantime, validate?
+          }
+        }).pipe(Effect.orDie),
+      );
+    });
+
+  return {
+    Type: ContainerTypeId,
+    LogicalId: id,
+    id,
+    env,
+    set: (bindingId: string, output: Output.Output) =>
+      Effect.sync(() => {
+        const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
+        env[key] = output.pipe(Output.map((value) => JSON.stringify(value)));
+        return key;
+      }),
+    get: <T>(key: string) =>
+      Config.string(key)
+        .asEffect()
+        .pipe(
+          Effect.flatMap((value) =>
+            Effect.try({
+              try: () => JSON.parse(value) as T,
+              catch: (error) => error as Error,
+            }),
+          ),
+          Effect.catch((cause) =>
+            Effect.die(
+              new Error(`Failed to get environment variable: ${key}`, {
+                cause,
+              }),
+            ),
+          ),
+        ),
+    run: ((effect: Effect.Effect<void, never, any>) =>
+      Effect.sync(() => {
+        runners.push(effect);
+      })) as unknown as Server.ProcessContext["run"],
+    serve,
+  } as Server.ProcessContext & {
+    serve: typeof serve;
+  };
+});
+
+export const bindContainer = Effect.fnUntraced(function* <Shape, Req = never>(
+  containerEff:
+    | (ContainerApplication & Rpc<Shape>)
+    | Effect.Effect<ContainerApplication & Rpc<Shape>, never, Req>,
+) {
+  const namespace = yield* DurableObjectNamespace.asEffect();
+
+  const container =
+    "asEffect" in containerEff
+      ? yield* (containerEff as any).asEffect() as Effect.Effect<
+          ContainerApplication & Rpc<Shape>
+        >
+      : Effect.isEffect(containerEff)
+        ? yield* containerEff as unknown as Effect.Effect<
+            ContainerApplication & Rpc<Shape>
+          >
+        : containerEff;
+
+  yield* container.bind`Owner(${namespace})`({
+    durableObjects: {
+      namespaceId: namespace.namespaceId,
+    },
+  });
+
+  const worker = yield* Worker;
+  const className = namespace.name;
+  yield* worker.bind`Container(${className})`({
+    bindings: [],
+    containers: [{ className }],
+  });
+
+  // TODO(sam): register this in the Container Execution Context
+  // const _httpEffect = yield* init;
+  return Effect.gen(function* () {
+    const state = yield* DurableObjectState;
+    return {
+      running: Effect.sync(() => state.container!.running ?? false),
+      destroy: (error?: any) =>
+        Effect.promise(() => state.container!.destroy(error)),
+      signal: (signo: number) =>
+        Effect.sync(() => state.container!.signal(signo)),
+      getTcpPort: (port: number) =>
+        Effect.sync(() =>
+          fromCloudflareFetcher(state.container!.getTcpPort(port)),
+        ),
+      setInactivityTimeout: (durationMs: number | bigint) =>
+        Effect.sync(() => state.container!.setInactivityTimeout(durationMs)),
+      interceptOutboundHttp: (addr: string, binding: Fetcher) =>
+        toCloudflareFetcher(binding).pipe(
+          Effect.map((binding) =>
+            state.container!.interceptOutboundHttp(addr, binding),
+          ),
+        ),
+      interceptAllOutboundHttp: (binding: Fetcher) =>
+        toCloudflareFetcher(binding).pipe(
+          Effect.map((binding) =>
+            state.container!.interceptAllOutboundHttp(binding),
+          ),
+        ),
+      monitor: () => Effect.sync(() => state.container?.monitor()),
+      start: (options?: ContainerStartupOptions) =>
+        Effect.sync(() => state.container!.start(options)),
+    } satisfies Container as Shape;
+  });
+});
+
+/**
+ * Runs the Container in a Durable Object and monitors it, providing a durable fetch and RPC interface to it.
+ */
+export const runContainer = Effect.fnUntraced(function* <
+  Shape extends Container,
+  Req = never,
+>(containerEff: Effect.Effect<Shape, never, Req | DurableObjectState>) {
+  // get the container instance
+  const container = yield* containerEff;
+  const monitor = yield* SynchronizedRef.make<
+    Fiber<void | void[], ContainerError> | undefined
+  >(undefined);
+
+  const start = container.start().pipe(
+    Effect.andThen(() =>
+      Effect.forkDetach(
+        container.monitor().pipe(
+          Effect.flatMap(() => Effect.logInfo("Container monitor stopped")),
+          Effect.catchTag("ContainerError", (error) =>
+            Effect.all([Effect.logError(error.message)]),
+          ),
+          Effect.ensuring(SynchronizedRef.set(monitor, undefined)),
+        ),
+      ),
+    ),
+  );
+
+  if (!(yield* container.running)) {
+    yield* SynchronizedRef.updateEffect(monitor, (current) =>
+      current ? start : Effect.succeed(current),
+    );
+  }
+
+  // TODO(sam): make configurable. is this too aggressive?
+  const backoff = Schedule.exponential(50, 1.2).pipe(
+    Schedule.modifyDelay((_, delay) =>
+      Effect.succeed(Duration.max(delay, Duration.seconds(0.5))),
+    ),
+  );
+
+  return {
+    ...container,
+    getTcpPort: (portNumber: number) =>
+      Effect.map(container.getTcpPort(portNumber), (port) => ({
+        fetch: ((
+          request:
+            | HttpClientRequest.HttpClientRequest
+            | HttpServerRequest.HttpServerRequest,
+        ) =>
+          port.fetch(request as any).pipe(
+            Effect.tapError((err) => Effect.logDebug(err)),
+            Effect.retry({
+              schedule: backoff,
+            }),
+          )) as {
+          (
+            request: HttpClientRequest.HttpClientRequest,
+          ): Effect.Effect<HttpClientResponse.HttpClientResponse>;
+          (
+            request: HttpServerRequest.HttpServerRequest,
+          ): Effect.Effect<HttpServerResponse.HttpServerResponse>;
+        },
+      })),
+  };
+});
+
+export type InstanceType = NonNullable<
+  Containers.CreateContainerApplicationRequest["configuration"]["instanceType"]
+>;
+export type SchedulingPolicy = NonNullable<
+  Containers.CreateContainerApplicationRequest["schedulingPolicy"]
+>;
+export type Observability = NonNullable<
+  Containers.CreateContainerApplicationRequest["configuration"]["observability"]
+>;
+export type Secret = NonNullable<
+  Containers.CreateContainerApplicationRequest["configuration"]["secrets"]
+>[number];
+export type Disk = NonNullable<
+  Containers.CreateContainerApplicationRequest["configuration"]["disk"]
+>;
+export type EnvironmentVariable = NonNullable<
+  Containers.CreateContainerApplicationRequest["configuration"]["environmentVariables"]
+>[number];
+export type Label = NonNullable<
+  Containers.CreateContainerApplicationRequest["configuration"]["labels"]
+>[number];
+export type Network = NonNullable<
+  Containers.CreateContainerApplicationRequest["configuration"]["network"]
+>;
+export type Dns = NonNullable<
+  Containers.CreateContainerApplicationRequest["configuration"]["dns"]
+>;
+export type Port = NonNullable<
+  Containers.CreateContainerApplicationRequest["configuration"]["ports"]
+>[number];
+export type Check = NonNullable<
+  Containers.CreateContainerApplicationRequest["configuration"]["checks"]
+>[number];
+export type Constraints = {
+  tier?: number;
+};
+export type Affinities = {
+  colocation?: "datacenter";
+};
+export type Configuration =
+  Containers.CreateContainerApplicationRequest["configuration"];
+export interface Rollout {
+  strategy?: "rolling" | "immediate";
+  kind?: "full_auto";
+  stepPercentage?: number;
+}
+
+export const ContainerProvider = () =>
+  Container.provider.effect(
+    Effect.gen(function* () {
+      const accountId = yield* Account;
+      const adoptPolicy = yield* Effect.serviceOption(AdoptPolicy).pipe(
+        Effect.map(Option.getOrElse(() => false)),
+      );
+      const dotAlchemy = yield* DotAlchemy;
+      const fs = yield* FileSystem.FileSystem;
+      const createContainerApplication =
+        yield* Containers.createContainerApplication;
+      const updateContainerApplication =
+        yield* Containers.updateContainerApplication;
+      const deleteContainerApplication =
+        yield* Containers.deleteContainerApplication;
+      const getContainerApplication = yield* Containers.getContainerApplication;
+      const listContainerApplications =
+        yield* Containers.listContainerApplications;
+      const createContainerRegistryCredentials =
+        yield* Containers.createContainerRegistryCredentials;
+      const createContainerApplicationRollout =
+        yield* Containers.createContainerApplicationRollout;
+
+      const createApplicationName = (id: string, name: string | undefined) =>
+        Effect.gen(function* () {
+          return (
+            name ??
+            (yield* createPhysicalName({
+              id,
+              lowercase: true,
+            }))
+          );
+        });
+
+      const findApplicationByName = Effect.fnUntraced(function* (name: string) {
+        return yield* listContainerApplications({ accountId }).pipe(
+          Effect.map((apps) => apps.find((app) => app.name === name)),
+        );
+      });
+
+      const findApplicationByNamespace = Effect.fnUntraced(function* (
+        namespaceId: string,
+      ) {
+        return yield* listContainerApplications({ accountId }).pipe(
+          Effect.map((apps) =>
+            apps.find((app) => app.durableObjects?.namespaceId === namespaceId),
+          ),
+        );
+      });
+
+      const desiredConfiguration = Effect.fnUntraced(function* (
+        id: string,
+        props: ContainerApplicationProps,
+      ) {
+        const image = yield* resolveImageReference(id, props);
+        return normalizeNulls({
+          image,
+          instanceType: props.instanceType,
+          observability: props.observability,
+          sshPublicKeyIds: props.sshPublicKeyIds,
+          secrets: props.secrets,
+          vcpu: props.vcpu,
+          memory: props.memory,
+          disk: props.disk,
+          environmentVariables: props.environmentVariables,
+          labels: props.labels,
+          network: props.network,
+          command: props.command,
+          entrypoint: props.entrypoint,
+          dns: props.dns,
+          ports: props.ports,
+          checks: props.checks,
+        }) as Configuration;
+      });
+
+      const resolveImageReference = Effect.fnUntraced(function* (
+        id: string,
+        props: ContainerApplicationProps,
+      ) {
+        const main = props.main;
+        if (!main) {
+          return yield* Effect.fail(
+            new Error("Container requires a `main` entrypoint."),
+          );
+        }
+        const name = yield* createApplicationName(id, props.name);
+        const repositoryName = name.toLowerCase();
+        const registryId = props.registryId ?? "registry.cloudflare.com";
+        const runtime = props.runtime ?? "bun";
+        const mainContent = yield* fs.readFileString(main).pipe(
+          Effect.catchIf(
+            () => true,
+            () => Effect.succeed(""),
+          ),
+        );
+        const hash = (yield* sha256Object({
+          dockerfile: props.dockerfile ?? "",
+          main: mainContent,
+          runtime,
+        })).slice(0, 16);
+        return `${registryId}/${accountId}/${repositoryName}:${hash}`;
+      });
+
+      const bundleProgram = ({
+        id,
+        main,
+        runtime,
+        handler = "default",
+      }: {
+        id: string;
+        main: string;
+        runtime: "bun" | "node";
+        handler: string | undefined;
+      }) =>
+        bundle({
+          id,
+          main,
+          build: {
+            format: "esm",
+            platform: "node",
+            target: "node22",
+            sourcemap: false,
+            treeshake: true,
+            minify: true,
+            external: ["cloudflare:workers", "cloudflare:workflows"],
+          },
+          entryContent: (importPath) =>
+            `
+${runtime === "bun" ? 'import { BunServices } from "@effect/platform-bun";' : 'import { NodeServices } from "@effect/platform-node";'}
+import { Stack } from "alchemy-effect/Stack";
+import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as ServiceMap from "effect/ServiceMap";
+import { MinimumLogLevel } from "effect/References";
+
+import { ${handler} as layer } from "${importPath}";
+
+const platform = Layer.mergeAll(
+  ${runtime === "bun" ? "BunServices.layer" : "NodeServices.layer"},
+  FetchHttpClient.layer,
+  // TODO(sam): wire this up to telemetry more directly
+  Logger.layer([Logger.consolePretty()]),
+);
+
+const tag = ServiceMap.Service("${ContainerTypeId}<${id}>")
+
+const stack = Layer.effect(
+  Stack,
+  Effect.all([
+    Config.string("ALCHEMY_STACK_NAME").asEffect(),
+    Config.string("ALCHEMY_STAGE").asEffect()
+  ]).pipe(
+    Effect.map(([name, stage]) => ({
+      name,
+      stage,
+      bindings: {},
+      resources: {}
+    }))
+  )
+);
+
+const handlerEffect = tag.asEffect().pipe(
+  Effect.flatMap(func => func.ExecutionContext.exports.handler),
+  Effect.provide(
+    layer.pipe(
+      Layer.provideMerge(stack),
+      Layer.provideMerge(platform),
+      Layer.provideMerge(
+        Layer.succeed(
+          ConfigProvider.ConfigProvider,
+          ConfigProvider.fromEnv()
+        )
+      ),
+      Layer.provideMerge(
+        Layer.succeed(
+          MinimumLogLevel,
+          process.env.DEBUG ? "Debug" : "Info",
+        )
+      ),
+    )
+  ),
+  Effect.scoped
+);
+
+export default await Effect.runPromise(handlerEffect)`,
+        });
+
+      const buildFinalDockerfile = (
+        userDockerfile: string | undefined,
+        runtime: "bun" | "node",
+      ): string => {
+        const base =
+          userDockerfile?.trim() ??
+          `FROM ${runtime === "bun" ? "oven/bun:1" : "node:22-slim"}`;
+        const runtimeImage = runtime === "bun" ? "oven/bun:1" : "node:22-slim";
+        const runtimeBin = runtime === "bun" ? "bun" : "node";
+        const binPath =
+          runtime === "bun" ? "/usr/local/bin/bun" : "/usr/local/bin/node";
+        return [
+          base,
+          "",
+          `COPY --from=${runtimeImage} ${binPath} ${binPath}`,
+          "WORKDIR /app",
+          "COPY index.mjs /app/index.mjs",
+          `ENTRYPOINT ["${runtimeBin}", "/app/index.mjs"]`,
+          "",
+        ].join("\n");
+      };
+
+      const ensureImageAvailable = Effect.fnUntraced(function* (
+        id: string,
+        props: ContainerApplicationProps,
+        session?: { note: (message: string) => Effect.Effect<void> },
+      ) {
+        const main = props.main;
+        if (!main) {
+          return yield* Effect.fail(
+            new Error("Container requires a `main` entrypoint."),
+          );
+        }
+        const runtime = props.runtime ?? "bun";
+        const imageRef = yield* resolveImageReference(id, props);
+
+        yield* Effect.logInfo(
+          `Cloudflare Container image: building ${imageRef}`,
+        );
+        if (session) {
+          yield* session.note(`Building container image ${imageRef}...`);
+        }
+
+        const { code } = yield* bundleProgram({
+          id,
+          main,
+          runtime,
+          handler: props.handler,
+        });
+
+        const registryId = props.registryId ?? "registry.cloudflare.com";
+        const finalDockerfile = buildFinalDockerfile(props.dockerfile, runtime);
+
+        const credentials = yield* createContainerRegistryCredentials({
+          accountId,
+          registryId,
+          permissions: ["pull", "push"],
+          expirationMinutes: 60,
+        });
+        const username = credentials.username ?? (credentials as any).user;
+        if (!username) {
+          return yield* Effect.fail(
+            new Error(
+              "Cloudflare registry credentials did not include a username.",
+            ),
+          );
+        }
+
+        const contextDir = yield* getStableContextDir(
+          process.cwd(),
+          dotAlchemy,
+          `${id}-container`,
+        );
+
+        yield* materializeDockerfile(finalDockerfile, contextDir);
+        yield* writeContextFiles(contextDir, [
+          { path: "index.mjs", content: code },
+        ]);
+        yield* dockerBuild({
+          tag: imageRef,
+          context: contextDir,
+          platform: "linux/amd64",
+        });
+
+        yield* pushImage(imageRef, {
+          username,
+          password: credentials.password,
+          server: registryId,
+        });
+
+        return imageRef;
+      });
+
+      const maybeCreateRollout = Effect.fnUntraced(function* ({
+        applicationId,
+        configuration,
+        rollout,
+      }: {
+        applicationId: string;
+        configuration: Configuration;
+        rollout: Rollout | undefined;
+      }) {
+        const strategy = rollout?.strategy ?? "rolling";
+        const stepPercentage =
+          strategy === "immediate" ? 100 : (rollout?.stepPercentage ?? 25);
+
+        yield* createContainerApplicationRollout({
+          accountId,
+          applicationId,
+          description:
+            strategy === "immediate"
+              ? "Immediate update"
+              : "Progressive update",
+          strategy: "rolling",
+          kind: rollout?.kind ?? "full_auto",
+          stepPercentage,
+          targetConfiguration: configuration,
+        });
+      });
+
+      const createApplication = Effect.fnUntraced(function* ({
+        id,
+        news,
+        name,
+        configuration,
+        durableObjects,
+        session,
+      }: {
+        id: string;
+        news: ContainerApplicationProps;
+        name: string;
+        configuration: Configuration;
+        durableObjects:
+          | {
+              namespaceId: string;
+            }
+          | undefined;
+        session: { note: (message: string) => Effect.Effect<void> };
+      }) {
+        const describeError = (error: unknown) => {
+          if (error instanceof Error) {
+            return JSON.stringify(
+              Object.fromEntries(
+                Object.getOwnPropertyNames(error).map((key) => [
+                  key,
+                  (error as unknown as Record<string, unknown>)[key],
+                ]),
+              ),
+              null,
+              2,
+            );
+          }
+          return String(error);
+        };
+
+        const existingByName = adoptPolicy
+          ? yield* findApplicationByName(name)
+          : undefined;
+
+        if (existingByName) {
+          yield* Effect.logInfo(
+            `Cloudflare Container create: adopting existing application ${name}`,
+          );
+          return yield* upsertApplication({
+            id,
+            news,
+            existing: toAttributes(existingByName),
+            session,
+          });
+        }
+
+        yield* Effect.logInfo(
+          `Cloudflare Container create: creating application ${name}`,
+        );
+        yield* session.note(`Creating container application ${name}...`);
+        const adoptExistingByName = Effect.gen(function* () {
+          yield* Effect.logInfo(
+            `Cloudflare Container create: application ${name} already exists, adopting`,
+          );
+          const existing = yield* findApplicationByName(name);
+          if (!existing) {
+            return yield* Effect.fail(
+              new Error(
+                `Container application "${name}" already exists but could not be found for adoption.`,
+              ),
+            );
+          }
+          return yield* upsertApplication({
+            id,
+            news,
+            existing: toAttributes(existing),
+            session,
+          });
+        });
+
+        const application = yield* createContainerApplication({
+          accountId,
+          name,
+          instances: news.instances ?? 1,
+          maxInstances: news.maxInstances ?? 1,
+          schedulingPolicy: news.schedulingPolicy ?? "default",
+          constraints: news.constraints ?? {},
+          affinities: news.affinities,
+          configuration,
+          durableObjects,
+        }).pipe(
+          Effect.catchTag("DurableObjectAlreadyHasApplication", () =>
+            adoptPolicy && durableObjects
+              ? Effect.gen(function* () {
+                  const existing = yield* findApplicationByNamespace(
+                    durableObjects.namespaceId,
+                  );
+                  if (!existing) {
+                    return yield* Effect.fail(
+                      new Error(
+                        `Container application for Durable Object namespace "${durableObjects.namespaceId}" already exists but could not be found for adoption.`,
+                      ),
+                    );
+                  }
+                  if (existing.name !== name) {
+                    return yield* Effect.fail(
+                      new Error(
+                        `Existing container application "${existing.name}" is already attached to Durable Object namespace "${durableObjects.namespaceId}". Use that application name to adopt it.`,
+                      ),
+                    );
+                  }
+                  return yield* upsertApplication({
+                    id,
+                    news,
+                    existing: toAttributes(existing),
+                    session,
+                  });
+                })
+              : Effect.fail(
+                  new Error(
+                    `Durable Object namespace "${durableObjects?.namespaceId ?? "unknown"}" already has a container application. Set AdoptPolicy to adopt it.`,
+                  ),
+                ),
+          ),
+          Effect.catchIf(
+            (e) =>
+              "message" in (e as any) &&
+              String((e as any).message).includes("already exists"),
+            () => adoptExistingByName,
+          ),
+          Effect.tapError((error) =>
+            Effect.logError(
+              `Cloudflare Container create error: ${describeError(error)}`,
+            ),
+          ),
+        );
+
+        return "applicationId" in application
+          ? application
+          : toAttributes(application);
+      });
+
+      const upsertApplication = Effect.fnUntraced(function* ({
+        id,
+        news,
+        existing,
+        session,
+      }: {
+        id: string;
+        news: ContainerApplicationProps;
+        existing: ContainerApplication["Attributes"];
+        session: { note: (message: string) => Effect.Effect<void> };
+      }) {
+        yield* Effect.logInfo(
+          `Cloudflare Container update: preparing ${existing.applicationName}`,
+        );
+        const configuration = yield* desiredConfiguration(id, news);
+        if (
+          stableStringify(existing.configuration) !==
+          stableStringify(configuration)
+        ) {
+          yield* ensureImageAvailable(id, news, session);
+        }
+        yield* session.note(
+          `Updating container application ${existing.applicationName}...`,
+        );
+        const application = yield* updateContainerApplication({
+          accountId,
+          applicationId: existing.applicationId,
+          instances: news.instances ?? 1,
+          maxInstances: news.maxInstances ?? 1,
+          schedulingPolicy: news.schedulingPolicy ?? "default",
+          constraints: news.constraints ?? {},
+          affinities: news.affinities,
+          configuration,
+        });
+        const updated = toAttributes(application);
+        if (
+          stableStringify(existing.configuration) !==
+          stableStringify(updated.configuration)
+        ) {
+          yield* Effect.logInfo(
+            `Cloudflare Container update: creating rollout for ${updated.applicationName}`,
+          );
+          yield* maybeCreateRollout({
+            applicationId: updated.applicationId,
+            configuration: updated.configuration,
+            rollout: news.rollout,
+          });
+        }
+        return updated;
+      });
+
+      const getDurableObjects = (
+        bindings: ResourceBinding<ContainerApplication["Binding"]>[],
+      ) => {
+        const dos = bindings.flatMap((b) =>
+          b.data.durableObjects ? [b.data.durableObjects] : [],
+        );
+        if (dos.length === 0) {
+          return Effect.succeed(undefined);
+        }
+        if (dos.length === 1) {
+          return Effect.succeed(dos[0]);
+        }
+        return Effect.die(
+          new Error(
+            `A Container can only be bound to one Durable Object namespace. Found ${dos.length} namespaces in bindings: ${bindings.map((b) => b.data.durableObjects?.namespaceId).join(", ")}`,
+          ),
+        );
+      };
+
+      return Container.provider.of({
+        stables: ["applicationId", "accountId"],
+        diff: Effect.fnUntraced(function* ({
+          id,
+          olds = {},
+          news = {},
+          output,
+          newBindings,
+          oldBindings,
+        }) {
+          if (!isResolved(news) || !isResolved(newBindings)) {
+            return undefined;
+          }
+
+          const name = yield* createApplicationName(id, news.name);
+          const oldName = output?.applicationName
+            ? output.applicationName
+            : yield* createApplicationName(id, olds.name);
+
+          if (
+            (output?.accountId ?? accountId) !== accountId ||
+            name !== oldName
+          ) {
+            return { action: "replace" } as const;
+          }
+
+          const hasDurableObjects =
+            (yield* getDurableObjects(newBindings)) !== undefined;
+          const hadDurableObjects =
+            (yield* getDurableObjects(oldBindings)) !== undefined;
+          if (hasDurableObjects !== hadDurableObjects) {
+            return { action: "replace" } as const;
+          }
+
+          if (!output) {
+            return undefined;
+          }
+
+          const configuration = yield* desiredConfiguration(id, news);
+          const oldConfiguration = yield* desiredConfiguration(id, olds);
+          if (
+            (news.instances ?? 1) !== (olds.instances ?? 1) ||
+            (news.maxInstances ?? 1) !== (olds.maxInstances ?? 1) ||
+            (news.schedulingPolicy ?? "default") !==
+              (olds.schedulingPolicy ?? "default") ||
+            !deepEqual(news.constraints, olds.constraints) ||
+            !deepEqual(news.affinities, olds.affinities) ||
+            !deepEqual(configuration, oldConfiguration)
+          ) {
+            return { action: "update" } as const;
+          }
+        }),
+        precreate: Effect.fnUntraced(function* ({ id, news = {}, session }) {
+          const name = yield* createApplicationName(id, news.name);
+          yield* Effect.logInfo(
+            `Cloudflare Container precreate: starting ${name}`,
+          );
+
+          const configuration = yield* desiredConfiguration(id, news);
+          yield* ensureImageAvailable(id, news, session);
+
+          // Precreate intentionally omits the Durable Object attachment so the
+          // worker can bind to this application id and break the circular
+          // dependency. The final create step recreates the application with the
+          // resolved namespace when needed.
+          return yield* createApplication({
+            id,
+            news,
+            name,
+            configuration,
+            durableObjects: undefined,
+            session: {
+              ...session,
+              note: (message) =>
+                session.note(message.replace("Creating", "Pre-creating")),
+            },
+          });
+        }),
+        create: Effect.fnUntraced(function* ({
+          id,
+          news = {},
+          bindings,
+          output,
+          session,
+        }) {
+          const name = yield* createApplicationName(id, news.name);
+          yield* Effect.logInfo(
+            `Cloudflare Container create: starting ${name}${adoptPolicy ? " with adopt" : ""}`,
+          );
+          const durableObjects = yield* getDurableObjects(bindings);
+          const configuration = yield* desiredConfiguration(id, news);
+
+          if (
+            output &&
+            !adoptPolicy &&
+            stableStringify(output.durableObjects) !==
+              stableStringify(durableObjects)
+          ) {
+            yield* Effect.logInfo(
+              `Cloudflare Container create: recreating pre-created application ${name} with durable object binding`,
+            );
+            yield* session.note(
+              `Recreating container application ${name} with durable object binding...`,
+            );
+            yield* deleteContainerApplication({
+              accountId: output.accountId,
+              applicationId: output.applicationId,
+            }).pipe(
+              Effect.catchTag(
+                "ContainerApplicationNotFound",
+                () => Effect.void,
+              ),
+            );
+            if (
+              stableStringify(output.configuration) !==
+              stableStringify(configuration)
+            ) {
+              yield* ensureImageAvailable(id, news, session);
+            }
+            return yield* createApplication({
+              id,
+              news,
+              name,
+              configuration,
+              durableObjects,
+              session,
+            });
+          }
+
+          if (output) {
+            return yield* upsertApplication({
+              id,
+              news,
+              existing: output,
+              session,
+            });
+          }
+
+          yield* ensureImageAvailable(id, news, session);
+
+          return yield* createApplication({
+            id,
+            news,
+            name,
+            configuration,
+            durableObjects,
+            session,
+          });
+        }),
+        update: Effect.fnUntraced(function* ({
+          id,
+          news = {},
+          output,
+          session,
+        }) {
+          yield* Effect.logInfo(
+            `Cloudflare Container update: starting ${output.applicationName}`,
+          );
+          return yield* upsertApplication({
+            id,
+            news,
+            existing: output,
+            session,
+          });
+        }),
+        delete: Effect.fnUntraced(function* ({ output }) {
+          yield* Effect.logInfo(
+            `Cloudflare Container delete: deleting ${output.applicationName}`,
+          );
+          yield* deleteContainerApplication({
+            accountId: output.accountId,
+            applicationId: output.applicationId,
+          }).pipe(
+            Effect.catchTag("ContainerApplicationNotFound", () => Effect.void),
+          );
+        }),
+        read: Effect.fnUntraced(function* ({ id, olds, output }) {
+          if (output?.applicationId) {
+            yield* Effect.logInfo(
+              `Cloudflare Container read: checking ${output.applicationName}`,
+            );
+            return yield* getContainerApplication({
+              accountId: output.accountId,
+              applicationId: output.applicationId,
+            }).pipe(
+              Effect.map(toAttributes),
+              Effect.catchTag("ContainerApplicationNotFound", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          }
+
+          const name = yield* createApplicationName(id, olds?.name);
+          yield* Effect.logInfo(
+            `Cloudflare Container read: looking up ${name}`,
+          );
+          const existing = yield* findApplicationByName(name);
+          if (!existing) {
+            yield* Effect.logInfo(
+              `Cloudflare Container read: ${name} not found`,
+            );
+          }
+          return existing ? toAttributes(existing) : undefined;
+        }),
+      });
+    }),
+  );
+
+const toAttributes = (
+  application:
+    | Containers.CreateContainerApplicationResponse
+    | Containers.UpdateContainerApplicationResponse
+    | Containers.GetContainerApplicationResponse,
+): ContainerApplication["Attributes"] => ({
+  applicationId: application.id,
+  applicationName: application.name,
+  accountId: application.accountId,
+  schedulingPolicy: application.schedulingPolicy,
+  instances: application.instances,
+  maxInstances: application.maxInstances,
+  constraints: normalizeNulls(
+    application.constraints as Constraints | undefined,
+  ),
+  affinities: normalizeNulls(application.affinities as Affinities | undefined),
+  configuration: normalizeNulls(application.configuration as Configuration),
+  durableObjects: normalizeNulls(application.durableObjects) as
+    | { namespaceId: string }
+    | undefined,
+  createdAt: application.createdAt,
+  version: application.version,
+});

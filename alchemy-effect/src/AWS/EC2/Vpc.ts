@@ -5,7 +5,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
-import { somePropsAreDifferent } from "../../Diff.ts";
+import { isResolved, somePropsAreDifferent } from "../../Diff.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 import type { AccountID } from "../Account.ts";
@@ -180,7 +180,8 @@ export const VpcProvider = () =>
 
       return {
         stables: ["vpcId", "vpcArn", "ownerId", "isDefault"],
-        diff: Effect.fn(function* ({ news = {}, olds = {} }) {
+        diff: Effect.fn(function* ({ news, olds }) {
+          if (!isResolved(news)) return;
           if (
             somePropsAreDifferent(olds, news, [
               "cidrBlock",

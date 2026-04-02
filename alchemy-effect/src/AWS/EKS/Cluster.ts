@@ -2,19 +2,19 @@ import * as eks from "@distilled.cloud/aws/eks";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { isResolved } from "../../Diff.ts";
 import {
   deleteObjects,
   reconcileObjects,
   type KubernetesClusterConnection,
 } from "../../Kubernetes/client.ts";
 import {
-  toKubernetesObjectRef,
   type KubernetesObjectBinding,
   type KubernetesObjectDefinition,
   type KubernetesObjectRef,
 } from "../../Kubernetes/types.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import { Resource } from "../../Resource.ts";
+import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import type { AccountID } from "../Account.ts";
 import type { RegionID } from "../Region.ts";
@@ -138,7 +138,9 @@ class ClusterNotReady extends Data.TaggedError("EKS.ClusterNotReady")<{
   status: string | undefined;
 }> {}
 
-class ClusterStillExists extends Data.TaggedError("EKS.ClusterStillExists")<{}> {}
+class ClusterStillExists extends Data.TaggedError(
+  "EKS.ClusterStillExists",
+)<{}> {}
 
 class ClusterUpdateNotComplete extends Data.TaggedError(
   "EKS.ClusterUpdateNotComplete",
@@ -180,18 +182,21 @@ const getKubernetesConnection = (
 };
 
 const getDesiredKubernetesObjects = (
-  bindings: ReadonlyArray<KubernetesObjectBinding>,
+  bindings: ReadonlyArray<ResourceBinding<KubernetesObjectBinding>>,
 ): KubernetesObjectDefinition[] =>
   bindings
     .filter(
-      (binding): binding is KubernetesObjectBinding =>
-        binding.type === "kubernetes-object",
+      (binding): binding is ResourceBinding<KubernetesObjectBinding> =>
+        binding.data.type === "kubernetes-object",
     )
-    .map((binding) => binding.object);
+    .map((binding) => binding.data.object);
 
 const clusterConfigChanged = (olds: ClusterProps, news: ClusterProps) =>
   !jsonEqual(olds.resourcesVpcConfig, news.resourcesVpcConfig) ||
-  !jsonEqual(olds.accessConfig?.authenticationMode, news.accessConfig?.authenticationMode) ||
+  !jsonEqual(
+    olds.accessConfig?.authenticationMode,
+    news.accessConfig?.authenticationMode,
+  ) ||
   !jsonEqual(olds.computeConfig, news.computeConfig) ||
   !jsonEqual(olds.storageConfig, news.storageConfig) ||
   !jsonEqual(olds.kubernetesNetworkConfig, news.kubernetesNetworkConfig) ||
@@ -236,7 +241,10 @@ const mapClusterState = (
 export const ClusterProvider = () =>
   Cluster.provider.effect(
     Effect.gen(function* () {
-      const toClusterName = (id: string, props: { clusterName?: string } = {}) =>
+      const toClusterName = (
+        id: string,
+        props: { clusterName?: string } = {},
+      ) =>
         props.clusterName
           ? Effect.succeed(props.clusterName)
           : createPhysicalName({ id, maxLength: 100 });
@@ -384,7 +392,10 @@ export const ClusterProvider = () =>
               if (update?.status === "Successful") {
                 return Effect.succeed(update);
               }
-              if (update?.status === "Failed" || update?.status === "Cancelled") {
+              if (
+                update?.status === "Failed" ||
+                update?.status === "Cancelled"
+              ) {
                 return Effect.fail(
                   new Error(
                     `EKS cluster update '${updateId}' failed with status '${update?.status}'`,
@@ -406,6 +417,7 @@ export const ClusterProvider = () =>
       return {
         stables: ["clusterArn", "clusterName"],
         diff: Effect.fn(function* ({ id, olds = {} as ClusterProps, news }) {
+          if (!isResolved(news)) return;
           if (
             (yield* toClusterName(id, olds)) !==
             (yield* toClusterName(id, news ?? {}))
@@ -430,7 +442,8 @@ export const ClusterProvider = () =>
             return { action: "replace" } as const;
           }
           if (
-            olds.computeConfig?.nodeRoleArn !== news.computeConfig?.nodeRoleArn &&
+            olds.computeConfig?.nodeRoleArn !==
+              news.computeConfig?.nodeRoleArn &&
             (olds.computeConfig?.enabled || news.computeConfig?.enabled)
           ) {
             return { action: "replace" } as const;
@@ -451,7 +464,7 @@ export const ClusterProvider = () =>
           const desiredObjects = getDesiredKubernetesObjects(bindings);
           const tags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
 
           yield* eks
@@ -488,7 +501,14 @@ export const ClusterProvider = () =>
             kubernetesObjects,
           };
         }),
-        update: Effect.fn(function* ({ id, news, olds, output, bindings, session }) {
+        update: Effect.fn(function* ({
+          id,
+          news,
+          olds,
+          output,
+          bindings,
+          session,
+        }) {
           yield* validateProps(news);
 
           if (clusterConfigChanged(olds, news)) {
@@ -540,11 +560,11 @@ export const ClusterProvider = () =>
 
           const oldTags = {
             ...(yield* createInternalTags(id)),
-            ...(olds.tags ?? {}),
+            ...olds.tags,
           };
           const newTags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
           const { removed, upsert } = diffTags(oldTags, newTags);
 

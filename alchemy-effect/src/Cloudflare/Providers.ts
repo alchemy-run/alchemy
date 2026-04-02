@@ -1,16 +1,16 @@
-import { BundleLive } from "@distilled.cloud/cloudflare-bundler";
+import { RolldownBundler } from "@distilled.cloud/cloudflare-bundler/rolldown";
 import * as Auth from "@distilled.cloud/cloudflare/Auth";
 import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import { BuildProvider } from "../Build/Build.ts";
-import { esbuild } from "../Bundle/ESBuild.ts";
+import { CommandProvider } from "../Build/Command.ts";
+import { rolldown } from "../Bundle/Rolldown.ts";
 import type { Provider } from "../Provider.ts";
 import * as Account from "./Account.ts";
+import { ContainerProvider } from "./Container.ts";
 import * as KV from "./KV/index.ts";
 import * as R2 from "./R2/index.ts";
 import { AssetsProvider } from "./Workers/Assets.ts";
-import * as Workers from "./Workers/index.ts";
 import { WorkerProvider } from "./Workers/Worker.ts";
 
 export type Providers = Extract<
@@ -44,7 +44,8 @@ export const credentials = () =>
  */
 export const resources = () =>
   Layer.mergeAll(
-    BuildProvider(),
+    CommandProvider(),
+    ContainerProvider(),
     WorkerProvider(),
     KV.NamespaceProvider(),
     R2.BucketProvider(),
@@ -67,7 +68,7 @@ export const bindings = () =>
     KV.DeletePolicyLive,
     KV.ListPolicyLive,
     KV.GetWithMetadataPolicyLive,
-    Workers.DurableObjectPolicyLive,
   );
 
-const utils = () => Layer.mergeAll(BundleLive, esbuild(), AssetsProvider());
+const utils = () =>
+  Layer.mergeAll(RolldownBundler, rolldown(), AssetsProvider());
