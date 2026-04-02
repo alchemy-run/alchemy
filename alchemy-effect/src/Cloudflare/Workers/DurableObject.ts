@@ -6,7 +6,6 @@ import * as ServiceMap from "effect/ServiceMap";
 import type { HttpServerError } from "effect/unstable/http/HttpServerError";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import type * as Socket from "effect/unstable/socket/Socket";
 import type { HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import type { PlatformServices } from "../../Platform.ts";
@@ -51,13 +50,13 @@ export interface DurableObjectShape {
   webSocketMessage?: (
     socket: DurableWebSocket,
     message: string | Uint8Array,
-  ) => Effect.Effect<void, Socket.SocketError>;
+  ) => Effect.Effect<void>;
   webSocketClose?: (
     socket: DurableWebSocket,
     code: number,
     reason: string,
     wasClean: boolean,
-  ) => Effect.Effect<void, Socket.SocketError>;
+  ) => Effect.Effect<void>;
 }
 
 export type DurableObjectServices =
@@ -159,8 +158,15 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
                   Effect.provideService(DurableObjectState, doState),
                   Effect.provideService(WorkerEnvironment, env),
                   Effect.map((methods: any) => {
+                    console.log(
+                      "[DurableObject] wrapping methods:",
+                      Object.keys(methods),
+                      "own:",
+                      Object.getOwnPropertyNames(methods),
+                    );
                     const wrapped: Record<string, unknown> = {};
-                    for (const [key, value] of Object.entries(methods as Record<string, unknown>)) {
+                    for (const key of Object.getOwnPropertyNames(methods)) {
+                      const value = methods[key];
                       if (Effect.isEffect(value)) {
                         wrapped[key] = (
                           value as Effect.Effect<any, any, any>
@@ -426,9 +432,7 @@ const fromDurableObjectState = (
   acceptWebSocket: (ws: DurableWebSocket, tags?: string[]) =>
     Effect.sync(() => state.acceptWebSocket(ws.ws, tags)),
   getWebSockets: (tag?: string) =>
-    Effect.sync(() => state.getWebSockets(tag)).pipe(
-      Effect.flatMap(Effect.forEach(fromWebSocket)),
-    ),
+    Effect.sync(() => state.getWebSockets(tag).map(fromWebSocket)),
   setWebSocketAutoResponse: (maybeReqResp?: cf.WebSocketRequestResponsePair) =>
     Effect.sync(() => state.setWebSocketAutoResponse(maybeReqResp)),
   getWebSocketAutoResponse: () =>

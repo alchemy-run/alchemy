@@ -62,6 +62,7 @@
     "download:cfn": "bun scripts/generate-cfn-docs.ts",
     "download:terraform": "./scripts/clone-external",
     "generate:docs": "bun scripts/generate-docs.ts",
+    "generate:api-reference": "bun scripts/generate-api-reference.ts",
     "audit:service": "bun scripts/audit-service.ts",
     "download:env": "doppler secrets download --no-file --format env > .env",
     "download:external": "bun download:env && bun download:cfn && bun download:terraform",

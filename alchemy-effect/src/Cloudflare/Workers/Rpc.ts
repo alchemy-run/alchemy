@@ -10,7 +10,7 @@ import * as Socket from "effect/unstable/socket/Socket";
 import type { HttpEffect } from "../../Http.ts";
 import { fromCloudflareFetcher } from "./Fetcher.ts";
 import { serveWebRequest } from "./HttpServer.ts";
-import type { WorkerServices } from "./Worker.ts";
+import { fromWebSocket } from "./WebSocket.ts";
 
 export const StreamTag = "~alchemy/rpc/stream";
 export const ErrorTag = "~alchemy/rpc/error";
@@ -228,35 +228,42 @@ export const makeDurableObjectBridge =
       readonly object: Promise<any>;
 
       async fetch(request: cf.Request): Promise<cf.Response> {
-        console.log(
-          `[DurableObjectBridge.fetch] ${className}`,
-          request.method,
-          request.url,
-        );
-        try {
-          const methods = await this.object;
-          console.log(
-            `[DurableObjectBridge.fetch] ${className} object resolved, has fetch:`,
-            !!methods.fetch,
+        const methods = await this.object;
+        if (methods.fetch) {
+          const fetch = methods.fetch as HttpEffect<never>;
+          const response = await serveWebRequest(request, fetch).pipe(
+            Effect.runPromise,
           );
-          if (methods.fetch) {
-            const fetch = methods.fetch as HttpEffect<WorkerServices>;
-            // const services = undefined!;
-            const response = await serveWebRequest(request, fetch).pipe(
-              // Effect.provideServices(services),
-              Effect.runPromise,
-            );
-            console.log(
-              `[DurableObjectBridge.fetch] ${className} response status:`,
-              (response as any).status,
-            );
-            return response as any;
-          } else {
-            return new Response("Method not found", { status: 404 }) as any;
+          return response as any;
+        } else {
+          return new Response("Method not found", { status: 404 }) as any;
+        }
+      }
+
+      async webSocketMessage(ws: cf.WebSocket, message: string | ArrayBuffer) {
+        const methods = await this.object;
+        if (methods.webSocketMessage) {
+          const socket = fromWebSocket(ws);
+          const value = methods.webSocketMessage(socket, message);
+          if (Effect.isEffect(value)) {
+            await Effect.runPromise(value as Effect.Effect<void>);
           }
-        } catch (err) {
-          console.error(`[DurableObjectBridge.fetch] ${className} error:`, err);
-          throw err;
+        }
+      }
+
+      async webSocketClose(
+        ws: cf.WebSocket,
+        code: number,
+        reason: string,
+        wasClean: boolean,
+      ) {
+        const methods = await this.object;
+        if (methods.webSocketClose) {
+          const socket = fromWebSocket(ws);
+          const value = methods.webSocketClose(socket, code, reason, wasClean);
+          if (Effect.isEffect(value)) {
+            await Effect.runPromise(value as Effect.Effect<void>);
+          }
         }
       }
 

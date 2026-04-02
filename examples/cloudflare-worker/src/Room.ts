@@ -1,6 +1,5 @@
 import * as Cloudflare from "alchemy-effect/Cloudflare";
 import * as Effect from "effect/Effect";
-import * as Socket from "effect/unstable/socket/Socket";
 
 /**
  * Ephemeral chat room: broadcasts each text message to every connected client.
@@ -12,51 +11,28 @@ export default class Room extends Cloudflare.DurableObjectNamespace<Room>()(
     return Effect.gen(function* () {
       const state = yield* Cloudflare.DurableObjectState;
 
-      const sessions = new Map<
-        string,
-        {
-          socket: Cloudflare.DurableWebSocket;
-          write: (
-            chunk: Uint8Array | string,
-          ) => Effect.Effect<void, Socket.SocketError>;
-        }
-      >();
+      const sessions = new Map<string, Cloudflare.DurableWebSocket>();
 
       for (const socket of yield* state.getWebSockets()) {
-        const attachment = yield* socket.deserializeAttachment<{
-          id: string;
-        }>();
+        const attachment = socket.deserializeAttachment<{ id: string }>();
         if (attachment) {
-          sessions.set(attachment.id, {
-            socket,
-            write: yield* socket.writer,
-          });
+          sessions.set(attachment.id, socket);
         }
       }
 
-      console.log("[Room] DO instance initialized, existing sessions:", sessions.size);
-
       return {
         fetch: Effect.gen(function* () {
-          console.log("[Room] fetch handler called, attempting upgrade");
           const [response, socket] = yield* Cloudflare.upgrade();
           const id = crypto.randomUUID();
-          console.log("[Room] upgrade succeeded, session id =", id);
-          yield* socket.serializeAttachment({ id });
-          sessions.set(id, {
-            socket,
-            write: yield* socket.writer,
-          });
-          console.log("[Room] returning response, status =", response.status);
+          socket.serializeAttachment({ id });
+          sessions.set(id, socket);
           return response;
         }),
         webSocketMessage: Effect.fnUntraced(function* (
           socket: Cloudflare.DurableWebSocket,
           message: string | Uint8Array,
         ) {
-          const attachment = yield* socket.deserializeAttachment<{
-            id: string;
-          }>();
+          const attachment = socket.deserializeAttachment<{ id: string }>();
           if (!attachment) return;
           const text =
             typeof message === "string"
@@ -64,7 +40,7 @@ export default class Room extends Cloudflare.DurableObjectNamespace<Room>()(
               : new TextDecoder().decode(message);
           const label = attachment.id.slice(0, 8);
           for (const peer of sessions.values()) {
-            yield* peer.write(`[${label}] ${text}`);
+            yield* peer.send(`[${label}] ${text}`);
           }
         }),
         webSocketClose: Effect.fnUntraced(function* (
@@ -73,9 +49,7 @@ export default class Room extends Cloudflare.DurableObjectNamespace<Room>()(
           reason: string,
           _wasClean: boolean,
         ) {
-          const attachment = yield* ws.deserializeAttachment<{
-            id: string;
-          }>();
+          const attachment = ws.deserializeAttachment<{ id: string }>();
           if (attachment) {
             sessions.delete(attachment.id);
           }
