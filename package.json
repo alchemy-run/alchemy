@@ -81,10 +81,6 @@
     "nuke:aws": "bash scripts/nuke-aws.sh",
     "nuke:aws:run": "bash scripts/nuke-aws.sh --no-dry-run --no-prompt --prompt-delay 3"
   },
-  "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.31",
-    "@ai-sdk/openai": "^3.0.23"
-  },
   "devDependencies": {
     "@ark/attest": "^0.56.0",
     "@effect/language-service": "^0.77.0",

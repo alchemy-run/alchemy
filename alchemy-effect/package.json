@@ -163,6 +163,8 @@
     "test:benchmark": "tsx --tsconfig tsconfig.test.json test/types.benchmark.ts"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.31",
+    "@ai-sdk/openai": "^3.0.23",
     "@ai-sdk/provider": "^3.0.8",
     "@aws-sdk/credential-providers": "catalog:",
     "@distilled.cloud/aws": "catalog:",
