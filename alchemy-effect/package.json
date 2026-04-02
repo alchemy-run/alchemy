@@ -163,6 +163,9 @@
     "test:benchmark": "tsx --tsconfig tsconfig.test.json test/types.benchmark.ts"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.31",
+    "@ai-sdk/openai": "^3.0.23",
+    "@ai-sdk/provider": "^3.0.8",
     "@aws-sdk/credential-providers": "catalog:",
     "@distilled.cloud/aws": "catalog:",
     "@distilled.cloud/cloudflare": "catalog:",
@@ -198,6 +201,7 @@
     "@types/react": "^19.2.2",
     "effect": "catalog:",
     "ink": "^6.3.1",
+    "pathe": "^2.0.3",
     "react": "^19.2.0",
     "react-devtools-core": "^7.0.1",
     "tsconfig-paths": "^4.2.0",
