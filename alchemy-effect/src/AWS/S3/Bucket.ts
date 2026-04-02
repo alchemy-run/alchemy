@@ -78,6 +78,77 @@ export interface Bucket extends Resource<
   }
 > {}
 
+/**
+ * An S3 bucket for storing objects in AWS.
+ *
+ * A bucket name is auto-generated from the app, stage, and logical ID unless
+ * you provide one explicitly via `bucketName`. Enable `forceDestroy` to allow
+ * Alchemy to empty the bucket before deleting it.
+ *
+ * @section Creating a Bucket
+ * @example Basic Bucket
+ * ```typescript
+ * import * as S3 from "alchemy-effect/AWS/S3";
+ *
+ * const bucket = yield* S3.Bucket("my-bucket", {});
+ * ```
+ *
+ * @example Bucket with a custom name
+ * ```typescript
+ * const bucket = yield* S3.Bucket("my-bucket", {
+ *   bucketName: "my-company-assets",
+ * });
+ * ```
+ *
+ * @example Bucket with force destroy
+ * ```typescript
+ * const bucket = yield* S3.Bucket("my-bucket", {
+ *   forceDestroy: true,
+ * });
+ * ```
+ *
+ * @section Reading Objects
+ * @example Get an object from a bucket
+ * ```typescript
+ * const getObject = yield* S3.GetObject.bind(bucket);
+ *
+ * const response = yield* getObject({ Key: "hello.txt" });
+ * ```
+ *
+ * @section Writing Objects
+ * @example Put an object into a bucket
+ * ```typescript
+ * const putObject = yield* S3.PutObject.bind(bucket);
+ *
+ * yield* putObject({
+ *   Key: "hello.txt",
+ *   Body: "Hello, World!",
+ *   ContentType: "text/plain",
+ * });
+ * ```
+ *
+ * @section Deleting Objects
+ * @example Delete an object from a bucket
+ * ```typescript
+ * const deleteObject = yield* S3.DeleteObject.bind(bucket);
+ *
+ * yield* deleteObject({ Key: "hello.txt" });
+ * ```
+ *
+ * @section Event Notifications
+ * @example Process object creation events
+ * ```typescript
+ * yield* S3.notifications(bucket, {
+ *   events: ["s3:ObjectCreated:*"],
+ * }).subscribe((stream) =>
+ *   stream.pipe(
+ *     Stream.runForEach((event) =>
+ *       Effect.log(`New object: ${event.key}`),
+ *     ),
+ *   ),
+ * );
+ * ```
+ */
 export const Bucket = Resource<Bucket>("AWS.S3.Bucket");
 
 export const BucketProvider = () =>
