@@ -8,6 +8,7 @@ import * as HttpServerError from "effect/unstable/http/HttpServerError";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as Socket from "effect/unstable/socket/Socket";
+import * as util from "node:util";
 import * as Http from "../../Http.ts";
 import { isWorkerEvent } from "./Worker.ts";
 
@@ -94,7 +95,6 @@ export const serveWebRequest = <Req = never>(
             );
           }
 
-          // @ts-expect-error - we know they will be on globalThis in workerd
           const pair: [cf.WebSocket, cf.WebSocket] = new WebSocketPair();
           const client = pair[0];
           const server = pair[1];
@@ -131,6 +131,11 @@ export const serveWebRequest = <Req = never>(
     const response = yield* handler.pipe(
       Effect.provideService(HttpServerRequest.HttpServerRequest, request),
       Effect.catchCause((cause) => {
+        console.error(
+          "[serveWebRequest] handler error:",
+          util.inspect(cause, { depth: null }),
+          typeof cause,
+        );
         const message = Option.match(Cause.findErrorOption(cause), {
           onNone: () => "Internal Server Error",
           onSome: (error) =>

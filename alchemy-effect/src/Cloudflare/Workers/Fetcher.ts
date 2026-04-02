@@ -5,6 +5,7 @@ import * as FiberSet from "effect/FiberSet";
 import { pipe } from "effect/Function";
 import * as Latch from "effect/Latch";
 import * as Scope from "effect/Scope";
+import * as HttpBody from "effect/unstable/http/HttpBody";
 import { HttpClientError } from "effect/unstable/http/HttpClientError";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
@@ -104,9 +105,15 @@ export const fromCloudflareFetcher = (fetcher: cf.Fetcher): Fetcher => {
         : pipe(
             HttpServerRequest.toWeb(request),
             Effect.flatMap(fetch),
-            Effect.map((response) =>
-              HttpServerResponse.fromWeb(response as any as Response),
-            ),
+            Effect.map((response) => {
+              if ((response as any).status === 101) {
+                return HttpServerResponse.setBody(
+                  HttpServerResponse.empty({ status: 101 }),
+                  HttpBody.raw(response),
+                );
+              }
+              return HttpServerResponse.fromWeb(response as any as Response);
+            }),
           ),
   };
 };

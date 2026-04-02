@@ -1,8 +1,9 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
-import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
+import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as Socket from "effect/unstable/socket/Socket";
+import { DurableObjectState } from "./DurableObject.ts";
 
 export type RawWebSocket = cf.WebSocket;
 
@@ -37,12 +38,26 @@ export interface WebSocketHttpResponse
   webSocket: DurableWebSocket;
 }
 
-export const upgrade: (
-  request: HttpServerRequest.HttpServerRequest,
-) => Effect.Effect<[WebSocketHttpResponse, DurableWebSocket]> =
-  Effect.fnUntraced(function* (request) {
-    const socket = yield* request.upgrade;
-    // TODO(sam): implement hibernation logic
-    // TODO(sam): add serialize and deserialize attachments
-    return socket;
+declare global {
+  const WebSocketPair: new () => [cf.WebSocket, cf.WebSocket];
+}
+
+export const upgrade = Effect.fnUntraced(function* () {
+  const _Response = Response as any as typeof cf.Response;
+  const ctx = yield* DurableObjectState;
+  const [client, server] = new WebSocketPair();
+  const serverSocket = yield* fromWebSocket(server);
+  yield* ctx.acceptWebSocket(serverSocket);
+  const rawResponse = new _Response(null, {
+    status: 101,
+    webSocket: client,
   });
+  // Store the raw Response as a Raw body so that HttpServerResponse.toWeb
+  // detects `body.body instanceof Response` and returns it directly,
+  // preserving the Cloudflare-specific `webSocket` property.
+  const effectResponse = HttpServerResponse.setBody(
+    HttpServerResponse.empty({ status: 101 }),
+    HttpBody.raw(rawResponse),
+  );
+  return [effectResponse, serverSocket] as const;
+});

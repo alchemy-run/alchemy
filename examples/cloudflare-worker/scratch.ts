@@ -25,7 +25,10 @@ const currentLineDecoder = (readable: ReadableStream<Uint8Array>) =>
   }).pipe(
     Stream.mapAccum(
       () => [new TextDecoder(), ""] as [TextDecoder, string],
-      ([decoder, buffer], chunk): [[TextDecoder, string], ReadonlyArray<string>] => {
+      (
+        [decoder, buffer],
+        chunk,
+      ): [[TextDecoder, string], ReadonlyArray<string>] => {
         const combined = buffer + decoder.decode(chunk, { stream: true });
         const lines = combined.split("\n");
         const remainder = lines.pop() ?? "";

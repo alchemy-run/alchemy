@@ -1,3 +1,5 @@
+import type * as cf from "@cloudflare/workers-types";
+
 import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -5,7 +7,10 @@ import * as Option from "effect/Option";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as Socket from "effect/unstable/socket/Socket";
+import type { HttpEffect } from "../../Http.ts";
 import { fromCloudflareFetcher } from "./Fetcher.ts";
+import { serveWebRequest } from "./HttpServer.ts";
+import type { WorkerServices } from "./Worker.ts";
 
 export const StreamTag = "~alchemy/rpc/stream";
 export const ErrorTag = "~alchemy/rpc/error";
@@ -115,7 +120,10 @@ export const isRpcStreamEnvelope = (
 export const fromRpcReadableStream = (
   body: ReadableStream<Uint8Array>,
   encoding: StreamEncoding,
-): Stream.Stream<any, Socket.SocketError | RpcDecodeError | RpcRemoteStreamError> => {
+): Stream.Stream<
+  any,
+  Socket.SocketError | RpcDecodeError | RpcRemoteStreamError
+> => {
   const stream = Stream.fromReadableStream({
     evaluate: () => body,
     onError: (cause) =>
@@ -150,8 +158,10 @@ export const fromRpcReadableStream = (
 
 export const fromRpcStreamEnvelope = (
   envelope: RpcStreamEnvelope,
-): Stream.Stream<any, Socket.SocketError | RpcDecodeError | RpcRemoteStreamError> =>
-  fromRpcReadableStream(envelope.body, envelope.encoding);
+): Stream.Stream<
+  any,
+  Socket.SocketError | RpcDecodeError | RpcRemoteStreamError
+> => fromRpcReadableStream(envelope.body, envelope.encoding);
 
 export const decodeRpcValue = (value: unknown) => {
   if (isRpcStreamEnvelope(value)) {
@@ -201,80 +211,122 @@ export const makeRpcStub = <Shape>(stub: any): Shape => {
  * Accepts the `DurableObject` base class and a `getExport` resolver so the
  * implementation lives in real TypeScript instead of a generated string template.
  */
-export const makeDurableObjectBridge = (
-  DurableObject: abstract new (state: unknown, env: unknown) => object,
-  getExport: (
-    name: string,
-  ) => Promise<
-    (state: unknown, env: unknown) => Effect.Effect<Record<string, unknown>>
-  >,
-) => {
-  return class DurableObjectBridge extends (DurableObject as new (
-    state: unknown,
-    env: unknown,
-  ) => object) {
-    constructor(
-      state: {
-        blockConcurrencyWhile: (fn: () => Promise<unknown>) => Promise<unknown>;
-      },
+export const makeDurableObjectBridge =
+  (
+    DurableObject: abstract new (
+      state: unknown,
       env: unknown,
-    ) {
-      super(state, env);
+    ) => cf.DurableObject,
+    getExport: (
+      name: string,
+    ) => Promise<
+      (state: unknown, env: unknown) => Effect.Effect<Record<string, unknown>>
+    >,
+  ) =>
+  (className: string) =>
+    class DurableObjectBridge extends DurableObject {
+      readonly object: Promise<any>;
 
-      const object: Promise<Record<string, (...args: unknown[]) => unknown>> =
-        state.blockConcurrencyWhile(async () => {
-          const cls = await getExport(this.constructor.name);
-          return await Effect.runPromise(cls(state, env));
-        }) as Promise<Record<string, (...args: unknown[]) => unknown>>;
+      async fetch(request: cf.Request): Promise<cf.Response> {
+        console.log(
+          `[DurableObjectBridge.fetch] ${className}`,
+          request.method,
+          request.url,
+        );
+        try {
+          const methods = await this.object;
+          console.log(
+            `[DurableObjectBridge.fetch] ${className} object resolved, has fetch:`,
+            !!methods.fetch,
+          );
+          if (methods.fetch) {
+            const fetch = methods.fetch as HttpEffect<WorkerServices>;
+            // const services = undefined!;
+            const response = await serveWebRequest(request, fetch).pipe(
+              // Effect.provideServices(services),
+              Effect.runPromise,
+            );
+            console.log(
+              `[DurableObjectBridge.fetch] ${className} response status:`,
+              (response as any).status,
+            );
+            return response as any;
+          } else {
+            return new Response("Method not found", { status: 404 }) as any;
+          }
+        } catch (err) {
+          console.error(`[DurableObjectBridge.fetch] ${className} error:`, err);
+          throw err;
+        }
+      }
 
-      return new Proxy(this, {
-        get: (target, prop) =>
-          prop !== "fetch" && prop !== "connect"
-            ? async (...args: unknown[]) => {
-                const methods = await object;
-                const value = methods[prop as string](...args);
-                if (Effect.isEffect(value)) {
-                  const exit = await Effect.runPromiseExit(
-                    value as Effect.Effect<unknown, never>,
-                  );
-                  if (exit._tag === "Success") {
-                    if (Stream.isStream(exit.value)) {
-                      return await Effect.runPromise(
-                        toRpcStream(
-                          exit.value,
-                        ) as Effect.Effect<RpcStreamEnvelope>,
-                      );
+      constructor(
+        state: {
+          blockConcurrencyWhile: (
+            fn: () => Promise<unknown>,
+          ) => Promise<unknown>;
+        },
+        env: unknown,
+      ) {
+        super(state, env);
+
+        this.object = state.blockConcurrencyWhile(async () => {
+          const makeDurableObject = await getExport(className);
+          return await Effect.runPromise(makeDurableObject(state, env));
+        }) as Promise<any>;
+
+        return new Proxy(this, {
+          get: (target: any, prop) =>
+            prop in target
+              ? target[prop]
+              : async (...args: unknown[]) => {
+                  const methods = await this.object;
+                  const value = methods[prop as string](...args);
+                  if (Effect.isEffect(value)) {
+                    const exit = await Effect.runPromiseExit(
+                      value as Effect.Effect<unknown, never>,
+                    );
+                    if (exit._tag === "Success") {
+                      if (Stream.isStream(exit.value)) {
+                        return await Effect.runPromise(
+                          toRpcStream(
+                            exit.value,
+                          ) as Effect.Effect<RpcStreamEnvelope>,
+                        );
+                      }
+                      return exit.value;
                     }
-                    return exit.value;
+                    const failReason = exit.cause.reasons.find(
+                      Cause.isFailReason,
+                    );
+                    if (failReason) {
+                      return {
+                        _tag: ErrorTag,
+                        error: encodeRpcError(failReason.error),
+                      } satisfies RpcErrorEnvelope;
+                    }
+                    const dieReason = exit.cause.reasons.find(
+                      Cause.isDieReason,
+                    );
+                    throw (
+                      dieReason?.defect ??
+                      new Error("RPC method failed with an unexpected cause")
+                    );
                   }
-                  const failReason = exit.cause.reasons.find(
-                    Cause.isFailReason,
-                  );
-                  if (failReason) {
-                    return {
-                      _tag: ErrorTag,
-                      error: encodeRpcError(failReason.error),
-                    } satisfies RpcErrorEnvelope;
-                  }
-                  const dieReason = exit.cause.reasons.find(Cause.isDieReason);
-                  throw (
-                    dieReason?.defect ??
-                    new Error("RPC method failed with an unexpected cause")
-                  );
-                }
-                return value;
-              }
-            : (target as Record<string | symbol, unknown>)[prop],
-      });
-    }
-  };
-};
+                  return value;
+                },
+        });
+      }
+    };
 
 const encodeStreamErrorMarker = (cause: Cause.Cause<unknown>): string => {
   const failReason = cause.reasons.find(Cause.isFailReason);
   const error = failReason ? encodeRpcError(failReason.error) : undefined;
   return (
-    JSON.stringify({ _tag: StreamErrorTag, error } satisfies RpcStreamErrorMarker) + "\n"
+    JSON.stringify({
+      _tag: StreamErrorTag,
+      error,
+    } satisfies RpcStreamErrorMarker) + "\n"
   );
 };
 

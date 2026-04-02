@@ -455,6 +455,7 @@ const executeNode = (
         };
         yield* signalReady;
 
+        yield* report("created");
         yield* markTerminal("created");
         return;
       }
@@ -561,6 +562,7 @@ const executeNode = (
           instanceId,
         };
 
+        yield* report("updated");
         yield* markTerminal("updated");
         return;
       }

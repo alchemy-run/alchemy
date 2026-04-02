@@ -347,9 +347,7 @@ describe("decodeRpcResult", () => {
       const exit = yield* Effect.exit(decodeRpcResult(envelope));
       expect(Exit.isFailure(exit)).toBe(true);
       if (Exit.isFailure(exit)) {
-        const failReason = exit.cause.reasons.find(
-          (r) => r._tag === "Fail",
-        );
+        const failReason = exit.cause.reasons.find((r) => r._tag === "Fail");
         expect(failReason).toBeDefined();
         const error = (failReason as any).error as Record<string, unknown>;
         expect(error._tag).toBe("MyError");
@@ -367,9 +365,7 @@ describe("decodeRpcResult", () => {
       const exit = yield* Effect.exit(decodeRpcResult(envelope));
       expect(Exit.isFailure(exit)).toBe(true);
       if (Exit.isFailure(exit)) {
-        const failReason = exit.cause.reasons.find(
-          (r) => r._tag === "Fail",
-        );
+        const failReason = exit.cause.reasons.find((r) => r._tag === "Fail");
         const error = (failReason as any).error as Record<string, unknown>;
         expect(error.message).toBe("plain failure");
       }
@@ -486,9 +482,7 @@ describe("makeRpcStub", () => {
       const exit = yield* Effect.exit(stub.boom());
       expect(Exit.isFailure(exit)).toBe(true);
       if (Exit.isFailure(exit)) {
-        const failReason = exit.cause.reasons.find(
-          (r) => r._tag === "Fail",
-        );
+        const failReason = exit.cause.reasons.find((r) => r._tag === "Fail");
         expect(failReason).toBeDefined();
         const error = (failReason as any).error;
         expect(error._tag).toBe("RpcCallError");
@@ -512,9 +506,7 @@ describe("makeRpcStub", () => {
       const exit = yield* Effect.exit(stub.failMe());
       expect(Exit.isFailure(exit)).toBe(true);
       if (Exit.isFailure(exit)) {
-        const failReason = exit.cause.reasons.find(
-          (r) => r._tag === "Fail",
-        );
+        const failReason = exit.cause.reasons.find((r) => r._tag === "Fail");
         const error = (failReason as any).error as Record<string, unknown>;
         expect(error._tag).toBe("MyError");
         expect(error.message).toBe("remote fail");
@@ -619,29 +611,25 @@ describe("stream errors", () => {
     }),
   );
 
-  it.effect(
-    "fromRpcReadableStream yields elements before error marker",
-    () =>
-      Effect.gen(function* () {
-        const errorLine = JSON.stringify({
-          _tag: StreamErrorTag,
-          error: { message: "after elements" },
-        });
-        const body = textToReadableStream(
-          `{"v":1}\n{"v":2}\n${errorLine}\n`,
-        );
-        const stream = fromRpcReadableStream(body, "jsonl");
-        const collected: unknown[] = [];
-        const exit = yield* Effect.exit(
-          Stream.runForEach(stream, (item) =>
-            Effect.sync(() => {
-              collected.push(item);
-            }),
-          ),
-        );
-        expect(collected).toEqual([{ v: 1 }, { v: 2 }]);
-        expect(Exit.isFailure(exit)).toBe(true);
-      }),
+  it.effect("fromRpcReadableStream yields elements before error marker", () =>
+    Effect.gen(function* () {
+      const errorLine = JSON.stringify({
+        _tag: StreamErrorTag,
+        error: { message: "after elements" },
+      });
+      const body = textToReadableStream(`{"v":1}\n{"v":2}\n${errorLine}\n`);
+      const stream = fromRpcReadableStream(body, "jsonl");
+      const collected: unknown[] = [];
+      const exit = yield* Effect.exit(
+        Stream.runForEach(stream, (item) =>
+          Effect.sync(() => {
+            collected.push(item);
+          }),
+        ),
+      );
+      expect(collected).toEqual([{ v: 1 }, { v: 2 }]);
+      expect(Exit.isFailure(exit)).toBe(true);
+    }),
   );
 
   it.effect(
@@ -652,9 +640,7 @@ describe("stream errors", () => {
           _tag: StreamErrorTag,
           error: { _tag: "MyError", message: "remote stream err" },
         });
-        const body = textToReadableStream(
-          `{"n":1}\n${errorLine}\n`,
-        );
+        const body = textToReadableStream(`{"n":1}\n${errorLine}\n`);
         const mockStub = {
           streamFail: async () => ({
             _tag: StreamTag,
@@ -663,7 +649,9 @@ describe("stream errors", () => {
           }),
         };
         const stub = makeRpcStub<{
-          streamFail: () => Effect.Effect<Stream.Stream<unknown, RpcRemoteStreamError>>;
+          streamFail: () => Effect.Effect<
+            Stream.Stream<unknown, RpcRemoteStreamError>
+          >;
         }>(mockStub);
 
         const stream = yield* stub.streamFail();

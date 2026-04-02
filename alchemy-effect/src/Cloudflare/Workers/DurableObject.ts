@@ -152,15 +152,44 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
 
             yield* worker.export(
               namespace,
-              (state: cf.DurableObjectState, env: any) =>
-                constructor.pipe(
+              (state: cf.DurableObjectState, env: any) => {
+                const doState = fromDurableObjectState(state);
+                return constructor.pipe(
                   Effect.provideServices(services),
-                  Effect.provideService(
-                    DurableObjectState,
-                    fromDurableObjectState(state),
-                  ),
+                  Effect.provideService(DurableObjectState, doState),
                   Effect.provideService(WorkerEnvironment, env),
-                ),
+                  Effect.map((methods: any) => {
+                    const wrapped: Record<string, unknown> = {};
+                    for (const [key, value] of Object.entries(methods as Record<string, unknown>)) {
+                      if (Effect.isEffect(value)) {
+                        wrapped[key] = (
+                          value as Effect.Effect<any, any, any>
+                        ).pipe(
+                          Effect.provideService(DurableObjectState, doState),
+                        );
+                      } else if (typeof value === "function") {
+                        wrapped[key] = (...args: unknown[]) => {
+                          const result = (value as Function)(...args);
+                          if (Effect.isEffect(result)) {
+                            return (
+                              result as Effect.Effect<any, any, any>
+                            ).pipe(
+                              Effect.provideService(
+                                DurableObjectState,
+                                doState,
+                              ),
+                            );
+                          }
+                          return result;
+                        };
+                      } else {
+                        wrapped[key] = value;
+                      }
+                    }
+                    return wrapped;
+                  }),
+                );
+              },
             );
 
             const binding = yield* Effect.serviceOption(WorkerEnvironment).pipe(
@@ -228,8 +257,7 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
               LogicalId: namespace,
               name: namespace,
               namespaceId,
-              getByName: (name: string) =>
-                makeRpcStub(binding.getByName(name)),
+              getByName: (name: string) => makeRpcStub(binding.getByName(name)),
               // newUniqueId: () => use((ns) => ns.newUniqueId()),
               // idFromName: (name: string) => use((ns) => ns.idFromName(name)),
               // idFromString: (id: string) => use((ns) => ns.idFromString(id)),

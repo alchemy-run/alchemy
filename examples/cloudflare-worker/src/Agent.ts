@@ -2,7 +2,6 @@ import * as Cloudflare from "alchemy-effect/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as Socket from "effect/unstable/socket/Socket";
 import { Sandbox } from "./Sandbox.ts";
 
@@ -61,8 +60,7 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
             ),
         // http (websocket connections)
         fetch: Effect.gen(function* () {
-          const request = yield* HttpServerRequest;
-          const [response, socket] = yield* Cloudflare.upgrade(request);
+          const [response, socket] = yield* Cloudflare.upgrade();
           const id = "TODO";
           yield* socket.serializeAttachment({ id });
           sessions.set(id, {

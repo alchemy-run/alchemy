@@ -26,7 +26,7 @@ import { effectClass } from "./Util/effect.ts";
 import type { IsAny } from "./Util/types.ts";
 
 export type Main<Services = never> = void | {
-  fetch: HttpEffect<Services>;
+  fetch: HttpEffect<Services | PlatformServices>;
 };
 
 export type Rpc<Shape> = {

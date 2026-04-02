@@ -577,8 +577,8 @@ let exportsPromise;
 // don't initialize the workerEffect during module init because Cloudflare does not allow I/O during module init
 // we cache it synchronously (??=) to guarnatee only one initialization ever happens
 const getExports = () => (exportsPromise ??= Effect.runPromise(exportsEffect))
-const worker = () => getExports().then(exports => exports.default)
 const getExport = (name: string) => getExports().then(exports => exports[name])
+const worker = () => getExports().then(exports => exports.default)
 
 export default new Proxy({}, {
   get: (target, prop) => 
@@ -589,12 +589,17 @@ export default new Proxy({}, {
 
 // export class proxy stubs for Durable Objects and Workflows
 ${
-  [
-    "const DurableObjectBridge = makeDurableObjectBridge(DurableObject, getExport);",
-    ...classes
-      // TODO(sam): differentiate Workflows from Durable Objects
-      .map((id) => `export class ${id} extends DurableObjectBridge {}`),
-  ].join("\n\n") ?? ""
+  classes.length === 0
+    ? ""
+    : ([
+        "const DurableObjectBridge = makeDurableObjectBridge(DurableObject, getExport);",
+        ...classes
+          // TODO(sam): differentiate Workflows from Durable Objects
+          .map(
+            (id) =>
+              `export class ${id} extends DurableObjectBridge("${id}") {}`,
+          ),
+      ].join("\n") ?? "")
 }
 `;
         yield* fs.writeFileString(tempEntry, script);
