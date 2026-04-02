@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% import "macros/docs.html" as docs %}
+
+{% block title %}{{ section.title }} | {{ config.title }}{% endblock title %}
+{% block description %}{{ section.description | default(value=config.description) }}{% endblock description %}
+
+{% block content %}
+  <section data-pagefind-body class="mx-auto max-w-6xl">
+    {% if section.path == "/" %}
+      <div class="brand-badge brand-badge-reference mb-4">
+        Documentation
+      </div>
+    {% elif section.extra.kind == "reference-section" %}
+      <div class="brand-badge brand-badge-reference mb-4">
+        API Reference
+      </div>
+    {% else %}
+      <div class="brand-badge brand-badge-guide mb-4">
+        Guides
+      </div>
+    {% endif %}
+
+    <h1 data-pagefind-meta="title" class="brand-title text-4xl font-semibold sm:text-5xl">
+      {{ section.title }}
+    </h1>
+
+    {% if section.description %}
+      <p class="brand-copy mt-5 max-w-3xl text-lg leading-8">{{ section.description }}</p>
+    {% endif %}
+
+    {% if section.content %}
+      <div class="doc-content mt-10">
+        {{ section.content | safe }}
+      </div>
+    {% endif %}
+
+    <div class="mt-12">
+      {{ docs::section_children(section=section) }}
+    </div>
+  </section>
+{% endblock content %}

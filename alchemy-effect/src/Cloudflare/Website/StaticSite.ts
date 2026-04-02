@@ -19,8 +19,8 @@ export const StaticSite = (id: string, props: InputProps<StaticSiteProps>) =>
     const worker = yield* Worker("Worker", {
       ...props,
       assets: {
-        ...build,
         path: build.outdir,
+        hash: build.hash,
       },
     });
 

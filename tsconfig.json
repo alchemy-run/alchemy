@@ -12,6 +12,9 @@
       "path": "./alchemy-effect/tsconfig.test.json"
     },
     {
+      "path": "./alchemy-effect-website/tsconfig.json"
+    },
+    {
       "path": "./examples/aws-ec2/tsconfig.json"
     },
     {
@@ -46,6 +49,9 @@
     },
     {
       "path": "./examples/cloudflare-worker/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-scratchpad/tsconfig.json"
     }
   ],
   "compilerOptions": {

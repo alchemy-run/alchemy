@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}Page Not Found | {{ config.title }}{% endblock title %}
+{% block description %}The requested documentation page could not be found.{% endblock description %}
+
+{% block content %}
+  <section class="mx-auto max-w-3xl rounded-[2rem] border border-white/10 bg-white/5 p-10 text-center">
+    <div class="brand-badge brand-badge-guide mb-4">
+      Not Found
+    </div>
+    <h1 class="brand-title text-4xl font-semibold">That page does not exist.</h1>
+    <p class="brand-copy mt-4 text-lg leading-8">
+      Try the guides, browse the API reference, or open search to jump to another page.
+    </p>
+    <div class="mt-8 flex flex-wrap items-center justify-center gap-4">
+      <a
+        href="/guides/"
+        class="brand-primary-button"
+      >
+        Browse guides
+      </a>
+      <a
+        href="/reference/"
+        class="brand-secondary-button"
+      >
+        Open API reference
+      </a>
+    </div>
+  </section>
+{% endblock content %}

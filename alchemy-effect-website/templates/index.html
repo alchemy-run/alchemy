@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% set guides = get_section(path="guides/_index.md") %}
+{% set reference = get_section(path="reference/_index.md") %}
+
+{% block title %}{{ section.title }} | {{ config.title }}{% endblock title %}
+{% block description %}{{ section.description }}{% endblock description %}
+
+{% block content %}
+  <section class="grid gap-10 lg:grid-cols-[minmax(0,1.2fr)_minmax(22rem,0.8fr)] lg:items-center">
+    <div>
+      <div class="brand-badge brand-badge-reference mb-5 px-4 py-2 text-sm font-medium normal-case tracking-[0.08em]">
+        Fast docs pipeline for a large API surface
+      </div>
+      <h1 class="brand-title max-w-4xl text-5xl font-semibold sm:text-6xl">
+        Infrastructure-as-Effects docs with a modern UI and a Rust-first build.
+      </h1>
+      <p class="brand-copy mt-6 max-w-3xl text-lg leading-8">
+        Browse handwritten guides alongside generated API reference pages without
+        pushing thousands of markdown files through a JavaScript renderer.
+      </p>
+      <div class="mt-8 flex flex-wrap items-center gap-4">
+        <a
+          href="{{ guides.permalink | safe }}"
+          class="brand-primary-button"
+        >
+          Read the guides
+        </a>
+        <a
+          href="{{ reference.permalink | safe }}"
+          class="brand-secondary-button"
+        >
+          Explore the API reference
+        </a>
+      </div>
+    </div>
+
+    <div class="brand-panel p-6">
+      <div class="brand-kicker mb-4">
+        Search Preview
+      </div>
+      <div class="brand-panel-strong p-4">
+        <div class="mb-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-400">
+          Search guides, resources, bindings, and examples
+        </div>
+        <div class="space-y-3">
+          <div class="brand-card-link p-4">
+            <div class="brand-kicker mb-1 text-xs">API Reference</div>
+            <div class="font-semibold text-white">AWS.Lambda.Function</div>
+            <p class="mt-1 text-sm leading-6 text-slate-300">
+              Function contract, examples, attributes, and binding data in one place.
+            </p>
+          </div>
+          <div class="brand-card-link p-4">
+            <div class="brand-kicker mb-1 text-xs">Guide</div>
+            <div class="font-semibold text-white">Getting Started</div>
+            <p class="mt-1 text-sm leading-6 text-slate-300">
+              Learn the docs workflow and how the generated reference fits into it.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="mt-20 grid gap-6 md:grid-cols-3">
+    <div class="brand-panel p-6">
+      <h2 class="text-xl font-semibold text-white">Modern design system</h2>
+      <p class="mt-3 text-sm leading-7 text-slate-300">
+        Tailwind-powered styling and custom JavaScript interactions keep the UI polished without making markdown rendering expensive.
+      </p>
+    </div>
+    <div class="brand-panel p-6">
+      <h2 class="text-xl font-semibold text-white">Generated API reference</h2>
+      <p class="mt-3 text-sm leading-7 text-slate-300">
+        Resource pages are generated from TypeScript source so contracts, examples, and properties stay aligned with the implementation.
+      </p>
+    </div>
+    <div class="brand-panel p-6">
+      <h2 class="text-xl font-semibold text-white">Static asset deployment</h2>
+      <p class="mt-3 text-sm leading-7 text-slate-300">
+        HTML, CSS, JavaScript, and Pagefind bundles are uploaded as Cloudflare Worker static assets instead of being inlined into the Worker script.
+      </p>
+    </div>
+  </section>
+{% endblock content %}

@@ -1,0 +1,68 @@
+{% macro nav_link(section_path, label) %}
+{% set section = get_section(path=section_path) %}
+<a
+  href="{{ section.permalink | safe }}"
+  class="brand-nav-pill"
+>
+  {{ label }}
+</a>
+{% endmacro nav_link %}
+
+{% macro breadcrumbs(page) %}
+<nav class="mb-6 flex flex-wrap items-center gap-2 text-sm text-slate-400">
+  <a href="/" class="transition hover:text-white">Docs</a>
+  {% for ancestor_path in page.ancestors %}
+    {% set ancestor = get_section(path=ancestor_path) %}
+    <span>/</span>
+    <a href="{{ ancestor.permalink | safe }}" class="transition hover:text-white">
+      {{ ancestor.title }}
+    </a>
+  {% endfor %}
+  <span>/</span>
+  <span class="text-slate-200">{{ page.title }}</span>
+</nav>
+{% endmacro breadcrumbs %}
+
+{% macro section_children(section) %}
+{% if section.subsections | length > 0 %}
+<div class="mb-10">
+  <h2 class="mb-4 text-xl font-semibold text-white">Sections</h2>
+  <div class="grid gap-4 md:grid-cols-2">
+    {% for subsection_path in section.subsections | sort %}
+      {% set subsection = get_section(path=subsection_path) %}
+      <a href="{{ subsection.permalink | safe }}" class="group brand-card-link">
+        <div class="mb-2 flex items-center justify-between gap-4">
+          <span class="text-base font-semibold text-white">{{ subsection.title }}</span>
+          <span class="text-sm text-violet-200 transition group-hover:translate-x-0.5">Open</span>
+        </div>
+        <p class="text-sm leading-6 text-slate-300">
+          {{ subsection.description | default(value="Browse the generated pages in this section.") }}
+        </p>
+      </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if section.pages | length > 0 %}
+<div>
+  <h2 class="mb-4 text-xl font-semibold text-white">Pages</h2>
+  <div class="overflow-hidden rounded-[1.5rem] border border-white/10 bg-black/35">
+    {% for child in section.pages %}
+      <a
+        href="{{ child.permalink | safe }}"
+        class="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4 transition last:border-b-0 hover:bg-white/5"
+      >
+        <div>
+          <div class="font-medium text-white">{{ child.title }}</div>
+          {% if child.description %}
+            <p class="mt-1 text-sm leading-6 text-slate-300">{{ child.description }}</p>
+          {% endif %}
+        </div>
+        <span class="pt-0.5 text-sm text-violet-200">View</span>
+      </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% endmacro section_children %}

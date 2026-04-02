@@ -5,28 +5,22 @@ import {
   Node,
   Project,
   SyntaxKind,
-  type SourceFile,
   type JSDoc,
   type PropertySignature,
+  type SourceFile,
 } from "ts-morph";
-
-// ── Configuration ──────────────────────────────────────────────────────────
 
 const config = {
   srcRoot: path.join(import.meta.dir, "../alchemy-effect/src"),
-  outRoot: path.join(import.meta.dir, "../alchemy-effect/docs"),
+  outRoot: path.join(import.meta.dir, "../alchemy-effect-website/content/reference"),
   tsConfig: path.join(import.meta.dir, "../alchemy-effect/tsconfig.json"),
-
   includeDirs: ["AWS", "Cloudflare"],
-
   excludeFile(baseName: string): boolean {
     if (baseName === "index.ts") return true;
     if (/^[a-z]/.test(baseName)) return true;
     return false;
   },
 };
-
-// ── Types ──────────────────────────────────────────────────────────────────
 
 interface FileEntry {
   relativePath: string;
@@ -66,7 +60,14 @@ interface PageDoc {
   reference: ReferenceSection[];
 }
 
-// ── Discovery ──────────────────────────────────────────────────────────────
+interface IndexDoc {
+  title: string;
+  description: string;
+  outputPath: string;
+  relativePath: string;
+}
+
+const normalizeSlashes = (value: string) => value.split(path.sep).join("/");
 
 async function discoverFiles(): Promise<FileEntry[]> {
   const entries: FileEntry[] = [];
@@ -102,8 +103,6 @@ async function discoverFiles(): Promise<FileEntry[]> {
   return entries;
 }
 
-// ── JSDoc Parsing ──────────────────────────────────────────────────────────
-
 function getJsDocBlocks(node: Node): JSDoc[] {
   const getter = (node as Node & { getJsDocs?: () => JSDoc[] }).getJsDocs;
   return getter ? getter.call(node) : [];
@@ -126,10 +125,11 @@ interface ParsedJSDoc {
 
 function parseJSDoc(node: Node): ParsedJSDoc {
   const docs = getJsDocBlocks(node);
-  if (docs.length === 0)
+  if (docs.length === 0) {
     return { summary: "", defaultValue: undefined, sections: [] };
+  }
 
-  const clean = cleanDocComment(docs.map((d) => d.getText()).join("\n"));
+  const clean = cleanDocComment(docs.map((doc) => doc.getText()).join("\n"));
   const lines = clean.split("\n");
 
   const summaryLines: string[] = [];
@@ -185,11 +185,12 @@ function parseJSDoc(node: Node): ParsedJSDoc {
 
   flushExample();
 
-  const summary = summaryLines.join("\n").trim();
-  return { summary, defaultValue, sections };
+  return {
+    summary: summaryLines.join("\n").trim(),
+    defaultValue,
+    sections,
+  };
 }
-
-// ── Property Extraction ────────────────────────────────────────────────────
 
 function formatType(value: string | undefined): string {
   if (!value) return "unknown";
@@ -218,7 +219,9 @@ function extractPropertiesFromTypeNode(node: Node): PropertyDoc[] {
   if (Node.isTypeLiteral(node)) {
     return node
       .getMembers()
-      .filter((m): m is PropertySignature => Node.isPropertySignature(m))
+      .filter((member): member is PropertySignature =>
+        Node.isPropertySignature(member),
+      )
       .map(propertyToDoc);
   }
   if (Node.isIntersectionTypeNode(node)) {
@@ -231,7 +234,6 @@ function extractPropertiesFromTypeNode(node: Node): PropertyDoc[] {
       .getTypeNodes()
       .flatMap((child) => extractPropertiesFromTypeNode(child));
   }
-  // handle parenthesized types like (A | B) in intersections
   if (node.getKind() === SyntaxKind.ParenthesizedType) {
     return node
       .getChildren()
@@ -252,10 +254,7 @@ function deduplicateProperties(props: PropertyDoc[]): PropertyDoc[] {
   return result;
 }
 
-// ── File Parsing ───────────────────────────────────────────────────────────
-
 function findPrimaryJSDoc(sourceFile: SourceFile): ParsedJSDoc {
-  // 1. Resource / Host const
   for (const decl of sourceFile.getVariableDeclarations()) {
     if (!decl.isExported()) continue;
     const init = decl.getInitializerIfKind(SyntaxKind.CallExpression);
@@ -269,7 +268,6 @@ function findPrimaryJSDoc(sourceFile: SourceFile): ParsedJSDoc {
     }
   }
 
-  // 2. Binding.Service / Binding.Policy class
   for (const cls of sourceFile.getClasses()) {
     if (!cls.isExported()) continue;
     const text = cls.getText();
@@ -282,7 +280,6 @@ function findPrimaryJSDoc(sourceFile: SourceFile): ParsedJSDoc {
     }
   }
 
-  // 3. First exported declaration with examples, then fall back to first with any JSDoc
   let firstWithSummary: ParsedJSDoc | undefined;
   for (const stmt of sourceFile.getStatements()) {
     if (Node.isExportable(stmt) && stmt.isExported()) {
@@ -300,14 +297,14 @@ function processInterface(
 ): ReferenceSection[] {
   const resourceHeritage = iface
     .getHeritageClauses()
-    .flatMap((c) => c.getTypeNodes())
-    .find((t) => {
-      const expr = t.getExpression().getText();
+    .flatMap((clause) => clause.getTypeNodes())
+    .find((typeNode) => {
+      const expr = typeNode.getExpression().getText();
       return expr === "Resource" || expr === "Host";
     });
 
   if (resourceHeritage) {
-    const result: ReferenceSection[] = [];
+    const sections: ReferenceSection[] = [];
     const typeArgs = resourceHeritage.getTypeArguments();
 
     const attrsNode = typeArgs[2];
@@ -316,7 +313,7 @@ function processInterface(
         extractPropertiesFromTypeNode(attrsNode),
       );
       if (props.length > 0) {
-        result.push({ heading: "Attributes", properties: props });
+        sections.push({ heading: "Attributes", properties: props });
       }
     }
 
@@ -326,24 +323,26 @@ function processInterface(
         extractPropertiesFromTypeNode(bindingNode),
       );
       if (props.length > 0) {
-        result.push({ heading: "Binding Contract", properties: props });
+        sections.push({ heading: "Binding Contract", properties: props });
       }
     }
-    return result;
+
+    return sections;
   }
 
   const props = iface.getProperties().map(propertyToDoc);
-  if (props.length > 0) {
-    const ifaceJsdoc = parseJSDoc(iface);
-    return [
-      {
-        heading: iface.getName(),
-        summary: ifaceJsdoc.summary || undefined,
-        properties: props,
-      },
-    ];
+  if (props.length === 0) {
+    return [];
   }
-  return [];
+
+  const ifaceJsdoc = parseJSDoc(iface);
+  return [
+    {
+      heading: iface.getName(),
+      summary: ifaceJsdoc.summary || undefined,
+      properties: props,
+    },
+  ];
 }
 
 function processTypeAlias(
@@ -352,25 +351,22 @@ function processTypeAlias(
   const typeNode = typeAlias.getTypeNode();
   if (!typeNode) return [];
 
-  const props = deduplicateProperties(
-    extractPropertiesFromTypeNode(typeNode),
-  );
-  if (props.length > 0) {
-    const typeJsdoc = parseJSDoc(typeAlias);
-    return [
-      {
-        heading: typeAlias.getName(),
-        summary: typeJsdoc.summary || undefined,
-        properties: props,
-      },
-    ];
+  const props = deduplicateProperties(extractPropertiesFromTypeNode(typeNode));
+  if (props.length === 0) {
+    return [];
   }
-  return [];
+
+  const typeJsdoc = parseJSDoc(typeAlias);
+  return [
+    {
+      heading: typeAlias.getName(),
+      summary: typeJsdoc.summary || undefined,
+      properties: props,
+    },
+  ];
 }
 
-function extractReferenceSections(
-  sourceFile: SourceFile,
-): ReferenceSection[] {
+function extractReferenceSections(sourceFile: SourceFile): ReferenceSection[] {
   const sections: ReferenceSection[] = [];
 
   for (const stmt of sourceFile.getStatements()) {
@@ -389,7 +385,7 @@ function parseFile(sourceFile: SourceFile, relativePath: string): PageDoc {
   const dirParts = path
     .dirname(relativePath)
     .split(path.sep)
-    .filter((p) => p !== ".");
+    .filter((part) => part !== ".");
   const title = [...dirParts, baseName].join(".");
 
   const primary = findPrimaryJSDoc(sourceFile);
@@ -404,10 +400,16 @@ function parseFile(sourceFile: SourceFile, relativePath: string): PageDoc {
   };
 }
 
-// ── Markdown Rendering ─────────────────────────────────────────────────────
-
 function escMd(value: string): string {
   return value.replace(/\|/g, "\\|");
+}
+
+function tomlString(value: string): string {
+  return JSON.stringify(value);
+}
+
+function flattenSummary(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
 }
 
 function renderPropertyTable(
@@ -416,8 +418,8 @@ function renderPropertyTable(
 ): string {
   if (includeRequired) {
     const rows = properties.map(
-      (p) =>
-        `| \`${escMd(p.name)}\` | \`${escMd(p.type)}\` | ${p.optional ? "No" : "Yes"} | ${escMd(p.defaultValue ?? "-")} | ${escMd(p.description || "-")} |`,
+      (prop) =>
+        `| \`${escMd(prop.name)}\` | \`${escMd(prop.type)}\` | ${prop.optional ? "No" : "Yes"} | ${escMd(prop.defaultValue ?? "-")} | ${escMd(prop.description || "-")} |`,
     );
     return [
       "| Property | Type | Required | Default | Description |",
@@ -427,8 +429,8 @@ function renderPropertyTable(
   }
 
   const rows = properties.map(
-    (p) =>
-      `| \`${escMd(p.name)}\` | \`${escMd(p.type)}\` | ${escMd(p.description || "-")} |`,
+    (prop) =>
+      `| \`${escMd(prop.name)}\` | \`${escMd(prop.type)}\` | ${escMd(prop.description || "-")} |`,
   );
   return [
     "| Property | Type | Description |",
@@ -437,12 +439,8 @@ function renderPropertyTable(
   ].join("\n");
 }
 
-function renderPage(doc: PageDoc): string {
+function renderPageBody(doc: PageDoc): string {
   const parts: string[] = [];
-
-  parts.push(`# ${doc.title}`);
-  if (doc.summary) parts.push(doc.summary);
-  parts.push(`**Source:** \`src/${doc.relativePath}\``);
 
   for (const section of doc.sections) {
     const secParts = [`## ${section.title}`];
@@ -456,60 +454,85 @@ function renderPage(doc: PageDoc): string {
   for (const section of doc.reference) {
     const secParts: string[] = [`## ${section.heading}`];
     if (section.summary) secParts.push(section.summary);
-    const isAttrs = section.heading === "Attributes";
-    secParts.push(renderPropertyTable(section.properties, !isAttrs));
+    secParts.push(
+      renderPropertyTable(section.properties, section.heading !== "Attributes"),
+    );
     parts.push(secParts.join("\n\n"));
   }
 
-  return parts.join("\n\n") + "\n";
+  if (parts.length === 0) {
+    parts.push("No API reference content was generated for this source file.");
+  }
+
+  return parts.join("\n\n");
 }
 
-// ── Directory Index Generation ─────────────────────────────────────────────
+function renderPage(doc: PageDoc): string {
+  const sourcePath = `src/${normalizeSlashes(doc.relativePath)}`;
+  const frontmatter = [
+    "+++",
+    `title = ${tomlString(doc.title)}`,
+    `description = ${tomlString(flattenSummary(doc.summary))}`,
+    'template = "page.html"',
+    "[extra]",
+    'kind = "reference"',
+    `source = ${tomlString(sourcePath)}`,
+    "+++",
+  ].join("\n");
 
-function generateIndexes(
-  entries: FileEntry[],
-): { outputPath: string; content: string }[] {
-  const dirs = new Set<string>();
+  return `${frontmatter}\n\n${renderPageBody(doc).trim()}\n`;
+}
+
+function generateIndexes(entries: FileEntry[]): IndexDoc[] {
+  const dirs = new Set<string>([config.outRoot]);
   for (const entry of entries) {
     let dir = path.dirname(entry.outputPath);
     while (dir.startsWith(config.outRoot)) {
       dirs.add(dir);
-      dir = path.dirname(dir);
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
     }
   }
 
-  return [...dirs].sort().map((dir) => {
-    const relDir = path.relative(config.outRoot, dir);
-    const title =
-      relDir === "" ? "API Reference" : relDir.split(path.sep).join(".");
+  return [...dirs]
+    .sort()
+    .map((dir) => {
+      const relativePath = path.relative(config.outRoot, dir);
+      const title =
+        relativePath === ""
+          ? "API Reference"
+          : normalizeSlashes(relativePath).split("/").join(".");
+      const description =
+        relativePath === ""
+          ? "Generated API reference for Alchemy Effect resources, bindings, and platforms."
+          : `Generated API reference for ${title}.`;
 
-    const childDirs = [...dirs]
-      .filter((d) => path.dirname(d) === dir && d !== dir)
-      .sort()
-      .map((d) => `- [${path.basename(d)}](./${path.basename(d)}/index.md)`);
-
-    const childFiles = entries
-      .filter((e) => path.dirname(e.outputPath) === dir)
-      .sort((a, b) => a.relativePath.localeCompare(b.relativePath))
-      .map(
-        (e) =>
-          `- [${path.basename(e.outputPath, ".md")}](./${path.basename(e.outputPath)})`,
-      );
-
-    const content: string[] = [`# ${title}`];
-    if (childDirs.length > 0)
-      content.push(["## Directories", "", ...childDirs].join("\n"));
-    if (childFiles.length > 0)
-      content.push(["## Files", "", ...childFiles].join("\n"));
-
-    return {
-      outputPath: path.join(dir, "index.md"),
-      content: content.join("\n\n") + "\n",
-    };
-  });
+      return {
+        title,
+        description,
+        relativePath,
+        outputPath: path.join(dir, "_index.md"),
+      };
+    });
 }
 
-// ── Main ───────────────────────────────────────────────────────────────────
+function renderIndex(doc: IndexDoc): string {
+  const frontmatter = [
+    "+++",
+    `title = ${tomlString(doc.title)}`,
+    `description = ${tomlString(doc.description)}`,
+    'template = "section.html"',
+    'sort_by = "title"',
+    "insert_anchor_links = \"heading\"",
+    "[extra]",
+    'kind = "reference-section"',
+    `section_path = ${tomlString(doc.relativePath === "" ? "reference" : `reference/${normalizeSlashes(doc.relativePath)}`)}`,
+    "+++",
+  ].join("\n");
+
+  return `${frontmatter}\n`;
+}
 
 async function main() {
   const entries = await discoverFiles();
@@ -538,13 +561,13 @@ async function main() {
   }
 
   const indexes = generateIndexes(entries);
-  for (const idx of indexes) {
-    await fs.mkdir(path.dirname(idx.outputPath), { recursive: true });
-    await fs.writeFile(idx.outputPath, idx.content, "utf8");
+  for (const index of indexes) {
+    await fs.mkdir(path.dirname(index.outputPath), { recursive: true });
+    await fs.writeFile(index.outputPath, renderIndex(index), "utf8");
   }
 
   console.log(
-    `Done. Wrote ${written} doc files and ${indexes.length} index files.`,
+    `Done. Wrote ${written} doc files and ${indexes.length} index files to ${normalizeSlashes(path.relative(path.join(import.meta.dir, ".."), config.outRoot))}.`,
   );
 }
 

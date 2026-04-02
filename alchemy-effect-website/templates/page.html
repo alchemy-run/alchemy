@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% import "macros/docs.html" as docs %}
+
+{% block title %}{{ page.title }} | {{ config.title }}{% endblock title %}
+{% block description %}{{ page.description | default(value=config.description) }}{% endblock description %}
+
+{% block content %}
+  <article data-pagefind-body class="mx-auto max-w-4xl">
+    {{ docs::breadcrumbs(page=page) }}
+
+    {% if page.extra.kind == "reference" %}
+      <div class="brand-badge brand-badge-reference mb-4">
+        API Reference
+      </div>
+    {% else %}
+      <div class="brand-badge brand-badge-guide mb-4">
+        Guide
+      </div>
+    {% endif %}
+
+    <h1 data-pagefind-meta="title" class="brand-title text-4xl font-semibold sm:text-5xl">
+      {{ page.title }}
+    </h1>
+
+    {% if page.description %}
+      <p class="brand-copy mt-5 text-lg leading-8">{{ page.description }}</p>
+    {% endif %}
+
+    {% if page.extra.source %}
+      <div class="brand-panel mt-6 rounded-2xl px-4 py-3 text-sm text-slate-300">
+        Source: <code class="brand-code">{{ page.extra.source }}</code>
+      </div>
+    {% endif %}
+
+    <div class="doc-content mt-10">
+      {{ page.content | safe }}
+    </div>
+  </article>
+{% endblock content %}

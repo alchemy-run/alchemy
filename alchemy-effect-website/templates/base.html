@@ -1,0 +1,97 @@
+{% import "macros/docs.html" as docs %}
+{% set guides = get_section(path="guides/_index.md") %}
+{% set reference = get_section(path="reference/_index.md") %}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}{{ config.title }}{% endblock title %}</title>
+    <meta name="description" content="{% block description %}{{ config.description }}{% endblock description %}">
+    <link rel="stylesheet" href="/assets/app.css">
+    <link rel="stylesheet" href="/giallo-light.css" media="(prefers-color-scheme: light)">
+    <link rel="stylesheet" href="/giallo-dark.css" media="(prefers-color-scheme: dark)">
+  </head>
+  <body class="min-h-screen text-slate-100 antialiased">
+    <div class="pointer-events-none fixed inset-0 -z-20 brand-noise"></div>
+    <div class="pointer-events-none fixed inset-x-0 top-0 -z-10 h-[36rem] bg-[radial-gradient(circle_at_top,_rgba(167,139,250,0.16),_transparent_56%)]"></div>
+    <header class="sticky top-0 z-30 border-b border-white/10 bg-[#0e0f17]/82 backdrop-blur">
+      <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-4">
+        <a href="/" class="flex items-center gap-3">
+          <span class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-sm font-semibold text-violet-100">
+            AE
+          </span>
+          <span>
+            <span class="block text-sm font-semibold text-white">Alchemy Effect</span>
+            <span class="block text-xs text-slate-400">Guides and API reference</span>
+          </span>
+        </a>
+
+        <nav class="hidden items-center gap-3 md:flex">
+          {{ docs::nav_link(section_path="guides/_index.md", label="Guides") }}
+          {{ docs::nav_link(section_path="reference/_index.md", label="API Reference") }}
+          <a
+            href="{{ config.extra.repo_url }}"
+            class="brand-nav-pill"
+          >
+            GitHub
+          </a>
+        </nav>
+
+        <div class="flex items-center gap-3">
+          <button
+            type="button"
+            data-search-open
+            class="brand-search-button"
+          >
+            <span>Search docs</span>
+            <span class="rounded-md border border-white/10 px-2 py-0.5 text-xs text-slate-400">/</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="mx-auto max-w-7xl px-6 py-10">
+      {% block content %}{% endblock content %}
+    </main>
+
+    <footer class="border-t border-white/10 py-8">
+      <div class="mx-auto flex max-w-7xl flex-col gap-3 px-6 text-sm text-slate-400 md:flex-row md:items-center md:justify-between">
+        <p>Rust-rendered docs with a custom Alchemy-style interface and Pagefind search.</p>
+        <div class="flex items-center gap-4">
+          <a href="{{ guides.permalink | safe }}" class="transition hover:text-white">Guides</a>
+          <a href="{{ reference.permalink | safe }}" class="transition hover:text-white">API Reference</a>
+          <a href="{{ config.extra.repo_url }}" class="transition hover:text-white">Repository</a>
+        </div>
+      </div>
+    </footer>
+
+    <div id="search-modal" class="hidden">
+      <div data-search-backdrop class="fixed inset-0 z-40 bg-black/72 backdrop-blur-sm"></div>
+      <div class="fixed inset-x-0 top-24 z-50 mx-auto w-full max-w-3xl px-4">
+        <div class="overflow-hidden rounded-[2rem] border border-white/10 bg-[#0e0f17]/95 shadow-2xl shadow-black/60">
+          <div class="border-b border-white/10 px-5 py-4">
+            <label class="block text-xs font-semibold uppercase tracking-[0.22em] text-violet-200" for="search-input">
+              Search
+            </label>
+            <input
+              id="search-input"
+              type="search"
+              autocomplete="off"
+              placeholder="Search guides, resources, bindings, and examples"
+              class="mt-3 w-full bg-transparent font-medium text-lg text-white outline-none placeholder:text-slate-500"
+            >
+          </div>
+          <div class="max-h-[70vh] overflow-y-auto">
+            <div id="search-status" class="border-b border-white/10 px-5 py-3 text-sm text-slate-400">
+              Start typing to search the docs.
+            </div>
+            <div id="search-results" class="divide-y divide-white/10"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/assets/app.js"></script>
+  </body>
+</html>
