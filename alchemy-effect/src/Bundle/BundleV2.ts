@@ -3,7 +3,10 @@ import * as Effect from "effect/Effect";
 import * as rolldown from "rolldown";
 import { sha256 } from "../Util/sha256.ts";
 
-export type BundleOutput = [BundleFile, ...BundleFile[]];
+export interface BundleOutput {
+  readonly files: [BundleFile, ...BundleFile[]];
+  readonly hash: string;
+}
 
 export interface BundleFile {
   readonly path: string;
@@ -26,26 +29,36 @@ export const build = (
   inputOptions: rolldown.InputOptions,
   outputOptions?: rolldown.OutputOptions,
 ): Effect.Effect<BundleOutput, BundleError> =>
-  Effect.flatMap(
-    Effect.tryPromise({
-      try: async () => {
-        const bundle = await rolldown.rolldown(inputOptions);
-        const result = await bundle.write(outputOptions);
-        await bundle.close();
-        return result.output;
-      },
-      catch: bundleErrorFromUnknown,
-    }),
-    (output) => Effect.forEach(output, bundleFileFromOutputChunk),
+  Effect.tryPromise({
+    try: async () => {
+      const bundle = await rolldown.rolldown(inputOptions);
+      const result = await bundle.write(outputOptions);
+      await bundle.close();
+      return result.output;
+    },
+    catch: (error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      return new BundleError({
+        message,
+        cause: error,
+      });
+    },
+  }).pipe(
+    Effect.flatMap(Effect.forEach(bundleFileFromOutputChunk)),
+    Effect.flatMap((files) =>
+      Effect.map(
+        sha256(
+          JSON.stringify(
+            files.map((file) => ({
+              path: file.path,
+              hash: file.hash,
+            })),
+          ),
+        ),
+        (hash) => ({ files, hash }),
+      ),
+    ),
   );
-
-function bundleErrorFromUnknown(error: unknown): BundleError {
-  const message = error instanceof Error ? error.message : String(error);
-  return new BundleError({
-    message,
-    cause: error,
-  });
-}
 
 function bundleFileFromOutputChunk(
   chunk: rolldown.OutputChunk | rolldown.OutputAsset,

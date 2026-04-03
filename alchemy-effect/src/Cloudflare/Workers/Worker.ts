@@ -485,7 +485,7 @@ export const WorkerProvider = () =>
         const tempEntry = path.join(realTempDir, "__index.ts");
         const outputDir = path.join(realTempDir, "out");
         const buildBundle = Effect.fnUntraced(function* (entry: string) {
-          const files = yield* Bundle.build(
+          const { files, hash } = yield* Bundle.build(
             {
               input: entry,
               cwd: yield* findCwdForBundle(entry),
@@ -522,7 +522,7 @@ export const WorkerProvider = () =>
                 }),
             ),
             mainModule: files[0].path,
-            hash: yield* hashBundleFiles(files),
+            hash,
           };
         });
 
@@ -1122,13 +1122,3 @@ const contentTypeFromExtension = (extension: string) => {
       return "application/octet-stream";
   }
 };
-
-const hashBundleFiles = (files: Bundle.BundleOutput) =>
-  sha256(
-    JSON.stringify(
-      files.map((file) => ({
-        name: file.path,
-        hash: file.hash,
-      })),
-    ),
-  );
