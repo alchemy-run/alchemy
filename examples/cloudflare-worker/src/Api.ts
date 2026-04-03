@@ -1,11 +1,13 @@
 import * as Cloudflare from "alchemy-effect/Cloudflare";
 import * as Effect from "effect/Effect";
+import * as HttpBody from "effect/unstable/http/HttpBody";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import Agent from "./Agent.ts";
+import NotifyWorkflow from "./NotifyWorkflow.ts";
 import Room from "./Room.ts";
 
-// declare the Api service with a tag + props
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
   {
@@ -19,70 +21,95 @@ export default class Api extends Cloudflare.Worker<Api>()(
     assets: "./assets",
   },
   Effect.gen(function* () {
-    // (Infrastructure dependencies are bound here)
-
-    // bind the Agent DO to the Worker
     const agents = yield* Agent;
     const rooms = yield* Room;
+    const notifier = yield* NotifyWorkflow;
+    const loader = yield* Cloudflare.DynamicWorker("Loader");
 
     return {
       fetch: Effect.gen(function* () {
-        // (Business logic is implemented here and can reference bound infrastructure above)
         const request = yield* HttpServerRequest;
-        console.log("[Api] fetch", request.method, request.url);
-        console.log("[Api] headers", JSON.stringify(request.headers));
-        if (request.url.startsWith("/eval")) {
-          if (request.method === "POST") {
-            const body = yield* request.text;
+        console.log("fetch", request.method, request.url);
 
-            const agent = agents.getByName("sandbox");
-            return yield* agent.eval(body).pipe(
-              Effect.map((response) => HttpServerResponse.text(response)),
-              Effect.catch(() =>
-                Effect.succeed(
-                  HttpServerResponse.text("Internal Server Error", {
-                    status: 500,
-                  }),
-                ),
-              ),
+        if (request.url.startsWith("/workflow/start/")) {
+          const roomId = request.url.split("/workflow/start/")[1];
+          if (!roomId) {
+            return yield* HttpServerResponse.json(
+              { error: "roomId is required" },
+              { status: 400 },
             );
           }
+          const instance = yield* notifier.create({
+            roomId,
+            message: "hello from workflow",
+          });
+          return yield* HttpServerResponse.json({ instanceId: instance.id });
+        } else if (request.url.startsWith("/workflow/status/")) {
+          const instanceId = request.url.split("/workflow/status/")[1];
+          if (!instanceId) {
+            return yield* HttpServerResponse.json(
+              { error: "instanceId is required" },
+              { status: 400 },
+            );
+          }
+          const instance = yield* notifier.get(instanceId);
+          const status = yield* instance.status();
+          return yield* HttpServerResponse.json(status);
+        } else if (request.url.startsWith("/eval")) {
+          if (request.method === "POST") {
+            const code = yield* request.text;
+            const worker = loader.load({
+              compatibilityDate: "2026-01-28",
+              mainModule: "worker.js",
+              modules: {
+                "worker.js": `
+                  export default {
+                    async fetch(request) {
+                      try {
+                        const result = (0, eval)(${"`${await request.text()}`"});
+                        return new Response(String(result), { status: 200 });
+                      } catch (e) {
+                        return new Response(e.message, { status: 500 });
+                      }
+                    }
+                  }
+                `,
+              },
+              globalOutbound: null,
+            });
+            return yield* worker
+              .fetch(
+                HttpClientRequest.post("https://worker/").pipe(
+                  HttpClientRequest.setBody(HttpBody.text(code)),
+                ),
+              )
+              .pipe(
+                Effect.map(HttpServerResponse.fromClientResponse),
+                Effect.orDie,
+              );
+          }
         } else if (request.url.startsWith("/connect/")) {
-          // connect to a Durable Object web socket
           const agentId = request.url.split("/").pop()!;
-          console.log("[Api] /connect/ agentId =", agentId);
           const agent = agents.getByName(agentId);
           const response = yield* agent.fetch(request);
           return response;
         } else if (request.url.startsWith("/room/")) {
+          console.log("request.url", request.url);
           const upgradeHeader = request.headers.upgrade;
           const roomId = request.url.split("/").pop()!;
-          console.log(
-            "[Api] /room/ roomId =",
-            roomId,
-            "upgrade =",
-            upgradeHeader,
-            "method =",
-            request.method,
-          );
           if (!upgradeHeader || upgradeHeader !== "websocket") {
-            console.log("[Api] rejecting: no upgrade header or not websocket");
             return HttpServerResponse.text(
               "Worker expected Upgrade: websocket",
-              {
-                status: 426,
-              },
+              { status: 426 },
             );
           } else if (request.method !== "GET") {
-            console.log("[Api] rejecting: method not GET");
             return HttpServerResponse.text("Method not allowed", {
               status: 405,
             });
           }
-          console.log("[Api] forwarding to Room DO");
           const room = rooms.getByName(roomId);
+          console.log("room", roomId);
           const response = yield* room.fetch(request);
-          console.log("[Api] Room DO response status =", response.status);
           return response;
         }
         return HttpServerResponse.text("Hello World", { status: 200 });

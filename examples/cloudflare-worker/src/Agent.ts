@@ -22,7 +22,6 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
       }
 
       return {
-        eval: (code: string) => container.eval(code),
         exec: (command: string) => container.exec(command),
         fetch: Effect.gen(function* () {
           const [response, socket] = yield* Cloudflare.upgrade();

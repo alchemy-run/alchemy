@@ -22,12 +22,21 @@ export default class Room extends Cloudflare.DurableObjectNamespace<Room>()(
 
       return {
         fetch: Effect.gen(function* () {
+          console.log("upgrading");
           const [response, socket] = yield* Cloudflare.upgrade();
+          console.log("upgraded");
           const id = crypto.randomUUID();
           socket.serializeAttachment({ id });
           sessions.set(id, socket);
+          console.log("sessions", sessions.size);
           return response;
         }),
+        broadcast: (text: string) =>
+          Effect.gen(function* () {
+            for (const peer of sessions.values()) {
+              yield* peer.send(text);
+            }
+          }),
         webSocketMessage: Effect.fnUntraced(function* (
           socket: Cloudflare.DurableWebSocket,
           message: string | Uint8Array,
