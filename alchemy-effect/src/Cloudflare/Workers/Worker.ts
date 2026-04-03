@@ -483,22 +483,16 @@ export const WorkerProvider = () =>
             {
               input: entry,
               cwd: yield* findCwdForBundle(entry),
-              onLog(level, log, defaultHandler) {
-                if (
-                  level === "warn" &&
-                  log.code === "UNRESOLVED_IMPORT" &&
-                  !log.message.includes("cloudflare")
-                ) {
-                  return;
-                }
-                defaultHandler(level, log);
-              },
               plugins: [
                 cloudflare({
                   compatibilityDate: props.compatibility?.date ?? "2026-03-10",
                   compatibilityFlags: props.compatibility?.flags,
                 }),
               ],
+              checks: {
+                // Suppress unresolved import warnings for unrelated AWS packages
+                unresolvedImport: false,
+              },
             },
             {
               dir: outputDir,
