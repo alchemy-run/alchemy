@@ -17,7 +17,7 @@ import { isResolved } from "../../Diff.ts";
 import type { HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import { Platform, type Main } from "../../Platform.ts";
+import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
@@ -47,7 +47,7 @@ export const isFunction = (value: any): value is Function => {
   );
 };
 
-export interface FunctionProps {
+export interface FunctionProps extends PlatformProps {
   /**
    * Entry module for the bundled Lambda function.
    */
@@ -386,12 +386,33 @@ export const FunctionProvider = () =>
         const handler = props.handler ?? "default";
         const sourcemap = props.build?.sourcemap ?? true;
         const uploadSourceMap = props.uploadSourceMap ?? true;
+        const build: Omit<BundleOptions, "entry" | "outfile"> = {
+          ...props.build,
+          format: "esm",
+          platform: "node",
+          target: "node22",
+          sourcemap,
+          treeshake: props.build?.treeshake ?? true,
+          minify: props.build?.minify ?? true,
+          external: [
+            "@aws-sdk/*",
+            "@smithy/*",
+            ...(props.build?.external ?? []),
+          ],
+        };
 
-        const { code, outfile } = yield* bundle({
-          id,
-          main: props.main,
-          outExtension: ".js",
-          entryContent: (importPath) => `
+        const request = props.isExternal
+          ? {
+              id,
+              main: props.main,
+              outExtension: ".js",
+              build,
+            }
+          : {
+              id,
+              main: props.main,
+              outExtension: ".js",
+              entryContent: (importPath: string) => `
 import { NodeServices } from "@effect/platform-node";
 import { Stack } from "alchemy-effect/Stack";
 import * as Config from "effect/Config";
@@ -458,21 +479,10 @@ const handlerEffect = tag.asEffect().pipe(
 
 export default await Effect.runPromise(handlerEffect)
 `,
-          build: {
-            ...props.build,
-            format: "esm",
-            platform: "node",
-            target: "node22",
-            sourcemap,
-            treeshake: props.build?.treeshake ?? true,
-            minify: props.build?.minify ?? true,
-            external: [
-              "@aws-sdk/*",
-              "@smithy/*",
-              ...(props.build?.external ?? []),
-            ],
-          },
-        });
+              build,
+            };
+
+        const { code, outfile } = yield* bundle(request);
 
         const sourceMap =
           uploadSourceMap && (sourcemap === true || sourcemap === "external")

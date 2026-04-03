@@ -10,6 +10,8 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
+import { Stack } from "@/Stack";
+import InternalWorker from "./internal-worker.ts";
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -22,6 +24,7 @@ test(
   "create, update, delete worker",
   Effect.gen(function* () {
     const accountId = yield* Account;
+    const stack = yield* Stack;
 
     yield* destroy();
 
@@ -45,6 +48,15 @@ test(
 
     const actualWorker = yield* findWorker(worker.workerName, accountId);
     expect(actualWorker?.scriptName).toEqual(worker.workerName);
+    expect(
+      yield* getWorkerTags(worker.workerName, accountId),
+    ).toContain(`alchemy:stack:${stack.name}`);
+    expect(
+      yield* getWorkerTags(worker.workerName, accountId),
+    ).toContain(`alchemy:stage:${stack.stage}`);
+    expect(
+      yield* getWorkerTags(worker.workerName, accountId),
+    ).toContain("alchemy:id:TestWorker");
 
     // Verify the worker is accessible via URL
     if (worker.url) {
@@ -88,6 +100,7 @@ test(
   "create, update, delete worker with assets",
   Effect.gen(function* () {
     const accountId = yield* Account;
+    const stack = yield* Stack;
 
     yield* destroy();
 
@@ -106,6 +119,15 @@ test(
 
     const actualWorker = yield* findWorker(worker.workerName, accountId);
     expect(actualWorker?.scriptName).toEqual(worker.workerName);
+    expect(
+      yield* getWorkerTags(worker.workerName, accountId),
+    ).toContain(`alchemy:stack:${stack.name}`);
+    expect(
+      yield* getWorkerTags(worker.workerName, accountId),
+    ).toContain(`alchemy:stage:${stack.stage}`);
+    expect(
+      yield* getWorkerTags(worker.workerName, accountId),
+    ).toContain("alchemy:id:TestWorkerWithAssets");
 
     // Verify the worker has assets
     expect(worker.hash?.assets).toBeDefined();
@@ -157,12 +179,60 @@ test(
   }).pipe(Effect.provide(Cloudflare.providers()), logLevel),
 );
 
+test(
+  "create, update, delete internal worker",
+  Effect.gen(function* () {
+    const accountId = yield* Account;
+    const stack = yield* Stack;
+
+    yield* destroy();
+
+    const worker = yield* test.deploy(
+      Effect.gen(function* () {
+        return yield* InternalWorker;
+      }),
+    );
+
+    const actualWorker = yield* findWorker(worker.workerName, accountId);
+    expect(actualWorker?.scriptName).toEqual(worker.workerName);
+    expect(
+      yield* getWorkerTags(worker.workerName, accountId),
+    ).toContain(`alchemy:stack:${stack.name}`);
+    expect(
+      yield* getWorkerTags(worker.workerName, accountId),
+    ).toContain(`alchemy:stage:${stack.stage}`);
+    expect(
+      yield* getWorkerTags(worker.workerName, accountId),
+    ).toContain("alchemy:id:InternalWorker");
+
+    const updatedWorker = yield* test.deploy(
+      Effect.gen(function* () {
+        return yield* InternalWorker;
+      }),
+    );
+
+    expect(updatedWorker.workerName).toEqual(worker.workerName);
+
+    yield* destroy();
+
+    yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
+  }).pipe(Effect.provide(Cloudflare.providers()), logLevel),
+);
+
 const findWorker = Effect.fn(function* (workerName: string, accountId: string) {
   const matches = yield* workers.searchScript({
     accountId,
     name: workerName,
   });
   return matches.find((worker) => worker.scriptName === workerName);
+});
+
+const getWorkerTags = Effect.fn(function* (workerName: string, accountId: string) {
+  const settings = yield* workers.getScriptScriptAndVersionSetting({
+    accountId,
+    scriptName: workerName,
+  });
+  return settings.tags ?? [];
 });
 
 const waitForWorkerToBeDeleted = Effect.fn(function* (

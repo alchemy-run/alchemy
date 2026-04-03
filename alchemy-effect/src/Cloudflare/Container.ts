@@ -32,6 +32,7 @@ import { createPhysicalName } from "../PhysicalName.ts";
 import {
   Platform,
   type Main,
+  type PlatformProps,
   type PlatformServices,
   type Rpc,
 } from "../Platform.ts";
@@ -85,7 +86,7 @@ export interface ContainerProps extends ContainerApplicationProps {
   main: string;
 }
 
-export interface ContainerApplicationProps {
+export interface ContainerApplicationProps extends PlatformProps {
   /**
    * Main entrypoint for the container program. This file is bundled and
    * added to the Docker image as the container's entrypoint.
@@ -619,6 +620,7 @@ export const ContainerProvider = () =>
           main,
           runtime,
           handler: props.handler,
+          isExternal: props.isExternal,
         });
 
         const finalDockerfile = buildFinalDockerfile(props.dockerfile, runtime);
@@ -640,11 +642,13 @@ export const ContainerProvider = () =>
         main,
         runtime,
         handler = "default",
+        isExternal = false,
       }: {
         id: string;
         main: string;
         runtime: "bun" | "node";
         handler: string | undefined;
+        isExternal?: boolean;
       }) =>
         bundle({
           id,
@@ -658,8 +662,10 @@ export const ContainerProvider = () =>
             minify: true,
             external: ["cloudflare:workers", "cloudflare:workflows"],
           },
-          entryContent: (importPath) =>
-            `
+          entryContent: isExternal
+            ? undefined
+            : (importPath) =>
+                `
 ${
   runtime === "bun"
     ? `

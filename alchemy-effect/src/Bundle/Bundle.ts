@@ -16,7 +16,7 @@ export interface BundleRequest {
    * Produce the temp entry file content.
    * Receives the normalized relative import path to `main`.
    */
-  readonly entryContent: (importPath: string) => string;
+  readonly entryContent?: (importPath: string) => string;
   /** File extension for the output, including the dot (default: `".mjs"`). */
   readonly outExtension?: string;
   readonly build: Omit<BundleOptions, "entry" | "outfile">;
@@ -56,26 +56,35 @@ export const bundle = Effect.fnUntraced(function* (request: BundleRequest) {
   );
 
   const realMain = yield* fs.realPath(request.main);
-  const tempDir = yield* createTempBundleDir(realMain, dotAlchemy, request.id);
-  const realTempDir = yield* fs.realPath(tempDir);
-  const tempEntry = path.join(realTempDir, "__index.ts");
+  let entry = realMain;
+  let tempDir: string | undefined;
+  if (request.entryContent) {
+    tempDir = yield* createTempBundleDir(realMain, dotAlchemy, request.id);
+    const realTempDir = yield* fs.realPath(tempDir);
+    const tempEntry = path.join(realTempDir, "__index.ts");
 
-  let importPath = path.relative(realTempDir, realMain);
-  if (!importPath.startsWith(".")) {
-    importPath = `./${importPath}`;
+    let importPath = path.relative(realTempDir, realMain);
+    if (!importPath.startsWith(".")) {
+      importPath = `./${importPath}`;
+    }
+    importPath = importPath.replaceAll("\\", "/");
+
+    yield* fs.writeFileString(tempEntry, request.entryContent(importPath));
+    entry = tempEntry;
   }
-  importPath = importPath.replaceAll("\\", "/");
 
-  yield* fs.writeFileString(tempEntry, request.entryContent(importPath));
-
-  return yield* Effect.gen(function* () {
+  const run = Effect.gen(function* () {
     yield* bundler.build({
       ...request.build,
-      entry: tempEntry,
+      entry,
       outfile,
     });
     const code = yield* fs.readFile(outfile);
     const hash = yield* sha256(code);
     return { code, hash, outfile } satisfies BundleResult;
-  }).pipe(Effect.ensuring(cleanupBundleTempDir(tempDir)));
+  });
+
+  return yield* (tempDir
+    ? run.pipe(Effect.ensuring(cleanupBundleTempDir(tempDir)))
+    : run);
 });

@@ -88,10 +88,16 @@ const getContentType = (name: string) => {
   if (name.endsWith(".sql")) return "text/sql";
   if (name.endsWith(".json")) return "application/json";
   if (name.endsWith(".js") || name.endsWith(".mjs")) {
-    return "application/javascript+module";
+    // Browsers only accept JavaScript module scripts when the MIME type is a
+    // "JavaScript MIME type" (e.g. text/javascript). application/javascript+module
+    // is not valid and causes strict module loading to fail.
+    return "text/javascript; charset=utf-8";
   }
   if (name.endsWith(".css")) return "text/css";
   if (name.endsWith(".wasm")) return "application/wasm";
+  if (name.endsWith(".png")) return "image/png";
+  if (name.endsWith(".svg")) return "image/svg+xml";
+  if (name.endsWith(".ico")) return "image/x-icon";
   return "application/octet-stream";
 };
 

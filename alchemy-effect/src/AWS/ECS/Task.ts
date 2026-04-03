@@ -24,7 +24,7 @@ import { DotAlchemy } from "../../Config.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import { Platform, type Main } from "../../Platform.ts";
+import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import type { ProcessContext, ServerHost } from "../../Server/Process.ts";
 import { Stack } from "../../Stack.ts";
@@ -49,7 +49,7 @@ export class TaskEnvironment extends ServiceMap.Service<
   Record<string, any>
 >()("AWS.ECS.TaskEnvironment") {}
 
-export interface TaskProps {
+export interface TaskProps extends PlatformProps {
   /**
    * Module entrypoint for the bundled task program. This should typically be
    * `import.meta.path` from an inline Effect program.
@@ -459,6 +459,34 @@ export const TaskProvider = () =>
         const tempDir = yield* createTempBundleDir(realMain, dotAlchemy, id);
         const realTempDir = yield* fs.realPath(tempDir);
         const tempEntry = path.join(realTempDir, "__index.ts");
+        const buildProgram = (entry: string) =>
+          Effect.gen(function* () {
+            yield* bundler.build({
+              ...props.build,
+              entry,
+              outfile,
+              format: "esm",
+              platform: "node",
+              target: "node22",
+              sourcemap: props.build?.sourcemap ?? false,
+              treeshake: props.build?.treeshake ?? true,
+              minify: props.build?.minify ?? true,
+              external: props.build?.external ?? [],
+            });
+            const code = yield* fs.readFile(outfile).pipe(Effect.orDie);
+            const hash = yield* sha256(code);
+            return {
+              code,
+              hash,
+            };
+          });
+
+        if (props.isExternal) {
+          return yield* buildProgram(realMain).pipe(
+            Effect.ensuring(cleanupBundleTempDir(tempDir)),
+          );
+        }
+
         let file = path.relative(realTempDir, realMain);
         if (!file.startsWith(".")) {
           file = `./${file}`;
@@ -522,26 +550,9 @@ await Effect.runPromise(program);
 `,
         );
 
-        return yield* Effect.gen(function* () {
-          yield* bundler.build({
-            ...props.build,
-            entry: tempEntry,
-            outfile,
-            format: "esm",
-            platform: "node",
-            target: "node22",
-            sourcemap: props.build?.sourcemap ?? false,
-            treeshake: props.build?.treeshake ?? true,
-            minify: props.build?.minify ?? true,
-            external: props.build?.external ?? [],
-          });
-          const code = yield* fs.readFile(outfile).pipe(Effect.orDie);
-          const hash = yield* sha256(code);
-          return {
-            code,
-            hash,
-          };
-        }).pipe(Effect.ensuring(cleanupBundleTempDir(tempDir)));
+        return yield* buildProgram(tempEntry).pipe(
+          Effect.ensuring(cleanupBundleTempDir(tempDir)),
+        );
       });
 
       const buildAndPushImage = Effect.fn(function* ({

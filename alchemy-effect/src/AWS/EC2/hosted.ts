@@ -12,6 +12,7 @@ import {
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import type { PlatformProps } from "../../Platform.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import type { ProcessContext } from "../../Server/Process.ts";
 import { createInternalTags, createTagsList, hasTags } from "../../Tags.ts";
@@ -25,7 +26,7 @@ export interface Ec2HostedBinding {
   policyStatements?: PolicyStatement[];
 }
 
-export interface Ec2HostedProps {
+export interface Ec2HostedProps extends PlatformProps {
   imageId: string;
   instanceType: string;
   keyName?: string;
@@ -201,6 +202,32 @@ export const createEc2HostedSupport = ({
     const tempDir = yield* createTempBundleDir(realMain, dotAlchemy, id);
     const realTempDir = yield* fs.realPath(tempDir);
     const tempEntry = path.join(realTempDir, "__index.ts");
+    const buildProgram = (entry: string) =>
+      Effect.gen(function* () {
+        yield* bundler.build({
+          ...props.build,
+          entry,
+          outfile,
+          format: "esm",
+          platform: "node",
+          target: "node22",
+          sourcemap: props.build?.sourcemap ?? false,
+          treeshake: props.build?.treeshake ?? true,
+          minify: props.build?.minify ?? true,
+          external: props.build?.external ?? [],
+        });
+        const code = yield* fs.readFile(outfile).pipe(Effect.orDie);
+        const archive = yield* zipCode(code);
+        const hash = yield* sha256(archive);
+        return { archive, hash };
+      });
+
+    if (props.isExternal) {
+      return yield* buildProgram(realMain).pipe(
+        Effect.ensuring(cleanupBundleTempDir(tempDir)),
+      );
+    }
+
     let file = path.relative(realTempDir, realMain);
     if (!file.startsWith(".")) {
       file = `./${file}`;
@@ -264,24 +291,9 @@ await Effect.runPromise(program);
 `,
     );
 
-    return yield* Effect.gen(function* () {
-      yield* bundler.build({
-        ...props.build,
-        entry: tempEntry,
-        outfile,
-        format: "esm",
-        platform: "node",
-        target: "node22",
-        sourcemap: props.build?.sourcemap ?? false,
-        treeshake: props.build?.treeshake ?? true,
-        minify: props.build?.minify ?? true,
-        external: props.build?.external ?? [],
-      });
-      const code = yield* fs.readFile(outfile).pipe(Effect.orDie);
-      const archive = yield* zipCode(code);
-      const hash = yield* sha256(archive);
-      return { archive, hash };
-    }).pipe(Effect.ensuring(cleanupBundleTempDir(tempDir)));
+    return yield* buildProgram(tempEntry).pipe(
+      Effect.ensuring(cleanupBundleTempDir(tempDir)),
+    );
   });
 
   const quoteEnvValue = (value: any) => {

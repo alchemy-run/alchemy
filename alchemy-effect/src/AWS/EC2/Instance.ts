@@ -13,7 +13,7 @@ import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { DotAlchemy } from "../../Config.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
-import { Platform, type Main } from "../../Platform.ts";
+import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
 import { Resource } from "../../Resource.ts";
 import type { ServerHost } from "../../Server/Process.ts";
 import { Stack } from "../../Stack.ts";
@@ -53,7 +53,7 @@ export const isInstance = (value: any): value is Instance => {
   );
 };
 
-export interface InstanceProps {
+export interface InstanceProps extends PlatformProps {
   /**
    * AMI ID to launch.
    */

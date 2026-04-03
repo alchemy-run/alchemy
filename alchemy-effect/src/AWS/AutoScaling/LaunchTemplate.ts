@@ -10,7 +10,7 @@ import { DotAlchemy } from "../../Config.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import { Platform, type Main } from "../../Platform.ts";
+import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
 import { Resource } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
@@ -32,7 +32,7 @@ export type LaunchTemplateName = string;
 export type LaunchTemplateArn =
   `arn:aws:ec2:${RegionID}:${AccountID}:launch-template/${LaunchTemplateId}`;
 
-export interface LaunchTemplateProps {
+export interface LaunchTemplateProps extends PlatformProps {
   /**
    * Launch template name. If omitted, a deterministic name is generated.
    */

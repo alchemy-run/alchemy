@@ -25,6 +25,14 @@ import type { Stage } from "./Stage.ts";
 import { effectClass } from "./Util/effect.ts";
 import type { IsAny } from "./Util/types.ts";
 
+export interface PlatformProps {
+  /**
+   * @internal type used to signal when this is an effect-native implementation
+   * @default false
+   */
+  isExternal?: boolean;
+}
+
 export type Main<Services = never> = void | {
   fetch: HttpEffect<Services | PlatformServices>;
 };
@@ -45,7 +53,7 @@ export type PlatformServices =
   | Stage;
 
 export interface Platform<
-  Resource extends ResourceLike,
+  Resource extends ResourceLike<string, PlatformProps>,
   Services,
   MainShape,
   ExecutionContext extends BaseExecutionContext,
@@ -188,35 +196,47 @@ export const Platform = <
   const resource = Resource(type);
   const PlatformContext = ExecutionContext(type);
 
-  const constructor = (id?: string, props?: any, impl?: Impl): any => {
+  const constructor = (
+    id?: string,
+    props?: any,
+    impl?: Impl,
+    isTag = false,
+  ): any => {
     if (!id) {
       // impl was not provided inline, this is a tagged instance
       // e.g.
       // export class Sandbox extends Cloudflare.Container<Sandbox>()(..) {}
       //
       // export const SandboxLive = Sandbox.make(..)
-      return constructor;
+      return (id: string, props?: any, impl?: Impl) =>
+        constructor(id, props, impl, true);
     } else if (!impl) {
-      // this is a non-tagged, curried constructor
-      // e.g.
-      // export default Cloudflare.Worker("id", { main: "./src/worker.ts" })(
-      //   Effect.gen(function* () { .. })
-      // )
-      // or
-      // export default Effect.gen(function* () { .. }).pipe(
-      //   Cloudflare.Worker("id", { main: "./src/worker.ts" })
-      // )
       const cls = makeClass(id, props);
       const asEffect = () =>
-        Effect.serviceOption(cls.Self).pipe(
-          Effect.flatMap(
-            Option.match({
-              // we are likely running at runtime, so we create
-              onNone: () => resource(id, props),
-              onSome: Effect.succeed,
-            }),
-          ),
-        );
+        !isTag
+          ? // this is a non-tagged resource yielded without providing an implementation
+            // e.g.
+            // yield* Cloudflare.Worker("id", { main: "./src/worker.ts" })
+            //
+            // This is where we bridge to non-effect, e.g. bundling an ordinary worker
+            // export default {
+            //   fetch: (request: Request) => {
+            //     return new Response("Hello, world!");
+            //   }
+            // }
+            resource(id, {
+              ...props,
+              isExternal: true,
+            })
+          : Effect.flatMap(
+              // this is a tagged resource
+              Effect.serviceOption(cls.Self),
+              Option.match({
+                // we are likely running at runtime, so we create
+                onNone: () => resource(id, props),
+                onSome: Effect.succeed,
+              }),
+            );
       return Object.assign(
         function (impl: Impl) {
           return cls.asEffect().pipe(Effect.provide(cls.make(impl)));
