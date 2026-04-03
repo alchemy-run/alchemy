@@ -31,7 +31,15 @@ export const build = (
 ): Effect.Effect<BundleOutput, BundleError> =>
   Effect.tryPromise({
     try: async () => {
-      const bundle = await rolldown.rolldown(inputOptions);
+      const bundle = await rolldown.rolldown({
+        ...inputOptions,
+        optimization: inputOptions.optimization ?? {
+          inlineConst: {
+            mode: "smart",
+            pass: 3,
+          },
+        },
+      });
       const result = await bundle.write(outputOptions);
       await bundle.close();
       return result.output;
