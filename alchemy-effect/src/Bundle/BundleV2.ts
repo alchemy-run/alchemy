@@ -1,6 +1,5 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Queue from "effect/Queue";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
@@ -70,26 +69,33 @@ export const build = (
 export const watch = (
   inputOptions: rolldown.InputOptions,
   outputOptions?: rolldown.OutputOptions,
-): Stream.Stream<
-  Result.Result<BundleOutput, BundleError>,
-  never,
-  FileSystem.FileSystem
-> =>
-  Stream.callback<
-    Extract<rolldown.RolldownWatcherEvent, { code: "BUNDLE_END" | "ERROR" }>
-  >((queue) =>
+): Stream.Stream<Result.Result<BundleOutput, BundleError>> =>
+  Stream.callback<Result.Result<rolldown.OutputBundle, BundleError>>((queue) =>
     Effect.acquireRelease(
       Effect.sync(() => {
         const watcher = rolldown.watch({
           ...inputOptions,
+          plugins: [
+            inputOptions.plugins,
+            // The watcher event listener does not receive the bundle output, so we grab it using a plugin.
+            {
+              name: "alchemy:watch-bundle",
+              generateBundle(_outputOptions, bundle) {
+                Queue.offerUnsafe(queue, Result.succeed(bundle));
+              },
+            },
+          ],
           output: outputOptions,
         });
         watcher.on("event", (event) => {
-          if (event.code === "BUNDLE_END" || event.code === "ERROR") {
-            Queue.offerUnsafe(queue, event);
+          if (event.code === "ERROR") {
+            Queue.offerUnsafe(
+              queue,
+              Result.fail(bundleErrorFromUnknown(event.error)),
+            );
+          } else if (event.code === "BUNDLE_END") {
+            // This must be called to avoid resource leaks.
             event.result.close().catch(() => {});
-          } else if (event.code === "END") {
-            Queue.endUnsafe(queue);
           }
         });
         return watcher;
@@ -97,42 +103,38 @@ export const watch = (
       (watcher) => Effect.promise(() => watcher.close()),
     ),
   ).pipe(
-    Stream.flatMap((event) => {
-      if (event.code === "ERROR") {
-        return Stream.succeed(Result.fail(bundleErrorFromUnknown(event.error)));
-      }
-      if (event.output.length === 0) {
-        return Stream.succeed(
-          Result.fail(
+    Stream.mapEffect((result) =>
+      Effect.gen(function* () {
+        if (result._tag === "Failure") {
+          return Result.fail(result.failure);
+        }
+        const files = Object.values(result.success);
+        // These are sanity checks - with rolldown, the first file is always an entry chunk.
+        if (!files[0] || files[0].type !== "chunk" || !files[0].isEntry) {
+          return Result.fail(
             new BundleError({
-              message: "No output files",
+              message: "Invalid bundle output",
             }),
-          ),
-        );
-      }
-      return Stream.fromEffect(
-        Effect.forEach(
-          event.output as [string, ...string[]],
-          bundleFileFromPath,
+          );
+        }
+        return yield* Effect.forEach(
+          files as [
+            rolldown.OutputChunk,
+            ...(rolldown.OutputChunk | rolldown.OutputAsset)[],
+          ],
+          bundleFileFromOutputChunk,
         ).pipe(
           Effect.flatMap(bundleOutputFromFiles),
           Effect.map(Result.succeed),
-          Effect.catchTag("BundleError", (error) =>
-            Effect.succeed(Result.fail(error)),
-          ),
-        ),
-      );
+        );
+      }),
+    ),
+    Stream.changesWith((left, right) => {
+      if (left._tag === "Success" && right._tag === "Success") {
+        return left.success.hash === right.success.hash;
+      }
+      return false;
     }),
-    // TODO(john): is this necessary?
-    // Stream.changesWith((left, right) => {
-    //   if (left._tag === "Failure" && right._tag === "Failure") {
-    //     return left.failure.message === right.failure.message;
-    //   }
-    //   if (left._tag === "Success" && right._tag === "Success") {
-    //     return left.success.hash === right.success.hash;
-    //   }
-    //   return false;
-    // }),
   );
 
 function bundleErrorFromUnknown(error: unknown): BundleError {
@@ -156,27 +158,6 @@ function bundleOutputFromFiles(
       ),
     ),
     (hash) => ({ files, hash }),
-  );
-}
-
-function bundleFileFromPath(
-  path: string,
-): Effect.Effect<BundleFile, BundleError, FileSystem.FileSystem> {
-  return FileSystem.FileSystem.use((fs) => fs.readFile(path)).pipe(
-    Effect.flatMap((content) =>
-      Effect.map(sha256(content), (hash) => ({
-        path,
-        content,
-        hash,
-      })),
-    ),
-    Effect.mapError(
-      (error) =>
-        new BundleError({
-          message: `Failed to read bundle file ${path}: ${error.message}`,
-          cause: error,
-        }),
-    ),
   );
 }
 
