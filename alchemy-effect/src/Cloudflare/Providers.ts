@@ -3,6 +3,7 @@ import * as Auth from "@distilled.cloud/cloudflare/Auth";
 import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as Socket from "effect/unstable/socket/Socket";
 import { CommandProvider } from "../Build/Command.ts";
 import { rolldown } from "../Bundle/Rolldown.ts";
 import type { Provider } from "../Provider.ts";
@@ -12,6 +13,7 @@ import * as KV from "./KV/index.ts";
 import * as R2 from "./R2/index.ts";
 import { AssetsProvider } from "./Workers/Assets.ts";
 import { WorkerProvider } from "./Workers/Worker.ts";
+import { WorkflowProvider } from "./Workers/Workflow.ts";
 
 export type Providers = Extract<
   Layer.Success<ReturnType<typeof providers>>,
@@ -47,6 +49,7 @@ export const resources = () =>
     CommandProvider(),
     ContainerProvider(),
     WorkerProvider(),
+    WorkflowProvider(),
     KV.NamespaceProvider(),
     R2.BucketProvider(),
   );
@@ -71,4 +74,9 @@ export const bindings = () =>
   );
 
 const utils = () =>
-  Layer.mergeAll(RolldownBundler, rolldown(), AssetsProvider());
+  Layer.mergeAll(
+    RolldownBundler,
+    rolldown(),
+    AssetsProvider(),
+    Socket.layerWebSocketConstructorGlobal,
+  );

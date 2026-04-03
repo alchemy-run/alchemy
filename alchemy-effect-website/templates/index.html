@@ -10,7 +10,7 @@
 {% block footer %}{% endblock footer %}
 
 {% block content %}
-  {# ── Header (matches alchemy.run Nova style) ── #}
+  {# ── Header ── #}
   <header class="site-header">
     <div class="site-header-inner">
       <a href="/" class="site-header-logo">
@@ -34,14 +34,18 @@
   <section class="landing-hero">
     <div class="landing-hero-inner">
       <div class="hero-text">
-        <h1 class="landing-hero-title">Infrastructure as Effects</h1>
+        <p class="landing-hero-eyebrow">Infrastructure as Effects</p>
+        <h1 class="landing-hero-title">
+          The intermediate representation<br>for <span class="gradient-text">AI</span>
+        </h1>
         <p class="landing-hero-tagline">
-          Deploy to AWS, Cloudflare, and more with pure TypeScript. Resources, runtimes, and bindings in one type-safe Effect program.
+          Type-safe IaC built on Effect. The perfect medium for coding agents to build,
+          emulate, and deploy full-stack cloud applications &mdash; from prompt to production.
         </p>
         <div class="landing-hero-actions">
-          <a href="{{ guides.permalink | safe }}" class="landing-hero-btn primary">Quick Start</a>
+          <a href="{{ guides.permalink | safe }}" class="landing-hero-btn primary">Get Started</a>
           <a href="{{ config.extra.repo_url }}" class="landing-hero-btn secondary" target="_blank" rel="noopener">
-            &#11088; Star on GitHub
+            GitHub
           </a>
         </div>
       </div>
@@ -57,26 +61,15 @@
             <span class="landing-code-title">alchemy.run.ts</span>
           </div>
           <div class="landing-code-body">
-            <pre><code><span class="token-keyword">import</span> * <span class="token-keyword">as</span> AWS <span class="token-keyword">from</span> <span class="token-string">"alchemy-effect/AWS"</span><span class="token-punctuation">;</span>
-<span class="token-keyword">import</span> * <span class="token-keyword">as</span> Stack <span class="token-keyword">from</span> <span class="token-string">"alchemy-effect/Stack"</span><span class="token-punctuation">;</span>
+            <pre><code><span class="token-keyword">import</span> <span class="token-punctuation">{</span> Cloudflare<span class="token-punctuation">,</span> Stack <span class="token-punctuation">}</span> <span class="token-keyword">from</span> <span class="token-string">"alchemy-effect"</span><span class="token-punctuation">;</span>
 <span class="token-keyword">import</span> * <span class="token-keyword">as</span> Effect <span class="token-keyword">from</span> <span class="token-string">"effect/Effect"</span><span class="token-punctuation">;</span>
+<span class="token-keyword">import</span> Api <span class="token-keyword">from</span> <span class="token-string">"./src/Api.ts"</span><span class="token-punctuation">;</span>
 
 <span class="token-keyword">export default</span> Effect.<span class="token-function">gen</span><span class="token-punctuation">(</span><span class="token-keyword">function*</span> <span class="token-punctuation">() {</span>
-  <span class="token-keyword">const</span> bucket = <span class="token-keyword">yield*</span> AWS.S3.<span class="token-function">Bucket</span><span class="token-punctuation">(</span><span class="token-string">"DataBucket"</span><span class="token-punctuation">);</span>
-  <span class="token-keyword">const</span> putObject = <span class="token-keyword">yield*</span> AWS.S3.PutObject.<span class="token-function">bind</span><span class="token-punctuation">(</span>bucket<span class="token-punctuation">);</span>
-
-  <span class="token-keyword">const</span> api = <span class="token-keyword">yield*</span> AWS.Lambda.<span class="token-function">Function</span><span class="token-punctuation">(</span><span class="token-string">"Api"</span><span class="token-punctuation">,</span> <span class="token-punctuation">{</span>
-    <span class="token-property">timeout</span><span class="token-punctuation">:</span> <span class="token-string">"30 seconds"</span><span class="token-punctuation">,</span>
-  <span class="token-punctuation">});</span>
-
-  <span class="token-keyword">return</span> <span class="token-punctuation">{</span>
-    <span class="token-property">bucketArn</span><span class="token-punctuation">:</span> bucket.bucketArn<span class="token-punctuation">,</span>
-    <span class="token-property">apiUrl</span><span class="token-punctuation">:</span> api.functionUrl<span class="token-punctuation">,</span>
-    putObject<span class="token-punctuation">,</span>
-  <span class="token-punctuation">};</span>
+  <span class="token-keyword">const</span> api = <span class="token-keyword">yield*</span> Api<span class="token-punctuation">;</span>
+  <span class="token-keyword">return</span> api.url<span class="token-punctuation">;</span>
 <span class="token-punctuation">}).</span><span class="token-function">pipe</span><span class="token-punctuation">(</span>
-  Stack.<span class="token-function">make</span><span class="token-punctuation">(</span><span class="token-string">"App"</span><span class="token-punctuation">),</span>
-  Effect.<span class="token-function">provide</span><span class="token-punctuation">(</span>AWS.<span class="token-function">providers</span><span class="token-punctuation">()),</span>
+  Stack.<span class="token-function">make</span><span class="token-punctuation">(</span><span class="token-string">"App"</span><span class="token-punctuation">,</span> Cloudflare.<span class="token-function">providers</span><span class="token-punctuation">()),</span>
 <span class="token-punctuation">);</span></code></pre>
           </div>
         </div>
@@ -84,215 +77,293 @@
     </div>
   </section>
 
-  {# ── Platform ── #}
+  {# ── What one prompt deploys ── #}
   <section class="landing-section">
     <div class="landing-section-inner">
       <div class="landing-section-header">
+        <p class="landing-section-label">Real-world example</p>
         <h2 class="landing-section-title">
-          <span class="gradient-text">Platform</span>
+          One prompt deploys <span class="gradient-text">all of this</span>
         </h2>
         <p class="landing-section-desc">
-          Build cloud applications from typed resources, runtime implementations,
-          binding contracts, and generated documentation.
+          A real-time collaborative app with WebSocket chat, background workflows,
+          container sandboxes, and code evaluation &mdash; from a single TypeScript program.
         </p>
       </div>
 
       <div class="landing-features-grid">
-        <a href="{{ reference.permalink | safe }}" class="landing-feature-card">
-          <div class="landing-feature-icon">AWS</div>
-          <h3 class="landing-feature-title">AWS Resources</h3>
-          <p class="landing-feature-desc">S3, Lambda, DynamoDB, SQS, EC2, ECS, Auto Scaling, and more as typed resources with explicit input and output contracts.</p>
-        </a>
-        <a href="{{ reference.permalink | safe }}" class="landing-feature-card">
-          <div class="landing-feature-icon">CF</div>
-          <h3 class="landing-feature-title">Cloudflare Resources</h3>
-          <p class="landing-feature-desc">Workers, assets, containers, and edge platform features using the same resource model as the rest of the framework.</p>
-        </a>
-        <a href="{{ reference.permalink | safe }}" class="landing-feature-card">
-          <div class="landing-feature-icon">Fn</div>
-          <h3 class="landing-feature-title">Functions and Workers</h3>
-          <p class="landing-feature-desc">Runtime behavior is written as an Effect, while deployment config stays attached to the same resource definition.</p>
-        </a>
-        <a href="{{ reference.permalink | safe }}" class="landing-feature-card">
-          <div class="landing-feature-icon">IO</div>
-          <h3 class="landing-feature-title">Capabilities and Bindings</h3>
-          <p class="landing-feature-desc">Attach runtime services, IAM policies, environment, and event sources with explicit binding contracts instead of hidden glue.</p>
-        </a>
-        <a href="{{ guides.permalink | safe }}" class="landing-feature-card">
-          <div class="landing-feature-icon">Fx</div>
-          <h3 class="landing-feature-title">Effect-native Composition</h3>
-          <p class="landing-feature-desc">Retries, errors, layers, outputs, and runtime dependencies all use the same Effect model as the application itself.</p>
-        </a>
-        <a href="{{ guides.permalink | safe }}" class="landing-feature-card">
-          <div class="landing-feature-icon">Doc</div>
-          <h3 class="landing-feature-title">Guides and API Reference</h3>
-          <p class="landing-feature-desc">Handwritten guides and generated reference pages keep resource contracts, examples, and implementation details aligned.</p>
-        </a>
+        <div class="landing-feature-card">
+          <div class="landing-feature-icon">W</div>
+          <h3 class="landing-feature-title">Worker</h3>
+          <p class="landing-feature-desc">Edge HTTP and WebSocket router with bundled static assets. One class defines infrastructure config and runtime behavior together.</p>
+        </div>
+        <div class="landing-feature-card">
+          <div class="landing-feature-icon">DO</div>
+          <h3 class="landing-feature-title">Durable Objects</h3>
+          <p class="landing-feature-desc">Stateful coordination primitives. Real-time WebSocket rooms, persistent sessions, and actor-model patterns with hibernation support.</p>
+        </div>
+        <div class="landing-feature-card">
+          <div class="landing-feature-icon">C</div>
+          <h3 class="landing-feature-title">Containers</h3>
+          <p class="landing-feature-desc">Full Linux environments running any Docker image. Typed exec API for shell access, streaming I/O, and sandboxed compute.</p>
+        </div>
+        <div class="landing-feature-card">
+          <div class="landing-feature-icon">WF</div>
+          <h3 class="landing-feature-title">Workflows</h3>
+          <p class="landing-feature-desc">Durable multi-step orchestration. Named tasks, sleep/wait, cross-resource coordination, and automatic retries &mdash; all typed.</p>
+        </div>
+        <div class="landing-feature-card">
+          <div class="landing-feature-icon">JS</div>
+          <h3 class="landing-feature-title">Dynamic Workers</h3>
+          <p class="landing-feature-desc">Ephemeral JavaScript runtimes. Load and execute arbitrary modules on-the-fly for code evaluation and sandboxed execution.</p>
+        </div>
+        <div class="landing-feature-card">
+          <div class="landing-feature-icon">UI</div>
+          <h3 class="landing-feature-title">Static Assets</h3>
+          <p class="landing-feature-desc">Bundled frontend served from the edge. HTML, CSS, and JavaScript deployed alongside the Worker with zero configuration.</p>
+        </div>
       </div>
     </div>
   </section>
 
-  {# ── The Problem ── #}
+  {# ── The agentic development loop ── #}
   <section class="landing-section">
     <div class="landing-section-inner">
       <div class="landing-section-header">
-        <p class="landing-section-label">The Problem</p>
+        <p class="landing-section-label">Agentic development</p>
         <h2 class="landing-section-title">
-          Cloud applications get
-          <span class="gradient-text">split across too many systems</span>
+          Write. Emulate. <span class="gradient-text">Deploy.</span>
         </h2>
         <p class="landing-section-desc">
-          Infrastructure definitions, runtime code, permissions, and deployment
-          behavior drift apart until the real architecture is hard to see.
+          The complete feedback loop for AI coding agents.
+          Type-check catches mistakes instantly. Local emulation gives real behavior
+          without cloud roundtrips. One command ships to production.
         </p>
       </div>
 
-      <div class="landing-problems-grid">
-        <div class="landing-problem-card">
-          <div class="landing-problem-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          </div>
-          <div class="landing-problem-text">
-            <h3>Infrastructure drift</h3>
-            <p>Business logic changes in one place while buckets, queues, functions, and policies change somewhere else.</p>
-          </div>
+      <div class="landing-steps">
+        <div class="landing-step">
+          <div class="landing-step-number">1</div>
+          <h3>Write</h3>
+          <p>
+            AI generates infrastructure, backend, and frontend in one TypeScript program.
+            Effect's type system catches wiring errors before anything runs.
+          </p>
         </div>
-        <div class="landing-problem-card">
-          <div class="landing-problem-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
-          </div>
-          <div class="landing-problem-text">
-            <h3>Hidden wiring</h3>
-            <p>Environment variables, IAM policies, and platform bindings often end up as fragile manual configuration.</p>
-          </div>
+        <div class="landing-step">
+          <div class="landing-step-number">2</div>
+          <h3>Emulate</h3>
+          <p>
+            Run the full stack locally with <code>alchemy dev</code>. Real Workers, Durable Objects,
+            and WebSockets &mdash; hot reload on every change.
+          </p>
         </div>
-        <div class="landing-problem-card">
-          <div class="landing-problem-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-          </div>
-          <div class="landing-problem-text">
-            <h3>Runtime surprises</h3>
-            <p>Eventual consistency, dependency violations, and retries are real cloud behavior, but many IaC tools keep them out of the model.</p>
-          </div>
+        <div class="landing-step">
+          <div class="landing-step-number">3</div>
+          <h3>Deploy</h3>
+          <p>
+            Ship to production with <code>alchemy deploy</code>. Preview environments from GitHub
+            Actions on every PR. Same code, same behavior.
+          </p>
         </div>
-        <div class="landing-problem-card">
-          <div class="landing-problem-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+      </div>
+
+      <div class="landing-terminal">
+        <div class="landing-code-header">
+          <div class="landing-code-dots">
+            <span class="landing-code-dot"></span>
+            <span class="landing-code-dot"></span>
+            <span class="landing-code-dot"></span>
           </div>
-          <div class="landing-problem-text">
-            <h3>Lost context</h3>
-            <p>Runtime code is too often configured with strings instead of typed references to the resources it depends on.</p>
-          </div>
+          <span class="landing-code-title">Terminal</span>
+        </div>
+        <div class="landing-terminal-body">
+          <pre><code><span class="terminal-prompt">$</span> <span class="terminal-cmd">bun alchemy dev</span>
+<span class="terminal-output">  Emulating Api</span> <span class="terminal-dim">(Worker)</span>
+<span class="terminal-output">  Emulating Rooms</span> <span class="terminal-dim">(Durable Object)</span>
+<span class="terminal-output">  Emulating Notifier</span> <span class="terminal-dim">(Workflow)</span>
+<span class="terminal-output">  Emulating Sandbox</span> <span class="terminal-dim">(Container)</span>
+<span class="terminal-success">  &rarr; http://localhost:8787</span>
+
+<span class="terminal-prompt">$</span> <span class="terminal-cmd">bun alchemy deploy</span>
+<span class="terminal-success">  &check; Deployed Api &rarr; https://app.workers.dev</span></code></pre>
         </div>
       </div>
     </div>
   </section>
 
-  {# ── Why alchemy-effect ── #}
+  {# ── Code showcases ── #}
   <section class="landing-section">
     <div class="landing-section-inner">
       <div class="landing-section-header">
         <h2 class="landing-section-title">
-          Why <span class="gradient-text">alchemy-effect</span>?
+          See the <span class="gradient-text">code</span>
         </h2>
         <p class="landing-section-desc">
-          Infrastructure-as-Effects for modern TypeScript
+          Each resource is a typed class. Infrastructure config, runtime behavior, and
+          resource dependencies &mdash; all in one definition. This is the code an AI writes.
         </p>
       </div>
 
       <div class="landing-showcases">
+        {# Worker #}
         <div class="landing-showcase">
           <div class="landing-showcase-content">
-            <h3 class="landing-showcase-title">One program, full stack</h3>
-            <p class="landing-showcase-desc">Stacks are Effects that declare resources and return outputs. Infra and application composition use the same programming model.</p>
+            <h3 class="landing-showcase-title">Workers compose everything</h3>
+            <p class="landing-showcase-desc">
+              A Worker is the entry point. It binds Durable Objects, Workflows,
+              Dynamic Workers, and static assets &mdash; all as typed Effect dependencies.
+              The type system ensures every resource is wired correctly.
+            </p>
             <ul class="landing-showcase-list">
-              <li><svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Declare resources inline where they are needed</li>
-              <li><svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Return typed outputs from the same stack definition</li>
-              <li><svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Keep infrastructure close to business logic</li>
+              <li><svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Dependencies declared with <code>yield*</code></li>
+              <li><svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Infra config and runtime in one class</li>
+              <li><svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Typed routing to DOs, Workflows, and more</li>
             </ul>
           </div>
           <div class="landing-showcase-code">
-            <pre><code><span class="token-keyword">const</span> stack = Effect.<span class="token-function">gen</span><span class="token-punctuation">(</span><span class="token-keyword">function*</span> <span class="token-punctuation">() {</span>
-  <span class="token-keyword">const</span> queue = <span class="token-keyword">yield*</span> AWS.SQS.<span class="token-function">Queue</span><span class="token-punctuation">(</span><span class="token-string">"Jobs"</span><span class="token-punctuation">);</span>
-  <span class="token-keyword">const</span> worker = <span class="token-keyword">yield*</span> AWS.Lambda.<span class="token-function">Function</span><span class="token-punctuation">(</span><span class="token-string">"Worker"</span><span class="token-punctuation">);</span>
+            <pre><code><span class="token-keyword">export default class</span> Api <span class="token-keyword">extends</span> Cloudflare.<span class="token-function">Worker</span><span class="token-punctuation">&lt;</span>Api<span class="token-punctuation">&gt;()(</span>
+  <span class="token-string">"Api"</span><span class="token-punctuation">,</span>
+  <span class="token-punctuation">{</span> <span class="token-property">main</span><span class="token-punctuation">:</span> <span class="token-keyword">import</span>.meta.path<span class="token-punctuation">,</span> <span class="token-property">assets</span><span class="token-punctuation">:</span> <span class="token-string">"./assets"</span> <span class="token-punctuation">},</span>
+  Effect.<span class="token-function">gen</span><span class="token-punctuation">(</span><span class="token-keyword">function*</span> <span class="token-punctuation">() {</span>
+    <span class="token-keyword">const</span> rooms    = <span class="token-keyword">yield*</span> Room<span class="token-punctuation">;</span>
+    <span class="token-keyword">const</span> notifier = <span class="token-keyword">yield*</span> NotifyWorkflow<span class="token-punctuation">;</span>
+    <span class="token-keyword">const</span> agents   = <span class="token-keyword">yield*</span> Agent<span class="token-punctuation">;</span>
+    <span class="token-keyword">const</span> loader   = <span class="token-keyword">yield*</span> Cloudflare.<span class="token-function">DynamicWorker</span><span class="token-punctuation">(</span><span class="token-string">"Loader"</span><span class="token-punctuation">);</span>
 
-  <span class="token-keyword">return</span> <span class="token-punctuation">{</span>
-    <span class="token-property">queueUrl</span><span class="token-punctuation">:</span> queue.queueUrl<span class="token-punctuation">,</span>
-    <span class="token-property">workerArn</span><span class="token-punctuation">:</span> worker.functionArn<span class="token-punctuation">,</span>
-  <span class="token-punctuation">};</span>
-<span class="token-punctuation">}).</span><span class="token-function">pipe</span><span class="token-punctuation">(</span>
-  Stack.<span class="token-function">make</span><span class="token-punctuation">(</span><span class="token-string">"App"</span><span class="token-punctuation">),</span>
-  Effect.<span class="token-function">provide</span><span class="token-punctuation">(</span>AWS.<span class="token-function">providers</span><span class="token-punctuation">()),</span>
-<span class="token-punctuation">);</span></code></pre>
-          </div>
-        </div>
-
-        <div class="landing-showcase reverse">
-          <div class="landing-showcase-content">
-            <h3 class="landing-showcase-title">Bindings make dependencies explicit</h3>
-            <p class="landing-showcase-desc">Capabilities connect runtime services with deploy-time permissions so the real dependency graph stays visible and typed.</p>
-            <ul class="landing-showcase-list">
-              <li><svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Attach IAM policies and env automatically</li>
-              <li><svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Bind runtime SDK wrappers as Effect services</li>
-              <li><svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Model circular dependencies intentionally</li>
-            </ul>
-          </div>
-          <div class="landing-showcase-code">
-            <pre><code><span class="token-keyword">const</span> bucket = <span class="token-keyword">yield*</span> AWS.S3.<span class="token-function">Bucket</span><span class="token-punctuation">(</span><span class="token-string">"Assets"</span><span class="token-punctuation">);</span>
-<span class="token-keyword">const</span> putObject = <span class="token-keyword">yield*</span> AWS.S3.PutObject.<span class="token-function">bind</span><span class="token-punctuation">(</span>bucket<span class="token-punctuation">);</span>
-
-<span class="token-keyword">yield*</span> Http.<span class="token-function">serve</span><span class="token-punctuation">(</span>app<span class="token-punctuation">).</span><span class="token-function">pipe</span><span class="token-punctuation">(</span>
-  Effect.<span class="token-function">provide</span><span class="token-punctuation">(</span>AWS.S3.PutObjectLive<span class="token-punctuation">),</span>
-<span class="token-punctuation">);</span>
-
-<span class="token-keyword">return</span> <span class="token-punctuation">{</span>
-  <span class="token-property">main</span><span class="token-punctuation">:</span> <span class="token-keyword">import</span>.meta.path<span class="token-punctuation">,</span>
-<span class="token-punctuation">};</span></code></pre>
-          </div>
-        </div>
-
-        <div class="landing-showcase">
-          <div class="landing-showcase-content">
-            <h3 class="landing-showcase-title">Runtime code is part of the resource</h3>
-            <p class="landing-showcase-desc">Lambda Functions and Cloudflare Workers are first-class resources whose runtime implementation lives in the same model as deployment behavior.</p>
-            <ul class="landing-showcase-list">
-              <li><svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Define runtime behavior with Effects</li>
-              <li><svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Keep config, assets, and code together</li>
-              <li><svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Support Lambda and Cloudflare runtimes</li>
-            </ul>
-          </div>
-          <div class="landing-showcase-code">
-            <pre><code><span class="token-keyword">yield*</span> Http.<span class="token-function">serve</span><span class="token-punctuation">(</span>api<span class="token-punctuation">);</span>
-
-<span class="token-keyword">return</span> <span class="token-punctuation">{</span>
-  <span class="token-property">main</span><span class="token-punctuation">:</span> <span class="token-keyword">import</span>.meta.path<span class="token-punctuation">,</span>
-  <span class="token-property">memory</span><span class="token-punctuation">:</span> <span class="token-type">1024</span><span class="token-punctuation">,</span>
-  <span class="token-property">url</span><span class="token-punctuation">:</span> <span class="token-type">true</span><span class="token-punctuation">,</span>
-<span class="token-punctuation">}</span> <span class="token-keyword">as const</span><span class="token-punctuation">;</span>
-<span class="token-punctuation">}).</span><span class="token-function">pipe</span><span class="token-punctuation">(</span>
-  Lambda.<span class="token-function">Function</span><span class="token-punctuation">(</span><span class="token-string">"Api"</span><span class="token-punctuation">),</span>
-<span class="token-punctuation">);</span></code></pre>
-          </div>
-        </div>
-
-        <div class="landing-showcase reverse">
-          <div class="landing-showcase-content">
-            <h3 class="landing-showcase-title">Effect-native reliability</h3>
-            <p class="landing-showcase-desc">Errors, retries, and composition are part of the programming model instead of bolted onto deployment after the fact.</p>
-            <ul class="landing-showcase-list">
-              <li><svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Bring failures into the type system</li>
-              <li><svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Use declarative retry logic for cloud behavior</li>
-              <li><svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Compose infrastructure with ordinary Effect layers</li>
-            </ul>
-          </div>
-          <div class="landing-showcase-code">
-            <pre><code><span class="token-function">createResource</span><span class="token-punctuation">(</span>params<span class="token-punctuation">).</span><span class="token-function">pipe</span><span class="token-punctuation">(</span>
-  Effect.<span class="token-function">retry</span><span class="token-punctuation">({</span>
-    <span class="token-property">while</span><span class="token-punctuation">:</span> isDependencyViolation<span class="token-punctuation">,</span>
-    <span class="token-property">schedule</span><span class="token-punctuation">:</span> Schedule.<span class="token-function">exponential</span><span class="token-punctuation">(</span><span class="token-string">"1 second"</span><span class="token-punctuation">),</span>
+    <span class="token-keyword">return</span> <span class="token-punctuation">{</span>
+      <span class="token-property">fetch</span><span class="token-punctuation">:</span> Effect.<span class="token-function">gen</span><span class="token-punctuation">(</span><span class="token-keyword">function*</span> <span class="token-punctuation">() {</span>
+        <span class="token-keyword">const</span> req = <span class="token-keyword">yield*</span> HttpServerRequest<span class="token-punctuation">;</span>
+        <span class="token-comment">// typed routing to DOs, Workflows, etc.</span>
+      <span class="token-punctuation">}),</span>
+    <span class="token-punctuation">};</span>
   <span class="token-punctuation">}),</span>
-<span class="token-punctuation">);</span></code></pre>
+<span class="token-punctuation">) {}</span></code></pre>
           </div>
+        </div>
+
+        {# Durable Object #}
+        <div class="landing-showcase reverse">
+          <div class="landing-showcase-content">
+            <h3 class="landing-showcase-title">Durable Objects hold state</h3>
+            <p class="landing-showcase-desc">
+              Real-time WebSocket rooms, persistent sessions, and actor-model coordination.
+              Each instance is isolated with its own state, and the API is fully typed &mdash;
+              <code>broadcast</code>, <code>fetch</code>, and lifecycle hooks are all Effects.
+            </p>
+            <ul class="landing-showcase-list">
+              <li><svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>WebSocket upgrade and session management</li>
+              <li><svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Hibernation-safe socket attachments</li>
+              <li><svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Cross-resource calls from Workflows</li>
+            </ul>
+          </div>
+          <div class="landing-showcase-code">
+            <pre><code><span class="token-keyword">export default class</span> Room <span class="token-keyword">extends</span>
+  Cloudflare.<span class="token-function">DurableObjectNamespace</span><span class="token-punctuation">&lt;</span>Room<span class="token-punctuation">&gt;()(</span>
+  <span class="token-string">"Rooms"</span><span class="token-punctuation">,</span>
+  Effect.<span class="token-function">gen</span><span class="token-punctuation">(</span><span class="token-keyword">function*</span> <span class="token-punctuation">() {</span>
+    <span class="token-keyword">return</span> Effect.<span class="token-function">gen</span><span class="token-punctuation">(</span><span class="token-keyword">function*</span> <span class="token-punctuation">() {</span>
+      <span class="token-keyword">const</span> state = <span class="token-keyword">yield*</span> Cloudflare.DurableObjectState<span class="token-punctuation">;</span>
+      <span class="token-keyword">return</span> <span class="token-punctuation">{</span>
+        <span class="token-property">fetch</span><span class="token-punctuation">:</span> Effect.<span class="token-function">gen</span><span class="token-punctuation">(</span><span class="token-keyword">function*</span> <span class="token-punctuation">() {</span>
+          <span class="token-keyword">const</span> <span class="token-punctuation">[</span>res<span class="token-punctuation">,</span> ws<span class="token-punctuation">]</span> = <span class="token-keyword">yield*</span> Cloudflare.<span class="token-function">upgrade</span><span class="token-punctuation">();</span>
+          <span class="token-keyword">return</span> res<span class="token-punctuation">;</span>
+        <span class="token-punctuation">}),</span>
+        <span class="token-property">broadcast</span><span class="token-punctuation">:</span> <span class="token-punctuation">(</span>text<span class="token-punctuation">)</span> <span class="token-punctuation">=&gt;</span>
+          Effect.<span class="token-function">gen</span><span class="token-punctuation">(</span><span class="token-keyword">function*</span> <span class="token-punctuation">() {</span>
+            <span class="token-keyword">for</span> <span class="token-punctuation">(</span><span class="token-keyword">const</span> p <span class="token-keyword">of</span> sessions<span class="token-punctuation">)</span>
+              <span class="token-keyword">yield*</span> p.<span class="token-function">send</span><span class="token-punctuation">(</span>text<span class="token-punctuation">);</span>
+          <span class="token-punctuation">}),</span>
+      <span class="token-punctuation">};</span>
+    <span class="token-punctuation">});</span>
+  <span class="token-punctuation">}),</span>
+<span class="token-punctuation">) {}</span></code></pre>
+          </div>
+        </div>
+
+        {# Workflow #}
+        <div class="landing-showcase">
+          <div class="landing-showcase-content">
+            <h3 class="landing-showcase-title">Workflows orchestrate across resources</h3>
+            <p class="landing-showcase-desc">
+              Durable, multi-step workflows with named tasks, sleep, and cross-resource coordination.
+              This workflow processes a message, broadcasts to a Durable Object room,
+              waits, and finalizes &mdash; all with automatic retry and persistence.
+            </p>
+            <ul class="landing-showcase-list">
+              <li><svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Named durable tasks with typed payloads</li>
+              <li><svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Call into Durable Objects from Workflows</li>
+              <li><svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Durable sleep and automatic retries</li>
+            </ul>
+          </div>
+          <div class="landing-showcase-code">
+            <pre><code><span class="token-keyword">export default class</span> NotifyWorkflow <span class="token-keyword">extends</span>
+  Cloudflare.<span class="token-function">Workflow</span><span class="token-punctuation">&lt;</span>NotifyWorkflow<span class="token-punctuation">&gt;()(</span>
+  <span class="token-string">"Notifier"</span><span class="token-punctuation">,</span>
+  Effect.<span class="token-function">gen</span><span class="token-punctuation">(</span><span class="token-keyword">function*</span> <span class="token-punctuation">() {</span>
+    <span class="token-keyword">const</span> rooms = <span class="token-keyword">yield*</span> Room<span class="token-punctuation">;</span>
+
+    <span class="token-keyword">return</span> Effect.<span class="token-function">gen</span><span class="token-punctuation">(</span><span class="token-keyword">function*</span> <span class="token-punctuation">() {</span>
+      <span class="token-keyword">const</span> event = <span class="token-keyword">yield*</span> Cloudflare.WorkflowEvent<span class="token-punctuation">;</span>
+      <span class="token-keyword">const</span> <span class="token-punctuation">{</span> roomId<span class="token-punctuation">,</span> message <span class="token-punctuation">}</span> = event.payload<span class="token-punctuation">;</span>
+
+      <span class="token-keyword">yield*</span> Cloudflare.<span class="token-function">task</span><span class="token-punctuation">(</span><span class="token-string">"process"</span><span class="token-punctuation">,</span> <span class="token-punctuation">...</span><span class="token-punctuation">);</span>
+      <span class="token-keyword">yield*</span> Cloudflare.<span class="token-function">task</span><span class="token-punctuation">(</span><span class="token-string">"broadcast"</span><span class="token-punctuation">,</span>
+        rooms.<span class="token-function">getByName</span><span class="token-punctuation">(</span>roomId<span class="token-punctuation">).</span><span class="token-function">broadcast</span><span class="token-punctuation">(</span><span class="token-punctuation">...</span><span class="token-punctuation">));</span>
+      <span class="token-keyword">yield*</span> Cloudflare.<span class="token-function">sleep</span><span class="token-punctuation">(</span><span class="token-string">"cooldown"</span><span class="token-punctuation">,</span> <span class="token-string">"2 seconds"</span><span class="token-punctuation">);</span>
+      <span class="token-keyword">yield*</span> Cloudflare.<span class="token-function">task</span><span class="token-punctuation">(</span><span class="token-string">"finalize"</span><span class="token-punctuation">,</span> <span class="token-punctuation">...</span><span class="token-punctuation">);</span>
+    <span class="token-punctuation">});</span>
+  <span class="token-punctuation">}),</span>
+<span class="token-punctuation">) {}</span></code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  {# ── Why AI agents use Alchemy ── #}
+  <section class="landing-section">
+    <div class="landing-section-inner">
+      <div class="landing-section-header">
+        <h2 class="landing-section-title">
+          Why AI agents choose <span class="gradient-text">Alchemy Effect</span>
+        </h2>
+        <p class="landing-section-desc">
+          Infrastructure-as-Effects built on Effect creates a uniquely AI-friendly
+          programming model for cloud applications.
+        </p>
+      </div>
+
+      <div class="landing-features-grid">
+        <div class="landing-feature-card">
+          <div class="landing-feature-icon">TS</div>
+          <h3 class="landing-feature-title">End-to-end type safety</h3>
+          <p class="landing-feature-desc">Types flow from infrastructure to backend to frontend. The compiler catches wiring errors before any code runs &mdash; exactly what an AI agent needs for fast iteration.</p>
+        </div>
+        <div class="landing-feature-card">
+          <div class="landing-feature-icon">Fx</div>
+          <h3 class="landing-feature-title">Effect-native composition</h3>
+          <p class="landing-feature-desc">Errors, retries, layers, and dependencies are part of the type system. Effect's programming model makes failure handling explicit and composable.</p>
+        </div>
+        <div class="landing-feature-card">
+          <div class="landing-feature-icon">&gt;_</div>
+          <h3 class="landing-feature-title">Local emulation</h3>
+          <p class="landing-feature-desc">Full-stack local dev with real Workers, Durable Objects, and WebSockets. AI gets instant feedback without waiting for cloud deploys.</p>
+        </div>
+        <div class="landing-feature-card">
+          <div class="landing-feature-icon">CI</div>
+          <h3 class="landing-feature-title">Preview deployments</h3>
+          <p class="landing-feature-desc">Every PR gets its own preview environment via GitHub Actions. Test changes in real infrastructure before merging to production.</p>
+        </div>
+        <div class="landing-feature-card">
+          <div class="landing-feature-icon">1</div>
+          <h3 class="landing-feature-title">One program, full stack</h3>
+          <p class="landing-feature-desc">Infrastructure, backend runtime, and static frontend in a single TypeScript program. No YAML, no separate config files, no context switching.</p>
+        </div>
+        <div class="landing-feature-card">
+          <div class="landing-feature-icon">&infin;</div>
+          <h3 class="landing-feature-title">Multi-cloud</h3>
+          <p class="landing-feature-desc">Deploy to Cloudflare, AWS, Planetscale, and more. Same resource model, same composition, same type safety across every provider.</p>
         </div>
       </div>
     </div>
@@ -302,14 +373,14 @@
   <section class="landing-cta">
     <div class="landing-cta-inner">
       <h2 class="landing-cta-title">
-        <span class="gradient-text">Get started</span> with alchemy-effect
+        From <span class="gradient-text">one prompt</span> to production
       </h2>
       <p class="landing-cta-desc">
-        Start with the guides and then dive into the API reference for contracts,
-        attributes, examples, and capabilities across AWS and Cloudflare.
+        Give your AI agent the right IR. Start building type-safe, full-stack
+        cloud applications with Alchemy Effect.
       </p>
       <div class="landing-cta-actions">
-        <a href="{{ guides.permalink | safe }}" class="landing-hero-btn primary">Explore guides</a>
+        <a href="{{ guides.permalink | safe }}" class="landing-hero-btn primary">Get Started</a>
         <a href="{{ reference.permalink | safe }}" class="landing-hero-btn secondary">API Reference</a>
       </div>
     </div>
@@ -321,10 +392,10 @@
       <div class="landing-footer-top">
         <div>
           <div class="landing-footer-brand">alchemy<span class="accent">-effect</span></div>
-          <p class="landing-footer-tagline">Infrastructure-as-Effects for cloud applications</p>
+          <p class="landing-footer-tagline">The intermediate representation for AI-native cloud applications</p>
         </div>
         <nav class="landing-footer-nav">
-          <a href="{{ guides.permalink | safe }}">Guides</a>
+          <a href="{{ guides.permalink | safe }}">Docs</a>
           <a href="{{ reference.permalink | safe }}">API Reference</a>
           <a href="{{ config.extra.repo_url }}" target="_blank" rel="noopener">GitHub</a>
         </nav>

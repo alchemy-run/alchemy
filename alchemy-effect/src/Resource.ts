@@ -13,9 +13,6 @@ import { RemovalPolicy } from "./RemovalPolicy.ts";
 import { Self } from "./Self.ts";
 import { Stack } from "./Stack.ts";
 
-/** Node/Bun `util.inspect` / `console.log` hook for Resource proxies */
-const nodeInspect = Symbol.for("nodejs.util.inspect.custom");
-
 export type ResourceConstructor<R extends ResourceLike, Req = never> = {
   Props: R["Props"];
   (
@@ -292,6 +289,8 @@ export interface ResourceProviders<Resource extends ResourceLike> {
     CreateReq = never,
     UpdateReq = never,
     DeleteReq = never,
+    TailReq = never,
+    LogsReq = never,
   >(
     eff: Effect.Effect<
       ProviderService<
@@ -301,7 +300,9 @@ export interface ResourceProviders<Resource extends ResourceLike> {
         PrecreateReq,
         CreateReq,
         UpdateReq,
-        DeleteReq
+        DeleteReq,
+        TailReq,
+        LogsReq
       >,
       never,
       Req
@@ -327,6 +328,8 @@ export interface ResourceProviders<Resource extends ResourceLike> {
     CreateReq = never,
     UpdateReq = never,
     DeleteReq = never,
+    TailReq = never,
+    LogsReq = never,
   >(
     service: ProviderService<
       Resource,
@@ -335,13 +338,20 @@ export interface ResourceProviders<Resource extends ResourceLike> {
       PrecreateReq,
       CreateReq,
       UpdateReq,
-      DeleteReq
+      DeleteReq,
+      TailReq,
+      LogsReq
     >,
   ) => Layer.Layer<
     Provider<Resource>,
     never,
     Exclude<
-      ReadReq | DiffReq | PrecreateReq | CreateReq | UpdateReq | DeleteReq,
+      | ReadReq
+      | DiffReq
+      | PrecreateReq
+      | CreateReq
+      | UpdateReq
+      | DeleteReq,
       InstanceId
     >
   >;
@@ -353,6 +363,8 @@ export interface ResourceProviders<Resource extends ResourceLike> {
     CreateReq = never,
     UpdateReq = never,
     DeleteReq = never,
+    TailReq = never,
+    LogsReq = never,
   >(
     service: ProviderService<
       Resource,
@@ -361,7 +373,9 @@ export interface ResourceProviders<Resource extends ResourceLike> {
       PrecreateReq,
       CreateReq,
       UpdateReq,
-      DeleteReq
+      DeleteReq,
+      TailReq,
+      LogsReq
     >,
   ) => ProviderService<
     Resource,
@@ -370,6 +384,8 @@ export interface ResourceProviders<Resource extends ResourceLike> {
     PrecreateReq,
     CreateReq,
     UpdateReq,
-    DeleteReq
+    DeleteReq,
+    TailReq,
+    LogsReq
   >;
 }

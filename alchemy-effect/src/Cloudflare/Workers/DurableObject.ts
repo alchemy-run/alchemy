@@ -15,6 +15,22 @@ import { makeRpcStub } from "./Rpc.ts";
 import { fromWebSocket, type DurableWebSocket } from "./WebSocket.ts";
 import { Worker, WorkerEnvironment, type WorkerServices } from "./Worker.ts";
 
+export interface DurableObjectExport {
+  readonly kind: "durableObject";
+  readonly make: (
+    state: cf.DurableObjectState,
+    env: any,
+  ) => Effect.Effect<Record<string, unknown>>;
+}
+
+export const isDurableObjectExport = (
+  value: unknown,
+): value is DurableObjectExport =>
+  typeof value === "object" &&
+  value !== null &&
+  "kind" in value &&
+  (value as any).kind === "durableObject";
+
 export type DurableObjectId = cf.DurableObjectId;
 export type DurableObjectJurisdiction = cf.DurableObjectJurisdiction;
 export type DurableObjectNamespaceGetDurableObjectOptions =
@@ -22,8 +38,8 @@ export type DurableObjectNamespaceGetDurableObjectOptions =
 
 export type AlarmInvocationInfo = cf.AlarmInvocationInfo;
 
-type TypeId = "Cloudflare.Workers.DurableObjectNamespace";
-const TypeId = "Cloudflare.Workers.DurableObjectNamespace";
+type TypeId = "Cloudflare.DurableObjectNamespace";
+const TypeId = "Cloudflare.DurableObjectNamespace";
 
 export interface DurableObjectNamespace<Shape = unknown> {
   Type: TypeId;
@@ -149,9 +165,9 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
             const services =
               yield* Effect.services<Effect.Services<typeof impl>>();
 
-            yield* worker.export(
-              namespace,
-              (state: cf.DurableObjectState, env: any) => {
+            yield* worker.export(namespace, {
+              kind: "durableObject",
+              make: (state: cf.DurableObjectState, env: any) => {
                 const doState = fromDurableObjectState(state);
                 return constructor.pipe(
                   Effect.provideServices(services),
@@ -196,7 +212,7 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
                   }),
                 );
               },
-            );
+            } satisfies DurableObjectExport);
 
             const binding = yield* Effect.serviceOption(WorkerEnvironment).pipe(
               Effect.map(Option.getOrUndefined),
@@ -328,7 +344,7 @@ export class DurableObjectState extends ServiceMap.Service<
     getTags(ws: cf.WebSocket): Effect.Effect<string[]>;
     abort(reason?: string): Effect.Effect<void>;
   }
->()("Cloudflare.Workers.DurableObjectState") {}
+>()("Cloudflare.DurableObjectState") {}
 
 export interface DurableObjectTransaction {
   get<T = unknown>(

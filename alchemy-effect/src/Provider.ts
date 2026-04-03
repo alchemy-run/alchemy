@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as ServiceMap from "effect/ServiceMap";
+import type * as Stream from "effect/Stream";
 import type { ScopedPlanStatusSession } from "./Cli/index.ts";
 import type { Diff } from "./Diff.ts";
 import type { Input } from "./Input.ts";
@@ -32,6 +33,16 @@ type Props<Res extends ResourceLike> = keyof Res["Props"] extends never
   ? Res["Props"] | undefined
   : Res["Props"];
 
+export interface LogLine {
+  timestamp: Date;
+  message: string;
+}
+
+export interface LogsInput {
+  since?: Date;
+  limit?: number;
+}
+
 export interface ProviderService<
   Res extends ResourceLike = ResourceLike,
   ReadReq = never,
@@ -40,6 +51,8 @@ export interface ProviderService<
   CreateReq = never,
   UpdateReq = never,
   DeleteReq = never,
+  TailReq = never,
+  LogsReq = never,
 > {
   /**
    * The version of the provider.
@@ -47,7 +60,27 @@ export interface ProviderService<
    * @default 0
    */
   version?: number;
-  // tail();
+  /**
+   * Returns a stream of log lines for a deployed resource.
+   * Used by `alchemy tail` to stream real-time logs.
+   */
+  tail?(input: {
+    id: string;
+    instanceId: string;
+    props: Props<Res>;
+    output: Res["Attributes"];
+  }): Stream.Stream<LogLine, any, TailReq>;
+  /**
+   * Queries historical logs for a deployed resource.
+   * Used by `alchemy logs` to fetch past log entries.
+   */
+  logs?(input: {
+    id: string;
+    instanceId: string;
+    props: Props<Res>;
+    output: Res["Attributes"];
+    options: LogsInput;
+  }): Effect.Effect<LogLine[], any, LogsReq>;
   // watch();
   // replace(): Effect.Effect<void, never, never>;
   // different interface that is persistent, watching, reloads

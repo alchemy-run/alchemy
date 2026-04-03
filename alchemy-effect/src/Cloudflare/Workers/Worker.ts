@@ -4,12 +4,17 @@ import {
   type Module as BundledModule,
 } from "@distilled.cloud/cloudflare-bundler";
 import * as workers from "@distilled.cloud/cloudflare/workers";
+import type * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Queue from "effect/Queue";
+import * as Schedule from "effect/Schedule";
 import * as ServiceMap from "effect/ServiceMap";
+import * as Stream from "effect/Stream";
+import * as Socket from "effect/unstable/socket/Socket";
 import * as Binding from "../../Binding.ts";
 import {
   cleanupBundleTempDir,
@@ -28,6 +33,7 @@ import {
   type PlatformProps,
   type Rpc,
 } from "../../Platform.ts";
+import type { LogLine } from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { Self } from "../../Self.ts";
 import * as Serverless from "../../Serverless/index.ts";
@@ -37,9 +43,11 @@ import { Account } from "../Account.ts";
 import type { AssetsConfig, AssetsProps } from "./Assets.ts";
 import * as Assets from "./Assets.ts";
 import cloudflare_workers from "./cloudflare:workers.ts";
+import { isDurableObjectExport } from "./DurableObject.ts";
 import { fromCloudflareFetcher } from "./Fetcher.ts";
 import { workersHttpHandler } from "./HttpServer.ts";
 import { makeRpcStub } from "./Rpc.ts";
+import { isWorkflowExport } from "./Workflow.ts";
 
 const WorkerTypeId = "Cloudflare.Worker";
 type WorkerTypeId = typeof WorkerTypeId;
@@ -53,7 +61,7 @@ export const isWorker = <T>(value: T): value is T & Worker =>
 export class WorkerEnvironment extends ServiceMap.Service<
   WorkerEnvironment,
   Record<string, any>
->()("Cloudflare.Workers.WorkerEnvironment") {}
+>()("Cloudflare.WorkerEnvironment") {}
 
 export const WorkerEnvironmentLive = Layer.effect(
   WorkerEnvironment,
@@ -63,12 +71,12 @@ export const WorkerEnvironmentLive = Layer.effect(
 export class ExecutionContext extends ServiceMap.Service<
   ExecutionContext,
   cf.ExecutionContext
->()("Cloudflare.Workers.ExecutionContext") {}
+>()("Cloudflare.ExecutionContext") {}
 
 export type WorkerEvent = Exclude<
   {
     [type in keyof cf.ExportedHandler]: {
-      kind: "Cloudflare.Workers.WorkerEvent";
+      kind: "Cloudflare.WorkerEvent";
       type: type;
       input: Parameters<Exclude<cf.ExportedHandler[type], undefined>>[0];
       env: Parameters<Exclude<cf.ExportedHandler[type], undefined>>[1];
@@ -79,7 +87,7 @@ export type WorkerEvent = Exclude<
 >;
 
 export const isWorkerEvent = (value: any): value is WorkerEvent =>
-  value?.kind === "Cloudflare.Workers.WorkerEvent";
+  value?.kind === "Cloudflare.WorkerEvent";
 
 /**
  * Assets configuration that includes a pre-computed hash.
@@ -272,11 +280,6 @@ export const Worker: Platform<
       )) as any as Serverless.FunctionContext["listen"],
     export: (name: string, value: any) =>
       Effect.gen(function* () {
-        if (name in exports) {
-          return yield* Effect.die(
-            new Error(`Worker export '${name}' already exists`),
-          );
-        }
         exports[name] = value;
       }),
     exports: Effect.gen(function* () {
@@ -287,7 +290,7 @@ export const Worker: Platform<
         (type: WorkerEvent["type"]) =>
         (request: any, env: unknown, context: cf.ExecutionContext) => {
           const event: WorkerEvent = {
-            kind: "Cloudflare.Workers.WorkerEvent",
+            kind: "Cloudflare.WorkerEvent",
             type,
             input: request,
             env,
@@ -388,9 +391,12 @@ export const WorkerProvider = () =>
 
       const { read, upload } = yield* Assets.Assets;
       const createScriptSubdomain = yield* workers.createScriptSubdomain;
+      const createScriptTail = yield* workers.createScriptTail;
       const deleteScript = yield* workers.deleteScript;
+      const deleteScriptTail = yield* workers.deleteScriptTail;
       const getScript = yield* workers.getScript;
       const getScriptSubdomain = yield* workers.getScriptSubdomain;
+      const queryTelemetry = yield* workers.queryObservabilityTelemetry;
       const getScriptSettings = yield* workers.getScriptScriptAndVersionSetting;
       const getSubdomain = yield* workers.getSubdomain;
       const listScripts = yield* workers.listScripts;
@@ -510,7 +516,8 @@ export const WorkerProvider = () =>
         const outputDir = path.join(realTempDir, "out");
         const buildBundle = (entry: string) =>
           Effect.gen(function* () {
-            const { projectRoot, tsconfig } = yield* findBundleProject(realMain);
+            const { projectRoot, tsconfig } =
+              yield* findBundleProject(realMain);
             const bundle = yield* bundler.build({
               main: entry,
               rootDir: projectRoot,
@@ -556,9 +563,21 @@ export const WorkerProvider = () =>
           importPath = `./${importPath}`;
         }
         importPath = importPath.replaceAll("\\", "/");
-        const classes = (Object.keys(props.exports ?? {}) ?? []).filter(
+        const exportMap = (props.exports ?? {}) as Record<string, unknown>;
+        const allExportNames = Object.keys(exportMap).filter(
           (id) => id !== "default",
         );
+        const doClasses: string[] = [];
+        const wfClasses: string[] = [];
+        for (const name of allExportNames) {
+          if (isWorkflowExport(exportMap[name])) {
+            wfClasses.push(name);
+          } else if (isDurableObjectExport(exportMap[name])) {
+            doClasses.push(name);
+          }
+        }
+        const hasDoClasses = doClasses.length > 0;
+        const hasWfClasses = wfClasses.length > 0;
         const script = `
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -570,11 +589,11 @@ import * as Logger from "effect/Logger";
 import * as ServiceMap from "effect/ServiceMap";
 import * as Stream from "effect/Stream";
 
-import { env, DurableObject } from "cloudflare:workers";
+import { env, DurableObject${hasWfClasses ? ", WorkflowEntrypoint" : ""} } from "cloudflare:workers";
 import { MinimumLogLevel } from "effect/References";
 import { NodeServices } from "@effect/platform-node";
 import { Stack } from "alchemy-effect/Stack";
-import { WorkerEnvironment, makeDurableObjectBridge, ExportedHandlerMethods } from "alchemy-effect/Cloudflare";
+import { WorkerEnvironment, makeDurableObjectBridge${hasWfClasses ? ", makeWorkflowBridge" : ""}, ExportedHandlerMethods } from "alchemy-effect/Cloudflare";
 
 import entry from "${importPath}";
 
@@ -643,7 +662,7 @@ let exportsPromise;
 // don't initialize the workerEffect during module init because Cloudflare does not allow I/O during module init
 // we cache it synchronously (??=) to guarnatee only one initialization ever happens
 const getExports = () => (exportsPromise ??= Effect.runPromise(exportsEffect))
-const getExport = (name: string) => getExports().then(exports => exports[name])
+const getExport = (name) => getExports().then(exports => exports[name]?.make)
 const worker = () => getExports().then(exports => exports.default)
 
 export default Object.fromEntries(ExportedHandlerMethods.map(
@@ -651,19 +670,24 @@ export default Object.fromEntries(ExportedHandlerMethods.map(
 ) satisfies Required<cf.ExportedHandler>;
 
 // export class proxy stubs for Durable Objects and Workflows
-${
-  classes.length === 0
-    ? ""
-    : ([
+${[
+  ...(hasDoClasses
+    ? [
         "const DurableObjectBridge = makeDurableObjectBridge(DurableObject, getExport);",
-        ...classes
-          // TODO(sam): differentiate Workflows from Durable Objects
-          .map(
-            (id) =>
-              `export class ${id} extends DurableObjectBridge("${id}") {}`,
-          ),
-      ].join("\n") ?? "")
-}
+        ...doClasses.map(
+          (id) => `export class ${id} extends DurableObjectBridge("${id}") {}`,
+        ),
+      ]
+    : []),
+  ...(hasWfClasses
+    ? [
+        "const WorkflowBridgeFn = makeWorkflowBridge(WorkflowEntrypoint, getExport);",
+        ...wfClasses.map(
+          (id) => `export class ${id} extends WorkflowBridgeFn("${id}") {}`,
+        ),
+      ]
+    : []),
+].join("\n")}
 `;
         yield* fs.writeFileString(tempEntry, script);
 
@@ -970,6 +994,7 @@ ${
           );
           yield* setWorkerSubdomain(name, enable);
         }
+
         return {
           workerId: worker.id ?? name,
           workerName: name,
@@ -1123,6 +1148,122 @@ ${
             scriptName: output.workerName,
           }).pipe(Effect.catchTag("WorkerNotFound", () => Effect.void));
         }),
+        tail: ({ output }) => {
+          const runTailSession = Effect.gen(function* () {
+            const { id: tailId, url } = yield* createScriptTail({
+              scriptName: output.workerName,
+              accountId: output.accountId,
+              body: { filters: [] },
+            });
+
+            const socket = yield* Socket.makeWebSocket(url, {
+              protocols: ["trace-v1"],
+            });
+
+            const queue = yield* Queue.make<LogLine, Cause.Done>();
+
+            yield* socket
+              .runRaw((raw) => {
+                const text =
+                  typeof raw === "string" ? raw : new TextDecoder().decode(raw);
+                const data: TailEventMessage = JSON.parse(text);
+                const eventTs = new Date(data.eventTimestamp ?? Date.now());
+
+                if (data.event && "request" in data.event) {
+                  const reqEvent = data.event;
+                  const pathname = (() => {
+                    try {
+                      return new URL(reqEvent.request.url).pathname;
+                    } catch {
+                      return reqEvent.request.url;
+                    }
+                  })();
+                  const status = reqEvent.response?.status ?? 500;
+                  Queue.offerUnsafe(queue, {
+                    timestamp: eventTs,
+                    message: `${reqEvent.request.method} ${pathname} > ${status} (cpu: ${Math.round(data.cpuTime)}ms, wall: ${Math.round(data.wallTime)}ms)`,
+                  });
+                }
+
+                for (const log of data.logs) {
+                  const msg = log.message.join(" ");
+                  Queue.offerUnsafe(queue, {
+                    timestamp: new Date(log.timestamp),
+                    message: log.level === "log" ? msg : `${log.level}: ${msg}`,
+                  });
+                }
+
+                for (const exception of data.exceptions) {
+                  Queue.offerUnsafe(queue, {
+                    timestamp: new Date(exception.timestamp),
+                    message: `${exception.name} ${exception.message}\n${exception.stack}`,
+                  });
+                }
+              })
+              .pipe(
+                Effect.ensuring(
+                  Effect.all([
+                    deleteScriptTail({
+                      scriptName: output.workerName,
+                      id: tailId,
+                      accountId: output.accountId,
+                    }).pipe(Effect.ignore),
+                    Queue.end(queue),
+                  ]),
+                ),
+                Effect.ignore,
+                Effect.forkChild(),
+              );
+
+            return Stream.fromQueue(queue);
+          });
+
+          return Stream.unwrap(runTailSession).pipe(
+            Stream.repeat(Schedule.spaced("1 second")),
+          );
+        },
+        logs: ({ output, options }) =>
+          Effect.gen(function* () {
+            const now = Date.now();
+            const from = options.since
+              ? options.since.getTime()
+              : now - 60 * 60 * 1000;
+            const limit = options.limit ?? 100;
+
+            const response = yield* queryTelemetry({
+              accountId: output.accountId,
+              queryId: "events",
+              view: "events",
+              timeframe: { from, to: now },
+              limit,
+              parameters: {
+                filters: [
+                  {
+                    key: "$workers.scriptName",
+                    operation: "eq",
+                    type: "string",
+                    value: output.workerName,
+                  },
+                ],
+                orderBy: { value: "timestamp", order: "desc" },
+              },
+            });
+
+            const lines: LogLine[] = [];
+            if (response.events?.events) {
+              for (const event of response.events.events) {
+                const ts = new Date(event.timestamp);
+                const meta = event.$metadata;
+                const msg =
+                  meta.message ??
+                  (meta.level === "error"
+                    ? `error: ${meta.error ?? "unknown"}`
+                    : `${meta.level ?? "log"}`);
+                lines.push({ timestamp: ts, message: msg });
+              }
+            }
+            return lines;
+          }),
       });
     }),
   );
@@ -1165,3 +1306,30 @@ const hashBundleFiles = (files: ReadonlyArray<PreparedBundleFile>) =>
     );
     return yield* sha256(JSON.stringify(parts));
   });
+
+interface TailEventMessage {
+  eventTimestamp?: number;
+  wallTime: number;
+  cpuTime: number;
+  truncated: boolean;
+  outcome: string;
+  scriptName: string;
+  exceptions: {
+    name: string;
+    message: string;
+    stack: string;
+    timestamp: string;
+  }[];
+  logs: {
+    message: string[];
+    level: string;
+    timestamp: string;
+  }[];
+  event:
+    | {
+        request: { method: string; url: string };
+        response?: { status: number };
+      }
+    | null
+    | undefined;
+}

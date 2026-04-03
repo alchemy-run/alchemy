@@ -154,8 +154,8 @@
     </div>
 
     <script>
-      const BASE =
-        "wss://cloudflareworker-api-dev-samgoodwin-syeejtp4rjzyxclr.testing-2b2.workers.dev";
+      const proto = location.protocol === "https:" ? "wss:" : "ws:";
+      const BASE = `${proto}//${location.host}`;
       const roomId =
         new URLSearchParams(location.search).get("room") || "default";
 

@@ -371,7 +371,7 @@ export const bindContainer = Effect.fnUntraced(function* <Shape, Req = never>(
           >
         : containerEff;
 
-  yield* container.bind`Owner(${namespace})`({
+  yield* container.bind`${namespace}`({
     durableObjects: {
       namespaceId: namespace.namespaceId,
     },
@@ -379,7 +379,7 @@ export const bindContainer = Effect.fnUntraced(function* <Shape, Req = never>(
 
   const worker = yield* Worker;
   const className = namespace.name;
-  yield* worker.bind`Container(${className})`({
+  yield* worker.bind`Cloudflare.Container(${className})`({
     bindings: [],
     containers: [{ className }],
   });
