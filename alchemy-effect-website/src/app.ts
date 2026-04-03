@@ -32,18 +32,9 @@ const escapeHtml = (value: string) =>
 
 const classifyUrl = (url: string) => {
   if (url.startsWith("/reference/")) {
-    return {
-      label: "API Reference",
-      classes:
-        "border-violet-200/20 bg-violet-200/10 text-violet-100",
-    };
+    return { label: "API Reference" };
   }
-
-  return {
-    label: "Guide",
-    classes:
-      "border-violet-400/20 bg-violet-400/10 text-violet-200",
-  };
+  return { label: "Guide" };
 };
 
 let pagefindPromise: Promise<PagefindModule> | undefined;
@@ -117,17 +108,15 @@ if (modal && input && results && status && backdrop) {
       .map((item) => {
         const badge = classifyUrl(item.url);
         return `
-          <a href="${item.url}" class="block px-5 py-4 transition hover:bg-white/[0.06]">
-            <div class="mb-2 flex items-center gap-3">
-              <span class="inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] ${badge.classes}">
-                ${badge.label}
-              </span>
-              <span class="text-xs text-slate-500">${escapeHtml(item.url)}</span>
+          <a href="${item.url}" class="search-result-link">
+            <div style="margin-bottom:0.5rem;display:flex;align-items:center;gap:0.75rem;">
+              <span class="search-result-badge">${badge.label}</span>
+              <span class="search-result-url">${escapeHtml(item.url)}</span>
             </div>
-            <div class="text-base font-semibold text-white">
+            <div class="search-result-title">
               ${escapeHtml(item.meta.title ?? item.url)}
             </div>
-            <p class="mt-2 text-sm leading-6 text-slate-300">${item.excerpt}</p>
+            <p class="search-result-excerpt">${item.excerpt}</p>
           </a>
         `;
       })

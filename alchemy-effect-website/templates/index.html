@@ -4,82 +4,334 @@
 
 {% block title %}{{ section.title }} | {{ config.title }}{% endblock title %}
 {% block description %}{{ section.description }}{% endblock description %}
+{% block body_class %}landing-page{% endblock body_class %}
+{% block header %}{% endblock header %}
+{% block main_class %}landing-main{% endblock main_class %}
+{% block footer %}{% endblock footer %}
 
 {% block content %}
-  <section class="grid gap-10 lg:grid-cols-[minmax(0,1.2fr)_minmax(22rem,0.8fr)] lg:items-center">
-    <div>
-      <div class="brand-badge brand-badge-reference mb-5 px-4 py-2 text-sm font-medium normal-case tracking-[0.08em]">
-        Fast docs pipeline for a large API surface
-      </div>
-      <h1 class="brand-title max-w-4xl text-5xl font-semibold sm:text-6xl">
-        Infrastructure-as-Effects docs with a modern UI and a Rust-first build.
-      </h1>
-      <p class="brand-copy mt-6 max-w-3xl text-lg leading-8">
-        Browse handwritten guides alongside generated API reference pages without
-        pushing thousands of markdown files through a JavaScript renderer.
-      </p>
-      <div class="mt-8 flex flex-wrap items-center gap-4">
-        <a
-          href="{{ guides.permalink | safe }}"
-          class="brand-primary-button"
-        >
-          Read the guides
-        </a>
-        <a
-          href="{{ reference.permalink | safe }}"
-          class="brand-secondary-button"
-        >
-          Explore the API reference
-        </a>
+  {# ── Header (matches alchemy.run Nova style) ── #}
+  <header class="site-header">
+    <div class="site-header-inner">
+      <a href="/" class="site-header-logo">
+        alchemy<span class="accent">-effect</span>
+      </a>
+      <nav class="site-header-nav">
+        <a href="{{ guides.permalink | safe }}">Docs</a>
+        <a href="{{ reference.permalink | safe }}">API Reference</a>
+        <a href="{{ config.extra.repo_url }}" target="_blank" rel="noopener">GitHub</a>
+      </nav>
+      <div class="site-header-search">
+        <button type="button" data-search-open class="site-header-search-btn">
+          <span>Search</span>
+          <kbd class="site-header-kbd">/</kbd>
+        </button>
       </div>
     </div>
+  </header>
 
-    <div class="brand-panel p-6">
-      <div class="brand-kicker mb-4">
-        Search Preview
-      </div>
-      <div class="brand-panel-strong p-4">
-        <div class="mb-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-400">
-          Search guides, resources, bindings, and examples
+  {# ── Hero ── #}
+  <section class="landing-hero">
+    <div class="landing-hero-inner">
+      <div class="hero-text">
+        <h1 class="landing-hero-title">Infrastructure as Effects</h1>
+        <p class="landing-hero-tagline">
+          Deploy to AWS, Cloudflare, and more with pure TypeScript. Resources, runtimes, and bindings in one type-safe Effect program.
+        </p>
+        <div class="landing-hero-actions">
+          <a href="{{ guides.permalink | safe }}" class="landing-hero-btn primary">Quick Start</a>
+          <a href="{{ config.extra.repo_url }}" class="landing-hero-btn secondary" target="_blank" rel="noopener">
+            &#11088; Star on GitHub
+          </a>
         </div>
-        <div class="space-y-3">
-          <div class="brand-card-link p-4">
-            <div class="brand-kicker mb-1 text-xs">API Reference</div>
-            <div class="font-semibold text-white">AWS.Lambda.Function</div>
-            <p class="mt-1 text-sm leading-6 text-slate-300">
-              Function contract, examples, attributes, and binding data in one place.
-            </p>
+      </div>
+
+      <div class="hero-visual">
+        <div class="landing-code-window">
+          <div class="landing-code-header">
+            <div class="landing-code-dots">
+              <span class="landing-code-dot"></span>
+              <span class="landing-code-dot"></span>
+              <span class="landing-code-dot"></span>
+            </div>
+            <span class="landing-code-title">alchemy.run.ts</span>
           </div>
-          <div class="brand-card-link p-4">
-            <div class="brand-kicker mb-1 text-xs">Guide</div>
-            <div class="font-semibold text-white">Getting Started</div>
-            <p class="mt-1 text-sm leading-6 text-slate-300">
-              Learn the docs workflow and how the generated reference fits into it.
-            </p>
+          <div class="landing-code-body">
+            <pre><code><span class="token-keyword">import</span> * <span class="token-keyword">as</span> AWS <span class="token-keyword">from</span> <span class="token-string">"alchemy-effect/AWS"</span><span class="token-punctuation">;</span>
+<span class="token-keyword">import</span> * <span class="token-keyword">as</span> Stack <span class="token-keyword">from</span> <span class="token-string">"alchemy-effect/Stack"</span><span class="token-punctuation">;</span>
+<span class="token-keyword">import</span> * <span class="token-keyword">as</span> Effect <span class="token-keyword">from</span> <span class="token-string">"effect/Effect"</span><span class="token-punctuation">;</span>
+
+<span class="token-keyword">export default</span> Effect.<span class="token-function">gen</span><span class="token-punctuation">(</span><span class="token-keyword">function*</span> <span class="token-punctuation">() {</span>
+  <span class="token-keyword">const</span> bucket = <span class="token-keyword">yield*</span> AWS.S3.<span class="token-function">Bucket</span><span class="token-punctuation">(</span><span class="token-string">"DataBucket"</span><span class="token-punctuation">);</span>
+  <span class="token-keyword">const</span> putObject = <span class="token-keyword">yield*</span> AWS.S3.PutObject.<span class="token-function">bind</span><span class="token-punctuation">(</span>bucket<span class="token-punctuation">);</span>
+
+  <span class="token-keyword">const</span> api = <span class="token-keyword">yield*</span> AWS.Lambda.<span class="token-function">Function</span><span class="token-punctuation">(</span><span class="token-string">"Api"</span><span class="token-punctuation">,</span> <span class="token-punctuation">{</span>
+    <span class="token-property">timeout</span><span class="token-punctuation">:</span> <span class="token-string">"30 seconds"</span><span class="token-punctuation">,</span>
+  <span class="token-punctuation">});</span>
+
+  <span class="token-keyword">return</span> <span class="token-punctuation">{</span>
+    <span class="token-property">bucketArn</span><span class="token-punctuation">:</span> bucket.bucketArn<span class="token-punctuation">,</span>
+    <span class="token-property">apiUrl</span><span class="token-punctuation">:</span> api.functionUrl<span class="token-punctuation">,</span>
+    putObject<span class="token-punctuation">,</span>
+  <span class="token-punctuation">};</span>
+<span class="token-punctuation">}).</span><span class="token-function">pipe</span><span class="token-punctuation">(</span>
+  Stack.<span class="token-function">make</span><span class="token-punctuation">(</span><span class="token-string">"App"</span><span class="token-punctuation">),</span>
+  Effect.<span class="token-function">provide</span><span class="token-punctuation">(</span>AWS.<span class="token-function">providers</span><span class="token-punctuation">()),</span>
+<span class="token-punctuation">);</span></code></pre>
           </div>
         </div>
       </div>
     </div>
   </section>
 
-  <section class="mt-20 grid gap-6 md:grid-cols-3">
-    <div class="brand-panel p-6">
-      <h2 class="text-xl font-semibold text-white">Modern design system</h2>
-      <p class="mt-3 text-sm leading-7 text-slate-300">
-        Tailwind-powered styling and custom JavaScript interactions keep the UI polished without making markdown rendering expensive.
-      </p>
-    </div>
-    <div class="brand-panel p-6">
-      <h2 class="text-xl font-semibold text-white">Generated API reference</h2>
-      <p class="mt-3 text-sm leading-7 text-slate-300">
-        Resource pages are generated from TypeScript source so contracts, examples, and properties stay aligned with the implementation.
-      </p>
-    </div>
-    <div class="brand-panel p-6">
-      <h2 class="text-xl font-semibold text-white">Static asset deployment</h2>
-      <p class="mt-3 text-sm leading-7 text-slate-300">
-        HTML, CSS, JavaScript, and Pagefind bundles are uploaded as Cloudflare Worker static assets instead of being inlined into the Worker script.
-      </p>
+  {# ── Platform ── #}
+  <section class="landing-section">
+    <div class="landing-section-inner">
+      <div class="landing-section-header">
+        <h2 class="landing-section-title">
+          <span class="gradient-text">Platform</span>
+        </h2>
+        <p class="landing-section-desc">
+          Build cloud applications from typed resources, runtime implementations,
+          binding contracts, and generated documentation.
+        </p>
+      </div>
+
+      <div class="landing-features-grid">
+        <a href="{{ reference.permalink | safe }}" class="landing-feature-card">
+          <div class="landing-feature-icon">AWS</div>
+          <h3 class="landing-feature-title">AWS Resources</h3>
+          <p class="landing-feature-desc">S3, Lambda, DynamoDB, SQS, EC2, ECS, Auto Scaling, and more as typed resources with explicit input and output contracts.</p>
+        </a>
+        <a href="{{ reference.permalink | safe }}" class="landing-feature-card">
+          <div class="landing-feature-icon">CF</div>
+          <h3 class="landing-feature-title">Cloudflare Resources</h3>
+          <p class="landing-feature-desc">Workers, assets, containers, and edge platform features using the same resource model as the rest of the framework.</p>
+        </a>
+        <a href="{{ reference.permalink | safe }}" class="landing-feature-card">
+          <div class="landing-feature-icon">Fn</div>
+          <h3 class="landing-feature-title">Functions and Workers</h3>
+          <p class="landing-feature-desc">Runtime behavior is written as an Effect, while deployment config stays attached to the same resource definition.</p>
+        </a>
+        <a href="{{ reference.permalink | safe }}" class="landing-feature-card">
+          <div class="landing-feature-icon">IO</div>
+          <h3 class="landing-feature-title">Capabilities and Bindings</h3>
+          <p class="landing-feature-desc">Attach runtime services, IAM policies, environment, and event sources with explicit binding contracts instead of hidden glue.</p>
+        </a>
+        <a href="{{ guides.permalink | safe }}" class="landing-feature-card">
+          <div class="landing-feature-icon">Fx</div>
+          <h3 class="landing-feature-title">Effect-native Composition</h3>
+          <p class="landing-feature-desc">Retries, errors, layers, outputs, and runtime dependencies all use the same Effect model as the application itself.</p>
+        </a>
+        <a href="{{ guides.permalink | safe }}" class="landing-feature-card">
+          <div class="landing-feature-icon">Doc</div>
+          <h3 class="landing-feature-title">Guides and API Reference</h3>
+          <p class="landing-feature-desc">Handwritten guides and generated reference pages keep resource contracts, examples, and implementation details aligned.</p>
+        </a>
+      </div>
     </div>
   </section>
+
+  {# ── The Problem ── #}
+  <section class="landing-section">
+    <div class="landing-section-inner">
+      <div class="landing-section-header">
+        <p class="landing-section-label">The Problem</p>
+        <h2 class="landing-section-title">
+          Cloud applications get
+          <span class="gradient-text">split across too many systems</span>
+        </h2>
+        <p class="landing-section-desc">
+          Infrastructure definitions, runtime code, permissions, and deployment
+          behavior drift apart until the real architecture is hard to see.
+        </p>
+      </div>
+
+      <div class="landing-problems-grid">
+        <div class="landing-problem-card">
+          <div class="landing-problem-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          </div>
+          <div class="landing-problem-text">
+            <h3>Infrastructure drift</h3>
+            <p>Business logic changes in one place while buckets, queues, functions, and policies change somewhere else.</p>
+          </div>
+        </div>
+        <div class="landing-problem-card">
+          <div class="landing-problem-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+          </div>
+          <div class="landing-problem-text">
+            <h3>Hidden wiring</h3>
+            <p>Environment variables, IAM policies, and platform bindings often end up as fragile manual configuration.</p>
+          </div>
+        </div>
+        <div class="landing-problem-card">
+          <div class="landing-problem-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+          </div>
+          <div class="landing-problem-text">
+            <h3>Runtime surprises</h3>
+            <p>Eventual consistency, dependency violations, and retries are real cloud behavior, but many IaC tools keep them out of the model.</p>
+          </div>
+        </div>
+        <div class="landing-problem-card">
+          <div class="landing-problem-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+          </div>
+          <div class="landing-problem-text">
+            <h3>Lost context</h3>
+            <p>Runtime code is too often configured with strings instead of typed references to the resources it depends on.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  {# ── Why alchemy-effect ── #}
+  <section class="landing-section">
+    <div class="landing-section-inner">
+      <div class="landing-section-header">
+        <h2 class="landing-section-title">
+          Why <span class="gradient-text">alchemy-effect</span>?
+        </h2>
+        <p class="landing-section-desc">
+          Infrastructure-as-Effects for modern TypeScript
+        </p>
+      </div>
+
+      <div class="landing-showcases">
+        <div class="landing-showcase">
+          <div class="landing-showcase-content">
+            <h3 class="landing-showcase-title">One program, full stack</h3>
+            <p class="landing-showcase-desc">Stacks are Effects that declare resources and return outputs. Infra and application composition use the same programming model.</p>
+            <ul class="landing-showcase-list">
+              <li><svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Declare resources inline where they are needed</li>
+              <li><svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Return typed outputs from the same stack definition</li>
+              <li><svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Keep infrastructure close to business logic</li>
+            </ul>
+          </div>
+          <div class="landing-showcase-code">
+            <pre><code><span class="token-keyword">const</span> stack = Effect.<span class="token-function">gen</span><span class="token-punctuation">(</span><span class="token-keyword">function*</span> <span class="token-punctuation">() {</span>
+  <span class="token-keyword">const</span> queue = <span class="token-keyword">yield*</span> AWS.SQS.<span class="token-function">Queue</span><span class="token-punctuation">(</span><span class="token-string">"Jobs"</span><span class="token-punctuation">);</span>
+  <span class="token-keyword">const</span> worker = <span class="token-keyword">yield*</span> AWS.Lambda.<span class="token-function">Function</span><span class="token-punctuation">(</span><span class="token-string">"Worker"</span><span class="token-punctuation">);</span>
+
+  <span class="token-keyword">return</span> <span class="token-punctuation">{</span>
+    <span class="token-property">queueUrl</span><span class="token-punctuation">:</span> queue.queueUrl<span class="token-punctuation">,</span>
+    <span class="token-property">workerArn</span><span class="token-punctuation">:</span> worker.functionArn<span class="token-punctuation">,</span>
+  <span class="token-punctuation">};</span>
+<span class="token-punctuation">}).</span><span class="token-function">pipe</span><span class="token-punctuation">(</span>
+  Stack.<span class="token-function">make</span><span class="token-punctuation">(</span><span class="token-string">"App"</span><span class="token-punctuation">),</span>
+  Effect.<span class="token-function">provide</span><span class="token-punctuation">(</span>AWS.<span class="token-function">providers</span><span class="token-punctuation">()),</span>
+<span class="token-punctuation">);</span></code></pre>
+          </div>
+        </div>
+
+        <div class="landing-showcase reverse">
+          <div class="landing-showcase-content">
+            <h3 class="landing-showcase-title">Bindings make dependencies explicit</h3>
+            <p class="landing-showcase-desc">Capabilities connect runtime services with deploy-time permissions so the real dependency graph stays visible and typed.</p>
+            <ul class="landing-showcase-list">
+              <li><svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Attach IAM policies and env automatically</li>
+              <li><svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Bind runtime SDK wrappers as Effect services</li>
+              <li><svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Model circular dependencies intentionally</li>
+            </ul>
+          </div>
+          <div class="landing-showcase-code">
+            <pre><code><span class="token-keyword">const</span> bucket = <span class="token-keyword">yield*</span> AWS.S3.<span class="token-function">Bucket</span><span class="token-punctuation">(</span><span class="token-string">"Assets"</span><span class="token-punctuation">);</span>
+<span class="token-keyword">const</span> putObject = <span class="token-keyword">yield*</span> AWS.S3.PutObject.<span class="token-function">bind</span><span class="token-punctuation">(</span>bucket<span class="token-punctuation">);</span>
+
+<span class="token-keyword">yield*</span> Http.<span class="token-function">serve</span><span class="token-punctuation">(</span>app<span class="token-punctuation">).</span><span class="token-function">pipe</span><span class="token-punctuation">(</span>
+  Effect.<span class="token-function">provide</span><span class="token-punctuation">(</span>AWS.S3.PutObjectLive<span class="token-punctuation">),</span>
+<span class="token-punctuation">);</span>
+
+<span class="token-keyword">return</span> <span class="token-punctuation">{</span>
+  <span class="token-property">main</span><span class="token-punctuation">:</span> <span class="token-keyword">import</span>.meta.path<span class="token-punctuation">,</span>
+<span class="token-punctuation">};</span></code></pre>
+          </div>
+        </div>
+
+        <div class="landing-showcase">
+          <div class="landing-showcase-content">
+            <h3 class="landing-showcase-title">Runtime code is part of the resource</h3>
+            <p class="landing-showcase-desc">Lambda Functions and Cloudflare Workers are first-class resources whose runtime implementation lives in the same model as deployment behavior.</p>
+            <ul class="landing-showcase-list">
+              <li><svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Define runtime behavior with Effects</li>
+              <li><svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Keep config, assets, and code together</li>
+              <li><svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Support Lambda and Cloudflare runtimes</li>
+            </ul>
+          </div>
+          <div class="landing-showcase-code">
+            <pre><code><span class="token-keyword">yield*</span> Http.<span class="token-function">serve</span><span class="token-punctuation">(</span>api<span class="token-punctuation">);</span>
+
+<span class="token-keyword">return</span> <span class="token-punctuation">{</span>
+  <span class="token-property">main</span><span class="token-punctuation">:</span> <span class="token-keyword">import</span>.meta.path<span class="token-punctuation">,</span>
+  <span class="token-property">memory</span><span class="token-punctuation">:</span> <span class="token-type">1024</span><span class="token-punctuation">,</span>
+  <span class="token-property">url</span><span class="token-punctuation">:</span> <span class="token-type">true</span><span class="token-punctuation">,</span>
+<span class="token-punctuation">}</span> <span class="token-keyword">as const</span><span class="token-punctuation">;</span>
+<span class="token-punctuation">}).</span><span class="token-function">pipe</span><span class="token-punctuation">(</span>
+  Lambda.<span class="token-function">Function</span><span class="token-punctuation">(</span><span class="token-string">"Api"</span><span class="token-punctuation">),</span>
+<span class="token-punctuation">);</span></code></pre>
+          </div>
+        </div>
+
+        <div class="landing-showcase reverse">
+          <div class="landing-showcase-content">
+            <h3 class="landing-showcase-title">Effect-native reliability</h3>
+            <p class="landing-showcase-desc">Errors, retries, and composition are part of the programming model instead of bolted onto deployment after the fact.</p>
+            <ul class="landing-showcase-list">
+              <li><svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Bring failures into the type system</li>
+              <li><svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Use declarative retry logic for cloud behavior</li>
+              <li><svg class="check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Compose infrastructure with ordinary Effect layers</li>
+            </ul>
+          </div>
+          <div class="landing-showcase-code">
+            <pre><code><span class="token-function">createResource</span><span class="token-punctuation">(</span>params<span class="token-punctuation">).</span><span class="token-function">pipe</span><span class="token-punctuation">(</span>
+  Effect.<span class="token-function">retry</span><span class="token-punctuation">({</span>
+    <span class="token-property">while</span><span class="token-punctuation">:</span> isDependencyViolation<span class="token-punctuation">,</span>
+    <span class="token-property">schedule</span><span class="token-punctuation">:</span> Schedule.<span class="token-function">exponential</span><span class="token-punctuation">(</span><span class="token-string">"1 second"</span><span class="token-punctuation">),</span>
+  <span class="token-punctuation">}),</span>
+<span class="token-punctuation">);</span></code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  {# ── CTA ── #}
+  <section class="landing-cta">
+    <div class="landing-cta-inner">
+      <h2 class="landing-cta-title">
+        <span class="gradient-text">Get started</span> with alchemy-effect
+      </h2>
+      <p class="landing-cta-desc">
+        Start with the guides and then dive into the API reference for contracts,
+        attributes, examples, and capabilities across AWS and Cloudflare.
+      </p>
+      <div class="landing-cta-actions">
+        <a href="{{ guides.permalink | safe }}" class="landing-hero-btn primary">Explore guides</a>
+        <a href="{{ reference.permalink | safe }}" class="landing-hero-btn secondary">API Reference</a>
+      </div>
+    </div>
+  </section>
+
+  {# ── Footer ── #}
+  <footer class="landing-footer">
+    <div class="landing-footer-inner">
+      <div class="landing-footer-top">
+        <div>
+          <div class="landing-footer-brand">alchemy<span class="accent">-effect</span></div>
+          <p class="landing-footer-tagline">Infrastructure-as-Effects for cloud applications</p>
+        </div>
+        <nav class="landing-footer-nav">
+          <a href="{{ guides.permalink | safe }}">Guides</a>
+          <a href="{{ reference.permalink | safe }}">API Reference</a>
+          <a href="{{ config.extra.repo_url }}" target="_blank" rel="noopener">GitHub</a>
+        </nav>
+      </div>
+      <div class="landing-footer-bottom">
+        <p class="landing-footer-copy">&copy; 2026 alchemy-effect. Open source infrastructure tooling built with Effect.</p>
+      </div>
+    </div>
+  </footer>
 {% endblock content %}

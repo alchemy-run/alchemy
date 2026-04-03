@@ -4,7 +4,7 @@
 {% block description %}The requested documentation page could not be found.{% endblock description %}
 
 {% block content %}
-  <section class="mx-auto max-w-3xl rounded-[2rem] border border-white/10 bg-white/5 p-10 text-center">
+  <section class="mx-auto max-w-3xl rounded-[2rem] border p-10 text-center" style="border-color: var(--brand-border); background: var(--brand-surface);">
     <div class="brand-badge brand-badge-guide mb-4">
       Not Found
     </div>
@@ -13,18 +13,8 @@
       Try the guides, browse the API reference, or open search to jump to another page.
     </p>
     <div class="mt-8 flex flex-wrap items-center justify-center gap-4">
-      <a
-        href="/guides/"
-        class="brand-primary-button"
-      >
-        Browse guides
-      </a>
-      <a
-        href="/reference/"
-        class="brand-secondary-button"
-      >
-        Open API reference
-      </a>
+      <a href="/guides/" class="brand-primary-button">Browse guides</a>
+      <a href="/reference/" class="brand-secondary-button">Open API reference</a>
     </div>
   </section>
 {% endblock content %}

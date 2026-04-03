@@ -1,5 +1,4 @@
-# Host-relative URLs so the same build works on workers.dev, custom domains, and local zola serve.
-base_url = "/"
+base_url = "https://alchemy.run"
 title = "Alchemy Effect"
 description = "Alchemy Effect documentation and generated API reference."
 default_language = "en"

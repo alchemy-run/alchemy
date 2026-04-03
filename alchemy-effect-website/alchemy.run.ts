@@ -23,6 +23,7 @@ const stack = Effect.gen(function* () {
     ],
     compatibility: {
       date: "2026-04-02",
+      flags: ["nodejs_compat"],
     },
   });
 
