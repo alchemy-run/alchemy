@@ -180,11 +180,11 @@
     "ai": "catalog:",
     "aws4fetch": "catalog:",
     "cloudflare": "catalog:",
-    "esbuild": "catalog:",
     "fast-glob": "^3.3.2",
     "fast-xml-parser": "catalog:",
     "ignore": "^7.0.5",
     "jszip": "^3.10.1",
+    "rolldown": "^1.0.0-rc.13",
     "solid-js": "catalog:",
     "web-tree-sitter": "catalog:",
     "yaml": "catalog:"
