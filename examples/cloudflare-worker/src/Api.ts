@@ -10,9 +10,6 @@ export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
   {
     main: import.meta.path,
-    observability: {
-      enabled: true,
-    },
     compatibility: {
       flags: ["nodejs_compat"],
     },

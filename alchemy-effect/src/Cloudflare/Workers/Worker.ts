@@ -1,8 +1,5 @@
 import type * as cf from "@cloudflare/workers-types";
-import {
-  Bundler,
-  type Module as BundledModule,
-} from "@distilled.cloud/cloudflare-bundler";
+import cloudflare from "@distilled.cloud/cloudflare-rolldown-plugin";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -11,6 +8,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as ServiceMap from "effect/ServiceMap";
 import * as Binding from "../../Binding.ts";
+import * as Bundle from "../../Bundle/BundleV2.ts";
 import {
   cleanupBundleTempDir,
   createTempBundleDir,
@@ -382,7 +380,6 @@ export const WorkerProvider = () =>
       const path = yield* Path.Path;
 
       const accountId = yield* Account;
-      const bundler = yield* Bundler;
       const dotAlchemy = yield* DotAlchemy;
       const stack = yield* Stack;
 
@@ -430,36 +427,15 @@ export const WorkerProvider = () =>
         return createAlchemyWorkerTags(id).every((tag) => actualTags.has(tag));
       };
 
-      const findBundleProject = Effect.fnUntraced(function* (entry: string) {
+      const findCwdForBundle = Effect.fnUntraced(function* (entry: string) {
         let current = path.dirname(entry);
         while (true) {
           if (yield* fs.exists(path.join(current, "package.json"))) {
-            const relativeEntry = path
-              .relative(current, entry)
-              .replaceAll("\\", "/");
-            const tsconfigCandidates = relativeEntry.startsWith("test/")
-              ? ["tsconfig.test.json", "tsconfig.json"]
-              : ["tsconfig.json", "tsconfig.test.json"];
-            for (const tsconfig of tsconfigCandidates) {
-              if (yield* fs.exists(path.join(current, tsconfig))) {
-                return {
-                  projectRoot: current,
-                  tsconfig,
-                };
-              }
-            }
-            return {
-              projectRoot: current,
-              tsconfig: undefined,
-            };
+            return current;
           }
-
           const parent = path.dirname(current);
           if (parent === current) {
-            return {
-              projectRoot: process.cwd(),
-              tsconfig: undefined,
-            };
+            return process.cwd();
           }
           current = parent;
         }
@@ -508,42 +484,47 @@ export const WorkerProvider = () =>
         const realTempDir = yield* fs.realPath(tempDir);
         const tempEntry = path.join(realTempDir, "__index.ts");
         const outputDir = path.join(realTempDir, "out");
-        const buildBundle = (entry: string) =>
-          Effect.gen(function* () {
-            const { projectRoot, tsconfig } = yield* findBundleProject(realMain);
-            const bundle = yield* bundler.build({
-              main: entry,
-              rootDir: projectRoot,
-              outDir: outputDir,
-              minify: true,
-              tsconfig,
-              cloudflare: {
-                compatibilityDate: props.compatibility?.date ?? "2026-03-10",
-                compatibilityFlags: props.compatibility?.flags,
+        const buildBundle = Effect.fnUntraced(function* (entry: string) {
+          const files = yield* Bundle.build(
+            {
+              input: entry,
+              cwd: yield* findCwdForBundle(entry),
+              onLog(level, log, defaultHandler) {
+                if (
+                  level === "warn" &&
+                  log.code === "UNRESOLVED_IMPORT" &&
+                  !log.message.includes("cloudflare")
+                ) {
+                  return;
+                }
+                defaultHandler(level, log);
               },
-            });
-            const files: Array<PreparedBundleFile> = bundle.modules.map(
-              (module: BundledModule) => ({
-                name: module.name,
-                content:
-                  module.name === bundle.main && module.type === "ESModule"
-                    ? stripSourceMapComment(
-                        Buffer.from(module.content).toString("utf8"),
-                      )
-                    : (module.content.buffer.slice(
-                        module.content.byteOffset,
-                        module.content.byteOffset + module.content.byteLength,
-                      ) as ArrayBuffer),
-                contentType:
-                  getModuleContentType(module) ?? "application/octet-stream",
-              }),
-            );
-            return {
-              files,
-              mainModule: bundle.main,
-              hash: yield* hashBundleFiles(files),
-            };
-          });
+              plugins: [
+                cloudflare({
+                  compatibilityDate: props.compatibility?.date ?? "2026-03-10",
+                  compatibilityFlags: props.compatibility?.flags,
+                }),
+              ],
+            },
+            {
+              dir: outputDir,
+              format: "esm",
+              sourcemap: "hidden",
+              minify: true,
+              keepNames: true,
+            },
+          );
+          return {
+            files: files.map(
+              (file) =>
+                new File([file.content as BlobPart], file.path, {
+                  type: contentTypeFromExtension(path.extname(file.path)),
+                }),
+            ),
+            mainModule: files[0].path,
+            hash: yield* hashBundleFiles(files),
+          };
+        });
 
         if (props.isExternal) {
           return yield* buildBundle(realMain).pipe(
@@ -600,8 +581,6 @@ const stack = Layer.succeed(
     resources: {}
   }
 );
-
-import util from "node:util";
 
 const exportsEffect = tag.asEffect().pipe(
   Effect.flatMap(func => func.ExecutionContext.exports),
@@ -919,17 +898,11 @@ ${
           tailConsumers: undefined,
           usageModel: undefined,
         };
-        const scriptFiles = bundle.files.map(
-          (file) =>
-            new File([file.content], file.name, {
-              type: file.contentType,
-            }),
-        );
         const worker = yield* putScript({
           accountId,
           scriptName: name,
           metadata,
-          files: scriptFiles,
+          files: bundle.files,
         }).pipe(
           Effect.catch((err) => {
             // When adopting a Worker managed by Wrangler (or after a previous
@@ -957,7 +930,7 @@ ${
                     newTag: bumpMigrationTagVersion(expectedTag),
                   },
                 },
-                files: scriptFiles,
+                files: bundle.files,
               });
             }
             return Effect.fail(err as any);
@@ -1127,41 +1100,35 @@ ${
     }),
   );
 
-const stripSourceMapComment = (code: string) =>
-  code.replace(/\n?\/\/# sourceMappingURL=.*$/gm, "");
-
-const getModuleContentType = (module: BundledModule) => {
-  switch (module.type) {
-    case "ESModule":
-      return "application/javascript+module";
-    case "CompiledWasm":
+const contentTypeFromExtension = (extension: string) => {
+  switch (extension) {
+    case ".wasm":
       return "application/wasm";
-    case "Data":
-      return "application/octet-stream";
-    case "Text":
-      if (module.name.endsWith(".html")) return "text/html";
-      if (module.name.endsWith(".sql")) return "text/sql";
+    case ".txt":
+    case ".html":
+    case ".sql":
+    case ".custom":
       return "text/plain";
-    case "SourceMap":
+    case ".bin":
+      return "application/octet-stream";
+    case ".mjs":
+    case ".js":
+      return "application/javascript+module";
+    case ".cjs":
+      return "application/javascript";
+    case ".map":
       return "application/source-map";
+    default:
+      return "application/octet-stream";
   }
 };
 
-const hashBundleFiles = (files: ReadonlyArray<PreparedBundleFile>) =>
-  Effect.gen(function* () {
-    const parts = yield* Effect.all(
-      files.map((file) =>
-        sha256(file.content).pipe(
-          Effect.map((hash) => ({
-            name: file.name,
-            contentType: file.contentType,
-            hash,
-          })),
-        ),
-      ),
-      {
-        concurrency: "unbounded",
-      },
-    );
-    return yield* sha256(JSON.stringify(parts));
-  });
+const hashBundleFiles = (files: Bundle.BundleOutput) =>
+  sha256(
+    JSON.stringify(
+      files.map((file) => ({
+        name: file.path,
+        hash: file.hash,
+      })),
+    ),
+  );

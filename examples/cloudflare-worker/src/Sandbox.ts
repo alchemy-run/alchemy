@@ -75,7 +75,7 @@ export const SandboxLive = Sandbox.make(
         Effect.try({
           // TODO(sam): evaluate in a sandbox
           // oxlint-disable-next-line no-eval
-          try: () => eval(code),
+          try: () => (0, eval)(code), // Use indirect eval to avoid bundler warnings: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
           catch: (error: any) => new EvalError({ message: error.message }),
         }),
       fetch: Effect.gen(function* () {

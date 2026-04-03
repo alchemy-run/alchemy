@@ -169,7 +169,7 @@
     "@aws-sdk/credential-providers": "catalog:",
     "@distilled.cloud/aws": "catalog:",
     "@distilled.cloud/cloudflare": "catalog:",
-    "@distilled.cloud/cloudflare-bundler": "catalog:",
+    "@distilled.cloud/cloudflare-rolldown-plugin": "catalog:",
     "@distilled.cloud/core": "catalog:",
     "@effect/vitest": "catalog:",
     "@libsql/client": "catalog:",

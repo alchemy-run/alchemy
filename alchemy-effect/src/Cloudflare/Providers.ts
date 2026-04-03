@@ -1,4 +1,3 @@
-import { RolldownBundler } from "@distilled.cloud/cloudflare-bundler/rolldown";
 import * as Auth from "@distilled.cloud/cloudflare/Auth";
 import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
@@ -70,5 +69,4 @@ export const bindings = () =>
     KV.GetWithMetadataPolicyLive,
   );
 
-const utils = () =>
-  Layer.mergeAll(RolldownBundler, rolldown(), AssetsProvider());
+const utils = () => Layer.mergeAll(rolldown(), AssetsProvider());
