@@ -221,7 +221,8 @@ export const listBuildFiles = Effect.fnUntraced(function* ({
   include,
   exclude = defaultBuildExclude,
 }: BuildFileGlobOptions) {
-  const fg = yield* Effect.promise(() => import("fast-glob"));
+  const mod = yield* Effect.promise(() => import("fast-glob"));
+  const fg = mod.default ?? mod;
   const files = yield* Effect.promise(() =>
     fg.glob(Array.from(include), {
       cwd,
