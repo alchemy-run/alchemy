@@ -12,7 +12,6 @@ export default [
     sourcemap: true,
     outputOptions: {
       inlineDynamicImports: true,
-      banner: "#!/usr/bin/env node",
     },
     noExternal: ["execa", "open", "env-paths"],
     tsconfig: "tsconfig.bundle.json",
