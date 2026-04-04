@@ -1,3 +1,4 @@
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import type { Credentials } from "@distilled.cloud/aws/Credentials";
 import * as iam from "@distilled.cloud/aws/iam";
 import type { CreateFunctionRequest } from "@distilled.cloud/aws/lambda";
@@ -11,6 +12,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as ServiceMap from "effect/ServiceMap";
+import * as Stream from "effect/Stream";
 import { bundle } from "../../Bundle/Bundle.ts";
 import type { BundleOptions } from "../../Bundle/Bundler.ts";
 import { isResolved } from "../../Diff.ts";
@@ -18,6 +20,7 @@ import type { HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
+import type { LogLine, LogsInput } from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
@@ -732,7 +735,7 @@ export default await Effect.runPromise(handlerEffect)
 
       const createOrUpdateFunctionUrl = Effect.fnUntraced(function* ({
         functionName,
-        url,
+        url = true,
         oldUrl,
       }: {
         functionName: string;
@@ -850,7 +853,7 @@ export default await Effect.runPromise(handlerEffect)
             output.functionName !==
               (yield* createFunctionName(id, news.functionName)) ||
             // url changed
-            olds.url !== news.url
+            (olds.url ?? true) !== news.url
           ) {
             return { action: "replace" };
           }
@@ -1100,6 +1103,72 @@ export default await Effect.runPromise(handlerEffect)
             .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
           return null as any;
         }),
+        tail: ({ output }) => {
+          const logGroupArn = `arn:aws:logs:${region}:${accountId}:log-group:/aws/lambda/${output.functionName}`;
+
+          const runTailSession = Effect.gen(function* () {
+            const response = yield* logs.startLiveTail({
+              logGroupIdentifiers: [logGroupArn],
+            });
+
+            if (!response.responseStream) {
+              return Stream.empty as Stream.Stream<LogLine>;
+            }
+
+            return response.responseStream.pipe(
+              Stream.flatMap((event) => {
+                if ("sessionUpdate" in event && event.sessionUpdate) {
+                  const lines: LogLine[] = (
+                    event.sessionUpdate.sessionResults ?? []
+                  ).flatMap((result) => {
+                    if (!result.message) return [];
+                    return [
+                      {
+                        timestamp: new Date(result.timestamp ?? Date.now()),
+                        message: result.message.trimEnd(),
+                      },
+                    ];
+                  });
+                  return Stream.fromIterable(lines);
+                }
+                return Stream.empty;
+              }),
+            );
+          });
+
+          return Stream.unwrap(runTailSession).pipe(
+            Stream.retry(Schedule.spaced("1 second")),
+          );
+        },
+        logs: ({
+          output,
+          options,
+        }: {
+          output: Function["Attributes"];
+          options: LogsInput;
+        }) =>
+          logs
+            .filterLogEvents({
+              logGroupName: `/aws/lambda/${output.functionName}`,
+              startTime: options.since?.getTime(),
+              limit: options.limit ?? 100,
+            })
+            .pipe(
+              Effect.map((response) =>
+                (response.events ?? []).flatMap((event): LogLine[] => {
+                  if (!event.message) return [];
+                  return [
+                    {
+                      timestamp: new Date(event.timestamp ?? Date.now()),
+                      message: event.message.trimEnd(),
+                    },
+                  ];
+                }),
+              ),
+              Effect.catchTag("ResourceNotFoundException", () =>
+                Effect.succeed([] as LogLine[]),
+              ),
+            ),
       };
     }),
   );
