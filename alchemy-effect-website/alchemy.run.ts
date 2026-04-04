@@ -9,7 +9,7 @@ const stack = Effect.gen(function* () {
     dev: {
       command: "bun run dev:site",
     },
-    outdir: "./dist",
+    outdir: "./public",
     hash: [
       "./config.toml",
       "./content/**",

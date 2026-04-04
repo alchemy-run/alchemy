@@ -1,2 +1,3 @@
-content/reference
-static/**/*.md
+/public
+/static
+/content/reference

@@ -681,6 +681,112 @@
     margin: 0 auto;
   }
 
+  /* ── Copy link section ── */
+
+  .landing-copy-section {
+    text-align: center;
+    padding: 0 1.5rem 5rem;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .landing-copy-label {
+    font-size: 0.8125rem;
+    color: var(--brand-text-dim);
+    margin-bottom: 0.75rem;
+  }
+
+  .landing-copy-box {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
+    border-radius: 0.5rem;
+    padding: 0.625rem 0.75rem 0.625rem 1rem;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+
+  .landing-copy-box:hover {
+    border-color: rgba(255, 255, 255, 0.12);
+  }
+
+  .landing-copy-text {
+    flex: 1;
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    color: var(--brand-text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    user-select: all;
+  }
+
+  .landing-copy-btn {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    color: var(--brand-text-dim);
+    cursor: pointer;
+    padding: 0.25rem;
+    border-radius: 0.25rem;
+    transition: color 0.15s;
+  }
+
+  .landing-copy-btn:hover {
+    color: var(--brand-accent);
+  }
+
+  /* ── How it works ── */
+
+  .landing-how-section {
+    padding: 0 1.5rem 6rem;
+    max-width: 680px;
+    margin: 0 auto;
+  }
+
+  .landing-how-section .landing-section-title {
+    margin-bottom: 2rem;
+  }
+
+  .landing-how-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  .landing-how-list li {
+    font-size: 0.9375rem;
+    line-height: 1.65;
+    color: var(--brand-text-dim);
+    padding-left: 1.25rem;
+    position: relative;
+  }
+
+  .landing-how-list li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.55em;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--brand-accent);
+    opacity: 0.6;
+  }
+
+  .landing-how-list li strong {
+    color: var(--brand-text);
+    font-weight: 600;
+  }
+
   /* ── Code pair (side-by-side on desktop) ── */
 
   .landing-code-pair {
