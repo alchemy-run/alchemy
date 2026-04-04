@@ -8,7 +8,7 @@ export const TanstackStart: typeof Worker = ((...args: any[]) =>
         args[0],
         {
           // TODO(sam): main entrypoint should be the Tanstack Start entrypoint (that is assumed to import and run this)
-          main: import.meta.path,
+          main: import.meta.filename,
         },
         args[1],
       )) as any;
