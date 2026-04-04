@@ -40,6 +40,7 @@ import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
 import { sha256 } from "../../Util/index.ts";
 import { Account } from "../Account.ts";
+import { CloudflareLogs } from "../Logs.ts";
 import type { AssetsConfig, AssetsProps } from "./Assets.ts";
 import * as Assets from "./Assets.ts";
 import cloudflare_workers from "./cloudflare:workers.ts";
@@ -396,7 +397,7 @@ export const WorkerProvider = () =>
       const deleteScriptTail = yield* workers.deleteScriptTail;
       const getScript = yield* workers.getScript;
       const getScriptSubdomain = yield* workers.getScriptSubdomain;
-      const queryTelemetry = yield* workers.queryObservabilityTelemetry;
+      const telemetry = yield* CloudflareLogs;
       const getScriptSettings = yield* workers.getScriptScriptAndVersionSetting;
       const getSubdomain = yield* workers.getSubdomain;
       const listScripts = yield* workers.listScripts;
@@ -1223,46 +1224,17 @@ ${[
           );
         },
         logs: ({ output, options }) =>
-          Effect.gen(function* () {
-            const now = Date.now();
-            const from = options.since
-              ? options.since.getTime()
-              : now - 60 * 60 * 1000;
-            const limit = options.limit ?? 100;
-
-            const response = yield* queryTelemetry({
-              accountId: output.accountId,
-              queryId: "events",
-              view: "events",
-              timeframe: { from, to: now },
-              limit,
-              parameters: {
-                filters: [
-                  {
-                    key: "$workers.scriptName",
-                    operation: "eq",
-                    type: "string",
-                    value: output.workerName,
-                  },
-                ],
-                orderBy: { value: "timestamp", order: "desc" },
+          telemetry.queryLogs({
+            accountId: output.accountId,
+            filters: [
+              {
+                key: "$workers.scriptName",
+                operation: "eq",
+                type: "string",
+                value: output.workerName,
               },
-            });
-
-            const lines: LogLine[] = [];
-            if (response.events?.events) {
-              for (const event of response.events.events) {
-                const ts = new Date(event.timestamp);
-                const meta = event.$metadata;
-                const msg =
-                  meta.message ??
-                  (meta.level === "error"
-                    ? `error: ${meta.error ?? "unknown"}`
-                    : `${meta.level ?? "log"}`);
-                lines.push({ timestamp: ts, message: msg });
-              }
-            }
-            return lines;
+            ],
+            options,
           }),
       });
     }),

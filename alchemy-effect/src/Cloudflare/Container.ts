@@ -1,20 +1,15 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
-import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
-import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import type { Fiber } from "effect/Fiber";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
-import * as SynchronizedRef from "effect/SynchronizedRef";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import * as Http from "node:http";
 import { AdoptPolicy } from "../AdoptPolicy.ts";
 import { bundle } from "../Bundle/Bundle.ts";
 import {
@@ -37,10 +32,13 @@ import {
   type Rpc,
 } from "../Platform.ts";
 import { Resource, type ResourceBinding } from "../Resource.ts";
+import { Self } from "../Self.ts";
 import * as Server from "../Server/index.ts";
+import { Stack } from "../Stack.ts";
 import { sha256Object } from "../Util/sha256.ts";
 import { normalizeNulls, stableStringify } from "../Util/stable.ts";
 import { Account } from "./Account.ts";
+import { CloudflareLogs, type TelemetryFilter } from "./Logs.ts";
 import {
   DurableObjectNamespace,
   DurableObjectState,
@@ -281,15 +279,6 @@ export const Container: Platform<
           );
           if (httpServer) {
             yield* httpServer.serve(handler);
-            const port = yield* Config.number("PORT").pipe(
-              Config.withDefault(3000),
-            );
-
-            BunHttpServer.make({});
-            const server = yield* NodeHttpServer.make(Http.createServer, {
-              port,
-            });
-            yield* server.serve(handler as any);
             yield* Effect.never;
           } else {
             // this should only happen at plantime, validate?
@@ -426,62 +415,59 @@ export const runContainer = Effect.fnUntraced(function* <
   Shape extends Container,
   Req = never,
 >(containerEff: Effect.Effect<Shape, never, Req | DurableObjectState>) {
-  // get the container instance
   const container = yield* containerEff;
-  const monitor = yield* SynchronizedRef.make<
-    Fiber<void | void[], ContainerError> | undefined
-  >(undefined);
 
-  const start = container.start().pipe(
-    Effect.andThen(() =>
-      Effect.forkDetach(
-        container.monitor().pipe(
-          Effect.flatMap(() => Effect.logInfo("Container monitor stopped")),
-          Effect.catchTag("ContainerError", (error) =>
-            Effect.all([Effect.logError(error.message)]),
-          ),
-          Effect.ensuring(SynchronizedRef.set(monitor, undefined)),
+  const ensureRunning = Effect.gen(function* () {
+    if (yield* container.running) return;
+    yield* Effect.logInfo("Container not running, starting...");
+    yield* container.start();
+    yield* Effect.logInfo("Container started, launching monitor");
+    yield* Effect.forkDetach(
+      container.monitor().pipe(
+        Effect.flatMap(() => Effect.logInfo("Container monitor exited")),
+        Effect.catchTag("ContainerError", (error) =>
+          Effect.logError(`Container monitor error: ${error.message}`),
         ),
       ),
-    ),
-  );
-
-  if (!(yield* container.running)) {
-    yield* SynchronizedRef.updateEffect(monitor, (current) =>
-      current ? start : Effect.succeed(current),
     );
-  }
+  });
 
-  // TODO(sam): make configurable. is this too aggressive?
-  const backoff = Schedule.exponential(50, 1.2).pipe(
+  yield* ensureRunning;
+
+  const startupBackoff = Schedule.exponential(100, 1.5).pipe(
     Schedule.modifyDelay((_, delay) =>
-      Effect.succeed(Duration.max(delay, Duration.seconds(0.5))),
+      Effect.succeed(Duration.max(delay, Duration.seconds(2))),
     ),
   );
+
+  const getTcpPort = (portNumber: number) =>
+    Effect.succeed({
+      fetch: ((
+        request:
+          | HttpClientRequest.HttpClientRequest
+          | HttpServerRequest.HttpServerRequest,
+      ) =>
+        ensureRunning.pipe(
+          Effect.andThen(() => container.getTcpPort(portNumber)),
+          Effect.andThen((port) => port.fetch(request as any)),
+          Effect.tapError((err) =>
+            Effect.logDebug(`Container fetch error (will retry): ${err}`),
+          ),
+          Effect.retry({ schedule: startupBackoff }),
+        )) as {
+        (
+          request: HttpClientRequest.HttpClientRequest,
+        ): Effect.Effect<HttpClientResponse.HttpClientResponse>;
+        (
+          request: HttpServerRequest.HttpServerRequest,
+        ): Effect.Effect<HttpServerResponse.HttpServerResponse>;
+      },
+    });
 
   return {
     ...container,
-    getTcpPort: (portNumber: number) =>
-      Effect.map(container.getTcpPort(portNumber), (port) => ({
-        fetch: ((
-          request:
-            | HttpClientRequest.HttpClientRequest
-            | HttpServerRequest.HttpServerRequest,
-        ) =>
-          port.fetch(request as any).pipe(
-            Effect.tapError((err) => Effect.logDebug(err)),
-            Effect.retry({
-              schedule: backoff,
-            }),
-          )) as {
-          (
-            request: HttpClientRequest.HttpClientRequest,
-          ): Effect.Effect<HttpClientResponse.HttpClientResponse>;
-          (
-            request: HttpServerRequest.HttpServerRequest,
-          ): Effect.Effect<HttpServerResponse.HttpServerResponse>;
-        },
-      })),
+    getTcpPort,
+    fetch: getTcpPort(3000),
   };
 });
 
@@ -535,6 +521,7 @@ export interface Rollout {
 export const ContainerProvider = () =>
   Container.provider.effect(
     Effect.gen(function* () {
+      const stack = yield* Stack;
       const accountId = yield* Account;
       const adoptPolicy = yield* Effect.serviceOption(AdoptPolicy).pipe(
         Effect.map(Option.getOrElse(() => false)),
@@ -553,6 +540,7 @@ export const ContainerProvider = () =>
         yield* Containers.createContainerRegistryCredentials;
       const createContainerApplicationRollout =
         yield* Containers.createContainerApplicationRollout;
+      const telemetry = yield* CloudflareLogs;
 
       const createApplicationName = (id: string, name: string | undefined) =>
         Effect.gen(function* () {
@@ -680,8 +668,6 @@ const HttpServer = NodeHttpServer;
 `
 }
 import { Stack } from "alchemy-effect/Stack";
-import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -689,7 +675,13 @@ import * as Logger from "effect/Logger";
 import * as ServiceMap from "effect/ServiceMap";
 import { MinimumLogLevel } from "effect/References";
 
-import { ${handler} as layer } from "${importPath}";
+import ${handler === "default" ? "entry" : `{ ${handler} as entry }`} from "${importPath}";
+
+const tag = ServiceMap.Service("${Self.key}")
+const layer =
+  typeof entry?.build === "function"
+    ? entry
+    : Layer.effect(tag, typeof entry?.asEffect === "function" ? entry.asEffect() : entry);
 
 const platform = Layer.mergeAll(
   ${runtime === "bun" ? "BunServices.layer" : "NodeServices.layer"},
@@ -698,37 +690,21 @@ const platform = Layer.mergeAll(
   Logger.layer([Logger.consolePretty()]),
 );
 
-const tag = ServiceMap.Service("${ContainerTypeId}<${id}>")
-
-const stack = Layer.effect(
-  Stack,
-  Effect.all([
-    Config.string("ALCHEMY_STACK_NAME").asEffect(),
-    Config.string("ALCHEMY_STAGE").asEffect()
-  ]).pipe(
-    Effect.map(([name, stage]) => ({
-      name,
-      stage,
-      bindings: {},
-      resources: {}
-    }))
-  )
-);
+const stack = Layer.succeed(Stack, {
+  name: ${JSON.stringify(stack.name)},
+  stage: ${JSON.stringify(stack.stage)},
+  bindings: {},
+  resources: {}
+});
 
 const serverEffect = tag.asEffect().pipe(
   Effect.flatMap(func => func.ExecutionContext.exports),
-  Effect.map(exports => exports.default),
+  Effect.flatMap(exports => exports.default),
   Effect.provide(
     layer.pipe(
       Layer.provideMerge(stack),
       Layer.provideMerge(HttpServer()),
       Layer.provideMerge(platform),
-      Layer.provideMerge(
-        Layer.succeed(
-          ConfigProvider.ConfigProvider,
-          ConfigProvider.fromEnv()
-        )
-      ),
       Layer.provideMerge(
         Layer.succeed(
           MinimumLogLevel,
@@ -740,7 +716,11 @@ const serverEffect = tag.asEffect().pipe(
   Effect.scoped
 );
 
-await Effect.runPromise(serverEffect)`,
+console.log("Container bootstrap starting...");
+await Effect.runPromise(serverEffect).catch((err) => {
+  console.error("Container bootstrap failed:", err);
+  process.exit(1);
+})`,
         });
 
       const buildFinalDockerfile = (
@@ -749,15 +729,11 @@ await Effect.runPromise(serverEffect)`,
       ): string => {
         const base =
           userDockerfile?.trim() ??
-          `FROM ${runtime === "bun" ? "oven/bun:1" : "node:22-slim"}`;
-        const runtimeImage = runtime === "bun" ? "oven/bun:1" : "node:22-slim";
+          (runtime === "bun" ? "FROM oven/bun:1" : "FROM node:22-slim");
         const runtimeBin = runtime === "bun" ? "bun" : "node";
-        const binPath =
-          runtime === "bun" ? "/usr/local/bin/bun" : "/usr/local/bin/node";
         return [
           base,
           "",
-          `COPY --from=${runtimeImage} ${binPath} ${binPath}`,
           "WORKDIR /app",
           "COPY index.mjs /app/index.mjs",
           `ENTRYPOINT ["${runtimeBin}", "/app/index.mjs"]`,
@@ -1278,9 +1254,35 @@ await Effect.runPromise(serverEffect)`,
             ? { ...toAttributes(existing), hash: output?.hash }
             : undefined;
         }),
+        tail: ({ output }) =>
+          telemetry.tailStream({
+            accountId: output.accountId,
+            filters: containerFilters(output.applicationId),
+          }),
+        logs: ({ output, options }) =>
+          telemetry.queryLogs({
+            accountId: output.accountId,
+            filters: containerFilters(output.applicationId),
+            options,
+          }),
       });
     }),
   );
+
+const containerFilters = (applicationId: string): TelemetryFilter[] => [
+  {
+    key: "$metadata.type",
+    operation: "eq",
+    type: "string",
+    value: "cf-container",
+  },
+  {
+    key: "$metadata.service",
+    operation: "eq",
+    type: "string",
+    value: applicationId,
+  },
+];
 
 const toAttributes = (
   application:

@@ -160,12 +160,21 @@ const planCommand = Command.make(
     }),
 );
 
+const resourceFilter = Flag.string("filter").pipe(
+  Flag.withDescription(
+    "Comma-separated logical resource IDs (e.g. Api,Sandbox). Only those resources are included.",
+  ),
+  Flag.optional,
+  Flag.map(Option.getOrUndefined),
+);
+
 const tailCommand = Command.make(
   "tail",
   {
     main,
     envFile,
     stage,
+    filter: resourceFilter,
   },
   (args) => execTail(args),
 );
@@ -396,10 +405,12 @@ const execTail = Effect.fn(function* ({
   main,
   stage,
   envFile,
+  filter,
 }: {
   main: string;
   stage: string;
   envFile: Option.Option<string>;
+  filter: string | undefined;
 }) {
   const path = yield* Path;
   const module = yield* Effect.promise(
@@ -439,6 +450,23 @@ const execTail = Effect.fn(function* ({
     const stack = yield* stackEffect;
 
     yield* Effect.gen(function* () {
+      const filterSet = parseResourceFilter(filter);
+      const availableIds = [
+        ...new Set(Object.values(stack.resources).map((r) => r.LogicalId)),
+      ].sort();
+
+      if (filterSet) {
+        for (const id of filterSet) {
+          if (!availableIds.includes(id)) {
+            return yield* Effect.die(
+              new Error(
+                `Unknown resource '${id}' in --filter. Available: ${availableIds.join(", ") || "(none)"}`,
+              ),
+            );
+          }
+        }
+      }
+
       const fqns = Object.keys(stack.resources);
       const tailable: {
         logicalId: string;
@@ -447,6 +475,8 @@ const execTail = Effect.fn(function* ({
 
       for (const fqn of fqns) {
         const resource = stack.resources[fqn]!;
+        if (filterSet && !filterSet.has(resource.LogicalId)) continue;
+
         const resourceState = yield* state.get({
           stack: stack.name,
           stage: stack.stage,
@@ -469,9 +499,15 @@ const execTail = Effect.fn(function* ({
       }
 
       if (tailable.length === 0) {
-        yield* Console.log(
-          "No tailable resources found. Deploy first, then run tail.",
-        );
+        if (filterSet) {
+          yield* Console.log(
+            "No tailable resources match --filter (deploy first, or selected resources may not support tail).",
+          );
+        } else {
+          yield* Console.log(
+            "No tailable resources found. Deploy first, then run tail.",
+          );
+        }
         return;
       }
 
@@ -524,6 +560,7 @@ const logsCommand = Command.make(
     main,
     envFile,
     stage,
+    filter: resourceFilter,
     limit: logsLimit,
     since: logsSince,
   },
@@ -534,12 +571,14 @@ const execLogs = Effect.fn(function* ({
   main,
   stage,
   envFile,
+  filter,
   limit,
   since,
 }: {
   main: string;
   stage: string;
   envFile: Option.Option<string>;
+  filter: string | undefined;
   limit: number;
   since: string | undefined;
 }) {
@@ -583,11 +622,30 @@ const execLogs = Effect.fn(function* ({
     const stack = yield* stackEffect;
 
     yield* Effect.gen(function* () {
+      const filterSet = parseResourceFilter(filter);
+      const availableIds = [
+        ...new Set(Object.values(stack.resources).map((r) => r.LogicalId)),
+      ].sort();
+
+      if (filterSet) {
+        for (const id of filterSet) {
+          if (!availableIds.includes(id)) {
+            return yield* Effect.die(
+              new Error(
+                `Unknown resource '${id}' in --filter. Available: ${availableIds.join(", ") || "(none)"}`,
+              ),
+            );
+          }
+        }
+      }
+
       const fqns = Object.keys(stack.resources);
       const allLogs: { logicalId: string; lines: LogLine[] }[] = [];
 
       for (const fqn of fqns) {
         const resource = stack.resources[fqn]!;
+        if (filterSet && !filterSet.has(resource.LogicalId)) continue;
+
         const resourceState = yield* state.get({
           stack: stack.name,
           stage: stack.stage,
@@ -610,9 +668,15 @@ const execLogs = Effect.fn(function* ({
       }
 
       if (allLogs.length === 0) {
-        yield* Console.log(
-          "No resources with logs found. Deploy first, then run logs.",
-        );
+        if (filterSet) {
+          yield* Console.log(
+            "No resources with logs match --filter (deploy first, or selected resources may not expose logs).",
+          );
+        } else {
+          yield* Console.log(
+            "No resources with logs found. Deploy first, then run logs.",
+          );
+        }
         return;
       }
 
@@ -641,6 +705,18 @@ const execLogs = Effect.fn(function* ({
     Effect.scoped,
   ) as Effect.Effect<void, any, never>;
 });
+
+const parseResourceFilter = (
+  filter: string | undefined,
+): ReadonlySet<string> | undefined => {
+  if (filter === undefined) return undefined;
+  const ids = filter
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  if (ids.length === 0) return undefined;
+  return new Set(ids);
+};
 
 const parseSince = (value: string): Date => {
   const match = value.match(/^(\d+)([smhd])$/);
