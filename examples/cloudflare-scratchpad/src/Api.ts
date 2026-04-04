@@ -5,7 +5,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 export default class Simple extends Cloudflare.Worker<Simple>()(
   "Simple",
   {
-    main: import.meta.path,
+    main: import.meta.filename,
     observability: {
       enabled: true,
     },

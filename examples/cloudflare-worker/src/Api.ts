@@ -11,7 +11,7 @@ import Room from "./Room.ts";
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
   {
-    main: import.meta.path,
+    main: import.meta.filename,
     observability: {
       enabled: true,
     },
@@ -36,7 +36,9 @@ export default class Api extends Cloudflare.Worker<Api>()(
           const body = yield* agent.increment().pipe(Effect.orDie);
           const room = rooms.getByName("default");
           yield* room.broadcast(`[container] ${body}`).pipe(Effect.orDie);
-          return yield* HttpServerResponse.json(JSON.parse(body));
+          return HttpServerResponse.text(body, {
+            headers: { "content-type": "application/json" },
+          });
         } else if (request.url.startsWith("/sandbox")) {
           const agent = agents.getByName("sandbox-test");
           const body = yield* agent.hello().pipe(Effect.orDie);

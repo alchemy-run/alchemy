@@ -9,9 +9,11 @@
   },
   "type": "module",
   "scripts": {
-    "deploy": "alchemy deploy",
-    "dev": "alchemy dev",
-    "destroy": "alchemy destroy"
+    "deploy": "alchemy-effect deploy",
+    "dev": "alchemy-effect dev",
+    "destroy": "alchemy-effect destroy",
+    "logs": "alchemy-effect logs",
+    "tail": "alchemy-effect tail"
   },
   "dependencies": {
     "@effect/platform-bun": "catalog:",

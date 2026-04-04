@@ -14,7 +14,7 @@ export default class Server extends AWS.EC2.Instance<Server>()(
     const network = yield* Network;
 
     return {
-      main: import.meta.path,
+      main: import.meta.filename,
       imageId,
       instanceType: "t3.small",
       subnetId: network.publicSubnetIds[0],

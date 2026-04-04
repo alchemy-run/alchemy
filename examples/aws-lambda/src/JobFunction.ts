@@ -19,7 +19,7 @@ import {
 export class JobFunction extends AWS.Lambda.Function<JobFunction>()(
   "JobFunction",
   Stack.useSync((stack) => ({
-    main: import.meta.path,
+    main: import.meta.filename,
     memory: stack.stage === "prod" ? 1024 : 512,
     url: true,
   })),

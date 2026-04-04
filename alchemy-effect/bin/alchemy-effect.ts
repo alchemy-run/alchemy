@@ -2,7 +2,6 @@ import * as Auth from "@distilled.cloud/aws/Auth";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
-import * as PlatformConfigProvider from "effect/ConfigProvider";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -109,6 +108,27 @@ const fileLogger = Effect.fnUntraced(function* (
     }),
   );
 });
+
+const loadConfigProvider = (envFile: Option.Option<string>) => {
+  if (Option.isSome(envFile)) {
+    return ConfigProvider.fromDotEnv({ path: envFile.value }).pipe(
+      Effect.map((dotEnv) =>
+        ConfigProvider.orElse(dotEnv, ConfigProvider.fromEnv()),
+      ),
+    );
+  }
+  return Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const exists = yield* fs.exists(".env");
+    if (!exists) {
+      return ConfigProvider.fromEnv();
+    }
+    return ConfigProvider.orElse(
+      yield* ConfigProvider.fromDotEnv({ path: ".env" }),
+      ConfigProvider.fromEnv(),
+    );
+  });
+};
 
 const main = Argument.file("main", {
   mustExist: true,
@@ -230,18 +250,8 @@ const bootstrapCommand = Command.make(
         Layer.succeed(AWSCredentials.Credentials, Effect.succeed(credentials)),
       );
 
-      // Build configProvider effect that requires platform (for fromDotEnv)
-      const configProviderEffect = Option.isSome(envFile)
-        ? Effect.map(
-            PlatformConfigProvider.fromDotEnv({
-              path: envFile.value,
-            }),
-            (dotEnv) => ConfigProvider.orElse(dotEnv, ConfigProvider.fromEnv()),
-          )
-        : Effect.succeed(ConfigProvider.fromEnv());
-
       return yield* Effect.gen(function* () {
-        const provider = yield* configProviderEffect;
+        const provider = yield* loadConfigProvider(envFile);
         const bootstrapLayer = Layer.provide(
           awsLayers,
           Layer.succeed(ConfigProvider.ConfigProvider, provider),
@@ -302,14 +312,7 @@ const execStack = Effect.fn(function* ({
     );
   }
 
-  const configProvider = Option.isSome(envFile)
-    ? ConfigProvider.orElse(
-        yield* PlatformConfigProvider.fromDotEnv({
-          path: envFile.value,
-        }),
-        ConfigProvider.fromEnv(),
-      )
-    : ConfigProvider.fromEnv();
+  const configProvider = yield* loadConfigProvider(envFile);
 
   // TODO(sam): implement local and watch
   const platform = Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer);
@@ -427,14 +430,7 @@ const execTail = Effect.fn(function* ({
     );
   }
 
-  const configProvider = Option.isSome(envFile)
-    ? ConfigProvider.orElse(
-        yield* PlatformConfigProvider.fromDotEnv({
-          path: envFile.value,
-        }),
-        ConfigProvider.fromEnv(),
-      )
-    : ConfigProvider.fromEnv();
+  const configProvider = yield* loadConfigProvider(envFile);
 
   const platform = Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer);
 
@@ -597,14 +593,7 @@ const execLogs = Effect.fn(function* ({
     );
   }
 
-  const configProvider = Option.isSome(envFile)
-    ? ConfigProvider.orElse(
-        yield* PlatformConfigProvider.fromDotEnv({
-          path: envFile.value,
-        }),
-        ConfigProvider.fromEnv(),
-      )
-    : ConfigProvider.fromEnv();
+  const configProvider = yield* loadConfigProvider(envFile);
 
   const platform = Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer);
 

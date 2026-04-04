@@ -8,7 +8,7 @@ import { JobsQueue, JobsQueueLive } from "./JobsQueue.ts";
 export default class ApiTask extends AWS.ECS.Task<ApiTask>()(
   "ApiTask",
   {
-    main: import.meta.path,
+    main: import.meta.filename,
     cpu: 512,
     memory: 1024,
     port: 3000,

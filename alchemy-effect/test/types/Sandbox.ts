@@ -14,7 +14,7 @@ export class Sandbox extends Cloudflare.Container<
 >()(
   "Sandbox",
   Stack.useSync((stack) => ({
-    main: import.meta.path,
+    main: import.meta.filename,
     // handler: "SandboxLive",
     instanceType: stack.stage === "prod" ? "standard-1" : "dev",
     dockerfile: `FROM alpine:latest`,

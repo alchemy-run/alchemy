@@ -15,7 +15,7 @@ const main = path.resolve(import.meta.dirname, "handler.ts");
 export class KinesisApiFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
   "KinesisApiFunction",
   {
-    main: import.meta.path,
+    main: import.meta.filename,
     url: true,
   },
 ) {}

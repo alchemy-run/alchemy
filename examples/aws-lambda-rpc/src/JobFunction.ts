@@ -8,7 +8,7 @@ import { JobStorageDynamoDB } from "./JobStorage.ts";
 export default class JobFunction extends AWS.Lambda.Function<JobFunction>()(
   "JobFunction",
   {
-    main: import.meta.path,
+    main: import.meta.filename,
     url: true,
   },
   JobRpcHttpEffect.pipe(
