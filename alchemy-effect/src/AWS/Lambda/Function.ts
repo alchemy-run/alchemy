@@ -235,14 +235,7 @@ export const FunctionProvider = () =>
       const createPolicyName = (id: string) =>
         createPhysicalName({ id, maxLength: 128 });
 
-      const hashBundle = Effect.fnUntraced(function* (
-        code: Uint8Array<ArrayBufferLike>,
-        sourceMap?: Uint8Array<ArrayBufferLike>,
-      ) {
-        const codeHash = yield* sha256(code);
-        const sourceMapHash = sourceMap ? yield* sha256(sourceMap) : "";
-        return yield* sha256(JSON.stringify({ codeHash, sourceMapHash }));
-      });
+      const hashBundle = (code: Uint8Array<ArrayBufferLike>) => sha256(code);
 
       const createNames = (id: string, functionName: string | undefined) =>
         Effect.gen(function* () {
@@ -513,7 +506,7 @@ export default await Effect.runPromise(handlerEffect)
         return {
           archive,
           code,
-          hash: yield* hashBundle(code, sourceMap),
+          hash: yield* hashBundle(code),
         };
       });
 
