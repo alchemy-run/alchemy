@@ -31,7 +31,17 @@ export default class Api extends Cloudflare.Worker<Api>()(
         const request = yield* HttpServerRequest;
         console.log("fetch", request.method, request.url);
 
-        if (request.url.startsWith("/workflow/start/")) {
+        if (request.url === "/sandbox/increment") {
+          const agent = agents.getByName("sandbox-test");
+          const body = yield* agent.increment().pipe(Effect.orDie);
+          const room = rooms.getByName("default");
+          yield* room.broadcast(`[container] ${body}`).pipe(Effect.orDie);
+          return yield* HttpServerResponse.json(JSON.parse(body));
+        } else if (request.url.startsWith("/sandbox")) {
+          const agent = agents.getByName("sandbox-test");
+          const body = yield* agent.hello().pipe(Effect.orDie);
+          return HttpServerResponse.text(body);
+        } else if (request.url.startsWith("/workflow/start/")) {
           const roomId = request.url.split("/workflow/start/")[1];
           if (!roomId) {
             return yield* HttpServerResponse.json(

@@ -1,5 +1,7 @@
 import * as Cloudflare from "alchemy-effect/Cloudflare";
 import * as Effect from "effect/Effect";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Sandbox } from "./Sandbox.ts";
 
 export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
@@ -23,6 +25,22 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
 
       return {
         exec: (command: string) => container.exec(command),
+        hello: () =>
+          Effect.gen(function* () {
+            const { fetch } = yield* container.getTcpPort(3000);
+            const response = yield* fetch(
+              HttpClientRequest.get("http://container/"),
+            );
+            return yield* response.text;
+          }),
+        increment: () =>
+          Effect.gen(function* () {
+            const { fetch } = yield* container.getTcpPort(3000);
+            const response = yield* fetch(
+              HttpClientRequest.post("http://container/increment"),
+            );
+            return yield* response.text;
+          }),
         fetch: Effect.gen(function* () {
           const [response, socket] = yield* Cloudflare.upgrade();
           const id = "TODO";

@@ -132,6 +132,20 @@
       #toggle.off:hover {
         background: #15803d;
       }
+      #actions {
+        display: flex;
+        gap: 0.5rem;
+      }
+      #increment {
+        background: #7c3aed;
+      }
+      #increment:hover {
+        background: #6d28d9;
+      }
+      #increment:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
     </style>
   </head>
   <body>
@@ -142,6 +156,9 @@
       </div>
       <span id="status" class="disconnected">disconnected</span>
       <div id="messages"></div>
+      <div id="actions">
+        <button id="increment">Increment Counter</button>
+      </div>
       <form id="form">
         <input
           id="input"
@@ -227,6 +244,22 @@
           if (!ws || ws.readyState !== WebSocket.OPEN) {
             connect();
           }
+        }
+      });
+
+      const incrementBtn = document.getElementById("increment");
+      incrementBtn.addEventListener("click", async () => {
+        incrementBtn.disabled = true;
+        incrementBtn.textContent = "Incrementing…";
+        try {
+          const resp = await fetch("/sandbox/increment", { method: "POST" });
+          const data = await resp.json();
+          addMessage(`Counter incremented to ${data.counter}`, true);
+        } catch (err) {
+          addMessage(`Increment failed: ${err.message}`, true);
+        } finally {
+          incrementBtn.disabled = false;
+          incrementBtn.textContent = "Increment Counter";
         }
       });
 

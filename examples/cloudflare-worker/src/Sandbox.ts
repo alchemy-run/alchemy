@@ -28,13 +28,21 @@ export class Sandbox extends Cloudflare.Container<
   Stack.useSync((stack) => ({
     main: import.meta.path,
     instanceType: stack.stage === "prod" ? "standard-1" : "dev",
-    dockerfile: `FROM alpine:latest`,
+    observability: {
+      logs: {
+        enabled: true,
+      },
+    },
   })),
 ) {}
 
 export const SandboxLive = Sandbox.make(
   Effect.gen(function* () {
     const cp = yield* ChildProcessSpawner;
+
+    console.log("Sandbox container started");
+
+    let counter = 0;
 
     return Sandbox.of({
       exec: (command) =>
@@ -62,25 +70,15 @@ export const SandboxLive = Sandbox.make(
           ),
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
-        const socket = yield* request.upgrade;
-        const writeMessage = yield* socket.writer;
-        const cmd = yield* ChildProcess.make("ffmpeg", ["-version"]);
-        const [exitCode] = yield* Effect.all(
-          [
-            cmd.exitCode,
-            cmd.stdout.pipe(
-              Stream.tap(writeMessage),
-              Stream.decodeText,
-              Stream.mkString,
-            ),
-          ] as const,
-          { concurrency: "unbounded" },
-        );
+        const url = new URL(request.url, "http://localhost");
 
-        return HttpServerResponse.empty({
-          status: exitCode === 0 ? 200 : 500,
-        });
-      }).pipe(Effect.orDie),
+        if (url.pathname === "/increment") {
+          counter++;
+          return yield* HttpServerResponse.json({ counter });
+        }
+
+        return HttpServerResponse.text("Hello from Sandbox container!");
+      }),
     });
   }),
 );
