@@ -17,9 +17,11 @@
     "build:search": "pagefind --site dist",
     "build": "bun run build:reference && bun run build:assets && bun run build:site && bun run build:search",
     "dev:site": "bun run build:reference && bun run build:assets && zola serve --interface 127.0.0.1 --port 1111",
-    "deploy": "bun ../alchemy-effect/bin/alchemy-effect.ts deploy",
-    "dev": "bun ../alchemy-effect/bin/alchemy-effect.ts dev",
-    "destroy": "bun ../alchemy-effect/bin/alchemy-effect.ts destroy"
+    "deploy": "alchemy-effect deploy",
+    "dev": "alchemy dev",
+    "destroy": "alchemy destroy",
+    "logs": "alchemy logs",
+    "tail": "alchemy tail"
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",

@@ -681,6 +681,29 @@
     margin: 0 auto;
   }
 
+  /* ── Code pair (side-by-side on desktop) ── */
+
+  .landing-code-pair {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    padding: 0 1.5rem;
+    max-width: 1280px;
+    margin: 0 auto;
+  }
+
+  @media (min-width: 1024px) {
+    .landing-code-pair {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  @media (max-width: 767px) {
+    .landing-code-pair {
+      padding: 0 1rem;
+    }
+  }
+
   /* ── Code showcase stack ── */
 
   .landing-code-stack {

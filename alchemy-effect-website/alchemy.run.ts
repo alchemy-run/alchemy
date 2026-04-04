@@ -21,6 +21,9 @@ const stack = Effect.gen(function* () {
       "../alchemy-effect/src/**",
       "../bun.lock",
     ],
+    assetsConfig: {
+      runWorkerFirst: true,
+    },
     compatibility: {
       date: "2026-04-02",
       flags: ["nodejs_compat"],

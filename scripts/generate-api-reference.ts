@@ -10,9 +10,13 @@ import {
   type SourceFile,
 } from "ts-morph";
 
+const websiteRoot = path.join(import.meta.dir, "../alchemy-effect-website");
+
 const config = {
   srcRoot: path.join(import.meta.dir, "../alchemy-effect/src"),
-  outRoot: path.join(import.meta.dir, "../alchemy-effect-website/content/reference"),
+  outRoot: path.join(websiteRoot, "content/reference"),
+  contentRoot: path.join(websiteRoot, "content"),
+  staticRoot: path.join(websiteRoot, "static"),
   tsConfig: path.join(import.meta.dir, "../alchemy-effect/tsconfig.json"),
   includeDirs: ["AWS", "Cloudflare"],
   excludeFile(baseName: string): boolean {
@@ -534,6 +538,59 @@ function renderIndex(doc: IndexDoc): string {
   return `${frontmatter}\n`;
 }
 
+function stripFrontmatter(content: string): string {
+  if (!content.startsWith("+++")) return content;
+  const end = content.indexOf("+++", 3);
+  if (end === -1) return content;
+  return content.slice(end + 3).replace(/^\n+/, "");
+}
+
+/**
+ * Maps a content-relative path to the Zola URL-based path under static/.
+ * Zola copies static/ verbatim into dist/, so these end up alongside the HTML.
+ *
+ *   _index.md            → index.md
+ *   guides/_index.md     → guides/index.md
+ *   guides/foo.md        → guides/foo/index.md
+ *   reference/X/Y/Z.md   → reference/X/Y/Z/index.md
+ */
+function contentPathToStaticPath(relPath: string): string {
+  const base = path.basename(relPath);
+  const dir = path.dirname(relPath);
+
+  if (base === "_index.md") {
+    return path.join(config.staticRoot, dir, "index.md");
+  }
+  const slug = base.replace(/\.md$/, "");
+  return path.join(config.staticRoot, dir, slug, "index.md");
+}
+
+async function writeStaticMarkdown(staticPath: string, body: string) {
+  await fs.mkdir(path.dirname(staticPath), { recursive: true });
+  await fs.writeFile(staticPath, body, "utf8");
+}
+
+/**
+ * Walks content/ for hand-written .md files (guides, root index, etc.)
+ * and writes stripped-frontmatter copies into static/ so Zola serves them
+ * alongside the HTML pages.
+ */
+async function copyContentMarkdownToStatic(): Promise<number> {
+  const allFiles = await fs.readdir(config.contentRoot, { recursive: true });
+  const mdFiles = (allFiles as string[]).filter(
+    (f) => f.endsWith(".md") && !f.startsWith("reference"),
+  );
+  let count = 0;
+  for (const relPath of mdFiles) {
+    const raw = await fs.readFile(path.join(config.contentRoot, relPath), "utf8");
+    const body = stripFrontmatter(raw);
+    if (!body.trim()) continue;
+    await writeStaticMarkdown(contentPathToStaticPath(relPath), body);
+    count++;
+  }
+  return count;
+}
+
 async function main() {
   const entries = await discoverFiles();
   console.log(`Discovered ${entries.length} source files.`);
@@ -555,8 +612,18 @@ async function main() {
     }
 
     const doc = parseFile(sourceFile, entry.relativePath);
+    const body = renderPageBody(doc).trim() + "\n";
+
+    // Zola content (with frontmatter) for HTML rendering
     await fs.mkdir(path.dirname(entry.outputPath), { recursive: true });
     await fs.writeFile(entry.outputPath, renderPage(doc), "utf8");
+
+    // Clean markdown in static/ for agent content negotiation
+    const staticPath = contentPathToStaticPath(
+      path.join("reference", entry.relativePath.replace(/\.ts$/, ".md")),
+    );
+    await writeStaticMarkdown(staticPath, body);
+
     written++;
   }
 
@@ -566,8 +633,11 @@ async function main() {
     await fs.writeFile(index.outputPath, renderIndex(index), "utf8");
   }
 
+  // Copy hand-written content (guides, root pages) to static/ as clean markdown
+  const contentCount = await copyContentMarkdownToStatic();
+
   console.log(
-    `Done. Wrote ${written} doc files and ${indexes.length} index files to ${normalizeSlashes(path.relative(path.join(import.meta.dir, ".."), config.outRoot))}.`,
+    `Done. Wrote ${written} doc files and ${indexes.length} index files to ${normalizeSlashes(path.relative(path.join(import.meta.dir, ".."), config.outRoot))}. Copied ${contentCount} content pages to static/.`,
   );
 }
 

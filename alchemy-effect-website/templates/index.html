@@ -46,25 +46,61 @@
     </div>
   </section>
 
-  {# ── 1. Worker → DO typed RPC ── #}
-  <div class="landing-code-section anim-4">
+  {# ── 1. Worker + Durable Object side-by-side ── #}
+  <div class="landing-code-pair anim-4">
     <div class="code-window">
       <div class="code-header">
         <span class="code-filename">src/Api.ts</span>
         <span class="code-tag">Worker</span>
       </div>
-      <div class="code-body code-body-lg">
-        <pre><code><span class="tk">export default class</span> Api <span class="tk">extends</span> Cloudflare.<span class="tf">Worker</span><span class="tx">&lt;</span>Api<span class="tx">&gt;()(</span>
-  <span class="ts">"Api"</span><span class="tx">,</span> <span class="tx">{</span> <span class="tp">main</span><span class="tx">:</span> <span class="tk">import</span>.meta.path <span class="tx">},</span>
+      <div class="code-body">
+        <pre><code><span class="tk">export default class</span> Api <span class="tk">extends</span> <span class="tf">Worker</span><span class="tx">&lt;</span>Api<span class="tx">&gt;()(</span>
+  <span class="ts">"Api"</span><span class="tx">,</span>
+  <span class="tx">{</span>
+    <span class="tp">main</span><span class="tx">:</span> <span class="tk">import</span>.meta.path
+  <span class="tx">},</span>
   Effect.<span class="tf">gen</span><span class="tx">(</span><span class="tk">function*</span> <span class="tx">() {</span>
-    <span class="tk">const</span> rooms  <span class="tx">=</span> <span class="tk">yield*</span> Room<span class="tx">;</span>
-    <span class="tk">const</span> agents <span class="tx">=</span> <span class="tk">yield*</span> Agent<span class="tx">;</span>
+    <span class="tk">const</span> chatRooms <span class="tx">=</span> <span class="tk">yield*</span> ChatRoom<span class="tx">;</span>
     <span class="tk">return</span> <span class="tx">{</span>
       <span class="tp">fetch</span><span class="tx">:</span> Effect.<span class="tf">gen</span><span class="tx">(</span><span class="tk">function*</span> <span class="tx">() {</span>
-        <span class="tk">yield*</span> rooms.<span class="tf">getByName</span><span class="tx">(</span><span class="ts">"lobby"</span><span class="tx">).</span><span class="tf">broadcast</span><span class="tx">(</span><span class="ts">"hello world"</span><span class="tx">);</span>
-        <span class="tk">return</span> HttpServerResponse.<span class="tf">text</span><span class="tx">(</span><span class="tk">yield*</span> agents.<span class="tf">getByName</span><span class="tx">(</span><span class="ts">"sandbox"</span><span class="tx">).</span><span class="tf">hello</span><span class="tx">());</span>
+        <span class="tk">const</span> room <span class="tx">=</span> chatRooms.<span class="tf">getByName</span><span class="tx">(</span><span class="ts">"lobby"</span><span class="tx">);</span>
+        <span class="tk">yield*</span> room.<span class="tf">broadcast</span><span class="tx">(</span><span class="ts">"hello"</span><span class="tx">);</span>
+        <span class="tk">return</span> HttpServerResponse.<span class="tf">text</span><span class="tx">(</span><span class="ts">"ok"</span><span class="tx">);</span>
       <span class="tx">}),</span>
     <span class="tx">};</span>
+  <span class="tx">}),</span>
+<span class="tx">) {}</span></code></pre>
+      </div>
+    </div>
+
+    <div class="code-window">
+      <div class="code-header">
+        <span class="code-filename">src/ChatRoom.ts</span>
+        <span class="code-tag">Durable Object</span>
+      </div>
+      <div class="code-body">
+        <pre><code><span class="tk">export default class</span> ChatRoom
+  <span class="tk">extends</span> <span class="tf">DurableObjectNamespace</span><span class="tx">&lt;</span>ChatRoom<span class="tx">&gt;()(</span>
+  <span class="ts">"ChatRooms"</span><span class="tx">,</span>
+  Effect.<span class="tf">gen</span><span class="tx">(</span><span class="tk">function*</span> <span class="tx">() {</span>
+    <span class="tk">return</span> Effect.<span class="tf">gen</span><span class="tx">(</span><span class="tk">function*</span> <span class="tx">() {</span>
+      <span class="tk">const</span> state <span class="tx">=</span> <span class="tk">yield*</span> DurableObjectState<span class="tx">;</span>
+      <span class="tk">return</span> <span class="tx">{</span>
+        <span class="tp">fetch</span><span class="tx">:</span> Effect.<span class="tf">gen</span><span class="tx">(</span><span class="tk">function*</span> <span class="tx">() {</span>
+          <span class="tk">const</span> <span class="tx">[</span>res<span class="tx">,</span> ws<span class="tx">]</span> <span class="tx">=</span> <span class="tk">yield*</span> <span class="tf">upgrade</span><span class="tx">();</span>
+          ws.<span class="tf">serializeAttachment</span><span class="tx">({</span>
+            <span class="tp">id</span><span class="tx">:</span> crypto.<span class="tf">randomUUID</span><span class="tx">()</span>
+          <span class="tx">});</span>
+          <span class="tk">return</span> res<span class="tx">;</span>
+        <span class="tx">}),</span>
+        <span class="tp">broadcast</span><span class="tx">:</span> <span class="tx">(</span>text<span class="tx">)</span> <span class="tx">=&gt;</span>
+          Effect.<span class="tf">gen</span><span class="tx">(</span><span class="tk">function*</span> <span class="tx">() {</span>
+            <span class="tk">const</span> sockets <span class="tx">=</span> <span class="tk">yield*</span> state.<span class="tf">getWebSockets</span><span class="tx">();</span>
+            <span class="tk">for</span> <span class="tx">(</span><span class="tk">const</span> ws <span class="tk">of</span> sockets<span class="tx">)</span>
+              <span class="tk">yield*</span> ws.<span class="tf">send</span><span class="tx">(</span>text<span class="tx">);</span>
+          <span class="tx">}),</span>
+      <span class="tx">};</span>
+    <span class="tx">});</span>
   <span class="tx">}),</span>
 <span class="tx">) {}</span></code></pre>
       </div>
@@ -81,33 +117,6 @@
 
     <div class="landing-code-stack">
 
-      {# 2. Durable Object — hibernatable WebSockets #}
-      <div class="code-window">
-        <div class="code-header">
-          <span class="code-filename">src/Room.ts</span>
-          <span class="code-tag">Durable Object</span>
-        </div>
-        <div class="code-body">
-          <pre><code><span class="tk">export default class</span> Room <span class="tk">extends</span> Cloudflare.<span class="tf">DurableObjectNamespace</span><span class="tx">&lt;</span>Room<span class="tx">&gt;()(</span>
-  <span class="ts">"Rooms"</span><span class="tx">,</span> Effect.<span class="tf">gen</span><span class="tx">(</span><span class="tk">function*</span> <span class="tx">() {</span>
-    <span class="tk">return</span> Effect.<span class="tf">gen</span><span class="tx">(</span><span class="tk">function*</span> <span class="tx">() {</span>
-      <span class="tk">const</span> state <span class="tx">=</span> <span class="tk">yield*</span> Cloudflare.DurableObjectState<span class="tx">;</span>
-      <span class="tk">return</span> <span class="tx">{</span>
-        <span class="tp">fetch</span><span class="tx">:</span> Effect.<span class="tf">gen</span><span class="tx">(</span><span class="tk">function*</span> <span class="tx">() {</span>
-          <span class="tk">const</span> <span class="tx">[</span>res<span class="tx">,</span> ws<span class="tx">]</span> <span class="tx">=</span> <span class="tk">yield*</span> Cloudflare.<span class="tf">upgrade</span><span class="tx">();</span>
-          ws.<span class="tf">serializeAttachment</span><span class="tx">({</span> <span class="tp">id</span><span class="tx">:</span> crypto.<span class="tf">randomUUID</span><span class="tx">() });</span>  <span class="tc">// survives hibernation</span>
-          <span class="tk">return</span> res<span class="tx">;</span>
-        <span class="tx">}),</span>
-        <span class="tp">broadcast</span><span class="tx">:</span> <span class="tx">(</span>text<span class="tx">:</span> <span class="tt">string</span><span class="tx">)</span> <span class="tx">=&gt;</span> Effect.<span class="tf">gen</span><span class="tx">(</span><span class="tk">function*</span> <span class="tx">() {</span>
-          <span class="tk">for</span> <span class="tx">(</span><span class="tk">const</span> ws <span class="tk">of</span> <span class="tk">yield*</span> state.<span class="tf">getWebSockets</span><span class="tx">())</span> <span class="tk">yield*</span> ws.<span class="tf">send</span><span class="tx">(</span>text<span class="tx">);</span>
-        <span class="tx">}),</span>
-      <span class="tx">};</span>
-    <span class="tx">});</span>
-  <span class="tx">}),</span>
-<span class="tx">) {}</span></code></pre>
-        </div>
-      </div>
-
       {# 3. Container #}
       <div class="code-window">
         <div class="code-header">
@@ -115,9 +124,12 @@
           <span class="code-tag">Container</span>
         </div>
         <div class="code-body">
-          <pre><code><span class="tk">export class</span> Sandbox <span class="tk">extends</span> Cloudflare.<span class="tf">Container</span><span class="tx">&lt;</span>Sandbox<span class="tx">,</span> <span class="tx">{</span>
-  <span class="tp">exec</span><span class="tx">:</span> <span class="tx">(</span>cmd<span class="tx">:</span> <span class="tt">string</span><span class="tx">)</span> <span class="tx">=&gt;</span> Effect.<span class="tt">Effect</span><span class="tx">&lt;{</span> <span class="tp">exitCode</span><span class="tx">:</span> <span class="tt">number</span><span class="tx">;</span> <span class="tp">stdout</span><span class="tx">:</span> <span class="tt">string</span> <span class="tx">}&gt;;</span>
-<span class="tx">}&gt;()(</span>
+          <pre><code><span class="tk">export class</span> Sandbox <span class="tk">extends</span> Cloudflare.<span class="tf">Container</span><span class="tx">&lt;</span>
+  Sandbox<span class="tx">,</span>
+  <span class="tx">{</span> <span class="tp">exec</span><span class="tx">:</span> <span class="tx">(</span>cmd<span class="tx">:</span> <span class="tt">string</span><span class="tx">)</span> <span class="tx">=&gt;</span> Effect.<span class="tt">Effect</span><span class="tx">&lt;{</span>
+    <span class="tp">exitCode</span><span class="tx">:</span> <span class="tt">number</span><span class="tx">;</span> <span class="tp">stdout</span><span class="tx">:</span> <span class="tt">string</span>
+  <span class="tx">}&gt;</span> <span class="tx">}</span>
+<span class="tx">&gt;()(</span>
   <span class="ts">"Sandbox"</span><span class="tx">,</span> <span class="tx">{</span> <span class="tp">main</span><span class="tx">:</span> <span class="tk">import</span>.meta.path<span class="tx">,</span> <span class="tp">instanceType</span><span class="tx">:</span> <span class="ts">"dev"</span> <span class="tx">},</span>
 <span class="tx">) {}</span>
 
@@ -130,19 +142,23 @@
       {# 4. Workflow #}
       <div class="code-window">
         <div class="code-header">
-          <span class="code-filename">src/NotifyWorkflow.ts</span>
+          <span class="code-filename">src/TransferWorkflow.ts</span>
           <span class="code-tag">Workflow</span>
         </div>
         <div class="code-body">
-          <pre><code><span class="tk">export default class</span> NotifyWorkflow <span class="tk">extends</span> Cloudflare.<span class="tf">Workflow</span><span class="tx">&lt;</span>NotifyWorkflow<span class="tx">&gt;()(</span>
-  <span class="ts">"Notifier"</span><span class="tx">,</span> Effect.<span class="tf">gen</span><span class="tx">(</span><span class="tk">function*</span> <span class="tx">() {</span>
-    <span class="tk">const</span> rooms <span class="tx">=</span> <span class="tk">yield*</span> Room<span class="tx">;</span>
+          <pre><code><span class="tk">export default class</span> Transfer
+  <span class="tk">extends</span> <span class="tf">Workflow</span><span class="tx">&lt;</span>Transfer<span class="tx">&gt;()(</span>
+  <span class="ts">"Transfer"</span><span class="tx">,</span>
+  Effect.<span class="tf">gen</span><span class="tx">(</span><span class="tk">function*</span> <span class="tx">() {</span>
+    <span class="tk">const</span> notifications <span class="tx">=</span> <span class="tk">yield*</span> Notifications<span class="tx">;</span>
     <span class="tk">return</span> Effect.<span class="tf">gen</span><span class="tx">(</span><span class="tk">function*</span> <span class="tx">() {</span>
-      <span class="tk">const</span> <span class="tx">{</span> payload <span class="tx">}</span> <span class="tx">=</span> <span class="tk">yield*</span> Cloudflare.WorkflowEvent<span class="tx">;</span>
-      <span class="tk">yield*</span> Cloudflare.<span class="tf">task</span><span class="tx">(</span><span class="ts">"process"</span><span class="tx">,</span> Effect.<span class="tf">succeed</span><span class="tx">(</span>payload.message<span class="tx">));</span>
-      <span class="tk">yield*</span> Cloudflare.<span class="tf">task</span><span class="tx">(</span><span class="ts">"broadcast"</span><span class="tx">,</span> rooms.<span class="tf">getByName</span><span class="tx">(</span>payload.roomId<span class="tx">).</span><span class="tf">broadcast</span><span class="tx">(</span><span class="ts">"hello"</span><span class="tx">));</span>
-      <span class="tk">yield*</span> Cloudflare.<span class="tf">sleep</span><span class="tx">(</span><span class="ts">"cooldown"</span><span class="tx">,</span> <span class="ts">"2 seconds"</span><span class="tx">);</span>
-      <span class="tk">yield*</span> Cloudflare.<span class="tf">task</span><span class="tx">(</span><span class="ts">"finalize"</span><span class="tx">,</span> rooms.<span class="tf">getByName</span><span class="tx">(</span>payload.roomId<span class="tx">).</span><span class="tf">broadcast</span><span class="tx">(</span><span class="ts">"done"</span><span class="tx">));</span>
+      <span class="tk">const</span> <span class="tx">{</span> from<span class="tx">,</span> to<span class="tx">,</span> amount <span class="tx">}</span> <span class="tx">=</span>
+        <span class="tx">(</span><span class="tk">yield*</span> WorkflowEvent<span class="tx">).</span>payload<span class="tx">;</span>
+      <span class="tk">yield*</span> <span class="tf">task</span><span class="tx">(</span><span class="ts">"debit"</span><span class="tx">,</span> <span class="tf">debitAccount</span><span class="tx">(</span>from<span class="tx">,</span> amount<span class="tx">));</span>
+      <span class="tk">yield*</span> <span class="tf">task</span><span class="tx">(</span><span class="ts">"credit"</span><span class="tx">,</span> <span class="tf">creditAccount</span><span class="tx">(</span>to<span class="tx">,</span> amount<span class="tx">));</span>
+      <span class="tk">yield*</span> <span class="tf">sleep</span><span class="tx">(</span><span class="ts">"settle"</span><span class="tx">,</span> <span class="ts">"30 seconds"</span><span class="tx">);</span>
+      <span class="tk">yield*</span> <span class="tf">task</span><span class="tx">(</span><span class="ts">"notify"</span><span class="tx">,</span>
+        notifications.<span class="tf">send</span><span class="tx">(</span>from<span class="tx">,</span> to<span class="tx">,</span> amount<span class="tx">));</span>
     <span class="tx">});</span>
   <span class="tx">}),</span>
 <span class="tx">) {}</span></code></pre>
@@ -162,11 +178,15 @@
   <span class="tp">mainModule</span><span class="tx">:</span> <span class="ts">"worker.js"</span><span class="tx">,</span>
   <span class="tp">modules</span><span class="tx">:</span> <span class="tx">{</span>
     <span class="ts">"worker.js"</span><span class="tx">:</span> <span class="ts">`export default {
-      async fetch(req) { return new Response(eval(await req.text())) }
+      async fetch(req) {
+        return new Response(eval(await req.text()))
+      }
     }`</span><span class="tx">,</span>
   <span class="tx">},</span>
 <span class="tx">});</span>
-<span class="tk">return</span> <span class="tk">yield*</span> worker.<span class="tf">fetch</span><span class="tx">(</span>HttpClientRequest.<span class="tf">post</span><span class="tx">(</span><span class="ts">"https://worker/"</span><span class="tx">));</span></code></pre>
+<span class="tk">return</span> <span class="tk">yield*</span> worker.<span class="tf">fetch</span><span class="tx">(</span>
+  HttpClientRequest.<span class="tf">post</span><span class="tx">(</span><span class="ts">"https://worker/"</span><span class="tx">),</span>
+<span class="tx">);</span></code></pre>
         </div>
       </div>
 
