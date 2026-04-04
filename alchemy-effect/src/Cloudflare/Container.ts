@@ -36,7 +36,8 @@ import { Self } from "../Self.ts";
 import * as Server from "../Server/index.ts";
 import { Stack } from "../Stack.ts";
 import { sha256Object } from "../Util/sha256.ts";
-import { normalizeNulls, stableStringify } from "../Util/stable.ts";
+import { deepEqual } from "../Diff.ts";
+import { normalizeNulls } from "../Util/stable.ts";
 import { Account } from "./Account.ts";
 import { CloudflareLogs, type TelemetryFilter } from "./Logs.ts";
 import {
@@ -449,7 +450,14 @@ export const runContainer = Effect.fnUntraced(function* <
       ) =>
         ensureRunning.pipe(
           Effect.andThen(() => container.getTcpPort(portNumber)),
-          Effect.andThen((port) => port.fetch(request as any)),
+          Effect.andThen((port: Fetcher) => port.fetch(request as any)),
+          Effect.catchDefect((defect: unknown) =>
+            Effect.fail(
+              new ContainerError({
+                message: `Container not ready on port ${portNumber}: ${defect}`,
+              }),
+            ),
+          ),
           Effect.tapError((err) =>
             Effect.logDebug(`Container fetch error (will retry): ${err}`),
           ),
@@ -812,7 +820,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
         configuration: Configuration;
         rollout: Rollout | undefined;
       }) {
-        const strategy = rollout?.strategy ?? "rolling";
+        const strategy = rollout?.strategy ?? "immediate";
         const stepPercentage =
           strategy === "immediate" ? 100 : (rollout?.stepPercentage ?? 25);
 
@@ -1002,20 +1010,17 @@ await Effect.runPromise(serverEffect).catch((err) => {
           configuration,
         });
         const updated = toAttributes(application);
-        if (
-          stableStringify(existing.configuration) !==
-          stableStringify(updated.configuration)
-        ) {
+        if (!deepEqual(existing.configuration, configuration)) {
           yield* Effect.logInfo(
             `Cloudflare Container update: creating rollout for ${updated.applicationName}`,
           );
           yield* maybeCreateRollout({
             applicationId: updated.applicationId,
-            configuration: updated.configuration,
+            configuration,
             rollout: news.rollout,
           });
         }
-        return { ...updated, hash: { image: imageHash } };
+        return { ...updated, configuration, hash: { image: imageHash } };
       });
 
       const getDurableObjects = (
@@ -1135,8 +1140,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
           if (
             output &&
             !adoptPolicy &&
-            stableStringify(output.durableObjects) !==
-              stableStringify(durableObjects)
+            !deepEqual(output.durableObjects, durableObjects)
           ) {
             yield* Effect.logInfo(
               `Cloudflare Container create: recreating pre-created application ${name} with durable object binding`,
