@@ -1,7 +1,7 @@
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 
-import cloudflare_workers from "./cloudflare:workers.ts";
+import cloudflare_workers from "./cloudflare_workers.ts";
 
 export const WorkerConfigProvider = () =>
   cloudflare_workers.pipe(

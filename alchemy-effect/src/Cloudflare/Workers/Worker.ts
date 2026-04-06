@@ -43,7 +43,7 @@ import { Account } from "../Account.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import type { AssetsConfig, AssetsProps } from "./Assets.ts";
 import * as Assets from "./Assets.ts";
-import cloudflare_workers from "./cloudflare:workers.ts";
+import cloudflare_workers from "./cloudflare_workers.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
 import { fromCloudflareFetcher } from "./Fetcher.ts";
 import { workersHttpHandler } from "./HttpServer.ts";
