@@ -16,10 +16,7 @@ import * as ServiceMap from "effect/ServiceMap";
 import * as Stream from "effect/Stream";
 import * as Socket from "effect/unstable/socket/Socket";
 import * as Binding from "../../Binding.ts";
-import {
-  cleanupBundleTempDir,
-  createTempBundleDir,
-} from "../../Bundle/TempRoot.ts";
+import { cleanupBundleTempDir } from "../../Bundle/TempRoot.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { DotAlchemy } from "../../Config.ts";
 import { isResolved } from "../../Diff.ts";
@@ -510,11 +507,6 @@ export const WorkerProvider = () =>
         id: string,
         props: WorkerProps,
       ) {
-        const realMain = yield* fs.realPath(props.main);
-        const tempDir = yield* createTempBundleDir(realMain, dotAlchemy, id);
-        const realTempDir = yield* fs.realPath(tempDir);
-        const tempEntry = path.join(realTempDir, "__index.ts");
-        const outputDir = path.join(realTempDir, "out");
         const buildBundle = (entry: string) =>
           Effect.gen(function* () {
             const { projectRoot, tsconfig } =

@@ -1,4 +1,3 @@
-import { RolldownBundler } from "@distilled.cloud/cloudflare-bundler/rolldown";
 import * as Auth from "@distilled.cloud/cloudflare/Auth";
 import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
@@ -75,7 +74,6 @@ export const bindings = () =>
 
 const utils = () =>
   Layer.mergeAll(
-    RolldownBundler,
     rolldown(),
     AssetsProvider(),
     Socket.layerWebSocketConstructorGlobal,
