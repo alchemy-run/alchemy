@@ -431,36 +431,15 @@ export const WorkerProvider = () =>
         return createAlchemyWorkerTags(id).every((tag) => actualTags.has(tag));
       };
 
-      const findBundleProject = Effect.fnUntraced(function* (entry: string) {
+      const findCwdForBundle = Effect.fnUntraced(function* (entry: string) {
         let current = path.dirname(entry);
         while (true) {
           if (yield* fs.exists(path.join(current, "package.json"))) {
-            const relativeEntry = path
-              .relative(current, entry)
-              .replaceAll("\\", "/");
-            const tsconfigCandidates = relativeEntry.startsWith("test/")
-              ? ["tsconfig.test.json", "tsconfig.json"]
-              : ["tsconfig.json", "tsconfig.test.json"];
-            for (const tsconfig of tsconfigCandidates) {
-              if (yield* fs.exists(path.join(current, tsconfig))) {
-                return {
-                  projectRoot: current,
-                  tsconfig,
-                };
-              }
-            }
-            return {
-              projectRoot: current,
-              tsconfig: undefined,
-            };
+            return current;
           }
-
           const parent = path.dirname(current);
           if (parent === current) {
-            return {
-              projectRoot: process.cwd(),
-              tsconfig: undefined,
-            };
+            return process.cwd();
           }
           current = parent;
         }
@@ -924,17 +903,11 @@ ${[
           tailConsumers: undefined,
           usageModel: undefined,
         };
-        const scriptFiles = bundle.files.map(
-          (file) =>
-            new File([file.content], file.name, {
-              type: file.contentType,
-            }),
-        );
         const worker = yield* putScript({
           accountId,
           scriptName: name,
           metadata,
-          files: scriptFiles,
+          files: bundle.files,
         }).pipe(
           Effect.catch((err) => {
             // When adopting a Worker managed by Wrangler (or after a previous
@@ -962,7 +935,7 @@ ${[
                     newTag: bumpMigrationTagVersion(expectedTag),
                   },
                 },
-                files: scriptFiles,
+                files: bundle.files,
               });
             }
             return Effect.fail(err as any);
