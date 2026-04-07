@@ -146,6 +146,41 @@
         opacity: 0.4;
         cursor: not-allowed;
       }
+      #workflow-run {
+        background: #0ea5e9;
+      }
+      #workflow-run:hover {
+        background: #0284c7;
+      }
+      #workflow-run:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      #workflow-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        padding: 0.75rem;
+        background: #1e293b;
+        border-radius: 0.5rem;
+        border: 1px solid #334155;
+      }
+      #workflow-panel h2 {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #94a3b8;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      #workflow-status {
+        font-size: 0.75rem;
+        font-family: "SF Mono", "Fira Code", monospace;
+        color: #cbd5e1;
+        white-space: pre-wrap;
+        word-break: break-word;
+        min-height: 2.5rem;
+        line-height: 1.4;
+      }
     </style>
   </head>
   <body>
@@ -158,6 +193,13 @@
       <div id="messages"></div>
       <div id="actions">
         <button id="increment">Increment Counter</button>
+      </div>
+      <div id="workflow-panel">
+        <h2>NotifyWorkflow</h2>
+        <button id="workflow-run" type="button">
+          Run workflow (broadcasts to this room)
+        </button>
+        <div id="workflow-status">Idle — messages will appear in the chat above.</div>
       </div>
       <form id="form">
         <input
@@ -260,6 +302,114 @@
         } finally {
           incrementBtn.disabled = false;
           incrementBtn.textContent = "Increment Counter";
+        }
+      });
+
+      const workflowRunBtn = document.getElementById("workflow-run");
+      const workflowStatusEl = document.getElementById("workflow-status");
+
+      function isWorkflowTerminal(status) {
+        if (!status || typeof status.status !== "string") return false;
+        const s = status.status.toLowerCase();
+        return (
+          s === "complete" ||
+          s === "completed" ||
+          s === "errored" ||
+          s === "failed" ||
+          s === "terminated" ||
+          s === "canceled" ||
+          s === "cancelled" ||
+          (status.error != null && status.error !== undefined)
+        );
+      }
+
+      function formatWorkflowStatus(status) {
+        const lines = [
+          `status: ${status.status ?? "(none)"}`,
+          status.output !== undefined
+            ? `output: ${JSON.stringify(status.output)}`
+            : null,
+          status.error
+            ? `error: ${JSON.stringify(status.error)}`
+            : null,
+        ].filter(Boolean);
+        return lines.join("\n");
+      }
+
+      let workflowPollTimer = null;
+
+      workflowRunBtn.addEventListener("click", async () => {
+        if (workflowPollTimer) {
+          clearTimeout(workflowPollTimer);
+          workflowPollTimer = null;
+        }
+        workflowRunBtn.disabled = true;
+        workflowStatusEl.textContent = "Starting workflow…";
+        addMessage(
+          `Starting NotifyWorkflow for room "${roomId}" (watch for [workflow] lines)…`,
+          true,
+        );
+        try {
+          const startResp = await fetch(
+            `/workflow/start/${encodeURIComponent(roomId)}`,
+            { method: "POST" },
+          );
+          if (!startResp.ok) {
+            const errText = await startResp.text();
+            throw new Error(errText || `HTTP ${startResp.status}`);
+          }
+          const { instanceId } = await startResp.json();
+          if (!instanceId) {
+            throw new Error("No instanceId in response");
+          }
+          workflowStatusEl.textContent = `instance: ${instanceId}\npolling…`;
+
+          let pollCount = 0;
+          const maxPolls = 120;
+
+          const poll = async () => {
+            try {
+              pollCount += 1;
+              if (pollCount > maxPolls) {
+                workflowStatusEl.textContent =
+                  `instance: ${instanceId}\n(stopped polling after ${maxPolls} attempts — check logs)`;
+                workflowRunBtn.disabled = false;
+                addMessage("Workflow status polling timed out.", true);
+                return;
+              }
+              const stResp = await fetch(
+                `/workflow/status/${encodeURIComponent(instanceId)}`,
+              );
+              if (!stResp.ok) {
+                workflowStatusEl.textContent = `status fetch failed: HTTP ${stResp.status}`;
+                workflowRunBtn.disabled = false;
+                return;
+              }
+              const st = await stResp.json();
+              workflowStatusEl.textContent =
+                `instance: ${instanceId}\n` + formatWorkflowStatus(st);
+              if (isWorkflowTerminal(st)) {
+                workflowRunBtn.disabled = false;
+                addMessage(
+                  `Workflow finished: ${st.status}` +
+                    (st.output !== undefined
+                      ? ` — ${JSON.stringify(st.output)}`
+                      : ""),
+                  true,
+                );
+                return;
+              }
+              workflowPollTimer = setTimeout(poll, 600);
+            } catch (e) {
+              workflowStatusEl.textContent = `poll error: ${e.message}`;
+              workflowRunBtn.disabled = false;
+            }
+          };
+          await poll();
+        } catch (err) {
+          workflowStatusEl.textContent = `Error: ${err.message}`;
+          addMessage(`Workflow start failed: ${err.message}`, true);
+          workflowRunBtn.disabled = false;
         }
       });
 

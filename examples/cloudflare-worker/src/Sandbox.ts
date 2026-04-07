@@ -28,9 +28,6 @@ export class Sandbox extends Cloudflare.Container<
   Stack.useSync((stack) => ({
     main: import.meta.filename,
     instanceType: stack.stage === "prod" ? "standard-1" : "dev",
-    env: {
-      SANDBOX_VERSION: "5",
-    },
     observability: {
       logs: {
         enabled: true,
@@ -41,9 +38,8 @@ export class Sandbox extends Cloudflare.Container<
 
 export const SandboxLive = Sandbox.make(
   Effect.gen(function* () {
+    //
     const cp = yield* ChildProcessSpawner;
-
-    console.log("Sandbox container started");
 
     let counter = 0;
 
@@ -66,9 +62,11 @@ export const SandboxLive = Sandbox.make(
                 { concurrency: "unbounded" },
               ),
             ),
-            Effect.map(([exitCode, stdout, stderr]) => {
-              return { exitCode, stdout, stderr };
-            }),
+            Effect.map(([exitCode, stdout, stderr]) => ({
+              exitCode,
+              stdout,
+              stderr,
+            })),
             Effect.scoped,
           ),
       fetch: Effect.gen(function* () {
