@@ -11,6 +11,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import type * as rolldown from "rolldown";
 import { AdoptPolicy } from "../AdoptPolicy.ts";
 import * as Bundle from "../Bundle/BundleV2.ts";
 import {
@@ -20,9 +21,8 @@ import {
   writeContextFiles,
 } from "../Bundle/Docker.ts";
 import { findCwdForBundle, getStableContextDir } from "../Bundle/TempRoot.ts";
-import type * as rolldown from "rolldown";
 import { DotAlchemy } from "../Config.ts";
-import { isResolved } from "../Diff.ts";
+import { deepEqual, isResolved } from "../Diff.ts";
 import { HttpServer, type HttpEffect } from "../Http.ts";
 import * as Output from "../Output.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
@@ -38,7 +38,6 @@ import { Self } from "../Self.ts";
 import * as Server from "../Server/index.ts";
 import { Stack } from "../Stack.ts";
 import { sha256Object } from "../Util/sha256.ts";
-import { deepEqual } from "../Diff.ts";
 import { normalizeNulls } from "../Util/stable.ts";
 import { Account } from "./Account.ts";
 import { CloudflareLogs, type TelemetryFilter } from "./Logs.ts";
@@ -661,7 +660,11 @@ export const ContainerProvider = () =>
             {
               input: entry,
               cwd,
-              external: ["cloudflare:workers", "cloudflare:workflows"],
+              external: [
+                "cloudflare:workers",
+                "cloudflare:workflows",
+                ...(runtime === "bun" ? ["bun", "bun:*"] : []),
+              ],
               platform: "node",
               plugins,
               treeshake: true,
