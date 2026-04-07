@@ -10,11 +10,11 @@ import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import { Path } from "effect/Path";
 import * as S from "effect/Schema";
+import * as Stream from "effect/Stream";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 import * as CliError from "effect/unstable/cli/CliError";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-
-import * as Stream from "effect/Stream";
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
 
 import packageJson from "../package.json" with { type: "json" };
 import { apply } from "../src/Apply.ts";
@@ -280,6 +280,29 @@ const bootstrapCommand = Command.make(
       });
     }).pipe(Effect.provide(platform)) as Effect.Effect<void, any, never>;
   }),
+);
+
+const devCommand = Command.make(
+  "dev",
+  {
+    main,
+    envFile,
+    stage,
+  },
+  ({ envFile, main, stage }) =>
+    Effect.gen(function* () {
+      const cmd = ChildProcess.make("bun", ["--hot", main], {
+        env: {
+          ALCHEMY_PHASE: "dev",
+        },
+      });
+
+      const proc = yield* cmd;
+
+      proc.stdout;
+      proc.stderr;
+      proc.all;
+    }),
 );
 
 const execStack = Effect.fn(function* ({

@@ -346,12 +346,7 @@ export interface ResourceProviders<Resource extends ResourceLike> {
     Provider<Resource>,
     never,
     Exclude<
-      | ReadReq
-      | DiffReq
-      | PrecreateReq
-      | CreateReq
-      | UpdateReq
-      | DeleteReq,
+      ReadReq | DiffReq | PrecreateReq | CreateReq | UpdateReq | DeleteReq,
       InstanceId
     >
   >;

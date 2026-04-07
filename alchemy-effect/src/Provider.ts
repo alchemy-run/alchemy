@@ -108,6 +108,7 @@ export interface ProviderService<
     newBindings: Input<BindingData<Res>>;
     output: Res["Attributes"] | undefined;
   }): Effect.Effect<Diff | void, any, DiffReq>;
+  // dev?:() => Effect.Effect<void, any, DevReq>;
   precreate?(input: {
     id: string;
     news: Props<Res>;

@@ -84,7 +84,7 @@ export const bundle = Effect.fnUntraced(function* (request: BundleRequest) {
     return { code, hash, outfile } satisfies BundleResult;
   });
 
-  return yield* (tempDir
+  return yield* tempDir
     ? run.pipe(Effect.ensuring(cleanupBundleTempDir(tempDir)))
-    : run);
+    : run;
 });
