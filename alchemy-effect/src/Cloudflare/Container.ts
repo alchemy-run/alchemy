@@ -679,7 +679,8 @@ export const ContainerProvider = () =>
           ? yield* buildBundle(realMain)
           : yield* buildBundle(
               realMain,
-              virtualEntryPlugin((importPath) => `
+              virtualEntryPlugin(
+                (importPath) => `
 ${
   runtime === "bun"
     ? `
@@ -746,7 +747,8 @@ console.log("Container bootstrap starting...");
 await Effect.runPromise(serverEffect).catch((err) => {
   console.error("Container bootstrap failed:", err);
   process.exit(1);
-})`),
+})`,
+              ),
             );
 
         const mainFile = bundleOutput.files[0];
