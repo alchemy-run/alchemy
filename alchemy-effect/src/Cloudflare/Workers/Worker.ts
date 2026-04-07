@@ -1232,45 +1232,6 @@ ${[
     }),
   );
 
-const stripSourceMapComment = (code: string) =>
-  code.replace(/\n?\/\/# sourceMappingURL=.*$/gm, "");
-
-const getModuleContentType = (module: BundledModule) => {
-  switch (module.type) {
-    case "ESModule":
-      return "application/javascript+module";
-    case "CompiledWasm":
-      return "application/wasm";
-    case "Data":
-      return "application/octet-stream";
-    case "Text":
-      if (module.name.endsWith(".html")) return "text/html";
-      if (module.name.endsWith(".sql")) return "text/sql";
-      return "text/plain";
-    case "SourceMap":
-      return "application/source-map";
-  }
-};
-
-const hashBundleFiles = (files: ReadonlyArray<PreparedBundleFile>) =>
-  Effect.gen(function* () {
-    const parts = yield* Effect.all(
-      files.map((file) =>
-        sha256(file.content).pipe(
-          Effect.map((hash) => ({
-            name: file.name,
-            contentType: file.contentType,
-            hash,
-          })),
-        ),
-      ),
-      {
-        concurrency: "unbounded",
-      },
-    );
-    return yield* sha256(JSON.stringify(parts));
-  });
-
 interface TailEventMessage {
   eventTimestamp?: number;
   wallTime: number;
@@ -1297,3 +1258,26 @@ interface TailEventMessage {
     | null
     | undefined;
 }
+
+const contentTypeFromExtension = (extension: string) => {
+  switch (extension) {
+    case ".wasm":
+      return "application/wasm";
+    case ".txt":
+    case ".html":
+    case ".sql":
+    case ".custom":
+      return "text/plain";
+    case ".bin":
+      return "application/octet-stream";
+    case ".mjs":
+    case ".js":
+      return "application/javascript+module";
+    case ".cjs":
+      return "application/javascript";
+    case ".map":
+      return "application/source-map";
+    default:
+      return "application/octet-stream";
+  }
+};
