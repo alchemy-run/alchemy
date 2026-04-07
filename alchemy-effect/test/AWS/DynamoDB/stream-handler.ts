@@ -7,7 +7,7 @@ import * as Stream from "effect/Stream";
 export class DynamoDBStreamFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
   "DynamoDBStreamFunction",
   {
-    main: import.meta.path,
+    main: import.meta.filename,
   },
 ) {}
 

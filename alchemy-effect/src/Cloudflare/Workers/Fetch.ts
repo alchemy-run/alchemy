@@ -23,7 +23,7 @@ export class Fetch extends Binding.Service<
       HttpClientError.RequestError
     >
   >
->()("Cloudflare.Workers.Fetch") {}
+>()("Cloudflare.Fetch") {}
 
 export const FetchLive = Layer.effect(
   Fetch,
@@ -119,7 +119,7 @@ const doFetch = (
 export class FetchPolicy extends Binding.Policy<
   FetchPolicy,
   (worker: Worker) => Effect.Effect<void>
->()("Cloudflare.Workers.Fetch") {}
+>()("Cloudflare.Fetch") {}
 
 export const FetchPolicyLive = FetchPolicy.layer.succeed(
   Effect.fn(function* (host) {

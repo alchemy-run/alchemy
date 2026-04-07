@@ -52,7 +52,7 @@ export class TaskEnvironment extends ServiceMap.Service<
 export interface TaskProps extends PlatformProps {
   /**
    * Module entrypoint for the bundled task program. This should typically be
-   * `import.meta.path` from an inline Effect program.
+   * `import.meta.filename` from an inline Effect program.
    */
   main: string;
   /**

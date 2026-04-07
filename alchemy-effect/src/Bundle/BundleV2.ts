@@ -6,7 +6,7 @@ import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import assert from "node:assert";
 import * as rolldown from "rolldown";
-import { sha256 } from "../Util/sha256.ts";
+import { sha256, sha256Object } from "../Util/sha256.ts";
 
 export interface BundleOutput {
   /**
@@ -185,13 +185,11 @@ function bundleOutputFromFiles(
   files: [BundleFile, ...BundleFile[]],
 ): Effect.Effect<BundleOutput> {
   return Effect.map(
-    sha256(
-      JSON.stringify(
-        files.map((file) => ({
-          path: file.path,
-          hash: file.hash,
-        })),
-      ),
+    sha256Object(
+      files.map((file) => ({
+        path: file.path,
+        hash: file.hash,
+      })),
     ),
     (hash) => ({ files, hash }),
   );

@@ -77,7 +77,7 @@ export default Effect.gen(function* () {
   yield* Http.serve(myHttpApp);
 
   return {
-    main: import.meta.path,
+    main: import.meta.filename,
     memory: 1024,
     url: true,
   } as const;
@@ -138,7 +138,7 @@ Then provide it as a Layer to your Lambda Function:
 export default Effect.gen(function* () {
   const { bucket, getJob } = yield* JobStorage;
   // ...
-  return { main: import.meta.path, url: true } as const;
+  return { main: import.meta.filename, url: true } as const;
 }).pipe(Effect.provide(jobStorage), Lambda.Function("JobFunction"));
 ```
 
@@ -477,7 +477,7 @@ export default Effect.gen(function* () {
   const stream = yield* Kinesis.Stream("Events", { streamMode: "ON_DEMAND" });
   const putRecord = yield* Kinesis.PutRecord.bind(stream);
   // use putRecord(...) at runtime
-  return { main: import.meta.path } as const;
+  return { main: import.meta.filename } as const;
 }).pipe(Effect.provide(Kinesis.PutRecordLive), Lambda.Function("Producer"));
 ```
 

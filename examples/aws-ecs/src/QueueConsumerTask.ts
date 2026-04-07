@@ -8,7 +8,7 @@ import { JobsQueue, JobsQueueLive } from "./JobsQueue.ts";
 export default class QueueConsumerTask extends AWS.ECS.Task<QueueConsumerTask>()(
   "QueueConsumerTask",
   {
-    main: import.meta.path,
+    main: import.meta.filename,
     cpu: 256,
     memory: 512,
     taskRoleManagedPolicyArns: ["arn:aws:iam::aws:policy/AmazonSQSFullAccess"],

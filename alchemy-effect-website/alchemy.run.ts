@@ -9,7 +9,7 @@ const stack = Effect.gen(function* () {
     dev: {
       command: "bun run dev:site",
     },
-    outdir: "./dist",
+    outdir: "./public",
     hash: [
       "./config.toml",
       "./content/**",
@@ -21,6 +21,9 @@ const stack = Effect.gen(function* () {
       "../alchemy-effect/src/**",
       "../bun.lock",
     ],
+    assetsConfig: {
+      runWorkerFirst: true,
+    },
     compatibility: {
       date: "2026-04-02",
       flags: ["nodejs_compat"],

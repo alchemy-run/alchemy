@@ -283,7 +283,7 @@ export type InstanceExecutionContext = Ec2HostExecutionContext;
  *   );
  *
  *   return {
- *     main: import.meta.path,
+ *     main: import.meta.filename,
  *     imageId,
  *     instanceType: "t3.small",
  *     subnetId: subnet.subnetId,

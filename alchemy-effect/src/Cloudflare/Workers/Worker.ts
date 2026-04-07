@@ -1,12 +1,17 @@
 import type * as cf from "@cloudflare/workers-types";
 import cloudflare from "@distilled.cloud/cloudflare-rolldown-plugin";
 import * as workers from "@distilled.cloud/cloudflare/workers";
+import type * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Queue from "effect/Queue";
+import * as Schedule from "effect/Schedule";
 import * as ServiceMap from "effect/ServiceMap";
+import * as Stream from "effect/Stream";
+import * as Socket from "effect/unstable/socket/Socket";
 import type * as rolldown from "rolldown";
 import * as Binding from "../../Binding.ts";
 import * as Bundle from "../../Bundle/BundleV2.ts";
@@ -22,18 +27,22 @@ import {
   type PlatformProps,
   type Rpc,
 } from "../../Platform.ts";
+import type { LogLine } from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { Self } from "../../Self.ts";
 import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
 import { sha256 } from "../../Util/index.ts";
 import { Account } from "../Account.ts";
+import { CloudflareLogs } from "../Logs.ts";
 import type { AssetsConfig, AssetsProps } from "./Assets.ts";
 import * as Assets from "./Assets.ts";
-import cloudflare_workers from "./cloudflare:workers.ts";
+import cloudflare_workers from "./cloudflare_workers.ts";
+import { isDurableObjectExport } from "./DurableObject.ts";
 import { fromCloudflareFetcher } from "./Fetcher.ts";
 import { workersHttpHandler } from "./HttpServer.ts";
 import { makeRpcStub } from "./Rpc.ts";
+import { isWorkflowExport } from "./Workflow.ts";
 
 const WorkerTypeId = "Cloudflare.Worker";
 type WorkerTypeId = typeof WorkerTypeId;
@@ -375,12 +384,15 @@ export const WorkerProvider = () =>
 
       const { read, upload } = yield* Assets.Assets;
       const createScriptSubdomain = yield* workers.createScriptSubdomain;
+      const createScriptTail = yield* workers.createScriptTail;
       const deleteScript = yield* workers.deleteScript;
+      const deleteScriptTail = yield* workers.deleteScriptTail;
       const getScriptSubdomain = yield* workers.getScriptSubdomain;
       const getScriptSettings = yield* workers.getScriptScriptAndVersionSetting;
       const getSubdomain = yield* workers.getSubdomain;
       const listScripts = yield* workers.listScripts;
       const putScript = yield* workers.putScript;
+      const telemetry = yield* CloudflareLogs;
 
       const getAccountSubdomain = (accountId: string) =>
         getSubdomain({
@@ -512,9 +524,21 @@ export const WorkerProvider = () =>
           return yield* buildBundle(realMain);
         }
 
-        const classes = (Object.keys(props.exports ?? {}) ?? []).filter(
+        const exportMap = (props.exports ?? {}) as Record<string, unknown>;
+        const allExportNames = Object.keys(exportMap).filter(
           (id) => id !== "default",
         );
+        const doClasses: string[] = [];
+        const wfClasses: string[] = [];
+        for (const name of allExportNames) {
+          if (isWorkflowExport(exportMap[name])) {
+            wfClasses.push(name);
+          } else if (isDurableObjectExport(exportMap[name])) {
+            doClasses.push(name);
+          }
+        }
+        const hasDoClasses = doClasses.length > 0;
+        const hasWfClasses = wfClasses.length > 0;
         const script = (importPath: string) => `
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -526,11 +550,11 @@ import * as Logger from "effect/Logger";
 import * as ServiceMap from "effect/ServiceMap";
 import * as Stream from "effect/Stream";
 
-import { env, DurableObject } from "cloudflare:workers";
+import { env, DurableObject${hasWfClasses ? ", WorkflowEntrypoint" : ""} } from "cloudflare:workers";
 import { MinimumLogLevel } from "effect/References";
 import { NodeServices } from "@effect/platform-node";
 import { Stack } from "alchemy-effect/Stack";
-import { WorkerEnvironment, makeDurableObjectBridge, ExportedHandlerMethods } from "alchemy-effect/Cloudflare";
+import { WorkerEnvironment, makeDurableObjectBridge${hasWfClasses ? ", makeWorkflowBridge" : ""}, ExportedHandlerMethods } from "alchemy-effect/Cloudflare";
 
 import entry from "${importPath}";
 
@@ -597,7 +621,7 @@ let exportsPromise;
 // don't initialize the workerEffect during module init because Cloudflare does not allow I/O during module init
 // we cache it synchronously (??=) to guarnatee only one initialization ever happens
 const getExports = () => (exportsPromise ??= Effect.runPromise(exportsEffect))
-const getExport = (name: string) => getExports().then(exports => exports[name])
+const getExport = (name) => getExports().then(exports => exports[name]?.make)
 const worker = () => getExports().then(exports => exports.default)
 
 export default Object.fromEntries(ExportedHandlerMethods.map(
@@ -605,19 +629,24 @@ export default Object.fromEntries(ExportedHandlerMethods.map(
 ) satisfies Required<cf.ExportedHandler>;
 
 // export class proxy stubs for Durable Objects and Workflows
-${
-  classes.length === 0
-    ? ""
-    : ([
+${[
+  ...(hasDoClasses
+    ? [
         "const DurableObjectBridge = makeDurableObjectBridge(DurableObject, getExport);",
-        ...classes
-          // TODO(sam): differentiate Workflows from Durable Objects
-          .map(
-            (id) =>
-              `export class ${id} extends DurableObjectBridge("${id}") {}`,
-          ),
-      ].join("\n") ?? "")
-}
+        ...doClasses.map(
+          (id) => `export class ${id} extends DurableObjectBridge("${id}") {}`,
+        ),
+      ]
+    : []),
+  ...(hasWfClasses
+    ? [
+        "const WorkflowBridgeFn = makeWorkflowBridge(WorkflowEntrypoint, getExport);",
+        ...wfClasses.map(
+          (id) => `export class ${id} extends WorkflowBridgeFn("${id}") {}`,
+        ),
+      ]
+    : []),
+].join("\n")}
 `;
 
         return yield* buildBundle(realMain, virtualEntryPlugin(script));
@@ -1069,9 +1098,123 @@ ${
             scriptName: output.workerName,
           }).pipe(Effect.catchTag("WorkerNotFound", () => Effect.void));
         }),
+        tail: ({ output }) => {
+          const runTailSession = Effect.gen(function* () {
+            const { id: tailId, url } = yield* createScriptTail({
+              scriptName: output.workerName,
+              accountId: output.accountId,
+              body: { filters: [] },
+            });
+
+            const socket = yield* Socket.makeWebSocket(url, {
+              protocols: ["trace-v1"],
+            });
+
+            const queue = yield* Queue.make<LogLine, Cause.Done>();
+
+            yield* socket
+              .runRaw((raw) => {
+                const text =
+                  typeof raw === "string" ? raw : new TextDecoder().decode(raw);
+                const data: TailEventMessage = JSON.parse(text);
+                const eventTs = new Date(data.eventTimestamp ?? Date.now());
+
+                if (data.event && "request" in data.event) {
+                  const reqEvent = data.event;
+                  const pathname = (() => {
+                    try {
+                      return new URL(reqEvent.request.url).pathname;
+                    } catch {
+                      return reqEvent.request.url;
+                    }
+                  })();
+                  const status = reqEvent.response?.status ?? 500;
+                  Queue.offerUnsafe(queue, {
+                    timestamp: eventTs,
+                    message: `${reqEvent.request.method} ${pathname} > ${status} (cpu: ${Math.round(data.cpuTime)}ms, wall: ${Math.round(data.wallTime)}ms)`,
+                  });
+                }
+
+                for (const log of data.logs) {
+                  const msg = log.message.join(" ");
+                  Queue.offerUnsafe(queue, {
+                    timestamp: new Date(log.timestamp),
+                    message: log.level === "log" ? msg : `${log.level}: ${msg}`,
+                  });
+                }
+
+                for (const exception of data.exceptions) {
+                  Queue.offerUnsafe(queue, {
+                    timestamp: new Date(exception.timestamp),
+                    message: `${exception.name} ${exception.message}\n${exception.stack}`,
+                  });
+                }
+              })
+              .pipe(
+                Effect.ensuring(
+                  Effect.all([
+                    deleteScriptTail({
+                      scriptName: output.workerName,
+                      id: tailId,
+                      accountId: output.accountId,
+                    }).pipe(Effect.ignore),
+                    Queue.end(queue),
+                  ]),
+                ),
+                Effect.ignore,
+                Effect.forkChild(),
+              );
+
+            return Stream.fromQueue(queue);
+          });
+
+          return Stream.unwrap(runTailSession).pipe(
+            Stream.repeat(Schedule.spaced("1 second")),
+          );
+        },
+        logs: ({ output, options }) =>
+          telemetry.queryLogs({
+            accountId: output.accountId,
+            filters: [
+              {
+                key: "$workers.scriptName",
+                operation: "eq",
+                type: "string",
+                value: output.workerName,
+              },
+            ],
+            options,
+          }),
       });
     }),
   );
+
+interface TailEventMessage {
+  eventTimestamp?: number;
+  wallTime: number;
+  cpuTime: number;
+  truncated: boolean;
+  outcome: string;
+  scriptName: string;
+  exceptions: {
+    name: string;
+    message: string;
+    stack: string;
+    timestamp: string;
+  }[];
+  logs: {
+    message: string[];
+    level: string;
+    timestamp: string;
+  }[];
+  event:
+    | {
+        request: { method: string; url: string };
+        response?: { status: number };
+      }
+    | null
+    | undefined;
+}
 
 const contentTypeFromExtension = (extension: string) => {
   switch (extension) {

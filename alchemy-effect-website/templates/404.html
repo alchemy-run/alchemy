@@ -4,17 +4,17 @@
 {% block description %}The requested documentation page could not be found.{% endblock description %}
 
 {% block content %}
-  <section class="mx-auto max-w-3xl rounded-[2rem] border p-10 text-center" style="border-color: var(--brand-border); background: var(--brand-surface);">
-    <div class="brand-badge brand-badge-guide mb-4">
-      Not Found
-    </div>
-    <h1 class="brand-title text-4xl font-semibold">That page does not exist.</h1>
-    <p class="brand-copy mt-4 text-lg leading-8">
-      Try the guides, browse the API reference, or open search to jump to another page.
+  <section class="mx-auto max-w-2xl rounded-xl border p-10 text-center" style="border-color: var(--brand-border); background: var(--brand-surface);">
+    <p class="mb-4 font-mono text-xs font-semibold uppercase tracking-[0.18em]" style="color: var(--brand-accent);">404</p>
+    <h1 class="text-3xl font-semibold tracking-tight" style="font-family: var(--font-display); color: var(--brand-text);">
+      Page not found
+    </h1>
+    <p class="mt-4 text-base leading-7" style="color: var(--brand-text-dim);">
+      Try the guides, browse the API reference, or search.
     </p>
-    <div class="mt-8 flex flex-wrap items-center justify-center gap-4">
+    <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
       <a href="/guides/" class="brand-primary-button">Browse guides</a>
-      <a href="/reference/" class="brand-secondary-button">Open API reference</a>
+      <a href="/reference/" class="brand-secondary-button">API Reference</a>
     </div>
   </section>
 {% endblock content %}

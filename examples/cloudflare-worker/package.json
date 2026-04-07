@@ -11,7 +11,9 @@
   "scripts": {
     "deploy": "alchemy-effect deploy",
     "dev": "alchemy-effect dev",
-    "destroy": "alchemy-effect destroy"
+    "destroy": "alchemy-effect destroy",
+    "logs": "alchemy-effect logs",
+    "tail": "alchemy-effect tail"
   },
   "dependencies": {
     "@effect/platform-bun": "catalog:",

@@ -10,7 +10,8 @@
     "directory": "alchemy"
   },
   "bin": {
-    "alchemy-effect": "bin/alchemy-effect.js"
+    "alchemy": "bin/alchemy-effect.sh",
+    "alchemy-effect": "bin/alchemy-effect.sh"
   },
   "files": [
     "bin",

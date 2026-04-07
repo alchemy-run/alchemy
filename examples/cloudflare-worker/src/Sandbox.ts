@@ -1,6 +1,5 @@
 import * as Cloudflare from "alchemy-effect/Cloudflare";
 import { Stack } from "alchemy-effect/Stack";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { PlatformError } from "effect/PlatformError";
 import * as Stream from "effect/Stream";
@@ -8,10 +7,6 @@ import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
-
-export class EvalError extends Data.TaggedError("EvalError")<{
-  message: string;
-}> {}
 
 export class Sandbox extends Cloudflare.Container<
   Sandbox,
@@ -27,26 +22,27 @@ export class Sandbox extends Cloudflare.Container<
       },
       PlatformError
     >;
-    /**
-     * Evaluate JavaScript code in a sandbox.
-     */
-    eval: (code: string) => Effect.Effect<any, EvalError>;
   }
 >()(
   "Sandbox",
   Stack.useSync((stack) => ({
-    main: import.meta.path,
-    // handler: "SandboxLive",
+    main: import.meta.filename,
     instanceType: stack.stage === "prod" ? "standard-1" : "dev",
-    dockerfile: `FROM alpine:latest`,
+    observability: {
+      logs: {
+        enabled: true,
+      },
+    },
   })),
 ) {}
 
 export const SandboxLive = Sandbox.make(
   Effect.gen(function* () {
+    //
     const cp = yield* ChildProcessSpawner;
 
-    // return http effect
+    let counter = 0;
+
     return Sandbox.of({
       exec: (command) =>
         cp
@@ -66,41 +62,24 @@ export const SandboxLive = Sandbox.make(
                 { concurrency: "unbounded" },
               ),
             ),
-            Effect.map(([exitCode, stdout, stderr]) => {
-              return { exitCode, stdout, stderr };
-            }),
+            Effect.map(([exitCode, stdout, stderr]) => ({
+              exitCode,
+              stdout,
+              stderr,
+            })),
             Effect.scoped,
           ),
-      eval: (code) =>
-        Effect.try({
-          // TODO(sam): evaluate in a sandbox
-          // oxlint-disable-next-line no-eval
-          try: () => (0, eval)(code), // Use indirect eval to avoid bundler warnings: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
-          catch: (error: any) => new EvalError({ message: error.message }),
-        }),
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
-        // upgrade to web socket
-        const socket = yield* request.upgrade;
-        const writeMessage = yield* socket.writer;
-        const cmd = yield* ChildProcess.make("ffmpeg", ["-version"]);
-        const [exitCode] = yield* Effect.all(
-          [
-            cmd.exitCode,
-            // pipe stdout to the websocket
-            cmd.stdout.pipe(
-              Stream.tap(writeMessage),
-              Stream.decodeText,
-              Stream.mkString,
-            ),
-          ] as const,
-          { concurrency: "unbounded" },
-        );
+        const url = new URL(request.url, "http://localhost");
 
-        return HttpServerResponse.empty({
-          status: exitCode === 0 ? 200 : 500,
-        });
-      }).pipe(Effect.orDie),
+        if (url.pathname === "/increment") {
+          counter++;
+          return yield* HttpServerResponse.json({ counter });
+        }
+
+        return HttpServerResponse.text("Hello from Sandbox container!");
+      }),
     });
   }),
 );

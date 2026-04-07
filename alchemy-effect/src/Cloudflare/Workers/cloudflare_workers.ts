@@ -6,13 +6,19 @@ const cloudflare_workers: Effect.Effect<{
     state: cf.DurableObjectState,
     env: any,
   ) => cf.DurableObject;
+  WorkflowEntrypoint: abstract new (
+    ctx: unknown,
+    env: unknown,
+  ) => { run(event: any, step: any): Promise<unknown> };
   env: Record<string, any>;
 }> = /** @__PURE__ #__PURE__ */ Effect.promise(() =>
   // @ts-expect-error
   import("cloudflare:workers").catch(() => ({
     env: {},
-    // stub
     DurableObject: class {},
+    WorkflowEntrypoint: class {
+      async run() {}
+    },
   })),
 );
 
