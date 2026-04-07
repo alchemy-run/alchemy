@@ -180,6 +180,99 @@ const planCommand = Command.make(
     }),
 );
 
+const execStack = Effect.fn(function* ({
+  main,
+  stage,
+  envFile,
+  dryRun = false,
+  yes = false,
+  destroy = false,
+}: {
+  main: string;
+  stage: string;
+  envFile: Option.Option<string>;
+  dryRun?: boolean;
+  yes?: boolean;
+  destroy?: boolean;
+}) {
+  const path = yield* Path;
+  const module = yield* Effect.promise(
+    () => import(path.resolve(process.cwd(), main)),
+  );
+  const stackEffect = module.default as ReturnType<
+    ReturnType<typeof Stack.make>
+  >;
+  if (!stackEffect) {
+    return yield* Effect.die(
+      new Error(
+        `Main file '${main}' must export a default stack definition (export default defineStack({...}))`,
+      ),
+    );
+  }
+
+  const configProvider = yield* loadConfigProvider(envFile);
+
+  // TODO(sam): implement local and watch
+  const platform = Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer);
+
+  const rootLogger = Logger.layer([fileLogger("out")]);
+
+  // override alchemy state store, CLI/reporting and dotAlchemy
+  const alchemy = Layer.mergeAll(
+    // TODO(sam): support overriding these
+    State.LocalState,
+    CLI.inkCLI(),
+    // optional
+    Layer.provideMerge(rootLogger, dotAlchemy),
+  );
+
+  yield* Effect.gen(function* () {
+    const cli = yield* CLI.Cli;
+    const stack = yield* stackEffect;
+
+    yield* Effect.gen(function* () {
+      const updatePlan = yield* Plan.make(
+        destroy
+          ? {
+              ...stack,
+              // zero these out (destroy will treat all as orphans)
+              // TODO(sam): probably better to have Plan.destroy and Plan.update
+              resources: {},
+              bindings: {},
+              output: {},
+            }
+          : stack,
+      );
+      if (dryRun) {
+        yield* cli.displayPlan(updatePlan);
+      } else {
+        if (!yes) {
+          const approved = yield* cli.approvePlan(updatePlan);
+          if (!approved) {
+            return;
+          }
+        }
+        const outputs = yield* apply(updatePlan);
+
+        yield* Console.log(outputs);
+      }
+    }).pipe(
+      Effect.provide(stack.services),
+      // Effect.provide(Logger.layer([fileLogger("stacks", stack.name, stage)])),
+    );
+  }).pipe(
+    Effect.provide(
+      Layer.provideMerge(
+        alchemy,
+        Layer.mergeAll(platform, Layer.succeed(Stage, stage)),
+      ),
+    ),
+    Effect.provideService(ConfigProvider.ConfigProvider, configProvider),
+  ) as Effect.Effect<void, any, never>;
+  // TODO(sam): figure out why we need to cast to remove the Provider<never> requirement
+  // Effect.Effect<void, any, Provider<never>>;
+});
+
 const resourceFilter = Flag.string("filter").pipe(
   Flag.withDescription(
     "Comma-separated logical resource IDs (e.g. Api,Sandbox). Only those resources are included.",
@@ -196,7 +289,138 @@ const tailCommand = Command.make(
     stage,
     filter: resourceFilter,
   },
-  (args) => execTail(args),
+  Effect.fnUntraced(function* ({
+    main,
+    stage,
+    envFile,
+    filter,
+  }: {
+    main: string;
+    stage: string;
+    envFile: Option.Option<string>;
+    filter: string | undefined;
+  }) {
+    const path = yield* Path;
+    const module = yield* Effect.promise(
+      () => import(path.resolve(process.cwd(), main)),
+    );
+    const stackEffect = module.default as ReturnType<
+      ReturnType<typeof Stack.make>
+    >;
+    if (!stackEffect) {
+      return yield* Effect.die(
+        new Error(
+          `Main file '${main}' must export a default stack definition (export default defineStack({...}))`,
+        ),
+      );
+    }
+
+    const configProvider = yield* loadConfigProvider(envFile);
+
+    const platform = Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer);
+
+    const rootLogger = Logger.layer([fileLogger("out")]);
+
+    const alchemy = Layer.mergeAll(
+      State.LocalState,
+      Layer.provideMerge(rootLogger, dotAlchemy),
+    );
+
+    yield* Effect.gen(function* () {
+      const state = yield* State.State;
+      const stack = yield* stackEffect;
+
+      yield* Effect.gen(function* () {
+        const filterSet = parseResourceFilter(filter);
+        const availableIds = [
+          ...new Set(Object.values(stack.resources).map((r) => r.LogicalId)),
+        ].sort();
+
+        if (filterSet) {
+          for (const id of filterSet) {
+            if (!availableIds.includes(id)) {
+              return yield* Effect.die(
+                new Error(
+                  `Unknown resource '${id}' in --filter. Available: ${availableIds.join(", ") || "(none)"}`,
+                ),
+              );
+            }
+          }
+        }
+
+        const fqns = Object.keys(stack.resources);
+        const tailable: {
+          logicalId: string;
+          stream: Stream.Stream<LogLine, any, any>;
+        }[] = [];
+
+        for (const fqn of fqns) {
+          const resource = stack.resources[fqn]!;
+          if (filterSet && !filterSet.has(resource.LogicalId)) continue;
+
+          const resourceState = yield* state.get({
+            stack: stack.name,
+            stage: stack.stage,
+            fqn,
+          });
+          if (!resourceState?.attr) continue;
+
+          const provider = yield* getProviderByType(resource.Type);
+          if (!provider.tail) continue;
+
+          tailable.push({
+            logicalId: resource.LogicalId,
+            stream: provider.tail({
+              id: resource.LogicalId,
+              instanceId: resourceState.instanceId,
+              props: resourceState.props as any,
+              output: resourceState.attr as any,
+            }),
+          });
+        }
+
+        if (tailable.length === 0) {
+          if (filterSet) {
+            yield* Console.log(
+              "No tailable resources match --filter (deploy first, or selected resources may not support tail).",
+            );
+          } else {
+            yield* Console.log(
+              "No tailable resources found. Deploy first, then run tail.",
+            );
+          }
+          return;
+        }
+
+        yield* Console.log(
+          `Tailing: ${tailable.map((t) => t.logicalId).join(", ")}`,
+        );
+
+        const taggedStreams = tailable.map(({ logicalId, stream }, i) => {
+          const color = TAIL_COLORS[i % TAIL_COLORS.length]!;
+          return stream.pipe(
+            Stream.map(({ timestamp, message }) => {
+              const ts = formatLocalTimestamp(timestamp);
+              return `${color}${ts} [${logicalId}]${TAIL_RESET} ${message}`;
+            }),
+          );
+        });
+
+        yield* Stream.mergeAll(taggedStreams, {
+          concurrency: "unbounded",
+        }).pipe(Stream.runForEach((line) => Console.log(line)));
+      }).pipe(Effect.provide(stack.services));
+    }).pipe(
+      Effect.provide(
+        Layer.provideMerge(
+          alchemy,
+          Layer.mergeAll(platform, Layer.succeed(Stage, stage)),
+        ),
+      ),
+      Effect.provideService(ConfigProvider.ConfigProvider, configProvider),
+      Effect.scoped,
+    ) as Effect.Effect<void, any, never>;
+  }),
 );
 
 const awsProfile = Flag.string("profile").pipe(
@@ -305,99 +529,6 @@ const devCommand = Command.make(
     }),
 );
 
-const execStack = Effect.fn(function* ({
-  main,
-  stage,
-  envFile,
-  dryRun = false,
-  yes = false,
-  destroy = false,
-}: {
-  main: string;
-  stage: string;
-  envFile: Option.Option<string>;
-  dryRun?: boolean;
-  yes?: boolean;
-  destroy?: boolean;
-}) {
-  const path = yield* Path;
-  const module = yield* Effect.promise(
-    () => import(path.resolve(process.cwd(), main)),
-  );
-  const stackEffect = module.default as ReturnType<
-    ReturnType<typeof Stack.make>
-  >;
-  if (!stackEffect) {
-    return yield* Effect.die(
-      new Error(
-        `Main file '${main}' must export a default stack definition (export default defineStack({...}))`,
-      ),
-    );
-  }
-
-  const configProvider = yield* loadConfigProvider(envFile);
-
-  // TODO(sam): implement local and watch
-  const platform = Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer);
-
-  const rootLogger = Logger.layer([fileLogger("out")]);
-
-  // override alchemy state store, CLI/reporting and dotAlchemy
-  const alchemy = Layer.mergeAll(
-    // TODO(sam): support overriding these
-    State.LocalState,
-    CLI.inkCLI(),
-    // optional
-    Layer.provideMerge(rootLogger, dotAlchemy),
-  );
-
-  yield* Effect.gen(function* () {
-    const cli = yield* CLI.Cli;
-    const stack = yield* stackEffect;
-
-    yield* Effect.gen(function* () {
-      const updatePlan = yield* Plan.make(
-        destroy
-          ? {
-              ...stack,
-              // zero these out (destroy will treat all as orphans)
-              // TODO(sam): probably better to have Plan.destroy and Plan.update
-              resources: {},
-              bindings: {},
-              output: {},
-            }
-          : stack,
-      );
-      if (dryRun) {
-        yield* cli.displayPlan(updatePlan);
-      } else {
-        if (!yes) {
-          const approved = yield* cli.approvePlan(updatePlan);
-          if (!approved) {
-            return;
-          }
-        }
-        const outputs = yield* apply(updatePlan);
-
-        yield* Console.log(outputs);
-      }
-    }).pipe(
-      Effect.provide(stack.services),
-      // Effect.provide(Logger.layer([fileLogger("stacks", stack.name, stage)])),
-    );
-  }).pipe(
-    Effect.provide(
-      Layer.provideMerge(
-        alchemy,
-        Layer.mergeAll(platform, Layer.succeed(Stage, stage)),
-      ),
-    ),
-    Effect.provideService(ConfigProvider.ConfigProvider, configProvider),
-  ) as Effect.Effect<void, any, never>;
-  // TODO(sam): figure out why we need to cast to remove the Provider<never> requirement
-  // Effect.Effect<void, any, Provider<never>>;
-});
-
 const TAIL_COLORS = [
   "\x1b[36m", // cyan
   "\x1b[35m", // magenta
@@ -427,139 +558,6 @@ const formatLocalTimestamp = (date: Date): string => {
   return `${y}-${mo}-${d} ${h}:${mi}:${s}.${ms} ${tz}`;
 };
 
-const execTail = Effect.fn(function* ({
-  main,
-  stage,
-  envFile,
-  filter,
-}: {
-  main: string;
-  stage: string;
-  envFile: Option.Option<string>;
-  filter: string | undefined;
-}) {
-  const path = yield* Path;
-  const module = yield* Effect.promise(
-    () => import(path.resolve(process.cwd(), main)),
-  );
-  const stackEffect = module.default as ReturnType<
-    ReturnType<typeof Stack.make>
-  >;
-  if (!stackEffect) {
-    return yield* Effect.die(
-      new Error(
-        `Main file '${main}' must export a default stack definition (export default defineStack({...}))`,
-      ),
-    );
-  }
-
-  const configProvider = yield* loadConfigProvider(envFile);
-
-  const platform = Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer);
-
-  const rootLogger = Logger.layer([fileLogger("out")]);
-
-  const alchemy = Layer.mergeAll(
-    State.LocalState,
-    Layer.provideMerge(rootLogger, dotAlchemy),
-  );
-
-  yield* Effect.gen(function* () {
-    const state = yield* State.State;
-    const stack = yield* stackEffect;
-
-    yield* Effect.gen(function* () {
-      const filterSet = parseResourceFilter(filter);
-      const availableIds = [
-        ...new Set(Object.values(stack.resources).map((r) => r.LogicalId)),
-      ].sort();
-
-      if (filterSet) {
-        for (const id of filterSet) {
-          if (!availableIds.includes(id)) {
-            return yield* Effect.die(
-              new Error(
-                `Unknown resource '${id}' in --filter. Available: ${availableIds.join(", ") || "(none)"}`,
-              ),
-            );
-          }
-        }
-      }
-
-      const fqns = Object.keys(stack.resources);
-      const tailable: {
-        logicalId: string;
-        stream: Stream.Stream<LogLine, any, any>;
-      }[] = [];
-
-      for (const fqn of fqns) {
-        const resource = stack.resources[fqn]!;
-        if (filterSet && !filterSet.has(resource.LogicalId)) continue;
-
-        const resourceState = yield* state.get({
-          stack: stack.name,
-          stage: stack.stage,
-          fqn,
-        });
-        if (!resourceState?.attr) continue;
-
-        const provider = yield* getProviderByType(resource.Type);
-        if (!provider.tail) continue;
-
-        tailable.push({
-          logicalId: resource.LogicalId,
-          stream: provider.tail({
-            id: resource.LogicalId,
-            instanceId: resourceState.instanceId,
-            props: resourceState.props as any,
-            output: resourceState.attr as any,
-          }),
-        });
-      }
-
-      if (tailable.length === 0) {
-        if (filterSet) {
-          yield* Console.log(
-            "No tailable resources match --filter (deploy first, or selected resources may not support tail).",
-          );
-        } else {
-          yield* Console.log(
-            "No tailable resources found. Deploy first, then run tail.",
-          );
-        }
-        return;
-      }
-
-      yield* Console.log(
-        `Tailing: ${tailable.map((t) => t.logicalId).join(", ")}`,
-      );
-
-      const taggedStreams = tailable.map(({ logicalId, stream }, i) => {
-        const color = TAIL_COLORS[i % TAIL_COLORS.length]!;
-        return stream.pipe(
-          Stream.map(({ timestamp, message }) => {
-            const ts = formatLocalTimestamp(timestamp);
-            return `${color}${ts} [${logicalId}]${TAIL_RESET} ${message}`;
-          }),
-        );
-      });
-
-      yield* Stream.mergeAll(taggedStreams, { concurrency: "unbounded" }).pipe(
-        Stream.runForEach((line) => Console.log(line)),
-      );
-    }).pipe(Effect.provide(stack.services));
-  }).pipe(
-    Effect.provide(
-      Layer.provideMerge(
-        alchemy,
-        Layer.mergeAll(platform, Layer.succeed(Stage, stage)),
-      ),
-    ),
-    Effect.provideService(ConfigProvider.ConfigProvider, configProvider),
-    Effect.scoped,
-  ) as Effect.Effect<void, any, never>;
-});
-
 const logsLimit = Flag.integer("limit").pipe(
   Flag.withDescription("Number of log entries to fetch"),
   Flag.withDefault(100),
@@ -583,140 +581,138 @@ const logsCommand = Command.make(
     limit: logsLimit,
     since: logsSince,
   },
-  (args) => execLogs(args),
-);
-
-const execLogs = Effect.fn(function* ({
-  main,
-  stage,
-  envFile,
-  filter,
-  limit,
-  since,
-}: {
-  main: string;
-  stage: string;
-  envFile: Option.Option<string>;
-  filter: string | undefined;
-  limit: number;
-  since: string | undefined;
-}) {
-  const path = yield* Path;
-  const module = yield* Effect.promise(
-    () => import(path.resolve(process.cwd(), main)),
-  );
-  const stackEffect = module.default as ReturnType<
-    ReturnType<typeof Stack.make>
-  >;
-  if (!stackEffect) {
-    return yield* Effect.die(
-      new Error(
-        `Main file '${main}' must export a default stack definition (export default defineStack({...}))`,
-      ),
+  Effect.fnUntraced(function* ({
+    main,
+    stage,
+    envFile,
+    filter,
+    limit,
+    since,
+  }: {
+    main: string;
+    stage: string;
+    envFile: Option.Option<string>;
+    filter: string | undefined;
+    limit: number;
+    since: string | undefined;
+  }) {
+    const path = yield* Path;
+    const module = yield* Effect.promise(
+      () => import(path.resolve(process.cwd(), main)),
     );
-  }
+    const stackEffect = module.default as ReturnType<
+      ReturnType<typeof Stack.make>
+    >;
+    if (!stackEffect) {
+      return yield* Effect.die(
+        new Error(
+          `Main file '${main}' must export a default stack definition (export default defineStack({...}))`,
+        ),
+      );
+    }
 
-  const configProvider = yield* loadConfigProvider(envFile);
+    const configProvider = yield* loadConfigProvider(envFile);
 
-  const platform = Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer);
+    const platform = Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer);
 
-  const rootLogger = Logger.layer([fileLogger("out")]);
+    const rootLogger = Logger.layer([fileLogger("out")]);
 
-  const alchemy = Layer.mergeAll(
-    State.LocalState,
-    Layer.provideMerge(rootLogger, dotAlchemy),
-  );
+    const alchemy = Layer.mergeAll(
+      State.LocalState,
+      Layer.provideMerge(rootLogger, dotAlchemy),
+    );
 
-  const sinceDate = since ? parseSince(since) : undefined;
-
-  yield* Effect.gen(function* () {
-    const state = yield* State.State;
-    const stack = yield* stackEffect;
+    const sinceDate = since ? parseSince(since) : undefined;
 
     yield* Effect.gen(function* () {
-      const filterSet = parseResourceFilter(filter);
-      const availableIds = [
-        ...new Set(Object.values(stack.resources).map((r) => r.LogicalId)),
-      ].sort();
+      const state = yield* State.State;
+      const stack = yield* stackEffect;
 
-      if (filterSet) {
-        for (const id of filterSet) {
-          if (!availableIds.includes(id)) {
-            return yield* Effect.die(
-              new Error(
-                `Unknown resource '${id}' in --filter. Available: ${availableIds.join(", ") || "(none)"}`,
-              ),
-            );
+      yield* Effect.gen(function* () {
+        const filterSet = parseResourceFilter(filter);
+        const availableIds = [
+          ...new Set(Object.values(stack.resources).map((r) => r.LogicalId)),
+        ].sort();
+
+        if (filterSet) {
+          for (const id of filterSet) {
+            if (!availableIds.includes(id)) {
+              return yield* Effect.die(
+                new Error(
+                  `Unknown resource '${id}' in --filter. Available: ${availableIds.join(", ") || "(none)"}`,
+                ),
+              );
+            }
           }
         }
-      }
 
-      const fqns = Object.keys(stack.resources);
-      const allLogs: { logicalId: string; lines: LogLine[] }[] = [];
+        const fqns = Object.keys(stack.resources);
+        const allLogs: { logicalId: string; lines: LogLine[] }[] = [];
 
-      for (const fqn of fqns) {
-        const resource = stack.resources[fqn]!;
-        if (filterSet && !filterSet.has(resource.LogicalId)) continue;
+        for (const fqn of fqns) {
+          const resource = stack.resources[fqn]!;
+          if (filterSet && !filterSet.has(resource.LogicalId)) continue;
 
-        const resourceState = yield* state.get({
-          stack: stack.name,
-          stage: stack.stage,
-          fqn,
-        });
-        if (!resourceState?.attr) continue;
+          const resourceState = yield* state.get({
+            stack: stack.name,
+            stage: stack.stage,
+            fqn,
+          });
+          if (!resourceState?.attr) continue;
 
-        const provider = yield* getProviderByType(resource.Type);
-        if (!provider.logs) continue;
+          const provider = yield* getProviderByType(resource.Type);
+          if (!provider.logs) continue;
 
-        const lines = yield* provider.logs({
-          id: resource.LogicalId,
-          instanceId: resourceState.instanceId,
-          props: resourceState.props as any,
-          output: resourceState.attr as any,
-          options: { limit, since: sinceDate },
-        });
+          const lines = yield* provider.logs({
+            id: resource.LogicalId,
+            instanceId: resourceState.instanceId,
+            props: resourceState.props as any,
+            output: resourceState.attr as any,
+            options: { limit, since: sinceDate },
+          });
 
-        allLogs.push({ logicalId: resource.LogicalId, lines });
-      }
-
-      if (allLogs.length === 0) {
-        if (filterSet) {
-          yield* Console.log(
-            "No resources with logs match --filter (deploy first, or selected resources may not expose logs).",
-          );
-        } else {
-          yield* Console.log(
-            "No resources with logs found. Deploy first, then run logs.",
-          );
+          allLogs.push({ logicalId: resource.LogicalId, lines });
         }
-        return;
-      }
 
-      const merged = allLogs
-        .flatMap(({ logicalId, lines }, i) => {
-          const color = TAIL_COLORS[i % TAIL_COLORS.length]!;
-          return lines.map((line) => ({
-            ...line,
-            formatted: `${color}${formatLocalTimestamp(line.timestamp)} [${logicalId}]${TAIL_RESET} ${line.message}`,
-          }));
-        })
-        .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+        if (allLogs.length === 0) {
+          if (filterSet) {
+            yield* Console.log(
+              "No resources with logs match --filter (deploy first, or selected resources may not expose logs).",
+            );
+          } else {
+            yield* Console.log(
+              "No resources with logs found. Deploy first, then run logs.",
+            );
+          }
+          return;
+        }
 
-      for (const entry of merged) {
-        yield* Console.log(entry.formatted);
-      }
-    }).pipe(Effect.provide(stack.services));
-  }).pipe(
-    Effect.provide(
-      Layer.provideMerge(
-        alchemy,
-        Layer.mergeAll(platform, Layer.succeed(Stage, stage)),
+        const merged = allLogs
+          .flatMap(({ logicalId, lines }, i) => {
+            const color = TAIL_COLORS[i % TAIL_COLORS.length]!;
+            return lines.map((line) => ({
+              ...line,
+              formatted: `${color}${formatLocalTimestamp(line.timestamp)} [${logicalId}]${TAIL_RESET} ${line.message}`,
+            }));
+          })
+          .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+
+        for (const entry of merged) {
+          yield* Console.log(entry.formatted);
+        }
+      }).pipe(Effect.provide(stack.services));
+    }).pipe(
+      Effect.provide(
+        Layer.provideMerge(
+          alchemy,
+          Layer.mergeAll(platform, Layer.succeed(Stage, stage)),
+        ),
       ),
-    ),
-    Effect.provideService(ConfigProvider.ConfigProvider, configProvider),
-    Effect.scoped,
-  ) as Effect.Effect<void, any, never>;
-});
+      Effect.provideService(ConfigProvider.ConfigProvider, configProvider),
+      Effect.scoped,
+    ) as Effect.Effect<void, any, never>;
+  }),
+);
 
 const parseResourceFilter = (
   filter: string | undefined,

@@ -48,15 +48,15 @@ test(
 
     const actualWorker = yield* findWorker(worker.workerName, accountId);
     expect(actualWorker?.scriptName).toEqual(worker.workerName);
-    expect(
-      yield* getWorkerTags(worker.workerName, accountId),
-    ).toContain(`alchemy:stack:${stack.name}`);
-    expect(
-      yield* getWorkerTags(worker.workerName, accountId),
-    ).toContain(`alchemy:stage:${stack.stage}`);
-    expect(
-      yield* getWorkerTags(worker.workerName, accountId),
-    ).toContain("alchemy:id:TestWorker");
+    expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
+      `alchemy:stack:${stack.name}`,
+    );
+    expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
+      `alchemy:stage:${stack.stage}`,
+    );
+    expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
+      "alchemy:id:TestWorker",
+    );
 
     // Verify the worker is accessible via URL
     if (worker.url) {
@@ -119,15 +119,15 @@ test(
 
     const actualWorker = yield* findWorker(worker.workerName, accountId);
     expect(actualWorker?.scriptName).toEqual(worker.workerName);
-    expect(
-      yield* getWorkerTags(worker.workerName, accountId),
-    ).toContain(`alchemy:stack:${stack.name}`);
-    expect(
-      yield* getWorkerTags(worker.workerName, accountId),
-    ).toContain(`alchemy:stage:${stack.stage}`);
-    expect(
-      yield* getWorkerTags(worker.workerName, accountId),
-    ).toContain("alchemy:id:TestWorkerWithAssets");
+    expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
+      `alchemy:stack:${stack.name}`,
+    );
+    expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
+      `alchemy:stage:${stack.stage}`,
+    );
+    expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
+      "alchemy:id:TestWorkerWithAssets",
+    );
 
     // Verify the worker has assets
     expect(worker.hash?.assets).toBeDefined();
@@ -195,15 +195,15 @@ test(
 
     const actualWorker = yield* findWorker(worker.workerName, accountId);
     expect(actualWorker?.scriptName).toEqual(worker.workerName);
-    expect(
-      yield* getWorkerTags(worker.workerName, accountId),
-    ).toContain(`alchemy:stack:${stack.name}`);
-    expect(
-      yield* getWorkerTags(worker.workerName, accountId),
-    ).toContain(`alchemy:stage:${stack.stage}`);
-    expect(
-      yield* getWorkerTags(worker.workerName, accountId),
-    ).toContain("alchemy:id:InternalWorker");
+    expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
+      `alchemy:stack:${stack.name}`,
+    );
+    expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
+      `alchemy:stage:${stack.stage}`,
+    );
+    expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
+      "alchemy:id:InternalWorker",
+    );
 
     const updatedWorker = yield* test.deploy(
       Effect.gen(function* () {
@@ -227,7 +227,10 @@ const findWorker = Effect.fn(function* (workerName: string, accountId: string) {
   return matches.find((worker) => worker.scriptName === workerName);
 });
 
-const getWorkerTags = Effect.fn(function* (workerName: string, accountId: string) {
+const getWorkerTags = Effect.fn(function* (
+  workerName: string,
+  accountId: string,
+) {
   const settings = yield* workers.getScriptScriptAndVersionSetting({
     accountId,
     scriptName: workerName,

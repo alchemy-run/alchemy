@@ -1,3 +1,4 @@
+import { makeClient } from "@/Daemon/Client";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -6,11 +7,13 @@ import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import * as NodePath from "node:path";
 import type { ChildProcessHandle } from "effect/unstable/process/ChildProcessSpawner";
-import { makeClient } from "@/Daemon/Client";
+import * as NodePath from "node:path";
 
-const BIN = NodePath.resolve(import.meta.dirname, "../../bin/process-manager.ts");
+const BIN = NodePath.resolve(
+  import.meta.dirname,
+  "../../bin/process-manager.ts",
+);
 
 const platform = NodeServices.layer;
 
@@ -63,18 +66,16 @@ const readPid = (cwd: string) =>
 const waitForSocket = (cwd: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    yield* fs
-      .exists(socketFilePath(cwd))
-      .pipe(
-        Effect.flatMap((exists) =>
-          exists ? Effect.void : Effect.fail("not yet" as const),
+    yield* fs.exists(socketFilePath(cwd)).pipe(
+      Effect.flatMap((exists) =>
+        exists ? Effect.void : Effect.fail("not yet" as const),
+      ),
+      Effect.retry(
+        Schedule.spaced("50 millis").pipe(
+          Schedule.compose(Schedule.recurs(100)),
         ),
-        Effect.retry(
-          Schedule.spaced("50 millis").pipe(
-            Schedule.compose(Schedule.recurs(100)),
-          ),
-        ),
-      );
+      ),
+    );
   });
 
 const startDaemon = Effect.gen(function* () {
@@ -405,11 +406,19 @@ describe("process-manager daemon", () => {
 
         yield* Effect.sleep("1 seconds");
 
-        const { stdout } = yield* watchAllText(client, "resume-test", "cursor-client");
+        const { stdout } = yield* watchAllText(
+          client,
+          "resume-test",
+          "cursor-client",
+        );
         expect(stdout).toContain("line-1");
         expect(stdout).toContain("line-5");
 
-        const second = yield* watchAllText(client, "resume-test", "cursor-client");
+        const second = yield* watchAllText(
+          client,
+          "resume-test",
+          "cursor-client",
+        );
         expect(second.stdout).toBe("");
 
         yield* daemon.kill();
@@ -458,7 +467,11 @@ describe("process-manager daemon", () => {
 
         yield* Effect.sleep("1 seconds");
 
-        const { stdout, stderr } = yield* watchAllText(client, "both-fds", "fd-client");
+        const { stdout, stderr } = yield* watchAllText(
+          client,
+          "both-fds",
+          "fd-client",
+        );
         expect(stdout).toContain("out-msg");
         expect(stderr).toContain("err-msg");
 
@@ -481,13 +494,21 @@ describe("process-manager daemon", () => {
 
         yield* Effect.sleep("2 seconds");
 
-        const { stdout } = yield* watchAllText(client, "stress-100", "stress-client");
+        const { stdout } = yield* watchAllText(
+          client,
+          "stress-100",
+          "stress-client",
+        );
 
         for (let i = 1; i <= 100; i++) {
           expect(stdout).toContain(`line-${i}`);
         }
 
-        const second = yield* watchAllText(client, "stress-100", "stress-client");
+        const second = yield* watchAllText(
+          client,
+          "stress-100",
+          "stress-client",
+        );
         expect(second.stdout).toBe("");
 
         yield* daemon.kill();
@@ -504,7 +525,10 @@ describe("process-manager daemon", () => {
         yield* client.spawn({
           id: "live-stream",
           command: "bash",
-          args: ["-c", "sleep 0.5; echo live-1; sleep 0.5; echo live-2; sleep 0.5; echo live-3"],
+          args: [
+            "-c",
+            "sleep 0.5; echo live-1; sleep 0.5; echo live-2; sleep 0.5; echo live-3",
+          ],
         });
 
         const text = yield* client
@@ -545,11 +569,17 @@ describe("process-manager daemon", () => {
           .watch({ id: "partial-take", clientId: "client-A" })
           .pipe(Stream.take(1), Stream.runCollect);
 
-        const partialText = Array.from(partial).map((m) => m.text).join("");
+        const partialText = Array.from(partial)
+          .map((m) => m.text)
+          .join("");
         expect(partialText).toContain("line-1");
 
         const client2 = yield* makeClient(socketFilePath(cwd));
-        const { stdout } = yield* watchAllText(client2, "partial-take", "client-B");
+        const { stdout } = yield* watchAllText(
+          client2,
+          "partial-take",
+          "client-B",
+        );
 
         for (let i = 1; i <= 10; i++) {
           expect(stdout).toContain(`line-${i}`);

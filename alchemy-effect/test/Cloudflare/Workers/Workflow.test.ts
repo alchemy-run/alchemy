@@ -60,9 +60,8 @@ const fakeStep = () => ({
   sleepUntil: async () => {},
 });
 
-const makeGetExport =
-  (body: WorkflowBody) => async () => (_env: unknown) =>
-    Effect.succeed(body);
+const makeGetExport = (body: WorkflowBody) => async () => (_env: unknown) =>
+  Effect.succeed(body);
 
 // ---------------------------------------------------------------------------
 // makeWorkflowBridge
