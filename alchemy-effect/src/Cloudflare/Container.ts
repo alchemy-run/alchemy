@@ -4,6 +4,7 @@ import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
@@ -11,14 +12,15 @@ import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { AdoptPolicy } from "../AdoptPolicy.ts";
-import { bundle } from "../Bundle/Bundle.ts";
+import * as Bundle from "../Bundle/BundleV2.ts";
 import {
   dockerBuild,
   materializeDockerfile,
   pushImage,
   writeContextFiles,
 } from "../Bundle/Docker.ts";
-import { getStableContextDir } from "../Bundle/TempRoot.ts";
+import { findCwdForBundle, getStableContextDir } from "../Bundle/TempRoot.ts";
+import type * as rolldown from "rolldown";
 import { DotAlchemy } from "../Config.ts";
 import { isResolved } from "../Diff.ts";
 import { HttpServer, type HttpEffect } from "../Http.ts";
@@ -535,6 +537,8 @@ export const ContainerProvider = () =>
         Effect.map(Option.getOrElse(() => false)),
       );
       const dotAlchemy = yield* DotAlchemy;
+      const fs = yield* FileSystem.FileSystem;
+      const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
       const createContainerApplication =
         yield* Containers.createContainerApplication;
       const updateContainerApplication =
@@ -633,7 +637,7 @@ export const ContainerProvider = () =>
         return { code, imageRef, imageHash };
       });
 
-      const bundleProgram = ({
+      const bundleProgram = Effect.fnUntraced(function* ({
         id,
         main,
         runtime,
@@ -645,23 +649,37 @@ export const ContainerProvider = () =>
         runtime: "bun" | "node";
         handler: string | undefined;
         isExternal?: boolean;
-      }) =>
-        bundle({
-          id,
-          main,
-          build: {
-            format: "esm",
-            platform: "node",
-            target: "node22",
-            sourcemap: false,
-            treeshake: true,
-            minify: true,
-            external: ["cloudflare:workers", "cloudflare:workflows"],
-          },
-          entryContent: isExternal
-            ? undefined
-            : (importPath) =>
-                `
+      }) {
+        const realMain = yield* fs.realPath(main);
+        const cwd = yield* findCwdForBundle(realMain);
+
+        const buildBundle = Effect.fnUntraced(function* (
+          entry: string,
+          plugins?: rolldown.RolldownPluginOption,
+        ) {
+          return yield* Bundle.build(
+            {
+              input: entry,
+              cwd,
+              external: ["cloudflare:workers", "cloudflare:workflows"],
+              platform: "node",
+              plugins,
+              treeshake: true,
+            },
+            {
+              format: "esm",
+              sourcemap: false,
+              minify: true,
+              entryFileNames: "index.js",
+            },
+          );
+        });
+
+        const bundleOutput = isExternal
+          ? yield* buildBundle(realMain)
+          : yield* buildBundle(
+              realMain,
+              virtualEntryPlugin((importPath) => `
 ${
   runtime === "bun"
     ? `
@@ -728,8 +746,17 @@ console.log("Container bootstrap starting...");
 await Effect.runPromise(serverEffect).catch((err) => {
   console.error("Container bootstrap failed:", err);
   process.exit(1);
-})`,
-        });
+})`),
+            );
+
+        const mainFile = bundleOutput.files[0];
+        const code =
+          typeof mainFile.content === "string"
+            ? new TextEncoder().encode(mainFile.content)
+            : mainFile.content;
+
+        return { code, hash: bundleOutput.hash };
+      });
 
       const buildFinalDockerfile = (
         userDockerfile: string | undefined,
