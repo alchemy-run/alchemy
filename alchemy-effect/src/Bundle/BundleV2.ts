@@ -1,8 +1,10 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
+import assert from "node:assert";
 import * as rolldown from "rolldown";
 import { sha256 } from "../Util/sha256.ts";
 
@@ -50,7 +52,7 @@ export const build = (
           },
         },
       });
-      const result = await bundle.write(outputOptions);
+      const result = await bundle.generate(outputOptions);
       await bundle.close();
       return result.output;
     },
@@ -136,6 +138,40 @@ export const watch = (
       return false;
     }),
   );
+
+const ENTRY_MODULE_ID = "virtual:alchemy-entry";
+const ENTRY_MODULE_REGEX = new RegExp(`^${ENTRY_MODULE_ID}$`);
+
+export const virtualEntryPlugin = Effect.gen(function* () {
+  const path = yield* Path.Path;
+  return (content: (importPath: string) => string) => {
+    let importPath: string | undefined;
+    return {
+      name: "alchemy:virtual-entry",
+      options(inputOptions) {
+        assert(
+          typeof inputOptions.input === "string",
+          "input must be a string",
+        );
+        importPath = `./${path.relative(inputOptions.cwd ?? process.cwd(), inputOptions.input)}`;
+        inputOptions.input = ENTRY_MODULE_ID;
+      },
+      resolveId: {
+        filter: { id: ENTRY_MODULE_REGEX },
+        handler() {
+          return { id: ENTRY_MODULE_ID };
+        },
+      },
+      load: {
+        filter: { id: ENTRY_MODULE_REGEX },
+        handler() {
+          assert(importPath !== undefined, "importPath must be defined");
+          return { code: content(importPath), moduleType: "ts" };
+        },
+      },
+    } satisfies rolldown.Plugin;
+  };
+});
 
 function bundleErrorFromUnknown(error: unknown): BundleError {
   const message = error instanceof Error ? error.message : String(error);

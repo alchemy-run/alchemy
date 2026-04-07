@@ -7,14 +7,10 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as ServiceMap from "effect/ServiceMap";
+import type * as rolldown from "rolldown";
 import * as Binding from "../../Binding.ts";
 import * as Bundle from "../../Bundle/BundleV2.ts";
-import {
-  cleanupBundleTempDir,
-  createTempBundleDir,
-} from "../../Bundle/TempRoot.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
-import { DotAlchemy } from "../../Config.ts";
 import { isResolved } from "../../Diff.ts";
 import type { HttpEffect } from "../../Http.ts";
 import type { Input } from "../../Input.ts";
@@ -374,13 +370,12 @@ export const WorkerProvider = () =>
       const path = yield* Path.Path;
 
       const accountId = yield* Account;
-      const dotAlchemy = yield* DotAlchemy;
+      const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
       const stack = yield* Stack;
 
       const { read, upload } = yield* Assets.Assets;
       const createScriptSubdomain = yield* workers.createScriptSubdomain;
       const deleteScript = yield* workers.deleteScript;
-      const getScript = yield* workers.getScript;
       const getScriptSubdomain = yield* workers.getScriptSubdomain;
       const getScriptSettings = yield* workers.getScriptScriptAndVersionSetting;
       const getSubdomain = yield* workers.getSubdomain;
@@ -474,11 +469,10 @@ export const WorkerProvider = () =>
         props: WorkerProps,
       ) {
         const realMain = yield* fs.realPath(props.main);
-        const tempDir = yield* createTempBundleDir(realMain, dotAlchemy, id);
-        const realTempDir = yield* fs.realPath(tempDir);
-        const tempEntry = path.join(realTempDir, "__index.ts");
-        const outputDir = path.join(realTempDir, "out");
-        const buildBundle = Effect.fnUntraced(function* (entry: string) {
+        const buildBundle = Effect.fnUntraced(function* (
+          entry: string,
+          plugins?: rolldown.RolldownPluginOption,
+        ) {
           const { files, hash } = yield* Bundle.build(
             {
               input: entry,
@@ -488,6 +482,7 @@ export const WorkerProvider = () =>
                   compatibilityDate: props.compatibility?.date ?? "2026-03-10",
                   compatibilityFlags: props.compatibility?.flags,
                 }),
+                plugins,
               ],
               checks: {
                 // Suppress unresolved import warnings for unrelated AWS packages
@@ -495,7 +490,6 @@ export const WorkerProvider = () =>
               },
             },
             {
-              dir: outputDir,
               format: "esm",
               sourcemap: "hidden",
               minify: true,
@@ -515,20 +509,13 @@ export const WorkerProvider = () =>
         });
 
         if (props.isExternal) {
-          return yield* buildBundle(realMain).pipe(
-            Effect.ensuring(cleanupBundleTempDir(tempDir)),
-          );
+          return yield* buildBundle(realMain);
         }
 
-        let importPath = path.relative(realTempDir, realMain);
-        if (!importPath.startsWith(".")) {
-          importPath = `./${importPath}`;
-        }
-        importPath = importPath.replaceAll("\\", "/");
         const classes = (Object.keys(props.exports ?? {}) ?? []).filter(
           (id) => id !== "default",
         );
-        const script = `
+        const script = (importPath: string) => `
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Console from "effect/Console";
@@ -632,11 +619,8 @@ ${
       ].join("\n") ?? "")
 }
 `;
-        yield* fs.writeFileString(tempEntry, script);
 
-        return yield* buildBundle(tempEntry).pipe(
-          Effect.ensuring(cleanupBundleTempDir(tempDir)),
-        );
+        return yield* buildBundle(realMain, virtualEntryPlugin(script));
       });
 
       const putWorker = Effect.fnUntraced(function* (
@@ -980,16 +964,13 @@ ${
             };
           }
         }),
-        read: Effect.fnUntraced(function* ({ id, output }) {
-          const workerName = yield* createWorkerName(id, output?.workerName);
-          yield* Effect.logInfo(
-            `Cloudflare Worker read: checking ${workerName}`,
-          );
-          return yield* Effect.gen(function* () {
-            yield* getScript({
-              accountId,
-              scriptName: workerName,
-            });
+        read: Effect.fnUntraced(
+          function* ({ id, output, olds }) {
+            const workerName =
+              output?.workerName ?? (yield* createWorkerName(id, olds?.name));
+            yield* Effect.logInfo(
+              `Cloudflare Worker read: checking ${workerName}`,
+            );
             const [worker, subdomain, settings] = yield* Effect.all([
               listScripts({
                 accountId,
@@ -1026,10 +1007,14 @@ ${
                 : undefined,
               tags: settings.tags ?? undefined,
             } satisfies Worker["Attributes"];
-          }).pipe(
-            Effect.catchTag("WorkerNotFound", () => Effect.succeed(undefined)),
-          );
-        }),
+          },
+          (effect) =>
+            effect.pipe(
+              Effect.catchTag("WorkerNotFound", () =>
+                Effect.succeed(undefined),
+              ),
+            ),
+        ),
         create: Effect.fnUntraced(function* ({ id, news, bindings, session }) {
           const name = yield* createWorkerName(id, news.name);
           yield* Effect.logInfo(`Cloudflare Worker create: starting ${name}`);
