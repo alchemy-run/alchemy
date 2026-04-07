@@ -13,8 +13,9 @@ import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as ServiceMap from "effect/ServiceMap";
 import * as Stream from "effect/Stream";
-import { bundle } from "../../Bundle/Bundle.ts";
-import type { BundleOptions } from "../../Bundle/Bundler.ts";
+import type * as rolldown from "rolldown";
+import * as Bundle from "../../Bundle/Bundle.ts";
+import * as TempRoot from "../../Bundle/TempRoot.ts";
 import { isResolved } from "../../Diff.ts";
 import type { HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
@@ -50,6 +51,11 @@ export const isFunction = (value: any): value is Function => {
   );
 };
 
+export interface FunctionBuildOptions {
+  readonly input?: Partial<rolldown.InputOptions>;
+  readonly output?: Partial<rolldown.OutputOptions>;
+}
+
 export interface FunctionProps extends PlatformProps {
   /**
    * Entry module for the bundled Lambda function.
@@ -68,7 +74,7 @@ export interface FunctionProps extends PlatformProps {
   functionName?: string;
   // TODO(sam): use a Layer instead so we can manage Effect platform?
   runtime?: "nodejs22.x" | "nodejs24.x";
-  build?: Partial<BundleOptions>;
+  build?: FunctionBuildOptions;
   uploadSourceMap?: boolean;
   env?: Record<string, any>;
   exports?: string[];
@@ -213,6 +219,7 @@ export const FunctionProvider = () =>
       const region = yield* Region;
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
+      const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
       const alchemyEnv = {
         ALCHEMY_STACK_NAME: stack.name,
         ALCHEMY_STAGE: stack.stage,
@@ -380,35 +387,47 @@ export const FunctionProvider = () =>
         props: FunctionProps,
       ) {
         const handler = props.handler ?? "default";
-        const sourcemap = props.build?.sourcemap ?? true;
+        const sourcemap = props.build?.output?.sourcemap ?? true;
         const uploadSourceMap = props.uploadSourceMap ?? true;
-        const build: Omit<BundleOptions, "entry" | "outfile"> = {
-          ...props.build,
-          format: "esm",
-          platform: "node",
-          target: "node22",
-          sourcemap,
-          treeshake: props.build?.treeshake ?? true,
-          minify: props.build?.minify ?? true,
-          external: [
-            "@aws-sdk/*",
-            "@smithy/*",
-            ...(props.build?.external ?? []),
-          ],
-        };
 
-        const request = props.isExternal
-          ? {
-              id,
-              main: props.main,
-              outExtension: ".js",
-              build,
-            }
-          : {
-              id,
-              main: props.main,
-              outExtension: ".js",
-              entryContent: (importPath: string) => `
+        const realMain = yield* fs.realPath(props.main);
+        const cwd = yield* TempRoot.findCwdForBundle(realMain);
+
+        const rolldownSourcemap = sourcemap;
+
+        const buildBundle = Effect.fnUntraced(function* (
+          entry: string,
+          plugins?: rolldown.RolldownPluginOption,
+        ) {
+          return yield* Bundle.build(
+            {
+              ...props.build?.input,
+              input: entry,
+              cwd,
+              external: [
+                /^@aws-sdk\//,
+                /^@smithy\//,
+                ...((props.build?.input?.external as string[]) ?? []),
+              ],
+              platform: "node",
+              plugins: [props.build?.input?.plugins, plugins],
+            },
+            {
+              ...props.build?.output,
+              format: "esm",
+              sourcemap: rolldownSourcemap,
+              minify: props.build?.output?.minify ?? true,
+              entryFileNames: "index.js",
+            },
+          );
+        });
+
+        const bundleOutput = props.isExternal
+          ? yield* buildBundle(realMain)
+          : yield* buildBundle(
+              realMain,
+              virtualEntryPlugin(
+                (importPath) => `
 import { NodeServices } from "@effect/platform-node";
 import { Stack } from "alchemy-effect/Stack";
 import * as Config from "effect/Config";
@@ -475,30 +494,29 @@ const handlerEffect = tag.asEffect().pipe(
 
 export default await Effect.runPromise(handlerEffect)
 `,
-              build,
-            };
+              ),
+            );
 
-        const { code, outfile } = yield* bundle(request);
+        const mainFile = bundleOutput.files[0];
+        const code =
+          typeof mainFile.content === "string"
+            ? new TextEncoder().encode(mainFile.content)
+            : mainFile.content;
 
-        const sourceMap =
-          uploadSourceMap && (sourcemap === true || sourcemap === "external")
-            ? yield* fs
-                .exists(`${outfile}.map`)
-                .pipe(
-                  Effect.flatMap((exists) =>
-                    exists
-                      ? fs.readFile(`${outfile}.map`)
-                      : Effect.succeed(undefined),
-                  ),
-                )
+        const sourceMapFile =
+          uploadSourceMap && (sourcemap === true || sourcemap === "hidden")
+            ? bundleOutput.files.find((f: Bundle.BundleFile) =>
+                f.path.endsWith(".map"),
+              )
             : undefined;
+
         const archive = yield* zipCode(
           code,
-          sourceMap
+          sourceMapFile
             ? [
                 {
-                  path: `${path.basename(outfile)}.map`,
-                  content: sourceMap,
+                  path: sourceMapFile.path,
+                  content: sourceMapFile.content,
                 },
               ]
             : undefined,
@@ -506,7 +524,7 @@ export default await Effect.runPromise(handlerEffect)
         return {
           archive,
           code,
-          hash: yield* hashBundle(code),
+          hash: bundleOutput.hash,
         };
       });
 
@@ -514,11 +532,11 @@ export default await Effect.runPromise(handlerEffect)
         env: Record<string, string> | undefined,
         props: FunctionProps,
       ) => {
-        const sourcemap = props.build?.sourcemap ?? true;
+        const sourcemap = props.build?.output?.sourcemap ?? true;
         const uploadSourceMap = props.uploadSourceMap ?? true;
         const shouldEnableSourceMaps =
           sourcemap === "inline" ||
-          (uploadSourceMap && (sourcemap === true || sourcemap === "external"));
+          (uploadSourceMap && (sourcemap === true || sourcemap === "hidden"));
 
         if (!shouldEnableSourceMaps) {
           return env;

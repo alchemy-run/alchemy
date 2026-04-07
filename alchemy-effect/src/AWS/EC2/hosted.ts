@@ -3,12 +3,9 @@ import * as s3 from "@distilled.cloud/aws/s3";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import { Bundler, type BundleOptions } from "../../Bundle/Bundler.ts";
-import {
-  cleanupBundleTempDir,
-  createTempBundleDir,
-} from "../../Bundle/TempRoot.ts";
+import type * as rolldown from "rolldown";
+import * as Bundle from "../../Bundle/Bundle.ts";
+import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -42,7 +39,10 @@ export interface Ec2HostedProps extends PlatformProps {
   handler?: string;
   port?: number;
   env?: Record<string, any>;
-  build?: Partial<BundleOptions>;
+  build?: {
+    input?: Partial<rolldown.InputOptions>;
+    output?: Partial<rolldown.OutputOptions>;
+  };
   roleManagedPolicyArns?: string[];
 }
 
@@ -128,10 +128,8 @@ export const createEc2HostedSupport = ({
   region,
   stackName,
   stage,
-  dotAlchemy,
   fs,
-  path,
-  bundler,
+  virtualEntryPlugin,
   assets,
   resourceType,
 }: {
@@ -139,10 +137,10 @@ export const createEc2HostedSupport = ({
   region: string;
   stackName: string;
   stage: string;
-  dotAlchemy: string;
   fs: FileSystem.FileSystem;
-  path: Path.Path;
-  bundler: typeof Bundler.Service;
+  virtualEntryPlugin: (
+    content: (importPath: string) => string,
+  ) => rolldown.Plugin;
   assets: typeof Assets.Service | undefined;
   resourceType: string;
 }) => {
@@ -193,50 +191,37 @@ export const createEc2HostedSupport = ({
     }
 
     const handler = props.handler ?? "default";
-    const outfile = path.join(
-      dotAlchemy,
-      "out",
-      `${stackName}-${stage}-${id}.mjs`,
-    );
     const realMain = yield* fs.realPath(props.main);
-    const tempDir = yield* createTempBundleDir(realMain, dotAlchemy, id);
-    const realTempDir = yield* fs.realPath(tempDir);
-    const tempEntry = path.join(realTempDir, "__index.ts");
-    const buildProgram = (entry: string) =>
-      Effect.gen(function* () {
-        yield* bundler.build({
-          ...props.build,
-          entry,
-          outfile,
-          format: "esm",
+    const cwd = yield* findCwdForBundle(realMain);
+
+    const buildBundle = Effect.fnUntraced(function* (
+      entry: string,
+      plugins?: rolldown.RolldownPluginOption,
+    ) {
+      return yield* Bundle.build(
+        {
+          ...props.build?.input,
+          input: entry,
+          cwd,
           platform: "node",
-          target: "node22",
-          sourcemap: props.build?.sourcemap ?? false,
-          treeshake: props.build?.treeshake ?? true,
-          minify: props.build?.minify ?? true,
-          external: props.build?.external ?? [],
-        });
-        const code = yield* fs.readFile(outfile).pipe(Effect.orDie);
-        const archive = yield* zipCode(code);
-        const hash = yield* sha256(archive);
-        return { archive, hash };
-      });
-
-    if (props.isExternal) {
-      return yield* buildProgram(realMain).pipe(
-        Effect.ensuring(cleanupBundleTempDir(tempDir)),
+          plugins: [props.build?.input?.plugins, plugins],
+        },
+        {
+          ...props.build?.output,
+          format: "esm",
+          sourcemap: props.build?.output?.sourcemap ?? false,
+          minify: props.build?.output?.minify ?? true,
+          entryFileNames: "index.js",
+        },
       );
-    }
+    });
 
-    let file = path.relative(realTempDir, realMain);
-    if (!file.startsWith(".")) {
-      file = `./${file}`;
-    }
-    file = file.replaceAll("\\", "/");
-
-    yield* fs.writeFileString(
-      tempEntry,
-      `
+    const bundleOutput = props.isExternal
+      ? yield* buildBundle(realMain)
+      : yield* buildBundle(
+          realMain,
+          virtualEntryPlugin(
+            (importPath) => `
 import { NodeServices } from "@effect/platform-node";
 import { Stack } from "alchemy-effect/Stack";
 import * as Config from "effect/Config";
@@ -248,7 +233,7 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Region from "@distilled.cloud/aws/Region";
 
-import { ${handler} as handler } from "${file}";
+import { ${handler} as handler } from "${importPath}";
 
 const platform = Layer.mergeAll(
   NodeServices.layer,
@@ -289,11 +274,17 @@ const program = handler.pipe(
 
 await Effect.runPromise(program);
 `,
-    );
+          ),
+        );
 
-    return yield* buildProgram(tempEntry).pipe(
-      Effect.ensuring(cleanupBundleTempDir(tempDir)),
-    );
+    const mainFile = bundleOutput.files[0];
+    const code =
+      typeof mainFile.content === "string"
+        ? new TextEncoder().encode(mainFile.content)
+        : mainFile.content;
+
+    const archive = yield* zipCode(code);
+    return { archive, hash: bundleOutput.hash };
   });
 
   const quoteEnvValue = (value: any) => {

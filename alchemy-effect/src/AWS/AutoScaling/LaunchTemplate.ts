@@ -4,9 +4,8 @@ import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
-import * as Path from "effect/Path";
-import { Bundler, type BundleOptions } from "../../Bundle/Bundler.ts";
-import { DotAlchemy } from "../../Config.ts";
+import type * as rolldown from "rolldown";
+import * as Bundle from "../../Bundle/Bundle.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -91,7 +90,10 @@ export interface LaunchTemplateProps extends PlatformProps {
   /**
    * Bundler configuration for the hosted process entrypoint.
    */
-  build?: Partial<BundleOptions>;
+  build?: {
+    input?: Partial<rolldown.InputOptions>;
+    output?: Partial<rolldown.OutputOptions>;
+  };
   /**
    * Additional managed policy ARNs for the managed instance role.
    * This can only be used when Alchemy manages the instance profile.
@@ -172,10 +174,8 @@ export const LaunchTemplateProvider = () =>
       const region = yield* Region;
       const stack = yield* Stack;
       const stage = yield* Stage;
-      const dotAlchemy = yield* DotAlchemy;
       const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const bundler = yield* Bundler;
+      const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
       const assets = (yield* Effect.serviceOption(Assets)).pipe(
         Option.getOrUndefined,
       );
@@ -185,10 +185,8 @@ export const LaunchTemplateProvider = () =>
         region,
         stackName: stack.name,
         stage,
-        dotAlchemy,
         fs,
-        path,
-        bundler,
+        virtualEntryPlugin,
         assets,
         resourceType: "AWS.AutoScaling.LaunchTemplate",
       });

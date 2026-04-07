@@ -11,7 +11,7 @@ import Room from "./Room.ts";
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
   {
-    main: import.meta.filename,
+    main: import.meta.path,
     observability: {
       enabled: true,
     },

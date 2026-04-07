@@ -6,9 +6,9 @@ import { Region } from "@distilled.cloud/aws/Region";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
 import * as ServiceMap from "effect/ServiceMap";
-import { Bundler, type BundleOptions } from "../../Bundle/Bundler.ts";
+import type * as rolldown from "rolldown";
+import * as Bundle from "../../Bundle/Bundle.ts";
 import {
   dockerBuild,
   materializeDockerfile,
@@ -16,8 +16,7 @@ import {
   writeContextFiles,
 } from "../../Bundle/Docker.ts";
 import {
-  cleanupBundleTempDir,
-  createTempBundleDir,
+  findCwdForBundle,
   getStableContextDir,
 } from "../../Bundle/TempRoot.ts";
 import { DotAlchemy } from "../../Config.ts";
@@ -28,9 +27,7 @@ import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import type { ProcessContext, ServerHost } from "../../Server/Process.ts";
 import { Stack } from "../../Stack.ts";
-import { Stage } from "../../Stage.ts";
 import { createInternalTags, createTagsList, hasTags } from "../../Tags.ts";
-import { sha256 } from "../../Util/sha256.ts";
 import { Account } from "../Account.ts";
 import type { Credentials } from "../Credentials.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
@@ -86,7 +83,10 @@ export interface TaskProps extends PlatformProps {
   /**
    * Bundler configuration for the task entrypoint.
    */
-  build?: Partial<BundleOptions>;
+  build?: {
+    input?: Partial<rolldown.InputOptions>;
+    output?: Partial<rolldown.OutputOptions>;
+  };
   /**
    * Docker image build: optional full {@link docker.dockerfile}. When omitted,
    * Alchemy generates a Dockerfile for the bundled `index.mjs`.
@@ -217,13 +217,11 @@ export const TaskProvider = () =>
   Task.provider.effect(
     Effect.gen(function* () {
       const stack = yield* Stack;
-      const stage = yield* Stage;
       const accountId = yield* Account;
       const region = yield* Region;
       const dotAlchemy = yield* DotAlchemy;
       const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const bundler = yield* Bundler;
+      const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
 
       const alchemyEnv = {
         ALCHEMY_STACK_NAME: stack.name,
@@ -450,52 +448,37 @@ export const TaskProvider = () =>
 
       const bundleProgram = Effect.fn(function* (id: string, props: TaskProps) {
         const handler = props.handler ?? "default";
-        const outfile = path.join(
-          dotAlchemy,
-          "out",
-          `${stack.name}-${stage}-${id}.mjs`,
-        );
         const realMain = yield* fs.realPath(props.main);
-        const tempDir = yield* createTempBundleDir(realMain, dotAlchemy, id);
-        const realTempDir = yield* fs.realPath(tempDir);
-        const tempEntry = path.join(realTempDir, "__index.ts");
-        const buildProgram = (entry: string) =>
-          Effect.gen(function* () {
-            yield* bundler.build({
-              ...props.build,
-              entry,
-              outfile,
-              format: "esm",
+        const cwd = yield* findCwdForBundle(realMain);
+
+        const buildBundle = Effect.fnUntraced(function* (
+          entry: string,
+          plugins?: rolldown.RolldownPluginOption,
+        ) {
+          return yield* Bundle.build(
+            {
+              ...props.build?.input,
+              input: entry,
+              cwd,
               platform: "node",
-              target: "node22",
-              sourcemap: props.build?.sourcemap ?? false,
-              treeshake: props.build?.treeshake ?? true,
-              minify: props.build?.minify ?? true,
-              external: props.build?.external ?? [],
-            });
-            const code = yield* fs.readFile(outfile).pipe(Effect.orDie);
-            const hash = yield* sha256(code);
-            return {
-              code,
-              hash,
-            };
-          });
-
-        if (props.isExternal) {
-          return yield* buildProgram(realMain).pipe(
-            Effect.ensuring(cleanupBundleTempDir(tempDir)),
+              plugins: [props.build?.input?.plugins, plugins],
+            },
+            {
+              ...props.build?.output,
+              format: "esm",
+              sourcemap: props.build?.output?.sourcemap ?? false,
+              minify: props.build?.output?.minify ?? true,
+              entryFileNames: "index.js",
+            },
           );
-        }
+        });
 
-        let file = path.relative(realTempDir, realMain);
-        if (!file.startsWith(".")) {
-          file = `./${file}`;
-        }
-        file = file.replaceAll("\\", "/");
-
-        yield* fs.writeFileString(
-          tempEntry,
-          `
+        const bundleOutput = props.isExternal
+          ? yield* buildBundle(realMain)
+          : yield* buildBundle(
+              realMain,
+              virtualEntryPlugin(
+                (importPath) => `
 import { NodeServices } from "@effect/platform-node";
 import { Stack } from "alchemy-effect/Stack";
 import * as Config from "effect/Config";
@@ -507,7 +490,7 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Region from "@distilled.cloud/aws/Region";
 
-import { ${handler} as handler } from "${file}";
+import { ${handler} as handler } from "${importPath}";
 
 const platform = Layer.mergeAll(
   NodeServices.layer,
@@ -548,11 +531,16 @@ const program = handler.pipe(
 
 await Effect.runPromise(program);
 `,
-        );
+              ),
+            );
 
-        return yield* buildProgram(tempEntry).pipe(
-          Effect.ensuring(cleanupBundleTempDir(tempDir)),
-        );
+        const mainFile = bundleOutput.files[0];
+        const code =
+          typeof mainFile.content === "string"
+            ? new TextEncoder().encode(mainFile.content)
+            : mainFile.content;
+
+        return { code, hash: bundleOutput.hash };
       });
 
       const buildAndPushImage = Effect.fn(function* ({

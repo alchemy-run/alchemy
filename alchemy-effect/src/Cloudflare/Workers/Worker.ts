@@ -1,8 +1,5 @@
 import type * as cf from "@cloudflare/workers-types";
-import {
-  Bundler,
-  type Module as BundledModule,
-} from "@distilled.cloud/cloudflare-bundler";
+import cloudflare from "@distilled.cloud/cloudflare-rolldown-plugin";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import type * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -15,13 +12,11 @@ import * as Schedule from "effect/Schedule";
 import * as ServiceMap from "effect/ServiceMap";
 import * as Stream from "effect/Stream";
 import * as Socket from "effect/unstable/socket/Socket";
+import type * as rolldown from "rolldown";
 import * as Binding from "../../Binding.ts";
-import {
-  cleanupBundleTempDir,
-  createTempBundleDir,
-} from "../../Bundle/TempRoot.ts";
+import * as Bundle from "../../Bundle/Bundle.ts";
+import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
-import { DotAlchemy } from "../../Config.ts";
 import { isResolved } from "../../Diff.ts";
 import type { HttpEffect } from "../../Http.ts";
 import type { Input } from "../../Input.ts";
@@ -62,7 +57,7 @@ export const isWorker = <T>(value: T): value is T & Worker =>
 export class WorkerEnvironment extends ServiceMap.Service<
   WorkerEnvironment,
   Record<string, any>
->()("Cloudflare.WorkerEnvironment") {}
+>()("Cloudflare.Workers.WorkerEnvironment") {}
 
 export const WorkerEnvironmentLive = Layer.effect(
   WorkerEnvironment,
@@ -72,12 +67,12 @@ export const WorkerEnvironmentLive = Layer.effect(
 export class ExecutionContext extends ServiceMap.Service<
   ExecutionContext,
   cf.ExecutionContext
->()("Cloudflare.ExecutionContext") {}
+>()("Cloudflare.Workers.ExecutionContext") {}
 
 export type WorkerEvent = Exclude<
   {
     [type in keyof cf.ExportedHandler]: {
-      kind: "Cloudflare.WorkerEvent";
+      kind: "Cloudflare.Workers.WorkerEvent";
       type: type;
       input: Parameters<Exclude<cf.ExportedHandler[type], undefined>>[0];
       env: Parameters<Exclude<cf.ExportedHandler[type], undefined>>[1];
@@ -88,7 +83,7 @@ export type WorkerEvent = Exclude<
 >;
 
 export const isWorkerEvent = (value: any): value is WorkerEvent =>
-  value?.kind === "Cloudflare.WorkerEvent";
+  value?.kind === "Cloudflare.Workers.WorkerEvent";
 
 /**
  * Assets configuration that includes a pre-computed hash.
@@ -110,12 +105,6 @@ export interface AssetsWithHash {
    */
   config?: AssetsConfig;
 }
-
-type PreparedBundleFile = {
-  name: string;
-  content: string | ArrayBuffer;
-  contentType: string;
-};
 
 export interface WorkerObservability extends Exclude<
   workers.PutScriptRequest["metadata"]["observability"],
@@ -280,7 +269,7 @@ export const Worker: Platform<
           : listeners.push(Effect.succeed(handler)),
       )) as any as Serverless.FunctionContext["listen"],
     export: (name: string, value: any) =>
-      Effect.gen(function* () {
+      Effect.sync(() => {
         exports[name] = value;
       }),
     exports: Effect.gen(function* () {
@@ -291,7 +280,7 @@ export const Worker: Platform<
         (type: WorkerEvent["type"]) =>
         (request: any, env: unknown, context: cf.ExecutionContext) => {
           const event: WorkerEvent = {
-            kind: "Cloudflare.WorkerEvent",
+            kind: "Cloudflare.Workers.WorkerEvent",
             type,
             input: request,
             env,
@@ -386,8 +375,7 @@ export const WorkerProvider = () =>
       const path = yield* Path.Path;
 
       const accountId = yield* Account;
-      const bundler = yield* Bundler;
-      const dotAlchemy = yield* DotAlchemy;
+      const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
       const stack = yield* Stack;
 
       const { read, upload } = yield* Assets.Assets;
@@ -395,13 +383,12 @@ export const WorkerProvider = () =>
       const createScriptTail = yield* workers.createScriptTail;
       const deleteScript = yield* workers.deleteScript;
       const deleteScriptTail = yield* workers.deleteScriptTail;
-      const getScript = yield* workers.getScript;
       const getScriptSubdomain = yield* workers.getScriptSubdomain;
-      const telemetry = yield* CloudflareLogs;
       const getScriptSettings = yield* workers.getScriptScriptAndVersionSetting;
       const getSubdomain = yield* workers.getSubdomain;
       const listScripts = yield* workers.listScripts;
       const putScript = yield* workers.putScript;
+      const telemetry = yield* CloudflareLogs;
 
       const getAccountSubdomain = (accountId: string) =>
         getSubdomain({
@@ -436,41 +423,6 @@ export const WorkerProvider = () =>
         const actualTags = new Set(tags ?? []);
         return createAlchemyWorkerTags(id).every((tag) => actualTags.has(tag));
       };
-
-      const findBundleProject = Effect.fnUntraced(function* (entry: string) {
-        let current = path.dirname(entry);
-        while (true) {
-          if (yield* fs.exists(path.join(current, "package.json"))) {
-            const relativeEntry = path
-              .relative(current, entry)
-              .replaceAll("\\", "/");
-            const tsconfigCandidates = relativeEntry.startsWith("test/")
-              ? ["tsconfig.test.json", "tsconfig.json"]
-              : ["tsconfig.json", "tsconfig.test.json"];
-            for (const tsconfig of tsconfigCandidates) {
-              if (yield* fs.exists(path.join(current, tsconfig))) {
-                return {
-                  projectRoot: current,
-                  tsconfig,
-                };
-              }
-            }
-            return {
-              projectRoot: current,
-              tsconfig: undefined,
-            };
-          }
-
-          const parent = path.dirname(current);
-          if (parent === current) {
-            return {
-              projectRoot: process.cwd(),
-              tsconfig: undefined,
-            };
-          }
-          current = parent;
-        }
-      });
 
       const prepareAssets = Effect.fnUntraced(function* (
         assets: WorkerProps["assets"],
@@ -511,59 +463,49 @@ export const WorkerProvider = () =>
         props: WorkerProps,
       ) {
         const realMain = yield* fs.realPath(props.main);
-        const tempDir = yield* createTempBundleDir(realMain, dotAlchemy, id);
-        const realTempDir = yield* fs.realPath(tempDir);
-        const tempEntry = path.join(realTempDir, "__index.ts");
-        const outputDir = path.join(realTempDir, "out");
-        const buildBundle = (entry: string) =>
-          Effect.gen(function* () {
-            const { projectRoot, tsconfig } =
-              yield* findBundleProject(realMain);
-            const bundle = yield* bundler.build({
-              main: entry,
-              rootDir: projectRoot,
-              outDir: outputDir,
-              minify: true,
-              tsconfig,
-              cloudflare: {
-                compatibilityDate: props.compatibility?.date ?? "2026-03-10",
-                compatibilityFlags: props.compatibility?.flags,
+        const buildBundle = Effect.fnUntraced(function* (
+          entry: string,
+          plugins?: rolldown.RolldownPluginOption,
+        ) {
+          const { files, hash } = yield* Bundle.build(
+            {
+              input: entry,
+              cwd: yield* findCwdForBundle(entry),
+              plugins: [
+                cloudflare({
+                  compatibilityDate: props.compatibility?.date ?? "2026-03-10",
+                  compatibilityFlags: props.compatibility?.flags,
+                }),
+                plugins,
+              ],
+              checks: {
+                // Suppress unresolved import warnings for unrelated AWS packages
+                unresolvedImport: false,
               },
-            });
-            const files: Array<PreparedBundleFile> = bundle.modules.map(
-              (module: BundledModule) => ({
-                name: module.name,
-                content:
-                  module.name === bundle.main && module.type === "ESModule"
-                    ? stripSourceMapComment(
-                        Buffer.from(module.content).toString("utf8"),
-                      )
-                    : (module.content.buffer.slice(
-                        module.content.byteOffset,
-                        module.content.byteOffset + module.content.byteLength,
-                      ) as ArrayBuffer),
-                contentType:
-                  getModuleContentType(module) ?? "application/octet-stream",
-              }),
-            );
-            return {
-              files,
-              mainModule: bundle.main,
-              hash: yield* hashBundleFiles(files),
-            };
-          });
+            },
+            {
+              format: "esm",
+              sourcemap: "hidden",
+              minify: true,
+              keepNames: true,
+            },
+          );
+          return {
+            files: files.map(
+              (file) =>
+                new File([file.content as BlobPart], file.path, {
+                  type: contentTypeFromExtension(path.extname(file.path)),
+                }),
+            ),
+            mainModule: files[0].path,
+            hash,
+          };
+        });
 
         if (props.isExternal) {
-          return yield* buildBundle(realMain).pipe(
-            Effect.ensuring(cleanupBundleTempDir(tempDir)),
-          );
+          return yield* buildBundle(realMain);
         }
 
-        let importPath = path.relative(realTempDir, realMain);
-        if (!importPath.startsWith(".")) {
-          importPath = `./${importPath}`;
-        }
-        importPath = importPath.replaceAll("\\", "/");
         const exportMap = (props.exports ?? {}) as Record<string, unknown>;
         const allExportNames = Object.keys(exportMap).filter(
           (id) => id !== "default",
@@ -579,7 +521,7 @@ export const WorkerProvider = () =>
         }
         const hasDoClasses = doClasses.length > 0;
         const hasWfClasses = wfClasses.length > 0;
-        const script = `
+        const script = (importPath: string) => `
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Console from "effect/Console";
@@ -620,8 +562,6 @@ const stack = Layer.succeed(
     resources: {}
   }
 );
-
-import util from "node:util";
 
 const exportsEffect = tag.asEffect().pipe(
   Effect.flatMap(func => func.ExecutionContext.exports),
@@ -690,11 +630,8 @@ ${[
     : []),
 ].join("\n")}
 `;
-        yield* fs.writeFileString(tempEntry, script);
 
-        return yield* buildBundle(tempEntry).pipe(
-          Effect.ensuring(cleanupBundleTempDir(tempDir)),
-        );
+        return yield* buildBundle(realMain, virtualEntryPlugin(script));
       });
 
       const putWorker = Effect.fnUntraced(function* (
@@ -944,17 +881,11 @@ ${[
           tailConsumers: undefined,
           usageModel: undefined,
         };
-        const scriptFiles = bundle.files.map(
-          (file) =>
-            new File([file.content], file.name, {
-              type: file.contentType,
-            }),
-        );
         const worker = yield* putScript({
           accountId,
           scriptName: name,
           metadata,
-          files: scriptFiles,
+          files: bundle.files,
         }).pipe(
           Effect.catch((err) => {
             // When adopting a Worker managed by Wrangler (or after a previous
@@ -982,7 +913,7 @@ ${[
                     newTag: bumpMigrationTagVersion(expectedTag),
                   },
                 },
-                files: scriptFiles,
+                files: bundle.files,
               });
             }
             return Effect.fail(err as any);
@@ -995,7 +926,6 @@ ${[
           );
           yield* setWorkerSubdomain(name, enable);
         }
-
         return {
           workerId: worker.id ?? name,
           workerName: name,
@@ -1045,16 +975,13 @@ ${[
             };
           }
         }),
-        read: Effect.fnUntraced(function* ({ id, output }) {
-          const workerName = yield* createWorkerName(id, output?.workerName);
-          yield* Effect.logInfo(
-            `Cloudflare Worker read: checking ${workerName}`,
-          );
-          return yield* Effect.gen(function* () {
-            yield* getScript({
-              accountId,
-              scriptName: workerName,
-            });
+        read: Effect.fnUntraced(
+          function* ({ id, output, olds }) {
+            const workerName =
+              output?.workerName ?? (yield* createWorkerName(id, olds?.name));
+            yield* Effect.logInfo(
+              `Cloudflare Worker read: checking ${workerName}`,
+            );
             const [worker, subdomain, settings] = yield* Effect.all([
               listScripts({
                 accountId,
@@ -1091,10 +1018,14 @@ ${[
                 : undefined,
               tags: settings.tags ?? undefined,
             } satisfies Worker["Attributes"];
-          }).pipe(
-            Effect.catchTag("WorkerNotFound", () => Effect.succeed(undefined)),
-          );
-        }),
+          },
+          (effect) =>
+            effect.pipe(
+              Effect.catchTag("WorkerNotFound", () =>
+                Effect.succeed(undefined),
+              ),
+            ),
+        ),
         create: Effect.fnUntraced(function* ({ id, news, bindings, session }) {
           const name = yield* createWorkerName(id, news.name);
           yield* Effect.logInfo(`Cloudflare Worker create: starting ${name}`);
@@ -1240,45 +1171,6 @@ ${[
     }),
   );
 
-const stripSourceMapComment = (code: string) =>
-  code.replace(/\n?\/\/# sourceMappingURL=.*$/gm, "");
-
-const getModuleContentType = (module: BundledModule) => {
-  switch (module.type) {
-    case "ESModule":
-      return "application/javascript+module";
-    case "CompiledWasm":
-      return "application/wasm";
-    case "Data":
-      return "application/octet-stream";
-    case "Text":
-      if (module.name.endsWith(".html")) return "text/html";
-      if (module.name.endsWith(".sql")) return "text/sql";
-      return "text/plain";
-    case "SourceMap":
-      return "application/source-map";
-  }
-};
-
-const hashBundleFiles = (files: ReadonlyArray<PreparedBundleFile>) =>
-  Effect.gen(function* () {
-    const parts = yield* Effect.all(
-      files.map((file) =>
-        sha256(file.content).pipe(
-          Effect.map((hash) => ({
-            name: file.name,
-            contentType: file.contentType,
-            hash,
-          })),
-        ),
-      ),
-      {
-        concurrency: "unbounded",
-      },
-    );
-    return yield* sha256(JSON.stringify(parts));
-  });
-
 interface TailEventMessage {
   eventTimestamp?: number;
   wallTime: number;
@@ -1305,3 +1197,26 @@ interface TailEventMessage {
     | null
     | undefined;
 }
+
+const contentTypeFromExtension = (extension: string) => {
+  switch (extension) {
+    case ".wasm":
+      return "application/wasm";
+    case ".txt":
+    case ".html":
+    case ".sql":
+    case ".custom":
+      return "text/plain";
+    case ".bin":
+      return "application/octet-stream";
+    case ".mjs":
+    case ".js":
+      return "application/javascript+module";
+    case ".cjs":
+      return "application/javascript";
+    case ".map":
+      return "application/source-map";
+    default:
+      return "application/octet-stream";
+  }
+};

@@ -1,90 +1,215 @@
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { DotAlchemy } from "../Config.ts";
-import { Stack } from "../Stack.ts";
-import { Stage } from "../Stage.ts";
-import { sha256 } from "../Util/sha256.ts";
-import type { BundleOptions } from "./Bundler.ts";
-import { Bundler } from "./Bundler.ts";
-import { cleanupBundleTempDir, createTempBundleDir } from "./TempRoot.ts";
+import * as Queue from "effect/Queue";
+import * as Result from "effect/Result";
+import * as Stream from "effect/Stream";
+import assert from "node:assert";
+import * as rolldown from "rolldown";
+import { sha256, sha256Object } from "../Util/sha256.ts";
 
-export interface BundleRequest {
-  readonly id: string;
-  readonly main: string;
+export interface BundleOutput {
   /**
-   * Produce the temp entry file content.
-   * Receives the normalized relative import path to `main`.
+   * The files in the bundle.
+   * The first file is the entry.
    */
-  readonly entryContent?: (importPath: string) => string;
-  /** File extension for the output, including the dot (default: `".mjs"`). */
-  readonly outExtension?: string;
-  readonly build: Omit<BundleOptions, "entry" | "outfile">;
+  readonly files: [BundleFile, ...BundleFile[]];
+  /**
+   * The SHA-256 hash of all files in the bundle.
+   */
+  readonly hash: string;
 }
 
-export interface BundleResult {
-  readonly code: Uint8Array;
-  /** SHA-256 hex digest of the bundled code. */
+export interface BundleFile {
+  readonly path: string;
+  readonly content: string | Uint8Array<ArrayBufferLike>;
   readonly hash: string;
-  /** Absolute path to the output file (useful for reading companion files like sourcemaps). */
-  readonly outfile: string;
 }
+
+export class BundleError extends Data.TaggedError("BundleError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
- * Shared bundle pipeline used by both AWS Lambda and Cloudflare Container providers.
- *
- * 1. Computes a deterministic output path under `.alchemy/out/`
- * 2. Creates a temp staging directory next to the entry's package root
- * 3. Writes a caller-supplied entry file that imports `main`
- * 4. Runs the configured `Bundler`
- * 5. Reads the output and computes a content hash
- * 6. Cleans up the temp directory (even on failure)
+ * Build a bundle using rolldown from the given input options and output options.
+ * @param inputOptions - The input options for the bundle.
+ * @param outputOptions - The output options for the bundle.
+ * @returns The bundle output.
  */
-export const bundle = Effect.fnUntraced(function* (request: BundleRequest) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const bundler = yield* Bundler;
-  const dotAlchemy = yield* DotAlchemy;
-  const stack = yield* Stack;
-  const stage = yield* Stage;
-
-  const ext = request.outExtension ?? ".mjs";
-  const outfile = path.join(
-    dotAlchemy,
-    "out",
-    `${stack.name}-${stage}-${request.id}${ext}`,
+export const build = (
+  inputOptions: rolldown.InputOptions,
+  outputOptions?: rolldown.OutputOptions,
+): Effect.Effect<BundleOutput, BundleError> =>
+  Effect.tryPromise({
+    try: async () => {
+      const bundle = await rolldown.rolldown({
+        ...inputOptions,
+        optimization: inputOptions.optimization ?? {
+          inlineConst: {
+            mode: "smart",
+            pass: 3,
+          },
+        },
+      });
+      const result = await bundle.generate(outputOptions);
+      await bundle.close();
+      return result.output;
+    },
+    catch: bundleErrorFromUnknown,
+  }).pipe(
+    Effect.flatMap(Effect.forEach(bundleFileFromOutputChunk)),
+    Effect.flatMap(bundleOutputFromFiles),
   );
 
-  const realMain = yield* fs.realPath(request.main);
-  let entry = realMain;
-  let tempDir: string | undefined;
-  if (request.entryContent) {
-    tempDir = yield* createTempBundleDir(realMain, dotAlchemy, request.id);
-    const realTempDir = yield* fs.realPath(tempDir);
-    const tempEntry = path.join(realTempDir, "__index.ts");
+/**
+ * Watch for changes in the bundle and return a stream of bundle output.
+ * @param inputOptions - The input options for the bundle.
+ * @param outputOptions - The output options for the bundle.
+ * @returns A stream of Result instances containing either the bundle output or an error.
+ */
+export const watch = (
+  inputOptions: rolldown.InputOptions,
+  outputOptions?: rolldown.OutputOptions,
+): Stream.Stream<Result.Result<BundleOutput, BundleError>> =>
+  Stream.callback<Result.Result<rolldown.OutputBundle, BundleError>>((queue) =>
+    Effect.acquireRelease(
+      Effect.sync(() => {
+        const watcher = rolldown.watch({
+          ...inputOptions,
+          plugins: [
+            inputOptions.plugins,
+            // The watcher event listener does not receive the bundle output, so we grab it using a plugin.
+            {
+              name: "alchemy:watch-bundle",
+              generateBundle(_outputOptions, bundle) {
+                Queue.offerUnsafe(queue, Result.succeed(bundle));
+              },
+            },
+          ],
+          output: outputOptions,
+        });
+        watcher.on("event", (event) => {
+          if (event.code === "ERROR") {
+            Queue.offerUnsafe(
+              queue,
+              Result.fail(bundleErrorFromUnknown(event.error)),
+            );
+          } else if (event.code === "BUNDLE_END") {
+            // This must be called to avoid resource leaks.
+            event.result.close().catch(() => {});
+          }
+        });
+        return watcher;
+      }),
+      (watcher) => Effect.promise(() => watcher.close()),
+    ),
+  ).pipe(
+    Stream.mapEffect((result) =>
+      Effect.gen(function* () {
+        if (result._tag === "Failure") {
+          return Result.fail(result.failure);
+        }
+        const files = Object.values(result.success);
+        // These are sanity checks - with rolldown, the first file is always an entry chunk.
+        if (!files[0] || files[0].type !== "chunk" || !files[0].isEntry) {
+          return Result.fail(
+            new BundleError({
+              message: "Invalid bundle output",
+            }),
+          );
+        }
+        return yield* Effect.forEach(
+          files as [
+            rolldown.OutputChunk,
+            ...(rolldown.OutputChunk | rolldown.OutputAsset)[],
+          ],
+          bundleFileFromOutputChunk,
+        ).pipe(
+          Effect.flatMap(bundleOutputFromFiles),
+          Effect.map(Result.succeed),
+        );
+      }),
+    ),
+    Stream.changesWith((left, right) => {
+      if (left._tag === "Success" && right._tag === "Success") {
+        return left.success.hash === right.success.hash;
+      }
+      return false;
+    }),
+  );
 
-    let importPath = path.relative(realTempDir, realMain);
-    if (!importPath.startsWith(".")) {
-      importPath = `./${importPath}`;
-    }
-    importPath = importPath.replaceAll("\\", "/");
+const ENTRY_MODULE_ID = "virtual:alchemy-entry";
+const ENTRY_MODULE_REGEX = new RegExp(`^${ENTRY_MODULE_ID}$`);
 
-    yield* fs.writeFileString(tempEntry, request.entryContent(importPath));
-    entry = tempEntry;
-  }
-
-  const run = Effect.gen(function* () {
-    yield* bundler.build({
-      ...request.build,
-      entry,
-      outfile,
-    });
-    const code = yield* fs.readFile(outfile);
-    const hash = yield* sha256(code);
-    return { code, hash, outfile } satisfies BundleResult;
-  });
-
-  return yield* tempDir
-    ? run.pipe(Effect.ensuring(cleanupBundleTempDir(tempDir)))
-    : run;
+export const virtualEntryPlugin = Effect.gen(function* () {
+  const path = yield* Path.Path;
+  return (content: (importPath: string) => string) => {
+    let importPath: string | undefined;
+    return {
+      name: "alchemy:virtual-entry",
+      options(inputOptions) {
+        assert(
+          typeof inputOptions.input === "string",
+          "input must be a string",
+        );
+        importPath = `./${path.relative(inputOptions.cwd ?? process.cwd(), inputOptions.input)}`;
+        inputOptions.input = ENTRY_MODULE_ID;
+      },
+      resolveId: {
+        filter: { id: ENTRY_MODULE_REGEX },
+        handler() {
+          return { id: ENTRY_MODULE_ID };
+        },
+      },
+      load: {
+        filter: { id: ENTRY_MODULE_REGEX },
+        handler() {
+          assert(importPath !== undefined, "importPath must be defined");
+          return { code: content(importPath), moduleType: "ts" };
+        },
+      },
+    } satisfies rolldown.Plugin;
+  };
 });
+
+function bundleErrorFromUnknown(error: unknown): BundleError {
+  const message = error instanceof Error ? error.message : String(error);
+  return new BundleError({
+    message,
+    cause: error,
+  });
+}
+
+function bundleOutputFromFiles(
+  files: [BundleFile, ...BundleFile[]],
+): Effect.Effect<BundleOutput> {
+  return Effect.map(
+    sha256Object(
+      files.map((file) => ({
+        path: file.path,
+        hash: file.hash,
+      })),
+    ),
+    (hash) => ({ files, hash }),
+  );
+}
+
+function bundleFileFromOutputChunk(
+  chunk: rolldown.OutputChunk | rolldown.OutputAsset,
+): Effect.Effect<BundleFile> {
+  switch (chunk.type) {
+    case "chunk":
+      return Effect.map(sha256(chunk.code), (hash) => ({
+        path: chunk.fileName,
+        content: chunk.code,
+        hash,
+      }));
+    case "asset":
+      return Effect.map(sha256(chunk.source), (hash) => ({
+        path: chunk.fileName,
+        content: chunk.source,
+        hash,
+      }));
+  }
+}

@@ -1,7 +1,7 @@
-import * as crypto from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as crypto from "node:crypto";
 import { Stack } from "../Stack.ts";
 import { Stage } from "../Stage.ts";
 
@@ -86,3 +86,19 @@ const findBundleTempRoot = (entry: string, dotAlchemy: string) =>
 
     return path.join(path.dirname(entry), path.basename(dotAlchemy), "tmp");
   });
+
+export const findCwdForBundle = Effect.fnUntraced(function* (entry: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  let current = path.dirname(entry);
+  while (true) {
+    if (yield* fs.exists(path.join(current, "package.json"))) {
+      return current;
+    }
+    const parent = path.dirname(current);
+    if (parent === current) {
+      return process.cwd();
+    }
+    current = parent;
+  }
+});
