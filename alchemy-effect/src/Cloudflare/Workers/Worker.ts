@@ -1,8 +1,5 @@
 import type * as cf from "@cloudflare/workers-types";
-import {
-  Bundler,
-  type Module as BundledModule,
-} from "@distilled.cloud/cloudflare-bundler";
+import cloudflare from "@distilled.cloud/cloudflare-rolldown-plugin";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import type * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -15,10 +12,11 @@ import * as Schedule from "effect/Schedule";
 import * as ServiceMap from "effect/ServiceMap";
 import * as Stream from "effect/Stream";
 import * as Socket from "effect/unstable/socket/Socket";
+import * as rolldown from "rolldown";
 import * as Binding from "../../Binding.ts";
-import { cleanupBundleTempDir } from "../../Bundle/TempRoot.ts";
+import * as Bundle from "../../Build/Bundler.ts";
+import * as VirtualEntryPlugin from "../../Build/VirtualEntryPlugin.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
-import { DotAlchemy } from "../../Config.ts";
 import { isResolved } from "../../Diff.ts";
 import type { HttpEffect } from "../../Http.ts";
 import type { Input } from "../../Input.ts";
@@ -383,8 +381,7 @@ export const WorkerProvider = () =>
       const path = yield* Path.Path;
 
       const accountId = yield* Account;
-      const bundler = yield* Bundler;
-      const dotAlchemy = yield* DotAlchemy;
+      const virtualEntryPlugin = yield* VirtualEntryPlugin.virtualEntryPlugin;
       const stack = yield* Stack;
 
       const { read, upload } = yield* Assets.Assets;
@@ -507,55 +504,49 @@ export const WorkerProvider = () =>
         id: string,
         props: WorkerProps,
       ) {
-        const buildBundle = (entry: string) =>
-          Effect.gen(function* () {
-            const { projectRoot, tsconfig } =
-              yield* findBundleProject(realMain);
-            const bundle = yield* bundler.build({
-              main: entry,
-              rootDir: projectRoot,
-              outDir: outputDir,
-              minify: true,
-              tsconfig,
-              cloudflare: {
-                compatibilityDate: props.compatibility?.date ?? "2026-03-10",
-                compatibilityFlags: props.compatibility?.flags,
+        const buildBundle = Effect.fnUntraced(function* (
+          entry: string,
+          plugins?: rolldown.RolldownPluginOption,
+        ) {
+          const { files, hash } = yield* Bundle.build(
+            {
+              input: entry,
+              cwd: yield* findCwdForBundle(entry),
+              plugins: [
+                cloudflare({
+                  compatibilityDate: props.compatibility?.date ?? "2026-03-10",
+                  compatibilityFlags: props.compatibility?.flags,
+                }),
+                plugins,
+              ],
+              checks: {
+                // Suppress unresolved import warnings for unrelated AWS packages
+                unresolvedImport: false,
               },
-            });
-            const files: Array<PreparedBundleFile> = bundle.modules.map(
-              (module: BundledModule) => ({
-                name: module.name,
-                content:
-                  module.name === bundle.main && module.type === "ESModule"
-                    ? stripSourceMapComment(
-                        Buffer.from(module.content).toString("utf8"),
-                      )
-                    : (module.content.buffer.slice(
-                        module.content.byteOffset,
-                        module.content.byteOffset + module.content.byteLength,
-                      ) as ArrayBuffer),
-                contentType:
-                  getModuleContentType(module) ?? "application/octet-stream",
-              }),
-            );
-            return {
-              files,
-              mainModule: bundle.main,
-              hash: yield* hashBundleFiles(files),
-            };
-          });
+            },
+            {
+              format: "esm",
+              sourcemap: "hidden",
+              minify: true,
+              keepNames: true,
+            },
+          );
+          return {
+            files: files.map(
+              (file) =>
+                new File([file.content as BlobPart], file.path, {
+                  type: contentTypeFromExtension(path.extname(file.path)),
+                }),
+            ),
+            mainModule: files[0].path,
+            hash,
+          };
+        });
 
         if (props.isExternal) {
-          return yield* buildBundle(realMain).pipe(
-            Effect.ensuring(cleanupBundleTempDir(tempDir)),
-          );
+          return yield* buildBundle(props.main);
         }
 
-        let importPath = path.relative(realTempDir, realMain);
-        if (!importPath.startsWith(".")) {
-          importPath = `./${importPath}`;
-        }
-        importPath = importPath.replaceAll("\\", "/");
         const exportMap = (props.exports ?? {}) as Record<string, unknown>;
         const allExportNames = Object.keys(exportMap).filter(
           (id) => id !== "default",
@@ -571,7 +562,7 @@ export const WorkerProvider = () =>
         }
         const hasDoClasses = doClasses.length > 0;
         const hasWfClasses = wfClasses.length > 0;
-        const script = `
+        const script = (importPath: string) => `
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Console from "effect/Console";
@@ -682,11 +673,8 @@ ${[
     : []),
 ].join("\n")}
 `;
-        yield* fs.writeFileString(tempEntry, script);
 
-        return yield* buildBundle(tempEntry).pipe(
-          Effect.ensuring(cleanupBundleTempDir(tempDir)),
-        );
+        return yield* buildBundle(props.main, virtualEntryPlugin(script));
       });
 
       const putWorker = Effect.fnUntraced(function* (
