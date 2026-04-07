@@ -268,12 +268,7 @@ export const Worker: Platform<
           : listeners.push(Effect.succeed(handler)),
       )) as any as Serverless.FunctionContext["listen"],
     export: (name: string, value: any) =>
-      Effect.gen(function* () {
-        if (name in exports) {
-          return yield* Effect.die(
-            new Error(`Worker export '${name}' already exists`),
-          );
-        }
+      Effect.sync(() => {
         exports[name] = value;
       }),
     exports: Effect.gen(function* () {
