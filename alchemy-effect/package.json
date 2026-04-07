@@ -185,7 +185,7 @@
     "fast-xml-parser": "catalog:",
     "ignore": "^7.0.5",
     "jszip": "^3.10.1",
-    "rolldown": "^1.0.0-rc.13",
+    "rolldown": "catalog:",
     "solid-js": "catalog:",
     "web-tree-sitter": "catalog:",
     "yaml": "catalog:"
