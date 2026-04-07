@@ -106,12 +106,6 @@ export interface AssetsWithHash {
   config?: AssetsConfig;
 }
 
-type PreparedBundleFile = {
-  name: string;
-  content: string | ArrayBuffer;
-  contentType: string;
-};
-
 export interface WorkerObservability extends Exclude<
   workers.PutScriptRequest["metadata"]["observability"],
   undefined
