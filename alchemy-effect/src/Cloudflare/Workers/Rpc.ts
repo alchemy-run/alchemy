@@ -368,10 +368,7 @@ export const makeWorkflowBridge =
               WorkflowEventService,
               wrapWorkflowEvent(event),
             ),
-            Effect.provideService(
-              WorkflowStep,
-              wrapWorkflowStep(step),
-            ),
+            Effect.provideService(WorkflowStep, wrapWorkflowStep(step)),
           ) as Effect.Effect<unknown>,
         );
       }
@@ -393,19 +390,14 @@ const wrapWorkflowEvent = (
   instanceId: event.instanceId ?? "",
 });
 
-const wrapWorkflowStep = (
-  step: any,
-): WorkflowStep["Service"] => ({
+const wrapWorkflowStep = (step: any): WorkflowStep["Service"] => ({
   do: <T>(name: string, effect: Effect.Effect<T>): Effect.Effect<T> =>
     Effect.tryPromise(
       () => step.do(name, () => Effect.runPromise(effect)) as Promise<T>,
     ),
   sleep: (name: string, duration: string | number): Effect.Effect<void> =>
     Effect.tryPromise(() => step.sleep(name, duration)),
-  sleepUntil: (
-    name: string,
-    timestamp: Date | number,
-  ): Effect.Effect<void> =>
+  sleepUntil: (name: string, timestamp: Date | number): Effect.Effect<void> =>
     Effect.tryPromise(() =>
       step.sleepUntil(
         name,

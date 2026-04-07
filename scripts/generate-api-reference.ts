@@ -499,26 +499,24 @@ function generateIndexes(entries: FileEntry[]): IndexDoc[] {
     }
   }
 
-  return [...dirs]
-    .sort()
-    .map((dir) => {
-      const relativePath = path.relative(config.outRoot, dir);
-      const title =
-        relativePath === ""
-          ? "API Reference"
-          : normalizeSlashes(relativePath).split("/").join(".");
-      const description =
-        relativePath === ""
-          ? "Generated API reference for Alchemy Effect resources, bindings, and platforms."
-          : `Generated API reference for ${title}.`;
+  return [...dirs].sort().map((dir) => {
+    const relativePath = path.relative(config.outRoot, dir);
+    const title =
+      relativePath === ""
+        ? "API Reference"
+        : normalizeSlashes(relativePath).split("/").join(".");
+    const description =
+      relativePath === ""
+        ? "Generated API reference for Alchemy Effect resources, bindings, and platforms."
+        : `Generated API reference for ${title}.`;
 
-      return {
-        title,
-        description,
-        relativePath,
-        outputPath: path.join(dir, "_index.md"),
-      };
-    });
+    return {
+      title,
+      description,
+      relativePath,
+      outputPath: path.join(dir, "_index.md"),
+    };
+  });
 }
 
 function renderIndex(doc: IndexDoc): string {
@@ -528,7 +526,7 @@ function renderIndex(doc: IndexDoc): string {
     `description = ${tomlString(doc.description)}`,
     'template = "section.html"',
     'sort_by = "title"',
-    "insert_anchor_links = \"heading\"",
+    'insert_anchor_links = "heading"',
     "[extra]",
     'kind = "reference-section"',
     `section_path = ${tomlString(doc.relativePath === "" ? "reference" : `reference/${normalizeSlashes(doc.relativePath)}`)}`,
@@ -582,7 +580,10 @@ async function copyContentMarkdownToStatic(): Promise<number> {
   );
   let count = 0;
   for (const relPath of mdFiles) {
-    const raw = await fs.readFile(path.join(config.contentRoot, relPath), "utf8");
+    const raw = await fs.readFile(
+      path.join(config.contentRoot, relPath),
+      "utf8",
+    );
     const body = stripFrontmatter(raw);
     if (!body.trim()) continue;
     await writeStaticMarkdown(contentPathToStaticPath(relPath), body);

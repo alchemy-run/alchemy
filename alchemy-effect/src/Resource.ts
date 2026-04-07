@@ -281,6 +281,7 @@ export function Resource<R extends ResourceLike>(
 }
 
 export interface ResourceProviders<Resource extends ResourceLike> {
+  tag: Provider<Resource>;
   effect<
     Req = never,
     ReadReq = never,

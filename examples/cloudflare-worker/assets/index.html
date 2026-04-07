@@ -199,7 +199,9 @@
         <button id="workflow-run" type="button">
           Run workflow (broadcasts to this room)
         </button>
-        <div id="workflow-status">Idle — messages will appear in the chat above.</div>
+        <div id="workflow-status">
+          Idle — messages will appear in the chat above.
+        </div>
       </div>
       <form id="form">
         <input
@@ -329,9 +331,7 @@
           status.output !== undefined
             ? `output: ${JSON.stringify(status.output)}`
             : null,
-          status.error
-            ? `error: ${JSON.stringify(status.error)}`
-            : null,
+          status.error ? `error: ${JSON.stringify(status.error)}` : null,
         ].filter(Boolean);
         return lines.join("\n");
       }
@@ -371,8 +371,7 @@
             try {
               pollCount += 1;
               if (pollCount > maxPolls) {
-                workflowStatusEl.textContent =
-                  `instance: ${instanceId}\n(stopped polling after ${maxPolls} attempts — check logs)`;
+                workflowStatusEl.textContent = `instance: ${instanceId}\n(stopped polling after ${maxPolls} attempts — check logs)`;
                 workflowRunBtn.disabled = false;
                 addMessage("Workflow status polling timed out.", true);
                 return;

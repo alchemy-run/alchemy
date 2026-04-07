@@ -38,10 +38,9 @@ const classifyUrl = (url: string) => {
 };
 
 let pagefindPromise: Promise<PagefindModule> | undefined;
-const dynamicImport = new Function(
-  "specifier",
-  "return import(specifier)",
-) as (specifier: string) => Promise<unknown>;
+const dynamicImport = new Function("specifier", "return import(specifier)") as (
+  specifier: string,
+) => Promise<unknown>;
 
 const loadPagefind = async () => {
   if (!pagefindPromise) {
@@ -76,7 +75,8 @@ if (copyBtn) {
     };
     copyBtn.addEventListener("click", handler);
     box?.addEventListener("click", (e) => {
-      if (e.target !== copyBtn && !copyBtn.contains(e.target as Node)) handler();
+      if (e.target !== copyBtn && !copyBtn.contains(e.target as Node))
+        handler();
     });
   }
 }
@@ -124,7 +124,9 @@ if (modal && input && results && status && backdrop) {
       return;
     }
 
-    setStatus(`Showing ${items.length} result${items.length === 1 ? "" : "s"}.`);
+    setStatus(
+      `Showing ${items.length} result${items.length === 1 ? "" : "s"}.`,
+    );
     results.innerHTML = items
       .map((item) => {
         const badge = classifyUrl(item.url);
@@ -186,7 +188,10 @@ if (modal && input && results && status && backdrop) {
 
     if (event.key === "/" && document.activeElement !== input) {
       const target = event.target;
-      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement
+      ) {
         return;
       }
       event.preventDefault();
