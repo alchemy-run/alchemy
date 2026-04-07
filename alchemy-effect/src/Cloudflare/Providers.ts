@@ -4,7 +4,6 @@ import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Socket from "effect/unstable/socket/Socket";
 import { CommandProvider } from "../Build/Command.ts";
-import { rolldown } from "../Bundle/Rolldown.ts";
 import type { Provider } from "../Provider.ts";
 import * as Account from "./Account.ts";
 import { ContainerProvider } from "./Container.ts";
@@ -73,8 +72,4 @@ export const bindings = () =>
   );
 
 const utils = () =>
-  Layer.mergeAll(
-    rolldown(),
-    AssetsProvider(),
-    Socket.layerWebSocketConstructorGlobal,
-  );
+  Layer.mergeAll(AssetsProvider(), Socket.layerWebSocketConstructorGlobal);

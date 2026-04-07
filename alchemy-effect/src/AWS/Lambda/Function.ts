@@ -14,7 +14,7 @@ import * as Schedule from "effect/Schedule";
 import * as ServiceMap from "effect/ServiceMap";
 import * as Stream from "effect/Stream";
 import type * as rolldown from "rolldown";
-import * as Bundle from "../../Bundle/BundleV2.ts";
+import * as Bundle from "../../Bundle/Bundle.ts";
 import * as TempRoot from "../../Bundle/TempRoot.ts";
 import { isResolved } from "../../Diff.ts";
 import type { HttpEffect } from "../../Http.ts";

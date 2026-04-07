@@ -3,9 +3,9 @@ import * as s3 from "@distilled.cloud/aws/s3";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Bundle from "../../Bundle/BundleV2.ts";
-import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
 import type * as rolldown from "rolldown";
+import * as Bundle from "../../Bundle/Bundle.ts";
+import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -220,7 +220,8 @@ export const createEc2HostedSupport = ({
       ? yield* buildBundle(realMain)
       : yield* buildBundle(
           realMain,
-          virtualEntryPlugin((importPath) => `
+          virtualEntryPlugin(
+            (importPath) => `
 import { NodeServices } from "@effect/platform-node";
 import { Stack } from "alchemy-effect/Stack";
 import * as Config from "effect/Config";
@@ -272,7 +273,8 @@ const program = handler.pipe(
 );
 
 await Effect.runPromise(program);
-`),
+`,
+          ),
         );
 
     const mainFile = bundleOutput.files[0];

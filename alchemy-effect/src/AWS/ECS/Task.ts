@@ -7,15 +7,18 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as ServiceMap from "effect/ServiceMap";
-import * as Bundle from "../../Bundle/BundleV2.ts";
+import type * as rolldown from "rolldown";
+import * as Bundle from "../../Bundle/Bundle.ts";
 import {
   dockerBuild,
   materializeDockerfile,
   pushImage,
   writeContextFiles,
 } from "../../Bundle/Docker.ts";
-import { findCwdForBundle, getStableContextDir } from "../../Bundle/TempRoot.ts";
-import type * as rolldown from "rolldown";
+import {
+  findCwdForBundle,
+  getStableContextDir,
+} from "../../Bundle/TempRoot.ts";
 import { DotAlchemy } from "../../Config.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Output from "../../Output.ts";
@@ -474,7 +477,8 @@ export const TaskProvider = () =>
           ? yield* buildBundle(realMain)
           : yield* buildBundle(
               realMain,
-              virtualEntryPlugin((importPath) => `
+              virtualEntryPlugin(
+                (importPath) => `
 import { NodeServices } from "@effect/platform-node";
 import { Stack } from "alchemy-effect/Stack";
 import * as Config from "effect/Config";
@@ -526,7 +530,8 @@ const program = handler.pipe(
 );
 
 await Effect.runPromise(program);
-`),
+`,
+              ),
             );
 
         const mainFile = bundleOutput.files[0];

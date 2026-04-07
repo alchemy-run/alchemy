@@ -13,7 +13,7 @@ import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type * as rolldown from "rolldown";
 import { AdoptPolicy } from "../AdoptPolicy.ts";
-import * as Bundle from "../Bundle/BundleV2.ts";
+import * as Bundle from "../Bundle/Bundle.ts";
 import {
   dockerBuild,
   materializeDockerfile,

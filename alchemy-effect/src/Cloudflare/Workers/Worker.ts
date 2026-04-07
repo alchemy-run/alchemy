@@ -14,7 +14,7 @@ import * as Stream from "effect/Stream";
 import * as Socket from "effect/unstable/socket/Socket";
 import type * as rolldown from "rolldown";
 import * as Binding from "../../Binding.ts";
-import * as Bundle from "../../Bundle/BundleV2.ts";
+import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
