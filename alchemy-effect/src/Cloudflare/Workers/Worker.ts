@@ -15,6 +15,7 @@ import * as Socket from "effect/unstable/socket/Socket";
 import type * as rolldown from "rolldown";
 import * as Binding from "../../Binding.ts";
 import * as Bundle from "../../Bundle/BundleV2.ts";
+import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
 import type { HttpEffect } from "../../Http.ts";
@@ -422,20 +423,6 @@ export const WorkerProvider = () =>
         const actualTags = new Set(tags ?? []);
         return createAlchemyWorkerTags(id).every((tag) => actualTags.has(tag));
       };
-
-      const findCwdForBundle = Effect.fnUntraced(function* (entry: string) {
-        let current = path.dirname(entry);
-        while (true) {
-          if (yield* fs.exists(path.join(current, "package.json"))) {
-            return current;
-          }
-          const parent = path.dirname(current);
-          if (parent === current) {
-            return process.cwd();
-          }
-          current = parent;
-        }
-      });
 
       const prepareAssets = Effect.fnUntraced(function* (
         assets: WorkerProps["assets"],
