@@ -8,7 +8,8 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { Bundler, type BundleOptions } from "../../Bundle/Bundler.ts";
+import * as Bundle from "../../Bundle/BundleV2.ts";
+import type * as rolldown from "rolldown";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { DotAlchemy } from "../../Config.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
@@ -125,7 +126,10 @@ export interface InstanceProps extends PlatformProps {
   /**
    * Bundler configuration for the hosted process entrypoint.
    */
-  build?: Partial<BundleOptions>;
+  build?: {
+    input?: Partial<rolldown.InputOptions>;
+    output?: Partial<rolldown.OutputOptions>;
+  };
   /**
    * Additional managed policy ARNs for the managed instance role.
    * This can only be used when Alchemy manages the instance profile.
@@ -314,10 +318,8 @@ export const InstanceProvider = () =>
       const accountId = yield* Account;
       const stack = yield* Stack;
       const stage = yield* Stage;
-      const dotAlchemy = yield* DotAlchemy;
       const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const bundler = yield* Bundler;
+      const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
       const assets = (yield* Effect.serviceOption(Assets)).pipe(
         Option.getOrUndefined,
       );
@@ -330,10 +332,8 @@ export const InstanceProvider = () =>
         region,
         stackName: stack.name,
         stage,
-        dotAlchemy,
         fs,
-        path,
-        bundler,
+        virtualEntryPlugin,
         assets,
         resourceType: "EC2.Instance",
       });
