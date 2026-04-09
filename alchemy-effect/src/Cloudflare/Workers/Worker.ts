@@ -33,7 +33,6 @@ import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { Self } from "../../Self.ts";
 import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
-import { sha256 } from "../../Util/index.ts";
 import { Account } from "../Account.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import type { AssetsConfig, AssetsProps } from "./Assets.ts";
@@ -436,41 +435,33 @@ export const WorkerProvider = () =>
           "path" in assets &&
           "hash" in assets
         ) {
-          const path = assets.path as string;
-          const hash = assets.hash as string;
           const result = yield* read({
-            directory: path,
+            directory: assets.path as string,
             config: assets.config,
           });
           return {
             ...result,
-            hash,
+            hash: assets.hash as string,
           };
         }
 
         // Handle string path or AssetsProps
-        const result = yield* read(
+        return yield* read(
           typeof assets === "string" ? { directory: assets } : assets,
         );
-        return {
-          ...result,
-          hash: yield* sha256(JSON.stringify(result)),
-        };
       });
 
       const prepareBundle = Effect.fnUntraced(function* (
         id: string,
         props: WorkerProps,
       ) {
-        const realMain = yield* fs.realPath(props.main);
-        const buildBundle = Effect.fnUntraced(function* (
-          entry: string,
-          plugins?: rolldown.RolldownPluginOption,
-        ) {
-          const { files, hash } = yield* Bundle.build(
+        const main = yield* fs.realPath(props.main);
+        const cwd = yield* findCwdForBundle(main);
+        const buildBundle = (plugins?: rolldown.RolldownPluginOption) =>
+          Bundle.build(
             {
-              input: entry,
-              cwd: yield* findCwdForBundle(entry),
+              input: main,
+              cwd,
               plugins: [
                 cloudflare({
                   compatibilityDate: props.compatibility?.date ?? "2026-03-10",
@@ -490,20 +481,9 @@ export const WorkerProvider = () =>
               keepNames: true,
             },
           );
-          return {
-            files: files.map(
-              (file) =>
-                new File([file.content as BlobPart], file.path, {
-                  type: contentTypeFromExtension(path.extname(file.path)),
-                }),
-            ),
-            mainModule: files[0].path,
-            hash,
-          };
-        });
 
         if (props.isExternal) {
-          return yield* buildBundle(realMain);
+          return yield* buildBundle();
         }
 
         const exportMap = (props.exports ?? {}) as Record<string, unknown>;
@@ -631,7 +611,7 @@ ${[
 ].join("\n")}
 `;
 
-        return yield* buildBundle(realMain, virtualEntryPlugin(script));
+        return yield* buildBundle(virtualEntryPlugin(script));
       });
 
       const putWorker = Effect.fnUntraced(function* (
@@ -867,7 +847,7 @@ ${[
           keepBindings: undefined,
           limits: news.limits,
           logpush: news.logpush,
-          mainModule: bundle.mainModule,
+          mainModule: bundle.files[0].path,
           migrations,
           observability: news.observability ?? {
             enabled: true,
@@ -881,11 +861,17 @@ ${[
           tailConsumers: undefined,
           usageModel: undefined,
         };
+        const files = bundle.files.map(
+          (file) =>
+            new File([file.content as BlobPart], file.path, {
+              type: contentTypeFromExtension(path.extname(file.path)),
+            }),
+        );
         const worker = yield* putScript({
           accountId,
           scriptName: name,
           metadata,
-          files: bundle.files,
+          files,
         }).pipe(
           Effect.catch((err) => {
             // When adopting a Worker managed by Wrangler (or after a previous
@@ -913,7 +899,7 @@ ${[
                     newTag: bumpMigrationTagVersion(expectedTag),
                   },
                 },
-                files: bundle.files,
+                files,
               });
             }
             return Effect.fail(err as any);
