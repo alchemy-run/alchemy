@@ -1,6 +1,9 @@
 {
   "files": [],
-  "exclude": ["node_modules", "dist"],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ],
   "references": [
     {
       "path": "./tsconfig.scripts.json"
@@ -49,6 +52,9 @@
     },
     {
       "path": "./examples/cloudflare-worker/tsconfig.json"
+    },
+    {
+      "path": "./packages/better-auth/tsconfig.json"
     }
   ],
   "compilerOptions": {
