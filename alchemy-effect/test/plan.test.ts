@@ -498,19 +498,21 @@ test(
       output: undefined,
     };
 
-    const exit = yield* Effect.exit(Effect.gen(function* () {
-      const secret = yield* TestResource("Secret", {
-        string: "secret-value",
-      });
-      yield* Function("Worker", {
-        name: "worker",
-        env: {
-          SECRET: secret.string,
-        },
-      });
-      const stack = yield* Stack.Stack;
-      delete stack.resources.Secret;
-    }).pipe(makePlanWithCustomStack(malformedStack)));
+    const exit = yield* Effect.exit(
+      Effect.gen(function* () {
+        const secret = yield* TestResource("Secret", {
+          string: "secret-value",
+        });
+        yield* Function("Worker", {
+          name: "worker",
+          env: {
+            SECRET: secret.string,
+          },
+        });
+        const stack = yield* Stack.Stack;
+        delete stack.resources.Secret;
+      }).pipe(makePlanWithCustomStack(malformedStack)),
+    );
 
     expect(Exit.isFailure(exit)).toBe(true);
     if (Exit.isFailure(exit)) {

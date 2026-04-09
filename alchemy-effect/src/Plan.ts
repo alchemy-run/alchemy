@@ -364,10 +364,7 @@ export const make = <A>(
       resources.map((resource) => {
         const fqn = resource.FQN;
         const deps = rawUpstreamDependencies[fqn] ?? [];
-        return [
-          fqn,
-          deps.filter((dep) => newResourceFqns.has(dep)),
-        ];
+        return [fqn, deps.filter((dep) => newResourceFqns.has(dep))];
       }),
     );
 

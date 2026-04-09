@@ -1,6 +1,5 @@
 import * as Cloudflare from "@/Cloudflare";
 import { Account } from "@/Cloudflare/Account";
-import * as D1 from "@/Cloudflare/D1/index";
 import { destroy } from "@/Destroy";
 import { test } from "@/Test/Vitest";
 import * as d1 from "@distilled.cloud/cloudflare/d1";
@@ -24,7 +23,7 @@ test(
 
     const database = yield* test.deploy(
       Effect.gen(function* () {
-        return yield* D1.Database("DefaultDatabase");
+        return yield* Cloudflare.D1Database("DefaultDatabase");
       }),
     );
 
@@ -52,7 +51,7 @@ test(
 
     const database = yield* test.deploy(
       Effect.gen(function* () {
-        return yield* D1.Database("TestDatabase", {
+        return yield* Cloudflare.D1Database("TestDatabase", {
           readReplication: { mode: "disabled" },
         });
       }),
@@ -66,7 +65,7 @@ test(
 
     const updatedDatabase = yield* test.deploy(
       Effect.gen(function* () {
-        return yield* D1.Database("TestDatabase", {
+        return yield* Cloudflare.D1Database("TestDatabase", {
           readReplication: { mode: "auto" },
         });
       }),

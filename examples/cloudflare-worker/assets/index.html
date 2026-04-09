@@ -406,11 +406,7 @@
           setAuthStatus("Email and password are required.");
           return;
         }
-        await submitAuth(
-          "/auth/sign-in/email",
-          { email, password },
-          "Sign In",
-        );
+        await submitAuth("/auth/sign-in/email", { email, password }, "Sign In");
       });
 
       const toggleBtn = document.getElementById("toggle");

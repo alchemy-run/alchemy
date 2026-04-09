@@ -44,8 +44,8 @@ export type DatabaseProps = {
   jurisdiction?: Jurisdiction;
 };
 
-export interface Database extends Resource<
-  "Cloudflare.D1.Database",
+export type D1Database = Resource<
+  "Cloudflare.D1Database",
   DatabaseProps,
   {
     databaseId: string;
@@ -54,7 +54,7 @@ export interface Database extends Resource<
     readReplication: { mode: "auto" | "disabled" } | undefined;
     accountId: string;
   }
-> {}
+>;
 
 /**
  * A Cloudflare D1 serverless SQL database built on SQLite.
@@ -72,14 +72,14 @@ export interface Database extends Resource<
  * });
  * ```
  */
-export const Database = Resource<Database>("Cloudflare.D1.Database");
+export const D1Database = Resource<D1Database>("Cloudflare.D1Database");
 
 export const DatabaseProvider = (): Layer<
-  Provider<Database>,
+  Provider<D1Database>,
   never,
   Account | Credentials | HttpClient | Stack | Stage
 > =>
-  Database.provider.effect(
+  D1Database.provider.effect(
     Effect.gen(function* () {
       const accountId = yield* Account;
       const createDb = yield* d1.createDatabase;
@@ -118,8 +118,7 @@ export const DatabaseProvider = (): Layer<
             output?.readReplication?.mode ??
             olds.readReplication?.mode ??
             "disabled";
-          const newReplicationMode =
-            news.readReplication?.mode ?? "disabled";
+          const newReplicationMode = news.readReplication?.mode ?? "disabled";
           if (oldReplicationMode !== newReplicationMode) {
             return { action: "update" } as const;
           }
@@ -130,8 +129,7 @@ export const DatabaseProvider = (): Layer<
           const db = yield* createDb({
             accountId,
             name,
-            jurisdiction:
-              jurisdiction !== "default" ? jurisdiction : undefined,
+            jurisdiction: jurisdiction !== "default" ? jurisdiction : undefined,
             primaryLocationHint: news.primaryLocationHint,
           }).pipe(
             Effect.catchTag("InvalidProperty", () =>
@@ -167,8 +165,7 @@ export const DatabaseProvider = (): Layer<
           };
         }),
         update: Effect.fn(function* ({ news = {}, output }) {
-          const replicationMode =
-            news.readReplication?.mode ?? "disabled";
+          const replicationMode = news.readReplication?.mode ?? "disabled";
           const updated = yield* patchDb({
             accountId: output.accountId,
             databaseId: output.databaseId,
@@ -186,9 +183,7 @@ export const DatabaseProvider = (): Layer<
           yield* deleteDb({
             accountId: output.accountId,
             databaseId: output.databaseId,
-          }).pipe(
-            Effect.catchTag("DatabaseNotFound", () => Effect.void),
-          );
+          }).pipe(Effect.catchTag("DatabaseNotFound", () => Effect.void));
         }),
         read: Effect.fn(function* ({ id, output, olds }) {
           if (output?.databaseId) {

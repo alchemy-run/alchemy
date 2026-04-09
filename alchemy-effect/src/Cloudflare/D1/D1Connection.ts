@@ -4,8 +4,8 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Binding from "../../Binding.ts";
 import { WorkerEnvironment } from "../Workers/Worker.ts";
-import type { Database } from "./Database.ts";
-import { DatabaseBinding } from "./DatabaseBinding.ts";
+import type { D1Database } from "./D1Database.ts";
+import { DatabaseBinding } from "./D1DatabaseBinding.ts";
 
 export interface D1ConnectionClient {
   /**
@@ -32,7 +32,7 @@ export interface D1ConnectionClient {
 
 export class D1Connection extends Binding.Service<
   D1Connection,
-  (database: Database) => Effect.Effect<D1ConnectionClient>
+  (database: D1Database) => Effect.Effect<D1ConnectionClient>
 >()("Cloudflare.D1.Connection") {}
 
 export const D1ConnectionLive = Layer.effect(
@@ -40,7 +40,7 @@ export const D1ConnectionLive = Layer.effect(
   Effect.gen(function* () {
     const Policy = yield* D1ConnectionPolicy;
 
-    return Effect.fn(function* (database: Database) {
+    return Effect.fn(function* (database: D1Database) {
       yield* Policy(database);
       const d1 = yield* Effect.serviceOption(WorkerEnvironment).pipe(
         Effect.map(Option.getOrUndefined),
@@ -67,7 +67,7 @@ export const D1ConnectionLive = Layer.effect(
 
 export class D1ConnectionPolicy extends Binding.Policy<
   D1ConnectionPolicy,
-  (database: Database) => Effect.Effect<void>
+  (database: D1Database) => Effect.Effect<void>
 >()("Cloudflare.D1.Connection") {}
 
 export const D1ConnectionPolicyLive =

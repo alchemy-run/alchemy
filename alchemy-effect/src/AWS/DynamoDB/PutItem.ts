@@ -24,12 +24,12 @@ export class PutItem extends Binding.Service<
 export const PutItemLive = Layer.effect(
   PutItem,
   Effect.gen(function* () {
-    const Policy = yield* PutItemPolicy;
+    const bind = yield* PutItemPolicy;
     const putItem = yield* DynamoDB.putItem;
 
     return Effect.fn(function* <T extends Table>(table: T) {
       const TableName = yield* table.tableName;
-      yield* Policy(table);
+      yield* bind(table);
       return Effect.fn(function* (request: PutItemRequest) {
         const tableName = yield* TableName;
         return yield* putItem({

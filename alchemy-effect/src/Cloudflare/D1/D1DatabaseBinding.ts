@@ -1,11 +1,11 @@
 import * as Effect from "effect/Effect";
 import type { ResourceLike } from "../../Resource.ts";
 import { isWorker } from "../Workers/Worker.ts";
-import type { Database } from "./Database.ts";
+import type { D1Database } from "./D1Database.ts";
 
 export const DatabaseBinding = Effect.fn(function* (
   host: ResourceLike,
-  database: Database,
+  database: D1Database,
 ) {
   if (isWorker(host)) {
     yield* host.bind`Bind(${database})`({
