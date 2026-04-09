@@ -455,7 +455,6 @@ const executeNode = (
         };
         yield* signalReady;
 
-        yield* report("created");
         yield* markTerminal("created");
         return;
       }
@@ -562,7 +561,6 @@ const executeNode = (
           instanceId,
         };
 
-        yield* report("updated");
         yield* markTerminal("updated");
         return;
       }
@@ -579,7 +577,6 @@ const executeNode = (
             instanceId,
           };
           yield* signalReady;
-          yield* report("created");
           yield* markTerminal("created");
           return;
         }
@@ -707,7 +704,6 @@ const executeNode = (
 
         // Keep progress anchored to the live replacement while GC drains the
         // previous generation(s) in the background.
-        yield* report("created");
         yield* markTerminal("created");
         return;
       }

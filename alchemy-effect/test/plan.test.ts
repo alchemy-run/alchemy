@@ -43,6 +43,24 @@ const makePlan = <A, Err = never, Req = never>(
     );
   });
 
+const makePlanWithCustomStack =
+  (stackSpec: any) =>
+  <A, Err = never, Req = never>(
+    effect: Effect.Effect<A, Err, Req>,
+  ): Effect.Effect<Plan.Plan<A>, Err, never> =>
+    // @ts-expect-error
+    Effect.gen(function* () {
+      const stack = yield* Stack.Stack;
+      // @ts-expect-error
+      return yield* effect.pipe(
+        // @ts-expect-error
+        Stack.make(stack.name, Layer.empty, stackSpec),
+        Effect.provideService(Stage, stack.stage),
+        Effect.flatMap(Plan.make),
+        Effect.provide(TestLayers),
+      );
+    });
+
 test(
   "create all resources when plan is empty",
   {
@@ -333,6 +351,179 @@ test(
         },
       },
     });
+  }),
+);
+
+test(
+  "allow deleting a resource after a surviving consumer removes the dependency",
+  {
+    state: test.state({
+      Secret: {
+        instanceId,
+        providerVersion: 0,
+        logicalId: "Secret",
+        fqn: "Secret",
+        namespace: undefined,
+        resourceType: "Test.TestResource",
+        status: "created",
+        props: {
+          string: "secret-value",
+        },
+        attr: {
+          string: "secret-value",
+          stringArray: [],
+          stableString: "Secret",
+          stableArray: ["Secret"],
+          replaceString: undefined,
+        },
+        bindings: [],
+        downstream: ["Worker"],
+      },
+      Worker: {
+        instanceId,
+        providerVersion: 0,
+        logicalId: "Worker",
+        fqn: "Worker",
+        namespace: undefined,
+        resourceType: "Test.Function",
+        status: "created",
+        props: {
+          name: "worker",
+          env: {
+            SECRET: "secret-value",
+          },
+        },
+        attr: {
+          name: "worker",
+          env: {
+            SECRET: "secret-value",
+          },
+          functionArn: "arn:aws:lambda:us-west-2:084828582823:function:Worker",
+        },
+        bindings: [],
+        downstream: [],
+      },
+    }),
+  },
+  Effect.gen(function* () {
+    expect(
+      yield* makePlan(
+        Effect.gen(function* () {
+          yield* Function("Worker", {
+            name: "worker",
+          });
+        }),
+      ),
+    ).toMatchObject({
+      resources: {
+        Worker: {
+          action: "update",
+          props: {
+            name: "worker",
+          },
+          bindings: [],
+        },
+      },
+      deletions: {
+        Secret: {
+          action: "delete",
+          state: {
+            status: "created",
+            downstream: ["Worker"],
+          },
+        },
+      },
+    });
+  }),
+);
+
+test(
+  "reject deleting a resource when a surviving consumer still references it",
+  {
+    state: test.state({
+      Secret: {
+        instanceId,
+        providerVersion: 0,
+        logicalId: "Secret",
+        fqn: "Secret",
+        namespace: undefined,
+        resourceType: "Test.TestResource",
+        status: "created",
+        props: {
+          string: "secret-value",
+        },
+        attr: {
+          string: "secret-value",
+          stringArray: [],
+          stableString: "Secret",
+          stableArray: ["Secret"],
+          replaceString: undefined,
+        },
+        bindings: [],
+        downstream: ["Worker"],
+      },
+      Worker: {
+        instanceId,
+        providerVersion: 0,
+        logicalId: "Worker",
+        fqn: "Worker",
+        namespace: undefined,
+        resourceType: "Test.Function",
+        status: "created",
+        props: {
+          name: "worker",
+          env: {
+            SECRET: "secret-value",
+          },
+        },
+        attr: {
+          name: "worker",
+          env: {
+            SECRET: "secret-value",
+          },
+          functionArn: "arn:aws:lambda:us-west-2:084828582823:function:Worker",
+        },
+        bindings: [],
+        downstream: [],
+      },
+    }),
+  },
+  Effect.gen(function* () {
+    const currentStack = yield* Stack.Stack;
+    const malformedStack = {
+      name: currentStack.name,
+      stage: currentStack.stage,
+      resources: {},
+      bindings: {},
+      output: undefined,
+    };
+
+    const exit = yield* Effect.exit(Effect.gen(function* () {
+      const secret = yield* TestResource("Secret", {
+        string: "secret-value",
+      });
+      yield* Function("Worker", {
+        name: "worker",
+        env: {
+          SECRET: secret.string,
+        },
+      });
+      const stack = yield* Stack.Stack;
+      delete stack.resources.Secret;
+    }).pipe(makePlanWithCustomStack(malformedStack)));
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isFailure(exit)) {
+      const reason = exit.cause.reasons.find(Cause.isFailReason);
+      expect(reason).toBeDefined();
+      expect(reason!.error).toEqual(
+        new Plan.DeleteResourceHasDownstreamDependencies({
+          message: "Resource Secret has downstream dependencies",
+          resourceId: "Secret",
+          dependencies: ["Worker"],
+        }),
+      );
+    }
   }),
 );
 

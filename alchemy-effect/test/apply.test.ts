@@ -16,6 +16,7 @@ import * as Effect from "effect/Effect";
 import {
   BindingTarget,
   DeletedBindingRegressionTarget,
+  Function,
   InMemoryTestLayers,
   PhasedTarget,
   StaticStablesResource,
@@ -284,6 +285,44 @@ describe("basic operations", () => {
           env: {},
         },
       });
+    }).pipe(Effect.provide(MockLayers())),
+  );
+
+  test(
+    "should update a surviving consumer before deleting a removed dependency",
+    Effect.gen(function* () {
+      const created = yield* test.deploy(
+        Effect.gen(function* () {
+          const secret = yield* TestResource("Secret", {
+            string: "secret-value",
+          });
+          const worker = yield* Function("Worker", {
+            name: "worker",
+            env: {
+              SECRET: secret.string,
+            },
+          });
+          return { secret, worker };
+        }),
+      );
+
+      expect(created.worker.env).toEqual({
+        SECRET: "secret-value",
+      });
+      expect((yield* getState("Secret"))?.status).toEqual("created");
+      expect((yield* getState("Worker"))?.status).toEqual("created");
+
+      const updated = yield* test.deploy(
+        Effect.gen(function* () {
+          return yield* Function("Worker", {
+            name: "worker",
+          });
+        }),
+      );
+
+      expect(updated.env).toEqual({});
+      expect(yield* getState("Secret")).toBeUndefined();
+      expect((yield* getState("Worker"))?.status).toEqual("updated");
     }).pipe(Effect.provide(MockLayers())),
   );
 

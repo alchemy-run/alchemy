@@ -342,19 +342,31 @@ export const make = <A>(
       ]),
     );
 
-    // Combined prop + binding upstream, filtered to resources in this graph
-    const allUpstreamDependencies: {
+    // Combined prop + binding upstream for the desired graph, including
+    // references to resources outside the current graph so delete validation can
+    // tell whether any surviving resource still points at an orphan.
+    const rawUpstreamDependencies: {
       [fqn: string]: string[];
     } = Object.fromEntries(
       resources.map((resource) => {
         const fqn = resource.FQN;
         const propDeps = newUpstreamDependencies[fqn] ?? [];
         const bindDeps = bindingUpstreamDependencies[fqn] ?? [];
+        return [fqn, [...new Set([...propDeps, ...bindDeps])]];
+      }),
+    );
+
+    // Combined prop + binding upstream, filtered to resources in this graph for
+    // scheduling and cycle detection.
+    const allUpstreamDependencies: {
+      [fqn: string]: string[];
+    } = Object.fromEntries(
+      resources.map((resource) => {
+        const fqn = resource.FQN;
+        const deps = rawUpstreamDependencies[fqn] ?? [];
         return [
           fqn,
-          [...new Set([...propDeps, ...bindDeps])].filter((dep) =>
-            newResourceFqns.has(dep),
-          ),
+          deps.filter((dep) => newResourceFqns.has(dep)),
         ];
       }),
     );
@@ -755,11 +767,13 @@ export const make = <A>(
       )).filter((v) => !!v),
     );
 
-    for (const [resourceFqn, deletion] of Object.entries(deletions)) {
-      // downstream is stored as FQNs - check if any exist in resourceGraph
-      const dependencies = deletion.state.downstream.filter(
-        (d) => d in resourceGraph,
-      );
+    for (const resourceFqn of Object.keys(deletions)) {
+      const dependencies = Object.entries(rawUpstreamDependencies)
+        .filter(
+          ([survivorFqn, upstream]) =>
+            survivorFqn in resourceGraph && upstream.includes(resourceFqn),
+        )
+        .map(([survivorFqn]) => survivorFqn);
       if (dependencies.length > 0) {
         return yield* new DeleteResourceHasDownstreamDependencies({
           message: `Resource ${resourceFqn} has downstream dependencies`,
