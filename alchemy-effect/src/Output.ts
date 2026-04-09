@@ -53,6 +53,7 @@ export interface Output<A = any, Req = any> extends Pipeable {
   >;
   bind(id: string): Effect.Effect<Effect.Effect<A>, never, ExecutionContext>;
   asEffect(): Effect.Effect<Accessor<A>, never, Req>;
+  as<T>(): Output<T, Req>;
 }
 
 export interface Accessor<A> extends Effect.Effect<A> {}
@@ -91,6 +92,9 @@ export abstract class BaseExpr<A = any, Req = any> implements Output<A, Req> {
   declare readonly req: Req;
   // we use a kind tag instead of instanceof to protect ourselves from duplicate alchemy-effect module imports
   constructor() {}
+  as<T>(): Output<T, Req> {
+    return this as any;
+  }
 
   [Symbol.iterator](): Iterator<
     Yieldable<any, void, never, Req>,
