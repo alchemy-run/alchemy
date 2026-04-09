@@ -189,13 +189,11 @@ export const StaticSite = Construct.fn(function* (
     ? yield* Command("Build", {
         command: props.build.command,
         cwd: sitePath,
-        hash: props.build.include ?? ["**/*"],
-        exclude: [
-          ...(props.build.exclude ?? []),
-          `**/${props.build.output}/**`,
-          "**/node_modules/**",
-          "**/.git/**",
-        ],
+        memo: {
+          include: props.build.include,
+          exclude: props.build.exclude,
+          lockfile: props.build.lockfile,
+        },
         outdir: props.build.output,
         env: props.environment,
       })
