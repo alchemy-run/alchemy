@@ -181,6 +181,73 @@
         min-height: 2.5rem;
         line-height: 1.4;
       }
+      #auth-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        padding: 0.75rem;
+        background: #1e293b;
+        border-radius: 0.5rem;
+        border: 1px solid #334155;
+      }
+      #auth-panel h2 {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #94a3b8;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      #auth-fields {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.5rem;
+      }
+      #auth-fields input {
+        width: 100%;
+        padding: 0.6rem 0.75rem;
+        border-radius: 0.375rem;
+        border: 1px solid #334155;
+        background: #0f172a;
+        color: #e2e8f0;
+        font-size: 0.9rem;
+        outline: none;
+      }
+      #auth-fields input:focus {
+        border-color: #3b82f6;
+      }
+      #auth-email {
+        grid-column: 1 / -1;
+      }
+      #auth-name {
+        grid-column: 1 / -1;
+      }
+      #auth-actions {
+        display: flex;
+        gap: 0.5rem;
+      }
+      #auth-signup {
+        background: #2563eb;
+      }
+      #auth-signin {
+        background: #059669;
+      }
+      #auth-signin:hover {
+        background: #047857;
+      }
+      #auth-status {
+        font-size: 0.75rem;
+        font-family: "SF Mono", "Fira Code", monospace;
+        color: #cbd5e1;
+        white-space: pre-wrap;
+        word-break: break-word;
+        min-height: 2.5rem;
+        line-height: 1.4;
+      }
+      @media (max-width: 640px) {
+        #auth-fields {
+          grid-template-columns: 1fr;
+        }
+      }
     </style>
   </head>
   <body>
@@ -190,6 +257,34 @@
         <button id="toggle">Disconnect</button>
       </div>
       <span id="status" class="disconnected">disconnected</span>
+      <div id="auth-panel">
+        <h2>Auth</h2>
+        <div id="auth-fields">
+          <input
+            id="auth-email"
+            type="email"
+            placeholder="Email"
+            autocomplete="email"
+          />
+          <input
+            id="auth-password"
+            type="password"
+            placeholder="Password"
+            autocomplete="current-password"
+          />
+          <input
+            id="auth-name"
+            type="text"
+            placeholder="Display name"
+            autocomplete="name"
+          />
+        </div>
+        <div id="auth-actions">
+          <button id="auth-signup" type="button">Sign Up</button>
+          <button id="auth-signin" type="button">Sign In</button>
+        </div>
+        <div id="auth-status">Idle.</div>
+      </div>
       <div id="messages"></div>
       <div id="actions">
         <button id="increment">Increment Counter</button>
@@ -224,6 +319,12 @@
       const messagesEl = document.getElementById("messages");
       const form = document.getElementById("form");
       const input = document.getElementById("input");
+      const authEmailEl = document.getElementById("auth-email");
+      const authPasswordEl = document.getElementById("auth-password");
+      const authNameEl = document.getElementById("auth-name");
+      const authSignUpBtn = document.getElementById("auth-signup");
+      const authSignInBtn = document.getElementById("auth-signin");
+      const authStatusEl = document.getElementById("auth-status");
 
       function setStatus(s) {
         statusEl.textContent = s;
@@ -237,6 +338,80 @@
         messagesEl.appendChild(div);
         messagesEl.scrollTop = messagesEl.scrollHeight;
       }
+
+      function setAuthStatus(text) {
+        authStatusEl.textContent = text;
+      }
+
+      async function readResponseBody(response) {
+        const text = await response.text();
+        try {
+          return JSON.stringify(JSON.parse(text), null, 2);
+        } catch {
+          return text || "(empty)";
+        }
+      }
+
+      function getAuthPayload() {
+        return {
+          email: authEmailEl.value.trim(),
+          password: authPasswordEl.value,
+          name: authNameEl.value.trim() || "Room Chat User",
+        };
+      }
+
+      async function submitAuth(path, body, buttonLabel) {
+        authSignUpBtn.disabled = true;
+        authSignInBtn.disabled = true;
+        setAuthStatus(`${buttonLabel}…`);
+        try {
+          const response = await fetch(path, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+            },
+            credentials: "include",
+            body: JSON.stringify(body),
+          });
+          const payload = await readResponseBody(response);
+          setAuthStatus(`status: ${response.status}\n${payload}`);
+          addMessage(`${buttonLabel} -> HTTP ${response.status}`, true);
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          setAuthStatus(`request failed: ${message}`);
+          addMessage(`${buttonLabel} failed: ${message}`, true);
+        } finally {
+          authSignUpBtn.disabled = false;
+          authSignInBtn.disabled = false;
+        }
+      }
+
+      authSignUpBtn.addEventListener("click", async () => {
+        const { email, password, name } = getAuthPayload();
+        if (!email || !password) {
+          setAuthStatus("Email and password are required.");
+          return;
+        }
+        await submitAuth(
+          "/auth/sign-up/email",
+          { email, password, name },
+          "Sign Up",
+        );
+      });
+
+      authSignInBtn.addEventListener("click", async () => {
+        const { email, password } = getAuthPayload();
+        if (!email || !password) {
+          setAuthStatus("Email and password are required.");
+          return;
+        }
+        await submitAuth(
+          "/auth/sign-in/email",
+          { email, password },
+          "Sign In",
+        );
+      });
 
       const toggleBtn = document.getElementById("toggle");
       let ws;

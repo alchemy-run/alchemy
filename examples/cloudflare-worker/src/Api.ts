@@ -5,6 +5,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import Agent from "./Agent.ts";
+import { BetterAuth, BetterAuthLive } from "./BetterAuth.ts";
 import NotifyWorkflow from "./NotifyWorkflow.ts";
 import Room from "./Room.ts";
 
@@ -21,6 +22,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
     assets: "./assets",
   },
   Effect.gen(function* () {
+    const betterAuth = yield* BetterAuth;
     const agents = yield* Agent;
     const rooms = yield* Room;
     const notifier = yield* NotifyWorkflow;
@@ -31,7 +33,9 @@ export default class Api extends Cloudflare.Worker<Api>()(
         const request = yield* HttpServerRequest;
         console.log("fetch", request.method, request.url);
 
-        if (request.url === "/sandbox/increment") {
+        if (request.url.startsWith("/auth/")) {
+          return yield* betterAuth.fetch;
+        } else if (request.url === "/sandbox/increment") {
           const agent = agents.getByName("sandbox-test");
           const body = yield* agent.increment().pipe(Effect.orDie);
           const room = rooms.getByName("default");
@@ -127,5 +131,5 @@ export default class Api extends Cloudflare.Worker<Api>()(
         return HttpServerResponse.text("Hello World", { status: 200 });
       }),
     };
-  }),
+  }).pipe(Effect.provide(BetterAuthLive)),
 ) {}

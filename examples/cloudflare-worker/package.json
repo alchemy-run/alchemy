@@ -19,6 +19,7 @@
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "alchemy-effect": "workspace:*",
+    "better-auth": "^1.6.1",
     "effect": "catalog:"
   }
 }

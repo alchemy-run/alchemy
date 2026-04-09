@@ -1,7 +1,6 @@
 import * as Cloudflare from "alchemy-effect/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Sandbox } from "./Sandbox.ts";
 
 export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
