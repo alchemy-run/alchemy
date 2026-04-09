@@ -3,7 +3,6 @@ import cloudflareRolldown from "@distilled.cloud/cloudflare-rolldown-plugin";
 import cloudflareVite from "@distilled.cloud/cloudflare-vite-plugin";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import type * as Cause from "effect/Cause";
-import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -15,9 +14,9 @@ import * as ServiceMap from "effect/ServiceMap";
 import * as Stream from "effect/Stream";
 import * as Socket from "effect/unstable/socket/Socket";
 import type * as rolldown from "rolldown";
-import * as vite from "vite";
+import type * as vite from "vite";
 import * as Binding from "../../Binding.ts";
-import type { MemoOptions } from "../../Build/Memo.ts";
+import { hashDirectory, type MemoOptions } from "../../Build/Memo.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
@@ -203,6 +202,7 @@ export interface Worker extends Resource<
     tags: string[] | undefined;
     accountId: string;
     hash?: {
+      input: string | undefined;
       assets: string | undefined;
       bundle: string;
     };
@@ -436,12 +436,16 @@ export const WorkerProvider = () =>
         props: WorkerProps,
       ) {
         if (props.vite) {
-          return yield* viteBuild(props);
+          const [{ assets, bundle }, input] = yield* Effect.all(
+            [viteBuild(props), hashViteInput(props.vite)],
+            { concurrency: "unbounded" },
+          );
+          return { assets, bundle, input };
         }
-        const [assets, bundle] = yield* Effect.all([
-          prepareAssets(props.assets),
-          prepareBundle(id, props),
-        ]);
+        const [assets, bundle] = yield* Effect.all(
+          [prepareAssets(props.assets), prepareBundle(id, props)],
+          { concurrency: "unbounded" },
+        );
         return { assets, bundle };
       });
 
@@ -473,64 +477,60 @@ export const WorkerProvider = () =>
         );
       });
 
+      const hashViteInput = (vite: NonNullable<WorkerProps["vite"]>) =>
+        hashDirectory(vite.cwd, vite.memo);
+
       const viteBuild = Effect.fnUntraced(function* (props: WorkerProps) {
         const vite = yield* Effect.promise(() => import("vite"));
-        const serverResult = yield* Deferred.make<vite.Rolldown.OutputBundle>();
-        const clientResult = yield* Deferred.make<string>();
-
-        const ssrOutputPlugin = {
-          name: "output:ssr",
-          applyToEnvironment(environment) {
-            return environment.name === "ssr";
-          },
-          generateBundle(_outputOptions, bundle) {
-            Deferred.doneUnsafe(serverResult, Effect.succeed(bundle));
-          },
-        } satisfies vite.Plugin;
-
-        const assetsDirectoryPlugin = {
-          name: "output:client",
-          applyToEnvironment(environment) {
-            return environment.name === "client";
-          },
-          generateBundle(outputOptions) {
-            Deferred.doneUnsafe(
-              clientResult,
-              Effect.succeed(outputOptions.dir!),
-            );
-          },
-        } satisfies vite.Plugin;
+        let serverBundle: vite.Rolldown.OutputBundle | undefined;
+        let clientDir: string | undefined;
 
         yield* Effect.tryPromise(async () => {
           const builder = await vite.createBuilder({
-            root: props.vite?.cwd ?? process.cwd(),
+            root: props.vite?.cwd,
             plugins: [
               cloudflareVite({
                 compatibilityDate: props.compatibility?.date,
                 compatibilityFlags: props.compatibility?.flags,
               }),
-              ssrOutputPlugin,
-              assetsDirectoryPlugin,
+              {
+                name: "output:ssr",
+                applyToEnvironment(environment) {
+                  return environment.name === "ssr";
+                },
+                generateBundle(_outputOptions, bundle) {
+                  serverBundle = bundle;
+                },
+              },
+              {
+                name: "output:client",
+                applyToEnvironment(environment) {
+                  return environment.name === "client";
+                },
+                generateBundle(outputOptions) {
+                  clientDir = outputOptions.dir;
+                },
+              },
             ],
           });
           await builder.buildApp();
         });
-        const [assets, bundle] = yield* Effect.all([
-          Deferred.await(clientResult).pipe(
-            Effect.flatMap((dir) =>
-              read({
-                directory: dir,
-                config:
-                  typeof props.assets === "object" && "config" in props.assets
-                    ? props.assets.config
-                    : undefined,
-              }),
-            ),
-          ),
-          Deferred.await(serverResult).pipe(
-            Effect.flatMap(Bundle.bundleOutputFromRolldownOutputBundle),
-          ),
-        ]);
+        if (!serverBundle || !clientDir) {
+          return yield* Effect.die(new Error("Failed to build Vite bundle"));
+        }
+        const [assets, bundle] = yield* Effect.all(
+          [
+            read({
+              directory: clientDir,
+              config:
+                typeof props.assets === "object" && "config" in props.assets
+                  ? props.assets.config
+                  : undefined,
+            }),
+            Bundle.bundleOutputFromRolldownOutputBundle(serverBundle),
+          ],
+          { concurrency: "unbounded" },
+        );
         return { assets, bundle };
       });
 
@@ -710,7 +710,7 @@ ${[
         yield* Effect.logInfo(
           `Cloudflare Worker ${olds ? "update" : "create"}: preparing bundle for ${name}`,
         );
-        const { assets, bundle } = yield* prepare(id, news);
+        const { assets, bundle, input } = yield* prepare(id, news);
         const metadataBindings = bindings.flatMap((b) => b.data.bindings);
         let metadataAssets:
           | workers.PutScriptRequest["metadata"]["assets"]
@@ -1005,8 +1005,33 @@ ${[
           hash: {
             assets: assets?.hash,
             bundle: bundle.hash,
+            input,
           },
         } satisfies Worker["Attributes"];
+      });
+
+      const hasChanged = Effect.fnUntraced(function* (
+        id: string,
+        props: WorkerProps,
+        output: Worker["Attributes"],
+      ) {
+        if (props.vite) {
+          const input = yield* hashViteInput(props.vite);
+          return input !== output.hash?.input;
+        }
+        const [assetsHash, bundleHash] = yield* Effect.all(
+          [
+            "assets" in output && output.hash?.assets
+              ? Effect.succeed(output.hash.assets)
+              : prepareAssets(props.assets).pipe(Effect.map((a) => a?.hash)),
+            prepareBundle(id, props).pipe(Effect.map((b) => b.hash)),
+          ],
+          { concurrency: "unbounded" },
+        );
+        return (
+          assetsHash !== output.hash?.assets ||
+          bundleHash !== output.hash?.bundle
+        );
       });
 
       return Worker.provider.of({
@@ -1026,11 +1051,7 @@ ${[
           if (!output) {
             return;
           }
-          const { assets, bundle } = yield* prepare(id, news);
-          if (
-            assets?.hash !== output.hash?.assets ||
-            bundle.hash !== output.hash?.bundle
-          ) {
+          if (yield* hasChanged(id, news, output)) {
             return {
               action: "update",
               stables:
