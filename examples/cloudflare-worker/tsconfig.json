@@ -1,6 +1,9 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["alchemy.run.ts", "src/**/*.ts"],
+  "include": [
+    "alchemy.run.ts",
+    "src/**/*.ts"
+  ],
   "compilerOptions": {
     "noEmit": true,
     "rootDir": ".",
@@ -11,6 +14,9 @@
   "references": [
     {
       "path": "../../alchemy-effect/tsconfig.json"
+    },
+    {
+      "path": "../../packages/better-auth/tsconfig.json"
     }
   ]
 }
