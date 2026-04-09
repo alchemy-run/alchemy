@@ -1,3 +1,4 @@
+import * as BetterAuth from "@alchemy.run/better-auth";
 import * as Cloudflare from "alchemy-effect/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as HttpBody from "effect/unstable/http/HttpBody";
@@ -5,7 +6,6 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import Agent from "./Agent.ts";
-import { BetterAuth, BetterAuthLive } from "./BetterAuth.ts";
 import NotifyWorkflow from "./NotifyWorkflow.ts";
 import Room from "./Room.ts";
 
@@ -22,7 +22,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
     assets: "./assets",
   },
   Effect.gen(function* () {
-    const betterAuth = yield* BetterAuth;
+    const betterAuth = yield* BetterAuth.BetterAuth;
     const agents = yield* Agent;
     const rooms = yield* Room;
     const notifier = yield* NotifyWorkflow;
@@ -131,5 +131,5 @@ export default class Api extends Cloudflare.Worker<Api>()(
         return HttpServerResponse.text("Hello World", { status: 200 });
       }),
     };
-  }).pipe(Effect.provide(BetterAuthLive)),
+  }).pipe(Effect.provide(BetterAuth.CloudflareD1)),
 ) {}

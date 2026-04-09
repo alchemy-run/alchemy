@@ -16,10 +16,11 @@
     "tail": "alchemy-effect tail"
   },
   "dependencies": {
+    "@alchemy.run/better-auth": "workspace:*",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "alchemy-effect": "workspace:*",
-    "better-auth": "^1.6.1",
+    "better-auth": "catalog:",
     "effect": "catalog:"
   }
 }
