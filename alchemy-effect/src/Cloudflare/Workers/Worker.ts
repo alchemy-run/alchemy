@@ -165,6 +165,7 @@ export interface WorkerProps extends PlatformProps {
     enabled?: boolean;
     previewsEnabled?: boolean;
   };
+  /** @internal used by Cloudflare.Vite resource */
   vite?: {
     cwd?: string;
     memo?: MemoOptions;
