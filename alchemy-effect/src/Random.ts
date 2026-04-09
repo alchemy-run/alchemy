@@ -10,13 +10,13 @@ export interface RandomProps {
   bytes?: number;
 }
 
-export interface Random extends Resource<
+export type Random = Resource<
   "Alchemy.Random",
   RandomProps,
   {
     text: Redacted.Redacted<string>;
   }
-> {}
+>;
 
 export const makeRandom = (id: string, props?: RandomProps) =>
   Random(id, props).pipe(Effect.flatMap((rand) => rand.text.asEffect()));

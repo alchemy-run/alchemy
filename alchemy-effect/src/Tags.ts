@@ -31,7 +31,7 @@ export const createTagsList = (tags: Tags) =>
       Value,
     }));
 
-export const createInternalTags = Effect.fn(function* (id: string) {
+export const createInternalTags = Effect.fnUntraced(function* (id: string) {
   const stack = yield* Stack;
   const stage = yield* Stage;
   return {
@@ -45,7 +45,9 @@ export const createInternalTags = Effect.fn(function* (id: string) {
  * Creates AWS-compatible tag filters for finding resources by alchemy tags.
  * Use with AWS describe APIs that accept Filter parameters.
  */
-export const createAlchemyTagFilters = Effect.fn(function* (id: string) {
+export const createAlchemyTagFilters = Effect.fnUntraced(function* (
+  id: string,
+) {
   const stack = yield* Stack;
   const stage = yield* Stage;
   return [
@@ -58,7 +60,7 @@ export const createAlchemyTagFilters = Effect.fn(function* (id: string) {
 /**
  * Checks if a resource has the expected alchemy tags for this app/stage/id.
  */
-export const hasAlchemyTags = Effect.fn(function* (
+export const hasAlchemyTags = Effect.fnUntraced(function* (
   id: string,
   tags: Tags | undefined,
 ) {

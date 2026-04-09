@@ -81,11 +81,6 @@
       "bun": "./src/Construct/index.ts",
       "import": "./lib/Construct/index.js"
     },
-    "./Kubernetes": {
-      "types": "./src/Kubernetes/index.d.ts",
-      "bun": "./src/Kubernetes/index.ts",
-      "import": "./lib/Kubernetes/index.js"
-    },
     "./Bundle": {
       "types": "./src/Bundle/index.d.ts",
       "bun": "./src/Bundle/index.ts",
@@ -116,10 +111,10 @@
       "bun": "./src/Endpoint/index.ts",
       "import": "./lib/Endpoint/index.js"
     },
-    "./SQLite": {
-      "types": "./src/SQLite/index.d.ts",
-      "bun": "./src/SQLite/index.ts",
-      "import": "./lib/SQLite/index.js"
+    "./Kubernetes": {
+      "types": "./src/Kubernetes/index.d.ts",
+      "bun": "./src/Kubernetes/index.ts",
+      "import": "./lib/Kubernetes/index.js"
     },
     "./Output": {
       "types": "./src/Output.d.ts",
@@ -130,6 +125,11 @@
       "types": "./src/Process/index.d.ts",
       "bun": "./src/Process/index.ts",
       "import": "./lib/Process/index.js"
+    },
+    "./SQLite": {
+      "types": "./src/SQLite/index.d.ts",
+      "bun": "./src/SQLite/index.ts",
+      "import": "./lib/SQLite/index.js"
     },
     "./TUI": {
       "types": "./src/TUI/index.d.ts",
@@ -180,6 +180,7 @@
     "@types/aws-lambda": "catalog:",
     "ai": "catalog:",
     "aws4fetch": "catalog:",
+    "capnp-es": "catalog:",
     "cloudflare": "catalog:",
     "fast-glob": "^3.3.2",
     "fast-xml-parser": "catalog:",
@@ -188,6 +189,7 @@
     "rolldown": "catalog:",
     "solid-js": "catalog:",
     "web-tree-sitter": "catalog:",
+    "workerd": "catalog:",
     "yaml": "catalog:"
   },
   "devDependencies": {
@@ -200,6 +202,7 @@
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "^19.2.2",
+    "better-auth": "catalog:",
     "effect": "catalog:",
     "ink": "^6.3.1",
     "pathe": "^2.0.3",
