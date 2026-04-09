@@ -3,19 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { LogLine, LogsInput } from "../Provider.ts";
 
-/**
- * Progressively wider lookback windows used when `since` is omitted.
- * We try each in order, stopping as soon as we get results.
- * This keeps the common case (recent activity) fast while still finding
- * older logs without asking Cloudflare to scan an enormous range up-front.
- */
-const LOOKBACK_WINDOWS_MS = [
-  1 * 60 * 60 * 1000, //  1 hour
-  6 * 60 * 60 * 1000, //  6 hours
-  24 * 60 * 60 * 1000, //  1 day
-  7 * 24 * 60 * 60 * 1000, //  7 days
-  30 * 24 * 60 * 60 * 1000, // 30 days
-];
+const DEFAULT_LOOKBACK_MS = 1 * 60 * 60 * 1000;
 
 export interface TelemetryFilter {
   key: string;
@@ -81,23 +69,18 @@ export const CloudflareLogs = Effect.gen(function* () {
         return parseEvents(response);
       }
 
-      for (const window of LOOKBACK_WINDOWS_MS) {
-        const response = yield* queryTelemetry({
-          accountId: opts.accountId,
-          queryId: "events",
-          view: "events",
-          timeframe: { from: now - window, to: now },
-          limit,
-          parameters: {
-            filters: opts.filters,
-            orderBy: { value: "timestamp", order: "desc" },
-          },
-        });
-        const lines = parseEvents(response);
-        if (lines.length > 0) return lines;
-      }
+      const response = yield* queryTelemetry({
+        accountId: opts.accountId,
+        queryId: "events",
+        view: "events",
+        timeframe: { from: now - DEFAULT_LOOKBACK_MS, to: now },
+        limit,
+        parameters: {
+          filters: opts.filters,
+        },
+      });
 
-      return [];
+      return parseEvents(response);
     });
 
   const tailStream = (opts: {
