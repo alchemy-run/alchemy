@@ -10,7 +10,10 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as Socket from "effect/unstable/socket/Socket";
 import * as util from "node:util";
 import * as Http from "../../Http.ts";
-import { isWorkerEvent } from "./Worker.ts";
+import { Request } from "./Request.ts";
+import { isWorkerEvent, type WorkerServices } from "./Worker.ts";
+
+export type HttpEffect = Http.HttpEffect<WorkerServices>;
 
 export const workersHttpHandler = <Req = never>(
   handler: Http.HttpEffect<Req>,
@@ -130,6 +133,7 @@ export const serveWebRequest = <Req = never>(
     const request = make();
     const response = yield* handler.pipe(
       Effect.provideService(HttpServerRequest.HttpServerRequest, request),
+      Effect.provideService(Request, webRequest as any),
       Effect.catchCause((cause) => {
         console.error(
           "[serveWebRequest] handler error:",

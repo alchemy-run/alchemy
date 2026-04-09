@@ -4,6 +4,7 @@ export * from "./DurableObject.ts";
 export * from "./DynamicWorker.ts";
 export * from "./Fetch.ts";
 export * from "./HttpServer.ts";
+export * from "./Request.ts";
 export * from "./Rpc.ts";
 export * from "./WebSocket.ts";
 export * from "./Worker.ts";
