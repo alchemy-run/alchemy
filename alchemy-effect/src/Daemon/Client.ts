@@ -10,6 +10,7 @@ import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner
 import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
 import * as Socket from "effect/unstable/socket/Socket";
 import { resolveSocketPath } from "./Config.ts";
+import { DaemonConnectFailed, DaemonSocketNotReady } from "./Errors.ts";
 import { DaemonRpcs } from "./RpcSchema.ts";
 
 export type DaemonClient = Effect.Success<ReturnType<typeof makeClient>>;
@@ -58,16 +59,19 @@ export const DaemonLive: Layer.Layer<
     const socketPath = yield* resolveSocketPath;
 
     const client = yield* tryConnect(socketPath).pipe(
-      Effect.catch(() =>
+      Effect.catchTag("DaemonConnectFailed", () =>
         Effect.gen(function* () {
           yield* Effect.logInfo("Starting daemon…");
           yield* startDaemonProcess.pipe(Effect.forkChild);
           yield* waitForSocket(socketPath);
           yield* Effect.sleep("200 millis");
-          return yield* makeClient(socketPath);
+          return yield* tryConnect(socketPath);
         }),
       ),
-      Effect.catch(() => Effect.die(new Error("Failed to connect to daemon"))),
+      Effect.catchTag("PlatformError", (e) => Effect.die(e)),
+      Effect.catchTag("DaemonConnectFailed", () =>
+        Effect.die(new Error("Failed to connect to daemon")),
+      ),
     );
 
     yield* client
@@ -89,17 +93,20 @@ const waitForSocket = (socketPath: string) =>
     const fs = yield* FileSystem.FileSystem;
     yield* fs.exists(socketPath).pipe(
       Effect.flatMap((exists) =>
-        exists ? Effect.void : Effect.fail("not yet" as const),
+        exists ? Effect.void : Effect.fail(new DaemonSocketNotReady()),
       ),
       Effect.retry(
         Schedule.spaced("100 millis").pipe(Schedule.both(Schedule.recurs(50))),
+      ),
+      Effect.catchTag("DaemonSocketNotReady", () =>
+        Effect.fail(new DaemonConnectFailed()),
       ),
     );
   });
 
 const tryConnect = (socketPath: string) =>
   makeClient(socketPath).pipe(
-    Effect.catch(() => Effect.fail("connect-failed" as const)),
+    Effect.catch(() => Effect.fail(new DaemonConnectFailed())),
   );
 
 const startDaemonProcess = Effect.gen(function* () {

@@ -13,7 +13,7 @@ export class ProcessNotFound extends Schema.TaggedClass<ProcessNotFound>()(
   { id: Schema.String },
 ) {}
 
-// Data-based errors used only by the server
+// Data-based errors used internally by the daemon runtime
 
 export class DaemonAlreadyRunning extends Data.TaggedError(
   "DaemonAlreadyRunning",
@@ -30,3 +30,19 @@ export class DaemonAlreadyRunning extends Data.TaggedError(
 export class LockCompromised extends Data.TaggedError("LockCompromised")<{
   readonly lockDir: string;
 }> {}
+
+export class DaemonSocketNotReady extends Data.TaggedError(
+  "DaemonSocketNotReady",
+) {
+  get message() {
+    return "Daemon socket is not ready yet";
+  }
+}
+
+export class DaemonConnectFailed extends Data.TaggedError(
+  "DaemonConnectFailed",
+) {
+  get message() {
+    return "Failed to connect to daemon";
+  }
+}

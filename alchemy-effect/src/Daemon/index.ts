@@ -15,6 +15,8 @@ export type { DaemonClient } from "./Client.ts";
 
 export {
   DaemonAlreadyRunning,
+  DaemonConnectFailed,
+  DaemonSocketNotReady,
   LockCompromised,
   ProcessAlreadyExists,
   ProcessNotFound,
