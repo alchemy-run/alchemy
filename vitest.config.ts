@@ -1,12 +1,9 @@
-import tsconfigPaths from "vite-tsconfig-paths";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  plugins: [
-    tsconfigPaths({
-      projects: ["alchemy-effect/tsconfig.test.json"],
-    }) as any,
-  ],
+  resolve: {
+    tsconfigPaths: true,
+  },
   test: {
     pool: "threads",
     maxWorkers: 32,
