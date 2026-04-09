@@ -348,7 +348,7 @@ export const AutoScalingGroupProvider = () =>
             Effect.retry({
               while: () => true,
               schedule: Schedule.recurs(8).pipe(
-                Schedule.compose(Schedule.exponential("250 millis")),
+                Schedule.both(Schedule.exponential("250 millis")),
               ),
             }),
           );
@@ -430,7 +430,7 @@ export const AutoScalingGroupProvider = () =>
               while: (error) =>
                 (error as Error).message === "AutoScalingGroupStillExists",
               schedule: Schedule.recurs(12).pipe(
-                Schedule.compose(Schedule.exponential("250 millis")),
+                Schedule.both(Schedule.exponential("250 millis")),
               ),
             }),
           );

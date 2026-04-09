@@ -71,9 +71,7 @@ const waitForSocket = (cwd: string) =>
         exists ? Effect.void : Effect.fail("not yet" as const),
       ),
       Effect.retry(
-        Schedule.spaced("50 millis").pipe(
-          Schedule.compose(Schedule.recurs(100)),
-        ),
+        Schedule.spaced("50 millis").pipe(Schedule.both(Schedule.recurs(100))),
       ),
     );
   });

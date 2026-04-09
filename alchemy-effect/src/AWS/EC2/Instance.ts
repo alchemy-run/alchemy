@@ -499,7 +499,7 @@ export const InstanceProvider = () =>
               error instanceof InstanceStateMismatch ||
               isPendingInstanceLookupError(error),
             schedule: Schedule.exponential("250 millis").pipe(
-              Schedule.compose(Schedule.recurs(8)),
+              Schedule.both(Schedule.recurs(8)),
             ),
           }),
         );
@@ -526,7 +526,7 @@ export const InstanceProvider = () =>
           Effect.retry({
             while: (error) => error instanceof InstanceStillExists,
             schedule: Schedule.exponential("250 millis").pipe(
-              Schedule.compose(Schedule.recurs(8)),
+              Schedule.both(Schedule.recurs(8)),
             ),
           }),
           Effect.catchTag("InvalidInstanceID.NotFound", () => Effect.void),
@@ -678,7 +678,7 @@ export const InstanceProvider = () =>
               Effect.retry({
                 while: isPendingInstanceProfileError,
                 schedule: Schedule.exponential("500 millis").pipe(
-                  Schedule.compose(Schedule.recurs(8)),
+                  Schedule.both(Schedule.recurs(8)),
                 ),
               }),
             );

@@ -67,7 +67,6 @@ export const DaemonLive: Layer.Layer<
           return yield* makeClient(socketPath);
         }),
       ),
-      Effect.catchTag("PlatformError", (e) => Effect.die(e)),
       Effect.catch(() => Effect.die(new Error("Failed to connect to daemon"))),
     );
 
@@ -93,9 +92,7 @@ const waitForSocket = (socketPath: string) =>
         exists ? Effect.void : Effect.fail("not yet" as const),
       ),
       Effect.retry(
-        Schedule.spaced("100 millis").pipe(
-          Schedule.compose(Schedule.recurs(50)),
-        ),
+        Schedule.spaced("100 millis").pipe(Schedule.both(Schedule.recurs(50))),
       ),
     );
   });
