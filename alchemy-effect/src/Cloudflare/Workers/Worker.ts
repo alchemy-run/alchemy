@@ -202,9 +202,9 @@ export interface Worker extends Resource<
     tags: string[] | undefined;
     accountId: string;
     hash?: {
-      input: string | undefined;
       assets: string | undefined;
       bundle: string;
+      input: string | undefined;
     };
   },
   {
