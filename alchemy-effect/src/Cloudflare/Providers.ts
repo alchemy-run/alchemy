@@ -5,8 +5,10 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Socket from "effect/unstable/socket/Socket";
 import { CommandProvider } from "../Build/Command.ts";
 import type { Provider } from "../Provider.ts";
+import { RandomProvider } from "../Random.ts";
 import * as Account from "./Account.ts";
 import { ContainerProvider } from "./Container.ts";
+import * as D1 from "./D1/index.ts";
 import * as KV from "./KV/index.ts";
 import * as R2 from "./R2/index.ts";
 import { AssetsProvider } from "./Workers/Assets.ts";
@@ -45,9 +47,11 @@ export const credentials = () =>
 export const resources = () =>
   Layer.mergeAll(
     CommandProvider(),
+    RandomProvider(),
     ContainerProvider(),
     WorkerProvider(),
     WorkflowProvider(),
+    D1.DatabaseProvider(),
     KV.NamespaceProvider(),
     R2.BucketProvider(),
   );
@@ -57,6 +61,7 @@ export const resources = () =>
  */
 export const bindings = () =>
   Layer.mergeAll(
+    D1.D1ConnectionPolicyLive,
     R2.GetObjectPolicyLive,
     R2.PutObjectPolicyLive,
     R2.DeleteObjectPolicyLive,
