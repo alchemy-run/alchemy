@@ -1,7 +1,9 @@
 import type * as cf from "@cloudflare/workers-types";
-import cloudflare from "@distilled.cloud/cloudflare-rolldown-plugin";
+import cloudflareRolldown from "@distilled.cloud/cloudflare-rolldown-plugin";
+import cloudflareVite from "@distilled.cloud/cloudflare-vite-plugin";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import type * as Cause from "effect/Cause";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -13,7 +15,9 @@ import * as ServiceMap from "effect/ServiceMap";
 import * as Stream from "effect/Stream";
 import * as Socket from "effect/unstable/socket/Socket";
 import type * as rolldown from "rolldown";
+import * as vite from "vite";
 import * as Binding from "../../Binding.ts";
+import type { MemoOptions } from "../../Build/Memo.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
@@ -161,6 +165,10 @@ export interface WorkerProps extends PlatformProps {
   subdomain?: {
     enabled?: boolean;
     previewsEnabled?: boolean;
+  };
+  vite?: {
+    cwd?: string;
+    memo?: MemoOptions;
   };
   logpush?: boolean;
   observability?: WorkerObservability;
@@ -423,6 +431,20 @@ export const WorkerProvider = () =>
         return createAlchemyWorkerTags(id).every((tag) => actualTags.has(tag));
       };
 
+      const prepare = Effect.fnUntraced(function* (
+        id: string,
+        props: WorkerProps,
+      ) {
+        if (props.vite) {
+          return yield* viteBuild(props);
+        }
+        const [assets, bundle] = yield* Effect.all([
+          prepareAssets(props.assets),
+          prepareBundle(id, props),
+        ]);
+        return { assets, bundle };
+      });
+
       const prepareAssets = Effect.fnUntraced(function* (
         assets: WorkerProps["assets"],
       ) {
@@ -451,6 +473,67 @@ export const WorkerProvider = () =>
         );
       });
 
+      const viteBuild = Effect.fnUntraced(function* (props: WorkerProps) {
+        const vite = yield* Effect.promise(() => import("vite"));
+        const serverResult = yield* Deferred.make<vite.Rolldown.OutputBundle>();
+        const clientResult = yield* Deferred.make<string>();
+
+        const ssrOutputPlugin = {
+          name: "output:ssr",
+          applyToEnvironment(environment) {
+            return environment.name === "ssr";
+          },
+          generateBundle(_outputOptions, bundle) {
+            Deferred.doneUnsafe(serverResult, Effect.succeed(bundle));
+          },
+        } satisfies vite.Plugin;
+
+        const assetsDirectoryPlugin = {
+          name: "output:client",
+          applyToEnvironment(environment) {
+            return environment.name === "client";
+          },
+          generateBundle(outputOptions) {
+            Deferred.doneUnsafe(
+              clientResult,
+              Effect.succeed(outputOptions.dir!),
+            );
+          },
+        } satisfies vite.Plugin;
+
+        yield* Effect.tryPromise(async () => {
+          const builder = await vite.createBuilder({
+            root: props.vite?.cwd ?? process.cwd(),
+            plugins: [
+              cloudflareVite({
+                compatibilityDate: props.compatibility?.date,
+                compatibilityFlags: props.compatibility?.flags,
+              }),
+              ssrOutputPlugin,
+              assetsDirectoryPlugin,
+            ],
+          });
+          await builder.buildApp();
+        });
+        const [assets, bundle] = yield* Effect.all([
+          Deferred.await(clientResult).pipe(
+            Effect.flatMap((dir) =>
+              read({
+                directory: dir,
+                config:
+                  typeof props.assets === "object" && "config" in props.assets
+                    ? props.assets.config
+                    : undefined,
+              }),
+            ),
+          ),
+          Deferred.await(serverResult).pipe(
+            Effect.flatMap(Bundle.bundleOutputFromRolldownOutputBundle),
+          ),
+        ]);
+        return { assets, bundle };
+      });
+
       const prepareBundle = Effect.fnUntraced(function* (
         id: string,
         props: WorkerProps,
@@ -463,7 +546,7 @@ export const WorkerProvider = () =>
               input: main,
               cwd,
               plugins: [
-                cloudflare({
+                cloudflareRolldown({
                   compatibilityDate: props.compatibility?.date ?? "2026-03-10",
                   compatibilityFlags: props.compatibility?.flags,
                 }),
@@ -627,10 +710,7 @@ ${[
         yield* Effect.logInfo(
           `Cloudflare Worker ${olds ? "update" : "create"}: preparing bundle for ${name}`,
         );
-        const [assets, bundle] = yield* Effect.all([
-          prepareAssets(news.assets),
-          prepareBundle(id, news),
-        ]);
+        const { assets, bundle } = yield* prepare(id, news);
         const metadataBindings = bindings.flatMap((b) => b.data.bindings);
         let metadataAssets:
           | workers.PutScriptRequest["metadata"]["assets"]
@@ -946,10 +1026,7 @@ ${[
           if (!output) {
             return;
           }
-          const [assets, bundle] = yield* Effect.all([
-            prepareAssets(news.assets),
-            prepareBundle(id, news),
-          ]);
+          const { assets, bundle } = yield* prepare(id, news);
           if (
             assets?.hash !== output.hash?.assets ||
             bundle.hash !== output.hash?.bundle

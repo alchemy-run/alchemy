@@ -11,6 +11,7 @@ export default Stack.make(
   Effect.gen(function* () {
     const worker = yield* Cloudflare.Worker("TanStack", {
       main: undefined!,
+      vite: {},
       compatibility: {
         date: "2026-04-09",
         flags: ["nodejs_compat"],
