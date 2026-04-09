@@ -3,16 +3,19 @@ import * as Cloudflare from "alchemy-effect/Cloudflare";
 // import * as GitHub from "alchemy-effect/GitHub";
 import * as Stack from "alchemy-effect/Stack";
 import * as Effect from "effect/Effect";
-import Worker from "./src/worker.ts";
 
 export default Stack.make(
   "CloudflareTanstackExample",
   Cloudflare.providers(),
 )(
   Effect.gen(function* () {
-    // const stage = yield* Stage;
-
-    const worker = yield* Worker;
+    const worker = yield* Cloudflare.Worker("TanStack", {
+      main: undefined!,
+      compatibility: {
+        date: "2026-04-09",
+        flags: ["nodejs_compat"],
+      },
+    });
 
     // if (stage.startsWith("pr-")) {
     //   yield* GitHub.Comment("Preview")`Preview deployed to ${worker.url}`;
