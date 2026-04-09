@@ -17,6 +17,7 @@ export * as Output from "./Output.ts";
 export * from "./PhysicalName.ts";
 export * as Plan from "./Plan.ts";
 export * from "./Provider.ts";
+export * from "./Random.ts";
 export * from "./Ref.ts";
 export * as RemovalPolicy from "./RemovalPolicy.ts";
 export * from "./Resource.ts";

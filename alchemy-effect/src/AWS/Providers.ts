@@ -3,6 +3,7 @@ import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
 import { CommandProvider } from "../Build/Command.ts";
 import type { Provider } from "../Provider.ts";
+import { RandomProvider } from "../Random.ts";
 import * as Account from "./Account.ts";
 import * as ACM from "./ACM/index.ts";
 import * as Assets from "./Assets.ts";
@@ -84,6 +85,7 @@ export const credentials = () =>
 export const resources = () =>
   Layer.mergeAll(
     CommandProvider(),
+    RandomProvider(),
     ACM.CertificateProvider(),
     AutoScaling.AutoScalingGroupProvider(),
     AutoScaling.LaunchTemplateProvider(),
