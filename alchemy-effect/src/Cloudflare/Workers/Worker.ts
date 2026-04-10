@@ -433,7 +433,7 @@ export const WorkerProvider = () =>
       };
 
       const prepare = Effect.fnUntraced(
-        function* (id: string, props: WorkerProps) {
+        function* (props: WorkerProps) {
           if (props.vite) {
             const [{ assets, bundle }, input] = yield* Effect.all(
               [viteBuild(props), hashDirectory(props.vite)],
@@ -442,7 +442,7 @@ export const WorkerProvider = () =>
             return { assets, bundle, input };
           }
           const [assets, bundle] = yield* Effect.all(
-            [prepareAssets(props.assets), prepareBundle(id, props)],
+            [prepareAssets(props.assets), prepareBundle(props)],
             { concurrency: "unbounded" },
           );
           return { assets, bundle };
@@ -560,10 +560,7 @@ export const WorkerProvider = () =>
         return { assets, bundle };
       });
 
-      const prepareBundle = Effect.fnUntraced(function* (
-        id: string,
-        props: WorkerProps,
-      ) {
+      const prepareBundle = Effect.fnUntraced(function* (props: WorkerProps) {
         const main = yield* fs.realPath(props.main);
         const cwd = yield* findCwdForBundle(main);
         const buildBundle = (plugins?: rolldown.RolldownPluginOption) =>
@@ -736,7 +733,7 @@ ${[
         yield* Effect.logInfo(
           `Cloudflare Worker ${olds ? "update" : "create"}: preparing bundle for ${name}`,
         );
-        const { assets, bundle, hash } = yield* prepare(id, news);
+        const { assets, bundle, hash } = yield* prepare(news);
         const metadataBindings = bindings.flatMap((b) => b.data.bindings);
         let metadataAssets:
           | workers.PutScriptRequest["metadata"]["assets"]
@@ -1027,7 +1024,6 @@ ${[
       });
 
       const hasChanged = Effect.fnUntraced(function* (
-        id: string,
         props: WorkerProps,
         output: Worker["Attributes"],
       ) {
@@ -1040,7 +1036,7 @@ ${[
             "assets" in output && output.hash?.assets
               ? Effect.succeed(output.hash.assets)
               : prepareAssets(props.assets).pipe(Effect.map((a) => a?.hash)),
-            prepareBundle(id, props).pipe(Effect.map((b) => b.hash)),
+            prepareBundle(props).pipe(Effect.map((b) => b.hash)),
           ],
           { concurrency: "unbounded" },
         );
@@ -1067,7 +1063,7 @@ ${[
           if (!output) {
             return;
           }
-          if (yield* hasChanged(id, news, output)) {
+          if (yield* hasChanged(news, output)) {
             return {
               action: "update",
               stables:
