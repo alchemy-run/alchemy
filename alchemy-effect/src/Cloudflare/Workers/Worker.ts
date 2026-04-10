@@ -397,6 +397,10 @@ export const WorkerProvider = () =>
       const listScripts = yield* workers.listScripts;
       const putScript = yield* workers.putScript;
       const telemetry = yield* CloudflareLogs;
+      const defaultCompatibilityDate = yield* Effect.promise(() =>
+        // @ts-expect-error no types for workerd
+        import("workerd").then((m) => m.compatibilityDate as string),
+      );
 
       const getAccountSubdomain = (accountId: string) =>
         getSubdomain({
@@ -470,7 +474,8 @@ export const WorkerProvider = () =>
               cwd,
               plugins: [
                 cloudflareRolldown({
-                  compatibilityDate: props.compatibility?.date ?? "2026-03-10",
+                  compatibilityDate:
+                    props.compatibility?.date ?? defaultCompatibilityDate,
                   compatibilityFlags: props.compatibility?.flags,
                 }),
                 plugins,
@@ -631,7 +636,8 @@ ${[
               root: props.vite?.cwd,
               plugins: [
                 cloudflareVite({
-                  compatibilityDate: props.compatibility?.date,
+                  compatibilityDate:
+                    props.compatibility?.date ?? defaultCompatibilityDate,
                   compatibilityFlags: props.compatibility?.flags,
                 }),
                 {
