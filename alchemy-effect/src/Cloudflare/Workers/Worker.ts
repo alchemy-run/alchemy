@@ -8,11 +8,13 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as ServiceMap from "effect/ServiceMap";
 import * as Stream from "effect/Stream";
 import * as Socket from "effect/unstable/socket/Socket";
 import type * as rolldown from "rolldown";
+import { Artifacts } from "../../Artifacts.ts";
 import * as Binding from "../../Binding.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
@@ -42,6 +44,7 @@ import cloudflare_workers from "./cloudflare_workers.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
 import { fromCloudflareFetcher } from "./Fetcher.ts";
 import { workersHttpHandler } from "./HttpServer.ts";
+import { Request } from "./Request.ts";
 import { makeRpcStub } from "./Rpc.ts";
 import { isWorkflowExport } from "./Workflow.ts";
 
@@ -175,13 +178,15 @@ export interface WorkerProps extends PlatformProps {
   placement?: WorkerPlacement;
   env?: Record<string, any>;
   exports?: string[];
+  /** @internal - only visible for the Vite resource */
+  vite?: boolean;
 }
 
 export interface WorkerExecutionContext extends Serverless.FunctionContext {
   export(name: string, value: any): Effect.Effect<void>;
 }
 
-export type WorkerServices = Worker | WorkerEnvironment;
+export type WorkerServices = Worker | WorkerEnvironment | Request;
 
 export type WorkerShape = Main<WorkerServices>;
 
@@ -249,11 +254,31 @@ export const Worker: Platform<
             ? Effect.succeed(value)
             : Effect.die(`Environment variable '${key}' not found`),
         ),
+        Effect.map((json) => {
+          try {
+            const value = JSON.parse(json);
+            if (!Redacted.isRedacted(value)) {
+              return Redacted.make(value.value);
+            }
+            return value;
+          } catch {
+            return json;
+          }
+        }),
       ) as any,
     set: (id: string, output: Output.Output) =>
       Effect.sync(() => {
         const key = id.replaceAll(/[^a-zA-Z0-9]/g, "_");
-        env[key] = output.pipe(Output.map((value) => JSON.stringify(value)));
+        env[key] = output.pipe(
+          Output.map((value) =>
+            Redacted.isRedacted(value)
+              ? JSON.stringify({
+                  _tag: "Redacted",
+                  value: Redacted.value(value),
+                })
+              : JSON.stringify(value),
+          ),
+        );
         return key;
       }),
     serve: <Req = never>(handler: HttpEffect<Req>) =>
@@ -462,6 +487,16 @@ export const WorkerProvider = () =>
         id: string,
         props: WorkerProps,
       ) {
+        const artifacts = yield* Artifacts;
+        const cached = yield* artifacts.get<{
+          files: File[];
+          mainModule: string;
+          hash: string;
+        }>("bundle");
+        if (cached) {
+          return cached;
+        }
+
         const realMain = yield* fs.realPath(props.main);
         const buildBundle = Effect.fnUntraced(function* (
           entry: string,
@@ -503,7 +538,9 @@ export const WorkerProvider = () =>
         });
 
         if (props.isExternal) {
-          return yield* buildBundle(realMain);
+          const bundle = yield* buildBundle(realMain);
+          yield* artifacts.set("bundle", bundle);
+          return bundle;
         }
 
         const exportMap = (props.exports ?? {}) as Record<string, unknown>;
@@ -574,7 +611,10 @@ const exportsEffect = tag.asEffect().pipe(
       Layer.provideMerge(
         Layer.succeed(
           ConfigProvider.ConfigProvider,
-          ConfigProvider.fromUnknown(env),
+          ConfigProvider.orElse(
+            ConfigProvider.fromUnknown({ ALCHEMY_PHASE: "runtime" }),
+            ConfigProvider.fromUnknown(env),
+          ),
         )
       ),
       Layer.provideMerge(
@@ -631,7 +671,9 @@ ${[
 ].join("\n")}
 `;
 
-        return yield* buildBundle(realMain, virtualEntryPlugin(script));
+        const bundle = yield* buildBundle(realMain, virtualEntryPlugin(script));
+        yield* artifacts.set("bundle", bundle);
+        return bundle;
       });
 
       const putWorker = Effect.fnUntraced(function* (

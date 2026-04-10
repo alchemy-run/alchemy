@@ -14,6 +14,7 @@ import { describe, expect } from "@effect/vitest";
 import { Data, Layer } from "effect";
 import * as Effect from "effect/Effect";
 import {
+  ArtifactProbe,
   BindingTarget,
   DeletedBindingRegressionTarget,
   Function,
@@ -3749,6 +3750,54 @@ describe("complex mixed state scenarios", () => {
       expect(output.A.replaceString).toEqual("changed");
       expect(output.B.string).toEqual("b-updated");
       expect(output.C.string).toEqual("c-value");
+    }).pipe(Effect.provide(MockLayers())),
+  );
+});
+
+describe("artifacts", () => {
+  test(
+    "shares artifacts from plan diff into apply update",
+    Effect.gen(function* () {
+      yield* Effect.gen(function* () {
+        yield* ArtifactProbe("A", { value: "v1" });
+      }).pipe(test.deploy);
+
+      const updated = yield* Effect.gen(function* () {
+        const A = yield* ArtifactProbe("A", { value: "v2" });
+        return { A };
+      }).pipe(test.deploy);
+
+      expect(updated.A.value).toEqual("v2");
+      expect(updated.A.artifactValue).toEqual("v2");
+      expect((yield* getState("A"))?.status).toEqual("updated");
+    }).pipe(Effect.provide(MockLayers())),
+  );
+
+  test(
+    "isolates artifact bags by FQN for namespaced resources with the same leaf logical ID",
+    Effect.gen(function* () {
+      const Site = Construct.fn(function* (
+        _id: string,
+        props: { value: string },
+      ) {
+        return yield* ArtifactProbe("Shared", { value: props.value });
+      });
+
+      yield* Effect.gen(function* () {
+        yield* Site("Left", { value: "left-v1" });
+        yield* Site("Right", { value: "right-v1" });
+      }).pipe(test.deploy);
+
+      const updated = yield* Effect.gen(function* () {
+        const left = yield* Site("Left", { value: "left-v2" });
+        const right = yield* Site("Right", { value: "right-v2" });
+        return { left, right };
+      }).pipe(test.deploy);
+
+      expect(updated.left.artifactValue).toEqual("left-v2");
+      expect(updated.right.artifactValue).toEqual("right-v2");
+      expect((yield* getState("Left/Shared"))?.status).toEqual("updated");
+      expect((yield* getState("Right/Shared"))?.status).toEqual("updated");
     }).pipe(Effect.provide(MockLayers())),
   );
 });

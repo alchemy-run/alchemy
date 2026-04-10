@@ -23,6 +23,7 @@ import * as Cloudflare from "../Cloudflare/index.ts";
 
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import { apply } from "../Apply.ts";
+import { Artifacts, provideFreshArtifactStore } from "../Artifacts.ts";
 import * as Credentials from "../AWS/Credentials.ts";
 import * as Region from "../AWS/Region.ts";
 import type { Command } from "../Build/Command.ts";
@@ -78,6 +79,7 @@ type Provided =
   | Server.ServerHost
   | Serverless.FunctionContext
   | AWS.StageConfig
+  | Artifacts
   | Provider<Command>
   | Layer.Success<ReturnType<typeof AWS.providers>>
   | Layer.Success<ReturnType<typeof Cloudflare.providers>>
@@ -337,17 +339,23 @@ export namespace test {
     effect: Effect.Effect<A, Err, Req>,
   ): Effect.Effect<Input.Resolve<A>, Err, Req | Stack.Stack> =>
     Stack.Stack.use((stack) => {
-      return effect.pipe(
-        // Effect.tap(Effect.logInfo),
-        // @ts-expect-error
-        Stack.make(stack.name, Layer.effectServices(Effect.services<never>()), {
-          ...stack,
-          resources: {},
-          bindings: {},
-        }),
-        Effect.flatMap(Plan.make),
-        Effect.tap((plan) => Effect.logInfo(formatPlan(plan))),
-        Effect.flatMap(apply),
+      return provideFreshArtifactStore(
+        effect.pipe(
+          // Effect.tap(Effect.logInfo),
+          // @ts-expect-error
+          Stack.make(
+            stack.name,
+            Layer.effectServices(Effect.services<never>()),
+            {
+              ...stack,
+              resources: {},
+              bindings: {},
+            },
+          ),
+          Effect.flatMap(Plan.make),
+          Effect.tap((plan) => Effect.logInfo(formatPlan(plan))),
+          Effect.flatMap(apply),
+        ),
       );
     });
 }

@@ -39,6 +39,10 @@ export interface StackSpec<Output = any> {
   output: Output;
 }
 
+export interface CompiledStack<Output, Services> extends StackSpec<Output> {
+  services: ServiceMap.ServiceMap<Services>;
+}
+
 export const StackName = Stack.use((stack) => Effect.succeed(stack.name));
 
 export const make =
@@ -56,11 +60,17 @@ export const make =
       Stack.asEffect(),
       Effect.services<ROut | StackServices>(),
     ]).pipe(
-      Effect.map(([output, stack, services]) => ({
-        output,
-        services,
-        ...stack,
-      })),
+      Effect.map(
+        ([output, stack, services]) =>
+          ({
+            output,
+            services,
+            ...stack,
+          }) satisfies CompiledStack<A, ROut | StackServices> as CompiledStack<
+            A,
+            ROut | StackServices
+          >,
+      ),
       Effect.provide(providers),
       Effect.provideServiceEffect(
         Stack,

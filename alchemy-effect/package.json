@@ -146,6 +146,11 @@
       "bun": "./src/State/index.ts",
       "import": "./lib/State/index.js"
     },
+    "./Test/Bun": {
+      "types": "./src/Test/Bun.d.ts",
+      "bun": "./src/Test/Bun.ts",
+      "import": "./lib/Test/Bun.js"
+    },
     "./Util": {
       "types": "./src/Util/index.d.ts",
       "bun": "./src/Util/index.ts",
