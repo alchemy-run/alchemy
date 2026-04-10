@@ -204,7 +204,7 @@ export interface Worker extends Resource<
     accountId: string;
     hash?: {
       assets: string | undefined;
-      bundle: string;
+      bundle: string | undefined;
       input: string | undefined;
     };
   },
@@ -487,48 +487,55 @@ export const WorkerProvider = () =>
         let clientDir: string | undefined;
 
         yield* Effect.tryPromise(async () => {
-          const builder = await vite.createBuilder({
-            root: props.vite?.cwd,
-            plugins: [
-              cloudflareVite({
-                compatibilityDate: props.compatibility?.date,
-                compatibilityFlags: props.compatibility?.flags,
-              }),
-              {
-                name: "output:ssr",
-                applyToEnvironment(environment) {
-                  return environment.name === "ssr";
+          const builder = await vite.createBuilder(
+            {
+              root: props.vite?.cwd,
+              plugins: [
+                cloudflareVite({
+                  compatibilityDate: props.compatibility?.date,
+                  compatibilityFlags: props.compatibility?.flags,
+                }),
+                {
+                  name: "output:ssr",
+                  applyToEnvironment(environment) {
+                    return environment.name === "ssr";
+                  },
+                  generateBundle(_outputOptions, bundle) {
+                    serverBundle = bundle;
+                  },
                 },
-                generateBundle(_outputOptions, bundle) {
-                  serverBundle = bundle;
+                {
+                  name: "output:client",
+                  applyToEnvironment(environment) {
+                    return environment.name === "client";
+                  },
+                  generateBundle(outputOptions) {
+                    clientDir = outputOptions.dir;
+                  },
                 },
-              },
-              {
-                name: "output:client",
-                applyToEnvironment(environment) {
-                  return environment.name === "client";
-                },
-                generateBundle(outputOptions) {
-                  clientDir = outputOptions.dir;
-                },
-              },
-            ],
-          });
+              ],
+            },
+            null, // no idea what this does
+          );
           await builder.buildApp();
         });
-        if (!serverBundle || !clientDir) {
+        if (!serverBundle && !clientDir) {
           return yield* Effect.die(new Error("Failed to build Vite bundle"));
         }
         const [assets, bundle] = yield* Effect.all(
           [
-            read({
-              directory: clientDir,
-              config:
-                typeof props.assets === "object" && "config" in props.assets
-                  ? props.assets.config
-                  : undefined,
-            }),
-            Bundle.bundleOutputFromRolldownOutputBundle(serverBundle),
+            clientDir
+              ? read({
+                  directory: clientDir,
+                  config:
+                    typeof props.assets === "object" && "config" in props.assets
+                      ? props.assets.config
+                      : undefined,
+                })
+              : Effect.succeed(undefined),
+            serverBundle
+              ? Bundle.bundleOutputFromRolldownOutputBundle(serverBundle)
+              : Effect.succeed(undefined),
           ],
           { concurrency: "unbounded" },
         );
@@ -928,7 +935,7 @@ ${[
           keepBindings: undefined,
           limits: news.limits,
           logpush: news.logpush,
-          mainModule: bundle.files[0].path,
+          mainModule: bundle?.files[0].path,
           migrations,
           observability: news.observability ?? {
             enabled: true,
@@ -942,7 +949,7 @@ ${[
           tailConsumers: undefined,
           usageModel: undefined,
         };
-        const files = bundle.files.map(
+        const files = bundle?.files.map(
           (file) =>
             new File([file.content as BlobPart], file.path, {
               type: contentTypeFromExtension(path.extname(file.path)),
@@ -1005,7 +1012,7 @@ ${[
           accountId,
           hash: {
             assets: assets?.hash,
-            bundle: bundle.hash,
+            bundle: bundle?.hash,
             input,
           },
         } satisfies Worker["Attributes"];
