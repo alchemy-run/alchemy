@@ -432,40 +432,6 @@ export const WorkerProvider = () =>
         return createAlchemyWorkerTags(id).every((tag) => actualTags.has(tag));
       };
 
-      const prepare = Effect.fnUntraced(
-        function* (props: WorkerProps) {
-          if (props.vite) {
-            const [{ assets, bundle }, input] = yield* Effect.all(
-              [viteBuild(props), hashDirectory(props.vite)],
-              { concurrency: "unbounded" },
-            );
-            return { assets, bundle, input };
-          }
-          const [assets, bundle] = yield* Effect.all(
-            [prepareAssets(props.assets), prepareBundle(props)],
-            { concurrency: "unbounded" },
-          );
-          return { assets, bundle };
-        },
-        Effect.map(({ assets, bundle, input }) => ({
-          assets,
-          bundle: {
-            main: bundle?.files[0].path,
-            files: bundle?.files.map(
-              (file) =>
-                new File([file.content as BlobPart], file.path, {
-                  type: contentTypeFromExtension(path.extname(file.path)),
-                }),
-            ),
-          },
-          hash: {
-            assets: assets?.hash,
-            bundle: bundle?.hash,
-            input,
-          } satisfies Worker["Attributes"]["hash"],
-        })),
-      );
-
       const prepareAssets = Effect.fnUntraced(function* (
         assets: WorkerProps["assets"],
       ) {
@@ -492,72 +458,6 @@ export const WorkerProvider = () =>
         return yield* read(
           typeof assets === "string" ? { directory: assets } : assets,
         );
-      });
-
-      const viteBuild = Effect.fnUntraced(function* (props: WorkerProps) {
-        const vite = yield* Effect.promise(() => import("vite"));
-        let assetsDirectory: string | undefined;
-        let serverBundle: vite.Rolldown.OutputBundle | undefined;
-
-        yield* Effect.promise(async () => {
-          const builder = await vite.createBuilder(
-            {
-              root: props.vite?.cwd,
-              plugins: [
-                cloudflareVite({
-                  compatibilityDate: props.compatibility?.date,
-                  compatibilityFlags: props.compatibility?.flags,
-                }),
-                {
-                  name: "output:ssr",
-                  applyToEnvironment(environment) {
-                    return environment.name === "ssr";
-                  },
-                  generateBundle(_outputOptions, bundle) {
-                    serverBundle = bundle;
-                  },
-                },
-                {
-                  name: "output:client",
-                  applyToEnvironment(environment) {
-                    return environment.name === "client";
-                  },
-                  generateBundle(outputOptions) {
-                    assetsDirectory = outputOptions.dir;
-                  },
-                },
-              ],
-            },
-            // This is the `useLegacyBuilder` option. The Vite CLI implementation uses `null` here.
-            // Originally we used `undefined` here, but this caused the static site build to fail.
-            // https://github.com/vitejs/vite/blob/a07a4bd052ac75f916391c999c408ad5f2867e61/packages/vite/src/node/cli.ts#L367
-            null,
-          );
-          await builder.buildApp();
-        });
-        if (!assetsDirectory && !serverBundle) {
-          return yield* Effect.die(
-            new Error("Vite build produced neither server nor client output"),
-          );
-        }
-        const [assets, bundle] = yield* Effect.all(
-          [
-            assetsDirectory
-              ? read({
-                  directory: assetsDirectory,
-                  config:
-                    typeof props.assets === "object" && "config" in props.assets
-                      ? props.assets.config
-                      : undefined,
-                })
-              : Effect.succeed(undefined),
-            serverBundle
-              ? Bundle.bundleOutputFromRolldownOutputBundle(serverBundle)
-              : Effect.succeed(undefined),
-          ],
-          { concurrency: "unbounded" },
-        );
-        return { assets, bundle };
       });
 
       const prepareBundle = Effect.fnUntraced(function* (props: WorkerProps) {
@@ -720,6 +620,106 @@ ${[
         return yield* buildBundle(virtualEntryPlugin(script));
       });
 
+      const viteBuild = Effect.fnUntraced(function* (props: WorkerProps) {
+        const vite = yield* Effect.promise(() => import("vite"));
+        let assetsDirectory: string | undefined;
+        let serverBundle: vite.Rolldown.OutputBundle | undefined;
+
+        yield* Effect.promise(async () => {
+          const builder = await vite.createBuilder(
+            {
+              root: props.vite?.cwd,
+              plugins: [
+                cloudflareVite({
+                  compatibilityDate: props.compatibility?.date,
+                  compatibilityFlags: props.compatibility?.flags,
+                }),
+                {
+                  name: "output:ssr",
+                  applyToEnvironment(environment) {
+                    return environment.name === "ssr";
+                  },
+                  generateBundle(_outputOptions, bundle) {
+                    serverBundle = bundle;
+                  },
+                },
+                {
+                  name: "output:client",
+                  applyToEnvironment(environment) {
+                    return environment.name === "client";
+                  },
+                  generateBundle(outputOptions) {
+                    assetsDirectory = outputOptions.dir;
+                  },
+                },
+              ],
+            },
+            // This is the `useLegacyBuilder` option. The Vite CLI implementation uses `null` here.
+            // Originally we used `undefined` here, but this caused the static site build to fail.
+            // https://github.com/vitejs/vite/blob/a07a4bd052ac75f916391c999c408ad5f2867e61/packages/vite/src/node/cli.ts#L367
+            null,
+          );
+          await builder.buildApp();
+        });
+        if (!assetsDirectory && !serverBundle) {
+          return yield* Effect.die(
+            new Error("Vite build produced neither server nor client output"),
+          );
+        }
+        const [assets, bundle] = yield* Effect.all(
+          [
+            assetsDirectory
+              ? read({
+                  directory: assetsDirectory,
+                  config:
+                    typeof props.assets === "object" && "config" in props.assets
+                      ? props.assets.config
+                      : undefined,
+                })
+              : Effect.succeed(undefined),
+            serverBundle
+              ? Bundle.bundleOutputFromRolldownOutputBundle(serverBundle)
+              : Effect.succeed(undefined),
+          ],
+          { concurrency: "unbounded" },
+        );
+        return { assets, bundle };
+      });
+
+      const prepareAssetsAndBundle = Effect.fnUntraced(
+        function* (props: WorkerProps) {
+          if (props.vite) {
+            const [{ assets, bundle }, input] = yield* Effect.all(
+              [viteBuild(props), hashDirectory(props.vite)],
+              { concurrency: "unbounded" },
+            );
+            return { assets, bundle, input };
+          }
+          const [assets, bundle] = yield* Effect.all(
+            [prepareAssets(props.assets), prepareBundle(props)],
+            { concurrency: "unbounded" },
+          );
+          return { assets, bundle };
+        },
+        Effect.map(({ assets, bundle, input }) => ({
+          assets,
+          bundle: {
+            main: bundle?.files[0].path,
+            files: bundle?.files.map(
+              (file) =>
+                new File([file.content as BlobPart], file.path, {
+                  type: contentTypeFromExtension(path.extname(file.path)),
+                }),
+            ),
+          },
+          hash: {
+            assets: assets?.hash,
+            bundle: bundle?.hash,
+            input,
+          } satisfies Worker["Attributes"]["hash"],
+        })),
+      );
+
       const putWorker = Effect.fnUntraced(function* (
         id: string,
         news: WorkerProps,
@@ -733,7 +733,7 @@ ${[
         yield* Effect.logInfo(
           `Cloudflare Worker ${olds ? "update" : "create"}: preparing bundle for ${name}`,
         );
-        const { assets, bundle, hash } = yield* prepare(news);
+        const { assets, bundle, hash } = yield* prepareAssetsAndBundle(news);
         const metadataBindings = bindings.flatMap((b) => b.data.bindings);
         let metadataAssets:
           | workers.PutScriptRequest["metadata"]["assets"]
