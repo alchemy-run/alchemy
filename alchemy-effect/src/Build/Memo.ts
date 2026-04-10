@@ -6,22 +6,34 @@ import fg from "fast-glob";
 import { gitignoreRulesToGlobs } from "../Util/gitignore-rules-to-globs.ts";
 import { sha256, sha256Object } from "../Util/sha256.ts";
 
+/**
+ * Controls which files are included in the content hash that determines
+ * whether a build needs to re-run.
+ *
+ * By default (no options), every non-gitignored file in the working directory
+ * is hashed, plus the nearest package-manager lockfile. Provide explicit
+ * `include`/`exclude` globs to narrow the scope when the default is too broad.
+ */
 export interface MemoOptions {
   /**
-   * Glob patterns to match input files for hashing.
-   * When the hash of matched files changes, the build will re-run.
-   * Defaults to all files in the working directory, except those matched by exclude.
-   * @example ["src/*.ts", "src/*.tsx", "package.json"]
+   * Glob patterns of files to hash. Paths are relative to the working directory.
+   *
+   * @default ["**\/*"] (all files, filtered by `exclude`)
+   * @example ["src/**", "package.json", "tsconfig.json"]
    */
   include?: string[];
   /**
-   * Glob patterns to exclude from input hashing.
-   * Defaults to using your .gitignore rules.
+   * Glob patterns to exclude from hashing. Paths are relative to the working directory.
+   *
+   * @default gitignore rules collected from the working directory up to the repo root
    */
   exclude?: string[];
   /**
-   * Whether to include the package manager lockfile in the hash.
-   * Defaults to false if include or exclude is provided.
+   * Whether to include the nearest package-manager lockfile (`bun.lock`,
+   * `package-lock.json`, `pnpm-lock.yaml`, or `yarn.lock`) in the hash,
+   * even when it lives above the working directory (e.g. monorepo root).
+   *
+   * @default true when both `include` and `exclude` are unset; false otherwise
    */
   lockfile?: boolean;
 }
@@ -33,6 +45,11 @@ interface ResolvedMemoOptions {
   lockfile: boolean;
 }
 
+/**
+ * Internal service that resolves memo options, lists matching files, and
+ * produces a single SHA-256 content hash. Constructed as an Effect so it
+ * can access the platform `FileSystem` and `Path` services.
+ */
 const Memo = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -146,6 +163,11 @@ const Memo = Effect.gen(function* () {
   };
 });
 
+/**
+ * Produces a deterministic SHA-256 hash of all files matched by the given
+ * memo options. The hash changes if and only if the content of the matched
+ * files changes, making it suitable for cache-busting build outputs.
+ */
 export const hashDirectory = Effect.fn(function* (props: {
   cwd?: string;
   memo?: MemoOptions;

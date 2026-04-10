@@ -20,9 +20,11 @@ export interface CommandProps {
    */
   cwd?: string;
   /**
-   * Options for memoizing the build input.
-   * Defaults to all files in the working directory that are not git ignored, plus the package manager lockfile.
-   * @example { include: ["src/*.ts", "src/*.tsx", "package.json"], exclude: ["node_modules", "dist"] }
+   * Controls which files are hashed to decide whether the build should re-run.
+   * By default every non-gitignored file in `cwd` is hashed, plus the nearest
+   * lockfile. Provide explicit globs to narrow the scope.
+   *
+   * @see {@link MemoOptions}
    */
   memo?: MemoOptions;
   /**
@@ -62,8 +64,7 @@ export interface Command extends Resource<
  * const build = yield* Build("vite-build", {
  *   command: "npm run build",
  *   cwd: "./frontend",
- *   include: ["src/*.ts", "src/*.tsx", "index.html", "package.json", "vite.config.ts"],
- *   output: "dist",
+ *   outdir: "dist",
  * });
  * yield* Console.log(build.path); // absolute path to dist directory
  * yield* Console.log(build.hash); // hash of input files
@@ -75,7 +76,6 @@ export interface Command extends Resource<
  * const build = yield* Build("production-build", {
  *   command: "npm run build",
  *   cwd: "./app",
- *   include: ["src/*", "package.json"],
  *   output: "dist",
  *   env: {
  *     NODE_ENV: "production",
@@ -83,6 +83,16 @@ export interface Command extends Resource<
  *   },
  * });
  * ```
+ *
+ * @section Customizing Memoization
+ * @example Customize Memoization
+ * ```typescript
+ * const build = yield* Build("custom-build", {
+ *   command: "npm run build",
+ *   cwd: "./app",
+ *   output: "dist",
+ *   memo: { include: ["src/*", "package.json"], exclude: ["node_modules", "dist"] },
+ * });
  */
 export const Command = Resource<Command>("Build.Command");
 
