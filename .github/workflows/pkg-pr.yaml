@@ -23,4 +23,4 @@ jobs:
         run: bun run build
 
       - name: Publish
-        run: bun pkg-pr-new publish --bun ./alchemy-effect
+        run: bun pkg-pr-new publish --bun ./alchemy-effect ./packages/better-auth

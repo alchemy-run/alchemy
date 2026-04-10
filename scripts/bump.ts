@@ -152,6 +152,22 @@ await writeFile(
   `${JSON.stringify(alchemyPackageJson, null, 2)}\n`,
 );
 
+// Bump @alchemy.run/better-auth version
+const betterAuthPackageJsonPath = join(
+  process.cwd(),
+  "packages",
+  "better-auth",
+  "package.json",
+);
+const betterAuthPackageJson = JSON.parse(
+  await readFile(betterAuthPackageJsonPath, "utf-8"),
+);
+betterAuthPackageJson.version = newVersion;
+await writeFile(
+  betterAuthPackageJsonPath,
+  `${JSON.stringify(betterAuthPackageJson, null, 2)}\n`,
+);
+
 await $`bun install`;
 
 console.log(`Updated version to ${newVersion} in package.json`);
@@ -162,7 +178,7 @@ console.log(`Updated version to ${newVersion} in package.json`);
 // await $`cd alchemy && bun ./scripts/generate-compatibility-date.ts`;
 // await $`git add package.json alchemy-effect/package.json alchemy/src/cloudflare/compatibility-date.gen.ts bun.lock`;
 
-await $`git add package.json alchemy-effect/package.json bun.lock`;
+await $`git add package.json alchemy-effect/package.json packages/better-auth/package.json bun.lock`;
 await $`git commit -m "chore(release): ${newVersion}"`;
 await $`git tag v${newVersion}`;
 

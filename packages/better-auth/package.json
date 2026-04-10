@@ -1,11 +1,20 @@
 {
   "name": "@alchemy.run/better-auth",
   "version": "0.0.0",
-  "private": true,
   "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/alchemy-run/alchemy-effect"
+  },
+  "files": [
+    "lib",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc -b"
   },
   "type": "module",
   "exports": {
