@@ -9,7 +9,6 @@ export default Stack.make(
   Effect.gen(function* () {
     const worker = yield* Cloudflare.Vite("TanStack", {
       compatibility: {
-        date: "2026-04-09",
         flags: ["nodejs_compat"],
       },
     });
