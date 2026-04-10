@@ -6,7 +6,7 @@ export interface ViteProps extends Omit<WorkerProps, "vite" | "main"> {
    * Root directory passed to Vite's `root` option.
    * Defaults to the current working directory (`process.cwd()`).
    */
-  cwd?: string;
+  rootDir?: string;
   /**
    * Controls which files are hashed to decide whether a rebuild is needed.
    * By default every non-gitignored file in `cwd` is hashed, plus the nearest
@@ -59,7 +59,7 @@ export const Vite = (id: string, props: ViteProps = {}) =>
     ...props,
     main: undefined!,
     vite: {
-      cwd: props.cwd,
+      rootDir: props.rootDir,
       memo: props.memo,
     },
   });

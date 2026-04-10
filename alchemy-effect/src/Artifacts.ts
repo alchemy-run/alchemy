@@ -131,3 +131,17 @@ export const ensureArtifactStore = <A, E, R>(
       ),
     ),
   );
+
+export const cached =
+  (id: string) =>
+  <A, Err = never, Req = never>(eff: Effect.Effect<A, Err, Req>) =>
+    Effect.gen(function* () {
+      const artifacts = yield* Artifacts;
+      const cached = yield* artifacts.get<A>(id);
+      if (cached) {
+        return cached;
+      }
+      const result = yield* eff;
+      yield* artifacts.set(id, result);
+      return result;
+    });

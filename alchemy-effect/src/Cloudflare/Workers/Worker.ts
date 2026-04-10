@@ -16,7 +16,7 @@ import * as Stream from "effect/Stream";
 import * as Socket from "effect/unstable/socket/Socket";
 import type * as rolldown from "rolldown";
 import type * as vite from "vite";
-import { Artifacts } from "../../Artifacts.ts";
+import * as Artifacts from "../../Artifacts.ts";
 import * as Binding from "../../Binding.ts";
 import { hashDirectory, type MemoOptions } from "../../Build/Memo.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
@@ -170,7 +170,7 @@ export interface WorkerProps extends PlatformProps {
   };
   /** @internal used by Cloudflare.Vite resource */
   vite?: {
-    cwd?: string;
+    rootDir?: string;
     memo?: MemoOptions;
   };
   logpush?: boolean;
@@ -488,12 +488,6 @@ export const WorkerProvider = () =>
       });
 
       const prepareBundle = Effect.fnUntraced(function* (props: WorkerProps) {
-        const artifacts = yield* Artifacts;
-        const cached = yield* artifacts.get<Bundle.BundleOutput>("bundle");
-        if (cached) {
-          return cached;
-        }
-
         const main = yield* fs.realPath(props.main);
         const cwd = yield* findCwdForBundle(main);
         const buildBundle = (plugins?: rolldown.RolldownPluginOption) =>
@@ -524,7 +518,6 @@ export const WorkerProvider = () =>
 
         if (props.isExternal) {
           const bundle = yield* buildBundle();
-          yield* artifacts.set("bundle", bundle);
           return bundle;
         }
 
@@ -656,9 +649,7 @@ ${[
 ].join("\n")}
 `;
 
-        const bundle = yield* buildBundle(virtualEntryPlugin(script));
-        yield* artifacts.set("bundle", bundle);
-        return bundle;
+        return yield* buildBundle(virtualEntryPlugin(script));
       });
 
       const viteBuild = Effect.fnUntraced(function* (props: WorkerProps) {
@@ -669,7 +660,7 @@ ${[
         yield* Effect.promise(async () => {
           const builder = await vite.createBuilder(
             {
-              root: props.vite?.cwd,
+              root: props.vite?.rootDir,
               plugins: [
                 cloudflareVite({
                   compatibilityDate:
@@ -728,8 +719,8 @@ ${[
         return { assets, bundle };
       });
 
-      const prepareAssetsAndBundle = Effect.fnUntraced(
-        function* (props: WorkerProps) {
+      const prepareAssetsAndBundle = (props: WorkerProps) =>
+        Effect.gen(function* () {
           if (props.vite) {
             const [{ assets, bundle }, input] = yield* Effect.all(
               [viteBuild(props), hashDirectory(props.vite)],
@@ -742,25 +733,26 @@ ${[
             { concurrency: "unbounded" },
           );
           return { assets, bundle };
-        },
-        Effect.map(({ assets, bundle, input }) => ({
-          assets,
-          bundle: {
-            main: bundle?.files[0].path,
-            files: bundle?.files.map(
-              (file) =>
-                new File([file.content as BlobPart], file.path, {
-                  type: contentTypeFromExtension(path.extname(file.path)),
-                }),
-            ),
-          },
-          hash: {
-            assets: assets?.hash,
-            bundle: bundle?.hash,
-            input,
-          } satisfies Worker["Attributes"]["hash"],
-        })),
-      );
+        }).pipe(
+          Effect.map(({ assets, bundle, input }) => ({
+            assets,
+            bundle: {
+              main: bundle?.files[0].path,
+              files: bundle?.files.map(
+                (file) =>
+                  new File([file.content as BlobPart], file.path, {
+                    type: contentTypeFromExtension(path.extname(file.path)),
+                  }),
+              ),
+            },
+            hash: {
+              assets: assets?.hash,
+              bundle: bundle?.hash,
+              input,
+            } satisfies Worker["Attributes"]["hash"],
+          })),
+          Artifacts.cached("build"),
+        );
 
       const putWorker = Effect.fnUntraced(function* (
         id: string,
