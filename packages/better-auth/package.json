@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/better-auth",
-  "version": "0.0.0",
+  "version": "0.6.4",
   "license": "Apache-2.0",
   "publishConfig": {
     "access": "public"
