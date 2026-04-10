@@ -7,7 +7,7 @@ export default Stack.make(
   Cloudflare.providers(),
 )(
   Effect.gen(function* () {
-    const worker = yield* Cloudflare.Vite("TanStack", {
+    const worker = yield* Cloudflare.Vite("TanStackStart", {
       compatibility: {
         flags: ["nodejs_compat"],
       },
