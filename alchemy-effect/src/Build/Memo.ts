@@ -129,13 +129,17 @@ const Memo = Effect.gen(function* () {
               "package-lock.json",
               "pnpm-lock.yaml",
               "yarn.lock",
-            ])
+            ]).pipe(
+              Effect.map((lockfile) =>
+                lockfile ? path.relative(options.cwd, lockfile) : undefined,
+              ),
+            )
           : Effect.succeed(undefined),
       ],
       { concurrency: "unbounded" },
     );
-    if (lockfile) {
-      files.push(path.relative(options.cwd, lockfile));
+    if (lockfile && !files.includes(lockfile)) {
+      files.push(lockfile);
     }
     return files.sort();
   });
