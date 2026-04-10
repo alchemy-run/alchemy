@@ -110,24 +110,9 @@ export const watch = (
         if (result._tag === "Failure") {
           return Result.fail(result.failure);
         }
-        const files = Object.values(result.success);
-        // These are sanity checks - with rolldown, the first file is always an entry chunk.
-        if (!files[0] || files[0].type !== "chunk" || !files[0].isEntry) {
-          return Result.fail(
-            new BundleError({
-              message: "Invalid bundle output",
-            }),
-          );
-        }
-        return yield* Effect.forEach(
-          files as [
-            rolldown.OutputChunk,
-            ...(rolldown.OutputChunk | rolldown.OutputAsset)[],
-          ],
-          bundleFileFromOutputChunk,
-        ).pipe(
-          Effect.flatMap(bundleOutputFromFiles),
+        return yield* bundleOutputFromRolldownOutputBundle(result.success).pipe(
           Effect.map(Result.succeed),
+          Effect.catch((error) => Effect.succeed(Result.fail(error))),
         );
       }),
     ),
@@ -172,6 +157,27 @@ export const virtualEntryPlugin = Effect.gen(function* () {
     } satisfies rolldown.Plugin;
   };
 });
+
+export function bundleOutputFromRolldownOutputBundle(
+  bundle: rolldown.OutputBundle,
+): Effect.Effect<BundleOutput, BundleError> {
+  const files = Object.values(bundle);
+  // These are sanity checks - with rolldown, the first file is always an entry chunk.
+  if (!files[0] || files[0].type !== "chunk" || !files[0].isEntry) {
+    return Effect.fail(
+      new BundleError({
+        message: "Invalid bundle output",
+      }),
+    );
+  }
+  return Effect.forEach(
+    files as [
+      rolldown.OutputChunk,
+      ...(rolldown.OutputChunk | rolldown.OutputAsset)[],
+    ],
+    bundleFileFromOutputChunk,
+  ).pipe(Effect.flatMap(bundleOutputFromFiles));
+}
 
 function bundleErrorFromUnknown(error: unknown): BundleError {
   const message = error instanceof Error ? error.message : String(error);

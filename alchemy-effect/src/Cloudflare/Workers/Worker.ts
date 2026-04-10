@@ -1,5 +1,6 @@
 import type * as cf from "@cloudflare/workers-types";
-import cloudflare from "@distilled.cloud/cloudflare-rolldown-plugin";
+import cloudflareRolldown from "@distilled.cloud/cloudflare-rolldown-plugin";
+import cloudflareVite from "@distilled.cloud/cloudflare-vite-plugin";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import type * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -14,8 +15,10 @@ import * as ServiceMap from "effect/ServiceMap";
 import * as Stream from "effect/Stream";
 import * as Socket from "effect/unstable/socket/Socket";
 import type * as rolldown from "rolldown";
-import { Artifacts } from "../../Artifacts.ts";
+import type * as vite from "vite";
+import * as Artifacts from "../../Artifacts.ts";
 import * as Binding from "../../Binding.ts";
+import { hashDirectory, type MemoOptions } from "../../Build/Memo.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
@@ -35,7 +38,6 @@ import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { Self } from "../../Self.ts";
 import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
-import { sha256 } from "../../Util/index.ts";
 import { Account } from "../Account.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import type { AssetsConfig, AssetsProps } from "./Assets.ts";
@@ -166,6 +168,11 @@ export interface WorkerProps extends PlatformProps {
     enabled?: boolean;
     previewsEnabled?: boolean;
   };
+  /** @internal used by Cloudflare.Vite resource */
+  vite?: {
+    rootDir?: string;
+    memo?: MemoOptions;
+  };
   logpush?: boolean;
   observability?: WorkerObservability;
   tags?: string[];
@@ -178,8 +185,6 @@ export interface WorkerProps extends PlatformProps {
   placement?: WorkerPlacement;
   env?: Record<string, any>;
   exports?: string[];
-  /** @internal - only visible for the Vite resource */
-  vite?: boolean;
 }
 
 export interface WorkerExecutionContext extends Serverless.FunctionContext {
@@ -202,7 +207,8 @@ export interface Worker extends Resource<
     accountId: string;
     hash?: {
       assets: string | undefined;
-      bundle: string;
+      bundle: string | undefined;
+      input: string | undefined;
     };
   },
   {
@@ -414,6 +420,10 @@ export const WorkerProvider = () =>
       const listScripts = yield* workers.listScripts;
       const putScript = yield* workers.putScript;
       const telemetry = yield* CloudflareLogs;
+      const defaultCompatibilityDate = yield* Effect.promise(() =>
+        // @ts-expect-error no types for workerd
+        import("workerd").then((m) => m.compatibilityDate as string),
+      );
 
       const getAccountSubdomain = (accountId: string) =>
         getSubdomain({
@@ -461,54 +471,34 @@ export const WorkerProvider = () =>
           "path" in assets &&
           "hash" in assets
         ) {
-          const path = assets.path as string;
-          const hash = assets.hash as string;
           const result = yield* read({
-            directory: path,
+            directory: assets.path as string,
             config: assets.config,
           });
           return {
             ...result,
-            hash,
+            hash: assets.hash as string,
           };
         }
 
         // Handle string path or AssetsProps
-        const result = yield* read(
+        return yield* read(
           typeof assets === "string" ? { directory: assets } : assets,
         );
-        return {
-          ...result,
-          hash: yield* sha256(JSON.stringify(result)),
-        };
       });
 
-      const prepareBundle = Effect.fnUntraced(function* (
-        id: string,
-        props: WorkerProps,
-      ) {
-        const artifacts = yield* Artifacts;
-        const cached = yield* artifacts.get<{
-          files: File[];
-          mainModule: string;
-          hash: string;
-        }>("bundle");
-        if (cached) {
-          return cached;
-        }
-
-        const realMain = yield* fs.realPath(props.main);
-        const buildBundle = Effect.fnUntraced(function* (
-          entry: string,
-          plugins?: rolldown.RolldownPluginOption,
-        ) {
-          const { files, hash } = yield* Bundle.build(
+      const prepareBundle = Effect.fnUntraced(function* (props: WorkerProps) {
+        const main = yield* fs.realPath(props.main);
+        const cwd = yield* findCwdForBundle(main);
+        const buildBundle = (plugins?: rolldown.RolldownPluginOption) =>
+          Bundle.build(
             {
-              input: entry,
-              cwd: yield* findCwdForBundle(entry),
+              input: main,
+              cwd,
               plugins: [
-                cloudflare({
-                  compatibilityDate: props.compatibility?.date ?? "2026-03-10",
+                cloudflareRolldown({
+                  compatibilityDate:
+                    props.compatibility?.date ?? defaultCompatibilityDate,
                   compatibilityFlags: props.compatibility?.flags,
                 }),
                 plugins,
@@ -525,21 +515,9 @@ export const WorkerProvider = () =>
               keepNames: true,
             },
           );
-          return {
-            files: files.map(
-              (file) =>
-                new File([file.content as BlobPart], file.path, {
-                  type: contentTypeFromExtension(path.extname(file.path)),
-                }),
-            ),
-            mainModule: files[0].path,
-            hash,
-          };
-        });
 
         if (props.isExternal) {
-          const bundle = yield* buildBundle(realMain);
-          yield* artifacts.set("bundle", bundle);
+          const bundle = yield* buildBundle();
           return bundle;
         }
 
@@ -671,10 +649,110 @@ ${[
 ].join("\n")}
 `;
 
-        const bundle = yield* buildBundle(realMain, virtualEntryPlugin(script));
-        yield* artifacts.set("bundle", bundle);
-        return bundle;
+        return yield* buildBundle(virtualEntryPlugin(script));
       });
+
+      const viteBuild = Effect.fnUntraced(function* (props: WorkerProps) {
+        const vite = yield* Effect.promise(() => import("vite"));
+        let assetsDirectory: string | undefined;
+        let serverBundle: vite.Rolldown.OutputBundle | undefined;
+
+        yield* Effect.promise(async () => {
+          const builder = await vite.createBuilder(
+            {
+              root: props.vite?.rootDir,
+              plugins: [
+                cloudflareVite({
+                  compatibilityDate:
+                    props.compatibility?.date ?? defaultCompatibilityDate,
+                  compatibilityFlags: props.compatibility?.flags,
+                }),
+                {
+                  name: "output:ssr",
+                  applyToEnvironment(environment) {
+                    return environment.name === "ssr";
+                  },
+                  generateBundle(_outputOptions, bundle) {
+                    serverBundle = bundle;
+                  },
+                },
+                {
+                  name: "output:client",
+                  applyToEnvironment(environment) {
+                    return environment.name === "client";
+                  },
+                  generateBundle(outputOptions) {
+                    assetsDirectory = outputOptions.dir;
+                  },
+                },
+              ],
+            },
+            // This is the `useLegacyBuilder` option. The Vite CLI implementation uses `null` here.
+            // Originally we used `undefined` here, but this caused the static site build to fail.
+            // https://github.com/vitejs/vite/blob/a07a4bd052ac75f916391c999c408ad5f2867e61/packages/vite/src/node/cli.ts#L367
+            null,
+          );
+          await builder.buildApp();
+        });
+        if (!assetsDirectory && !serverBundle) {
+          return yield* Effect.die(
+            new Error("Vite build produced neither server nor client output"),
+          );
+        }
+        const [assets, bundle] = yield* Effect.all(
+          [
+            assetsDirectory
+              ? read({
+                  directory: assetsDirectory,
+                  config:
+                    typeof props.assets === "object" && "config" in props.assets
+                      ? props.assets.config
+                      : undefined,
+                })
+              : Effect.succeed(undefined),
+            serverBundle
+              ? Bundle.bundleOutputFromRolldownOutputBundle(serverBundle)
+              : Effect.succeed(undefined),
+          ],
+          { concurrency: "unbounded" },
+        );
+        return { assets, bundle };
+      });
+
+      const prepareAssetsAndBundle = (props: WorkerProps) =>
+        Effect.gen(function* () {
+          if (props.vite) {
+            const [{ assets, bundle }, input] = yield* Effect.all(
+              [viteBuild(props), hashDirectory(props.vite)],
+              { concurrency: "unbounded" },
+            );
+            return { assets, bundle, input };
+          }
+          const [assets, bundle] = yield* Effect.all(
+            [prepareAssets(props.assets), prepareBundle(props)],
+            { concurrency: "unbounded" },
+          );
+          return { assets, bundle };
+        }).pipe(
+          Effect.map(({ assets, bundle, input }) => ({
+            assets,
+            bundle: {
+              main: bundle?.files[0].path,
+              files: bundle?.files.map(
+                (file) =>
+                  new File([file.content as BlobPart], file.path, {
+                    type: contentTypeFromExtension(path.extname(file.path)),
+                  }),
+              ),
+            },
+            hash: {
+              assets: assets?.hash,
+              bundle: bundle?.hash,
+              input,
+            } satisfies Worker["Attributes"]["hash"],
+          })),
+          Artifacts.cached("build"),
+        );
 
       const putWorker = Effect.fnUntraced(function* (
         id: string,
@@ -689,10 +767,7 @@ ${[
         yield* Effect.logInfo(
           `Cloudflare Worker ${olds ? "update" : "create"}: preparing bundle for ${name}`,
         );
-        const [assets, bundle] = yield* Effect.all([
-          prepareAssets(news.assets),
-          prepareBundle(id, news),
-        ]);
+        const { assets, bundle, hash } = yield* prepareAssetsAndBundle(news);
         const metadataBindings = bindings.flatMap((b) => b.data.bindings);
         let metadataAssets:
           | workers.PutScriptRequest["metadata"]["assets"]
@@ -909,7 +984,7 @@ ${[
           keepBindings: undefined,
           limits: news.limits,
           logpush: news.logpush,
-          mainModule: bundle.mainModule,
+          mainModule: bundle.main,
           migrations,
           observability: news.observability ?? {
             enabled: true,
@@ -978,11 +1053,31 @@ ${[
               : undefined,
           tags: metadata.tags,
           accountId,
-          hash: {
-            assets: assets?.hash,
-            bundle: bundle.hash,
-          },
+          hash,
         } satisfies Worker["Attributes"];
+      });
+
+      const hasChanged = Effect.fnUntraced(function* (
+        props: WorkerProps,
+        output: Worker["Attributes"],
+      ) {
+        if (props.vite) {
+          const input = yield* hashDirectory(props.vite);
+          return input !== output.hash?.input;
+        }
+        const [assetsHash, bundleHash] = yield* Effect.all(
+          [
+            "assets" in output && output.hash?.assets
+              ? Effect.succeed(output.hash.assets)
+              : prepareAssets(props.assets).pipe(Effect.map((a) => a?.hash)),
+            prepareBundle(props).pipe(Effect.map((b) => b.hash)),
+          ],
+          { concurrency: "unbounded" },
+        );
+        return (
+          assetsHash !== output.hash?.assets ||
+          bundleHash !== output.hash?.bundle
+        );
       });
 
       return Worker.provider.of({
@@ -1002,14 +1097,7 @@ ${[
           if (!output) {
             return;
           }
-          const [assets, bundle] = yield* Effect.all([
-            prepareAssets(news.assets),
-            prepareBundle(id, news),
-          ]);
-          if (
-            assets?.hash !== output.hash?.assets ||
-            bundle.hash !== output.hash?.bundle
-          ) {
+          if (yield* hasChanged(news, output)) {
             return {
               action: "update",
               stables:

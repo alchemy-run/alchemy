@@ -11,7 +11,9 @@
   "scripts": {
     "dev": "vite dev --port 3000",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy": "bun ../../alchemy-effect/bin/alchemy-effect.ts deploy",
+    "destroy": "bun ../../alchemy-effect/bin/alchemy-effect.ts destroy"
   },
   "dependencies": {
     "@tanstack/react-router": "^1.167.4",
@@ -26,6 +28,6 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
     "typescript": "^5.9.3",
-    "vite": "^8.0.0"
+    "vite": "catalog:"
   }
 }

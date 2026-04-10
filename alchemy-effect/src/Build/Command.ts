@@ -5,7 +5,7 @@ import * as Stream from "effect/Stream";
 import { ChildProcess } from "effect/unstable/process";
 import { isResolved } from "../Diff.ts";
 import { Resource } from "../Resource.ts";
-import { sha256, sha256Object } from "../Util/sha256.ts";
+import { hashDirectory, type MemoOptions } from "./Memo.ts";
 
 export interface CommandProps {
   /**
@@ -20,16 +20,13 @@ export interface CommandProps {
    */
   cwd?: string;
   /**
-   * Glob patterns to match input files for hashing.
-   * When the hash of matched files changes, the build will re-run.
-   * @example ["src/*.ts", "src/*.tsx", "package.json"]
+   * Controls which files are hashed to decide whether the build should re-run.
+   * By default every non-gitignored file in `cwd` is hashed, plus the nearest
+   * lockfile. Provide explicit globs to narrow the scope.
+   *
+   * @see {@link MemoOptions}
    */
-  hash: string[];
-  /**
-   * Glob patterns to exclude from input hashing.
-   * Defaults to node_modules and .git directories.
-   */
-  exclude?: string[];
+  memo?: MemoOptions;
   /**
    * The output path (file or directory) produced by the build.
    * This path is relative to the working directory.
@@ -67,8 +64,7 @@ export interface Command extends Resource<
  * const build = yield* Build("vite-build", {
  *   command: "npm run build",
  *   cwd: "./frontend",
- *   include: ["src/*.ts", "src/*.tsx", "index.html", "package.json", "vite.config.ts"],
- *   output: "dist",
+ *   outdir: "dist",
  * });
  * yield* Console.log(build.path); // absolute path to dist directory
  * yield* Console.log(build.hash); // hash of input files
@@ -80,7 +76,6 @@ export interface Command extends Resource<
  * const build = yield* Build("production-build", {
  *   command: "npm run build",
  *   cwd: "./app",
- *   include: ["src/*", "package.json"],
  *   output: "dist",
  *   env: {
  *     NODE_ENV: "production",
@@ -88,6 +83,16 @@ export interface Command extends Resource<
  *   },
  * });
  * ```
+ *
+ * @section Customizing Memoization
+ * @example Customize Memoization
+ * ```typescript
+ * const build = yield* Build("custom-build", {
+ *   command: "npm run build",
+ *   cwd: "./app",
+ *   output: "dist",
+ *   memo: { include: ["src/*", "package.json"], exclude: ["node_modules", "dist"] },
+ * });
  */
 export const Command = Resource<Command>("Build.Command");
 
@@ -96,26 +101,6 @@ export const CommandProvider = () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const pathModule = yield* Path.Path;
-
-      const computeInputHash = (props: CommandProps) =>
-        Effect.gen(function* () {
-          const cwd = props.cwd ? pathModule.resolve(props.cwd) : process.cwd();
-          const files = yield* listBuildFiles({
-            cwd,
-            include: props.hash,
-            exclude: props.exclude ?? defaultBuildExclude,
-          });
-          const fileHashes = yield* hashBuildFiles({
-            cwd,
-            files,
-          });
-          const hash = yield* sha256Object({
-            command: props.command,
-            env: props.env,
-            files: fileHashes,
-          });
-          return hash;
-        });
 
       const runBuild = (props: CommandProps) =>
         Effect.gen(function* () {
@@ -139,7 +124,7 @@ export const CommandProvider = () =>
           if (!output) {
             return undefined;
           }
-          const newHash = yield* computeInputHash(news);
+          const newHash = yield* hashDirectory(news);
           if (newHash !== output.hash) {
             return { action: "update" as const };
           }
@@ -156,7 +141,7 @@ export const CommandProvider = () =>
           return output;
         }),
         create: Effect.fnUntraced(function* ({ news, session }) {
-          const hash = yield* computeInputHash(news);
+          const hash = yield* hashDirectory(news);
           const outputPath = getOutputPath(news);
 
           yield* session.note(`Running build: ${news.command}`);
@@ -177,7 +162,7 @@ export const CommandProvider = () =>
           };
         }),
         update: Effect.fnUntraced(function* ({ news, session }) {
-          const hash = yield* computeInputHash(news);
+          const hash = yield* hashDirectory(news);
           const outputPath = getOutputPath(news);
 
           yield* session.note(`Rebuilding: ${news.command}`);
@@ -207,69 +192,6 @@ export const CommandProvider = () =>
       });
     }),
   );
-
-export const defaultBuildExclude = ["**/node_modules/**", "**/.git/**"];
-
-export interface BuildFileGlobOptions {
-  cwd: string;
-  include: ReadonlyArray<string>;
-  exclude?: ReadonlyArray<string>;
-}
-
-export const listBuildFiles = Effect.fnUntraced(function* ({
-  cwd,
-  include,
-  exclude = defaultBuildExclude,
-}: BuildFileGlobOptions) {
-  const mod = yield* Effect.promise(() => import("fast-glob"));
-  const fg = mod.default ?? mod;
-  const files = yield* Effect.promise(() =>
-    fg.glob(Array.from(include), {
-      cwd,
-      ignore: Array.from(exclude),
-      onlyFiles: true,
-      dot: true,
-    }),
-  );
-  files.sort();
-  return files.map((file) => file.replaceAll("\\", "/"));
-});
-
-export interface HashBuildFilesOptions {
-  cwd: string;
-  files: ReadonlyArray<string>;
-}
-
-export const hashBuildFiles = Effect.fnUntraced(function* ({
-  cwd,
-  files,
-}: HashBuildFilesOptions) {
-  const fs = yield* FileSystem.FileSystem;
-  const pathModule = yield* Path.Path;
-  const parts = yield* Effect.all(
-    files.map((file) =>
-      fs.readFile(pathModule.join(cwd, file)).pipe(
-        Effect.flatMap((content) =>
-          sha256(content).pipe(Effect.map((hash) => `${file}:${hash}`)),
-        ),
-        Effect.catch(() => Effect.succeed(undefined)),
-      ),
-    ),
-    { concurrency: 10 },
-  );
-  return parts.filter((part): part is string => part !== undefined);
-});
-
-export const hashBuildDirectory = Effect.fnUntraced(function* (
-  directory: string,
-) {
-  const files = yield* listBuildFiles({
-    cwd: directory,
-    include: ["**/*"],
-    exclude: [],
-  });
-  return yield* hashBuildFiles({ cwd: directory, files });
-});
 
 export interface RunBuildCommandOptions {
   command: string;

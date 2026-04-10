@@ -1,2 +1,2 @@
 export * from "./StaticSite.ts";
-export * from "./TanstackStart.ts";
+export * from "./Vite.ts";

@@ -350,6 +350,7 @@ export namespace test {
               ...stack,
               resources: {},
               bindings: {},
+              output: {},
             },
           ),
           Effect.flatMap(Plan.make),

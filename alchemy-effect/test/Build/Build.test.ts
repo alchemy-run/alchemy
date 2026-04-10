@@ -29,7 +29,6 @@ test(
         return yield* Build.Command("test-build", {
           command: "bash build.sh",
           cwd: fixtureDir,
-          hash: ["src/**/*.ts"],
           outdir: "dist",
         });
       }),
@@ -57,7 +56,6 @@ test(
         return yield* Build.Command("test-build", {
           command: "bash build.sh",
           cwd: fixtureDir,
-          hash: ["src/**/*.ts"],
           outdir: "dist",
         });
       }),
@@ -80,7 +78,6 @@ test(
         return yield* Build.Command("test-build", {
           command: "bash build.sh",
           cwd: fixtureDir,
-          hash: ["src/**/*.ts"],
           outdir: "dist",
         });
       }),

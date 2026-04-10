@@ -24,6 +24,6 @@
   },
   "devDependencies": {
     "typescript": "catalog:",
-    "vite": "^6.2.3"
+    "vite": "catalog:"
   }
 }

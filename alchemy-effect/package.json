@@ -176,6 +176,7 @@
     "@distilled.cloud/aws": "catalog:",
     "@distilled.cloud/cloudflare": "catalog:",
     "@distilled.cloud/cloudflare-rolldown-plugin": "catalog:",
+    "@distilled.cloud/cloudflare-vite-plugin": "catalog:",
     "@distilled.cloud/core": "catalog:",
     "@effect/vitest": "catalog:",
     "@libsql/client": "catalog:",
@@ -221,7 +222,8 @@
   "peerDependencies": {
     "@effect/platform-bun": "*",
     "@effect/platform-node": "*",
-    "effect": "*"
+    "effect": "*",
+    "vite": "catalog:"
   },
   "peerDependenciesMeta": {
     "@effect/platform-node": {
@@ -231,6 +233,9 @@
       "optional": true
     },
     "effect": {
+      "optional": true
+    },
+    "vite": {
       "optional": true
     }
   }

@@ -7,7 +7,7 @@ import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import * as ServiceMap from "effect/ServiceMap";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
-import { sha256 } from "../../Util/index.ts";
+import { sha256, sha256Object } from "../../Util/index.ts";
 
 const MAX_ASSET_SIZE = 1024 * 1024 * 25; // 25MB
 const MAX_ASSET_COUNT = 20_000;
@@ -23,6 +23,7 @@ export interface AssetReadResult {
   manifest: Record<string, { hash: string; size: number }>;
   _headers: string | undefined;
   _redirects: string | undefined;
+  hash: string;
 }
 
 export interface AssetsProps {
@@ -190,7 +191,7 @@ export const AssetsProvider = () =>
               });
             }),
           );
-          return {
+          const result = {
             directory: props.directory,
             config: props.config,
             manifest: Object.fromEntries(
@@ -200,6 +201,10 @@ export const AssetsProvider = () =>
             ),
             _headers,
             _redirects,
+          };
+          return {
+            ...result,
+            hash: yield* sha256Object(result),
           };
         }),
         upload: Effect.fnUntraced(function* (

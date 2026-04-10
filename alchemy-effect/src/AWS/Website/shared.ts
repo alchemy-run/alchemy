@@ -91,14 +91,26 @@ export interface StaticSiteBuildProps {
    */
   output: string;
   /**
-   * Optional glob list used to hash build inputs.
-   * @default all files under `path`
+   * Glob patterns of files to hash. Paths are relative to `path`.
+   * When the hash of matched files changes, the build will re-run.
+   *
+   * @default ["**\/*"] (all files, filtered by `exclude`)
+   * @example ["src/**", "package.json", "tsconfig.json"]
    */
   include?: string[];
   /**
-   * Optional glob list excluded from build input hashing.
+   * Glob patterns to exclude from input hashing. Paths are relative to `path`.
+   *
+   * @default gitignore rules collected from the working directory up to the repo root
    */
   exclude?: string[];
+  /**
+   * Whether to include the nearest package-manager lockfile in the hash,
+   * even when it lives above the site directory (e.g. monorepo root).
+   *
+   * @default true when both `include` and `exclude` are unset; false otherwise
+   */
+  lockfile?: boolean;
 }
 
 export interface StaticSiteAssetsProps {
