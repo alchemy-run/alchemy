@@ -268,8 +268,8 @@
     "@cloudflare/workers-types": "^4.20250805.0",
     "@distilled.cloud/aws": "^0.7.11",
     "@distilled.cloud/cloudflare": "^0.7.11",
-    "@distilled.cloud/cloudflare-rolldown-plugin": "^0.1.2",
-    "@distilled.cloud/cloudflare-vite-plugin": "^0.0.3",
+    "@distilled.cloud/cloudflare-rolldown-plugin": "0.2.0",
+    "@distilled.cloud/cloudflare-vite-plugin": "0.1.0",
     "@distilled.cloud/core": "^0.7.11",
     "@effect/language-service": "4.0.0-beta.43",
     "@effect/platform-bun": "4.0.0-beta.43",
@@ -479,9 +479,9 @@
 
     "@distilled.cloud/cloudflare": ["@distilled.cloud/cloudflare@0.7.11", "", { "dependencies": { "@distilled.cloud/core": "0.7.11", "effect": "4.0.0-beta.43" } }, "sha512-q1cQxd+Fax8yRHO/syiAJ9UzRsHGigWFlDbVV+I6yAGeMpp7SfvtTd7SEOD+lrABN5GM/+GzzrQuPkPO5aH4xg=="],
 
-    "@distilled.cloud/cloudflare-rolldown-plugin": ["@distilled.cloud/cloudflare-rolldown-plugin@0.1.2", "", { "dependencies": { "@cloudflare/unenv-preset": "^2.16.0", "unenv": "^2.0.0-rc.24" }, "peerDependencies": { "rolldown": "^1.0.0-rc.9" } }, "sha512-rYLCDiy6rOuTKZeMSEnFWom9ucVFle2bEALl7WLc/ljonKxjsyiGPHc4Be4L/6zv/BAyvF4HNKAWcCRzzZY07w=="],
+    "@distilled.cloud/cloudflare-rolldown-plugin": ["@distilled.cloud/cloudflare-rolldown-plugin@0.2.0", "", { "dependencies": { "@cloudflare/unenv-preset": "^2.16.0", "unenv": "^2.0.0-rc.24" }, "peerDependencies": { "rolldown": "^1.0.0-rc.9" } }, "sha512-zZFzGzp+6sy+zP3fOxkJ0pXyTXd08pLrOw/9ooIR4NkcyL1D1k2NxNPuan0X5pttebigTVCP8Ny3e62gUe9MBg=="],
 
-    "@distilled.cloud/cloudflare-vite-plugin": ["@distilled.cloud/cloudflare-vite-plugin@0.0.3", "", { "dependencies": { "@distilled.cloud/cloudflare-rolldown-plugin": "0.1.2" }, "peerDependencies": { "vite": "^8.0.0" } }, "sha512-lgdLcway7okNxNEx158oH2Xm7e/mFGREe0m+QihrhaGoSxXC/rpr2+hUDmNBVESdGLvkQX/PfxnSv5vwfl9QuA=="],
+    "@distilled.cloud/cloudflare-vite-plugin": ["@distilled.cloud/cloudflare-vite-plugin@0.1.0", "", { "dependencies": { "@distilled.cloud/cloudflare-rolldown-plugin": "0.2.0" }, "peerDependencies": { "vite": "^8.0.0" } }, "sha512-Brluigro6OXOmGKea8LCbs43u+pI7NsxtvEFLU8eO2Go2hDqcwLQ3fc4YiXq4Y6nRYUpkoiGV2ITynttV+/suA=="],
 
     "@distilled.cloud/core": ["@distilled.cloud/core@0.7.11", "", { "dependencies": { "effect": "4.0.0-beta.43" } }, "sha512-pvRUqkciucw5t9b8+lhFZ4z1wHSVn9AwFSsLnIZ4ib8LuKlngnRwdHxcx2V8fmPutMk4spERfPXGpsyN8xmRzQ=="],
 
