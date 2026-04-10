@@ -1,3 +1,11 @@
+## v0.6.4
+
+_No significant changes_
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v0.6.3...v0.6.4)
+
+---
+
 ## v0.6.3
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features

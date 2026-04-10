@@ -7,6 +7,7 @@ import type { Scope } from "effect/Scope";
 import * as ServiceMap from "effect/ServiceMap";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
+import type { Artifacts } from "./Artifacts.ts";
 import { DotAlchemy } from "./Config.ts";
 import type { ResourceBinding, ResourceLike } from "./Resource.ts";
 import { Stage } from "./Stage.ts";
@@ -19,7 +20,8 @@ export type StackServices =
   | Path
   | DotAlchemy
   | HttpClient
-  | ChildProcessSpawner;
+  | ChildProcessSpawner
+  | Artifacts;
 
 export class Stack extends ServiceMap.Service<
   Stack,
@@ -39,6 +41,10 @@ export interface StackSpec<Output = any> {
   output: Output;
 }
 
+export interface CompiledStack<Output, Services> extends StackSpec<Output> {
+  services: ServiceMap.ServiceMap<Services>;
+}
+
 export const StackName = Stack.use((stack) => Effect.succeed(stack.name));
 
 export const make =
@@ -56,11 +62,17 @@ export const make =
       Stack.asEffect(),
       Effect.services<ROut | StackServices>(),
     ]).pipe(
-      Effect.map(([output, stack, services]) => ({
-        output,
-        services,
-        ...stack,
-      })),
+      Effect.map(
+        ([output, stack, services]) =>
+          ({
+            output,
+            services,
+            ...stack,
+          }) satisfies CompiledStack<A, ROut | StackServices> as CompiledStack<
+            A,
+            ROut | StackServices
+          >,
+      ),
       Effect.provide(providers),
       Effect.provideServiceEffect(
         Stack,

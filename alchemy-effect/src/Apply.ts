@@ -1,7 +1,14 @@
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import type { Simplify } from "effect/Types";
+import {
+  Artifacts,
+  ArtifactStore,
+  createArtifactStore,
+  ensureArtifactStore,
+  makeScopedArtifacts,
+} from "./Artifacts.ts";
+import * as Option from "effect/Option";
 import {
   type PlanStatusSession,
   type ScopedPlanStatusSession,
@@ -59,6 +66,21 @@ interface ResourceTracker {
   instanceId: string;
 }
 
+const provideLifecycleScope =
+  (fqn: string, instanceId: string) =>
+  <A, E, R>(
+    effect: Effect.Effect<A, E, R>,
+  ): Effect.Effect<A, E, Exclude<R, InstanceId | Artifacts>> =>
+    Effect.serviceOption(ArtifactStore).pipe(
+      Effect.map(Option.getOrElse(createArtifactStore)),
+      Effect.flatMap((store) =>
+        effect.pipe(
+          Effect.provideService(Artifacts, makeScopedArtifacts(store, fqn)),
+          Effect.provideService(InstanceId, instanceId),
+        ),
+      ),
+    ) as Effect.Effect<A, E, Exclude<R, InstanceId | Artifacts>>;
+
 export const apply = <P extends Plan>(
   plan: P,
 ): Effect.Effect<
@@ -66,68 +88,70 @@ export const apply = <P extends Plan>(
   Output.InvalidReferenceError | Output.MissingSourceError | StateStoreError,
   Cli | State | Stack | Stage
 > =>
-  Effect.gen(function* () {
-    const cli = yield* Cli;
-    const session = yield* cli.startApplySession(plan);
-    const state = yield* State;
-    const stack = yield* Stack;
-    const stage = yield* Stage;
-    const stackName = stack.name;
+  ensureArtifactStore(
+    Effect.gen(function* () {
+      const cli = yield* Cli;
+      const session = yield* cli.startApplySession(plan);
+      const state = yield* State;
+      const stack = yield* Stack;
+      const stage = yield* Stage;
+      const stackName = stack.name;
 
-    const tracker: Record<string, ResourceTracker> = {};
-    const terminalStatuses = new Map<
-      string,
-      {
-        id: string;
-        type: string;
-        status: Extract<ApplyStatus, "created" | "updated">;
+      const tracker: Record<string, ResourceTracker> = {};
+      const terminalStatuses = new Map<
+        string,
+        {
+          id: string;
+          type: string;
+          status: Extract<ApplyStatus, "created" | "updated">;
+        }
+      >();
+
+      yield* executePlan(
+        plan,
+        tracker,
+        terminalStatuses,
+        session,
+        state,
+        stackName,
+        stage,
+      );
+
+      // TODO(sam): support roll back to previous state if errors occur during expansion
+      // -> RISK: some UPDATEs may not be reversible (i.e. trigger replacements)
+      // TODO(sam): should pivot be done separately? E.g shift traffic?
+
+      yield* collectGarbage(plan, session);
+
+      yield* converge(
+        plan,
+        tracker,
+        terminalStatuses,
+        session,
+        state,
+        stackName,
+        stage,
+      );
+
+      yield* Effect.forEach(
+        Array.from(terminalStatuses.values()),
+        ({ id, type, status }) =>
+          session.emit({ kind: "status-change", id, type, status }),
+        { concurrency: "unbounded" },
+      );
+
+      yield* session.done();
+
+      if (!plan.output) {
+        return undefined;
       }
-    >();
 
-    yield* executePlan(
-      plan,
-      tracker,
-      terminalStatuses,
-      session,
-      state,
-      stackName,
-      stage,
-    );
-
-    // TODO(sam): support roll back to previous state if errors occur during expansion
-    // -> RISK: some UPDATEs may not be reversible (i.e. trigger replacements)
-    // TODO(sam): should pivot be done separately? E.g shift traffic?
-
-    yield* collectGarbage(plan, session);
-
-    yield* converge(
-      plan,
-      tracker,
-      terminalStatuses,
-      session,
-      state,
-      stackName,
-      stage,
-    );
-
-    yield* Effect.forEach(
-      Array.from(terminalStatuses.values()),
-      ({ id, type, status }) =>
-        session.emit({ kind: "status-change", id, type, status }),
-      { concurrency: "unbounded" },
-    );
-
-    yield* session.done();
-
-    if (!plan.output) {
-      return undefined;
-    }
-
-    const outputs = Object.fromEntries(
-      Object.entries(tracker).map(([fqn, t]) => [fqn, t.output]),
-    );
-    return yield* Output.evaluate(plan.output, outputs);
-  });
+      const outputs = Object.fromEntries(
+        Object.entries(tracker).map(([fqn, t]) => [fqn, t.output]),
+      );
+      return yield* Output.evaluate(plan.output, outputs);
+    }),
+  );
 
 // ── Phase 1: concurrent initial execution ──────────────────────────────────
 //
@@ -381,12 +405,14 @@ const executeNode = (
           // Some resources need a placeholder physical resource before their real
           // create can finish. Persist that stub so downstream evaluation can proceed.
           yield* report("pre-creating");
-          attr = yield* node.provider.precreate({
-            id: logicalId,
-            news: node.props,
-            session: scopedSession,
-            instanceId,
-          });
+          attr = yield* node.provider
+            .precreate({
+              id: logicalId,
+              news: node.props,
+              session: scopedSession,
+              instanceId,
+            })
+            .pipe(provideLifecycleScope(fqn, instanceId));
           yield* commit<CreatingResourceState>({
             status: "creating",
             fqn,
@@ -424,14 +450,16 @@ const executeNode = (
           yield* Output.evaluate(node.bindings, outputs),
         );
 
-        attr = yield* node.provider.create({
-          id: logicalId,
-          news,
-          instanceId,
-          bindings: bindingOutputs,
-          session: scopedSession,
-          output: attr,
-        });
+        attr = yield* node.provider
+          .create({
+            id: logicalId,
+            news,
+            instanceId,
+            bindings: bindingOutputs,
+            session: scopedSession,
+            output: attr,
+          })
+          .pipe(provideLifecycleScope(fqn, instanceId));
 
         yield* commit<CreatedResourceState>({
           status: "created",
@@ -519,16 +547,18 @@ const executeNode = (
           yield* Output.evaluate(node.bindings, outputs),
         );
 
-        const attr = yield* node.provider.update({
-          id: logicalId,
-          news,
-          instanceId,
-          bindings: bindingOutputs,
-          session: scopedSession,
-          olds: previousProps,
-          // @ts-expect-error - type system says this can be undefined, can it be?
-          output: node.state.attr,
-        });
+        const attr = yield* node.provider
+          .update({
+            id: logicalId,
+            news,
+            instanceId,
+            bindings: bindingOutputs,
+            session: scopedSession,
+            olds: previousProps,
+            // @ts-expect-error - type system says this can be undefined, can it be?
+            output: node.state.attr,
+          })
+          .pipe(provideLifecycleScope(fqn, instanceId));
 
         if (node.state.status === "replaced") {
           yield* commit<ReplacedResourceState>({
@@ -620,12 +650,14 @@ const executeNode = (
 
         if (node.provider.precreate && attr === undefined) {
           yield* report("pre-creating");
-          attr = yield* node.provider.precreate({
-            id: logicalId,
-            news: node.props,
-            session: scopedSession,
-            instanceId,
-          });
+          attr = yield* node.provider
+            .precreate({
+              id: logicalId,
+              news: node.props,
+              session: scopedSession,
+              instanceId,
+            })
+            .pipe(provideLifecycleScope(fqn, instanceId));
           yield* commit<ReplacingResourceState>({
             status: "replacing",
             fqn,
@@ -665,14 +697,16 @@ const executeNode = (
           yield* Output.evaluate(node.bindings, outputs),
         );
 
-        attr = yield* node.provider.create({
-          id: logicalId,
-          news,
-          instanceId,
-          bindings: bindingOutputs,
-          session: scopedSession,
-          output: attr,
-        });
+        attr = yield* node.provider
+          .create({
+            id: logicalId,
+            news,
+            instanceId,
+            bindings: bindingOutputs,
+            session: scopedSession,
+            output: attr,
+          })
+          .pipe(provideLifecycleScope(fqn, instanceId));
 
         yield* commit<ReplacedResourceState>({
           // Creation of the new generation succeeded; from here on the only remaining
@@ -710,7 +744,7 @@ const executeNode = (
 
       // @ts-expect-error - node is never, this should be unreachable
       return yield* Effect.die(`Unknown action: ${node.action}`);
-    }).pipe(Effect.provide(Layer.succeed(InstanceId, instanceId)));
+    });
   }) as Effect.Effect<void, never, never>;
 
 // ── Phase 3: imperative convergence loop ───────────────────────────────────
@@ -796,7 +830,7 @@ const converge = Effect.fnUntraced(function* (
           olds: oldProps,
           output: tracker[fqn].output,
         })
-        .pipe(Effect.provide(Layer.succeed(InstanceId, instanceId)));
+        .pipe(provideLifecycleScope(fqn, instanceId));
 
       tracker[fqn] = {
         output: attr,
@@ -851,13 +885,13 @@ const collectGarbage = Effect.fnUntraced(function* (
     deletionGraph: Record<string, Delete | ReplacedResourceState | undefined>,
   ) {
     const deletions: {
-      [fqn in string]: Effect.Effect<void, StateStoreError, never>;
+      [fqn in string]: Effect.Effect<void, StateStoreError, ArtifactStore>;
     } = {};
 
     const deleteResource = (
       node: Delete | ReplacedResourceState,
       ancestors: ReadonlySet<string> = new Set(),
-    ): Effect.Effect<void, StateStoreError, never> =>
+    ): Effect.Effect<void, StateStoreError, ArtifactStore> =>
       Effect.gen(function* () {
         const isDeleteNode = (
           node: Delete | ReplacedResourceState,
@@ -964,14 +998,16 @@ const collectGarbage = Effect.fnUntraced(function* (
             }
 
             if (attr !== undefined) {
-              yield* provider.delete({
-                id: logicalId,
-                instanceId,
-                olds: props as never,
-                output: attr,
-                session: scopedSession,
-                bindings: [],
-              });
+              yield* provider
+                .delete({
+                  id: logicalId,
+                  instanceId,
+                  olds: props as never,
+                  output: attr,
+                  session: scopedSession,
+                  bindings: [],
+                })
+                .pipe(provideLifecycleScope(fqn, instanceId));
             }
 
             if (isDeleteNode(node)) {
@@ -1024,7 +1060,7 @@ const collectGarbage = Effect.fnUntraced(function* (
               }
               yield* scopedSession.note("Replaced resource cleanup complete.");
             }
-          }).pipe(Effect.provide(Layer.succeed(InstanceId, instanceId))),
+          }),
         ));
       });
 

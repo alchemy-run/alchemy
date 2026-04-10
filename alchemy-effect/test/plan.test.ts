@@ -13,6 +13,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import {
+  ArtifactProbe,
   BindingTarget,
   Bucket,
   Function,
@@ -60,6 +61,67 @@ const makePlanWithCustomStack =
         Effect.provide(TestLayers),
       );
     });
+
+test(
+  "artifacts are isolated by FQN during plan diff for namespaced resources",
+  {
+    state: test.state({
+      "Left/Shared": {
+        instanceId: "left-instance",
+        providerVersion: 0,
+        logicalId: "Shared",
+        fqn: "Left/Shared",
+        namespace: { Id: "Left" },
+        resourceType: "Test.ArtifactProbe",
+        status: "created",
+        props: {
+          value: "left-v1",
+        },
+        attr: {
+          value: "left-v1",
+          artifactValue: undefined,
+        },
+        bindings: [],
+        downstream: [],
+      },
+      "Right/Shared": {
+        instanceId: "right-instance",
+        providerVersion: 0,
+        logicalId: "Shared",
+        fqn: "Right/Shared",
+        namespace: { Id: "Right" },
+        resourceType: "Test.ArtifactProbe",
+        status: "created",
+        props: {
+          value: "right-v1",
+        },
+        attr: {
+          value: "right-v1",
+          artifactValue: undefined,
+        },
+        bindings: [],
+        downstream: [],
+      },
+    }),
+  },
+  Effect.gen(function* () {
+    const Site = Construct.fn(function* (
+      _id: string,
+      props: { value: string },
+    ) {
+      return yield* ArtifactProbe("Shared", { value: props.value });
+    });
+
+    const plan = yield* Effect.gen(function* () {
+      const left = yield* Site("Left", { value: "left-v2" });
+      const right = yield* Site("Right", { value: "right-v2" });
+      return { left, right };
+    }).pipe(makePlan);
+
+    expect(plan.resources["Left/Shared"]?.action).toEqual("update");
+    expect(plan.resources["Right/Shared"]?.action).toEqual("update");
+  }),
+);
 
 test(
   "create all resources when plan is empty",

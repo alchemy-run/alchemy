@@ -18,6 +18,7 @@ import * as ChildProcess from "effect/unstable/process/ChildProcess";
 
 import packageJson from "../package.json" with { type: "json" };
 import { apply } from "../src/Apply.ts";
+import { provideFreshArtifactStore } from "../src/Artifacts.ts";
 import * as AWSAccount from "../src/AWS/Account.ts";
 import {
   bootstrap as bootstrapAws,
@@ -230,33 +231,35 @@ const execStack = Effect.fn(function* ({
     const cli = yield* CLI.Cli;
     const stack = yield* stackEffect;
 
-    yield* Effect.gen(function* () {
-      const updatePlan = yield* Plan.make(
-        destroy
-          ? {
-              ...stack,
-              // zero these out (destroy will treat all as orphans)
-              // TODO(sam): probably better to have Plan.destroy and Plan.update
-              resources: {},
-              bindings: {},
-              output: {},
+    yield* provideFreshArtifactStore(
+      Effect.gen(function* () {
+        const updatePlan = yield* Plan.make(
+          destroy
+            ? {
+                ...stack,
+                // zero these out (destroy will treat all as orphans)
+                // TODO(sam): probably better to have Plan.destroy and Plan.update
+                resources: {},
+                bindings: {},
+                output: {},
+              }
+            : stack,
+        );
+        if (dryRun) {
+          yield* cli.displayPlan(updatePlan);
+        } else {
+          if (!yes) {
+            const approved = yield* cli.approvePlan(updatePlan);
+            if (!approved) {
+              return;
             }
-          : stack,
-      );
-      if (dryRun) {
-        yield* cli.displayPlan(updatePlan);
-      } else {
-        if (!yes) {
-          const approved = yield* cli.approvePlan(updatePlan);
-          if (!approved) {
-            return;
           }
-        }
-        const outputs = yield* apply(updatePlan);
+          const outputs = yield* apply(updatePlan);
 
-        yield* Console.log(outputs);
-      }
-    }).pipe(
+          yield* Console.log(outputs);
+        }
+      }),
+    ).pipe(
       Effect.provide(stack.services),
       // Effect.provide(Logger.layer([fileLogger("stacks", stack.name, stage)])),
     );

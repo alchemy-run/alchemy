@@ -1,3 +1,4 @@
+import { Artifacts } from "@/Artifacts";
 import { isResolved } from "@/Diff.ts";
 import { Resource } from "@/Resource";
 import * as State from "@/State/index";
@@ -270,6 +271,58 @@ export const deletedBindingRegressionProvider =
     }),
     delete: Effect.fn(function* () {}),
   });
+
+export type ArtifactProbeProps = {
+  value: string;
+};
+
+export interface ArtifactProbe extends Resource<
+  "Test.ArtifactProbe",
+  ArtifactProbeProps,
+  {
+    value: string;
+    artifactValue: string | undefined;
+  }
+> {}
+
+export const ArtifactProbe = Resource<ArtifactProbe>("Test.ArtifactProbe");
+
+export const artifactProbeProvider = ArtifactProbe.provider.succeed({
+  diff: Effect.fn(function* ({ news, olds }) {
+    const next = news as ArtifactProbeProps;
+    const prev = olds as ArtifactProbeProps | undefined;
+    const artifacts = yield* Artifacts;
+    const previous = yield* artifacts.get<string>("memo");
+    if (
+      previous !== undefined &&
+      previous !== next.value &&
+      previous !== prev?.value
+    ) {
+      return { action: "replace" as const };
+    }
+    yield* artifacts.set("memo", next.value);
+    return next.value !== prev?.value
+      ? { action: "update" as const }
+      : undefined;
+  }),
+  create: Effect.fn(function* ({ news }) {
+    const props = news as ArtifactProbeProps;
+    const artifacts = yield* Artifacts;
+    return {
+      value: props.value,
+      artifactValue: yield* artifacts.get<string>("memo"),
+    };
+  }),
+  update: Effect.fn(function* ({ news }) {
+    const props = news as ArtifactProbeProps;
+    const artifacts = yield* Artifacts;
+    return {
+      value: props.value,
+      artifactValue: yield* artifacts.get<string>("memo"),
+    };
+  }),
+  delete: Effect.fn(function* () {}),
+});
 
 // TestResource
 
@@ -644,6 +697,7 @@ export const TestLayers = Layer.mergeAll(
   functionProvider,
   bindingTargetProvider,
   deletedBindingRegressionProvider,
+  artifactProbeProvider,
   testResourceProvider,
   staticStablesResourceProvider,
   phasedTargetProvider,
