@@ -432,23 +432,39 @@ export const WorkerProvider = () =>
         return createAlchemyWorkerTags(id).every((tag) => actualTags.has(tag));
       };
 
-      const prepare = Effect.fnUntraced(function* (
-        id: string,
-        props: WorkerProps,
-      ) {
-        if (props.vite) {
-          const [{ assets, bundle }, input] = yield* Effect.all(
-            [viteBuild(props), hashDirectory(props.vite)],
+      const prepare = Effect.fnUntraced(
+        function* (id: string, props: WorkerProps) {
+          if (props.vite) {
+            const [{ assets, bundle }, input] = yield* Effect.all(
+              [viteBuild(props), hashDirectory(props.vite)],
+              { concurrency: "unbounded" },
+            );
+            return { assets, bundle, input };
+          }
+          const [assets, bundle] = yield* Effect.all(
+            [prepareAssets(props.assets), prepareBundle(id, props)],
             { concurrency: "unbounded" },
           );
-          return { assets, bundle, input };
-        }
-        const [assets, bundle] = yield* Effect.all(
-          [prepareAssets(props.assets), prepareBundle(id, props)],
-          { concurrency: "unbounded" },
-        );
-        return { assets, bundle };
-      });
+          return { assets, bundle };
+        },
+        Effect.map(({ assets, bundle, input }) => ({
+          assets,
+          bundle: {
+            main: bundle?.files[0].path,
+            files: bundle?.files.map(
+              (file) =>
+                new File([file.content as BlobPart], file.path, {
+                  type: contentTypeFromExtension(path.extname(file.path)),
+                }),
+            ),
+          },
+          hash: {
+            assets: assets?.hash,
+            bundle: bundle?.hash,
+            input,
+          } satisfies Worker["Attributes"]["hash"],
+        })),
+      );
 
       const prepareAssets = Effect.fnUntraced(function* (
         assets: WorkerProps["assets"],
@@ -720,7 +736,7 @@ ${[
         yield* Effect.logInfo(
           `Cloudflare Worker ${olds ? "update" : "create"}: preparing bundle for ${name}`,
         );
-        const { assets, bundle, input } = yield* prepare(id, news);
+        const { assets, bundle, hash } = yield* prepare(id, news);
         const metadataBindings = bindings.flatMap((b) => b.data.bindings);
         let metadataAssets:
           | workers.PutScriptRequest["metadata"]["assets"]
@@ -937,7 +953,7 @@ ${[
           keepBindings: undefined,
           limits: news.limits,
           logpush: news.logpush,
-          mainModule: bundle?.files[0].path,
+          mainModule: bundle.main,
           migrations,
           observability: news.observability ?? {
             enabled: true,
@@ -951,17 +967,11 @@ ${[
           tailConsumers: undefined,
           usageModel: undefined,
         };
-        const files = bundle?.files.map(
-          (file) =>
-            new File([file.content as BlobPart], file.path, {
-              type: contentTypeFromExtension(path.extname(file.path)),
-            }),
-        );
         const worker = yield* putScript({
           accountId,
           scriptName: name,
           metadata,
-          files,
+          files: bundle.files,
         }).pipe(
           Effect.catch((err) => {
             // When adopting a Worker managed by Wrangler (or after a previous
@@ -989,7 +999,7 @@ ${[
                     newTag: bumpMigrationTagVersion(expectedTag),
                   },
                 },
-                files,
+                files: bundle.files,
               });
             }
             return Effect.fail(err as any);
@@ -1012,11 +1022,7 @@ ${[
               : undefined,
           tags: metadata.tags,
           accountId,
-          hash: {
-            assets: assets?.hash,
-            bundle: bundle?.hash,
-            input,
-          },
+          hash,
         } satisfies Worker["Attributes"];
       });
 
