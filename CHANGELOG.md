@@ -1,3 +1,17 @@
+## v0.7.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**:
+  - Vite integration &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy/issues/41 [<samp>(e3c16)</samp>](https://github.com/alchemy-run/alchemy/commit/e3c160c)
+- **core**:
+  - Add Output.as<T>() &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(33186)</samp>](https://github.com/alchemy-run/alchemy/commit/33186ef)
+  - Artifact service for caching build artifacts across plan and apply &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(dc60e)</samp>](https://github.com/alchemy-run/alchemy/commit/dc60e9e)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v0.6.4...v0.7.0)
+
+---
+
 ## v0.6.4
 
 _No significant changes_
