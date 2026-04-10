@@ -438,7 +438,7 @@ export const WorkerProvider = () =>
       ) {
         if (props.vite) {
           const [{ assets, bundle }, input] = yield* Effect.all(
-            [viteBuild(props), hashViteInput(props.vite)],
+            [viteBuild(props), hashDirectory(props.vite.cwd, props.vite.memo)],
             { concurrency: "unbounded" },
           );
           return { assets, bundle, input };
@@ -478,15 +478,12 @@ export const WorkerProvider = () =>
         );
       });
 
-      const hashViteInput = (vite: NonNullable<WorkerProps["vite"]>) =>
-        hashDirectory(vite.cwd, vite.memo);
-
       const viteBuild = Effect.fnUntraced(function* (props: WorkerProps) {
         const vite = yield* Effect.promise(() => import("vite"));
+        let assetsDirectory: string | undefined;
         let serverBundle: vite.Rolldown.OutputBundle | undefined;
-        let clientDir: string | undefined;
 
-        yield* Effect.tryPromise(async () => {
+        yield* Effect.promise(async () => {
           const builder = await vite.createBuilder(
             {
               root: props.vite?.cwd,
@@ -510,7 +507,7 @@ export const WorkerProvider = () =>
                     return environment.name === "client";
                   },
                   generateBundle(outputOptions) {
-                    clientDir = outputOptions.dir;
+                    assetsDirectory = outputOptions.dir;
                   },
                 },
               ],
@@ -522,14 +519,16 @@ export const WorkerProvider = () =>
           );
           await builder.buildApp();
         });
-        if (!serverBundle && !clientDir) {
-          return yield* Effect.die(new Error("Failed to build Vite bundle"));
+        if (!assetsDirectory && !serverBundle) {
+          return yield* Effect.die(
+            new Error("Vite build produced neither server nor client output"),
+          );
         }
         const [assets, bundle] = yield* Effect.all(
           [
-            clientDir
+            assetsDirectory
               ? read({
-                  directory: clientDir,
+                  directory: assetsDirectory,
                   config:
                     typeof props.assets === "object" && "config" in props.assets
                       ? props.assets.config
@@ -1027,7 +1026,7 @@ ${[
         output: Worker["Attributes"],
       ) {
         if (props.vite) {
-          const input = yield* hashViteInput(props.vite);
+          const input = yield* hashDirectory(props.vite.cwd, props.vite.memo);
           return input !== output.hash?.input;
         }
         const [assetsHash, bundleHash] = yield* Effect.all(

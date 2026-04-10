@@ -21,7 +21,7 @@ export interface CommandProps {
   cwd?: string;
   /**
    * Options for memoizing the build input.
-   * Defaults to all files in the working directory, except those matched by exclude.
+   * Defaults to all files in the working directory that are not git ignored, plus the package manager lockfile.
    * @example { include: ["src/*.ts", "src/*.tsx", "package.json"], exclude: ["node_modules", "dist"] }
    */
   memo?: MemoOptions;
@@ -93,11 +93,7 @@ export const CommandProvider = () =>
       const pathModule = yield* Path.Path;
 
       const computeInputHash = (props: CommandProps) =>
-        hashDirectory(props.cwd, {
-          include: props.memo?.include,
-          exclude: props.memo?.exclude,
-          lockfile: props.memo?.lockfile,
-        });
+        hashDirectory(props.cwd, props.memo);
 
       const runBuild = (props: CommandProps) =>
         Effect.gen(function* () {
