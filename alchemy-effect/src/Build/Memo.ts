@@ -146,12 +146,15 @@ const Memo = Effect.gen(function* () {
   };
 });
 
-export const hashDirectory = Effect.fn(function* (
-  cwd: string | undefined,
-  options?: MemoOptions,
-): Effect.fn.Return<string, PlatformError, FileSystem.FileSystem | Path.Path> {
+export const hashDirectory = Effect.fn(function* (props: {
+  cwd?: string;
+  memo?: MemoOptions;
+}): Effect.fn.Return<string, PlatformError, FileSystem.FileSystem | Path.Path> {
   const service = yield* Memo;
-  const resolvedOptions = yield* service.resolveMemoOptions(cwd, options ?? {});
+  const resolvedOptions = yield* service.resolveMemoOptions(
+    props.cwd,
+    props.memo ?? {},
+  );
   const files = yield* service.listFiles(resolvedOptions);
   const hash = yield* service.hashFiles(resolvedOptions.cwd, files);
   return hash;

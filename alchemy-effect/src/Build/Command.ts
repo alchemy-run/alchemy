@@ -92,9 +92,6 @@ export const CommandProvider = () =>
       const fs = yield* FileSystem.FileSystem;
       const pathModule = yield* Path.Path;
 
-      const computeInputHash = (props: CommandProps) =>
-        hashDirectory(props.cwd, props.memo);
-
       const runBuild = (props: CommandProps) =>
         Effect.gen(function* () {
           const cwd = props.cwd ? pathModule.resolve(props.cwd) : process.cwd();
@@ -117,7 +114,7 @@ export const CommandProvider = () =>
           if (!output) {
             return undefined;
           }
-          const newHash = yield* computeInputHash(news);
+          const newHash = yield* hashDirectory(news);
           if (newHash !== output.hash) {
             return { action: "update" as const };
           }
@@ -134,7 +131,7 @@ export const CommandProvider = () =>
           return output;
         }),
         create: Effect.fnUntraced(function* ({ news, session }) {
-          const hash = yield* computeInputHash(news);
+          const hash = yield* hashDirectory(news);
           const outputPath = getOutputPath(news);
 
           yield* session.note(`Running build: ${news.command}`);
@@ -155,7 +152,7 @@ export const CommandProvider = () =>
           };
         }),
         update: Effect.fnUntraced(function* ({ news, session }) {
-          const hash = yield* computeInputHash(news);
+          const hash = yield* hashDirectory(news);
           const outputPath = getOutputPath(news);
 
           yield* session.note(`Rebuilding: ${news.command}`);

@@ -438,7 +438,7 @@ export const WorkerProvider = () =>
       ) {
         if (props.vite) {
           const [{ assets, bundle }, input] = yield* Effect.all(
-            [viteBuild(props), hashDirectory(props.vite.cwd, props.vite.memo)],
+            [viteBuild(props), hashDirectory(props.vite)],
             { concurrency: "unbounded" },
           );
           return { assets, bundle, input };
@@ -1026,7 +1026,7 @@ ${[
         output: Worker["Attributes"],
       ) {
         if (props.vite) {
-          const input = yield* hashDirectory(props.vite.cwd, props.vite.memo);
+          const input = yield* hashDirectory(props.vite);
           return input !== output.hash?.input;
         }
         const [assetsHash, bundleHash] = yield* Effect.all(
