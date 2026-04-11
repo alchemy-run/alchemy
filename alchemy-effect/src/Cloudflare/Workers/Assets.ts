@@ -185,10 +185,16 @@ export const AssetsProvider = () =>
                   count,
                 });
               }
-              manifest.set(name.startsWith("/") ? name : `/${name}`, {
-                hash,
-                size,
-              });
+              manifest.set(
+                (name.startsWith("/") ? name : `/${name}`).replaceAll(
+                  "\\",
+                  "/",
+                ),
+                {
+                  hash,
+                  size,
+                },
+              );
             }),
           );
           const result = {
@@ -202,6 +208,7 @@ export const AssetsProvider = () =>
             _headers,
             _redirects,
           };
+          console.log("the manifest is", result.manifest);
           return {
             ...result,
             hash: yield* sha256Object(result),
