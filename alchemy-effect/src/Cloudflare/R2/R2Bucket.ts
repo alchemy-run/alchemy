@@ -6,9 +6,9 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import { Account } from "../Account.ts";
 
-export type BucketName = string;
+export type R2BucketName = string;
 
-export type BucketProps = {
+export type R2BucketProps = {
   /**
    * Name of the bucket. If omitted, a unique name will be generated.
    * @default ${app}-${stage}-${id}
@@ -18,40 +18,40 @@ export type BucketProps = {
    * Storage class for newly uploaded objects.
    * @default "Standard"
    */
-  storageClass?: Bucket.StorageClass;
+  storageClass?: R2Bucket.StorageClass;
   /**
    * Jurisdiction where objects in this bucket are guaranteed to be stored.
    * @default "default"
    */
-  jurisdiction?: Bucket.Jurisdiction;
+  jurisdiction?: R2Bucket.Jurisdiction;
   /**
    * Location hint for the bucket.
    */
-  locationHint?: Bucket.Location;
+  locationHint?: R2Bucket.Location;
 };
 
-export interface Bucket extends Resource<
-  "Cloudflare.R2.Bucket",
-  BucketProps,
+export type R2Bucket = Resource<
+  "Cloudflare.R2Bucket",
+  R2BucketProps,
   {
-    bucketName: BucketName;
-    storageClass: Bucket.StorageClass;
-    jurisdiction: Bucket.Jurisdiction;
-    location: Bucket.Location | undefined;
+    bucketName: R2BucketName;
+    storageClass: R2Bucket.StorageClass;
+    jurisdiction: R2Bucket.Jurisdiction;
+    location: R2Bucket.Location | undefined;
     accountId: string;
   }
-> {}
+>;
 
-export const Bucket = Resource<Bucket>("Cloudflare.R2.Bucket");
+export const R2Bucket = Resource<R2Bucket>("Cloudflare.R2Bucket");
 
-export declare namespace Bucket {
+export declare namespace R2Bucket {
   export type StorageClass = "Standard" | "InfrequentAccess";
   export type Jurisdiction = "default" | "eu" | "fedramp";
   export type Location = "apac" | "eeur" | "enam" | "weur" | "wnam" | "oc";
 }
 
-export const BucketProvider = () =>
-  Bucket.provider.effect(
+export const R2BucketProvider = () =>
+  R2Bucket.provider.effect(
     Effect.gen(function* () {
       const accountId = yield* Account;
       const createBucket = yield* r2.createBucket;
@@ -70,9 +70,9 @@ export const BucketProvider = () =>
 
       const normalizeLocation = (
         location: string | undefined | null,
-      ): Bucket.Location | undefined => {
+      ): R2Bucket.Location | undefined => {
         if (!location) return undefined;
-        return location.toLowerCase() as Bucket.Location;
+        return location.toLowerCase() as R2Bucket.Location;
       };
 
       return {

@@ -1,6 +1,5 @@
 import * as Cloudflare from "@/Cloudflare";
 import { Account } from "@/Cloudflare/Account";
-import * as R2 from "@/Cloudflare/R2/index";
 import { destroy } from "@/Destroy";
 import { test } from "@/Test/Vitest";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
@@ -24,7 +23,7 @@ test(
 
     const bucket = yield* test.deploy(
       Effect.gen(function* () {
-        return yield* R2.Bucket("DefaultBucket");
+        return yield* Cloudflare.R2Bucket("DefaultBucket");
       }),
     );
 
@@ -53,7 +52,7 @@ test(
 
     const bucket = yield* test.deploy(
       Effect.gen(function* () {
-        return yield* R2.Bucket("TestBucket", {
+        return yield* Cloudflare.R2Bucket("TestBucket", {
           name: "test-bucket-initial",
           storageClass: "Standard",
         });
@@ -70,7 +69,7 @@ test(
     // Update the bucket
     const updatedBucket = yield* test.deploy(
       Effect.gen(function* () {
-        return yield* R2.Bucket("TestBucket", {
+        return yield* Cloudflare.R2Bucket("TestBucket", {
           name: "test-bucket-initial",
           storageClass: "InfrequentAccess",
         });

@@ -5,8 +5,8 @@ import type * as Stream from "effect/Stream";
 import * as Binding from "../../Binding.ts";
 import { WorkerEnvironment } from "../Workers/Worker.ts";
 import { replaceEffectStream } from "../stream.ts";
-import type { Namespace } from "./Namespace.ts";
-import { NamespaceBinding } from "./NamespaceBinding.ts";
+import type { KVNamespace } from "./KVNamespace.ts";
+import { NamespaceBinding } from "./KVNamespaceBinding.ts";
 
 export type PutValue =
   | string
@@ -20,7 +20,7 @@ export interface PutOptions extends runtime.KVNamespacePutOptions {}
 export class Put extends Binding.Service<
   Put,
   (
-    namespace: Namespace,
+    namespace: KVNamespace,
   ) => Effect.Effect<
     (key: string, value: PutValue, options?: PutOptions) => Effect.Effect<void>
   >
@@ -32,7 +32,7 @@ export const PutLive = Layer.effect(
     const Policy = yield* PutPolicy;
     const env = yield* WorkerEnvironment;
 
-    return Effect.fn(function* (namespace: Namespace) {
+    return Effect.fn(function* (namespace: KVNamespace) {
       yield* Policy(namespace);
       const kvNamespace = (env as Record<string, runtime.KVNamespace>)[
         namespace.LogicalId
@@ -53,7 +53,7 @@ export const PutLive = Layer.effect(
 
 export class PutPolicy extends Binding.Policy<
   PutPolicy,
-  (namespace: Namespace) => Effect.Effect<void>
+  (namespace: KVNamespace) => Effect.Effect<void>
 >()("Cloudflare.KV.Put") {}
 
 export const PutPolicyLive = PutPolicy.layer.succeed(NamespaceBinding);

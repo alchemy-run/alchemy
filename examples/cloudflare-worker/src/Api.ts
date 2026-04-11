@@ -1,11 +1,13 @@
 import * as BetterAuth from "@alchemy.run/better-auth";
 import * as Cloudflare from "alchemy-effect/Cloudflare";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import Agent from "./Agent.ts";
+import { Bucket } from "./Bucket.ts";
 import NotifyWorkflow from "./NotifyWorkflow.ts";
 import Room from "./Room.ts";
 
@@ -27,6 +29,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
     const rooms = yield* Room;
     const notifier = yield* NotifyWorkflow;
     const loader = yield* Cloudflare.DynamicWorker("Loader");
+    const bucket = yield* Cloudflare.R2BucketBinding.bind(Bucket);
 
     return {
       fetch: Effect.gen(function* () {
@@ -35,6 +38,32 @@ export default class Api extends Cloudflare.Worker<Api>()(
 
         if (request.url.startsWith("/auth/")) {
           return yield* betterAuth.fetch;
+        } else if (request.url.startsWith("/object/")) {
+          return yield* bucket.get(request.url.split("/").pop()!).pipe(
+            Effect.flatMap((object) =>
+              object === null
+                ? Effect.succeed(
+                    HttpServerResponse.text("Object not found", {
+                      status: 404,
+                    }),
+                  )
+                : object.text().pipe(
+                    Effect.map((text) =>
+                      HttpServerResponse.text(text, {
+                        headers: { "content-type": "application/json" },
+                      }),
+                    ),
+                  ),
+            ),
+            Effect.catchTag("R2Error", (error) =>
+              Effect.succeed(
+                HttpServerResponse.text("Internal server error", {
+                  status: 500,
+                  statusText: error.message,
+                }),
+              ),
+            ),
+          );
         } else if (request.url === "/sandbox/increment") {
           const agent = agents.getByName("sandbox-test");
           const body = yield* agent.increment().pipe(Effect.orDie);
@@ -131,5 +160,9 @@ export default class Api extends Cloudflare.Worker<Api>()(
         return HttpServerResponse.text("Hello World", { status: 200 });
       }),
     };
-  }).pipe(Effect.provide(BetterAuth.CloudflareD1)),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(BetterAuth.CloudflareD1, Cloudflare.R2BucketBindingLive),
+    ),
+  ),
 ) {}

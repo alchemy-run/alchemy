@@ -21,8 +21,8 @@ export type NamespaceProps = {
   title?: string;
 };
 
-export interface Namespace extends Resource<
-  "Cloudflare.KV.Namespace",
+export type KVNamespace = Resource<
+  "Cloudflare.KVNamespace",
   NamespaceProps,
   {
     title: string;
@@ -30,16 +30,16 @@ export interface Namespace extends Resource<
     supportsUrlEncoding: boolean | undefined;
     accountId: string;
   }
-> {}
+>;
 
-export const Namespace = Resource<Namespace>("Cloudflare.KV.Namespace");
+export const KVNamespace = Resource<KVNamespace>("Cloudflare.KVNamespace");
 
 export const NamespaceProvider = (): Layer<
-  Provider<Namespace>,
+  Provider<KVNamespace>,
   never,
   Account | Credentials | HttpClient | Stack | Stage
 > =>
-  Namespace.provider.effect(
+  KVNamespace.provider.effect(
     Effect.gen(function* () {
       const accountId = yield* Account;
       const createNamespace = yield* kv.createNamespace;

@@ -123,6 +123,38 @@ export const DatabaseProvider = (): Layer<
             return { action: "update" } as const;
           }
         }),
+        read: Effect.fn(function* ({ id, output, olds }) {
+          if (output?.databaseId) {
+            return yield* getDb({
+              accountId: output.accountId,
+              databaseId: output.databaseId,
+            }).pipe(
+              Effect.map((db) => ({
+                databaseId: db.uuid ?? output.databaseId,
+                databaseName: db.name ?? output.databaseName,
+                jurisdiction: output.jurisdiction,
+                readReplication: db.readReplication ?? undefined,
+                accountId: output.accountId,
+              })),
+              Effect.catchTag("DatabaseNotFound", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          }
+          const name = yield* createDatabaseName(id, olds?.name);
+          const dbs = yield* listDbs({ accountId, name });
+          const match = dbs.result.find((db) => db.name === name);
+          if (match) {
+            return {
+              databaseId: match.uuid!,
+              databaseName: match.name ?? name,
+              jurisdiction: (olds?.jurisdiction ?? "default") as Jurisdiction,
+              readReplication: olds?.readReplication,
+              accountId,
+            };
+          }
+          return undefined;
+        }),
         create: Effect.fn(function* ({ id, news = {} }) {
           const name = yield* createDatabaseName(id, news.name);
           const jurisdiction = news.jurisdiction ?? "default";
@@ -184,38 +216,6 @@ export const DatabaseProvider = (): Layer<
             accountId: output.accountId,
             databaseId: output.databaseId,
           }).pipe(Effect.catchTag("DatabaseNotFound", () => Effect.void));
-        }),
-        read: Effect.fn(function* ({ id, output, olds }) {
-          if (output?.databaseId) {
-            return yield* getDb({
-              accountId: output.accountId,
-              databaseId: output.databaseId,
-            }).pipe(
-              Effect.map((db) => ({
-                databaseId: db.uuid ?? output.databaseId,
-                databaseName: db.name ?? output.databaseName,
-                jurisdiction: output.jurisdiction,
-                readReplication: db.readReplication ?? undefined,
-                accountId: output.accountId,
-              })),
-              Effect.catchTag("DatabaseNotFound", () =>
-                Effect.succeed(undefined),
-              ),
-            );
-          }
-          const name = yield* createDatabaseName(id, olds?.name);
-          const dbs = yield* listDbs({ accountId, name });
-          const match = dbs.result.find((db) => db.name === name);
-          if (match) {
-            return {
-              databaseId: match.uuid!,
-              databaseName: match.name ?? name,
-              jurisdiction: (olds?.jurisdiction ?? "default") as Jurisdiction,
-              readReplication: olds?.readReplication,
-              accountId,
-            };
-          }
-          return undefined;
         }),
       };
     }),

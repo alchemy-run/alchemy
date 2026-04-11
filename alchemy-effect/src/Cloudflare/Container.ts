@@ -268,80 +268,82 @@ export const Container: Platform<
   ContainerShape,
   Server.ProcessContext,
   Container
-> = Platform("Cloudflare.Container", (id: string): Server.ProcessContext => {
-  const runners: Effect.Effect<void, never, any>[] = [];
-  const env: Record<string, any> = {};
+> = Platform("Cloudflare.Container", {
+  createExecutionContext: (id: string): Server.ProcessContext => {
+    const runners: Effect.Effect<void, never, any>[] = [];
+    const env: Record<string, any> = {};
 
-  const serve = <Req = never>(handler: HttpEffect<Req>) =>
-    Effect.sync(() => {
-      runners.push(
-        Effect.gen(function* () {
-          const httpServer = yield* Effect.serviceOption(HttpServer).pipe(
-            Effect.map(Option.getOrUndefined),
-          );
-          if (httpServer) {
-            yield* httpServer.serve(handler);
-            yield* Effect.never;
-          } else {
-            // this should only happen at plantime, validate?
-          }
-        }).pipe(Effect.orDie),
-      );
-    });
-
-  return {
-    Type: ContainerTypeId,
-    LogicalId: id,
-    id,
-    env,
-    set: (bindingId: string, output: Output.Output) =>
+    const serve = <Req = never>(handler: HttpEffect<Req>) =>
       Effect.sync(() => {
-        const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
-        env[key] = output.pipe(Output.map((value) => JSON.stringify(value)));
-        return key;
-      }),
-    get: <T>(key: string) =>
-      Config.string(key)
-        .asEffect()
-        .pipe(
-          Effect.flatMap((value) =>
-            Effect.try({
-              try: () => JSON.parse(value) as T,
-              catch: (error) => error as Error,
-            }),
-          ),
-          Effect.catch((cause) =>
-            Effect.die(
-              new Error(`Failed to get environment variable: ${key}`, {
-                cause,
+        runners.push(
+          Effect.gen(function* () {
+            const httpServer = yield* Effect.serviceOption(HttpServer).pipe(
+              Effect.map(Option.getOrUndefined),
+            );
+            if (httpServer) {
+              yield* httpServer.serve(handler);
+              yield* Effect.never;
+            } else {
+              // this should only happen at plantime, validate?
+            }
+          }).pipe(Effect.orDie),
+        );
+      });
+
+    return {
+      Type: ContainerTypeId,
+      LogicalId: id,
+      id,
+      env,
+      set: (bindingId: string, output: Output.Output) =>
+        Effect.sync(() => {
+          const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
+          env[key] = output.pipe(Output.map((value) => JSON.stringify(value)));
+          return key;
+        }),
+      get: <T>(key: string) =>
+        Config.string(key)
+          .asEffect()
+          .pipe(
+            Effect.flatMap((value) =>
+              Effect.try({
+                try: () => JSON.parse(value) as T,
+                catch: (error) => error as Error,
               }),
             ),
-          ),
-        ),
-    run: ((effect: Effect.Effect<void, never, any>) =>
-      Effect.sync(() => {
-        runners.push(effect);
-      })) as unknown as Server.ProcessContext["run"],
-    serve,
-    exports: Effect.sync(() => ({
-      default: Effect.all(
-        runners.map((eff) =>
-          Effect.forever(
-            eff.pipe(
-              // Log and ignore errors (daemon mode, it should just re-run)
-              Effect.tapError((err) => Effect.logError(err)),
-              Effect.ignore,
-              // TODO(sam): ignore cause? for now, let that actually kill the server
-              // Effect.ignoreCause
+            Effect.catch((cause) =>
+              Effect.die(
+                new Error(`Failed to get environment variable: ${key}`, {
+                  cause,
+                }),
+              ),
             ),
           ),
+      run: ((effect: Effect.Effect<void, never, any>) =>
+        Effect.sync(() => {
+          runners.push(effect);
+        })) as unknown as Server.ProcessContext["run"],
+      serve,
+      exports: Effect.sync(() => ({
+        default: Effect.all(
+          runners.map((eff) =>
+            Effect.forever(
+              eff.pipe(
+                // Log and ignore errors (daemon mode, it should just re-run)
+                Effect.tapError((err) => Effect.logError(err)),
+                Effect.ignore,
+                // TODO(sam): ignore cause? for now, let that actually kill the server
+                // Effect.ignoreCause
+              ),
+            ),
+          ),
+          {
+            concurrency: "unbounded",
+          },
         ),
-        {
-          concurrency: "unbounded",
-        },
-      ),
-    })),
-  } as Server.ProcessContext;
+      })),
+    } as Server.ProcessContext;
+  },
 });
 
 export const bindContainer = Effect.fnUntraced(function* <Shape, Req = never>(
@@ -637,7 +639,6 @@ export const ContainerProvider = () =>
       });
 
       const bundleProgram = Effect.fnUntraced(function* ({
-        id,
         main,
         runtime,
         handler = "default",

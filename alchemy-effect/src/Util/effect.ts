@@ -55,3 +55,27 @@ export const taggedFunction = <
     },
     toString: () => `${tag.toString()}.${fn.name}`,
   });
+
+export type UnwrapEffect<T> =
+  T extends Effect.Effect<infer A, any, any> ? A : T;
+
+export type ToEffectInterface<T> = {
+  raw: T;
+} & {
+  [K in keyof T]: T[K] extends (...args: any[]) => any
+    ? (...args: Parameters<T[K]>) => Effect.Effect<Awaited<ReturnType<T[K]>>>
+    : T[K];
+};
+
+export const toEffectInterface = <T extends object>(raw: T) =>
+  ({
+    raw,
+    ...Object.fromEntries(
+      Object.entries(raw).map(([key, value]) => [
+        key,
+        typeof value === "function"
+          ? (...args: any[]) => Effect.tryPromise(async () => value(...args))
+          : value,
+      ]),
+    ),
+  }) as ToEffectInterface<T>;

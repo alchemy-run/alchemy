@@ -28,14 +28,21 @@ export interface Service<
   extends ServiceMap.Service<Self, Shape>, ServiceLike {
   readonly key: Identifier;
   new (_: never): ServiceShape<Identifier, Shape>;
-  bind: (
-    ...args: Parameters<Shape>
+  bind: <Req = never>(
+    ...args: BindParameters<Parameters<Shape>, Req>
   ) => Effect.Effect<
     Effect.Success<ReturnType<Shape>>,
     Effect.Error<ReturnType<Shape>>,
-    Self | Effect.Services<ReturnType<Shape>>
+    Self | Effect.Services<ReturnType<Shape>> | Req
   >;
 }
+
+type BindParameters<
+  Parameters extends any[],
+  Req = never,
+> = Parameters extends [infer First, ...infer Rest]
+  ? [First | Effect.Effect<First, never, Req>, ...BindParameters<Rest, Req>]
+  : [];
 
 /**
  * Creates a runtime binding service.

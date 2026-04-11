@@ -31,9 +31,13 @@ import {
 const test = Object.assign(
   ((name: string, ...args: any[]) => {
     if (args.length === 1) {
-      return (baseTest as any)(name, {
-        providers: false,
-      }, args[0]);
+      return (baseTest as any)(
+        name,
+        {
+          providers: false,
+        },
+        args[0],
+      );
     }
 
     const [options, effect] = args;

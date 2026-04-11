@@ -162,10 +162,11 @@ export const LaunchTemplate: Platform<
   LaunchTemplateServices,
   LaunchTemplateShape,
   LaunchTemplateExecutionContext
-> = Platform(
-  "AWS.AutoScaling.LaunchTemplate",
-  createEc2HostExecutionContext("AWS.AutoScaling.LaunchTemplate"),
-);
+> = Platform("AWS.AutoScaling.LaunchTemplate", {
+  createExecutionContext: createEc2HostExecutionContext(
+    "AWS.AutoScaling.LaunchTemplate",
+  ),
+});
 
 export const LaunchTemplateProvider = () =>
   LaunchTemplate.provider.effect(

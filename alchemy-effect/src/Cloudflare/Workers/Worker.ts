@@ -24,7 +24,7 @@ import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
 import type { HttpEffect } from "../../Http.ts";
-import type { Input } from "../../Input.ts";
+import type { Input, InputProps } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import {
@@ -39,7 +39,9 @@ import { Self } from "../../Self.ts";
 import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
 import { Account } from "../Account.ts";
+import { D1Database } from "../D1/D1Database.ts";
 import { CloudflareLogs } from "../Logs.ts";
+import type { R2Bucket } from "../R2/R2Bucket.ts";
 import type { AssetsConfig, AssetsProps } from "./Assets.ts";
 import * as Assets from "./Assets.ts";
 import cloudflare_workers from "./cloudflare_workers.ts";
@@ -142,7 +144,29 @@ export const ExportedHandlerMethods = [
   "queue",
 ] as const satisfies (keyof cf.ExportedHandler)[];
 
-export interface WorkerProps extends PlatformProps {
+export interface WorkerExecutionContext extends Serverless.FunctionContext {
+  export(name: string, value: any): Effect.Effect<void>;
+}
+
+export type WorkerServices = Worker | WorkerEnvironment | Request;
+
+export type WorkerShape = Main<WorkerServices>;
+
+export type WorkerBindingResource = R2Bucket | D1Database;
+
+export type WorkerBindings = {
+  [bindingName in string]: WorkerBindingResource;
+};
+
+export type WorkerBindingProps = {
+  [bindingName in string]:
+    | WorkerBindingResource
+    | Effect.Effect<WorkerBindingResource, any, any>;
+};
+
+export interface WorkerProps<
+  Bindings extends WorkerBindingProps = any,
+> extends PlatformProps {
   /**
    * Worker name override. If omitted, Alchemy derives a deterministic physical
    * name from the stack, stage, and logical ID.
@@ -185,19 +209,12 @@ export interface WorkerProps extends PlatformProps {
   placement?: WorkerPlacement;
   env?: Record<string, any>;
   exports?: string[];
+  bindings?: Bindings;
 }
 
-export interface WorkerExecutionContext extends Serverless.FunctionContext {
-  export(name: string, value: any): Effect.Effect<void>;
-}
-
-export type WorkerServices = Worker | WorkerEnvironment | Request;
-
-export type WorkerShape = Main<WorkerServices>;
-
-export interface Worker extends Resource<
+export type Worker<Bindings extends WorkerBindings = any> = Resource<
   WorkerTypeId,
-  WorkerProps,
+  WorkerProps<Bindings>,
   {
     workerId: string;
     workerName: string;
@@ -215,7 +232,7 @@ export interface Worker extends Resource<
     bindings: WorkerBinding[];
     containers?: { className: string }[];
   }
-> {}
+>;
 
 /**
  * A Cloudflare Worker host with deploy-time binding support and runtime export
@@ -238,105 +255,165 @@ export const Worker: Platform<
   WorkerServices,
   WorkerShape,
   WorkerExecutionContext
-> = Platform(WorkerTypeId, (id: string): WorkerExecutionContext => {
-  const listeners: Effect.Effect<Serverless.FunctionListener>[] = [];
-  const exports: Record<string, any> = {};
-  const env: Record<string, any> = {};
+> & {
+  <const Bindings extends WorkerBindingProps>(
+    id: string,
+    props: InputProps<WorkerProps<Bindings>>,
+  ): Effect.Effect<
+    Worker<{
+      [B in keyof Bindings]: Bindings[B] extends Effect.Effect<
+        infer T extends WorkerBindingResource,
+        any,
+        any
+      >
+        ? T
+        : Extract<Bindings[B], WorkerBindingResource>;
+    }>
+  >;
+} = Platform(WorkerTypeId, {
+  onCreate: Effect.fnUntraced(function* (
+    resource: Worker,
+    props: InputProps<WorkerProps<WorkerBindingProps>>,
+  ) {
+    if (props.bindings) {
+      for (const bindingName in props.bindings) {
+        // @ts-expect-error
+        const bindingEff = props.bindings?.[bindingName] as
+          | WorkerBindingResource
+          | Effect.Effect<WorkerBindingResource>;
+        const binding = Effect.isEffect(bindingEff)
+          ? yield* bindingEff
+          : bindingEff;
 
-  const ctx = {
-    Type: WorkerTypeId,
-    id,
-    env,
-    get: (key: string) =>
-      Effect.serviceOption(WorkerEnvironment).pipe(
-        Effect.map(Option.getOrUndefined),
-        Effect.flatMap((env) =>
-          env
-            ? Effect.succeed(env[key])
-            : Effect.die("WorkerEnvironment not found"),
-        ),
-        Effect.flatMap((value) =>
-          value
-            ? Effect.succeed(value)
-            : Effect.die(`Environment variable '${key}' not found`),
-        ),
-        Effect.map((json) => {
-          try {
-            const value = JSON.parse(json);
-            if (!Redacted.isRedacted(value)) {
-              return Redacted.make(value.value);
-            }
-            return value;
-          } catch {
-            return json;
-          }
-        }),
-      ) as any,
-    set: (id: string, output: Output.Output) =>
-      Effect.sync(() => {
-        const key = id.replaceAll(/[^a-zA-Z0-9]/g, "_");
-        env[key] = output.pipe(
-          Output.map((value) =>
-            Redacted.isRedacted(value)
-              ? JSON.stringify({
-                  _tag: "Redacted",
-                  value: Redacted.value(value),
-                })
-              : JSON.stringify(value),
+        const bindingMeta: InputProps<WorkerBinding> | undefined =
+          binding.Type === "Cloudflare.D1Database"
+            ? {
+                type: "d1",
+                id: binding.databaseId,
+                name: bindingName,
+              }
+            : binding.Type === "Cloudflare.R2Bucket"
+              ? {
+                  type: "r2_bucket",
+                  name: bindingName,
+                  bucketName: binding.bucketName,
+                  jurisdiction: binding.jurisdiction.pipe(
+                    Output.map((jurisdiction) =>
+                      jurisdiction === "default" ? undefined : jurisdiction,
+                    ),
+                  ),
+                }
+              : // TODO(sam): handle others
+                undefined;
+
+        if (bindingMeta) {
+          yield* resource.bind`${bindingName}`({
+            bindings: [bindingMeta],
+          });
+        }
+      }
+    }
+  }),
+  createExecutionContext: (id: string): WorkerExecutionContext => {
+    const listeners: Effect.Effect<Serverless.FunctionListener>[] = [];
+    const exports: Record<string, any> = {};
+    const env: Record<string, any> = {};
+
+    const ctx = {
+      Type: WorkerTypeId,
+      id,
+      env,
+      get: (key: string) =>
+        Effect.serviceOption(WorkerEnvironment).pipe(
+          Effect.map(Option.getOrUndefined),
+          Effect.flatMap((env) =>
+            env
+              ? Effect.succeed(env[key])
+              : Effect.die("WorkerEnvironment not found"),
           ),
-        );
-        return key;
-      }),
-    serve: <Req = never>(handler: HttpEffect<Req>) =>
-      ctx.listen(workersHttpHandler(handler)),
-    listen: ((
-      handler:
-        | Serverless.FunctionListener
-        | Effect.Effect<Serverless.FunctionListener>,
-    ) =>
-      Effect.sync(() =>
-        Effect.isEffect(handler)
-          ? listeners.push(handler)
-          : listeners.push(Effect.succeed(handler)),
-      )) as any as Serverless.FunctionContext["listen"],
-    export: (name: string, value: any) =>
-      Effect.sync(() => {
-        exports[name] = value;
-      }),
-    exports: Effect.gen(function* () {
-      const handlers = yield* Effect.all(listeners, {
-        concurrency: "unbounded",
-      });
-      const handle =
-        (type: WorkerEvent["type"]) =>
-        (request: any, env: unknown, context: cf.ExecutionContext) => {
-          const event: WorkerEvent = {
-            kind: "Cloudflare.Workers.WorkerEvent",
-            type,
-            input: request,
-            env,
-            context,
-          };
-          for (const handler of handlers) {
-            const eff = handler(event);
-            if (Effect.isEffect(eff)) {
-              return eff.pipe(
-                Effect.provide(Layer.succeed(ExecutionContext, context)),
-                Effect.runPromise,
-              );
+          Effect.flatMap((value) =>
+            value
+              ? Effect.succeed(value)
+              : Effect.die(`Environment variable '${key}' not found`),
+          ),
+          Effect.map((json) => {
+            try {
+              const value = JSON.parse(json);
+              if (!Redacted.isRedacted(value)) {
+                return Redacted.make(value.value);
+              }
+              return value;
+            } catch {
+              return json;
             }
-          }
-          return Promise.reject(new Error("No event handler found"));
+          }),
+        ) as any,
+      set: (id: string, output: Output.Output) =>
+        Effect.sync(() => {
+          const key = id.replaceAll(/[^a-zA-Z0-9]/g, "_");
+          env[key] = output.pipe(
+            Output.map((value) =>
+              Redacted.isRedacted(value)
+                ? JSON.stringify({
+                    _tag: "Redacted",
+                    value: Redacted.value(value),
+                  })
+                : JSON.stringify(value),
+            ),
+          );
+          return key;
+        }),
+      serve: <Req = never>(handler: HttpEffect<Req>) =>
+        ctx.listen(workersHttpHandler(handler)),
+      listen: ((
+        handler:
+          | Serverless.FunctionListener
+          | Effect.Effect<Serverless.FunctionListener>,
+      ) =>
+        Effect.sync(() =>
+          Effect.isEffect(handler)
+            ? listeners.push(handler)
+            : listeners.push(Effect.succeed(handler)),
+        )) as any as Serverless.FunctionContext["listen"],
+      export: (name: string, value: any) =>
+        Effect.sync(() => {
+          exports[name] = value;
+        }),
+      exports: Effect.gen(function* () {
+        const handlers = yield* Effect.all(listeners, {
+          concurrency: "unbounded",
+        });
+        const handle =
+          (type: WorkerEvent["type"]) =>
+          (request: any, env: unknown, context: cf.ExecutionContext) => {
+            const event: WorkerEvent = {
+              kind: "Cloudflare.Workers.WorkerEvent",
+              type,
+              input: request,
+              env,
+              context,
+            };
+            for (const handler of handlers) {
+              const eff = handler(event);
+              if (Effect.isEffect(eff)) {
+                return eff.pipe(
+                  Effect.provide(Layer.succeed(ExecutionContext, context)),
+                  Effect.runPromise,
+                );
+              }
+            }
+            return Promise.reject(new Error("No event handler found"));
+          };
+        return {
+          ...exports,
+          default: Object.fromEntries(
+            ExportedHandlerMethods.map((method) => [method, handle(method)]),
+          ),
         };
-      return {
-        ...exports,
-        default: Object.fromEntries(
-          ExportedHandlerMethods.map((method) => [method, handle(method)]),
-        ),
-      };
-    }),
-  };
-  return ctx;
+      }),
+    };
+    return ctx;
+  },
 });
 
 export const bindWorker = Effect.fnUntraced(function* <Shape, Req = never>(

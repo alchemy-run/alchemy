@@ -304,10 +304,9 @@ export const Instance: Platform<
   InstanceServices,
   InstanceShape,
   InstanceExecutionContext
-> = Platform(
-  "AWS.EC2.Instance",
-  createEc2HostExecutionContext("AWS.EC2.Instance"),
-);
+> = Platform("AWS.EC2.Instance", {
+  createExecutionContext: createEc2HostExecutionContext("AWS.EC2.Instance"),
+});
 
 export const InstanceProvider = () =>
   Instance.provider.effect(

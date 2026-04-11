@@ -3,15 +3,15 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { WorkerEnvironment } from "../Workers/Worker.ts";
-import type { Namespace } from "./Namespace.ts";
-import { NamespaceBinding } from "./NamespaceBinding.ts";
+import type { KVNamespace } from "./KVNamespace.ts";
+import { NamespaceBinding } from "./KVNamespaceBinding.ts";
 
 export interface GetWithMetadataOptions extends runtime.KVNamespaceGetOptions<undefined> {}
 
 export class GetWithMetadata extends Binding.Service<
   GetWithMetadata,
   (
-    namespace: Namespace,
+    namespace: KVNamespace,
   ) => Effect.Effect<
     <Metadata = unknown>(
       key: string,
@@ -28,7 +28,7 @@ export const GetWithMetadataLive = Layer.effect(
     const Policy = yield* GetWithMetadataPolicy;
     const env = yield* WorkerEnvironment;
 
-    return Effect.fn(function* (namespace: Namespace) {
+    return Effect.fn(function* (namespace: KVNamespace) {
       yield* Policy(namespace);
       const kvNamespace = (env as Record<string, runtime.KVNamespace>)[
         namespace.LogicalId
@@ -47,7 +47,7 @@ export const GetWithMetadataLive = Layer.effect(
 
 export class GetWithMetadataPolicy extends Binding.Policy<
   GetWithMetadataPolicy,
-  (namespace: Namespace) => Effect.Effect<void>
+  (namespace: KVNamespace) => Effect.Effect<void>
 >()("Cloudflare.KV.GetWithMetadata") {}
 
 export const GetWithMetadataPolicyLive =

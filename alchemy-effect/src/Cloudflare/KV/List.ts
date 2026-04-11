@@ -3,15 +3,15 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { WorkerEnvironment } from "../Workers/Worker.ts";
-import type { Namespace } from "./Namespace.ts";
-import { NamespaceBinding } from "./NamespaceBinding.ts";
+import type { KVNamespace } from "./KVNamespace.ts";
+import { NamespaceBinding } from "./KVNamespaceBinding.ts";
 
 export interface ListOptions extends runtime.KVNamespaceListOptions {}
 
 export class List extends Binding.Service<
   List,
   (
-    namespace: Namespace,
+    namespace: KVNamespace,
   ) => Effect.Effect<
     <Metadata = unknown>(
       options?: ListOptions,
@@ -25,7 +25,7 @@ export const ListLive = Layer.effect(
     const Policy = yield* ListPolicy;
     const env = yield* WorkerEnvironment;
 
-    return Effect.fn(function* (namespace: Namespace) {
+    return Effect.fn(function* (namespace: KVNamespace) {
       yield* Policy(namespace);
       const kvNamespace = (env as Record<string, runtime.KVNamespace>)[
         namespace.LogicalId
@@ -39,7 +39,7 @@ export const ListLive = Layer.effect(
 
 export class ListPolicy extends Binding.Policy<
   ListPolicy,
-  (namespace: Namespace) => Effect.Effect<void>
+  (namespace: KVNamespace) => Effect.Effect<void>
 >()("Cloudflare.KV.List") {}
 
 export const ListPolicyLive = ListPolicy.layer.succeed(NamespaceBinding);

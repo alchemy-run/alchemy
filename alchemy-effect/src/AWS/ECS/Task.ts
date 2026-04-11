@@ -174,43 +174,45 @@ export const Task: Platform<
   TaskServices,
   TaskShape,
   TaskExecutionContext
-> = Platform("AWS.ECS.Task", (id): TaskExecutionContext => {
-  const runners: Effect.Effect<void, never, any>[] = [];
-  const env: Record<string, any> = {};
+> = Platform("AWS.ECS.Task", {
+  createExecutionContext: (id): TaskExecutionContext => {
+    const runners: Effect.Effect<void, never, any>[] = [];
+    const env: Record<string, any> = {};
 
-  return {
-    Type: "AWS.ECS.Task",
-    id,
-    env,
-    set: (bindingId: string, output: Output.Output) =>
-      Effect.sync(() => {
-        const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
-        env[key] = output.pipe(Output.map((value) => JSON.stringify(value)));
-        return key;
-      }),
-    get: <T>(key: string) =>
-      Config.string(key)
-        .asEffect()
-        .pipe(
-          Effect.flatMap((value) =>
-            Effect.try({
-              try: () => JSON.parse(value) as T,
-              catch: (error) => error as Error,
-            }),
-          ),
-          Effect.catch((cause) =>
-            Effect.die(
-              new Error(`Failed to get environment variable: ${key}`, {
-                cause,
+    return {
+      Type: "AWS.ECS.Task",
+      id,
+      env,
+      set: (bindingId: string, output: Output.Output) =>
+        Effect.sync(() => {
+          const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
+          env[key] = output.pipe(Output.map((value) => JSON.stringify(value)));
+          return key;
+        }),
+      get: <T>(key: string) =>
+        Config.string(key)
+          .asEffect()
+          .pipe(
+            Effect.flatMap((value) =>
+              Effect.try({
+                try: () => JSON.parse(value) as T,
+                catch: (error) => error as Error,
               }),
             ),
+            Effect.catch((cause) =>
+              Effect.die(
+                new Error(`Failed to get environment variable: ${key}`, {
+                  cause,
+                }),
+              ),
+            ),
           ),
-        ),
-    run: (effect: Effect.Effect<void, never, any>) =>
-      Effect.sync(() => {
-        runners.push(effect);
-      }),
-  };
+      run: (effect: Effect.Effect<void, never, any>) =>
+        Effect.sync(() => {
+          runners.push(effect);
+        }),
+    };
+  },
 });
 
 export const TaskProvider = () =>

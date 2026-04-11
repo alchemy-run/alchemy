@@ -53,7 +53,7 @@ export const resources = () =>
     WorkflowProvider(),
     D1.DatabaseProvider(),
     KV.NamespaceProvider(),
-    R2.BucketProvider(),
+    R2.R2BucketProvider(),
   );
 
 /**
@@ -62,13 +62,7 @@ export const resources = () =>
 export const bindings = () =>
   Layer.mergeAll(
     D1.D1ConnectionPolicyLive,
-    R2.GetObjectPolicyLive,
-    R2.PutObjectPolicyLive,
-    R2.DeleteObjectPolicyLive,
-    R2.HeadObjectPolicyLive,
-    R2.ListObjectsPolicyLive,
-    R2.CreateMultipartUploadPolicyLive,
-    R2.ResumeMultipartUploadPolicyLive,
+    R2.R2BucketBindingPolicyLive,
     KV.GetPolicyLive,
     KV.PutPolicyLive,
     KV.DeletePolicyLive,

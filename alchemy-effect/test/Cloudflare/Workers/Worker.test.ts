@@ -2,6 +2,7 @@ import { Account } from "@/Cloudflare/Account";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as R2 from "@/Cloudflare/R2";
 import { destroy } from "@/Destroy";
+import { Stack } from "@/Stack";
 import { test } from "@/Test/Vitest";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { expect } from "@effect/vitest";
@@ -10,7 +11,6 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
-import { Stack } from "@/Stack";
 import InternalWorker from "./internal-worker.ts";
 
 const logLevel = Effect.provideService(
@@ -30,7 +30,7 @@ test(
 
     const worker = yield* test.deploy(
       Effect.gen(function* () {
-        const bucket = yield* R2.Bucket("Bucket", {
+        const bucket = yield* R2.R2Bucket("Bucket", {
           storageClass: "Standard",
         });
 

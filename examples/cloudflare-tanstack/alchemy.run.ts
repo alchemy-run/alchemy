@@ -7,7 +7,6 @@ export default Effect.gen(function* () {
     compatibility: {
       flags: ["nodejs_compat"],
     },
-    memo: {},
   });
 
   return {

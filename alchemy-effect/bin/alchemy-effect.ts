@@ -94,7 +94,9 @@ const yes = Flag.boolean("yes").pipe(
 );
 
 const force = Flag.boolean("force").pipe(
-  Flag.withDescription("Force updates for resources that would otherwise no-op"),
+  Flag.withDescription(
+    "Force updates for resources that would otherwise no-op",
+  ),
   Flag.withDefault(false),
 );
 

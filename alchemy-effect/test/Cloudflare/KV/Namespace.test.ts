@@ -24,7 +24,7 @@ test(
 
     const namespace = yield* test.deploy(
       Effect.gen(function* () {
-        return yield* KV.Namespace("DefaultNamespace");
+        return yield* KV.KVNamespace("DefaultNamespace");
       }),
     );
 
@@ -52,7 +52,7 @@ test(
 
     const namespace = yield* test.deploy(
       Effect.gen(function* () {
-        return yield* KV.Namespace("TestNamespace", {
+        return yield* KV.KVNamespace("TestNamespace", {
           title: "test-namespace-initial",
         });
       }),
@@ -68,7 +68,7 @@ test(
     // Update the namespace
     const updatedNamespace = yield* test.deploy(
       Effect.gen(function* () {
-        return yield* KV.Namespace("TestNamespace", {
+        return yield* KV.KVNamespace("TestNamespace", {
           title: "test-namespace-updated",
         });
       }),

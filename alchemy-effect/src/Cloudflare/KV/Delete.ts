@@ -3,12 +3,14 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { WorkerEnvironment } from "../Workers/Worker.ts";
-import type { Namespace } from "./Namespace.ts";
-import { NamespaceBinding } from "./NamespaceBinding.ts";
+import type { KVNamespace } from "./KVNamespace.ts";
+import { NamespaceBinding } from "./KVNamespaceBinding.ts";
 
 export class Delete extends Binding.Service<
   Delete,
-  (namespace: Namespace) => Effect.Effect<(key: string) => Effect.Effect<void>>
+  (
+    namespace: KVNamespace,
+  ) => Effect.Effect<(key: string) => Effect.Effect<void>>
 >()("Cloudflare.KV.Delete") {}
 
 export const DeleteLive = Layer.effect(
@@ -17,7 +19,7 @@ export const DeleteLive = Layer.effect(
     const Policy = yield* DeletePolicy;
     const env = yield* WorkerEnvironment;
 
-    return Effect.fn(function* (namespace: Namespace) {
+    return Effect.fn(function* (namespace: KVNamespace) {
       yield* Policy(namespace);
       const kvNamespace = (env as Record<string, runtime.KVNamespace>)[
         namespace.LogicalId
@@ -32,7 +34,7 @@ export const DeleteLive = Layer.effect(
 
 export class DeletePolicy extends Binding.Policy<
   DeletePolicy,
-  (namespace: Namespace) => Effect.Effect<void>
+  (namespace: KVNamespace) => Effect.Effect<void>
 >()("Cloudflare.KV.Delete") {}
 
 export const DeletePolicyLive = DeletePolicy.layer.succeed(NamespaceBinding);

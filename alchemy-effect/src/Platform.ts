@@ -23,7 +23,6 @@ import { Self } from "./Self.ts";
 import type { Stack, StackServices } from "./Stack.ts";
 import type { Stage } from "./Stage.ts";
 import { effectClass } from "./Util/effect.ts";
-import type { IsAny } from "./Util/types.ts";
 
 export interface PlatformProps {
   /**
@@ -85,7 +84,6 @@ export interface Platform<
         | Exclude<PropsReq | InitReq, Services | PlatformServices>
       >;
       new (_: never): MakeShape<Shape, BaseShape>;
-      promise(): PlatformPromise<Self>;
       of(shape: Shape & MainShape): MakeShape<Shape, BaseShape>;
     };
   };
@@ -108,7 +106,6 @@ export interface Platform<
       | Exclude<InitReq, Services | PlatformServices>
     > & {
       new (_: never): MakeShape<Shape, BaseShape>;
-      promise(): PlatformPromise<Self>;
     };
     <Shape, PropsReq = never>(
       id: string,
@@ -129,7 +126,6 @@ export interface Platform<
         | Exclude<PropsReq | InitReq, Services | PlatformServices>
       >;
       new (_: never): MakeShape<Shape, BaseShape>;
-      promise(): PlatformPromise<Self>;
     } & (<InitReq extends Services | PlatformServices = never>(
         impl: Effect.Effect<Shape, never, InitReq>,
       ) => Effect.Effect<
@@ -140,18 +136,18 @@ export interface Platform<
         | Exclude<InitReq, Services | PlatformServices>
       >);
   };
-  <PropsReq = never, InitReq extends Services | PlatformServices = never>(
-    id: string,
-    props:
-      | InputProps<Resource["Props"]>
-      | Effect.Effect<InputProps<Resource["Props"]>, never, PropsReq>,
-  ): Effect.Effect<
-    Resource,
-    never,
-    | Provider<Resource>
-    | PropsReq
-    | Exclude<InitReq, Services | PlatformServices>
-  >;
+  // <PropsReq = never, InitReq extends Services | PlatformServices = never>(
+  //   id: string,
+  //   props:
+  //     | InputProps<Resource["Props"]>
+  //     | Effect.Effect<InputProps<Resource["Props"]>, never, PropsReq>,
+  // ): Effect.Effect<
+  //   Resource,
+  //   never,
+  //   | Provider<Resource>
+  //   | PropsReq
+  //   | Exclude<InitReq, Services | PlatformServices>
+  // >;
   <
     Shape extends MainShape,
     PropsReq = never,
@@ -168,9 +164,7 @@ export interface Platform<
     | Provider<Resource>
     | PropsReq
     | Exclude<InitReq, Services | PlatformServices>
-  > & {
-    promise(): PlatformPromise<Shape>;
-  };
+  >;
 }
 
 type MakeShape<Shape, BaseShape> = Shape extends never | undefined | void
@@ -188,7 +182,10 @@ export const Platform = <
   >,
 >(
   type: R["Type"],
-  createExecutionContext: (id: string) => BaseExecutionContext,
+  hooks: {
+    createExecutionContext: (id: string) => BaseExecutionContext;
+    onCreate?: (resource: R, props: any) => Effect.Effect<void>;
+  },
 ): any => {
   type Props = any;
   type Impl = Effect.Effect<any>;
@@ -213,7 +210,7 @@ export const Platform = <
     } else if (!impl) {
       const cls = makeClass(id, props);
       const asEffect = () =>
-        !isTag
+        (!isTag
           ? // this is a non-tagged resource yielded without providing an implementation
             // e.g.
             // yield* Cloudflare.Worker("id", { main: "./src/worker.ts" })
@@ -236,7 +233,15 @@ export const Platform = <
                 onNone: () => resource(id, props),
                 onSome: Effect.succeed,
               }),
-            );
+            )
+        ).pipe(
+          Effect.flatMap(
+            (resource) =>
+              hooks
+                .onCreate?.(resource as R, props)
+                .pipe(Effect.map(() => resource)) ?? Effect.succeed(resource),
+          ),
+        );
       return Object.assign(
         function (impl: Impl) {
           return cls.asEffect().pipe(Effect.provide(cls.make(impl)));
@@ -249,6 +254,8 @@ export const Platform = <
         cls,
         {
           asEffect,
+          // @ts-expect-error
+          pipe: (...args: any[]) => asEffect().pipe(...args),
           [Symbol.iterator]: () => new SingleShotGen({ asEffect }),
         },
       );
@@ -289,7 +296,7 @@ export const Platform = <
           Effect.flatMap(
             Effect.all([
               Effect.isEffect(props) ? props : Effect.succeed(props ?? {}),
-              Effect.sync(() => createExecutionContext(id)),
+              Effect.sync(() => hooks.createExecutionContext(id)),
               Effect.services<never>(),
             ]),
             Effect.fnUntraced(function* ([
@@ -298,7 +305,15 @@ export const Platform = <
               outerServices,
             ]) {
               const instance = Object.assign(
-                yield* resource(id, props as any),
+                yield* resource(id, props as any).pipe(
+                  Effect.flatMap(
+                    (resource) =>
+                      hooks
+                        .onCreate?.(resource, props)
+                        .pipe(Effect.map(() => resource)) ??
+                      Effect.succeed(resource),
+                  ),
+                ),
                 executionContext,
               );
 
@@ -365,34 +380,3 @@ export const Platform = <
   }) as any;
   return instance;
 };
-
-/**
- * Bridge between the Effect and the Promise.
- *
- * Only map types if needed.
- *
- * TODO(sam): probably over engineering? Maybe just let the user run into the wall of Effect.runPromise and fix? Good friction is good!
- */
-export type PlatformPromise<Shape> = [
-  HasRequirements<Extract<Shape[keyof Shape], Effect.Effect<any, any, any>>>,
-  Effect.Services<Extract<Shape[keyof Shape], Effect.Effect<any, any, any>>>,
-] extends [true, never]
-  ? Promise<Shape>
-  : Promise<{
-      [key in keyof Shape]: Shape[key] extends (
-        ...args: infer Args
-      ) => Effect.Effect<infer A, infer Err, any>
-        ? (...args: Args) => Effect.Effect<A, Err, never>
-        : Shape[key] extends Effect.Effect<infer A, infer Err, infer Req>
-          ? Req extends never
-            ? Shape[key]
-            : Effect.Effect<A, Err, never>
-          : Shape[key];
-    }>;
-
-type HasRequirements<E extends Effect.Effect<any, any, any>> =
-  IsAny<Effect.Services<E>> extends true
-    ? true
-    : Effect.Services<E> extends never
-      ? false
-      : true;

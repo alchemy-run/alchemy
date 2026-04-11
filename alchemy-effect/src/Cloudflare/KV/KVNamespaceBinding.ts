@@ -1,11 +1,11 @@
 import * as Effect from "effect/Effect";
 import type { ResourceLike } from "../../Resource.ts";
 import { isWorker } from "../Workers/Worker.ts";
-import type { Namespace } from "./Namespace.ts";
+import type { KVNamespace } from "./KVNamespace.ts";
 
 export const NamespaceBinding = Effect.fn(function* (
   host: ResourceLike,
-  namespace: Namespace,
+  namespace: KVNamespace,
 ) {
   if (isWorker(host)) {
     yield* host.bind`Bind(${namespace})`({
