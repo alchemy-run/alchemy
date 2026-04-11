@@ -148,7 +148,10 @@ const deriveStackName = (testPath: string, suffix: string) => {
 const runWithContext = <A, Err>(
   stackName: string,
   effect: Effect.Effect<A, Err, Provided>,
-  options: { state?: Layer.Layer<State.State, never, Stack.Stack> } = {},
+  options: {
+    state?: Layer.Layer<State.State, never, Stack.Stack>;
+    providers?: boolean;
+  } = {},
 ): Effect.Effect<
   A,
   aws.Credentials.CredentialsError | Config.ConfigError | Err,
@@ -194,7 +197,9 @@ const runWithContext = <A, Err>(
   }).pipe(
     Effect.provide(
       Layer.provideMerge(
-        Layer.mergeAll(awsProviders, cfProviders),
+        options.providers === false
+          ? Layer.empty
+          : Layer.mergeAll(awsProviders, cfProviders),
         Layer.provideMerge(alchemy, platform),
       ),
     ),
@@ -216,6 +221,7 @@ export function test(
   options: {
     timeout?: number;
     state?: Layer.Layer<State.State, never, Stack.Stack>;
+    providers?: boolean;
   },
   testCase: Effect.Effect<void, any, Provided>,
 ): void;
@@ -232,6 +238,7 @@ export function test(
         {
           timeout?: number;
           state?: Layer.Layer<State.State, never, Stack.Stack>;
+          providers?: boolean;
         },
         Effect.Effect<void, any, Provided>,
       ]
@@ -253,6 +260,7 @@ export namespace test {
     options: {
       timeout?: number;
       state?: Layer.Layer<State.State, never, Stack.Stack>;
+      providers?: boolean;
     },
     testCase: Effect.Effect<void, any, Provided>,
   ): void;
@@ -269,6 +277,7 @@ export namespace test {
           {
             timeout?: number;
             state?: Layer.Layer<State.State, never, Stack.Stack>;
+            providers?: boolean;
           },
           Effect.Effect<void, any, Provided>,
         ]
@@ -287,6 +296,7 @@ export namespace test {
             {
               timeout?: number;
               state?: Layer.Layer<State.State, never, Stack.Stack>;
+              providers?: boolean;
             },
             Effect.Effect<void, any, Provided>,
           ]
@@ -436,6 +446,7 @@ export function skip(
   options: {
     timeout?: number;
     state?: Layer.Layer<State.State, never, Stack.Stack>;
+    providers?: boolean;
   },
   testCase: Effect.Effect<void, any, Provided>,
 ): void;
@@ -452,6 +463,7 @@ export function skip(
         {
           timeout?: number;
           state?: Layer.Layer<State.State, never, Stack.Stack>;
+          providers?: boolean;
         },
         Effect.Effect<void, any, Provided>,
       ]
@@ -470,6 +482,7 @@ export function skipIf(condition: boolean) {
           {
             timeout?: number;
             state?: Layer.Layer<State.State, never, Stack.Stack>;
+            providers?: boolean;
           },
           Effect.Effect<void, any, Provided>,
         ]

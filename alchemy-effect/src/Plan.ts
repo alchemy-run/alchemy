@@ -148,8 +148,13 @@ export type Plan<Output = any> = {
   output: Output;
 };
 
+export interface MakePlanOptions {
+  force?: boolean;
+}
+
 export const make = <A>(
   stack: StackSpec<A>,
+  options: MakePlanOptions = {},
 ): Effect.Effect<Plan<A>, never, State> =>
   // @ts-expect-error
   ensureArtifactStore(
@@ -485,6 +490,13 @@ export const make = <A>(
                           ? "update"
                           : "noop",
                     } as UpdateDiff | NoopDiff),
+                ),
+                Effect.map((diff) =>
+                  options.force && diff.action === "noop"
+                    ? ({
+                        action: "update",
+                      } satisfies UpdateDiff)
+                    : diff,
                 ),
               );
 

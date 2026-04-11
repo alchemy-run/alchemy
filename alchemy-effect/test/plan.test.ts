@@ -6,7 +6,11 @@ import { UnsatisfiedResourceCycle } from "@/Plan";
 import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
 import { State, type ResourceState, type ResourceStatus } from "@/State";
-import { expectEmptyObject, expectPropExpr, test } from "@/Test/Vitest";
+import {
+  expectEmptyObject,
+  expectPropExpr,
+  test as baseTest,
+} from "@/Test/Vitest";
 import { describe, expect } from "@effect/vitest";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -24,12 +28,34 @@ import {
   type TestResourceProps,
 } from "./test.resources";
 
+const test = Object.assign(
+  ((name: string, ...args: any[]) => {
+    if (args.length === 1) {
+      return (baseTest as any)(name, {
+        providers: false,
+      }, args[0]);
+    }
+
+    const [options, effect] = args;
+    return (baseTest as any)(
+      name,
+      {
+        ...options,
+        providers: false,
+      },
+      effect,
+    );
+  }) as typeof baseTest,
+  baseTest,
+);
+
 const _test = test;
 
 const instanceId = "852f6ec2e19b66589825efe14dca2971";
 
 const makePlan = <A, Err = never, Req = never>(
   effect: Effect.Effect<A, Err, Req>,
+  options?: Plan.MakePlanOptions,
 ): Effect.Effect<Plan.Plan<A>, Err, never> =>
   // @ts-expect-error
   Effect.gen(function* () {
@@ -39,7 +65,7 @@ const makePlan = <A, Err = never, Req = never>(
       // @ts-expect-error
       Stack.make(stack.name, Layer.empty),
       Effect.provideService(Stage, stack.stage),
-      Effect.flatMap(Plan.make),
+      Effect.flatMap((stackSpec) => Plan.make(stackSpec, options)),
       Effect.provide(TestLayers),
     );
   });
@@ -218,6 +244,57 @@ test(
             name: "test-queue",
           },
           state: undefined,
+        },
+      },
+      deletions: expectEmptyObject(),
+    });
+  }),
+);
+
+test(
+  "force changes noop resources into updates",
+  {
+    state: test.state({
+      MyBucket: {
+        instanceId,
+        providerVersion: 0,
+        logicalId: "MyBucket",
+        fqn: "MyBucket",
+        namespace: undefined,
+        resourceType: "Test.Bucket",
+        status: "created",
+        props: {
+          name: "test-bucket",
+        },
+        attr: {
+          name: "test-bucket",
+        },
+        bindings: [],
+        downstream: [],
+      },
+    }),
+  },
+  Effect.gen(function* () {
+    expect(
+      yield* makePlan(
+        Effect.gen(function* () {
+          yield* Bucket("MyBucket", {
+            name: "test-bucket",
+          });
+        }),
+        { force: true },
+      ),
+    ).toMatchObject({
+      resources: {
+        MyBucket: {
+          action: "update",
+          bindings: [],
+          props: {
+            name: "test-bucket",
+          },
+          state: {
+            status: "created",
+          },
         },
       },
       deletions: expectEmptyObject(),
@@ -635,6 +712,30 @@ describe("replace resource when replaceString changes", () => {
             replaceString: "B",
           });
         }).pipe(makePlan),
+      ).toMatchObject({
+        resources: {
+          A: {
+            action: "replace",
+            props: {
+              replaceString: "B",
+            },
+          },
+        },
+        deletions: expectEmptyObject(),
+      });
+    }),
+  );
+
+  test(
+    "force preserves replaces",
+    { state },
+    Effect.gen(function* () {
+      expect(
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", {
+            replaceString: "B",
+          });
+        }).pipe((effect) => makePlan(effect, { force: true })),
       ).toMatchObject({
         resources: {
           A: {

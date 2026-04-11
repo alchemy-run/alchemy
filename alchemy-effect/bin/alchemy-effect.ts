@@ -93,6 +93,11 @@ const yes = Flag.boolean("yes").pipe(
   Flag.withDefault(false),
 );
 
+const force = Flag.boolean("force").pipe(
+  Flag.withDescription("Force updates for resources that would otherwise no-op"),
+  Flag.withDefault(false),
+);
+
 const fileLogger = Effect.fnUntraced(function* (
   ...segments: ReadonlyArray<string>
 ) {
@@ -142,6 +147,7 @@ const deployCommand = Command.make(
   "deploy",
   {
     dryRun,
+    force,
     main,
     envFile,
     stage,
@@ -186,6 +192,7 @@ const execStack = Effect.fn(function* ({
   stage,
   envFile,
   dryRun = false,
+  force = false,
   yes = false,
   destroy = false,
 }: {
@@ -193,6 +200,7 @@ const execStack = Effect.fn(function* ({
   stage: string;
   envFile: Option.Option<string>;
   dryRun?: boolean;
+  force?: boolean;
   yes?: boolean;
   destroy?: boolean;
 }) {
@@ -244,6 +252,7 @@ const execStack = Effect.fn(function* ({
                 output: {},
               }
             : stack,
+          { force },
         );
         if (dryRun) {
           yield* cli.displayPlan(updatePlan);
