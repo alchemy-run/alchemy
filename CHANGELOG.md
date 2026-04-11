@@ -1,3 +1,13 @@
+## v0.8.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**: Async-alchemy style bindings and R2 wrapper &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(4c4ca)</samp>](https://github.com/alchemy-run/alchemy/commit/4c4ca91)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v0.7.1...v0.8.0)
+
+---
+
 ## v0.7.1
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
