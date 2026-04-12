@@ -36,7 +36,7 @@ export class Sandbox extends Cloudflare.Container<
   })),
 ) {}
 
-export const SandboxLive = Sandbox.make(
+export const SandboxLive = /* @__PURE__ */ Sandbox.make(
   Effect.gen(function* () {
     //
     const cp = yield* ChildProcessSpawner;

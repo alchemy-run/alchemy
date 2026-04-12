@@ -3,13 +3,8 @@ import * as Effect from "effect/Effect";
 
 import Api from "./src/Api.ts";
 
-const stack = Effect.gen(function* () {
+export default Effect.gen(function* () {
   const api = yield* Api;
-  // const sandbox = yield* Sandbox;
 
-  return api.url;
-});
-
-export default stack.pipe(
-  Stack.make("CloudflareWorker", Cloudflare.providers()),
-);
+  return api.url.as<string>();
+}).pipe(Stack.make("CloudflareWorker", Cloudflare.providers()));

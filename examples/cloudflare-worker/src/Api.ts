@@ -1,4 +1,3 @@
-import * as BetterAuth from "@alchemy.run/better-auth";
 import * as Cloudflare from "alchemy-effect/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -20,24 +19,27 @@ export default class Api extends Cloudflare.Worker<Api>()(
     },
     compatibility: {
       flags: ["nodejs_compat"],
+      date: "2026-03-17",
     },
     assets: "./assets",
+    build: {
+      metafile: true,
+    },
   },
   Effect.gen(function* () {
-    const betterAuth = yield* BetterAuth.BetterAuth;
+    // const betterAuth = yield* BetterAuth.BetterAuth;
     const agents = yield* Agent;
     const rooms = yield* Room;
     const notifier = yield* NotifyWorkflow;
-    const loader = yield* Cloudflare.DynamicWorker("Loader");
+    const loader = yield* Cloudflare.DynamicWorkerLoader("Loader");
     const bucket = yield* Cloudflare.R2BucketBinding.bind(Bucket);
 
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
-        console.log("fetch", request.method, request.url);
 
         if (request.url.startsWith("/auth/")) {
-          return yield* betterAuth.fetch;
+          // return yield* betterAuth.fetch;
         } else if (request.url.startsWith("/object/")) {
           return yield* bucket.get(request.url.split("/").pop()!).pipe(
             Effect.flatMap((object) =>
@@ -160,9 +162,5 @@ export default class Api extends Cloudflare.Worker<Api>()(
         return HttpServerResponse.text("Hello World", { status: 200 });
       }),
     };
-  }).pipe(
-    Effect.provide(
-      Layer.mergeAll(BetterAuth.CloudflareD1, Cloudflare.R2BucketBindingLive),
-    ),
-  ),
+  }).pipe(Effect.provide(Layer.mergeAll(Cloudflare.R2BucketBindingLive))),
 ) {}

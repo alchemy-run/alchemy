@@ -59,7 +59,7 @@ export interface DynamicWorkerInstance extends Fetcher {
  * The handle returned by `DynamicWorker(name)`. Provides a `.load()` method
  * for spinning up isolated dynamic workers at runtime.
  */
-export interface DynamicWorkerLoader {
+export type DynamicWorkerLoader = {
   Type: DynamicWorkerTypeId;
   name: string;
   /**
@@ -67,7 +67,7 @@ export interface DynamicWorkerLoader {
    * exposes `.getEntrypoint()` and `.fetch()` for calling into the worker.
    */
   load(options: DynamicWorkerLoadOptions): DynamicWorkerInstance;
-}
+};
 
 /**
  * Declare a Dynamic Worker loader binding inside a Worker program.
@@ -96,7 +96,7 @@ export interface DynamicWorkerLoader {
  * const response = yield* worker.fetch(request);
  * ```
  */
-export const DynamicWorker = Effect.fnUntraced(function* (name: string) {
+export const DynamicWorkerLoader = Effect.fnUntraced(function* (name: string) {
   const worker = yield* Worker;
 
   yield* worker.bind`Cloudflare.DynamicWorker(${name})`({
