@@ -1,5 +1,3 @@
-import * as BunHttpServerPlatform from "@effect/platform-bun/BunHttpServer";
-import * as NodeHttpServerPlatform from "@effect/platform-node/NodeHttpServer";
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
@@ -11,14 +9,6 @@ import type { HttpBodyError } from "effect/unstable/http/HttpBody";
 import type { HttpServerError } from "effect/unstable/http/HttpServerError";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import * as NodeHttp from "node:http";
-
-// TODO(sam): move to this https://github.com/Effect-TS/effect/blob/main/packages/platform/README.md#http-server
-// import * as HttpServer from "effect/unstable/http/HttpServer";
-
-// Effect.gen(function* () {
-//   yield* HttpServer.serve()()
-// });
 
 export type HttpEffect<Req = never> = Effect.Effect<
   HttpServerResponse.HttpServerResponse,
@@ -72,34 +62,47 @@ export const safeHttpEffect = <Req = never>(handler: HttpEffect<Req>) =>
     );
   });
 
-const resolvePort = (options: { port?: number } | undefined) =>
+export const resolvePort = (options: { port?: number } | undefined) =>
   options?.port !== undefined
     ? Effect.succeed(options.port)
     : Config.number("PORT").pipe(Config.withDefault(3000)).asEffect();
 
-/** Bun runtime (`Bun.serve`). */
 export const BunHttpServer = () =>
-  Layer.succeed(HttpServer, {
-    serve: (handler, options) =>
-      Effect.gen(function* () {
-        const port = yield* resolvePort(options);
-        const server = yield* BunHttpServerPlatform.make({ port });
-        yield* server.serve(safeHttpEffect(handler));
-      }).pipe(Effect.orDie),
-  });
+  Layer.effect(
+    HttpServer,
+    Effect.gen(function* () {
+      const BunHttpServerPlatform = yield* Effect.promise(
+        () => import("@effect/platform-bun/BunHttpServer"),
+      );
+      return {
+        serve: (handler, options) =>
+          Effect.gen(function* () {
+            const port = yield* resolvePort(options);
+            const server = yield* BunHttpServerPlatform.make({ port });
+            yield* server.serve(safeHttpEffect(handler));
+          }).pipe(Effect.orDie),
+      };
+    }),
+  );
 
-/** Node.js runtime (`node:http`). */
 export const NodeHttpServer = () =>
-  Layer.succeed(HttpServer, {
-    serve: (handler, options) =>
-      Effect.gen(function* () {
-        const port = yield* resolvePort(options);
-        const server = yield* NodeHttpServerPlatform.make(
-          NodeHttp.createServer,
-          {
-            port,
-          },
-        );
-        yield* server.serve(safeHttpEffect(handler));
-      }).pipe(Effect.orDie),
-  });
+  Layer.effect(
+    HttpServer,
+    Effect.gen(function* () {
+      const NodeHttpServerPlatform = yield* Effect.promise(
+        () => import("@effect/platform-node/NodeHttpServer"),
+      );
+      const NodeHttp = yield* Effect.promise(() => import("node:http"));
+      return {
+        serve: (handler, options) =>
+          Effect.gen(function* () {
+            const port = yield* resolvePort(options);
+            const server = yield* NodeHttpServerPlatform.make(
+              NodeHttp.createServer,
+              { port },
+            );
+            yield* server.serve(safeHttpEffect(handler));
+          }).pipe(Effect.orDie),
+      };
+    }),
+  );
