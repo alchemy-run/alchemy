@@ -822,6 +822,21 @@ ${[
           const builder = await vite.createBuilder(
             {
               root: props.vite?.rootDir,
+              // Declare the ssr environment so Vite 8+ creates it.
+              // The cloudflare-vite-plugin config hook merges its
+              // SSR-specific settings on top of this stub.
+              environments: {
+                ssr: {
+                  build: {
+                    // Prevent the SSR build from wiping the client
+                    // build's output (both share the dist/ directory).
+                    emptyOutDir: false,
+                  },
+                },
+              },
+              builder: {
+                sharedConfigBuild: true,
+              },
               plugins: [
                 cloudflareVite({
                   compatibilityDate:

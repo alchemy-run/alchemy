@@ -185,10 +185,16 @@ export const AssetsProvider = () =>
                   count,
                 });
               }
-              manifest.set(name.startsWith("/") ? name : `/${name}`, {
-                hash,
-                size,
-              });
+              manifest.set(
+                (name.startsWith("/") ? name : `/${name}`).replaceAll(
+                  "\\",
+                  "/",
+                ),
+                {
+                  hash,
+                  size,
+                },
+              );
             }),
           );
           const result = {
