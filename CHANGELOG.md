@@ -1,3 +1,16 @@
+## v0.10.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**:
+  - Accept Output<T> in Worker env + Vite props &nbsp;-&nbsp; by **cooper** in https://github.com/alchemy-run/alchemy/issues/51 [<samp>(9560b)</samp>](https://github.com/alchemy-run/alchemy/commit/9560bed)
+  - Allow bindings to be undefined &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(15c8c)</samp>](https://github.com/alchemy-run/alchemy/commit/15c8c6e)
+  - Rename DynamicWorker to DynamicWorkerLoader &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(39f89)</samp>](https://github.com/alchemy-run/alchemy/commit/39f89d5)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v0.9.1...v0.10.0)
+
+---
+
 ## v0.9.1
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
