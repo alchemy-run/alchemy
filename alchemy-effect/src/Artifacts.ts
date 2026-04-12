@@ -1,3 +1,4 @@
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -134,14 +135,22 @@ export const ensureArtifactStore = <A, E, R>(
 
 export const cached =
   (id: string) =>
-  <A, Err = never, Req = never>(eff: Effect.Effect<A, Err, Req>) =>
+  <A, Err = never, Req = never>(
+    eff: Effect.Effect<A, Err, Req>,
+  ): Effect.Effect<A, Err, Req | Artifacts> =>
     Effect.gen(function* () {
       const artifacts = yield* Artifacts;
+      const deferred = yield* Deferred.make<A>();
       const cached = yield* artifacts.get<A>(id);
       if (cached) {
+        if (Effect.isEffect(cached)) {
+          return yield* cached;
+        }
         return cached;
       }
+      yield* artifacts.set(id, Deferred.await(deferred));
       const result = yield* eff;
+      yield* Deferred.succeed(deferred, result);
       yield* artifacts.set(id, result);
       return result;
     });
