@@ -1,0 +1,21 @@
+{
+  "name": "pr-package",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alchemy-run/alchemy-effect"
+  },
+  "type": "module",
+  "scripts": {
+    "deploy": "bun ../../alchemy-effect/bin/alchemy-effect.ts deploy",
+    "destroy": "bun ../../alchemy-effect/bin/alchemy-effect.ts destroy"
+  },
+  "dependencies": {
+    "@effect/platform-bun": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "alchemy-effect": "workspace:*",
+    "effect": "catalog:"
+  }
+}
