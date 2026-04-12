@@ -37,6 +37,6 @@ const stack = Effect.gen(function* () {
   return {
     url: site.url,
   };
-}).pipe(Stack.make("AlchemyEffectWebsite", Cloudflare.providers()));
+}).pipe(Stack.make("AlchemyEffectWebsite", Cloudflare.providers));
 
 export default stack;

@@ -1,5 +1,6 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 
 export interface AccountPasswordPolicyProps
@@ -34,8 +35,9 @@ export const AccountPasswordPolicy = Resource<AccountPasswordPolicy>(
   "AWS.IAM.AccountPasswordPolicy",
 );
 
-export const AccountPasswordPolicyProvider = () =>
-  AccountPasswordPolicy.provider.succeed({
+export const AccountPasswordPolicyProvider = Provider.succeed(
+  AccountPasswordPolicy,
+  {
     read: Effect.fn(function* () {
       const response = yield* iam
         .getAccountPasswordPolicy({})
@@ -61,4 +63,5 @@ export const AccountPasswordPolicyProvider = () =>
         .deleteAccountPasswordPolicy({})
         .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
     }),
-  });
+  },
+);

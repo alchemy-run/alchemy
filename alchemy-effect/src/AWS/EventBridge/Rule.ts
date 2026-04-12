@@ -1,10 +1,10 @@
 import { Region } from "@distilled.cloud/aws/Region";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as Effect from "effect/Effect";
-
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import {
   createInternalTags,
@@ -265,283 +265,279 @@ export interface Rule extends Resource<
 > {}
 export const Rule = Resource<Rule>("AWS.EventBridge.Rule");
 
-export const RuleProvider = () =>
-  Rule.provider.effect(
-    Effect.gen(function* () {
-      const region = yield* Region;
-      const accountId = yield* Account;
+export const RuleProvider = Provider.effect(
+  Rule,
+  Effect.gen(function* () {
+    const region = yield* Region;
+    const accountId = yield* Account;
 
-      const createRuleName = (id: string, props: { name?: string } = {}) => {
-        if (props.name) {
-          return Effect.succeed(props.name);
+    const createRuleName = (id: string, props: { name?: string } = {}) => {
+      if (props.name) {
+        return Effect.succeed(props.name);
+      }
+      return createPhysicalName({
+        id,
+        maxLength: 64,
+      });
+    };
+
+    return {
+      stables: ["ruleName", "ruleArn", "eventBusName"],
+      diff: Effect.fn(function* ({ id, news, olds }) {
+        if (!isResolved(news)) return;
+        const oldName = yield* createRuleName(id, olds);
+        const newName = yield* createRuleName(id, news);
+        if (oldName !== newName) {
+          return { action: "replace" } as const;
         }
-        return createPhysicalName({
-          id,
-          maxLength: 64,
-        });
-      };
-
-      return {
-        stables: ["ruleName", "ruleArn", "eventBusName"],
-        diff: Effect.fn(function* ({ id, news, olds }) {
-          if (!isResolved(news)) return;
-          const oldName = yield* createRuleName(id, olds);
-          const newName = yield* createRuleName(id, news);
-          if (oldName !== newName) {
-            return { action: "replace" } as const;
-          }
-          const oldBus = (olds.eventBusName as string | undefined) ?? "default";
-          const newBus = (news.eventBusName as string | undefined) ?? "default";
-          if (oldBus !== newBus) {
-            return { action: "replace" } as const;
-          }
-        }),
-        read: Effect.fn(function* ({ id, olds, output }) {
-          const ruleName =
-            output?.ruleName ?? (yield* createRuleName(id, olds));
-          const eventBusName =
-            output?.eventBusName ?? olds.eventBusName ?? "default";
-          const described = yield* eventbridge
-            .describeRule({
-              Name: ruleName,
-              EventBusName:
-                eventBusName !== "default" ? eventBusName : undefined,
-            })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
-
-          if (!described?.Name) {
-            return undefined;
-          }
-
-          const resolvedEventBusName = described.EventBusName ?? eventBusName;
-          return {
-            ruleName: described.Name,
-            ruleArn: toRuleArn(
-              region,
-              accountId,
-              resolvedEventBusName,
-              described.Name,
-            ),
-            eventBusName: resolvedEventBusName,
-          };
-        }),
-        create: Effect.fn(function* ({ id, news = {}, session }) {
-          yield* validateRuleProps(news);
-          const ruleName = yield* createRuleName(id, news);
-          const internalTags = yield* createInternalTags(id);
-          const allTags = {
-            ...internalTags,
-            ...(news.tags as Record<string, string> | undefined),
-          };
-          const eventBusName =
-            (news.eventBusName as string | undefined) ?? "default";
-          const ruleArn = toRuleArn(region, accountId, eventBusName, ruleName);
-
-          const existing = yield* eventbridge
-            .describeRule({
-              Name: ruleName,
-              EventBusName:
-                eventBusName !== "default" ? eventBusName : undefined,
-            })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
-
-          if (existing) {
-            const { Tags } = yield* eventbridge.listTagsForResource({
-              ResourceARN: existing.Arn ?? ruleArn,
-            });
-
-            if (!(yield* hasAlchemyTags(id, Tags ?? []))) {
-              return yield* Effect.fail(
-                new Error(
-                  `Rule '${ruleName}' already exists on event bus '${eventBusName}' and is not managed by alchemy`,
-                ),
-              );
-            }
-          }
-
-          const { RuleArn } = yield* eventbridge.putRule({
+        const oldBus = (olds.eventBusName as string | undefined) ?? "default";
+        const newBus = (news.eventBusName as string | undefined) ?? "default";
+        if (oldBus !== newBus) {
+          return { action: "replace" } as const;
+        }
+      }),
+      read: Effect.fn(function* ({ id, olds, output }) {
+        const ruleName = output?.ruleName ?? (yield* createRuleName(id, olds));
+        const eventBusName =
+          output?.eventBusName ?? olds.eventBusName ?? "default";
+        const described = yield* eventbridge
+          .describeRule({
             Name: ruleName,
-            Description: news.description,
             EventBusName: eventBusName !== "default" ? eventBusName : undefined,
-            EventPattern: news.eventPattern
-              ? JSON.stringify(news.eventPattern)
-              : undefined,
-            ScheduleExpression: news.scheduleExpression,
-            State: news.state ?? "ENABLED",
-            RoleArn: news.roleArn as string | undefined,
-            Tags: createTagsList(allTags),
-          });
+          })
+          .pipe(
+            Effect.catchTag("ResourceNotFoundException", () =>
+              Effect.succeed(undefined),
+            ),
+          );
 
-          const resolvedTargets =
-            (news.targets as Input.Resolve<RuleTarget>[] | undefined) ?? [];
-          if (resolvedTargets.length > 0) {
-            const response = yield* eventbridge.putTargets({
-              Rule: ruleName,
-              EventBusName:
-                eventBusName !== "default" ? eventBusName : undefined,
-              Targets: resolvedTargets.map(toTarget),
-            });
-            yield* assertPutTargetsSucceeded(response);
-          }
+        if (!described?.Name) {
+          return undefined;
+        }
 
-          yield* session.note(ruleArn);
+        const resolvedEventBusName = described.EventBusName ?? eventBusName;
+        return {
+          ruleName: described.Name,
+          ruleArn: toRuleArn(
+            region,
+            accountId,
+            resolvedEventBusName,
+            described.Name,
+          ),
+          eventBusName: resolvedEventBusName,
+        };
+      }),
+      create: Effect.fn(function* ({ id, news = {}, session }) {
+        yield* validateRuleProps(news);
+        const ruleName = yield* createRuleName(id, news);
+        const internalTags = yield* createInternalTags(id);
+        const allTags = {
+          ...internalTags,
+          ...(news.tags as Record<string, string> | undefined),
+        };
+        const eventBusName =
+          (news.eventBusName as string | undefined) ?? "default";
+        const ruleArn = toRuleArn(region, accountId, eventBusName, ruleName);
 
-          return {
-            ruleName,
-            ruleArn:
-              (RuleArn as RuleArn | undefined) ??
-              toRuleArn(region, accountId, eventBusName, ruleName),
-            eventBusName,
-          };
-        }),
-        update: Effect.fn(function* ({
-          id,
-          news = {},
-          olds = {},
-          output,
-          session,
-        }) {
-          yield* validateRuleProps(news);
-          const ruleName = output.ruleName;
-          const eventBusName = output.eventBusName;
-          const eventBusParam =
-            eventBusName !== "default" ? eventBusName : undefined;
-
-          yield* eventbridge.putRule({
+        const existing = yield* eventbridge
+          .describeRule({
             Name: ruleName,
-            Description: news.description,
-            EventBusName: eventBusParam,
-            EventPattern: news.eventPattern
-              ? JSON.stringify(news.eventPattern)
-              : undefined,
-            ScheduleExpression: news.scheduleExpression,
-            State: news.state ?? "ENABLED",
-            RoleArn: news.roleArn as string | undefined,
+            EventBusName: eventBusName !== "default" ? eventBusName : undefined,
+          })
+          .pipe(
+            Effect.catchTag("ResourceNotFoundException", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+
+        if (existing) {
+          const { Tags } = yield* eventbridge.listTagsForResource({
+            ResourceARN: existing.Arn ?? ruleArn,
           });
 
-          const oldTargetIds = new Set(
-            (
-              (olds.targets as Input.Resolve<RuleTarget>[] | undefined) ?? []
-            ).map((t) => t.Id),
-          );
-          const newTargetIds = new Set(
-            (
-              (news.targets as Input.Resolve<RuleTarget>[] | undefined) ?? []
-            ).map((t) => t.Id),
-          );
-          const removedIds = [...oldTargetIds].filter(
-            (id) => !newTargetIds.has(id),
-          );
-
-          if (removedIds.length > 0) {
-            const response = yield* eventbridge
-              .removeTargets({
-                Rule: ruleName,
-                EventBusName: eventBusParam,
-                Ids: removedIds,
-              })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
-
-            if (response) {
-              yield* assertRemoveTargetsSucceeded(response);
-            }
+          if (!(yield* hasAlchemyTags(id, Tags ?? []))) {
+            return yield* Effect.fail(
+              new Error(
+                `Rule '${ruleName}' already exists on event bus '${eventBusName}' and is not managed by alchemy`,
+              ),
+            );
           }
+        }
 
-          const resolvedTargets =
-            (news.targets as Input.Resolve<RuleTarget>[] | undefined) ?? [];
-          if (resolvedTargets.length > 0) {
-            const response = yield* eventbridge.putTargets({
+        const { RuleArn } = yield* eventbridge.putRule({
+          Name: ruleName,
+          Description: news.description,
+          EventBusName: eventBusName !== "default" ? eventBusName : undefined,
+          EventPattern: news.eventPattern
+            ? JSON.stringify(news.eventPattern)
+            : undefined,
+          ScheduleExpression: news.scheduleExpression,
+          State: news.state ?? "ENABLED",
+          RoleArn: news.roleArn as string | undefined,
+          Tags: createTagsList(allTags),
+        });
+
+        const resolvedTargets =
+          (news.targets as Input.Resolve<RuleTarget>[] | undefined) ?? [];
+        if (resolvedTargets.length > 0) {
+          const response = yield* eventbridge.putTargets({
+            Rule: ruleName,
+            EventBusName: eventBusName !== "default" ? eventBusName : undefined,
+            Targets: resolvedTargets.map(toTarget),
+          });
+          yield* assertPutTargetsSucceeded(response);
+        }
+
+        yield* session.note(ruleArn);
+
+        return {
+          ruleName,
+          ruleArn:
+            (RuleArn as RuleArn | undefined) ??
+            toRuleArn(region, accountId, eventBusName, ruleName),
+          eventBusName,
+        };
+      }),
+      update: Effect.fn(function* ({
+        id,
+        news = {},
+        olds = {},
+        output,
+        session,
+      }) {
+        yield* validateRuleProps(news);
+        const ruleName = output.ruleName;
+        const eventBusName = output.eventBusName;
+        const eventBusParam =
+          eventBusName !== "default" ? eventBusName : undefined;
+
+        yield* eventbridge.putRule({
+          Name: ruleName,
+          Description: news.description,
+          EventBusName: eventBusParam,
+          EventPattern: news.eventPattern
+            ? JSON.stringify(news.eventPattern)
+            : undefined,
+          ScheduleExpression: news.scheduleExpression,
+          State: news.state ?? "ENABLED",
+          RoleArn: news.roleArn as string | undefined,
+        });
+
+        const oldTargetIds = new Set(
+          ((olds.targets as Input.Resolve<RuleTarget>[] | undefined) ?? []).map(
+            (t) => t.Id,
+          ),
+        );
+        const newTargetIds = new Set(
+          ((news.targets as Input.Resolve<RuleTarget>[] | undefined) ?? []).map(
+            (t) => t.Id,
+          ),
+        );
+        const removedIds = [...oldTargetIds].filter(
+          (id) => !newTargetIds.has(id),
+        );
+
+        if (removedIds.length > 0) {
+          const response = yield* eventbridge
+            .removeTargets({
               Rule: ruleName,
               EventBusName: eventBusParam,
-              Targets: resolvedTargets.map(toTarget),
-            });
-            yield* assertPutTargetsSucceeded(response);
-          }
-
-          const internalTags = yield* createInternalTags(id);
-          const oldTags = {
-            ...internalTags,
-            ...(olds.tags as Record<string, string> | undefined),
-          };
-          const newTags = {
-            ...internalTags,
-            ...(news.tags as Record<string, string> | undefined),
-          };
-          const { removed, upsert } = diffTags(oldTags, newTags);
-
-          if (removed.length > 0) {
-            yield* eventbridge.untagResource({
-              ResourceARN: output.ruleArn,
-              TagKeys: removed,
-            });
-          }
-
-          if (upsert.length > 0) {
-            yield* eventbridge.tagResource({
-              ResourceARN: output.ruleArn,
-              Tags: upsert,
-            });
-          }
-
-          yield* session.note(output.ruleArn);
-          return output;
-        }),
-        delete: Effect.fn(function* (input) {
-          const ruleName = input.output.ruleName;
-          const eventBusName = input.output.eventBusName;
-          const eventBusParam =
-            eventBusName !== "default" ? eventBusName : undefined;
-
-          const { Targets } = yield* eventbridge
-            .listTargetsByRule({
-              Rule: ruleName,
-              EventBusName: eventBusParam,
+              Ids: removedIds,
             })
             .pipe(
               Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed({ Targets: undefined }),
+                Effect.succeed(undefined),
               ),
             );
 
-          if (Targets && Targets.length > 0) {
-            const response = yield* eventbridge
-              .removeTargets({
-                Rule: ruleName,
-                EventBusName: eventBusParam,
-                Ids: Targets.map((t) => t.Id),
-              })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              );
-            if (response) {
-              yield* assertRemoveTargetsSucceeded(response);
-            }
+          if (response) {
+            yield* assertRemoveTargetsSucceeded(response);
           }
+        }
 
-          yield* eventbridge
-            .deleteRule({
-              Name: ruleName,
+        const resolvedTargets =
+          (news.targets as Input.Resolve<RuleTarget>[] | undefined) ?? [];
+        if (resolvedTargets.length > 0) {
+          const response = yield* eventbridge.putTargets({
+            Rule: ruleName,
+            EventBusName: eventBusParam,
+            Targets: resolvedTargets.map(toTarget),
+          });
+          yield* assertPutTargetsSucceeded(response);
+        }
+
+        const internalTags = yield* createInternalTags(id);
+        const oldTags = {
+          ...internalTags,
+          ...(olds.tags as Record<string, string> | undefined),
+        };
+        const newTags = {
+          ...internalTags,
+          ...(news.tags as Record<string, string> | undefined),
+        };
+        const { removed, upsert } = diffTags(oldTags, newTags);
+
+        if (removed.length > 0) {
+          yield* eventbridge.untagResource({
+            ResourceARN: output.ruleArn,
+            TagKeys: removed,
+          });
+        }
+
+        if (upsert.length > 0) {
+          yield* eventbridge.tagResource({
+            ResourceARN: output.ruleArn,
+            Tags: upsert,
+          });
+        }
+
+        yield* session.note(output.ruleArn);
+        return output;
+      }),
+      delete: Effect.fn(function* (input) {
+        const ruleName = input.output.ruleName;
+        const eventBusName = input.output.eventBusName;
+        const eventBusParam =
+          eventBusName !== "default" ? eventBusName : undefined;
+
+        const { Targets } = yield* eventbridge
+          .listTargetsByRule({
+            Rule: ruleName,
+            EventBusName: eventBusParam,
+          })
+          .pipe(
+            Effect.catchTag("ResourceNotFoundException", () =>
+              Effect.succeed({ Targets: undefined }),
+            ),
+          );
+
+        if (Targets && Targets.length > 0) {
+          const response = yield* eventbridge
+            .removeTargets({
+              Rule: ruleName,
               EventBusName: eventBusParam,
+              Ids: Targets.map((t) => t.Id),
             })
             .pipe(
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             );
-        }),
-      };
-    }),
-  );
+          if (response) {
+            yield* assertRemoveTargetsSucceeded(response);
+          }
+        }
+
+        yield* eventbridge
+          .deleteRule({
+            Name: ruleName,
+            EventBusName: eventBusParam,
+          })
+          .pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
+      }),
+    };
+  }),
+);
 
 const toTarget = (target: Input.Resolve<RuleTarget>): eventbridge.Target => ({
   Id: target.Id,

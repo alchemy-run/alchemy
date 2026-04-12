@@ -1,6 +1,7 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 
 export interface SSHPublicKeyProps {
@@ -53,96 +54,95 @@ export interface SSHPublicKey extends Resource<
  */
 export const SSHPublicKey = Resource<SSHPublicKey>("AWS.IAM.SSHPublicKey");
 
-export const SSHPublicKeyProvider = () =>
-  SSHPublicKey.provider.succeed({
-    stables: ["sshPublicKeyId"],
-    diff: Effect.fn(function* ({ olds, news }) {
-      if (!isResolved(news)) return;
-      if (
-        olds.userName !== news.userName ||
-        olds.sshPublicKeyBody !== news.sshPublicKeyBody
-      ) {
-        return { action: "replace" } as const;
-      }
-    }),
-    read: Effect.fn(function* ({ output }) {
-      if (!output) {
-        return undefined;
-      }
-      const response = yield* iam
-        .getSSHPublicKey({
-          UserName: output.userName,
-          SSHPublicKeyId: output.sshPublicKeyId,
-          Encoding: "SSH",
-        })
-        .pipe(
-          Effect.catchTag("NoSuchEntityException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
-      if (!response?.SSHPublicKey?.SSHPublicKeyId) {
-        return undefined;
-      }
-      return {
-        userName: response.SSHPublicKey.UserName,
-        sshPublicKeyId: response.SSHPublicKey.SSHPublicKeyId,
-        fingerprint: response.SSHPublicKey.Fingerprint,
-        sshPublicKeyBody: response.SSHPublicKey.SSHPublicKeyBody,
-        status: response.SSHPublicKey.Status,
-        uploadDate: response.SSHPublicKey.UploadDate,
-      };
-    }),
-    create: Effect.fn(function* ({ news, session }) {
-      const created = yield* iam.uploadSSHPublicKey({
+export const SSHPublicKeyProvider = Provider.succeed(SSHPublicKey, {
+  stables: ["sshPublicKeyId"],
+  diff: Effect.fn(function* ({ olds, news }) {
+    if (!isResolved(news)) return;
+    if (
+      olds.userName !== news.userName ||
+      olds.sshPublicKeyBody !== news.sshPublicKeyBody
+    ) {
+      return { action: "replace" } as const;
+    }
+  }),
+  read: Effect.fn(function* ({ output }) {
+    if (!output) {
+      return undefined;
+    }
+    const response = yield* iam
+      .getSSHPublicKey({
+        UserName: output.userName,
+        SSHPublicKeyId: output.sshPublicKeyId,
+        Encoding: "SSH",
+      })
+      .pipe(
+        Effect.catchTag("NoSuchEntityException", () =>
+          Effect.succeed(undefined),
+        ),
+      );
+    if (!response?.SSHPublicKey?.SSHPublicKeyId) {
+      return undefined;
+    }
+    return {
+      userName: response.SSHPublicKey.UserName,
+      sshPublicKeyId: response.SSHPublicKey.SSHPublicKeyId,
+      fingerprint: response.SSHPublicKey.Fingerprint,
+      sshPublicKeyBody: response.SSHPublicKey.SSHPublicKeyBody,
+      status: response.SSHPublicKey.Status,
+      uploadDate: response.SSHPublicKey.UploadDate,
+    };
+  }),
+  create: Effect.fn(function* ({ news, session }) {
+    const created = yield* iam.uploadSSHPublicKey({
+      UserName: news.userName,
+      SSHPublicKeyBody: news.sshPublicKeyBody,
+    });
+    if (!created.SSHPublicKey?.SSHPublicKeyId) {
+      return yield* Effect.fail(
+        new Error(`uploadSSHPublicKey returned no key id`),
+      );
+    }
+    if (
+      news.status !== undefined &&
+      created.SSHPublicKey.Status !== news.status
+    ) {
+      yield* iam.updateSSHPublicKey({
         UserName: news.userName,
-        SSHPublicKeyBody: news.sshPublicKeyBody,
+        SSHPublicKeyId: created.SSHPublicKey.SSHPublicKeyId,
+        Status: news.status,
       });
-      if (!created.SSHPublicKey?.SSHPublicKeyId) {
-        return yield* Effect.fail(
-          new Error(`uploadSSHPublicKey returned no key id`),
-        );
-      }
-      if (
-        news.status !== undefined &&
-        created.SSHPublicKey.Status !== news.status
-      ) {
-        yield* iam.updateSSHPublicKey({
-          UserName: news.userName,
-          SSHPublicKeyId: created.SSHPublicKey.SSHPublicKeyId,
-          Status: news.status,
-        });
-      }
-      yield* session.note(created.SSHPublicKey.SSHPublicKeyId);
-      return {
-        userName: created.SSHPublicKey.UserName,
-        sshPublicKeyId: created.SSHPublicKey.SSHPublicKeyId,
-        fingerprint: created.SSHPublicKey.Fingerprint,
-        sshPublicKeyBody: created.SSHPublicKey.SSHPublicKeyBody,
-        status: news.status ?? created.SSHPublicKey.Status,
-        uploadDate: created.SSHPublicKey.UploadDate,
-      };
-    }),
-    update: Effect.fn(function* ({ news, output, session }) {
-      const status = news.status ?? output.status;
-      if (status !== output.status) {
-        yield* iam.updateSSHPublicKey({
-          UserName: output.userName,
-          SSHPublicKeyId: output.sshPublicKeyId,
-          Status: status,
-        });
-      }
-      yield* session.note(output.sshPublicKeyId);
-      return {
-        ...output,
-        status,
-      };
-    }),
-    delete: Effect.fn(function* ({ output }) {
-      yield* iam
-        .deleteSSHPublicKey({
-          UserName: output.userName,
-          SSHPublicKeyId: output.sshPublicKeyId,
-        })
-        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
-    }),
-  });
+    }
+    yield* session.note(created.SSHPublicKey.SSHPublicKeyId);
+    return {
+      userName: created.SSHPublicKey.UserName,
+      sshPublicKeyId: created.SSHPublicKey.SSHPublicKeyId,
+      fingerprint: created.SSHPublicKey.Fingerprint,
+      sshPublicKeyBody: created.SSHPublicKey.SSHPublicKeyBody,
+      status: news.status ?? created.SSHPublicKey.Status,
+      uploadDate: created.SSHPublicKey.UploadDate,
+    };
+  }),
+  update: Effect.fn(function* ({ news, output, session }) {
+    const status = news.status ?? output.status;
+    if (status !== output.status) {
+      yield* iam.updateSSHPublicKey({
+        UserName: output.userName,
+        SSHPublicKeyId: output.sshPublicKeyId,
+        Status: status,
+      });
+    }
+    yield* session.note(output.sshPublicKeyId);
+    return {
+      ...output,
+      status,
+    };
+  }),
+  delete: Effect.fn(function* ({ output }) {
+    yield* iam
+      .deleteSSHPublicKey({
+        UserName: output.userName,
+        SSHPublicKeyId: output.sshPublicKeyId,
+      })
+      .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+  }),
+});

@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import {
   createInternalTags,
@@ -112,162 +113,162 @@ export interface EventBus extends Resource<
 > {}
 export const EventBus = Resource<EventBus>("AWS.EventBridge.EventBus");
 
-export const EventBusProvider = () =>
-  EventBus.provider.effect(
-    Effect.gen(function* () {
-      const region = yield* Region;
-      const accountId = yield* Account;
+export const EventBusProvider = Provider.effect(
+  EventBus,
+  Effect.gen(function* () {
+    const region = yield* Region;
+    const accountId = yield* Account;
 
-      const createEventBusName = (id: string, props: { name?: string } = {}) =>
-        Effect.gen(function* () {
-          if (props.name) {
-            return props.name;
-          }
-          return yield* createPhysicalName({
-            id,
-            maxLength: 256,
-          });
-        });
-
-      return {
-        stables: ["eventBusName", "eventBusArn"],
-        diff: Effect.fn(function* ({ id, news, olds }) {
-          if (!isResolved(news)) return;
-          const oldName = yield* createEventBusName(id, olds);
-          const newName = yield* createEventBusName(id, news);
-          if (oldName !== newName) {
-            return { action: "replace" } as const;
-          }
-          if ((olds.eventSourceName ?? "") !== (news.eventSourceName ?? "")) {
-            return { action: "replace" } as const;
-          }
-        }),
-        read: Effect.fn(function* ({ id, olds, output }) {
-          const eventBusName =
-            output?.eventBusName ?? (yield* createEventBusName(id, olds ?? {}));
-          const described = yield* eventbridge
-            .describeEventBus({
-              Name: eventBusName,
-            })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
-
-          if (!described?.Arn || !described.Name) {
-            return undefined;
-          }
-
-          return {
-            eventBusName: described.Name,
-            eventBusArn: described.Arn as EventBusArn,
-            description: described.Description,
-          };
-        }),
-        create: Effect.fn(function* ({ id, news = {}, session }) {
-          const eventBusName = yield* createEventBusName(id, news);
-          const internalTags = yield* createInternalTags(id);
-          const allTags = {
-            ...internalTags,
-            ...(news.tags as Record<string, string> | undefined),
-          };
-
-          const eventBusArn =
-            `arn:aws:events:${region}:${accountId}:event-bus/${eventBusName}` as const;
-
-          yield* eventbridge
-            .createEventBus({
-              Name: eventBusName,
-              EventSourceName: news.eventSourceName,
-              Description: news.description,
-              KmsKeyIdentifier: news.kmsKeyIdentifier as string | undefined,
-              DeadLetterConfig: news.deadLetterConfig
-                ? { Arn: news.deadLetterConfig.Arn as string | undefined }
-                : undefined,
-              LogConfig: news.logConfig,
-              Tags: createTagsList(allTags),
-            })
-            .pipe(
-              Effect.catchTag("ResourceAlreadyExistsException", () =>
-                Effect.gen(function* () {
-                  const { Tags } = yield* eventbridge.listTagsForResource({
-                    ResourceARN: eventBusArn,
-                  });
-                  if (!(yield* hasAlchemyTags(id, Tags ?? []))) {
-                    return yield* Effect.fail(
-                      new eventbridge.ResourceAlreadyExistsException({
-                        message: `Event bus '${eventBusName}' already exists and is not managed by alchemy`,
-                      }),
-                    );
-                  }
-                }),
-              ),
-            );
-
-          yield* session.note(eventBusArn);
-
-          return {
-            eventBusName,
-            eventBusArn,
-            description: news.description,
-          };
-        }),
-        update: Effect.fn(function* ({
+    const createEventBusName = (id: string, props: { name?: string } = {}) =>
+      Effect.gen(function* () {
+        if (props.name) {
+          return props.name;
+        }
+        return yield* createPhysicalName({
           id,
-          news = {},
-          olds = {},
-          output,
-          session,
-        }) {
-          const eventBusName = output.eventBusName;
+          maxLength: 256,
+        });
+      });
 
-          yield* eventbridge.updateEventBus({
+    return {
+      stables: ["eventBusName", "eventBusArn"],
+      diff: Effect.fn(function* ({ id, news, olds }) {
+        if (!isResolved(news)) return;
+        const oldName = yield* createEventBusName(id, olds);
+        const newName = yield* createEventBusName(id, news);
+        if (oldName !== newName) {
+          return { action: "replace" } as const;
+        }
+        if ((olds.eventSourceName ?? "") !== (news.eventSourceName ?? "")) {
+          return { action: "replace" } as const;
+        }
+      }),
+      read: Effect.fn(function* ({ id, olds, output }) {
+        const eventBusName =
+          output?.eventBusName ?? (yield* createEventBusName(id, olds ?? {}));
+        const described = yield* eventbridge
+          .describeEventBus({
             Name: eventBusName,
+          })
+          .pipe(
+            Effect.catchTag("ResourceNotFoundException", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+
+        if (!described?.Arn || !described.Name) {
+          return undefined;
+        }
+
+        return {
+          eventBusName: described.Name,
+          eventBusArn: described.Arn as EventBusArn,
+          description: described.Description,
+        };
+      }),
+      create: Effect.fn(function* ({ id, news = {}, session }) {
+        const eventBusName = yield* createEventBusName(id, news);
+        const internalTags = yield* createInternalTags(id);
+        const allTags = {
+          ...internalTags,
+          ...(news.tags as Record<string, string> | undefined),
+        };
+
+        const eventBusArn =
+          `arn:aws:events:${region}:${accountId}:event-bus/${eventBusName}` as const;
+
+        yield* eventbridge
+          .createEventBus({
+            Name: eventBusName,
+            EventSourceName: news.eventSourceName,
             Description: news.description,
             KmsKeyIdentifier: news.kmsKeyIdentifier as string | undefined,
             DeadLetterConfig: news.deadLetterConfig
               ? { Arn: news.deadLetterConfig.Arn as string | undefined }
               : undefined,
             LogConfig: news.logConfig,
+            Tags: createTagsList(allTags),
+          })
+          .pipe(
+            Effect.catchTag("ResourceAlreadyExistsException", () =>
+              Effect.gen(function* () {
+                const { Tags } = yield* eventbridge.listTagsForResource({
+                  ResourceARN: eventBusArn,
+                });
+                if (!(yield* hasAlchemyTags(id, Tags ?? []))) {
+                  return yield* Effect.fail(
+                    new eventbridge.ResourceAlreadyExistsException({
+                      message: `Event bus '${eventBusName}' already exists and is not managed by alchemy`,
+                    }),
+                  );
+                }
+              }),
+            ),
+          );
+
+        yield* session.note(eventBusArn);
+
+        return {
+          eventBusName,
+          eventBusArn,
+          description: news.description,
+        };
+      }),
+      update: Effect.fn(function* ({
+        id,
+        news = {},
+        olds = {},
+        output,
+        session,
+      }) {
+        const eventBusName = output.eventBusName;
+
+        yield* eventbridge.updateEventBus({
+          Name: eventBusName,
+          Description: news.description,
+          KmsKeyIdentifier: news.kmsKeyIdentifier as string | undefined,
+          DeadLetterConfig: news.deadLetterConfig
+            ? { Arn: news.deadLetterConfig.Arn as string | undefined }
+            : undefined,
+          LogConfig: news.logConfig,
+        });
+
+        const internalTags = yield* createInternalTags(id);
+        const oldTags = {
+          ...internalTags,
+          ...(olds.tags as Record<string, string> | undefined),
+        };
+        const newTags = {
+          ...internalTags,
+          ...(news.tags as Record<string, string> | undefined),
+        };
+        const { removed, upsert } = diffTags(oldTags, newTags);
+
+        if (removed.length > 0) {
+          yield* eventbridge.untagResource({
+            ResourceARN: output.eventBusArn,
+            TagKeys: removed,
           });
+        }
 
-          const internalTags = yield* createInternalTags(id);
-          const oldTags = {
-            ...internalTags,
-            ...(olds.tags as Record<string, string> | undefined),
-          };
-          const newTags = {
-            ...internalTags,
-            ...(news.tags as Record<string, string> | undefined),
-          };
-          const { removed, upsert } = diffTags(oldTags, newTags);
-
-          if (removed.length > 0) {
-            yield* eventbridge.untagResource({
-              ResourceARN: output.eventBusArn,
-              TagKeys: removed,
-            });
-          }
-
-          if (upsert.length > 0) {
-            yield* eventbridge.tagResource({
-              ResourceARN: output.eventBusArn,
-              Tags: upsert,
-            });
-          }
-
-          yield* session.note(output.eventBusArn);
-          return {
-            ...output,
-            description: news.description,
-          };
-        }),
-        delete: Effect.fn(function* (input) {
-          yield* eventbridge.deleteEventBus({
-            Name: input.output.eventBusName,
+        if (upsert.length > 0) {
+          yield* eventbridge.tagResource({
+            ResourceARN: output.eventBusArn,
+            Tags: upsert,
           });
-        }),
-      };
-    }),
-  );
+        }
+
+        yield* session.note(output.eventBusArn);
+        return {
+          ...output,
+          description: news.description,
+        };
+      }),
+      delete: Effect.fn(function* (input) {
+        yield* eventbridge.deleteEventBus({
+          Name: input.output.eventBusName,
+        });
+      }),
+    };
+  }),
+);

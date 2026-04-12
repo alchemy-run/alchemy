@@ -59,7 +59,7 @@ describe.sequential("AWS.Kinesis.StreamEventSource", () => {
       expect(mapping.State).toEqual("Enabled");
 
       yield* destroy();
-    }).pipe(Effect.provide(AWS.providers())),
+    }).pipe(Effect.provide(AWS.providers)),
   );
 });
 

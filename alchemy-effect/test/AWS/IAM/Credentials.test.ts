@@ -83,7 +83,7 @@ describe("AWS.IAM credential resources", () => {
               deployed.credential.serviceSpecificCredentialId,
           ),
       ).toBe(true);
-    }).pipe(Effect.provide(AWS.providers())),
+    }).pipe(Effect.provide(AWS.providers)),
   );
 
   test(
@@ -179,6 +179,6 @@ describe("AWS.IAM credential resources", () => {
               entry.CertificateId === deployed.signingCertificate.certificateId,
           ),
       ).toBe(true);
-    }).pipe(Effect.provide(AWS.providers())),
+    }).pipe(Effect.provide(AWS.providers)),
   );
 });

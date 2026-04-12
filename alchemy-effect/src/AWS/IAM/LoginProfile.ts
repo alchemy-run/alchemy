@@ -2,6 +2,7 @@ import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { unwrapRedactedString } from "./common.ts";
 
@@ -52,86 +53,85 @@ export interface LoginProfile extends Resource<
  */
 export const LoginProfile = Resource<LoginProfile>("AWS.IAM.LoginProfile");
 
-export const LoginProfileProvider = () =>
-  LoginProfile.provider.succeed({
-    stables: ["userName"],
-    diff: Effect.fn(function* ({ olds, news }) {
-      if (!isResolved(news)) return;
-      if (olds.userName !== news.userName) {
-        return { action: "replace" } as const;
-      }
-    }),
-    read: Effect.fn(function* ({ output }) {
-      if (!output) {
-        return undefined;
-      }
-      const response = yield* iam
-        .getLoginProfile({
-          UserName: output.userName,
-        })
-        .pipe(
-          Effect.catchTag("NoSuchEntityException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
-      if (!response?.LoginProfile) {
-        return undefined;
-      }
-      return {
-        userName: response.LoginProfile.UserName,
-        createDate: response.LoginProfile.CreateDate,
-        passwordResetRequired: response.LoginProfile.PasswordResetRequired,
-      };
-    }),
-    create: Effect.fn(function* ({ news, session }) {
-      const response = yield* iam
-        .createLoginProfile({
-          UserName: news.userName,
-          Password: unwrapRedactedString(news.password),
-          PasswordResetRequired: news.passwordResetRequired,
-        })
-        .pipe(
-          Effect.catchTag("EntityAlreadyExistsException", () =>
-            Effect.gen(function* () {
-              yield* iam.updateLoginProfile({
-                UserName: news.userName,
-                Password: unwrapRedactedString(news.password),
-                PasswordResetRequired: news.passwordResetRequired,
-              });
-              return yield* iam.getLoginProfile({
-                UserName: news.userName,
-              });
-            }),
-          ),
-        );
-      yield* session.note(news.userName);
-      return {
-        userName: response.LoginProfile.UserName,
-        createDate: response.LoginProfile.CreateDate,
-        passwordResetRequired: response.LoginProfile.PasswordResetRequired,
-      };
-    }),
-    update: Effect.fn(function* ({ news, output, session }) {
-      yield* iam.updateLoginProfile({
+export const LoginProfileProvider = Provider.succeed(LoginProfile, {
+  stables: ["userName"],
+  diff: Effect.fn(function* ({ olds, news }) {
+    if (!isResolved(news)) return;
+    if (olds.userName !== news.userName) {
+      return { action: "replace" } as const;
+    }
+  }),
+  read: Effect.fn(function* ({ output }) {
+    if (!output) {
+      return undefined;
+    }
+    const response = yield* iam
+      .getLoginProfile({
         UserName: output.userName,
+      })
+      .pipe(
+        Effect.catchTag("NoSuchEntityException", () =>
+          Effect.succeed(undefined),
+        ),
+      );
+    if (!response?.LoginProfile) {
+      return undefined;
+    }
+    return {
+      userName: response.LoginProfile.UserName,
+      createDate: response.LoginProfile.CreateDate,
+      passwordResetRequired: response.LoginProfile.PasswordResetRequired,
+    };
+  }),
+  create: Effect.fn(function* ({ news, session }) {
+    const response = yield* iam
+      .createLoginProfile({
+        UserName: news.userName,
         Password: unwrapRedactedString(news.password),
         PasswordResetRequired: news.passwordResetRequired,
-      });
-      const response = yield* iam.getLoginProfile({
+      })
+      .pipe(
+        Effect.catchTag("EntityAlreadyExistsException", () =>
+          Effect.gen(function* () {
+            yield* iam.updateLoginProfile({
+              UserName: news.userName,
+              Password: unwrapRedactedString(news.password),
+              PasswordResetRequired: news.passwordResetRequired,
+            });
+            return yield* iam.getLoginProfile({
+              UserName: news.userName,
+            });
+          }),
+        ),
+      );
+    yield* session.note(news.userName);
+    return {
+      userName: response.LoginProfile.UserName,
+      createDate: response.LoginProfile.CreateDate,
+      passwordResetRequired: response.LoginProfile.PasswordResetRequired,
+    };
+  }),
+  update: Effect.fn(function* ({ news, output, session }) {
+    yield* iam.updateLoginProfile({
+      UserName: output.userName,
+      Password: unwrapRedactedString(news.password),
+      PasswordResetRequired: news.passwordResetRequired,
+    });
+    const response = yield* iam.getLoginProfile({
+      UserName: output.userName,
+    });
+    yield* session.note(output.userName);
+    return {
+      userName: response.LoginProfile.UserName,
+      createDate: response.LoginProfile.CreateDate,
+      passwordResetRequired: response.LoginProfile.PasswordResetRequired,
+    };
+  }),
+  delete: Effect.fn(function* ({ output }) {
+    yield* iam
+      .deleteLoginProfile({
         UserName: output.userName,
-      });
-      yield* session.note(output.userName);
-      return {
-        userName: response.LoginProfile.UserName,
-        createDate: response.LoginProfile.CreateDate,
-        passwordResetRequired: response.LoginProfile.PasswordResetRequired,
-      };
-    }),
-    delete: Effect.fn(function* ({ output }) {
-      yield* iam
-        .deleteLoginProfile({
-          UserName: output.userName,
-        })
-        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
-    }),
-  });
+      })
+      .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+  }),
+});

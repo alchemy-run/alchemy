@@ -73,5 +73,5 @@ test(
       PolicyArn: policy.policyArn,
     }).pipe(Effect.option);
     expect(deleted._tag).toBe("None");
-  }).pipe(Effect.provide(AWS.providers())),
+  }).pipe(Effect.provide(AWS.providers)),
 );

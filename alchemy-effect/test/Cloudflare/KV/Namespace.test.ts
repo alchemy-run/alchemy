@@ -40,7 +40,7 @@ test(
     yield* destroy();
 
     yield* waitForNamespaceToBeDeleted(namespace.namespaceId, accountId);
-  }).pipe(Effect.provide(Cloudflare.providers()), logLevel),
+  }).pipe(Effect.provide(Cloudflare.providers), logLevel),
 );
 
 test(
@@ -84,7 +84,7 @@ test(
     yield* destroy();
 
     yield* waitForNamespaceToBeDeleted(namespace.namespaceId, accountId);
-  }).pipe(Effect.provide(Cloudflare.providers()), logLevel),
+  }).pipe(Effect.provide(Cloudflare.providers), logLevel),
 );
 
 const waitForNamespaceToBeDeleted = Effect.fn(function* (

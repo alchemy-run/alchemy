@@ -57,7 +57,7 @@ describe("AWS.Website.Router", () => {
       yield* assertDistributionDeleted(
         deployed.router.distribution.distributionId,
       );
-    }).pipe(Effect.provide(AWS.providers())),
+    }).pipe(Effect.provide(AWS.providers)),
   );
 });
 

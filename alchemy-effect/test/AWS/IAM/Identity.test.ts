@@ -61,5 +61,5 @@ test(
     );
 
     yield* destroy();
-  }).pipe(Effect.provide(AWS.providers())),
+  }).pipe(Effect.provide(AWS.providers)),
 );

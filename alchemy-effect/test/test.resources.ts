@@ -1,5 +1,6 @@
 import { Artifacts } from "@/Artifacts";
 import { isResolved } from "@/Diff.ts";
+import * as Provider from "@/Provider.ts";
 import { Resource } from "@/Resource";
 import * as State from "@/State/index";
 import { isUnknown } from "@/Util/unknown";
@@ -24,7 +25,7 @@ export interface Bucket extends Resource<
 
 export const Bucket = Resource<Bucket>("Test.Bucket");
 
-const bucketProvider = Bucket.provider.succeed({
+const bucketProvider = Provider.succeed(Bucket, {
   diff: Effect.fn(function* ({ id, news, output }) {
     if (!isResolved(news)) return undefined;
   }),
@@ -58,7 +59,7 @@ export interface Queue extends Resource<
 
 export const Queue = Resource<Queue>("Test.Queue");
 
-export const queueProvider = Queue.provider.succeed({
+export const queueProvider = Provider.succeed(Queue, {
   diff: Effect.fn(function* ({ id, news = {}, output }) {
     if (!isResolved(news)) return undefined;
   }),
@@ -96,7 +97,7 @@ export interface Function extends Resource<
 
 export const Function = Resource<Function>("Test.Function");
 
-export const functionProvider = Function.provider.succeed({
+export const functionProvider = Provider.succeed(Function, {
   diff: Effect.fn(function* ({ id, news, output }) {
     if (!isResolved(news)) return undefined;
   }),
@@ -139,7 +140,8 @@ export interface BindingTarget extends Resource<
 
 export const BindingTarget = Resource<BindingTarget>("Test.BindingTarget");
 
-export const bindingTargetProvider = BindingTarget.provider.effect(
+export const bindingTargetProvider = Provider.effect(
+  BindingTarget,
   Effect.gen(function* () {
     return {
       diff: Effect.fn(function* ({ news = {}, olds = {} }) {
@@ -238,8 +240,9 @@ export const DeletedBindingRegressionTarget =
     "Test.DeletedBindingRegressionTarget",
   );
 
-export const deletedBindingRegressionProvider =
-  DeletedBindingRegressionTarget.provider.succeed({
+export const deletedBindingRegressionProvider = Provider.succeed(
+  DeletedBindingRegressionTarget,
+  {
     diff: Effect.fn(function* () {}),
     precreate: Effect.fn(function* ({ id, news = {} }) {
       return {
@@ -270,7 +273,8 @@ export const deletedBindingRegressionProvider =
       };
     }),
     delete: Effect.fn(function* () {}),
-  });
+  },
+);
 
 export type ArtifactProbeProps = {
   value: string;
@@ -287,7 +291,7 @@ export interface ArtifactProbe extends Resource<
 
 export const ArtifactProbe = Resource<ArtifactProbe>("Test.ArtifactProbe");
 
-export const artifactProbeProvider = ArtifactProbe.provider.succeed({
+export const artifactProbeProvider = Provider.succeed(ArtifactProbe, {
   diff: Effect.fn(function* ({ news, olds }) {
     const next = news as ArtifactProbeProps;
     const prev = olds as ArtifactProbeProps | undefined;
@@ -359,7 +363,8 @@ export class TestResourceHooks extends ServiceMap.Service<
 
 export const TestResource = Resource<TestResource>("Test.TestResource");
 
-export const testResourceProvider = TestResource.provider.effect(
+export const testResourceProvider = Provider.effect(
+  TestResource,
   Effect.gen(function* () {
     return {
       read: Effect.fn(function* ({ id, output }) {
@@ -477,8 +482,9 @@ export const StaticStablesResource = Resource<StaticStablesResource>(
   "Test.StaticStablesResource",
 );
 
-export const staticStablesResourceProvider =
-  StaticStablesResource.provider.succeed({
+export const staticStablesResourceProvider = Provider.succeed(
+  StaticStablesResource,
+  {
     // KEY DIFFERENCE: Static stables defined on the provider itself
     // These are always stable regardless of what diff() returns
     stables: ["stableId", "stableArn"],
@@ -539,7 +545,8 @@ export const staticStablesResourceProvider =
       }
       return;
     }),
-  });
+  },
+);
 
 export type PhasedTargetProps = {
   desired: string;
@@ -571,7 +578,8 @@ const mergeBindingEnv = (bindings: Array<any>) =>
     ...bindings.map((binding) => binding.env ?? binding.data?.env ?? {}),
   );
 
-export const phasedTargetProvider = PhasedTarget.provider.effect(
+export const phasedTargetProvider = Provider.effect(
+  PhasedTarget,
   Effect.gen(function* () {
     return {
       diff: Effect.fn(function* ({ news, olds }) {
@@ -662,8 +670,9 @@ export const NoPrecreateBindingTarget = Resource<NoPrecreateBindingTarget>(
   "Test.NoPrecreateBindingTarget",
 );
 
-export const noPrecreateBindingTargetProvider =
-  NoPrecreateBindingTarget.provider.succeed({
+export const noPrecreateBindingTargetProvider = Provider.succeed(
+  NoPrecreateBindingTarget,
+  {
     diff: Effect.fn(function* () {}),
     create: Effect.fn(function* ({ id, news = {}, bindings }) {
       return {
@@ -688,7 +697,8 @@ export const noPrecreateBindingTargetProvider =
       };
     }),
     delete: Effect.fn(function* () {}),
-  });
+  },
+);
 
 // Layers
 export const TestLayers = Layer.mergeAll(

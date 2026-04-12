@@ -5,6 +5,7 @@ import * as Schedule from "effect/Schedule";
 
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved, somePropsAreDifferent } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 import type { AccountID } from "../Account.ts";
@@ -208,295 +209,294 @@ export interface Subnet extends Resource<
 > {}
 export const Subnet = Resource<Subnet>("AWS.EC2.Subnet");
 
-export const SubnetProvider = () =>
-  Subnet.provider.effect(
-    Effect.gen(function* () {
-      return {
-        stables: ["subnetId", "subnetArn", "ownerId", "vpcId"],
-        diff: Effect.fn(function* ({ news, olds }) {
-          if (!isResolved(news)) return;
-          if (
-            somePropsAreDifferent(olds, news, [
-              "vpcId",
-              "cidrBlock",
-              "availabilityZone",
-              "availabilityZoneId",
-              "ipv6CidrBlock",
-              "ipv4IpamPoolId",
-              "ipv6IpamPoolId",
-            ])
-          ) {
-            return { action: "replace" };
-          }
-        }),
+export const SubnetProvider = Provider.effect(
+  Subnet,
+  Effect.gen(function* () {
+    return {
+      stables: ["subnetId", "subnetArn", "ownerId", "vpcId"],
+      diff: Effect.fn(function* ({ news, olds }) {
+        if (!isResolved(news)) return;
+        if (
+          somePropsAreDifferent(olds, news, [
+            "vpcId",
+            "cidrBlock",
+            "availabilityZone",
+            "availabilityZoneId",
+            "ipv6CidrBlock",
+            "ipv4IpamPoolId",
+            "ipv6IpamPoolId",
+          ])
+        ) {
+          return { action: "replace" };
+        }
+      }),
 
-        create: Effect.fn(function* ({ id, news, session }) {
-          // 1. Get VPC ID from the VPC resource
-          // TODO(sam): i need to make it possible to pass Resources as input Props to Resources
-          const vpcId = news.vpcId;
+      create: Effect.fn(function* ({ id, news, session }) {
+        // 1. Get VPC ID from the VPC resource
+        // TODO(sam): i need to make it possible to pass Resources as input Props to Resources
+        const vpcId = news.vpcId;
 
-          // 2. Prepare tags
-          const alchemyTags = yield* createInternalTags(id);
-          const userTags = news.tags ?? {};
-          const allTags = { ...alchemyTags, ...userTags };
+        // 2. Prepare tags
+        const alchemyTags = yield* createInternalTags(id);
+        const userTags = news.tags ?? {};
+        const allTags = { ...alchemyTags, ...userTags };
 
-          // 3. Call CreateSubnet
-          const createResult = yield* ec2
-            .createSubnet({
-              VpcId: vpcId,
-              CidrBlock: news.cidrBlock,
-              Ipv6CidrBlock: news.ipv6CidrBlock,
-              AvailabilityZone: news.availabilityZone,
-              AvailabilityZoneId: news.availabilityZoneId,
-              Ipv4IpamPoolId: news.ipv4IpamPoolId,
-              Ipv4NetmaskLength: news.ipv4NetmaskLength,
-              Ipv6IpamPoolId: news.ipv6IpamPoolId,
-              Ipv6NetmaskLength: news.ipv6NetmaskLength,
-              Ipv6Native: false, // Explicitly set to false for now
-              TagSpecifications: [
-                {
-                  ResourceType: "subnet",
-                  Tags: createTagsList(allTags),
-                },
+        // 3. Call CreateSubnet
+        const createResult = yield* ec2
+          .createSubnet({
+            VpcId: vpcId,
+            CidrBlock: news.cidrBlock,
+            Ipv6CidrBlock: news.ipv6CidrBlock,
+            AvailabilityZone: news.availabilityZone,
+            AvailabilityZoneId: news.availabilityZoneId,
+            Ipv4IpamPoolId: news.ipv4IpamPoolId,
+            Ipv4NetmaskLength: news.ipv4NetmaskLength,
+            Ipv6IpamPoolId: news.ipv6IpamPoolId,
+            Ipv6NetmaskLength: news.ipv6NetmaskLength,
+            Ipv6Native: false, // Explicitly set to false for now
+            TagSpecifications: [
+              {
+                ResourceType: "subnet",
+                Tags: createTagsList(allTags),
+              },
+            ],
+            DryRun: false,
+          })
+          .pipe(
+            Effect.retry({
+              while: (e) => e._tag === "InvalidVpcID.NotFound",
+              schedule: Schedule.exponential(100),
+            }),
+          );
+
+        const subnetId = createResult.Subnet!.SubnetId! as SubnetId;
+        yield* session.note(`Subnet created: ${subnetId}`);
+
+        // 4. Modify subnet attributes if specified
+        if (news.mapPublicIpOnLaunch !== undefined) {
+          yield* ec2.modifySubnetAttribute({
+            SubnetId: subnetId,
+            MapPublicIpOnLaunch: { Value: news.mapPublicIpOnLaunch },
+          });
+        }
+
+        if (news.assignIpv6AddressOnCreation !== undefined) {
+          yield* ec2.modifySubnetAttribute({
+            SubnetId: subnetId,
+            AssignIpv6AddressOnCreation: {
+              Value: news.assignIpv6AddressOnCreation,
+            },
+          });
+        }
+
+        if (news.enableDns64 !== undefined) {
+          yield* ec2.modifySubnetAttribute({
+            SubnetId: subnetId,
+            EnableDns64: { Value: news.enableDns64 },
+          });
+        }
+
+        if (
+          news.enableResourceNameDnsARecordOnLaunch !== undefined ||
+          news.enableResourceNameDnsAAAARecordOnLaunch !== undefined ||
+          news.hostnameType !== undefined
+        ) {
+          yield* ec2.modifySubnetAttribute({
+            SubnetId: subnetId,
+            PrivateDnsHostnameTypeOnLaunch: news.hostnameType,
+            EnableResourceNameDnsARecordOnLaunch:
+              news.enableResourceNameDnsARecordOnLaunch !== undefined
+                ? { Value: news.enableResourceNameDnsARecordOnLaunch }
+                : undefined,
+            EnableResourceNameDnsAAAARecordOnLaunch:
+              news.enableResourceNameDnsAAAARecordOnLaunch !== undefined
+                ? { Value: news.enableResourceNameDnsAAAARecordOnLaunch }
+                : undefined,
+          });
+        }
+
+        // 5. Wait for subnet to be available
+        const subnet = yield* waitForSubnetAvailable(subnetId, session);
+
+        // 6. Return attributes
+        return {
+          subnetId,
+          subnetArn: subnet.SubnetArn! as SubnetArn,
+          cidrBlock: subnet.CidrBlock!,
+          vpcId: news.vpcId,
+          availabilityZone: subnet.AvailabilityZone!,
+          availabilityZoneId: subnet.AvailabilityZoneId,
+          state: subnet.State!,
+          availableIpAddressCount: subnet.AvailableIpAddressCount ?? 0,
+          mapPublicIpOnLaunch: subnet.MapPublicIpOnLaunch ?? false,
+          assignIpv6AddressOnCreation:
+            subnet.AssignIpv6AddressOnCreation ?? false,
+          defaultForAz: subnet.DefaultForAz ?? false,
+          ownerId: subnet.OwnerId,
+          ipv6CidrBlockAssociationSet: subnet.Ipv6CidrBlockAssociationSet?.map(
+            (assoc) => ({
+              associationId: assoc.AssociationId!,
+              ipv6CidrBlock: assoc.Ipv6CidrBlock!,
+              ipv6CidrBlockState: {
+                state: assoc.Ipv6CidrBlockState!.State!,
+                statusMessage: assoc.Ipv6CidrBlockState!.StatusMessage,
+              },
+            }),
+          ),
+          enableDns64: subnet.EnableDns64,
+          ipv6Native: subnet.Ipv6Native,
+          privateDnsNameOptionsOnLaunch: subnet.PrivateDnsNameOptionsOnLaunch
+            ? {
+                hostnameType: subnet.PrivateDnsNameOptionsOnLaunch.HostnameType,
+                enableResourceNameDnsARecord:
+                  subnet.PrivateDnsNameOptionsOnLaunch
+                    .EnableResourceNameDnsARecord,
+                enableResourceNameDnsAAAARecord:
+                  subnet.PrivateDnsNameOptionsOnLaunch
+                    .EnableResourceNameDnsAAAARecord,
+              }
+            : undefined,
+        };
+      }),
+
+      update: Effect.fn(function* ({ id, news, olds, output, session }) {
+        const subnetId = output.subnetId;
+
+        // Update MapPublicIpOnLaunch if changed
+        if (news.mapPublicIpOnLaunch !== olds.mapPublicIpOnLaunch) {
+          yield* ec2.modifySubnetAttribute({
+            SubnetId: subnetId,
+            MapPublicIpOnLaunch: { Value: news.mapPublicIpOnLaunch ?? false },
+          });
+          yield* session.note("Updated map public IP on launch");
+        }
+
+        // Update AssignIpv6AddressOnCreation if changed
+        if (
+          news.assignIpv6AddressOnCreation !== olds.assignIpv6AddressOnCreation
+        ) {
+          yield* ec2.modifySubnetAttribute({
+            SubnetId: subnetId,
+            AssignIpv6AddressOnCreation: {
+              Value: news.assignIpv6AddressOnCreation ?? false,
+            },
+          });
+          yield* session.note("Updated assign IPv6 address on creation");
+        }
+
+        // Update EnableDns64 if changed
+        if (news.enableDns64 !== olds.enableDns64) {
+          yield* ec2.modifySubnetAttribute({
+            SubnetId: subnetId,
+            EnableDns64: { Value: news.enableDns64 ?? false },
+          });
+          yield* session.note("Updated DNS64 setting");
+        }
+
+        // Update private DNS hostname settings if changed
+        if (
+          news.enableResourceNameDnsARecordOnLaunch !==
+            olds.enableResourceNameDnsARecordOnLaunch ||
+          news.enableResourceNameDnsAAAARecordOnLaunch !==
+            olds.enableResourceNameDnsAAAARecordOnLaunch ||
+          news.hostnameType !== olds.hostnameType
+        ) {
+          yield* ec2.modifySubnetAttribute({
+            SubnetId: subnetId,
+            PrivateDnsHostnameTypeOnLaunch: news.hostnameType,
+            EnableResourceNameDnsARecordOnLaunch:
+              news.enableResourceNameDnsARecordOnLaunch !== undefined
+                ? { Value: news.enableResourceNameDnsARecordOnLaunch }
+                : undefined,
+            EnableResourceNameDnsAAAARecordOnLaunch:
+              news.enableResourceNameDnsAAAARecordOnLaunch !== undefined
+                ? { Value: news.enableResourceNameDnsAAAARecordOnLaunch }
+                : undefined,
+          });
+          yield* session.note("Updated private DNS hostname settings");
+        }
+
+        // Handle tag updates
+        const alchemyTags = yield* createInternalTags(id);
+        const newTags = { ...alchemyTags, ...news.tags };
+        const oldTags =
+          (yield* ec2
+            .describeTags({
+              Filters: [
+                { Name: "resource-id", Values: [subnetId] },
+                { Name: "resource-type", Values: ["subnet"] },
               ],
-              DryRun: false,
             })
             .pipe(
-              Effect.retry({
-                while: (e) => e._tag === "InvalidVpcID.NotFound",
-                schedule: Schedule.exponential(100),
-              }),
-            );
+              Effect.map(
+                (r) =>
+                  Object.fromEntries(
+                    r.Tags?.map((t) => [t.Key!, t.Value!]) ?? [],
+                  ) as Record<string, string>,
+              ),
+            )) ?? {};
 
-          const subnetId = createResult.Subnet!.SubnetId! as SubnetId;
-          yield* session.note(`Subnet created: ${subnetId}`);
+        const { removed, upsert } = diffTags(oldTags, newTags);
 
-          // 4. Modify subnet attributes if specified
-          if (news.mapPublicIpOnLaunch !== undefined) {
-            yield* ec2.modifySubnetAttribute({
-              SubnetId: subnetId,
-              MapPublicIpOnLaunch: { Value: news.mapPublicIpOnLaunch },
-            });
-          }
+        if (removed.length > 0) {
+          yield* ec2.deleteTags({
+            Resources: [subnetId],
+            Tags: removed.map((key) => ({ Key: key })),
+            DryRun: false,
+          });
+        }
+        if (upsert.length > 0) {
+          yield* ec2.createTags({
+            Resources: [subnetId],
+            Tags: upsert,
+            DryRun: false,
+          });
+          yield* session.note("Updated tags");
+        }
 
-          if (news.assignIpv6AddressOnCreation !== undefined) {
-            yield* ec2.modifySubnetAttribute({
-              SubnetId: subnetId,
-              AssignIpv6AddressOnCreation: {
-                Value: news.assignIpv6AddressOnCreation,
+        return output; // Subnet attributes don't change from these updates
+      }),
+
+      delete: Effect.fn(function* ({ output, session }) {
+        const subnetId = output.subnetId;
+
+        yield* session.note(`Deleting subnet: ${subnetId}`);
+
+        // 1. Attempt to delete subnet
+        yield* ec2
+          .deleteSubnet({
+            SubnetId: subnetId,
+            DryRun: false,
+          })
+          .pipe(
+            Effect.tapError(Effect.logDebug),
+            Effect.catchTag("InvalidSubnetID.NotFound", () => Effect.void),
+            // Retry on dependency violations (resources still being deleted)
+            Effect.retry({
+              while: (e) => {
+                // DependencyViolation means there are still dependent resources
+                // This can happen if ENIs/instances are being deleted concurrently
+                return e._tag === "DependencyViolation";
               },
-            });
-          }
-
-          if (news.enableDns64 !== undefined) {
-            yield* ec2.modifySubnetAttribute({
-              SubnetId: subnetId,
-              EnableDns64: { Value: news.enableDns64 },
-            });
-          }
-
-          if (
-            news.enableResourceNameDnsARecordOnLaunch !== undefined ||
-            news.enableResourceNameDnsAAAARecordOnLaunch !== undefined ||
-            news.hostnameType !== undefined
-          ) {
-            yield* ec2.modifySubnetAttribute({
-              SubnetId: subnetId,
-              PrivateDnsHostnameTypeOnLaunch: news.hostnameType,
-              EnableResourceNameDnsARecordOnLaunch:
-                news.enableResourceNameDnsARecordOnLaunch !== undefined
-                  ? { Value: news.enableResourceNameDnsARecordOnLaunch }
-                  : undefined,
-              EnableResourceNameDnsAAAARecordOnLaunch:
-                news.enableResourceNameDnsAAAARecordOnLaunch !== undefined
-                  ? { Value: news.enableResourceNameDnsAAAARecordOnLaunch }
-                  : undefined,
-            });
-          }
-
-          // 5. Wait for subnet to be available
-          const subnet = yield* waitForSubnetAvailable(subnetId, session);
-
-          // 6. Return attributes
-          return {
-            subnetId,
-            subnetArn: subnet.SubnetArn! as SubnetArn,
-            cidrBlock: subnet.CidrBlock!,
-            vpcId: news.vpcId,
-            availabilityZone: subnet.AvailabilityZone!,
-            availabilityZoneId: subnet.AvailabilityZoneId,
-            state: subnet.State!,
-            availableIpAddressCount: subnet.AvailableIpAddressCount ?? 0,
-            mapPublicIpOnLaunch: subnet.MapPublicIpOnLaunch ?? false,
-            assignIpv6AddressOnCreation:
-              subnet.AssignIpv6AddressOnCreation ?? false,
-            defaultForAz: subnet.DefaultForAz ?? false,
-            ownerId: subnet.OwnerId,
-            ipv6CidrBlockAssociationSet:
-              subnet.Ipv6CidrBlockAssociationSet?.map((assoc) => ({
-                associationId: assoc.AssociationId!,
-                ipv6CidrBlock: assoc.Ipv6CidrBlock!,
-                ipv6CidrBlockState: {
-                  state: assoc.Ipv6CidrBlockState!.State!,
-                  statusMessage: assoc.Ipv6CidrBlockState!.StatusMessage,
-                },
-              })),
-            enableDns64: subnet.EnableDns64,
-            ipv6Native: subnet.Ipv6Native,
-            privateDnsNameOptionsOnLaunch: subnet.PrivateDnsNameOptionsOnLaunch
-              ? {
-                  hostnameType:
-                    subnet.PrivateDnsNameOptionsOnLaunch.HostnameType,
-                  enableResourceNameDnsARecord:
-                    subnet.PrivateDnsNameOptionsOnLaunch
-                      .EnableResourceNameDnsARecord,
-                  enableResourceNameDnsAAAARecord:
-                    subnet.PrivateDnsNameOptionsOnLaunch
-                      .EnableResourceNameDnsAAAARecord,
-                }
-              : undefined,
-          };
-        }),
-
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          const subnetId = output.subnetId;
-
-          // Update MapPublicIpOnLaunch if changed
-          if (news.mapPublicIpOnLaunch !== olds.mapPublicIpOnLaunch) {
-            yield* ec2.modifySubnetAttribute({
-              SubnetId: subnetId,
-              MapPublicIpOnLaunch: { Value: news.mapPublicIpOnLaunch ?? false },
-            });
-            yield* session.note("Updated map public IP on launch");
-          }
-
-          // Update AssignIpv6AddressOnCreation if changed
-          if (
-            news.assignIpv6AddressOnCreation !==
-            olds.assignIpv6AddressOnCreation
-          ) {
-            yield* ec2.modifySubnetAttribute({
-              SubnetId: subnetId,
-              AssignIpv6AddressOnCreation: {
-                Value: news.assignIpv6AddressOnCreation ?? false,
-              },
-            });
-            yield* session.note("Updated assign IPv6 address on creation");
-          }
-
-          // Update EnableDns64 if changed
-          if (news.enableDns64 !== olds.enableDns64) {
-            yield* ec2.modifySubnetAttribute({
-              SubnetId: subnetId,
-              EnableDns64: { Value: news.enableDns64 ?? false },
-            });
-            yield* session.note("Updated DNS64 setting");
-          }
-
-          // Update private DNS hostname settings if changed
-          if (
-            news.enableResourceNameDnsARecordOnLaunch !==
-              olds.enableResourceNameDnsARecordOnLaunch ||
-            news.enableResourceNameDnsAAAARecordOnLaunch !==
-              olds.enableResourceNameDnsAAAARecordOnLaunch ||
-            news.hostnameType !== olds.hostnameType
-          ) {
-            yield* ec2.modifySubnetAttribute({
-              SubnetId: subnetId,
-              PrivateDnsHostnameTypeOnLaunch: news.hostnameType,
-              EnableResourceNameDnsARecordOnLaunch:
-                news.enableResourceNameDnsARecordOnLaunch !== undefined
-                  ? { Value: news.enableResourceNameDnsARecordOnLaunch }
-                  : undefined,
-              EnableResourceNameDnsAAAARecordOnLaunch:
-                news.enableResourceNameDnsAAAARecordOnLaunch !== undefined
-                  ? { Value: news.enableResourceNameDnsAAAARecordOnLaunch }
-                  : undefined,
-            });
-            yield* session.note("Updated private DNS hostname settings");
-          }
-
-          // Handle tag updates
-          const alchemyTags = yield* createInternalTags(id);
-          const newTags = { ...alchemyTags, ...news.tags };
-          const oldTags =
-            (yield* ec2
-              .describeTags({
-                Filters: [
-                  { Name: "resource-id", Values: [subnetId] },
-                  { Name: "resource-type", Values: ["subnet"] },
-                ],
-              })
-              .pipe(
-                Effect.map(
-                  (r) =>
-                    Object.fromEntries(
-                      r.Tags?.map((t) => [t.Key!, t.Value!]) ?? [],
-                    ) as Record<string, string>,
-                ),
-              )) ?? {};
-
-          const { removed, upsert } = diffTags(oldTags, newTags);
-
-          if (removed.length > 0) {
-            yield* ec2.deleteTags({
-              Resources: [subnetId],
-              Tags: removed.map((key) => ({ Key: key })),
-              DryRun: false,
-            });
-          }
-          if (upsert.length > 0) {
-            yield* ec2.createTags({
-              Resources: [subnetId],
-              Tags: upsert,
-              DryRun: false,
-            });
-            yield* session.note("Updated tags");
-          }
-
-          return output; // Subnet attributes don't change from these updates
-        }),
-
-        delete: Effect.fn(function* ({ output, session }) {
-          const subnetId = output.subnetId;
-
-          yield* session.note(`Deleting subnet: ${subnetId}`);
-
-          // 1. Attempt to delete subnet
-          yield* ec2
-            .deleteSubnet({
-              SubnetId: subnetId,
-              DryRun: false,
-            })
-            .pipe(
-              Effect.tapError(Effect.logDebug),
-              Effect.catchTag("InvalidSubnetID.NotFound", () => Effect.void),
-              // Retry on dependency violations (resources still being deleted)
-              Effect.retry({
-                while: (e) => {
-                  // DependencyViolation means there are still dependent resources
-                  // This can happen if ENIs/instances are being deleted concurrently
-                  return e._tag === "DependencyViolation";
-                },
-                schedule: Schedule.exponential(1000, 1.5).pipe(
-                  Schedule.both(Schedule.recurs(10)), // Try up to 10 times
-                  Schedule.tapOutput(([, attempt]) =>
-                    session.note(
-                      `Waiting for dependencies to clear... (attempt ${attempt + 1})`,
-                    ),
+              schedule: Schedule.exponential(1000, 1.5).pipe(
+                Schedule.both(Schedule.recurs(10)), // Try up to 10 times
+                Schedule.tapOutput(([, attempt]) =>
+                  session.note(
+                    `Waiting for dependencies to clear... (attempt ${attempt + 1})`,
                   ),
                 ),
-              }),
-            );
+              ),
+            }),
+          );
 
-          // 2. Wait for subnet to be fully deleted
-          yield* waitForSubnetDeleted(subnetId, session);
+        // 2. Wait for subnet to be fully deleted
+        yield* waitForSubnetDeleted(subnetId, session);
 
-          yield* session.note(`Subnet ${subnetId} deleted successfully`);
-        }),
-      };
-    }),
-  );
+        yield* session.note(`Subnet ${subnetId} deleted successfully`);
+      }),
+    };
+  }),
+);
 
 // Retryable error: Subnet is still pending
 class SubnetPending extends Data.TaggedError("SubnetPending")<{

@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
 
@@ -124,151 +125,146 @@ const toAttrs = ({
   tags,
 });
 
-export const DBInstanceProvider = () =>
-  DBInstance.provider.effect(
-    Effect.gen(function* () {
-      const toIdentifier = (id: string, props: DBInstanceProps) =>
-        props.dbInstanceIdentifier
-          ? Effect.succeed(props.dbInstanceIdentifier)
-          : createPhysicalName({ id, maxLength: 63 });
+export const DBInstanceProvider = Provider.effect(
+  DBInstance,
+  Effect.gen(function* () {
+    const toIdentifier = (id: string, props: DBInstanceProps) =>
+      props.dbInstanceIdentifier
+        ? Effect.succeed(props.dbInstanceIdentifier)
+        : createPhysicalName({ id, maxLength: 63 });
 
-      const readInstance = Effect.fn(function* (instanceId: string) {
-        const response = yield* rds
-          .describeDBInstances({
-            DBInstanceIdentifier: instanceId,
-          })
-          .pipe(
-            Effect.catchTag("DBInstanceNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
-        return response?.DBInstances?.[0];
-      });
-
-      const waitForInstance = Effect.fn(function* (instanceId: string) {
-        const readinessPolicy = Schedule.fixed("2 seconds").pipe(
-          Schedule.both(Schedule.recurs(30)),
-        );
-        return yield* readInstance(instanceId).pipe(
-          Effect.flatMap((instance) =>
-            instance?.DBInstanceArn
-              ? Effect.succeed(instance)
-              : Effect.fail(new Error(`DB instance '${instanceId}' not ready`)),
+    const readInstance = Effect.fn(function* (instanceId: string) {
+      const response = yield* rds
+        .describeDBInstances({
+          DBInstanceIdentifier: instanceId,
+        })
+        .pipe(
+          Effect.catchTag("DBInstanceNotFoundFault", () =>
+            Effect.succeed(undefined),
           ),
-          Effect.retry({ schedule: readinessPolicy }),
         );
-      });
+      return response?.DBInstances?.[0];
+    });
 
-      return {
-        stables: ["dbInstanceArn", "dbInstanceIdentifier"],
-        diff: Effect.fn(function* ({ id, olds, news }) {
-          if (!isResolved(news)) return undefined;
-          if (
-            (yield* toIdentifier(id, olds ?? ({} as DBInstanceProps))) !==
-            (yield* toIdentifier(id, news))
-          ) {
-            return { action: "replace" } as const;
-          }
-        }),
-        read: Effect.fn(function* ({ id, olds, output }) {
-          const identifier =
-            output?.dbInstanceIdentifier ??
-            (yield* toIdentifier(
-              id,
-              olds ?? { dbInstanceClass: "", engine: "" },
-            ));
-          const instance = yield* readInstance(identifier);
-          if (!instance?.DBInstanceArn) {
-            return undefined;
-          }
-          return toAttrs({ instance, tags: toTagRecord(instance.TagList) });
-        }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const identifier = yield* toIdentifier(id, news);
-          const tags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          yield* rds
-            .createDBInstance({
-              DBInstanceIdentifier: identifier,
-              DBClusterIdentifier: news.dbClusterIdentifier,
-              DBInstanceClass: news.dbInstanceClass,
-              Engine: news.engine,
-              EngineVersion: news.engineVersion,
-              DBSubnetGroupName: news.dbSubnetGroupName,
-              DBParameterGroupName: news.dbParameterGroupName,
-              VpcSecurityGroupIds: news.vpcSecurityGroupIds,
-              PubliclyAccessible: news.publiclyAccessible,
-              PromotionTier: news.promotionTier,
-              AutoMinorVersionUpgrade: news.autoMinorVersionUpgrade,
-              CopyTagsToSnapshot: news.copyTagsToSnapshot,
-              Tags: Object.entries(tags).map(([Key, Value]) => ({
-                Key,
-                Value,
-              })),
-            })
-            .pipe(
-              Effect.catchTag(
-                "DBInstanceAlreadyExistsFault",
-                () => Effect.void,
-              ),
-            );
+    const waitForInstance = Effect.fn(function* (instanceId: string) {
+      const readinessPolicy = Schedule.fixed("2 seconds").pipe(
+        Schedule.both(Schedule.recurs(30)),
+      );
+      return yield* readInstance(instanceId).pipe(
+        Effect.flatMap((instance) =>
+          instance?.DBInstanceArn
+            ? Effect.succeed(instance)
+            : Effect.fail(new Error(`DB instance '${instanceId}' not ready`)),
+        ),
+        Effect.retry({ schedule: readinessPolicy }),
+      );
+    });
 
-          const instance = yield* waitForInstance(identifier);
-          yield* session.note(instance.DBInstanceArn ?? identifier);
-          return toAttrs({ instance, tags });
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          yield* rds.modifyDBInstance({
-            DBInstanceIdentifier: output.dbInstanceIdentifier,
+    return {
+      stables: ["dbInstanceArn", "dbInstanceIdentifier"],
+      diff: Effect.fn(function* ({ id, olds, news }) {
+        if (!isResolved(news)) return undefined;
+        if (
+          (yield* toIdentifier(id, olds ?? ({} as DBInstanceProps))) !==
+          (yield* toIdentifier(id, news))
+        ) {
+          return { action: "replace" } as const;
+        }
+      }),
+      read: Effect.fn(function* ({ id, olds, output }) {
+        const identifier =
+          output?.dbInstanceIdentifier ??
+          (yield* toIdentifier(
+            id,
+            olds ?? { dbInstanceClass: "", engine: "" },
+          ));
+        const instance = yield* readInstance(identifier);
+        if (!instance?.DBInstanceArn) {
+          return undefined;
+        }
+        return toAttrs({ instance, tags: toTagRecord(instance.TagList) });
+      }),
+      create: Effect.fn(function* ({ id, news, session }) {
+        const identifier = yield* toIdentifier(id, news);
+        const tags = {
+          ...(yield* createInternalTags(id)),
+          ...news.tags,
+        };
+        yield* rds
+          .createDBInstance({
+            DBInstanceIdentifier: identifier,
+            DBClusterIdentifier: news.dbClusterIdentifier,
             DBInstanceClass: news.dbInstanceClass,
+            Engine: news.engine,
             EngineVersion: news.engineVersion,
+            DBSubnetGroupName: news.dbSubnetGroupName,
             DBParameterGroupName: news.dbParameterGroupName,
             VpcSecurityGroupIds: news.vpcSecurityGroupIds,
             PubliclyAccessible: news.publiclyAccessible,
             PromotionTier: news.promotionTier,
             AutoMinorVersionUpgrade: news.autoMinorVersionUpgrade,
             CopyTagsToSnapshot: news.copyTagsToSnapshot,
-            ApplyImmediately: true,
+            Tags: Object.entries(tags).map(([Key, Value]) => ({
+              Key,
+              Value,
+            })),
+          })
+          .pipe(
+            Effect.catchTag("DBInstanceAlreadyExistsFault", () => Effect.void),
+          );
+
+        const instance = yield* waitForInstance(identifier);
+        yield* session.note(instance.DBInstanceArn ?? identifier);
+        return toAttrs({ instance, tags });
+      }),
+      update: Effect.fn(function* ({ id, news, olds, output, session }) {
+        yield* rds.modifyDBInstance({
+          DBInstanceIdentifier: output.dbInstanceIdentifier,
+          DBInstanceClass: news.dbInstanceClass,
+          EngineVersion: news.engineVersion,
+          DBParameterGroupName: news.dbParameterGroupName,
+          VpcSecurityGroupIds: news.vpcSecurityGroupIds,
+          PubliclyAccessible: news.publiclyAccessible,
+          PromotionTier: news.promotionTier,
+          AutoMinorVersionUpgrade: news.autoMinorVersionUpgrade,
+          CopyTagsToSnapshot: news.copyTagsToSnapshot,
+          ApplyImmediately: true,
+        });
+
+        const oldTags = {
+          ...(yield* createInternalTags(id)),
+          ...olds.tags,
+        };
+        const newTags = {
+          ...(yield* createInternalTags(id)),
+          ...news.tags,
+        };
+        const { removed, upsert } = diffTags(oldTags, newTags);
+        if (upsert.length > 0) {
+          yield* rds.addTagsToResource({
+            ResourceName: output.dbInstanceArn,
+            Tags: upsert,
           });
+        }
+        if (removed.length > 0) {
+          yield* rds.removeTagsFromResource({
+            ResourceName: output.dbInstanceArn,
+            TagKeys: removed,
+          });
+        }
 
-          const oldTags = {
-            ...(yield* createInternalTags(id)),
-            ...olds.tags,
-          };
-          const newTags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const { removed, upsert } = diffTags(oldTags, newTags);
-          if (upsert.length > 0) {
-            yield* rds.addTagsToResource({
-              ResourceName: output.dbInstanceArn,
-              Tags: upsert,
-            });
-          }
-          if (removed.length > 0) {
-            yield* rds.removeTagsFromResource({
-              ResourceName: output.dbInstanceArn,
-              TagKeys: removed,
-            });
-          }
-
-          const instance = yield* waitForInstance(output.dbInstanceIdentifier);
-          yield* session.note(output.dbInstanceArn);
-          return toAttrs({ instance, tags: newTags });
-        }),
-        delete: Effect.fn(function* ({ output }) {
-          yield* rds
-            .deleteDBInstance({
-              DBInstanceIdentifier: output.dbInstanceIdentifier,
-              SkipFinalSnapshot: true,
-            })
-            .pipe(
-              Effect.catchTag("DBInstanceNotFoundFault", () => Effect.void),
-            );
-        }),
-      };
-    }),
-  );
+        const instance = yield* waitForInstance(output.dbInstanceIdentifier);
+        yield* session.note(output.dbInstanceArn);
+        return toAttrs({ instance, tags: newTags });
+      }),
+      delete: Effect.fn(function* ({ output }) {
+        yield* rds
+          .deleteDBInstance({
+            DBInstanceIdentifier: output.dbInstanceIdentifier,
+            SkipFinalSnapshot: true,
+          })
+          .pipe(Effect.catchTag("DBInstanceNotFoundFault", () => Effect.void));
+      }),
+    };
+  }),
+);

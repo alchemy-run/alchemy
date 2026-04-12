@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 
 export interface FunctionProps {
@@ -153,187 +154,184 @@ const retryForKvAssociationReadiness = (
     }),
   );
 
-export const FunctionProvider = () =>
-  Function.provider.effect(
-    Effect.gen(function* () {
-      const describe = Effect.fn(function* (
-        name: string,
-        stage?: cloudfront.FunctionStage,
-      ) {
-        return yield* cloudfront
-          .describeFunction({
-            Name: name,
-            Stage: stage,
-          })
-          .pipe(
-            Effect.catchTag("NoSuchFunctionExists", () =>
-              Effect.succeed(undefined),
-            ),
-          );
-      });
-
-      const getCurrent = Effect.fn(function* (name: string) {
-        const live = yield* describe(name, "LIVE");
-        if (live?.FunctionSummary) {
-          return live;
-        }
-        return yield* describe(name, "DEVELOPMENT");
-      });
-
-      const getDevelopmentEtag = Effect.fn(function* (name: string) {
-        const current = yield* describe(name, "DEVELOPMENT");
-        return current?.ETag;
-      });
-
-      const publish = Effect.fn(function* (
-        name: string,
-        etag: string | undefined,
-      ) {
-        if (!etag) {
-          return yield* Effect.fail(
-            new Error(
-              `CloudFront Function '${name}' is missing an ETag for publish`,
-            ),
-          );
-        }
-        yield* cloudfront.publishFunction({
+export const FunctionProvider = Provider.effect(
+  Function,
+  Effect.gen(function* () {
+    const describe = Effect.fn(function* (
+      name: string,
+      stage?: cloudfront.FunctionStage,
+    ) {
+      return yield* cloudfront
+        .describeFunction({
           Name: name,
-          IfMatch: etag,
-        });
-        return yield* describe(name, "LIVE");
+          Stage: stage,
+        })
+        .pipe(
+          Effect.catchTag("NoSuchFunctionExists", () =>
+            Effect.succeed(undefined),
+          ),
+        );
+    });
+
+    const getCurrent = Effect.fn(function* (name: string) {
+      const live = yield* describe(name, "LIVE");
+      if (live?.FunctionSummary) {
+        return live;
+      }
+      return yield* describe(name, "DEVELOPMENT");
+    });
+
+    const getDevelopmentEtag = Effect.fn(function* (name: string) {
+      const current = yield* describe(name, "DEVELOPMENT");
+      return current?.ETag;
+    });
+
+    const publish = Effect.fn(function* (
+      name: string,
+      etag: string | undefined,
+    ) {
+      if (!etag) {
+        return yield* Effect.fail(
+          new Error(
+            `CloudFront Function '${name}' is missing an ETag for publish`,
+          ),
+        );
+      }
+      yield* cloudfront.publishFunction({
+        Name: name,
+        IfMatch: etag,
       });
+      return yield* describe(name, "LIVE");
+    });
 
-      return {
-        stables: ["functionArn", "functionName"],
-        diff: Effect.fn(function* ({ id, olds, news: _news }) {
-          if (!isResolved(_news)) return undefined;
-          const news = _news as typeof olds;
-          if (
-            (yield* createName(id, olds ?? {})) !==
-            (yield* createName(id, news))
-          ) {
-            return { action: "replace" } as const;
-          }
-        }),
-        read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.functionName ?? (yield* createName(id, olds ?? {}));
-          const current = yield* getCurrent(name);
-          if (!current?.FunctionSummary) {
-            return undefined;
-          }
-          return toAttrs(current.FunctionSummary, current.ETag, name);
-        }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const name = yield* createName(id, news);
-          const created = yield* retryForKvAssociationReadiness(
-            "create",
-            cloudfront
-              .createFunction({
-                Name: name,
-                FunctionConfig: {
-                  Comment: news.comment ?? "",
-                  Runtime: news.runtime ?? "cloudfront-js-2.0",
-                  KeyValueStoreAssociations: toKvAssociations(
-                    news.keyValueStoreArns,
-                  ),
-                },
-                FunctionCode: new TextEncoder().encode(news.code),
-              })
-              .pipe(
-                Effect.catchTag("FunctionAlreadyExists", () =>
-                  describe(name, "DEVELOPMENT").pipe(
-                    Effect.flatMap((existing) =>
-                      existing
-                        ? Effect.succeed(existing)
-                        : Effect.die(
-                            `CloudFront Function '${name}' already exists but could not be recovered`,
-                          ),
-                    ),
-                  ),
-                ),
-              ),
-          );
-
-          const live = yield* publish(name, created.ETag);
-          if (!live?.FunctionSummary) {
-            return yield* Effect.die(
-              "publishFunction returned no function summary",
-            );
-          }
-
-          yield* session.note(name);
-          return toAttrs(live.FunctionSummary, live.ETag, name);
-        }),
-        update: Effect.fn(function* ({ news, output, session }) {
-          yield* retryForKvAssociationReadiness(
-            "update",
-            cloudfront.updateFunction({
-              Name: output.functionName,
-              IfMatch: output.etag!,
+    return {
+      stables: ["functionArn", "functionName"],
+      diff: Effect.fn(function* ({ id, olds, news: _news }) {
+        if (!isResolved(_news)) return undefined;
+        const news = _news as typeof olds;
+        if (
+          (yield* createName(id, olds ?? {})) !== (yield* createName(id, news))
+        ) {
+          return { action: "replace" } as const;
+        }
+      }),
+      read: Effect.fn(function* ({ id, olds, output }) {
+        const name =
+          output?.functionName ?? (yield* createName(id, olds ?? {}));
+        const current = yield* getCurrent(name);
+        if (!current?.FunctionSummary) {
+          return undefined;
+        }
+        return toAttrs(current.FunctionSummary, current.ETag, name);
+      }),
+      create: Effect.fn(function* ({ id, news, session }) {
+        const name = yield* createName(id, news);
+        const created = yield* retryForKvAssociationReadiness(
+          "create",
+          cloudfront
+            .createFunction({
+              Name: name,
               FunctionConfig: {
                 Comment: news.comment ?? "",
-                Runtime: news.runtime ?? output.runtime,
+                Runtime: news.runtime ?? "cloudfront-js-2.0",
                 KeyValueStoreAssociations: toKvAssociations(
                   news.keyValueStoreArns,
                 ),
               },
               FunctionCode: new TextEncoder().encode(news.code),
-            }),
-          );
+            })
+            .pipe(
+              Effect.catchTag("FunctionAlreadyExists", () =>
+                describe(name, "DEVELOPMENT").pipe(
+                  Effect.flatMap((existing) =>
+                    existing
+                      ? Effect.succeed(existing)
+                      : Effect.die(
+                          `CloudFront Function '${name}' already exists but could not be recovered`,
+                        ),
+                  ),
+                ),
+              ),
+            ),
+        );
 
+        const live = yield* publish(name, created.ETag);
+        if (!live?.FunctionSummary) {
+          return yield* Effect.die(
+            "publishFunction returned no function summary",
+          );
+        }
+
+        yield* session.note(name);
+        return toAttrs(live.FunctionSummary, live.ETag, name);
+      }),
+      update: Effect.fn(function* ({ news, output, session }) {
+        yield* retryForKvAssociationReadiness(
+          "update",
+          cloudfront.updateFunction({
+            Name: output.functionName,
+            IfMatch: output.etag!,
+            FunctionConfig: {
+              Comment: news.comment ?? "",
+              Runtime: news.runtime ?? output.runtime,
+              KeyValueStoreAssociations: toKvAssociations(
+                news.keyValueStoreArns,
+              ),
+            },
+            FunctionCode: new TextEncoder().encode(news.code),
+          }),
+        );
+
+        const developmentEtag = yield* getDevelopmentEtag(output.functionName);
+        const live = yield* publish(output.functionName, developmentEtag);
+        if (!live?.FunctionSummary) {
+          return yield* Effect.die(
+            "publishFunction returned no function summary",
+          );
+        }
+
+        yield* session.note(output.functionName);
+        return toAttrs(live.FunctionSummary, live.ETag, output.functionName);
+      }),
+      delete: Effect.fn(function* ({ output }) {
+        yield* Effect.gen(function* () {
           const developmentEtag = yield* getDevelopmentEtag(
             output.functionName,
           );
-          const live = yield* publish(output.functionName, developmentEtag);
-          if (!live?.FunctionSummary) {
-            return yield* Effect.die(
-              "publishFunction returned no function summary",
+          if (!developmentEtag) {
+            yield* Effect.logInfo(
+              `CloudFront Function delete: ${output.functionName} already absent`,
             );
+            return;
           }
 
-          yield* session.note(output.functionName);
-          return toAttrs(live.FunctionSummary, live.ETag, output.functionName);
-        }),
-        delete: Effect.fn(function* ({ output }) {
-          yield* Effect.gen(function* () {
-            const developmentEtag = yield* getDevelopmentEtag(
-              output.functionName,
-            );
-            if (!developmentEtag) {
-              yield* Effect.logInfo(
-                `CloudFront Function delete: ${output.functionName} already absent`,
-              );
-              return;
-            }
-
-            yield* Effect.logInfo(
-              `CloudFront Function delete: deleting ${output.functionName} stage=DEVELOPMENT etag=${developmentEtag}`,
-            );
-            yield* cloudfront.deleteFunction({
-              Name: output.functionName,
-              IfMatch: developmentEtag,
-            });
-          }).pipe(
-            Effect.catchTag("NoSuchFunctionExists", () => Effect.void),
-            Effect.tapError((error) =>
-              isFunctionDeletePending(error)
-                ? Effect.logInfo(
-                    `CloudFront Function delete: ${output.functionName} not ready yet (${error._tag}), retrying with capped exponential backoff`,
-                  )
-                : Effect.logError(
-                    `CloudFront Function delete: ${output.functionName} failed with ${String(error)}`,
-                  ),
-            ),
-            Effect.retry({
-              while: isFunctionDeletePending,
-              schedule: cappedCloudFrontRetrySchedule,
-            }),
+          yield* Effect.logInfo(
+            `CloudFront Function delete: deleting ${output.functionName} stage=DEVELOPMENT etag=${developmentEtag}`,
           );
-        }),
-      };
-    }),
-  );
+          yield* cloudfront.deleteFunction({
+            Name: output.functionName,
+            IfMatch: developmentEtag,
+          });
+        }).pipe(
+          Effect.catchTag("NoSuchFunctionExists", () => Effect.void),
+          Effect.tapError((error) =>
+            isFunctionDeletePending(error)
+              ? Effect.logInfo(
+                  `CloudFront Function delete: ${output.functionName} not ready yet (${error._tag}), retrying with capped exponential backoff`,
+                )
+              : Effect.logError(
+                  `CloudFront Function delete: ${output.functionName} failed with ${String(error)}`,
+                ),
+          ),
+          Effect.retry({
+            while: isFunctionDeletePending,
+            schedule: cappedCloudFrontRetrySchedule,
+          }),
+        );
+      }),
+    };
+  }),
+);
 
 const createName = (id: string, props: FunctionProps) =>
   props.name

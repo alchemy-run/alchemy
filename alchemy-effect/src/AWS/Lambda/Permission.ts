@@ -3,6 +3,7 @@ import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 
 export type { FunctionUrlAuthType } from "@distilled.cloud/aws/lambda";
@@ -111,107 +112,107 @@ export interface Permission extends Resource<
  */
 export const Permission = Resource<Permission>("AWS.Lambda.Permission");
 
-export const PermissionProvider = () =>
-  Permission.provider.effect(
-    Effect.gen(function* () {
-      const createStatementId = (id: string) =>
-        createPhysicalName({
-          id,
-          maxLength: 100,
-          delimiter: "-",
+export const PermissionProvider = Provider.effect(
+  Permission,
+  Effect.gen(function* () {
+    const createStatementId = (id: string) =>
+      createPhysicalName({
+        id,
+        maxLength: 100,
+        delimiter: "-",
+      });
+
+    return {
+      stables: ["statementId", "functionName"],
+      diff: Effect.fn(function* ({ news, olds }) {
+        if (!isResolved(news)) return;
+        if (news.functionName !== olds.functionName) {
+          return { action: "replace" } as const;
+        }
+      }),
+      create: Effect.fn(function* ({ id, news, session }) {
+        const statementId = yield* createStatementId(id);
+
+        yield* Lambda.addPermission({
+          FunctionName: news.functionName,
+          StatementId: statementId,
+          Action: news.action,
+          Principal: news.principal,
+          SourceArn: news.sourceArn,
+          SourceAccount: news.sourceAccount,
+          EventSourceToken: news.eventSourceToken,
+          FunctionUrlAuthType: news.functionUrlAuthType,
+          PrincipalOrgID: news.principalOrgID,
+        }).pipe(
+          Effect.catchTag("ResourceConflictException", () =>
+            Effect.gen(function* () {
+              yield* Lambda.removePermission({
+                FunctionName: news.functionName,
+                StatementId: statementId,
+              });
+              yield* Lambda.addPermission({
+                FunctionName: news.functionName,
+                StatementId: statementId,
+                Action: news.action,
+                Principal: news.principal,
+                SourceArn: news.sourceArn,
+                SourceAccount: news.sourceAccount,
+                EventSourceToken: news.eventSourceToken,
+                FunctionUrlAuthType: news.functionUrlAuthType,
+                PrincipalOrgID: news.principalOrgID,
+              });
+            }),
+          ),
+        );
+
+        yield* session.note(
+          `Permission ${statementId} on ${news.functionName}`,
+        );
+
+        return {
+          statementId,
+          functionName: news.functionName,
+        };
+      }),
+      update: Effect.fn(function* ({ news, output, session }) {
+        const statementId = output.statementId;
+
+        yield* Lambda.removePermission({
+          FunctionName: output.functionName,
+          StatementId: statementId,
+        }).pipe(
+          Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+        );
+
+        yield* Lambda.addPermission({
+          FunctionName: news.functionName,
+          StatementId: statementId,
+          Action: news.action,
+          Principal: news.principal,
+          SourceArn: news.sourceArn,
+          SourceAccount: news.sourceAccount,
+          EventSourceToken: news.eventSourceToken,
+          FunctionUrlAuthType: news.functionUrlAuthType,
+          PrincipalOrgID: news.principalOrgID,
         });
 
-      return {
-        stables: ["statementId", "functionName"],
-        diff: Effect.fn(function* ({ news, olds }) {
-          if (!isResolved(news)) return;
-          if (news.functionName !== olds.functionName) {
-            return { action: "replace" } as const;
-          }
-        }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const statementId = yield* createStatementId(id);
+        yield* session.note(
+          `Updated permission ${statementId} on ${news.functionName}`,
+        );
 
-          yield* Lambda.addPermission({
-            FunctionName: news.functionName,
-            StatementId: statementId,
-            Action: news.action,
-            Principal: news.principal,
-            SourceArn: news.sourceArn,
-            SourceAccount: news.sourceAccount,
-            EventSourceToken: news.eventSourceToken,
-            FunctionUrlAuthType: news.functionUrlAuthType,
-            PrincipalOrgID: news.principalOrgID,
-          }).pipe(
-            Effect.catchTag("ResourceConflictException", () =>
-              Effect.gen(function* () {
-                yield* Lambda.removePermission({
-                  FunctionName: news.functionName,
-                  StatementId: statementId,
-                });
-                yield* Lambda.addPermission({
-                  FunctionName: news.functionName,
-                  StatementId: statementId,
-                  Action: news.action,
-                  Principal: news.principal,
-                  SourceArn: news.sourceArn,
-                  SourceAccount: news.sourceAccount,
-                  EventSourceToken: news.eventSourceToken,
-                  FunctionUrlAuthType: news.functionUrlAuthType,
-                  PrincipalOrgID: news.principalOrgID,
-                });
-              }),
-            ),
-          );
-
-          yield* session.note(
-            `Permission ${statementId} on ${news.functionName}`,
-          );
-
-          return {
-            statementId,
-            functionName: news.functionName,
-          };
-        }),
-        update: Effect.fn(function* ({ news, output, session }) {
-          const statementId = output.statementId;
-
-          yield* Lambda.removePermission({
-            FunctionName: output.functionName,
-            StatementId: statementId,
-          }).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
-
-          yield* Lambda.addPermission({
-            FunctionName: news.functionName,
-            StatementId: statementId,
-            Action: news.action,
-            Principal: news.principal,
-            SourceArn: news.sourceArn,
-            SourceAccount: news.sourceAccount,
-            EventSourceToken: news.eventSourceToken,
-            FunctionUrlAuthType: news.functionUrlAuthType,
-            PrincipalOrgID: news.principalOrgID,
-          });
-
-          yield* session.note(
-            `Updated permission ${statementId} on ${news.functionName}`,
-          );
-
-          return {
-            statementId,
-            functionName: news.functionName,
-          };
-        }),
-        delete: Effect.fn(function* ({ output }) {
-          yield* Lambda.removePermission({
-            FunctionName: output.functionName,
-            StatementId: output.statementId,
-          }).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
-        }),
-      };
-    }),
-  );
+        return {
+          statementId,
+          functionName: news.functionName,
+        };
+      }),
+      delete: Effect.fn(function* ({ output }) {
+        yield* Lambda.removePermission({
+          FunctionName: output.functionName,
+          StatementId: output.statementId,
+        }).pipe(
+          Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+        );
+      }),
+    };
+  }),
+);

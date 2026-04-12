@@ -1,27 +1,62 @@
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as ServiceMap from "effect/ServiceMap";
 import type * as Stream from "effect/Stream";
+import type { Artifacts } from "./Artifacts.ts";
 import type { ScopedPlanStatusSession } from "./Cli/index.ts";
 import type { Diff } from "./Diff.ts";
 import type { Input } from "./Input.ts";
-import type { ResourceBinding, ResourceLike } from "./Resource.ts";
+import type { InstanceId } from "./InstanceId.ts";
+import type { Platform } from "./Platform.ts";
+import type {
+  ResourceBinding,
+  ResourceClass,
+  ResourceLike,
+} from "./Resource.ts";
 
-export interface Provider<
-  R extends ResourceLike = ResourceLike,
-> extends ServiceMap.ServiceClass<
-  Provider<R>,
-  R["Type"],
-  ProviderService<R>
-  // TODO(sam): we are using any here because the R["type"] is enough and gaining access to the sub type (e.g. SQS.Queue)
-  // is currently not possible in the current approach
+export interface Provider<R extends ResourceLike = ResourceLike> {
+  asEffect: () => Effect.Effect<ProviderService<R>, never, Provider<R>>;
+  [Symbol.iterator]: () => Effect.EffectIterator<Provider<R>>;
+  of: <
+    ReadReq = never,
+    DiffReq = never,
+    PrecreateReq = never,
+    CreateReq = never,
+    UpdateReq = never,
+    DeleteReq = never,
+    TailReq = never,
+    LogsReq = never,
+  >(
+    service: ProviderService<
+      R,
+      ReadReq,
+      DiffReq,
+      PrecreateReq,
+      CreateReq,
+      UpdateReq,
+      DeleteReq,
+      TailReq,
+      LogsReq
+    >,
+  ) => ProviderService<
+    R,
+    ReadReq,
+    DiffReq,
+    PrecreateReq,
+    CreateReq,
+    UpdateReq,
+    DeleteReq,
+    TailReq,
+    LogsReq
+  >;
+}
 
-  // preferred:
-  // ProviderService<R>
-> {}
+type LifecycleServices = InstanceId | Artifacts;
 
 export const Provider = <R extends ResourceLike>(
   type: R["Type"],
-): Provider<R> => ServiceMap.Service<Provider<R>, ProviderService<R>>()(type);
+): Provider<R> =>
+  ServiceMap.Service<Provider<R>, ProviderService<R>>()(type) as any;
 
 type BindingData<Res extends ResourceLike> = [Res] extends [
   { Binding: infer B },
@@ -155,3 +190,76 @@ export const getProviderByType = Effect.fnUntraced(function* <
   }
   return provider;
 });
+
+export const effect = <
+  R extends ResourceLike,
+  Req = never,
+  ReadReq = never,
+  DiffReq = never,
+  PrecreateReq = never,
+  CreateReq = never,
+  UpdateReq = never,
+  DeleteReq = never,
+  TailReq = never,
+  LogsReq = never,
+>(
+  cls: ResourceClass<R> | Platform<R, any, any, any, any>,
+  eff: Effect.Effect<
+    ProviderService<
+      R,
+      ReadReq,
+      DiffReq,
+      PrecreateReq,
+      CreateReq,
+      UpdateReq,
+      DeleteReq,
+      TailReq,
+      LogsReq
+    >,
+    never,
+    Req
+  >,
+): Layer.Layer<
+  Provider<R>,
+  never,
+  Exclude<
+    Req | ReadReq | DiffReq | PrecreateReq | CreateReq | UpdateReq | DeleteReq,
+    LifecycleServices
+  >
+> =>
+  // @ts-expect-error
+  Layer.effect(Provider(cls.Type), eff);
+
+export const succeed = <
+  R extends ResourceLike,
+  ReadReq = never,
+  DiffReq = never,
+  PrecreateReq = never,
+  CreateReq = never,
+  UpdateReq = never,
+  DeleteReq = never,
+  TailReq = never,
+  LogsReq = never,
+>(
+  cls: ResourceClass<R> | Platform<R, any, any, any, any>,
+  service: ProviderService<
+    R,
+    ReadReq,
+    DiffReq,
+    PrecreateReq,
+    CreateReq,
+    UpdateReq,
+    DeleteReq,
+    TailReq,
+    LogsReq
+  >,
+): Layer.Layer<
+  Provider<R>,
+  never,
+  Exclude<
+    ReadReq | DiffReq | PrecreateReq | CreateReq | UpdateReq | DeleteReq,
+    LifecycleServices
+  >
+> =>
+  // @ts-expect-error
+  Layer.succeed(Provider(cls.Type), service);

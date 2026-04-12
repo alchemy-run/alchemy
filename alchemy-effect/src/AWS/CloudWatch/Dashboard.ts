@@ -1,6 +1,7 @@
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { Account, type AccountID } from "../Account.ts";
 import { createName, retryConcurrent } from "./common.ts";
@@ -155,108 +156,107 @@ const parseDashboardBody = (body: string | undefined) => {
   return JSON.parse(body) as DashboardBody;
 };
 
-export const DashboardProvider = () =>
-  Dashboard.provider.effect(
-    Effect.gen(function* () {
-      const accountId = yield* Account;
+export const DashboardProvider = Provider.effect(
+  Dashboard,
+  Effect.gen(function* () {
+    const accountId = yield* Account;
 
-      const createDashboardName = (id: string, props: { name?: string } = {}) =>
-        createName(id, props.name, 255);
+    const createDashboardName = (id: string, props: { name?: string } = {}) =>
+      createName(id, props.name, 255);
 
-      const dashboardArn = (dashboardName: string) =>
-        `arn:aws:cloudwatch::${accountId}:dashboard/${dashboardName}` as DashboardArn;
+    const dashboardArn = (dashboardName: string) =>
+      `arn:aws:cloudwatch::${accountId}:dashboard/${dashboardName}` as DashboardArn;
 
-      const readDashboard = Effect.fn(function* (dashboardName: string) {
-        const output = yield* cloudwatch
-          .getDashboard({
-            DashboardName: dashboardName,
-          })
-          .pipe(
-            Effect.catchTag("DashboardNotFoundError", () =>
-              Effect.succeed(undefined),
-            ),
+    const readDashboard = Effect.fn(function* (dashboardName: string) {
+      const output = yield* cloudwatch
+        .getDashboard({
+          DashboardName: dashboardName,
+        })
+        .pipe(
+          Effect.catchTag("DashboardNotFoundError", () =>
+            Effect.succeed(undefined),
+          ),
+        );
+
+      if (!output?.DashboardName) {
+        return undefined;
+      }
+
+      return {
+        dashboardName: output.DashboardName,
+        dashboardArn: dashboardArn(output.DashboardName),
+        dashboardBody: parseDashboardBody(output.DashboardBody),
+        tags: {},
+      };
+    });
+
+    return {
+      stables: ["dashboardName", "dashboardArn"],
+      diff: Effect.fn(function* ({
+        id,
+        olds = {},
+        news = {} as DashboardProps,
+      }) {
+        if (!isResolved(news)) return undefined;
+        const oldName = yield* createDashboardName(id, olds);
+        const newName = yield* createDashboardName(id, news);
+
+        if (oldName !== newName) {
+          return { action: "replace" } as const;
+        }
+      }),
+      read: Effect.fn(function* ({ id, olds, output }) {
+        const name =
+          output?.dashboardName ?? (yield* createDashboardName(id, olds ?? {}));
+        return yield* readDashboard(name);
+      }),
+      create: Effect.fn(function* ({ id, news, session }) {
+        const name = yield* createDashboardName(id, news);
+
+        yield* retryConcurrent(
+          cloudwatch.putDashboard({
+            DashboardName: name,
+            DashboardBody: serializeDashboardBody(news.DashboardBody),
+          }),
+        );
+
+        yield* session.note(dashboardArn(name));
+
+        const state = yield* readDashboard(name);
+        if (!state) {
+          return yield* Effect.fail(
+            new Error(`failed to read created dashboard '${name}'`),
           );
-
-        if (!output?.DashboardName) {
-          return undefined;
         }
 
         return {
-          dashboardName: output.DashboardName,
-          dashboardArn: dashboardArn(output.DashboardName),
-          dashboardBody: parseDashboardBody(output.DashboardBody),
+          ...state,
           tags: {},
         };
-      });
+      }),
+      update: Effect.fn(function* ({ news, output, session }) {
+        yield* retryConcurrent(
+          cloudwatch.putDashboard({
+            DashboardName: output.dashboardName,
+            DashboardBody: serializeDashboardBody(news.DashboardBody),
+          }),
+        );
 
-      return {
-        stables: ["dashboardName", "dashboardArn"],
-        diff: Effect.fn(function* ({
-          id,
-          olds = {},
-          news = {} as DashboardProps,
-        }) {
-          if (!isResolved(news)) return undefined;
-          const oldName = yield* createDashboardName(id, olds);
-          const newName = yield* createDashboardName(id, news);
+        yield* session.note(output.dashboardArn);
 
-          if (oldName !== newName) {
-            return { action: "replace" } as const;
-          }
-        }),
-        read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.dashboardName ??
-            (yield* createDashboardName(id, olds ?? {}));
-          return yield* readDashboard(name);
-        }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const name = yield* createDashboardName(id, news);
-
-          yield* retryConcurrent(
-            cloudwatch.putDashboard({
-              DashboardName: name,
-              DashboardBody: serializeDashboardBody(news.DashboardBody),
-            }),
-          );
-
-          yield* session.note(dashboardArn(name));
-
-          const state = yield* readDashboard(name);
-          if (!state) {
-            return yield* Effect.fail(
-              new Error(`failed to read created dashboard '${name}'`),
-            );
-          }
-
-          return {
-            ...state,
-            tags: {},
-          };
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          yield* retryConcurrent(
-            cloudwatch.putDashboard({
-              DashboardName: output.dashboardName,
-              DashboardBody: serializeDashboardBody(news.DashboardBody),
-            }),
-          );
-
-          yield* session.note(output.dashboardArn);
-
-          return {
-            ...output,
-            dashboardBody: news.DashboardBody,
-            tags: {},
-          };
-        }),
-        delete: Effect.fn(function* ({ output }) {
-          yield* retryConcurrent(
-            cloudwatch.deleteDashboards({
-              DashboardNames: [output.dashboardName],
-            }),
-          ).pipe(Effect.catchTag("DashboardNotFoundError", () => Effect.void));
-        }),
-      };
-    }),
-  );
+        return {
+          ...output,
+          dashboardBody: news.DashboardBody,
+          tags: {},
+        };
+      }),
+      delete: Effect.fn(function* ({ output }) {
+        yield* retryConcurrent(
+          cloudwatch.deleteDashboards({
+            DashboardNames: [output.dashboardName],
+          }),
+        ).pipe(Effect.catchTag("DashboardNotFoundError", () => Effect.void));
+      }),
+    };
+  }),
+);

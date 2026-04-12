@@ -7,4 +7,4 @@ export default Effect.gen(function* () {
   const api = yield* Api;
 
   return api.url.as<string>();
-}).pipe(Stack.make("CloudflareWorker", Cloudflare.providers()));
+}).pipe(Stack.make("CloudflareWorker", Cloudflare.providers));

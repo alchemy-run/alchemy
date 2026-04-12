@@ -34,7 +34,7 @@ test(
     yield* destroy();
 
     yield* assertQueueDeleted(queue.queueUrl);
-  }).pipe(Effect.provide(AWS.providers())),
+  }).pipe(Effect.provide(AWS.providers)),
 );
 
 test(
@@ -76,7 +76,7 @@ test(
     yield* destroy();
 
     yield* assertQueueDeleted(queue.queueUrl);
-  }).pipe(Effect.provide(AWS.providers())),
+  }).pipe(Effect.provide(AWS.providers)),
 );
 
 test(
@@ -125,7 +125,7 @@ test(
     yield* destroy();
 
     yield* assertQueueDeleted(queue.queueUrl);
-  }).pipe(Effect.provide(AWS.providers())),
+  }).pipe(Effect.provide(AWS.providers)),
 );
 
 test(
@@ -152,7 +152,7 @@ test(
     yield* destroy();
 
     yield* assertQueueDeleted(queue.queueUrl);
-  }).pipe(Effect.provide(AWS.providers())),
+  }).pipe(Effect.provide(AWS.providers)),
 );
 
 test(
@@ -201,7 +201,7 @@ test(
     yield* destroy();
 
     yield* assertQueueDeleted(queueUrl);
-  }).pipe(Effect.provide(AWS.providers())),
+  }).pipe(Effect.provide(AWS.providers)),
 );
 
 class QueueStillExists extends Data.TaggedError("QueueStillExists") {}

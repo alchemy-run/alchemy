@@ -52,7 +52,7 @@ test(
 
     yield* destroy();
     yield* assertSubscriptionDeleted(deployed.subscription.subscriptionArn);
-  }).pipe(Effect.provide(AWS.providers())),
+  }).pipe(Effect.provide(AWS.providers)),
 );
 
 class SubscriptionStillExists extends Data.TaggedError(

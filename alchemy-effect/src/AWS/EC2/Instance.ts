@@ -13,6 +13,7 @@ import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { ServerHost } from "../../Server/Process.ts";
 import { Stack } from "../../Stack.ts";
@@ -308,416 +309,357 @@ export const Instance: Platform<
   createExecutionContext: createEc2HostExecutionContext("AWS.EC2.Instance"),
 });
 
-export const InstanceProvider = () =>
-  Instance.provider.effect(
-    Effect.gen(function* () {
-      const region = yield* Region;
-      const accountId = yield* Account;
-      const stack = yield* Stack;
-      const stage = yield* Stage;
-      const fs = yield* FileSystem.FileSystem;
-      const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
-      const assets = (yield* Effect.serviceOption(Assets)).pipe(
-        Option.getOrUndefined,
+export const InstanceProvider = Provider.effect(
+  Instance,
+  Effect.gen(function* () {
+    const region = yield* Region;
+    const accountId = yield* Account;
+    const stack = yield* Stack;
+    const stage = yield* Stage;
+    const fs = yield* FileSystem.FileSystem;
+    const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
+    const assets = (yield* Effect.serviceOption(Assets)).pipe(
+      Option.getOrUndefined,
+    );
+
+    const toInstanceArn = (instanceId: InstanceId) =>
+      `arn:aws:ec2:${region}:${accountId}:instance/${instanceId}` as InstanceArn;
+
+    const hosted = createEc2HostedSupport({
+      accountId,
+      region,
+      stackName: stack.name,
+      stage,
+      fs,
+      virtualEntryPlugin,
+      assets,
+      resourceType: "EC2.Instance",
+    });
+
+    const isPendingInstanceProfileError = (error: unknown) => {
+      const tag = (error as { _tag?: string })?._tag;
+      if (
+        tag === "InvalidIAMInstanceProfile.NotFound" ||
+        tag === "InvalidParameterValue"
+      ) {
+        return true;
+      }
+      if (tag !== "UnknownAwsError") {
+        return false;
+      }
+      const unknown = error as {
+        errorTag?: string;
+        message?: string;
+        errorData?: {
+          message?: string;
+          Message?: string;
+        };
+      };
+      const message =
+        unknown.message ??
+        unknown.errorData?.message ??
+        unknown.errorData?.Message ??
+        "";
+      return (
+        unknown.errorTag === "InvalidParameterValue" &&
+        message.includes("iamInstanceProfile.name") &&
+        message.includes("Invalid IAM Instance Profile name")
+      );
+    };
+
+    const isPendingInstanceLookupError = (error: unknown) => {
+      const tag = (error as { _tag?: string })?._tag;
+      return (
+        error instanceof InstanceNotFound ||
+        tag === "InvalidInstanceID.NotFound"
+      );
+    };
+
+    const toTagRecord = (tags?: Array<{ Key?: string; Value?: string }>) =>
+      Object.fromEntries(
+        (tags ?? [])
+          .filter((tag): tag is { Key: string; Value: string } =>
+            Boolean(tag.Key && tag.Value !== undefined),
+          )
+          .map((tag) => [tag.Key, tag.Value]),
       );
 
-      const toInstanceArn = (instanceId: InstanceId) =>
-        `arn:aws:ec2:${region}:${accountId}:instance/${instanceId}` as InstanceArn;
+    const toAttributes = (instance: ec2.Instance): Instance["Attributes"] => ({
+      instanceId: instance.InstanceId as InstanceId,
+      instanceArn: toInstanceArn(instance.InstanceId as InstanceId),
+      imageId: instance.ImageId!,
+      instanceType: String(instance.InstanceType ?? ""),
+      state: instance.State?.Name ?? "unknown",
+      vpcId: instance.VpcId as VpcId | undefined,
+      subnetId: instance.SubnetId as SubnetId | undefined,
+      availabilityZone: instance.Placement?.AvailabilityZone,
+      securityGroupIds: (instance.SecurityGroups ?? [])
+        .map((group) => group.GroupId)
+        .filter((value): value is string => Boolean(value)),
+      privateIpAddress: instance.PrivateIpAddress,
+      publicIpAddress: instance.PublicIpAddress,
+      privateDnsName: instance.PrivateDnsName,
+      publicDnsName: instance.PublicDnsName,
+      keyName: instance.KeyName,
+      instanceProfileArn: instance.IamInstanceProfile?.Arn,
+      instanceProfileId: instance.IamInstanceProfile?.Id,
+      instanceProfileName: undefined,
+      sourceDestCheck: instance.SourceDestCheck,
+      launchTime:
+        instance.LaunchTime instanceof Date
+          ? instance.LaunchTime.toISOString()
+          : (instance.LaunchTime as string | undefined),
+      tags: toTagRecord(instance.Tags),
+    });
 
-      const hosted = createEc2HostedSupport({
-        accountId,
-        region,
-        stackName: stack.name,
-        stage,
-        fs,
-        virtualEntryPlugin,
-        assets,
-        resourceType: "EC2.Instance",
-      });
-
-      const isPendingInstanceProfileError = (error: unknown) => {
-        const tag = (error as { _tag?: string })?._tag;
-        if (
-          tag === "InvalidIAMInstanceProfile.NotFound" ||
-          tag === "InvalidParameterValue"
-        ) {
-          return true;
-        }
-        if (tag !== "UnknownAwsError") {
-          return false;
-        }
-        const unknown = error as {
-          errorTag?: string;
-          message?: string;
-          errorData?: {
-            message?: string;
-            Message?: string;
-          };
-        };
-        const message =
-          unknown.message ??
-          unknown.errorData?.message ??
-          unknown.errorData?.Message ??
-          "";
-        return (
-          unknown.errorTag === "InvalidParameterValue" &&
-          message.includes("iamInstanceProfile.name") &&
-          message.includes("Invalid IAM Instance Profile name")
-        );
-      };
-
-      const isPendingInstanceLookupError = (error: unknown) => {
-        const tag = (error as { _tag?: string })?._tag;
-        return (
-          error instanceof InstanceNotFound ||
-          tag === "InvalidInstanceID.NotFound"
-        );
-      };
-
-      const toTagRecord = (tags?: Array<{ Key?: string; Value?: string }>) =>
-        Object.fromEntries(
-          (tags ?? [])
-            .filter((tag): tag is { Key: string; Value: string } =>
-              Boolean(tag.Key && tag.Value !== undefined),
-            )
-            .map((tag) => [tag.Key, tag.Value]),
-        );
-
-      const toAttributes = (
-        instance: ec2.Instance,
-      ): Instance["Attributes"] => ({
-        instanceId: instance.InstanceId as InstanceId,
-        instanceArn: toInstanceArn(instance.InstanceId as InstanceId),
-        imageId: instance.ImageId!,
-        instanceType: String(instance.InstanceType ?? ""),
-        state: instance.State?.Name ?? "unknown",
-        vpcId: instance.VpcId as VpcId | undefined,
-        subnetId: instance.SubnetId as SubnetId | undefined,
-        availabilityZone: instance.Placement?.AvailabilityZone,
-        securityGroupIds: (instance.SecurityGroups ?? [])
-          .map((group) => group.GroupId)
-          .filter((value): value is string => Boolean(value)),
-        privateIpAddress: instance.PrivateIpAddress,
-        publicIpAddress: instance.PublicIpAddress,
-        privateDnsName: instance.PrivateDnsName,
-        publicDnsName: instance.PublicDnsName,
-        keyName: instance.KeyName,
-        instanceProfileArn: instance.IamInstanceProfile?.Arn,
-        instanceProfileId: instance.IamInstanceProfile?.Id,
-        instanceProfileName: undefined,
-        sourceDestCheck: instance.SourceDestCheck,
-        launchTime:
-          instance.LaunchTime instanceof Date
-            ? instance.LaunchTime.toISOString()
-            : (instance.LaunchTime as string | undefined),
-        tags: toTagRecord(instance.Tags),
-      });
-
-      const describeInstance = (instanceId: string) =>
-        ec2
-          .describeInstances({
-            InstanceIds: [instanceId],
-          })
-          .pipe(
-            Effect.map(
-              (result) =>
-                (result.Reservations ?? []).flatMap(
-                  (reservation) => reservation.Instances ?? [],
-                )[0],
-            ),
-            Effect.flatMap((instance) =>
-              instance
-                ? Effect.succeed(instance)
-                : Effect.fail(new InstanceNotFound({ instanceId })),
-            ),
-          );
-
-      const findInstanceByTags = Effect.fn(function* (id: string) {
-        const filters = yield* createAlchemyTagFilters(id);
-        return yield* ec2.describeInstances
-          .items({
-            Filters: filters,
-          })
-          .pipe(
-            Stream.flatMap((reservation) =>
-              Stream.fromArray(reservation.Instances ?? []),
-            ),
-            Stream.filter((instance) => {
-              const state = instance.State?.Name;
-              return (
-                state === "pending" ||
-                state === "running" ||
-                state === "stopping" ||
-                state === "stopped"
-              );
-            }),
-            Stream.runCollect,
-            Effect.map(
-              (instances) =>
-                [...instances].sort((a, b) => {
-                  const aTime =
-                    a.LaunchTime instanceof Date
-                      ? a.LaunchTime.getTime()
-                      : Date.parse(String(a.LaunchTime ?? 0));
-                  const bTime =
-                    b.LaunchTime instanceof Date
-                      ? b.LaunchTime.getTime()
-                      : Date.parse(String(b.LaunchTime ?? 0));
-                  return bTime - aTime;
-                })[0],
-            ),
-          );
-      });
-
-      const waitForState = Effect.fn(function* ({
-        instanceId,
-        states,
-        session,
-      }: {
-        instanceId: string;
-        states: string[];
-        session: Pick<ScopedPlanStatusSession, "note">;
-      }) {
-        return yield* describeInstance(instanceId).pipe(
-          Effect.tap((instance) =>
-            session.note(
-              `Waiting for instance ${instanceId}: ${instance.State?.Name ?? "unknown"}`,
-            ),
-          ),
-          Effect.filterOrFail(
-            (instance) => states.includes(instance.State?.Name ?? ""),
-            (instance) =>
-              new InstanceStateMismatch({
-                instanceId,
-                actual: instance.State?.Name ?? "unknown",
-                expected: states,
-              }),
-          ),
-          Effect.retry({
-            while: (error) =>
-              error instanceof InstanceStateMismatch ||
-              isPendingInstanceLookupError(error),
-            schedule: Schedule.exponential("250 millis").pipe(
-              Schedule.both(Schedule.recurs(8)),
-            ),
-          }),
-        );
-      });
-
-      const waitForDeleted = Effect.fn(function* ({
-        instanceId,
-        session,
-      }: {
-        instanceId: string;
-        session: Pick<ScopedPlanStatusSession, "note">;
-      }) {
-        yield* describeInstance(instanceId).pipe(
-          Effect.tap((instance) =>
-            session.note(
-              `Waiting for instance deletion ${instanceId}: ${instance.State?.Name ?? "unknown"}`,
-            ),
+    const describeInstance = (instanceId: string) =>
+      ec2
+        .describeInstances({
+          InstanceIds: [instanceId],
+        })
+        .pipe(
+          Effect.map(
+            (result) =>
+              (result.Reservations ?? []).flatMap(
+                (reservation) => reservation.Instances ?? [],
+              )[0],
           ),
           Effect.flatMap((instance) =>
-            instance.State?.Name === "terminated"
-              ? Effect.succeed(undefined)
-              : Effect.fail(new InstanceStillExists({ instanceId })),
+            instance
+              ? Effect.succeed(instance)
+              : Effect.fail(new InstanceNotFound({ instanceId })),
           ),
-          Effect.retry({
-            while: (error) => error instanceof InstanceStillExists,
-            schedule: Schedule.exponential("250 millis").pipe(
-              Schedule.both(Schedule.recurs(8)),
-            ),
-          }),
-          Effect.catchTag("InvalidInstanceID.NotFound", () => Effect.void),
-          Effect.catchTag("InstanceNotFound", () => Effect.void),
         );
-      });
 
-      const resolvedSecurityGroups = (
-        groups?: InstanceProps["securityGroupIds"],
-      ) => hosted.normalizeSecurityGroups(groups as string[] | undefined);
-
-      const buildRunInstancesRequest = (
-        news: InstanceProps,
-        runtime: {
-          userData?: string;
-          instanceProfileName?: string;
-        },
-        tags: Record<string, string>,
-      ): ec2.RunInstancesRequest => {
-        return {
-          ...hosted.buildLaunchTemplateData(
-            {
-              imageId: news.imageId,
-              instanceType: news.instanceType,
-              keyName: news.keyName,
-              subnetId: news.subnetId as string | undefined,
-              securityGroupIds: news.securityGroupIds as string[] | undefined,
-              associatePublicIpAddress: news.associatePublicIpAddress,
-              privateIpAddress: news.privateIpAddress,
-              availabilityZone: news.availabilityZone,
-              tags,
-            },
-            runtime,
+    const findInstanceByTags = Effect.fn(function* (id: string) {
+      const filters = yield* createAlchemyTagFilters(id);
+      return yield* ec2.describeInstances
+        .items({
+          Filters: filters,
+        })
+        .pipe(
+          Stream.flatMap((reservation) =>
+            Stream.fromArray(reservation.Instances ?? []),
           ),
-          MinCount: 1,
-          MaxCount: 1,
-        };
-      };
+          Stream.filter((instance) => {
+            const state = instance.State?.Name;
+            return (
+              state === "pending" ||
+              state === "running" ||
+              state === "stopping" ||
+              state === "stopped"
+            );
+          }),
+          Stream.runCollect,
+          Effect.map(
+            (instances) =>
+              [...instances].sort((a, b) => {
+                const aTime =
+                  a.LaunchTime instanceof Date
+                    ? a.LaunchTime.getTime()
+                    : Date.parse(String(a.LaunchTime ?? 0));
+                const bTime =
+                  b.LaunchTime instanceof Date
+                    ? b.LaunchTime.getTime()
+                    : Date.parse(String(b.LaunchTime ?? 0));
+                return bTime - aTime;
+              })[0],
+          ),
+        );
+    });
 
+    const waitForState = Effect.fn(function* ({
+      instanceId,
+      states,
+      session,
+    }: {
+      instanceId: string;
+      states: string[];
+      session: Pick<ScopedPlanStatusSession, "note">;
+    }) {
+      return yield* describeInstance(instanceId).pipe(
+        Effect.tap((instance) =>
+          session.note(
+            `Waiting for instance ${instanceId}: ${instance.State?.Name ?? "unknown"}`,
+          ),
+        ),
+        Effect.filterOrFail(
+          (instance) => states.includes(instance.State?.Name ?? ""),
+          (instance) =>
+            new InstanceStateMismatch({
+              instanceId,
+              actual: instance.State?.Name ?? "unknown",
+              expected: states,
+            }),
+        ),
+        Effect.retry({
+          while: (error) =>
+            error instanceof InstanceStateMismatch ||
+            isPendingInstanceLookupError(error),
+          schedule: Schedule.exponential("250 millis").pipe(
+            Schedule.both(Schedule.recurs(8)),
+          ),
+        }),
+      );
+    });
+
+    const waitForDeleted = Effect.fn(function* ({
+      instanceId,
+      session,
+    }: {
+      instanceId: string;
+      session: Pick<ScopedPlanStatusSession, "note">;
+    }) {
+      yield* describeInstance(instanceId).pipe(
+        Effect.tap((instance) =>
+          session.note(
+            `Waiting for instance deletion ${instanceId}: ${instance.State?.Name ?? "unknown"}`,
+          ),
+        ),
+        Effect.flatMap((instance) =>
+          instance.State?.Name === "terminated"
+            ? Effect.succeed(undefined)
+            : Effect.fail(new InstanceStillExists({ instanceId })),
+        ),
+        Effect.retry({
+          while: (error) => error instanceof InstanceStillExists,
+          schedule: Schedule.exponential("250 millis").pipe(
+            Schedule.both(Schedule.recurs(8)),
+          ),
+        }),
+        Effect.catchTag("InvalidInstanceID.NotFound", () => Effect.void),
+        Effect.catchTag("InstanceNotFound", () => Effect.void),
+      );
+    });
+
+    const resolvedSecurityGroups = (
+      groups?: InstanceProps["securityGroupIds"],
+    ) => hosted.normalizeSecurityGroups(groups as string[] | undefined);
+
+    const buildRunInstancesRequest = (
+      news: InstanceProps,
+      runtime: {
+        userData?: string;
+        instanceProfileName?: string;
+      },
+      tags: Record<string, string>,
+    ): ec2.RunInstancesRequest => {
       return {
-        stables: ["instanceId", "instanceArn", "vpcId", "subnetId"],
-        diff: Effect.fn(function* ({ news, olds }) {
-          if (!isResolved(news)) return;
-          const hostModeChanged = Boolean(olds.main) !== Boolean(news.main);
-          if (
-            hostModeChanged ||
-            olds.imageId !== news.imageId ||
-            olds.subnetId !== news.subnetId ||
-            olds.keyName !== news.keyName ||
-            olds.instanceProfileName !== news.instanceProfileName ||
-            olds.userData !== news.userData ||
-            olds.associatePublicIpAddress !== news.associatePublicIpAddress ||
-            olds.privateIpAddress !== news.privateIpAddress ||
-            olds.availabilityZone !== news.availabilityZone
-          ) {
-            return { action: "replace" } as const;
-          }
+        ...hosted.buildLaunchTemplateData(
+          {
+            imageId: news.imageId,
+            instanceType: news.instanceType,
+            keyName: news.keyName,
+            subnetId: news.subnetId as string | undefined,
+            securityGroupIds: news.securityGroupIds as string[] | undefined,
+            associatePublicIpAddress: news.associatePublicIpAddress,
+            privateIpAddress: news.privateIpAddress,
+            availabilityZone: news.availabilityZone,
+            tags,
+          },
+          runtime,
+        ),
+        MinCount: 1,
+        MaxCount: 1,
+      };
+    };
 
-          if (
-            olds.instanceType !== news.instanceType ||
-            olds.sourceDestCheck !== news.sourceDestCheck ||
-            olds.main !== news.main ||
-            olds.handler !== news.handler ||
-            olds.port !== news.port ||
-            !deepEqual(olds.env ?? {}, news.env ?? {}) ||
-            !deepEqual(olds.build ?? {}, news.build ?? {}) ||
-            !deepEqual(
-              olds.roleManagedPolicyArns ?? [],
-              news.roleManagedPolicyArns ?? [],
-            ) ||
-            !deepEqual(
-              resolvedSecurityGroups(olds.securityGroupIds),
-              resolvedSecurityGroups(news.securityGroupIds),
-            ) ||
-            !deepEqual(olds.tags ?? {}, news.tags ?? {})
-          ) {
-            return {
-              action: "update",
-              stables: ["instanceId", "instanceArn", "vpcId", "subnetId"],
-            } as const;
-          }
-        }),
-        read: Effect.fn(function* ({ id, output }) {
-          const instance = output?.instanceId
-            ? yield* describeInstance(output.instanceId).pipe(
-                Effect.catchTag("InvalidInstanceID.NotFound", () =>
-                  Effect.succeed(undefined),
-                ),
-                Effect.catchTag("InstanceNotFound", () =>
-                  Effect.succeed(undefined),
-                ),
-              )
-            : yield* findInstanceByTags(id);
-          return instance
-            ? {
-                ...toAttributes(instance),
-                instanceProfileName: output?.instanceProfileName,
-                roleArn: output?.roleArn,
-                roleName: output?.roleName,
-                policyName: output?.policyName,
-                managedIam: output?.managedIam,
-                runtimeUnitName: output?.runtimeUnitName,
-                assetPrefix: output?.assetPrefix,
-                code: output?.code,
-              }
-            : undefined;
-        }),
-        create: Effect.fn(function* ({ id, news, output, bindings, session }) {
-          const tags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const runtime = yield* hosted.resolveHostedRuntime({
-            id,
-            news,
-            bindings,
-            output,
-          });
+    return {
+      stables: ["instanceId", "instanceArn", "vpcId", "subnetId"],
+      diff: Effect.fn(function* ({ news, olds }) {
+        if (!isResolved(news)) return;
+        const hostModeChanged = Boolean(olds.main) !== Boolean(news.main);
+        if (
+          hostModeChanged ||
+          olds.imageId !== news.imageId ||
+          olds.subnetId !== news.subnetId ||
+          olds.keyName !== news.keyName ||
+          olds.instanceProfileName !== news.instanceProfileName ||
+          olds.userData !== news.userData ||
+          olds.associatePublicIpAddress !== news.associatePublicIpAddress ||
+          olds.privateIpAddress !== news.privateIpAddress ||
+          olds.availabilityZone !== news.availabilityZone
+        ) {
+          return { action: "replace" } as const;
+        }
 
-          const existing = output?.instanceId
-            ? yield* describeInstance(output.instanceId).pipe(
-                Effect.catchTag("InvalidInstanceID.NotFound", () =>
-                  Effect.succeed(undefined),
-                ),
-                Effect.catchTag("InstanceNotFound", () =>
-                  Effect.succeed(undefined),
-                ),
-              )
-            : yield* findInstanceByTags(id);
-
-          if (existing) {
-            return {
-              ...toAttributes(existing),
-              instanceProfileName:
-                runtime.instanceProfileName ?? output?.instanceProfileName,
-              roleArn: runtime.roleArn,
-              roleName: runtime.roleName,
-              policyName: runtime.policyName,
-              managedIam: runtime.managedIam,
-              runtimeUnitName: runtime.runtimeUnitName,
-              assetPrefix: runtime.assetPrefix,
-              code: runtime.code,
-            };
-          }
-
-          const created = yield* ec2
-            .runInstances(buildRunInstancesRequest(news, runtime, tags))
-            .pipe(
-              Effect.retry({
-                while: isPendingInstanceProfileError,
-                schedule: Schedule.exponential("500 millis").pipe(
-                  Schedule.both(Schedule.recurs(8)),
-                ),
-              }),
-            );
-
-          const instanceId = created.Instances?.[0]?.InstanceId as
-            | InstanceId
-            | undefined;
-          if (!instanceId) {
-            return yield* Effect.fail(
-              new Error(`RunInstances returned no instance ID for '${id}'`),
-            );
-          }
-
-          yield* session.note(instanceId);
-          const instance = yield* waitForState({
-            instanceId,
-            states: ["running"],
-            session,
-          });
-
-          if (news.sourceDestCheck !== undefined) {
-            yield* ec2.modifyInstanceAttribute({
-              InstanceId: instanceId,
-              SourceDestCheck: {
-                Value: news.sourceDestCheck,
-              },
-            });
-          }
-
-          const refreshed = yield* describeInstance(instanceId).pipe(
-            Effect.catchTag("InvalidInstanceID.NotFound", () =>
-              Effect.succeed(undefined),
-            ),
-            Effect.catchTag("InstanceNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+        if (
+          olds.instanceType !== news.instanceType ||
+          olds.sourceDestCheck !== news.sourceDestCheck ||
+          olds.main !== news.main ||
+          olds.handler !== news.handler ||
+          olds.port !== news.port ||
+          !deepEqual(olds.env ?? {}, news.env ?? {}) ||
+          !deepEqual(olds.build ?? {}, news.build ?? {}) ||
+          !deepEqual(
+            olds.roleManagedPolicyArns ?? [],
+            news.roleManagedPolicyArns ?? [],
+          ) ||
+          !deepEqual(
+            resolvedSecurityGroups(olds.securityGroupIds),
+            resolvedSecurityGroups(news.securityGroupIds),
+          ) ||
+          !deepEqual(olds.tags ?? {}, news.tags ?? {})
+        ) {
           return {
-            ...toAttributes(refreshed ?? instance),
-            instanceProfileName: runtime.instanceProfileName,
+            action: "update",
+            stables: ["instanceId", "instanceArn", "vpcId", "subnetId"],
+          } as const;
+        }
+      }),
+      read: Effect.fn(function* ({ id, output }) {
+        const instance = output?.instanceId
+          ? yield* describeInstance(output.instanceId).pipe(
+              Effect.catchTag("InvalidInstanceID.NotFound", () =>
+                Effect.succeed(undefined),
+              ),
+              Effect.catchTag("InstanceNotFound", () =>
+                Effect.succeed(undefined),
+              ),
+            )
+          : yield* findInstanceByTags(id);
+        return instance
+          ? {
+              ...toAttributes(instance),
+              instanceProfileName: output?.instanceProfileName,
+              roleArn: output?.roleArn,
+              roleName: output?.roleName,
+              policyName: output?.policyName,
+              managedIam: output?.managedIam,
+              runtimeUnitName: output?.runtimeUnitName,
+              assetPrefix: output?.assetPrefix,
+              code: output?.code,
+            }
+          : undefined;
+      }),
+      create: Effect.fn(function* ({ id, news, output, bindings, session }) {
+        const tags = {
+          ...(yield* createInternalTags(id)),
+          ...news.tags,
+        };
+        const runtime = yield* hosted.resolveHostedRuntime({
+          id,
+          news,
+          bindings,
+          output,
+        });
+
+        const existing = output?.instanceId
+          ? yield* describeInstance(output.instanceId).pipe(
+              Effect.catchTag("InvalidInstanceID.NotFound", () =>
+                Effect.succeed(undefined),
+              ),
+              Effect.catchTag("InstanceNotFound", () =>
+                Effect.succeed(undefined),
+              ),
+            )
+          : yield* findInstanceByTags(id);
+
+        if (existing) {
+          return {
+            ...toAttributes(existing),
+            instanceProfileName:
+              runtime.instanceProfileName ?? output?.instanceProfileName,
             roleArn: runtime.roleArn,
             roleName: runtime.roleName,
             policyName: runtime.policyName,
@@ -726,100 +668,124 @@ export const InstanceProvider = () =>
             assetPrefix: runtime.assetPrefix,
             code: runtime.code,
           };
-        }),
-        update: Effect.fn(function* ({
+        }
+
+        const created = yield* ec2
+          .runInstances(buildRunInstancesRequest(news, runtime, tags))
+          .pipe(
+            Effect.retry({
+              while: isPendingInstanceProfileError,
+              schedule: Schedule.exponential("500 millis").pipe(
+                Schedule.both(Schedule.recurs(8)),
+              ),
+            }),
+          );
+
+        const instanceId = created.Instances?.[0]?.InstanceId as
+          | InstanceId
+          | undefined;
+        if (!instanceId) {
+          return yield* Effect.fail(
+            new Error(`RunInstances returned no instance ID for '${id}'`),
+          );
+        }
+
+        yield* session.note(instanceId);
+        const instance = yield* waitForState({
+          instanceId,
+          states: ["running"],
+          session,
+        });
+
+        if (news.sourceDestCheck !== undefined) {
+          yield* ec2.modifyInstanceAttribute({
+            InstanceId: instanceId,
+            SourceDestCheck: {
+              Value: news.sourceDestCheck,
+            },
+          });
+        }
+
+        const refreshed = yield* describeInstance(instanceId).pipe(
+          Effect.catchTag("InvalidInstanceID.NotFound", () =>
+            Effect.succeed(undefined),
+          ),
+          Effect.catchTag("InstanceNotFound", () => Effect.succeed(undefined)),
+        );
+        return {
+          ...toAttributes(refreshed ?? instance),
+          instanceProfileName: runtime.instanceProfileName,
+          roleArn: runtime.roleArn,
+          roleName: runtime.roleName,
+          policyName: runtime.policyName,
+          managedIam: runtime.managedIam,
+          runtimeUnitName: runtime.runtimeUnitName,
+          assetPrefix: runtime.assetPrefix,
+          code: runtime.code,
+        };
+      }),
+      update: Effect.fn(function* ({
+        id,
+        news,
+        olds,
+        output,
+        bindings,
+        session,
+      }) {
+        const desiredTags = {
+          ...(yield* createInternalTags(id)),
+          ...news.tags,
+        };
+        const runtime = yield* hosted.resolveHostedRuntime({
           id,
           news,
-          olds,
-          output,
           bindings,
-          session,
-        }) {
-          const desiredTags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const runtime = yield* hosted.resolveHostedRuntime({
-            id,
-            news,
-            bindings,
-            output,
+          output,
+        });
+        let restarted = false;
+
+        if (
+          JSON.stringify(resolvedSecurityGroups(olds.securityGroupIds)) !==
+          JSON.stringify(resolvedSecurityGroups(news.securityGroupIds))
+        ) {
+          yield* ec2.modifyInstanceAttribute({
+            InstanceId: output.instanceId,
+            Groups: resolvedSecurityGroups(news.securityGroupIds),
           });
-          let restarted = false;
+        }
 
-          if (
-            JSON.stringify(resolvedSecurityGroups(olds.securityGroupIds)) !==
-            JSON.stringify(resolvedSecurityGroups(news.securityGroupIds))
-          ) {
-            yield* ec2.modifyInstanceAttribute({
-              InstanceId: output.instanceId,
-              Groups: resolvedSecurityGroups(news.securityGroupIds),
+        if (olds.sourceDestCheck !== news.sourceDestCheck) {
+          yield* ec2.modifyInstanceAttribute({
+            InstanceId: output.instanceId,
+            SourceDestCheck: {
+              Value: news.sourceDestCheck ?? true,
+            },
+          });
+        }
+
+        if (olds.instanceType !== news.instanceType) {
+          const before = yield* describeInstance(output.instanceId);
+          const wasRunning = before.State?.Name === "running";
+          if (wasRunning) {
+            yield* ec2.stopInstances({
+              InstanceIds: [output.instanceId],
+            });
+            yield* waitForState({
+              instanceId: output.instanceId,
+              states: ["stopped"],
+              session,
             });
           }
 
-          if (olds.sourceDestCheck !== news.sourceDestCheck) {
-            yield* ec2.modifyInstanceAttribute({
-              InstanceId: output.instanceId,
-              SourceDestCheck: {
-                Value: news.sourceDestCheck ?? true,
-              },
-            });
-          }
+          yield* ec2.modifyInstanceAttribute({
+            InstanceId: output.instanceId,
+            InstanceType: {
+              Value: news.instanceType as ec2.InstanceType,
+            },
+          });
 
-          if (olds.instanceType !== news.instanceType) {
-            const before = yield* describeInstance(output.instanceId);
-            const wasRunning = before.State?.Name === "running";
-            if (wasRunning) {
-              yield* ec2.stopInstances({
-                InstanceIds: [output.instanceId],
-              });
-              yield* waitForState({
-                instanceId: output.instanceId,
-                states: ["stopped"],
-                session,
-              });
-            }
-
-            yield* ec2.modifyInstanceAttribute({
-              InstanceId: output.instanceId,
-              InstanceType: {
-                Value: news.instanceType as ec2.InstanceType,
-              },
-            });
-
-            if (wasRunning) {
-              yield* ec2.startInstances({
-                InstanceIds: [output.instanceId],
-              });
-              yield* waitForState({
-                instanceId: output.instanceId,
-                states: ["running"],
-                session,
-              });
-              restarted = true;
-            }
-          }
-
-          const oldTags = {
-            ...(yield* createInternalTags(id)),
-            ...olds.tags,
-          };
-          const { removed, upsert } = diffTags(oldTags, desiredTags);
-          if (removed.length > 0) {
-            yield* ec2.deleteTags({
-              Resources: [output.instanceId],
-              Tags: removed.map((key) => ({ Key: key })),
-            });
-          }
-          if (upsert.length > 0) {
-            yield* ec2.createTags({
-              Resources: [output.instanceId],
-              Tags: upsert,
-            });
-          }
-
-          if (news.main && !restarted) {
-            yield* ec2.rebootInstances({
+          if (wasRunning) {
+            yield* ec2.startInstances({
               InstanceIds: [output.instanceId],
             });
             yield* waitForState({
@@ -827,39 +793,70 @@ export const InstanceProvider = () =>
               states: ["running"],
               session,
             });
+            restarted = true;
           }
+        }
 
-          return {
-            ...toAttributes(yield* describeInstance(output.instanceId)),
-            instanceProfileName:
-              runtime.instanceProfileName ?? output.instanceProfileName,
-            roleArn: runtime.roleArn ?? output.roleArn,
-            roleName: runtime.roleName ?? output.roleName,
-            policyName: runtime.policyName ?? output.policyName,
-            managedIam: runtime.managedIam ?? output.managedIam,
-            runtimeUnitName: runtime.runtimeUnitName ?? output.runtimeUnitName,
-            assetPrefix: runtime.assetPrefix ?? output.assetPrefix,
-            code: runtime.code ?? output.code,
-          };
-        }),
-        delete: Effect.fn(function* ({ output, session }) {
-          yield* ec2
-            .terminateInstances({
-              InstanceIds: [output.instanceId],
-            })
-            .pipe(
-              Effect.catchTag("InvalidInstanceID.NotFound", () => Effect.void),
-            );
-          yield* waitForDeleted({
+        const oldTags = {
+          ...(yield* createInternalTags(id)),
+          ...olds.tags,
+        };
+        const { removed, upsert } = diffTags(oldTags, desiredTags);
+        if (removed.length > 0) {
+          yield* ec2.deleteTags({
+            Resources: [output.instanceId],
+            Tags: removed.map((key) => ({ Key: key })),
+          });
+        }
+        if (upsert.length > 0) {
+          yield* ec2.createTags({
+            Resources: [output.instanceId],
+            Tags: upsert,
+          });
+        }
+
+        if (news.main && !restarted) {
+          yield* ec2.rebootInstances({
+            InstanceIds: [output.instanceId],
+          });
+          yield* waitForState({
             instanceId: output.instanceId,
+            states: ["running"],
             session,
           });
+        }
 
-          yield* hosted.cleanupHostedRuntime({ output });
-        }),
-      };
-    }),
-  );
+        return {
+          ...toAttributes(yield* describeInstance(output.instanceId)),
+          instanceProfileName:
+            runtime.instanceProfileName ?? output.instanceProfileName,
+          roleArn: runtime.roleArn ?? output.roleArn,
+          roleName: runtime.roleName ?? output.roleName,
+          policyName: runtime.policyName ?? output.policyName,
+          managedIam: runtime.managedIam ?? output.managedIam,
+          runtimeUnitName: runtime.runtimeUnitName ?? output.runtimeUnitName,
+          assetPrefix: runtime.assetPrefix ?? output.assetPrefix,
+          code: runtime.code ?? output.code,
+        };
+      }),
+      delete: Effect.fn(function* ({ output, session }) {
+        yield* ec2
+          .terminateInstances({
+            InstanceIds: [output.instanceId],
+          })
+          .pipe(
+            Effect.catchTag("InvalidInstanceID.NotFound", () => Effect.void),
+          );
+        yield* waitForDeleted({
+          instanceId: output.instanceId,
+          session,
+        });
+
+        yield* hosted.cleanupHostedRuntime({ output });
+      }),
+    };
+  }),
+);
 
 class InstanceNotFound extends Data.TaggedError("InstanceNotFound")<{
   instanceId: string;

@@ -105,7 +105,7 @@ describe("AWS.CloudFront.Distribution", () => {
 
       yield* destroy();
       yield* assertDistributionDeleted(deployed.distribution.distributionId);
-    }).pipe(Effect.provide(AWS.providers())),
+    }).pipe(Effect.provide(AWS.providers)),
   );
 });
 

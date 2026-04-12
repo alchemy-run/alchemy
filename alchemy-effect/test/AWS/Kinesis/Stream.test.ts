@@ -37,7 +37,7 @@ describe("AWS.Kinesis.Stream", () => {
       yield* destroy();
 
       yield* assertStreamDeleted(stream.streamName);
-    }).pipe(Effect.provide(AWS.providers())),
+    }).pipe(Effect.provide(AWS.providers)),
   );
 
   test(
@@ -112,7 +112,7 @@ describe("AWS.Kinesis.Stream", () => {
       yield* destroy();
 
       yield* assertStreamDeleted(stream.streamName);
-    }).pipe(Effect.provide(AWS.providers())),
+    }).pipe(Effect.provide(AWS.providers)),
   );
 
   test(
@@ -146,7 +146,7 @@ describe("AWS.Kinesis.Stream", () => {
       yield* destroy();
 
       yield* assertStreamDeleted(stream.streamName);
-    }).pipe(Effect.provide(AWS.providers())),
+    }).pipe(Effect.provide(AWS.providers)),
   );
 
   test(
@@ -191,7 +191,7 @@ describe("AWS.Kinesis.Stream", () => {
       yield* destroy();
 
       yield* assertStreamDeleted(stream.streamName);
-    }).pipe(Effect.provide(AWS.providers())),
+    }).pipe(Effect.provide(AWS.providers)),
   );
 
   test(
@@ -222,7 +222,7 @@ describe("AWS.Kinesis.Stream", () => {
       yield* destroy();
 
       yield* assertStreamDeleted(customName);
-    }).pipe(Effect.provide(AWS.providers())),
+    }).pipe(Effect.provide(AWS.providers)),
   );
 
   test(
@@ -265,7 +265,7 @@ describe("AWS.Kinesis.Stream", () => {
       yield* destroy();
 
       yield* assertStreamDeleted(stream.streamName);
-    }).pipe(Effect.provide(AWS.providers())),
+    }).pipe(Effect.provide(AWS.providers)),
   );
 
   test(
@@ -318,7 +318,7 @@ describe("AWS.Kinesis.Stream", () => {
       yield* destroy();
 
       yield* assertStreamDeleted(stream.streamName);
-    }).pipe(Effect.provide(AWS.providers())),
+    }).pipe(Effect.provide(AWS.providers)),
   );
 
   test(
@@ -344,7 +344,7 @@ describe("AWS.Kinesis.Stream", () => {
       yield* destroy();
 
       yield* assertStreamDeleted(streamName);
-    }).pipe(Effect.provide(AWS.providers())),
+    }).pipe(Effect.provide(AWS.providers)),
   );
 
   test(
@@ -390,7 +390,7 @@ describe("AWS.Kinesis.Stream", () => {
       yield* destroy();
 
       yield* assertStreamDeleted(stream.streamName);
-    }).pipe(Effect.provide(AWS.providers())),
+    }).pipe(Effect.provide(AWS.providers)),
   );
 
   test(
@@ -433,7 +433,7 @@ describe("AWS.Kinesis.Stream", () => {
       yield* destroy();
 
       yield* assertStreamDeleted(stream.streamName);
-    }).pipe(Effect.provide(AWS.providers())),
+    }).pipe(Effect.provide(AWS.providers)),
   );
 
   test(
@@ -490,7 +490,7 @@ describe("AWS.Kinesis.Stream", () => {
 
       yield* destroy();
       yield* assertStreamDeleted(stream.streamName);
-    }).pipe(Effect.provide(AWS.providers())),
+    }).pipe(Effect.provide(AWS.providers)),
   );
 
   test(
@@ -531,7 +531,7 @@ describe("AWS.Kinesis.Stream", () => {
 
       yield* destroy();
       yield* assertStreamDeleted(stream.streamName);
-    }).pipe(Effect.provide(AWS.providers())),
+    }).pipe(Effect.provide(AWS.providers)),
   );
 
   class StreamStillExists extends Data.TaggedError("StreamStillExists") {}

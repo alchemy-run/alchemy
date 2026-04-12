@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved, somePropsAreDifferent } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 import type { AccountID } from "../Account.ts";
@@ -161,219 +162,218 @@ export interface Vpc extends Resource<
 > {}
 export const Vpc = Resource<Vpc>("AWS.EC2.VPC");
 
-export const VpcProvider = () =>
-  Vpc.provider.effect(
-    Effect.gen(function* () {
-      const region = yield* Region;
-      const accountId = yield* Account;
+export const VpcProvider = Provider.effect(
+  Vpc,
+  Effect.gen(function* () {
+    const region = yield* Region;
+    const accountId = yield* Account;
 
-      const createTags = Effect.fn(function* (
-        id: string,
-        tags?: Record<string, string>,
-      ) {
-        return {
-          Name: id,
-          ...(yield* createInternalTags(id)),
-          ...tags,
-        };
-      });
-
+    const createTags = Effect.fn(function* (
+      id: string,
+      tags?: Record<string, string>,
+    ) {
       return {
-        stables: ["vpcId", "vpcArn", "ownerId", "isDefault"],
-        diff: Effect.fn(function* ({ news, olds }) {
-          if (!isResolved(news)) return;
-          if (
-            somePropsAreDifferent(olds, news, [
-              "cidrBlock",
-              "instanceTenancy",
-              "ipv4IpamPoolId",
-              "ipv6IpamPoolId",
-              "ipv6CidrBlock",
-            ])
-          ) {
-            return { action: "replace" };
-          }
-        }),
+        Name: id,
+        ...(yield* createInternalTags(id)),
+        ...tags,
+      };
+    });
 
-        create: Effect.fn(function* ({ id, news = {}, session }) {
-          // 1. Call CreateVpc
-          const createResult = yield* ec2.createVpc({
-            // TODO(sam): add all properties
-            AmazonProvidedIpv6CidrBlock: news.amazonProvidedIpv6CidrBlock,
-            InstanceTenancy: news.instanceTenancy,
-            CidrBlock: news.cidrBlock,
-            Ipv4IpamPoolId: news.ipv4IpamPoolId,
-            Ipv4NetmaskLength: news.ipv4NetmaskLength,
-            Ipv6Pool: news.ipv6Pool,
-            Ipv6CidrBlock: news.ipv6CidrBlock,
-            Ipv6IpamPoolId: news.ipv6IpamPoolId,
-            Ipv6NetmaskLength: news.ipv6NetmaskLength,
-            Ipv6CidrBlockNetworkBorderGroup:
-              news.ipv6CidrBlockNetworkBorderGroup,
-            TagSpecifications: [
-              {
-                ResourceType: "vpc",
-                Tags: createTagsList(yield* createTags(id, news.tags)),
-              },
-            ],
-            DryRun: false,
+    return {
+      stables: ["vpcId", "vpcArn", "ownerId", "isDefault"],
+      diff: Effect.fn(function* ({ news, olds }) {
+        if (!isResolved(news)) return;
+        if (
+          somePropsAreDifferent(olds, news, [
+            "cidrBlock",
+            "instanceTenancy",
+            "ipv4IpamPoolId",
+            "ipv6IpamPoolId",
+            "ipv6CidrBlock",
+          ])
+        ) {
+          return { action: "replace" };
+        }
+      }),
+
+      create: Effect.fn(function* ({ id, news = {}, session }) {
+        // 1. Call CreateVpc
+        const createResult = yield* ec2.createVpc({
+          // TODO(sam): add all properties
+          AmazonProvidedIpv6CidrBlock: news.amazonProvidedIpv6CidrBlock,
+          InstanceTenancy: news.instanceTenancy,
+          CidrBlock: news.cidrBlock,
+          Ipv4IpamPoolId: news.ipv4IpamPoolId,
+          Ipv4NetmaskLength: news.ipv4NetmaskLength,
+          Ipv6Pool: news.ipv6Pool,
+          Ipv6CidrBlock: news.ipv6CidrBlock,
+          Ipv6IpamPoolId: news.ipv6IpamPoolId,
+          Ipv6NetmaskLength: news.ipv6NetmaskLength,
+          Ipv6CidrBlockNetworkBorderGroup: news.ipv6CidrBlockNetworkBorderGroup,
+          TagSpecifications: [
+            {
+              ResourceType: "vpc",
+              Tags: createTagsList(yield* createTags(id, news.tags)),
+            },
+          ],
+          DryRun: false,
+        });
+
+        const vpcId = createResult.Vpc!.VpcId! as VpcId;
+        yield* session.note(`VPC created: ${vpcId}`);
+
+        // 3. Modify DNS attributes if specified (separate API calls)
+        yield* ec2.modifyVpcAttribute({
+          VpcId: vpcId,
+          EnableDnsSupport: { Value: news.enableDnsSupport ?? true },
+        });
+
+        if (news.enableDnsHostnames !== undefined) {
+          yield* ec2.modifyVpcAttribute({
+            VpcId: vpcId,
+            EnableDnsHostnames: { Value: news.enableDnsHostnames },
           });
+        }
 
-          const vpcId = createResult.Vpc!.VpcId! as VpcId;
-          yield* session.note(`VPC created: ${vpcId}`);
+        // 4. Wait for VPC to be available
+        const vpc = yield* waitForVpcAvailable(vpcId, session);
 
-          // 3. Modify DNS attributes if specified (separate API calls)
+        // 6. Return attributes
+        return {
+          vpcId,
+          vpcArn: `arn:aws:ec2:${region}:${accountId}:vpc/${vpcId}` as VpcArn,
+          cidrBlock: vpc.CidrBlock!,
+          dhcpOptionsId: vpc.DhcpOptionsId!,
+          state: vpc.State!,
+          isDefault: vpc.IsDefault ?? false,
+          ownerId: vpc.OwnerId,
+          cidrBlockAssociationSet: vpc.CidrBlockAssociationSet?.map(
+            (assoc) => ({
+              associationId: assoc.AssociationId!,
+              cidrBlock: assoc.CidrBlock!,
+              cidrBlockState: {
+                state: assoc.CidrBlockState!.State!,
+                statusMessage: assoc.CidrBlockState!.StatusMessage,
+              },
+            }),
+          ),
+          ipv6CidrBlockAssociationSet: vpc.Ipv6CidrBlockAssociationSet?.map(
+            (assoc) => ({
+              associationId: assoc.AssociationId!,
+              ipv6CidrBlock: assoc.Ipv6CidrBlock!,
+              ipv6CidrBlockState: {
+                state: assoc.Ipv6CidrBlockState!.State!,
+                statusMessage: assoc.Ipv6CidrBlockState!.StatusMessage,
+              },
+              networkBorderGroup: assoc.NetworkBorderGroup,
+              ipv6Pool: assoc.Ipv6Pool,
+            }),
+          ),
+        };
+      }),
+
+      update: Effect.fn(function* ({
+        id,
+        news = {},
+        olds = {},
+        output,
+        session,
+      }) {
+        const vpcId = output.vpcId;
+
+        // Only DNS and metrics settings can be updated
+        // Everything else requires replacement (handled by diff)
+
+        if (news.enableDnsSupport !== olds.enableDnsSupport) {
           yield* ec2.modifyVpcAttribute({
             VpcId: vpcId,
             EnableDnsSupport: { Value: news.enableDnsSupport ?? true },
           });
+          yield* session.note("Updated DNS support");
+        }
 
-          if (news.enableDnsHostnames !== undefined) {
-            yield* ec2.modifyVpcAttribute({
-              VpcId: vpcId,
-              EnableDnsHostnames: { Value: news.enableDnsHostnames },
-            });
-          }
+        if (news.enableDnsHostnames !== olds.enableDnsHostnames) {
+          yield* ec2.modifyVpcAttribute({
+            VpcId: vpcId,
+            EnableDnsHostnames: { Value: news.enableDnsHostnames ?? false },
+          });
+          yield* session.note("Updated DNS hostnames");
+        }
 
-          // 4. Wait for VPC to be available
-          const vpc = yield* waitForVpcAvailable(vpcId, session);
+        // Handle user tag updates
+        const newTags = yield* createTags(id, news.tags);
+        const oldTags = output.tags ?? {};
+        const { removed, upsert } = diffTags(oldTags, newTags);
+        if (removed.length > 0) {
+          yield* ec2.deleteTags({
+            Resources: [vpcId],
+            Tags: removed.map((key) => ({ Key: key })),
+            DryRun: false,
+          });
+        }
+        if (upsert.length > 0) {
+          yield* ec2.createTags({
+            Resources: [vpcId],
+            Tags: upsert,
+            DryRun: false,
+          });
+        }
 
-          // 6. Return attributes
-          return {
-            vpcId,
-            vpcArn: `arn:aws:ec2:${region}:${accountId}:vpc/${vpcId}` as VpcArn,
-            cidrBlock: vpc.CidrBlock!,
-            dhcpOptionsId: vpc.DhcpOptionsId!,
-            state: vpc.State!,
-            isDefault: vpc.IsDefault ?? false,
-            ownerId: vpc.OwnerId,
-            cidrBlockAssociationSet: vpc.CidrBlockAssociationSet?.map(
-              (assoc) => ({
-                associationId: assoc.AssociationId!,
-                cidrBlock: assoc.CidrBlock!,
-                cidrBlockState: {
-                  state: assoc.CidrBlockState!.State!,
-                  statusMessage: assoc.CidrBlockState!.StatusMessage,
-                },
-              }),
-            ),
-            ipv6CidrBlockAssociationSet: vpc.Ipv6CidrBlockAssociationSet?.map(
-              (assoc) => ({
-                associationId: assoc.AssociationId!,
-                ipv6CidrBlock: assoc.Ipv6CidrBlock!,
-                ipv6CidrBlockState: {
-                  state: assoc.Ipv6CidrBlockState!.State!,
-                  statusMessage: assoc.Ipv6CidrBlockState!.StatusMessage,
-                },
-                networkBorderGroup: assoc.NetworkBorderGroup,
-                ipv6Pool: assoc.Ipv6Pool,
-              }),
-            ),
-          };
-        }),
+        return {
+          ...output,
+          tags: newTags,
+        }; // VPC attributes don't change from these updates
+      }),
 
-        update: Effect.fn(function* ({
-          id,
-          news = {},
-          olds = {},
-          output,
-          session,
-        }) {
-          const vpcId = output.vpcId;
+      delete: Effect.fn(function* ({ output, session }) {
+        const vpcId = output.vpcId;
 
-          // Only DNS and metrics settings can be updated
-          // Everything else requires replacement (handled by diff)
+        yield* session.note(`Deleting VPC: ${vpcId}`);
 
-          if (news.enableDnsSupport !== olds.enableDnsSupport) {
-            yield* ec2.modifyVpcAttribute({
-              VpcId: vpcId,
-              EnableDnsSupport: { Value: news.enableDnsSupport ?? true },
-            });
-            yield* session.note("Updated DNS support");
-          }
-
-          if (news.enableDnsHostnames !== olds.enableDnsHostnames) {
-            yield* ec2.modifyVpcAttribute({
-              VpcId: vpcId,
-              EnableDnsHostnames: { Value: news.enableDnsHostnames ?? false },
-            });
-            yield* session.note("Updated DNS hostnames");
-          }
-
-          // Handle user tag updates
-          const newTags = yield* createTags(id, news.tags);
-          const oldTags = output.tags ?? {};
-          const { removed, upsert } = diffTags(oldTags, newTags);
-          if (removed.length > 0) {
-            yield* ec2.deleteTags({
-              Resources: [vpcId],
-              Tags: removed.map((key) => ({ Key: key })),
-              DryRun: false,
-            });
-          }
-          if (upsert.length > 0) {
-            yield* ec2.createTags({
-              Resources: [vpcId],
-              Tags: upsert,
-              DryRun: false,
-            });
-          }
-
-          return {
-            ...output,
-            tags: newTags,
-          }; // VPC attributes don't change from these updates
-        }),
-
-        delete: Effect.fn(function* ({ output, session }) {
-          const vpcId = output.vpcId;
-
-          yield* session.note(`Deleting VPC: ${vpcId}`);
-
-          // 1. Attempt to delete VPC
-          yield* ec2
-            .deleteVpc({
-              VpcId: vpcId,
-              DryRun: false,
-            })
-            .pipe(
-              Effect.tapError(Effect.logDebug),
-              Effect.catchTag("InvalidVpcID.NotFound", () => Effect.void),
-              // Retry on dependency violations (resources still being deleted)
-              Effect.retry({
-                while: (e) => {
-                  // DependencyViolation means there are still dependent resources
-                  // This can happen if subnets/IGW are being deleted concurrently
-                  return (
-                    e._tag === "DependencyViolation" ||
-                    (e._tag === "ValidationError" &&
-                      e.message?.includes("DependencyViolation"))
-                  );
-                },
-                // Use fixed 5s delay instead of exponential to avoid very long waits
-                schedule: Schedule.fixed(5000).pipe(
-                  Schedule.both(Schedule.recurs(60)), // Up to 5 minutes total
-                  Schedule.tapOutput(([, attempt]) =>
-                    session.note(
-                      `Waiting for dependencies to clear... (attempt ${attempt + 1})`,
-                    ),
+        // 1. Attempt to delete VPC
+        yield* ec2
+          .deleteVpc({
+            VpcId: vpcId,
+            DryRun: false,
+          })
+          .pipe(
+            Effect.tapError(Effect.logDebug),
+            Effect.catchTag("InvalidVpcID.NotFound", () => Effect.void),
+            // Retry on dependency violations (resources still being deleted)
+            Effect.retry({
+              while: (e) => {
+                // DependencyViolation means there are still dependent resources
+                // This can happen if subnets/IGW are being deleted concurrently
+                return (
+                  e._tag === "DependencyViolation" ||
+                  (e._tag === "ValidationError" &&
+                    e.message?.includes("DependencyViolation"))
+                );
+              },
+              // Use fixed 5s delay instead of exponential to avoid very long waits
+              schedule: Schedule.fixed(5000).pipe(
+                Schedule.both(Schedule.recurs(60)), // Up to 5 minutes total
+                Schedule.tapOutput(([, attempt]) =>
+                  session.note(
+                    `Waiting for dependencies to clear... (attempt ${attempt + 1})`,
                   ),
                 ),
-              }),
-              // Log the actual error for debugging
-              Effect.tapError((e) =>
-                session.note(`VPC delete failed: ${e._tag} - ${e.message}`),
               ),
-            );
+            }),
+            // Log the actual error for debugging
+            Effect.tapError((e) =>
+              session.note(`VPC delete failed: ${e._tag} - ${e.message}`),
+            ),
+          );
 
-          // 2. Wait for VPC to be fully deleted
-          yield* waitForVpcDeleted(vpcId, session);
+        // 2. Wait for VPC to be fully deleted
+        yield* waitForVpcDeleted(vpcId, session);
 
-          yield* session.note(`VPC ${vpcId} deleted successfully`);
-        }),
-      };
-    }),
-  );
+        yield* session.note(`VPC ${vpcId} deleted successfully`);
+      }),
+    };
+  }),
+);
 
 // Retryable error: VPC is still pending
 class VpcPending extends Data.TaggedError("VpcPending")<{

@@ -3,6 +3,7 @@ import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Effect from "effect/Effect";
 
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { NetworkAclId } from "./NetworkAcl.ts";
 
@@ -95,206 +96,206 @@ export const NetworkAclEntry = Resource<NetworkAclEntry>(
   "AWS.EC2.NetworkAclEntry",
 );
 
-export const NetworkAclEntryProvider = () =>
-  NetworkAclEntry.provider.effect(
-    Effect.gen(function* () {
-      const findEntry = (
-        networkAclId: string,
-        ruleNumber: number,
-        egress: boolean,
-      ) =>
-        ec2
-          .describeNetworkAcls({ NetworkAclIds: [networkAclId] })
+export const NetworkAclEntryProvider = Provider.effect(
+  NetworkAclEntry,
+  Effect.gen(function* () {
+    const findEntry = (
+      networkAclId: string,
+      ruleNumber: number,
+      egress: boolean,
+    ) =>
+      ec2
+        .describeNetworkAcls({ NetworkAclIds: [networkAclId] })
+        .pipe(
+          Effect.map((r) =>
+            r.NetworkAcls?.[0]?.Entries?.find(
+              (e) => e.RuleNumber === ruleNumber && e.Egress === egress,
+            ),
+          ),
+        );
+
+    const toAttrs = (
+      props: NetworkAclEntryProps,
+      entry: NonNullable<
+        Awaited<
+          ReturnType<
+            typeof findEntry extends (
+              ...args: any
+            ) => Effect.Effect<infer R, any, any>
+              ? () => Promise<R>
+              : never
+          >
+        >
+      >,
+    ) => ({
+      networkAclId: props.networkAclId as NetworkAclId,
+      ruleNumber: entry.RuleNumber!,
+      egress: entry.Egress!,
+      protocol: entry.Protocol!,
+      ruleAction: entry.RuleAction!,
+      cidrBlock: entry.CidrBlock,
+      ipv6CidrBlock: entry.Ipv6CidrBlock,
+      icmpTypeCode: entry.IcmpTypeCode
+        ? {
+            code: entry.IcmpTypeCode.Code,
+            type: entry.IcmpTypeCode.Type,
+          }
+        : undefined,
+      portRange: entry.PortRange
+        ? {
+            from: entry.PortRange.From,
+            to: entry.PortRange.To,
+          }
+        : undefined,
+    });
+
+    return {
+      stables: [],
+
+      read: Effect.fn(function* ({ olds, output }) {
+        if (!output) return undefined;
+        const entry = yield* findEntry(
+          olds.networkAclId as string,
+          output.ruleNumber,
+          output.egress,
+        );
+        if (!entry) {
+          return yield* Effect.fail(
+            new Error(
+              `Network ACL Entry not found: ${output.networkAclId} rule ${output.ruleNumber} egress=${output.egress}`,
+            ),
+          );
+        }
+        return toAttrs(olds, entry);
+      }),
+
+      diff: Effect.fn(function* ({ news, olds }) {
+        if (!isResolved(news)) return;
+        // If network ACL, rule number, or egress changes, need to replace
+        if (
+          news.networkAclId !== olds.networkAclId ||
+          news.ruleNumber !== olds.ruleNumber ||
+          news.egress !== olds.egress
+        ) {
+          return { action: "replace" };
+        }
+        // Other properties can be updated by replacing the entry
+      }),
+
+      create: Effect.fn(function* ({ news, session }) {
+        yield* session.note(
+          `Creating Network ACL Entry (rule ${news.ruleNumber})...`,
+        );
+
+        yield* ec2.createNetworkAclEntry({
+          NetworkAclId: news.networkAclId as string,
+          RuleNumber: news.ruleNumber,
+          Protocol: news.protocol,
+          RuleAction: news.ruleAction,
+          Egress: news.egress ?? false,
+          CidrBlock: news.cidrBlock,
+          Ipv6CidrBlock: news.ipv6CidrBlock,
+          IcmpTypeCode: news.icmpTypeCode
+            ? {
+                Code: news.icmpTypeCode.code,
+                Type: news.icmpTypeCode.type,
+              }
+            : undefined,
+          PortRange: news.portRange
+            ? {
+                From: news.portRange.from,
+                To: news.portRange.to,
+              }
+            : undefined,
+          DryRun: false,
+        });
+
+        yield* session.note(
+          `Network ACL Entry created: rule ${news.ruleNumber}`,
+        );
+
+        const entry = yield* findEntry(
+          news.networkAclId as string,
+          news.ruleNumber,
+          news.egress ?? false,
+        );
+        if (!entry) {
+          return yield* Effect.fail(
+            new Error("Network ACL Entry not found after creation"),
+          );
+        }
+        return toAttrs(news, entry);
+      }),
+
+      update: Effect.fn(function* ({ news, session }) {
+        // To update a network ACL entry, we need to replace it
+        yield* session.note(
+          `Updating Network ACL Entry (rule ${news.ruleNumber})...`,
+        );
+
+        yield* ec2.replaceNetworkAclEntry({
+          NetworkAclId: news.networkAclId as string,
+          RuleNumber: news.ruleNumber,
+          Protocol: news.protocol,
+          RuleAction: news.ruleAction,
+          Egress: news.egress ?? false,
+          CidrBlock: news.cidrBlock,
+          Ipv6CidrBlock: news.ipv6CidrBlock,
+          IcmpTypeCode: news.icmpTypeCode
+            ? {
+                Code: news.icmpTypeCode.code,
+                Type: news.icmpTypeCode.type,
+              }
+            : undefined,
+          PortRange: news.portRange
+            ? {
+                From: news.portRange.from,
+                To: news.portRange.to,
+              }
+            : undefined,
+          DryRun: false,
+        });
+
+        yield* session.note(
+          `Network ACL Entry updated: rule ${news.ruleNumber}`,
+        );
+
+        const entry = yield* findEntry(
+          news.networkAclId as string,
+          news.ruleNumber,
+          news.egress ?? false,
+        );
+        if (!entry) {
+          return yield* Effect.fail(
+            new Error("Network ACL Entry not found after update"),
+          );
+        }
+        return toAttrs(news, entry);
+      }),
+
+      delete: Effect.fn(function* ({ olds, output, session }) {
+        yield* session.note(
+          `Deleting Network ACL Entry (rule ${output.ruleNumber})...`,
+        );
+
+        yield* ec2
+          .deleteNetworkAclEntry({
+            NetworkAclId: olds.networkAclId as string,
+            RuleNumber: output.ruleNumber,
+            Egress: output.egress,
+            DryRun: false,
+          })
           .pipe(
-            Effect.map((r) =>
-              r.NetworkAcls?.[0]?.Entries?.find(
-                (e) => e.RuleNumber === ruleNumber && e.Egress === egress,
-              ),
+            Effect.catchTag(
+              "InvalidNetworkAclEntry.NotFound",
+              () => Effect.void,
             ),
           );
 
-      const toAttrs = (
-        props: NetworkAclEntryProps,
-        entry: NonNullable<
-          Awaited<
-            ReturnType<
-              typeof findEntry extends (
-                ...args: any
-              ) => Effect.Effect<infer R, any, any>
-                ? () => Promise<R>
-                : never
-            >
-          >
-        >,
-      ) => ({
-        networkAclId: props.networkAclId as NetworkAclId,
-        ruleNumber: entry.RuleNumber!,
-        egress: entry.Egress!,
-        protocol: entry.Protocol!,
-        ruleAction: entry.RuleAction!,
-        cidrBlock: entry.CidrBlock,
-        ipv6CidrBlock: entry.Ipv6CidrBlock,
-        icmpTypeCode: entry.IcmpTypeCode
-          ? {
-              code: entry.IcmpTypeCode.Code,
-              type: entry.IcmpTypeCode.Type,
-            }
-          : undefined,
-        portRange: entry.PortRange
-          ? {
-              from: entry.PortRange.From,
-              to: entry.PortRange.To,
-            }
-          : undefined,
-      });
-
-      return {
-        stables: [],
-
-        read: Effect.fn(function* ({ olds, output }) {
-          if (!output) return undefined;
-          const entry = yield* findEntry(
-            olds.networkAclId as string,
-            output.ruleNumber,
-            output.egress,
-          );
-          if (!entry) {
-            return yield* Effect.fail(
-              new Error(
-                `Network ACL Entry not found: ${output.networkAclId} rule ${output.ruleNumber} egress=${output.egress}`,
-              ),
-            );
-          }
-          return toAttrs(olds, entry);
-        }),
-
-        diff: Effect.fn(function* ({ news, olds }) {
-          if (!isResolved(news)) return;
-          // If network ACL, rule number, or egress changes, need to replace
-          if (
-            news.networkAclId !== olds.networkAclId ||
-            news.ruleNumber !== olds.ruleNumber ||
-            news.egress !== olds.egress
-          ) {
-            return { action: "replace" };
-          }
-          // Other properties can be updated by replacing the entry
-        }),
-
-        create: Effect.fn(function* ({ news, session }) {
-          yield* session.note(
-            `Creating Network ACL Entry (rule ${news.ruleNumber})...`,
-          );
-
-          yield* ec2.createNetworkAclEntry({
-            NetworkAclId: news.networkAclId as string,
-            RuleNumber: news.ruleNumber,
-            Protocol: news.protocol,
-            RuleAction: news.ruleAction,
-            Egress: news.egress ?? false,
-            CidrBlock: news.cidrBlock,
-            Ipv6CidrBlock: news.ipv6CidrBlock,
-            IcmpTypeCode: news.icmpTypeCode
-              ? {
-                  Code: news.icmpTypeCode.code,
-                  Type: news.icmpTypeCode.type,
-                }
-              : undefined,
-            PortRange: news.portRange
-              ? {
-                  From: news.portRange.from,
-                  To: news.portRange.to,
-                }
-              : undefined,
-            DryRun: false,
-          });
-
-          yield* session.note(
-            `Network ACL Entry created: rule ${news.ruleNumber}`,
-          );
-
-          const entry = yield* findEntry(
-            news.networkAclId as string,
-            news.ruleNumber,
-            news.egress ?? false,
-          );
-          if (!entry) {
-            return yield* Effect.fail(
-              new Error("Network ACL Entry not found after creation"),
-            );
-          }
-          return toAttrs(news, entry);
-        }),
-
-        update: Effect.fn(function* ({ news, session }) {
-          // To update a network ACL entry, we need to replace it
-          yield* session.note(
-            `Updating Network ACL Entry (rule ${news.ruleNumber})...`,
-          );
-
-          yield* ec2.replaceNetworkAclEntry({
-            NetworkAclId: news.networkAclId as string,
-            RuleNumber: news.ruleNumber,
-            Protocol: news.protocol,
-            RuleAction: news.ruleAction,
-            Egress: news.egress ?? false,
-            CidrBlock: news.cidrBlock,
-            Ipv6CidrBlock: news.ipv6CidrBlock,
-            IcmpTypeCode: news.icmpTypeCode
-              ? {
-                  Code: news.icmpTypeCode.code,
-                  Type: news.icmpTypeCode.type,
-                }
-              : undefined,
-            PortRange: news.portRange
-              ? {
-                  From: news.portRange.from,
-                  To: news.portRange.to,
-                }
-              : undefined,
-            DryRun: false,
-          });
-
-          yield* session.note(
-            `Network ACL Entry updated: rule ${news.ruleNumber}`,
-          );
-
-          const entry = yield* findEntry(
-            news.networkAclId as string,
-            news.ruleNumber,
-            news.egress ?? false,
-          );
-          if (!entry) {
-            return yield* Effect.fail(
-              new Error("Network ACL Entry not found after update"),
-            );
-          }
-          return toAttrs(news, entry);
-        }),
-
-        delete: Effect.fn(function* ({ olds, output, session }) {
-          yield* session.note(
-            `Deleting Network ACL Entry (rule ${output.ruleNumber})...`,
-          );
-
-          yield* ec2
-            .deleteNetworkAclEntry({
-              NetworkAclId: olds.networkAclId as string,
-              RuleNumber: output.ruleNumber,
-              Egress: output.egress,
-              DryRun: false,
-            })
-            .pipe(
-              Effect.catchTag(
-                "InvalidNetworkAclEntry.NotFound",
-                () => Effect.void,
-              ),
-            );
-
-          yield* session.note(
-            `Network ACL Entry deleted: rule ${output.ruleNumber}`,
-          );
-        }),
-      };
-    }),
-  );
+        yield* session.note(
+          `Network ACL Entry deleted: rule ${output.ruleNumber}`,
+        );
+      }),
+    };
+  }),
+);

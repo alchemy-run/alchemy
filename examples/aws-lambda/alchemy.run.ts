@@ -23,8 +23,8 @@ const awsConfig = Layer.effect(
   }),
 );
 
-// const aws = AWS.providers() // <- can also use the default aws stage config by omitting
-const aws = AWS.providers().pipe(Layer.provide(awsConfig));
+// const aws = AWS.providers // <- can also use the default aws stage config by omitting
+const aws = AWS.providers.pipe(Layer.provide(awsConfig));
 const dashboardRegion = process.env.AWS_REGION ?? "us-west-2";
 
 const stack = Effect.gen(function* () {

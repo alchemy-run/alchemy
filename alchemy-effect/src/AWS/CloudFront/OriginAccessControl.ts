@@ -2,6 +2,7 @@ import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 
 export interface OriginAccessControlProps {
@@ -83,163 +84,157 @@ export const OriginAccessControl = Resource<OriginAccessControl>(
   "AWS.CloudFront.OriginAccessControl",
 );
 
-export const OriginAccessControlProvider = () =>
-  OriginAccessControl.provider.effect(
-    Effect.gen(function* () {
-      const getByName = Effect.fn(function* (name: string) {
-        const listed = yield* cloudfront.listOriginAccessControls({});
-        const summary =
-          listed.OriginAccessControlList?.Items?.find(
-            (item) => item.Name === name,
-          ) ?? undefined;
-        if (!summary?.Id) {
-          return undefined;
-        }
-        const config = yield* cloudfront.getOriginAccessControlConfig({
-          Id: summary.Id,
-        });
-        return {
-          OriginAccessControl: {
-            Id: summary.Id,
-            OriginAccessControlConfig: config.OriginAccessControlConfig,
-          },
-          ETag: config.ETag,
-        };
+export const OriginAccessControlProvider = Provider.effect(
+  OriginAccessControl,
+  Effect.gen(function* () {
+    const getByName = Effect.fn(function* (name: string) {
+      const listed = yield* cloudfront.listOriginAccessControls({});
+      const summary =
+        listed.OriginAccessControlList?.Items?.find(
+          (item) => item.Name === name,
+        ) ?? undefined;
+      if (!summary?.Id) {
+        return undefined;
+      }
+      const config = yield* cloudfront.getOriginAccessControlConfig({
+        Id: summary.Id,
       });
+      return {
+        OriginAccessControl: {
+          Id: summary.Id,
+          OriginAccessControlConfig: config.OriginAccessControlConfig,
+        },
+        ETag: config.ETag,
+      };
+    });
 
-      const getCurrent = Effect.fn(function* (
-        output: OriginAccessControl["Attributes"] | undefined,
-      ) {
-        if (!output?.originAccessControlId) {
+    const getCurrent = Effect.fn(function* (
+      output: OriginAccessControl["Attributes"] | undefined,
+    ) {
+      if (!output?.originAccessControlId) {
+        return undefined;
+      }
+      const config = yield* cloudfront
+        .getOriginAccessControlConfig({
+          Id: output.originAccessControlId,
+        })
+        .pipe(
+          Effect.catchTag("NoSuchOriginAccessControl", () =>
+            Effect.succeed(undefined),
+          ),
+        );
+
+      if (!config?.OriginAccessControlConfig) {
+        return undefined;
+      }
+
+      return {
+        OriginAccessControl: {
+          Id: output.originAccessControlId,
+          OriginAccessControlConfig: config.OriginAccessControlConfig,
+        },
+        ETag: config.ETag,
+      };
+    });
+
+    return {
+      stables: ["originAccessControlId"],
+      diff: Effect.fn(function* ({ id, olds, news: _news }) {
+        if (!isResolved(_news)) return undefined;
+        const news = _news as typeof olds;
+        if (
+          (yield* createName(id, olds ?? {})) !== (yield* createName(id, news))
+        ) {
+          return { action: "replace" } as const;
+        }
+      }),
+      read: Effect.fn(function* ({ id, olds, output }) {
+        const existing =
+          (yield* getCurrent(output)) ??
+          (yield* getByName(yield* createName(id, olds ?? {})));
+
+        if (!existing?.OriginAccessControl?.Id) {
           return undefined;
         }
-        const config = yield* cloudfront
-          .getOriginAccessControlConfig({
-            Id: output.originAccessControlId,
+
+        return toAttrs(
+          existing.OriginAccessControl,
+          existing.ETag,
+          yield* createName(id, olds ?? {}),
+        );
+      }),
+      create: Effect.fn(function* ({ id, news, session }) {
+        const name = yield* createName(id, news);
+        const created = yield* cloudfront
+          .createOriginAccessControl({
+            OriginAccessControlConfig: {
+              Name: name,
+              Description: news.description,
+              OriginAccessControlOriginType: news.originType ?? "s3",
+              SigningBehavior: news.signingBehavior ?? "always",
+              SigningProtocol: news.signingProtocol ?? "sigv4",
+            },
           })
           .pipe(
-            Effect.catchTag("NoSuchOriginAccessControl", () =>
-              Effect.succeed(undefined),
+            Effect.catchTag("OriginAccessControlAlreadyExists", () =>
+              getByName(name).pipe(
+                Effect.flatMap((existing) =>
+                  existing
+                    ? Effect.succeed(existing)
+                    : Effect.fail(
+                        new Error(
+                          `Origin access control '${name}' already exists but could not be recovered`,
+                        ),
+                      ),
+                ),
+              ),
             ),
           );
 
-        if (!config?.OriginAccessControlConfig) {
-          return undefined;
+        if (!created.OriginAccessControl?.Id) {
+          return yield* Effect.fail(
+            new Error("createOriginAccessControl returned no identifier"),
+          );
         }
 
-        return {
-          OriginAccessControl: {
-            Id: output.originAccessControlId,
-            OriginAccessControlConfig: config.OriginAccessControlConfig,
+        yield* session.note(created.OriginAccessControl.Id);
+        return toAttrs(created.OriginAccessControl, created.ETag, name);
+      }),
+      update: Effect.fn(function* ({ news, output, session }) {
+        const updated = yield* cloudfront.updateOriginAccessControl({
+          Id: output.originAccessControlId,
+          IfMatch: output.etag,
+          OriginAccessControlConfig: {
+            Name: output.name,
+            Description: news.description,
+            OriginAccessControlOriginType: news.originType ?? output.originType,
+            SigningBehavior: news.signingBehavior ?? output.signingBehavior,
+            SigningProtocol: news.signingProtocol ?? output.signingProtocol,
           },
-          ETag: config.ETag,
-        };
-      });
+        });
 
-      return {
-        stables: ["originAccessControlId"],
-        diff: Effect.fn(function* ({ id, olds, news: _news }) {
-          if (!isResolved(_news)) return undefined;
-          const news = _news as typeof olds;
-          if (
-            (yield* createName(id, olds ?? {})) !==
-            (yield* createName(id, news))
-          ) {
-            return { action: "replace" } as const;
-          }
-        }),
-        read: Effect.fn(function* ({ id, olds, output }) {
-          const existing =
-            (yield* getCurrent(output)) ??
-            (yield* getByName(yield* createName(id, olds ?? {})));
-
-          if (!existing?.OriginAccessControl?.Id) {
-            return undefined;
-          }
-
-          return toAttrs(
-            existing.OriginAccessControl,
-            existing.ETag,
-            yield* createName(id, olds ?? {}),
+        if (!updated.OriginAccessControl?.Id) {
+          return yield* Effect.fail(
+            new Error("updateOriginAccessControl returned no identifier"),
           );
-        }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const name = yield* createName(id, news);
-          const created = yield* cloudfront
-            .createOriginAccessControl({
-              OriginAccessControlConfig: {
-                Name: name,
-                Description: news.description,
-                OriginAccessControlOriginType: news.originType ?? "s3",
-                SigningBehavior: news.signingBehavior ?? "always",
-                SigningProtocol: news.signingProtocol ?? "sigv4",
-              },
-            })
-            .pipe(
-              Effect.catchTag("OriginAccessControlAlreadyExists", () =>
-                getByName(name).pipe(
-                  Effect.flatMap((existing) =>
-                    existing
-                      ? Effect.succeed(existing)
-                      : Effect.fail(
-                          new Error(
-                            `Origin access control '${name}' already exists but could not be recovered`,
-                          ),
-                        ),
-                  ),
-                ),
-              ),
-            );
+        }
 
-          if (!created.OriginAccessControl?.Id) {
-            return yield* Effect.fail(
-              new Error("createOriginAccessControl returned no identifier"),
-            );
-          }
-
-          yield* session.note(created.OriginAccessControl.Id);
-          return toAttrs(created.OriginAccessControl, created.ETag, name);
-        }),
-        update: Effect.fn(function* ({ news, output, session }) {
-          const updated = yield* cloudfront.updateOriginAccessControl({
+        yield* session.note(output.originAccessControlId);
+        return toAttrs(updated.OriginAccessControl, updated.ETag, output.name);
+      }),
+      delete: Effect.fn(function* ({ output }) {
+        yield* cloudfront
+          .deleteOriginAccessControl({
             Id: output.originAccessControlId,
             IfMatch: output.etag,
-            OriginAccessControlConfig: {
-              Name: output.name,
-              Description: news.description,
-              OriginAccessControlOriginType:
-                news.originType ?? output.originType,
-              SigningBehavior: news.signingBehavior ?? output.signingBehavior,
-              SigningProtocol: news.signingProtocol ?? output.signingProtocol,
-            },
-          });
-
-          if (!updated.OriginAccessControl?.Id) {
-            return yield* Effect.fail(
-              new Error("updateOriginAccessControl returned no identifier"),
-            );
-          }
-
-          yield* session.note(output.originAccessControlId);
-          return toAttrs(
-            updated.OriginAccessControl,
-            updated.ETag,
-            output.name,
+          })
+          .pipe(
+            Effect.catchTag("NoSuchOriginAccessControl", () => Effect.void),
           );
-        }),
-        delete: Effect.fn(function* ({ output }) {
-          yield* cloudfront
-            .deleteOriginAccessControl({
-              Id: output.originAccessControlId,
-              IfMatch: output.etag,
-            })
-            .pipe(
-              Effect.catchTag("NoSuchOriginAccessControl", () => Effect.void),
-            );
-        }),
-      };
-    }),
-  );
+      }),
+    };
+  }),
+);
 
 const createName = (id: string, props: OriginAccessControlProps) =>
   props.name

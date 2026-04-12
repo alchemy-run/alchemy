@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { Account } from "../Account.ts";
 
@@ -50,124 +51,124 @@ export declare namespace R2Bucket {
   export type Location = "apac" | "eeur" | "enam" | "weur" | "wnam" | "oc";
 }
 
-export const R2BucketProvider = () =>
-  R2Bucket.provider.effect(
-    Effect.gen(function* () {
-      const accountId = yield* Account;
-      const createBucket = yield* r2.createBucket;
-      const patchBucket = yield* r2.patchBucket;
-      const deleteBucket = yield* r2.deleteBucket;
-      const getBucket = yield* r2.getBucket;
+export const R2BucketProvider = Provider.effect(
+  R2Bucket,
+  Effect.gen(function* () {
+    const accountId = yield* Account;
+    const createBucket = yield* r2.createBucket;
+    const patchBucket = yield* r2.patchBucket;
+    const deleteBucket = yield* r2.deleteBucket;
+    const getBucket = yield* r2.getBucket;
 
-      const createBucketName = (id: string, name: string | undefined) =>
-        Effect.gen(function* () {
-          if (name) return name;
-          return (yield* createPhysicalName({
-            id,
-            maxLength: 63,
-          })).toLowerCase();
+    const createBucketName = (id: string, name: string | undefined) =>
+      Effect.gen(function* () {
+        if (name) return name;
+        return (yield* createPhysicalName({
+          id,
+          maxLength: 63,
+        })).toLowerCase();
+      });
+
+    const normalizeLocation = (
+      location: string | undefined | null,
+    ): R2Bucket.Location | undefined => {
+      if (!location) return undefined;
+      return location.toLowerCase() as R2Bucket.Location;
+    };
+
+    return {
+      stables: ["bucketName", "accountId"],
+      diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
+        if (!isResolved(news)) return undefined;
+        const name = yield* createBucketName(id, news.name);
+        const oldName = output?.bucketName
+          ? output.bucketName
+          : yield* createBucketName(id, olds.name);
+        const oldJurisdiction =
+          output?.jurisdiction ?? olds.jurisdiction ?? "default";
+        const oldStorageClass =
+          output?.storageClass ?? olds.storageClass ?? "Standard";
+        if (
+          (output?.accountId ?? accountId) !== accountId ||
+          oldName !== name ||
+          oldJurisdiction !== (news.jurisdiction ?? "default") ||
+          olds.locationHint !== news.locationHint
+        ) {
+          return { action: "replace" } as const;
+        }
+        if (oldStorageClass !== (news.storageClass ?? "Standard")) {
+          return {
+            action: "update",
+            stables: oldName === name ? ["bucketName"] : undefined,
+          } as const;
+        }
+      }),
+      create: Effect.fn(function* ({ id, news = {} }) {
+        const name = yield* createBucketName(id, news.name);
+        const bucket = yield* createBucket({
+          accountId,
+          name,
+          storageClass: news.storageClass,
+          jurisdiction: news.jurisdiction,
+          locationHint: news.locationHint,
+        }).pipe(
+          Effect.catchTag("BucketAlreadyExists", () =>
+            getBucket({
+              accountId,
+              bucketName: name,
+              jurisdiction: news.jurisdiction,
+            }),
+          ),
+        );
+        return {
+          bucketName: bucket.name!,
+          storageClass: bucket.storageClass ?? "Standard",
+          jurisdiction: bucket.jurisdiction ?? "default",
+          location: normalizeLocation(bucket.location),
+          accountId,
+        };
+      }),
+      update: Effect.fn(function* ({ news = {}, output }) {
+        const bucket = yield* patchBucket({
+          accountId: output.accountId,
+          bucketName: output.bucketName,
+          storageClass: news.storageClass ?? output.storageClass,
+          jurisdiction: output.jurisdiction,
         });
-
-      const normalizeLocation = (
-        location: string | undefined | null,
-      ): R2Bucket.Location | undefined => {
-        if (!location) return undefined;
-        return location.toLowerCase() as R2Bucket.Location;
-      };
-
-      return {
-        stables: ["bucketName", "accountId"],
-        diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
-          if (!isResolved(news)) return undefined;
-          const name = yield* createBucketName(id, news.name);
-          const oldName = output?.bucketName
-            ? output.bucketName
-            : yield* createBucketName(id, olds.name);
-          const oldJurisdiction =
-            output?.jurisdiction ?? olds.jurisdiction ?? "default";
-          const oldStorageClass =
-            output?.storageClass ?? olds.storageClass ?? "Standard";
-          if (
-            (output?.accountId ?? accountId) !== accountId ||
-            oldName !== name ||
-            oldJurisdiction !== (news.jurisdiction ?? "default") ||
-            olds.locationHint !== news.locationHint
-          ) {
-            return { action: "replace" } as const;
-          }
-          if (oldStorageClass !== (news.storageClass ?? "Standard")) {
-            return {
-              action: "update",
-              stables: oldName === name ? ["bucketName"] : undefined,
-            } as const;
-          }
-        }),
-        create: Effect.fn(function* ({ id, news = {} }) {
-          const name = yield* createBucketName(id, news.name);
-          const bucket = yield* createBucket({
-            accountId,
-            name,
-            storageClass: news.storageClass,
-            jurisdiction: news.jurisdiction,
-            locationHint: news.locationHint,
-          }).pipe(
-            Effect.catchTag("BucketAlreadyExists", () =>
-              getBucket({
-                accountId,
-                bucketName: name,
-                jurisdiction: news.jurisdiction,
-              }),
-            ),
-          );
-          return {
+        return {
+          bucketName: bucket.name!,
+          storageClass: bucket.storageClass ?? "Standard",
+          jurisdiction: bucket.jurisdiction ?? "default",
+          location: normalizeLocation(bucket.location),
+          accountId: output.accountId,
+        };
+      }),
+      delete: Effect.fn(function* ({ output }) {
+        yield* deleteBucket({
+          accountId: output.accountId,
+          bucketName: output.bucketName,
+          jurisdiction: output.jurisdiction,
+        }).pipe(Effect.catchTag("NoSuchBucket", () => Effect.void));
+      }),
+      read: Effect.fn(function* ({ id, output, olds }) {
+        const name =
+          output?.bucketName ?? (yield* createBucketName(id, olds?.name));
+        const acct = output?.accountId ?? accountId;
+        return yield* getBucket({
+          accountId: acct,
+          bucketName: name,
+          jurisdiction: output?.jurisdiction ?? olds?.jurisdiction,
+        }).pipe(
+          Effect.map((bucket) => ({
             bucketName: bucket.name!,
             storageClass: bucket.storageClass ?? "Standard",
             jurisdiction: bucket.jurisdiction ?? "default",
             location: normalizeLocation(bucket.location),
-            accountId,
-          };
-        }),
-        update: Effect.fn(function* ({ news = {}, output }) {
-          const bucket = yield* patchBucket({
-            accountId: output.accountId,
-            bucketName: output.bucketName,
-            storageClass: news.storageClass ?? output.storageClass,
-            jurisdiction: output.jurisdiction,
-          });
-          return {
-            bucketName: bucket.name!,
-            storageClass: bucket.storageClass ?? "Standard",
-            jurisdiction: bucket.jurisdiction ?? "default",
-            location: normalizeLocation(bucket.location),
-            accountId: output.accountId,
-          };
-        }),
-        delete: Effect.fn(function* ({ output }) {
-          yield* deleteBucket({
-            accountId: output.accountId,
-            bucketName: output.bucketName,
-            jurisdiction: output.jurisdiction,
-          }).pipe(Effect.catchTag("NoSuchBucket", () => Effect.void));
-        }),
-        read: Effect.fn(function* ({ id, output, olds }) {
-          const name =
-            output?.bucketName ?? (yield* createBucketName(id, olds?.name));
-          const acct = output?.accountId ?? accountId;
-          return yield* getBucket({
             accountId: acct,
-            bucketName: name,
-            jurisdiction: output?.jurisdiction ?? olds?.jurisdiction,
-          }).pipe(
-            Effect.map((bucket) => ({
-              bucketName: bucket.name!,
-              storageClass: bucket.storageClass ?? "Standard",
-              jurisdiction: bucket.jurisdiction ?? "default",
-              location: normalizeLocation(bucket.location),
-              accountId: acct,
-            })),
-            Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
-          );
-        }),
-      };
-    }),
-  );
+          })),
+          Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
+        );
+      }),
+    };
+  }),
+);

@@ -93,7 +93,7 @@ test(
     yield* destroy();
 
     yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
-  }).pipe(Effect.provide(Cloudflare.providers()), logLevel),
+  }).pipe(Effect.provide(Cloudflare.providers), logLevel),
 );
 
 test(
@@ -176,7 +176,7 @@ test(
     yield* destroy();
 
     yield* waitForWorkerToBeDeleted(finalWorker.workerName, accountId);
-  }).pipe(Effect.provide(Cloudflare.providers()), logLevel),
+  }).pipe(Effect.provide(Cloudflare.providers), logLevel),
 );
 
 test(
@@ -216,7 +216,7 @@ test(
     yield* destroy();
 
     yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
-  }).pipe(Effect.provide(Cloudflare.providers()), logLevel),
+  }).pipe(Effect.provide(Cloudflare.providers), logLevel),
 );
 
 const findWorker = Effect.fn(function* (workerName: string, accountId: string) {

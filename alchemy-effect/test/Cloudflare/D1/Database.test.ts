@@ -39,7 +39,7 @@ test(
     yield* destroy();
 
     yield* waitForDatabaseToBeDeleted(database.databaseId, accountId);
-  }).pipe(Effect.provide(Cloudflare.providers()), logLevel),
+  }).pipe(Effect.provide(Cloudflare.providers), logLevel),
 );
 
 test(
@@ -82,7 +82,7 @@ test(
     yield* destroy();
 
     yield* waitForDatabaseToBeDeleted(database.databaseId, accountId);
-  }).pipe(Effect.provide(Cloudflare.providers()), logLevel),
+  }).pipe(Effect.provide(Cloudflare.providers), logLevel),
 );
 
 const waitForDatabaseToBeDeleted = Effect.fn(function* (

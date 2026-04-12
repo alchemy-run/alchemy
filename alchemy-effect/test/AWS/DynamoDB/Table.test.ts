@@ -38,7 +38,7 @@ describe("AWS.DynamoDB.Table", () => {
       yield* destroy();
 
       yield* assertTableIsDeleted(table.tableName);
-    }).pipe(Effect.provide(AWS.providers())),
+    }).pipe(Effect.provide(AWS.providers)),
   );
 
   test(
@@ -120,7 +120,7 @@ describe("AWS.DynamoDB.Table", () => {
       yield* destroy();
 
       yield* assertTableIsDeleted(table.tableName);
-    }).pipe(Effect.provide(AWS.providers())),
+    }).pipe(Effect.provide(AWS.providers)),
   );
 
   test(
@@ -199,7 +199,7 @@ describe("AWS.DynamoDB.Table", () => {
       yield* destroy();
 
       yield* assertTableIsDeleted(table.tableName);
-    }).pipe(Effect.provide(AWS.providers())),
+    }).pipe(Effect.provide(AWS.providers)),
   );
 
   test(
@@ -283,7 +283,7 @@ describe("AWS.DynamoDB.Table", () => {
       yield* destroy();
 
       yield* assertTableIsDeleted(table.tableName);
-    }).pipe(Effect.provide(AWS.providers())),
+    }).pipe(Effect.provide(AWS.providers)),
   );
 
   // it's super slow because GSIs are awfully slow to create
@@ -457,7 +457,7 @@ describe("AWS.DynamoDB.Table", () => {
       yield* destroy();
 
       yield* assertTableIsDeleted(table.tableName);
-    }).pipe(Effect.provide(AWS.providers())),
+    }).pipe(Effect.provide(AWS.providers)),
   );
 
   test(
@@ -544,7 +544,7 @@ describe("AWS.DynamoDB.Table", () => {
       yield* destroy();
 
       yield* assertTableIsDeleted(withoutLsiAgain.tableName);
-    }).pipe(Effect.provide(AWS.providers())),
+    }).pipe(Effect.provide(AWS.providers)),
   );
 
   const assertTableIsDeleted = Effect.fn(function* (tableName: string) {

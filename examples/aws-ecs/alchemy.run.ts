@@ -23,7 +23,7 @@ const awsConfig = Layer.effect(
   }).pipe(Effect.orDie),
 );
 
-const aws = AWS.providers().pipe(Layer.provide(awsConfig));
+const aws = AWS.providers.pipe(Layer.provide(awsConfig));
 
 const stack = Effect.gen(function* () {
   const network = yield* AWS.EC2.Network("ExampleNetwork", {

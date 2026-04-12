@@ -40,7 +40,7 @@ test(
     yield* destroy();
 
     yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
-  }).pipe(Effect.provide(Cloudflare.providers()), logLevel),
+  }).pipe(Effect.provide(Cloudflare.providers), logLevel),
 );
 
 test(
@@ -86,7 +86,7 @@ test(
     yield* destroy();
 
     yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
-  }).pipe(Effect.provide(Cloudflare.providers()), logLevel),
+  }).pipe(Effect.provide(Cloudflare.providers), logLevel),
 );
 
 const waitForBucketToBeDeleted = Effect.fn(function* (

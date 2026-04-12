@@ -2,10 +2,10 @@ import * as eks from "@distilled.cloud/aws/eks";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 
@@ -149,163 +149,163 @@ class AddonStillExists extends Data.TaggedError("AddonStillExists")<{
   readonly clusterName: string;
   readonly addonName: string;
 }> {}
-export const AddonProvider = () =>
-  Addon.provider.effect(
-    Effect.gen(function* () {
-      const toClientRequestToken = (id: string, action: string) =>
-        createPhysicalName({
-          id: `${id}-${action}`,
-          maxLength: 64,
-          delimiter: "-",
+export const AddonProvider = Provider.effect(
+  Addon,
+  Effect.gen(function* () {
+    const toClientRequestToken = (id: string, action: string) =>
+      createPhysicalName({
+        id: `${id}-${action}`,
+        maxLength: 64,
+        delimiter: "-",
+      });
+
+    return {
+      stables: ["addonArn"],
+      diff: Effect.fn(function* ({ olds, news }) {
+        if (!isResolved(news)) return;
+        if (olds.clusterName !== news.clusterName) {
+          return { action: "replace" } as const;
+        }
+
+        if (olds.addonName !== news.addonName) {
+          return { action: "replace" } as const;
+        }
+
+        if (!deepEqual(olds.namespaceConfig, news.namespaceConfig)) {
+          return { action: "replace" } as const;
+        }
+      }),
+      read: Effect.fn(function* ({ olds }) {
+        return yield* readAddon({
+          clusterName: olds.clusterName as string,
+          addonName: olds.addonName,
         });
+      }),
+      create: Effect.fn(function* ({ id, news, session }) {
+        const tags = {
+          ...(yield* createInternalTags(id)),
+          ...news.tags,
+        };
 
-      return {
-        stables: ["addonArn"],
-        diff: Effect.fn(function* ({ olds, news }) {
-          if (!isResolved(news)) return;
-          if (olds.clusterName !== news.clusterName) {
-            return { action: "replace" } as const;
-          }
-
-          if (olds.addonName !== news.addonName) {
-            return { action: "replace" } as const;
-          }
-
-          if (!deepEqual(olds.namespaceConfig, news.namespaceConfig)) {
-            return { action: "replace" } as const;
-          }
-        }),
-        read: Effect.fn(function* ({ olds }) {
-          return yield* readAddon({
-            clusterName: olds.clusterName as string,
-            addonName: olds.addonName,
-          });
-        }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const tags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-
-          yield* eks
-            .createAddon({
-              clusterName: news.clusterName as string,
-              addonName: news.addonName,
-              addonVersion: news.addonVersion,
-              serviceAccountRoleArn: news.serviceAccountRoleArn as
-                | string
-                | undefined,
-              resolveConflicts: news.resolveConflicts,
-              configurationValues: news.configurationValues,
-              podIdentityAssociations: news.podIdentityAssociations,
-              namespaceConfig: news.namespaceConfig,
-              tags,
-              clientRequestToken: yield* toClientRequestToken(id, "create"),
-            })
-            .pipe(
-              Effect.catchTag("ResourceInUseException", () =>
-                readAddon({
-                  clusterName: news.clusterName as string,
-                  addonName: news.addonName,
-                }).pipe(
-                  Effect.flatMap((existing) =>
-                    existing && hasAlchemyTags(id, existing.tags)
-                      ? Effect.succeed(existing)
-                      : Effect.fail(
-                          new Error(
-                            `Addon '${news.clusterName as string}/${news.addonName}' already exists and is not managed by alchemy`,
-                          ),
-                        ),
-                  ),
-                  Effect.asVoid,
-                ),
-              ),
-            );
-
-          const addon = yield* waitForAddonActive({
+        yield* eks
+          .createAddon({
             clusterName: news.clusterName as string,
             addonName: news.addonName,
-          });
-          yield* session.note(addon.addonArn);
-          return addon;
-        }),
-        update: Effect.fn(function* ({ id, olds, news, output, session }) {
-          if (
-            olds.addonVersion !== news.addonVersion ||
-            olds.serviceAccountRoleArn !== news.serviceAccountRoleArn ||
-            olds.resolveConflicts !== news.resolveConflicts ||
-            olds.configurationValues !== news.configurationValues ||
-            JSON.stringify(olds.podIdentityAssociations ?? []) !==
-              JSON.stringify(news.podIdentityAssociations ?? [])
-          ) {
-            yield* eks.updateAddon({
-              clusterName: output.clusterName,
-              addonName: output.addonName,
-              addonVersion: news.addonVersion,
-              serviceAccountRoleArn: news.serviceAccountRoleArn as
-                | string
-                | undefined,
-              resolveConflicts: news.resolveConflicts,
-              configurationValues: news.configurationValues,
-              podIdentityAssociations: news.podIdentityAssociations,
-              clientRequestToken: yield* toClientRequestToken(id, "update"),
-            });
-          }
-
-          const oldTags = {
-            ...(yield* createInternalTags(id)),
-            ...olds.tags,
-          };
-          const newTags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const { removed, upsert } = diffTags(oldTags, newTags);
-
-          if (upsert.length > 0) {
-            yield* eks.tagResource({
-              resourceArn: output.addonArn,
-              tags: Object.fromEntries(
-                upsert.map((tag) => [tag.Key, tag.Value] as const),
+            addonVersion: news.addonVersion,
+            serviceAccountRoleArn: news.serviceAccountRoleArn as
+              | string
+              | undefined,
+            resolveConflicts: news.resolveConflicts,
+            configurationValues: news.configurationValues,
+            podIdentityAssociations: news.podIdentityAssociations,
+            namespaceConfig: news.namespaceConfig,
+            tags,
+            clientRequestToken: yield* toClientRequestToken(id, "create"),
+          })
+          .pipe(
+            Effect.catchTag("ResourceInUseException", () =>
+              readAddon({
+                clusterName: news.clusterName as string,
+                addonName: news.addonName,
+              }).pipe(
+                Effect.flatMap((existing) =>
+                  existing && hasAlchemyTags(id, existing.tags)
+                    ? Effect.succeed(existing)
+                    : Effect.fail(
+                        new Error(
+                          `Addon '${news.clusterName as string}/${news.addonName}' already exists and is not managed by alchemy`,
+                        ),
+                      ),
+                ),
+                Effect.asVoid,
               ),
-            });
-          }
+            ),
+          );
 
-          if (removed.length > 0) {
-            yield* eks.untagResource({
-              resourceArn: output.addonArn,
-              tagKeys: removed,
-            });
-          }
+        const addon = yield* waitForAddonActive({
+          clusterName: news.clusterName as string,
+          addonName: news.addonName,
+        });
+        yield* session.note(addon.addonArn);
+        return addon;
+      }),
+      update: Effect.fn(function* ({ id, olds, news, output, session }) {
+        if (
+          olds.addonVersion !== news.addonVersion ||
+          olds.serviceAccountRoleArn !== news.serviceAccountRoleArn ||
+          olds.resolveConflicts !== news.resolveConflicts ||
+          olds.configurationValues !== news.configurationValues ||
+          JSON.stringify(olds.podIdentityAssociations ?? []) !==
+            JSON.stringify(news.podIdentityAssociations ?? [])
+        ) {
+          yield* eks.updateAddon({
+            clusterName: output.clusterName,
+            addonName: output.addonName,
+            addonVersion: news.addonVersion,
+            serviceAccountRoleArn: news.serviceAccountRoleArn as
+              | string
+              | undefined,
+            resolveConflicts: news.resolveConflicts,
+            configurationValues: news.configurationValues,
+            podIdentityAssociations: news.podIdentityAssociations,
+            clientRequestToken: yield* toClientRequestToken(id, "update"),
+          });
+        }
 
-          const addon = yield* waitForAddonActive({
+        const oldTags = {
+          ...(yield* createInternalTags(id)),
+          ...olds.tags,
+        };
+        const newTags = {
+          ...(yield* createInternalTags(id)),
+          ...news.tags,
+        };
+        const { removed, upsert } = diffTags(oldTags, newTags);
+
+        if (upsert.length > 0) {
+          yield* eks.tagResource({
+            resourceArn: output.addonArn,
+            tags: Object.fromEntries(
+              upsert.map((tag) => [tag.Key, tag.Value] as const),
+            ),
+          });
+        }
+
+        if (removed.length > 0) {
+          yield* eks.untagResource({
+            resourceArn: output.addonArn,
+            tagKeys: removed,
+          });
+        }
+
+        const addon = yield* waitForAddonActive({
+          clusterName: output.clusterName,
+          addonName: output.addonName,
+        });
+        yield* session.note(output.addonArn);
+        return addon;
+      }),
+      delete: Effect.fn(function* ({ olds, output }) {
+        yield* eks
+          .deleteAddon({
+            clusterName: output.clusterName,
+            addonName: output.addonName,
+            preserve: olds.preserveOnDelete,
+          })
+          .pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
+
+        if (!olds.preserveOnDelete) {
+          yield* waitForAddonDeleted({
             clusterName: output.clusterName,
             addonName: output.addonName,
           });
-          yield* session.note(output.addonArn);
-          return addon;
-        }),
-        delete: Effect.fn(function* ({ olds, output }) {
-          yield* eks
-            .deleteAddon({
-              clusterName: output.clusterName,
-              addonName: output.addonName,
-              preserve: olds.preserveOnDelete,
-            })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
-
-          if (!olds.preserveOnDelete) {
-            yield* waitForAddonDeleted({
-              clusterName: output.clusterName,
-              addonName: output.addonName,
-            });
-          }
-        }),
-      };
-    }),
-  );
+        }
+      }),
+    };
+  }),
+);
 
 const waitForAddonActive = Effect.fn(function* ({
   clusterName,

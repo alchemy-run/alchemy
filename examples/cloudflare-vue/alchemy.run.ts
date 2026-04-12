@@ -19,4 +19,4 @@ export default Effect.gen(function* () {
   return {
     url: worker.url,
   };
-}).pipe(Stack.make("CloudflareVueExample", Cloudflare.providers()));
+}).pipe(Stack.make("CloudflareVueExample", Cloudflare.providers));

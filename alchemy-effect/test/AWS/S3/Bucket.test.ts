@@ -28,7 +28,7 @@ test(
     yield* destroy();
 
     yield* assertBucketDeleted(bucket.bucketName);
-  }).pipe(Effect.provide(AWS.providers())),
+  }).pipe(Effect.provide(AWS.providers)),
 );
 
 test(
@@ -86,7 +86,7 @@ test(
     yield* destroy();
 
     yield* assertBucketDeleted(bucket.bucketName);
-  }).pipe(Effect.provide(AWS.providers())),
+  }).pipe(Effect.provide(AWS.providers)),
 );
 
 test(
@@ -115,7 +115,7 @@ test(
     yield* destroy();
 
     yield* assertBucketDeleted(bucket.bucketName);
-  }).pipe(Effect.provide(AWS.providers())),
+  }).pipe(Effect.provide(AWS.providers)),
 );
 
 test(
@@ -150,7 +150,7 @@ test(
     yield* destroy();
 
     yield* assertBucketDeleted(bucket.bucketName);
-  }).pipe(Effect.provide(AWS.providers())),
+  }).pipe(Effect.provide(AWS.providers)),
 );
 
 test(
@@ -184,7 +184,7 @@ test(
     yield* destroy();
 
     yield* assertBucketDeleted(bucketName);
-  }).pipe(Effect.provide(AWS.providers())),
+  }).pipe(Effect.provide(AWS.providers)),
 );
 
 test(
@@ -214,7 +214,7 @@ test(
     yield* destroy();
 
     yield* assertBucketDeleted(bucket.bucketName);
-  }).pipe(Effect.provide(AWS.providers())),
+  }).pipe(Effect.provide(AWS.providers)),
 );
 
 test(
@@ -263,7 +263,7 @@ test(
     yield* destroy();
 
     yield* assertBucketDeleted(bucketName);
-  }).pipe(Effect.provide(AWS.providers())),
+  }).pipe(Effect.provide(AWS.providers)),
 );
 
 test(
@@ -345,7 +345,7 @@ test(
     yield* destroy();
 
     yield* assertBucketDeleted(bucket.bucketName);
-  }).pipe(Effect.provide(AWS.providers())),
+  }).pipe(Effect.provide(AWS.providers)),
 );
 
 class BucketStillExists extends Data.TaggedError("BucketStillExists") {}

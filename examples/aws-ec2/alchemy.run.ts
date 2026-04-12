@@ -6,7 +6,7 @@ import * as Layer from "effect/Layer";
 import { NetworkLive } from "./src/Network.ts";
 import Server from "./src/Server.ts";
 
-const aws = AWS.providers().pipe(Layer.provide(AWS.DefaultStageConfig));
+const aws = AWS.providers.pipe(Layer.provide(AWS.DefaultStageConfig));
 
 const stack = Effect.gen(function* () {
   const instance = yield* Server;

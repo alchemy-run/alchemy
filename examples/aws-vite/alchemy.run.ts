@@ -5,7 +5,7 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 
-const aws = AWS.providers() as any;
+const aws = AWS.providers as any;
 
 const WEBSITE_DOMAIN = Config.string("WEBSITE_DOMAIN").pipe(
   Config.option,

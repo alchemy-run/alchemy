@@ -1,6 +1,7 @@
 import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import {
   collectPages,
@@ -48,70 +49,70 @@ export interface Root extends Resource<
  */
 export const Root = Resource<Root>("AWS.Organizations.Root");
 
-export const RootProvider = () =>
-  Root.provider.effect(
-    Effect.gen(function* () {
-      return {
-        stables: ["rootId", "rootArn"],
-        diff: Effect.fn(function* ({ olds, news }) {
-          if (!isResolved(news)) return;
-          if (olds?.rootId !== news?.rootId) {
-            return { action: "replace" } as const;
-          }
-          if (olds?.name !== news?.name) {
-            return { action: "replace" } as const;
-          }
-        }),
-        read: Effect.fn(function* ({ olds, output }) {
-          return yield* readRoot({
-            rootId: output?.rootId ?? olds?.rootId,
-            name: olds?.name,
-          });
-        }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const root = yield* readRoot(news);
-          if (!root) {
-            return yield* Effect.fail(new Error("organization root not found"));
-          }
+export const RootProvider = Provider.effect(
+  Root,
+  Effect.gen(function* () {
+    return {
+      stables: ["rootId", "rootArn"],
+      diff: Effect.fn(function* ({ olds, news }) {
+        if (!isResolved(news)) return;
+        if (olds?.rootId !== news?.rootId) {
+          return { action: "replace" } as const;
+        }
+        if (olds?.name !== news?.name) {
+          return { action: "replace" } as const;
+        }
+      }),
+      read: Effect.fn(function* ({ olds, output }) {
+        return yield* readRoot({
+          rootId: output?.rootId ?? olds?.rootId,
+          name: olds?.name,
+        });
+      }),
+      create: Effect.fn(function* ({ id, news, session }) {
+        const root = yield* readRoot(news);
+        if (!root) {
+          return yield* Effect.fail(new Error("organization root not found"));
+        }
 
-          const tags = yield* updateResourceTags({
-            id,
-            resourceId: root.rootId,
-            olds: root.tags,
-            news: news.tags,
-          });
+        const tags = yield* updateResourceTags({
+          id,
+          resourceId: root.rootId,
+          olds: root.tags,
+          news: news.tags,
+        });
 
-          yield* session.note(root.rootArn);
-          return {
-            ...root,
-            tags,
-          };
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          const root = yield* readRoot({ rootId: output.rootId });
-          if (!root) {
-            return yield* Effect.fail(
-              new Error(`organization root '${output.rootId}' not found`),
-            );
-          }
+        yield* session.note(root.rootArn);
+        return {
+          ...root,
+          tags,
+        };
+      }),
+      update: Effect.fn(function* ({ id, news, olds, output, session }) {
+        const root = yield* readRoot({ rootId: output.rootId });
+        if (!root) {
+          return yield* Effect.fail(
+            new Error(`organization root '${output.rootId}' not found`),
+          );
+        }
 
-          const tags = yield* updateResourceTags({
-            id,
-            resourceId: output.rootId,
-            olds: olds.tags,
-            news: news.tags,
-          });
+        const tags = yield* updateResourceTags({
+          id,
+          resourceId: output.rootId,
+          olds: olds.tags,
+          news: news.tags,
+        });
 
-          yield* session.note(output.rootArn);
-          return {
-            ...root,
-            tags,
-          };
-        }),
-        delete: Effect.fn(function* () {}),
-      };
-    }),
-  );
+        yield* session.note(output.rootArn);
+        return {
+          ...root,
+          tags,
+        };
+      }),
+      delete: Effect.fn(function* () {}),
+    };
+  }),
+);
 
 const listRoots = () =>
   collectPages(

@@ -8,4 +8,4 @@ export default Effect.gen(function* () {
   return {
     url: worker.url,
   };
-}).pipe(Stack.make("CloudflareVite", Cloudflare.providers()));
+}).pipe(Stack.make("CloudflareVite", Cloudflare.providers));

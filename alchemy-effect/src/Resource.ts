@@ -1,20 +1,18 @@
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { pipeArguments, type Pipeable } from "effect/Pipeable";
 import { SingleShotGen } from "effect/Utils";
-import type { Artifacts } from "./Artifacts.ts";
 import { toFqn } from "./FQN.ts";
 import type { Input } from "./Input.ts";
-import type { InstanceId } from "./InstanceId.ts";
 import { CurrentNamespace, type NamespaceNode } from "./Namespace.ts";
 import * as Output from "./Output.ts";
-import { Provider, type ProviderService } from "./Provider.ts";
+import { Provider } from "./Provider.ts";
 import { RemovalPolicy } from "./RemovalPolicy.ts";
 import { Self } from "./Self.ts";
 import { Stack } from "./Stack.ts";
 
 export type ResourceConstructor<R extends ResourceLike, Req = never> = {
+  Type: R["Type"];
   Props: R["Props"];
   (
     id: string,
@@ -41,8 +39,8 @@ export type ResourceClass<R extends ResourceLike> = ResourceConstructor<
   Provider<R>
 > &
   Effect.Effect<ResourceConstructor<R>> & {
-    provider: ResourceProviders<R>;
     Self: Self<R>;
+    Provider: Provider<R>;
   };
 
 export type LogicalId = string;
@@ -269,120 +267,10 @@ export function Resource<R extends ResourceLike>(
         constructor(id, props),
       );
     },
-    provider: {
-      tag: ProviderTag,
-      of: ProviderTag.of,
-      effect: Layer.effect(ProviderTag),
-      succeed: Layer.succeed(ProviderTag),
-    },
+    Type: type,
+    Provider: ProviderTag,
     Self: self,
   };
 
   return Object.assign(constructor, Service) as any as ResourceClass<R>;
-}
-
-export interface ResourceProviders<Resource extends ResourceLike> {
-  tag: Provider<Resource>;
-  effect<
-    Req = never,
-    ReadReq = never,
-    DiffReq = never,
-    PrecreateReq = never,
-    CreateReq = never,
-    UpdateReq = never,
-    DeleteReq = never,
-    TailReq = never,
-    LogsReq = never,
-  >(
-    eff: Effect.Effect<
-      ProviderService<
-        Resource,
-        ReadReq,
-        DiffReq,
-        PrecreateReq,
-        CreateReq,
-        UpdateReq,
-        DeleteReq,
-        TailReq,
-        LogsReq
-      >,
-      never,
-      Req
-    >,
-  ): Layer.Layer<
-    Provider<Resource>,
-    never,
-    Exclude<
-      | Req
-      | ReadReq
-      | DiffReq
-      | PrecreateReq
-      | CreateReq
-      | UpdateReq
-      | DeleteReq,
-      InstanceId | Artifacts
-    >
-  >;
-  succeed: <
-    ReadReq = never,
-    DiffReq = never,
-    PrecreateReq = never,
-    CreateReq = never,
-    UpdateReq = never,
-    DeleteReq = never,
-    TailReq = never,
-    LogsReq = never,
-  >(
-    service: ProviderService<
-      Resource,
-      ReadReq,
-      DiffReq,
-      PrecreateReq,
-      CreateReq,
-      UpdateReq,
-      DeleteReq,
-      TailReq,
-      LogsReq
-    >,
-  ) => Layer.Layer<
-    Provider<Resource>,
-    never,
-    Exclude<
-      ReadReq | DiffReq | PrecreateReq | CreateReq | UpdateReq | DeleteReq,
-      InstanceId | Artifacts
-    >
-  >;
-
-  of: <
-    ReadReq = never,
-    DiffReq = never,
-    PrecreateReq = never,
-    CreateReq = never,
-    UpdateReq = never,
-    DeleteReq = never,
-    TailReq = never,
-    LogsReq = never,
-  >(
-    service: ProviderService<
-      Resource,
-      ReadReq,
-      DiffReq,
-      PrecreateReq,
-      CreateReq,
-      UpdateReq,
-      DeleteReq,
-      TailReq,
-      LogsReq
-    >,
-  ) => ProviderService<
-    Resource,
-    ReadReq,
-    DiffReq,
-    PrecreateReq,
-    CreateReq,
-    UpdateReq,
-    DeleteReq,
-    TailReq,
-    LogsReq
-  >;
 }

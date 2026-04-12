@@ -4,6 +4,7 @@ import * as route53 from "@distilled.cloud/aws/route-53";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { deepEqual, isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import {
   createInternalTags,
@@ -171,332 +172,329 @@ const toAttrs = (
 const isTerminalFailure = (status: acm.CertificateStatus | undefined) =>
   status === "FAILED" || status === "VALIDATION_TIMED_OUT";
 
-export const CertificateProvider = () =>
-  Certificate.provider.effect(
-    Effect.gen(function* () {
-      const describeCertificate = Effect.fn(function* (certificateArn: string) {
-        return yield* withAcmRegion(
-          acm.describeCertificate({ CertificateArn: certificateArn }).pipe(
-            Effect.map((response) => response.Certificate),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+export const CertificateProvider = Provider.effect(
+  Certificate,
+  Effect.gen(function* () {
+    const describeCertificate = Effect.fn(function* (certificateArn: string) {
+      return yield* withAcmRegion(
+        acm.describeCertificate({ CertificateArn: certificateArn }).pipe(
+          Effect.map((response) => response.Certificate),
+          Effect.catchTag("ResourceNotFoundException", () =>
+            Effect.succeed(undefined),
           ),
-        );
-      });
+        ),
+      );
+    });
 
-      const listCertificateTags = Effect.fn(function* (certificateArn: string) {
-        return yield* withAcmRegion(
-          acm.listTagsForCertificate({ CertificateArn: certificateArn }).pipe(
-            Effect.map((response) => toTagRecord(response.Tags)),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed({}),
-            ),
+    const listCertificateTags = Effect.fn(function* (certificateArn: string) {
+      return yield* withAcmRegion(
+        acm.listTagsForCertificate({ CertificateArn: certificateArn }).pipe(
+          Effect.map((response) => toTagRecord(response.Tags)),
+          Effect.catchTag("ResourceNotFoundException", () =>
+            Effect.succeed({}),
           ),
-        );
-      });
+        ),
+      );
+    });
 
-      const findManagedCertificate = Effect.fn(function* (
-        id: string,
-        props: CertificateProps,
-      ) {
-        const listed = yield* withAcmRegion(
-          acm.listCertificates({
-            Includes: {
-              keyTypes: props.keyAlgorithm ? [props.keyAlgorithm] : undefined,
-            },
-          } as any),
-        );
-
-        const summaries =
-          listed.CertificateSummaryList?.filter(
-            (summary) => summary.DomainName === props.domainName,
-          ) ?? [];
-
-        for (const summary of summaries) {
-          if (!summary.CertificateArn) {
-            continue;
-          }
-          const detail = yield* describeCertificate(summary.CertificateArn);
-          if (!detail?.CertificateArn) {
-            continue;
-          }
-          if (
-            detail.DomainName !== props.domainName ||
-            JSON.stringify(normalizeSanList(detail.SubjectAlternativeNames)) !==
-              JSON.stringify(normalizeSanList(props.subjectAlternativeNames))
-          ) {
-            continue;
-          }
-          const tags = yield* listCertificateTags(detail.CertificateArn);
-          if (yield* hasAlchemyTags(id, tags)) {
-            return detail;
-          }
-        }
-
-        return undefined;
-      });
-
-      const waitForValidationRecords = Effect.fn(function* (
-        certificateArn: string,
-      ) {
-        return yield* describeCertificate(certificateArn).pipe(
-          Effect.flatMap((detail) => {
-            const validations = detail?.DomainValidationOptions ?? [];
-            if (
-              validations.length === 0 ||
-              validations.some((option) => option.ResourceRecord === undefined)
-            ) {
-              return Effect.fail(
-                new Error("CertificateValidationRecordPending"),
-              );
-            }
-            return Effect.succeed(detail!);
-          }),
-          Effect.retry({
-            while: (error) =>
-              error instanceof Error &&
-              error.message === "CertificateValidationRecordPending",
-            schedule: Schedule.fixed("2 seconds").pipe(
-              Schedule.both(Schedule.recurs(60)),
-            ),
-          }),
-        );
-      });
-
-      const waitForIssued = Effect.fn(function* (certificateArn: string) {
-        return yield* describeCertificate(certificateArn).pipe(
-          Effect.flatMap((detail) => {
-            if (!detail?.CertificateArn) {
-              return Effect.fail(new Error("CertificateNotFound"));
-            }
-            if (detail.Status === "ISSUED") {
-              return Effect.succeed(detail);
-            }
-            if (isTerminalFailure(detail.Status)) {
-              return Effect.fail(
-                new Error(
-                  `Certificate issuance failed with status ${detail.Status}${detail.FailureReason ? ` (${detail.FailureReason})` : ""}`,
-                ),
-              );
-            }
-            return Effect.fail(new Error("CertificatePendingValidation"));
-          }),
-          Effect.retry({
-            while: (error) =>
-              error instanceof Error &&
-              error.message === "CertificatePendingValidation",
-            schedule: Schedule.fixed("10 seconds").pipe(
-              Schedule.both(Schedule.recurs(60)),
-            ),
-          }),
-        );
-      });
-
-      const waitForChange = Effect.fn(function* (changeId: string) {
-        return yield* route53.getChange({ Id: changeId }).pipe(
-          Effect.map((response) => response.ChangeInfo),
-          Effect.flatMap((changeInfo) =>
-            changeInfo.Status === "INSYNC"
-              ? Effect.succeed(changeInfo)
-              : Effect.fail(new Error("Route53ChangePending")),
-          ),
-          Effect.retry({
-            while: (error) =>
-              error instanceof Error &&
-              error.message === "Route53ChangePending",
-            schedule: Schedule.fixed("2 seconds").pipe(
-              Schedule.both(Schedule.recurs(60)),
-            ),
-          }),
-        );
-      });
-
-      const upsertValidationRecords = Effect.fn(function* (
-        hostedZoneId: string,
-        certificate: acm.CertificateDetail,
-      ) {
-        const changes = (certificate.DomainValidationOptions ?? [])
-          .flatMap((option) =>
-            option.ResourceRecord ? [option.ResourceRecord] : [],
-          )
-          .map((record) => ({
-            Action: "UPSERT" as const,
-            ResourceRecordSet: {
-              Name: record.Name,
-              Type: record.Type,
-              TTL: 60,
-              ResourceRecords: [{ Value: record.Value }],
-            },
-          }));
-
-        if (changes.length === 0) {
-          return;
-        }
-
-        const response = yield* route53.changeResourceRecordSets({
-          HostedZoneId: normalizeHostedZoneId(hostedZoneId),
-          ChangeBatch: {
-            Comment: "Alchemy ACM DNS validation",
-            Changes: changes,
+    const findManagedCertificate = Effect.fn(function* (
+      id: string,
+      props: CertificateProps,
+    ) {
+      const listed = yield* withAcmRegion(
+        acm.listCertificates({
+          Includes: {
+            keyTypes: props.keyAlgorithm ? [props.keyAlgorithm] : undefined,
           },
-        });
+        } as any),
+      );
 
-        yield* waitForChange(response.ChangeInfo.Id);
+      const summaries =
+        listed.CertificateSummaryList?.filter(
+          (summary) => summary.DomainName === props.domainName,
+        ) ?? [];
+
+      for (const summary of summaries) {
+        if (!summary.CertificateArn) {
+          continue;
+        }
+        const detail = yield* describeCertificate(summary.CertificateArn);
+        if (!detail?.CertificateArn) {
+          continue;
+        }
+        if (
+          detail.DomainName !== props.domainName ||
+          JSON.stringify(normalizeSanList(detail.SubjectAlternativeNames)) !==
+            JSON.stringify(normalizeSanList(props.subjectAlternativeNames))
+        ) {
+          continue;
+        }
+        const tags = yield* listCertificateTags(detail.CertificateArn);
+        if (yield* hasAlchemyTags(id, tags)) {
+          return detail;
+        }
+      }
+
+      return undefined;
+    });
+
+    const waitForValidationRecords = Effect.fn(function* (
+      certificateArn: string,
+    ) {
+      return yield* describeCertificate(certificateArn).pipe(
+        Effect.flatMap((detail) => {
+          const validations = detail?.DomainValidationOptions ?? [];
+          if (
+            validations.length === 0 ||
+            validations.some((option) => option.ResourceRecord === undefined)
+          ) {
+            return Effect.fail(new Error("CertificateValidationRecordPending"));
+          }
+          return Effect.succeed(detail!);
+        }),
+        Effect.retry({
+          while: (error) =>
+            error instanceof Error &&
+            error.message === "CertificateValidationRecordPending",
+          schedule: Schedule.fixed("2 seconds").pipe(
+            Schedule.both(Schedule.recurs(60)),
+          ),
+        }),
+      );
+    });
+
+    const waitForIssued = Effect.fn(function* (certificateArn: string) {
+      return yield* describeCertificate(certificateArn).pipe(
+        Effect.flatMap((detail) => {
+          if (!detail?.CertificateArn) {
+            return Effect.fail(new Error("CertificateNotFound"));
+          }
+          if (detail.Status === "ISSUED") {
+            return Effect.succeed(detail);
+          }
+          if (isTerminalFailure(detail.Status)) {
+            return Effect.fail(
+              new Error(
+                `Certificate issuance failed with status ${detail.Status}${detail.FailureReason ? ` (${detail.FailureReason})` : ""}`,
+              ),
+            );
+          }
+          return Effect.fail(new Error("CertificatePendingValidation"));
+        }),
+        Effect.retry({
+          while: (error) =>
+            error instanceof Error &&
+            error.message === "CertificatePendingValidation",
+          schedule: Schedule.fixed("10 seconds").pipe(
+            Schedule.both(Schedule.recurs(60)),
+          ),
+        }),
+      );
+    });
+
+    const waitForChange = Effect.fn(function* (changeId: string) {
+      return yield* route53.getChange({ Id: changeId }).pipe(
+        Effect.map((response) => response.ChangeInfo),
+        Effect.flatMap((changeInfo) =>
+          changeInfo.Status === "INSYNC"
+            ? Effect.succeed(changeInfo)
+            : Effect.fail(new Error("Route53ChangePending")),
+        ),
+        Effect.retry({
+          while: (error) =>
+            error instanceof Error && error.message === "Route53ChangePending",
+          schedule: Schedule.fixed("2 seconds").pipe(
+            Schedule.both(Schedule.recurs(60)),
+          ),
+        }),
+      );
+    });
+
+    const upsertValidationRecords = Effect.fn(function* (
+      hostedZoneId: string,
+      certificate: acm.CertificateDetail,
+    ) {
+      const changes = (certificate.DomainValidationOptions ?? [])
+        .flatMap((option) =>
+          option.ResourceRecord ? [option.ResourceRecord] : [],
+        )
+        .map((record) => ({
+          Action: "UPSERT" as const,
+          ResourceRecordSet: {
+            Name: record.Name,
+            Type: record.Type,
+            TTL: 60,
+            ResourceRecords: [{ Value: record.Value }],
+          },
+        }));
+
+      if (changes.length === 0) {
+        return;
+      }
+
+      const response = yield* route53.changeResourceRecordSets({
+        HostedZoneId: normalizeHostedZoneId(hostedZoneId),
+        ChangeBatch: {
+          Comment: "Alchemy ACM DNS validation",
+          Changes: changes,
+        },
       });
 
-      return {
-        stables: ["certificateArn"],
-        diff: Effect.fn(function* ({ olds, news: _news }) {
-          if (!isResolved(_news)) return undefined;
-          const news = _news as typeof olds;
-          if (
-            olds.domainName !== news.domainName ||
-            !deepEqual(
-              normalizeSanList(olds.subjectAlternativeNames),
-              normalizeSanList(news.subjectAlternativeNames),
-            ) ||
-            (olds.validationMethod ?? defaultValidationMethod) !==
-              (news.validationMethod ?? defaultValidationMethod) ||
-            olds.hostedZoneId !== news.hostedZoneId ||
-            olds.keyAlgorithm !== news.keyAlgorithm ||
-            olds.certificateTransparencyLoggingPreference !==
-              news.certificateTransparencyLoggingPreference
-          ) {
-            return { action: "replace" } as const;
-          }
-        }),
-        read: Effect.fn(function* ({ id, olds, output }) {
-          const certificate = output?.certificateArn
-            ? yield* describeCertificate(output.certificateArn)
-            : yield* findManagedCertificate(id, olds!);
+      yield* waitForChange(response.ChangeInfo.Id);
+    });
 
-          if (!certificate?.CertificateArn) {
-            return undefined;
-          }
+    return {
+      stables: ["certificateArn"],
+      diff: Effect.fn(function* ({ olds, news: _news }) {
+        if (!isResolved(_news)) return undefined;
+        const news = _news as typeof olds;
+        if (
+          olds.domainName !== news.domainName ||
+          !deepEqual(
+            normalizeSanList(olds.subjectAlternativeNames),
+            normalizeSanList(news.subjectAlternativeNames),
+          ) ||
+          (olds.validationMethod ?? defaultValidationMethod) !==
+            (news.validationMethod ?? defaultValidationMethod) ||
+          olds.hostedZoneId !== news.hostedZoneId ||
+          olds.keyAlgorithm !== news.keyAlgorithm ||
+          olds.certificateTransparencyLoggingPreference !==
+            news.certificateTransparencyLoggingPreference
+        ) {
+          return { action: "replace" } as const;
+        }
+      }),
+      read: Effect.fn(function* ({ id, olds, output }) {
+        const certificate = output?.certificateArn
+          ? yield* describeCertificate(output.certificateArn)
+          : yield* findManagedCertificate(id, olds!);
 
-          const tags = yield* listCertificateTags(certificate.CertificateArn);
-          return toAttrs(olds!, certificate, tags);
-        }),
-        create: Effect.fn(function* ({ id, instanceId, news, session }) {
-          const tags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
+        if (!certificate?.CertificateArn) {
+          return undefined;
+        }
 
-          const existing = yield* findManagedCertificate(id, news);
-          const certificate =
-            existing ??
-            (yield* withAcmRegion(
-              acm
-                .requestCertificate({
-                  DomainName: news.domainName,
-                  SubjectAlternativeNames: news.subjectAlternativeNames,
-                  ValidationMethod:
-                    news.validationMethod ?? defaultValidationMethod,
-                  KeyAlgorithm: news.keyAlgorithm,
-                  Options: news.certificateTransparencyLoggingPreference
-                    ? {
-                        CertificateTransparencyLoggingPreference:
-                          news.certificateTransparencyLoggingPreference,
-                      }
-                    : undefined,
-                  IdempotencyToken: instanceId
-                    .replaceAll(/[^a-zA-Z0-9]/g, "")
-                    .slice(0, 32),
-                  Tags: createTagsList(tags),
-                })
-                .pipe(
-                  Effect.flatMap((response) =>
-                    response.CertificateArn
-                      ? describeCertificate(response.CertificateArn).pipe(
-                          Effect.map((detail) => detail!),
-                        )
-                      : Effect.fail(
-                          new Error(
-                            "requestCertificate returned no certificate ARN",
-                          ),
-                        ),
-                  ),
-                ),
-            ));
+        const tags = yield* listCertificateTags(certificate.CertificateArn);
+        return toAttrs(olds!, certificate, tags);
+      }),
+      create: Effect.fn(function* ({ id, instanceId, news, session }) {
+        const tags = {
+          ...(yield* createInternalTags(id)),
+          ...news.tags,
+        };
 
-          if (!certificate?.CertificateArn) {
-            return yield* Effect.fail(
-              new Error("Failed to obtain ACM certificate"),
-            );
-          }
-
-          yield* session.note(certificate.CertificateArn);
-
-          const shouldAutoValidate =
-            (news.validationMethod ?? defaultValidationMethod) === "DNS" &&
-            news.hostedZoneId !== undefined;
-
-          const finalCertificate = shouldAutoValidate
-            ? yield* Effect.gen(function* () {
-                const withRecords = yield* waitForValidationRecords(
-                  certificate.CertificateArn!,
-                );
-                yield* upsertValidationRecords(news.hostedZoneId!, withRecords);
-                return yield* waitForIssued(certificate.CertificateArn!);
-              })
-            : certificate;
-
-          const listedTags = yield* listCertificateTags(
-            certificate.CertificateArn,
-          );
-          return toAttrs(news, finalCertificate, listedTags);
-        }),
-        update: Effect.fn(function* ({ id, olds, news, output, session }) {
-          const oldTags = {
-            ...(yield* createInternalTags(id)),
-            ...olds.tags,
-          };
-          const newTags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const { removed, upsert } = diffTags(oldTags, newTags);
-
-          if (upsert.length > 0) {
-            yield* withAcmRegion(
-              acm.addTagsToCertificate({
-                CertificateArn: output.certificateArn,
-                Tags: upsert,
-              }),
-            );
-          }
-
-          if (removed.length > 0) {
-            yield* withAcmRegion(
-              acm.removeTagsFromCertificate({
-                CertificateArn: output.certificateArn,
-                Tags: removed.map((Key) => ({ Key })),
-              }),
-            );
-          }
-
-          const detail = yield* describeCertificate(output.certificateArn);
-          if (!detail?.CertificateArn) {
-            return output;
-          }
-
-          yield* session.note(output.certificateArn);
-          const tags = yield* listCertificateTags(output.certificateArn);
-          return toAttrs(news, detail, tags);
-        }),
-        delete: Effect.fn(function* ({ output }) {
-          yield* withAcmRegion(
+        const existing = yield* findManagedCertificate(id, news);
+        const certificate =
+          existing ??
+          (yield* withAcmRegion(
             acm
-              .deleteCertificate({
-                CertificateArn: output.certificateArn,
+              .requestCertificate({
+                DomainName: news.domainName,
+                SubjectAlternativeNames: news.subjectAlternativeNames,
+                ValidationMethod:
+                  news.validationMethod ?? defaultValidationMethod,
+                KeyAlgorithm: news.keyAlgorithm,
+                Options: news.certificateTransparencyLoggingPreference
+                  ? {
+                      CertificateTransparencyLoggingPreference:
+                        news.certificateTransparencyLoggingPreference,
+                    }
+                  : undefined,
+                IdempotencyToken: instanceId
+                  .replaceAll(/[^a-zA-Z0-9]/g, "")
+                  .slice(0, 32),
+                Tags: createTagsList(tags),
               })
               .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+                Effect.flatMap((response) =>
+                  response.CertificateArn
+                    ? describeCertificate(response.CertificateArn).pipe(
+                        Effect.map((detail) => detail!),
+                      )
+                    : Effect.fail(
+                        new Error(
+                          "requestCertificate returned no certificate ARN",
+                        ),
+                      ),
+                ),
               ),
+          ));
+
+        if (!certificate?.CertificateArn) {
+          return yield* Effect.fail(
+            new Error("Failed to obtain ACM certificate"),
           );
-        }),
-      };
-    }),
-  );
+        }
+
+        yield* session.note(certificate.CertificateArn);
+
+        const shouldAutoValidate =
+          (news.validationMethod ?? defaultValidationMethod) === "DNS" &&
+          news.hostedZoneId !== undefined;
+
+        const finalCertificate = shouldAutoValidate
+          ? yield* Effect.gen(function* () {
+              const withRecords = yield* waitForValidationRecords(
+                certificate.CertificateArn!,
+              );
+              yield* upsertValidationRecords(news.hostedZoneId!, withRecords);
+              return yield* waitForIssued(certificate.CertificateArn!);
+            })
+          : certificate;
+
+        const listedTags = yield* listCertificateTags(
+          certificate.CertificateArn,
+        );
+        return toAttrs(news, finalCertificate, listedTags);
+      }),
+      update: Effect.fn(function* ({ id, olds, news, output, session }) {
+        const oldTags = {
+          ...(yield* createInternalTags(id)),
+          ...olds.tags,
+        };
+        const newTags = {
+          ...(yield* createInternalTags(id)),
+          ...news.tags,
+        };
+        const { removed, upsert } = diffTags(oldTags, newTags);
+
+        if (upsert.length > 0) {
+          yield* withAcmRegion(
+            acm.addTagsToCertificate({
+              CertificateArn: output.certificateArn,
+              Tags: upsert,
+            }),
+          );
+        }
+
+        if (removed.length > 0) {
+          yield* withAcmRegion(
+            acm.removeTagsFromCertificate({
+              CertificateArn: output.certificateArn,
+              Tags: removed.map((Key) => ({ Key })),
+            }),
+          );
+        }
+
+        const detail = yield* describeCertificate(output.certificateArn);
+        if (!detail?.CertificateArn) {
+          return output;
+        }
+
+        yield* session.note(output.certificateArn);
+        const tags = yield* listCertificateTags(output.certificateArn);
+        return toAttrs(news, detail, tags);
+      }),
+      delete: Effect.fn(function* ({ output }) {
+        yield* withAcmRegion(
+          acm
+            .deleteCertificate({
+              CertificateArn: output.certificateArn,
+            })
+            .pipe(
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            ),
+        );
+      }),
+    };
+  }),
+);

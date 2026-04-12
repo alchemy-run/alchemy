@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as ServiceMap from "effect/ServiceMap";
 import type { PlatformServices } from "../../Platform.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
 import { Account } from "../Account.ts";
@@ -157,7 +158,7 @@ export interface WorkflowClass extends Effect.Effect<
   never,
   WorkflowHandle
 > {
-  <Self>(): {
+  <_Self>(): {
     <Result = unknown, InitReq = never>(
       name: string,
       impl: Effect.Effect<WorkflowBody<Result>, never, InitReq>,
@@ -321,63 +322,63 @@ export interface WorkflowResource extends Resource<
 
 const WorkflowResource = Resource<WorkflowResource>(WorkflowResourceTypeId);
 
-export const WorkflowProvider = () =>
-  WorkflowResource.provider.effect(
-    Effect.gen(function* () {
-      const accountId = yield* Account;
-      const putWorkflow = yield* workflows.putWorkflow;
-      const deleteWorkflow = yield* workflows.deleteWorkflow;
+export const WorkflowProvider = Provider.effect(
+  WorkflowResource,
+  Effect.gen(function* () {
+    const accountId = yield* Account;
+    const putWorkflow = yield* workflows.putWorkflow;
+    const deleteWorkflow = yield* workflows.deleteWorkflow;
 
-      return WorkflowResource.provider.of({
-        stables: ["workflowId", "accountId"],
-        create: Effect.fnUntraced(function* ({ news }) {
-          yield* Effect.logInfo(
-            `Cloudflare Workflow create: ${news.workflowName}`,
-          );
-          const result = yield* putWorkflow({
-            accountId,
-            workflowName: news.workflowName,
-            className: news.className,
-            scriptName: news.scriptName,
-          });
-          return {
-            workflowId: result.id,
-            workflowName: result.name,
-            className: result.className,
-            scriptName: result.scriptName,
-            accountId,
-          };
-        }),
-        update: Effect.fnUntraced(function* ({ news, output }) {
-          yield* Effect.logInfo(
-            `Cloudflare Workflow update: ${news.workflowName}`,
-          );
-          const result = yield* putWorkflow({
-            accountId: output.accountId,
-            workflowName: news.workflowName,
-            className: news.className,
-            scriptName: news.scriptName,
-          });
-          return {
-            workflowId: result.id,
-            workflowName: result.name,
-            className: result.className,
-            scriptName: result.scriptName,
-            accountId: output.accountId,
-          };
-        }),
-        delete: Effect.fnUntraced(function* ({ output }) {
-          yield* Effect.logInfo(
-            `Cloudflare Workflow delete: ${output.workflowName}`,
-          );
-          yield* deleteWorkflow({
-            accountId: output.accountId,
-            workflowName: output.workflowName,
-          }).pipe(Effect.catchTag("WorkflowNotFound", () => Effect.void));
-        }),
-      });
-    }),
-  );
+    return WorkflowResource.Provider.of({
+      stables: ["workflowId", "accountId"],
+      create: Effect.fnUntraced(function* ({ news }) {
+        yield* Effect.logInfo(
+          `Cloudflare Workflow create: ${news.workflowName}`,
+        );
+        const result = yield* putWorkflow({
+          accountId,
+          workflowName: news.workflowName,
+          className: news.className,
+          scriptName: news.scriptName,
+        });
+        return {
+          workflowId: result.id,
+          workflowName: result.name,
+          className: result.className,
+          scriptName: result.scriptName,
+          accountId,
+        };
+      }),
+      update: Effect.fnUntraced(function* ({ news, output }) {
+        yield* Effect.logInfo(
+          `Cloudflare Workflow update: ${news.workflowName}`,
+        );
+        const result = yield* putWorkflow({
+          accountId: output.accountId,
+          workflowName: news.workflowName,
+          className: news.className,
+          scriptName: news.scriptName,
+        });
+        return {
+          workflowId: result.id,
+          workflowName: result.name,
+          className: result.className,
+          scriptName: result.scriptName,
+          accountId: output.accountId,
+        };
+      }),
+      delete: Effect.fnUntraced(function* ({ output }) {
+        yield* Effect.logInfo(
+          `Cloudflare Workflow delete: ${output.workflowName}`,
+        );
+        yield* deleteWorkflow({
+          accountId: output.accountId,
+          workflowName: output.workflowName,
+        }).pipe(Effect.catchTag("WorkflowNotFound", () => Effect.void));
+      }),
+    });
+  }),
+);
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags } from "../../Tags.ts";
 import type { AccountID } from "../Account.ts";
@@ -243,330 +244,327 @@ export interface Service extends Resource<
  */
 export const Service = Resource<Service>("AWS.ECS.Service");
 
-export const ServiceProvider = () =>
-  Service.provider.effect(
-    Effect.gen(function* () {
-      const clusterArnOf = (cluster: ServiceProps["cluster"] | ClusterArn) =>
-        typeof cluster === "string"
-          ? cluster
-          : (((cluster as any).clusterArn ?? cluster) as string);
-      const toEcsTags = (tags: Record<string, string>): ecs.Tag[] =>
-        Object.entries(tags).map(([key, value]) => ({ key, value }));
+export const ServiceProvider = Provider.effect(
+  Service,
+  Effect.gen(function* () {
+    const clusterArnOf = (cluster: ServiceProps["cluster"] | ClusterArn) =>
+      typeof cluster === "string"
+        ? cluster
+        : (((cluster as any).clusterArn ?? cluster) as string);
+    const toEcsTags = (tags: Record<string, string>): ecs.Tag[] =>
+      Object.entries(tags).map(([key, value]) => ({ key, value }));
 
-      const toServiceName = (
-        id: string,
-        props: { serviceName?: string } = {},
-      ) =>
-        props.serviceName
-          ? Effect.succeed(props.serviceName)
-          : createPhysicalName({
-              id,
-              maxLength: 255,
-              lowercase: true,
-            });
-
-      const ingressNames = (id: string) =>
-        Effect.gen(function* () {
-          const loadBalancerName = yield* createPhysicalName({
-            id: `${id}-alb`,
-            maxLength: 32,
+    const toServiceName = (id: string, props: { serviceName?: string } = {}) =>
+      props.serviceName
+        ? Effect.succeed(props.serviceName)
+        : createPhysicalName({
+            id,
+            maxLength: 255,
             lowercase: true,
           });
-          const targetGroupName = yield* createPhysicalName({
-            id: `${id}-tg`,
-            maxLength: 32,
-            lowercase: true,
-          });
-          return {
-            loadBalancerName,
-            targetGroupName,
-          };
+
+    const ingressNames = (id: string) =>
+      Effect.gen(function* () {
+        const loadBalancerName = yield* createPhysicalName({
+          id: `${id}-alb`,
+          maxLength: 32,
+          lowercase: true,
         });
-
-      const createIngress = Effect.fn(function* ({
-        id,
-        news,
-      }: {
-        id: string;
-        news: ServiceProps;
-      }) {
-        const names = yield* ingressNames(id);
-        const tags = {
-          ...(yield* createInternalTags(id)),
-          ...(news.tags ?? {}),
-        };
-
-        const loadBalancer = yield* elbv2.createLoadBalancer({
-          Name: names.loadBalancerName,
-          Type: "application",
-          Scheme: "internet-facing",
-          Subnets: news.subnets,
-          SecurityGroups: news.securityGroups,
-          Tags: Object.entries(tags).map(([Key, Value]) => ({ Key, Value })),
+        const targetGroupName = yield* createPhysicalName({
+          id: `${id}-tg`,
+          maxLength: 32,
+          lowercase: true,
         });
-        const lb = loadBalancer.LoadBalancers?.[0];
-        if (!lb?.LoadBalancerArn || !lb.DNSName) {
-          return yield* Effect.die(
-            new Error("Failed to create ECS service load balancer"),
-          );
-        }
-
-        const targetGroup = yield* elbv2.createTargetGroup({
-          Name: names.targetGroupName,
-          VpcId: news.vpcId,
-          TargetType: "ip",
-          Protocol: "HTTP",
-          Port: news.task.port ?? 3000,
-          HealthCheckPath: news.healthCheckPath ?? "/",
-          Tags: Object.entries(tags).map(([Key, Value]) => ({ Key, Value })),
-        });
-        const tg = targetGroup.TargetGroups?.[0];
-        if (!tg?.TargetGroupArn) {
-          return yield* Effect.die(
-            new Error("Failed to create ECS service target group"),
-          );
-        }
-
-        const listener = yield* elbv2.createListener({
-          LoadBalancerArn: lb.LoadBalancerArn,
-          Port: news.listenerPort ?? (news.certificateArn ? 443 : 80),
-          Protocol: news.certificateArn ? "HTTPS" : "HTTP",
-          Certificates: news.certificateArn
-            ? [{ CertificateArn: news.certificateArn }]
-            : undefined,
-          DefaultActions: [
-            {
-              Type: "forward",
-              TargetGroupArn: tg.TargetGroupArn,
-            },
-          ],
-        });
-        const ls = listener.Listeners?.[0];
-        if (!ls?.ListenerArn) {
-          return yield* Effect.die(
-            new Error("Failed to create ECS service listener"),
-          );
-        }
-
         return {
-          loadBalancerArn: lb.LoadBalancerArn,
-          targetGroupArn: tg.TargetGroupArn,
-          listenerArn: ls.ListenerArn,
-          url: `${news.certificateArn ? "https" : "http"}://${lb.DNSName}`,
+          loadBalancerName,
+          targetGroupName,
         };
       });
 
-      const serviceInput = (
-        news: ServiceProps,
-        output?: Service["Attributes"],
-      ) => ({
-        cluster: clusterArnOf(news.cluster),
-        service: output?.serviceName,
-        serviceName: output?.serviceName,
-        taskDefinition: news.task.taskDefinitionArn,
-        desiredCount: news.desiredCount ?? 1,
-        launchType: "FARGATE" as const,
-        platformVersion: news.platformVersion,
-        deploymentConfiguration: news.deploymentConfiguration,
-        healthCheckGracePeriodSeconds: news.healthCheckGracePeriodSeconds,
-        networkConfiguration: {
-          awsvpcConfiguration: {
-            subnets: news.subnets,
-            securityGroups: news.securityGroups,
-            assignPublicIp: news.assignPublicIp ? "ENABLED" : "DISABLED",
-          },
-        },
+    const createIngress = Effect.fn(function* ({
+      id,
+      news,
+    }: {
+      id: string;
+      news: ServiceProps;
+    }) {
+      const names = yield* ingressNames(id);
+      const tags = {
+        ...(yield* createInternalTags(id)),
+        ...news.tags,
+      };
+
+      const loadBalancer = yield* elbv2.createLoadBalancer({
+        Name: names.loadBalancerName,
+        Type: "application",
+        Scheme: "internet-facing",
+        Subnets: news.subnets,
+        SecurityGroups: news.securityGroups,
+        Tags: Object.entries(tags).map(([Key, Value]) => ({ Key, Value })),
       });
+      const lb = loadBalancer.LoadBalancers?.[0];
+      if (!lb?.LoadBalancerArn || !lb.DNSName) {
+        return yield* Effect.die(
+          new Error("Failed to create ECS service load balancer"),
+        );
+      }
+
+      const targetGroup = yield* elbv2.createTargetGroup({
+        Name: names.targetGroupName,
+        VpcId: news.vpcId,
+        TargetType: "ip",
+        Protocol: "HTTP",
+        Port: news.task.port ?? 3000,
+        HealthCheckPath: news.healthCheckPath ?? "/",
+        Tags: Object.entries(tags).map(([Key, Value]) => ({ Key, Value })),
+      });
+      const tg = targetGroup.TargetGroups?.[0];
+      if (!tg?.TargetGroupArn) {
+        return yield* Effect.die(
+          new Error("Failed to create ECS service target group"),
+        );
+      }
+
+      const listener = yield* elbv2.createListener({
+        LoadBalancerArn: lb.LoadBalancerArn,
+        Port: news.listenerPort ?? (news.certificateArn ? 443 : 80),
+        Protocol: news.certificateArn ? "HTTPS" : "HTTP",
+        Certificates: news.certificateArn
+          ? [{ CertificateArn: news.certificateArn }]
+          : undefined,
+        DefaultActions: [
+          {
+            Type: "forward",
+            TargetGroupArn: tg.TargetGroupArn,
+          },
+        ],
+      });
+      const ls = listener.Listeners?.[0];
+      if (!ls?.ListenerArn) {
+        return yield* Effect.die(
+          new Error("Failed to create ECS service listener"),
+        );
+      }
 
       return {
-        stables: ["serviceArn", "serviceName", "clusterArn"],
-        diff: Effect.fn(function* ({ id, olds, news }) {
-          if (!isResolved(news)) return;
-          if (
-            (yield* toServiceName(id, olds ?? {})) !==
-            (yield* toServiceName(id, news ?? {}))
-          ) {
-            return { action: "replace", deleteFirst: true } as const;
-          }
-          if (
-            !deepEqual(
-              {
-                cluster: olds.cluster,
-                vpcId: olds.vpcId,
-                subnets: olds.subnets,
-                securityGroups: olds.securityGroups ?? [],
-                assignPublicIp: olds.assignPublicIp ?? false,
-                public: olds.public ?? false,
-                listenerPort: olds.listenerPort,
-                certificateArn: olds.certificateArn,
-                healthCheckPath: olds.healthCheckPath,
-              },
-              {
-                cluster: news.cluster,
-                vpcId: news.vpcId,
-                subnets: news.subnets,
-                securityGroups: news.securityGroups ?? [],
-                assignPublicIp: news.assignPublicIp ?? false,
-                public: news.public ?? false,
-                listenerPort: news.listenerPort,
-                certificateArn: news.certificateArn,
-                healthCheckPath: news.healthCheckPath,
-              },
-            )
-          ) {
-            return { action: "replace", deleteFirst: true } as const;
-          }
-        }),
-        read: Effect.fn(function* ({ id, olds, output }) {
-          const serviceName =
-            output?.serviceName ?? (yield* toServiceName(id, olds ?? {}));
-          const described = yield* ecs
-            .describeServices({
-              cluster: output?.clusterArn ?? clusterArnOf(olds!.cluster),
-              services: [serviceName],
-              include: ["TAGS"],
+        loadBalancerArn: lb.LoadBalancerArn,
+        targetGroupArn: tg.TargetGroupArn,
+        listenerArn: ls.ListenerArn,
+        url: `${news.certificateArn ? "https" : "http"}://${lb.DNSName}`,
+      };
+    });
+
+    const serviceInput = (
+      news: ServiceProps,
+      output?: Service["Attributes"],
+    ) => ({
+      cluster: clusterArnOf(news.cluster),
+      service: output?.serviceName,
+      serviceName: output?.serviceName,
+      taskDefinition: news.task.taskDefinitionArn,
+      desiredCount: news.desiredCount ?? 1,
+      launchType: "FARGATE" as const,
+      platformVersion: news.platformVersion,
+      deploymentConfiguration: news.deploymentConfiguration,
+      healthCheckGracePeriodSeconds: news.healthCheckGracePeriodSeconds,
+      networkConfiguration: {
+        awsvpcConfiguration: {
+          subnets: news.subnets,
+          securityGroups: news.securityGroups,
+          assignPublicIp: news.assignPublicIp ? "ENABLED" : "DISABLED",
+        },
+      },
+    });
+
+    return {
+      stables: ["serviceArn", "serviceName", "clusterArn"],
+      diff: Effect.fn(function* ({ id, olds, news }) {
+        if (!isResolved(news)) return;
+        if (
+          (yield* toServiceName(id, olds ?? {})) !==
+          (yield* toServiceName(id, news ?? {}))
+        ) {
+          return { action: "replace", deleteFirst: true } as const;
+        }
+        if (
+          !deepEqual(
+            {
+              cluster: olds.cluster,
+              vpcId: olds.vpcId,
+              subnets: olds.subnets,
+              securityGroups: olds.securityGroups ?? [],
+              assignPublicIp: olds.assignPublicIp ?? false,
+              public: olds.public ?? false,
+              listenerPort: olds.listenerPort,
+              certificateArn: olds.certificateArn,
+              healthCheckPath: olds.healthCheckPath,
+            },
+            {
+              cluster: news.cluster,
+              vpcId: news.vpcId,
+              subnets: news.subnets,
+              securityGroups: news.securityGroups ?? [],
+              assignPublicIp: news.assignPublicIp ?? false,
+              public: news.public ?? false,
+              listenerPort: news.listenerPort,
+              certificateArn: news.certificateArn,
+              healthCheckPath: news.healthCheckPath,
+            },
+          )
+        ) {
+          return { action: "replace", deleteFirst: true } as const;
+        }
+      }),
+      read: Effect.fn(function* ({ id, olds, output }) {
+        const serviceName =
+          output?.serviceName ?? (yield* toServiceName(id, olds ?? {}));
+        const described = yield* ecs
+          .describeServices({
+            cluster: output?.clusterArn ?? clusterArnOf(olds!.cluster),
+            services: [serviceName],
+            include: ["TAGS"],
+          })
+          .pipe(
+            Effect.catchTag("ClusterNotFoundException", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+        const service = described?.services?.[0];
+        if (!service?.serviceArn) {
+          return undefined;
+        }
+        return {
+          ...output!,
+          serviceArn: service.serviceArn as ServiceArn,
+          serviceName: service.serviceName!,
+          clusterArn: service.clusterArn as ClusterArn,
+          taskDefinitionArn: service.taskDefinition!,
+          status: service.status ?? "ACTIVE",
+        };
+      }),
+      create: Effect.fn(function* ({ id, news, session }) {
+        const serviceName = yield* toServiceName(id, news);
+        const ingress = news.public
+          ? yield* createIngress({ id, news })
+          : undefined;
+        const tags = {
+          ...(yield* createInternalTags(id)),
+          ...news.tags,
+        };
+
+        const created = yield* ecs.createService({
+          ...serviceInput(news),
+          serviceName,
+          cluster: clusterArnOf(news.cluster),
+          loadBalancers: ingress
+            ? [
+                {
+                  targetGroupArn: ingress.targetGroupArn,
+                  containerName: news.task.containerName,
+                  containerPort: news.task.port ?? 3000,
+                },
+              ]
+            : undefined,
+          tags: toEcsTags(tags),
+          enableECSManagedTags: true,
+        });
+        const service = created.service;
+        if (!service?.serviceArn) {
+          return yield* Effect.die(
+            new Error("createService returned no service"),
+          );
+        }
+        yield* session.note(service.serviceArn);
+
+        return {
+          serviceArn: service.serviceArn as ServiceArn,
+          serviceName: service.serviceName!,
+          clusterArn: service.clusterArn as ClusterArn,
+          taskDefinitionArn: service.taskDefinition!,
+          status: service.status ?? "ACTIVE",
+          url: ingress?.url,
+          loadBalancerArn: ingress?.loadBalancerArn,
+          targetGroupArn: ingress?.targetGroupArn,
+          listenerArn: ingress?.listenerArn,
+        };
+      }),
+      update: Effect.fn(function* ({ news, output, session }) {
+        const updated = yield* ecs.updateService({
+          ...serviceInput(news, output),
+          service: output.serviceName,
+          cluster: output.clusterArn,
+          loadBalancers: output.targetGroupArn
+            ? [
+                {
+                  targetGroupArn: output.targetGroupArn,
+                  containerName: news.task.containerName,
+                  containerPort: news.task.port ?? 3000,
+                },
+              ]
+            : undefined,
+          forceNewDeployment: true,
+        });
+        const service = updated.service;
+        yield* session.note(output.serviceArn);
+        return {
+          ...output,
+          taskDefinitionArn:
+            service?.taskDefinition ?? output.taskDefinitionArn,
+          status: service?.status ?? output.status,
+        };
+      }),
+      delete: Effect.fn(function* ({ output }) {
+        yield* ecs
+          .updateService({
+            cluster: output.clusterArn,
+            service: output.serviceName,
+            desiredCount: 0,
+          })
+          .pipe(
+            Effect.catchTag("ServiceNotFoundException", () => Effect.void),
+            Effect.catchTag("ClusterNotFoundException", () => Effect.void),
+          );
+
+        yield* ecs
+          .deleteService({
+            cluster: output.clusterArn,
+            service: output.serviceName,
+            force: true,
+          })
+          .pipe(
+            Effect.catchTag("ServiceNotFoundException", () => Effect.void),
+            Effect.catchTag("ClusterNotFoundException", () => Effect.void),
+          );
+
+        if (output.listenerArn) {
+          yield* elbv2
+            .deleteListener({
+              ListenerArn: output.listenerArn,
             })
             .pipe(
-              Effect.catchTag("ClusterNotFoundException", () =>
-                Effect.succeed(undefined),
+              Effect.catchTag("ListenerNotFoundException", () => Effect.void),
+            );
+        }
+        if (output.targetGroupArn) {
+          yield* elbv2
+            .deleteTargetGroup({
+              TargetGroupArn: output.targetGroupArn,
+            })
+            .pipe(Effect.catch(() => Effect.void));
+        }
+        if (output.loadBalancerArn) {
+          yield* elbv2
+            .deleteLoadBalancer({
+              LoadBalancerArn: output.loadBalancerArn,
+            })
+            .pipe(
+              Effect.catchTag(
+                "LoadBalancerNotFoundException",
+                () => Effect.void,
               ),
             );
-          const service = described?.services?.[0];
-          if (!service?.serviceArn) {
-            return undefined;
-          }
-          return {
-            ...output!,
-            serviceArn: service.serviceArn as ServiceArn,
-            serviceName: service.serviceName!,
-            clusterArn: service.clusterArn as ClusterArn,
-            taskDefinitionArn: service.taskDefinition!,
-            status: service.status ?? "ACTIVE",
-          };
-        }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const serviceName = yield* toServiceName(id, news);
-          const ingress = news.public
-            ? yield* createIngress({ id, news })
-            : undefined;
-          const tags = {
-            ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
-          };
-
-          const created = yield* ecs.createService({
-            ...serviceInput(news),
-            serviceName,
-            cluster: clusterArnOf(news.cluster),
-            loadBalancers: ingress
-              ? [
-                  {
-                    targetGroupArn: ingress.targetGroupArn,
-                    containerName: news.task.containerName,
-                    containerPort: news.task.port ?? 3000,
-                  },
-                ]
-              : undefined,
-            tags: toEcsTags(tags),
-            enableECSManagedTags: true,
-          });
-          const service = created.service;
-          if (!service?.serviceArn) {
-            return yield* Effect.die(
-              new Error("createService returned no service"),
-            );
-          }
-          yield* session.note(service.serviceArn);
-
-          return {
-            serviceArn: service.serviceArn as ServiceArn,
-            serviceName: service.serviceName!,
-            clusterArn: service.clusterArn as ClusterArn,
-            taskDefinitionArn: service.taskDefinition!,
-            status: service.status ?? "ACTIVE",
-            url: ingress?.url,
-            loadBalancerArn: ingress?.loadBalancerArn,
-            targetGroupArn: ingress?.targetGroupArn,
-            listenerArn: ingress?.listenerArn,
-          };
-        }),
-        update: Effect.fn(function* ({ news, output, session }) {
-          const updated = yield* ecs.updateService({
-            ...serviceInput(news, output),
-            service: output.serviceName,
-            cluster: output.clusterArn,
-            loadBalancers: output.targetGroupArn
-              ? [
-                  {
-                    targetGroupArn: output.targetGroupArn,
-                    containerName: news.task.containerName,
-                    containerPort: news.task.port ?? 3000,
-                  },
-                ]
-              : undefined,
-            forceNewDeployment: true,
-          });
-          const service = updated.service;
-          yield* session.note(output.serviceArn);
-          return {
-            ...output,
-            taskDefinitionArn:
-              service?.taskDefinition ?? output.taskDefinitionArn,
-            status: service?.status ?? output.status,
-          };
-        }),
-        delete: Effect.fn(function* ({ output }) {
-          yield* ecs
-            .updateService({
-              cluster: output.clusterArn,
-              service: output.serviceName,
-              desiredCount: 0,
-            })
-            .pipe(
-              Effect.catchTag("ServiceNotFoundException", () => Effect.void),
-              Effect.catchTag("ClusterNotFoundException", () => Effect.void),
-            );
-
-          yield* ecs
-            .deleteService({
-              cluster: output.clusterArn,
-              service: output.serviceName,
-              force: true,
-            })
-            .pipe(
-              Effect.catchTag("ServiceNotFoundException", () => Effect.void),
-              Effect.catchTag("ClusterNotFoundException", () => Effect.void),
-            );
-
-          if (output.listenerArn) {
-            yield* elbv2
-              .deleteListener({
-                ListenerArn: output.listenerArn,
-              })
-              .pipe(
-                Effect.catchTag("ListenerNotFoundException", () => Effect.void),
-              );
-          }
-          if (output.targetGroupArn) {
-            yield* elbv2
-              .deleteTargetGroup({
-                TargetGroupArn: output.targetGroupArn,
-              })
-              .pipe(Effect.catch(() => Effect.void));
-          }
-          if (output.loadBalancerArn) {
-            yield* elbv2
-              .deleteLoadBalancer({
-                LoadBalancerArn: output.loadBalancerArn,
-              })
-              .pipe(
-                Effect.catchTag(
-                  "LoadBalancerNotFoundException",
-                  () => Effect.void,
-                ),
-              );
-          }
-        }),
-      };
-    }),
-  );
+        }
+      }),
+    };
+  }),
+);

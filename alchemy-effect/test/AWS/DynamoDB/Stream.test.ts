@@ -77,7 +77,7 @@ describe.sequential("AWS.DynamoDB.Stream", () => {
 
       yield* Effect.logInfo("DynamoDB Stream test: destroying fixture");
       yield* destroy();
-    }).pipe(Effect.provide(AWS.providers())),
+    }).pipe(Effect.provide(AWS.providers)),
   );
 });
 

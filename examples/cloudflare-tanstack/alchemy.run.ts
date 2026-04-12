@@ -12,4 +12,4 @@ export default Effect.gen(function* () {
   return {
     url: worker.url,
   };
-}).pipe(Stack.make("CloudflareTanstackExample", Cloudflare.providers()));
+}).pipe(Stack.make("CloudflareTanstackExample", Cloudflare.providers));
