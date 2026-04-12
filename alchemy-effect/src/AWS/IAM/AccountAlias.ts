@@ -40,57 +40,58 @@ const readAccountAlias = Effect.gen(function* () {
   return response.AccountAliases?.[0];
 });
 
-export const AccountAliasProvider = Provider.succeed(AccountAlias, {
-  stables: ["accountAlias"],
-  diff: Effect.fn(function* ({ olds, news }) {
-    if (!isResolved(news)) return;
-    if (olds.accountAlias !== news.accountAlias) {
-      return { action: "replace" } as const;
-    }
-  }),
-  read: Effect.fn(function* () {
-    const accountAlias = yield* readAccountAlias;
-    if (!accountAlias) {
-      return undefined;
-    }
-    return { accountAlias };
-  }),
-  create: Effect.fn(function* ({ news, session }) {
-    const existing = yield* readAccountAlias;
-    if (existing && existing !== news.accountAlias) {
-      return yield* Effect.fail(
-        new Error(
-          `Account alias '${existing}' already exists and must be removed before '${news.accountAlias}' can be created`,
-        ),
-      );
-    }
-    if (!existing) {
-      yield* iam.createAccountAlias({
-        AccountAlias: news.accountAlias,
-      });
-    }
-    yield* session.note(news.accountAlias);
-    return { accountAlias: news.accountAlias };
-  }),
-  update: Effect.fn(function* ({ news, olds, session }) {
-    if (olds.accountAlias !== news.accountAlias) {
-      yield* iam.createAccountAlias({
-        AccountAlias: news.accountAlias,
-      });
+export const AccountAliasProvider = () =>
+  Provider.succeed(AccountAlias, {
+    stables: ["accountAlias"],
+    diff: Effect.fn(function* ({ olds, news }) {
+      if (!isResolved(news)) return;
+      if (olds.accountAlias !== news.accountAlias) {
+        return { action: "replace" } as const;
+      }
+    }),
+    read: Effect.fn(function* () {
+      const accountAlias = yield* readAccountAlias;
+      if (!accountAlias) {
+        return undefined;
+      }
+      return { accountAlias };
+    }),
+    create: Effect.fn(function* ({ news, session }) {
+      const existing = yield* readAccountAlias;
+      if (existing && existing !== news.accountAlias) {
+        return yield* Effect.fail(
+          new Error(
+            `Account alias '${existing}' already exists and must be removed before '${news.accountAlias}' can be created`,
+          ),
+        );
+      }
+      if (!existing) {
+        yield* iam.createAccountAlias({
+          AccountAlias: news.accountAlias,
+        });
+      }
+      yield* session.note(news.accountAlias);
+      return { accountAlias: news.accountAlias };
+    }),
+    update: Effect.fn(function* ({ news, olds, session }) {
+      if (olds.accountAlias !== news.accountAlias) {
+        yield* iam.createAccountAlias({
+          AccountAlias: news.accountAlias,
+        });
+        yield* iam
+          .deleteAccountAlias({
+            AccountAlias: olds.accountAlias,
+          })
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+      }
+      yield* session.note(news.accountAlias);
+      return { accountAlias: news.accountAlias };
+    }),
+    delete: Effect.fn(function* ({ output }) {
       yield* iam
         .deleteAccountAlias({
-          AccountAlias: olds.accountAlias,
+          AccountAlias: output.accountAlias,
         })
         .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
-    }
-    yield* session.note(news.accountAlias);
-    return { accountAlias: news.accountAlias };
-  }),
-  delete: Effect.fn(function* ({ output }) {
-    yield* iam
-      .deleteAccountAlias({
-        AccountAlias: output.accountAlias,
-      })
-      .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
-  }),
-});
+    }),
+  });

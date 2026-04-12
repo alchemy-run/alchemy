@@ -71,180 +71,189 @@ export interface Cluster extends Resource<
  */
 export const Cluster = Resource<Cluster>("AWS.ECS.Cluster");
 
-export const ClusterProvider = Provider.effect(
-  Cluster,
-  Effect.gen(function* () {
-    const region = yield* Region;
-    const accountId = yield* Account;
+export const ClusterProvider = () =>
+  Provider.effect(
+    Cluster,
+    Effect.gen(function* () {
+      const region = yield* Region;
+      const accountId = yield* Account;
 
-    const toEcsTags = (tags: Record<string, string>): ecs.Tag[] =>
-      Object.entries(tags).map(([key, value]) => ({
-        key,
-        value,
-      }));
+      const toEcsTags = (tags: Record<string, string>): ecs.Tag[] =>
+        Object.entries(tags).map(([key, value]) => ({
+          key,
+          value,
+        }));
 
-    const toClusterName = (id: string, props: { clusterName?: string } = {}) =>
-      props.clusterName
-        ? Effect.succeed(props.clusterName)
-        : createPhysicalName({ id, maxLength: 255, lowercase: true });
+      const toClusterName = (
+        id: string,
+        props: { clusterName?: string } = {},
+      ) =>
+        props.clusterName
+          ? Effect.succeed(props.clusterName)
+          : createPhysicalName({ id, maxLength: 255, lowercase: true });
 
-    const applyCapacityProviders = Effect.fn(function* ({
-      cluster,
-      capacityProviders,
-      defaultCapacityProviderStrategy,
-    }: {
-      cluster: string;
-      capacityProviders?: string[];
-      defaultCapacityProviderStrategy?: ecs.CapacityProviderStrategyItem[];
-    }) {
-      if (
-        capacityProviders !== undefined ||
-        defaultCapacityProviderStrategy !== undefined
-      ) {
-        yield* ecs.putClusterCapacityProviders({
-          cluster,
-          capacityProviders: capacityProviders ?? [],
-          defaultCapacityProviderStrategy:
-            defaultCapacityProviderStrategy ?? [],
-        });
-      }
-    });
-
-    return {
-      stables: ["clusterArn", "clusterName"],
-      diff: Effect.fn(function* ({ id, olds, news }) {
-        if (!isResolved(news)) return;
+      const applyCapacityProviders = Effect.fn(function* ({
+        cluster,
+        capacityProviders,
+        defaultCapacityProviderStrategy,
+      }: {
+        cluster: string;
+        capacityProviders?: string[];
+        defaultCapacityProviderStrategy?: ecs.CapacityProviderStrategyItem[];
+      }) {
         if (
-          (yield* toClusterName(id, olds ?? {})) !==
-          (yield* toClusterName(id, news ?? {}))
+          capacityProviders !== undefined ||
+          defaultCapacityProviderStrategy !== undefined
         ) {
-          return { action: "replace" } as const;
-        }
-      }),
-      read: Effect.fn(function* ({ id, olds, output }) {
-        const clusterName =
-          output?.clusterName ?? (yield* toClusterName(id, olds ?? {}));
-        const described = yield* ecs.describeClusters({
-          clusters: [output?.clusterArn ?? clusterName],
-          include: ["SETTINGS", "TAGS", "CONFIGURATIONS"],
-        });
-        const cluster = described.clusters?.[0];
-        if (!cluster?.clusterArn) {
-          return undefined;
-        }
-        return {
-          clusterArn: cluster.clusterArn as ClusterArn,
-          clusterName: cluster.clusterName!,
-          status: cluster.status ?? "ACTIVE",
-          settings: cluster.settings ?? [],
-          configuration: cluster.configuration,
-          capacityProviders: cluster.capacityProviders ?? [],
-          defaultCapacityProviderStrategy:
-            cluster.defaultCapacityProviderStrategy ?? [],
-          serviceConnectDefaults: cluster.serviceConnectDefaults?.namespace
-            ? { namespace: cluster.serviceConnectDefaults.namespace }
-            : undefined,
-          tags: output?.tags ?? {},
-        };
-      }),
-      create: Effect.fn(function* ({ id, news, session }) {
-        const clusterName = yield* toClusterName(id, news);
-        const tags = {
-          ...(yield* createInternalTags(id)),
-          ...news.tags,
-        };
-        const created = yield* ecs.createCluster({
-          clusterName,
-          settings: news.settings,
-          configuration: news.configuration,
-          serviceConnectDefaults: news.serviceConnectDefaults,
-          tags: toEcsTags(tags),
-        });
-        yield* applyCapacityProviders({
-          cluster: clusterName,
-          capacityProviders: news.capacityProviders,
-          defaultCapacityProviderStrategy: news.defaultCapacityProviderStrategy,
-        });
-
-        const cluster = created.cluster;
-        const clusterArn = (cluster?.clusterArn ??
-          `arn:aws:ecs:${region}:${accountId}:cluster/${clusterName}`) as ClusterArn;
-        yield* session.note(clusterArn);
-
-        return {
-          clusterArn,
-          clusterName,
-          status: cluster?.status ?? "ACTIVE",
-          settings: news.settings ?? [],
-          configuration: news.configuration,
-          capacityProviders: news.capacityProviders ?? [],
-          defaultCapacityProviderStrategy:
-            news.defaultCapacityProviderStrategy ?? [],
-          serviceConnectDefaults: news.serviceConnectDefaults,
-          tags,
-        };
-      }),
-      update: Effect.fn(function* ({ id, news, olds, output, session }) {
-        yield* ecs.updateCluster({
-          cluster: output.clusterArn,
-          settings: news.settings,
-          configuration: news.configuration,
-          serviceConnectDefaults: news.serviceConnectDefaults,
-        });
-        yield* applyCapacityProviders({
-          cluster: output.clusterArn,
-          capacityProviders: news.capacityProviders,
-          defaultCapacityProviderStrategy: news.defaultCapacityProviderStrategy,
-        });
-
-        const oldTags = {
-          ...(yield* createInternalTags(id)),
-          ...olds.tags,
-        };
-        const newTags = {
-          ...(yield* createInternalTags(id)),
-          ...news.tags,
-        };
-        const { removed, upsert } = diffTags(oldTags, newTags);
-        if (upsert.length > 0) {
-          yield* ecs.tagResource({
-            resourceArn: output.clusterArn,
-            tags: upsert.map((tag) => ({ key: tag.Key, value: tag.Value })),
+          yield* ecs.putClusterCapacityProviders({
+            cluster,
+            capacityProviders: capacityProviders ?? [],
+            defaultCapacityProviderStrategy:
+              defaultCapacityProviderStrategy ?? [],
           });
         }
-        if (removed.length > 0) {
-          yield* ecs.untagResource({
-            resourceArn: output.clusterArn,
-            tagKeys: removed,
-          });
-        }
+      });
 
-        yield* session.note(output.clusterArn);
-        return {
-          ...output,
-          settings: news.settings ?? [],
-          configuration: news.configuration,
-          capacityProviders: news.capacityProviders ?? [],
-          defaultCapacityProviderStrategy:
-            news.defaultCapacityProviderStrategy ?? [],
-          serviceConnectDefaults: news.serviceConnectDefaults,
-          tags: newTags,
-        };
-      }),
-      delete: Effect.fn(function* ({ output }) {
-        yield* ecs
-          .deleteCluster({
+      return {
+        stables: ["clusterArn", "clusterName"],
+        diff: Effect.fn(function* ({ id, olds, news }) {
+          if (!isResolved(news)) return;
+          if (
+            (yield* toClusterName(id, olds ?? {})) !==
+            (yield* toClusterName(id, news ?? {}))
+          ) {
+            return { action: "replace" } as const;
+          }
+        }),
+        read: Effect.fn(function* ({ id, olds, output }) {
+          const clusterName =
+            output?.clusterName ?? (yield* toClusterName(id, olds ?? {}));
+          const described = yield* ecs.describeClusters({
+            clusters: [output?.clusterArn ?? clusterName],
+            include: ["SETTINGS", "TAGS", "CONFIGURATIONS"],
+          });
+          const cluster = described.clusters?.[0];
+          if (!cluster?.clusterArn) {
+            return undefined;
+          }
+          return {
+            clusterArn: cluster.clusterArn as ClusterArn,
+            clusterName: cluster.clusterName!,
+            status: cluster.status ?? "ACTIVE",
+            settings: cluster.settings ?? [],
+            configuration: cluster.configuration,
+            capacityProviders: cluster.capacityProviders ?? [],
+            defaultCapacityProviderStrategy:
+              cluster.defaultCapacityProviderStrategy ?? [],
+            serviceConnectDefaults: cluster.serviceConnectDefaults?.namespace
+              ? { namespace: cluster.serviceConnectDefaults.namespace }
+              : undefined,
+            tags: output?.tags ?? {},
+          };
+        }),
+        create: Effect.fn(function* ({ id, news, session }) {
+          const clusterName = yield* toClusterName(id, news);
+          const tags = {
+            ...(yield* createInternalTags(id)),
+            ...news.tags,
+          };
+          const created = yield* ecs.createCluster({
+            clusterName,
+            settings: news.settings,
+            configuration: news.configuration,
+            serviceConnectDefaults: news.serviceConnectDefaults,
+            tags: toEcsTags(tags),
+          });
+          yield* applyCapacityProviders({
+            cluster: clusterName,
+            capacityProviders: news.capacityProviders,
+            defaultCapacityProviderStrategy:
+              news.defaultCapacityProviderStrategy,
+          });
+
+          const cluster = created.cluster;
+          const clusterArn = (cluster?.clusterArn ??
+            `arn:aws:ecs:${region}:${accountId}:cluster/${clusterName}`) as ClusterArn;
+          yield* session.note(clusterArn);
+
+          return {
+            clusterArn,
+            clusterName,
+            status: cluster?.status ?? "ACTIVE",
+            settings: news.settings ?? [],
+            configuration: news.configuration,
+            capacityProviders: news.capacityProviders ?? [],
+            defaultCapacityProviderStrategy:
+              news.defaultCapacityProviderStrategy ?? [],
+            serviceConnectDefaults: news.serviceConnectDefaults,
+            tags,
+          };
+        }),
+        update: Effect.fn(function* ({ id, news, olds, output, session }) {
+          yield* ecs.updateCluster({
             cluster: output.clusterArn,
-          })
-          .pipe(
-            Effect.catchTag("ClusterNotFoundException", () => Effect.void),
-            Effect.catchTag(
-              "ClusterContainsServicesException",
-              () => Effect.void,
-            ),
-            Effect.catchTag("ClusterContainsTasksException", () => Effect.void),
-          );
-      }),
-    };
-  }),
-);
+            settings: news.settings,
+            configuration: news.configuration,
+            serviceConnectDefaults: news.serviceConnectDefaults,
+          });
+          yield* applyCapacityProviders({
+            cluster: output.clusterArn,
+            capacityProviders: news.capacityProviders,
+            defaultCapacityProviderStrategy:
+              news.defaultCapacityProviderStrategy,
+          });
+
+          const oldTags = {
+            ...(yield* createInternalTags(id)),
+            ...olds.tags,
+          };
+          const newTags = {
+            ...(yield* createInternalTags(id)),
+            ...news.tags,
+          };
+          const { removed, upsert } = diffTags(oldTags, newTags);
+          if (upsert.length > 0) {
+            yield* ecs.tagResource({
+              resourceArn: output.clusterArn,
+              tags: upsert.map((tag) => ({ key: tag.Key, value: tag.Value })),
+            });
+          }
+          if (removed.length > 0) {
+            yield* ecs.untagResource({
+              resourceArn: output.clusterArn,
+              tagKeys: removed,
+            });
+          }
+
+          yield* session.note(output.clusterArn);
+          return {
+            ...output,
+            settings: news.settings ?? [],
+            configuration: news.configuration,
+            capacityProviders: news.capacityProviders ?? [],
+            defaultCapacityProviderStrategy:
+              news.defaultCapacityProviderStrategy ?? [],
+            serviceConnectDefaults: news.serviceConnectDefaults,
+            tags: newTags,
+          };
+        }),
+        delete: Effect.fn(function* ({ output }) {
+          yield* ecs
+            .deleteCluster({
+              cluster: output.clusterArn,
+            })
+            .pipe(
+              Effect.catchTag("ClusterNotFoundException", () => Effect.void),
+              Effect.catchTag(
+                "ClusterContainsServicesException",
+                () => Effect.void,
+              ),
+              Effect.catchTag(
+                "ClusterContainsTasksException",
+                () => Effect.void,
+              ),
+            );
+        }),
+      };
+    }),
+  );

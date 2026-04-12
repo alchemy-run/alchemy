@@ -55,83 +55,84 @@ export const SigningCertificate = Resource<SigningCertificate>(
   "AWS.IAM.SigningCertificate",
 );
 
-export const SigningCertificateProvider = Provider.succeed(SigningCertificate, {
-  stables: ["certificateId"],
-  diff: Effect.fn(function* ({ olds, news }) {
-    if (!isResolved(news)) return;
-    if (
-      olds.userName !== news.userName ||
-      olds.certificateBody !== news.certificateBody
-    ) {
-      return { action: "replace" } as const;
-    }
-  }),
-  read: Effect.fn(function* ({ output }) {
-    if (!output) {
-      return undefined;
-    }
-    const listed = yield* iam.listSigningCertificates({
-      UserName: output.userName,
-    });
-    const cert = listed.Certificates.find(
-      (entry) => entry.CertificateId === output.certificateId,
-    );
-    if (!cert?.CertificateId) {
-      return undefined;
-    }
-    return {
-      userName: cert.UserName,
-      certificateId: cert.CertificateId,
-      certificateBody: cert.CertificateBody,
-      status: cert.Status,
-      uploadDate: cert.UploadDate,
-    };
-  }),
-  create: Effect.fn(function* ({ news, session }) {
-    const created = yield* iam.uploadSigningCertificate({
-      UserName: news.userName,
-      CertificateBody: news.certificateBody,
-    });
-    if (
-      news.status !== undefined &&
-      created.Certificate.Status !== news.status
-    ) {
-      yield* iam.updateSigningCertificate({
+export const SigningCertificateProvider = () =>
+  Provider.succeed(SigningCertificate, {
+    stables: ["certificateId"],
+    diff: Effect.fn(function* ({ olds, news }) {
+      if (!isResolved(news)) return;
+      if (
+        olds.userName !== news.userName ||
+        olds.certificateBody !== news.certificateBody
+      ) {
+        return { action: "replace" } as const;
+      }
+    }),
+    read: Effect.fn(function* ({ output }) {
+      if (!output) {
+        return undefined;
+      }
+      const listed = yield* iam.listSigningCertificates({
+        UserName: output.userName,
+      });
+      const cert = listed.Certificates.find(
+        (entry) => entry.CertificateId === output.certificateId,
+      );
+      if (!cert?.CertificateId) {
+        return undefined;
+      }
+      return {
+        userName: cert.UserName,
+        certificateId: cert.CertificateId,
+        certificateBody: cert.CertificateBody,
+        status: cert.Status,
+        uploadDate: cert.UploadDate,
+      };
+    }),
+    create: Effect.fn(function* ({ news, session }) {
+      const created = yield* iam.uploadSigningCertificate({
         UserName: news.userName,
-        CertificateId: created.Certificate.CertificateId,
-        Status: news.status,
+        CertificateBody: news.certificateBody,
       });
-    }
-    yield* session.note(created.Certificate.CertificateId);
-    return {
-      userName: created.Certificate.UserName,
-      certificateId: created.Certificate.CertificateId,
-      certificateBody: created.Certificate.CertificateBody,
-      status: news.status ?? created.Certificate.Status,
-      uploadDate: created.Certificate.UploadDate,
-    };
-  }),
-  update: Effect.fn(function* ({ news, output, session }) {
-    const status = news.status ?? output.status;
-    if (status !== output.status) {
-      yield* iam.updateSigningCertificate({
-        UserName: output.userName,
-        CertificateId: output.certificateId,
-        Status: status,
-      });
-    }
-    yield* session.note(output.certificateId);
-    return {
-      ...output,
-      status,
-    };
-  }),
-  delete: Effect.fn(function* ({ output }) {
-    yield* iam
-      .deleteSigningCertificate({
-        UserName: output.userName,
-        CertificateId: output.certificateId,
-      })
-      .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
-  }),
-});
+      if (
+        news.status !== undefined &&
+        created.Certificate.Status !== news.status
+      ) {
+        yield* iam.updateSigningCertificate({
+          UserName: news.userName,
+          CertificateId: created.Certificate.CertificateId,
+          Status: news.status,
+        });
+      }
+      yield* session.note(created.Certificate.CertificateId);
+      return {
+        userName: created.Certificate.UserName,
+        certificateId: created.Certificate.CertificateId,
+        certificateBody: created.Certificate.CertificateBody,
+        status: news.status ?? created.Certificate.Status,
+        uploadDate: created.Certificate.UploadDate,
+      };
+    }),
+    update: Effect.fn(function* ({ news, output, session }) {
+      const status = news.status ?? output.status;
+      if (status !== output.status) {
+        yield* iam.updateSigningCertificate({
+          UserName: output.userName,
+          CertificateId: output.certificateId,
+          Status: status,
+        });
+      }
+      yield* session.note(output.certificateId);
+      return {
+        ...output,
+        status,
+      };
+    }),
+    delete: Effect.fn(function* ({ output }) {
+      yield* iam
+        .deleteSigningCertificate({
+          UserName: output.userName,
+          CertificateId: output.certificateId,
+        })
+        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+    }),
+  });

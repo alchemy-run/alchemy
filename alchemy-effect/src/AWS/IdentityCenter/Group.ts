@@ -56,113 +56,114 @@ export interface Group extends Resource<
  */
 export const Group = Resource<Group>("AWS.IdentityCenter.Group");
 
-export const GroupProvider = Provider.effect(
-  Group,
-  Effect.gen(function* () {
-    return {
-      stables: ["identityStoreId", "groupId"],
-      diff: Effect.fn(function* ({ olds, news }) {
-        if (!isResolved(news)) return;
-        if (olds?.identityStoreId !== news.identityStoreId) {
-          return { action: "replace" } as const;
-        }
-      }),
-      read: Effect.fn(function* ({ olds, output }) {
-        if (output?.groupId && output.identityStoreId) {
-          return yield* readGroupById(output.identityStoreId, output.groupId);
-        }
+export const GroupProvider = () =>
+  Provider.effect(
+    Group,
+    Effect.gen(function* () {
+      return {
+        stables: ["identityStoreId", "groupId"],
+        diff: Effect.fn(function* ({ olds, news }) {
+          if (!isResolved(news)) return;
+          if (olds?.identityStoreId !== news.identityStoreId) {
+            return { action: "replace" } as const;
+          }
+        }),
+        read: Effect.fn(function* ({ olds, output }) {
+          if (output?.groupId && output.identityStoreId) {
+            return yield* readGroupById(output.identityStoreId, output.groupId);
+          }
 
-        if (!olds) {
-          return undefined;
-        }
+          if (!olds) {
+            return undefined;
+          }
 
-        return yield* readGroupByDisplayName(olds);
-      }),
-      create: Effect.fn(function* ({ news, session }) {
-        const identityStoreId = yield* resolveIdentityStoreId(news);
-        const existing = yield* readGroupByDisplayName({
-          ...news,
-          identityStoreId,
-        });
-        if (existing) {
-          yield* session.note(existing.groupId);
-          return existing;
-        }
-
-        const response = yield* retryIdentityCenter(
-          identitystore.createGroup({
-            IdentityStoreId: identityStoreId,
-            DisplayName: news.displayName,
-            Description: news.description,
-          }),
-        );
-
-        const created =
-          (response.GroupId
-            ? yield* readGroupById(identityStoreId, response.GroupId)
-            : undefined) ??
-          (yield* readGroupByDisplayName({
+          return yield* readGroupByDisplayName(olds);
+        }),
+        create: Effect.fn(function* ({ news, session }) {
+          const identityStoreId = yield* resolveIdentityStoreId(news);
+          const existing = yield* readGroupByDisplayName({
             ...news,
             identityStoreId,
-          }));
+          });
+          if (existing) {
+            yield* session.note(existing.groupId);
+            return existing;
+          }
 
-        if (!created) {
-          return yield* Effect.fail(
-            new Error(`group '${news.displayName}' not found after create`),
+          const response = yield* retryIdentityCenter(
+            identitystore.createGroup({
+              IdentityStoreId: identityStoreId,
+              DisplayName: news.displayName,
+              Description: news.description,
+            }),
           );
-        }
 
-        yield* session.note(created.groupId);
-        return created;
-      }),
-      update: Effect.fn(function* ({ news, output, session }) {
-        const operations = [
-          {
-            AttributePath: "DisplayName",
-            AttributeValue: news.displayName,
-          },
-          {
-            AttributePath: "Description",
-            AttributeValue: news.description ?? "",
-          },
-        ];
+          const created =
+            (response.GroupId
+              ? yield* readGroupById(identityStoreId, response.GroupId)
+              : undefined) ??
+            (yield* readGroupByDisplayName({
+              ...news,
+              identityStoreId,
+            }));
 
-        yield* retryIdentityCenter(
-          identitystore.updateGroup({
-            IdentityStoreId: output.identityStoreId,
-            GroupId: output.groupId,
-            Operations: operations,
-          }),
-        );
+          if (!created) {
+            return yield* Effect.fail(
+              new Error(`group '${news.displayName}' not found after create`),
+            );
+          }
 
-        const updated = yield* readGroupById(
-          output.identityStoreId,
-          output.groupId,
-        );
-        if (!updated) {
-          return yield* Effect.fail(
-            new Error(`group '${output.groupId}' not found after update`),
-          );
-        }
+          yield* session.note(created.groupId);
+          return created;
+        }),
+        update: Effect.fn(function* ({ news, output, session }) {
+          const operations = [
+            {
+              AttributePath: "DisplayName",
+              AttributeValue: news.displayName,
+            },
+            {
+              AttributePath: "Description",
+              AttributeValue: news.description ?? "",
+            },
+          ];
 
-        yield* session.note(updated.groupId);
-        return updated;
-      }),
-      delete: Effect.fn(function* ({ output }) {
-        yield* retryIdentityCenter(
-          identitystore
-            .deleteGroup({
+          yield* retryIdentityCenter(
+            identitystore.updateGroup({
               IdentityStoreId: output.identityStoreId,
               GroupId: output.groupId,
-            })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            ),
-        );
-      }),
-    };
-  }),
-);
+              Operations: operations,
+            }),
+          );
+
+          const updated = yield* readGroupById(
+            output.identityStoreId,
+            output.groupId,
+          );
+          if (!updated) {
+            return yield* Effect.fail(
+              new Error(`group '${output.groupId}' not found after update`),
+            );
+          }
+
+          yield* session.note(updated.groupId);
+          return updated;
+        }),
+        delete: Effect.fn(function* ({ output }) {
+          yield* retryIdentityCenter(
+            identitystore
+              .deleteGroup({
+                IdentityStoreId: output.identityStoreId,
+                GroupId: output.groupId,
+              })
+              .pipe(
+                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              ),
+          );
+        }),
+      };
+    }),
+  );
 
 const readGroupById = Effect.fn(function* (
   identityStoreId: string,

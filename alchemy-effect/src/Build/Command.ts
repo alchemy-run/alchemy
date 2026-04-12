@@ -98,109 +98,110 @@ export interface Command extends Resource<
  */
 export const Command = Resource<Command>("Build.Command");
 
-export const CommandProvider = Provider.effect(
-  Command,
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const pathModule = yield* Path.Path;
+export const CommandProvider = () =>
+  Provider.effect(
+    Command,
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const pathModule = yield* Path.Path;
 
-    const runBuild = (props: CommandProps) =>
-      Effect.gen(function* () {
-        const cwd = props.cwd ? pathModule.resolve(props.cwd) : process.cwd();
-        yield* runBuildCommand({
-          command: props.command,
-          cwd,
-          env: props.env
-            ? Object.fromEntries(
-                Object.entries(props.env).map(([key, value]) => [
-                  key,
-                  typeof value === "string" ? value : Redacted.value(value),
-                ]),
-              )
-            : undefined,
+      const runBuild = (props: CommandProps) =>
+        Effect.gen(function* () {
+          const cwd = props.cwd ? pathModule.resolve(props.cwd) : process.cwd();
+          yield* runBuildCommand({
+            command: props.command,
+            cwd,
+            env: props.env
+              ? Object.fromEntries(
+                  Object.entries(props.env).map(([key, value]) => [
+                    key,
+                    typeof value === "string" ? value : Redacted.value(value),
+                  ]),
+                )
+              : undefined,
+          });
         });
+
+      const getOutputPath = (props: CommandProps) => {
+        const cwd = props.cwd ? pathModule.resolve(props.cwd) : process.cwd();
+        return pathModule.resolve(cwd, props.outdir);
+      };
+
+      return Command.Provider.of({
+        stables: ["outdir"],
+        diff: Effect.fnUntraced(function* ({ news, output }) {
+          if (!isResolved(news)) return undefined;
+          if (!output) {
+            return undefined;
+          }
+          const newHash = yield* hashDirectory(news);
+          if (newHash !== output.hash) {
+            return { action: "update" as const };
+          }
+        }),
+        read: Effect.fnUntraced(function* ({ olds, output }) {
+          if (!output) {
+            return undefined;
+          }
+          const outputPath = getOutputPath(olds);
+          const exists = yield* fs.exists(outputPath);
+          if (!exists) {
+            return undefined;
+          }
+          return output;
+        }),
+        create: Effect.fnUntraced(function* ({ news, session }) {
+          const hash = yield* hashDirectory(news);
+          const outputPath = getOutputPath(news);
+
+          yield* session.note(`Running build: ${news.command}`);
+          yield* runBuild(news);
+
+          const exists = yield* fs.exists(outputPath);
+          if (!exists) {
+            return yield* Effect.die(
+              `Build completed but output path does not exist: ${outputPath}`,
+            );
+          }
+
+          yield* session.note(`Build completed: ${outputPath}`);
+
+          return {
+            outdir: outputPath,
+            hash,
+          };
+        }),
+        update: Effect.fnUntraced(function* ({ news, session }) {
+          const hash = yield* hashDirectory(news);
+          const outputPath = getOutputPath(news);
+
+          yield* session.note(`Rebuilding: ${news.command}`);
+          yield* runBuild(news);
+
+          const exists = yield* fs.exists(outputPath);
+          if (!exists) {
+            return yield* Effect.die(
+              `Build completed but output path does not exist: ${outputPath}`,
+            );
+          }
+
+          yield* session.note(`Rebuild completed: ${outputPath}`);
+
+          return {
+            outdir: outputPath,
+            hash,
+          };
+        }),
+        delete: Effect.fnUntraced(function* ({ output, session }) {
+          const exists = yield* fs.exists(output.outdir);
+          if (exists) {
+            yield* fs.remove(output.outdir, { recursive: true });
+            yield* session.note(`Removed build output: ${output.outdir}`);
+          }
+        }),
       });
-
-    const getOutputPath = (props: CommandProps) => {
-      const cwd = props.cwd ? pathModule.resolve(props.cwd) : process.cwd();
-      return pathModule.resolve(cwd, props.outdir);
-    };
-
-    return Command.Provider.of({
-      stables: ["outdir"],
-      diff: Effect.fnUntraced(function* ({ news, output }) {
-        if (!isResolved(news)) return undefined;
-        if (!output) {
-          return undefined;
-        }
-        const newHash = yield* hashDirectory(news);
-        if (newHash !== output.hash) {
-          return { action: "update" as const };
-        }
-      }),
-      read: Effect.fnUntraced(function* ({ olds, output }) {
-        if (!output) {
-          return undefined;
-        }
-        const outputPath = getOutputPath(olds);
-        const exists = yield* fs.exists(outputPath);
-        if (!exists) {
-          return undefined;
-        }
-        return output;
-      }),
-      create: Effect.fnUntraced(function* ({ news, session }) {
-        const hash = yield* hashDirectory(news);
-        const outputPath = getOutputPath(news);
-
-        yield* session.note(`Running build: ${news.command}`);
-        yield* runBuild(news);
-
-        const exists = yield* fs.exists(outputPath);
-        if (!exists) {
-          return yield* Effect.die(
-            `Build completed but output path does not exist: ${outputPath}`,
-          );
-        }
-
-        yield* session.note(`Build completed: ${outputPath}`);
-
-        return {
-          outdir: outputPath,
-          hash,
-        };
-      }),
-      update: Effect.fnUntraced(function* ({ news, session }) {
-        const hash = yield* hashDirectory(news);
-        const outputPath = getOutputPath(news);
-
-        yield* session.note(`Rebuilding: ${news.command}`);
-        yield* runBuild(news);
-
-        const exists = yield* fs.exists(outputPath);
-        if (!exists) {
-          return yield* Effect.die(
-            `Build completed but output path does not exist: ${outputPath}`,
-          );
-        }
-
-        yield* session.note(`Rebuild completed: ${outputPath}`);
-
-        return {
-          outdir: outputPath,
-          hash,
-        };
-      }),
-      delete: Effect.fnUntraced(function* ({ output, session }) {
-        const exists = yield* fs.exists(output.outdir);
-        if (exists) {
-          yield* fs.remove(output.outdir, { recursive: true });
-          yield* session.note(`Removed build output: ${output.outdir}`);
-        }
-      }),
-    });
-  }),
-);
+    }),
+  );
 
 export interface RunBuildCommandOptions {
   command: string;

@@ -1191,7 +1191,7 @@ test.skip(
     }
 
     yield* Effect.log("=== All stages completed successfully! ===");
-  }).pipe(Effect.provide(AWS.providers), logLevel),
+  }).pipe(Effect.provide(AWS.providers()), logLevel),
 );
 
 test.skip(
@@ -2204,7 +2204,7 @@ test.skip(
     );
 
     yield* Effect.log("=== Comprehensive VPC test completed successfully! ===");
-  }).pipe(Effect.provide(AWS.providers), logLevel),
+  }).pipe(Effect.provide(AWS.providers()), logLevel),
 );
 
 // ============================================================================

@@ -25,7 +25,7 @@ A Resource Provider implements the following Lifecycle Operations:
 - **Delete** - deletes an existing Resource. It must be designed as idempotent because it is always possible for state persistence to fail after the delete operation is called. If the resource doesn't exist during deletion, it should not be considered an error.
 - **Capability** - a runtime requirement of a Function (e.g. require `SQS.SendMessage` on a `SQS.Queue`). Each Capability is split into two parts: a `Binding.Service` (runtime SDK wrapper) and a `Binding.Policy` (deploy-time IAM/binding attachment).
 - **Binding.Service** - an Effect Service that wraps an SDK client and exposes a `.bind(resource)` method returning a typed callable for runtime use. Provided as a Layer on the **Function** Effect so it gets bundled into the Lambda/Worker. See [Binding](./alchemy-effect/src/Binding.ts).
-- **Binding.Policy** - an Effect Service that runs only at deploy time to attach IAM policies (AWS) or bindings (Cloudflare) to a Function's role/config. At runtime, `Binding.Policy` uses `Effect.serviceOption` so it gracefully becomes a no-op when the layer is not provided. Policy layers are provided on the **Stack** via `AWS.providers()`, not on the Function.
+- **Binding.Policy** - an Effect Service that runs only at deploy time to attach IAM policies (AWS) or bindings (Cloudflare) to a Function's role/config. At runtime, `Binding.Policy` uses `Effect.serviceOption` so it gracefully becomes a no-op when the layer is not provided. Policy layers are provided on the **Stack** via `AWS.providers()()`, not on the Function.
 - **Binding** - data attached to a Resource via `resource.bind(data)`. A Binding is a `{ context: PolicyContext, data: BindingData }` tuple that is collected on the Stack during plan/deploy. Bindings enable circular references between Resources — the `Binding.Policy` calls `ctx.bind({ policyStatements: [...] })` on the target Function, which records the binding data on the Stack. The Resource Provider then receives the resolved binding data in its `create`/`update` lifecycle operations via the `bindings` parameter.
 - **Binding Contract** - the shape of data a Resource accepts from Bindings. For example, a Lambda Function accepts `{ env?: Record<string, any>, policyStatements?: PolicyStatement[] }` because it needs environment variables and IAM policies. A Cloudflare Worker accepts `{ bindings: Worker.Binding[] }` for its native binding system. The Binding Contract is declared as the fourth type parameter on the `Resource` interface. See [Lambda Function](./alchemy-effect/src/AWS/Lambda/Function.ts) and [Cloudflare Worker](./alchemy-effect/src/Cloudflare/Workers/Worker.ts).
 - **Dependency** - Resources depend on other Resources through two mechanisms:
@@ -308,7 +308,7 @@ For fields like `name: string`, `bucketName: string`, `bucketPrefix: string`, yo
 Each capability has two parts:
 
 - **`Binding.Service`** — runtime SDK wrapper, provided on the Function Effect (bundled into Lambda/Worker)
-- **`Binding.Policy`** — deploy-time IAM policy attachment, provided on the Stack via `AWS.providers()` (never bundled)
+- **`Binding.Policy`** — deploy-time IAM policy attachment, provided on the Stack via `AWS.providers()()` (never bundled)
 
 Read through the established capabilities to understand the pattern:
 
@@ -338,11 +338,11 @@ export const PutRecordLive = Layer.effect(PutRecord, ...);
 // 3. The Binding.Policy class
 export class PutRecordPolicy extends Binding.Policy<...>()("AWS.Kinesis.PutRecord") {}
 
-// 4. The Binding.Policy Live layer (provided on Stack via AWS.providers())
+// 4. The Binding.Policy Live layer (provided on Stack via AWS.providers()())
 export const PutRecordPolicyLive = Layer.effect(PutRecordPolicy, ...);
 ```
 
-After implementing, register the Policy in `AWS.providers()`:
+After implementing, register the Policy in `AWS.providers()()`:
 
 - Add the `*PolicyLive` layer to `bindings()` in [Providers.ts](./alchemy-effect/src/AWS/Providers.ts)
 - Re-export from the service's `index.ts`

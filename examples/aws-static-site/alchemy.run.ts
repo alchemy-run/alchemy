@@ -19,4 +19,4 @@ export default Effect.gen(function* () {
   return {
     url: site.url,
   };
-}).pipe(Stack.make("AwsStaticSiteExample", AWS.providers));
+}).pipe(Stack.make("AwsStaticSiteExample", AWS.providers()));

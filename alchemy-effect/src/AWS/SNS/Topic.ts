@@ -91,147 +91,155 @@ export interface Topic extends Resource<
  */
 export const Topic = Resource<Topic>("AWS.SNS.Topic");
 
-export const TopicProvider = Provider.succeed(Topic, {
-  read: Effect.fn(function* ({ id, olds, output }) {
-    const topicName = output?.topicName ?? (yield* toTopicName(id, olds ?? {}));
+export const TopicProvider = () =>
+  Provider.succeed(Topic, {
+    read: Effect.fn(function* ({ id, olds, output }) {
+      const topicName =
+        output?.topicName ?? (yield* toTopicName(id, olds ?? {}));
 
-    return yield* readTopic({
-      id,
-      topicArn: output?.topicArn,
-      topicName,
-    });
-  }),
-  stables: ["topicArn", "topicName", "fifo"],
-  diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
-    if (!isResolved(news)) return undefined;
-    if ((news.fifo ?? false) !== (olds.fifo ?? false)) {
-      return { action: "replace" } as const;
-    }
-
-    const oldTopicName = yield* toTopicName(id, olds);
-    const newTopicName = yield* toTopicName(id, news);
-
-    if (oldTopicName !== newTopicName) {
-      return { action: "replace" } as const;
-    }
-
-    if (
-      olds.dataProtectionPolicy !== undefined &&
-      news.dataProtectionPolicy === undefined
-    ) {
-      return { action: "replace" } as const;
-    }
-  }),
-  create: Effect.fn(function* ({ id, news = {}, session }) {
-    const topicName = yield* toTopicName(id, news);
-    const tags = {
-      ...(yield* createInternalTags(id)),
-      ...news.tags,
-    };
-
-    const response = yield* sns.createTopic({
-      Name: topicName,
-      Attributes: toAttributes(news),
-      Tags: createTagsList(tags),
-      DataProtectionPolicy: news.dataProtectionPolicy,
-    });
-
-    const topicArn = response.TopicArn;
-
-    if (!topicArn) {
-      return yield* Effect.die(new Error(`createTopic returned no ARN`));
-    }
-
-    yield* session.note(topicArn);
-
-    return {
-      topicArn: topicArn as TopicArn,
-      topicName,
-      fifo: news.fifo ?? false,
-      attributes: toAttributes(news),
-      dataProtectionPolicy: news.dataProtectionPolicy,
-      tags,
-    };
-  }),
-  update: Effect.fn(function* ({ id, news = {}, olds = {}, output, session }) {
-    const newAttributes = toAttributes(news);
-    const oldAttributes = toAttributes(olds);
-
-    for (const [name, value] of Object.entries(newAttributes)) {
-      if (oldAttributes[name] !== value) {
-        yield* sns.setTopicAttributes({
-          TopicArn: output.topicArn,
-          AttributeName: name,
-          AttributeValue: value,
-        });
-      }
-    }
-
-    for (const name of Object.keys(oldAttributes)) {
-      if (!(name in newAttributes)) {
-        yield* sns.setTopicAttributes({
-          TopicArn: output.topicArn,
-          AttributeName: name,
-        });
-      }
-    }
-
-    const newTags = {
-      ...(yield* createInternalTags(id)),
-      ...news.tags,
-    };
-    const oldTags = {
-      ...(yield* createInternalTags(id)),
-      ...olds.tags,
-    };
-    const { removed, upsert } = diffTags(oldTags, newTags);
-
-    if (upsert.length > 0) {
-      yield* sns.tagResource({
-        ResourceArn: output.topicArn,
-        Tags: upsert,
+      return yield* readTopic({
+        id,
+        topicArn: output?.topicArn,
+        topicName,
       });
-    }
+    }),
+    stables: ["topicArn", "topicName", "fifo"],
+    diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
+      if (!isResolved(news)) return undefined;
+      if ((news.fifo ?? false) !== (olds.fifo ?? false)) {
+        return { action: "replace" } as const;
+      }
 
-    if (removed.length > 0) {
-      yield* sns.untagResource({
-        ResourceArn: output.topicArn,
-        TagKeys: removed,
-      });
-    }
+      const oldTopicName = yield* toTopicName(id, olds);
+      const newTopicName = yield* toTopicName(id, news);
 
-    if (
-      news.dataProtectionPolicy !== undefined &&
-      news.dataProtectionPolicy !== olds.dataProtectionPolicy
-    ) {
-      yield* sns.putDataProtectionPolicy({
-        ResourceArn: output.topicArn,
+      if (oldTopicName !== newTopicName) {
+        return { action: "replace" } as const;
+      }
+
+      if (
+        olds.dataProtectionPolicy !== undefined &&
+        news.dataProtectionPolicy === undefined
+      ) {
+        return { action: "replace" } as const;
+      }
+    }),
+    create: Effect.fn(function* ({ id, news = {}, session }) {
+      const topicName = yield* toTopicName(id, news);
+      const tags = {
+        ...(yield* createInternalTags(id)),
+        ...news.tags,
+      };
+
+      const response = yield* sns.createTopic({
+        Name: topicName,
+        Attributes: toAttributes(news),
+        Tags: createTagsList(tags),
         DataProtectionPolicy: news.dataProtectionPolicy,
       });
-    }
 
-    yield* session.note(output.topicArn);
+      const topicArn = response.TopicArn;
 
-    return {
-      ...output,
-      fifo: news.fifo ?? false,
-      attributes: newAttributes,
-      dataProtectionPolicy:
-        news.dataProtectionPolicy ?? output.dataProtectionPolicy,
-      tags: newTags,
-    };
-  }),
-  delete: Effect.fn(function* ({ output }) {
-    yield* sns
-      .deleteTopic({
-        TopicArn: output.topicArn,
-      })
-      .pipe(
-        Effect.catchTag("NotFoundException", () => Effect.void),
-        Effect.catchTag("InvalidParameterException", () => Effect.void),
-      );
-  }),
-});
+      if (!topicArn) {
+        return yield* Effect.die(new Error(`createTopic returned no ARN`));
+      }
+
+      yield* session.note(topicArn);
+
+      return {
+        topicArn: topicArn as TopicArn,
+        topicName,
+        fifo: news.fifo ?? false,
+        attributes: toAttributes(news),
+        dataProtectionPolicy: news.dataProtectionPolicy,
+        tags,
+      };
+    }),
+    update: Effect.fn(function* ({
+      id,
+      news = {},
+      olds = {},
+      output,
+      session,
+    }) {
+      const newAttributes = toAttributes(news);
+      const oldAttributes = toAttributes(olds);
+
+      for (const [name, value] of Object.entries(newAttributes)) {
+        if (oldAttributes[name] !== value) {
+          yield* sns.setTopicAttributes({
+            TopicArn: output.topicArn,
+            AttributeName: name,
+            AttributeValue: value,
+          });
+        }
+      }
+
+      for (const name of Object.keys(oldAttributes)) {
+        if (!(name in newAttributes)) {
+          yield* sns.setTopicAttributes({
+            TopicArn: output.topicArn,
+            AttributeName: name,
+          });
+        }
+      }
+
+      const newTags = {
+        ...(yield* createInternalTags(id)),
+        ...news.tags,
+      };
+      const oldTags = {
+        ...(yield* createInternalTags(id)),
+        ...olds.tags,
+      };
+      const { removed, upsert } = diffTags(oldTags, newTags);
+
+      if (upsert.length > 0) {
+        yield* sns.tagResource({
+          ResourceArn: output.topicArn,
+          Tags: upsert,
+        });
+      }
+
+      if (removed.length > 0) {
+        yield* sns.untagResource({
+          ResourceArn: output.topicArn,
+          TagKeys: removed,
+        });
+      }
+
+      if (
+        news.dataProtectionPolicy !== undefined &&
+        news.dataProtectionPolicy !== olds.dataProtectionPolicy
+      ) {
+        yield* sns.putDataProtectionPolicy({
+          ResourceArn: output.topicArn,
+          DataProtectionPolicy: news.dataProtectionPolicy,
+        });
+      }
+
+      yield* session.note(output.topicArn);
+
+      return {
+        ...output,
+        fifo: news.fifo ?? false,
+        attributes: newAttributes,
+        dataProtectionPolicy:
+          news.dataProtectionPolicy ?? output.dataProtectionPolicy,
+        tags: newTags,
+      };
+    }),
+    delete: Effect.fn(function* ({ output }) {
+      yield* sns
+        .deleteTopic({
+          TopicArn: output.topicArn,
+        })
+        .pipe(
+          Effect.catchTag("NotFoundException", () => Effect.void),
+          Effect.catchTag("InvalidParameterException", () => Effect.void),
+        );
+    }),
+  });
 
 const toTopicName = Effect.fn(function* (id: string, props: TopicProps) {
   if (props.topicName) {

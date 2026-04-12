@@ -7,9 +7,9 @@ import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
 import { State, type ResourceState, type ResourceStatus } from "@/State";
 import {
+  test as baseTest,
   expectEmptyObject,
   expectPropExpr,
-  test as baseTest,
 } from "@/Test/Vitest";
 import { describe, expect } from "@effect/vitest";
 import * as Cause from "effect/Cause";
@@ -70,7 +70,7 @@ const makePlan = <A, Err = never, Req = never>(
       Stack.make(stack.name, Layer.empty),
       Effect.provideService(Stage, stack.stage),
       Effect.flatMap((stackSpec) => Plan.make(stackSpec, options)),
-      Effect.provide(TestLayers),
+      Effect.provide(TestLayers()),
     );
   });
 
@@ -88,7 +88,7 @@ const makePlanWithCustomStack =
         Stack.make(stack.name, Layer.empty, stackSpec),
         Effect.provideService(Stage, stack.stage),
         Effect.flatMap(Plan.make),
-        Effect.provide(TestLayers),
+        Effect.provide(TestLayers()),
       );
     });
 
@@ -958,7 +958,7 @@ test(
           });
         }),
       )
-      .pipe(Effect.provide(TestLayers));
+      .pipe(Effect.provide(TestLayers()));
 
     expect(
       yield* state.get({

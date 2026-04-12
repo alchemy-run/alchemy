@@ -68,9 +68,8 @@ export const ServiceSpecificCredential = Resource<ServiceSpecificCredential>(
   "AWS.IAM.ServiceSpecificCredential",
 );
 
-export const ServiceSpecificCredentialProvider = Provider.succeed(
-  ServiceSpecificCredential,
-  {
+export const ServiceSpecificCredentialProvider = () =>
+  Provider.succeed(ServiceSpecificCredential, {
     stables: ["serviceSpecificCredentialId"],
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return;
@@ -171,5 +170,4 @@ export const ServiceSpecificCredentialProvider = Provider.succeed(
         })
         .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
     }),
-  },
-);
+  });

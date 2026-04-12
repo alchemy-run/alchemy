@@ -58,142 +58,143 @@ export const OrganizationalUnit = Resource<OrganizationalUnit>(
   "AWS.Organizations.OrganizationalUnit",
 );
 
-export const OrganizationalUnitProvider = Provider.effect(
-  OrganizationalUnit,
-  Effect.gen(function* () {
-    return {
-      stables: ["ouId", "ouArn"],
-      diff: Effect.fn(function* ({ id, olds, news }) {
-        if (!isResolved(news)) return;
-        const oldName = yield* toName(id, olds ?? {});
-        const newName = yield* toName(id, news ?? {});
+export const OrganizationalUnitProvider = () =>
+  Provider.effect(
+    OrganizationalUnit,
+    Effect.gen(function* () {
+      return {
+        stables: ["ouId", "ouArn"],
+        diff: Effect.fn(function* ({ id, olds, news }) {
+          if (!isResolved(news)) return;
+          const oldName = yield* toName(id, olds ?? {});
+          const newName = yield* toName(id, news ?? {});
 
-        if (olds?.parentId !== news?.parentId) {
-          return { action: "replace" } as const;
-        }
+          if (olds?.parentId !== news?.parentId) {
+            return { action: "replace" } as const;
+          }
 
-        if (oldName !== newName) {
-          return { action: "update" } as const;
-        }
-      }),
-      read: Effect.fn(function* ({ id, olds, output }) {
-        if (output?.ouId) {
-          return yield* readOUById(output.ouId);
-        }
+          if (oldName !== newName) {
+            return { action: "update" } as const;
+          }
+        }),
+        read: Effect.fn(function* ({ id, olds, output }) {
+          if (output?.ouId) {
+            return yield* readOUById(output.ouId);
+          }
 
-        const parentId = olds?.parentId;
-        if (!parentId) {
-          return undefined;
-        }
+          const parentId = olds?.parentId;
+          if (!parentId) {
+            return undefined;
+          }
 
-        return yield* readOUByParentAndName({
-          parentId,
-          name: yield* toName(id, olds ?? {}),
-        });
-      }),
-      create: Effect.fn(function* ({ id, news, session }) {
-        const name = yield* toName(id, news);
-        const existing = yield* readOUByParentAndName({
-          parentId: news.parentId,
-          name,
-        });
+          return yield* readOUByParentAndName({
+            parentId,
+            name: yield* toName(id, olds ?? {}),
+          });
+        }),
+        create: Effect.fn(function* ({ id, news, session }) {
+          const name = yield* toName(id, news);
+          const existing = yield* readOUByParentAndName({
+            parentId: news.parentId,
+            name,
+          });
 
-        if (existing) {
-          yield* ensureOwnedByAlchemy(
+          if (existing) {
+            yield* ensureOwnedByAlchemy(
+              id,
+              existing.ouId,
+              existing.tags,
+              "organizational unit",
+            );
+          } else {
+            yield* retryOrganizations(
+              organizations
+                .createOrganizationalUnit({
+                  ParentId: news.parentId,
+                  Name: name,
+                })
+                .pipe(
+                  Effect.catchTag(
+                    "DuplicateOrganizationalUnitException",
+                    () => Effect.void,
+                  ),
+                ),
+            );
+          }
+
+          const created = yield* readOUByParentAndName({
+            parentId: news.parentId,
+            name,
+          });
+          if (!created) {
+            return yield* Effect.fail(
+              new Error(`organizational unit '${name}' not found after create`),
+            );
+          }
+
+          const tags = yield* updateResourceTags({
             id,
-            existing.ouId,
-            existing.tags,
-            "organizational unit",
-          );
-        } else {
+            resourceId: created.ouId,
+            olds: created.tags,
+            news: news.tags,
+          });
+
+          yield* session.note(created.ouArn);
+          return {
+            ...created,
+            tags,
+          };
+        }),
+        update: Effect.fn(function* ({ id, news, olds, output, session }) {
+          const newName = yield* toName(id, news);
+          if (output.name !== newName) {
+            yield* retryOrganizations(
+              organizations.updateOrganizationalUnit({
+                OrganizationalUnitId: output.ouId,
+                Name: newName,
+              }),
+            );
+          }
+
+          const tags = yield* updateResourceTags({
+            id,
+            resourceId: output.ouId,
+            olds: olds.tags,
+            news: news.tags,
+          });
+
+          const updated = yield* readOUById(output.ouId);
+          if (!updated) {
+            return yield* Effect.fail(
+              new Error(
+                `organizational unit '${output.ouId}' not found after update`,
+              ),
+            );
+          }
+
+          yield* session.note(output.ouArn);
+          return {
+            ...updated,
+            tags,
+          };
+        }),
+        delete: Effect.fn(function* ({ output }) {
           yield* retryOrganizations(
             organizations
-              .createOrganizationalUnit({
-                ParentId: news.parentId,
-                Name: name,
+              .deleteOrganizationalUnit({
+                OrganizationalUnitId: output.ouId,
               })
               .pipe(
                 Effect.catchTag(
-                  "DuplicateOrganizationalUnitException",
+                  "OrganizationalUnitNotFoundException",
                   () => Effect.void,
                 ),
               ),
           );
-        }
-
-        const created = yield* readOUByParentAndName({
-          parentId: news.parentId,
-          name,
-        });
-        if (!created) {
-          return yield* Effect.fail(
-            new Error(`organizational unit '${name}' not found after create`),
-          );
-        }
-
-        const tags = yield* updateResourceTags({
-          id,
-          resourceId: created.ouId,
-          olds: created.tags,
-          news: news.tags,
-        });
-
-        yield* session.note(created.ouArn);
-        return {
-          ...created,
-          tags,
-        };
-      }),
-      update: Effect.fn(function* ({ id, news, olds, output, session }) {
-        const newName = yield* toName(id, news);
-        if (output.name !== newName) {
-          yield* retryOrganizations(
-            organizations.updateOrganizationalUnit({
-              OrganizationalUnitId: output.ouId,
-              Name: newName,
-            }),
-          );
-        }
-
-        const tags = yield* updateResourceTags({
-          id,
-          resourceId: output.ouId,
-          olds: olds.tags,
-          news: news.tags,
-        });
-
-        const updated = yield* readOUById(output.ouId);
-        if (!updated) {
-          return yield* Effect.fail(
-            new Error(
-              `organizational unit '${output.ouId}' not found after update`,
-            ),
-          );
-        }
-
-        yield* session.note(output.ouArn);
-        return {
-          ...updated,
-          tags,
-        };
-      }),
-      delete: Effect.fn(function* ({ output }) {
-        yield* retryOrganizations(
-          organizations
-            .deleteOrganizationalUnit({
-              OrganizationalUnitId: output.ouId,
-            })
-            .pipe(
-              Effect.catchTag(
-                "OrganizationalUnitNotFoundException",
-                () => Effect.void,
-              ),
-            ),
-        );
-      }),
-    };
-  }),
-);
+        }),
+      };
+    }),
+  );
 
 const toName = (id: string, props: { name?: string } = {}) =>
   createName(id, props.name, 128);

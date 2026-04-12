@@ -62,7 +62,7 @@ describe("AWS.IAM device and server certificate resources", () => {
         ServerCertificateName: certificate.serverCertificateName,
       }).pipe(Effect.option);
       expect(deleted._tag).toBe("None");
-    }).pipe(Effect.provide(AWS.providers)),
+    }).pipe(Effect.provide(AWS.providers())),
   );
 
   test(
@@ -124,6 +124,6 @@ describe("AWS.IAM device and server certificate resources", () => {
             (entry) => entry.SerialNumber === device.serialNumber,
           ),
       ).toBe(true);
-    }).pipe(Effect.provide(AWS.providers)),
+    }).pipe(Effect.provide(AWS.providers())),
   );
 });

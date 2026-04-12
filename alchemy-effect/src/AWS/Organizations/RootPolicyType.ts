@@ -34,76 +34,77 @@ export const RootPolicyType = Resource<RootPolicyType>(
   "AWS.Organizations.RootPolicyType",
 );
 
-export const RootPolicyTypeProvider = Provider.effect(
-  RootPolicyType,
-  Effect.gen(function* () {
-    return {
-      stables: ["rootId", "rootArn", "policyType"],
-      diff: Effect.fn(function* ({ olds, news }) {
-        if (!isResolved(news)) return;
-        if (
-          olds?.rootId !== news.rootId ||
-          olds?.policyType !== news.policyType
-        ) {
-          return { action: "replace" } as const;
-        }
-      }),
-      read: Effect.fn(function* ({ olds, output }) {
-        return yield* readRootPolicyType({
-          rootId: output?.rootId ?? olds!.rootId,
-          policyType: output?.policyType ?? olds!.policyType,
-        });
-      }),
-      create: Effect.fn(function* ({ news, session }) {
-        yield* retryOrganizations(
-          organizations
-            .enablePolicyType({
-              RootId: news.rootId,
-              PolicyType: news.policyType,
-            })
-            .pipe(
-              Effect.catchTag(
-                "PolicyTypeAlreadyEnabledException",
-                () => Effect.void,
+export const RootPolicyTypeProvider = () =>
+  Provider.effect(
+    RootPolicyType,
+    Effect.gen(function* () {
+      return {
+        stables: ["rootId", "rootArn", "policyType"],
+        diff: Effect.fn(function* ({ olds, news }) {
+          if (!isResolved(news)) return;
+          if (
+            olds?.rootId !== news.rootId ||
+            olds?.policyType !== news.policyType
+          ) {
+            return { action: "replace" } as const;
+          }
+        }),
+        read: Effect.fn(function* ({ olds, output }) {
+          return yield* readRootPolicyType({
+            rootId: output?.rootId ?? olds!.rootId,
+            policyType: output?.policyType ?? olds!.policyType,
+          });
+        }),
+        create: Effect.fn(function* ({ news, session }) {
+          yield* retryOrganizations(
+            organizations
+              .enablePolicyType({
+                RootId: news.rootId,
+                PolicyType: news.policyType,
+              })
+              .pipe(
+                Effect.catchTag(
+                  "PolicyTypeAlreadyEnabledException",
+                  () => Effect.void,
+                ),
               ),
-            ),
-        );
+          );
 
-        const state = yield* readRootPolicyType(news);
-        if (!state) {
-          return {
-            rootId: news.rootId,
-            rootArn: undefined,
-            policyType: news.policyType,
-            status: "PENDING_ENABLE",
-          } satisfies RootPolicyType["Attributes"];
-        }
+          const state = yield* readRootPolicyType(news);
+          if (!state) {
+            return {
+              rootId: news.rootId,
+              rootArn: undefined,
+              policyType: news.policyType,
+              status: "PENDING_ENABLE",
+            } satisfies RootPolicyType["Attributes"];
+          }
 
-        yield* session.note(state.rootArn ?? state.rootId);
-        return state;
-      }),
-      update: Effect.fn(function* ({ output, session }) {
-        yield* session.note(output.rootArn ?? output.rootId);
-        return output;
-      }),
-      delete: Effect.fn(function* ({ output }) {
-        yield* retryOrganizations(
-          organizations
-            .disablePolicyType({
-              RootId: output.rootId,
-              PolicyType: output.policyType,
-            })
-            .pipe(
-              Effect.catchTags({
-                PolicyTypeNotEnabledException: () => Effect.void,
-                RootNotFoundException: () => Effect.void,
-              }),
-            ),
-        );
-      }),
-    };
-  }),
-);
+          yield* session.note(state.rootArn ?? state.rootId);
+          return state;
+        }),
+        update: Effect.fn(function* ({ output, session }) {
+          yield* session.note(output.rootArn ?? output.rootId);
+          return output;
+        }),
+        delete: Effect.fn(function* ({ output }) {
+          yield* retryOrganizations(
+            organizations
+              .disablePolicyType({
+                RootId: output.rootId,
+                PolicyType: output.policyType,
+              })
+              .pipe(
+                Effect.catchTags({
+                  PolicyTypeNotEnabledException: () => Effect.void,
+                  RootNotFoundException: () => Effect.void,
+                }),
+              ),
+          );
+        }),
+      };
+    }),
+  );
 
 const readRoot = (rootId: string) =>
   collectPages(

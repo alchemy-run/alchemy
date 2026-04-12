@@ -35,9 +35,8 @@ export const AccountPasswordPolicy = Resource<AccountPasswordPolicy>(
   "AWS.IAM.AccountPasswordPolicy",
 );
 
-export const AccountPasswordPolicyProvider = Provider.succeed(
-  AccountPasswordPolicy,
-  {
+export const AccountPasswordPolicyProvider = () =>
+  Provider.succeed(AccountPasswordPolicy, {
     read: Effect.fn(function* () {
       const response = yield* iam
         .getAccountPasswordPolicy({})
@@ -63,5 +62,4 @@ export const AccountPasswordPolicyProvider = Provider.succeed(
         .deleteAccountPasswordPolicy({})
         .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
     }),
-  },
-);
+  });

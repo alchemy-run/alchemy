@@ -105,7 +105,7 @@ test.skipIf(process.env.ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS !== "true")(
 
     yield* destroy();
     yield* assertDistributionDeleted(deployed.distribution.distributionId);
-  }).pipe(Effect.provide(AWS.providers)),
+  }).pipe(Effect.provide(AWS.providers())),
 );
 
 const assertDistributionDeleted = (distributionId: string) =>

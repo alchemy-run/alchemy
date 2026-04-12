@@ -81,8 +81,8 @@ type Provided =
   | AWS.StageConfig
   | Artifacts
   | Provider<Command>
-  | Layer.Success<typeof AWS.providers>
-  | Layer.Success<typeof Cloudflare.providers>
+  | AWS.Providers
+  | Cloudflare.Providers
   | ChildProcessSpawner;
 
 const quietLogger = Logger.make(() => {
@@ -126,12 +126,12 @@ const awsStageConfig = Layer.effect(
 );
 
 const awsProviders = Layer.provideMerge(
-  AWS.providers,
+  AWS.providers(),
   Layer.mergeAll(Credentials.fromStageConfig(), Region.fromStageConfig()),
 );
 
 const cfProviders = Layer.provideMerge(
-  Cloudflare.providers,
+  Cloudflare.providers(),
   Layer.mergeAll(cf.CredentialsFromEnv, FetchHttpClient.layer),
 );
 

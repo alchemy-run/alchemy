@@ -82,178 +82,179 @@ export const PodIdentityAssociation = Resource<PodIdentityAssociation>(
   "AWS.EKS.PodIdentityAssociation",
 );
 
-export const PodIdentityAssociationProvider = Provider.effect(
-  PodIdentityAssociation,
-  Effect.gen(function* () {
-    const toClientRequestToken = (id: string, action: string) =>
-      createPhysicalName({
-        id: `${id}-${action}`,
-        maxLength: 64,
-        delimiter: "-",
-      });
-
-    return {
-      stables: ["associationArn", "associationId"],
-      diff: Effect.fn(function* ({ olds, news }) {
-        if (!isResolved(news)) return;
-        if (olds.clusterName !== news.clusterName) {
-          return { action: "replace" } as const;
-        }
-
-        if (olds.namespace !== news.namespace) {
-          return { action: "replace" } as const;
-        }
-
-        if (olds.serviceAccount !== news.serviceAccount) {
-          return { action: "replace" } as const;
-        }
-      }),
-      read: Effect.fn(function* ({ id, olds, output }) {
-        if (output?.associationId) {
-          return yield* readAssociationById({
-            clusterName: output.clusterName,
-            associationId: output.associationId,
-          });
-        }
-
-        return yield* findAssociation({
-          id,
-          clusterName: olds.clusterName as string,
-          namespace: olds.namespace,
-          serviceAccount: olds.serviceAccount,
+export const PodIdentityAssociationProvider = () =>
+  Provider.effect(
+    PodIdentityAssociation,
+    Effect.gen(function* () {
+      const toClientRequestToken = (id: string, action: string) =>
+        createPhysicalName({
+          id: `${id}-${action}`,
+          maxLength: 64,
+          delimiter: "-",
         });
-      }),
-      create: Effect.fn(function* ({ id, news, session }) {
-        const tags = {
-          ...(yield* createInternalTags(id)),
-          ...news.tags,
-        };
 
-        yield* eks
-          .createPodIdentityAssociation({
+      return {
+        stables: ["associationArn", "associationId"],
+        diff: Effect.fn(function* ({ olds, news }) {
+          if (!isResolved(news)) return;
+          if (olds.clusterName !== news.clusterName) {
+            return { action: "replace" } as const;
+          }
+
+          if (olds.namespace !== news.namespace) {
+            return { action: "replace" } as const;
+          }
+
+          if (olds.serviceAccount !== news.serviceAccount) {
+            return { action: "replace" } as const;
+          }
+        }),
+        read: Effect.fn(function* ({ id, olds, output }) {
+          if (output?.associationId) {
+            return yield* readAssociationById({
+              clusterName: output.clusterName,
+              associationId: output.associationId,
+            });
+          }
+
+          return yield* findAssociation({
+            id,
+            clusterName: olds.clusterName as string,
+            namespace: olds.namespace,
+            serviceAccount: olds.serviceAccount,
+          });
+        }),
+        create: Effect.fn(function* ({ id, news, session }) {
+          const tags = {
+            ...(yield* createInternalTags(id)),
+            ...news.tags,
+          };
+
+          yield* eks
+            .createPodIdentityAssociation({
+              clusterName: news.clusterName as string,
+              namespace: news.namespace,
+              serviceAccount: news.serviceAccount,
+              roleArn: news.roleArn as string,
+              disableSessionTags: news.disableSessionTags,
+              targetRoleArn: news.targetRoleArn as string | undefined,
+              policy: news.policy,
+              tags,
+              clientRequestToken: yield* toClientRequestToken(id, "create"),
+            })
+            .pipe(
+              Effect.catchTag("ResourceInUseException", () =>
+                findAssociation({
+                  id,
+                  clusterName: news.clusterName as string,
+                  namespace: news.namespace,
+                  serviceAccount: news.serviceAccount,
+                }).pipe(
+                  Effect.flatMap((existing) =>
+                    existing
+                      ? Effect.succeed(existing)
+                      : Effect.fail(
+                          new Error(
+                            `PodIdentityAssociation '${news.namespace}/${news.serviceAccount}' already exists and is not managed by alchemy`,
+                          ),
+                        ),
+                  ),
+                  Effect.asVoid,
+                ),
+              ),
+            );
+
+          const state = yield* findAssociation({
+            id,
             clusterName: news.clusterName as string,
             namespace: news.namespace,
             serviceAccount: news.serviceAccount,
-            roleArn: news.roleArn as string,
-            disableSessionTags: news.disableSessionTags,
-            targetRoleArn: news.targetRoleArn as string | undefined,
-            policy: news.policy,
-            tags,
-            clientRequestToken: yield* toClientRequestToken(id, "create"),
-          })
-          .pipe(
-            Effect.catchTag("ResourceInUseException", () =>
-              findAssociation({
-                id,
-                clusterName: news.clusterName as string,
-                namespace: news.namespace,
-                serviceAccount: news.serviceAccount,
-              }).pipe(
-                Effect.flatMap((existing) =>
-                  existing
-                    ? Effect.succeed(existing)
-                    : Effect.fail(
-                        new Error(
-                          `PodIdentityAssociation '${news.namespace}/${news.serviceAccount}' already exists and is not managed by alchemy`,
-                        ),
-                      ),
-                ),
-                Effect.asVoid,
+          });
+
+          if (!state) {
+            return yield* Effect.fail(
+              new Error(
+                `PodIdentityAssociation '${news.namespace}/${news.serviceAccount}' could not be read after creation`,
               ),
-            ),
-          );
+            );
+          }
 
-        const state = yield* findAssociation({
-          id,
-          clusterName: news.clusterName as string,
-          namespace: news.namespace,
-          serviceAccount: news.serviceAccount,
-        });
+          yield* session.note(state.associationArn);
+          return state;
+        }),
+        update: Effect.fn(function* ({ id, olds, news, output, session }) {
+          if (
+            olds.roleArn !== news.roleArn ||
+            olds.disableSessionTags !== news.disableSessionTags ||
+            olds.targetRoleArn !== news.targetRoleArn ||
+            olds.policy !== news.policy
+          ) {
+            yield* eks.updatePodIdentityAssociation({
+              clusterName: output.clusterName,
+              associationId: output.associationId,
+              roleArn: news.roleArn as string,
+              disableSessionTags: news.disableSessionTags,
+              targetRoleArn: news.targetRoleArn as string | undefined,
+              policy: news.policy,
+              clientRequestToken: yield* toClientRequestToken(id, "update"),
+            });
+          }
 
-        if (!state) {
-          return yield* Effect.fail(
-            new Error(
-              `PodIdentityAssociation '${news.namespace}/${news.serviceAccount}' could not be read after creation`,
-            ),
-          );
-        }
+          const oldTags = {
+            ...(yield* createInternalTags(id)),
+            ...olds.tags,
+          };
+          const newTags = {
+            ...(yield* createInternalTags(id)),
+            ...news.tags,
+          };
+          const { removed, upsert } = diffTags(oldTags, newTags);
 
-        yield* session.note(state.associationArn);
-        return state;
-      }),
-      update: Effect.fn(function* ({ id, olds, news, output, session }) {
-        if (
-          olds.roleArn !== news.roleArn ||
-          olds.disableSessionTags !== news.disableSessionTags ||
-          olds.targetRoleArn !== news.targetRoleArn ||
-          olds.policy !== news.policy
-        ) {
-          yield* eks.updatePodIdentityAssociation({
+          if (upsert.length > 0) {
+            yield* eks.tagResource({
+              resourceArn: output.associationArn,
+              tags: Object.fromEntries(
+                upsert.map((tag) => [tag.Key, tag.Value] as const),
+              ),
+            });
+          }
+
+          if (removed.length > 0) {
+            yield* eks.untagResource({
+              resourceArn: output.associationArn,
+              tagKeys: removed,
+            });
+          }
+
+          const state = yield* readAssociationById({
             clusterName: output.clusterName,
             associationId: output.associationId,
-            roleArn: news.roleArn as string,
-            disableSessionTags: news.disableSessionTags,
-            targetRoleArn: news.targetRoleArn as string | undefined,
-            policy: news.policy,
-            clientRequestToken: yield* toClientRequestToken(id, "update"),
           });
-        }
 
-        const oldTags = {
-          ...(yield* createInternalTags(id)),
-          ...olds.tags,
-        };
-        const newTags = {
-          ...(yield* createInternalTags(id)),
-          ...news.tags,
-        };
-        const { removed, upsert } = diffTags(oldTags, newTags);
+          if (!state) {
+            return yield* Effect.fail(
+              new Error(
+                `PodIdentityAssociation '${output.associationId}' could not be read after update`,
+              ),
+            );
+          }
 
-        if (upsert.length > 0) {
-          yield* eks.tagResource({
-            resourceArn: output.associationArn,
-            tags: Object.fromEntries(
-              upsert.map((tag) => [tag.Key, tag.Value] as const),
-            ),
-          });
-        }
-
-        if (removed.length > 0) {
-          yield* eks.untagResource({
-            resourceArn: output.associationArn,
-            tagKeys: removed,
-          });
-        }
-
-        const state = yield* readAssociationById({
-          clusterName: output.clusterName,
-          associationId: output.associationId,
-        });
-
-        if (!state) {
-          return yield* Effect.fail(
-            new Error(
-              `PodIdentityAssociation '${output.associationId}' could not be read after update`,
-            ),
-          );
-        }
-
-        yield* session.note(output.associationArn);
-        return state;
-      }),
-      delete: Effect.fn(function* ({ output }) {
-        yield* eks
-          .deletePodIdentityAssociation({
-            clusterName: output.clusterName,
-            associationId: output.associationId,
-          })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
-      }),
-    };
-  }),
-);
+          yield* session.note(output.associationArn);
+          return state;
+        }),
+        delete: Effect.fn(function* ({ output }) {
+          yield* eks
+            .deletePodIdentityAssociation({
+              clusterName: output.clusterName,
+              associationId: output.associationId,
+            })
+            .pipe(
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            );
+        }),
+      };
+    }),
+  );
 
 const normalizeTags = (tags: Record<string, string | undefined> | undefined) =>
   Object.fromEntries(

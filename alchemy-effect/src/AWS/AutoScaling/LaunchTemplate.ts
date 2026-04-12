@@ -169,258 +169,112 @@ export const LaunchTemplate: Platform<
   ),
 });
 
-export const LaunchTemplateProvider = Provider.effect(
-  LaunchTemplate,
-  Effect.gen(function* () {
-    const accountId = yield* Account;
-    const region = yield* Region;
-    const stack = yield* Stack;
-    const stage = yield* Stage;
-    const fs = yield* FileSystem.FileSystem;
-    const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
-    const assets = (yield* Effect.serviceOption(Assets)).pipe(
-      Option.getOrUndefined,
-    );
+export const LaunchTemplateProvider = () =>
+  Provider.effect(
+    LaunchTemplate,
+    Effect.gen(function* () {
+      const accountId = yield* Account;
+      const region = yield* Region;
+      const stack = yield* Stack;
+      const stage = yield* Stage;
+      const fs = yield* FileSystem.FileSystem;
+      const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
+      const assets = (yield* Effect.serviceOption(Assets)).pipe(
+        Option.getOrUndefined,
+      );
 
-    const hosted = createEc2HostedSupport({
-      accountId,
-      region,
-      stackName: stack.name,
-      stage,
-      fs,
-      virtualEntryPlugin,
-      assets,
-      resourceType: "AWS.AutoScaling.LaunchTemplate",
-    });
+      const hosted = createEc2HostedSupport({
+        accountId,
+        region,
+        stackName: stack.name,
+        stage,
+        fs,
+        virtualEntryPlugin,
+        assets,
+        resourceType: "AWS.AutoScaling.LaunchTemplate",
+      });
 
-    const toName = (id: string, props: { launchTemplateName?: string } = {}) =>
-      props.launchTemplateName
-        ? Effect.succeed(props.launchTemplateName)
-        : createPhysicalName({ id, maxLength: 128, lowercase: true });
+      const toName = (
+        id: string,
+        props: { launchTemplateName?: string } = {},
+      ) =>
+        props.launchTemplateName
+          ? Effect.succeed(props.launchTemplateName)
+          : createPhysicalName({ id, maxLength: 128, lowercase: true });
 
-    const toArn = (launchTemplateId: LaunchTemplateId) =>
-      `arn:aws:ec2:${region}:${accountId}:launch-template/${launchTemplateId}` as LaunchTemplateArn;
+      const toArn = (launchTemplateId: LaunchTemplateId) =>
+        `arn:aws:ec2:${region}:${accountId}:launch-template/${launchTemplateId}` as LaunchTemplateArn;
 
-    const describeById = (launchTemplateId: string) =>
-      ec2
-        .describeLaunchTemplates({
-          LaunchTemplateIds: [launchTemplateId],
-        } as any)
-        .pipe(
-          Effect.map((result) => result.LaunchTemplates?.[0]),
-          Effect.catch((error) =>
-            isLaunchTemplateNotFound(error)
-              ? Effect.succeed(undefined)
-              : Effect.fail(error),
-          ),
-        );
+      const describeById = (launchTemplateId: string) =>
+        ec2
+          .describeLaunchTemplates({
+            LaunchTemplateIds: [launchTemplateId],
+          } as any)
+          .pipe(
+            Effect.map((result) => result.LaunchTemplates?.[0]),
+            Effect.catch((error) =>
+              isLaunchTemplateNotFound(error)
+                ? Effect.succeed(undefined)
+                : Effect.fail(error),
+            ),
+          );
 
-    const describeByName = (launchTemplateName: string) =>
-      ec2
-        .describeLaunchTemplates({
-          LaunchTemplateNames: [launchTemplateName],
-        } as any)
-        .pipe(
-          Effect.map((result) => result.LaunchTemplates?.[0]),
-          Effect.catch((error) =>
-            isLaunchTemplateNotFound(error)
-              ? Effect.succeed(undefined)
-              : Effect.fail(error),
-          ),
-        );
+      const describeByName = (launchTemplateName: string) =>
+        ec2
+          .describeLaunchTemplates({
+            LaunchTemplateNames: [launchTemplateName],
+          } as any)
+          .pipe(
+            Effect.map((result) => result.LaunchTemplates?.[0]),
+            Effect.catch((error) =>
+              isLaunchTemplateNotFound(error)
+                ? Effect.succeed(undefined)
+                : Effect.fail(error),
+            ),
+          );
 
-    const syncTemplateTags = Effect.fn(function* ({
-      launchTemplateId,
-      oldTags,
-      newTags,
-    }: {
-      launchTemplateId: LaunchTemplateId;
-      oldTags: Record<string, string>;
-      newTags: Record<string, string>;
-    }) {
-      const { removed, upsert } = diffTags(oldTags, newTags);
-      if (removed.length > 0) {
-        yield* ec2.deleteTags({
-          Resources: [launchTemplateId],
-          Tags: removed.map((key) => ({ Key: key })),
-        });
-      }
-      if (upsert.length > 0) {
-        yield* ec2.createTags({
-          Resources: [launchTemplateId],
-          Tags: upsert,
-        });
-      }
-    });
-
-    const createVersion = Effect.fn(function* ({
-      launchTemplateId,
-      news,
-      runtime,
-    }: {
-      launchTemplateId: LaunchTemplateId;
-      news: LaunchTemplateProps;
-      runtime: {
-        userData?: string;
-        instanceProfileName?: string;
-        code?: {
-          hash: string;
-        };
-      };
-    }) {
-      const created = yield* ec2.createLaunchTemplateVersion({
-        LaunchTemplateId: launchTemplateId,
-        VersionDescription: runtime.code?.hash ?? "alchemy-update",
-        LaunchTemplateData: hosted.buildLaunchTemplateData(
-          {
-            imageId: news.imageId,
-            instanceType: news.instanceType,
-            keyName: news.keyName,
-            securityGroupIds: news.securityGroupIds as string[] | undefined,
-            associatePublicIpAddress: news.associatePublicIpAddress,
-            tags: news.tags,
-          },
-          runtime,
-        ),
-      } as any);
-
-      const versionNumber = created.LaunchTemplateVersion?.VersionNumber;
-      if (versionNumber === undefined) {
-        return yield* Effect.fail(
-          new Error(
-            `createLaunchTemplateVersion returned no version for '${launchTemplateId}'`,
-          ),
-        );
-      }
-
-      yield* ec2.modifyLaunchTemplate({
-        LaunchTemplateId: launchTemplateId,
-        DefaultVersion: String(versionNumber),
-      } as any);
-
-      return Number(versionNumber);
-    });
-
-    const toAttributes = (
-      template: ec2.LaunchTemplate,
-      runtime: Partial<LaunchTemplate["Attributes"]> = {},
-    ): LaunchTemplate["Attributes"] => ({
-      launchTemplateId: template.LaunchTemplateId as LaunchTemplateId,
-      launchTemplateArn: toArn(template.LaunchTemplateId as LaunchTemplateId),
-      launchTemplateName: template.LaunchTemplateName!,
-      defaultVersionNumber: Number(template.DefaultVersionNumber ?? 1),
-      latestVersionNumber: Number(
-        template.LatestVersionNumber ?? template.DefaultVersionNumber ?? 1,
-      ),
-      tags: toTagRecord(template.Tags),
-      roleArn: runtime.roleArn,
-      roleName: runtime.roleName,
-      policyName: runtime.policyName,
-      managedIam: runtime.managedIam,
-      runtimeUnitName: runtime.runtimeUnitName,
-      assetPrefix: runtime.assetPrefix,
-      code: runtime.code,
-    });
-
-    return {
-      stables: ["launchTemplateId", "launchTemplateArn", "launchTemplateName"],
-      diff: Effect.fn(function* ({ id, olds, news: _news }) {
-        if (!isResolved(_news)) return undefined;
-        const news = _news as typeof olds;
-        const oldName = yield* toName(id, olds ?? {});
-        const newName = yield* toName(id, news ?? {});
-        if (oldName !== newName) {
-          return { action: "replace" } as const;
-        }
-
-        if (!deepEqual(olds, news)) {
-          return {
-            action: "update",
-            stables: [
-              "launchTemplateId",
-              "launchTemplateArn",
-              "launchTemplateName",
-            ],
-          } as const;
-        }
-      }),
-      read: Effect.fn(function* ({ id, olds, output }) {
-        const template =
-          (output?.launchTemplateId &&
-            (yield* describeById(output.launchTemplateId))) ??
-          (yield* describeByName(yield* toName(id, olds ?? {})));
-
-        return template
-          ? toAttributes(template, {
-              roleArn: output?.roleArn,
-              roleName: output?.roleName,
-              policyName: output?.policyName,
-              managedIam: output?.managedIam,
-              runtimeUnitName: output?.runtimeUnitName,
-              assetPrefix: output?.assetPrefix,
-              code: output?.code,
-            })
-          : undefined;
-      }),
-      create: Effect.fn(function* ({ id, news, output, bindings, session }) {
-        const launchTemplateName = yield* toName(id, news);
-        const tags = {
-          ...(yield* createInternalTags(id)),
-          ...news.tags,
-        };
-        const runtime = yield* hosted.resolveHostedRuntime({
-          id,
-          news,
-          bindings,
-          output,
-        });
-        const existing =
-          (output?.launchTemplateId &&
-            (yield* describeById(output.launchTemplateId))) ??
-          (yield* describeByName(launchTemplateName));
-
-        if (existing) {
-          if (!hasTags(tags, toTagRecord(existing.Tags))) {
-            return yield* Effect.fail(
-              new Error(
-                `Launch template '${launchTemplateName}' already exists and is not managed by alchemy`,
-              ),
-            );
-          }
-          yield* createVersion({
-            launchTemplateId: existing.LaunchTemplateId as LaunchTemplateId,
-            news,
-            runtime,
+      const syncTemplateTags = Effect.fn(function* ({
+        launchTemplateId,
+        oldTags,
+        newTags,
+      }: {
+        launchTemplateId: LaunchTemplateId;
+        oldTags: Record<string, string>;
+        newTags: Record<string, string>;
+      }) {
+        const { removed, upsert } = diffTags(oldTags, newTags);
+        if (removed.length > 0) {
+          yield* ec2.deleteTags({
+            Resources: [launchTemplateId],
+            Tags: removed.map((key) => ({ Key: key })),
           });
-          yield* syncTemplateTags({
-            launchTemplateId: existing.LaunchTemplateId as LaunchTemplateId,
-            oldTags: toTagRecord(existing.Tags),
-            newTags: tags,
-          });
-          const refreshed = yield* describeById(existing.LaunchTemplateId!);
-          if (!refreshed) {
-            return yield* Effect.fail(
-              new Error(
-                `Launch template '${launchTemplateName}' was not readable after update`,
-              ),
-            );
-          }
-          yield* session.note(refreshed.LaunchTemplateId!);
-          return toAttributes(refreshed, runtime);
         }
+        if (upsert.length > 0) {
+          yield* ec2.createTags({
+            Resources: [launchTemplateId],
+            Tags: upsert,
+          });
+        }
+      });
 
-        const created = yield* ec2.createLaunchTemplate({
-          LaunchTemplateName: launchTemplateName,
-          VersionDescription: runtime.code?.hash ?? "alchemy-create",
-          TagSpecifications: [
-            {
-              ResourceType: "launch-template",
-              Tags: Object.entries(tags).map(([Key, Value]) => ({
-                Key,
-                Value,
-              })),
-            },
-          ],
+      const createVersion = Effect.fn(function* ({
+        launchTemplateId,
+        news,
+        runtime,
+      }: {
+        launchTemplateId: LaunchTemplateId;
+        news: LaunchTemplateProps;
+        runtime: {
+          userData?: string;
+          instanceProfileName?: string;
+          code?: {
+            hash: string;
+          };
+        };
+      }) {
+        const created = yield* ec2.createLaunchTemplateVersion({
+          LaunchTemplateId: launchTemplateId,
+          VersionDescription: runtime.code?.hash ?? "alchemy-update",
           LaunchTemplateData: hosted.buildLaunchTemplateData(
             {
               imageId: news.imageId,
@@ -428,87 +282,241 @@ export const LaunchTemplateProvider = Provider.effect(
               keyName: news.keyName,
               securityGroupIds: news.securityGroupIds as string[] | undefined,
               associatePublicIpAddress: news.associatePublicIpAddress,
-              tags,
+              tags: news.tags,
             },
             runtime,
           ),
         } as any);
-        const template = created.LaunchTemplate;
-        if (!template?.LaunchTemplateId || !template.LaunchTemplateName) {
+
+        const versionNumber = created.LaunchTemplateVersion?.VersionNumber;
+        if (versionNumber === undefined) {
           return yield* Effect.fail(
             new Error(
-              `createLaunchTemplate returned no launch template for '${id}'`,
+              `createLaunchTemplateVersion returned no version for '${launchTemplateId}'`,
             ),
           );
         }
 
-        yield* session.note(template.LaunchTemplateId);
-        return toAttributes(template as ec2.LaunchTemplate, runtime);
-      }),
-      update: Effect.fn(function* ({
-        id,
-        news,
-        olds,
-        output,
-        bindings,
-        session,
-      }) {
-        const tags = {
-          ...(yield* createInternalTags(id)),
-          ...news.tags,
-        };
-        const oldTags = {
-          ...(yield* createInternalTags(id)),
-          ...olds.tags,
-        };
-        const runtime = yield* hosted.resolveHostedRuntime({
+        yield* ec2.modifyLaunchTemplate({
+          LaunchTemplateId: launchTemplateId,
+          DefaultVersion: String(versionNumber),
+        } as any);
+
+        return Number(versionNumber);
+      });
+
+      const toAttributes = (
+        template: ec2.LaunchTemplate,
+        runtime: Partial<LaunchTemplate["Attributes"]> = {},
+      ): LaunchTemplate["Attributes"] => ({
+        launchTemplateId: template.LaunchTemplateId as LaunchTemplateId,
+        launchTemplateArn: toArn(template.LaunchTemplateId as LaunchTemplateId),
+        launchTemplateName: template.LaunchTemplateName!,
+        defaultVersionNumber: Number(template.DefaultVersionNumber ?? 1),
+        latestVersionNumber: Number(
+          template.LatestVersionNumber ?? template.DefaultVersionNumber ?? 1,
+        ),
+        tags: toTagRecord(template.Tags),
+        roleArn: runtime.roleArn,
+        roleName: runtime.roleName,
+        policyName: runtime.policyName,
+        managedIam: runtime.managedIam,
+        runtimeUnitName: runtime.runtimeUnitName,
+        assetPrefix: runtime.assetPrefix,
+        code: runtime.code,
+      });
+
+      return {
+        stables: [
+          "launchTemplateId",
+          "launchTemplateArn",
+          "launchTemplateName",
+        ],
+        diff: Effect.fn(function* ({ id, olds, news: _news }) {
+          if (!isResolved(_news)) return undefined;
+          const news = _news as typeof olds;
+          const oldName = yield* toName(id, olds ?? {});
+          const newName = yield* toName(id, news ?? {});
+          if (oldName !== newName) {
+            return { action: "replace" } as const;
+          }
+
+          if (!deepEqual(olds, news)) {
+            return {
+              action: "update",
+              stables: [
+                "launchTemplateId",
+                "launchTemplateArn",
+                "launchTemplateName",
+              ],
+            } as const;
+          }
+        }),
+        read: Effect.fn(function* ({ id, olds, output }) {
+          const template =
+            (output?.launchTemplateId &&
+              (yield* describeById(output.launchTemplateId))) ??
+            (yield* describeByName(yield* toName(id, olds ?? {})));
+
+          return template
+            ? toAttributes(template, {
+                roleArn: output?.roleArn,
+                roleName: output?.roleName,
+                policyName: output?.policyName,
+                managedIam: output?.managedIam,
+                runtimeUnitName: output?.runtimeUnitName,
+                assetPrefix: output?.assetPrefix,
+                code: output?.code,
+              })
+            : undefined;
+        }),
+        create: Effect.fn(function* ({ id, news, output, bindings, session }) {
+          const launchTemplateName = yield* toName(id, news);
+          const tags = {
+            ...(yield* createInternalTags(id)),
+            ...news.tags,
+          };
+          const runtime = yield* hosted.resolveHostedRuntime({
+            id,
+            news,
+            bindings,
+            output,
+          });
+          const existing =
+            (output?.launchTemplateId &&
+              (yield* describeById(output.launchTemplateId))) ??
+            (yield* describeByName(launchTemplateName));
+
+          if (existing) {
+            if (!hasTags(tags, toTagRecord(existing.Tags))) {
+              return yield* Effect.fail(
+                new Error(
+                  `Launch template '${launchTemplateName}' already exists and is not managed by alchemy`,
+                ),
+              );
+            }
+            yield* createVersion({
+              launchTemplateId: existing.LaunchTemplateId as LaunchTemplateId,
+              news,
+              runtime,
+            });
+            yield* syncTemplateTags({
+              launchTemplateId: existing.LaunchTemplateId as LaunchTemplateId,
+              oldTags: toTagRecord(existing.Tags),
+              newTags: tags,
+            });
+            const refreshed = yield* describeById(existing.LaunchTemplateId!);
+            if (!refreshed) {
+              return yield* Effect.fail(
+                new Error(
+                  `Launch template '${launchTemplateName}' was not readable after update`,
+                ),
+              );
+            }
+            yield* session.note(refreshed.LaunchTemplateId!);
+            return toAttributes(refreshed, runtime);
+          }
+
+          const created = yield* ec2.createLaunchTemplate({
+            LaunchTemplateName: launchTemplateName,
+            VersionDescription: runtime.code?.hash ?? "alchemy-create",
+            TagSpecifications: [
+              {
+                ResourceType: "launch-template",
+                Tags: Object.entries(tags).map(([Key, Value]) => ({
+                  Key,
+                  Value,
+                })),
+              },
+            ],
+            LaunchTemplateData: hosted.buildLaunchTemplateData(
+              {
+                imageId: news.imageId,
+                instanceType: news.instanceType,
+                keyName: news.keyName,
+                securityGroupIds: news.securityGroupIds as string[] | undefined,
+                associatePublicIpAddress: news.associatePublicIpAddress,
+                tags,
+              },
+              runtime,
+            ),
+          } as any);
+          const template = created.LaunchTemplate;
+          if (!template?.LaunchTemplateId || !template.LaunchTemplateName) {
+            return yield* Effect.fail(
+              new Error(
+                `createLaunchTemplate returned no launch template for '${id}'`,
+              ),
+            );
+          }
+
+          yield* session.note(template.LaunchTemplateId);
+          return toAttributes(template as ec2.LaunchTemplate, runtime);
+        }),
+        update: Effect.fn(function* ({
           id,
           news,
-          bindings,
+          olds,
           output,
-        });
+          bindings,
+          session,
+        }) {
+          const tags = {
+            ...(yield* createInternalTags(id)),
+            ...news.tags,
+          };
+          const oldTags = {
+            ...(yield* createInternalTags(id)),
+            ...olds.tags,
+          };
+          const runtime = yield* hosted.resolveHostedRuntime({
+            id,
+            news,
+            bindings,
+            output,
+          });
 
-        yield* createVersion({
-          launchTemplateId: output.launchTemplateId,
-          news,
-          runtime,
-        });
-        yield* syncTemplateTags({
-          launchTemplateId: output.launchTemplateId,
-          oldTags,
-          newTags: tags,
-        });
+          yield* createVersion({
+            launchTemplateId: output.launchTemplateId,
+            news,
+            runtime,
+          });
+          yield* syncTemplateTags({
+            launchTemplateId: output.launchTemplateId,
+            oldTags,
+            newTags: tags,
+          });
 
-        const refreshed = yield* describeById(output.launchTemplateId);
-        if (!refreshed) {
-          return yield* Effect.fail(
-            new Error(
-              `Launch template '${output.launchTemplateName}' was not readable after update`,
-            ),
-          );
-        }
+          const refreshed = yield* describeById(output.launchTemplateId);
+          if (!refreshed) {
+            return yield* Effect.fail(
+              new Error(
+                `Launch template '${output.launchTemplateName}' was not readable after update`,
+              ),
+            );
+          }
 
-        yield* session.note(output.launchTemplateId);
-        return toAttributes(refreshed, runtime);
-      }),
-      delete: Effect.fn(function* ({ output, session }) {
-        yield* ec2
-          .deleteLaunchTemplate({
-            LaunchTemplateId: output.launchTemplateId,
-          } as any)
-          .pipe(
-            Effect.catch((error) =>
-              isLaunchTemplateNotFound(error)
-                ? Effect.void
-                : Effect.fail(error),
-            ),
-          );
+          yield* session.note(output.launchTemplateId);
+          return toAttributes(refreshed, runtime);
+        }),
+        delete: Effect.fn(function* ({ output, session }) {
+          yield* ec2
+            .deleteLaunchTemplate({
+              LaunchTemplateId: output.launchTemplateId,
+            } as any)
+            .pipe(
+              Effect.catch((error) =>
+                isLaunchTemplateNotFound(error)
+                  ? Effect.void
+                  : Effect.fail(error),
+              ),
+            );
 
-        yield* hosted.cleanupHostedRuntime({ output, session });
-      }),
-    };
-  }),
-);
+          yield* hosted.cleanupHostedRuntime({ output, session });
+        }),
+      };
+    }),
+  );
 
 const isLaunchTemplateNotFound = (error: unknown) => {
   const tag = (error as { _tag?: string })?._tag;

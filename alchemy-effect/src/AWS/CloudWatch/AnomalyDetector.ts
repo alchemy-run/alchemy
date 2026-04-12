@@ -137,104 +137,107 @@ const describeDetector = Effect.fn(function* (
   return detector;
 });
 
-export const AnomalyDetectorProvider = Provider.succeed(AnomalyDetector, {
-  stables: ["detectorId"],
-  diff: Effect.fn(function* ({ olds = {}, news = {} }) {
-    if (!isResolved(news)) return undefined;
-    if (detectorIdentity(olds) !== detectorIdentity(news)) {
-      return { action: "replace" } as const;
-    }
-  }),
-  read: Effect.fn(function* ({ olds, output }) {
-    const props = output?.anomalyDetector ?? olds;
-    if (!props) {
-      return undefined;
-    }
+export const AnomalyDetectorProvider = () =>
+  Provider.succeed(AnomalyDetector, {
+    stables: ["detectorId"],
+    diff: Effect.fn(function* ({ olds = {}, news = {} }) {
+      if (!isResolved(news)) return undefined;
+      if (detectorIdentity(olds) !== detectorIdentity(news)) {
+        return { action: "replace" } as const;
+      }
+    }),
+    read: Effect.fn(function* ({ olds, output }) {
+      const props = output?.anomalyDetector ?? olds;
+      if (!props) {
+        return undefined;
+      }
 
-    const detector = yield* describeDetector(props);
+      const detector = yield* describeDetector(props);
 
-    if (!detector) {
-      return undefined;
-    }
+      if (!detector) {
+        return undefined;
+      }
 
-    return {
-      detectorId: detectorIdentity(props),
-      anomalyDetector: detector,
-    };
-  }),
-  create: Effect.fn(function* ({ news, session }) {
-    yield* retryConcurrent(cloudwatch.putAnomalyDetector(news));
-    const detectorId = detectorIdentity(news);
-    yield* session.note(detectorId);
+      return {
+        detectorId: detectorIdentity(props),
+        anomalyDetector: detector,
+      };
+    }),
+    create: Effect.fn(function* ({ news, session }) {
+      yield* retryConcurrent(cloudwatch.putAnomalyDetector(news));
+      const detectorId = detectorIdentity(news);
+      yield* session.note(detectorId);
 
-    let attempt = 0;
-    const state = yield* Effect.suspend(() => {
-      attempt += 1;
-      return describeDetector(news, {
-        resourceId: "AnomalyDetector",
-        attempt,
-        logMisses: true,
+      let attempt = 0;
+      const state = yield* Effect.suspend(() => {
+        attempt += 1;
+        return describeDetector(news, {
+          resourceId: "AnomalyDetector",
+          attempt,
+          logMisses: true,
+        }).pipe(
+          Effect.flatMap((state) =>
+            state
+              ? Effect.succeed(state)
+              : Effect.fail(
+                  new AnomalyDetectorNotVisible({
+                    message: "Anomaly detector not yet visible",
+                  }),
+                ),
+          ),
+        );
       }).pipe(
-        Effect.flatMap((state) =>
-          state
-            ? Effect.succeed(state)
-            : Effect.fail(
-                new AnomalyDetectorNotVisible({
-                  message: "Anomaly detector not yet visible",
-                }),
-              ),
-        ),
+        Effect.retry({
+          while: (error) => error._tag === "AnomalyDetectorNotVisible",
+          schedule: detectorReadinessSchedule,
+        }),
       );
-    }).pipe(
-      Effect.retry({
-        while: (error) => error._tag === "AnomalyDetectorNotVisible",
-        schedule: detectorReadinessSchedule,
-      }),
-    );
 
-    return {
-      detectorId,
-      anomalyDetector: state,
-    };
-  }),
-  update: Effect.fn(function* ({ news, session }) {
-    yield* retryConcurrent(cloudwatch.putAnomalyDetector(news));
-    const detectorId = detectorIdentity(news);
-    yield* session.note(detectorId);
+      return {
+        detectorId,
+        anomalyDetector: state,
+      };
+    }),
+    update: Effect.fn(function* ({ news, session }) {
+      yield* retryConcurrent(cloudwatch.putAnomalyDetector(news));
+      const detectorId = detectorIdentity(news);
+      yield* session.note(detectorId);
 
-    let attempt = 0;
-    const state = yield* Effect.suspend(() => {
-      attempt += 1;
-      return describeDetector(news, {
-        resourceId: "AnomalyDetector",
-        attempt,
-        logMisses: true,
+      let attempt = 0;
+      const state = yield* Effect.suspend(() => {
+        attempt += 1;
+        return describeDetector(news, {
+          resourceId: "AnomalyDetector",
+          attempt,
+          logMisses: true,
+        }).pipe(
+          Effect.flatMap((state) =>
+            state
+              ? Effect.succeed(state)
+              : Effect.fail(
+                  new AnomalyDetectorNotVisible({
+                    message: "Anomaly detector not yet visible",
+                  }),
+                ),
+          ),
+        );
       }).pipe(
-        Effect.flatMap((state) =>
-          state
-            ? Effect.succeed(state)
-            : Effect.fail(
-                new AnomalyDetectorNotVisible({
-                  message: "Anomaly detector not yet visible",
-                }),
-              ),
-        ),
+        Effect.retry({
+          while: (error) => error._tag === "AnomalyDetectorNotVisible",
+          schedule: detectorReadinessSchedule,
+        }),
       );
-    }).pipe(
-      Effect.retry({
-        while: (error) => error._tag === "AnomalyDetectorNotVisible",
-        schedule: detectorReadinessSchedule,
-      }),
-    );
 
-    return {
-      detectorId,
-      anomalyDetector: state,
-    };
-  }),
-  delete: Effect.fn(function* ({ output }) {
-    yield* retryConcurrent(
-      cloudwatch.deleteAnomalyDetector(toDeleteRequest(output.anomalyDetector)),
-    ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
-  }),
-});
+      return {
+        detectorId,
+        anomalyDetector: state,
+      };
+    }),
+    delete: Effect.fn(function* ({ output }) {
+      yield* retryConcurrent(
+        cloudwatch.deleteAnomalyDetector(
+          toDeleteRequest(output.anomalyDetector),
+        ),
+      ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
+    }),
+  });

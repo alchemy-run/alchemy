@@ -87,124 +87,125 @@ export interface Queue extends Resource<
 
 export const Queue = Resource<Queue>("AWS.SQS.Queue");
 
-export const QueueProvider = Provider.effect(
-  Queue,
-  Effect.gen(function* () {
-    const region = yield* Region;
-    const accountId = yield* Account;
-    const createQueueName = Effect.fnUntraced(function* (
-      id: string,
-      props: {
-        queueName?: string | undefined;
-        fifo?: boolean;
-      },
-    ) {
-      if (props.queueName) {
-        return props.queueName;
-      }
-      const baseName = yield* createPhysicalName({
-        id,
-        maxLength: props.fifo ? 80 - ".fifo".length : 80,
+export const QueueProvider = () =>
+  Provider.effect(
+    Queue,
+    Effect.gen(function* () {
+      const region = yield* Region;
+      const accountId = yield* Account;
+      const createQueueName = Effect.fnUntraced(function* (
+        id: string,
+        props: {
+          queueName?: string | undefined;
+          fifo?: boolean;
+        },
+      ) {
+        if (props.queueName) {
+          return props.queueName;
+        }
+        const baseName = yield* createPhysicalName({
+          id,
+          maxLength: props.fifo ? 80 - ".fifo".length : 80,
+        });
+        return props.fifo ? `${baseName}.fifo` : baseName;
       });
-      return props.fifo ? `${baseName}.fifo` : baseName;
-    });
-    const createAttributes = (
-      props: QueueProps,
-      bindings: ResourceBinding<Queue["Binding"]>[],
-    ) => {
-      const baseAttributes: Record<string, string | undefined> = {
-        DelaySeconds: props.delaySeconds?.toString(),
-        MaximumMessageSize: props.maximumMessageSize?.toString(),
-        MessageRetentionPeriod: props.messageRetentionPeriod?.toString(),
-        ReceiveMessageWaitTimeSeconds:
-          props.receiveMessageWaitTimeSeconds?.toString(),
-        VisibilityTimeout: props.visibilityTimeout?.toString(),
-        Policy:
-          bindings.length > 0
-            ? JSON.stringify({
-                Version: "2012-10-17",
-                Statement: bindings.flatMap((p) => p.data.policyStatements),
-              })
-            : undefined,
-      };
-
-      if (props.fifo) {
-        return {
-          ...baseAttributes,
-          FifoQueue: "true",
-          FifoThroughputLimit: props.fifoThroughputLimit,
-          ContentBasedDeduplication: props.contentBasedDeduplication
-            ? "true"
-            : "false",
-          DeduplicationScope: props.deduplicationScope,
+      const createAttributes = (
+        props: QueueProps,
+        bindings: ResourceBinding<Queue["Binding"]>[],
+      ) => {
+        const baseAttributes: Record<string, string | undefined> = {
+          DelaySeconds: props.delaySeconds?.toString(),
+          MaximumMessageSize: props.maximumMessageSize?.toString(),
+          MessageRetentionPeriod: props.messageRetentionPeriod?.toString(),
+          ReceiveMessageWaitTimeSeconds:
+            props.receiveMessageWaitTimeSeconds?.toString(),
+          VisibilityTimeout: props.visibilityTimeout?.toString(),
+          Policy:
+            bindings.length > 0
+              ? JSON.stringify({
+                  Version: "2012-10-17",
+                  Statement: bindings.flatMap((p) => p.data.policyStatements),
+                })
+              : undefined,
         };
-      }
 
-      return baseAttributes;
-    };
-    return Queue.Provider.of({
-      stables: ["queueName", "queueUrl", "queueArn"],
-      diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
-        if (!isResolved(news)) return undefined;
-        const oldFifo = olds.fifo ?? false;
-        const newFifo = news.fifo ?? false;
-        if (oldFifo !== newFifo) {
-          return { action: "replace" } as const;
+        if (props.fifo) {
+          return {
+            ...baseAttributes,
+            FifoQueue: "true",
+            FifoThroughputLimit: props.fifoThroughputLimit,
+            ContentBasedDeduplication: props.contentBasedDeduplication
+              ? "true"
+              : "false",
+            DeduplicationScope: props.deduplicationScope,
+          };
         }
-        const oldQueueName = yield* createQueueName(id, olds);
-        const newQueueName = yield* createQueueName(id, news);
-        if (oldQueueName !== newQueueName) {
-          return { action: "replace" } as const;
-        }
-        // Return undefined to allow update function to be called for other attribute changes
-      }),
-      create: Effect.fn(function* ({ id, news = {}, session, bindings }) {
-        const queueName = yield* createQueueName(id, news);
-        const response = yield* sqs
-          .createQueue({
-            QueueName: queueName,
-            Attributes: createAttributes(news, bindings),
-          })
-          .pipe(
-            Effect.retry({
-              while: (e) => e._tag === "QueueDeletedRecently",
-              schedule: Schedule.fixed(1000).pipe(
-                Schedule.tapOutput((i) =>
-                  session.note(
-                    `Queue was deleted recently, retrying... ${i + 1}s`,
+
+        return baseAttributes;
+      };
+      return Queue.Provider.of({
+        stables: ["queueName", "queueUrl", "queueArn"],
+        diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
+          if (!isResolved(news)) return undefined;
+          const oldFifo = olds.fifo ?? false;
+          const newFifo = news.fifo ?? false;
+          if (oldFifo !== newFifo) {
+            return { action: "replace" } as const;
+          }
+          const oldQueueName = yield* createQueueName(id, olds);
+          const newQueueName = yield* createQueueName(id, news);
+          if (oldQueueName !== newQueueName) {
+            return { action: "replace" } as const;
+          }
+          // Return undefined to allow update function to be called for other attribute changes
+        }),
+        create: Effect.fn(function* ({ id, news = {}, session, bindings }) {
+          const queueName = yield* createQueueName(id, news);
+          const response = yield* sqs
+            .createQueue({
+              QueueName: queueName,
+              Attributes: createAttributes(news, bindings),
+            })
+            .pipe(
+              Effect.retry({
+                while: (e) => e._tag === "QueueDeletedRecently",
+                schedule: Schedule.fixed(1000).pipe(
+                  Schedule.tapOutput((i) =>
+                    session.note(
+                      `Queue was deleted recently, retrying... ${i + 1}s`,
+                    ),
                   ),
                 ),
-              ),
-            }),
-          );
-        const queueArn =
-          `arn:aws:sqs:${region}:${accountId}:${queueName}` as const;
-        const queueUrl = response.QueueUrl!;
-        yield* session.note(queueUrl);
-        return {
-          queueName,
-          queueUrl,
-          queueArn: queueArn,
-        };
-      }),
-      update: Effect.fn(function* ({ news = {}, output, session, bindings }) {
-        const attributes = createAttributes(news, bindings);
-        if (Object.values(attributes).some((a) => a !== undefined)) {
-          yield* sqs.setQueueAttributes({
-            QueueUrl: output.queueUrl,
-            Attributes: attributes,
-          });
-        }
-        yield* session.note(output.queueUrl);
-        return output;
-      }),
-      delete: Effect.fn(function* (input) {
-        yield* sqs
-          .deleteQueue({
-            QueueUrl: input.output.queueUrl,
-          })
-          .pipe(Effect.catchTag("QueueDoesNotExist", () => Effect.void));
-      }),
-    });
-  }),
-);
+              }),
+            );
+          const queueArn =
+            `arn:aws:sqs:${region}:${accountId}:${queueName}` as const;
+          const queueUrl = response.QueueUrl!;
+          yield* session.note(queueUrl);
+          return {
+            queueName,
+            queueUrl,
+            queueArn: queueArn,
+          };
+        }),
+        update: Effect.fn(function* ({ news = {}, output, session, bindings }) {
+          const attributes = createAttributes(news, bindings);
+          if (Object.values(attributes).some((a) => a !== undefined)) {
+            yield* sqs.setQueueAttributes({
+              QueueUrl: output.queueUrl,
+              Attributes: attributes,
+            });
+          }
+          yield* session.note(output.queueUrl);
+          return output;
+        }),
+        delete: Effect.fn(function* (input) {
+          yield* sqs
+            .deleteQueue({
+              QueueUrl: input.output.queueUrl,
+            })
+            .pipe(Effect.catchTag("QueueDoesNotExist", () => Effect.void));
+        }),
+      });
+    }),
+  );

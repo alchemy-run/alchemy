@@ -67,7 +67,7 @@ test(
     yield* destroy();
 
     yield* assertSubnetDeleted(subnet.subnetId);
-  }).pipe(Effect.provide(AWS.providers), logLevel),
+  }).pipe(Effect.provide(AWS.providers()), logLevel),
 );
 
 const expectSubnetAttribute = Effect.fn(function* (props: {

@@ -255,494 +255,505 @@ export const Distribution = Resource<Distribution>(
   "AWS.CloudFront.Distribution",
 );
 
-export const DistributionProvider = Provider.effect(
-  Distribution,
-  Effect.gen(function* () {
-    const waitForDeployment = Effect.fn(function* (distributionId: string) {
-      yield* Effect.logInfo(
-        `CloudFront Distribution wait: polling deployment for ${distributionId}`,
-      );
-      return yield* cloudfront.getDistribution({ Id: distributionId }).pipe(
-        Effect.map((response) => response.Distribution),
-        Effect.flatMap((distribution) =>
-          distribution?.Status === "Deployed"
-            ? Effect.gen(function* () {
-                yield* Effect.logInfo(
-                  `CloudFront Distribution wait: ${distributionId} deployed`,
-                );
-                return distribution;
-              })
-            : Effect.gen(function* () {
-                yield* Effect.logInfo(
-                  `CloudFront Distribution wait: ${distributionId} status=${distribution?.Status ?? "unknown"}`,
-                );
-                return yield* Effect.fail(
-                  new DistributionPendingDeployment({
-                    message: `Distribution ${distributionId} is not yet deployed`,
-                  }),
-                );
-              }),
-        ),
-        Effect.retry({
-          while: (error) => error._tag === "DistributionPendingDeployment",
-          schedule: Schedule.fixed("10 seconds").pipe(
-            Schedule.both(Schedule.recurs(60)),
-          ),
-        }),
-      );
-    });
-
-    const getCurrent = Effect.fn(function* (distributionId: string) {
-      yield* Effect.logInfo(
-        `CloudFront Distribution read: loading distribution ${distributionId}`,
-      );
-      const distribution = yield* cloudfront
-        .getDistribution({ Id: distributionId })
-        .pipe(
-          Effect.map((response) => response.Distribution),
-          Effect.catchTag("NoSuchDistribution", () =>
-            Effect.succeed(undefined),
-          ),
-        );
-
-      if (!distribution?.Id) {
+export const DistributionProvider = () =>
+  Provider.effect(
+    Distribution,
+    Effect.gen(function* () {
+      const waitForDeployment = Effect.fn(function* (distributionId: string) {
         yield* Effect.logInfo(
-          `CloudFront Distribution read: distribution ${distributionId} not found`,
+          `CloudFront Distribution wait: polling deployment for ${distributionId}`,
         );
-        return undefined;
-      }
-
-      yield* Effect.logInfo(
-        `CloudFront Distribution read: loading config and tags for ${distributionId}`,
-      );
-      const config = yield* cloudfront.getDistributionConfig({
-        Id: distributionId,
+        return yield* cloudfront.getDistribution({ Id: distributionId }).pipe(
+          Effect.map((response) => response.Distribution),
+          Effect.flatMap((distribution) =>
+            distribution?.Status === "Deployed"
+              ? Effect.gen(function* () {
+                  yield* Effect.logInfo(
+                    `CloudFront Distribution wait: ${distributionId} deployed`,
+                  );
+                  return distribution;
+                })
+              : Effect.gen(function* () {
+                  yield* Effect.logInfo(
+                    `CloudFront Distribution wait: ${distributionId} status=${distribution?.Status ?? "unknown"}`,
+                  );
+                  return yield* Effect.fail(
+                    new DistributionPendingDeployment({
+                      message: `Distribution ${distributionId} is not yet deployed`,
+                    }),
+                  );
+                }),
+          ),
+          Effect.retry({
+            while: (error) => error._tag === "DistributionPendingDeployment",
+            schedule: Schedule.fixed("10 seconds").pipe(
+              Schedule.both(Schedule.recurs(60)),
+            ),
+          }),
+        );
       });
-      const tags = yield* cloudfront
-        .listTagsForResource({
-          Resource: distribution.ARN,
-        })
-        .pipe(Effect.map((response) => toTagsRecord(response.Tags.Items)));
 
-      yield* Effect.logInfo(
-        `CloudFront Distribution read: loaded ${distributionId} status=${distribution.Status} enabled=${config.DistributionConfig?.Enabled ?? "unknown"} etag=${config.ETag ?? "missing"} tags=${Object.keys(tags).length}`,
-      );
-      return {
-        distribution,
-        config: config.DistributionConfig!,
-        etag: config.ETag,
-        tags,
-      };
-    });
+      const getCurrent = Effect.fn(function* (distributionId: string) {
+        yield* Effect.logInfo(
+          `CloudFront Distribution read: loading distribution ${distributionId}`,
+        );
+        const distribution = yield* cloudfront
+          .getDistribution({ Id: distributionId })
+          .pipe(
+            Effect.map((response) => response.Distribution),
+            Effect.catchTag("NoSuchDistribution", () =>
+              Effect.succeed(undefined),
+            ),
+          );
 
-    const getByCallerReference = Effect.fn(function* (callerReference: string) {
-      yield* Effect.logInfo(
-        `CloudFront Distribution read: searching for callerReference=${callerReference}`,
-      );
-      let marker: string | undefined;
-
-      do {
-        const listed = yield* cloudfront.listDistributions({
-          Marker: marker,
-        });
-
-        for (const item of listed.DistributionList?.Items ?? []) {
-          if (!item.Id) continue;
-
-          const config = yield* cloudfront
-            .getDistributionConfig({
-              Id: item.Id,
-            })
-            .pipe(
-              Effect.catchTag("NoSuchDistribution", () =>
-                Effect.succeed(undefined),
-              ),
-            );
-
-          if (config?.DistributionConfig?.CallerReference === callerReference) {
-            yield* Effect.logInfo(
-              `CloudFront Distribution read: recovered ${item.Id} for callerReference=${callerReference}`,
-            );
-            return yield* getCurrent(item.Id);
-          }
+        if (!distribution?.Id) {
+          yield* Effect.logInfo(
+            `CloudFront Distribution read: distribution ${distributionId} not found`,
+          );
+          return undefined;
         }
 
-        marker = listed.DistributionList?.IsTruncated
-          ? listed.DistributionList.NextMarker
-          : undefined;
-      } while (marker);
+        yield* Effect.logInfo(
+          `CloudFront Distribution read: loading config and tags for ${distributionId}`,
+        );
+        const config = yield* cloudfront.getDistributionConfig({
+          Id: distributionId,
+        });
+        const tags = yield* cloudfront
+          .listTagsForResource({
+            Resource: distribution.ARN,
+          })
+          .pipe(Effect.map((response) => toTagsRecord(response.Tags.Items)));
 
-      yield* Effect.logInfo(
-        `CloudFront Distribution read: no distribution found for callerReference=${callerReference}`,
-      );
-      return undefined;
-    });
+        yield* Effect.logInfo(
+          `CloudFront Distribution read: loaded ${distributionId} status=${distribution.Status} enabled=${config.DistributionConfig?.Enabled ?? "unknown"} etag=${config.ETag ?? "missing"} tags=${Object.keys(tags).length}`,
+        );
+        return {
+          distribution,
+          config: config.DistributionConfig!,
+          etag: config.ETag,
+          tags,
+        };
+      });
 
-    const waitForDeletionReady = Effect.fn(function* (distributionId: string) {
-      class DistributionPendingDeletionReadiness extends Data.TaggedError(
-        "DistributionPendingDeletionReadiness",
-      )<{
-        message: string;
-      }> {}
+      const getByCallerReference = Effect.fn(function* (
+        callerReference: string,
+      ) {
+        yield* Effect.logInfo(
+          `CloudFront Distribution read: searching for callerReference=${callerReference}`,
+        );
+        let marker: string | undefined;
 
-      yield* Effect.logInfo(
-        `CloudFront Distribution delete: waiting for ${distributionId} to become disabled and deployed`,
-      );
-      return yield* Effect.logInfo(
-        `CloudFront Distribution delete: waiting for ${distributionId} to become disabled and deployed`,
-      ).pipe(
-        Effect.andThen(() => getCurrent(distributionId)),
-        Effect.flatMap(
-          Effect.fnUntraced(function* (current) {
-            if (!current) {
-              yield* Effect.logInfo(
-                `CloudFront Distribution delete: ${distributionId} already absent while waiting`,
+        do {
+          const listed = yield* cloudfront.listDistributions({
+            Marker: marker,
+          });
+
+          for (const item of listed.DistributionList?.Items ?? []) {
+            if (!item.Id) continue;
+
+            const config = yield* cloudfront
+              .getDistributionConfig({
+                Id: item.Id,
+              })
+              .pipe(
+                Effect.catchTag("NoSuchDistribution", () =>
+                  Effect.succeed(undefined),
+                ),
               );
-              return undefined;
-            }
 
             if (
-              current.config.Enabled ||
-              current.distribution.Status !== "Deployed"
+              config?.DistributionConfig?.CallerReference === callerReference
             ) {
               yield* Effect.logInfo(
-                `CloudFront Distribution delete: ${distributionId} not ready enabled=${current.config.Enabled} status=${current.distribution.Status}`,
+                `CloudFront Distribution read: recovered ${item.Id} for callerReference=${callerReference}`,
               );
-              return yield* Effect.fail(
-                new DistributionPendingDeletionReadiness({
-                  message: `Distribution ${distributionId} is not yet ready for deletion`,
-                }),
-              );
+              return yield* getCurrent(item.Id);
             }
+          }
 
-            yield* Effect.logInfo(
-              `CloudFront Distribution delete: ${distributionId} ready for delete with etag=${current.etag ?? "missing"}`,
-            );
-            return current;
-          }),
-        ),
-        Effect.retry({
-          while: (error) =>
-            error._tag === "DistributionPendingDeletionReadiness",
-          schedule: Schedule.fixed("10 seconds").pipe(
-            Schedule.both(Schedule.recurs(60)),
-          ),
-        }),
-      );
-    });
+          marker = listed.DistributionList?.IsTruncated
+            ? listed.DistributionList.NextMarker
+            : undefined;
+        } while (marker);
 
-    return {
-      stables: [
-        "distributionId",
-        "distributionArn",
-        "domainName",
-        "hostedZoneId",
-      ],
-      read: Effect.fn(function* ({ output }) {
-        if (!output?.distributionId) {
-          return undefined;
-        }
-
-        const current = yield* getCurrent(output.distributionId);
-        if (!current) {
-          return undefined;
-        }
-
-        return toAttrs(current.distribution, current.etag, current.tags);
-      }),
-      create: Effect.fn(function* ({ id, instanceId, news, session }) {
-        const tags = {
-          ...(yield* createInternalTags(id)),
-          ...news.tags,
-        };
-
-        const callerReference = instanceId;
-        const config = toConfig(callerReference, news);
         yield* Effect.logInfo(
-          `CloudFront Distribution create: callerReference=${callerReference} aliases=${news.aliases?.length ?? 0} origins=${(news.origins as DistributionOrigin[]).length} tags=${Object.keys(tags).length}`,
+          `CloudFront Distribution read: no distribution found for callerReference=${callerReference}`,
         );
+        return undefined;
+      });
+
+      const waitForDeletionReady = Effect.fn(function* (
+        distributionId: string,
+      ) {
+        class DistributionPendingDeletionReadiness extends Data.TaggedError(
+          "DistributionPendingDeletionReadiness",
+        )<{
+          message: string;
+        }> {}
+
         yield* Effect.logInfo(
-          `CloudFront Distribution create: creating distribution with tags for callerReference=${callerReference}`,
+          `CloudFront Distribution delete: waiting for ${distributionId} to become disabled and deployed`,
         );
-        const created = yield* cloudfront
-          .createDistributionWithTags({
-            DistributionConfigWithTags: {
-              DistributionConfig: config,
-              Tags: {
-                Items: createTagsList(tags),
-              },
-            },
-          })
-          .pipe(
-            Effect.catch((error) =>
-              isAccessDenied(error)
-                ? Effect.gen(function* () {
-                    yield* Effect.logInfo(
-                      `CloudFront Distribution create: createDistributionWithTags denied, retrying without tags for callerReference=${callerReference}`,
-                    );
-                    const created = yield* cloudfront.createDistribution({
-                      DistributionConfig: config,
-                    });
-
-                    if (
-                      created.Distribution?.ARN &&
-                      Object.keys(tags).length > 0
-                    ) {
-                      yield* Effect.logInfo(
-                        `CloudFront Distribution create: tagging distribution ${created.Distribution.Id} after fallback`,
-                      );
-                      yield* cloudfront.tagResource({
-                        Resource: created.Distribution.ARN,
-                        Tags: {
-                          Items: createTagsList(tags),
-                        },
-                      });
-                    }
-
-                    return created;
-                  })
-                : Effect.gen(function* () {
-                    yield* Effect.logInfo(
-                      `CloudFront Distribution create: createDistributionWithTags failed for callerReference=${callerReference} error=${String(error)}`,
-                    );
-                    return yield* Effect.fail(error);
-                  }),
-            ),
-          )
-          .pipe(
-            Effect.map((created) => ({
-              distributionId: created.Distribution?.Id,
-              etag: created.ETag,
-              tags,
-            })),
-            Effect.catchTag("DistributionAlreadyExists", () =>
-              Effect.gen(function* () {
+        return yield* Effect.logInfo(
+          `CloudFront Distribution delete: waiting for ${distributionId} to become disabled and deployed`,
+        ).pipe(
+          Effect.andThen(() => getCurrent(distributionId)),
+          Effect.flatMap(
+            Effect.fnUntraced(function* (current) {
+              if (!current) {
                 yield* Effect.logInfo(
-                  `CloudFront Distribution create: callerReference=${callerReference} already exists, attempting recovery`,
+                  `CloudFront Distribution delete: ${distributionId} already absent while waiting`,
                 );
-                const recovered = yield* getByCallerReference(callerReference);
-                if (!recovered?.distribution.Id) {
-                  return yield* Effect.fail(
-                    new Error(
-                      `CloudFront distribution with caller reference '${callerReference}' already exists but could not be recovered`,
-                    ),
+                return undefined;
+              }
+
+              if (
+                current.config.Enabled ||
+                current.distribution.Status !== "Deployed"
+              ) {
+                yield* Effect.logInfo(
+                  `CloudFront Distribution delete: ${distributionId} not ready enabled=${current.config.Enabled} status=${current.distribution.Status}`,
+                );
+                return yield* Effect.fail(
+                  new DistributionPendingDeletionReadiness({
+                    message: `Distribution ${distributionId} is not yet ready for deletion`,
+                  }),
+                );
+              }
+
+              yield* Effect.logInfo(
+                `CloudFront Distribution delete: ${distributionId} ready for delete with etag=${current.etag ?? "missing"}`,
+              );
+              return current;
+            }),
+          ),
+          Effect.retry({
+            while: (error) =>
+              error._tag === "DistributionPendingDeletionReadiness",
+            schedule: Schedule.fixed("10 seconds").pipe(
+              Schedule.both(Schedule.recurs(60)),
+            ),
+          }),
+        );
+      });
+
+      return {
+        stables: [
+          "distributionId",
+          "distributionArn",
+          "domainName",
+          "hostedZoneId",
+        ],
+        read: Effect.fn(function* ({ output }) {
+          if (!output?.distributionId) {
+            return undefined;
+          }
+
+          const current = yield* getCurrent(output.distributionId);
+          if (!current) {
+            return undefined;
+          }
+
+          return toAttrs(current.distribution, current.etag, current.tags);
+        }),
+        create: Effect.fn(function* ({ id, instanceId, news, session }) {
+          const tags = {
+            ...(yield* createInternalTags(id)),
+            ...news.tags,
+          };
+
+          const callerReference = instanceId;
+          const config = toConfig(callerReference, news);
+          yield* Effect.logInfo(
+            `CloudFront Distribution create: callerReference=${callerReference} aliases=${news.aliases?.length ?? 0} origins=${(news.origins as DistributionOrigin[]).length} tags=${Object.keys(tags).length}`,
+          );
+          yield* Effect.logInfo(
+            `CloudFront Distribution create: creating distribution with tags for callerReference=${callerReference}`,
+          );
+          const created = yield* cloudfront
+            .createDistributionWithTags({
+              DistributionConfigWithTags: {
+                DistributionConfig: config,
+                Tags: {
+                  Items: createTagsList(tags),
+                },
+              },
+            })
+            .pipe(
+              Effect.catch((error) =>
+                isAccessDenied(error)
+                  ? Effect.gen(function* () {
+                      yield* Effect.logInfo(
+                        `CloudFront Distribution create: createDistributionWithTags denied, retrying without tags for callerReference=${callerReference}`,
+                      );
+                      const created = yield* cloudfront.createDistribution({
+                        DistributionConfig: config,
+                      });
+
+                      if (
+                        created.Distribution?.ARN &&
+                        Object.keys(tags).length > 0
+                      ) {
+                        yield* Effect.logInfo(
+                          `CloudFront Distribution create: tagging distribution ${created.Distribution.Id} after fallback`,
+                        );
+                        yield* cloudfront.tagResource({
+                          Resource: created.Distribution.ARN,
+                          Tags: {
+                            Items: createTagsList(tags),
+                          },
+                        });
+                      }
+
+                      return created;
+                    })
+                  : Effect.gen(function* () {
+                      yield* Effect.logInfo(
+                        `CloudFront Distribution create: createDistributionWithTags failed for callerReference=${callerReference} error=${String(error)}`,
+                      );
+                      return yield* Effect.fail(error);
+                    }),
+              ),
+            )
+            .pipe(
+              Effect.map((created) => ({
+                distributionId: created.Distribution?.Id,
+                etag: created.ETag,
+                tags,
+              })),
+              Effect.catchTag("DistributionAlreadyExists", () =>
+                Effect.gen(function* () {
+                  yield* Effect.logInfo(
+                    `CloudFront Distribution create: callerReference=${callerReference} already exists, attempting recovery`,
                   );
-                }
-                return {
-                  distributionId: recovered.distribution.Id,
-                  etag: recovered.etag,
-                  tags: recovered.tags,
-                };
+                  const recovered =
+                    yield* getByCallerReference(callerReference);
+                  if (!recovered?.distribution.Id) {
+                    return yield* Effect.fail(
+                      new Error(
+                        `CloudFront distribution with caller reference '${callerReference}' already exists but could not be recovered`,
+                      ),
+                    );
+                  }
+                  return {
+                    distributionId: recovered.distribution.Id,
+                    etag: recovered.etag,
+                    tags: recovered.tags,
+                  };
+                }),
+              ),
+              Effect.catchTag(
+                "InvalidArgument",
+                (
+                  error,
+                ): Effect.Effect<
+                  never,
+                  | cloudfront.InvalidArgument
+                  | DistributionFunctionAssociationPending
+                > =>
+                  isFunctionAssociationPending(error)
+                    ? Effect.logInfo(
+                        "CloudFront Distribution create: function association not yet ready, retrying",
+                      ).pipe(
+                        Effect.andThen(
+                          Effect.fail(
+                            new DistributionFunctionAssociationPending({
+                              message:
+                                error.Message ??
+                                "CloudFront function association pending",
+                            }),
+                          ),
+                        ),
+                      )
+                    : Effect.fail(error),
+              ),
+              Effect.retry({
+                while: (error) =>
+                  error instanceof DistributionFunctionAssociationPending,
+                schedule: Schedule.fixed("5 seconds").pipe(
+                  Schedule.both(Schedule.recurs(24)),
+                ),
               }),
-            ),
-            Effect.catchTag(
-              "InvalidArgument",
-              (
-                error,
-              ): Effect.Effect<
-                never,
-                | cloudfront.InvalidArgument
-                | DistributionFunctionAssociationPending
-              > =>
-                isFunctionAssociationPending(error)
-                  ? Effect.logInfo(
-                      "CloudFront Distribution create: function association not yet ready, retrying",
-                    ).pipe(
-                      Effect.andThen(
-                        Effect.fail(
-                          new DistributionFunctionAssociationPending({
-                            message:
-                              error.Message ??
-                              "CloudFront function association pending",
-                          }),
-                        ),
-                      ),
-                    )
-                  : Effect.fail(error),
-            ),
-            Effect.retry({
-              while: (error) =>
-                error instanceof DistributionFunctionAssociationPending,
-              schedule: Schedule.fixed("5 seconds").pipe(
-                Schedule.both(Schedule.recurs(24)),
+            );
+
+          if (!created.distributionId) {
+            return yield* Effect.fail(
+              new Error("createDistribution returned no distribution"),
+            );
+          }
+
+          yield* Effect.logInfo(
+            `CloudFront Distribution create: created ${created.distributionId} etag=${created.etag ?? "missing"}, waiting for deployment`,
+          );
+          const deployed = yield* waitForDeployment(created.distributionId);
+          yield* Effect.logInfo(
+            `CloudFront Distribution create: deployed ${created.distributionId} domain=${deployed.DomainName}`,
+          );
+          yield* session.note(created.distributionId);
+          return toAttrs(deployed, created.etag, created.tags);
+        }),
+        update: Effect.fn(function* ({ id, news, olds, output, session }) {
+          yield* Effect.logInfo(
+            `CloudFront Distribution update: distribution=${output.distributionId} aliases=${news.aliases?.length ?? 0}`,
+          );
+          const current = yield* getCurrent(output.distributionId);
+          if (!current) {
+            return yield* Effect.fail(
+              new Error(
+                `CloudFront distribution '${output.distributionId}' was not found`,
               ),
-            }),
-          );
+            );
+          }
 
-        if (!created.distributionId) {
-          return yield* Effect.fail(
-            new Error("createDistribution returned no distribution"),
+          yield* Effect.logInfo(
+            `CloudFront Distribution update: updating config for ${output.distributionId} with etag=${current.etag ?? "missing"}`,
           );
-        }
-
-        yield* Effect.logInfo(
-          `CloudFront Distribution create: created ${created.distributionId} etag=${created.etag ?? "missing"}, waiting for deployment`,
-        );
-        const deployed = yield* waitForDeployment(created.distributionId);
-        yield* Effect.logInfo(
-          `CloudFront Distribution create: deployed ${created.distributionId} domain=${deployed.DomainName}`,
-        );
-        yield* session.note(created.distributionId);
-        return toAttrs(deployed, created.etag, created.tags);
-      }),
-      update: Effect.fn(function* ({ id, news, olds, output, session }) {
-        yield* Effect.logInfo(
-          `CloudFront Distribution update: distribution=${output.distributionId} aliases=${news.aliases?.length ?? 0}`,
-        );
-        const current = yield* getCurrent(output.distributionId);
-        if (!current) {
-          return yield* Effect.fail(
-            new Error(
-              `CloudFront distribution '${output.distributionId}' was not found`,
-            ),
-          );
-        }
-
-        yield* Effect.logInfo(
-          `CloudFront Distribution update: updating config for ${output.distributionId} with etag=${current.etag ?? "missing"}`,
-        );
-        const updated = yield* cloudfront
-          .updateDistribution({
-            Id: output.distributionId,
-            IfMatch: current.etag,
-            DistributionConfig: toConfig(current.config.CallerReference, news),
-          })
-          .pipe(
-            Effect.catchTag(
-              "InvalidArgument",
-              (
-                error,
-              ): Effect.Effect<
-                never,
-                | cloudfront.InvalidArgument
-                | DistributionFunctionAssociationPending
-              > =>
-                isFunctionAssociationPending(error)
-                  ? Effect.logInfo(
-                      "CloudFront Distribution update: function association not yet ready, retrying",
-                    ).pipe(
-                      Effect.andThen(
-                        Effect.fail(
-                          new DistributionFunctionAssociationPending({
-                            message:
-                              error.Message ??
-                              "CloudFront function association pending",
-                          }),
-                        ),
-                      ),
-                    )
-                  : Effect.fail(error),
-            ),
-            Effect.retry({
-              while: (error) =>
-                error instanceof DistributionFunctionAssociationPending,
-              schedule: Schedule.fixed("5 seconds").pipe(
-                Schedule.both(Schedule.recurs(24)),
+          const updated = yield* cloudfront
+            .updateDistribution({
+              Id: output.distributionId,
+              IfMatch: current.etag,
+              DistributionConfig: toConfig(
+                current.config.CallerReference,
+                news,
               ),
-            }),
-          );
+            })
+            .pipe(
+              Effect.catchTag(
+                "InvalidArgument",
+                (
+                  error,
+                ): Effect.Effect<
+                  never,
+                  | cloudfront.InvalidArgument
+                  | DistributionFunctionAssociationPending
+                > =>
+                  isFunctionAssociationPending(error)
+                    ? Effect.logInfo(
+                        "CloudFront Distribution update: function association not yet ready, retrying",
+                      ).pipe(
+                        Effect.andThen(
+                          Effect.fail(
+                            new DistributionFunctionAssociationPending({
+                              message:
+                                error.Message ??
+                                "CloudFront function association pending",
+                            }),
+                          ),
+                        ),
+                      )
+                    : Effect.fail(error),
+              ),
+              Effect.retry({
+                while: (error) =>
+                  error instanceof DistributionFunctionAssociationPending,
+                schedule: Schedule.fixed("5 seconds").pipe(
+                  Schedule.both(Schedule.recurs(24)),
+                ),
+              }),
+            );
 
-        const oldTags = {
-          ...(yield* createInternalTags(id)),
-          ...olds.tags,
-        };
-        const newTags = {
-          ...(yield* createInternalTags(id)),
-          ...news.tags,
-        };
-        const { removed, upsert } = diffTags(oldTags, newTags);
+          const oldTags = {
+            ...(yield* createInternalTags(id)),
+            ...olds.tags,
+          };
+          const newTags = {
+            ...(yield* createInternalTags(id)),
+            ...news.tags,
+          };
+          const { removed, upsert } = diffTags(oldTags, newTags);
 
-        yield* Effect.logInfo(
-          `CloudFront Distribution update: distribution=${output.distributionId} upsertTags=${upsert.length} removedTags=${removed.length}`,
-        );
-
-        if (upsert.length > 0) {
           yield* Effect.logInfo(
-            `CloudFront Distribution update: tagging ${output.distributionId} with ${upsert.length} tag(s)`,
+            `CloudFront Distribution update: distribution=${output.distributionId} upsertTags=${upsert.length} removedTags=${removed.length}`,
           );
-          yield* cloudfront.tagResource({
-            Resource: output.distributionArn,
-            Tags: {
-              Items: upsert,
-            },
-          });
-        }
 
-        if (removed.length > 0) {
+          if (upsert.length > 0) {
+            yield* Effect.logInfo(
+              `CloudFront Distribution update: tagging ${output.distributionId} with ${upsert.length} tag(s)`,
+            );
+            yield* cloudfront.tagResource({
+              Resource: output.distributionArn,
+              Tags: {
+                Items: upsert,
+              },
+            });
+          }
+
+          if (removed.length > 0) {
+            yield* Effect.logInfo(
+              `CloudFront Distribution update: removing ${removed.length} tag(s) from ${output.distributionId}`,
+            );
+            yield* cloudfront.untagResource({
+              Resource: output.distributionArn,
+              TagKeys: {
+                Items: removed,
+              },
+            });
+          }
+
+          if (!updated.Distribution?.Id) {
+            return yield* Effect.fail(
+              new Error("updateDistribution returned no distribution"),
+            );
+          }
+
           yield* Effect.logInfo(
-            `CloudFront Distribution update: removing ${removed.length} tag(s) from ${output.distributionId}`,
+            `CloudFront Distribution update: updated ${output.distributionId} etag=${updated.ETag ?? "missing"}, waiting for deployment`,
           );
-          yield* cloudfront.untagResource({
-            Resource: output.distributionArn,
-            TagKeys: {
-              Items: removed,
-            },
-          });
-        }
-
-        if (!updated.Distribution?.Id) {
-          return yield* Effect.fail(
-            new Error("updateDistribution returned no distribution"),
-          );
-        }
-
-        yield* Effect.logInfo(
-          `CloudFront Distribution update: updated ${output.distributionId} etag=${updated.ETag ?? "missing"}, waiting for deployment`,
-        );
-        const deployed = yield* waitForDeployment(updated.Distribution.Id);
-        yield* Effect.logInfo(
-          `CloudFront Distribution update: deployed ${output.distributionId} domain=${deployed.DomainName}`,
-        );
-        yield* session.note(output.distributionId);
-        return toAttrs(deployed, updated.ETag, newTags);
-      }),
-      delete: Effect.fn(function* ({ output }) {
-        yield* Effect.logInfo(
-          `CloudFront Distribution delete: distribution=${output.distributionId}`,
-        );
-        const current = yield* getCurrent(output.distributionId);
-        if (!current) {
+          const deployed = yield* waitForDeployment(updated.Distribution.Id);
           yield* Effect.logInfo(
-            `CloudFront Distribution delete: ${output.distributionId} already absent`,
+            `CloudFront Distribution update: deployed ${output.distributionId} domain=${deployed.DomainName}`,
           );
-          return;
-        }
-
-        if (current.config.Enabled) {
+          yield* session.note(output.distributionId);
+          return toAttrs(deployed, updated.ETag, newTags);
+        }),
+        delete: Effect.fn(function* ({ output }) {
           yield* Effect.logInfo(
-            `CloudFront Distribution delete: disabling ${output.distributionId} before delete`,
+            `CloudFront Distribution delete: distribution=${output.distributionId}`,
           );
-          yield* cloudfront.updateDistribution({
-            Id: output.distributionId,
-            IfMatch: current.etag,
-            DistributionConfig: {
-              ...current.config,
-              Enabled: false,
-            },
-          });
-        }
+          const current = yield* getCurrent(output.distributionId);
+          if (!current) {
+            yield* Effect.logInfo(
+              `CloudFront Distribution delete: ${output.distributionId} already absent`,
+            );
+            return;
+          }
 
-        const latest = yield* waitForDeletionReady(output.distributionId);
-        if (!latest) {
+          if (current.config.Enabled) {
+            yield* Effect.logInfo(
+              `CloudFront Distribution delete: disabling ${output.distributionId} before delete`,
+            );
+            yield* cloudfront.updateDistribution({
+              Id: output.distributionId,
+              IfMatch: current.etag,
+              DistributionConfig: {
+                ...current.config,
+                Enabled: false,
+              },
+            });
+          }
+
+          const latest = yield* waitForDeletionReady(output.distributionId);
+          if (!latest) {
+            yield* Effect.logInfo(
+              `CloudFront Distribution delete: ${output.distributionId} disappeared before delete`,
+            );
+            return;
+          }
+
           yield* Effect.logInfo(
-            `CloudFront Distribution delete: ${output.distributionId} disappeared before delete`,
+            `CloudFront Distribution delete: deleting ${output.distributionId} with etag=${latest.etag ?? "missing"}`,
           );
-          return;
-        }
-
-        yield* Effect.logInfo(
-          `CloudFront Distribution delete: deleting ${output.distributionId} with etag=${latest.etag ?? "missing"}`,
-        );
-        yield* cloudfront
-          .deleteDistribution({
-            Id: output.distributionId,
-            IfMatch: latest.etag,
-          })
-          .pipe(Effect.catchTag("NoSuchDistribution", () => Effect.void));
-      }),
-    };
-  }),
-);
+          yield* cloudfront
+            .deleteDistribution({
+              Id: output.distributionId,
+              IfMatch: latest.etag,
+            })
+            .pipe(Effect.catchTag("NoSuchDistribution", () => Effect.void));
+        }),
+      };
+    }),
+  );
 
 const toTagsRecord = (tags: cloudfront.Tag[] | undefined) =>
   Object.fromEntries(

@@ -60,106 +60,107 @@ export interface SAMLProvider extends Resource<
  */
 export const SAMLProvider = Resource<SAMLProvider>("AWS.IAM.SAMLProvider");
 
-export const SAMLProviderProvider = Provider.succeed(SAMLProvider, {
-  stables: ["samlProviderArn"],
-  diff: Effect.fn(function* ({ olds, news }) {
-    if (!isResolved(news)) return;
-    if (olds.name !== news.name) {
-      return { action: "replace" } as const;
-    }
-  }),
-  read: Effect.fn(function* ({ output }) {
-    if (!output) {
-      return undefined;
-    }
-    const response = yield* iam
-      .getSAMLProvider({
+export const SAMLProviderProvider = () =>
+  Provider.succeed(SAMLProvider, {
+    stables: ["samlProviderArn"],
+    diff: Effect.fn(function* ({ olds, news }) {
+      if (!isResolved(news)) return;
+      if (olds.name !== news.name) {
+        return { action: "replace" } as const;
+      }
+    }),
+    read: Effect.fn(function* ({ output }) {
+      if (!output) {
+        return undefined;
+      }
+      const response = yield* iam
+        .getSAMLProvider({
+          SAMLProviderArn: output.samlProviderArn,
+        })
+        .pipe(
+          Effect.catchTag("NoSuchEntityException", () =>
+            Effect.succeed(undefined),
+          ),
+        );
+      if (!response) {
+        return undefined;
+      }
+      const tags = yield* iam.listSAMLProviderTags({
         SAMLProviderArn: output.samlProviderArn,
-      })
-      .pipe(
-        Effect.catchTag("NoSuchEntityException", () =>
-          Effect.succeed(undefined),
-        ),
-      );
-    if (!response) {
-      return undefined;
-    }
-    const tags = yield* iam.listSAMLProviderTags({
-      SAMLProviderArn: output.samlProviderArn,
-    });
-    return {
-      samlProviderArn: output.samlProviderArn,
-      name: output.name,
-      samlProviderUUID: response.SAMLProviderUUID,
-      samlMetadataDocument: response.SAMLMetadataDocument,
-      assertionEncryptionMode: response.AssertionEncryptionMode,
-      tags: toTagRecord(tags.Tags),
-    };
-  }),
-  create: Effect.fn(function* ({ news, session }) {
-    const response = yield* iam.createSAMLProvider({
-      Name: news.name,
-      SAMLMetadataDocument: news.samlMetadataDocument,
-      AssertionEncryptionMode: news.assertionEncryptionMode,
-      AddPrivateKey: news.addPrivateKey
-        ? unwrapRedactedString(news.addPrivateKey)
-        : undefined,
-      Tags: Object.entries(news.tags ?? {}).map(([Key, Value]) => ({
-        Key,
-        Value,
-      })),
-    });
-    const samlProviderArn = response.SAMLProviderArn ?? news.name;
-    yield* session.note(samlProviderArn);
-    return {
-      samlProviderArn,
-      name: news.name,
-      samlProviderUUID: undefined,
-      samlMetadataDocument: news.samlMetadataDocument,
-      assertionEncryptionMode: news.assertionEncryptionMode,
-      tags: news.tags ?? {},
-    };
-  }),
-  update: Effect.fn(function* ({ news, olds, output, session }) {
-    yield* iam.updateSAMLProvider({
-      SAMLProviderArn: output.samlProviderArn,
-      SAMLMetadataDocument:
-        news.samlMetadataDocument !== olds.samlMetadataDocument
-          ? news.samlMetadataDocument
+      });
+      return {
+        samlProviderArn: output.samlProviderArn,
+        name: output.name,
+        samlProviderUUID: response.SAMLProviderUUID,
+        samlMetadataDocument: response.SAMLMetadataDocument,
+        assertionEncryptionMode: response.AssertionEncryptionMode,
+        tags: toTagRecord(tags.Tags),
+      };
+    }),
+    create: Effect.fn(function* ({ news, session }) {
+      const response = yield* iam.createSAMLProvider({
+        Name: news.name,
+        SAMLMetadataDocument: news.samlMetadataDocument,
+        AssertionEncryptionMode: news.assertionEncryptionMode,
+        AddPrivateKey: news.addPrivateKey
+          ? unwrapRedactedString(news.addPrivateKey)
           : undefined,
-      AssertionEncryptionMode: news.assertionEncryptionMode,
-      AddPrivateKey: news.addPrivateKey
-        ? unwrapRedactedString(news.addPrivateKey)
-        : undefined,
-    });
-    const { removed, upsert } = diffTags(olds.tags ?? {}, news.tags ?? {});
-    if (upsert.length > 0) {
-      yield* iam.tagSAMLProvider({
-        SAMLProviderArn: output.samlProviderArn,
-        Tags: upsert,
+        Tags: Object.entries(news.tags ?? {}).map(([Key, Value]) => ({
+          Key,
+          Value,
+        })),
       });
-    }
-    if (removed.length > 0) {
-      yield* iam.untagSAMLProvider({
+      const samlProviderArn = response.SAMLProviderArn ?? news.name;
+      yield* session.note(samlProviderArn);
+      return {
+        samlProviderArn,
+        name: news.name,
+        samlProviderUUID: undefined,
+        samlMetadataDocument: news.samlMetadataDocument,
+        assertionEncryptionMode: news.assertionEncryptionMode,
+        tags: news.tags ?? {},
+      };
+    }),
+    update: Effect.fn(function* ({ news, olds, output, session }) {
+      yield* iam.updateSAMLProvider({
         SAMLProviderArn: output.samlProviderArn,
-        TagKeys: removed,
+        SAMLMetadataDocument:
+          news.samlMetadataDocument !== olds.samlMetadataDocument
+            ? news.samlMetadataDocument
+            : undefined,
+        AssertionEncryptionMode: news.assertionEncryptionMode,
+        AddPrivateKey: news.addPrivateKey
+          ? unwrapRedactedString(news.addPrivateKey)
+          : undefined,
       });
-    }
-    yield* session.note(output.samlProviderArn);
-    return {
-      samlProviderArn: output.samlProviderArn,
-      name: output.name,
-      samlProviderUUID: output.samlProviderUUID,
-      samlMetadataDocument: news.samlMetadataDocument,
-      assertionEncryptionMode: news.assertionEncryptionMode,
-      tags: news.tags ?? {},
-    };
-  }),
-  delete: Effect.fn(function* ({ output }) {
-    yield* iam
-      .deleteSAMLProvider({
-        SAMLProviderArn: output.samlProviderArn,
-      })
-      .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
-  }),
-});
+      const { removed, upsert } = diffTags(olds.tags ?? {}, news.tags ?? {});
+      if (upsert.length > 0) {
+        yield* iam.tagSAMLProvider({
+          SAMLProviderArn: output.samlProviderArn,
+          Tags: upsert,
+        });
+      }
+      if (removed.length > 0) {
+        yield* iam.untagSAMLProvider({
+          SAMLProviderArn: output.samlProviderArn,
+          TagKeys: removed,
+        });
+      }
+      yield* session.note(output.samlProviderArn);
+      return {
+        samlProviderArn: output.samlProviderArn,
+        name: output.name,
+        samlProviderUUID: output.samlProviderUUID,
+        samlMetadataDocument: news.samlMetadataDocument,
+        assertionEncryptionMode: news.assertionEncryptionMode,
+        tags: news.tags ?? {},
+      };
+    }),
+    delete: Effect.fn(function* ({ output }) {
+      yield* iam
+        .deleteSAMLProvider({
+          SAMLProviderArn: output.samlProviderArn,
+        })
+        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+    }),
+  });

@@ -37,5 +37,5 @@ test(
     expect(yield* response.text).toBe("Hello, world!");
 
     yield* destroy();
-  }).pipe(Effect.provide(AWS.providers)) as Effect.Effect<void, any, any>,
+  }).pipe(Effect.provide(AWS.providers())) as Effect.Effect<void, any, any>,
 );

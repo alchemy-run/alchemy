@@ -40,7 +40,7 @@ test.skipIf(process.env.ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS !== "true")(
 
     yield* destroy();
     yield* assertFunctionDeleted(deployed.fn.functionName);
-  }).pipe(Effect.provide(AWS.providers)),
+  }).pipe(Effect.provide(AWS.providers())),
 );
 
 const assertFunctionDeleted = (name: string) =>

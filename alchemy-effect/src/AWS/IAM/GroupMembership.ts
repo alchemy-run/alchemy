@@ -56,63 +56,82 @@ export const GroupMembership = Resource<GroupMembership>(
   "AWS.IAM.GroupMembership",
 );
 
-export const GroupMembershipProvider = Provider.succeed(GroupMembership, {
-  stables: ["groupName"],
-  diff: Effect.fn(function* ({ olds, news }) {
-    if (!isResolved(news)) return;
-    if (olds.groupName !== news.groupName) {
-      return { action: "replace" } as const;
-    }
-  }),
-  read: Effect.fn(function* ({ output }) {
-    if (!output) {
-      return undefined;
-    }
-    const response = yield* iam
-      .getGroup({
-        GroupName: output.groupName,
-      })
-      .pipe(
-        Effect.catchTag("NoSuchEntityException", () =>
-          Effect.succeed(undefined),
-        ),
-      );
-    if (!response?.Group?.GroupName) {
-      return undefined;
-    }
-    return {
-      groupName: response.Group.GroupName,
-      userNames: (response.Users ?? [])
-        .map((user) => user.UserName)
-        .filter((userName): userName is string => typeof userName === "string"),
-    };
-  }),
-  create: Effect.fn(function* ({ news, session }) {
-    for (const userName of news.userNames as string[]) {
-      yield* iam.addUserToGroup({
-        GroupName: news.groupName as string,
-        UserName: userName,
-      });
-    }
-    yield* session.note(news.groupName as string);
-    return {
-      groupName: news.groupName as string,
-      userNames: news.userNames as string[],
-    };
-  }),
-  update: Effect.fn(function* ({ olds, news, output, session }) {
-    const oldSet = new Set(olds.userNames as string[]);
-    const newSet = new Set(news.userNames as string[]);
-    for (const userName of news.userNames as string[]) {
-      if (!oldSet.has(userName)) {
-        yield* iam.addUserToGroup({
+export const GroupMembershipProvider = () =>
+  Provider.succeed(GroupMembership, {
+    stables: ["groupName"],
+    diff: Effect.fn(function* ({ olds, news }) {
+      if (!isResolved(news)) return;
+      if (olds.groupName !== news.groupName) {
+        return { action: "replace" } as const;
+      }
+    }),
+    read: Effect.fn(function* ({ output }) {
+      if (!output) {
+        return undefined;
+      }
+      const response = yield* iam
+        .getGroup({
           GroupName: output.groupName,
+        })
+        .pipe(
+          Effect.catchTag("NoSuchEntityException", () =>
+            Effect.succeed(undefined),
+          ),
+        );
+      if (!response?.Group?.GroupName) {
+        return undefined;
+      }
+      return {
+        groupName: response.Group.GroupName,
+        userNames: (response.Users ?? [])
+          .map((user) => user.UserName)
+          .filter(
+            (userName): userName is string => typeof userName === "string",
+          ),
+      };
+    }),
+    create: Effect.fn(function* ({ news, session }) {
+      for (const userName of news.userNames as string[]) {
+        yield* iam.addUserToGroup({
+          GroupName: news.groupName as string,
           UserName: userName,
         });
       }
-    }
-    for (const userName of olds.userNames as string[]) {
-      if (!newSet.has(userName)) {
+      yield* session.note(news.groupName as string);
+      return {
+        groupName: news.groupName as string,
+        userNames: news.userNames as string[],
+      };
+    }),
+    update: Effect.fn(function* ({ olds, news, output, session }) {
+      const oldSet = new Set(olds.userNames as string[]);
+      const newSet = new Set(news.userNames as string[]);
+      for (const userName of news.userNames as string[]) {
+        if (!oldSet.has(userName)) {
+          yield* iam.addUserToGroup({
+            GroupName: output.groupName,
+            UserName: userName,
+          });
+        }
+      }
+      for (const userName of olds.userNames as string[]) {
+        if (!newSet.has(userName)) {
+          yield* iam
+            .removeUserFromGroup({
+              GroupName: output.groupName,
+              UserName: userName,
+            })
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+        }
+      }
+      yield* session.note(output.groupName);
+      return {
+        groupName: output.groupName,
+        userNames: news.userNames as string[],
+      };
+    }),
+    delete: Effect.fn(function* ({ output }) {
+      for (const userName of output.userNames) {
         yield* iam
           .removeUserFromGroup({
             GroupName: output.groupName,
@@ -120,21 +139,5 @@ export const GroupMembershipProvider = Provider.succeed(GroupMembership, {
           })
           .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
       }
-    }
-    yield* session.note(output.groupName);
-    return {
-      groupName: output.groupName,
-      userNames: news.userNames as string[],
-    };
-  }),
-  delete: Effect.fn(function* ({ output }) {
-    for (const userName of output.userNames) {
-      yield* iam
-        .removeUserFromGroup({
-          GroupName: output.groupName,
-          UserName: userName,
-        })
-        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
-    }
-  }),
-});
+    }),
+  });

@@ -99,5 +99,5 @@ test(
 
     const distExistsAfterDestroy = yield* fs.exists(distDir);
     expect(distExistsAfterDestroy).toBe(false);
-  }).pipe(Effect.provide(Layer.mergeAll(Build.CommandProvider))),
+  }).pipe(Effect.provide(Layer.mergeAll(Build.CommandProvider()))),
 );

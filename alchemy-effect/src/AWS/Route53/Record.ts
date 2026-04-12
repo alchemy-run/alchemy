@@ -178,161 +178,167 @@ const toAttrs = (
   setIdentifier: recordSet.SetIdentifier,
 });
 
-export const RecordProvider = Provider.effect(
-  Record,
-  Effect.gen(function* () {
-    const waitForChange = Effect.fn(function* (changeId: string) {
-      return yield* route53.getChange({ Id: changeId }).pipe(
-        Effect.map((response) => response.ChangeInfo),
-        Effect.flatMap((changeInfo) =>
-          changeInfo.Status === "INSYNC"
-            ? Effect.succeed(changeInfo)
-            : Effect.die(new Error("Route53ChangePending")),
-        ),
-        Effect.retry({
-          while: (error) =>
-            error instanceof Error && error.message === "Route53ChangePending",
-          schedule: Schedule.fixed("2 seconds").pipe(
-            Schedule.both(Schedule.recurs(60)),
+export const RecordProvider = () =>
+  Provider.effect(
+    Record,
+    Effect.gen(function* () {
+      const waitForChange = Effect.fn(function* (changeId: string) {
+        return yield* route53.getChange({ Id: changeId }).pipe(
+          Effect.map((response) => response.ChangeInfo),
+          Effect.flatMap((changeInfo) =>
+            changeInfo.Status === "INSYNC"
+              ? Effect.succeed(changeInfo)
+              : Effect.die(new Error("Route53ChangePending")),
           ),
-        }),
-      );
-    });
-
-    const findRecord = Effect.fn(function* (
-      hostedZoneId: string,
-      props: Pick<RecordProps, "name" | "type" | "setIdentifier">,
-    ) {
-      const response = yield* route53
-        .listResourceRecordSets({
-          HostedZoneId: normalizeHostedZoneId(hostedZoneId),
-          StartRecordName: normalizeName(props.name),
-          StartRecordType: props.type,
-          MaxItems: 100,
-        })
-        .pipe(
-          Effect.catchTag("NoSuchHostedZone", () => Effect.succeed(undefined)),
+          Effect.retry({
+            while: (error) =>
+              error instanceof Error &&
+              error.message === "Route53ChangePending",
+            schedule: Schedule.fixed("2 seconds").pipe(
+              Schedule.both(Schedule.recurs(60)),
+            ),
+          }),
         );
-
-      return response?.ResourceRecordSets.find(
-        (recordSet) =>
-          recordSet.Name === normalizeName(props.name) &&
-          recordSet.Type === props.type &&
-          (recordSet.SetIdentifier ?? undefined) === props.setIdentifier,
-      );
-    });
-
-    const upsertRecord = Effect.fn(function* (props: RecordProps) {
-      const response = yield* route53.changeResourceRecordSets({
-        HostedZoneId: normalizeHostedZoneId(props.hostedZoneId),
-        ChangeBatch: {
-          Comment: "Alchemy Route53 record upsert",
-          Changes: [
-            {
-              Action: "UPSERT",
-              ResourceRecordSet: toRecordSet(props),
-            },
-          ],
-        },
       });
 
-      yield* waitForChange(response.ChangeInfo.Id);
-    });
-
-    return {
-      stables: ["hostedZoneId", "name", "type", "setIdentifier"],
-      diff: Effect.fn(function* ({ olds, news }) {
-        if (!isResolved(news)) return undefined;
-        if (
-          normalizeHostedZoneId(olds.hostedZoneId) !==
-            normalizeHostedZoneId(news.hostedZoneId) ||
-          normalizeName(olds.name) !== normalizeName(news.name) ||
-          olds.type !== news.type ||
-          olds.setIdentifier !== news.setIdentifier
-        ) {
-          return { action: "replace" } as const;
-        }
-      }),
-      read: Effect.fn(function* ({ olds, output }) {
-        const recordSet = yield* findRecord(
-          output?.hostedZoneId ?? olds!.hostedZoneId,
-          {
-            name: output?.name ?? olds!.name,
-            type: output?.type ?? olds!.type,
-            setIdentifier: output?.setIdentifier ?? olds!.setIdentifier,
-          },
-        );
-
-        if (!recordSet) {
-          return undefined;
-        }
-
-        return toAttrs(recordSet, output?.hostedZoneId ?? olds!.hostedZoneId);
-      }),
-      create: Effect.fn(function* ({ news, session }) {
-        yield* upsertRecord(news);
-        const recordSet = yield* findRecord(news.hostedZoneId, news);
-
-        if (!recordSet) {
-          return yield* Effect.die(
-            new Error("Route53 record was not found after create"),
-          );
-        }
-
-        yield* session.note(`${news.type} ${normalizeName(news.name)}`);
-        return toAttrs(recordSet, news.hostedZoneId);
-      }),
-      update: Effect.fn(function* ({ news, session }) {
-        yield* upsertRecord(news);
-        const recordSet = yield* findRecord(news.hostedZoneId, news);
-
-        if (!recordSet) {
-          return yield* Effect.die(
-            new Error("Route53 record was not found after update"),
-          );
-        }
-
-        yield* session.note(`${news.type} ${normalizeName(news.name)}`);
-        return toAttrs(recordSet, news.hostedZoneId);
-      }),
-      delete: Effect.fn(function* ({ output }) {
-        yield* route53
-          .changeResourceRecordSets({
-            HostedZoneId: normalizeHostedZoneId(output.hostedZoneId),
-            ChangeBatch: {
-              Comment: "Alchemy Route53 record delete",
-              Changes: [
-                {
-                  Action: "DELETE",
-                  ResourceRecordSet: {
-                    Name: output.name,
-                    Type: output.type,
-                    SetIdentifier: output.setIdentifier,
-                    TTL: output.aliasTarget ? undefined : output.ttl,
-                    ResourceRecords: output.records?.map((Value) => ({
-                      Value,
-                    })),
-                    AliasTarget: output.aliasTarget
-                      ? {
-                          HostedZoneId: normalizeHostedZoneId(
-                            output.aliasTarget.hostedZoneId as string,
-                          ),
-                          DNSName: output.aliasTarget.dnsName as string,
-                          EvaluateTargetHealth:
-                            output.aliasTarget.evaluateTargetHealth ?? false,
-                        }
-                      : undefined,
-                  },
-                },
-              ],
-            },
+      const findRecord = Effect.fn(function* (
+        hostedZoneId: string,
+        props: Pick<RecordProps, "name" | "type" | "setIdentifier">,
+      ) {
+        const response = yield* route53
+          .listResourceRecordSets({
+            HostedZoneId: normalizeHostedZoneId(hostedZoneId),
+            StartRecordName: normalizeName(props.name),
+            StartRecordType: props.type,
+            MaxItems: 100,
           })
           .pipe(
-            Effect.flatMap((response) => waitForChange(response.ChangeInfo.Id)),
-            Effect.catchTag("NoSuchHostedZone", () => Effect.void),
-            Effect.catchTag("InvalidChangeBatch", () => Effect.void),
+            Effect.catchTag("NoSuchHostedZone", () =>
+              Effect.succeed(undefined),
+            ),
           );
-      }),
-    };
-  }),
-);
+
+        return response?.ResourceRecordSets.find(
+          (recordSet) =>
+            recordSet.Name === normalizeName(props.name) &&
+            recordSet.Type === props.type &&
+            (recordSet.SetIdentifier ?? undefined) === props.setIdentifier,
+        );
+      });
+
+      const upsertRecord = Effect.fn(function* (props: RecordProps) {
+        const response = yield* route53.changeResourceRecordSets({
+          HostedZoneId: normalizeHostedZoneId(props.hostedZoneId),
+          ChangeBatch: {
+            Comment: "Alchemy Route53 record upsert",
+            Changes: [
+              {
+                Action: "UPSERT",
+                ResourceRecordSet: toRecordSet(props),
+              },
+            ],
+          },
+        });
+
+        yield* waitForChange(response.ChangeInfo.Id);
+      });
+
+      return {
+        stables: ["hostedZoneId", "name", "type", "setIdentifier"],
+        diff: Effect.fn(function* ({ olds, news }) {
+          if (!isResolved(news)) return undefined;
+          if (
+            normalizeHostedZoneId(olds.hostedZoneId) !==
+              normalizeHostedZoneId(news.hostedZoneId) ||
+            normalizeName(olds.name) !== normalizeName(news.name) ||
+            olds.type !== news.type ||
+            olds.setIdentifier !== news.setIdentifier
+          ) {
+            return { action: "replace" } as const;
+          }
+        }),
+        read: Effect.fn(function* ({ olds, output }) {
+          const recordSet = yield* findRecord(
+            output?.hostedZoneId ?? olds!.hostedZoneId,
+            {
+              name: output?.name ?? olds!.name,
+              type: output?.type ?? olds!.type,
+              setIdentifier: output?.setIdentifier ?? olds!.setIdentifier,
+            },
+          );
+
+          if (!recordSet) {
+            return undefined;
+          }
+
+          return toAttrs(recordSet, output?.hostedZoneId ?? olds!.hostedZoneId);
+        }),
+        create: Effect.fn(function* ({ news, session }) {
+          yield* upsertRecord(news);
+          const recordSet = yield* findRecord(news.hostedZoneId, news);
+
+          if (!recordSet) {
+            return yield* Effect.die(
+              new Error("Route53 record was not found after create"),
+            );
+          }
+
+          yield* session.note(`${news.type} ${normalizeName(news.name)}`);
+          return toAttrs(recordSet, news.hostedZoneId);
+        }),
+        update: Effect.fn(function* ({ news, session }) {
+          yield* upsertRecord(news);
+          const recordSet = yield* findRecord(news.hostedZoneId, news);
+
+          if (!recordSet) {
+            return yield* Effect.die(
+              new Error("Route53 record was not found after update"),
+            );
+          }
+
+          yield* session.note(`${news.type} ${normalizeName(news.name)}`);
+          return toAttrs(recordSet, news.hostedZoneId);
+        }),
+        delete: Effect.fn(function* ({ output }) {
+          yield* route53
+            .changeResourceRecordSets({
+              HostedZoneId: normalizeHostedZoneId(output.hostedZoneId),
+              ChangeBatch: {
+                Comment: "Alchemy Route53 record delete",
+                Changes: [
+                  {
+                    Action: "DELETE",
+                    ResourceRecordSet: {
+                      Name: output.name,
+                      Type: output.type,
+                      SetIdentifier: output.setIdentifier,
+                      TTL: output.aliasTarget ? undefined : output.ttl,
+                      ResourceRecords: output.records?.map((Value) => ({
+                        Value,
+                      })),
+                      AliasTarget: output.aliasTarget
+                        ? {
+                            HostedZoneId: normalizeHostedZoneId(
+                              output.aliasTarget.hostedZoneId as string,
+                            ),
+                            DNSName: output.aliasTarget.dnsName as string,
+                            EvaluateTargetHealth:
+                              output.aliasTarget.evaluateTargetHealth ?? false,
+                          }
+                        : undefined,
+                    },
+                  },
+                ],
+              },
+            })
+            .pipe(
+              Effect.flatMap((response) =>
+                waitForChange(response.ChangeInfo.Id),
+              ),
+              Effect.catchTag("NoSuchHostedZone", () => Effect.void),
+              Effect.catchTag("InvalidChangeBatch", () => Effect.void),
+            );
+        }),
+      };
+    }),
+  );

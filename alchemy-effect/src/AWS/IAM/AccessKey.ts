@@ -55,85 +55,89 @@ export interface AccessKey extends Resource<
  */
 export const AccessKey = Resource<AccessKey>("AWS.IAM.AccessKey");
 
-export const AccessKeyProvider = Provider.succeed(AccessKey, {
-  stables: ["accessKeyId"],
-  diff: Effect.fn(function* ({ olds, news }) {
-    if (!isResolved(news)) return;
-    if (olds.userName !== news.userName) {
-      return { action: "replace" } as const;
-    }
-  }),
-  read: Effect.fn(function* ({ output }) {
-    if (!output) {
-      return undefined;
-    }
-    const listed = yield* iam.listAccessKeys({
-      UserName: output.userName,
-    });
-    const metadata = listed.AccessKeyMetadata.find(
-      (entry) => entry.AccessKeyId === output.accessKeyId,
-    );
-    if (!metadata?.AccessKeyId) {
-      return undefined;
-    }
-    const lastUsed = yield* iam.getAccessKeyLastUsed({
-      AccessKeyId: output.accessKeyId,
-    });
-    return {
-      userName: metadata.UserName ?? output.userName,
-      accessKeyId: metadata.AccessKeyId,
-      status: metadata.Status ?? output.status,
-      createDate: metadata.CreateDate,
-      secretAccessKey: output.secretAccessKey,
-      lastUsedDate: lastUsed?.AccessKeyLastUsed?.LastUsedDate,
-      lastUsedServiceName: lastUsed?.AccessKeyLastUsed?.ServiceName,
-      lastUsedRegion: lastUsed?.AccessKeyLastUsed?.Region,
-    };
-  }),
-  create: Effect.fn(function* ({ news, session }) {
-    const created = yield* iam.createAccessKey({
-      UserName: news.userName,
-    });
-    if (news.status !== undefined && created.AccessKey.Status !== news.status) {
-      yield* iam.updateAccessKey({
+export const AccessKeyProvider = () =>
+  Provider.succeed(AccessKey, {
+    stables: ["accessKeyId"],
+    diff: Effect.fn(function* ({ olds, news }) {
+      if (!isResolved(news)) return;
+      if (olds.userName !== news.userName) {
+        return { action: "replace" } as const;
+      }
+    }),
+    read: Effect.fn(function* ({ output }) {
+      if (!output) {
+        return undefined;
+      }
+      const listed = yield* iam.listAccessKeys({
+        UserName: output.userName,
+      });
+      const metadata = listed.AccessKeyMetadata.find(
+        (entry) => entry.AccessKeyId === output.accessKeyId,
+      );
+      if (!metadata?.AccessKeyId) {
+        return undefined;
+      }
+      const lastUsed = yield* iam.getAccessKeyLastUsed({
+        AccessKeyId: output.accessKeyId,
+      });
+      return {
+        userName: metadata.UserName ?? output.userName,
+        accessKeyId: metadata.AccessKeyId,
+        status: metadata.Status ?? output.status,
+        createDate: metadata.CreateDate,
+        secretAccessKey: output.secretAccessKey,
+        lastUsedDate: lastUsed?.AccessKeyLastUsed?.LastUsedDate,
+        lastUsedServiceName: lastUsed?.AccessKeyLastUsed?.ServiceName,
+        lastUsedRegion: lastUsed?.AccessKeyLastUsed?.Region,
+      };
+    }),
+    create: Effect.fn(function* ({ news, session }) {
+      const created = yield* iam.createAccessKey({
         UserName: news.userName,
-        AccessKeyId: created.AccessKey.AccessKeyId,
-        Status: news.status,
       });
-    }
-    yield* session.note(created.AccessKey.AccessKeyId);
-    return {
-      userName: created.AccessKey.UserName,
-      accessKeyId: created.AccessKey.AccessKeyId,
-      status: news.status ?? created.AccessKey.Status,
-      createDate: created.AccessKey.CreateDate,
-      secretAccessKey: toRedactedString(created.AccessKey.SecretAccessKey),
-      lastUsedDate: undefined,
-      lastUsedServiceName: undefined,
-      lastUsedRegion: undefined,
-    };
-  }),
-  update: Effect.fn(function* ({ news, output, session }) {
-    const status = news.status ?? output.status;
-    if (status !== output.status) {
-      yield* iam.updateAccessKey({
-        UserName: output.userName,
-        AccessKeyId: output.accessKeyId,
-        Status: status,
-      });
-    }
-    yield* session.note(output.accessKeyId);
-    return {
-      ...output,
-      status,
-    };
-  }),
-  delete: Effect.fn(function* ({ output }) {
-    yield* iam
-      .deleteAccessKey({
-        UserName: output.userName,
-        AccessKeyId: output.accessKeyId,
-      })
-      .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
-  }),
-});
+      if (
+        news.status !== undefined &&
+        created.AccessKey.Status !== news.status
+      ) {
+        yield* iam.updateAccessKey({
+          UserName: news.userName,
+          AccessKeyId: created.AccessKey.AccessKeyId,
+          Status: news.status,
+        });
+      }
+      yield* session.note(created.AccessKey.AccessKeyId);
+      return {
+        userName: created.AccessKey.UserName,
+        accessKeyId: created.AccessKey.AccessKeyId,
+        status: news.status ?? created.AccessKey.Status,
+        createDate: created.AccessKey.CreateDate,
+        secretAccessKey: toRedactedString(created.AccessKey.SecretAccessKey),
+        lastUsedDate: undefined,
+        lastUsedServiceName: undefined,
+        lastUsedRegion: undefined,
+      };
+    }),
+    update: Effect.fn(function* ({ news, output, session }) {
+      const status = news.status ?? output.status;
+      if (status !== output.status) {
+        yield* iam.updateAccessKey({
+          UserName: output.userName,
+          AccessKeyId: output.accessKeyId,
+          Status: status,
+        });
+      }
+      yield* session.note(output.accessKeyId);
+      return {
+        ...output,
+        status,
+      };
+    }),
+    delete: Effect.fn(function* ({ output }) {
+      yield* iam
+        .deleteAccessKey({
+          UserName: output.userName,
+          AccessKeyId: output.accessKeyId,
+        })
+        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+    }),
+  });

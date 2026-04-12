@@ -586,162 +586,163 @@ export const retryForContainerApplicationReadiness = <A, E, R>(
     }),
   );
 
-export const ContainerProvider = Provider.effect(
-  Container,
-  Effect.gen(function* () {
-    const stack = yield* Stack;
-    const accountId = yield* Account;
-    const adoptPolicy = yield* Effect.serviceOption(AdoptPolicy).pipe(
-      Effect.map(Option.getOrElse(() => false)),
-    );
-    const dotAlchemy = yield* DotAlchemy;
-    const fs = yield* FileSystem.FileSystem;
-    const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
-    const createContainerApplication =
-      yield* Containers.createContainerApplication;
-    const updateContainerApplication =
-      yield* Containers.updateContainerApplication;
-    const deleteContainerApplication =
-      yield* Containers.deleteContainerApplication;
-    const getContainerApplication = yield* Containers.getContainerApplication;
-    const listContainerApplications =
-      yield* Containers.listContainerApplications;
-    const createContainerRegistryCredentials =
-      yield* Containers.createContainerRegistryCredentials;
-    const createContainerApplicationRollout =
-      yield* Containers.createContainerApplicationRollout;
-    const telemetry = yield* CloudflareLogs;
+export const ContainerProvider = () =>
+  Provider.effect(
+    Container,
+    Effect.gen(function* () {
+      const stack = yield* Stack;
+      const accountId = yield* Account;
+      const adoptPolicy = yield* Effect.serviceOption(AdoptPolicy).pipe(
+        Effect.map(Option.getOrElse(() => false)),
+      );
+      const dotAlchemy = yield* DotAlchemy;
+      const fs = yield* FileSystem.FileSystem;
+      const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
+      const createContainerApplication =
+        yield* Containers.createContainerApplication;
+      const updateContainerApplication =
+        yield* Containers.updateContainerApplication;
+      const deleteContainerApplication =
+        yield* Containers.deleteContainerApplication;
+      const getContainerApplication = yield* Containers.getContainerApplication;
+      const listContainerApplications =
+        yield* Containers.listContainerApplications;
+      const createContainerRegistryCredentials =
+        yield* Containers.createContainerRegistryCredentials;
+      const createContainerApplicationRollout =
+        yield* Containers.createContainerApplicationRollout;
+      const telemetry = yield* CloudflareLogs;
 
-    const createApplicationName = (id: string, name: string | undefined) =>
-      Effect.gen(function* () {
-        return (
-          name ??
-          (yield* createPhysicalName({
-            id,
-            lowercase: true,
-          }))
+      const createApplicationName = (id: string, name: string | undefined) =>
+        Effect.gen(function* () {
+          return (
+            name ??
+            (yield* createPhysicalName({
+              id,
+              lowercase: true,
+            }))
+          );
+        });
+
+      const findApplicationByName = Effect.fnUntraced(function* (name: string) {
+        return yield* listContainerApplications({ accountId }).pipe(
+          Effect.map((apps) => apps.find((app) => app.name === name)),
         );
       });
 
-    const findApplicationByName = Effect.fnUntraced(function* (name: string) {
-      return yield* listContainerApplications({ accountId }).pipe(
-        Effect.map((apps) => apps.find((app) => app.name === name)),
-      );
-    });
-
-    const findApplicationByNamespace = Effect.fnUntraced(function* (
-      namespaceId: string,
-    ) {
-      return yield* listContainerApplications({ accountId }).pipe(
-        Effect.map((apps) =>
-          apps.find((app) => app.durableObjects?.namespaceId === namespaceId),
-        ),
-      );
-    });
-
-    const desiredConfiguration = (
-      props: ContainerApplicationProps,
-      imageRef: string,
-    ) =>
-      normalizeNulls({
-        image: imageRef,
-        instanceType: props.instanceType,
-        observability: props.observability,
-        sshPublicKeyIds: props.sshPublicKeyIds,
-        secrets: props.secrets,
-        vcpu: props.vcpu,
-        memory: props.memory,
-        disk: props.disk,
-        environmentVariables: props.environmentVariables,
-        labels: props.labels,
-        network: props.network,
-        command: props.command,
-        entrypoint: props.entrypoint,
-        dns: props.dns,
-        ports: props.ports,
-        checks: props.checks,
-      }) as Configuration;
-
-    const computeImageHash = Effect.fnUntraced(function* (
-      id: string,
-      props: ContainerApplicationProps,
-    ) {
-      const main = props.main;
-      if (!main) {
-        return yield* Effect.fail(
-          new Error("Container requires a `main` entrypoint."),
+      const findApplicationByNamespace = Effect.fnUntraced(function* (
+        namespaceId: string,
+      ) {
+        return yield* listContainerApplications({ accountId }).pipe(
+          Effect.map((apps) =>
+            apps.find((app) => app.durableObjects?.namespaceId === namespaceId),
+          ),
         );
-      }
-      const runtime = props.runtime ?? "bun";
-      const { code, hash: bundleHash } = yield* bundleProgram({
-        id,
+      });
+
+      const desiredConfiguration = (
+        props: ContainerApplicationProps,
+        imageRef: string,
+      ) =>
+        normalizeNulls({
+          image: imageRef,
+          instanceType: props.instanceType,
+          observability: props.observability,
+          sshPublicKeyIds: props.sshPublicKeyIds,
+          secrets: props.secrets,
+          vcpu: props.vcpu,
+          memory: props.memory,
+          disk: props.disk,
+          environmentVariables: props.environmentVariables,
+          labels: props.labels,
+          network: props.network,
+          command: props.command,
+          entrypoint: props.entrypoint,
+          dns: props.dns,
+          ports: props.ports,
+          checks: props.checks,
+        }) as Configuration;
+
+      const computeImageHash = Effect.fnUntraced(function* (
+        id: string,
+        props: ContainerApplicationProps,
+      ) {
+        const main = props.main;
+        if (!main) {
+          return yield* Effect.fail(
+            new Error("Container requires a `main` entrypoint."),
+          );
+        }
+        const runtime = props.runtime ?? "bun";
+        const { code, hash: bundleHash } = yield* bundleProgram({
+          id,
+          main,
+          runtime,
+          handler: props.handler,
+          isExternal: props.isExternal,
+        });
+
+        const finalDockerfile = buildFinalDockerfile(props.dockerfile, runtime);
+        const imageHash = (yield* sha256Object({
+          bundleHash,
+          dockerfile: finalDockerfile,
+        })).slice(0, 16);
+
+        const name = yield* createApplicationName(id, props.name);
+        const registryId = props.registryId ?? "registry.cloudflare.com";
+        const repositoryName = name.toLowerCase();
+        const imageRef = `${registryId}/${accountId}/${repositoryName}:${imageHash}`;
+
+        return { code, imageRef, imageHash };
+      });
+
+      const bundleProgram = Effect.fnUntraced(function* ({
         main,
         runtime,
-        handler: props.handler,
-        isExternal: props.isExternal,
-      });
+        handler = "default",
+        isExternal = false,
+      }: {
+        id: string;
+        main: string;
+        runtime: "bun" | "node";
+        handler: string | undefined;
+        isExternal?: boolean;
+      }) {
+        const realMain = yield* fs.realPath(main);
+        const cwd = yield* findCwdForBundle(realMain);
 
-      const finalDockerfile = buildFinalDockerfile(props.dockerfile, runtime);
-      const imageHash = (yield* sha256Object({
-        bundleHash,
-        dockerfile: finalDockerfile,
-      })).slice(0, 16);
+        const buildBundle = Effect.fnUntraced(function* (
+          entry: string,
+          plugins?: rolldown.RolldownPluginOption,
+        ) {
+          return yield* Bundle.build(
+            {
+              input: entry,
+              cwd,
+              external: [
+                "cloudflare:workers",
+                "cloudflare:workflows",
+                ...(runtime === "bun" ? ["bun", "bun:*"] : []),
+              ],
+              platform: "node",
+              plugins,
+              treeshake: true,
+            },
+            {
+              format: "esm",
+              sourcemap: false,
+              minify: true,
+              entryFileNames: "index.js",
+            },
+          );
+        });
 
-      const name = yield* createApplicationName(id, props.name);
-      const registryId = props.registryId ?? "registry.cloudflare.com";
-      const repositoryName = name.toLowerCase();
-      const imageRef = `${registryId}/${accountId}/${repositoryName}:${imageHash}`;
-
-      return { code, imageRef, imageHash };
-    });
-
-    const bundleProgram = Effect.fnUntraced(function* ({
-      main,
-      runtime,
-      handler = "default",
-      isExternal = false,
-    }: {
-      id: string;
-      main: string;
-      runtime: "bun" | "node";
-      handler: string | undefined;
-      isExternal?: boolean;
-    }) {
-      const realMain = yield* fs.realPath(main);
-      const cwd = yield* findCwdForBundle(realMain);
-
-      const buildBundle = Effect.fnUntraced(function* (
-        entry: string,
-        plugins?: rolldown.RolldownPluginOption,
-      ) {
-        return yield* Bundle.build(
-          {
-            input: entry,
-            cwd,
-            external: [
-              "cloudflare:workers",
-              "cloudflare:workflows",
-              ...(runtime === "bun" ? ["bun", "bun:*"] : []),
-            ],
-            platform: "node",
-            plugins,
-            treeshake: true,
-          },
-          {
-            format: "esm",
-            sourcemap: false,
-            minify: true,
-            entryFileNames: "index.js",
-          },
-        );
-      });
-
-      const bundleOutput = isExternal
-        ? yield* buildBundle(realMain)
-        : yield* buildBundle(
-            realMain,
-            virtualEntryPlugin(
-              (importPath) => `
+        const bundleOutput = isExternal
+          ? yield* buildBundle(realMain)
+          : yield* buildBundle(
+              realMain,
+              virtualEntryPlugin(
+                (importPath) => `
 ${
   runtime === "bun"
     ? `
@@ -809,225 +810,448 @@ await Effect.runPromise(serverEffect).catch((err) => {
   console.error("Container bootstrap failed:", err);
   process.exit(1);
 })`,
-            ),
-          );
+              ),
+            );
 
-      const mainFile = bundleOutput.files[0];
-      const code =
-        typeof mainFile.content === "string"
-          ? new TextEncoder().encode(mainFile.content)
-          : mainFile.content;
+        const mainFile = bundleOutput.files[0];
+        const code =
+          typeof mainFile.content === "string"
+            ? new TextEncoder().encode(mainFile.content)
+            : mainFile.content;
 
-      return { code, hash: bundleOutput.hash };
-    });
-
-    const buildFinalDockerfile = (
-      userDockerfile: string | undefined,
-      runtime: "bun" | "node",
-    ): string => {
-      const base =
-        userDockerfile?.trim() ??
-        (runtime === "bun" ? "FROM oven/bun:1" : "FROM node:22-slim");
-      const runtimeBin = runtime === "bun" ? "bun" : "node";
-      return [
-        base,
-        "",
-        "WORKDIR /app",
-        "COPY index.mjs /app/index.mjs",
-        `ENTRYPOINT ["${runtimeBin}", "/app/index.mjs"]`,
-        "",
-      ].join("\n");
-    };
-
-    const buildAndPushImage = Effect.fnUntraced(function* (
-      id: string,
-      props: ContainerApplicationProps,
-      code: Uint8Array,
-      imageRef: string,
-      session?: { note: (message: string) => Effect.Effect<void> },
-    ) {
-      const runtime = props.runtime ?? "bun";
-
-      yield* Effect.logInfo(`Cloudflare Container image: building ${imageRef}`);
-      if (session) {
-        yield* session.note(`Building container image ${imageRef}...`);
-      }
-
-      const contextDir = yield* getStableContextDir(
-        process.cwd(),
-        dotAlchemy,
-        `${id}-container`,
-      );
-      const finalDockerfile = buildFinalDockerfile(props.dockerfile, runtime);
-      yield* materializeDockerfile(finalDockerfile, contextDir);
-      yield* writeContextFiles(contextDir, [
-        { path: "index.mjs", content: code },
-      ]);
-      yield* dockerBuild({
-        tag: imageRef,
-        context: contextDir,
-        platform: "linux/amd64",
+        return { code, hash: bundleOutput.hash };
       });
 
-      yield* Effect.logInfo(`Cloudflare Container image: pushing ${imageRef}`);
-      if (session) {
-        yield* session.note(`Pushing container image ${imageRef}...`);
-      }
-
-      const registryId = props.registryId ?? "registry.cloudflare.com";
-      const credentials = yield* createContainerRegistryCredentials({
-        accountId,
-        registryId,
-        permissions: ["pull", "push"],
-        expirationMinutes: 60,
-      });
-      const username = credentials.username ?? (credentials as any).user;
-      if (!username) {
-        return yield* Effect.fail(
-          new Error(
-            "Cloudflare registry credentials did not include a username.",
-          ),
-        );
-      }
-
-      yield* pushImage(imageRef, {
-        username,
-        password: credentials.password,
-        server: registryId,
-      });
-    });
-
-    const maybeCreateRollout = Effect.fnUntraced(function* ({
-      applicationId,
-      configuration,
-      rollout,
-    }: {
-      applicationId: string;
-      configuration: Configuration;
-      rollout: Rollout | undefined;
-    }) {
-      const strategy = rollout?.strategy ?? "immediate";
-      const stepPercentage =
-        strategy === "immediate" ? 100 : (rollout?.stepPercentage ?? 25);
-
-      yield* retryForContainerApplicationReadiness(
-        "rollout",
-        applicationId,
-        createContainerApplicationRollout({
-          accountId,
-          applicationId,
-          description:
-            strategy === "immediate"
-              ? "Immediate update"
-              : "Progressive update",
-          strategy: "rolling",
-          kind: rollout?.kind ?? "full_auto",
-          stepPercentage,
-          targetConfiguration: configuration,
-        }),
-      );
-    });
-
-    const createApplication = Effect.fnUntraced(function* ({
-      id,
-      news,
-      name,
-      configuration,
-      durableObjects,
-      session,
-    }: {
-      id: string;
-      news: ContainerApplicationProps;
-      name: string;
-      configuration: Configuration;
-      durableObjects:
-        | {
-            namespaceId: string;
-          }
-        | undefined;
-      session: { note: (message: string) => Effect.Effect<void> };
-    }) {
-      const describeError = (error: unknown) => {
-        if (error instanceof Error) {
-          return JSON.stringify(
-            Object.fromEntries(
-              Object.getOwnPropertyNames(error).map((key) => [
-                key,
-                (error as unknown as Record<string, unknown>)[key],
-              ]),
-            ),
-            null,
-            2,
-          );
-        }
-        return String(error);
+      const buildFinalDockerfile = (
+        userDockerfile: string | undefined,
+        runtime: "bun" | "node",
+      ): string => {
+        const base =
+          userDockerfile?.trim() ??
+          (runtime === "bun" ? "FROM oven/bun:1" : "FROM node:22-slim");
+        const runtimeBin = runtime === "bun" ? "bun" : "node";
+        return [
+          base,
+          "",
+          "WORKDIR /app",
+          "COPY index.mjs /app/index.mjs",
+          `ENTRYPOINT ["${runtimeBin}", "/app/index.mjs"]`,
+          "",
+        ].join("\n");
       };
 
-      const existingByName = adoptPolicy
-        ? yield* findApplicationByName(name)
-        : undefined;
+      const buildAndPushImage = Effect.fnUntraced(function* (
+        id: string,
+        props: ContainerApplicationProps,
+        code: Uint8Array,
+        imageRef: string,
+        session?: { note: (message: string) => Effect.Effect<void> },
+      ) {
+        const runtime = props.runtime ?? "bun";
 
-      if (existingByName) {
         yield* Effect.logInfo(
-          `Cloudflare Container create: adopting existing application ${name}`,
+          `Cloudflare Container image: building ${imageRef}`,
         );
-        return yield* upsertApplication({
-          id,
-          news,
-          existing: toAttributes(existingByName),
-          session,
+        if (session) {
+          yield* session.note(`Building container image ${imageRef}...`);
+        }
+
+        const contextDir = yield* getStableContextDir(
+          process.cwd(),
+          dotAlchemy,
+          `${id}-container`,
+        );
+        const finalDockerfile = buildFinalDockerfile(props.dockerfile, runtime);
+        yield* materializeDockerfile(finalDockerfile, contextDir);
+        yield* writeContextFiles(contextDir, [
+          { path: "index.mjs", content: code },
+        ]);
+        yield* dockerBuild({
+          tag: imageRef,
+          context: contextDir,
+          platform: "linux/amd64",
         });
-      }
 
-      yield* Effect.logInfo(
-        `Cloudflare Container create: creating application ${name}`,
-      );
-      yield* session.note(`Creating container application ${name}...`);
-      const adoptExistingByName = Effect.gen(function* () {
         yield* Effect.logInfo(
-          `Cloudflare Container create: application ${name} already exists, adopting`,
+          `Cloudflare Container image: pushing ${imageRef}`,
         );
-        const existing = yield* findApplicationByName(name);
-        if (!existing) {
+        if (session) {
+          yield* session.note(`Pushing container image ${imageRef}...`);
+        }
+
+        const registryId = props.registryId ?? "registry.cloudflare.com";
+        const credentials = yield* createContainerRegistryCredentials({
+          accountId,
+          registryId,
+          permissions: ["pull", "push"],
+          expirationMinutes: 60,
+        });
+        const username = credentials.username ?? (credentials as any).user;
+        if (!username) {
           return yield* Effect.fail(
             new Error(
-              `Container application "${name}" already exists but could not be found for adoption.`,
+              "Cloudflare registry credentials did not include a username.",
             ),
           );
         }
-        return yield* upsertApplication({
-          id,
-          news,
-          existing: toAttributes(existing),
-          session,
+
+        yield* pushImage(imageRef, {
+          username,
+          password: credentials.password,
+          server: registryId,
         });
       });
 
-      const application = yield* createContainerApplication({
-        accountId,
+      const maybeCreateRollout = Effect.fnUntraced(function* ({
+        applicationId,
+        configuration,
+        rollout,
+      }: {
+        applicationId: string;
+        configuration: Configuration;
+        rollout: Rollout | undefined;
+      }) {
+        const strategy = rollout?.strategy ?? "immediate";
+        const stepPercentage =
+          strategy === "immediate" ? 100 : (rollout?.stepPercentage ?? 25);
+
+        yield* retryForContainerApplicationReadiness(
+          "rollout",
+          applicationId,
+          createContainerApplicationRollout({
+            accountId,
+            applicationId,
+            description:
+              strategy === "immediate"
+                ? "Immediate update"
+                : "Progressive update",
+            strategy: "rolling",
+            kind: rollout?.kind ?? "full_auto",
+            stepPercentage,
+            targetConfiguration: configuration,
+          }),
+        );
+      });
+
+      const createApplication = Effect.fnUntraced(function* ({
+        id,
+        news,
         name,
-        instances: news.instances ?? 1,
-        maxInstances: news.maxInstances ?? 1,
-        schedulingPolicy: news.schedulingPolicy ?? "default",
-        constraints: news.constraints ?? {},
-        affinities: news.affinities,
         configuration,
         durableObjects,
-      }).pipe(
-        Effect.catchTag("DurableObjectAlreadyHasApplication", () =>
-          durableObjects
-            ? Effect.gen(function* () {
-                const existing = yield* findApplicationByNamespace(
-                  durableObjects.namespaceId,
-                );
-                const recovery = resolveDurableObjectApplicationRecovery({
-                  namespaceId: durableObjects.namespaceId,
-                  expectedName: name,
-                  existingName: existing?.name,
-                });
-                if (!recovery.canAdopt) {
-                  return yield* Effect.fail(new Error(recovery.message));
-                }
+        session,
+      }: {
+        id: string;
+        news: ContainerApplicationProps;
+        name: string;
+        configuration: Configuration;
+        durableObjects:
+          | {
+              namespaceId: string;
+            }
+          | undefined;
+        session: { note: (message: string) => Effect.Effect<void> };
+      }) {
+        const describeError = (error: unknown) => {
+          if (error instanceof Error) {
+            return JSON.stringify(
+              Object.fromEntries(
+                Object.getOwnPropertyNames(error).map((key) => [
+                  key,
+                  (error as unknown as Record<string, unknown>)[key],
+                ]),
+              ),
+              null,
+              2,
+            );
+          }
+          return String(error);
+        };
+
+        const existingByName = adoptPolicy
+          ? yield* findApplicationByName(name)
+          : undefined;
+
+        if (existingByName) {
+          yield* Effect.logInfo(
+            `Cloudflare Container create: adopting existing application ${name}`,
+          );
+          return yield* upsertApplication({
+            id,
+            news,
+            existing: toAttributes(existingByName),
+            session,
+          });
+        }
+
+        yield* Effect.logInfo(
+          `Cloudflare Container create: creating application ${name}`,
+        );
+        yield* session.note(`Creating container application ${name}...`);
+        const adoptExistingByName = Effect.gen(function* () {
+          yield* Effect.logInfo(
+            `Cloudflare Container create: application ${name} already exists, adopting`,
+          );
+          const existing = yield* findApplicationByName(name);
+          if (!existing) {
+            return yield* Effect.fail(
+              new Error(
+                `Container application "${name}" already exists but could not be found for adoption.`,
+              ),
+            );
+          }
+          return yield* upsertApplication({
+            id,
+            news,
+            existing: toAttributes(existing),
+            session,
+          });
+        });
+
+        const application = yield* createContainerApplication({
+          accountId,
+          name,
+          instances: news.instances ?? 1,
+          maxInstances: news.maxInstances ?? 1,
+          schedulingPolicy: news.schedulingPolicy ?? "default",
+          constraints: news.constraints ?? {},
+          affinities: news.affinities,
+          configuration,
+          durableObjects,
+        }).pipe(
+          Effect.catchTag("DurableObjectAlreadyHasApplication", () =>
+            durableObjects
+              ? Effect.gen(function* () {
+                  const existing = yield* findApplicationByNamespace(
+                    durableObjects.namespaceId,
+                  );
+                  const recovery = resolveDurableObjectApplicationRecovery({
+                    namespaceId: durableObjects.namespaceId,
+                    expectedName: name,
+                    existingName: existing?.name,
+                  });
+                  if (!recovery.canAdopt) {
+                    return yield* Effect.fail(new Error(recovery.message));
+                  }
+                  if (!existing) {
+                    return yield* Effect.fail(
+                      new Error(
+                        `Container application for Durable Object namespace "${durableObjects.namespaceId}" already exists but could not be found for adoption.`,
+                      ),
+                    );
+                  }
+                  return yield* upsertApplication({
+                    id,
+                    news,
+                    existing: toAttributes(existing),
+                    session,
+                  });
+                })
+              : Effect.fail(
+                  new Error(
+                    "Durable Object namespace already has a container application. Set AdoptPolicy to adopt it.",
+                  ),
+                ),
+          ),
+          Effect.catchIf(
+            (e) =>
+              "message" in (e as any) &&
+              String((e as any).message).includes("already exists"),
+            () => adoptExistingByName,
+          ),
+          Effect.tapError((error) =>
+            Effect.logError(
+              `Cloudflare Container create error: ${describeError(error)}`,
+            ),
+          ),
+        );
+
+        return "applicationId" in application
+          ? application
+          : toAttributes(application);
+      });
+
+      const upsertApplication = Effect.fnUntraced(function* ({
+        id,
+        news,
+        existing,
+        session,
+      }: {
+        id: string;
+        news: ContainerApplicationProps;
+        existing: ContainerApplication["Attributes"];
+        session: { note: (message: string) => Effect.Effect<void> };
+      }) {
+        yield* Effect.logInfo(
+          `Cloudflare Container update: preparing ${existing.applicationName}`,
+        );
+        const { code, imageRef, imageHash } = yield* computeImageHash(id, news);
+        const configuration = desiredConfiguration(news, imageRef);
+
+        if (imageHash !== existing.hash?.image) {
+          yield* buildAndPushImage(id, news, code, imageRef, session);
+        }
+
+        yield* session.note(
+          `Updating container application ${existing.applicationName}...`,
+        );
+        const application = yield* retryForContainerApplicationReadiness(
+          "update",
+          existing.applicationId,
+          updateContainerApplication({
+            accountId,
+            applicationId: existing.applicationId,
+            instances: news.instances ?? 1,
+            maxInstances: news.maxInstances ?? 1,
+            schedulingPolicy: news.schedulingPolicy ?? "default",
+            constraints: news.constraints ?? {},
+            affinities: news.affinities,
+            configuration,
+          }),
+        );
+        const updated = toAttributes(application);
+        if (!deepEqual(existing.configuration, configuration)) {
+          yield* Effect.logInfo(
+            `Cloudflare Container update: creating rollout for ${updated.applicationName}`,
+          );
+          yield* maybeCreateRollout({
+            applicationId: updated.applicationId,
+            configuration,
+            rollout: news.rollout,
+          });
+        }
+        return { ...updated, configuration, hash: { image: imageHash } };
+      });
+
+      const getDurableObjects = (
+        bindings: ResourceBinding<ContainerApplication["Binding"]>[],
+      ) => {
+        const dos = bindings.flatMap((b) =>
+          b.data.durableObjects ? [b.data.durableObjects] : [],
+        );
+        if (dos.length === 0) {
+          return Effect.succeed(undefined);
+        }
+        if (dos.length === 1) {
+          return Effect.succeed(dos[0]);
+        }
+        return Effect.die(
+          new Error(
+            `A Container can only be bound to one Durable Object namespace. Found ${dos.length} namespaces in bindings: ${bindings.map((b) => b.data.durableObjects?.namespaceId).join(", ")}`,
+          ),
+        );
+      };
+
+      return Container.Provider.of({
+        stables: ["applicationId", "accountId"],
+        diff: Effect.fnUntraced(function* ({
+          id,
+          olds = {},
+          news = {},
+          output,
+          newBindings,
+          oldBindings,
+        }) {
+          if (!isResolved(news) || !isResolved(newBindings)) {
+            return undefined;
+          }
+
+          const name = yield* createApplicationName(id, news.name);
+          const oldName = output?.applicationName
+            ? output.applicationName
+            : yield* createApplicationName(id, olds.name);
+
+          if (
+            (output?.accountId ?? accountId) !== accountId ||
+            name !== oldName
+          ) {
+            return { action: "replace" } as const;
+          }
+
+          const hasDurableObjects =
+            (yield* getDurableObjects(newBindings)) !== undefined;
+          const hadDurableObjects =
+            (yield* getDurableObjects(oldBindings)) !== undefined;
+          if (hasDurableObjects !== hadDurableObjects) {
+            return { action: "replace" } as const;
+          }
+
+          if (!output) {
+            return undefined;
+          }
+
+          const { imageHash } = yield* computeImageHash(id, news);
+          if (imageHash !== output.hash?.image) {
+            return { action: "update" } as const;
+          }
+        }),
+        precreate: Effect.fnUntraced(function* ({ id, news = {}, session }) {
+          const name = yield* createApplicationName(id, news.name);
+          yield* Effect.logInfo(
+            `Cloudflare Container precreate: starting ${name}`,
+          );
+
+          const { code, imageRef, imageHash } = yield* computeImageHash(
+            id,
+            news,
+          );
+          const configuration = desiredConfiguration(news, imageRef);
+          yield* buildAndPushImage(id, news, code, imageRef, session);
+
+          // Precreate intentionally omits the Durable Object attachment so the
+          // worker can bind to this application id and break the circular
+          // dependency. The final create step recreates the application with the
+          // resolved namespace when needed.
+          const result = yield* createApplication({
+            id,
+            news,
+            name,
+            configuration,
+            durableObjects: undefined,
+            session: {
+              ...session,
+              note: (message) =>
+                session.note(message.replace("Creating", "Pre-creating")),
+            },
+          });
+          return {
+            ...("applicationId" in result ? result : toAttributes(result)),
+            hash: { image: imageHash },
+          };
+        }),
+        create: Effect.fnUntraced(function* ({
+          id,
+          news = {},
+          bindings,
+          output,
+          session,
+        }) {
+          const name = yield* createApplicationName(id, news.name);
+          yield* Effect.logInfo(
+            `Cloudflare Container create: starting ${name}${adoptPolicy ? " with adopt" : ""}`,
+          );
+          const durableObjects = yield* getDurableObjects(bindings);
+          const { code, imageRef, imageHash } = yield* computeImageHash(
+            id,
+            news,
+          );
+          const configuration = desiredConfiguration(news, imageRef);
+
+          if (
+            output &&
+            !adoptPolicy &&
+            !deepEqual(output.durableObjects, durableObjects)
+          ) {
+            if (durableObjects) {
+              const existing = yield* findApplicationByNamespace(
+                durableObjects.namespaceId,
+              );
+              const recovery = resolveDurableObjectApplicationRecovery({
+                namespaceId: durableObjects.namespaceId,
+                expectedName: name,
+                existingName: existing?.name,
+              });
+              if (recovery.canAdopt) {
                 if (!existing) {
                   return yield* Effect.fail(
                     new Error(
@@ -1041,236 +1265,51 @@ await Effect.runPromise(serverEffect).catch((err) => {
                   existing: toAttributes(existing),
                   session,
                 });
-              })
-            : Effect.fail(
-                new Error(
-                  "Durable Object namespace already has a container application. Set AdoptPolicy to adopt it.",
-                ),
-              ),
-        ),
-        Effect.catchIf(
-          (e) =>
-            "message" in (e as any) &&
-            String((e as any).message).includes("already exists"),
-          () => adoptExistingByName,
-        ),
-        Effect.tapError((error) =>
-          Effect.logError(
-            `Cloudflare Container create error: ${describeError(error)}`,
-          ),
-        ),
-      );
-
-      return "applicationId" in application
-        ? application
-        : toAttributes(application);
-    });
-
-    const upsertApplication = Effect.fnUntraced(function* ({
-      id,
-      news,
-      existing,
-      session,
-    }: {
-      id: string;
-      news: ContainerApplicationProps;
-      existing: ContainerApplication["Attributes"];
-      session: { note: (message: string) => Effect.Effect<void> };
-    }) {
-      yield* Effect.logInfo(
-        `Cloudflare Container update: preparing ${existing.applicationName}`,
-      );
-      const { code, imageRef, imageHash } = yield* computeImageHash(id, news);
-      const configuration = desiredConfiguration(news, imageRef);
-
-      if (imageHash !== existing.hash?.image) {
-        yield* buildAndPushImage(id, news, code, imageRef, session);
-      }
-
-      yield* session.note(
-        `Updating container application ${existing.applicationName}...`,
-      );
-      const application = yield* retryForContainerApplicationReadiness(
-        "update",
-        existing.applicationId,
-        updateContainerApplication({
-          accountId,
-          applicationId: existing.applicationId,
-          instances: news.instances ?? 1,
-          maxInstances: news.maxInstances ?? 1,
-          schedulingPolicy: news.schedulingPolicy ?? "default",
-          constraints: news.constraints ?? {},
-          affinities: news.affinities,
-          configuration,
-        }),
-      );
-      const updated = toAttributes(application);
-      if (!deepEqual(existing.configuration, configuration)) {
-        yield* Effect.logInfo(
-          `Cloudflare Container update: creating rollout for ${updated.applicationName}`,
-        );
-        yield* maybeCreateRollout({
-          applicationId: updated.applicationId,
-          configuration,
-          rollout: news.rollout,
-        });
-      }
-      return { ...updated, configuration, hash: { image: imageHash } };
-    });
-
-    const getDurableObjects = (
-      bindings: ResourceBinding<ContainerApplication["Binding"]>[],
-    ) => {
-      const dos = bindings.flatMap((b) =>
-        b.data.durableObjects ? [b.data.durableObjects] : [],
-      );
-      if (dos.length === 0) {
-        return Effect.succeed(undefined);
-      }
-      if (dos.length === 1) {
-        return Effect.succeed(dos[0]);
-      }
-      return Effect.die(
-        new Error(
-          `A Container can only be bound to one Durable Object namespace. Found ${dos.length} namespaces in bindings: ${bindings.map((b) => b.data.durableObjects?.namespaceId).join(", ")}`,
-        ),
-      );
-    };
-
-    return Container.Provider.of({
-      stables: ["applicationId", "accountId"],
-      diff: Effect.fnUntraced(function* ({
-        id,
-        olds = {},
-        news = {},
-        output,
-        newBindings,
-        oldBindings,
-      }) {
-        if (!isResolved(news) || !isResolved(newBindings)) {
-          return undefined;
-        }
-
-        const name = yield* createApplicationName(id, news.name);
-        const oldName = output?.applicationName
-          ? output.applicationName
-          : yield* createApplicationName(id, olds.name);
-
-        if (
-          (output?.accountId ?? accountId) !== accountId ||
-          name !== oldName
-        ) {
-          return { action: "replace" } as const;
-        }
-
-        const hasDurableObjects =
-          (yield* getDurableObjects(newBindings)) !== undefined;
-        const hadDurableObjects =
-          (yield* getDurableObjects(oldBindings)) !== undefined;
-        if (hasDurableObjects !== hadDurableObjects) {
-          return { action: "replace" } as const;
-        }
-
-        if (!output) {
-          return undefined;
-        }
-
-        const { imageHash } = yield* computeImageHash(id, news);
-        if (imageHash !== output.hash?.image) {
-          return { action: "update" } as const;
-        }
-      }),
-      precreate: Effect.fnUntraced(function* ({ id, news = {}, session }) {
-        const name = yield* createApplicationName(id, news.name);
-        yield* Effect.logInfo(
-          `Cloudflare Container precreate: starting ${name}`,
-        );
-
-        const { code, imageRef, imageHash } = yield* computeImageHash(id, news);
-        const configuration = desiredConfiguration(news, imageRef);
-        yield* buildAndPushImage(id, news, code, imageRef, session);
-
-        // Precreate intentionally omits the Durable Object attachment so the
-        // worker can bind to this application id and break the circular
-        // dependency. The final create step recreates the application with the
-        // resolved namespace when needed.
-        const result = yield* createApplication({
-          id,
-          news,
-          name,
-          configuration,
-          durableObjects: undefined,
-          session: {
-            ...session,
-            note: (message) =>
-              session.note(message.replace("Creating", "Pre-creating")),
-          },
-        });
-        return {
-          ...("applicationId" in result ? result : toAttributes(result)),
-          hash: { image: imageHash },
-        };
-      }),
-      create: Effect.fnUntraced(function* ({
-        id,
-        news = {},
-        bindings,
-        output,
-        session,
-      }) {
-        const name = yield* createApplicationName(id, news.name);
-        yield* Effect.logInfo(
-          `Cloudflare Container create: starting ${name}${adoptPolicy ? " with adopt" : ""}`,
-        );
-        const durableObjects = yield* getDurableObjects(bindings);
-        const { code, imageRef, imageHash } = yield* computeImageHash(id, news);
-        const configuration = desiredConfiguration(news, imageRef);
-
-        if (
-          output &&
-          !adoptPolicy &&
-          !deepEqual(output.durableObjects, durableObjects)
-        ) {
-          if (durableObjects) {
-            const existing = yield* findApplicationByNamespace(
-              durableObjects.namespaceId,
-            );
-            const recovery = resolveDurableObjectApplicationRecovery({
-              namespaceId: durableObjects.namespaceId,
-              expectedName: name,
-              existingName: existing?.name,
-            });
-            if (recovery.canAdopt) {
-              if (!existing) {
-                return yield* Effect.fail(
-                  new Error(
-                    `Container application for Durable Object namespace "${durableObjects.namespaceId}" already exists but could not be found for adoption.`,
-                  ),
-                );
               }
-              return yield* upsertApplication({
-                id,
-                news,
-                existing: toAttributes(existing),
-                session,
-              });
             }
+            yield* Effect.logInfo(
+              `Cloudflare Container create: recreating pre-created application ${name} with durable object binding`,
+            );
+            yield* session.note(
+              `Recreating container application ${name} with durable object binding...`,
+            );
+            yield* deleteContainerApplication({
+              accountId: output.accountId,
+              applicationId: output.applicationId,
+            }).pipe(
+              Effect.catchTag(
+                "ContainerApplicationNotFound",
+                () => Effect.void,
+              ),
+            );
+            if (imageHash !== output.hash?.image) {
+              yield* buildAndPushImage(id, news, code, imageRef, session);
+            }
+            const result = yield* createApplication({
+              id,
+              news,
+              name,
+              configuration,
+              durableObjects,
+              session,
+            });
+            return {
+              ...("applicationId" in result ? result : toAttributes(result)),
+              hash: { image: imageHash },
+            };
           }
-          yield* Effect.logInfo(
-            `Cloudflare Container create: recreating pre-created application ${name} with durable object binding`,
-          );
-          yield* session.note(
-            `Recreating container application ${name} with durable object binding...`,
-          );
-          yield* deleteContainerApplication({
-            accountId: output.accountId,
-            applicationId: output.applicationId,
-          }).pipe(
-            Effect.catchTag("ContainerApplicationNotFound", () => Effect.void),
-          );
-          if (imageHash !== output.hash?.image) {
-            yield* buildAndPushImage(id, news, code, imageRef, session);
+
+          if (output) {
+            return yield* upsertApplication({
+              id,
+              news,
+              existing: output,
+              session,
+            });
           }
+
+          yield* buildAndPushImage(id, news, code, imageRef, session);
+
           const result = yield* createApplication({
             id,
             news,
@@ -1283,108 +1322,88 @@ await Effect.runPromise(serverEffect).catch((err) => {
             ...("applicationId" in result ? result : toAttributes(result)),
             hash: { image: imageHash },
           };
-        }
-
-        if (output) {
+        }),
+        update: Effect.fnUntraced(function* ({
+          id,
+          news = {},
+          output,
+          session,
+        }) {
+          yield* Effect.logInfo(
+            `Cloudflare Container update: starting ${output.applicationName}`,
+          );
           return yield* upsertApplication({
             id,
             news,
             existing: output,
             session,
           });
-        }
-
-        yield* buildAndPushImage(id, news, code, imageRef, session);
-
-        const result = yield* createApplication({
-          id,
-          news,
-          name,
-          configuration,
-          durableObjects,
-          session,
-        });
-        return {
-          ...("applicationId" in result ? result : toAttributes(result)),
-          hash: { image: imageHash },
-        };
-      }),
-      update: Effect.fnUntraced(function* ({ id, news = {}, output, session }) {
-        yield* Effect.logInfo(
-          `Cloudflare Container update: starting ${output.applicationName}`,
-        );
-        return yield* upsertApplication({
-          id,
-          news,
-          existing: output,
-          session,
-        });
-      }),
-      delete: Effect.fnUntraced(function* ({ output }) {
-        yield* Effect.logInfo(
-          `Cloudflare Container delete: deleting ${output.applicationName}`,
-        );
-        yield* deleteContainerApplication({
-          accountId: output.accountId,
-          applicationId: output.applicationId,
-        }).pipe(
-          Effect.catchTag("ContainerApplicationNotFound", () => Effect.void),
-        );
-      }),
-      read: Effect.fnUntraced(function* ({ id, olds, output }) {
-        const readByName = (name: string) =>
-          Effect.gen(function* () {
-            yield* Effect.logInfo(
-              `Cloudflare Container read: looking up ${name}`,
-            );
-            const existing = yield* findApplicationByName(name);
-            if (!existing) {
-              yield* Effect.logInfo(
-                `Cloudflare Container read: ${name} not found`,
-              );
-              return undefined;
-            }
-            return {
-              ...toAttributes(existing),
-              hash: output?.hash,
-            };
-          });
-
-        if (output?.applicationId) {
+        }),
+        delete: Effect.fnUntraced(function* ({ output }) {
           yield* Effect.logInfo(
-            `Cloudflare Container read: checking ${output.applicationName}`,
+            `Cloudflare Container delete: deleting ${output.applicationName}`,
           );
-          return yield* getContainerApplication({
+          yield* deleteContainerApplication({
             accountId: output.accountId,
             applicationId: output.applicationId,
           }).pipe(
-            Effect.map((app) => ({
-              ...toAttributes(app),
-              hash: output.hash,
-            })),
-            Effect.catchTag("ContainerApplicationNotFound", () =>
-              readByName(output.applicationName),
-            ),
+            Effect.catchTag("ContainerApplicationNotFound", () => Effect.void),
           );
-        }
+        }),
+        read: Effect.fnUntraced(function* ({ id, olds, output }) {
+          const readByName = (name: string) =>
+            Effect.gen(function* () {
+              yield* Effect.logInfo(
+                `Cloudflare Container read: looking up ${name}`,
+              );
+              const existing = yield* findApplicationByName(name);
+              if (!existing) {
+                yield* Effect.logInfo(
+                  `Cloudflare Container read: ${name} not found`,
+                );
+                return undefined;
+              }
+              return {
+                ...toAttributes(existing),
+                hash: output?.hash,
+              };
+            });
 
-        const name = yield* createApplicationName(id, olds?.name);
-        return yield* readByName(name);
-      }),
-      tail: ({ output }) =>
-        telemetry.tailStream({
-          accountId: output.accountId,
-          filters: containerFilters(output.applicationId),
+          if (output?.applicationId) {
+            yield* Effect.logInfo(
+              `Cloudflare Container read: checking ${output.applicationName}`,
+            );
+            return yield* getContainerApplication({
+              accountId: output.accountId,
+              applicationId: output.applicationId,
+            }).pipe(
+              Effect.map((app) => ({
+                ...toAttributes(app),
+                hash: output.hash,
+              })),
+              Effect.catchTag("ContainerApplicationNotFound", () =>
+                readByName(output.applicationName),
+              ),
+            );
+          }
+
+          const name = yield* createApplicationName(id, olds?.name);
+          return yield* readByName(name);
         }),
-      logs: ({ output, options }) =>
-        telemetry.queryLogs({
-          accountId: output.accountId,
-          filters: containerFilters(output.applicationId),
-          options,
-        }),
-    });
-  }),
-);
+        tail: ({ output }) =>
+          telemetry.tailStream({
+            accountId: output.accountId,
+            filters: containerFilters(output.applicationId),
+          }),
+        logs: ({ output, options }) =>
+          telemetry.queryLogs({
+            accountId: output.accountId,
+            filters: containerFilters(output.applicationId),
+            options,
+          }),
+      });
+    }),
+  );
 
 const containerFilters = (applicationId: string): TelemetryFilter[] => [
   {

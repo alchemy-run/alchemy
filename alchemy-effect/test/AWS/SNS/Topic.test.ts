@@ -27,7 +27,7 @@ test(
 
     yield* destroy();
     yield* assertTopicDeleted(topic.topicArn);
-  }).pipe(Effect.provide(AWS.providers)),
+  }).pipe(Effect.provide(AWS.providers())),
 );
 
 test(
@@ -80,7 +80,7 @@ test(
 
     yield* destroy();
     yield* assertTopicDeleted(updatedTopic.topicArn);
-  }).pipe(Effect.provide(AWS.providers)),
+  }).pipe(Effect.provide(AWS.providers())),
 );
 
 test(
@@ -107,7 +107,7 @@ test(
 
     yield* destroy();
     yield* assertTopicDeleted(topic.topicArn);
-  }).pipe(Effect.provide(AWS.providers)),
+  }).pipe(Effect.provide(AWS.providers())),
 );
 
 class TopicStillExists extends Data.TaggedError("TopicStillExists") {}

@@ -158,210 +158,211 @@ export interface NatGateway extends Resource<
 > {}
 export const NatGateway = Resource<NatGateway>("AWS.EC2.NatGateway");
 
-export const NatGatewayProvider = Provider.effect(
-  NatGateway,
-  Effect.gen(function* () {
-    const region = yield* Region;
-    const accountId = yield* Account;
+export const NatGatewayProvider = () =>
+  Provider.effect(
+    NatGateway,
+    Effect.gen(function* () {
+      const region = yield* Region;
+      const accountId = yield* Account;
 
-    const createTags = Effect.fn(function* (
-      id: string,
-      tags?: Record<string, string>,
-    ) {
-      return {
-        Name: id,
-        ...(yield* createInternalTags(id)),
-        ...tags,
+      const createTags = Effect.fn(function* (
+        id: string,
+        tags?: Record<string, string>,
+      ) {
+        return {
+          Name: id,
+          ...(yield* createInternalTags(id)),
+          ...tags,
+        };
+      });
+
+      const describeNatGateway = (natGatewayId: string) =>
+        ec2.describeNatGateways({ NatGatewayIds: [natGatewayId] }).pipe(
+          Effect.map((r) => r.NatGateways?.[0]),
+          Effect.flatMap((gw) =>
+            gw
+              ? Effect.succeed(gw)
+              : Effect.fail(new Error(`NAT Gateway ${natGatewayId} not found`)),
+          ),
+        );
+
+      const toAttrs = (gw: ec2.NatGateway): NatGateway["Attributes"] => {
+        const primaryAddress =
+          gw.NatGatewayAddresses?.find((a) => a.IsPrimary) ??
+          gw.NatGatewayAddresses?.[0];
+        return {
+          natGatewayId: gw.NatGatewayId as NatGatewayId,
+          natGatewayArn:
+            `arn:aws:ec2:${region}:${accountId}:natgateway/${gw.NatGatewayId}` as NatGatewayArn,
+          subnetId: gw.SubnetId as SubnetId,
+          vpcId: gw.VpcId!,
+          state: gw.State!,
+          connectivityType: gw.ConnectivityType!,
+          publicIp: primaryAddress?.PublicIp,
+          privateIp: primaryAddress?.PrivateIp,
+          natGatewayAddresses: gw.NatGatewayAddresses?.map((a) => ({
+            allocationId: a.AllocationId,
+            networkInterfaceId: a.NetworkInterfaceId,
+            privateIp: a.PrivateIp,
+            publicIp: a.PublicIp,
+            associationId: a.AssociationId,
+            isPrimary: a.IsPrimary,
+            failureMessage: a.FailureMessage,
+            status: a.Status,
+          })),
+          failureCode: gw.FailureCode,
+          failureMessage: gw.FailureMessage,
+          createTime:
+            gw.CreateTime instanceof Date
+              ? gw.CreateTime.toISOString()
+              : (gw.CreateTime as string | undefined),
+          deleteTime:
+            gw.DeleteTime instanceof Date
+              ? gw.DeleteTime.toISOString()
+              : (gw.DeleteTime as string | undefined),
+        };
       };
-    });
 
-    const describeNatGateway = (natGatewayId: string) =>
-      ec2.describeNatGateways({ NatGatewayIds: [natGatewayId] }).pipe(
-        Effect.map((r) => r.NatGateways?.[0]),
-        Effect.flatMap((gw) =>
-          gw
-            ? Effect.succeed(gw)
-            : Effect.fail(new Error(`NAT Gateway ${natGatewayId} not found`)),
-        ),
-      );
+      // Find NAT Gateway by alchemy tags when we don't have the ID
+      const findNatGatewayByTags = Effect.fn(function* (id: string) {
+        const filters = yield* createAlchemyTagFilters(id);
+        const result = yield* ec2.describeNatGateways({ Filter: filters });
 
-    const toAttrs = (gw: ec2.NatGateway): NatGateway["Attributes"] => {
-      const primaryAddress =
-        gw.NatGatewayAddresses?.find((a) => a.IsPrimary) ??
-        gw.NatGatewayAddresses?.[0];
-      return {
-        natGatewayId: gw.NatGatewayId as NatGatewayId,
-        natGatewayArn:
-          `arn:aws:ec2:${region}:${accountId}:natgateway/${gw.NatGatewayId}` as NatGatewayArn,
-        subnetId: gw.SubnetId as SubnetId,
-        vpcId: gw.VpcId!,
-        state: gw.State!,
-        connectivityType: gw.ConnectivityType!,
-        publicIp: primaryAddress?.PublicIp,
-        privateIp: primaryAddress?.PrivateIp,
-        natGatewayAddresses: gw.NatGatewayAddresses?.map((a) => ({
-          allocationId: a.AllocationId,
-          networkInterfaceId: a.NetworkInterfaceId,
-          privateIp: a.PrivateIp,
-          publicIp: a.PublicIp,
-          associationId: a.AssociationId,
-          isPrimary: a.IsPrimary,
-          failureMessage: a.FailureMessage,
-          status: a.Status,
-        })),
-        failureCode: gw.FailureCode,
-        failureMessage: gw.FailureMessage,
-        createTime:
-          gw.CreateTime instanceof Date
-            ? gw.CreateTime.toISOString()
-            : (gw.CreateTime as string | undefined),
-        deleteTime:
-          gw.DeleteTime instanceof Date
-            ? gw.DeleteTime.toISOString()
-            : (gw.DeleteTime as string | undefined),
-      };
-    };
-
-    // Find NAT Gateway by alchemy tags when we don't have the ID
-    const findNatGatewayByTags = Effect.fn(function* (id: string) {
-      const filters = yield* createAlchemyTagFilters(id);
-      const result = yield* ec2.describeNatGateways({ Filter: filters });
-
-      // Find a NAT Gateway that's not deleted and has matching tags
-      for (const gw of result.NatGateways ?? []) {
-        return gw;
-      }
-      return undefined;
-    });
-
-    return {
-      stables: ["natGatewayId", "natGatewayArn", "vpcId"],
-
-      read: Effect.fn(function* ({ id, output }) {
-        if (output) {
-          // We have the NAT Gateway ID, use it directly
-          return toAttrs(yield* describeNatGateway(output.natGatewayId));
+        // Find a NAT Gateway that's not deleted and has matching tags
+        for (const gw of result.NatGateways ?? []) {
+          return gw;
         }
-
-        // No output - try to find by tags (recovery from incomplete create)
-        const gw = yield* findNatGatewayByTags(id);
-        if (gw) {
-          return toAttrs(gw);
-        }
-
-        // Not found
         return undefined;
-      }),
+      });
 
-      diff: Effect.fn(function* ({ news, olds }) {
-        if (!isResolved(news)) return;
-        // NAT Gateway is mostly immutable - any change to core properties requires replacement
-        if (
-          news.subnetId !== olds.subnetId ||
-          news.connectivityType !== olds.connectivityType ||
-          news.allocationId !== olds.allocationId
-        ) {
-          return { action: "replace" };
-        }
-        // Tags can be updated in-place
-      }),
+      return {
+        stables: ["natGatewayId", "natGatewayArn", "vpcId"],
 
-      create: Effect.fn(function* ({ id, news, session }) {
-        yield* session.note("Creating NAT Gateway...");
+        read: Effect.fn(function* ({ id, output }) {
+          if (output) {
+            // We have the NAT Gateway ID, use it directly
+            return toAttrs(yield* describeNatGateway(output.natGatewayId));
+          }
 
-        const result = yield* ec2.createNatGateway({
-          SubnetId: news.subnetId as string,
-          AllocationId: news.allocationId as string | undefined,
-          ConnectivityType: news.connectivityType ?? "public",
-          PrivateIpAddress: news.privateIpAddress,
-          SecondaryAllocationIds: news.secondaryAllocationIds as
-            | string[]
-            | undefined,
-          SecondaryPrivateIpAddresses: news.secondaryPrivateIpAddresses,
-          SecondaryPrivateIpAddressCount: news.secondaryPrivateIpAddressCount,
-          TagSpecifications: [
-            {
-              ResourceType: "natgateway",
-              Tags: createTagsList(yield* createTags(id, news.tags)),
-            },
-          ],
-          DryRun: false,
-        });
+          // No output - try to find by tags (recovery from incomplete create)
+          const gw = yield* findNatGatewayByTags(id);
+          if (gw) {
+            return toAttrs(gw);
+          }
 
-        const natGatewayId = result.NatGateway!.NatGatewayId!;
-        yield* session.note(`NAT Gateway created: ${natGatewayId}`);
+          // Not found
+          return undefined;
+        }),
 
-        // Wait for NAT Gateway to be available
-        const gw = yield* waitForNatGatewayAvailable(natGatewayId, session);
+        diff: Effect.fn(function* ({ news, olds }) {
+          if (!isResolved(news)) return;
+          // NAT Gateway is mostly immutable - any change to core properties requires replacement
+          if (
+            news.subnetId !== olds.subnetId ||
+            news.connectivityType !== olds.connectivityType ||
+            news.allocationId !== olds.allocationId
+          ) {
+            return { action: "replace" };
+          }
+          // Tags can be updated in-place
+        }),
 
-        return toAttrs(gw);
-      }),
+        create: Effect.fn(function* ({ id, news, session }) {
+          yield* session.note("Creating NAT Gateway...");
 
-      update: Effect.fn(function* ({ id, news, output, session }) {
-        const natGatewayId = output.natGatewayId;
+          const result = yield* ec2.createNatGateway({
+            SubnetId: news.subnetId as string,
+            AllocationId: news.allocationId as string | undefined,
+            ConnectivityType: news.connectivityType ?? "public",
+            PrivateIpAddress: news.privateIpAddress,
+            SecondaryAllocationIds: news.secondaryAllocationIds as
+              | string[]
+              | undefined,
+            SecondaryPrivateIpAddresses: news.secondaryPrivateIpAddresses,
+            SecondaryPrivateIpAddressCount: news.secondaryPrivateIpAddressCount,
+            TagSpecifications: [
+              {
+                ResourceType: "natgateway",
+                Tags: createTagsList(yield* createTags(id, news.tags)),
+              },
+            ],
+            DryRun: false,
+          });
 
-        // Handle tag updates
-        const newTags = yield* createTags(id, news.tags);
-        const oldTags =
-          (yield* ec2
-            .describeTags({
-              Filters: [
-                { Name: "resource-id", Values: [natGatewayId] },
-                { Name: "resource-type", Values: ["natgateway"] },
-              ],
+          const natGatewayId = result.NatGateway!.NatGatewayId!;
+          yield* session.note(`NAT Gateway created: ${natGatewayId}`);
+
+          // Wait for NAT Gateway to be available
+          const gw = yield* waitForNatGatewayAvailable(natGatewayId, session);
+
+          return toAttrs(gw);
+        }),
+
+        update: Effect.fn(function* ({ id, news, output, session }) {
+          const natGatewayId = output.natGatewayId;
+
+          // Handle tag updates
+          const newTags = yield* createTags(id, news.tags);
+          const oldTags =
+            (yield* ec2
+              .describeTags({
+                Filters: [
+                  { Name: "resource-id", Values: [natGatewayId] },
+                  { Name: "resource-type", Values: ["natgateway"] },
+                ],
+              })
+              .pipe(
+                Effect.map(
+                  (r) =>
+                    Object.fromEntries(
+                      r.Tags?.map((t) => [t.Key!, t.Value!]) ?? [],
+                    ) as Record<string, string>,
+                ),
+              )) ?? {};
+
+          const { removed, upsert } = diffTags(oldTags, newTags);
+
+          if (removed.length > 0) {
+            yield* ec2.deleteTags({
+              Resources: [natGatewayId],
+              Tags: removed.map((key) => ({ Key: key })),
+              DryRun: false,
+            });
+          }
+          if (upsert.length > 0) {
+            yield* ec2.createTags({
+              Resources: [natGatewayId],
+              Tags: upsert,
+              DryRun: false,
+            });
+            yield* session.note("Updated tags");
+          }
+
+          // Refresh state
+          const gw = yield* describeNatGateway(natGatewayId);
+          return toAttrs(gw);
+        }),
+
+        delete: Effect.fn(function* ({ output, session }) {
+          const natGatewayId = output.natGatewayId;
+
+          yield* session.note(`Deleting NAT Gateway: ${natGatewayId}`);
+
+          yield* ec2
+            .deleteNatGateway({
+              NatGatewayId: natGatewayId,
+              DryRun: false,
             })
-            .pipe(
-              Effect.map(
-                (r) =>
-                  Object.fromEntries(
-                    r.Tags?.map((t) => [t.Key!, t.Value!]) ?? [],
-                  ) as Record<string, string>,
-              ),
-            )) ?? {};
+            .pipe(Effect.catchTag("NatGatewayNotFound", () => Effect.void));
 
-        const { removed, upsert } = diffTags(oldTags, newTags);
+          // Wait for NAT Gateway to be deleted
+          yield* waitForNatGatewayDeleted(natGatewayId, session);
 
-        if (removed.length > 0) {
-          yield* ec2.deleteTags({
-            Resources: [natGatewayId],
-            Tags: removed.map((key) => ({ Key: key })),
-            DryRun: false,
-          });
-        }
-        if (upsert.length > 0) {
-          yield* ec2.createTags({
-            Resources: [natGatewayId],
-            Tags: upsert,
-            DryRun: false,
-          });
-          yield* session.note("Updated tags");
-        }
-
-        // Refresh state
-        const gw = yield* describeNatGateway(natGatewayId);
-        return toAttrs(gw);
-      }),
-
-      delete: Effect.fn(function* ({ output, session }) {
-        const natGatewayId = output.natGatewayId;
-
-        yield* session.note(`Deleting NAT Gateway: ${natGatewayId}`);
-
-        yield* ec2
-          .deleteNatGateway({
-            NatGatewayId: natGatewayId,
-            DryRun: false,
-          })
-          .pipe(Effect.catchTag("NatGatewayNotFound", () => Effect.void));
-
-        // Wait for NAT Gateway to be deleted
-        yield* waitForNatGatewayDeleted(natGatewayId, session);
-
-        yield* session.note(`NAT Gateway ${natGatewayId} deleted`);
-      }),
-    };
-  }),
-);
+          yield* session.note(`NAT Gateway ${natGatewayId} deleted`);
+        }),
+      };
+    }),
+  );
 
 // Retryable error: NAT Gateway is still pending
 class NatGatewayPending extends Data.TaggedError("NatGatewayPending")<{

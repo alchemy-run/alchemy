@@ -17,5 +17,5 @@ export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
 
 export default Worker.pipe(
   Effect.map((worker) => worker.url),
-  Stack.make("CloudflareWorker", Cloudflare.providers),
+  Stack.make("CloudflareWorker", Cloudflare.providers()),
 );

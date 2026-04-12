@@ -69,145 +69,146 @@ export type D1Database = Resource<
  */
 export const D1Database = Resource<D1Database>("Cloudflare.D1Database");
 
-export const DatabaseProvider = Provider.effect(
-  D1Database,
-  Effect.gen(function* () {
-    const accountId = yield* Account;
-    const createDb = yield* d1.createDatabase;
-    const getDb = yield* d1.getDatabase;
-    const patchDb = yield* d1.patchDatabase;
-    const deleteDb = yield* d1.deleteDatabase;
-    const listDbs = yield* d1.listDatabases;
+export const DatabaseProvider = () =>
+  Provider.effect(
+    D1Database,
+    Effect.gen(function* () {
+      const accountId = yield* Account;
+      const createDb = yield* d1.createDatabase;
+      const getDb = yield* d1.getDatabase;
+      const patchDb = yield* d1.patchDatabase;
+      const deleteDb = yield* d1.deleteDatabase;
+      const listDbs = yield* d1.listDatabases;
 
-    const createDatabaseName = (id: string, name: string | undefined) =>
-      Effect.gen(function* () {
-        return name ?? (yield* createPhysicalName({ id }));
-      });
+      const createDatabaseName = (id: string, name: string | undefined) =>
+        Effect.gen(function* () {
+          return name ?? (yield* createPhysicalName({ id }));
+        });
 
-    return {
-      stables: ["databaseId", "accountId"],
-      diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
-        if (!isResolved(news)) return undefined;
-        if ((output?.accountId ?? accountId) !== accountId) {
-          return { action: "replace" } as const;
-        }
-        const name = yield* createDatabaseName(id, news.name);
-        const oldName = output?.databaseName
-          ? output.databaseName
-          : yield* createDatabaseName(id, olds.name);
-        const oldJurisdiction =
-          output?.jurisdiction ?? olds.jurisdiction ?? "default";
-        if (
-          oldName !== name ||
-          oldJurisdiction !== (news.jurisdiction ?? "default") ||
-          (olds.primaryLocationHint !== news.primaryLocationHint &&
-            news.primaryLocationHint !== undefined)
-        ) {
-          return { action: "replace" } as const;
-        }
-        const oldReplicationMode =
-          output?.readReplication?.mode ??
-          olds.readReplication?.mode ??
-          "disabled";
-        const newReplicationMode = news.readReplication?.mode ?? "disabled";
-        if (oldReplicationMode !== newReplicationMode) {
-          return { action: "update" } as const;
-        }
-      }),
-      read: Effect.fn(function* ({ id, output, olds }) {
-        if (output?.databaseId) {
-          return yield* getDb({
-            accountId: output.accountId,
-            databaseId: output.databaseId,
-          }).pipe(
-            Effect.map((db) => ({
-              databaseId: db.uuid ?? output.databaseId,
-              databaseName: db.name ?? output.databaseName,
-              jurisdiction: output.jurisdiction,
-              readReplication: db.readReplication ?? undefined,
+      return {
+        stables: ["databaseId", "accountId"],
+        diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
+          if (!isResolved(news)) return undefined;
+          if ((output?.accountId ?? accountId) !== accountId) {
+            return { action: "replace" } as const;
+          }
+          const name = yield* createDatabaseName(id, news.name);
+          const oldName = output?.databaseName
+            ? output.databaseName
+            : yield* createDatabaseName(id, olds.name);
+          const oldJurisdiction =
+            output?.jurisdiction ?? olds.jurisdiction ?? "default";
+          if (
+            oldName !== name ||
+            oldJurisdiction !== (news.jurisdiction ?? "default") ||
+            (olds.primaryLocationHint !== news.primaryLocationHint &&
+              news.primaryLocationHint !== undefined)
+          ) {
+            return { action: "replace" } as const;
+          }
+          const oldReplicationMode =
+            output?.readReplication?.mode ??
+            olds.readReplication?.mode ??
+            "disabled";
+          const newReplicationMode = news.readReplication?.mode ?? "disabled";
+          if (oldReplicationMode !== newReplicationMode) {
+            return { action: "update" } as const;
+          }
+        }),
+        read: Effect.fn(function* ({ id, output, olds }) {
+          if (output?.databaseId) {
+            return yield* getDb({
               accountId: output.accountId,
-            })),
-            Effect.catchTag("DatabaseNotFound", () =>
-              Effect.succeed(undefined),
+              databaseId: output.databaseId,
+            }).pipe(
+              Effect.map((db) => ({
+                databaseId: db.uuid ?? output.databaseId,
+                databaseName: db.name ?? output.databaseName,
+                jurisdiction: output.jurisdiction,
+                readReplication: db.readReplication ?? undefined,
+                accountId: output.accountId,
+              })),
+              Effect.catchTag("DatabaseNotFound", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          }
+          const name = yield* createDatabaseName(id, olds?.name);
+          const dbs = yield* listDbs({ accountId, name });
+          const match = dbs.result.find((db) => db.name === name);
+          if (match) {
+            return {
+              databaseId: match.uuid!,
+              databaseName: match.name ?? name,
+              jurisdiction: (olds?.jurisdiction ?? "default") as Jurisdiction,
+              readReplication: olds?.readReplication,
+              accountId,
+            };
+          }
+          return undefined;
+        }),
+        create: Effect.fn(function* ({ id, news = {} }) {
+          const name = yield* createDatabaseName(id, news.name);
+          const jurisdiction = news.jurisdiction ?? "default";
+          const db = yield* createDb({
+            accountId,
+            name,
+            jurisdiction: jurisdiction !== "default" ? jurisdiction : undefined,
+            primaryLocationHint: news.primaryLocationHint,
+          }).pipe(
+            Effect.catchTag("InvalidProperty", () =>
+              Effect.gen(function* () {
+                const dbs = yield* listDbs({ accountId, name });
+                const match = dbs.result.find((db) => db.name === name);
+                if (match) {
+                  return match;
+                }
+                return yield* Effect.die(
+                  `Database with name "${name}" already exists but could not be found`,
+                );
+              }),
             ),
           );
-        }
-        const name = yield* createDatabaseName(id, olds?.name);
-        const dbs = yield* listDbs({ accountId, name });
-        const match = dbs.result.find((db) => db.name === name);
-        if (match) {
+
+          const databaseId = db.uuid!;
+
+          if (news.readReplication?.mode) {
+            yield* patchDb({
+              accountId,
+              databaseId,
+              readReplication: news.readReplication,
+            });
+          }
+
           return {
-            databaseId: match.uuid!,
-            databaseName: match.name ?? name,
-            jurisdiction: (olds?.jurisdiction ?? "default") as Jurisdiction,
-            readReplication: olds?.readReplication,
+            databaseId,
+            databaseName: db.name ?? name,
+            jurisdiction,
+            readReplication: news.readReplication,
             accountId,
           };
-        }
-        return undefined;
-      }),
-      create: Effect.fn(function* ({ id, news = {} }) {
-        const name = yield* createDatabaseName(id, news.name);
-        const jurisdiction = news.jurisdiction ?? "default";
-        const db = yield* createDb({
-          accountId,
-          name,
-          jurisdiction: jurisdiction !== "default" ? jurisdiction : undefined,
-          primaryLocationHint: news.primaryLocationHint,
-        }).pipe(
-          Effect.catchTag("InvalidProperty", () =>
-            Effect.gen(function* () {
-              const dbs = yield* listDbs({ accountId, name });
-              const match = dbs.result.find((db) => db.name === name);
-              if (match) {
-                return match;
-              }
-              return yield* Effect.die(
-                `Database with name "${name}" already exists but could not be found`,
-              );
-            }),
-          ),
-        );
-
-        const databaseId = db.uuid!;
-
-        if (news.readReplication?.mode) {
-          yield* patchDb({
-            accountId,
-            databaseId,
-            readReplication: news.readReplication,
+        }),
+        update: Effect.fn(function* ({ news = {}, output }) {
+          const replicationMode = news.readReplication?.mode ?? "disabled";
+          const updated = yield* patchDb({
+            accountId: output.accountId,
+            databaseId: output.databaseId,
+            readReplication: { mode: replicationMode },
           });
-        }
-
-        return {
-          databaseId,
-          databaseName: db.name ?? name,
-          jurisdiction,
-          readReplication: news.readReplication,
-          accountId,
-        };
-      }),
-      update: Effect.fn(function* ({ news = {}, output }) {
-        const replicationMode = news.readReplication?.mode ?? "disabled";
-        const updated = yield* patchDb({
-          accountId: output.accountId,
-          databaseId: output.databaseId,
-          readReplication: { mode: replicationMode },
-        });
-        return {
-          databaseId: updated.uuid ?? output.databaseId,
-          databaseName: updated.name ?? output.databaseName,
-          jurisdiction: output.jurisdiction,
-          readReplication: news.readReplication,
-          accountId: output.accountId,
-        };
-      }),
-      delete: Effect.fn(function* ({ output }) {
-        yield* deleteDb({
-          accountId: output.accountId,
-          databaseId: output.databaseId,
-        }).pipe(Effect.catchTag("DatabaseNotFound", () => Effect.void));
-      }),
-    };
-  }),
-);
+          return {
+            databaseId: updated.uuid ?? output.databaseId,
+            databaseName: updated.name ?? output.databaseName,
+            jurisdiction: output.jurisdiction,
+            readReplication: news.readReplication,
+            accountId: output.accountId,
+          };
+        }),
+        delete: Effect.fn(function* ({ output }) {
+          yield* deleteDb({
+            accountId: output.accountId,
+            databaseId: output.databaseId,
+          }).pipe(Effect.catchTag("DatabaseNotFound", () => Effect.void));
+        }),
+      };
+    }),
+  );

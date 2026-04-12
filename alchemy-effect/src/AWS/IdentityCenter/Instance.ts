@@ -76,97 +76,98 @@ export interface Instance extends Resource<
  */
 export const Instance = Resource<Instance>("AWS.IdentityCenter.Instance");
 
-export const InstanceProvider = Provider.effect(
-  Instance,
-  Effect.gen(function* () {
-    return {
-      stables: ["instanceArn", "identityStoreId", "ownerAccountId", "mode"],
-      diff: Effect.fn(function* ({ olds, news }) {
-        if (!isResolved(news)) return;
-        if (
-          olds?.instanceArn !== news.instanceArn ||
-          olds?.mode !== news.mode ||
-          olds?.name !== news.name
-        ) {
-          return { action: "replace" } as const;
-        }
-      }),
-      read: Effect.fn(function* ({ olds, output }) {
-        const mode = output?.mode ?? olds?.mode ?? "existing";
-        const instance = yield* readInstance({
-          instanceArn: output?.instanceArn ?? olds?.instanceArn,
-          name: olds?.name,
-        });
-        return instance ? { ...instance, mode } : undefined;
-      }),
-      create: Effect.fn(function* ({ news, session }) {
-        const mode = news.mode ?? "existing";
-        const existing = yield* readInstance(news);
-        if (existing) {
-          yield* session.note(existing.instanceArn);
+export const InstanceProvider = () =>
+  Provider.effect(
+    Instance,
+    Effect.gen(function* () {
+      return {
+        stables: ["instanceArn", "identityStoreId", "ownerAccountId", "mode"],
+        diff: Effect.fn(function* ({ olds, news }) {
+          if (!isResolved(news)) return;
+          if (
+            olds?.instanceArn !== news.instanceArn ||
+            olds?.mode !== news.mode ||
+            olds?.name !== news.name
+          ) {
+            return { action: "replace" } as const;
+          }
+        }),
+        read: Effect.fn(function* ({ olds, output }) {
+          const mode = output?.mode ?? olds?.mode ?? "existing";
+          const instance = yield* readInstance({
+            instanceArn: output?.instanceArn ?? olds?.instanceArn,
+            name: olds?.name,
+          });
+          return instance ? { ...instance, mode } : undefined;
+        }),
+        create: Effect.fn(function* ({ news, session }) {
+          const mode = news.mode ?? "existing";
+          const existing = yield* readInstance(news);
+          if (existing) {
+            yield* session.note(existing.instanceArn);
+            return {
+              ...existing,
+              mode,
+            };
+          }
+
+          if (mode !== "account") {
+            return yield* Effect.fail(
+              new Error(
+                "No visible Identity Center instance was found. Organization instances must be enabled manually in the management account before Alchemy can adopt them.",
+              ),
+            );
+          }
+
+          const response = yield* retryIdentityCenter(
+            ssoAdmin.createInstance({
+              Name: news.name,
+            }),
+          );
+
+          const created = yield* readInstance({
+            instanceArn: response.InstanceArn,
+            name: news.name,
+          });
+          if (!created) {
+            return yield* Effect.fail(
+              new Error(
+                "failed to resolve Identity Center instance after create",
+              ),
+            );
+          }
+
+          yield* session.note(created.instanceArn);
           return {
-            ...existing,
+            ...created,
             mode,
           };
-        }
+        }),
+        update: Effect.fn(function* ({ output, session }) {
+          yield* session.note(output.instanceArn);
+          return output;
+        }),
+        delete: Effect.fn(function* ({ output }) {
+          if (output.mode !== "account") {
+            return;
+          }
 
-        if (mode !== "account") {
-          return yield* Effect.fail(
-            new Error(
-              "No visible Identity Center instance was found. Organization instances must be enabled manually in the management account before Alchemy can adopt them.",
-            ),
+          const existing = yield* readInstance({
+            instanceArn: output.instanceArn,
+          });
+          if (!existing) {
+            return;
+          }
+
+          yield* retryIdentityCenter(
+            ssoAdmin.deleteInstance({
+              InstanceArn: output.instanceArn,
+            }),
           );
-        }
-
-        const response = yield* retryIdentityCenter(
-          ssoAdmin.createInstance({
-            Name: news.name,
-          }),
-        );
-
-        const created = yield* readInstance({
-          instanceArn: response.InstanceArn,
-          name: news.name,
-        });
-        if (!created) {
-          return yield* Effect.fail(
-            new Error(
-              "failed to resolve Identity Center instance after create",
-            ),
-          );
-        }
-
-        yield* session.note(created.instanceArn);
-        return {
-          ...created,
-          mode,
-        };
-      }),
-      update: Effect.fn(function* ({ output, session }) {
-        yield* session.note(output.instanceArn);
-        return output;
-      }),
-      delete: Effect.fn(function* ({ output }) {
-        if (output.mode !== "account") {
-          return;
-        }
-
-        const existing = yield* readInstance({
-          instanceArn: output.instanceArn,
-        });
-        if (!existing) {
-          return;
-        }
-
-        yield* retryIdentityCenter(
-          ssoAdmin.deleteInstance({
-            InstanceArn: output.instanceArn,
-          }),
-        );
-      }),
-    };
-  }),
-);
+        }),
+      };
+    }),
+  );
 
 const readInstance = Effect.fn(function* ({
   instanceArn,

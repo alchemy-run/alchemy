@@ -89,6 +89,6 @@ describe("AWS.Kinesis.StreamConsumer", () => {
         ),
       );
       expect(deleted).toBe(true);
-    }).pipe(Effect.provide(AWS.providers)),
+    }).pipe(Effect.provide(AWS.providers())),
   );
 });

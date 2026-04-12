@@ -239,409 +239,419 @@ const mapClusterState = (
   kubernetesObjects,
 });
 
-export const ClusterProvider = Provider.effect(
-  Cluster,
-  Effect.gen(function* () {
-    const toClusterName = (id: string, props: { clusterName?: string } = {}) =>
-      props.clusterName
-        ? Effect.succeed(props.clusterName)
-        : createPhysicalName({ id, maxLength: 100 });
+export const ClusterProvider = () =>
+  Provider.effect(
+    Cluster,
+    Effect.gen(function* () {
+      const toClusterName = (
+        id: string,
+        props: { clusterName?: string } = {},
+      ) =>
+        props.clusterName
+          ? Effect.succeed(props.clusterName)
+          : createPhysicalName({ id, maxLength: 100 });
 
-    const toClientRequestToken = (id: string, action: string) =>
-      createPhysicalName({
-        id: `${id}-${action}`,
-        maxLength: 64,
-        delimiter: "-",
+      const toClientRequestToken = (id: string, action: string) =>
+        createPhysicalName({
+          id: `${id}-${action}`,
+          maxLength: 64,
+          delimiter: "-",
+        });
+
+      const validateProps = Effect.fn(function* (props: ClusterProps) {
+        const subnetIds = props.resourcesVpcConfig.subnetIds ?? [];
+        if (subnetIds.length < 2) {
+          return yield* Effect.fail(
+            new Error("AWS.EKS.Cluster requires at least two subnet IDs"),
+          );
+        }
+        if (
+          props.computeConfig?.enabled &&
+          props.accessConfig?.authenticationMode === "CONFIG_MAP"
+        ) {
+          return yield* Effect.fail(
+            new Error(
+              "AWS.EKS.Cluster Auto Mode requires accessConfig.authenticationMode to include API access",
+            ),
+          );
+        }
       });
 
-    const validateProps = Effect.fn(function* (props: ClusterProps) {
-      const subnetIds = props.resourcesVpcConfig.subnetIds ?? [];
-      if (subnetIds.length < 2) {
-        return yield* Effect.fail(
-          new Error("AWS.EKS.Cluster requires at least two subnet IDs"),
-        );
-      }
-      if (
-        props.computeConfig?.enabled &&
-        props.accessConfig?.authenticationMode === "CONFIG_MAP"
-      ) {
-        return yield* Effect.fail(
-          new Error(
-            "AWS.EKS.Cluster Auto Mode requires accessConfig.authenticationMode to include API access",
-          ),
-        );
-      }
-    });
-
-    const readCluster = Effect.fn(function* ({
-      clusterName,
-      kubernetesObjects,
-    }: {
-      clusterName: string;
-      kubernetesObjects?: KubernetesObjectRef[];
-    }) {
-      const described = yield* eks
-        .describeCluster({
-          name: clusterName,
-        })
-        .pipe(
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
-      const cluster = described?.cluster;
-      if (!cluster?.arn || !cluster.name || !cluster.roleArn) {
-        return undefined;
-      }
-      const listedTags = yield* eks
-        .listTagsForResource({
-          resourceArn: cluster.arn,
-        })
-        .pipe(
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
-        );
-      const tags = normalizeTags(listedTags?.tags ?? cluster.tags);
-      return mapClusterState(cluster, tags, kubernetesObjects ?? []);
-    });
-
-    const resolveOwnedCluster = Effect.fn(function* (
-      id: string,
-      clusterName: string,
-    ) {
-      const state = yield* readCluster({
-        clusterName,
-      });
-      if (!state) {
-        return yield* Effect.fail(
-          new Error(`cluster '${clusterName}' exists but could not be read`),
-        );
-      }
-      if (!(yield* hasAlchemyTags(id, state.tags))) {
-        return yield* Effect.fail(
-          new Error(
-            `cluster '${clusterName}' already exists and is not managed by alchemy`,
-          ),
-        );
-      }
-      return state;
-    });
-
-    const waitForClusterActive = (
-      clusterName: string,
-      kubernetesObjects: KubernetesObjectRef[] = [],
-    ) =>
-      readCluster({
+      const readCluster = Effect.fn(function* ({
         clusterName,
         kubernetesObjects,
-      }).pipe(
-        Effect.flatMap((state) => {
-          if (!state) {
-            return Effect.fail(
-              new ClusterNotReady({
-                status: undefined,
-              }),
-            );
-          }
-          if (state.status === "ACTIVE") {
-            return Effect.succeed(state);
-          }
-          if (state.status === "FAILED") {
-            return Effect.fail(
-              new Error(`EKS cluster '${clusterName}' entered FAILED state`),
-            );
-          }
-          return Effect.fail(
-            new ClusterNotReady({
-              status: state.status,
-            }),
+      }: {
+        clusterName: string;
+        kubernetesObjects?: KubernetesObjectRef[];
+      }) {
+        const described = yield* eks
+          .describeCluster({
+            name: clusterName,
+          })
+          .pipe(
+            Effect.catchTag("ResourceNotFoundException", () =>
+              Effect.succeed(undefined),
+            ),
           );
-        }),
-        Effect.retry({
-          while: (error) => error instanceof ClusterNotReady,
-          schedule: updateRetrySchedule,
-        }),
-      );
+        const cluster = described?.cluster;
+        if (!cluster?.arn || !cluster.name || !cluster.roleArn) {
+          return undefined;
+        }
+        const listedTags = yield* eks
+          .listTagsForResource({
+            resourceArn: cluster.arn,
+          })
+          .pipe(
+            Effect.catchTag("NotFoundException", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+        const tags = normalizeTags(listedTags?.tags ?? cluster.tags);
+        return mapClusterState(cluster, tags, kubernetesObjects ?? []);
+      });
 
-    const waitForClusterDeleted = (clusterName: string) =>
-      readCluster({
-        clusterName,
-      }).pipe(
-        Effect.flatMap((state) =>
-          state
-            ? Effect.fail(new ClusterStillExists())
-            : Effect.succeed(undefined),
-        ),
-        Effect.retry({
-          while: (error) => error instanceof ClusterStillExists,
-          schedule: updateRetrySchedule,
-        }),
-      );
+      const resolveOwnedCluster = Effect.fn(function* (
+        id: string,
+        clusterName: string,
+      ) {
+        const state = yield* readCluster({
+          clusterName,
+        });
+        if (!state) {
+          return yield* Effect.fail(
+            new Error(`cluster '${clusterName}' exists but could not be read`),
+          );
+        }
+        if (!(yield* hasAlchemyTags(id, state.tags))) {
+          return yield* Effect.fail(
+            new Error(
+              `cluster '${clusterName}' already exists and is not managed by alchemy`,
+            ),
+          );
+        }
+        return state;
+      });
 
-    const waitForUpdate = (clusterName: string, updateId: string) =>
-      eks
-        .describeUpdate({
-          name: clusterName,
-          updateId,
-        })
-        .pipe(
-          Effect.flatMap(({ update }) => {
-            if (update?.status === "Successful") {
-              return Effect.succeed(update);
-            }
-            if (update?.status === "Failed" || update?.status === "Cancelled") {
+      const waitForClusterActive = (
+        clusterName: string,
+        kubernetesObjects: KubernetesObjectRef[] = [],
+      ) =>
+        readCluster({
+          clusterName,
+          kubernetesObjects,
+        }).pipe(
+          Effect.flatMap((state) => {
+            if (!state) {
               return Effect.fail(
-                new Error(
-                  `EKS cluster update '${updateId}' failed with status '${update?.status}'`,
-                ),
+                new ClusterNotReady({
+                  status: undefined,
+                }),
+              );
+            }
+            if (state.status === "ACTIVE") {
+              return Effect.succeed(state);
+            }
+            if (state.status === "FAILED") {
+              return Effect.fail(
+                new Error(`EKS cluster '${clusterName}' entered FAILED state`),
               );
             }
             return Effect.fail(
-              new ClusterUpdateNotComplete({
-                status: update?.status,
+              new ClusterNotReady({
+                status: state.status,
               }),
             );
           }),
           Effect.retry({
-            while: (error) => error instanceof ClusterUpdateNotComplete,
+            while: (error) => error instanceof ClusterNotReady,
             schedule: updateRetrySchedule,
           }),
         );
 
-    return {
-      stables: ["clusterArn", "clusterName"],
-      diff: Effect.fn(function* ({ id, olds = {} as ClusterProps, news }) {
-        if (!isResolved(news)) return;
-        if (
-          (yield* toClusterName(id, olds)) !==
-          (yield* toClusterName(id, news ?? {}))
-        ) {
-          return { action: "replace" } as const;
-        }
-        if (olds.roleArn !== news.roleArn) {
-          return { action: "replace" } as const;
-        }
-        if (
-          olds.accessConfig?.bootstrapClusterCreatorAdminPermissions !==
-          news.accessConfig?.bootstrapClusterCreatorAdminPermissions
-        ) {
-          return { action: "replace" } as const;
-        }
-        if (
-          olds.kubernetesNetworkConfig?.serviceIpv4Cidr !==
-            news.kubernetesNetworkConfig?.serviceIpv4Cidr ||
-          olds.kubernetesNetworkConfig?.ipFamily !==
-            news.kubernetesNetworkConfig?.ipFamily
-        ) {
-          return { action: "replace" } as const;
-        }
-        if (
-          olds.computeConfig?.nodeRoleArn !== news.computeConfig?.nodeRoleArn &&
-          (olds.computeConfig?.enabled || news.computeConfig?.enabled)
-        ) {
-          return { action: "replace" } as const;
-        }
-      }),
-      read: Effect.fn(function* ({ id, olds, output }) {
-        const clusterName =
-          output?.clusterName ?? (yield* toClusterName(id, olds ?? {}));
-        return yield* readCluster({
+      const waitForClusterDeleted = (clusterName: string) =>
+        readCluster({
           clusterName,
-          kubernetesObjects: output?.kubernetesObjects,
-        });
-      }),
-      create: Effect.fn(function* ({ id, news, bindings, session }) {
-        yield* validateProps(news);
-
-        const clusterName = yield* toClusterName(id, news);
-        const desiredObjects = getDesiredKubernetesObjects(bindings);
-        const tags = {
-          ...(yield* createInternalTags(id)),
-          ...news.tags,
-        };
-
-        yield* eks
-          .createCluster({
-            name: clusterName,
-            version: news.version,
-            roleArn: news.roleArn,
-            resourcesVpcConfig: news.resourcesVpcConfig,
-            kubernetesNetworkConfig: news.kubernetesNetworkConfig,
-            logging: news.logging,
-            accessConfig: news.accessConfig,
-            computeConfig: news.computeConfig,
-            storageConfig: news.storageConfig,
-            deletionProtection: news.deletionProtection,
-            upgradePolicy: news.upgradePolicy,
-            tags,
-            clientRequestToken: yield* toClientRequestToken(id, "create"),
-          })
-          .pipe(
-            Effect.catchTag("ResourceInUseException", () =>
-              resolveOwnedCluster(id, clusterName).pipe(Effect.asVoid),
-            ),
-          );
-
-        yield* session.note(`Creating EKS cluster ${clusterName}...`);
-        const cluster = yield* waitForClusterActive(clusterName);
-        const kubernetesObjects = yield* reconcileObjects({
-          connection: getKubernetesConnection(cluster),
-          previousObjects: [],
-          desiredObjects,
-        });
-        return {
-          ...cluster,
-          kubernetesObjects,
-        };
-      }),
-      update: Effect.fn(function* ({
-        id,
-        news,
-        olds,
-        output,
-        bindings,
-        session,
-      }) {
-        yield* validateProps(news);
-
-        if (clusterConfigChanged(olds, news)) {
-          const configUpdate = yield* eks.updateClusterConfig({
-            name: output.clusterName,
-            resourcesVpcConfig: news.resourcesVpcConfig,
-            logging: news.logging,
-            accessConfig: news.accessConfig
-              ? {
-                  authenticationMode: news.accessConfig.authenticationMode,
-                }
-              : undefined,
-            upgradePolicy: news.upgradePolicy,
-            computeConfig: news.computeConfig,
-            kubernetesNetworkConfig: news.kubernetesNetworkConfig,
-            storageConfig: news.storageConfig,
-            deletionProtection: news.deletionProtection,
-            clientRequestToken: yield* toClientRequestToken(id, "config"),
-          });
-          if (configUpdate.update?.id) {
-            yield* session.note(
-              `Updating EKS cluster config ${output.clusterName}...`,
-            );
-            yield* waitForUpdate(output.clusterName, configUpdate.update.id);
-            yield* waitForClusterActive(
-              output.clusterName,
-              output.kubernetesObjects ?? [],
-            );
-          }
-        }
-
-        if (olds.version !== news.version && news.version) {
-          const versionUpdate = yield* eks.updateClusterVersion({
-            name: output.clusterName,
-            version: news.version,
-            clientRequestToken: yield* toClientRequestToken(id, "version"),
-          });
-          if (versionUpdate.update?.id) {
-            yield* session.note(
-              `Updating EKS cluster version ${output.clusterName}...`,
-            );
-            yield* waitForUpdate(output.clusterName, versionUpdate.update.id);
-            yield* waitForClusterActive(
-              output.clusterName,
-              output.kubernetesObjects ?? [],
-            );
-          }
-        }
-
-        const oldTags = {
-          ...(yield* createInternalTags(id)),
-          ...olds.tags,
-        };
-        const newTags = {
-          ...(yield* createInternalTags(id)),
-          ...news.tags,
-        };
-        const { removed, upsert } = diffTags(oldTags, newTags);
-
-        if (upsert.length > 0) {
-          yield* eks.tagResource({
-            resourceArn: output.clusterArn,
-            tags: Object.fromEntries(
-              upsert.map((tag) => [tag.Key, tag.Value] as const),
-            ),
-          });
-        }
-        if (removed.length > 0) {
-          yield* eks.untagResource({
-            resourceArn: output.clusterArn,
-            tagKeys: removed,
-          });
-        }
-
-        yield* session.note(output.clusterArn);
-
-        const state = yield* readCluster({
-          clusterName: output.clusterName,
-          kubernetesObjects: output.kubernetesObjects ?? [],
         }).pipe(
           Effect.flatMap((state) =>
             state
-              ? Effect.succeed(state)
-              : Effect.fail(
-                  new Error(
-                    `EKS cluster '${output.clusterName}' could not be read after update`,
-                  ),
-                ),
+              ? Effect.fail(new ClusterStillExists())
+              : Effect.succeed(undefined),
           ),
+          Effect.retry({
+            while: (error) => error instanceof ClusterStillExists,
+            schedule: updateRetrySchedule,
+          }),
         );
 
-        const kubernetesObjects = yield* reconcileObjects({
-          connection: getKubernetesConnection(state),
-          previousObjects: output.kubernetesObjects ?? [],
-          desiredObjects: getDesiredKubernetesObjects(bindings),
-        });
-
-        return {
-          ...state,
-          kubernetesObjects,
-        };
-      }),
-      delete: Effect.fn(function* ({ id, output }) {
-        if ((output.kubernetesObjects ?? []).length > 0) {
-          yield* deleteObjects({
-            connection: getKubernetesConnection(output),
-            objects: output.kubernetesObjects ?? [],
-          });
-        }
-
-        if (output.deletionProtection) {
-          const disableDeletionProtection = yield* eks.updateClusterConfig({
-            name: output.clusterName,
-            deletionProtection: false,
-            clientRequestToken: yield* toClientRequestToken(
-              id,
-              "disable-deletion-protection",
-            ),
-          });
-          if (disableDeletionProtection.update?.id) {
-            yield* waitForUpdate(
-              output.clusterName,
-              disableDeletionProtection.update.id,
-            );
-            yield* waitForClusterActive(
-              output.clusterName,
-              output.kubernetesObjects ?? [],
-            );
-          }
-        }
-
-        yield* eks
-          .deleteCluster({
-            name: output.clusterName,
+      const waitForUpdate = (clusterName: string, updateId: string) =>
+        eks
+          .describeUpdate({
+            name: clusterName,
+            updateId,
           })
           .pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            Effect.flatMap(({ update }) => {
+              if (update?.status === "Successful") {
+                return Effect.succeed(update);
+              }
+              if (
+                update?.status === "Failed" ||
+                update?.status === "Cancelled"
+              ) {
+                return Effect.fail(
+                  new Error(
+                    `EKS cluster update '${updateId}' failed with status '${update?.status}'`,
+                  ),
+                );
+              }
+              return Effect.fail(
+                new ClusterUpdateNotComplete({
+                  status: update?.status,
+                }),
+              );
+            }),
+            Effect.retry({
+              while: (error) => error instanceof ClusterUpdateNotComplete,
+              schedule: updateRetrySchedule,
+            }),
           );
 
-        yield* waitForClusterDeleted(output.clusterName);
-      }),
-    };
-  }),
-);
+      return {
+        stables: ["clusterArn", "clusterName"],
+        diff: Effect.fn(function* ({ id, olds = {} as ClusterProps, news }) {
+          if (!isResolved(news)) return;
+          if (
+            (yield* toClusterName(id, olds)) !==
+            (yield* toClusterName(id, news ?? {}))
+          ) {
+            return { action: "replace" } as const;
+          }
+          if (olds.roleArn !== news.roleArn) {
+            return { action: "replace" } as const;
+          }
+          if (
+            olds.accessConfig?.bootstrapClusterCreatorAdminPermissions !==
+            news.accessConfig?.bootstrapClusterCreatorAdminPermissions
+          ) {
+            return { action: "replace" } as const;
+          }
+          if (
+            olds.kubernetesNetworkConfig?.serviceIpv4Cidr !==
+              news.kubernetesNetworkConfig?.serviceIpv4Cidr ||
+            olds.kubernetesNetworkConfig?.ipFamily !==
+              news.kubernetesNetworkConfig?.ipFamily
+          ) {
+            return { action: "replace" } as const;
+          }
+          if (
+            olds.computeConfig?.nodeRoleArn !==
+              news.computeConfig?.nodeRoleArn &&
+            (olds.computeConfig?.enabled || news.computeConfig?.enabled)
+          ) {
+            return { action: "replace" } as const;
+          }
+        }),
+        read: Effect.fn(function* ({ id, olds, output }) {
+          const clusterName =
+            output?.clusterName ?? (yield* toClusterName(id, olds ?? {}));
+          return yield* readCluster({
+            clusterName,
+            kubernetesObjects: output?.kubernetesObjects,
+          });
+        }),
+        create: Effect.fn(function* ({ id, news, bindings, session }) {
+          yield* validateProps(news);
+
+          const clusterName = yield* toClusterName(id, news);
+          const desiredObjects = getDesiredKubernetesObjects(bindings);
+          const tags = {
+            ...(yield* createInternalTags(id)),
+            ...news.tags,
+          };
+
+          yield* eks
+            .createCluster({
+              name: clusterName,
+              version: news.version,
+              roleArn: news.roleArn,
+              resourcesVpcConfig: news.resourcesVpcConfig,
+              kubernetesNetworkConfig: news.kubernetesNetworkConfig,
+              logging: news.logging,
+              accessConfig: news.accessConfig,
+              computeConfig: news.computeConfig,
+              storageConfig: news.storageConfig,
+              deletionProtection: news.deletionProtection,
+              upgradePolicy: news.upgradePolicy,
+              tags,
+              clientRequestToken: yield* toClientRequestToken(id, "create"),
+            })
+            .pipe(
+              Effect.catchTag("ResourceInUseException", () =>
+                resolveOwnedCluster(id, clusterName).pipe(Effect.asVoid),
+              ),
+            );
+
+          yield* session.note(`Creating EKS cluster ${clusterName}...`);
+          const cluster = yield* waitForClusterActive(clusterName);
+          const kubernetesObjects = yield* reconcileObjects({
+            connection: getKubernetesConnection(cluster),
+            previousObjects: [],
+            desiredObjects,
+          });
+          return {
+            ...cluster,
+            kubernetesObjects,
+          };
+        }),
+        update: Effect.fn(function* ({
+          id,
+          news,
+          olds,
+          output,
+          bindings,
+          session,
+        }) {
+          yield* validateProps(news);
+
+          if (clusterConfigChanged(olds, news)) {
+            const configUpdate = yield* eks.updateClusterConfig({
+              name: output.clusterName,
+              resourcesVpcConfig: news.resourcesVpcConfig,
+              logging: news.logging,
+              accessConfig: news.accessConfig
+                ? {
+                    authenticationMode: news.accessConfig.authenticationMode,
+                  }
+                : undefined,
+              upgradePolicy: news.upgradePolicy,
+              computeConfig: news.computeConfig,
+              kubernetesNetworkConfig: news.kubernetesNetworkConfig,
+              storageConfig: news.storageConfig,
+              deletionProtection: news.deletionProtection,
+              clientRequestToken: yield* toClientRequestToken(id, "config"),
+            });
+            if (configUpdate.update?.id) {
+              yield* session.note(
+                `Updating EKS cluster config ${output.clusterName}...`,
+              );
+              yield* waitForUpdate(output.clusterName, configUpdate.update.id);
+              yield* waitForClusterActive(
+                output.clusterName,
+                output.kubernetesObjects ?? [],
+              );
+            }
+          }
+
+          if (olds.version !== news.version && news.version) {
+            const versionUpdate = yield* eks.updateClusterVersion({
+              name: output.clusterName,
+              version: news.version,
+              clientRequestToken: yield* toClientRequestToken(id, "version"),
+            });
+            if (versionUpdate.update?.id) {
+              yield* session.note(
+                `Updating EKS cluster version ${output.clusterName}...`,
+              );
+              yield* waitForUpdate(output.clusterName, versionUpdate.update.id);
+              yield* waitForClusterActive(
+                output.clusterName,
+                output.kubernetesObjects ?? [],
+              );
+            }
+          }
+
+          const oldTags = {
+            ...(yield* createInternalTags(id)),
+            ...olds.tags,
+          };
+          const newTags = {
+            ...(yield* createInternalTags(id)),
+            ...news.tags,
+          };
+          const { removed, upsert } = diffTags(oldTags, newTags);
+
+          if (upsert.length > 0) {
+            yield* eks.tagResource({
+              resourceArn: output.clusterArn,
+              tags: Object.fromEntries(
+                upsert.map((tag) => [tag.Key, tag.Value] as const),
+              ),
+            });
+          }
+          if (removed.length > 0) {
+            yield* eks.untagResource({
+              resourceArn: output.clusterArn,
+              tagKeys: removed,
+            });
+          }
+
+          yield* session.note(output.clusterArn);
+
+          const state = yield* readCluster({
+            clusterName: output.clusterName,
+            kubernetesObjects: output.kubernetesObjects ?? [],
+          }).pipe(
+            Effect.flatMap((state) =>
+              state
+                ? Effect.succeed(state)
+                : Effect.fail(
+                    new Error(
+                      `EKS cluster '${output.clusterName}' could not be read after update`,
+                    ),
+                  ),
+            ),
+          );
+
+          const kubernetesObjects = yield* reconcileObjects({
+            connection: getKubernetesConnection(state),
+            previousObjects: output.kubernetesObjects ?? [],
+            desiredObjects: getDesiredKubernetesObjects(bindings),
+          });
+
+          return {
+            ...state,
+            kubernetesObjects,
+          };
+        }),
+        delete: Effect.fn(function* ({ id, output }) {
+          if ((output.kubernetesObjects ?? []).length > 0) {
+            yield* deleteObjects({
+              connection: getKubernetesConnection(output),
+              objects: output.kubernetesObjects ?? [],
+            });
+          }
+
+          if (output.deletionProtection) {
+            const disableDeletionProtection = yield* eks.updateClusterConfig({
+              name: output.clusterName,
+              deletionProtection: false,
+              clientRequestToken: yield* toClientRequestToken(
+                id,
+                "disable-deletion-protection",
+              ),
+            });
+            if (disableDeletionProtection.update?.id) {
+              yield* waitForUpdate(
+                output.clusterName,
+                disableDeletionProtection.update.id,
+              );
+              yield* waitForClusterActive(
+                output.clusterName,
+                output.kubernetesObjects ?? [],
+              );
+            }
+          }
+
+          yield* eks
+            .deleteCluster({
+              name: output.clusterName,
+            })
+            .pipe(
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            );
+
+          yield* waitForClusterDeleted(output.clusterName);
+        }),
+      };
+    }),
+  );

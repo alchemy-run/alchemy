@@ -49,61 +49,62 @@ const readResourcePolicy = () =>
     ),
   );
 
-export const OrganizationResourcePolicyProvider = Provider.effect(
-  OrganizationResourcePolicy,
-  Effect.gen(function* () {
-    return {
-      stables: ["resourcePolicyId", "resourcePolicyArn"],
-      diff: Effect.fn(function* () {}),
-      read: Effect.fn(function* () {
-        return yield* readResourcePolicy();
-      }),
-      create: Effect.fn(function* ({ news, session }) {
-        yield* retryOrganizations(
-          organizations.putResourcePolicy({
-            Content: JSON.stringify(news.document),
-          }),
-        );
-
-        const state = yield* readResourcePolicy();
-        if (!state) {
-          return yield* Effect.fail(
-            new Error("organization resource policy not found after create"),
+export const OrganizationResourcePolicyProvider = () =>
+  Provider.effect(
+    OrganizationResourcePolicy,
+    Effect.gen(function* () {
+      return {
+        stables: ["resourcePolicyId", "resourcePolicyArn"],
+        diff: Effect.fn(function* () {}),
+        read: Effect.fn(function* () {
+          return yield* readResourcePolicy();
+        }),
+        create: Effect.fn(function* ({ news, session }) {
+          yield* retryOrganizations(
+            organizations.putResourcePolicy({
+              Content: JSON.stringify(news.document),
+            }),
           );
-        }
 
-        yield* session.note(state.resourcePolicyArn);
-        return state;
-      }),
-      update: Effect.fn(function* ({ news, output, session }) {
-        yield* retryOrganizations(
-          organizations.putResourcePolicy({
-            Content: JSON.stringify(news.document),
-          }),
-        );
+          const state = yield* readResourcePolicy();
+          if (!state) {
+            return yield* Effect.fail(
+              new Error("organization resource policy not found after create"),
+            );
+          }
 
-        const state = yield* readResourcePolicy();
-        if (!state) {
-          return yield* Effect.fail(
-            new Error("organization resource policy not found after update"),
+          yield* session.note(state.resourcePolicyArn);
+          return state;
+        }),
+        update: Effect.fn(function* ({ news, output, session }) {
+          yield* retryOrganizations(
+            organizations.putResourcePolicy({
+              Content: JSON.stringify(news.document),
+            }),
           );
-        }
 
-        yield* session.note(output.resourcePolicyArn);
-        return state;
-      }),
-      delete: Effect.fn(function* () {
-        yield* retryOrganizations(
-          organizations
-            .deleteResourcePolicy({})
-            .pipe(
-              Effect.catchTag(
-                "ResourcePolicyNotFoundException",
-                () => Effect.void,
+          const state = yield* readResourcePolicy();
+          if (!state) {
+            return yield* Effect.fail(
+              new Error("organization resource policy not found after update"),
+            );
+          }
+
+          yield* session.note(output.resourcePolicyArn);
+          return state;
+        }),
+        delete: Effect.fn(function* () {
+          yield* retryOrganizations(
+            organizations
+              .deleteResourcePolicy({})
+              .pipe(
+                Effect.catchTag(
+                  "ResourcePolicyNotFoundException",
+                  () => Effect.void,
+                ),
               ),
-            ),
-        );
-      }),
-    };
-  }),
-);
+          );
+        }),
+      };
+    }),
+  );

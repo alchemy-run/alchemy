@@ -36,79 +36,81 @@ export const DelegatedAdministrator = Resource<DelegatedAdministrator>(
   "AWS.Organizations.DelegatedAdministrator",
 );
 
-export const DelegatedAdministratorProvider = Provider.effect(
-  DelegatedAdministrator,
-  Effect.gen(function* () {
-    return {
-      stables: ["accountId", "servicePrincipal"],
-      diff: Effect.fn(function* ({ olds, news }) {
-        if (!isResolved(news)) return;
-        if (
-          olds?.accountId !== news.accountId ||
-          olds?.servicePrincipal !== news.servicePrincipal
-        ) {
-          return { action: "replace" } as const;
-        }
-      }),
-      read: Effect.fn(function* ({ olds, output }) {
-        return yield* readDelegatedAdministrator({
-          accountId: output?.accountId ?? olds!.accountId,
-          servicePrincipal: output?.servicePrincipal ?? olds!.servicePrincipal,
-        });
-      }),
-      create: Effect.fn(function* ({ news, session }) {
-        if (!(yield* readDelegatedAdministrator(news))) {
-          yield* retryOrganizations(
-            organizations
-              .registerDelegatedAdministrator({
-                AccountId: news.accountId,
-                ServicePrincipal: news.servicePrincipal,
-              })
-              .pipe(
-                Effect.catchTag(
-                  "AccountAlreadyRegisteredException",
-                  () => Effect.void,
+export const DelegatedAdministratorProvider = () =>
+  Provider.effect(
+    DelegatedAdministrator,
+    Effect.gen(function* () {
+      return {
+        stables: ["accountId", "servicePrincipal"],
+        diff: Effect.fn(function* ({ olds, news }) {
+          if (!isResolved(news)) return;
+          if (
+            olds?.accountId !== news.accountId ||
+            olds?.servicePrincipal !== news.servicePrincipal
+          ) {
+            return { action: "replace" } as const;
+          }
+        }),
+        read: Effect.fn(function* ({ olds, output }) {
+          return yield* readDelegatedAdministrator({
+            accountId: output?.accountId ?? olds!.accountId,
+            servicePrincipal:
+              output?.servicePrincipal ?? olds!.servicePrincipal,
+          });
+        }),
+        create: Effect.fn(function* ({ news, session }) {
+          if (!(yield* readDelegatedAdministrator(news))) {
+            yield* retryOrganizations(
+              organizations
+                .registerDelegatedAdministrator({
+                  AccountId: news.accountId,
+                  ServicePrincipal: news.servicePrincipal,
+                })
+                .pipe(
+                  Effect.catchTag(
+                    "AccountAlreadyRegisteredException",
+                    () => Effect.void,
+                  ),
                 ),
+            );
+          }
+
+          const state = yield* readDelegatedAdministrator(news);
+          if (!state) {
+            return yield* Effect.fail(
+              new Error(
+                `delegated administrator '${news.accountId}' for '${news.servicePrincipal}' not found after create`,
               ),
+            );
+          }
+
+          yield* session.note(`${state.accountId}:${state.servicePrincipal}`);
+          return state;
+        }),
+        update: Effect.fn(function* ({ output, session }) {
+          yield* session.note(`${output.accountId}:${output.servicePrincipal}`);
+          return output;
+        }),
+        delete: Effect.fn(function* ({ output }) {
+          if (
+            !(yield* readDelegatedAdministrator({
+              accountId: output.accountId,
+              servicePrincipal: output.servicePrincipal,
+            }))
+          ) {
+            return;
+          }
+
+          yield* retryOrganizations(
+            organizations.deregisterDelegatedAdministrator({
+              AccountId: output.accountId,
+              ServicePrincipal: output.servicePrincipal,
+            }),
           );
-        }
-
-        const state = yield* readDelegatedAdministrator(news);
-        if (!state) {
-          return yield* Effect.fail(
-            new Error(
-              `delegated administrator '${news.accountId}' for '${news.servicePrincipal}' not found after create`,
-            ),
-          );
-        }
-
-        yield* session.note(`${state.accountId}:${state.servicePrincipal}`);
-        return state;
-      }),
-      update: Effect.fn(function* ({ output, session }) {
-        yield* session.note(`${output.accountId}:${output.servicePrincipal}`);
-        return output;
-      }),
-      delete: Effect.fn(function* ({ output }) {
-        if (
-          !(yield* readDelegatedAdministrator({
-            accountId: output.accountId,
-            servicePrincipal: output.servicePrincipal,
-          }))
-        ) {
-          return;
-        }
-
-        yield* retryOrganizations(
-          organizations.deregisterDelegatedAdministrator({
-            AccountId: output.accountId,
-            ServicePrincipal: output.servicePrincipal,
-          }),
-        );
-      }),
-    };
-  }),
-);
+        }),
+      };
+    }),
+  );
 
 const readDelegatedAdministrator = Effect.fn(function* ({
   accountId,

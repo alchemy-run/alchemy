@@ -195,164 +195,169 @@ const toAttrs = ({
   tags,
 });
 
-export const DBClusterProvider = Provider.effect(
-  DBCluster,
-  Effect.gen(function* () {
-    const toIdentifier = (id: string, props: DBClusterProps) =>
-      props.dbClusterIdentifier
-        ? Effect.succeed(props.dbClusterIdentifier)
-        : createPhysicalName({ id, maxLength: 63 });
+export const DBClusterProvider = () =>
+  Provider.effect(
+    DBCluster,
+    Effect.gen(function* () {
+      const toIdentifier = (id: string, props: DBClusterProps) =>
+        props.dbClusterIdentifier
+          ? Effect.succeed(props.dbClusterIdentifier)
+          : createPhysicalName({ id, maxLength: 63 });
 
-    const readCluster = Effect.fn(function* (clusterId: string) {
-      const response = yield* rds
-        .describeDBClusters({
-          DBClusterIdentifier: clusterId,
-        })
-        .pipe(
-          Effect.catchTag("DBClusterNotFoundFault", () =>
-            Effect.succeed(undefined),
-          ),
+      const readCluster = Effect.fn(function* (clusterId: string) {
+        const response = yield* rds
+          .describeDBClusters({
+            DBClusterIdentifier: clusterId,
+          })
+          .pipe(
+            Effect.catchTag("DBClusterNotFoundFault", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+        return response?.DBClusters?.[0];
+      });
+
+      const waitForCluster = Effect.fn(function* (clusterId: string) {
+        const readinessPolicy = Schedule.fixed("2 seconds").pipe(
+          Schedule.both(Schedule.recurs(30)),
         );
-      return response?.DBClusters?.[0];
-    });
+        return yield* readCluster(clusterId).pipe(
+          Effect.flatMap((cluster) =>
+            cluster?.DBClusterArn
+              ? Effect.succeed(cluster)
+              : Effect.fail(new Error(`DB cluster '${clusterId}' not ready`)),
+          ),
+          Effect.retry({ schedule: readinessPolicy }),
+        );
+      });
 
-    const waitForCluster = Effect.fn(function* (clusterId: string) {
-      const readinessPolicy = Schedule.fixed("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(30)),
-      );
-      return yield* readCluster(clusterId).pipe(
-        Effect.flatMap((cluster) =>
-          cluster?.DBClusterArn
-            ? Effect.succeed(cluster)
-            : Effect.fail(new Error(`DB cluster '${clusterId}' not ready`)),
-        ),
-        Effect.retry({ schedule: readinessPolicy }),
-      );
-    });
+      return {
+        stables: ["dbClusterArn", "dbClusterIdentifier"],
+        diff: Effect.fn(function* ({ id, olds, news }) {
+          if (!isResolved(news)) return;
+          if (
+            (yield* toIdentifier(id, olds ?? ({} as DBClusterProps))) !==
+            (yield* toIdentifier(id, news))
+          ) {
+            return { action: "replace" } as const;
+          }
+          if (olds?.engine !== news.engine) {
+            return { action: "replace" } as const;
+          }
+        }),
+        read: Effect.fn(function* ({ id, olds, output }) {
+          const identifier =
+            output?.dbClusterIdentifier ??
+            (yield* toIdentifier(
+              id,
+              olds ?? ({ engine: "" } as DBClusterProps),
+            ));
+          const cluster = yield* readCluster(identifier);
+          if (!cluster?.DBClusterArn) {
+            return undefined;
+          }
+          return toAttrs({
+            cluster,
+            tags: toTagRecord(cluster.TagList),
+          });
+        }),
+        create: Effect.fn(function* ({ id, news, session }) {
+          const identifier = yield* toIdentifier(id, news);
+          const tags = {
+            ...(yield* createInternalTags(id)),
+            ...news.tags,
+          };
+          const credentials = yield* resolveMasterCredentials(news);
 
-    return {
-      stables: ["dbClusterArn", "dbClusterIdentifier"],
-      diff: Effect.fn(function* ({ id, olds, news }) {
-        if (!isResolved(news)) return;
-        if (
-          (yield* toIdentifier(id, olds ?? ({} as DBClusterProps))) !==
-          (yield* toIdentifier(id, news))
-        ) {
-          return { action: "replace" } as const;
-        }
-        if (olds?.engine !== news.engine) {
-          return { action: "replace" } as const;
-        }
-      }),
-      read: Effect.fn(function* ({ id, olds, output }) {
-        const identifier =
-          output?.dbClusterIdentifier ??
-          (yield* toIdentifier(id, olds ?? ({ engine: "" } as DBClusterProps)));
-        const cluster = yield* readCluster(identifier);
-        if (!cluster?.DBClusterArn) {
-          return undefined;
-        }
-        return toAttrs({
-          cluster,
-          tags: toTagRecord(cluster.TagList),
-        });
-      }),
-      create: Effect.fn(function* ({ id, news, session }) {
-        const identifier = yield* toIdentifier(id, news);
-        const tags = {
-          ...(yield* createInternalTags(id)),
-          ...news.tags,
-        };
-        const credentials = yield* resolveMasterCredentials(news);
+          yield* rds
+            .createDBCluster({
+              DBClusterIdentifier: identifier,
+              Engine: news.engine,
+              EngineVersion: news.engineVersion,
+              DatabaseName: news.databaseName,
+              DBSubnetGroupName: news.dbSubnetGroupName,
+              DBClusterParameterGroupName: news.dbClusterParameterGroupName,
+              VpcSecurityGroupIds: news.vpcSecurityGroupIds,
+              Port: news.port,
+              EnableIAMDatabaseAuthentication:
+                news.enableIAMDatabaseAuthentication,
+              EnableHttpEndpoint: news.enableHttpEndpoint,
+              EngineMode: news.engineMode,
+              ServerlessV2ScalingConfiguration:
+                news.serverlessV2ScalingConfiguration,
+              CopyTagsToSnapshot: news.copyTagsToSnapshot,
+              DeletionProtection: news.deletionProtection,
+              StorageEncrypted: news.storageEncrypted,
+              KmsKeyId: news.kmsKeyId,
+              ManageMasterUserPassword: news.manageMasterUserPassword,
+              Tags: Object.entries(tags).map(([Key, Value]) => ({
+                Key,
+                Value,
+              })),
+              ...credentials,
+            })
+            .pipe(
+              Effect.catchTag("DBClusterAlreadyExistsFault", () => Effect.void),
+            );
 
-        yield* rds
-          .createDBCluster({
-            DBClusterIdentifier: identifier,
-            Engine: news.engine,
+          const cluster = yield* waitForCluster(identifier);
+          yield* session.note(cluster.DBClusterArn ?? identifier);
+          return toAttrs({ cluster, tags });
+        }),
+        update: Effect.fn(function* ({ id, news, olds, output, session }) {
+          const credentials = yield* resolveMasterCredentials(news);
+
+          yield* rds.modifyDBCluster({
+            DBClusterIdentifier: output.dbClusterIdentifier,
             EngineVersion: news.engineVersion,
-            DatabaseName: news.databaseName,
-            DBSubnetGroupName: news.dbSubnetGroupName,
             DBClusterParameterGroupName: news.dbClusterParameterGroupName,
             VpcSecurityGroupIds: news.vpcSecurityGroupIds,
             Port: news.port,
             EnableIAMDatabaseAuthentication:
               news.enableIAMDatabaseAuthentication,
             EnableHttpEndpoint: news.enableHttpEndpoint,
-            EngineMode: news.engineMode,
             ServerlessV2ScalingConfiguration:
               news.serverlessV2ScalingConfiguration,
             CopyTagsToSnapshot: news.copyTagsToSnapshot,
             DeletionProtection: news.deletionProtection,
-            StorageEncrypted: news.storageEncrypted,
-            KmsKeyId: news.kmsKeyId,
-            ManageMasterUserPassword: news.manageMasterUserPassword,
-            Tags: Object.entries(tags).map(([Key, Value]) => ({
-              Key,
-              Value,
-            })),
-            ...credentials,
-          })
-          .pipe(
-            Effect.catchTag("DBClusterAlreadyExistsFault", () => Effect.void),
-          );
-
-        const cluster = yield* waitForCluster(identifier);
-        yield* session.note(cluster.DBClusterArn ?? identifier);
-        return toAttrs({ cluster, tags });
-      }),
-      update: Effect.fn(function* ({ id, news, olds, output, session }) {
-        const credentials = yield* resolveMasterCredentials(news);
-
-        yield* rds.modifyDBCluster({
-          DBClusterIdentifier: output.dbClusterIdentifier,
-          EngineVersion: news.engineVersion,
-          DBClusterParameterGroupName: news.dbClusterParameterGroupName,
-          VpcSecurityGroupIds: news.vpcSecurityGroupIds,
-          Port: news.port,
-          EnableIAMDatabaseAuthentication: news.enableIAMDatabaseAuthentication,
-          EnableHttpEndpoint: news.enableHttpEndpoint,
-          ServerlessV2ScalingConfiguration:
-            news.serverlessV2ScalingConfiguration,
-          CopyTagsToSnapshot: news.copyTagsToSnapshot,
-          DeletionProtection: news.deletionProtection,
-          MasterUserPassword: credentials.MasterUserPassword,
-          ApplyImmediately: true,
-        });
-
-        const oldTags = {
-          ...(yield* createInternalTags(id)),
-          ...olds.tags,
-        };
-        const newTags = {
-          ...(yield* createInternalTags(id)),
-          ...news.tags,
-        };
-        const { removed, upsert } = diffTags(oldTags, newTags);
-        if (upsert.length > 0) {
-          yield* rds.addTagsToResource({
-            ResourceName: output.dbClusterArn,
-            Tags: upsert,
+            MasterUserPassword: credentials.MasterUserPassword,
+            ApplyImmediately: true,
           });
-        }
-        if (removed.length > 0) {
-          yield* rds.removeTagsFromResource({
-            ResourceName: output.dbClusterArn,
-            TagKeys: removed,
-          });
-        }
 
-        const cluster = yield* waitForCluster(output.dbClusterIdentifier);
-        yield* session.note(output.dbClusterArn);
-        return toAttrs({ cluster, tags: newTags });
-      }),
-      delete: Effect.fn(function* ({ output }) {
-        yield* rds
-          .deleteDBCluster({
-            DBClusterIdentifier: output.dbClusterIdentifier,
-            SkipFinalSnapshot: true,
-          })
-          .pipe(Effect.catchTag("DBClusterNotFoundFault", () => Effect.void));
-      }),
-    };
-  }),
-);
+          const oldTags = {
+            ...(yield* createInternalTags(id)),
+            ...olds.tags,
+          };
+          const newTags = {
+            ...(yield* createInternalTags(id)),
+            ...news.tags,
+          };
+          const { removed, upsert } = diffTags(oldTags, newTags);
+          if (upsert.length > 0) {
+            yield* rds.addTagsToResource({
+              ResourceName: output.dbClusterArn,
+              Tags: upsert,
+            });
+          }
+          if (removed.length > 0) {
+            yield* rds.removeTagsFromResource({
+              ResourceName: output.dbClusterArn,
+              TagKeys: removed,
+            });
+          }
+
+          const cluster = yield* waitForCluster(output.dbClusterIdentifier);
+          yield* session.note(output.dbClusterArn);
+          return toAttrs({ cluster, tags: newTags });
+        }),
+        delete: Effect.fn(function* ({ output }) {
+          yield* rds
+            .deleteDBCluster({
+              DBClusterIdentifier: output.dbClusterIdentifier,
+              SkipFinalSnapshot: true,
+            })
+            .pipe(Effect.catchTag("DBClusterNotFoundFault", () => Effect.void));
+        }),
+      };
+    }),
+  );

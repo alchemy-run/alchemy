@@ -17,4 +17,4 @@ export default Effect.gen(function* () {
   return {
     url: worker.url,
   };
-}).pipe(Stack.make("CloudflareSolidJSSSRExample", Cloudflare.providers));
+}).pipe(Stack.make("CloudflareSolidJSSSRExample", Cloudflare.providers()));

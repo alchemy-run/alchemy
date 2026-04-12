@@ -28,61 +28,62 @@ export const TrustedServiceAccess = Resource<TrustedServiceAccess>(
   "AWS.Organizations.TrustedServiceAccess",
 );
 
-export const TrustedServiceAccessProvider = Provider.effect(
-  TrustedServiceAccess,
-  Effect.gen(function* () {
-    return {
-      stables: ["servicePrincipal"],
-      diff: Effect.fn(function* ({ olds, news }) {
-        if (!isResolved(news)) return;
-        if (olds?.servicePrincipal !== news.servicePrincipal) {
-          return { action: "replace" } as const;
-        }
-      }),
-      read: Effect.fn(function* ({ olds, output }) {
-        return yield* readTrustedServiceAccess(
-          output?.servicePrincipal ?? olds!.servicePrincipal,
-        );
-      }),
-      create: Effect.fn(function* ({ news, session }) {
-        if (!(yield* readTrustedServiceAccess(news.servicePrincipal))) {
+export const TrustedServiceAccessProvider = () =>
+  Provider.effect(
+    TrustedServiceAccess,
+    Effect.gen(function* () {
+      return {
+        stables: ["servicePrincipal"],
+        diff: Effect.fn(function* ({ olds, news }) {
+          if (!isResolved(news)) return;
+          if (olds?.servicePrincipal !== news.servicePrincipal) {
+            return { action: "replace" } as const;
+          }
+        }),
+        read: Effect.fn(function* ({ olds, output }) {
+          return yield* readTrustedServiceAccess(
+            output?.servicePrincipal ?? olds!.servicePrincipal,
+          );
+        }),
+        create: Effect.fn(function* ({ news, session }) {
+          if (!(yield* readTrustedServiceAccess(news.servicePrincipal))) {
+            yield* retryOrganizations(
+              organizations.enableAWSServiceAccess({
+                ServicePrincipal: news.servicePrincipal,
+              }),
+            );
+          }
+
+          const state = yield* readTrustedServiceAccess(news.servicePrincipal);
+          if (!state) {
+            return yield* Effect.fail(
+              new Error(
+                `trusted service access '${news.servicePrincipal}' not found after create`,
+              ),
+            );
+          }
+
+          yield* session.note(state.servicePrincipal);
+          return state;
+        }),
+        update: Effect.fn(function* ({ output, session }) {
+          yield* session.note(output.servicePrincipal);
+          return output;
+        }),
+        delete: Effect.fn(function* ({ output }) {
+          if (!(yield* readTrustedServiceAccess(output.servicePrincipal))) {
+            return;
+          }
+
           yield* retryOrganizations(
-            organizations.enableAWSServiceAccess({
-              ServicePrincipal: news.servicePrincipal,
+            organizations.disableAWSServiceAccess({
+              ServicePrincipal: output.servicePrincipal,
             }),
           );
-        }
-
-        const state = yield* readTrustedServiceAccess(news.servicePrincipal);
-        if (!state) {
-          return yield* Effect.fail(
-            new Error(
-              `trusted service access '${news.servicePrincipal}' not found after create`,
-            ),
-          );
-        }
-
-        yield* session.note(state.servicePrincipal);
-        return state;
-      }),
-      update: Effect.fn(function* ({ output, session }) {
-        yield* session.note(output.servicePrincipal);
-        return output;
-      }),
-      delete: Effect.fn(function* ({ output }) {
-        if (!(yield* readTrustedServiceAccess(output.servicePrincipal))) {
-          return;
-        }
-
-        yield* retryOrganizations(
-          organizations.disableAWSServiceAccess({
-            ServicePrincipal: output.servicePrincipal,
-          }),
-        );
-      }),
-    };
-  }),
-);
+        }),
+      };
+    }),
+  );
 
 const readTrustedServiceAccess = Effect.fn(function* (
   servicePrincipal: string,

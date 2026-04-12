@@ -66,180 +66,184 @@ export interface NetworkAcl extends Resource<
 > {}
 export const NetworkAcl = Resource<NetworkAcl>("AWS.EC2.NetworkAcl");
 
-export const NetworkAclProvider = Provider.effect(
-  NetworkAcl,
-  Effect.gen(function* () {
-    const region = yield* Region;
-    const accountId = yield* Account;
+export const NetworkAclProvider = () =>
+  Provider.effect(
+    NetworkAcl,
+    Effect.gen(function* () {
+      const region = yield* Region;
+      const accountId = yield* Account;
 
-    const createTags = Effect.fn(function* (
-      id: string,
-      tags?: Record<string, string>,
-    ) {
+      const createTags = Effect.fn(function* (
+        id: string,
+        tags?: Record<string, string>,
+      ) {
+        return {
+          Name: id,
+          ...(yield* createInternalTags(id)),
+          ...tags,
+        };
+      });
+
+      const describeNetworkAcl = (networkAclId: string) =>
+        ec2.describeNetworkAcls({ NetworkAclIds: [networkAclId] }).pipe(
+          Effect.map((r) => r.NetworkAcls?.[0]),
+          Effect.flatMap((acl) =>
+            acl
+              ? Effect.succeed(acl)
+              : Effect.fail(new Error(`Network ACL ${networkAclId} not found`)),
+          ),
+        );
+
+      const toAttrs = (acl: ec2.NetworkAcl) => ({
+        networkAclId: acl.NetworkAclId as NetworkAclId,
+        networkAclArn:
+          `arn:aws:ec2:${region}:${accountId}:network-acl/${acl.NetworkAclId}` as NetworkAclArn,
+        vpcId: acl.VpcId as VpcId,
+        isDefault: acl.IsDefault ?? false,
+        ownerId: acl.OwnerId!,
+        entries: acl.Entries?.map((e) => ({
+          ruleNumber: e.RuleNumber!,
+          protocol: e.Protocol!,
+          ruleAction: e.RuleAction!,
+          egress: e.Egress!,
+          cidrBlock: e.CidrBlock,
+          ipv6CidrBlock: e.Ipv6CidrBlock,
+          icmpTypeCode: e.IcmpTypeCode
+            ? {
+                code: e.IcmpTypeCode.Code,
+                type: e.IcmpTypeCode.Type,
+              }
+            : undefined,
+          portRange: e.PortRange
+            ? {
+                from: e.PortRange.From,
+                to: e.PortRange.To,
+              }
+            : undefined,
+        })),
+        associations: acl.Associations?.map((a) => ({
+          networkAclAssociationId: a.NetworkAclAssociationId!,
+          networkAclId: a.NetworkAclId!,
+          subnetId: a.SubnetId!,
+        })),
+      });
+
       return {
-        Name: id,
-        ...(yield* createInternalTags(id)),
-        ...tags,
-      };
-    });
+        stables: ["networkAclId", "networkAclArn", "ownerId", "isDefault"],
 
-    const describeNetworkAcl = (networkAclId: string) =>
-      ec2.describeNetworkAcls({ NetworkAclIds: [networkAclId] }).pipe(
-        Effect.map((r) => r.NetworkAcls?.[0]),
-        Effect.flatMap((acl) =>
-          acl
-            ? Effect.succeed(acl)
-            : Effect.fail(new Error(`Network ACL ${networkAclId} not found`)),
-        ),
-      );
+        read: Effect.fn(function* ({ output }) {
+          if (!output) return undefined;
+          const acl = yield* describeNetworkAcl(output.networkAclId);
+          return toAttrs(acl);
+        }),
 
-    const toAttrs = (acl: ec2.NetworkAcl) => ({
-      networkAclId: acl.NetworkAclId as NetworkAclId,
-      networkAclArn:
-        `arn:aws:ec2:${region}:${accountId}:network-acl/${acl.NetworkAclId}` as NetworkAclArn,
-      vpcId: acl.VpcId as VpcId,
-      isDefault: acl.IsDefault ?? false,
-      ownerId: acl.OwnerId!,
-      entries: acl.Entries?.map((e) => ({
-        ruleNumber: e.RuleNumber!,
-        protocol: e.Protocol!,
-        ruleAction: e.RuleAction!,
-        egress: e.Egress!,
-        cidrBlock: e.CidrBlock,
-        ipv6CidrBlock: e.Ipv6CidrBlock,
-        icmpTypeCode: e.IcmpTypeCode
-          ? {
-              code: e.IcmpTypeCode.Code,
-              type: e.IcmpTypeCode.Type,
-            }
-          : undefined,
-        portRange: e.PortRange
-          ? {
-              from: e.PortRange.From,
-              to: e.PortRange.To,
-            }
-          : undefined,
-      })),
-      associations: acl.Associations?.map((a) => ({
-        networkAclAssociationId: a.NetworkAclAssociationId!,
-        networkAclId: a.NetworkAclId!,
-        subnetId: a.SubnetId!,
-      })),
-    });
+        diff: Effect.fn(function* ({ news, olds }) {
+          if (!isResolved(news)) return;
+          // VPC change requires replacement
+          if (news.vpcId !== olds.vpcId) {
+            return { action: "replace" };
+          }
+          // Tags can be updated in-place
+        }),
 
-    return {
-      stables: ["networkAclId", "networkAclArn", "ownerId", "isDefault"],
+        create: Effect.fn(function* ({ id, news, session }) {
+          yield* session.note("Creating Network ACL...");
 
-      read: Effect.fn(function* ({ output }) {
-        if (!output) return undefined;
-        const acl = yield* describeNetworkAcl(output.networkAclId);
-        return toAttrs(acl);
-      }),
+          const result = yield* ec2.createNetworkAcl({
+            VpcId: news.vpcId as string,
+            TagSpecifications: [
+              {
+                ResourceType: "network-acl",
+                Tags: createTagsList(yield* createTags(id, news.tags)),
+              },
+            ],
+            DryRun: false,
+          });
 
-      diff: Effect.fn(function* ({ news, olds }) {
-        if (!isResolved(news)) return;
-        // VPC change requires replacement
-        if (news.vpcId !== olds.vpcId) {
-          return { action: "replace" };
-        }
-        // Tags can be updated in-place
-      }),
+          const networkAclId = result.NetworkAcl!.NetworkAclId!;
+          yield* session.note(`Network ACL created: ${networkAclId}`);
 
-      create: Effect.fn(function* ({ id, news, session }) {
-        yield* session.note("Creating Network ACL...");
+          const acl = yield* describeNetworkAcl(networkAclId);
+          return toAttrs(acl);
+        }),
 
-        const result = yield* ec2.createNetworkAcl({
-          VpcId: news.vpcId as string,
-          TagSpecifications: [
-            {
-              ResourceType: "network-acl",
-              Tags: createTagsList(yield* createTags(id, news.tags)),
-            },
-          ],
-          DryRun: false,
-        });
+        update: Effect.fn(function* ({ id, news, output, session }) {
+          const networkAclId = output.networkAclId;
 
-        const networkAclId = result.NetworkAcl!.NetworkAclId!;
-        yield* session.note(`Network ACL created: ${networkAclId}`);
+          // Handle tag updates
+          const newTags = yield* createTags(id, news.tags);
+          const oldTags =
+            (yield* ec2
+              .describeTags({
+                Filters: [
+                  { Name: "resource-id", Values: [networkAclId] },
+                  { Name: "resource-type", Values: ["network-acl"] },
+                ],
+              })
+              .pipe(
+                Effect.map(
+                  (r) =>
+                    Object.fromEntries(
+                      r.Tags?.map((t) => [t.Key!, t.Value!]) ?? [],
+                    ) as Record<string, string>,
+                ),
+              )) ?? {};
 
-        const acl = yield* describeNetworkAcl(networkAclId);
-        return toAttrs(acl);
-      }),
+          const { removed, upsert } = diffTags(oldTags, newTags);
 
-      update: Effect.fn(function* ({ id, news, output, session }) {
-        const networkAclId = output.networkAclId;
+          if (removed.length > 0) {
+            yield* ec2.deleteTags({
+              Resources: [networkAclId],
+              Tags: removed.map((key) => ({ Key: key })),
+              DryRun: false,
+            });
+          }
+          if (upsert.length > 0) {
+            yield* ec2.createTags({
+              Resources: [networkAclId],
+              Tags: upsert,
+              DryRun: false,
+            });
+            yield* session.note("Updated tags");
+          }
 
-        // Handle tag updates
-        const newTags = yield* createTags(id, news.tags);
-        const oldTags =
-          (yield* ec2
-            .describeTags({
-              Filters: [
-                { Name: "resource-id", Values: [networkAclId] },
-                { Name: "resource-type", Values: ["network-acl"] },
-              ],
+          const acl = yield* describeNetworkAcl(networkAclId);
+          return toAttrs(acl);
+        }),
+
+        delete: Effect.fn(function* ({ output, session }) {
+          const networkAclId = output.networkAclId;
+
+          yield* session.note(`Deleting Network ACL: ${networkAclId}`);
+
+          yield* ec2
+            .deleteNetworkAcl({
+              NetworkAclId: networkAclId,
+              DryRun: false,
             })
             .pipe(
-              Effect.map(
-                (r) =>
-                  Object.fromEntries(
-                    r.Tags?.map((t) => [t.Key!, t.Value!]) ?? [],
-                  ) as Record<string, string>,
+              Effect.catchTag(
+                "InvalidNetworkAclID.NotFound",
+                () => Effect.void,
               ),
-            )) ?? {};
-
-        const { removed, upsert } = diffTags(oldTags, newTags);
-
-        if (removed.length > 0) {
-          yield* ec2.deleteTags({
-            Resources: [networkAclId],
-            Tags: removed.map((key) => ({ Key: key })),
-            DryRun: false,
-          });
-        }
-        if (upsert.length > 0) {
-          yield* ec2.createTags({
-            Resources: [networkAclId],
-            Tags: upsert,
-            DryRun: false,
-          });
-          yield* session.note("Updated tags");
-        }
-
-        const acl = yield* describeNetworkAcl(networkAclId);
-        return toAttrs(acl);
-      }),
-
-      delete: Effect.fn(function* ({ output, session }) {
-        const networkAclId = output.networkAclId;
-
-        yield* session.note(`Deleting Network ACL: ${networkAclId}`);
-
-        yield* ec2
-          .deleteNetworkAcl({
-            NetworkAclId: networkAclId,
-            DryRun: false,
-          })
-          .pipe(
-            Effect.catchTag("InvalidNetworkAclID.NotFound", () => Effect.void),
-            // Retry on dependency violations (e.g., associations still being removed)
-            Effect.retry({
-              while: (e) => {
-                return e._tag === "DependencyViolation";
-              },
-              schedule: Schedule.exponential(1000, 1.5).pipe(
-                Schedule.both(Schedule.recurs(15)),
-                Schedule.tapOutput(([, attempt]) =>
-                  session.note(
-                    `Waiting for dependencies to clear... (attempt ${attempt + 1})`,
+              // Retry on dependency violations (e.g., associations still being removed)
+              Effect.retry({
+                while: (e) => {
+                  return e._tag === "DependencyViolation";
+                },
+                schedule: Schedule.exponential(1000, 1.5).pipe(
+                  Schedule.both(Schedule.recurs(15)),
+                  Schedule.tapOutput(([, attempt]) =>
+                    session.note(
+                      `Waiting for dependencies to clear... (attempt ${attempt + 1})`,
+                    ),
                   ),
                 ),
-              ),
-            }),
-          );
+              }),
+            );
 
-        yield* session.note(`Network ACL ${networkAclId} deleted`);
-      }),
-    };
-  }),
-);
+          yield* session.note(`Network ACL ${networkAclId} deleted`);
+        }),
+      };
+    }),
+  );

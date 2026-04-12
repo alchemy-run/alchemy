@@ -63,126 +63,127 @@ export const AccountAssignment = Resource<AccountAssignment>(
   "AWS.IdentityCenter.AccountAssignment",
 );
 
-export const AccountAssignmentProvider = Provider.effect(
-  AccountAssignment,
-  Effect.gen(function* () {
-    return {
-      stables: [
-        "instanceArn",
-        "permissionSetArn",
-        "principalId",
-        "principalType",
-        "targetId",
-        "targetType",
-      ],
-      diff: Effect.fn(function* ({ olds, news }) {
-        if (!isResolved(news)) return;
-        if (
-          olds?.instanceArn !== news.instanceArn ||
-          olds?.permissionSetArn !== news.permissionSetArn ||
-          olds?.principalId !== news.principalId ||
-          olds?.principalType !== news.principalType ||
-          olds?.targetId !== news.targetId
-        ) {
-          return { action: "replace" } as const;
-        }
-      }),
-      read: Effect.fn(function* ({ olds, output }) {
-        if (output?.instanceArn) {
-          return yield* readAssignment({
-            instanceArn: output.instanceArn,
-            permissionSetArn: output.permissionSetArn,
-            principalId: output.principalId,
-            principalType: output.principalType,
-            targetId: output.targetId,
-          });
-        }
+export const AccountAssignmentProvider = () =>
+  Provider.effect(
+    AccountAssignment,
+    Effect.gen(function* () {
+      return {
+        stables: [
+          "instanceArn",
+          "permissionSetArn",
+          "principalId",
+          "principalType",
+          "targetId",
+          "targetType",
+        ],
+        diff: Effect.fn(function* ({ olds, news }) {
+          if (!isResolved(news)) return;
+          if (
+            olds?.instanceArn !== news.instanceArn ||
+            olds?.permissionSetArn !== news.permissionSetArn ||
+            olds?.principalId !== news.principalId ||
+            olds?.principalType !== news.principalType ||
+            olds?.targetId !== news.targetId
+          ) {
+            return { action: "replace" } as const;
+          }
+        }),
+        read: Effect.fn(function* ({ olds, output }) {
+          if (output?.instanceArn) {
+            return yield* readAssignment({
+              instanceArn: output.instanceArn,
+              permissionSetArn: output.permissionSetArn,
+              principalId: output.principalId,
+              principalType: output.principalType,
+              targetId: output.targetId,
+            });
+          }
 
-        if (!olds) {
-          return undefined;
-        }
+          if (!olds) {
+            return undefined;
+          }
 
-        return yield* readAssignment(olds);
-      }),
-      create: Effect.fn(function* ({ news, session }) {
-        const existing = yield* readAssignment(news);
-        if (existing) {
-          yield* session.note(
-            `${existing.targetId}:${existing.permissionSetArn}:${existing.principalId}`,
-          );
-          return existing;
-        }
+          return yield* readAssignment(olds);
+        }),
+        create: Effect.fn(function* ({ news, session }) {
+          const existing = yield* readAssignment(news);
+          if (existing) {
+            yield* session.note(
+              `${existing.targetId}:${existing.permissionSetArn}:${existing.principalId}`,
+            );
+            return existing;
+          }
 
-        const instance = yield* resolveInstance(news.instanceArn);
-        const response = yield* retryIdentityCenter(
-          ssoAdmin.createAccountAssignment({
-            InstanceArn: instance.InstanceArn!,
-            PermissionSetArn: news.permissionSetArn,
-            PrincipalId: news.principalId,
-            PrincipalType: news.principalType,
-            TargetId: news.targetId,
-            TargetType: "AWS_ACCOUNT",
-          }),
-        );
-
-        const requestId =
-          response.AccountAssignmentCreationStatus?.RequestId ?? undefined;
-        if (requestId) {
-          yield* waitForAssignmentCreation(instance.InstanceArn!, requestId);
-        }
-
-        const created = yield* readAssignment({
-          ...news,
-          instanceArn: instance.InstanceArn,
-        });
-        if (!created) {
-          return yield* Effect.fail(
-            new Error("account assignment not found after create"),
-          );
-        }
-
-        yield* session.note(
-          `${created.targetId}:${created.permissionSetArn}:${created.principalId}`,
-        );
-        return created;
-      }),
-      update: Effect.fn(function* ({ output, session }) {
-        yield* session.note(
-          `${output.targetId}:${output.permissionSetArn}:${output.principalId}`,
-        );
-        return output;
-      }),
-      delete: Effect.fn(function* ({ output }) {
-        if (!(yield* readAssignment(output))) {
-          return;
-        }
-
-        const response = yield* retryIdentityCenter(
-          ssoAdmin
-            .deleteAccountAssignment({
-              InstanceArn: output.instanceArn,
-              PermissionSetArn: output.permissionSetArn,
-              PrincipalId: output.principalId,
-              PrincipalType: output.principalType,
-              TargetId: output.targetId,
+          const instance = yield* resolveInstance(news.instanceArn);
+          const response = yield* retryIdentityCenter(
+            ssoAdmin.createAccountAssignment({
+              InstanceArn: instance.InstanceArn!,
+              PermissionSetArn: news.permissionSetArn,
+              PrincipalId: news.principalId,
+              PrincipalType: news.principalType,
+              TargetId: news.targetId,
               TargetType: "AWS_ACCOUNT",
-            })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            ),
-        );
+            }),
+          );
 
-        const requestId =
-          response?.AccountAssignmentDeletionStatus?.RequestId ?? undefined;
-        if (requestId) {
-          yield* waitForAssignmentDeletion(output.instanceArn, requestId);
-        }
-      }),
-    };
-  }),
-);
+          const requestId =
+            response.AccountAssignmentCreationStatus?.RequestId ?? undefined;
+          if (requestId) {
+            yield* waitForAssignmentCreation(instance.InstanceArn!, requestId);
+          }
+
+          const created = yield* readAssignment({
+            ...news,
+            instanceArn: instance.InstanceArn,
+          });
+          if (!created) {
+            return yield* Effect.fail(
+              new Error("account assignment not found after create"),
+            );
+          }
+
+          yield* session.note(
+            `${created.targetId}:${created.permissionSetArn}:${created.principalId}`,
+          );
+          return created;
+        }),
+        update: Effect.fn(function* ({ output, session }) {
+          yield* session.note(
+            `${output.targetId}:${output.permissionSetArn}:${output.principalId}`,
+          );
+          return output;
+        }),
+        delete: Effect.fn(function* ({ output }) {
+          if (!(yield* readAssignment(output))) {
+            return;
+          }
+
+          const response = yield* retryIdentityCenter(
+            ssoAdmin
+              .deleteAccountAssignment({
+                InstanceArn: output.instanceArn,
+                PermissionSetArn: output.permissionSetArn,
+                PrincipalId: output.principalId,
+                PrincipalType: output.principalType,
+                TargetId: output.targetId,
+                TargetType: "AWS_ACCOUNT",
+              })
+              .pipe(
+                Effect.catchTag("ResourceNotFoundException", () =>
+                  Effect.succeed(undefined),
+                ),
+              ),
+          );
+
+          const requestId =
+            response?.AccountAssignmentDeletionStatus?.RequestId ?? undefined;
+          if (requestId) {
+            yield* waitForAssignmentDeletion(output.instanceArn, requestId);
+          }
+        }),
+      };
+    }),
+  );
 
 const readAssignment = Effect.fn(function* ({
   instanceArn,

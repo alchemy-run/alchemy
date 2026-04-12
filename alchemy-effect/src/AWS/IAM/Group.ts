@@ -66,284 +66,294 @@ export interface Group extends Resource<
  */
 export const Group = Resource<Group>("AWS.IAM.Group");
 
-export const GroupProvider = Provider.effect(
-  Group,
-  Effect.gen(function* () {
-    const toName = (id: string, props: GroupProps) =>
-      props.groupName
-        ? Effect.succeed(props.groupName)
-        : createPhysicalName({ id, maxLength: 128 });
+export const GroupProvider = () =>
+  Provider.effect(
+    Group,
+    Effect.gen(function* () {
+      const toName = (id: string, props: GroupProps) =>
+        props.groupName
+          ? Effect.succeed(props.groupName)
+          : createPhysicalName({ id, maxLength: 128 });
 
-    const readInlinePolicies = Effect.fn(function* (groupName: string) {
-      const listed = yield* iam.listGroupPolicies({
-        GroupName: groupName,
-      });
-      const entries = yield* Effect.all(
-        (listed.PolicyNames ?? []).map((policyName) =>
-          iam
-            .getGroupPolicy({
-              GroupName: groupName,
-              PolicyName: policyName,
-            })
-            .pipe(
-              Effect.map(
-                (response) =>
-                  [
-                    policyName,
-                    parsePolicyDocument(response.PolicyDocument),
-                  ] as const,
+      const readInlinePolicies = Effect.fn(function* (groupName: string) {
+        const listed = yield* iam.listGroupPolicies({
+          GroupName: groupName,
+        });
+        const entries = yield* Effect.all(
+          (listed.PolicyNames ?? []).map((policyName) =>
+            iam
+              .getGroupPolicy({
+                GroupName: groupName,
+                PolicyName: policyName,
+              })
+              .pipe(
+                Effect.map(
+                  (response) =>
+                    [
+                      policyName,
+                      parsePolicyDocument(response.PolicyDocument),
+                    ] as const,
+                ),
+                Effect.catchTag("NoSuchEntityException", () =>
+                  Effect.succeed([policyName, undefined] as const),
+                ),
               ),
-              Effect.catchTag("NoSuchEntityException", () =>
-                Effect.succeed([policyName, undefined] as const),
-              ),
-            ),
-        ),
-      );
-      return Object.fromEntries(
-        entries.filter(
-          (entry): entry is [string, PolicyDocument] => entry[1] !== undefined,
-        ),
-      );
-    });
-
-    const readManagedPolicies = Effect.fn(function* (groupName: string) {
-      const listed = yield* iam.listAttachedGroupPolicies({
-        GroupName: groupName,
-      });
-      return (listed.AttachedPolicies ?? [])
-        .map((policy) => policy.PolicyArn)
-        .filter(
-          (policyArn): policyArn is string => typeof policyArn === "string",
+          ),
         );
-    });
+        return Object.fromEntries(
+          entries.filter(
+            (entry): entry is [string, PolicyDocument] =>
+              entry[1] !== undefined,
+          ),
+        );
+      });
 
-    const syncManagedPolicies = Effect.fn(function* ({
-      groupName,
-      olds,
-      news,
-    }: {
-      groupName: string;
-      olds: string[];
-      news: string[];
-    }) {
-      const oldSet = new Set(olds);
-      const newSet = new Set(news);
-      for (const policyArn of news) {
-        if (!oldSet.has(policyArn)) {
-          yield* iam.attachGroupPolicy({
-            GroupName: groupName,
-            PolicyArn: policyArn,
-          });
-        }
-      }
-      for (const policyArn of olds) {
-        if (!newSet.has(policyArn)) {
-          yield* iam
-            .detachGroupPolicy({
+      const readManagedPolicies = Effect.fn(function* (groupName: string) {
+        const listed = yield* iam.listAttachedGroupPolicies({
+          GroupName: groupName,
+        });
+        return (listed.AttachedPolicies ?? [])
+          .map((policy) => policy.PolicyArn)
+          .filter(
+            (policyArn): policyArn is string => typeof policyArn === "string",
+          );
+      });
+
+      const syncManagedPolicies = Effect.fn(function* ({
+        groupName,
+        olds,
+        news,
+      }: {
+        groupName: string;
+        olds: string[];
+        news: string[];
+      }) {
+        const oldSet = new Set(olds);
+        const newSet = new Set(news);
+        for (const policyArn of news) {
+          if (!oldSet.has(policyArn)) {
+            yield* iam.attachGroupPolicy({
               GroupName: groupName,
               PolicyArn: policyArn,
-            })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
-        }
-      }
-    });
-
-    const syncInlinePolicies = Effect.fn(function* ({
-      groupName,
-      olds,
-      news,
-    }: {
-      groupName: string;
-      olds: Record<string, PolicyDocument>;
-      news: Record<string, PolicyDocument>;
-    }) {
-      for (const [policyName, document] of Object.entries(news)) {
-        if (
-          JSON.stringify(olds[policyName] ?? null) !== JSON.stringify(document)
-        ) {
-          yield* iam.putGroupPolicy({
-            GroupName: groupName,
-            PolicyName: policyName,
-            PolicyDocument: stringifyPolicyDocument(document),
-          });
-        }
-      }
-      for (const policyName of Object.keys(olds)) {
-        if (!(policyName in news)) {
-          yield* iam
-            .deleteGroupPolicy({
-              GroupName: groupName,
-              PolicyName: policyName,
-            })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
-        }
-      }
-    });
-
-    return {
-      stables: ["groupArn", "groupName", "groupId"],
-      diff: Effect.fn(function* ({ id, olds, news }) {
-        if (!isResolved(news)) return;
-        if (
-          (yield* toName(id, olds ?? ({} as GroupProps))) !==
-          (yield* toName(id, news))
-        ) {
-          return { action: "replace" } as const;
-        }
-        if ((olds?.path ?? "/") !== (news.path ?? "/")) {
-          return { action: "replace" } as const;
-        }
-      }),
-      read: Effect.fn(function* ({ id, olds, output }) {
-        const groupName =
-          output?.groupName ?? (yield* toName(id, olds ?? ({} as GroupProps)));
-        const response = yield* iam
-          .getGroup({
-            GroupName: groupName,
-          })
-          .pipe(
-            Effect.catchTag("NoSuchEntityException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
-        if (!response?.Group?.Arn) {
-          return undefined;
-        }
-        const [managedPolicyArns, inlinePolicies] = yield* Effect.all([
-          readManagedPolicies(groupName),
-          readInlinePolicies(groupName),
-        ]);
-        return {
-          groupArn: response.Group.Arn,
-          groupName: response.Group.GroupName,
-          groupId: response.Group.GroupId,
-          path: response.Group.Path,
-          managedPolicyArns,
-          inlinePolicies,
-        };
-      }),
-      create: Effect.fn(function* ({ id, news, session }) {
-        const groupName = yield* toName(id, news);
-        const created = yield* iam
-          .createGroup({
-            GroupName: groupName,
-            Path: news.path,
-          })
-          .pipe(
-            Effect.catchTag("EntityAlreadyExistsException", () =>
-              iam
-                .getGroup({
-                  GroupName: groupName,
-                })
-                .pipe(Effect.map((response) => ({ Group: response.Group }))),
-            ),
-          );
-
-        yield* syncManagedPolicies({
-          groupName,
-          olds: [],
-          news: news.managedPolicyArns ?? [],
-        });
-        yield* syncInlinePolicies({
-          groupName,
-          olds: {},
-          news: news.inlinePolicies ?? {},
-        });
-
-        yield* session.note(created.Group?.Arn ?? groupName);
-        return {
-          groupArn: created.Group?.Arn ?? groupName,
-          groupName,
-          groupId: created.Group?.GroupId,
-          path: created.Group?.Path ?? news.path ?? "/",
-          managedPolicyArns: news.managedPolicyArns ?? [],
-          inlinePolicies: news.inlinePolicies ?? {},
-        };
-      }),
-      update: Effect.fn(function* ({ news, olds, output, session }) {
-        yield* syncManagedPolicies({
-          groupName: output.groupName,
-          olds: olds.managedPolicyArns ?? [],
-          news: news.managedPolicyArns ?? [],
-        });
-        yield* syncInlinePolicies({
-          groupName: output.groupName,
-          olds: olds.inlinePolicies ?? {},
-          news: news.inlinePolicies ?? {},
-        });
-        yield* session.note(output.groupArn);
-        return {
-          ...output,
-          managedPolicyArns: news.managedPolicyArns ?? [],
-          inlinePolicies: news.inlinePolicies ?? {},
-        };
-      }),
-      delete: Effect.fn(function* ({ output }) {
-        const groupState = yield* iam
-          .getGroup({
-            GroupName: output.groupName,
-          })
-          .pipe(
-            Effect.catchTag("NoSuchEntityException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
-        for (const user of groupState?.Users ?? []) {
-          if (user.UserName) {
-            yield* iam
-              .removeUserFromGroup({
-                GroupName: output.groupName,
-                UserName: user.UserName,
-              })
-              .pipe(
-                Effect.catchTag("NoSuchEntityException", () => Effect.void),
-              );
+            });
           }
         }
-        const inlinePolicies = yield* iam
-          .listGroupPolicies({
-            GroupName: output.groupName,
-          })
-          .pipe(
-            Effect.catchTag("NoSuchEntityException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
-        for (const policyName of inlinePolicies?.PolicyNames ?? []) {
-          yield* iam
-            .deleteGroupPolicy({
-              GroupName: output.groupName,
-              PolicyName: policyName,
-            })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
-        }
-        const attachedPolicies = yield* iam
-          .listAttachedGroupPolicies({
-            GroupName: output.groupName,
-          })
-          .pipe(
-            Effect.catchTag("NoSuchEntityException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
-        for (const policy of attachedPolicies?.AttachedPolicies ?? []) {
-          if (policy.PolicyArn) {
+        for (const policyArn of olds) {
+          if (!newSet.has(policyArn)) {
             yield* iam
               .detachGroupPolicy({
-                GroupName: output.groupName,
-                PolicyArn: policy.PolicyArn,
+                GroupName: groupName,
+                PolicyArn: policyArn,
               })
               .pipe(
                 Effect.catchTag("NoSuchEntityException", () => Effect.void),
               );
           }
         }
-        yield* iam
-          .deleteGroup({
-            GroupName: output.groupName,
-          })
-          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
-      }),
-    };
-  }),
-);
+      });
+
+      const syncInlinePolicies = Effect.fn(function* ({
+        groupName,
+        olds,
+        news,
+      }: {
+        groupName: string;
+        olds: Record<string, PolicyDocument>;
+        news: Record<string, PolicyDocument>;
+      }) {
+        for (const [policyName, document] of Object.entries(news)) {
+          if (
+            JSON.stringify(olds[policyName] ?? null) !==
+            JSON.stringify(document)
+          ) {
+            yield* iam.putGroupPolicy({
+              GroupName: groupName,
+              PolicyName: policyName,
+              PolicyDocument: stringifyPolicyDocument(document),
+            });
+          }
+        }
+        for (const policyName of Object.keys(olds)) {
+          if (!(policyName in news)) {
+            yield* iam
+              .deleteGroupPolicy({
+                GroupName: groupName,
+                PolicyName: policyName,
+              })
+              .pipe(
+                Effect.catchTag("NoSuchEntityException", () => Effect.void),
+              );
+          }
+        }
+      });
+
+      return {
+        stables: ["groupArn", "groupName", "groupId"],
+        diff: Effect.fn(function* ({ id, olds, news }) {
+          if (!isResolved(news)) return;
+          if (
+            (yield* toName(id, olds ?? ({} as GroupProps))) !==
+            (yield* toName(id, news))
+          ) {
+            return { action: "replace" } as const;
+          }
+          if ((olds?.path ?? "/") !== (news.path ?? "/")) {
+            return { action: "replace" } as const;
+          }
+        }),
+        read: Effect.fn(function* ({ id, olds, output }) {
+          const groupName =
+            output?.groupName ??
+            (yield* toName(id, olds ?? ({} as GroupProps)));
+          const response = yield* iam
+            .getGroup({
+              GroupName: groupName,
+            })
+            .pipe(
+              Effect.catchTag("NoSuchEntityException", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          if (!response?.Group?.Arn) {
+            return undefined;
+          }
+          const [managedPolicyArns, inlinePolicies] = yield* Effect.all([
+            readManagedPolicies(groupName),
+            readInlinePolicies(groupName),
+          ]);
+          return {
+            groupArn: response.Group.Arn,
+            groupName: response.Group.GroupName,
+            groupId: response.Group.GroupId,
+            path: response.Group.Path,
+            managedPolicyArns,
+            inlinePolicies,
+          };
+        }),
+        create: Effect.fn(function* ({ id, news, session }) {
+          const groupName = yield* toName(id, news);
+          const created = yield* iam
+            .createGroup({
+              GroupName: groupName,
+              Path: news.path,
+            })
+            .pipe(
+              Effect.catchTag("EntityAlreadyExistsException", () =>
+                iam
+                  .getGroup({
+                    GroupName: groupName,
+                  })
+                  .pipe(Effect.map((response) => ({ Group: response.Group }))),
+              ),
+            );
+
+          yield* syncManagedPolicies({
+            groupName,
+            olds: [],
+            news: news.managedPolicyArns ?? [],
+          });
+          yield* syncInlinePolicies({
+            groupName,
+            olds: {},
+            news: news.inlinePolicies ?? {},
+          });
+
+          yield* session.note(created.Group?.Arn ?? groupName);
+          return {
+            groupArn: created.Group?.Arn ?? groupName,
+            groupName,
+            groupId: created.Group?.GroupId,
+            path: created.Group?.Path ?? news.path ?? "/",
+            managedPolicyArns: news.managedPolicyArns ?? [],
+            inlinePolicies: news.inlinePolicies ?? {},
+          };
+        }),
+        update: Effect.fn(function* ({ news, olds, output, session }) {
+          yield* syncManagedPolicies({
+            groupName: output.groupName,
+            olds: olds.managedPolicyArns ?? [],
+            news: news.managedPolicyArns ?? [],
+          });
+          yield* syncInlinePolicies({
+            groupName: output.groupName,
+            olds: olds.inlinePolicies ?? {},
+            news: news.inlinePolicies ?? {},
+          });
+          yield* session.note(output.groupArn);
+          return {
+            ...output,
+            managedPolicyArns: news.managedPolicyArns ?? [],
+            inlinePolicies: news.inlinePolicies ?? {},
+          };
+        }),
+        delete: Effect.fn(function* ({ output }) {
+          const groupState = yield* iam
+            .getGroup({
+              GroupName: output.groupName,
+            })
+            .pipe(
+              Effect.catchTag("NoSuchEntityException", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          for (const user of groupState?.Users ?? []) {
+            if (user.UserName) {
+              yield* iam
+                .removeUserFromGroup({
+                  GroupName: output.groupName,
+                  UserName: user.UserName,
+                })
+                .pipe(
+                  Effect.catchTag("NoSuchEntityException", () => Effect.void),
+                );
+            }
+          }
+          const inlinePolicies = yield* iam
+            .listGroupPolicies({
+              GroupName: output.groupName,
+            })
+            .pipe(
+              Effect.catchTag("NoSuchEntityException", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          for (const policyName of inlinePolicies?.PolicyNames ?? []) {
+            yield* iam
+              .deleteGroupPolicy({
+                GroupName: output.groupName,
+                PolicyName: policyName,
+              })
+              .pipe(
+                Effect.catchTag("NoSuchEntityException", () => Effect.void),
+              );
+          }
+          const attachedPolicies = yield* iam
+            .listAttachedGroupPolicies({
+              GroupName: output.groupName,
+            })
+            .pipe(
+              Effect.catchTag("NoSuchEntityException", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          for (const policy of attachedPolicies?.AttachedPolicies ?? []) {
+            if (policy.PolicyArn) {
+              yield* iam
+                .detachGroupPolicy({
+                  GroupName: output.groupName,
+                  PolicyArn: policy.PolicyArn,
+                })
+                .pipe(
+                  Effect.catchTag("NoSuchEntityException", () => Effect.void),
+                );
+            }
+          }
+          yield* iam
+            .deleteGroup({
+              GroupName: output.groupName,
+            })
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+        }),
+      };
+    }),
+  );

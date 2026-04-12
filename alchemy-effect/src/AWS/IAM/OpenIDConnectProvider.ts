@@ -58,133 +58,137 @@ export const OpenIDConnectProvider = Resource<OpenIDConnectProvider>(
   "AWS.IAM.OpenIDConnectProvider",
 );
 
-export const OpenIDConnectProviderProvider = Provider.effect(
-  OpenIDConnectProvider,
-  Effect.gen(function* () {
-    const accountId = yield* Account;
-    const oidcArnFromUrl = (url: string) =>
-      `arn:aws:iam::${accountId}:oidc-provider/${url.replace(/^https?:\/\//, "")}`;
+export const OpenIDConnectProviderProvider = () =>
+  Provider.effect(
+    OpenIDConnectProvider,
+    Effect.gen(function* () {
+      const accountId = yield* Account;
+      const oidcArnFromUrl = (url: string) =>
+        `arn:aws:iam::${accountId}:oidc-provider/${url.replace(/^https?:\/\//, "")}`;
 
-    const readProvider = Effect.fn(function* (providerArn: string) {
-      const response = yield* iam
-        .getOpenIDConnectProvider({
-          OpenIDConnectProviderArn: providerArn,
-        })
-        .pipe(
-          Effect.catchTag("NoSuchEntityException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
-      return response;
-    });
-
-    return {
-      stables: ["openIDConnectProviderArn"],
-      diff: Effect.fn(function* ({ olds, news }) {
-        if (!isResolved(news)) return;
-        if (olds.url !== news.url) {
-          return { action: "replace" } as const;
-        }
-      }),
-      read: Effect.fn(function* ({ olds, output }) {
-        const providerArn =
-          output?.openIDConnectProviderArn ?? oidcArnFromUrl(olds.url);
-        const provider = yield* readProvider(providerArn);
-        if (!provider?.Url) {
-          return undefined;
-        }
-        const tags = yield* iam.listOpenIDConnectProviderTags({
-          OpenIDConnectProviderArn: providerArn,
-        });
-        return {
-          openIDConnectProviderArn: providerArn,
-          url: provider.Url,
-          clientIDList: provider.ClientIDList ?? [],
-          thumbprintList: provider.ThumbprintList ?? [],
-          tags: toTagRecord(tags.Tags),
-        };
-      }),
-      create: Effect.fn(function* ({ news, session }) {
-        const created = yield* iam.createOpenIDConnectProvider({
-          Url: news.url,
-          ClientIDList: news.clientIDList,
-          ThumbprintList: news.thumbprintList,
-          Tags: Object.entries(news.tags ?? {}).map(([Key, Value]) => ({
-            Key,
-            Value,
-          })),
-        });
-
-        const providerArn =
-          created.OpenIDConnectProviderArn ?? oidcArnFromUrl(news.url);
-        yield* session.note(providerArn);
-        return {
-          openIDConnectProviderArn: providerArn,
-          url: news.url,
-          clientIDList: news.clientIDList ?? [],
-          thumbprintList: news.thumbprintList ?? [],
-          tags: news.tags ?? {},
-        };
-      }),
-      update: Effect.fn(function* ({ news, olds, output, session }) {
-        const oldClientIds = new Set(olds.clientIDList ?? []);
-        const newClientIds = new Set(news.clientIDList ?? []);
-        for (const clientId of news.clientIDList ?? []) {
-          if (!oldClientIds.has(clientId)) {
-            yield* iam.addClientIDToOpenIDConnectProvider({
-              OpenIDConnectProviderArn: output.openIDConnectProviderArn,
-              ClientID: clientId,
-            });
-          }
-        }
-        for (const clientId of olds.clientIDList ?? []) {
-          if (!newClientIds.has(clientId)) {
-            yield* iam.removeClientIDFromOpenIDConnectProvider({
-              OpenIDConnectProviderArn: output.openIDConnectProviderArn,
-              ClientID: clientId,
-            });
-          }
-        }
-        if (
-          JSON.stringify(olds.thumbprintList ?? []) !==
-          JSON.stringify(news.thumbprintList ?? [])
-        ) {
-          yield* iam.updateOpenIDConnectProviderThumbprint({
-            OpenIDConnectProviderArn: output.openIDConnectProviderArn,
-            ThumbprintList: news.thumbprintList ?? [],
-          });
-        }
-
-        const { removed, upsert } = diffTags(olds.tags ?? {}, news.tags ?? {});
-        if (upsert.length > 0) {
-          yield* iam.tagOpenIDConnectProvider({
-            OpenIDConnectProviderArn: output.openIDConnectProviderArn,
-            Tags: upsert,
-          });
-        }
-        if (removed.length > 0) {
-          yield* iam.untagOpenIDConnectProvider({
-            OpenIDConnectProviderArn: output.openIDConnectProviderArn,
-            TagKeys: removed,
-          });
-        }
-
-        yield* session.note(output.openIDConnectProviderArn);
-        return {
-          openIDConnectProviderArn: output.openIDConnectProviderArn,
-          url: output.url,
-          clientIDList: news.clientIDList ?? [],
-          thumbprintList: news.thumbprintList ?? [],
-          tags: news.tags ?? {},
-        };
-      }),
-      delete: Effect.fn(function* ({ output }) {
-        yield* iam
-          .deleteOpenIDConnectProvider({
-            OpenIDConnectProviderArn: output.openIDConnectProviderArn,
+      const readProvider = Effect.fn(function* (providerArn: string) {
+        const response = yield* iam
+          .getOpenIDConnectProvider({
+            OpenIDConnectProviderArn: providerArn,
           })
-          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
-      }),
-    };
-  }),
-);
+          .pipe(
+            Effect.catchTag("NoSuchEntityException", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+        return response;
+      });
+
+      return {
+        stables: ["openIDConnectProviderArn"],
+        diff: Effect.fn(function* ({ olds, news }) {
+          if (!isResolved(news)) return;
+          if (olds.url !== news.url) {
+            return { action: "replace" } as const;
+          }
+        }),
+        read: Effect.fn(function* ({ olds, output }) {
+          const providerArn =
+            output?.openIDConnectProviderArn ?? oidcArnFromUrl(olds.url);
+          const provider = yield* readProvider(providerArn);
+          if (!provider?.Url) {
+            return undefined;
+          }
+          const tags = yield* iam.listOpenIDConnectProviderTags({
+            OpenIDConnectProviderArn: providerArn,
+          });
+          return {
+            openIDConnectProviderArn: providerArn,
+            url: provider.Url,
+            clientIDList: provider.ClientIDList ?? [],
+            thumbprintList: provider.ThumbprintList ?? [],
+            tags: toTagRecord(tags.Tags),
+          };
+        }),
+        create: Effect.fn(function* ({ news, session }) {
+          const created = yield* iam.createOpenIDConnectProvider({
+            Url: news.url,
+            ClientIDList: news.clientIDList,
+            ThumbprintList: news.thumbprintList,
+            Tags: Object.entries(news.tags ?? {}).map(([Key, Value]) => ({
+              Key,
+              Value,
+            })),
+          });
+
+          const providerArn =
+            created.OpenIDConnectProviderArn ?? oidcArnFromUrl(news.url);
+          yield* session.note(providerArn);
+          return {
+            openIDConnectProviderArn: providerArn,
+            url: news.url,
+            clientIDList: news.clientIDList ?? [],
+            thumbprintList: news.thumbprintList ?? [],
+            tags: news.tags ?? {},
+          };
+        }),
+        update: Effect.fn(function* ({ news, olds, output, session }) {
+          const oldClientIds = new Set(olds.clientIDList ?? []);
+          const newClientIds = new Set(news.clientIDList ?? []);
+          for (const clientId of news.clientIDList ?? []) {
+            if (!oldClientIds.has(clientId)) {
+              yield* iam.addClientIDToOpenIDConnectProvider({
+                OpenIDConnectProviderArn: output.openIDConnectProviderArn,
+                ClientID: clientId,
+              });
+            }
+          }
+          for (const clientId of olds.clientIDList ?? []) {
+            if (!newClientIds.has(clientId)) {
+              yield* iam.removeClientIDFromOpenIDConnectProvider({
+                OpenIDConnectProviderArn: output.openIDConnectProviderArn,
+                ClientID: clientId,
+              });
+            }
+          }
+          if (
+            JSON.stringify(olds.thumbprintList ?? []) !==
+            JSON.stringify(news.thumbprintList ?? [])
+          ) {
+            yield* iam.updateOpenIDConnectProviderThumbprint({
+              OpenIDConnectProviderArn: output.openIDConnectProviderArn,
+              ThumbprintList: news.thumbprintList ?? [],
+            });
+          }
+
+          const { removed, upsert } = diffTags(
+            olds.tags ?? {},
+            news.tags ?? {},
+          );
+          if (upsert.length > 0) {
+            yield* iam.tagOpenIDConnectProvider({
+              OpenIDConnectProviderArn: output.openIDConnectProviderArn,
+              Tags: upsert,
+            });
+          }
+          if (removed.length > 0) {
+            yield* iam.untagOpenIDConnectProvider({
+              OpenIDConnectProviderArn: output.openIDConnectProviderArn,
+              TagKeys: removed,
+            });
+          }
+
+          yield* session.note(output.openIDConnectProviderArn);
+          return {
+            openIDConnectProviderArn: output.openIDConnectProviderArn,
+            url: output.url,
+            clientIDList: news.clientIDList ?? [],
+            thumbprintList: news.thumbprintList ?? [],
+            tags: news.tags ?? {},
+          };
+        }),
+        delete: Effect.fn(function* ({ output }) {
+          yield* iam
+            .deleteOpenIDConnectProvider({
+              OpenIDConnectProviderArn: output.openIDConnectProviderArn,
+            })
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+        }),
+      };
+    }),
+  );

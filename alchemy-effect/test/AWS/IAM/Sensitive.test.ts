@@ -56,6 +56,6 @@ describe("AWS.IAM sensitive resources", () => {
       expect(loginProfile.LoginProfile.PasswordResetRequired).toBe(false);
 
       yield* destroy();
-    }).pipe(Effect.provide(AWS.providers)),
+    }).pipe(Effect.provide(AWS.providers())),
   );
 });
