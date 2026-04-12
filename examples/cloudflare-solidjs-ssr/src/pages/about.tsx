@@ -1,5 +1,5 @@
-import { createEffect, Suspense } from 'solid-js';
-import AboutData from './about.data';
+import { createEffect, Suspense } from "solid-js";
+import AboutData from "./about.data";
 
 export default function About() {
   const name = AboutData();

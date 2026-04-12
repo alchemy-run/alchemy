@@ -1,7 +1,7 @@
-import { renderToStringAsync, generateHydrationScript } from 'solid-js/web';
-import { StaticRouter } from '@solidjs/router';
-import App from './app';
-import { routes } from './routes';
+import { renderToStringAsync, generateHydrationScript } from "solid-js/web";
+import { StaticRouter } from "@solidjs/router";
+import App from "./app";
+import { routes } from "./routes";
 
 const FALLBACK_HTML = `<!DOCTYPE html>
 <html lang="en">
@@ -16,9 +16,12 @@ const FALLBACK_HTML = `<!DOCTYPE html>
 </body>
 </html>`;
 
-async function getTemplate(env: { ASSETS: Fetcher }, origin: string): Promise<string> {
+async function getTemplate(
+  env: { ASSETS: Fetcher },
+  origin: string,
+): Promise<string> {
   try {
-    const res = await env.ASSETS.fetch(new Request(origin + '/index.html'));
+    const res = await env.ASSETS.fetch(new Request(origin + "/index.html"));
     if (res.ok) {
       const text = await res.text();
       if (text.length > 0) return text;
@@ -34,7 +37,7 @@ export default {
       const pathname = url.pathname;
 
       // Serve static assets via the assets binding
-      if (pathname.startsWith('/assets/') || pathname.endsWith('.ico')) {
+      if (pathname.startsWith("/assets/") || pathname.endsWith(".ico")) {
         return env.ASSETS.fetch(request);
       }
 
@@ -43,23 +46,26 @@ export default {
 
       // Render the SolidJS app to HTML on the server
       const appHtml = await renderToStringAsync(() => (
-        <StaticRouter url={pathname} root={(props) => <App>{props.children}</App>}>
+        <StaticRouter
+          url={pathname}
+          root={(props) => <App>{props.children}</App>}
+        >
           {routes}
         </StaticRouter>
       ));
 
       // Inject the server-rendered HTML and hydration script
       const html = template
-        .replace('<!--ssr-head-->', generateHydrationScript())
-        .replace('<!--ssr-outlet-->', appHtml);
+        .replace("<!--ssr-head-->", generateHydrationScript())
+        .replace("<!--ssr-outlet-->", appHtml);
 
       return new Response(html, {
-        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        headers: { "Content-Type": "text/html; charset=utf-8" },
       });
     } catch (e: any) {
       return new Response(`SSR Error: ${e.message}\n\n${e.stack}`, {
         status: 500,
-        headers: { 'Content-Type': 'text/plain' },
+        headers: { "Content-Type": "text/plain" },
       });
     }
   },

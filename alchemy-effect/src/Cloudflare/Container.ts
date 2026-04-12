@@ -1030,9 +1030,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
                     existingName: existing?.name,
                   });
                   if (!recovery.canAdopt) {
-                    return yield* Effect.fail(
-                      new Error(recovery.message),
-                    );
+                    return yield* Effect.fail(new Error(recovery.message));
                   }
                   if (!existing) {
                     return yield* Effect.fail(

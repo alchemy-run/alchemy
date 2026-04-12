@@ -1,14 +1,14 @@
 /* @refresh reload */
-import 'solid-devtools';
-import './index.css';
+import "solid-devtools";
+import "./index.css";
 
-import { hydrate, render } from 'solid-js/web';
+import { hydrate, render } from "solid-js/web";
 
-import App from './app';
-import { Router } from '@solidjs/router';
-import { routes } from './routes';
+import App from "./app";
+import { Router } from "@solidjs/router";
+import { routes } from "./routes";
 
-const root = document.getElementById('root')!;
+const root = document.getElementById("root")!;
 
 const app = () => (
   <Router root={(props) => <App>{props.children}</App>}>{routes}</Router>
