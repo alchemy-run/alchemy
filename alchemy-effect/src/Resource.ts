@@ -3,6 +3,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { pipeArguments, type Pipeable } from "effect/Pipeable";
 import { SingleShotGen } from "effect/Utils";
+import type { Artifacts } from "./Artifacts.ts";
 import { toFqn } from "./FQN.ts";
 import type { Input } from "./Input.ts";
 import type { InstanceId } from "./InstanceId.ts";
@@ -319,7 +320,7 @@ export interface ResourceProviders<Resource extends ResourceLike> {
       | CreateReq
       | UpdateReq
       | DeleteReq,
-      InstanceId
+      InstanceId | Artifacts
     >
   >;
   succeed: <
@@ -348,7 +349,7 @@ export interface ResourceProviders<Resource extends ResourceLike> {
     never,
     Exclude<
       ReadReq | DiffReq | PrecreateReq | CreateReq | UpdateReq | DeleteReq,
-      InstanceId
+      InstanceId | Artifacts
     >
   >;
 

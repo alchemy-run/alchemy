@@ -7,7 +7,6 @@ import type { Scope } from "effect/Scope";
 import * as ServiceMap from "effect/ServiceMap";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
-import type { Artifacts } from "./Artifacts.ts";
 import { DotAlchemy } from "./Config.ts";
 import type { ResourceBinding, ResourceLike } from "./Resource.ts";
 import { Stage } from "./Stage.ts";
@@ -20,8 +19,7 @@ export type StackServices =
   | Path
   | DotAlchemy
   | HttpClient
-  | ChildProcessSpawner
-  | Artifacts;
+  | ChildProcessSpawner;
 
 export class Stack extends ServiceMap.Service<
   Stack,
@@ -41,7 +39,10 @@ export interface StackSpec<Output = any> {
   output: Output;
 }
 
-export interface CompiledStack<Output, Services> extends StackSpec<Output> {
+export interface CompiledStack<
+  Output = any,
+  Services = any,
+> extends StackSpec<Output> {
   services: ServiceMap.ServiceMap<Services>;
 }
 
