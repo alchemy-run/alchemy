@@ -1,5 +1,4 @@
 import type * as cf from "@cloudflare/workers-types";
-import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as ServiceMap from "effect/ServiceMap";
@@ -10,7 +9,6 @@ import type { HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import type { PlatformServices } from "../../Platform.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
-import { Account } from "../Account.ts";
 import { makeRpcStub } from "./Rpc.ts";
 import { fromWebSocket, type DurableWebSocket } from "./WebSocket.ts";
 import { Worker, WorkerEnvironment, type WorkerServices } from "./Worker.ts";
@@ -240,37 +238,9 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
               }),
             );
 
-            const namespaceId = worker.workerName.pipe(
-              // TODO(sam): move out to a plantime function
-              Output.mapEffect((scriptName) =>
-                Account.asEffect().pipe(
-                  Effect.flatMap((accountId) =>
-                    workers.getScriptScriptAndVersionSetting({
-                      accountId: accountId.toString(),
-                      scriptName,
-                    }),
-                  ),
-                  Effect.flatMap((setting) => {
-                    const namespaceId = setting.bindings?.find(
-                      (
-                        binding,
-                      ): binding is typeof binding & {
-                        type: "dispatch_namespace";
-                        namespaceId: string;
-                      } =>
-                        binding.type === "durable_object_namespace" &&
-                        binding.className === namespace,
-                    )?.namespaceId;
-                    return namespaceId
-                      ? Effect.succeed(namespaceId)
-                      : Effect.die(
-                          new Error(
-                            `DurableObjectNamespace '${namespace}' not found`,
-                          ),
-                        );
-                  }),
-                  Effect.orDie,
-                ),
+            const namespaceId = worker.durableObjectNamespaces.pipe(
+              Output.map((durableObjectNamespaces) =>
+                durableObjectNamespaces?.[namespace],
               ),
             );
 

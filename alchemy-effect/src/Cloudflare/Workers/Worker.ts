@@ -3,6 +3,7 @@ import cloudflareRolldown from "@distilled.cloud/cloudflare-rolldown-plugin";
 import cloudflareVite from "@distilled.cloud/cloudflare-vite-plugin";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import type * as Cause from "effect/Cause";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -133,6 +134,11 @@ export type WorkerBinding = Exclude<
   undefined
 >[number];
 
+type WorkerSettingsBinding = Exclude<
+  workers.GetScriptScriptAndVersionSettingResponse["bindings"],
+  null | undefined
+>[number];
+
 export const ExportedHandlerMethods = [
   "fetch",
   "tail",
@@ -221,6 +227,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
     logpush: boolean | undefined;
     url: string | undefined;
     tags: string[] | undefined;
+    durableObjectNamespaces: Record<string, string>;
     accountId: string;
     hash?: {
       assets: string | undefined;
@@ -467,6 +474,13 @@ export const BindWorkerPolicyLive = BindWorkerPolicy.layer.succeed(
   }),
 );
 
+class MissingDurableObjectNamespaces extends Data.TaggedError(
+  "MissingDurableObjectNamespaces",
+)<{
+  scriptName: string;
+  expected: string[];
+}> {}
+
 function bumpMigrationTagVersion(
   oldTag: string | undefined,
 ): string | undefined {
@@ -536,6 +550,70 @@ export const WorkerProvider = () =>
         return createAlchemyWorkerTags(id).every((tag) => actualTags.has(tag));
       };
 
+      const getDurableObjectNamespaces = (
+        bindings: readonly WorkerSettingsBinding[] | null | undefined,
+      ) => {
+        const namespaces = Object.fromEntries(
+          (bindings ?? []).flatMap((binding) =>
+            binding.type === "durable_object_namespace" &&
+            binding.className &&
+            binding.namespaceId
+              ? [[binding.className, binding.namespaceId]]
+              : [],
+          ),
+        );
+        return namespaces;
+      };
+
+      const getExpectedDurableObjectClassNames = (
+        bindings: readonly WorkerBinding[],
+      ) =>
+        Array.from(
+          new Set(
+            bindings.flatMap((binding) =>
+              binding.type === "durable_object_namespace" && binding.className
+                ? [binding.className]
+                : [],
+            ),
+          ),
+        );
+
+      const getWorkerSettingsWithDurableObjects = Effect.fnUntraced(function* (
+        scriptName: string,
+        expectedClassNames: readonly string[],
+      ) {
+        return yield* getScriptSettings({
+          accountId,
+          scriptName,
+        }).pipe(
+          Effect.map((settings) => {
+            const namespaces = getDurableObjectNamespaces(settings.bindings);
+            const missing = expectedClassNames.filter(
+              (className) => !namespaces[className],
+            );
+            if (missing.length > 0) {
+              return Effect.fail(
+                new MissingDurableObjectNamespaces({
+                  scriptName,
+                  expected: missing,
+                }),
+              );
+            }
+            return Effect.succeed({
+              settings,
+              durableObjectNamespaces: namespaces,
+            });
+          }),
+          Effect.flatten,
+          Effect.retry({
+            while: (error) => error._tag === "MissingDurableObjectNamespaces",
+            schedule: Schedule.exponential(100).pipe(
+              Schedule.both(Schedule.recurs(20)),
+            ),
+          }),
+        );
+      });
+
       const prepareAssets = Effect.fnUntraced(function* (
         assets: WorkerProps["assets"],
       ) {
@@ -567,8 +645,13 @@ export const WorkerProvider = () =>
       const prepareBundle = Effect.fnUntraced(function* (props: WorkerProps) {
         const main = yield* fs.realPath(props.main);
         const cwd = yield* findCwdForBundle(main);
-        const buildBundle = (plugins?: rolldown.RolldownPluginOption) =>
-          Bundle.build(
+        const buildBundle = (plugins?: rolldown.RolldownPluginOption) => {
+          console.log({
+            compatibilityDate:
+              props.compatibility?.date ?? defaultCompatibilityDate,
+            compatibilityFlags: props.compatibility?.flags,
+          });
+          return Bundle.build(
             {
               input: main,
               cwd,
@@ -592,6 +675,7 @@ export const WorkerProvider = () =>
               keepNames: true,
             },
           );
+        };
 
         if (props.isExternal) {
           const bundle = yield* buildBundle();
@@ -846,6 +930,8 @@ ${[
         );
         const { assets, bundle, hash } = yield* prepareAssetsAndBundle(news);
         const metadataBindings = bindings.flatMap((b) => b.data.bindings);
+        const expectedDurableObjectClassNames =
+          getExpectedDurableObjectClassNames(metadataBindings);
         let metadataAssets:
           | workers.PutScriptRequest["metadata"]["assets"]
           | undefined;
@@ -1113,6 +1199,11 @@ ${[
             return Effect.fail(err as any);
           }),
         );
+        const { settings, durableObjectNamespaces } =
+          yield* getWorkerSettingsWithDurableObjects(
+            name,
+            expectedDurableObjectClassNames,
+          );
         if (!olds || news.url !== olds.url) {
           const enable = news.url !== false;
           yield* session.note(
@@ -1128,7 +1219,8 @@ ${[
             news.url !== false
               ? `https://${name}.${yield* getAccountSubdomain(accountId)}.workers.dev`
               : undefined,
-          tags: metadata.tags,
+          tags: settings.tags ?? metadata.tags,
+          durableObjectNamespaces,
           accountId,
           hash,
         } satisfies Worker["Attributes"];
@@ -1182,6 +1274,71 @@ ${[
             };
           }
         }),
+        precreate: Effect.fnUntraced(function* ({ id, news, session }) {
+          const name = yield* createWorkerName(id, news.name);
+          const tags = Array.from(
+            new Set([...createAlchemyWorkerTags(id), ...(news.tags ?? [])]),
+          );
+          yield* Effect.logInfo(`Cloudflare Worker precreate: starting ${name}`);
+          const existingSettings = yield* getScriptSettings({
+            accountId,
+            scriptName: name,
+          }).pipe(
+            Effect.catchTag("WorkerNotFound", () => Effect.succeed(undefined)),
+          );
+
+          if (existingSettings) {
+            if (!hasAlchemyWorkerTags(id, existingSettings.tags ?? [])) {
+              return yield* Effect.die(
+                `Worker "${name}" already exists but is not owned by this stack/stage/resource`,
+              );
+            }
+            yield* Effect.logInfo(
+              `Cloudflare Worker precreate: adopting existing ${name} owned by this stack/stage/resource`,
+            );
+          } else {
+            yield* session.note("Pre-creating worker...");
+            yield* putScript({
+              accountId,
+              scriptName: name,
+              metadata: {
+                mainModule: "main.js",
+                compatibilityDate:
+                  news.compatibility?.date ?? defaultCompatibilityDate,
+                compatibilityFlags: news.compatibility?.flags,
+                observability: news.observability ?? {
+                  enabled: true,
+                  logs: {
+                    enabled: true,
+                    invocationLogs: true,
+                  },
+                },
+                tags,
+              },
+              files: [
+                new File(
+                  [
+                    `export default { fetch() { return new Response("Alchemy worker is being deployed...") } };`,
+                  ],
+                  "main.js",
+                  { type: "application/javascript+module" },
+                ),
+              ],
+            });
+          }
+
+          return {
+            workerId: name,
+            workerName: name,
+            logpush: existingSettings?.logpush ?? undefined,
+            url: undefined,
+            tags: existingSettings?.tags ?? tags,
+            durableObjectNamespaces: getDurableObjectNamespaces(
+              existingSettings?.bindings,
+            ),
+            accountId,
+          } satisfies Worker["Attributes"];
+        }),
         read: Effect.fnUntraced(
           function* ({ id, output, olds }) {
             const workerName =
@@ -1224,6 +1381,9 @@ ${[
                 ? `https://${workerName}.${yield* getAccountSubdomain(accountId)}.workers.dev`
                 : undefined,
               tags: settings.tags ?? undefined,
+              durableObjectNamespaces: getDurableObjectNamespaces(
+                settings.bindings,
+              ),
             } satisfies Worker["Attributes"];
           },
           (effect) =>
@@ -1233,7 +1393,13 @@ ${[
               ),
             ),
         ),
-        create: Effect.fnUntraced(function* ({ id, news, bindings, session }) {
+        create: Effect.fnUntraced(function* ({
+          id,
+          news,
+          bindings,
+          output,
+          session,
+        }) {
           const name = yield* createWorkerName(id, news.name);
           yield* Effect.logInfo(`Cloudflare Worker create: starting ${name}`);
           const existingSettings = yield* getScriptSettings({
@@ -1260,7 +1426,7 @@ ${[
             news,
             bindings,
             undefined,
-            undefined,
+            output,
             session,
             existingSettings,
           );
