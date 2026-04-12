@@ -412,6 +412,32 @@ export const bindContainer = Effect.fnUntraced(function* <Shape, Req = never>(
   });
 });
 
+export const resolveDurableObjectApplicationRecovery = ({
+  namespaceId,
+  expectedName,
+  existingName,
+}: {
+  namespaceId: string;
+  expectedName: string;
+  existingName: string | undefined;
+}) => {
+  if (!existingName) {
+    return {
+      canAdopt: false as const,
+      message: `Container application for Durable Object namespace "${namespaceId}" already exists but could not be found for adoption.`,
+    };
+  }
+  if (existingName !== expectedName) {
+    return {
+      canAdopt: false as const,
+      message: `Existing container application "${existingName}" is already attached to Durable Object namespace "${namespaceId}". Use that application name to adopt it.`,
+    };
+  }
+  return {
+    canAdopt: true as const,
+  };
+};
+
 /**
  * Runs the Container in a Durable Object and monitors it, providing a durable fetch and RPC interface to it.
  */
@@ -993,22 +1019,25 @@ await Effect.runPromise(serverEffect).catch((err) => {
           durableObjects,
         }).pipe(
           Effect.catchTag("DurableObjectAlreadyHasApplication", () =>
-            adoptPolicy && durableObjects
+            durableObjects
               ? Effect.gen(function* () {
                   const existing = yield* findApplicationByNamespace(
                     durableObjects.namespaceId,
                   );
+                  const recovery = resolveDurableObjectApplicationRecovery({
+                    namespaceId: durableObjects.namespaceId,
+                    expectedName: name,
+                    existingName: existing?.name,
+                  });
+                  if (!recovery.canAdopt) {
+                    return yield* Effect.fail(
+                      new Error(recovery.message),
+                    );
+                  }
                   if (!existing) {
                     return yield* Effect.fail(
                       new Error(
                         `Container application for Durable Object namespace "${durableObjects.namespaceId}" already exists but could not be found for adoption.`,
-                      ),
-                    );
-                  }
-                  if (existing.name !== name) {
-                    return yield* Effect.fail(
-                      new Error(
-                        `Existing container application "${existing.name}" is already attached to Durable Object namespace "${durableObjects.namespaceId}". Use that application name to adopt it.`,
                       ),
                     );
                   }
@@ -1021,7 +1050,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
                 })
               : Effect.fail(
                   new Error(
-                    `Durable Object namespace "${durableObjects?.namespaceId ?? "unknown"}" already has a container application. Set AdoptPolicy to adopt it.`,
+                    "Durable Object namespace already has a container application. Set AdoptPolicy to adopt it.",
                   ),
                 ),
           ),
@@ -1214,6 +1243,31 @@ await Effect.runPromise(serverEffect).catch((err) => {
             !adoptPolicy &&
             !deepEqual(output.durableObjects, durableObjects)
           ) {
+            if (durableObjects) {
+              const existing = yield* findApplicationByNamespace(
+                durableObjects.namespaceId,
+              );
+              const recovery = resolveDurableObjectApplicationRecovery({
+                namespaceId: durableObjects.namespaceId,
+                expectedName: name,
+                existingName: existing?.name,
+              });
+              if (recovery.canAdopt) {
+                if (!existing) {
+                  return yield* Effect.fail(
+                    new Error(
+                      `Container application for Durable Object namespace "${durableObjects.namespaceId}" already exists but could not be found for adoption.`,
+                    ),
+                  );
+                }
+                return yield* upsertApplication({
+                  id,
+                  news,
+                  existing: toAttributes(existing),
+                  session,
+                });
+              }
+            }
             yield* Effect.logInfo(
               `Cloudflare Container create: recreating pre-created application ${name} with durable object binding`,
             );
@@ -1298,6 +1352,24 @@ await Effect.runPromise(serverEffect).catch((err) => {
           );
         }),
         read: Effect.fnUntraced(function* ({ id, olds, output }) {
+          const readByName = (name: string) =>
+            Effect.gen(function* () {
+              yield* Effect.logInfo(
+                `Cloudflare Container read: looking up ${name}`,
+              );
+              const existing = yield* findApplicationByName(name);
+              if (!existing) {
+                yield* Effect.logInfo(
+                  `Cloudflare Container read: ${name} not found`,
+                );
+                return undefined;
+              }
+              return {
+                ...toAttributes(existing),
+                hash: output?.hash,
+              };
+            });
+
           if (output?.applicationId) {
             yield* Effect.logInfo(
               `Cloudflare Container read: checking ${output.applicationName}`,
@@ -1311,24 +1383,13 @@ await Effect.runPromise(serverEffect).catch((err) => {
                 hash: output.hash,
               })),
               Effect.catchTag("ContainerApplicationNotFound", () =>
-                Effect.succeed(undefined),
+                readByName(output.applicationName),
               ),
             );
           }
 
           const name = yield* createApplicationName(id, olds?.name);
-          yield* Effect.logInfo(
-            `Cloudflare Container read: looking up ${name}`,
-          );
-          const existing = yield* findApplicationByName(name);
-          if (!existing) {
-            yield* Effect.logInfo(
-              `Cloudflare Container read: ${name} not found`,
-            );
-          }
-          return existing
-            ? { ...toAttributes(existing), hash: output?.hash }
-            : undefined;
+          return yield* readByName(name);
         }),
         tail: ({ output }) =>
           telemetry.tailStream({
