@@ -16,6 +16,7 @@ import * as ServiceMap from "effect/ServiceMap";
 import * as Stream from "effect/Stream";
 import * as Socket from "effect/unstable/socket/Socket";
 import type * as rolldown from "rolldown";
+import Sonda from "sonda/rolldown";
 import type * as vite from "vite";
 import * as Artifacts from "../../Artifacts.ts";
 import * as Binding from "../../Binding.ts";
@@ -216,6 +217,13 @@ export interface WorkerProps<
   env?: Record<string, any>;
   exports?: string[];
   bindings?: Bindings;
+  build?: {
+    /**
+     * Whether to generate a metafile for the worker bundle.
+     * @default false
+     */
+    metafile?: boolean;
+  };
 }
 
 export type Worker<Bindings extends WorkerBindings = any> = Resource<
@@ -642,62 +650,59 @@ export const WorkerProvider = () =>
         );
       });
 
-      const prepareBundle = Effect.fnUntraced(function* (props: WorkerProps) {
-        const main = yield* fs.realPath(props.main);
-        const cwd = yield* findCwdForBundle(main);
-        const buildBundle = (plugins?: rolldown.RolldownPluginOption) => {
-          console.log({
-            compatibilityDate:
-              props.compatibility?.date ?? defaultCompatibilityDate,
-            compatibilityFlags: props.compatibility?.flags,
-          });
-          return Bundle.build(
-            {
-              input: main,
-              cwd,
-              plugins: [
-                cloudflareRolldown({
-                  compatibilityDate:
-                    props.compatibility?.date ?? defaultCompatibilityDate,
-                  compatibilityFlags: props.compatibility?.flags,
-                }),
-                plugins,
-              ],
-              checks: {
-                // Suppress unresolved import warnings for unrelated AWS packages
-                unresolvedImport: false,
+      const prepareBundle = (id: string, props: WorkerProps) =>
+        Effect.gen(function* () {
+          const main = yield* fs.realPath(props.main);
+          const cwd = yield* findCwdForBundle(main);
+          const buildBundle = (plugins?: rolldown.RolldownPluginOption) =>
+            Bundle.build(
+              {
+                input: main,
+                cwd,
+                plugins: [
+                  cloudflareRolldown({
+                    compatibilityDate:
+                      props.compatibility?.date ?? defaultCompatibilityDate,
+                    compatibilityFlags: props.compatibility?.flags,
+                  }),
+                  plugins,
+                  ...(props.build?.metafile ? [Sonda({ open: false })] : []),
+                ],
+                checks: {
+                  // Suppress unresolved import warnings for unrelated AWS packages
+                  unresolvedImport: false,
+                },
               },
-            },
-            {
-              format: "esm",
-              sourcemap: "hidden",
-              minify: true,
-              keepNames: true,
-            },
-          );
-        };
+              {
+                format: "esm",
+                sourcemap: "hidden",
+                minify: true,
+                keepNames: true,
+                dir: `.alchemy/bundles/${id}`,
+              },
+            );
 
-        if (props.isExternal) {
-          const bundle = yield* buildBundle();
-          return bundle;
-        }
-
-        const exportMap = (props.exports ?? {}) as Record<string, unknown>;
-        const allExportNames = Object.keys(exportMap).filter(
-          (id) => id !== "default",
-        );
-        const doClasses: string[] = [];
-        const wfClasses: string[] = [];
-        for (const name of allExportNames) {
-          if (isWorkflowExport(exportMap[name])) {
-            wfClasses.push(name);
-          } else if (isDurableObjectExport(exportMap[name])) {
-            doClasses.push(name);
+          if (props.isExternal) {
+            const bundle = yield* buildBundle();
+            return bundle;
           }
-        }
-        const hasDoClasses = doClasses.length > 0;
-        const hasWfClasses = wfClasses.length > 0;
-        const script = (importPath: string) => `
+
+          const exportMap = (props.exports ?? {}) as Record<string, unknown>;
+          const allExportNames = Object.keys(exportMap).filter(
+            (id) => id !== "default",
+          );
+          const doClasses: string[] = [];
+          const wfClasses: string[] = [];
+          for (const name of allExportNames) {
+            if (isWorkflowExport(exportMap[name])) {
+              wfClasses.push(name);
+            } else if (isDurableObjectExport(exportMap[name])) {
+              doClasses.push(name);
+            }
+          }
+          const hasDoClasses = doClasses.length > 0;
+          const hasWfClasses = wfClasses.length > 0;
+          const script = (importPath: string) => `
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Console from "effect/Console";
@@ -810,8 +815,8 @@ ${[
 ].join("\n")}
 `;
 
-        return yield* buildBundle(virtualEntryPlugin(script));
-      });
+          return yield* buildBundle(virtualEntryPlugin(script));
+        }).pipe(Artifacts.cached("build"));
 
       const viteBuild = Effect.fnUntraced(function* (props: WorkerProps) {
         const vite = yield* Effect.promise(() => import("vite"));
@@ -895,7 +900,7 @@ ${[
         return { assets, bundle };
       });
 
-      const prepareAssetsAndBundle = (props: WorkerProps) =>
+      const prepareAssetsAndBundle = (id: string, props: WorkerProps) =>
         Effect.gen(function* () {
           if (props.vite) {
             const [{ assets, bundle }, input] = yield* Effect.all(
@@ -905,7 +910,7 @@ ${[
             return { assets, bundle, input };
           }
           const [assets, bundle] = yield* Effect.all(
-            [prepareAssets(props.assets), prepareBundle(props)],
+            [prepareAssets(props.assets), prepareBundle(id, props)],
             { concurrency: "unbounded" },
           );
           return { assets, bundle };
@@ -927,7 +932,6 @@ ${[
               input,
             } satisfies Worker["Attributes"]["hash"],
           })),
-          Artifacts.cached("build"),
         );
 
       const putWorker = Effect.fnUntraced(function* (
@@ -943,7 +947,10 @@ ${[
         yield* Effect.logInfo(
           `Cloudflare Worker ${olds ? "update" : "create"}: preparing bundle for ${name}`,
         );
-        const { assets, bundle, hash } = yield* prepareAssetsAndBundle(news);
+        const { assets, bundle, hash } = yield* prepareAssetsAndBundle(
+          id,
+          news,
+        );
         const metadataBindings = bindings.flatMap((b) => b.data.bindings);
         const expectedDurableObjectClassNames =
           getExpectedDurableObjectClassNames(metadataBindings);
@@ -1242,6 +1249,7 @@ ${[
       });
 
       const hasChanged = Effect.fnUntraced(function* (
+        id: string,
         props: WorkerProps,
         output: Worker["Attributes"],
       ) {
@@ -1254,7 +1262,7 @@ ${[
             "assets" in output && output.hash?.assets
               ? Effect.succeed(output.hash.assets)
               : prepareAssets(props.assets).pipe(Effect.map((a) => a?.hash)),
-            prepareBundle(props).pipe(Effect.map((b) => b.hash)),
+            prepareBundle(id, props).pipe(Effect.map((b) => b.hash)),
           ],
           { concurrency: "unbounded" },
         );
@@ -1281,7 +1289,7 @@ ${[
           if (!output) {
             return;
           }
-          if (yield* hasChanged(news, output)) {
+          if (yield* hasChanged(id, news, output)) {
             return {
               action: "update",
               stables:
@@ -1291,15 +1299,33 @@ ${[
         }),
         precreate: Effect.fnUntraced(function* ({ id, news, session }) {
           const name = yield* createWorkerName(id, news.name);
-          const tags = Array.from(
-            new Set([...createAlchemyWorkerTags(id), ...(news.tags ?? [])]),
+          const exportMap = (news.exports ?? {}) as Record<string, unknown>;
+          const doClasses = Object.keys(exportMap).filter((name) =>
+            isDurableObjectExport(exportMap[name]),
           );
-          yield* Effect.logInfo(`Cloudflare Worker precreate: starting ${name}`);
+          const containers = doClasses.map((className) => ({ className }));
+          const alchemyDoTags = doClasses.map(
+            (className) =>
+              `alchemy:do:Cloudflare.DurableObjectNamespace(${className}):${className}`,
+          );
+          const tags = Array.from(
+            new Set([
+              ...createAlchemyWorkerTags(id),
+              ...alchemyDoTags,
+              ...(news.tags ?? []),
+            ]),
+          );
+          yield* Effect.logInfo(
+            `Cloudflare Worker precreate: starting ${name}`,
+          );
           const existingSettings = yield* getScriptSettings({
             accountId,
             scriptName: name,
           }).pipe(
             Effect.catchTag("WorkerNotFound", () => Effect.succeed(undefined)),
+          );
+          let durableObjectNamespaces = getDurableObjectNamespaces(
+            existingSettings?.bindings,
           );
 
           if (existingSettings) {
@@ -1313,14 +1339,42 @@ ${[
             );
           } else {
             yield* session.note("Pre-creating worker...");
+            const mainModule = "main.js";
+            const placeholderScript = `${doClasses.length > 0 ? 'import { DurableObject } from "cloudflare:workers";\n\n' : ""}export default { fetch() { return new Response("Alchemy worker is being deployed...") } };\n${doClasses
+              .map(
+                (className) =>
+                  `export class ${className} extends DurableObject {}`,
+              )
+              .join("\n")}`;
             yield* putScript({
               accountId,
               scriptName: name,
               metadata: {
-                mainModule: "main.js",
+                mainModule,
+                bindings:
+                  doClasses.length > 0
+                    ? doClasses.map((className) => ({
+                        type: "durable_object_namespace" as const,
+                        name: className,
+                        className,
+                      }))
+                    : undefined,
                 compatibilityDate:
                   news.compatibility?.date ?? defaultCompatibilityDate,
                 compatibilityFlags: news.compatibility?.flags,
+                containers,
+                migrations:
+                  doClasses.length > 0
+                    ? {
+                        oldTag: undefined,
+                        newTag: undefined,
+                        newClasses: [],
+                        deletedClasses: [],
+                        renamedClasses: [],
+                        transferredClasses: [],
+                        newSqliteClasses: doClasses,
+                      }
+                    : undefined,
                 observability: news.observability ?? {
                   enabled: true,
                   logs: {
@@ -1331,15 +1385,20 @@ ${[
                 tags,
               },
               files: [
-                new File(
-                  [
-                    `export default { fetch() { return new Response("Alchemy worker is being deployed...") } };`,
-                  ],
-                  "main.js",
-                  { type: "application/javascript+module" },
-                ),
+                new File([placeholderScript], mainModule, {
+                  type: "application/javascript+module",
+                }),
               ],
             });
+            if (doClasses.length > 0) {
+              ({ durableObjectNamespaces } =
+                yield* getWorkerSettingsWithDurableObjects(name, doClasses));
+            }
+          }
+
+          if (existingSettings && doClasses.length > 0) {
+            ({ durableObjectNamespaces } =
+              yield* getWorkerSettingsWithDurableObjects(name, doClasses));
           }
 
           return {
@@ -1348,9 +1407,7 @@ ${[
             logpush: existingSettings?.logpush ?? undefined,
             url: undefined,
             tags: existingSettings?.tags ?? tags,
-            durableObjectNamespaces: getDurableObjectNamespaces(
-              existingSettings?.bindings,
-            ),
+            durableObjectNamespaces,
             accountId,
           } satisfies Worker["Attributes"];
         }),

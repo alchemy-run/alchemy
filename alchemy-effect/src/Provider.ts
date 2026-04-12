@@ -114,6 +114,7 @@ export interface ProviderService<
     news: Props<Res>;
     instanceId: string;
     session: ScopedPlanStatusSession;
+    bindings: BindingData<Res>;
   }): Effect.Effect<Res["Attributes"], any, PrecreateReq>;
   create(input: {
     id: string;

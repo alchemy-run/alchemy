@@ -239,8 +239,9 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
             );
 
             const namespaceId = worker.durableObjectNamespaces.pipe(
-              Output.map((durableObjectNamespaces) =>
-                durableObjectNamespaces?.[namespace],
+              Output.map(
+                (durableObjectNamespaces) =>
+                  durableObjectNamespaces?.[namespace],
               ),
             );
 

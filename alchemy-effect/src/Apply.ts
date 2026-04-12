@@ -411,6 +411,7 @@ const executeNode = (
               news: node.props,
               session: scopedSession,
               instanceId,
+              bindings: excludeDeletedBindings(node.bindings),
             })
             .pipe(provideLifecycleScope(fqn, instanceId));
           yield* commit<CreatingResourceState>({
@@ -656,6 +657,7 @@ const executeNode = (
               news: node.props,
               session: scopedSession,
               instanceId,
+              bindings: excludeDeletedBindings(node.bindings),
             })
             .pipe(provideLifecycleScope(fqn, instanceId));
           yield* commit<ReplacingResourceState>({
