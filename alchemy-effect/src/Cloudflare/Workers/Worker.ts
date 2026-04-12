@@ -214,7 +214,7 @@ export interface WorkerProps<
   };
   limits?: WorkerLimits;
   placement?: WorkerPlacement;
-  env?: Record<string, any>;
+  env?: Record<string, string | Redacted.Redacted<string>>;
   exports?: string[];
   bindings?: Bindings;
   build?: {
