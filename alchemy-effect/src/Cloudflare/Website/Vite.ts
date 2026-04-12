@@ -1,3 +1,4 @@
+import type { InputProps } from "../../Input.ts";
 import type { MemoOptions } from "../../Build/Memo.ts";
 import { Worker, type WorkerProps } from "../Workers/Worker.ts";
 
@@ -54,7 +55,7 @@ export interface ViteProps extends Omit<WorkerProps, "vite" | "main"> {
  * });
  * ```
  */
-export const Vite = (id: string, props: ViteProps = {}) =>
+export const Vite = (id: string, props: InputProps<ViteProps> = {}) =>
   Worker(id, {
     ...props,
     main: undefined!,
