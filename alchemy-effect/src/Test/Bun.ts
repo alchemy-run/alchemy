@@ -17,6 +17,7 @@ import { type CompiledStack, type StackServices } from "../Stack.ts";
 import { Stage } from "../Stage.ts";
 import * as State from "../State/index.ts";
 import { loadConfigProvider } from "../Util/ConfigProvider.ts";
+import { TestCli } from "./TestCli.ts";
 
 export type ProvidedServices = StackServices;
 
@@ -97,7 +98,12 @@ export function beforeAll<A>(
   options?: HookOptions,
 ) {
   let a: A;
-  bun.beforeAll(() => run(eff).then((v) => (a = v)), options);
+  bun.beforeAll(
+    () => run(eff).then((v) => (a = v)),
+    options ?? {
+      timeout: 120_000,
+    },
+  );
   return Effect.sync(() => a);
 }
 
@@ -118,7 +124,12 @@ export namespace afterAll {
     (test: Effect.Effect<void, any>, options?: HookOptions) => {
       if (predicate) {
       } else {
-        bun.afterAll(() => run(test), options);
+        bun.afterAll(
+          () => run(test),
+          options ?? {
+            timeout: 120_000,
+          },
+        );
       }
     };
 }
@@ -142,7 +153,8 @@ export const deploy = (
     (stack) =>
       Effect.gen(function* () {
         const plan = yield* Plan.make(stack);
-        yield* Apply.apply(plan);
+        const output = yield* Apply.apply(plan);
+        return output;
       }),
     options,
   );
@@ -189,6 +201,7 @@ const exec = (
     );
   }).pipe(
     Effect.provide(Layer.succeed(Stage, options?.stage ?? "test")),
+    Effect.provide(TestCli),
     Effect.provide(Layer.provideMerge(alchemy, platform)),
     Effect.scoped,
   );
