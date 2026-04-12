@@ -373,7 +373,6 @@ export const bindContainer = Effect.fnUntraced(function* <Shape, Req = never>(
   const worker = yield* Worker;
   const className = namespace.name;
   yield* worker.bind`Cloudflare.Container(${className})`({
-    bindings: [],
     containers: [{ className }],
   });
 

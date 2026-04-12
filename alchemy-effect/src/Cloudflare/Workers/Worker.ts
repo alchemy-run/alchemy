@@ -244,7 +244,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
     };
   },
   {
-    bindings: WorkerBinding[];
+    bindings?: WorkerBinding[];
     containers?: { className: string }[];
   }
 >;
@@ -438,7 +438,7 @@ export const bindWorker = Effect.fnUntraced(function* <Shape, Req = never>(
 ) {
   const worker = Effect.isEffect(workerEff) ? yield* workerEff : workerEff;
   const self = yield* Worker;
-  yield* self.bind`Bind(${worker})`({
+  yield* self.bind`${worker}`({
     bindings: [
       {
         type: "service",
@@ -574,15 +574,15 @@ export const WorkerProvider = () =>
       };
 
       const getExpectedDurableObjectClassNames = (
-        bindings: readonly WorkerBinding[],
+        bindings: readonly WorkerBinding[] | undefined,
       ) =>
         Array.from(
           new Set(
-            bindings.flatMap((binding) =>
+            bindings?.flatMap((binding) =>
               binding.type === "durable_object_namespace" && binding.className
                 ? [binding.className]
                 : [],
-            ),
+            ) ?? [],
           ),
         );
 
@@ -951,7 +951,7 @@ ${[
           id,
           news,
         );
-        const metadataBindings = bindings.flatMap((b) => b.data.bindings);
+        const metadataBindings = bindings.flatMap((b) => b.data.bindings ?? []);
         const expectedDurableObjectClassNames =
           getExpectedDurableObjectClassNames(metadataBindings);
         let metadataAssets:
@@ -1108,7 +1108,7 @@ ${[
         const newSqliteClasses: string[] = [];
         const renamedClasses: { from: string; to: string }[] = [];
         for (const rb of bindings) {
-          for (const b of rb.data.bindings) {
+          for (const b of rb.data.bindings ?? []) {
             if (
               b.type === "durable_object_namespace" &&
               "className" in b &&
@@ -1142,7 +1142,7 @@ ${[
         // Build alchemy:do:{sid}:{bindingName} tags for each DO binding
         const alchemyDoTags: string[] = [];
         for (const rb of bindings) {
-          for (const b of rb.data.bindings) {
+          for (const b of rb.data.bindings ?? []) {
             if (b.type === "durable_object_namespace" && "className" in b) {
               alchemyDoTags.push(`alchemy:do:${rb.sid}:${b.name}`);
             }
