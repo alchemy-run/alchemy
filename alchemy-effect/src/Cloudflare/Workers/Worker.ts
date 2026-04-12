@@ -994,6 +994,18 @@ ${[
             text: stack.stage,
           },
         );
+        // Add environment variables as metadata bindings
+        if (news.env) {
+          for (const [key, value] of Object.entries(news.env)) {
+            if (value == null) continue;
+            const text = typeof value === "string" ? value : String(value);
+            metadataBindings.push({
+              type: "secret_text",
+              name: key,
+              text,
+            });
+          }
+        }
         yield* Effect.logInfo(
           `Cloudflare Worker ${olds ? "update" : "create"}: uploading script for ${name}`,
         );
