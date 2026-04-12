@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { ChildProcess } from "effect/unstable/process";
 import { isResolved } from "../Diff.ts";
@@ -36,7 +37,7 @@ export interface CommandProps {
   /**
    * Environment variables to pass to the build command.
    */
-  env?: Record<string, string>;
+  env?: Record<string, string | Redacted.Redacted<string>>;
 }
 
 export interface Command extends Resource<
@@ -108,7 +109,14 @@ export const CommandProvider = () =>
           yield* runBuildCommand({
             command: props.command,
             cwd,
-            env: props.env,
+            env: props.env
+              ? Object.fromEntries(
+                  Object.entries(props.env).map(([key, value]) => [
+                    key,
+                    typeof value === "string" ? value : Redacted.value(value),
+                  ]),
+                )
+              : undefined,
           });
         });
 
