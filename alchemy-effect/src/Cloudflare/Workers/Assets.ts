@@ -208,7 +208,6 @@ export const AssetsProvider = () =>
             _headers,
             _redirects,
           };
-          console.log("the manifest is", result.manifest);
           return {
             ...result,
             hash: yield* sha256Object(result),
