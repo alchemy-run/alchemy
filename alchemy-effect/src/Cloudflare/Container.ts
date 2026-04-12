@@ -529,6 +529,37 @@ export interface Rollout {
   stepPercentage?: number;
 }
 
+const containerApplicationReadinessSchedule = Schedule.exponential(100).pipe(
+  Schedule.both(Schedule.recurs(20)),
+);
+
+const isContainerApplicationNotFound = (
+  error: unknown,
+): error is Containers.ContainerApplicationNotFound =>
+  typeof error === "object" &&
+  error !== null &&
+  "_tag" in error &&
+  error._tag === "ContainerApplicationNotFound";
+
+export const retryForContainerApplicationReadiness = <A, E, R>(
+  operation: string,
+  applicationId: string,
+  effect: Effect.Effect<A, E, R>,
+) =>
+  effect.pipe(
+    Effect.tapError((error) =>
+      isContainerApplicationNotFound(error)
+        ? Effect.logDebug(
+            `Cloudflare Container ${operation}: application ${applicationId} not found yet, retrying`,
+          )
+        : Effect.void,
+    ),
+    Effect.retry({
+      while: isContainerApplicationNotFound,
+      schedule: containerApplicationReadinessSchedule,
+    }),
+  );
+
 export const ContainerProvider = () =>
   Container.provider.effect(
     Effect.gen(function* () {
@@ -857,18 +888,22 @@ await Effect.runPromise(serverEffect).catch((err) => {
         const stepPercentage =
           strategy === "immediate" ? 100 : (rollout?.stepPercentage ?? 25);
 
-        yield* createContainerApplicationRollout({
-          accountId,
+        yield* retryForContainerApplicationReadiness(
+          "rollout",
           applicationId,
-          description:
-            strategy === "immediate"
-              ? "Immediate update"
-              : "Progressive update",
-          strategy: "rolling",
-          kind: rollout?.kind ?? "full_auto",
-          stepPercentage,
-          targetConfiguration: configuration,
-        });
+          createContainerApplicationRollout({
+            accountId,
+            applicationId,
+            description:
+              strategy === "immediate"
+                ? "Immediate update"
+                : "Progressive update",
+            strategy: "rolling",
+            kind: rollout?.kind ?? "full_auto",
+            stepPercentage,
+            targetConfiguration: configuration,
+          }),
+        );
       });
 
       const createApplication = Effect.fnUntraced(function* ({
@@ -1032,16 +1067,20 @@ await Effect.runPromise(serverEffect).catch((err) => {
         yield* session.note(
           `Updating container application ${existing.applicationName}...`,
         );
-        const application = yield* updateContainerApplication({
-          accountId,
-          applicationId: existing.applicationId,
-          instances: news.instances ?? 1,
-          maxInstances: news.maxInstances ?? 1,
-          schedulingPolicy: news.schedulingPolicy ?? "default",
-          constraints: news.constraints ?? {},
-          affinities: news.affinities,
-          configuration,
-        });
+        const application = yield* retryForContainerApplicationReadiness(
+          "update",
+          existing.applicationId,
+          updateContainerApplication({
+            accountId,
+            applicationId: existing.applicationId,
+            instances: news.instances ?? 1,
+            maxInstances: news.maxInstances ?? 1,
+            schedulingPolicy: news.schedulingPolicy ?? "default",
+            constraints: news.constraints ?? {},
+            affinities: news.affinities,
+            configuration,
+          }),
+        );
         const updated = toAttributes(application);
         if (!deepEqual(existing.configuration, configuration)) {
           yield* Effect.logInfo(
