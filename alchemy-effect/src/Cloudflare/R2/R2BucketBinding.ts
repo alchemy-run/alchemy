@@ -63,18 +63,18 @@ export type R2UploadedPart = runtime.R2UploadedPart;
 export interface R2UploadPartOptions extends runtime.R2UploadPartOptions {}
 
 export interface R2BucketClient {
-  raw: runtime.R2Bucket;
-  head(key: string): Effect.Effect<R2Object | null, R2Error>;
+  raw: Effect.Effect<runtime.R2Bucket, never, WorkerEnvironment>;
+  head(key: string): Effect.Effect<R2Object | null, R2Error, WorkerEnvironment>;
   get(
     key: string,
     options: R2GetOptions & {
       onlyIf: runtime.R2Conditional | Headers;
     },
-  ): Effect.Effect<R2ObjectBody | R2Object | null, R2Error>;
+  ): Effect.Effect<R2ObjectBody | R2Object | null, R2Error, WorkerEnvironment>;
   get(
     key: string,
     options?: R2GetOptions,
-  ): Effect.Effect<R2ObjectBody | null, R2Error>;
+  ): Effect.Effect<R2ObjectBody | null, R2Error, WorkerEnvironment>;
   put(
     key: string,
     value:
@@ -88,7 +88,7 @@ export interface R2BucketClient {
     options?: R2PutOptions & {
       onlyIf: R2Conditional | Headers;
     },
-  ): Effect.Effect<R2Object | null, R2Error>;
+  ): Effect.Effect<R2Object | null, R2Error, WorkerEnvironment>;
   put(
     key: string,
     value:
@@ -100,17 +100,21 @@ export interface R2BucketClient {
       | Blob
       | Stream.Stream<Uint8Array>,
     options?: R2PutOptions,
-  ): Effect.Effect<R2Object, R2Error>;
-  delete(keys: string | string[]): Effect.Effect<void, R2Error>;
-  list(options?: R2ListOptions): Effect.Effect<R2Objects, R2Error>;
+  ): Effect.Effect<R2Object, R2Error, WorkerEnvironment>;
+  delete(
+    keys: string | string[],
+  ): Effect.Effect<void, R2Error, WorkerEnvironment>;
+  list(
+    options?: R2ListOptions,
+  ): Effect.Effect<R2Objects, R2Error, WorkerEnvironment>;
   createMultipartUpload(
     key: string,
     options?: R2MultipartOptions,
-  ): Effect.Effect<R2MultipartUpload, R2Error>;
+  ): Effect.Effect<R2MultipartUpload, R2Error, WorkerEnvironment>;
   resumeMultipartUpload(
     key: string,
     uploadId: string,
-  ): Effect.Effect<R2MultipartUpload, R2Error>;
+  ): Effect.Effect<R2MultipartUpload, R2Error, WorkerEnvironment>;
 }
 
 export class R2BucketBinding extends Binding.Service<
@@ -122,11 +126,15 @@ export const R2BucketBindingLive = Layer.effect(
   R2BucketBinding,
   Effect.gen(function* () {
     const bind = yield* BucketBindingPolicy;
-    const env = yield* WorkerEnvironment;
 
     return Effect.fn(function* (bucket: R2Bucket) {
       yield* bind(bucket);
-      const raw = (env as Record<string, runtime.R2Bucket>)[bucket.LogicalId];
+      const env = WorkerEnvironment.asEffect();
+      const raw = env.pipe(
+        Effect.map(
+          (env) => (env as Record<string, runtime.R2Bucket>)[bucket.LogicalId],
+        ),
+      );
       const tryPromise = <T>(fn: () => Promise<T>): Effect.Effect<T, R2Error> =>
         Effect.tryPromise({
           try: fn,
@@ -219,11 +227,13 @@ export const R2BucketBindingLive = Layer.effect(
       return {
         raw: raw,
         head: (key: string) =>
-          tryPromise(() => raw.head(key)).pipe(
+          raw.pipe(
+            Effect.flatMap((raw) => tryPromise(() => raw.head(key))),
             Effect.map((object) => (object ? wrapR2Object(object) : object)),
           ),
         get: (key: string, options?: R2GetOptions) =>
-          tryPromise(() => raw.get(key, options)).pipe(
+          raw.pipe(
+            Effect.flatMap((raw) => tryPromise(() => raw.get(key, options))),
             Effect.map(wrapR2ObjectOrBody),
           ) as any,
         put: (
@@ -238,24 +248,37 @@ export const R2BucketBindingLive = Layer.effect(
             | Stream.Stream<Uint8Array>,
           options?: R2PutOptions & { onlyIf: R2Conditional | Headers },
         ) =>
-          tryPromise(() =>
-            raw.put(
-              key,
-              Stream.isStream(value)
-                ? value.pipe(Stream.toReadableStream())
-                : (value as any),
-              options,
+          raw.pipe(
+            Effect.flatMap((raw) =>
+              tryPromise(() =>
+                raw.put(
+                  key,
+                  Stream.isStream(value)
+                    ? value.pipe(Stream.toReadableStream())
+                    : (value as any),
+                  options,
+                ),
+              ),
             ),
-          ).pipe(Effect.map(wrapR2ObjectOrBody)) as any,
-        delete: (keys: string | string[]) => tryPromise(() => raw.delete(keys)),
+            Effect.map(wrapR2ObjectOrBody),
+          ) as any,
+        delete: (keys: string | string[]) =>
+          raw.pipe(Effect.flatMap((raw) => tryPromise(() => raw.delete(keys)))),
         list: (options?: R2ListOptions) =>
-          tryPromise(() => raw.list(options)).pipe(Effect.map(wrapR2Objects)),
+          raw.pipe(
+            Effect.flatMap((raw) => tryPromise(() => raw.list(options))),
+            Effect.map(wrapR2Objects),
+          ),
         createMultipartUpload: (key: string, options?: R2MultipartOptions) =>
-          tryPromise(() => raw.createMultipartUpload(key, options)).pipe(
+          raw.pipe(
+            Effect.flatMap((raw) =>
+              tryPromise(() => raw.createMultipartUpload(key, options)),
+            ),
             Effect.map(wrapR2MultipartUpload),
           ),
         resumeMultipartUpload: (key: string, uploadId: string) =>
-          Effect.sync(() => raw.resumeMultipartUpload(key, uploadId)).pipe(
+          raw.pipe(
+            Effect.map((raw) => raw.resumeMultipartUpload(key, uploadId)),
             Effect.map(wrapR2MultipartUpload),
           ),
       } satisfies R2BucketClient as R2BucketClient;
