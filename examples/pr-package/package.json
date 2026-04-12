@@ -10,7 +10,9 @@
   "type": "module",
   "scripts": {
     "deploy": "bun ../../alchemy-effect/bin/alchemy-effect.ts deploy",
-    "destroy": "bun ../../alchemy-effect/bin/alchemy-effect.ts destroy"
+    "destroy": "bun ../../alchemy-effect/bin/alchemy-effect.ts destroy",
+    "logs": "bun ../../alchemy-effect/bin/alchemy-effect.ts logs",
+    "tail": "bun ../../alchemy-effect/bin/alchemy-effect.ts tail"
   },
   "dependencies": {
     "@effect/platform-bun": "catalog:",

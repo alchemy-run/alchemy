@@ -34,6 +34,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
     },
     compatibility: {
       flags: ["nodejs_compat"],
+      date: "2026-03-17",
     },
   },
   Effect.gen(function* () {
