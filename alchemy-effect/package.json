@@ -194,6 +194,7 @@
     "jszip": "^3.10.1",
     "rolldown": "catalog:",
     "solid-js": "catalog:",
+    "sonda": "catalog:",
     "web-tree-sitter": "catalog:",
     "workerd": "catalog:",
     "yaml": "catalog:"
