@@ -98,6 +98,7 @@ export const serveWebRequest = <Req = never>(
             );
           }
 
+          // @ts-expect-error
           const pair: [cf.WebSocket, cf.WebSocket] = new WebSocketPair();
           const client = pair[0];
           const server = pair[1];

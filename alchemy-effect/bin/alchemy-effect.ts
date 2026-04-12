@@ -4,7 +4,6 @@ import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
@@ -27,12 +26,14 @@ import {
 import * as AWSCredentials from "../src/AWS/Credentials.ts";
 import * as AWSRegion from "../src/AWS/Region.ts";
 import * as CLI from "../src/Cli/index.ts";
-import { DotAlchemy, dotAlchemy } from "../src/Config.ts";
+import { dotAlchemy } from "../src/Config.ts";
 import * as Plan from "../src/Plan.ts";
 import { getProviderByType, type LogLine } from "../src/Provider.ts";
 import * as Stack from "../src/Stack.ts";
 import { Stage } from "../src/Stage.ts";
 import * as State from "../src/State/index.ts";
+import { loadConfigProvider } from "../src/Util/ConfigProvider.ts";
+import { fileLogger } from "../src/Util/FileLogger.ts";
 
 const USER = Config.string("USER").pipe(
   Config.orElse(() => Config.string("USERNAME")),
@@ -99,44 +100,6 @@ const force = Flag.boolean("force").pipe(
   ),
   Flag.withDefault(false),
 );
-
-const fileLogger = Effect.fnUntraced(function* (
-  ...segments: ReadonlyArray<string>
-) {
-  const dotAlchemy = yield* DotAlchemy;
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path;
-  const logFile = path.join(dotAlchemy, "log", ...segments);
-
-  yield* fs.makeDirectory(path.dirname(logFile), { recursive: true });
-
-  return yield* Logger.formatLogFmt.pipe(
-    Logger.toFile(logFile, {
-      flag: "a",
-    }),
-  );
-});
-
-const loadConfigProvider = (envFile: Option.Option<string>) => {
-  if (Option.isSome(envFile)) {
-    return ConfigProvider.fromDotEnv({ path: envFile.value }).pipe(
-      Effect.map((dotEnv) =>
-        ConfigProvider.orElse(dotEnv, ConfigProvider.fromEnv()),
-      ),
-    );
-  }
-  return Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const exists = yield* fs.exists(".env");
-    if (!exists) {
-      return ConfigProvider.fromEnv();
-    }
-    return ConfigProvider.orElse(
-      yield* ConfigProvider.fromDotEnv({ path: ".env" }),
-      ConfigProvider.fromEnv(),
-    );
-  });
-};
 
 const main = Argument.file("main", {
   mustExist: true,
@@ -241,37 +204,36 @@ const execStack = Effect.fn(function* ({
     const cli = yield* CLI.Cli;
     const stack = yield* stackEffect;
 
-    yield* provideFreshArtifactStore(
-      Effect.gen(function* () {
-        const updatePlan = yield* Plan.make(
-          destroy
-            ? {
-                ...stack,
-                // zero these out (destroy will treat all as orphans)
-                // TODO(sam): probably better to have Plan.destroy and Plan.update
-                resources: {},
-                bindings: {},
-                output: {},
-              }
-            : stack,
-          { force },
-        );
-        if (dryRun) {
-          yield* cli.displayPlan(updatePlan);
-        } else {
-          if (!yes) {
-            const approved = yield* cli.approvePlan(updatePlan);
-            if (!approved) {
-              return;
+    yield* Effect.gen(function* () {
+      const updatePlan = yield* Plan.make(
+        destroy
+          ? {
+              ...stack,
+              // zero these out (destroy will treat all as orphans)
+              // TODO(sam): probably better to have Plan.destroy and Plan.update
+              resources: {},
+              bindings: {},
+              output: {},
             }
+          : stack,
+        { force },
+      );
+      if (dryRun) {
+        yield* cli.displayPlan(updatePlan);
+      } else {
+        if (!yes) {
+          const approved = yield* cli.approvePlan(updatePlan);
+          if (!approved) {
+            return;
           }
-          const outputs = yield* apply(updatePlan);
-
-          yield* Console.log(outputs);
         }
-      }),
-    ).pipe(
+        const outputs = yield* apply(updatePlan);
+
+        yield* Console.log(outputs);
+      }
+    }).pipe(
       Effect.provide(stack.services),
+      provideFreshArtifactStore,
       // Effect.provide(Logger.layer([fileLogger("stacks", stack.name, stage)])),
     );
   }).pipe(

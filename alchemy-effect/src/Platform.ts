@@ -235,11 +235,8 @@ export const Platform = <
               }),
             )
         ).pipe(
-          Effect.flatMap(
-            (resource) =>
-              hooks
-                .onCreate?.(resource as R, props)
-                .pipe(Effect.map(() => resource)) ?? Effect.succeed(resource),
+          Effect.tap(
+            (resource) => hooks.onCreate?.(resource as R, props) ?? Effect.void,
           ),
         );
       return Object.assign(

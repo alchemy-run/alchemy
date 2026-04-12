@@ -22,13 +22,14 @@ export const fromWebSocket = (ws: RawWebSocket): DurableWebSocket => ({
   deserializeAttachment: () => ws.deserializeAttachment() as any,
 });
 
-declare global {
-  const WebSocketPair: new () => [cf.WebSocket, cf.WebSocket];
-}
+// declare global {
+//   const WebSocketPair: new () => [cf.WebSocket, cf.WebSocket];
+// }
 
 export const upgrade = Effect.fnUntraced(function* () {
   const _Response = Response as any as typeof cf.Response;
   const ctx = yield* DurableObjectState;
+  // @ts-expect-error
   const [client, server] = new WebSocketPair();
   const serverSocket = fromWebSocket(server);
   yield* ctx.acceptWebSocket(serverSocket);
