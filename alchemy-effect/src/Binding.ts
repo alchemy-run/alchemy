@@ -147,8 +147,16 @@ export const Policy =
         Effect.map(
           ([resource, fn]) =>
             (...args: any[]) =>
-              fn(...args).pipe(
-                Namespace.push((resource as ResourceLike).LogicalId),
+              Effect.all(
+                args.map((arg) =>
+                  Effect.isEffect(arg) ? arg : Effect.succeed(arg),
+                ),
+              ).pipe(
+                Effect.flatMap((args) =>
+                  fn(...args).pipe(
+                    Namespace.push((resource as ResourceLike).LogicalId),
+                  ),
+                ),
               ),
         ),
       );
