@@ -998,12 +998,19 @@ ${[
         if (news.env) {
           for (const [key, value] of Object.entries(news.env)) {
             if (value == null) continue;
-            const text = typeof value === "string" ? value : String(value);
-            metadataBindings.push({
-              type: "secret_text",
-              name: key,
-              text,
-            });
+            if (Redacted.isRedacted(value)) {
+              metadataBindings.push({
+                type: "secret_text",
+                name: key,
+                text: Redacted.value(value),
+              });
+            } else {
+              metadataBindings.push({
+                type: "plain_text",
+                name: key,
+                text: typeof value === "string" ? value : String(value),
+              });
+            }
           }
         }
         yield* Effect.logInfo(
