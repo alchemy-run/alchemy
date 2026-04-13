@@ -6,6 +6,7 @@ import * as Stream from "effect/Stream";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import type { ResourceLike } from "../../Resource.ts";
+import { getRawStream } from "../../Util/Stream.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { R2Bucket } from "./R2Bucket.ts";
 
@@ -24,7 +25,9 @@ export interface R2ObjectBody extends R2Object {
 }
 
 export type R2GetOptions = runtime.R2GetOptions;
-export type R2PutOptions = runtime.R2PutOptions;
+export type R2PutOptions = runtime.R2PutOptions & {
+  contentLength?: number;
+};
 
 export type R2ListOptions = runtime.R2ListOptions;
 export type R2Objects = {
@@ -75,7 +78,7 @@ export interface R2BucketClient {
     key: string,
     options?: R2GetOptions,
   ): Effect.Effect<R2ObjectBody | null, R2Error, WorkerEnvironment>;
-  put(
+  put<Err = never>(
     key: string,
     value:
       | ReadableStream
@@ -84,12 +87,24 @@ export interface R2BucketClient {
       | string
       | null
       | Blob
-      | Stream.Stream<Uint8Array>,
+      | Stream.Stream<Uint8Array, Err>,
     options?: R2PutOptions & {
       onlyIf: R2Conditional | Headers;
+      contentLength?: number;
     },
-  ): Effect.Effect<R2Object | null, R2Error, WorkerEnvironment>;
-  put(
+  ): Effect.Effect<R2Object | null, R2Error | Err, WorkerEnvironment>;
+  put<Err = never>(
+    key: string,
+    value:
+      | ReadableStream
+      | ArrayBuffer
+      | ArrayBufferView
+      | string
+      | null
+      | Blob,
+    options?: R2PutOptions,
+  ): Effect.Effect<R2Object, R2Error | Err, WorkerEnvironment>;
+  put<Err = never>(
     key: string,
     value:
       | ReadableStream
@@ -98,9 +113,11 @@ export interface R2BucketClient {
       | string
       | null
       | Blob
-      | Stream.Stream<Uint8Array>,
-    options?: R2PutOptions,
-  ): Effect.Effect<R2Object, R2Error, WorkerEnvironment>;
+      | Stream.Stream<Uint8Array, Err>,
+    options: R2PutOptions & {
+      contentLength: number;
+    },
+  ): Effect.Effect<R2Object, R2Error | Err, WorkerEnvironment>;
   delete(
     keys: string | string[],
   ): Effect.Effect<void, R2Error, WorkerEnvironment>;
@@ -144,6 +161,11 @@ export const R2BucketBindingLive = Layer.effect(
               cause: error,
             }),
         });
+
+      const use = <T>(
+        fn: (raw: runtime.R2Bucket) => Promise<T>,
+      ): Effect.Effect<T, R2Error, WorkerEnvironment> =>
+        raw.pipe(Effect.flatMap((raw) => tryPromise(() => fn(raw))));
 
       const wrapR2Object = (object: runtime.R2Object): R2Object => ({
         ...object,
@@ -227,15 +249,14 @@ export const R2BucketBindingLive = Layer.effect(
       return {
         raw: raw,
         head: (key: string) =>
-          raw.pipe(
-            Effect.flatMap((raw) => tryPromise(() => raw.head(key))),
+          use((raw) => raw.head(key)).pipe(
             Effect.map((object) => (object ? wrapR2Object(object) : object)),
           ),
         get: (key: string, options?: R2GetOptions) =>
-          raw.pipe(
-            Effect.flatMap((raw) => tryPromise(() => raw.get(key, options))),
+          use((raw) => raw.get(key, options)).pipe(
             Effect.map(wrapR2ObjectOrBody),
           ) as any,
+        // @ts-expect-error
         put: (
           key: string,
           value:
@@ -246,34 +267,33 @@ export const R2BucketBindingLive = Layer.effect(
             | null
             | Blob
             | Stream.Stream<Uint8Array>,
-          options?: R2PutOptions & { onlyIf: R2Conditional | Headers },
+          options?: R2PutOptions & {
+            onlyIf: R2Conditional | Headers;
+            contentLength?: number;
+          },
         ) =>
-          raw.pipe(
-            Effect.flatMap((raw) =>
-              tryPromise(() =>
-                raw.put(
-                  key,
-                  Stream.isStream(value)
-                    ? value.pipe(Stream.toReadableStream())
-                    : (value as any),
-                  options,
-                ),
-              ),
-            ),
-            Effect.map(wrapR2ObjectOrBody),
-          ) as any,
-        delete: (keys: string | string[]) =>
-          raw.pipe(Effect.flatMap((raw) => tryPromise(() => raw.delete(keys)))),
+          use((raw) => {
+            if (Stream.isStream(value)) {
+              const rawStream = getRawStream(value);
+              if (rawStream) {
+                return raw.put(key, rawStream as any, options);
+              } else if (!options?.contentLength) {
+                throw new Error("Content length is required");
+              }
+              // content length myst be known, so we pipe through fixed length stream
+              // TODO(sam): is it more efficient to just assign the contentLength as a property?
+              const readable = Stream.toReadableStream(value).pipeThrough(
+                new FixedLengthStream(options.contentLength),
+              );
+              return raw.put(key, readable as any);
+            }
+            return raw.put(key, value as any, options);
+          }).pipe(Effect.map(wrapR2ObjectOrBody)) as any,
+        delete: (keys: string | string[]) => use((raw) => raw.delete(keys)),
         list: (options?: R2ListOptions) =>
-          raw.pipe(
-            Effect.flatMap((raw) => tryPromise(() => raw.list(options))),
-            Effect.map(wrapR2Objects),
-          ),
+          use((raw) => raw.list(options)).pipe(Effect.map(wrapR2Objects)),
         createMultipartUpload: (key: string, options?: R2MultipartOptions) =>
-          raw.pipe(
-            Effect.flatMap((raw) =>
-              tryPromise(() => raw.createMultipartUpload(key, options)),
-            ),
+          use((raw) => raw.createMultipartUpload(key, options)).pipe(
             Effect.map(wrapR2MultipartUpload),
           ),
         resumeMultipartUpload: (key: string, uploadId: string) =>

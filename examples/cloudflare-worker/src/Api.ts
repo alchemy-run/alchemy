@@ -66,31 +66,58 @@ export default class Api extends Cloudflare.Worker<Api>()(
             );
           }
         } else if (request.url.startsWith("/object/")) {
-          return yield* bucket.get(request.url.split("/").pop()!).pipe(
-            Effect.flatMap((object) =>
-              object === null
-                ? Effect.succeed(
-                    HttpServerResponse.text("Object not found", {
-                      status: 404,
-                    }),
-                  )
-                : object.text().pipe(
-                    Effect.map((text) =>
-                      HttpServerResponse.text(text, {
-                        headers: { "content-type": "application/json" },
+          if (request.method === "GET") {
+            return yield* bucket.get(request.url.split("/").pop()!).pipe(
+              Effect.flatMap((object) =>
+                object === null
+                  ? Effect.succeed(
+                      HttpServerResponse.text("Object not found", {
+                        status: 404,
                       }),
+                    )
+                  : object.text().pipe(
+                      Effect.map((text) =>
+                        HttpServerResponse.text(text, {
+                          headers: { "content-type": "application/json" },
+                        }),
+                      ),
+                    ),
+              ),
+              Effect.catchTag("R2Error", (error) =>
+                Effect.succeed(
+                  HttpServerResponse.text(error.message, {
+                    status: 500,
+                    statusText: error.message,
+                  }),
+                ),
+              ),
+            );
+          } else if (request.method === "POST" || request.method === "PUT") {
+            // const request = yield* Cloudflare.Request
+            const key = request.url.split("/").pop()!;
+            return yield* bucket
+              .put(key, request.stream, {
+                contentLength: Number(request.headers["content-length"] ?? 0),
+              })
+              .pipe(
+                Effect.map(() => HttpServerResponse.empty({ status: 201 })),
+                Effect.catch((err) =>
+                  Effect.succeed(
+                    HttpServerResponse.jsonUnsafe(
+                      {
+                        error: err.message,
+                        headers: request.headers,
+                      },
+                      { status: 500 },
                     ),
                   ),
-            ),
-            Effect.catchTag("R2Error", (error) =>
-              Effect.succeed(
-                HttpServerResponse.text(error.message, {
-                  status: 500,
-                  statusText: error.message,
-                }),
-              ),
-            ),
-          );
+                ),
+              );
+          } else {
+            return HttpServerResponse.text("Method not allowed", {
+              status: 405,
+            });
+          }
         } else if (request.url === "/sandbox/increment") {
           const agent = agents.getByName("sandbox-test");
           const body = yield* agent.increment().pipe(Effect.orDie);

@@ -9,7 +9,7 @@ const stack = beforeAll(deploy(Stack));
 test(
   "integ",
   Effect.gen(function* () {
-    const url = yield* stack;
+    const { url } = yield* stack;
 
     expect(url).toBeString();
   }),
