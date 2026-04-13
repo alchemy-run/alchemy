@@ -1,4 +1,5 @@
 import * as Cloudflare from "alchemy-effect/Cloudflare";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -18,7 +19,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
     url: true,
     env: {
       AUTH_TOKEN: "test-bearer-token",
-      DEFAULT_TTL_DAYS: "30",
+      DEFAULT_TTL: "3 weeks",
     },
     compatibility: {
       flags: ["nodejs_compat"],
@@ -39,7 +40,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 
         const env = yield* Cloudflare.WorkerEnvironment;
         const authToken = (env as any).AUTH_TOKEN as string;
-        const defaultTtlDays = Number((env as any).DEFAULT_TTL_DAYS) || 30;
+        const defaultTtl = (env as any).DEFAULT_TTL as string || "3 weeks";
 
         const requireAuth = Effect.gen(function* () {
           const authHeader = request.headers.authorization;
@@ -50,7 +51,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 
         // --- PUT /packages ---
         // Body: raw .tgz stream (streamed directly to R2)
-        // Headers: X-Tags (JSON array), X-TTL (optional, days), Content-Length
+        // Headers: X-Tags (JSON array), X-TTL (optional, Effect Duration string e.g. "7 hours", "3 weeks"), Content-Length
         if (method === "PUT" && path === "/packages") {
           return yield* Effect.gen(function* () {
             yield* requireAuth;
@@ -91,9 +92,23 @@ export default class Api extends Cloudflare.Worker<Api>()(
               );
             }
 
-            const ttl = ttlRaw ? Number(ttlRaw) : defaultTtlDays;
+            const ttlStr = ttlRaw || defaultTtl;
+            const ttlDuration = Duration.fromInput(ttlStr);
+            if (ttlDuration._tag === "None") {
+              return yield* HttpServerResponse.json(
+                { error: "X-TTL must be an Effect Duration string (e.g. '7 hours', '3 weeks', '30 minutes')" },
+                { status: 400 },
+              );
+            }
+            const ttlMillis = Duration.toMillis(ttlDuration.value);
+            if (ttlMillis <= 0) {
+              return yield* HttpServerResponse.json(
+                { error: "X-TTL must be a positive duration (e.g. '7 hours', '3 weeks')" },
+                { status: 400 },
+              );
+            }
             const resourceId = crypto.randomUUID();
-            const expiresAt = Date.now() + ttl * 24 * 60 * 60 * 1000;
+            const expiresAt = Date.now() + ttlMillis;
 
             // reassign tags: remove from old resources, cleanup orphans
             for (const tag of tags) {
@@ -139,7 +154,8 @@ export default class Api extends Cloudflare.Worker<Api>()(
             return yield* HttpServerResponse.json({
               resourceId,
               tags,
-              ttl,
+              ttl: ttlStr,
+              expiresAt,
             });
           }).pipe(
             Effect.catchTag("Unauthorized", () =>

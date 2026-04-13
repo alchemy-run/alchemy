@@ -51,7 +51,7 @@ function upload(
   baseUrl: string,
   file: Uint8Array,
   tags: string[],
-  options?: { ttl?: number; token?: string },
+  options?: { ttl?: string; token?: string },
 ) {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${options?.token ?? AUTH_TOKEN}`,
@@ -59,7 +59,7 @@ function upload(
     "X-Tags": JSON.stringify(tags),
   };
   if (options?.ttl !== undefined) {
-    headers["X-TTL"] = String(options.ttl);
+    headers["X-TTL"] = options.ttl;
   }
   return fetch(`${baseUrl}/packages`, {
     method: "PUT",
@@ -335,11 +335,15 @@ test(
     const content = createTgz("ttl-custom");
 
     const res = yield* Effect.promise(() =>
-      upload(url, content, ["ttl-test"], { ttl: 7 }),
+      upload(url, content, ["ttl-test"], { ttl: "7 hours" }),
     );
     expect(res.status).toBe(200);
     const body = yield* Effect.promise(() => res.json());
-    expect(body.ttl).toBe(7);
+    expect(body.ttl).toBe("7 hours");
+    // expiresAt should be ~7 hours from now
+    const sevenHoursMs = 7 * 60 * 60 * 1000;
+    expect(body.expiresAt).toBeGreaterThan(Date.now() + sevenHoursMs - 60_000);
+    expect(body.expiresAt).toBeLessThan(Date.now() + sevenHoursMs + 60_000);
   }),
 );
 
