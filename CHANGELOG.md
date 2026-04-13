@@ -1,3 +1,19 @@
+## v0.11.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **test**: Add skipIf to bun testing harness &nbsp;-&nbsp; by **Michael (Pear)** [<samp>(6021c)</samp>](https://github.com/alchemy-run/alchemy/commit/6021c3d)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **Http**: Lazy-import platform-node to avoid crash on Bun &nbsp;-&nbsp; by **Christopher Yovanovitch** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/48 [<samp>(85224)</samp>](https://github.com/alchemy-run/alchemy/commit/852243b)
+- **cloudflare**: Bindings resolve Effect<Resource> and remove KV per-operation bindings &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(61e02)</samp>](https://github.com/alchemy-run/alchemy/commit/61e0244)
+- **core**: Migrate to Provider.effect so that providers are tree-shakable &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/53 [<samp>(73029)</samp>](https://github.com/alchemy-run/alchemy/commit/7302911)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v0.10.0...v0.11.0)
+
+---
+
 ## v0.10.0
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
