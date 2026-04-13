@@ -22,7 +22,7 @@
     }
   },
   "dependencies": {
-    "alchemy-effect": "workspace:*",
+    "alchemy": "workspace:*",
     "better-auth": "catalog:",
     "effect": "catalog:"
   },
