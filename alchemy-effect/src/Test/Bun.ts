@@ -12,6 +12,7 @@ import type { HookOptions } from "node:test";
 import * as Apply from "../Apply.ts";
 import { provideFreshArtifactStore } from "../Artifacts.ts";
 import { DotAlchemy, dotAlchemy } from "../Config.ts";
+import type { Input } from "../Input.ts";
 import * as Plan from "../Plan.ts";
 import { type CompiledStack, type StackServices } from "../Stack.ts";
 import { Stage } from "../Stage.ts";
@@ -67,7 +68,11 @@ export function test(
 
 export namespace test {
   export function skipIf(condition: boolean) {
-    return (name: string, test: TestEffect<void>, options?: bun.TestOptions) => {
+    return (
+      name: string,
+      test: TestEffect<void>,
+      options?: bun.TestOptions,
+    ) => {
       bun.test.skipIf(condition)(name, () => run(test), options);
     };
   }
@@ -147,8 +152,8 @@ export function afterEach(
   bun.afterEach(() => run(eff), options);
 }
 
-export const deploy = (
-  effect: TestEffect<CompiledStack, Stage | DotAlchemy>,
+export const deploy = <A>(
+  effect: TestEffect<CompiledStack<A>, Stage | DotAlchemy>,
   options?: {
     /** @default test */
     stage?: string;
@@ -160,7 +165,7 @@ export const deploy = (
       Effect.gen(function* () {
         const plan = yield* Plan.make(stack);
         const output = yield* Apply.apply(plan);
-        return output;
+        return output as Input.Resolve<A>;
       }),
     options,
   );
@@ -189,9 +194,9 @@ export const destroy = (
     options,
   );
 
-const exec = (
-  effect: TestEffect<CompiledStack, Stage | DotAlchemy>,
-  fn: (stack: CompiledStack) => Effect.Effect<void, any, any>,
+const exec = <A, B>(
+  effect: TestEffect<CompiledStack<A>, Stage | DotAlchemy>,
+  fn: (stack: CompiledStack<A>) => Effect.Effect<B, any, any>,
   options?: {
     stage?: string;
   },
