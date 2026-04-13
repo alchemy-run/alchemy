@@ -1019,12 +1019,13 @@ ${[
           `Cloudflare Worker ${olds ? "update" : "create"}: uploading script for ${name}`,
         );
         const size =
-          bundle.files?.reduce((acc, file) => acc + file.size, 0) ?? 0;
+          bundle.files
+            ?.filter((file) => !file.name.endsWith(".map"))
+            .reduce((acc, file) => acc + file.size, 0) ?? 0;
         const sizeKB = size / 1024;
         const sizeMB = sizeKB / 1024;
-        yield* session.note(
-          `Uploading worker (${sizeKB > 1024 ? `${sizeMB.toFixed(2)} MB` : `${sizeKB.toFixed(2)} KB`}) ...`,
-        );
+        const bundleSize = `${sizeKB > 1024 ? `${sizeMB.toFixed(2)} MB` : `${sizeKB.toFixed(2)} KB`}`;
+        yield* session.note(`Uploading worker (${bundleSize}) ...`);
 
         // Collect new DO bindings from the metadata bindings list (keyed by binding name)
         const newDoBindings = new Map<
