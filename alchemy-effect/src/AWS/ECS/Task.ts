@@ -24,6 +24,7 @@ import { isResolved } from "../../Diff.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import type { ProcessContext, ServerHost } from "../../Server/Process.ts";
 import { Stack } from "../../Stack.ts";
@@ -216,7 +217,8 @@ export const Task: Platform<
 });
 
 export const TaskProvider = () =>
-  Task.provider.effect(
+  Provider.effect(
+    Task,
     Effect.gen(function* () {
       const stack = yield* Stack;
       const accountId = yield* Account;

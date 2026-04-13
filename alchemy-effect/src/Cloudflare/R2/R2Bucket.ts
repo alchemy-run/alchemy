@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { Account } from "../Account.ts";
 
@@ -51,7 +52,8 @@ export declare namespace R2Bucket {
 }
 
 export const R2BucketProvider = () =>
-  R2Bucket.provider.effect(
+  Provider.effect(
+    R2Bucket,
     Effect.gen(function* () {
       const accountId = yield* Account;
       const createBucket = yield* r2.createBucket;

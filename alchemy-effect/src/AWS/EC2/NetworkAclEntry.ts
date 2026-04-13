@@ -3,6 +3,7 @@ import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Effect from "effect/Effect";
 
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { NetworkAclId } from "./NetworkAcl.ts";
 
@@ -96,7 +97,8 @@ export const NetworkAclEntry = Resource<NetworkAclEntry>(
 );
 
 export const NetworkAclEntryProvider = () =>
-  NetworkAclEntry.provider.effect(
+  Provider.effect(
+    NetworkAclEntry,
     Effect.gen(function* () {
       const findEntry = (
         networkAclId: string,

@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
 
@@ -81,7 +82,8 @@ const toAttrs = ({
 });
 
 export const DBProxyEndpointProvider = () =>
-  DBProxyEndpoint.provider.effect(
+  Provider.effect(
+    DBProxyEndpoint,
     Effect.gen(function* () {
       const toName = (id: string, props: DBProxyEndpointProps) =>
         props.dbProxyEndpointName

@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
 import { isResolved, somePropsAreDifferent } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { RouteTableId } from "./RouteTable.ts";
 
@@ -120,7 +121,8 @@ export interface Route extends Resource<
 export const Route = Resource<Route>("AWS.EC2.Route");
 
 export const RouteProvider = () =>
-  Route.provider.effect(
+  Provider.effect(
+    Route,
     Effect.gen(function* () {
       return {
         diff: Effect.fn(function* ({ news, olds }) {

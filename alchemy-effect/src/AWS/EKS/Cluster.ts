@@ -14,6 +14,7 @@ import {
   type KubernetesObjectRef,
 } from "../../Kubernetes/types.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import type { AccountID } from "../Account.ts";
@@ -239,7 +240,8 @@ const mapClusterState = (
 });
 
 export const ClusterProvider = () =>
-  Cluster.provider.effect(
+  Provider.effect(
+    Cluster,
     Effect.gen(function* () {
       const toClusterName = (
         id: string,

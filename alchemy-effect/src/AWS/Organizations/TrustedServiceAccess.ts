@@ -1,6 +1,7 @@
 import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { collectPages, retryOrganizations } from "./common.ts";
 
@@ -28,7 +29,8 @@ export const TrustedServiceAccess = Resource<TrustedServiceAccess>(
 );
 
 export const TrustedServiceAccessProvider = () =>
-  TrustedServiceAccess.provider.effect(
+  Provider.effect(
+    TrustedServiceAccess,
     Effect.gen(function* () {
       return {
         stables: ["servicePrincipal"],

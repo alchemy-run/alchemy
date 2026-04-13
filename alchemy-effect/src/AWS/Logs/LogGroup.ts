@@ -3,6 +3,7 @@ import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
 import type { AccountID } from "../Account.ts";
@@ -58,7 +59,8 @@ export interface LogGroup extends Resource<
 export const LogGroup = Resource<LogGroup>("AWS.Logs.LogGroup");
 
 export const LogGroupProvider = () =>
-  LogGroup.provider.effect(
+  Provider.effect(
+    LogGroup,
     Effect.gen(function* () {
       const region = yield* Region;
       const accountId = yield* Account;

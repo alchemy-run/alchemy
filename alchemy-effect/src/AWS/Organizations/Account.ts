@@ -3,6 +3,7 @@ import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import {
   collectPages,
@@ -65,7 +66,8 @@ export interface Account extends Resource<
 export const Account = Resource<Account>("AWS.Organizations.Account");
 
 export const AccountProvider = () =>
-  Account.provider.effect(
+  Provider.effect(
+    Account,
     Effect.gen(function* () {
       return {
         stables: ["accountId", "accountArn", "joinedMethod", "joinedTimestamp"],

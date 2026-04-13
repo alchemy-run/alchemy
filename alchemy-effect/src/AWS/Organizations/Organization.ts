@@ -1,5 +1,6 @@
 import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Effect from "effect/Effect";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { retryOrganizations } from "./common.ts";
 
@@ -50,7 +51,8 @@ export const Organization = Resource<Organization>(
 );
 
 export const OrganizationProvider = () =>
-  Organization.provider.effect(
+  Provider.effect(
+    Organization,
     Effect.gen(function* () {
       return {
         stables: ["organizationId", "organizationArn", "managementAccountId"],

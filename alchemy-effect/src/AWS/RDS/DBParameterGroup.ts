@@ -2,6 +2,7 @@ import * as rds from "@distilled.cloud/aws/rds";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
 
@@ -44,7 +45,8 @@ export const DBParameterGroup = Resource<DBParameterGroup>(
 );
 
 export const DBParameterGroupProvider = () =>
-  DBParameterGroup.provider.effect(
+  Provider.effect(
+    DBParameterGroup,
     Effect.gen(function* () {
       const toName = (id: string, props: DBParameterGroupProps) =>
         props.dbParameterGroupName

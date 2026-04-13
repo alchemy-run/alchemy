@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import {
   createInternalTags,
@@ -75,7 +76,8 @@ export const InstanceProfile = Resource<InstanceProfile>(
 );
 
 export const InstanceProfileProvider = () =>
-  InstanceProfile.provider.effect(
+  Provider.effect(
+    InstanceProfile,
     Effect.gen(function* () {
       const toName = (id: string, props: InstanceProfileProps) =>
         props.instanceProfileName

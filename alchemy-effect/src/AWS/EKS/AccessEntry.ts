@@ -2,6 +2,7 @@ import * as eks from "@distilled.cloud/aws/eks";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 
@@ -90,7 +91,7 @@ export interface AccessEntry extends Resource<
 export const AccessEntry = Resource<AccessEntry>("AWS.EKS.AccessEntry");
 
 export const AccessEntryProvider = () =>
-  AccessEntry.provider.succeed({
+  Provider.succeed(AccessEntry, {
     stables: ["accessEntryArn"],
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return;

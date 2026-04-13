@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 import type { AccountID } from "../Account.ts";
@@ -173,7 +174,8 @@ export interface SecurityGroup extends Resource<
 export const SecurityGroup = Resource<SecurityGroup>("AWS.EC2.SecurityGroup");
 
 export const SecurityGroupProvider = () =>
-  SecurityGroup.provider.effect(
+  Provider.effect(
+    SecurityGroup,
     Effect.gen(function* () {
       const region = yield* Region;
       const accountId = yield* Account;

@@ -382,7 +382,6 @@ const createTenantIdentityCenter = Effect.fn(function* ({
   id,
   spec,
   accounts,
-  sharedTags,
   delegatedAdministrators,
 }: {
   id: string;
@@ -502,5 +501,5 @@ const mergeTags = (
   tags: Record<string, string> | undefined,
 ) => ({
   ...shared,
-  ...(tags ?? {}),
+  ...tags,
 });

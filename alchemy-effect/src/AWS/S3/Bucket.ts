@@ -6,6 +6,7 @@ import * as Schedule from "effect/Schedule";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { diffTags } from "../../Tags.ts";
 import { Account, type AccountID } from "../Account.ts";
@@ -152,7 +153,8 @@ export interface Bucket extends Resource<
 export const Bucket = Resource<Bucket>("AWS.S3.Bucket");
 
 export const BucketProvider = () =>
-  Bucket.provider.effect(
+  Provider.effect(
+    Bucket,
     Effect.gen(function* () {
       const createBucketName = (
         id: string,

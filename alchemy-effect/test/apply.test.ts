@@ -1,8 +1,8 @@
+import { Cli } from "@/Cli/Cli";
+import * as Construct from "@/Construct";
 import { destroy } from "@/Destroy";
 import * as Output from "@/Output";
 import * as Stack from "@/Stack";
-import * as Construct from "@/Construct";
-import { Cli } from "@/Cli/Cli";
 import {
   type ReplacedResourceState,
   type ReplacingResourceState,
@@ -210,7 +210,7 @@ describe("basic operations", () => {
           return B.string;
         }).pipe(test.deploy),
       ).toEqual("TEST-STRING-NEW");
-    }).pipe(Effect.provide(TestLayers)),
+    }).pipe(Effect.provide(TestLayers())),
   );
 
   test(

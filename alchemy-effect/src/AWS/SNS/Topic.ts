@@ -2,6 +2,7 @@ import * as sns from "@distilled.cloud/aws/sns";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 import type { AccountID } from "../Account.ts";
@@ -91,7 +92,7 @@ export interface Topic extends Resource<
 export const Topic = Resource<Topic>("AWS.SNS.Topic");
 
 export const TopicProvider = () =>
-  Topic.provider.succeed({
+  Provider.succeed(Topic, {
     read: Effect.fn(function* ({ id, olds, output }) {
       const topicName =
         output?.topicName ?? (yield* toTopicName(id, olds ?? {}));

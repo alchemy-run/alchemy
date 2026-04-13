@@ -2,6 +2,7 @@ import { Region } from "@distilled.cloud/aws/Region";
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { Account } from "../Account.ts";
 import type { AlarmArn } from "./Alarm.ts";
@@ -58,7 +59,8 @@ export const CompositeAlarm = Resource<CompositeAlarm>(
 );
 
 export const CompositeAlarmProvider = () =>
-  CompositeAlarm.provider.effect(
+  Provider.effect(
+    CompositeAlarm,
     Effect.gen(function* () {
       const region = yield* Region;
       const accountId = yield* Account;

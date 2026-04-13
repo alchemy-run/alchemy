@@ -5,6 +5,7 @@ import * as Schedule from "effect/Schedule";
 
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { RouteTableId } from "./RouteTable.ts";
 import type { SubnetId } from "./Subnet.ts";
@@ -74,7 +75,8 @@ export const RouteTableAssociation = Resource<RouteTableAssociation>(
 );
 
 export const RouteTableAssociationProvider = () =>
-  RouteTableAssociation.provider.effect(
+  Provider.effect(
+    RouteTableAssociation,
     Effect.gen(function* () {
       return {
         stables: ["associationId", "subnetId", "gatewayId"],

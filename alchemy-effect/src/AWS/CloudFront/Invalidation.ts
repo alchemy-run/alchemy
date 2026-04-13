@@ -3,6 +3,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 
 export interface InvalidationProps {
@@ -68,7 +69,8 @@ class InvalidationInProgress extends Data.TaggedError(
 }> {}
 
 export const InvalidationProvider = () =>
-  Invalidation.provider.effect(
+  Provider.effect(
+    Invalidation,
     Effect.gen(function* () {
       const waitForCompletion = Effect.fn(function* (
         distributionId: string,

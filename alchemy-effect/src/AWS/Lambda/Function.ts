@@ -21,6 +21,7 @@ import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
 import type { LogLine, LogsInput } from "../../Provider.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
@@ -213,7 +214,8 @@ export const Function: Platform<
 });
 
 export const FunctionProvider = () =>
-  Function.provider.effect(
+  Provider.effect(
+    Function,
     Effect.gen(function* () {
       const stack = yield* Stack;
       const accountId = yield* Account;

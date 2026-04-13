@@ -2,6 +2,7 @@ import * as scheduler from "@distilled.cloud/aws/scheduler";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import {
   createInternalTags,
@@ -52,7 +53,8 @@ export const ScheduleGroup = Resource<ScheduleGroup>(
 );
 
 export const ScheduleGroupProvider = () =>
-  ScheduleGroup.provider.effect(
+  Provider.effect(
+    ScheduleGroup,
     Effect.gen(function* () {
       const toName = (id: string, props: ScheduleGroupProps) =>
         props.name

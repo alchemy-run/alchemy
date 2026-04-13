@@ -1,10 +1,10 @@
 import { Region } from "@distilled.cloud/aws/Region";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as Effect from "effect/Effect";
-
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import {
   createInternalTags,
@@ -266,7 +266,8 @@ export interface Rule extends Resource<
 export const Rule = Resource<Rule>("AWS.EventBridge.Rule");
 
 export const RuleProvider = () =>
-  Rule.provider.effect(
+  Provider.effect(
+    Rule,
     Effect.gen(function* () {
       const region = yield* Region;
       const accountId = yield* Account;

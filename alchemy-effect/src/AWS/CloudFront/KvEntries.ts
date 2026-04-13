@@ -1,6 +1,7 @@
 import * as kvs from "@distilled.cloud/aws/cloudfront-keyvaluestore";
 import * as Effect from "effect/Effect";
 import type { Input } from "../../Input.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import {
   extractValue,
@@ -77,7 +78,8 @@ const resolveEntries = (entries: KvEntriesProps["entries"]): ResolvedEntries =>
   ) as ResolvedEntries;
 
 export const KvEntriesProvider = () =>
-  KvEntries.provider.effect(
+  Provider.effect(
+    KvEntries,
     // @ts-expect-error
     Effect.gen(function* () {
       const collectAllKeys = Effect.fn(function* (store: string) {

@@ -2,10 +2,10 @@ import * as eks from "@distilled.cloud/aws/eks";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 
@@ -150,7 +150,8 @@ class AddonStillExists extends Data.TaggedError("AddonStillExists")<{
   readonly addonName: string;
 }> {}
 export const AddonProvider = () =>
-  Addon.provider.effect(
+  Provider.effect(
+    Addon,
     Effect.gen(function* () {
       const toClientRequestToken = (id: string, action: string) =>
         createPhysicalName({

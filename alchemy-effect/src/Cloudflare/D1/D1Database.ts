@@ -1,15 +1,10 @@
 import * as d1 from "@distilled.cloud/cloudflare/d1";
 import * as Effect from "effect/Effect";
 
-import type { Credentials } from "@distilled.cloud/cloudflare";
-import type { Layer } from "effect/Layer";
-import type { HttpClient } from "effect/unstable/http/HttpClient";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import type { Provider } from "../../Provider.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Stack } from "../../Stack.ts";
-import type { Stage } from "../../Stage.ts";
 import { Account } from "../Account.ts";
 
 export type Jurisdiction = "default" | "eu" | "fedramp";
@@ -74,12 +69,9 @@ export type D1Database = Resource<
  */
 export const D1Database = Resource<D1Database>("Cloudflare.D1Database");
 
-export const DatabaseProvider = (): Layer<
-  Provider<D1Database>,
-  never,
-  Account | Credentials | HttpClient | Stack | Stage
-> =>
-  D1Database.provider.effect(
+export const DatabaseProvider = () =>
+  Provider.effect(
+    D1Database,
     Effect.gen(function* () {
       const accountId = yield* Account;
       const createDb = yield* d1.createDatabase;

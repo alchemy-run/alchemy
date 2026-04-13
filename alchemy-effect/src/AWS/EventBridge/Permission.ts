@@ -2,6 +2,7 @@ import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 
 export interface PermissionProps {
@@ -56,7 +57,8 @@ export interface Permission extends Resource<
 export const Permission = Resource<Permission>("AWS.EventBridge.Permission");
 
 export const PermissionProvider = () =>
-  Permission.provider.effect(
+  Provider.effect(
+    Permission,
     Effect.gen(function* () {
       const toStatementId = (id: string, props: PermissionProps) =>
         props.statementId

@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 import type { AccountID } from "../Account.ts";
@@ -66,7 +67,8 @@ export interface NetworkAcl extends Resource<
 export const NetworkAcl = Resource<NetworkAcl>("AWS.EC2.NetworkAcl");
 
 export const NetworkAclProvider = () =>
-  NetworkAcl.provider.effect(
+  Provider.effect(
+    NetworkAcl,
     Effect.gen(function* () {
       const region = yield* Region;
       const accountId = yield* Account;

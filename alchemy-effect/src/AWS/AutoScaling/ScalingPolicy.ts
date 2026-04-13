@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { AutoScalingGroup as AutoScalingGroupResource } from "./AutoScalingGroup.ts";
 
@@ -74,7 +75,8 @@ const isAutoScalingGroupResource = (
   (value as { Type?: string }).Type === "AWS.AutoScaling.AutoScalingGroup";
 
 export const ScalingPolicyProvider = () =>
-  ScalingPolicy.provider.effect(
+  Provider.effect(
+    ScalingPolicy,
     Effect.gen(function* () {
       const toName = (id: string, props: { policyName?: string } = {}) =>
         props.policyName
@@ -190,7 +192,7 @@ export const ScalingPolicyProvider = () =>
           yield* session.note(policyName);
           return toAttributes(policy);
         }),
-        update: Effect.fn(function* ({ id, news, output, session }) {
+        update: Effect.fn(function* ({ news, output, session }) {
           yield* autoscaling.putScalingPolicy({
             AutoScalingGroupName: output.autoScalingGroupName,
             PolicyName: output.policyName,

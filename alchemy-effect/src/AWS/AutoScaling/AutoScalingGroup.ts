@@ -4,6 +4,7 @@ import * as Schedule from "effect/Schedule";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
 import type { SubnetId } from "../EC2/Subnet.ts";
@@ -117,7 +118,8 @@ const sortStrings = (values: readonly string[] = []) =>
   [...values].sort((a, b) => a.localeCompare(b));
 
 export const AutoScalingGroupProvider = () =>
-  AutoScalingGroup.provider.effect(
+  Provider.effect(
+    AutoScalingGroup,
     Effect.gen(function* () {
       const toName = (
         id: string,

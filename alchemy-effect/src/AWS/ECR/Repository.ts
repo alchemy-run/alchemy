@@ -1,11 +1,11 @@
 import * as ecr from "@distilled.cloud/aws/ecr";
-import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
-import { Account, type AccountID } from "../Account.ts";
+import { type AccountID } from "../Account.ts";
 import type { RegionID } from "../Region.ts";
 
 export type RepositoryName = string;
@@ -66,11 +66,9 @@ export interface Repository extends Resource<
 export const Repository = Resource<Repository>("AWS.ECR.Repository");
 
 export const RepositoryProvider = () =>
-  Repository.provider.effect(
+  Provider.effect(
+    Repository,
     Effect.gen(function* () {
-      const accountId = yield* Account;
-      const region = yield* Region;
-
       const toRepositoryName = (
         id: string,
         props: { repositoryName?: string } = {},
@@ -132,7 +130,7 @@ export const RepositoryProvider = () =>
           const repositoryName = yield* toRepositoryName(id, news);
           const tags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
           const created = yield* ecr
             .createRepository({
@@ -210,11 +208,11 @@ export const RepositoryProvider = () =>
 
           const oldTags = {
             ...(yield* createInternalTags(id)),
-            ...(olds.tags ?? {}),
+            ...olds.tags,
           };
           const newTags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
           const { removed, upsert } = diffTags(oldTags, newTags);
           if (upsert.length > 0) {

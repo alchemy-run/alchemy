@@ -1,5 +1,6 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 
 export interface AccountPasswordPolicyProps
@@ -35,7 +36,7 @@ export const AccountPasswordPolicy = Resource<AccountPasswordPolicy>(
 );
 
 export const AccountPasswordPolicyProvider = () =>
-  AccountPasswordPolicy.provider.succeed({
+  Provider.succeed(AccountPasswordPolicy, {
     read: Effect.fn(function* () {
       const response = yield* iam
         .getAccountPasswordPolicy({})

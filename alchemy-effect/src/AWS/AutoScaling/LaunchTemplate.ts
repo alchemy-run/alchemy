@@ -10,6 +10,7 @@ import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
@@ -169,7 +170,8 @@ export const LaunchTemplate: Platform<
 });
 
 export const LaunchTemplateProvider = () =>
-  LaunchTemplate.provider.effect(
+  Provider.effect(
+    LaunchTemplate,
     Effect.gen(function* () {
       const accountId = yield* Account;
       const region = yield* Region;

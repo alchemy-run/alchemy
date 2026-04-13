@@ -36,6 +36,7 @@ import {
   type Rpc,
 } from "../../Platform.ts";
 import type { LogLine } from "../../Provider.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { Self } from "../../Self.ts";
 import * as Serverless from "../../Serverless/index.ts";
@@ -499,7 +500,8 @@ function bumpMigrationTagVersion(
 }
 
 export const WorkerProvider = () =>
-  Worker.provider.effect(
+  Provider.effect(
+    Worker,
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -1016,7 +1018,14 @@ ${[
         yield* Effect.logInfo(
           `Cloudflare Worker ${olds ? "update" : "create"}: uploading script for ${name}`,
         );
-        yield* session.note("Uploading worker...");
+        const size =
+          bundle.files
+            ?.filter((file) => !file.name.endsWith(".map"))
+            .reduce((acc, file) => acc + file.size, 0) ?? 0;
+        const sizeKB = size / 1024;
+        const sizeMB = sizeKB / 1024;
+        const bundleSize = `${sizeKB > 1024 ? `${sizeMB.toFixed(2)} MB` : `${sizeKB.toFixed(2)} KB`}`;
+        yield* session.note(`Uploading worker (${bundleSize}) ...`);
 
         // Collect new DO bindings from the metadata bindings list (keyed by binding name)
         const newDoBindings = new Map<
@@ -1291,7 +1300,7 @@ ${[
         );
       });
 
-      return Worker.provider.of({
+      return Worker.Provider.of({
         stables: ["workerId", "workerName"],
         diff: Effect.fnUntraced(function* ({ id, news, olds, output }) {
           if (!isResolved(news)) return undefined;

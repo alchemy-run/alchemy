@@ -1,6 +1,7 @@
 import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { PolicyDocument } from "../IAM/Policy.ts";
 import {
@@ -60,7 +61,8 @@ export interface Policy extends Resource<
 export const Policy = Resource<Policy>("AWS.Organizations.Policy");
 
 export const PolicyProvider = () =>
-  Policy.provider.effect(
+  Provider.effect(
+    Policy,
     Effect.gen(function* () {
       return {
         stables: ["policyId", "policyArn"],

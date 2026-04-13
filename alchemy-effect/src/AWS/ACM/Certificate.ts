@@ -4,6 +4,7 @@ import * as route53 from "@distilled.cloud/aws/route-53";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { deepEqual, isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import {
   createInternalTags,
@@ -172,7 +173,8 @@ const isTerminalFailure = (status: acm.CertificateStatus | undefined) =>
   status === "FAILED" || status === "VALIDATION_TIMED_OUT";
 
 export const CertificateProvider = () =>
-  Certificate.provider.effect(
+  Provider.effect(
+    Certificate,
     Effect.gen(function* () {
       const describeCertificate = Effect.fn(function* (certificateArn: string) {
         return yield* withAcmRegion(

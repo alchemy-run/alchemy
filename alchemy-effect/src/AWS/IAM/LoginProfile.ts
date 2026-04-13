@@ -2,6 +2,7 @@ import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { unwrapRedactedString } from "./common.ts";
 
@@ -53,7 +54,7 @@ export interface LoginProfile extends Resource<
 export const LoginProfile = Resource<LoginProfile>("AWS.IAM.LoginProfile");
 
 export const LoginProfileProvider = () =>
-  LoginProfile.provider.succeed({
+  Provider.succeed(LoginProfile, {
     stables: ["userName"],
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return;

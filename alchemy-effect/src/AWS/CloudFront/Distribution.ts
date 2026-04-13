@@ -3,6 +3,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Input } from "../../Input.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 
@@ -255,7 +256,8 @@ export const Distribution = Resource<Distribution>(
 );
 
 export const DistributionProvider = () =>
-  Distribution.provider.effect(
+  Provider.effect(
+    Distribution,
     Effect.gen(function* () {
       const waitForDeployment = Effect.fn(function* (distributionId: string) {
         yield* Effect.logInfo(

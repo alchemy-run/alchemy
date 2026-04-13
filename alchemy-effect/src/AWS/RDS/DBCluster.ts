@@ -5,6 +5,7 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
 
@@ -195,7 +196,8 @@ const toAttrs = ({
 });
 
 export const DBClusterProvider = () =>
-  DBCluster.provider.effect(
+  Provider.effect(
+    DBCluster,
     Effect.gen(function* () {
       const toIdentifier = (id: string, props: DBClusterProps) =>
         props.dbClusterIdentifier

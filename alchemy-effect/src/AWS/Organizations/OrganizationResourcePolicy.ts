@@ -1,5 +1,6 @@
 import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Effect from "effect/Effect";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { PolicyDocument } from "../IAM/Policy.ts";
 import { retryOrganizations } from "./common.ts";
@@ -49,7 +50,8 @@ const readResourcePolicy = () =>
   );
 
 export const OrganizationResourcePolicyProvider = () =>
-  OrganizationResourcePolicy.provider.effect(
+  Provider.effect(
+    OrganizationResourcePolicy,
     Effect.gen(function* () {
       return {
         stables: ["resourcePolicyId", "resourcePolicyArn"],

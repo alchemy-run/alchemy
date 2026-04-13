@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as ServiceMap from "effect/ServiceMap";
 import type { PlatformServices } from "../../Platform.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
 import { Account } from "../Account.ts";
@@ -157,7 +158,7 @@ export interface WorkflowClass extends Effect.Effect<
   never,
   WorkflowHandle
 > {
-  <Self>(): {
+  <_Self>(): {
     <Result = unknown, InitReq = never>(
       name: string,
       impl: Effect.Effect<WorkflowBody<Result>, never, InitReq>,
@@ -322,13 +323,14 @@ export interface WorkflowResource extends Resource<
 const WorkflowResource = Resource<WorkflowResource>(WorkflowResourceTypeId);
 
 export const WorkflowProvider = () =>
-  WorkflowResource.provider.effect(
+  Provider.effect(
+    WorkflowResource,
     Effect.gen(function* () {
       const accountId = yield* Account;
       const putWorkflow = yield* workflows.putWorkflow;
       const deleteWorkflow = yield* workflows.deleteWorkflow;
 
-      return WorkflowResource.provider.of({
+      return WorkflowResource.Provider.of({
         stables: ["workflowId", "accountId"],
         create: Effect.fnUntraced(function* ({ news }) {
           yield* Effect.logInfo(

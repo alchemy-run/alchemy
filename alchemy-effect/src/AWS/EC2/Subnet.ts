@@ -5,6 +5,7 @@ import * as Schedule from "effect/Schedule";
 
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved, somePropsAreDifferent } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 import type { AccountID } from "../Account.ts";
@@ -209,7 +210,8 @@ export interface Subnet extends Resource<
 export const Subnet = Resource<Subnet>("AWS.EC2.Subnet");
 
 export const SubnetProvider = () =>
-  Subnet.provider.effect(
+  Provider.effect(
+    Subnet,
     Effect.gen(function* () {
       return {
         stables: ["subnetId", "subnetArn", "ownerId", "vpcId"],

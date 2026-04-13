@@ -5,6 +5,7 @@ import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { ChildProcess } from "effect/unstable/process";
 import { isResolved } from "../Diff.ts";
+import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { hashDirectory, type MemoOptions } from "./Memo.ts";
 
@@ -98,7 +99,8 @@ export interface Command extends Resource<
 export const Command = Resource<Command>("Build.Command");
 
 export const CommandProvider = () =>
-  Command.provider.effect(
+  Provider.effect(
+    Command,
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const pathModule = yield* Path.Path;
@@ -125,7 +127,7 @@ export const CommandProvider = () =>
         return pathModule.resolve(cwd, props.outdir);
       };
 
-      return Command.provider.of({
+      return Command.Provider.of({
         stables: ["outdir"],
         diff: Effect.fnUntraced(function* ({ news, output }) {
           if (!isResolved(news)) return undefined;

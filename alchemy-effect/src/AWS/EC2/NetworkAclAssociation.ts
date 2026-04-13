@@ -2,6 +2,7 @@ import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Effect from "effect/Effect";
 
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { NetworkAclId } from "./NetworkAcl.ts";
 import type { SubnetId } from "./Subnet.ts";
@@ -39,7 +40,8 @@ export const NetworkAclAssociation = Resource<NetworkAclAssociation>(
 );
 
 export const NetworkAclAssociationProvider = () =>
-  NetworkAclAssociation.provider.effect(
+  Provider.effect(
+    NetworkAclAssociation,
     Effect.gen(function* () {
       const findAssociation = (subnetId: string) =>
         ec2
@@ -62,7 +64,7 @@ export const NetworkAclAssociationProvider = () =>
             }),
           );
 
-      return NetworkAclAssociation.provider.of({
+      return NetworkAclAssociation.Provider.of({
         stables: ["subnetId"],
 
         read: Effect.fn(function* ({ olds }) {

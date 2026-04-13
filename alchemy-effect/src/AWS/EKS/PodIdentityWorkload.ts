@@ -1,15 +1,12 @@
 import * as Effect from "effect/Effect";
-import * as Namespace from "../../Namespace.ts";
-import * as Kubernetes from "../../Kubernetes/index.ts";
 import type { Input } from "../../Input.ts";
+import * as Kubernetes from "../../Kubernetes/index.ts";
+import * as Namespace from "../../Namespace.ts";
 import type { PolicyDocument } from "../IAM/Policy.ts";
 import type { RoleArn, Role as RoleResource } from "../IAM/Role.ts";
-import type { PodIdentityAssociation as PodIdentityAssociationResource } from "./PodIdentityAssociation.ts";
 import type { Cluster } from "./Cluster.ts";
-import {
-  PodIdentityServiceAccount,
-  type PodIdentityServiceAccountResources,
-} from "./PodIdentityServiceAccount.ts";
+import type { PodIdentityAssociation as PodIdentityAssociationResource } from "./PodIdentityAssociation.ts";
+import { PodIdentityServiceAccount } from "./PodIdentityServiceAccount.ts";
 import { Workload, type WorkloadServiceProps } from "./Workload.ts";
 
 export interface PodIdentityWorkloadProps {

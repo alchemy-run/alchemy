@@ -3,6 +3,7 @@ import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 
 export type { FunctionUrlAuthType } from "@distilled.cloud/aws/lambda";
@@ -112,7 +113,8 @@ export interface Permission extends Resource<
 export const Permission = Resource<Permission>("AWS.Lambda.Permission");
 
 export const PermissionProvider = () =>
-  Permission.provider.effect(
+  Provider.effect(
+    Permission,
     Effect.gen(function* () {
       const createStatementId = (id: string) =>
         createPhysicalName({

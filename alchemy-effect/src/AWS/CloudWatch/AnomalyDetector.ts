@@ -3,6 +3,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import {
   detectorIdentity,
@@ -137,7 +138,7 @@ const describeDetector = Effect.fn(function* (
 });
 
 export const AnomalyDetectorProvider = () =>
-  AnomalyDetector.provider.succeed({
+  Provider.succeed(AnomalyDetector, {
     stables: ["detectorId"],
     diff: Effect.fn(function* ({ olds = {}, news = {} }) {
       if (!isResolved(news)) return undefined;

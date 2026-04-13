@@ -1,6 +1,7 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { diffTags } from "../../Tags.ts";
 import { Account } from "../Account.ts";
@@ -58,7 +59,8 @@ export const OpenIDConnectProvider = Resource<OpenIDConnectProvider>(
 );
 
 export const OpenIDConnectProviderProvider = () =>
-  OpenIDConnectProvider.provider.effect(
+  Provider.effect(
+    OpenIDConnectProvider,
     Effect.gen(function* () {
       const accountId = yield* Account;
       const oidcArnFromUrl = (url: string) =>

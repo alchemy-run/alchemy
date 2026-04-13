@@ -1,11 +1,10 @@
-import type * as lambda from "aws-lambda";
-
 import type * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import type {
   PointInTimeRecoverySpecification,
   TimeToLiveSpecification,
 } from "@distilled.cloud/aws/dynamodb";
 import * as dynamodb from "@distilled.cloud/aws/dynamodb";
+import type * as lambda from "aws-lambda";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -13,6 +12,7 @@ import * as Schedule from "effect/Schedule";
 import { havePropsChanged, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import {
   createInternalTags,
@@ -154,7 +154,8 @@ export interface Table extends Resource<
 export const Table = Resource<Table>("AWS.DynamoDB.Table");
 
 export const TableProvider = () =>
-  Table.provider.effect(
+  Provider.effect(
+    Table,
     Effect.gen(function* () {
       const createTableName = (
         id: string,
@@ -790,7 +791,7 @@ export const TableProvider = () =>
         };
       };
 
-      return Table.provider.of({
+      return Table.Provider.of({
         stables: ["tableName", "tableId", "tableArn"],
         read: Effect.fn(function* ({ output }) {
           if (!output) return undefined;

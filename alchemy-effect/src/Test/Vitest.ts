@@ -81,8 +81,8 @@ type Provided =
   | AWS.StageConfig
   | Artifacts
   | Provider<Command>
-  | Layer.Success<ReturnType<typeof AWS.providers>>
-  | Layer.Success<ReturnType<typeof Cloudflare.providers>>
+  | AWS.Providers
+  | Cloudflare.Providers
   | ChildProcessSpawner;
 
 const quietLogger = Logger.make(() => {

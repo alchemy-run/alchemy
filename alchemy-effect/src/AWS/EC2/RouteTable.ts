@@ -6,6 +6,7 @@ import * as Schedule from "effect/Schedule";
 
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, createTagsList } from "../../Tags.ts";
 import type { AccountID } from "../Account.ts";
@@ -170,7 +171,8 @@ export interface RouteTable extends Resource<
 export const RouteTable = Resource<RouteTable>("AWS.EC2.RouteTable");
 
 export const RouteTableProvider = () =>
-  RouteTable.provider.effect(
+  Provider.effect(
+    RouteTable,
     Effect.gen(function* () {
       const region = yield* Region;
       const accountId = yield* Account;

@@ -2,6 +2,7 @@ import * as rds from "@distilled.cloud/aws/rds";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
 import type { SubnetId } from "../EC2/Subnet.ts";
@@ -46,7 +47,8 @@ export interface DBSubnetGroup extends Resource<
 export const DBSubnetGroup = Resource<DBSubnetGroup>("AWS.RDS.DBSubnetGroup");
 
 export const DBSubnetGroupProvider = () =>
-  DBSubnetGroup.provider.effect(
+  Provider.effect(
+    DBSubnetGroup,
     Effect.gen(function* () {
       const toName = (id: string, props: DBSubnetGroupProps) =>
         props.dbSubnetGroupName

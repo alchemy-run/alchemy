@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import {
   createInternalTags,
@@ -102,7 +103,8 @@ export interface Schedule extends Resource<
 export const Schedule = Resource<Schedule>("AWS.Scheduler.Schedule");
 
 export const ScheduleProvider = () =>
-  Schedule.provider.effect(
+  Provider.effect(
+    Schedule,
     Effect.gen(function* () {
       const toName = (id: string, props: ScheduleProps) =>
         props.name

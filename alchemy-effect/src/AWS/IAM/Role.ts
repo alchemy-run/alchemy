@@ -2,6 +2,7 @@ import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import {
   createInternalTags,
@@ -100,7 +101,8 @@ export interface Role extends Resource<
 export const Role = Resource<Role>("AWS.IAM.Role");
 
 export const RoleProvider = () =>
-  Role.provider.effect(
+  Provider.effect(
+    Role,
     Effect.gen(function* () {
       yield* Account;
 

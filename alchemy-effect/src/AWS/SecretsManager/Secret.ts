@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
 
@@ -108,7 +109,8 @@ const toTagRecord = (
   );
 
 export const SecretProvider = () =>
-  Secret.provider.effect(
+  Provider.effect(
+    Secret,
     Effect.gen(function* () {
       const toSecretName = (id: string, props: SecretProps) =>
         props.name

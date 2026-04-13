@@ -6,6 +6,7 @@ import * as Schedule from "effect/Schedule";
 
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import {
   createAlchemyTagFilters,
@@ -158,7 +159,8 @@ export interface NatGateway extends Resource<
 export const NatGateway = Resource<NatGateway>("AWS.EC2.NatGateway");
 
 export const NatGatewayProvider = () =>
-  NatGateway.provider.effect(
+  Provider.effect(
+    NatGateway,
     Effect.gen(function* () {
       const region = yield* Region;
       const accountId = yield* Account;

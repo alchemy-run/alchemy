@@ -2,6 +2,7 @@ import * as ssoAdmin from "@distilled.cloud/aws/sso-admin";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { resolveInstance, retryIdentityCenter } from "./common.ts";
 
@@ -61,7 +62,8 @@ export const PermissionSet = Resource<PermissionSet>(
 );
 
 export const PermissionSetProvider = () =>
-  PermissionSet.provider.effect(
+  Provider.effect(
+    PermissionSet,
     Effect.gen(function* () {
       return {
         stables: ["permissionSetArn", "instanceArn"],

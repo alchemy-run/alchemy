@@ -33,6 +33,7 @@ import {
   type PlatformServices,
   type Rpc,
 } from "../Platform.ts";
+import * as Provider from "../Provider.ts";
 import { Resource, type ResourceBinding } from "../Resource.ts";
 import { Self } from "../Self.ts";
 import * as Server from "../Server/index.ts";
@@ -586,7 +587,8 @@ export const retryForContainerApplicationReadiness = <A, E, R>(
   );
 
 export const ContainerProvider = () =>
-  Container.provider.effect(
+  Provider.effect(
+    Container,
     Effect.gen(function* () {
       const stack = yield* Stack;
       const accountId = yield* Account;
@@ -1140,7 +1142,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
         );
       };
 
-      return Container.provider.of({
+      return Container.Provider.of({
         stables: ["applicationId", "accountId"],
         diff: Effect.fnUntraced(function* ({
           id,

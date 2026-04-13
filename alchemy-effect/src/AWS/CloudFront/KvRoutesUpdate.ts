@@ -1,5 +1,6 @@
 import * as kvs from "@distilled.cloud/aws/cloudfront-keyvaluestore";
 import * as Effect from "effect/Effect";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import {
   extractValue,
@@ -55,7 +56,8 @@ export const KvRoutesUpdate = Resource<KvRoutesUpdate>(
 const CHUNK_SIZE = 1000;
 
 export const KvRoutesUpdateProvider = () =>
-  KvRoutesUpdate.provider.effect(
+  Provider.effect(
+    KvRoutesUpdate,
     Effect.gen(function* () {
       const getRoutes = Effect.fn(function* (store: string, fullKey: string) {
         const res = yield* kvs
@@ -102,11 +104,9 @@ export const KvRoutesUpdateProvider = () =>
         const serialized = JSON.stringify(routes);
         const puts: kvs.PutKeyRequestListItem[] = [];
         const deletes: kvs.DeleteKeyRequestListItem[] = [];
-        let newChunkNum: number;
 
         if (serialized.length > CHUNK_SIZE) {
           const chunkCount = Math.ceil(serialized.length / CHUNK_SIZE);
-          newChunkNum = chunkCount;
           puts.push({
             Key: fullKey,
             Value: JSON.stringify({ parts: chunkCount }),
@@ -123,7 +123,6 @@ export const KvRoutesUpdateProvider = () =>
             }
           }
         } else {
-          newChunkNum = 1;
           puts.push({ Key: fullKey, Value: serialized });
           if (oldChunkNum > 1) {
             for (let i = 0; i < oldChunkNum; i++) {

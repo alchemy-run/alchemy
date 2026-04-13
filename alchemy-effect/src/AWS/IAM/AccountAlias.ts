@@ -1,6 +1,7 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 
 export interface AccountAliasProps {
@@ -40,7 +41,7 @@ const readAccountAlias = Effect.gen(function* () {
 });
 
 export const AccountAliasProvider = () =>
-  AccountAlias.provider.succeed({
+  Provider.succeed(AccountAlias, {
     stables: ["accountAlias"],
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return;

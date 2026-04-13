@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import {
   createInternalTags,
@@ -80,7 +81,8 @@ export const ServerCertificate = Resource<ServerCertificate>(
 );
 
 export const ServerCertificateProvider = () =>
-  ServerCertificate.provider.effect(
+  Provider.effect(
+    ServerCertificate,
     Effect.gen(function* () {
       const toName = (id: string, props: ServerCertificateProps) =>
         props.serverCertificateName

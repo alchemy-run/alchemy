@@ -1,6 +1,7 @@
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { Account, type AccountID } from "../Account.ts";
 import { createName, retryConcurrent } from "./common.ts";
@@ -156,7 +157,8 @@ const parseDashboardBody = (body: string | undefined) => {
 };
 
 export const DashboardProvider = () =>
-  Dashboard.provider.effect(
+  Provider.effect(
+    Dashboard,
     Effect.gen(function* () {
       const accountId = yield* Account;
 
@@ -234,7 +236,7 @@ export const DashboardProvider = () =>
             tags: {},
           };
         }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
+        update: Effect.fn(function* ({ news, output, session }) {
           yield* retryConcurrent(
             cloudwatch.putDashboard({
               DashboardName: output.dashboardName,

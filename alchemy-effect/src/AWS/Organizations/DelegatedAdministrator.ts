@@ -1,6 +1,7 @@
 import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { collectPages, retryOrganizations } from "./common.ts";
 
@@ -36,7 +37,8 @@ export const DelegatedAdministrator = Resource<DelegatedAdministrator>(
 );
 
 export const DelegatedAdministratorProvider = () =>
-  DelegatedAdministrator.provider.effect(
+  Provider.effect(
+    DelegatedAdministrator,
     Effect.gen(function* () {
       return {
         stables: ["accountId", "servicePrincipal"],

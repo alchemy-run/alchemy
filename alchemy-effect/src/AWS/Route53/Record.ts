@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 
 export interface RecordAliasTarget {
@@ -178,7 +179,8 @@ const toAttrs = (
 });
 
 export const RecordProvider = () =>
-  Record.provider.effect(
+  Provider.effect(
+    Record,
     Effect.gen(function* () {
       const waitForChange = Effect.fn(function* (changeId: string) {
         return yield* route53.getChange({ Id: changeId }).pipe(

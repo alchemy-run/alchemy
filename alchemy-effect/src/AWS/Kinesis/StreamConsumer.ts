@@ -4,6 +4,7 @@ import * as Schedule from "effect/Schedule";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import {
   createInternalTags,
@@ -213,7 +214,7 @@ const waitForConsumerDeleted = (consumerArn: string) =>
   );
 
 export const StreamConsumerProvider = () =>
-  StreamConsumer.provider.succeed({
+  Provider.succeed(StreamConsumer, {
     stables: ["consumerArn", "consumerName"],
     read: Effect.fn(function* ({ id, olds, output }) {
       const consumerName =

@@ -2,6 +2,7 @@ import * as sns from "@distilled.cloud/aws/sns";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 
 export type SubscriptionArn = string;
@@ -64,7 +65,7 @@ export interface Subscription extends Resource<
 export const Subscription = Resource<Subscription>("AWS.SNS.Subscription");
 
 export const SubscriptionProvider = () =>
-  Subscription.provider.succeed({
+  Provider.succeed(Subscription, {
     read: Effect.fn(function* ({ olds, output }) {
       return yield* readSubscription({
         subscriptionArn: output?.subscriptionArn,

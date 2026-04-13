@@ -2,8 +2,8 @@ import * as ec2 from "@distilled.cloud/aws/ec2";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, createTagsList } from "../../Tags.ts";
 import type { AccountID } from "../Account.ts";
@@ -65,7 +65,8 @@ export const InternetGateway = Resource<InternetGateway>(
 );
 
 export const InternetGatewayProvider = () =>
-  InternetGateway.provider.effect(
+  Provider.effect(
+    InternetGateway,
     Effect.gen(function* () {
       const region = yield* Region;
       const accountId = yield* Account;

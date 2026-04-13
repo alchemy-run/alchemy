@@ -1,6 +1,7 @@
 import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import {
   collectPages,
@@ -58,7 +59,8 @@ export const OrganizationalUnit = Resource<OrganizationalUnit>(
 );
 
 export const OrganizationalUnitProvider = () =>
-  OrganizationalUnit.provider.effect(
+  Provider.effect(
+    OrganizationalUnit,
     Effect.gen(function* () {
       return {
         stables: ["ouId", "ouArn"],

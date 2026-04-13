@@ -2,6 +2,7 @@ import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import {
   createInternalTags,
@@ -79,7 +80,8 @@ export interface User extends Resource<
 export const User = Resource<User>("AWS.IAM.User");
 
 export const UserProvider = () =>
-  User.provider.effect(
+  Provider.effect(
+    User,
     Effect.gen(function* () {
       const toName = (id: string, props: UserProps) =>
         props.userName

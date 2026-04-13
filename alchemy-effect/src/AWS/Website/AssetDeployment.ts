@@ -5,6 +5,7 @@ import * as Schedule from "effect/Schedule";
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { WebsiteTextEncoding } from "./shared.ts";
 
@@ -94,7 +95,8 @@ const defaultHtmlCacheControl = "max-age=0,no-cache,no-store,must-revalidate";
 const defaultAssetCacheControl = "max-age=31536000,public,immutable";
 
 export const AssetDeploymentProvider = () =>
-  AssetDeployment.provider.effect(
+  Provider.effect(
+    AssetDeployment,
     Effect.gen(function* () {
       const sync = Effect.fn(function* (news: AssetDeploymentProps) {
         const bucketName = news.bucket.bucketName;

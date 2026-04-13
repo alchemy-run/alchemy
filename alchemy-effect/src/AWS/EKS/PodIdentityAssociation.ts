@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 
@@ -82,7 +83,8 @@ export const PodIdentityAssociation = Resource<PodIdentityAssociation>(
 );
 
 export const PodIdentityAssociationProvider = () =>
-  PodIdentityAssociation.provider.effect(
+  Provider.effect(
+    PodIdentityAssociation,
     Effect.gen(function* () {
       const toClientRequestToken = (id: string, action: string) =>
         createPhysicalName({

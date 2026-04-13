@@ -2,6 +2,7 @@ import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { toRedactedString } from "./common.ts";
 
@@ -68,7 +69,7 @@ export const ServiceSpecificCredential = Resource<ServiceSpecificCredential>(
 );
 
 export const ServiceSpecificCredentialProvider = () =>
-  ServiceSpecificCredential.provider.succeed({
+  Provider.succeed(ServiceSpecificCredential, {
     stables: ["serviceSpecificCredentialId"],
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return;

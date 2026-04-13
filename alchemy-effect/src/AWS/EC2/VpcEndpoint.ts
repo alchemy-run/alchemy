@@ -7,6 +7,7 @@ import * as Schedule from "effect/Schedule";
 
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 import type { AccountID } from "../Account.ts";
@@ -212,7 +213,8 @@ export interface VpcEndpoint extends Resource<
 export const VpcEndpoint = Resource<VpcEndpoint>("AWS.EC2.VpcEndpoint");
 
 export const VpcEndpointProvider = () =>
-  VpcEndpoint.provider.effect(
+  Provider.effect(
+    VpcEndpoint,
     Effect.gen(function* () {
       const region = yield* Region;
       const accountId = yield* Account;

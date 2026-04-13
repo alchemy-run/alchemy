@@ -2,6 +2,7 @@ import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as Effect from "effect/Effect";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
 import type { AccountID } from "../Account.ts";
@@ -42,7 +43,8 @@ export interface TargetGroup extends Resource<
 export const TargetGroup = Resource<TargetGroup>("AWS.ELBv2.TargetGroup");
 
 export const TargetGroupProvider = () =>
-  TargetGroup.provider.effect(
+  Provider.effect(
+    TargetGroup,
     Effect.gen(function* () {
       const toName = (id: string, props: { name?: string } = {}) =>
         props.name

@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import {
   createInternalTags,
@@ -401,7 +402,8 @@ const waitForStreamDeleted = (streamName: string) =>
   );
 
 export const StreamProvider = () =>
-  Stream.provider.effect(
+  Provider.effect(
+    Stream,
     Effect.gen(function* () {
       const region = yield* Region;
       const accountId = yield* Account;

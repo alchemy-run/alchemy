@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Provider from "./Provider.ts";
 import { Resource } from "./Resource.ts";
 
 export interface RandomProps {
@@ -30,7 +31,7 @@ export const makeRandom = (id: string, props?: RandomProps) =>
 export const Random = Resource<Random>("Alchemy.Random");
 
 export const RandomProvider = () =>
-  Random.provider.succeed({
+  Provider.succeed(Random, {
     create: Effect.fn(function* ({ news = {}, output }) {
       if (output?.text) {
         return output;

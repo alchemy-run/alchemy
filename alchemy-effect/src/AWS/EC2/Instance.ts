@@ -13,6 +13,7 @@ import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { ServerHost } from "../../Server/Process.ts";
 import { Stack } from "../../Stack.ts";
@@ -309,7 +310,8 @@ export const Instance: Platform<
 });
 
 export const InstanceProvider = () =>
-  Instance.provider.effect(
+  Provider.effect(
+    Instance,
     Effect.gen(function* () {
       const region = yield* Region;
       const accountId = yield* Account;

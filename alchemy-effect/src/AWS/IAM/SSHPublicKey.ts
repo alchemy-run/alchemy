@@ -1,6 +1,7 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 
 export interface SSHPublicKeyProps {
@@ -54,7 +55,7 @@ export interface SSHPublicKey extends Resource<
 export const SSHPublicKey = Resource<SSHPublicKey>("AWS.IAM.SSHPublicKey");
 
 export const SSHPublicKeyProvider = () =>
-  SSHPublicKey.provider.succeed({
+  Provider.succeed(SSHPublicKey, {
     stables: ["sshPublicKeyId"],
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return;

@@ -1,6 +1,7 @@
 import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import {
   collectPages,
@@ -49,7 +50,8 @@ export interface Root extends Resource<
 export const Root = Resource<Root>("AWS.Organizations.Root");
 
 export const RootProvider = () =>
-  Root.provider.effect(
+  Provider.effect(
+    Root,
     Effect.gen(function* () {
       return {
         stables: ["rootId", "rootArn"],

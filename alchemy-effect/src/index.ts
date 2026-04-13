@@ -1,7 +1,7 @@
 export * as AdoptPolicy from "./AdoptPolicy.ts";
 export * from "./Apply.ts";
 export * as AWS from "./AWS/index.ts";
-export * from "./Binding.ts";
+export * as Binding from "./Binding.ts";
 export * as Build from "./Build/index.ts";
 export * as Bundle from "./Bundle/index.ts";
 export * as Cloudflare from "./Cloudflare/index.ts";
@@ -16,7 +16,7 @@ export * from "./Namespace.ts";
 export * as Output from "./Output.ts";
 export * from "./PhysicalName.ts";
 export * as Plan from "./Plan.ts";
-export * from "./Provider.ts";
+export * as Provider from "./Provider.ts";
 export * from "./Random.ts";
 export * from "./Ref.ts";
 export * as RemovalPolicy from "./RemovalPolicy.ts";

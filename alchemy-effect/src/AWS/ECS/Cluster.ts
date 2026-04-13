@@ -3,6 +3,7 @@ import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
 import { Account, type AccountID } from "../Account.ts";
@@ -71,7 +72,8 @@ export interface Cluster extends Resource<
 export const Cluster = Resource<Cluster>("AWS.ECS.Cluster");
 
 export const ClusterProvider = () =>
-  Cluster.provider.effect(
+  Provider.effect(
+    Cluster,
     Effect.gen(function* () {
       const region = yield* Region;
       const accountId = yield* Account;

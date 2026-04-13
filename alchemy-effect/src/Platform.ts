@@ -14,11 +14,7 @@ import {
 import type { HttpEffect } from "./Http.ts";
 import type { InputProps } from "./Input.ts";
 import type { Provider } from "./Provider.ts";
-import {
-  Resource,
-  type ResourceLike,
-  type ResourceProviders,
-} from "./Resource.ts";
+import { Resource, type ResourceLike } from "./Resource.ts";
 import { Self } from "./Self.ts";
 import type { Stack, StackServices } from "./Stack.ts";
 import type { Stage } from "./Stage.ts";
@@ -62,7 +58,8 @@ export interface Platform<
   never,
   Services | PlatformServices
 > {
-  provider: ResourceProviders<Resource>;
+  Type: Resource["Type"];
+  Provider: Provider<Resource>;
 
   <Self, Shape>(): {
     <PropsReq = never>(

@@ -1,6 +1,7 @@
 import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { collectPages, retryOrganizations } from "./common.ts";
 
@@ -34,7 +35,8 @@ export const RootPolicyType = Resource<RootPolicyType>(
 );
 
 export const RootPolicyTypeProvider = () =>
-  RootPolicyType.provider.effect(
+  Provider.effect(
+    RootPolicyType,
     Effect.gen(function* () {
       return {
         stables: ["rootId", "rootArn", "policyType"],

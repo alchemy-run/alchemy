@@ -1,6 +1,7 @@
 import * as ssoAdmin from "@distilled.cloud/aws/sso-admin";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import {
   listInstances,
@@ -76,7 +77,8 @@ export interface Instance extends Resource<
 export const Instance = Resource<Instance>("AWS.IdentityCenter.Instance");
 
 export const InstanceProvider = () =>
-  Instance.provider.effect(
+  Provider.effect(
+    Instance,
     Effect.gen(function* () {
       return {
         stables: ["instanceArn", "identityStoreId", "ownerAccountId", "mode"],

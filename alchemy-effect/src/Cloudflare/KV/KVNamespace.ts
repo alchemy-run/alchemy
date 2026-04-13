@@ -1,15 +1,9 @@
 import * as kv from "@distilled.cloud/cloudflare/kv";
 import * as Effect from "effect/Effect";
-
-import type { Credentials } from "@distilled.cloud/cloudflare";
-import type { Layer } from "effect/Layer";
-import type { HttpClient } from "effect/unstable/http/HttpClient";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import type { Provider } from "../../Provider.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Stack } from "../../Stack.ts";
-import type { Stage } from "../../Stage.ts";
 import { Account } from "../Account.ts";
 
 export type NamespaceProps = {
@@ -34,12 +28,9 @@ export type KVNamespace = Resource<
 
 export const KVNamespace = Resource<KVNamespace>("Cloudflare.KVNamespace");
 
-export const NamespaceProvider = (): Layer<
-  Provider<KVNamespace>,
-  never,
-  Account | Credentials | HttpClient | Stack | Stage
-> =>
-  KVNamespace.provider.effect(
+export const NamespaceProvider = () =>
+  Provider.effect(
+    KVNamespace,
     Effect.gen(function* () {
       const accountId = yield* Account;
       const createNamespace = yield* kv.createNamespace;

@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { resolveInstance, retryIdentityCenter } from "./common.ts";
 
@@ -63,7 +64,8 @@ export const AccountAssignment = Resource<AccountAssignment>(
 );
 
 export const AccountAssignmentProvider = () =>
-  AccountAssignment.provider.effect(
+  Provider.effect(
+    AccountAssignment,
     Effect.gen(function* () {
       return {
         stables: [

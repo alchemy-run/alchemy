@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags } from "../../Tags.ts";
 import type { AccountID } from "../Account.ts";
@@ -244,7 +245,8 @@ export interface Service extends Resource<
 export const Service = Resource<Service>("AWS.ECS.Service");
 
 export const ServiceProvider = () =>
-  Service.provider.effect(
+  Provider.effect(
+    Service,
     Effect.gen(function* () {
       const clusterArnOf = (cluster: ServiceProps["cluster"] | ClusterArn) =>
         typeof cluster === "string"
@@ -293,7 +295,7 @@ export const ServiceProvider = () =>
         const names = yield* ingressNames(id);
         const tags = {
           ...(yield* createInternalTags(id)),
-          ...(news.tags ?? {}),
+          ...news.tags,
         };
 
         const loadBalancer = yield* elbv2.createLoadBalancer({
@@ -451,7 +453,7 @@ export const ServiceProvider = () =>
             : undefined;
           const tags = {
             ...(yield* createInternalTags(id)),
-            ...(news.tags ?? {}),
+            ...news.tags,
           };
 
           const created = yield* ecs.createService({

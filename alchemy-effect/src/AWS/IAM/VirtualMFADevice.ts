@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 import { toRedactedBytes, toTagRecord } from "./common.ts";
@@ -76,7 +77,8 @@ export const VirtualMFADevice = Resource<VirtualMFADevice>(
 );
 
 export const VirtualMFADeviceProvider = () =>
-  VirtualMFADevice.provider.effect(
+  Provider.effect(
+    VirtualMFADevice,
     Effect.gen(function* () {
       const toName = (id: string, props: VirtualMFADeviceProps) =>
         props.virtualMFADeviceName

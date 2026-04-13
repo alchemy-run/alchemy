@@ -3,6 +3,7 @@ import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { Account, type AccountID } from "../Account.ts";
 import type { RegionID } from "../Region.ts";
@@ -67,11 +68,11 @@ export const MetricStream = Resource<MetricStream>(
 );
 
 export const MetricStreamProvider = () =>
-  MetricStream.provider.effect(
+  Provider.effect(
+    MetricStream,
     Effect.gen(function* () {
       const region = yield* Region;
       const accountId = yield* Account;
-
       const createMetricStreamName = (
         id: string,
         props: { name?: string } = {},

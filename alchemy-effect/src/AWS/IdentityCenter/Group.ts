@@ -1,6 +1,7 @@
 import * as identitystore from "@distilled.cloud/aws/identitystore";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import {
   listGroups,
@@ -56,7 +57,8 @@ export interface Group extends Resource<
 export const Group = Resource<Group>("AWS.IdentityCenter.Group");
 
 export const GroupProvider = () =>
-  Group.provider.effect(
+  Provider.effect(
+    Group,
     Effect.gen(function* () {
       return {
         stables: ["identityStoreId", "groupId"],

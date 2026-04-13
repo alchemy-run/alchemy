@@ -2,6 +2,7 @@ import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 
 export interface KeyValueStoreProps {
@@ -69,7 +70,8 @@ export const KeyValueStore = Resource<KeyValueStore>(
 );
 
 export const KeyValueStoreProvider = () =>
-  KeyValueStore.provider.effect(
+  Provider.effect(
+    KeyValueStore,
     Effect.gen(function* () {
       const getByName = Effect.fn(function* (name: string) {
         const listed = yield* cloudfront.listKeyValueStores({});

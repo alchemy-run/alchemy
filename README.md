@@ -23,7 +23,7 @@ export default Effect.gen(function* () {
   return {
     bucketArn: bucket.bucketArn,
   };
-}).pipe(Stack.make("MyStack"), Effect.provide(AWS.providers()));
+}).pipe(Stack.make("MyStack"), Effect.provide(AWS.providers()()));
 ```
 
 ## Resources
@@ -294,7 +294,7 @@ export default Effect.gen(function* () {
   // ...
 }).pipe(
   Stack.make("MyStack"),
-  Effect.provide(Layer.provide(AWS.providers(), awsConfig)),
+  Effect.provide(Layer.provide(AWS.providers()(), awsConfig)),
 );
 ```
 
@@ -430,7 +430,7 @@ Key design principles:
 Every capability (e.g. `S3.GetObject`, `Kinesis.PutRecord`) is split into two layers:
 
 - **`Binding.Service`** — the runtime implementation (SDK call). Provided on the **Function** Effect so it is bundled into your Lambda/Worker.
-- **`Binding.Policy`** — the deploy-time IAM policy attachment. Provided on the **Stack** via `AWS.providers()` so it only runs during `plan`/`deploy`, never at runtime.
+- **`Binding.Policy`** — the deploy-time IAM policy attachment. Provided on the **Stack** via `AWS.providers()()` so it only runs during `plan`/`deploy`, never at runtime.
 
 This separation means your Lambda bundle only includes the code it needs, while IAM policies are resolved at deploy time.
 
@@ -515,7 +515,7 @@ export const PutRecordPolicyLive = PutRecordPolicy.layer.succeed(
 );
 ```
 
-Policy layers are provided on the **Stack** through `AWS.providers()`, not on the Function:
+Policy layers are provided on the **Stack** through `AWS.providers()()`, not on the Function:
 
 ```typescript
 // alchemy.run.ts — stack entrypoint
@@ -524,8 +524,8 @@ export default Effect.gen(function* () {
   return { url: func.functionUrl };
 }).pipe(
   Stack.make("MyStack"),
-  // AWS.providers() includes all *PolicyLive layers (deploy-time only)
-  Effect.provide(Layer.provide(AWS.providers(), awsConfig)),
+  // AWS.providers()() includes all *PolicyLive layers (deploy-time only)
+  Effect.provide(Layer.provide(AWS.providers()(), awsConfig)),
 );
 ```
 
@@ -533,7 +533,7 @@ export default Effect.gen(function* () {
 
 ```
 Stack (alchemy.run.ts)
-├── AWS.providers()
+├── AWS.providers()()
 │   ├── Resource Providers (StreamProvider, BucketProvider, ...)
 │   └── Binding Policies (PutRecordPolicyLive, GetObjectPolicyLive, ...)  ← deploy-time only
 │

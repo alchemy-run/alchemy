@@ -2,6 +2,7 @@ import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { PolicyDocument } from "./Policy.ts";
 import { parsePolicyDocument, stringifyPolicyDocument } from "./common.ts";
@@ -66,7 +67,8 @@ export interface Group extends Resource<
 export const Group = Resource<Group>("AWS.IAM.Group");
 
 export const GroupProvider = () =>
-  Group.provider.effect(
+  Provider.effect(
+    Group,
     Effect.gen(function* () {
       const toName = (id: string, props: GroupProps) =>
         props.groupName

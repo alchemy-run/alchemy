@@ -2,6 +2,7 @@ import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import {
   createInternalTags,
@@ -106,7 +107,8 @@ export interface Policy extends Resource<
 export const Policy = Resource<Policy>("AWS.IAM.Policy");
 
 export const PolicyProvider = () =>
-  Policy.provider.effect(
+  Provider.effect(
+    Policy,
     Effect.gen(function* () {
       const accountId = yield* Account;
 

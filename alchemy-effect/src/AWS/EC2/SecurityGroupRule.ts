@@ -2,6 +2,7 @@ import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Effect from "effect/Effect";
 
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 import type { SecurityGroupId } from "./SecurityGroup.ts";
@@ -141,7 +142,8 @@ export const SecurityGroupRule = Resource<SecurityGroupRule>(
 );
 
 export const SecurityGroupRuleProvider = () =>
-  SecurityGroupRule.provider.effect(
+  Provider.effect(
+    SecurityGroupRule,
     Effect.gen(function* () {
       const createTags = Effect.fn(function* (
         id: string,

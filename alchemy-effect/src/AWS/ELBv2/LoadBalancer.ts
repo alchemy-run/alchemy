@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
 import type { AccountID } from "../Account.ts";
@@ -45,7 +46,8 @@ export interface LoadBalancer extends Resource<
 export const LoadBalancer = Resource<LoadBalancer>("AWS.ELBv2.LoadBalancer");
 
 export const LoadBalancerProvider = () =>
-  LoadBalancer.provider.effect(
+  Provider.effect(
+    LoadBalancer,
     Effect.gen(function* () {
       const toName = (id: string, props: { name?: string } = {}) =>
         props.name

@@ -2,6 +2,7 @@ import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 
 export interface GroupMembershipProps {
@@ -56,7 +57,7 @@ export const GroupMembership = Resource<GroupMembership>(
 );
 
 export const GroupMembershipProvider = () =>
-  GroupMembership.provider.succeed({
+  Provider.succeed(GroupMembership, {
     stables: ["groupName"],
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return;

@@ -5,10 +5,10 @@ import { Bucket } from "@/AWS/S3";
 import { destroy } from "@/Destroy";
 import * as Output from "@/Output";
 import { test } from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
-import * as Effect from "effect/Effect";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as S3 from "@distilled.cloud/aws/s3";
+import { expect } from "@effect/vitest";
+import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
 test.skipIf(process.env.ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS !== "true")(

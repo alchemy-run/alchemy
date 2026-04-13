@@ -2,9 +2,9 @@ import { Region } from "@distilled.cloud/aws/Region";
 import * as sqs from "@distilled.cloud/aws/sqs";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { Account, type AccountID } from "../Account.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
@@ -88,7 +88,8 @@ export interface Queue extends Resource<
 export const Queue = Resource<Queue>("AWS.SQS.Queue");
 
 export const QueueProvider = () =>
-  Queue.provider.effect(
+  Provider.effect(
+    Queue,
     Effect.gen(function* () {
       const region = yield* Region;
       const accountId = yield* Account;
@@ -142,7 +143,7 @@ export const QueueProvider = () =>
 
         return baseAttributes;
       };
-      return Queue.provider.of({
+      return Queue.Provider.of({
         stables: ["queueName", "queueUrl", "queueArn"],
         diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
           if (!isResolved(news)) return undefined;

@@ -4,8 +4,8 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { deepEqual, isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasTags } from "../../Tags.ts";
 import { Account } from "../Account.ts";
@@ -173,7 +173,8 @@ export const EventSourceMapping = Resource<EventSourceMapping>(
 );
 
 export const EventSourceMappingProvider = () =>
-  EventSourceMapping.provider.effect(
+  Provider.effect(
+    EventSourceMapping,
     Effect.gen(function* () {
       const region = yield* Region;
       const accountId = yield* Account;

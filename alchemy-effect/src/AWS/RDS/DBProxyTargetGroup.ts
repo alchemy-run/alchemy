@@ -1,6 +1,7 @@
 import * as rds from "@distilled.cloud/aws/rds";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 
 export interface DBProxyTargetGroupProps {
@@ -54,7 +55,8 @@ const toTargetGroupName = (props: DBProxyTargetGroupProps) =>
   props.targetGroupName ?? "default";
 
 export const DBProxyTargetGroupProvider = () =>
-  DBProxyTargetGroup.provider.effect(
+  Provider.effect(
+    DBProxyTargetGroup,
     Effect.gen(function* () {
       const readGroup = Effect.fn(function* ({
         dbProxyName,
