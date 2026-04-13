@@ -60,38 +60,18 @@ export default class Api extends Cloudflare.Worker<Api>()(
         });
 
         // --- PUT /packages ---
+        // Body: raw .tgz stream
+        // Headers: X-Tags (JSON array), X-TTL (optional, days), Content-Length
         if (method === "PUT" && path === "/packages") {
           return yield* Effect.gen(function* () {
             yield* requireAuth;
 
-            const rawRequest =
-              (yield* Cloudflare.Request) as globalThis.Request;
-            const formData = yield* Effect.promise(() => rawRequest.formData());
-            const file = formData.get("file") as unknown as File | null;
-            const tagsRaw = formData.get("tags") as string | null;
-            const ttlRaw = formData.get("ttl") as string | null;
+            const tagsRaw = request.headers["x-tags"];
+            const ttlRaw = request.headers["x-ttl"];
 
-            if (!file || !tagsRaw) {
+            if (!tagsRaw) {
               return yield* HttpServerResponse.json(
-                { error: "file and tags are required" },
-                { status: 400 },
-              );
-            }
-
-            if (!file.name.endsWith(".tgz")) {
-              return yield* HttpServerResponse.json(
-                { error: "file must be a .tgz archive" },
-                { status: 400 },
-              );
-            }
-
-            const bytes = new Uint8Array(
-              yield* Effect.promise(() => file.arrayBuffer()),
-            );
-
-            if (!isGzip(bytes)) {
-              return yield* HttpServerResponse.json(
-                { error: "file must be a valid .tgz (gzip) archive" },
+                { error: "X-Tags header is required" },
                 { status: 400 },
               );
             }
@@ -101,13 +81,27 @@ export default class Api extends Cloudflare.Worker<Api>()(
               tags = JSON.parse(tagsRaw);
               if (!Array.isArray(tags) || tags.length === 0) {
                 return yield* HttpServerResponse.json(
-                  { error: "tags must be a non-empty JSON array of strings" },
+                  { error: "X-Tags must be a non-empty JSON array of strings" },
                   { status: 400 },
                 );
               }
             } catch {
               return yield* HttpServerResponse.json(
-                { error: "tags must be valid JSON" },
+                { error: "X-Tags must be valid JSON" },
+                { status: 400 },
+              );
+            }
+
+            // buffer body to compute hash and validate gzip magic
+            const rawRequest =
+              (yield* Cloudflare.Request) as globalThis.Request;
+            const bytes = new Uint8Array(
+              yield* Effect.promise(() => rawRequest.arrayBuffer()),
+            );
+
+            if (!isGzip(bytes)) {
+              return yield* HttpServerResponse.json(
+                { error: "body must be a valid .tgz (gzip) archive" },
                 { status: 400 },
               );
             }

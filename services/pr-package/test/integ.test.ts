@@ -51,22 +51,20 @@ function upload(
   baseUrl: string,
   file: Uint8Array,
   tags: string[],
-  options?: { ttl?: number; token?: string; filename?: string },
+  options?: { ttl?: number; token?: string },
 ) {
-  const form = new FormData();
-  form.append(
-    "file",
-    new Blob([file], { type: "application/gzip" }),
-    options?.filename ?? "package.tgz",
-  );
-  form.append("tags", JSON.stringify(tags));
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${options?.token ?? AUTH_TOKEN}`,
+    "Content-Type": "application/gzip",
+    "X-Tags": JSON.stringify(tags),
+  };
   if (options?.ttl !== undefined) {
-    form.append("ttl", String(options.ttl));
+    headers["X-TTL"] = String(options.ttl);
   }
   return fetch(`${baseUrl}/packages`, {
     method: "PUT",
-    headers: { Authorization: `Bearer ${options?.token ?? AUTH_TOKEN}` },
-    body: form,
+    headers,
+    body: file,
   });
 }
 
@@ -224,30 +222,17 @@ test(
 );
 
 test(
-  "reject non-.tgz upload",
+  "reject upload with invalid gzip content",
   Effect.gen(function* () {
     const url = yield* stack;
     const txt = new TextEncoder().encode("not a tgz");
 
     const res = yield* Effect.promise(() =>
-      upload(url, txt, ["bad"], { filename: "readme.txt" }),
+      upload(url, txt, ["bad"]),
     );
     expect(res.status).toBe(400);
     const body = yield* Effect.promise(() => res.json());
     expect(body.error).toContain("tgz");
-  }),
-);
-
-test(
-  "reject upload with invalid gzip magic bytes",
-  Effect.gen(function* () {
-    const url = yield* stack;
-    const fake = new Uint8Array([0x00, 0x00, 0x08, 0x00]);
-
-    const res = yield* Effect.promise(() =>
-      upload(url, fake, ["bad-magic"], { filename: "package.tgz" }),
-    );
-    expect(res.status).toBe(400);
   }),
 );
 
@@ -258,15 +243,15 @@ test(
     const content = createTgz("auth-test");
 
     // PUT without token
-    const form = new FormData();
-    form.append(
-      "file",
-      new Blob([content], { type: "application/gzip" }),
-      "package.tgz",
-    );
-    form.append("tags", JSON.stringify(["auth-tag"]));
     const noAuthPut = yield* Effect.promise(() =>
-      fetch(`${url}/packages`, { method: "PUT", body: form }),
+      fetch(`${url}/packages`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/gzip",
+          "X-Tags": JSON.stringify(["auth-tag"]),
+        },
+        body: content,
+      }),
     );
     expect(noAuthPut.status).toBe(401);
 
