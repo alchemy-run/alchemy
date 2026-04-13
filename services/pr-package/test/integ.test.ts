@@ -2,8 +2,33 @@ import { afterAll, beforeAll, deploy, destroy, expect, test } from "alchemy-effe
 import * as Effect from "effect/Effect";
 import Stack from "../alchemy.run.ts";
 
-const stack = beforeAll(deploy(Stack));
-afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
+async function waitForWorker(url: string, maxRetries = 30) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const res = await fetch(`${url}/health`);
+      // Our worker returns 404 with text "Not Found" for unknown routes.
+      // Cloudflare's edge 404 (route not ready) has a different body.
+      // Also skip 521/522 (worker not reachable).
+      const body = await res.text();
+      if (body === "Not Found" || res.status === 200) return;
+    } catch {
+      // network error, keep retrying
+    }
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  throw new Error("Worker not reachable after retries");
+}
+
+// Deploy stack and wait for worker to be reachable
+const stack = beforeAll(
+  Effect.gen(function* () {
+    const url = yield* deploy(Stack);
+    yield* Effect.promise(() => waitForWorker(url!));
+    return url;
+  }),
+  { timeout: 180_000 },
+);
+// afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 // --- helpers ---
 
@@ -293,11 +318,13 @@ test(
   }),
 );
 
-test.skipIf(!!process.env.NO_DESTROY)(
+test(
   "download tracking records tag used",
   Effect.gen(function* () {
     const url = yield* stack;
-    const content = createTgz("stats-content");
+    // Use unique content per run to get a fresh DO instance
+    const runId = crypto.randomUUID();
+    const content = createTgz(`stats-content-${runId}`);
 
     const uploaded = yield* Effect.promise(() =>
       upload(url, content, ["stats-a", "stats-b"]).then((r) => r.json()),

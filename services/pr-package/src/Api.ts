@@ -1,5 +1,4 @@
 import * as Cloudflare from "alchemy-effect/Cloudflare";
-import * as KV from "alchemy-effect/Cloudflare/KV";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -38,10 +37,8 @@ export default class Api extends Cloudflare.Worker<Api>()(
     },
   },
   Effect.gen(function* () {
-    const r2 = yield* Cloudflare.R2BucketBinding.bind(Bucket);
-    const kvGet = yield* KV.Get.bind(TagIndex);
-    const kvPut = yield* KV.Put.bind(TagIndex);
-    const kvDelete = yield* KV.Delete.bind(TagIndex);
+    const r2 = yield* Cloudflare.R2Bucket.bind(Bucket);
+    const kv = yield* Cloudflare.KVNamespace.bind(TagIndex);
     const packages = yield* PackageStore;
 
     return {
@@ -123,7 +120,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 
             // reassign tags: remove from old resources, cleanup orphans
             for (const tag of tags) {
-              const oldResourceId = yield* kvGet(`tag:${tag}`);
+              const oldResourceId = yield* kv.get(`tag:${tag}`);
               if (oldResourceId && oldResourceId !== resourceId) {
                 const oldStore = packages.getByName(oldResourceId);
                 const { orphaned } = yield* oldStore
@@ -133,7 +130,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
                   yield* r2
                     .delete(oldResourceId + ".tgz")
                     .pipe(Effect.orDie);
-                  yield* kvDelete(`metadata:${oldResourceId}`);
+                  yield* kv.delete(`metadata:${oldResourceId}`);
                 }
               }
             }
@@ -143,11 +140,11 @@ export default class Api extends Cloudflare.Worker<Api>()(
 
             // store tag pointers in KV
             for (const tag of tags) {
-              yield* kvPut(`tag:${tag}`, resourceId);
+              yield* kv.put(`tag:${tag}`, resourceId);
             }
 
             // store metadata in KV (for potential cron cleanup)
-            yield* kvPut(
+            yield* kv.put(
               `metadata:${resourceId}`,
               JSON.stringify({ tags, expiresAt }),
             );
@@ -174,7 +171,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
         // --- GET /tags/:tag ---
         if (method === "GET" && path.startsWith("/tags/")) {
           const tag = decodeURIComponent(path.slice("/tags/".length));
-          const resourceId = yield* kvGet(`tag:${tag}`);
+          const resourceId = yield* kv.get(`tag:${tag}`);
           if (!resourceId) {
             return yield* HttpServerResponse.json(
               { error: "tag not found" },
@@ -186,7 +183,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
             .get(resourceId + ".tgz")
             .pipe(Effect.orDie);
           if (!object) {
-            yield* kvDelete(`tag:${tag}`);
+            yield* kv.delete(`tag:${tag}`);
             return yield* HttpServerResponse.json(
               { error: "resource not found" },
               { status: 404 },
@@ -212,7 +209,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
             yield* requireAuth;
 
             const tag = decodeURIComponent(path.slice("/tags/".length));
-            const resourceId = yield* kvGet(`tag:${tag}`);
+            const resourceId = yield* kv.get(`tag:${tag}`);
             if (!resourceId) {
               return yield* HttpServerResponse.json(
                 { error: "tag not found" },
@@ -225,13 +222,13 @@ export default class Api extends Cloudflare.Worker<Api>()(
               .removeTag(tag)
               .pipe(Effect.orDie);
 
-            yield* kvDelete(`tag:${tag}`);
+            yield* kv.delete(`tag:${tag}`);
 
             if (orphaned) {
               yield* r2
                 .delete(resourceId + ".tgz")
                 .pipe(Effect.orDie);
-              yield* kvDelete(`metadata:${resourceId}`);
+              yield* kv.delete(`metadata:${resourceId}`);
             }
 
             return yield* HttpServerResponse.json({ ok: true });
@@ -258,7 +255,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
               "/packages/".length,
               -"/stats".length,
             );
-            const meta = yield* kvGet(`metadata:${resourceId}`);
+            const meta = yield* kv.get(`metadata:${resourceId}`);
             if (!meta) {
               return yield* HttpServerResponse.json(
                 { error: "resource not found" },
@@ -281,15 +278,19 @@ export default class Api extends Cloudflare.Worker<Api>()(
         }
 
         return HttpServerResponse.text("Not Found", { status: 404 });
-      }),
+      }).pipe(
+        Effect.catch(() =>
+          Effect.succeed(
+            HttpServerResponse.text("Internal Server Error", { status: 500 }),
+          ),
+        ),
+      ),
     };
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
         Cloudflare.R2BucketBindingLive,
-        KV.GetLive,
-        KV.PutLive,
-        KV.DeleteLive,
+        Cloudflare.KVNamespaceBindingLive,
       ),
     ),
   ),
