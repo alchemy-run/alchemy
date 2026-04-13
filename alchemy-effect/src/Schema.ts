@@ -103,7 +103,7 @@ export type AnyClassSchema<
 
 export type AnyClass = new (...args: any[]) => any;
 
-export type AnyErrorSchema = S.ErrorClass<any, any, any>;
+export type AnyErrorSchema = S.Class<any, any, any>;
 
 export type SchemaWithTemplate<
   Schema extends S.Schema<any>,

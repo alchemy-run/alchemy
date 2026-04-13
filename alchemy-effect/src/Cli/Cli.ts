@@ -1,5 +1,5 @@
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as ServiceMap from "effect/ServiceMap";
 import type { Plan } from "../Plan.ts";
 import type { ApplyEvent } from "./Event.ts";
 
@@ -20,4 +20,4 @@ export interface CLIService {
   ) => Effect.Effect<PlanStatusSession>;
 }
 
-export class Cli extends ServiceMap.Service<Cli, CLIService>()("CLI") {}
+export class Cli extends Context.Service<Cli, CLIService>()("CLI") {}

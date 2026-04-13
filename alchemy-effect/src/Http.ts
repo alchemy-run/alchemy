@@ -1,10 +1,10 @@
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type { Scope } from "effect/Scope";
-import * as ServiceMap from "effect/ServiceMap";
 import type { HttpBodyError } from "effect/unstable/http/HttpBody";
 import type { HttpServerError } from "effect/unstable/http/HttpServerError";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -29,7 +29,7 @@ export const serve = <Req = never>(
     Effect.flatMap((http) => (http ? http.serve(handler) : Effect.void)),
   );
 
-export class HttpServer extends ServiceMap.Service<
+export class HttpServer extends Context.Service<
   HttpServer,
   {
     serve: <Req = never>(

@@ -1,7 +1,7 @@
+import * as Context from "effect/Context";
 import type { Yieldable } from "effect/Effect";
 import * as Effect from "effect/Effect";
 import * as S from "effect/Schema";
-import * as ServiceMap from "effect/ServiceMap";
 import type { Class, IsAny } from "../Util/index.ts";
 import { ContextPlugin } from "./ContextPlugin.ts";
 import { createPluginBuilder, type Plugins } from "./Plugin.ts";
@@ -22,7 +22,7 @@ export const isAspect = (a: any): a is Aspect => {
   );
 };
 
-export class AspectConfig extends ServiceMap.Service<
+export class AspectConfig extends Context.Service<
   AspectConfig,
   {
     cwd: string;

@@ -1,8 +1,8 @@
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as ServiceMap from "effect/ServiceMap";
 
 /** A 16-byte (128-bit) random hex-encoded string representing an physical instance of a logical resource */
-export class InstanceId extends ServiceMap.Service<InstanceId, string>()(
+export class InstanceId extends Context.Service<InstanceId, string>()(
   "instance-id",
 ) {}
 

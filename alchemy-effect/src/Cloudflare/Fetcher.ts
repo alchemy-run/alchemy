@@ -35,7 +35,7 @@ export interface Fetcher {
 export const toCloudflareFetcher = Effect.fnUntraced(function* (
   fetcher: Fetcher,
 ) {
-  const services = yield* Effect.services();
+  const context = yield* Effect.context();
   return {
     fetch: (input, init) =>
       fetcher
@@ -48,10 +48,10 @@ export const toCloudflareFetcher = Effect.fnUntraced(function* (
           Effect.map(
             (response) =>
               HttpServerResponse.toWeb(response, {
-                services,
+                context,
               }) as any as cf.Response,
           ),
-          Effect.provideServices(services),
+          Effect.provideContext(context),
           Effect.runPromise,
         ),
     connect() {

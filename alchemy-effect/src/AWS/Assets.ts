@@ -1,10 +1,10 @@
 import type { Credentials } from "@distilled.cloud/aws/Credentials";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as s3 from "@distilled.cloud/aws/s3";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as ServiceMap from "effect/ServiceMap";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 
 import { lookupAssetsBucket } from "./Bootstrap.ts";
@@ -29,7 +29,7 @@ export type AssetsError =
  */
 export type AssetsRequirements = Region | Credentials | HttpClient;
 
-export class Assets extends ServiceMap.Service<
+export class Assets extends Context.Service<
   Assets,
   {
     /**

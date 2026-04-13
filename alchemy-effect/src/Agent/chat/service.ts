@@ -1,6 +1,6 @@
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as S from "effect/Schema";
-import * as ServiceMap from "effect/ServiceMap";
 import { AgentId } from "../Agent.ts";
 import { StreamTextPart } from "../llm/stream-text-part.ts";
 import { Task, TaskId } from "../process/task.ts";
@@ -101,7 +101,7 @@ export class CreateTaskRequest extends S.Class<CreateTaskRequest>(
 /**
  * The ChatService is the central service for managing Channels, Threads, and Messages.
  */
-export class Chat extends ServiceMap.Service<
+export class Chat extends Context.Service<
   Chat,
   {
     getThread: (request: GetThreadRequest) => Effect.Effect<GetThreadResponse>;

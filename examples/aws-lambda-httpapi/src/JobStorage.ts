@@ -5,10 +5,10 @@ import * as SQS from "alchemy-effect/AWS/SQS";
 import * as RemovalPolicy from "alchemy-effect/RemovalPolicy";
 import { Stack } from "alchemy-effect/Stack";
 import * as Console from "effect/Console";
+import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as ServiceMap from "effect/ServiceMap";
 import * as Stream from "effect/Stream";
 
 import type { Job } from "./Job.ts";
@@ -23,7 +23,7 @@ export class GetJobError extends Data.TaggedError("GetJobError")<{
   readonly cause?: unknown;
 }> {}
 
-export class JobStorage extends ServiceMap.Service<
+export class JobStorage extends Context.Service<
   JobStorage,
   {
     putJob(job: Job): Effect.Effect<Job, PutJobError>;

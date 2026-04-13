@@ -1,7 +1,7 @@
 import type * as cf from "@cloudflare/workers-types";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as ServiceMap from "effect/ServiceMap";
 import type { HttpServerError } from "effect/unstable/http/HttpServerError";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -114,7 +114,7 @@ export interface DurableObjectNamespaceClass extends Effect.Effect<
   >;
 }
 
-export class DurableObjectNamespaceScope extends ServiceMap.Service<
+export class DurableObjectNamespaceScope extends Context.Service<
   DurableObjectNamespaceScope,
   DurableObjectNamespace
 >()("Cloudflare.DurableObjectNamespace") {}
@@ -159,14 +159,14 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
             });
 
             const services =
-              yield* Effect.services<Effect.Services<typeof impl>>();
+              yield* Effect.context<Effect.Services<typeof impl>>();
 
             yield* worker.export(namespace, {
               kind: "durableObject",
               make: (state: cf.DurableObjectState, env: any) => {
                 const doState = fromDurableObjectState(state);
                 return constructor.pipe(
-                  Effect.provideServices(services),
+                  Effect.provideContext(services),
                   Effect.provideService(DurableObjectState, doState),
                   Effect.provideService(WorkerEnvironment, env),
                   Effect.map((methods: any) => {
@@ -281,7 +281,7 @@ export type DurableObjectStub<Shape> = {
   >;
 };
 
-export class DurableObjectState extends ServiceMap.Service<
+export class DurableObjectState extends Context.Service<
   DurableObjectState,
   {
     // TODO(sam): is this needed when we have Effect?

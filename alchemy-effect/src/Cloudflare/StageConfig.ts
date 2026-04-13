@@ -1,6 +1,6 @@
-import * as ServiceMap from "effect/ServiceMap";
+import * as Context from "effect/Context";
 
-export class StageConfig extends ServiceMap.Service<
+export class StageConfig extends Context.Service<
   StageConfig,
   {
     account?: string;

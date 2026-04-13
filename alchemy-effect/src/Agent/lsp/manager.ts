@@ -1,9 +1,9 @@
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as HashMap from "effect/HashMap";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
-import * as ServiceMap from "effect/ServiceMap";
 import { type Diagnostic, type LSPClient, makeLSPClient } from "./client.ts";
 import { type ServerConfig, DefaultServers } from "./servers.ts";
 
@@ -51,7 +51,7 @@ export interface LSPManager {
   readonly shutdown: Effect.Effect<void, never, never>;
 }
 
-export const LSPManager = ServiceMap.Service<LSPManager>("LSPManager");
+export const LSPManager = Context.Service<LSPManager>("LSPManager");
 
 /**
  * Create an LSPManager implementation.

@@ -1,7 +1,7 @@
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as ServiceMap from "effect/ServiceMap";
 import { SingleShotGen } from "effect/Utils";
 import { ExecutionContext } from "./ExecutionContext.ts";
 import * as Namespace from "./Namespace.ts";
@@ -18,14 +18,14 @@ export interface ServiceShape<
   Identifier extends string,
   Shape extends (...args: any[]) => Effect.Effect<any, any, any>,
 >
-  extends ServiceMap.ServiceClass.Shape<Identifier, Shape>, ServiceLike {}
+  extends Context.ServiceClass.Shape<Identifier, Shape>, ServiceLike {}
 
 export interface Service<
   Self,
   Identifier extends string,
   Shape extends (...args: any[]) => Effect.Effect<any, any, any>,
 >
-  extends ServiceMap.Service<Self, Shape>, ServiceLike {
+  extends Context.Service<Self, Shape>, ServiceLike {
   readonly key: Identifier;
   new (_: never): ServiceShape<Identifier, Shape>;
   bind: <Req = never>(
@@ -55,7 +55,7 @@ type BindParameters<
 export const Service =
   <Self, Shape extends (...args: any[]) => Effect.Effect<any, any, any>>() =>
   <Identifier extends string>(id: Identifier) => {
-    const self = ServiceMap.Service<Self, Shape>(id) as Service<
+    const self = Context.Service<Self, Shape>(id) as Service<
       Self,
       Identifier,
       Shape
@@ -83,7 +83,7 @@ export interface PolicyShape<
   Identifier extends string,
   Shape extends (...args: any[]) => Effect.Effect<any, any, any>,
 >
-  extends ServiceMap.ServiceClass.Shape<Identifier, Shape>, PolicyLike {}
+  extends Context.ServiceClass.Shape<Identifier, Shape>, PolicyLike {}
 
 export interface Policy<
   in out Self,
@@ -129,7 +129,7 @@ export const Policy =
   <Identifier extends string>(
     Identifier: Identifier,
   ): Policy<Self, `Policy<${Identifier}>`, Shape> => {
-    const self = ServiceMap.Service<Self, Shape>(`Policy<${Identifier}>`);
+    const self = Context.Service<Self, Shape>(`Policy<${Identifier}>`);
 
     // we use a service option because at runtime (e.g. in a Lambda Function or Cloudflare Worker)
     // the Policy Layer is not provided and this becomes a no-op

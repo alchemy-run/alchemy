@@ -3,6 +3,7 @@ import cloudflareRolldown from "@distilled.cloud/cloudflare-rolldown-plugin";
 import cloudflareVite from "@distilled.cloud/cloudflare-vite-plugin";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import type * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -12,7 +13,6 @@ import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import * as ServiceMap from "effect/ServiceMap";
 import * as Stream from "effect/Stream";
 import * as Socket from "effect/unstable/socket/Socket";
 import type * as rolldown from "rolldown";
@@ -64,7 +64,7 @@ export const isWorker = <T>(value: T): value is T & Worker =>
   "Type" in value &&
   value.Type === WorkerTypeId;
 
-export class WorkerEnvironment extends ServiceMap.Service<
+export class WorkerEnvironment extends Context.Service<
   WorkerEnvironment,
   Record<string, any>
 >()("Cloudflare.Workers.WorkerEnvironment") {}
@@ -74,7 +74,7 @@ export const WorkerEnvironmentLive = Layer.effect(
   cloudflare_workers.pipe(Effect.map((m) => m.env)),
 );
 
-export class ExecutionContext extends ServiceMap.Service<
+export class ExecutionContext extends Context.Service<
   ExecutionContext,
   cf.ExecutionContext
 >()("Cloudflare.Workers.ExecutionContext") {}
@@ -399,7 +399,7 @@ export const Worker: Platform<
         const handlers = yield* Effect.all(listeners, {
           concurrency: "unbounded",
         });
-        const services = yield* Effect.services();
+        const services = yield* Effect.context();
         const handle =
           (type: WorkerEvent["type"]) =>
           (request: any, env: unknown, context: cf.ExecutionContext) => {
@@ -414,7 +414,7 @@ export const Worker: Platform<
               const eff = handler(event);
               if (Effect.isEffect(eff)) {
                 return eff.pipe(
-                  Effect.provideServices(services),
+                  Effect.provideContext(services),
                   Effect.provide(Layer.succeed(ExecutionContext, context)),
                   Effect.runPromise,
                 );
@@ -752,7 +752,7 @@ import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
-import * as ServiceMap from "effect/ServiceMap";
+import * as Context from "effect/Context";
 import * as Stream from "effect/Stream";
 
 import { env, DurableObject${hasWfClasses ? ", WorkflowEntrypoint" : ""} } from "cloudflare:workers";
@@ -763,7 +763,7 @@ import { WorkerEnvironment, makeDurableObjectBridge${hasWfClasses ? ", makeWorkf
 
 import entry from "${importPath}";
 
-const tag = ServiceMap.Service("${Self.key}")
+const tag = Context.Service("${Self.key}")
 const layer =
   typeof entry?.build === "function"
     ? entry

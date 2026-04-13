@@ -353,16 +353,12 @@ export namespace test {
         effect.pipe(
           // Effect.tap(Effect.logInfo),
           // @ts-expect-error
-          Stack.make(
-            stack.name,
-            Layer.effectServices(Effect.services<never>()),
-            {
-              ...stack,
-              resources: {},
-              bindings: {},
-              output: {},
-            },
-          ),
+          Stack.make(stack.name, Layer.effectContext(Effect.context<never>()), {
+            ...stack,
+            resources: {},
+            bindings: {},
+            output: {},
+          }),
           Effect.flatMap(Plan.make),
           Effect.tap((plan) => Effect.logInfo(formatPlan(plan))),
           Effect.flatMap(apply),

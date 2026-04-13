@@ -1,8 +1,8 @@
 import { AWS } from "alchemy-effect";
+import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as ServiceMap from "effect/ServiceMap";
 import { Client } from "pg";
 import { Network } from "./Network.ts";
 
@@ -11,7 +11,7 @@ export class SqlError extends Data.TaggedError("SqlError")<{
   readonly cause?: unknown;
 }> {}
 
-export class Database extends ServiceMap.Service<
+export class Database extends Context.Service<
   Database,
   {
     query<Row extends Record<string, unknown> = Record<string, unknown>>(

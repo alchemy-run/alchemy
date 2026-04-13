@@ -1,9 +1,9 @@
 import * as Auth from "@distilled.cloud/aws/Auth";
 import type { AwsCredentialIdentity } from "@smithy/types";
 import * as Config from "effect/Config";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as ServiceMap from "effect/ServiceMap";
 import type { AccountID } from "./Account.ts";
 import { AWS_REGION, type RegionID } from "./Region.ts";
 
@@ -11,7 +11,7 @@ export const AWS_PROFILE = Config.string("AWS_PROFILE").pipe(
   Config.withDefault("default"),
 );
 
-export class StageConfig extends ServiceMap.Service<
+export class StageConfig extends Context.Service<
   StageConfig,
   {
     account?: AccountID;

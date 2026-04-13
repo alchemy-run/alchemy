@@ -1,11 +1,11 @@
 import * as workers from "@distilled.cloud/cloudflare/workers";
+import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
-import * as ServiceMap from "effect/ServiceMap";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { sha256, sha256Object } from "../../Util/index.ts";
 
@@ -31,7 +31,7 @@ export interface AssetsProps {
   config?: AssetsConfig;
 }
 
-export class Assets extends ServiceMap.Service<
+export class Assets extends Context.Service<
   Assets,
   {
     read(

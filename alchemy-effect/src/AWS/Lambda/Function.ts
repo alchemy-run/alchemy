@@ -6,11 +6,11 @@ import * as Lambda from "@distilled.cloud/aws/lambda";
 import { Region } from "@distilled.cloud/aws/Region";
 import type * as lambda from "aws-lambda";
 import * as Config from "effect/Config";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
-import * as ServiceMap from "effect/ServiceMap";
 import * as Stream from "effect/Stream";
 import type * as rolldown from "rolldown";
 import * as Bundle from "../../Bundle/Bundle.ts";
@@ -37,7 +37,7 @@ import { makeFunctionHttpHandler } from "./HttpServer.ts";
 export const FunctionTypeId = "AWS.Lambda.Function" as const;
 export type FunctionTypeId = typeof FunctionTypeId;
 
-export class HandlerContext extends ServiceMap.Service<
+export class HandlerContext extends Context.Service<
   HandlerContext,
   lambda.Context
 >()("AWS.Lambda.HandlerContext") {}
@@ -440,7 +440,7 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Region from "@distilled.cloud/aws/Region";
-import * as ServiceMap from "effect/ServiceMap";
+import * as Context from "effect/Context";
 import { MinimumLogLevel } from "effect/References";
 
 import { ${handler} as layer } from "${importPath}";
@@ -452,7 +452,7 @@ const platform = Layer.mergeAll(
   Logger.layer([Logger.consolePretty()]),
 );
 
-const tag = ServiceMap.Service("${FunctionTypeId}<${id}>")
+const tag = Context.Service("${FunctionTypeId}<${id}>")
 
 const stack = Layer.effect(
   Stack,

@@ -1,8 +1,8 @@
+import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as ServiceMap from "effect/ServiceMap";
 
 /**
  * Per-resource in-memory artifacts shared across a single `Plan.make -> apply`
@@ -31,7 +31,7 @@ import * as ServiceMap from "effect/ServiceMap";
  * return bundle;
  * ```
  */
-export class Artifacts extends ServiceMap.Service<
+export class Artifacts extends Context.Service<
   Artifacts,
   {
     /**
@@ -51,7 +51,7 @@ export class Artifacts extends ServiceMap.Service<
 
 type ArtifactBag = Map<string, unknown>;
 
-export class ArtifactStore extends ServiceMap.Service<
+export class ArtifactStore extends Context.Service<
   ArtifactStore,
   Map<string, ArtifactBag>
 >()("Artifacts/Store") {}

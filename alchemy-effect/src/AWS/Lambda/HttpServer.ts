@@ -73,8 +73,8 @@ const toLambdaFunctionURLResult = (
   response: HttpServerResponse.HttpServerResponse,
 ): Effect.Effect<LambdaFunctionURLResult> =>
   Effect.gen(function* () {
-    const services = yield* Effect.services();
-    const webResponse = HttpServerResponse.toWeb(response, { services });
+    const context = yield* Effect.context();
+    const webResponse = HttpServerResponse.toWeb(response, { context });
     const headers = new Headers(webResponse.headers);
     const cookies =
       typeof headers.getSetCookie === "function" ? headers.getSetCookie() : [];

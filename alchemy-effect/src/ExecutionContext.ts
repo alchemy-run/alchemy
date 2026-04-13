@@ -1,6 +1,6 @@
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as ServiceMap from "effect/ServiceMap";
 import type { HttpEffect } from "./Http.ts";
 import type { Output } from "./Output.ts";
 import { GenericService } from "./Util/service.ts";
@@ -19,7 +19,7 @@ export interface BaseExecutionContext {
 
 export interface ExecutionContext<
   Ctx extends BaseExecutionContext = BaseExecutionContext,
-> extends ServiceMap.Service<`ExecutionContext<${Ctx["Type"]}>`, Ctx> {}
+> extends Context.Service<`ExecutionContext<${Ctx["Type"]}>`, Ctx> {}
 
 export const ExecutionContext = GenericService<{
   <Ctx extends BaseExecutionContext>(type: Ctx["Type"]): ExecutionContext<Ctx>;

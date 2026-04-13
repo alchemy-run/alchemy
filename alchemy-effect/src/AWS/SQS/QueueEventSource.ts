@@ -1,6 +1,6 @@
 import type * as lambda from "aws-lambda";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as ServiceMap from "effect/ServiceMap";
 import * as Stream from "effect/Stream";
 import type { Queue } from "./Queue.ts";
 
@@ -30,7 +30,7 @@ export const messages = <Q extends Queue>(
   ) => QueueEventSource.use((source) => source(queue, props, process)),
 });
 
-export class QueueEventSource extends ServiceMap.Service<
+export class QueueEventSource extends Context.Service<
   QueueEventSource,
   QueueEventSourceService
 >()("AWS.SQS.QueueEventSource") {}

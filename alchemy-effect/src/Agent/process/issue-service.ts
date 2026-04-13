@@ -1,6 +1,6 @@
+import * as Context from "effect/Context";
 import type { Effect } from "effect/Effect";
 import * as S from "effect/Schema";
-import * as ServiceMap from "effect/ServiceMap";
 import { Issue, IssueId } from "./issue.ts";
 import { Reply, ReplyId } from "./reply.ts";
 
@@ -33,7 +33,7 @@ export class UpdateReplyRequest extends S.Class<UpdateReplyRequest>(
   content: S.String.pipe(S.optional),
 }) {}
 
-export class Issues extends ServiceMap.Service<
+export class Issues extends Context.Service<
   Issues,
   {
     listIssues: () => Effect<Issue[]>;

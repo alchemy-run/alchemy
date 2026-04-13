@@ -4,9 +4,9 @@ import * as ecs from "@distilled.cloud/aws/ecs";
 import * as iam from "@distilled.cloud/aws/iam";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as Config from "effect/Config";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as ServiceMap from "effect/ServiceMap";
 import type * as rolldown from "rolldown";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import {
@@ -42,7 +42,7 @@ export const isTask = (value: any): value is Task => {
   );
 };
 
-export class TaskEnvironment extends ServiceMap.Service<
+export class TaskEnvironment extends Context.Service<
   TaskEnvironment,
   Record<string, any>
 >()("AWS.ECS.TaskEnvironment") {}

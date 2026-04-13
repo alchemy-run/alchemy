@@ -1,8 +1,8 @@
 import * as AWS from "alchemy-effect/AWS";
 import type { Output } from "alchemy-effect/Output";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as ServiceMap from "effect/ServiceMap";
 
 export interface ExampleNetwork {
   network: AWS.EC2.Network;
@@ -10,7 +10,7 @@ export interface ExampleNetwork {
   appSecurityGroupId: Output<AWS.EC2.SecurityGroupId>;
 }
 
-export class Network extends ServiceMap.Service<Network, ExampleNetwork>()(
+export class Network extends Context.Service<Network, ExampleNetwork>()(
   "Network",
 ) {}
 

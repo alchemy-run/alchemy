@@ -1,8 +1,8 @@
 import { AWS } from "alchemy-effect";
+import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as ServiceMap from "effect/ServiceMap";
 import * as Stream from "effect/Stream";
 
 import type { Job } from "./Job.ts";
@@ -17,7 +17,7 @@ type JobNotification = {
   job: Job;
 };
 
-export class JobNotifications extends ServiceMap.Service<
+export class JobNotifications extends Context.Service<
   JobNotifications,
   {
     notifyJobCreated(job: Job): Effect.Effect<void, NotifyJobError>;

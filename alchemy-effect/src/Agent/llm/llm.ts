@@ -7,18 +7,18 @@ import {
   type OpenAIResponsesProviderOptions,
 } from "@ai-sdk/openai";
 import { jsonSchema, tool, ToolLoopAgent, type ModelMessage } from "ai";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as S from "effect/Schema";
-import * as ServiceMap from "effect/ServiceMap";
 import * as Stream from "effect/Stream";
 import type { IsUnknown } from "../../Util/unknown.ts";
 import type { Tool } from "../tool/tool.ts";
 import { fromAnyError, type LLMError } from "./error.ts";
 import type { StreamTextPart } from "./stream-text-part.ts";
 
-export class LLM extends ServiceMap.Service<LLM, LLMService>()("LLM") {}
+export class LLM extends Context.Service<LLM, LLMService>()("LLM") {}
 
 export type StreamTextOptions<T extends Tool = Tool> = {
   messages: ModelMessage[];
@@ -74,7 +74,7 @@ export const llm = (config: LLMConfig) =>
         return Stream.fromEffect(
           Effect.gen(function* () {
             // we need to get the caller's context so we can construct async functions
-            const context = yield* Effect.services<never>();
+            const context = yield* Effect.context<never>();
             const tools: any = {};
             for (const t of input.tools) {
               const decode = S.decodeEffect(t.schema);

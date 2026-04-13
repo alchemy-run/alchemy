@@ -1,6 +1,6 @@
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as ServiceMap from "effect/ServiceMap";
 import type * as Stream from "effect/Stream";
 import type { Artifacts } from "./Artifacts.ts";
 import type { ScopedPlanStatusSession } from "./Cli/index.ts";
@@ -56,7 +56,7 @@ type LifecycleServices = InstanceId | Artifacts;
 export const Provider = <R extends ResourceLike>(
   type: R["Type"],
 ): Provider<R> =>
-  ServiceMap.Service<Provider<R>, ProviderService<R>>()(type) as any;
+  Context.Service<Provider<R>, ProviderService<R>>()(type) as any;
 
 type BindingData<Res extends ResourceLike> = [Res] extends [
   { Binding: infer B },
@@ -181,7 +181,7 @@ export interface ProviderService<
 export const getProviderByType = Effect.fnUntraced(function* <
   R extends ResourceLike,
 >(resourceType: string) {
-  const context = yield* Effect.services<never>();
+  const context = yield* Effect.context<never>();
   const provider: ProviderService<R> = context.mapUnsafe.get(resourceType);
   if (!provider) {
     return yield* Effect.die(

@@ -492,12 +492,12 @@ import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
-import * as ServiceMap from "effect/ServiceMap";
+import * as Context from "effect/Context";
 import { MinimumLogLevel } from "effect/References";
 
 import ${handler === "default" ? "entry" : `{ ${handler} as entry }`} from "${importPath}";
 
-const tag = ServiceMap.Service("${Self.key}")
+const tag = Context.Service("${Self.key}")
 const layer =
   typeof entry?.build === "function"
     ? entry

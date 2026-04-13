@@ -1,10 +1,10 @@
+import * as Context from "effect/Context";
 import * as S from "effect/Schema";
-import * as ServiceMap from "effect/ServiceMap";
 import type { Instance } from "..//Util/instance.ts";
 import type { Pointer } from "..//Util/pointer.ts";
 import { isAspect, type Aspect, type AspectLike } from "./Aspect.ts";
 
-export class AspectGraph extends ServiceMap.Service<
+export class AspectGraph extends Context.Service<
   AspectGraph,
   {
     aspects: AspectIndex<AspectLike>;

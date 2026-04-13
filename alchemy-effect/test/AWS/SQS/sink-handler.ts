@@ -1,8 +1,8 @@
 import * as AWS from "@/AWS";
 import * as Console from "effect/Console";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as ServiceMap from "effect/ServiceMap";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -10,7 +10,7 @@ import path from "pathe";
 
 const main = path.resolve(import.meta.dirname, "sink-handler.ts");
 
-export class TestQueue extends ServiceMap.Service<
+export class TestQueue extends Context.Service<
   TestQueue,
   { queue: AWS.SQS.Queue }
 >()("TestQueue") {}

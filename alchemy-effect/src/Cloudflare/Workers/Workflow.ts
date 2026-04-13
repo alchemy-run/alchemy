@@ -1,7 +1,7 @@
 import * as workflows from "@distilled.cloud/cloudflare/workflows";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as ServiceMap from "effect/ServiceMap";
 import type { PlatformServices } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -20,7 +20,7 @@ const WorkflowTypeId: WorkflowTypeId = "Cloudflare.Workflow";
  * Service that carries the current workflow event payload.
  * `yield* WorkflowEvent` inside a workflow body to access it.
  */
-export class WorkflowEvent extends ServiceMap.Service<
+export class WorkflowEvent extends Context.Service<
   WorkflowEvent,
   {
     payload: unknown;
@@ -33,7 +33,7 @@ export class WorkflowEvent extends ServiceMap.Service<
  * Internal service that wraps the Cloudflare `WorkflowStep` object.
  * Not accessed directly by users -- use `task`, `sleep`, `sleepUntil` instead.
  */
-export class WorkflowStep extends ServiceMap.Service<
+export class WorkflowStep extends Context.Service<
   WorkflowStep,
   {
     do<T>(name: string, effect: Effect.Effect<T>): Effect.Effect<T>;
@@ -180,7 +180,7 @@ export interface WorkflowClass extends Effect.Effect<
   >;
 }
 
-export class WorkflowScope extends ServiceMap.Service<
+export class WorkflowScope extends Context.Service<
   WorkflowScope,
   WorkflowHandle
 >()("Cloudflare.Workflow") {}
@@ -241,7 +241,7 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
           });
 
           const services =
-            yield* Effect.services<Effect.Services<typeof impl>>();
+            yield* Effect.context<Effect.Services<typeof impl>>();
 
           const binding = yield* Effect.serviceOption(WorkerEnvironment).pipe(
             Effect.map(Option.getOrUndefined),
@@ -282,7 +282,7 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
             kind: "workflow",
             make: (env: unknown) =>
               Effect.succeed(body).pipe(
-                Effect.provideServices(services),
+                Effect.provideContext(services),
                 Effect.provideService(
                   WorkerEnvironment,
                   env as Record<string, any>,

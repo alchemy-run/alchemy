@@ -1,7 +1,7 @@
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as ServiceMap from "effect/ServiceMap";
 
-export class AdoptPolicy extends ServiceMap.Service<AdoptPolicy, boolean>()(
+export class AdoptPolicy extends Context.Service<AdoptPolicy, boolean>()(
   "AdoptPolicy",
 ) {}
 

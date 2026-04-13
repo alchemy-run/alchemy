@@ -1,10 +1,10 @@
+import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
-import * as ServiceMap from "effect/ServiceMap";
 
 import type { SQLiteConnection } from "./SQLiteConnection.ts";
 import type { SQLiteErrorType } from "./SQLiteError.ts";
 
-export class SQLite extends ServiceMap.Service<SQLite, SQLiteService>()(
+export class SQLite extends Context.Service<SQLite, SQLiteService>()(
   "SQLite",
 ) {}
 

@@ -1,3 +1,3 @@
-import * as ServiceMap from "effect/ServiceMap";
+import * as Context from "effect/Context";
 
-export class Stage extends ServiceMap.Service<Stage, string>()("Stage") {}
+export class Stage extends Context.Service<Stage, string>()("Stage") {}

@@ -1,6 +1,6 @@
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import { pipeArguments } from "effect/Pipeable";
-import * as ServiceMap from "effect/ServiceMap";
 import { SingleShotGen } from "effect/Utils";
 
 export type EffectClass<Shape, A, Err = never, Req = never> = Effect.Effect<
@@ -37,7 +37,7 @@ export const effectClass: {
       ) as unknown as EffectClass<any, any, any, any>)) as any;
 
 export const taggedFunction = <
-  Tag extends ServiceMap.ServiceClass<any, any, any>,
+  Tag extends Context.ServiceClass<any, any, any>,
   Fn extends (...args: any[]) => any,
 >(
   tag: Tag,

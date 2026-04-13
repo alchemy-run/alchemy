@@ -1,14 +1,14 @@
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import * as ServiceMap from "effect/ServiceMap";
 import * as Stream from "effect/Stream";
 import { ChildProcess } from "effect/unstable/process";
 import { AspectConfig } from "../Aspect.ts";
 import { loadParser } from "./parser.ts";
 
-export class CommandValidator extends ServiceMap.Service<
+export class CommandValidator extends Context.Service<
   CommandValidator,
   {
     validate: (command: string) => Effect.Effect<void, string>;

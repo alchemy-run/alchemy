@@ -4,10 +4,10 @@ import * as Provider from "@/Provider.ts";
 import { Resource } from "@/Resource";
 import * as State from "@/State/index";
 import { isUnknown } from "@/Util/unknown";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as ServiceMap from "effect/ServiceMap";
 
 // Bucket
 export type BucketProps = {
@@ -354,7 +354,7 @@ export interface TestResource extends Resource<
   }
 > {}
 
-export class TestResourceHooks extends ServiceMap.Service<
+export class TestResourceHooks extends Context.Service<
   TestResourceHooks,
   {
     create?: (id: string, props: TestResourceProps) => Effect.Effect<void, any>;
@@ -467,7 +467,7 @@ export interface StaticStablesResource extends Resource<
   }
 > {}
 
-export class StaticStablesResourceHooks extends ServiceMap.Service<
+export class StaticStablesResourceHooks extends Context.Service<
   StaticStablesResourceHooks,
   {
     create?: (

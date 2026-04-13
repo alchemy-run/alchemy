@@ -1,6 +1,6 @@
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as S from "effect/Schema";
-import * as ServiceMap from "effect/ServiceMap";
 import { AgentId } from "../Agent.ts";
 import { ThreadId } from "../chat/thread.ts";
 
@@ -26,7 +26,7 @@ export class CreateTaskRequest extends S.Class<CreateTaskRequest>(
   agentId: AgentId,
 }) {}
 
-export class Tasks extends ServiceMap.Service<
+export class Tasks extends Context.Service<
   Tasks,
   {
     createTask: (input: CreateTaskRequest) => Effect.Effect<Task>;

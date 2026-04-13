@@ -1,5 +1,5 @@
-import * as ServiceMap from "effect/ServiceMap";
+import * as Context from "effect/Context";
 
-export class Request extends ServiceMap.Service<Request, globalThis.Request>()(
+export class Request extends Context.Service<Request, globalThis.Request>()(
   "Request",
 ) {}

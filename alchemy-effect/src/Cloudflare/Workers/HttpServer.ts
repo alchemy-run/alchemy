@@ -82,6 +82,6 @@ export const serveWebRequest = <Req = never>(
     );
 
     return HttpServerResponse.toWeb(response, {
-      services: yield* Effect.services(),
+      context: yield* Effect.context(),
     });
   }) as any;

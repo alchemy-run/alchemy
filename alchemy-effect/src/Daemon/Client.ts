@@ -1,10 +1,10 @@
 import * as NodeSocket from "@effect/platform-node/NodeSocket";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
-import * as ServiceMap from "effect/ServiceMap";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
@@ -15,7 +15,7 @@ import { DaemonRpcs } from "./RpcSchema.ts";
 
 export type DaemonClient = Effect.Success<ReturnType<typeof makeClient>>;
 
-export class Daemon extends ServiceMap.Service<Daemon, DaemonClient>()(
+export class Daemon extends Context.Service<Daemon, DaemonClient>()(
   "alchemy/Cli/Daemon",
 ) {}
 

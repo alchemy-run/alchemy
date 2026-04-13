@@ -1,11 +1,11 @@
 import * as Config from "effect/Config";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as ServiceMap from "effect/ServiceMap";
 import { StageConfig } from "./StageConfig.ts";
 
-export class Account extends ServiceMap.Service<Account, string>()(
+export class Account extends Context.Service<Account, string>()(
   "cloudflare/account-id",
 ) {}
 

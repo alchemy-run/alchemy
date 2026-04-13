@@ -1,7 +1,7 @@
 import * as AWS from "@/AWS";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as ServiceMap from "effect/ServiceMap";
 import * as Stream from "effect/Stream";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
@@ -13,7 +13,7 @@ export class KinesisStreamFunction extends AWS.Lambda.Function<AWS.Lambda.Functi
   },
 ) {}
 
-export class StreamAndQueue extends ServiceMap.Service<
+export class StreamAndQueue extends Context.Service<
   StreamAndQueue,
   {
     stream: AWS.Kinesis.Stream;

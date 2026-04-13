@@ -97,9 +97,9 @@ Encapsulate Resources and capabilities into Effect Services for clean separation
 import * as S3 from "alchemy-effect/AWS/S3";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as ServiceMap from "effect/ServiceMap";
+import * as Context from "effect/Context";
 
-export class JobStorage extends ServiceMap.Service<
+export class JobStorage extends Context.Service<
   JobStorage,
   {
     bucket: S3.Bucket;

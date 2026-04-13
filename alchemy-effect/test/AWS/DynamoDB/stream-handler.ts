@@ -1,7 +1,7 @@
 import * as AWS from "@/AWS";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as ServiceMap from "effect/ServiceMap";
 import * as Stream from "effect/Stream";
 
 export class DynamoDBStreamFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
@@ -11,7 +11,7 @@ export class DynamoDBStreamFunction extends AWS.Lambda.Function<AWS.Lambda.Funct
   },
 ) {}
 
-export class TableAndQueue extends ServiceMap.Service<
+export class TableAndQueue extends Context.Service<
   TableAndQueue,
   {
     table: AWS.DynamoDB.Table;

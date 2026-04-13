@@ -1,9 +1,9 @@
 import * as Auth from "@distilled.cloud/aws/Auth";
 import * as STS from "@distilled.cloud/aws/sts";
+import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as ServiceMap from "effect/ServiceMap";
 import { StageConfig } from "./StageConfig.ts";
 
 export class FailedToGetAccount extends Data.TaggedError(
@@ -15,7 +15,7 @@ export class FailedToGetAccount extends Data.TaggedError(
 
 export type AccountID = string;
 
-export class Account extends ServiceMap.Service<Account, AccountID>()(
+export class Account extends Context.Service<Account, AccountID>()(
   "AWS::AccountID",
 ) {}
 

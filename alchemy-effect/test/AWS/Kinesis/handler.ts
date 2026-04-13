@@ -1,10 +1,10 @@
 import * as AWS from "@/AWS";
 import * as Kinesis from "@distilled.cloud/aws/kinesis";
+import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
-import * as ServiceMap from "effect/ServiceMap";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -20,7 +20,7 @@ export class KinesisApiFunction extends AWS.Lambda.Function<AWS.Lambda.Function>
   },
 ) {}
 
-export class StreamAndConsumer extends ServiceMap.Service<
+export class StreamAndConsumer extends Context.Service<
   StreamAndConsumer,
   {
     stream: AWS.Kinesis.Stream;

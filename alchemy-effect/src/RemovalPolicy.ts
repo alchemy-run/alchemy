@@ -1,7 +1,7 @@
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as ServiceMap from "effect/ServiceMap";
 
-export class RemovalPolicy extends ServiceMap.Service<
+export class RemovalPolicy extends Context.Service<
   RemovalPolicy,
   "retain" | "destroy"
 >()("RemovalPolicy") {}

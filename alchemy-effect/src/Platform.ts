@@ -1,9 +1,9 @@
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type { Scope } from "effect/Scope";
-import * as ServiceMap from "effect/ServiceMap";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import { SingleShotGen } from "effect/Utils";
 import type { PolicyLike } from "./Binding.ts";
@@ -266,7 +266,7 @@ export const Platform = <
   const makeClass = (id: string, props: Props) => {
     return class Platform {
       static readonly Self = Self(`${type}<${id}>`);
-      static readonly Platform = ServiceMap.Service<Platform, Platform>(
+      static readonly Platform = Context.Service<Platform, Platform>(
         `Platform<${type}<${id}>>`,
       );
       static [Symbol.iterator](): Iterator<
@@ -292,7 +292,7 @@ export const Platform = <
             Effect.all([
               Effect.isEffect(props) ? props : Effect.succeed(props ?? {}),
               Effect.sync(() => hooks.createExecutionContext(id)),
-              Effect.services<never>(),
+              Effect.context<never>(),
             ]),
             Effect.fnUntraced(function* ([
               props,
@@ -329,7 +329,7 @@ export const Platform = <
                       Layer.succeed(Platform.Self, instance),
                       Layer.succeed(Self, instance),
                     ),
-                    Layer.succeedServices(outerServices),
+                    Layer.succeedContext(outerServices),
                   ),
                 ),
               );

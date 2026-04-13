@@ -1,5 +1,5 @@
-import * as ServiceMap from "effect/ServiceMap";
+import * as Context from "effect/Context";
 
-export class Profile extends ServiceMap.Service<Profile, string>()(
+export class Profile extends Context.Service<Profile, string>()(
   "AWS::Profile",
 ) {}

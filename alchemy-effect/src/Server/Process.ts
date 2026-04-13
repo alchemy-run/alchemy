@@ -1,7 +1,7 @@
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import { FileSystem } from "effect/FileSystem";
 import type { Path } from "effect/Path";
-import * as ServiceMap from "effect/ServiceMap";
 import type { Stdio } from "effect/Stdio";
 import type { Terminal } from "effect/Terminal";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
@@ -24,7 +24,7 @@ export interface ProcessContext extends BaseExecutionContext {
  * Long-running host loop registration (`run`). Provided by `Platform` when the
  * execution context implements {@link ProcessContext}.
  */
-export class ServerHost extends ServiceMap.Service<
+export class ServerHost extends Context.Service<
   ServerHost,
   Pick<ProcessContext, "run">
 >()("Alchemy::ServerHost") {}
