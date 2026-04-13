@@ -110,6 +110,22 @@ test(
       yield* Effect.promise(() => getRes.arrayBuffer()),
     );
     expect(data).toEqual(content);
+
+    // verify the tag endpoint redirects to the resource URL
+    const redirectRes = yield* Effect.promise(() =>
+      fetch(`${url}/tags/latest`),
+    );
+    expect(redirectRes.redirected).toBe(true);
+    expect(redirectRes.url).toContain(`/packages/${body.resourceId}`);
+
+    // verify the resource URL is cacheable
+    const directRes = yield* Effect.promise(() =>
+      fetch(`${url}/packages/${body.resourceId}`),
+    );
+    expect(directRes.status).toBe(200);
+    expect(directRes.headers.get("cache-control")).toBe(
+      "public, max-age=31536000, immutable",
+    );
   }),
 );
 

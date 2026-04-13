@@ -168,7 +168,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
           );
         }
 
-        // --- GET /tags/:tag ---
+        // --- GET /tags/:tag --- (302 redirect to /packages/:resourceId)
         if (method === "GET" && path.startsWith("/tags/")) {
           const tag = decodeURIComponent(path.slice("/tags/".length));
           const resourceId = yield* kv.get(`tag:${tag}`);
@@ -179,26 +179,43 @@ export default class Api extends Cloudflare.Worker<Api>()(
             );
           }
 
+          // record download (before redirect so we know which tag was used)
+          const store = packages.getByName(resourceId);
+          yield* store.recordDownload(tag).pipe(Effect.orDie);
+
+          return HttpServerResponse.fromWeb(
+            new Response(null, {
+              status: 302,
+              headers: { location: `/packages/${resourceId}` },
+            }),
+          );
+        }
+
+        // --- GET /packages/:resourceId --- (serve blob, cacheable)
+        if (
+          method === "GET" &&
+          path.startsWith("/packages/") &&
+          !path.endsWith("/stats")
+        ) {
+          const resourceId = path.slice("/packages/".length);
           const object = yield* r2
             .get(resourceId + ".tgz")
             .pipe(Effect.orDie);
           if (!object) {
-            yield* kv.delete(`tag:${tag}`);
             return yield* HttpServerResponse.json(
               { error: "resource not found" },
               { status: 404 },
             );
           }
 
-          // record download
-          const store = packages.getByName(resourceId);
-          yield* store.recordDownload(tag).pipe(Effect.orDie);
-
           const body = yield* object.arrayBuffer().pipe(Effect.orDie);
           return HttpServerResponse.fromWeb(
             new Response(body, {
               status: 200,
-              headers: { "content-type": "application/gzip" },
+              headers: {
+                "content-type": "application/gzip",
+                "cache-control": "public, max-age=31536000, immutable",
+              },
             }),
           );
         }
