@@ -17,6 +17,8 @@ export interface StaticSiteProps
   };
 }
 
+export type StaticSite = ReturnType<typeof StaticSite>;
+
 export const StaticSite = (id: string, props: InputProps<StaticSiteProps>) =>
   Effect.gen(function* () {
     // TODO(sam): local dev/hmr support?

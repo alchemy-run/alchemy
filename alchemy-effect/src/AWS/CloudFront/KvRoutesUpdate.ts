@@ -1,7 +1,11 @@
 import * as kvs from "@distilled.cloud/aws/cloudfront-keyvaluestore";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
+import type { HttpClient } from "effect/unstable/http/HttpClient";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import type { Credentials } from "../Credentials.ts";
+import type { Region } from "../Region.ts";
 import {
   extractValue,
   getKvsEtag,
@@ -160,7 +164,11 @@ export const KvRoutesUpdateProvider = () =>
 
       const createOp = (
         props: KvRoutesUpdateProps,
-      ): Effect.Effect<void, any, any> =>
+      ): Effect.Effect<
+        void,
+        kvs.UpdateKeysError,
+        Credentials | Region | HttpClient
+      > =>
         Effect.gen(function* () {
           const fullKey = `${props.namespace}:${props.key}`;
           const etag = yield* getKvsEtag(props.store);
@@ -170,20 +178,23 @@ export const KvRoutesUpdateProvider = () =>
           }
           yield* setRoutes(props.store, etag, fullKey, routes, chunkNum);
         }).pipe(
-          Effect.catchTag("ValidationException", (err) =>
-            "Message" in err &&
-            typeof err.Message === "string" &&
-            isKvsPreconditionFailed(err)
-              ? Effect.sleep(
-                  `${Math.floor(Math.random() * 400) + 100} millis`,
-                ).pipe(Effect.andThen(createOp(props)))
-              : Effect.fail(err),
-          ),
+          Effect.retry({
+            while: (error) =>
+              error._tag === "ValidationException" &&
+              isKvsPreconditionFailed(error),
+            schedule: Schedule.exponential("100 millis").pipe(
+              Schedule.both(Schedule.recurs(24)),
+            ),
+          }),
         );
 
       const deleteOp = (
         props: KvRoutesUpdateProps,
-      ): Effect.Effect<void, any, any> =>
+      ): Effect.Effect<
+        void,
+        kvs.UpdateKeysError,
+        Credentials | Region | HttpClient
+      > =>
         Effect.gen(function* () {
           const fullKey = `${props.namespace}:${props.key}`;
           const etag = yield* getKvsEtag(props.store);
@@ -195,15 +206,14 @@ export const KvRoutesUpdateProvider = () =>
             yield* setRoutes(props.store, etag, fullKey, filtered, chunkNum);
           }
         }).pipe(
-          Effect.catchTag("ValidationException", (err) =>
-            "Message" in err &&
-            typeof err.Message === "string" &&
-            isKvsPreconditionFailed(err)
-              ? Effect.sleep(
-                  `${Math.floor(Math.random() * 400) + 100} millis`,
-                ).pipe(Effect.andThen(deleteOp(props)))
-              : Effect.fail(err),
-          ),
+          Effect.retry({
+            while: (error) =>
+              error._tag === "ValidationException" &&
+              isKvsPreconditionFailed(error),
+            schedule: Schedule.exponential("100 millis").pipe(
+              Schedule.both(Schedule.recurs(24)),
+            ),
+          }),
         );
 
       return {
@@ -240,7 +250,11 @@ export const KvRoutesUpdateProvider = () =>
                   yield* createOp(news);
                 } else {
                   const fullKey = `${news.namespace}:${news.key}`;
-                  const updateInPlace = (): Effect.Effect<void, any, any> =>
+                  const updateInPlace = (): Effect.Effect<
+                    void,
+                    kvs.UpdateKeysError,
+                    HttpClient | Region | Credentials
+                  > =>
                     Effect.gen(function* () {
                       const etag = yield* getKvsEtag(news.store);
                       const { routes, chunkNum } = yield* getRoutes(
@@ -259,15 +273,14 @@ export const KvRoutesUpdateProvider = () =>
                         chunkNum,
                       );
                     }).pipe(
-                      Effect.catchTag("ValidationException", (err) =>
-                        "Message" in err &&
-                        typeof err.Message === "string" &&
-                        isKvsPreconditionFailed(err)
-                          ? Effect.sleep(
-                              `${Math.floor(Math.random() * 400) + 100} millis`,
-                            ).pipe(Effect.andThen(updateInPlace()))
-                          : Effect.fail(err),
-                      ),
+                      Effect.retry({
+                        while: (error) =>
+                          error._tag === "ValidationException" &&
+                          isKvsPreconditionFailed(error),
+                        schedule: Schedule.exponential("100 millis").pipe(
+                          Schedule.both(Schedule.recurs(24)),
+                        ),
+                      }),
                     );
                   yield* updateInPlace();
                 }

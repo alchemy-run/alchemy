@@ -1,5 +1,6 @@
 import * as kvs from "@distilled.cloud/aws/cloudfront-keyvaluestore";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -138,18 +139,14 @@ export const KvEntriesProvider = () =>
             batchPuts,
             batchDeletes,
           ).pipe(
-            Effect.catchTag("ValidationException", (err) =>
-              isKvsPreconditionFailed(err)
-                ? Effect.sleep(
-                    `${Math.floor(Math.random() * 400) + 100} millis`,
-                  ).pipe(
-                    Effect.andThen(getKvsEtag(store)),
-                    Effect.andThen((freshEtag) =>
-                      sendBatch(store, freshEtag, batchPuts, batchDeletes),
-                    ),
-                  )
-                : Effect.fail(err),
-            ),
+            Effect.retry({
+              while: (error) =>
+                error._tag === "ValidationException" &&
+                isKvsPreconditionFailed(error),
+              schedule: Schedule.exponential("100 millis").pipe(
+                Schedule.both(Schedule.recurs(24)),
+              ),
+            }),
           );
 
           currentEtag = resp.ETag;

@@ -4,7 +4,6 @@ import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Socket from "effect/unstable/socket/Socket";
 import { CommandProvider } from "../Build/Command.ts";
-import type { Provider } from "../Provider.ts";
 import { RandomProvider } from "../Random.ts";
 import * as Account from "./Account.ts";
 import { ContainerProvider } from "./Container/ContainerApplication.ts";
@@ -15,15 +14,21 @@ import { AssetsProvider } from "./Workers/Assets.ts";
 import { WorkerProvider } from "./Workers/Worker.ts";
 import { WorkflowProvider } from "./Workers/Workflow.ts";
 
-export type Providers = Extract<
-  Layer.Success<ReturnType<typeof providers>>,
-  Provider<any>
->;
+// export type Providers = Extract<Layer.Success<_providers>, Provider<any>>;
+
+export interface Providers extends Layer.Layer<
+  Layer.Success<_providers>,
+  Layer.Error<_providers>,
+  Layer.Services<_providers>
+> {}
 
 /**
  * Cloudflare providers, bindings, and credentials for Worker-based stacks.
  */
-export const providers = () =>
+export const providers: () => Providers = () => _providers();
+
+type _providers = ReturnType<typeof _providers>;
+const _providers = () =>
   pipe(
     resources(),
     Layer.provideMerge(bindings()),

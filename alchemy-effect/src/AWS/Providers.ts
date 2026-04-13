@@ -84,12 +84,48 @@ export const credentials = () =>
  */
 export const resources = () =>
   Layer.mergeAll(
-    CommandProvider(),
-    RandomProvider(),
-    ACM.CertificateProvider(),
+    buildProviders(),
+    acmProviders(),
+    autoScalingProviders(),
+    cloudFrontProviders(),
+    cloudWatchProviders(),
+    dynamoDbProviders(),
+    ec2Providers(),
+    ecrProviders(),
+    ecsProviders(),
+    eksProviders(),
+    elbv2Providers(),
+    eventBridgeProviders(),
+    iamProviders(),
+    identityCenterProviders(),
+    kinesisProviders(),
+    lambdaProviders(),
+    logsProviders(),
+    organizationsProviders(),
+    rdsProviders(),
+    route53Providers(),
+    s3Providers(),
+    schedulerProviders(),
+    secretsManagerProviders(),
+    snsProviders(),
+    sqsProviders(),
+    websiteProviders(),
+  );
+
+export const buildProviders = () =>
+  Layer.mergeAll(CommandProvider(), RandomProvider());
+
+export const acmProviders = () => Layer.mergeAll(ACM.CertificateProvider());
+
+export const autoScalingProviders = () =>
+  Layer.mergeAll(
     AutoScaling.AutoScalingGroupProvider(),
     AutoScaling.LaunchTemplateProvider(),
     AutoScaling.ScalingPolicyProvider(),
+  );
+
+export const cloudFrontProviders = () =>
+  Layer.mergeAll(
     CloudFront.DistributionProvider(),
     CloudFront.FunctionProvider(),
     CloudFront.InvalidationProvider(),
@@ -97,6 +133,10 @@ export const resources = () =>
     CloudFront.KvEntriesProvider(),
     CloudFront.KvRoutesUpdateProvider(),
     CloudFront.OriginAccessControlProvider(),
+  );
+
+export const cloudWatchProviders = () =>
+  Layer.mergeAll(
     CloudWatch.AlarmMuteRuleProvider(),
     CloudWatch.AlarmProvider(),
     CloudWatch.AnomalyDetectorProvider(),
@@ -104,7 +144,12 @@ export const resources = () =>
     CloudWatch.DashboardProvider(),
     CloudWatch.InsightRuleProvider(),
     CloudWatch.MetricStreamProvider(),
-    DynamoDB.TableProvider(),
+  );
+
+export const dynamoDbProviders = () => Layer.mergeAll(DynamoDB.TableProvider());
+
+export const ec2Providers = () =>
+  Layer.mergeAll(
     EC2.EgressOnlyInternetGatewayProvider(),
     EC2.EIPProvider(),
     EC2.InstanceProvider(),
@@ -121,20 +166,41 @@ export const resources = () =>
     EC2.SubnetProvider(),
     EC2.VpcEndpointProvider(),
     EC2.VpcProvider(),
-    ECR.RepositoryProvider(),
+  );
+
+export const ecrProviders = () => Layer.mergeAll(ECR.RepositoryProvider());
+
+export const ecsProviders = () =>
+  Layer.mergeAll(
     ECS.ClusterProvider(),
     ECS.ServiceProvider(),
     ECS.TaskProvider(),
+  );
+
+export const eksProviders = () =>
+  Layer.mergeAll(
     EKS.AccessEntryProvider(),
     EKS.AddonProvider(),
     EKS.ClusterProvider(),
     EKS.PodIdentityAssociationProvider(),
+  );
+
+export const elbv2Providers = () =>
+  Layer.mergeAll(
     ELBv2.ListenerProvider(),
     ELBv2.LoadBalancerProvider(),
     ELBv2.TargetGroupProvider(),
+  );
+
+export const eventBridgeProviders = () =>
+  Layer.mergeAll(
     EventBridge.EventBusProvider(),
     EventBridge.PermissionProvider(),
     EventBridge.RuleProvider(),
+  );
+
+export const iamProviders = () =>
+  Layer.mergeAll(
     IAM.AccessKeyProvider(),
     IAM.AccountAliasProvider(),
     IAM.AccountPasswordPolicyProvider(),
@@ -152,16 +218,30 @@ export const resources = () =>
     IAM.SSHPublicKeyProvider(),
     IAM.UserProvider(),
     IAM.VirtualMFADeviceProvider(),
+  );
+
+export const identityCenterProviders = () =>
+  Layer.mergeAll(
     IdentityCenter.AccountAssignmentProvider(),
     IdentityCenter.GroupProvider(),
     IdentityCenter.InstanceProvider(),
     IdentityCenter.PermissionSetProvider(),
-    Kinesis.StreamConsumerProvider(),
-    Kinesis.StreamProvider(),
+  );
+
+export const kinesisProviders = () =>
+  Layer.mergeAll(Kinesis.StreamConsumerProvider(), Kinesis.StreamProvider());
+
+export const lambdaProviders = () =>
+  Layer.mergeAll(
     Lambda.EventSourceMappingProvider(),
     Lambda.FunctionProvider(),
     Lambda.PermissionProvider(),
-    Logs.LogGroupProvider(),
+  );
+
+export const logsProviders = () => Layer.mergeAll(Logs.LogGroupProvider());
+
+export const organizationsProviders = () =>
+  Layer.mergeAll(
     Organizations.AccountProvider(),
     Organizations.DelegatedAdministratorProvider(),
     Organizations.OrganizationalUnitProvider(),
@@ -172,6 +252,10 @@ export const resources = () =>
     Organizations.RootPolicyTypeProvider(),
     Organizations.RootProvider(),
     Organizations.TrustedServiceAccessProvider(),
+  );
+
+export const rdsProviders = () =>
+  Layer.mergeAll(
     RDS.DBClusterEndpointProvider(),
     RDS.DBClusterParameterGroupProvider(),
     RDS.DBClusterProvider(),
@@ -181,16 +265,28 @@ export const resources = () =>
     RDS.DBProxyProvider(),
     RDS.DBProxyTargetGroupProvider(),
     RDS.DBSubnetGroupProvider(),
-    Route53.RecordProvider(),
-    S3.BucketProvider(),
+  );
+
+export const route53Providers = () => Layer.mergeAll(Route53.RecordProvider());
+
+export const s3Providers = () => Layer.mergeAll(S3.BucketProvider());
+
+export const schedulerProviders = () =>
+  Layer.mergeAll(
     Scheduler.ScheduleGroupProvider(),
     Scheduler.ScheduleProvider(),
-    SecretsManager.SecretProvider(),
-    SNS.SubscriptionProvider(),
-    SNS.TopicProvider(),
-    SQS.QueueProvider(),
-    Website.AssetDeploymentProvider(),
   );
+
+export const secretsManagerProviders = () =>
+  Layer.mergeAll(SecretsManager.SecretProvider());
+
+export const snsProviders = () =>
+  Layer.mergeAll(SNS.SubscriptionProvider(), SNS.TopicProvider());
+
+export const sqsProviders = () => Layer.mergeAll(SQS.QueueProvider());
+
+export const websiteProviders = () =>
+  Layer.mergeAll(Website.AssetDeploymentProvider());
 
 /**
  * All AWS binding policies.
@@ -200,6 +296,22 @@ export const resources = () =>
  * with the required permissions.
  */
 export const bindings = () =>
+  Layer.mergeAll(
+    cloudWatchBindings(),
+    dynamoDbBindings(),
+    ecsBindings(),
+    eventBridgeBindings(),
+    kinesisBindings(),
+    lambdaBindings(),
+    rdsBindings(),
+    rdsDataBindings(),
+    s3Bindings(),
+    secretsManagerBindings(),
+    snsBindings(),
+    sqsBindings(),
+  );
+
+export const cloudWatchBindings = () =>
   Layer.mergeAll(
     CloudWatch.DescribeAlarmContributorsPolicyLive,
     CloudWatch.DescribeAlarmHistoryPolicyLive,
@@ -225,6 +337,10 @@ export const bindings = () =>
     CloudWatch.ListTagsForResourcePolicyLive,
     CloudWatch.PutMetricDataPolicyLive,
     CloudWatch.SetAlarmStatePolicyLive,
+  );
+
+export const dynamoDbBindings = () =>
+  Layer.mergeAll(
     DynamoDB.BatchExecuteStatementPolicyLive,
     DynamoDB.BatchGetItemPolicyLive,
     DynamoDB.BatchWriteItemPolicyLive,
@@ -244,10 +360,18 @@ export const bindings = () =>
     DynamoDB.TransactWriteItemsPolicyLive,
     DynamoDB.UpdateItemPolicyLive,
     DynamoDB.UpdateTimeToLivePolicyLive,
+  );
+
+export const ecsBindings = () =>
+  Layer.mergeAll(
     ECS.DescribeTasksPolicyLive,
     ECS.ListTasksPolicyLive,
     ECS.RunTaskPolicyLive,
     ECS.StopTaskPolicyLive,
+  );
+
+export const eventBridgeBindings = () =>
+  Layer.mergeAll(
     EventBridge.DescribeEventBusPolicyLive,
     EventBridge.DescribeRulePolicyLive,
     EventBridge.ListEventBusesPolicyLive,
@@ -257,6 +381,10 @@ export const bindings = () =>
     EventBridge.TestEventPatternPolicyLive,
     EventBridge.ToLambdaPolicyLive,
     EventBridge.ToQueuePolicyLive,
+  );
+
+export const kinesisBindings = () =>
+  Layer.mergeAll(
     Kinesis.DescribeAccountSettingsPolicyLive,
     Kinesis.DescribeLimitsPolicyLive,
     Kinesis.DescribeStreamConsumerPolicyLive,
@@ -273,18 +401,31 @@ export const bindings = () =>
     Kinesis.PutRecordsPolicyLive,
     Kinesis.StreamSinkPolicyLive,
     Kinesis.SubscribeToShardPolicyLive,
+  );
+
+export const lambdaBindings = () =>
+  Layer.mergeAll(
     Lambda.BucketEventSourcePolicyLive,
     Lambda.QueueEventSourcePolicyLive,
     Lambda.StreamEventSourcePolicyLive,
     Lambda.TableEventSourcePolicyLive,
     Lambda.TopicEventSourcePolicyLive,
-    RDS.ConnectPolicyLive,
+  );
+
+export const rdsBindings = () => Layer.mergeAll(RDS.ConnectPolicyLive);
+
+export const rdsDataBindings = () =>
+  Layer.mergeAll(
     RDSData.BatchExecuteStatementPolicyLive,
     RDSData.BeginTransactionPolicyLive,
     RDSData.CommitTransactionPolicyLive,
     RDSData.ExecuteSqlPolicyLive,
     RDSData.ExecuteStatementPolicyLive,
     RDSData.RollbackTransactionPolicyLive,
+  );
+
+export const s3Bindings = () =>
+  Layer.mergeAll(
     S3.AbortMultipartUploadPolicyLive,
     S3.CompleteMultipartUploadPolicyLive,
     S3.CreateMultipartUploadPolicyLive,
@@ -294,11 +435,19 @@ export const bindings = () =>
     S3.ListObjectsV2PolicyLive,
     S3.PutObjectPolicyLive,
     S3.UploadPartPolicyLive,
+  );
+
+export const secretsManagerBindings = () =>
+  Layer.mergeAll(
     SecretsManager.DescribeSecretPolicyLive,
     SecretsManager.GetRandomPasswordPolicyLive,
     SecretsManager.GetSecretValuePolicyLive,
     SecretsManager.ListSecretsPolicyLive,
     SecretsManager.PutSecretValuePolicyLive,
+  );
+
+export const snsBindings = () =>
+  Layer.mergeAll(
     SNS.AddPermissionPolicyLive,
     SNS.ConfirmSubscriptionPolicyLive,
     SNS.GetDataProtectionPolicyPolicyLive,
@@ -317,6 +466,10 @@ export const bindings = () =>
     SNS.TagResourcePolicyLive,
     SNS.TopicSinkPolicyLive,
     SNS.UntagResourcePolicyLive,
+  );
+
+export const sqsBindings = () =>
+  Layer.mergeAll(
     SQS.DeleteMessageBatchPolicyLive,
     SQS.QueueSinkPolicyLive,
     SQS.ReceiveMessagePolicyLive,

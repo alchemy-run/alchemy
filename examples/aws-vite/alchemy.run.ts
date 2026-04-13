@@ -1,6 +1,6 @@
+import * as Alchemy from "alchemy-effect";
 import * as AWS from "alchemy-effect/AWS";
 import * as Output from "alchemy-effect/Output";
-import * as Stack from "alchemy-effect/Stack";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -31,7 +31,10 @@ const WEBSITE_ALIASES = Config.string("WEBSITE_ALIASES").pipe(
   (config) => config.asEffect(),
 );
 
-const stack = Effect.gen(function* () {
+export default Alchemy.Stack(
+  "AwsViteExample",
+  { providers: aws },
+  Effect.gen(function* () {
   /**
    * Optional Route 53 / ACM config.
    *
@@ -96,6 +99,5 @@ const stack = Effect.gen(function* () {
     aliasRecordNames: router.records.map((record) => record.name),
     previewHint: Output.interpolate`Run bun run dev:vite for local frontend iteration, then deploy to publish ${router.distribution.domainName}`,
   };
-}).pipe(Stack.make("AwsViteExample", aws) as any);
-
-export default stack;
+  }) as any,
+);
