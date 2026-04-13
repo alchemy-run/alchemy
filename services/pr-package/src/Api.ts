@@ -49,10 +49,18 @@ export default class Api extends Cloudflare.Worker<Api>()(
           }
         });
 
-        // --- PUT /packages ---
+        // Route pattern: /projects/:project/...
+        const projectMatch = path.match(/^\/projects\/([^/]+)(\/.*)?$/);
+        if (!projectMatch) {
+          return HttpServerResponse.text("Not Found", { status: 404 });
+        }
+        const project = decodeURIComponent(projectMatch[1]);
+        const subPath = projectMatch[2] || "/";
+
+        // --- PUT /projects/:project/packages ---
         // Body: raw .tgz stream (streamed directly to R2)
         // Headers: X-Tags (JSON array), X-TTL (optional, Effect Duration string e.g. "7 hours", "3 weeks"), Content-Length
-        if (method === "PUT" && path === "/packages") {
+        if (method === "PUT" && subPath === "/packages") {
           return yield* Effect.gen(function* () {
             yield* requireAuth;
 
@@ -112,7 +120,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 
             // reassign tags: remove from old resources, cleanup orphans
             for (const tag of tags) {
-              const oldResourceId = yield* kv.get(`tag:${tag}`);
+              const oldResourceId = yield* kv.get(`tag:${project}:${tag}`);
               if (oldResourceId && oldResourceId !== resourceId) {
                 const oldStore = packages.getByName(oldResourceId);
                 const { orphaned } = yield* oldStore
@@ -136,15 +144,15 @@ export default class Api extends Cloudflare.Worker<Api>()(
               })
               .pipe(Effect.orDie);
 
-            // store tag pointers in KV
+            // store tag pointers in KV (scoped by project)
             for (const tag of tags) {
-              yield* kv.put(`tag:${tag}`, resourceId);
+              yield* kv.put(`tag:${project}:${tag}`, resourceId);
             }
 
             // store metadata in KV (for potential cron cleanup)
             yield* kv.put(
               `metadata:${resourceId}`,
-              JSON.stringify({ tags, expiresAt }),
+              JSON.stringify({ project, tags, expiresAt }),
             );
 
             // init DO state
@@ -153,6 +161,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 
             return yield* HttpServerResponse.json({
               resourceId,
+              project,
               tags,
               ttl: ttlStr,
               expiresAt,
@@ -167,10 +176,10 @@ export default class Api extends Cloudflare.Worker<Api>()(
           );
         }
 
-        // --- GET /tags/:tag --- (302 redirect to /packages/:resourceId)
-        if (method === "GET" && path.startsWith("/tags/")) {
-          const tag = decodeURIComponent(path.slice("/tags/".length));
-          const resourceId = yield* kv.get(`tag:${tag}`);
+        // --- GET /projects/:project/tags/:tag --- (302 redirect to /projects/:project/packages/:resourceId)
+        if (method === "GET" && subPath.startsWith("/tags/")) {
+          const tag = decodeURIComponent(subPath.slice("/tags/".length));
+          const resourceId = yield* kv.get(`tag:${project}:${tag}`);
           if (!resourceId) {
             return yield* HttpServerResponse.json(
               { error: "tag not found" },
@@ -185,18 +194,18 @@ export default class Api extends Cloudflare.Worker<Api>()(
           return HttpServerResponse.fromWeb(
             new Response(null, {
               status: 302,
-              headers: { location: `/packages/${resourceId}` },
+              headers: { location: `/projects/${encodeURIComponent(project)}/packages/${resourceId}` },
             }),
           );
         }
 
-        // --- GET /packages/:resourceId --- (serve blob, cacheable)
+        // --- GET /projects/:project/packages/:resourceId --- (serve blob, cacheable)
         if (
           method === "GET" &&
-          path.startsWith("/packages/") &&
-          !path.endsWith("/stats")
+          subPath.startsWith("/packages/") &&
+          !subPath.endsWith("/stats")
         ) {
-          const resourceId = path.slice("/packages/".length);
+          const resourceId = subPath.slice("/packages/".length);
           const object = yield* r2
             .get(resourceId + ".tgz")
             .pipe(Effect.orDie);
@@ -219,13 +228,13 @@ export default class Api extends Cloudflare.Worker<Api>()(
           );
         }
 
-        // --- DELETE /tags/:tag ---
-        if (method === "DELETE" && path.startsWith("/tags/")) {
+        // --- DELETE /projects/:project/tags/:tag ---
+        if (method === "DELETE" && subPath.startsWith("/tags/")) {
           return yield* Effect.gen(function* () {
             yield* requireAuth;
 
-            const tag = decodeURIComponent(path.slice("/tags/".length));
-            const resourceId = yield* kv.get(`tag:${tag}`);
+            const tag = decodeURIComponent(subPath.slice("/tags/".length));
+            const resourceId = yield* kv.get(`tag:${project}:${tag}`);
             if (!resourceId) {
               return yield* HttpServerResponse.json(
                 { error: "tag not found" },
@@ -238,7 +247,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
               .removeTag(tag)
               .pipe(Effect.orDie);
 
-            yield* kv.delete(`tag:${tag}`);
+            yield* kv.delete(`tag:${project}:${tag}`);
 
             if (orphaned) {
               yield* r2
@@ -258,16 +267,16 @@ export default class Api extends Cloudflare.Worker<Api>()(
           );
         }
 
-        // --- GET /packages/:resourceId/stats ---
+        // --- GET /projects/:project/packages/:resourceId/stats ---
         if (
           method === "GET" &&
-          path.startsWith("/packages/") &&
-          path.endsWith("/stats")
+          subPath.startsWith("/packages/") &&
+          subPath.endsWith("/stats")
         ) {
           return yield* Effect.gen(function* () {
             yield* requireAuth;
 
-            const resourceId = path.slice(
+            const resourceId = subPath.slice(
               "/packages/".length,
               -"/stats".length,
             );

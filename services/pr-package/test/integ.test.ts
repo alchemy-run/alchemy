@@ -33,6 +33,7 @@ const stack = beforeAll(
 // --- helpers ---
 
 const AUTH_TOKEN = "test-bearer-token";
+const DEFAULT_PROJECT = "test-project";
 
 function createTgz(content: string): Uint8Array {
   // Minimal valid gzip: 10-byte header + deflated payload + 8-byte trailer.
@@ -51,8 +52,9 @@ function upload(
   baseUrl: string,
   file: Uint8Array,
   tags: string[],
-  options?: { ttl?: string; token?: string },
+  options?: { ttl?: string; token?: string; project?: string },
 ) {
+  const project = options?.project ?? DEFAULT_PROJECT;
   const headers: Record<string, string> = {
     Authorization: `Bearer ${options?.token ?? AUTH_TOKEN}`,
     "Content-Type": "application/gzip",
@@ -61,27 +63,27 @@ function upload(
   if (options?.ttl !== undefined) {
     headers["X-TTL"] = options.ttl;
   }
-  return fetch(`${baseUrl}/packages`, {
+  return fetch(`${baseUrl}/projects/${project}/packages`, {
     method: "PUT",
     headers,
     body: file,
   });
 }
 
-function getByTag(baseUrl: string, tag: string) {
-  return fetch(`${baseUrl}/tags/${tag}`);
+function getByTag(baseUrl: string, tag: string, project?: string) {
+  return fetch(`${baseUrl}/projects/${project ?? DEFAULT_PROJECT}/tags/${tag}`);
 }
 
-function deleteTag(baseUrl: string, tag: string, token?: string) {
-  return fetch(`${baseUrl}/tags/${tag}`, {
+function deleteTag(baseUrl: string, tag: string, options?: { token?: string; project?: string }) {
+  return fetch(`${baseUrl}/projects/${options?.project ?? DEFAULT_PROJECT}/tags/${tag}`, {
     method: "DELETE",
-    headers: { Authorization: `Bearer ${token ?? AUTH_TOKEN}` },
+    headers: { Authorization: `Bearer ${options?.token ?? AUTH_TOKEN}` },
   });
 }
 
-function getStats(baseUrl: string, resourceId: string, token?: string) {
-  return fetch(`${baseUrl}/packages/${resourceId}/stats`, {
-    headers: { Authorization: `Bearer ${token ?? AUTH_TOKEN}` },
+function getStats(baseUrl: string, resourceId: string, options?: { token?: string; project?: string }) {
+  return fetch(`${baseUrl}/projects/${options?.project ?? DEFAULT_PROJECT}/packages/${resourceId}/stats`, {
+    headers: { Authorization: `Bearer ${options?.token ?? AUTH_TOKEN}` },
   });
 }
 
@@ -111,14 +113,14 @@ test(
 
     // verify the tag endpoint redirects to the resource URL
     const redirectRes = yield* Effect.promise(() =>
-      fetch(`${url}/tags/latest`),
+      fetch(`${url}/projects/${DEFAULT_PROJECT}/tags/latest`),
     );
     expect(redirectRes.redirected).toBe(true);
-    expect(redirectRes.url).toContain(`/packages/${body.resourceId}`);
+    expect(redirectRes.url).toContain(`/projects/${DEFAULT_PROJECT}/packages/${body.resourceId}`);
 
     // verify the resource URL is cacheable
     const directRes = yield* Effect.promise(() =>
-      fetch(`${url}/packages/${body.resourceId}`),
+      fetch(`${url}/projects/${DEFAULT_PROJECT}/packages/${body.resourceId}`),
     );
     expect(directRes.status).toBe(200);
     expect(directRes.headers.get("cache-control")).toBe(
@@ -228,7 +230,7 @@ test(
     const content = createTgz("no-tags");
 
     const res = yield* Effect.promise(() =>
-      fetch(`${url}/packages`, {
+      fetch(`${url}/projects/${DEFAULT_PROJECT}/packages`, {
         method: "PUT",
         headers: {
           Authorization: `Bearer ${AUTH_TOKEN}`,
@@ -251,7 +253,7 @@ test(
 
     // PUT without token
     const noAuthPut = yield* Effect.promise(() =>
-      fetch(`${url}/packages`, {
+      fetch(`${url}/projects/${DEFAULT_PROJECT}/packages`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/gzip",
@@ -264,7 +266,7 @@ test(
 
     // DELETE without token
     const noAuthDel = yield* Effect.promise(() =>
-      fetch(`${url}/tags/auth-tag`, { method: "DELETE" }),
+      fetch(`${url}/projects/${DEFAULT_PROJECT}/tags/auth-tag`, { method: "DELETE" }),
     );
     expect(noAuthDel.status).toBe(401);
 
@@ -367,5 +369,63 @@ test(
       getStats(url, r1.resourceId),
     );
     expect(statsRes.status).toBe(404);
+  }),
+);
+
+test(
+  "same tag on different projects points to different resources",
+  Effect.gen(function* () {
+    const url = yield* stack;
+    const contentA = createTgz("project-a-content");
+    const contentB = createTgz("project-b-content");
+
+    const resA = yield* Effect.promise(() =>
+      upload(url, contentA, ["latest"], { project: "repo-alpha" }).then((r) =>
+        r.json(),
+      ),
+    );
+    const resB = yield* Effect.promise(() =>
+      upload(url, contentB, ["latest"], { project: "repo-beta" }).then((r) =>
+        r.json(),
+      ),
+    );
+
+    // different resources
+    expect(resA.resourceId).not.toBe(resB.resourceId);
+    expect(resA.project).toBe("repo-alpha");
+    expect(resB.project).toBe("repo-beta");
+
+    // each project's "latest" resolves to its own content
+    const getA = yield* Effect.promise(() =>
+      getByTag(url, "latest", "repo-alpha"),
+    );
+    const getB = yield* Effect.promise(() =>
+      getByTag(url, "latest", "repo-beta"),
+    );
+    expect(getA.status).toBe(200);
+    expect(getB.status).toBe(200);
+
+    const dataA = new Uint8Array(
+      yield* Effect.promise(() => getA.arrayBuffer()),
+    );
+    const dataB = new Uint8Array(
+      yield* Effect.promise(() => getB.arrayBuffer()),
+    );
+    expect(dataA).toEqual(contentA);
+    expect(dataB).toEqual(contentB);
+
+    // deleting tag on one project doesn't affect the other
+    yield* Effect.promise(() =>
+      deleteTag(url, "latest", { project: "repo-alpha" }),
+    );
+    const getAAfter = yield* Effect.promise(() =>
+      getByTag(url, "latest", "repo-alpha"),
+    );
+    expect(getAAfter.status).toBe(404);
+
+    const getBAfter = yield* Effect.promise(() =>
+      getByTag(url, "latest", "repo-beta"),
+    );
+    expect(getBAfter.status).toBe(200);
   }),
 );
