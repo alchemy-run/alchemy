@@ -7,7 +7,7 @@ import { CommandProvider } from "../Build/Command.ts";
 import type { Provider } from "../Provider.ts";
 import { RandomProvider } from "../Random.ts";
 import * as Account from "./Account.ts";
-import { ContainerProvider } from "./Container.ts";
+import { ContainerProvider } from "./Container/ContainerApplication.ts";
 import * as D1 from "./D1/index.ts";
 import * as KV from "./KV/index.ts";
 import * as R2 from "./R2/index.ts";

@@ -14,6 +14,9 @@ import { Stack } from "./Stack.ts";
 export type ResourceConstructor<R extends ResourceLike, Req = never> = {
   Type: R["Type"];
   Props: R["Props"];
+  <const Methods extends { [key: string]: any }>(
+    methods: Methods,
+  ): ResourceClassWithMethods<R, Methods>;
   (
     id: string,
     ...args: {} extends R["Props"]
@@ -33,6 +36,15 @@ export type ResourceConstructor<R extends ResourceLike, Req = never> = {
   //   props: Effect.Effect<Input<R["Props"]>, never, PropsReq>,
   // ): Effect.Effect<R, never, PropsReq | Req>;
 };
+
+export type ResourceClassWithMethods<
+  R extends ResourceLike,
+  Methods extends { [key: string]: any },
+> = ResourceConstructor<R, Provider<R>> &
+  Effect.Effect<ResourceConstructor<R>> & {
+    Self: Self<R>;
+    Provider: Provider<R>;
+  } & Methods;
 
 export type ResourceClass<R extends ResourceLike> = ResourceConstructor<
   R,
@@ -272,5 +284,13 @@ export function Resource<R extends ResourceLike>(
     Self: self,
   };
 
-  return Object.assign(constructor, Service) as any as ResourceClass<R>;
+  const ResourceClass = Object.assign(
+    (...args: [id: string, props: R["Props"]] | [methods: object]) =>
+      typeof args[0] === "object"
+        ? Object.assign(ResourceClass, args[0])
+        : constructor(...(args as [string, R["Props"]])),
+    Service,
+  ) as any;
+
+  return ResourceClass;
 }

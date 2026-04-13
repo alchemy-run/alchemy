@@ -43,13 +43,13 @@ import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
 import { Account } from "../Account.ts";
 import { D1Database } from "../D1/D1Database.ts";
+import { fromCloudflareFetcher } from "../Fetcher.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import type { R2Bucket } from "../R2/R2Bucket.ts";
 import type { AssetsConfig, AssetsProps } from "./Assets.ts";
 import * as Assets from "./Assets.ts";
 import cloudflare_workers from "./cloudflare_workers.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
-import { fromCloudflareFetcher } from "./Fetcher.ts";
 import { workersHttpHandler } from "./HttpServer.ts";
 import { Request } from "./Request.ts";
 import { makeRpcStub } from "./Rpc.ts";
@@ -468,7 +468,7 @@ export class BindWorkerPolicy extends Binding.Policy<
 export const BindWorkerPolicyLive = BindWorkerPolicy.layer.succeed(
   Effect.fn(function* (host, worker: Worker) {
     if (isWorker(host)) {
-      yield* host.bind`Bind(${worker})`({
+      yield* host.bind`${worker}`({
         bindings: [
           {
             type: "service",
@@ -499,6 +499,44 @@ function bumpMigrationTagVersion(
   const version = oldTag.match(/^(alchemy:)?v(\d+)$/)?.[2];
   if (!version) return "alchemy:v1";
   return `alchemy:v${parseInt(version, 10) + 1}`;
+}
+
+function getDurableObjectBindings(
+  bindings: ReadonlyArray<ResourceBinding>,
+  workerName: string,
+) {
+  return bindings.flatMap((binding) =>
+    (binding.data.bindings ?? []).flatMap((item: WorkerBinding) =>
+      item.type === "durable_object_namespace" &&
+      "className" in item &&
+      item.className &&
+      (!("scriptName" in item) ||
+        !item.scriptName ||
+        item.scriptName === workerName)
+        ? [
+            {
+              logicalId: binding.sid,
+              bindingName: item.name,
+              className: item.className,
+            },
+          ]
+        : [],
+    ),
+  );
+}
+
+function getDurableObjectTagMap(tags: ReadonlyArray<string>) {
+  return Object.fromEntries(
+    tags.flatMap((tag) => {
+      if (!tag.startsWith("alchemy:do:")) {
+        return [];
+      }
+      const parts = tag.split(":");
+      const logicalId = parts[2];
+      const className = parts.slice(3).join(":");
+      return logicalId && className ? [[logicalId, className]] : [];
+    }),
+  );
 }
 
 export const WorkerProvider = () =>
@@ -1029,24 +1067,6 @@ ${[
         const bundleSize = `${sizeKB > 1024 ? `${sizeMB.toFixed(2)} MB` : `${sizeKB.toFixed(2)} KB`}`;
         yield* session.note(`Uploading worker (${bundleSize}) ...`);
 
-        // Collect new DO bindings from the metadata bindings list (keyed by binding name)
-        const newDoBindings = new Map<
-          string,
-          { className: string; scriptName?: string }
-        >();
-        for (const b of metadataBindings) {
-          if (
-            b.type === "durable_object_namespace" &&
-            "className" in b &&
-            b.className
-          ) {
-            newDoBindings.set(b.name, {
-              className: b.className,
-              scriptName: "scriptName" in b ? b.scriptName : undefined,
-            });
-          }
-        }
-
         // Read existing worker settings for migration tracking
         const oldSettings =
           existingSettings ??
@@ -1061,15 +1081,14 @@ ${[
         const oldTags = Array.from(new Set(oldSettings?.tags ?? []));
         const oldBindings = oldSettings?.bindings ?? [];
 
-        // Parse alchemy:do:{stableId}:{bindingName} tags
-        const bindingNameToStableId = Object.fromEntries(
-          oldTags.flatMap((tag) => {
-            if (tag.startsWith("alchemy:do:")) {
-              const parts = tag.split(":");
-              return [[parts[3], parts[2]]];
-            }
-            return [];
-          }),
+        // Parse alchemy:do:{logicalId}:{className} tags
+        const oldDoClassNameByLogicalId = getDurableObjectTagMap(oldTags);
+        const currentDoBindings = getDurableObjectBindings(bindings, name);
+        const currentDoClassNameByLogicalId = Object.fromEntries(
+          currentDoBindings.map((binding) => [
+            binding.logicalId,
+            binding.className,
+          ]),
         );
 
         // Parse alchemy:migration-tag:{version}
@@ -1082,27 +1101,30 @@ ${[
 
         // Compute deleted classes
         const deletedClasses: string[] = [];
-        for (const oldBinding of oldBindings) {
-          if (
-            oldBinding.type === "durable_object_namespace" &&
-            "className" in oldBinding &&
-            oldBinding.className &&
-            (!("scriptName" in oldBinding) ||
-              !oldBinding.scriptName ||
-              oldBinding.scriptName === name)
-          ) {
-            const stableId = bindingNameToStableId[oldBinding.name];
-            if (stableId) {
-              const stillExists = [...bindings].some(
-                (rb) => rb.sid === stableId,
-              );
-              if (!stillExists) {
-                deletedClasses.push(oldBinding.className);
-              }
-            } else {
-              if (!newDoBindings.has(oldBinding.name)) {
-                deletedClasses.push(oldBinding.className);
-              }
+        for (const [logicalId, className] of Object.entries(
+          oldDoClassNameByLogicalId,
+        )) {
+          if (!currentDoClassNameByLogicalId[logicalId]) {
+            deletedClasses.push(className);
+          }
+        }
+
+        // Backward compatibility for old workers that have DO bindings but no
+        // alchemy:do tags yet.
+        if (Object.keys(oldDoClassNameByLogicalId).length === 0) {
+          for (const oldBinding of oldBindings) {
+            if (
+              oldBinding.type === "durable_object_namespace" &&
+              "className" in oldBinding &&
+              oldBinding.className &&
+              (!("scriptName" in oldBinding) ||
+                !oldBinding.scriptName ||
+                oldBinding.scriptName === name) &&
+              !currentDoBindings.some(
+                (binding) => binding.bindingName === oldBinding.name,
+              )
+            ) {
+              deletedClasses.push(oldBinding.className);
             }
           }
         }
@@ -1118,46 +1140,40 @@ ${[
         const newClasses: string[] = [];
         const newSqliteClasses: string[] = [];
         const renamedClasses: { from: string; to: string }[] = [];
-        for (const rb of bindings) {
-          for (const b of rb.data.bindings ?? []) {
-            if (
-              b.type === "durable_object_namespace" &&
-              "className" in b &&
-              b.className &&
-              (!("scriptName" in b) || !b.scriptName || b.scriptName === name)
-            ) {
-              const prevOldBinding = oldBindings.find(
-                (ob) =>
-                  ob.type === "durable_object_namespace" &&
-                  (bindingNameToStableId[ob.name] === rb.sid ||
-                    (!bindingNameToStableId[ob.name] && ob.name === b.name)),
-              );
-              if (!prevOldBinding) {
-                // Default all new Durable Object classes to SQLite. Cloudflare
-                // recommends SQLite for new namespaces, and container-backed
-                // Durable Objects require it.
-                newSqliteClasses.push(b.className);
-              } else if (
-                "className" in prevOldBinding &&
-                prevOldBinding.className !== b.className
-              ) {
-                renamedClasses.push({
-                  from: prevOldBinding.className!,
-                  to: b.className,
-                });
-              }
-            }
+        for (const binding of currentDoBindings) {
+          const previousClassName =
+            oldDoClassNameByLogicalId[binding.logicalId];
+          if (!previousClassName) {
+            // Default all new Durable Object classes to SQLite. Cloudflare
+            // recommends SQLite for new namespaces, and container-backed
+            // Durable Objects require it.
+            newSqliteClasses.push(binding.className);
+          } else if (previousClassName !== binding.className) {
+            renamedClasses.push({
+              from: previousClassName,
+              to: binding.className,
+            });
           }
         }
 
-        // Build alchemy:do:{sid}:{bindingName} tags for each DO binding
+        yield* Effect.logInfo(
+          `Cloudflare Worker put: durable object reconciliation ${JSON.stringify(
+            {
+              oldDoClassNameByLogicalId,
+              currentDoClassNameByLogicalId,
+              deletedClasses,
+              renamedClasses,
+              newSqliteClasses,
+            },
+          )}`,
+        );
+
+        // Build alchemy:do:{logicalId}:{className} tags for each DO binding
         const alchemyDoTags: string[] = [];
-        for (const rb of bindings) {
-          for (const b of rb.data.bindings ?? []) {
-            if (b.type === "durable_object_namespace" && "className" in b) {
-              alchemyDoTags.push(`alchemy:do:${rb.sid}:${b.name}`);
-            }
-          }
+        for (const binding of currentDoBindings) {
+          alchemyDoTags.push(
+            `alchemy:do:${binding.logicalId}:${binding.className}`,
+          );
         }
 
         const metadataTags = Array.from(
@@ -1330,13 +1346,17 @@ ${[
         precreate: Effect.fnUntraced(function* ({ id, news, session }) {
           const name = yield* createWorkerName(id, news.name);
           const exportMap = (news.exports ?? {}) as Record<string, unknown>;
-          const doClasses = Object.keys(exportMap).filter((name) =>
-            isDurableObjectExport(exportMap[name]),
-          );
+          const durableObjects = Object.keys(exportMap)
+            .filter((logicalId) => isDurableObjectExport(exportMap[logicalId]))
+            .map((logicalId) => ({
+              logicalId,
+              className: logicalId,
+            }));
+          const doClasses = durableObjects.map((binding) => binding.className);
           const containers = doClasses.map((className) => ({ className }));
-          const alchemyDoTags = doClasses.map(
-            (className) =>
-              `alchemy:do:Cloudflare.DurableObjectNamespace(${className}):${className}`,
+          const alchemyDoTags = durableObjects.map(
+            ({ logicalId, className }) =>
+              `alchemy:do:${logicalId}:${className}`,
           );
           const tags = Array.from(
             new Set([
@@ -1347,6 +1367,11 @@ ${[
           );
           yield* Effect.logInfo(
             `Cloudflare Worker precreate: starting ${name}`,
+          );
+          yield* Effect.logInfo(
+            `Cloudflare Worker precreate: durable objects ${JSON.stringify(
+              durableObjects,
+            )}`,
           );
           const existingSettings = yield* getScriptSettings({
             accountId,
@@ -1503,12 +1528,30 @@ ${[
           session,
         }) {
           const name = yield* createWorkerName(id, news.name);
+          const durableObjects = getDurableObjectBindings(bindings, name).map(
+            ({ logicalId, className }) => ({
+              logicalId,
+              className,
+            }),
+          );
           yield* Effect.logInfo(`Cloudflare Worker create: starting ${name}`);
+          yield* Effect.logInfo(
+            `Cloudflare Worker create: durable objects ${JSON.stringify(
+              durableObjects,
+            )}`,
+          );
           const existingSettings = yield* getScriptSettings({
             accountId,
             scriptName: name,
           }).pipe(
             Effect.catchTag("WorkerNotFound", () => Effect.succeed(undefined)),
+          );
+          yield* Effect.logInfo(
+            `Cloudflare Worker create: existing durable object tags ${JSON.stringify(
+              (existingSettings?.tags ?? []).filter((tag) =>
+                tag.startsWith("alchemy:do:"),
+              ),
+            )}`,
           );
           if (existingSettings) {
             yield* Effect.logInfo(
@@ -1541,8 +1584,27 @@ ${[
           bindings,
           session,
         }) {
+          const durableObjects = getDurableObjectBindings(
+            bindings,
+            output.workerName,
+          ).map(({ logicalId, className }) => ({
+            logicalId,
+            className,
+          }));
           yield* Effect.logInfo(
             `Cloudflare Worker update: starting ${output.workerName}`,
+          );
+          yield* Effect.logInfo(
+            `Cloudflare Worker update: durable objects ${JSON.stringify(
+              durableObjects,
+            )}`,
+          );
+          yield* Effect.logInfo(
+            `Cloudflare Worker update: previous durable object tags ${JSON.stringify(
+              (output.tags ?? []).filter((tag) =>
+                tag.startsWith("alchemy:do:"),
+              ),
+            )}`,
           );
           return yield* putWorker(id, news, bindings, olds, output, session);
         }),

@@ -24,7 +24,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
     },
     assets: "./assets",
     build: {
-      metafile: true,
+      // metafile: true,
     },
   },
   Effect.gen(function* () {
@@ -33,8 +33,8 @@ export default class Api extends Cloudflare.Worker<Api>()(
     const rooms = yield* Room;
     const notifier = yield* NotifyWorkflow;
     const loader = yield* Cloudflare.DynamicWorkerLoader("Loader");
-    const bucket = yield* Cloudflare.R2BucketBinding.bind(Bucket);
-    const kv = yield* Cloudflare.KVNamespaceBinding.bind(KV);
+    const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
+    const kv = yield* Cloudflare.KVNamespace.bind(KV);
 
     return {
       fetch: Effect.gen(function* () {
@@ -193,7 +193,6 @@ export default class Api extends Cloudflare.Worker<Api>()(
           const response = yield* agent.fetch(request);
           return response;
         } else if (request.url.startsWith("/room/")) {
-          console.log("request.url", request.url);
           const upgradeHeader = request.headers.upgrade;
           const roomId = request.url.split("/").pop()!;
           if (!upgradeHeader || upgradeHeader !== "websocket") {
@@ -207,7 +206,6 @@ export default class Api extends Cloudflare.Worker<Api>()(
             });
           }
           const room = rooms.getByName(roomId);
-          console.log("room", roomId);
           const response = yield* room.fetch(request);
           return response;
         }

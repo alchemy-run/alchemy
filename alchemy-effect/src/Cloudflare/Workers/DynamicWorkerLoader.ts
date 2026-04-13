@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { fromCloudflareFetcher, type Fetcher } from "./Fetcher.ts";
+import { fromCloudflareFetcher, type Fetcher } from "../Fetcher.ts";
 import { makeRpcStub } from "./Rpc.ts";
 import { Worker, WorkerEnvironment } from "./Worker.ts";
 
@@ -99,7 +99,7 @@ export type DynamicWorkerLoader = {
 export const DynamicWorkerLoader = Effect.fnUntraced(function* (name: string) {
   const worker = yield* Worker;
 
-  yield* worker.bind`Cloudflare.DynamicWorker(${name})`({
+  yield* worker.bind`${name}`({
     bindings: [{ type: "worker_loader", name } as any],
   });
 

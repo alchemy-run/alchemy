@@ -183,6 +183,7 @@ export const Platform = <
     createExecutionContext: (id: string) => BaseExecutionContext;
     onCreate?: (resource: R, props: any) => Effect.Effect<void>;
   },
+  methods?: { [key: string]: any },
 ): any => {
   type Props = any;
   type Impl = Effect.Effect<any>;
@@ -371,6 +372,7 @@ export const Platform = <
   const instance = Object.assign(constructor, resource, {
     Platform: Platform,
     asEffect: () => resource.Self.asEffect(),
+    ...methods,
   }) as any;
   return instance;
 };

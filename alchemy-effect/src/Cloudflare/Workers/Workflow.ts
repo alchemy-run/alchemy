@@ -222,7 +222,7 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
           const worker = yield* Worker;
 
           // Add the workflow binding to the Worker metadata
-          yield* worker.bind`Cloudflare.Workflow(${name})`({
+          yield* worker.bind`${name}`({
             bindings: [
               {
                 type: "workflow",

@@ -6,6 +6,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { Account } from "../Account.ts";
+import { R2BucketBinding } from "./R2BucketBinding.ts";
 
 export type R2BucketName = string;
 
@@ -43,7 +44,9 @@ export type R2Bucket = Resource<
   }
 >;
 
-export const R2Bucket = Resource<R2Bucket>("Cloudflare.R2Bucket");
+export const R2Bucket = Resource<R2Bucket>("Cloudflare.R2Bucket")({
+  bind: R2BucketBinding.bind,
+});
 
 export declare namespace R2Bucket {
   export type StorageClass = "Standard" | "InfrequentAccess";

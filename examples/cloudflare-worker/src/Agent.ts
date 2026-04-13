@@ -6,12 +6,12 @@ import { Sandbox } from "./Sandbox.ts";
 export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
   "Agents",
   Effect.gen(function* () {
-    const sandbox = yield* Cloudflare.bindContainer(Sandbox);
+    const sandbox = yield* Cloudflare.Container.bind(Sandbox);
 
     return Effect.gen(function* () {
       const state = yield* Cloudflare.DurableObjectState;
 
-      const container = yield* Cloudflare.runContainer(sandbox);
+      const container = yield* Cloudflare.start(sandbox);
 
       const sessions = new Map<string, Cloudflare.DurableWebSocket>();
 

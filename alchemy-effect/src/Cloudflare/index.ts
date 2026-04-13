@@ -1,4 +1,4 @@
-export * from "./Container.ts";
+export * from "./Container/index.ts";
 export * from "./D1/index.ts";
 export * from "./KV/index.ts";
 export * from "./Providers.ts";

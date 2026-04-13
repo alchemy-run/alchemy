@@ -124,7 +124,7 @@ export class FetchPolicy extends Binding.Policy<
 export const FetchPolicyLive = FetchPolicy.layer.succeed(
   Effect.fn(function* (host) {
     if (isWorker(host)) {
-      yield* host.bind`Bind(${host})`({
+      yield* host.bind`${host}`({
         bindings: [
           {
             type: "service",

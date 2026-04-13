@@ -8,7 +8,7 @@ import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as Socket from "effect/unstable/socket/Socket";
 import type { HttpEffect } from "../../Http.ts";
-import { fromCloudflareFetcher } from "./Fetcher.ts";
+import { fromCloudflareFetcher } from "../Fetcher.ts";
 import { serveWebRequest } from "./HttpServer.ts";
 import { fromWebSocket } from "./WebSocket.ts";
 

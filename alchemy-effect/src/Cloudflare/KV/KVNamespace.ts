@@ -5,6 +5,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { Account } from "../Account.ts";
+import { KVNamespaceBinding } from "./KVNamespaceBinding.ts";
 
 export type NamespaceProps = {
   /**
@@ -26,7 +27,9 @@ export type KVNamespace = Resource<
   }
 >;
 
-export const KVNamespace = Resource<KVNamespace>("Cloudflare.KVNamespace");
+export const KVNamespace = Resource<KVNamespace>("Cloudflare.KVNamespace")({
+  bind: KVNamespaceBinding.bind,
+});
 
 export const NamespaceProvider = () =>
   Provider.effect(

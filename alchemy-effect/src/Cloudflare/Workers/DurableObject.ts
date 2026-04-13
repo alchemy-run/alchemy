@@ -141,24 +141,22 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
             const [namespace, impl] = args;
             const worker = yield* Worker;
 
-            yield* worker.bind`Cloudflare.DurableObjectNamespace(${namespace})`(
-              {
-                // TODO(sam): automate class migrations, probably in the provider
-                bindings: [
-                  {
-                    type: "durable_object_namespace",
-                    name: namespace,
-                    className: namespace,
-                    // scriptName:
-                    //   binding.scriptName === props.workerName
-                    //     ? undefined
-                    //     : binding.scriptName,
-                    // environment: binding.environment,
-                    // namespaceId: binding.namespaceId,
-                  },
-                ],
-              },
-            );
+            yield* worker.bind`${namespace}`({
+              // TODO(sam): automate class migrations, probably in the provider
+              bindings: [
+                {
+                  type: "durable_object_namespace",
+                  name: namespace,
+                  className: namespace,
+                  // scriptName:
+                  //   binding.scriptName === props.workerName
+                  //     ? undefined
+                  //     : binding.scriptName,
+                  // environment: binding.environment,
+                  // namespaceId: binding.namespaceId,
+                },
+              ],
+            });
 
             const services =
               yield* Effect.services<Effect.Services<typeof impl>>();

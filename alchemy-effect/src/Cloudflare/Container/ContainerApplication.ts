@@ -1,90 +1,87 @@
-import type * as cf from "@cloudflare/workers-types";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
-import * as Config from "effect/Config";
-import * as Data from "effect/Data";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
-import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type * as rolldown from "rolldown";
-import { AdoptPolicy } from "../AdoptPolicy.ts";
-import * as Bundle from "../Bundle/Bundle.ts";
+import { AdoptPolicy } from "../../AdoptPolicy.ts";
+import * as Bundle from "../../Bundle/Bundle.ts";
 import {
   dockerBuild,
   materializeDockerfile,
   pushImage,
   writeContextFiles,
-} from "../Bundle/Docker.ts";
-import { findCwdForBundle, getStableContextDir } from "../Bundle/TempRoot.ts";
-import { DotAlchemy } from "../Config.ts";
-import { deepEqual, isResolved } from "../Diff.ts";
-import { HttpServer, type HttpEffect } from "../Http.ts";
-import * as Output from "../Output.ts";
-import { createPhysicalName } from "../PhysicalName.ts";
+} from "../../Bundle/Docker.ts";
 import {
-  Platform,
+  findCwdForBundle,
+  getStableContextDir,
+} from "../../Bundle/TempRoot.ts";
+import { DotAlchemy } from "../../Config.ts";
+import { deepEqual, isResolved } from "../../Diff.ts";
+import { createPhysicalName } from "../../PhysicalName.ts";
+import {
   type Main,
   type PlatformProps,
   type PlatformServices,
-  type Rpc,
-} from "../Platform.ts";
-import * as Provider from "../Provider.ts";
-import { Resource, type ResourceBinding } from "../Resource.ts";
-import { Self } from "../Self.ts";
-import * as Server from "../Server/index.ts";
-import { Stack } from "../Stack.ts";
-import { sha256Object } from "../Util/sha256.ts";
-import { normalizeNulls } from "../Util/stable.ts";
-import { Account } from "./Account.ts";
-import { CloudflareLogs, type TelemetryFilter } from "./Logs.ts";
-import {
-  DurableObjectNamespace,
-  DurableObjectState,
-} from "./Workers/DurableObject.ts";
-import {
-  fromCloudflareFetcher,
-  toCloudflareFetcher,
-  type Fetcher,
-} from "./Workers/Fetcher.ts";
-import { Worker } from "./Workers/Worker.ts";
+} from "../../Platform.ts";
+import * as Provider from "../../Provider.ts";
+import { Resource, type ResourceBinding } from "../../Resource.ts";
+import { Self } from "../../Self.ts";
+import * as Server from "../../Server/index.ts";
+import { Stack } from "../../Stack.ts";
+import { sha256Object } from "../../Util/sha256.ts";
+import { normalizeNulls } from "../../Util/stable.ts";
+import { Account } from "../Account.ts";
+import { CloudflareLogs, type TelemetryFilter } from "../Logs.ts";
+import { Container, ContainerTypeId } from "./Container.ts";
 
 export { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 
-const ContainerTypeId = "Cloudflare.Container";
-type ContainerTypeId = typeof ContainerTypeId;
-
-export const isContainer = <T>(value: T): value is T & Container =>
-  typeof value === "object" &&
-  value !== null &&
-  "Type" in value &&
-  value.Type === ContainerTypeId;
-
-export class ContainerError extends Data.TaggedError("ContainerError")<{
-  readonly message: string;
-  readonly cause?: unknown;
-}> {}
-
-export interface ContainerStartupOptions extends cf.ContainerStartupOptions {}
-
-export interface Container {
-  get running(): Effect.Effect<boolean>;
-  start(options?: ContainerStartupOptions): Effect.Effect<void>;
-  monitor(): Effect.Effect<void, ContainerError>;
-  destroy(error?: any): Effect.Effect<void>;
-  signal(signo: number): Effect.Effect<void>;
-  getTcpPort(port: number): Effect.Effect<Fetcher>;
-  setInactivityTimeout(durationMs: number | bigint): Effect.Effect<void>;
-  interceptOutboundHttp(addr: string, binding: Fetcher): Effect.Effect<void>;
-  interceptAllOutboundHttp(binding: Fetcher): Effect.Effect<void>;
-}
-
-export interface ContainerProps extends ContainerApplicationProps {
-  main: string;
+export type InstanceType = NonNullable<
+  Containers.CreateContainerApplicationRequest["configuration"]["instanceType"]
+>;
+export type SchedulingPolicy = NonNullable<
+  Containers.CreateContainerApplicationRequest["schedulingPolicy"]
+>;
+export type Observability = NonNullable<
+  Containers.CreateContainerApplicationRequest["configuration"]["observability"]
+>;
+export type Secret = NonNullable<
+  Containers.CreateContainerApplicationRequest["configuration"]["secrets"]
+>[number];
+export type Disk = NonNullable<
+  Containers.CreateContainerApplicationRequest["configuration"]["disk"]
+>;
+export type EnvironmentVariable = NonNullable<
+  Containers.CreateContainerApplicationRequest["configuration"]["environmentVariables"]
+>[number];
+export type Label = NonNullable<
+  Containers.CreateContainerApplicationRequest["configuration"]["labels"]
+>[number];
+export type Network = NonNullable<
+  Containers.CreateContainerApplicationRequest["configuration"]["network"]
+>;
+export type Dns = NonNullable<
+  Containers.CreateContainerApplicationRequest["configuration"]["dns"]
+>;
+export type Port = NonNullable<
+  Containers.CreateContainerApplicationRequest["configuration"]["ports"]
+>[number];
+export type Check = NonNullable<
+  Containers.CreateContainerApplicationRequest["configuration"]["checks"]
+>[number];
+export type Constraints = {
+  tier?: number;
+};
+export type Affinities = {
+  colocation?: "datacenter";
+};
+export type Configuration =
+  Containers.CreateContainerApplicationRequest["configuration"];
+export interface Rollout {
+  strategy?: "rolling" | "immediate";
+  kind?: "full_auto";
+  stepPercentage?: number;
 }
 
 export interface ContainerApplicationProps extends PlatformProps {
@@ -263,156 +260,7 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
   Shape: Shape;
 }
 
-export const Container: Platform<
-  ContainerApplication,
-  ContainerServices,
-  ContainerShape,
-  Server.ProcessContext,
-  Container
-> = Platform("Cloudflare.Container", {
-  createExecutionContext: (id: string): Server.ProcessContext => {
-    const runners: Effect.Effect<void, never, any>[] = [];
-    const env: Record<string, any> = {};
-
-    const serve = <Req = never>(handler: HttpEffect<Req>) =>
-      Effect.sync(() => {
-        runners.push(
-          Effect.gen(function* () {
-            const httpServer = yield* Effect.serviceOption(HttpServer).pipe(
-              Effect.map(Option.getOrUndefined),
-            );
-            if (httpServer) {
-              yield* httpServer.serve(handler);
-              yield* Effect.never;
-            } else {
-              // this should only happen at plantime, validate?
-            }
-          }).pipe(Effect.orDie),
-        );
-      });
-
-    return {
-      Type: ContainerTypeId,
-      LogicalId: id,
-      id,
-      env,
-      set: (bindingId: string, output: Output.Output) =>
-        Effect.sync(() => {
-          const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
-          env[key] = output.pipe(Output.map((value) => JSON.stringify(value)));
-          return key;
-        }),
-      get: <T>(key: string) =>
-        Config.string(key)
-          .asEffect()
-          .pipe(
-            Effect.flatMap((value) =>
-              Effect.try({
-                try: () => JSON.parse(value) as T,
-                catch: (error) => error as Error,
-              }),
-            ),
-            Effect.catch((cause) =>
-              Effect.die(
-                new Error(`Failed to get environment variable: ${key}`, {
-                  cause,
-                }),
-              ),
-            ),
-          ),
-      run: ((effect: Effect.Effect<void, never, any>) =>
-        Effect.sync(() => {
-          runners.push(effect);
-        })) as unknown as Server.ProcessContext["run"],
-      serve,
-      exports: Effect.sync(() => ({
-        default: Effect.all(
-          runners.map((eff) =>
-            Effect.forever(
-              eff.pipe(
-                // Log and ignore errors (daemon mode, it should just re-run)
-                Effect.tapError((err) => Effect.logError(err)),
-                Effect.ignore,
-                // TODO(sam): ignore cause? for now, let that actually kill the server
-                // Effect.ignoreCause
-              ),
-            ),
-          ),
-          {
-            concurrency: "unbounded",
-          },
-        ),
-      })),
-    } as Server.ProcessContext;
-  },
-});
-
-export const bindContainer = Effect.fnUntraced(function* <Shape, Req = never>(
-  containerEff:
-    | (ContainerApplication & Rpc<Shape>)
-    | Effect.Effect<ContainerApplication & Rpc<Shape>, never, Req>,
-) {
-  const namespace = yield* DurableObjectNamespace.asEffect();
-
-  const container =
-    "asEffect" in containerEff
-      ? yield* (containerEff as any).asEffect() as Effect.Effect<
-          ContainerApplication & Rpc<Shape>
-        >
-      : Effect.isEffect(containerEff)
-        ? yield* containerEff as unknown as Effect.Effect<
-            ContainerApplication & Rpc<Shape>
-          >
-        : containerEff;
-
-  yield* container.bind`${namespace}`({
-    durableObjects: {
-      namespaceId: namespace.namespaceId,
-    },
-  });
-
-  const worker = yield* Worker;
-  const className = namespace.name;
-  yield* worker.bind`Cloudflare.Container(${className})`({
-    containers: [{ className }],
-  });
-
-  // TODO(sam): register this in the Container Execution Context
-  // const _httpEffect = yield* init;
-  return Effect.gen(function* () {
-    const state = yield* DurableObjectState;
-    return {
-      running: Effect.sync(() => state.container!.running ?? false),
-      destroy: (error?: any) =>
-        Effect.promise(() => state.container!.destroy(error)),
-      signal: (signo: number) =>
-        Effect.sync(() => state.container!.signal(signo)),
-      getTcpPort: (port: number) =>
-        Effect.sync(() =>
-          fromCloudflareFetcher(state.container!.getTcpPort(port)),
-        ),
-      setInactivityTimeout: (durationMs: number | bigint) =>
-        Effect.sync(() => state.container!.setInactivityTimeout(durationMs)),
-      interceptOutboundHttp: (addr: string, binding: Fetcher) =>
-        toCloudflareFetcher(binding).pipe(
-          Effect.map((binding) =>
-            state.container!.interceptOutboundHttp(addr, binding),
-          ),
-        ),
-      interceptAllOutboundHttp: (binding: Fetcher) =>
-        toCloudflareFetcher(binding).pipe(
-          Effect.map((binding) =>
-            state.container!.interceptAllOutboundHttp(binding),
-          ),
-        ),
-      monitor: () => Effect.sync(() => state.container?.monitor()),
-      start: (options?: ContainerStartupOptions) =>
-        Effect.sync(() => state.container!.start(options)),
-    } satisfies Container as Shape;
-  });
-});
-
-export const resolveDurableObjectApplicationRecovery = ({
+const resolveDurableObjectApplicationRecovery = ({
   namespaceId,
   expectedName,
   existingName,
@@ -437,123 +285,6 @@ export const resolveDurableObjectApplicationRecovery = ({
     canAdopt: true as const,
   };
 };
-
-/**
- * Runs the Container in a Durable Object and monitors it, providing a durable fetch and RPC interface to it.
- */
-export const runContainer = Effect.fnUntraced(function* <
-  Shape extends Container,
-  Req = never,
->(containerEff: Effect.Effect<Shape, never, Req | DurableObjectState>) {
-  const container = yield* containerEff;
-
-  const ensureRunning = Effect.gen(function* () {
-    if (yield* container.running) return;
-    yield* Effect.logInfo("Container not running, starting...");
-    yield* container.start();
-    yield* Effect.logInfo("Container started, launching monitor");
-    yield* Effect.forkDetach(
-      container.monitor().pipe(
-        Effect.flatMap(() => Effect.logInfo("Container monitor exited")),
-        Effect.catchTag("ContainerError", (error) =>
-          Effect.logError(`Container monitor error: ${error.message}`),
-        ),
-      ),
-    );
-  });
-
-  yield* ensureRunning;
-
-  const startupBackoff = Schedule.exponential(100, 1.5).pipe(
-    Schedule.modifyDelay((_, delay) =>
-      Effect.succeed(Duration.max(delay, Duration.seconds(2))),
-    ),
-  );
-
-  const getTcpPort = (portNumber: number) =>
-    Effect.succeed({
-      fetch: ((
-        request:
-          | HttpClientRequest.HttpClientRequest
-          | HttpServerRequest.HttpServerRequest,
-      ) =>
-        ensureRunning.pipe(
-          Effect.andThen(() => container.getTcpPort(portNumber)),
-          Effect.andThen((port: Fetcher) => port.fetch(request as any)),
-          Effect.catchDefect((defect: unknown) =>
-            Effect.fail(
-              new ContainerError({
-                message: `Container not ready on port ${portNumber}: ${defect}`,
-              }),
-            ),
-          ),
-          Effect.tapError((err) =>
-            Effect.logDebug(`Container fetch error (will retry): ${err}`),
-          ),
-          Effect.retry({ schedule: startupBackoff }),
-        )) as {
-        (
-          request: HttpClientRequest.HttpClientRequest,
-        ): Effect.Effect<HttpClientResponse.HttpClientResponse>;
-        (
-          request: HttpServerRequest.HttpServerRequest,
-        ): Effect.Effect<HttpServerResponse.HttpServerResponse>;
-      },
-    });
-
-  return {
-    ...container,
-    getTcpPort,
-    fetch: getTcpPort(3000),
-  };
-});
-
-export type InstanceType = NonNullable<
-  Containers.CreateContainerApplicationRequest["configuration"]["instanceType"]
->;
-export type SchedulingPolicy = NonNullable<
-  Containers.CreateContainerApplicationRequest["schedulingPolicy"]
->;
-export type Observability = NonNullable<
-  Containers.CreateContainerApplicationRequest["configuration"]["observability"]
->;
-export type Secret = NonNullable<
-  Containers.CreateContainerApplicationRequest["configuration"]["secrets"]
->[number];
-export type Disk = NonNullable<
-  Containers.CreateContainerApplicationRequest["configuration"]["disk"]
->;
-export type EnvironmentVariable = NonNullable<
-  Containers.CreateContainerApplicationRequest["configuration"]["environmentVariables"]
->[number];
-export type Label = NonNullable<
-  Containers.CreateContainerApplicationRequest["configuration"]["labels"]
->[number];
-export type Network = NonNullable<
-  Containers.CreateContainerApplicationRequest["configuration"]["network"]
->;
-export type Dns = NonNullable<
-  Containers.CreateContainerApplicationRequest["configuration"]["dns"]
->;
-export type Port = NonNullable<
-  Containers.CreateContainerApplicationRequest["configuration"]["ports"]
->[number];
-export type Check = NonNullable<
-  Containers.CreateContainerApplicationRequest["configuration"]["checks"]
->[number];
-export type Constraints = {
-  tier?: number;
-};
-export type Affinities = {
-  colocation?: "datacenter";
-};
-export type Configuration =
-  Containers.CreateContainerApplicationRequest["configuration"];
-export interface Rollout {
-  strategy?: "rolling" | "immediate";
-  kind?: "full_auto";
-  stepPercentage?: number;
-}
 
 const containerApplicationReadinessSchedule = Schedule.exponential(100).pipe(
   Schedule.both(Schedule.recurs(20)),
