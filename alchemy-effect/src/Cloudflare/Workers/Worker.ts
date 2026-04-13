@@ -399,6 +399,7 @@ export const Worker: Platform<
         const handlers = yield* Effect.all(listeners, {
           concurrency: "unbounded",
         });
+        const services = yield* Effect.services();
         const handle =
           (type: WorkerEvent["type"]) =>
           (request: any, env: unknown, context: cf.ExecutionContext) => {
@@ -413,6 +414,7 @@ export const Worker: Platform<
               const eff = handler(event);
               if (Effect.isEffect(eff)) {
                 return eff.pipe(
+                  Effect.provideServices(services),
                   Effect.provide(Layer.succeed(ExecutionContext, context)),
                   Effect.runPromise,
                 );

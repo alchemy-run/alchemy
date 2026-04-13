@@ -61,7 +61,17 @@ export const Service =
       Shape
     >;
     return Object.assign(self, {
-      bind: (...args: Parameters<Shape>) => self.use((f) => f(...args)),
+      bind: (...args: Parameters<Shape>) =>
+        self.use((f) =>
+          Effect.all(
+            args.map((arg) =>
+              Effect.isEffect(arg) ? arg : Effect.succeed(arg),
+            ),
+            {
+              concurrency: "unbounded",
+            },
+          ).pipe(Effect.flatMap((args) => f(...args))),
+        ),
     });
   };
 

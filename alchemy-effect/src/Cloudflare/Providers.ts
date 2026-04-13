@@ -63,11 +63,7 @@ export const bindings = () =>
   Layer.mergeAll(
     D1.D1ConnectionPolicyLive,
     R2.R2BucketBindingPolicyLive,
-    KV.GetPolicyLive,
-    KV.PutPolicyLive,
-    KV.DeletePolicyLive,
-    KV.ListPolicyLive,
-    KV.GetWithMetadataPolicyLive,
+    KV.KVNamespaceBindingPolicyLive,
   );
 
 const utils = () =>

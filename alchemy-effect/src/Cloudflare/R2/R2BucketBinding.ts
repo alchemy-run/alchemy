@@ -300,7 +300,7 @@ export const R2BucketClient = Effect.fn(function* (
   bucket: R2Bucket,
 ) {
   if (isWorker(host)) {
-    yield* host.bind`Bind(${bucket})`({
+    yield* host.bind`${bucket}`({
       bindings: [
         {
           type: "r2_bucket",

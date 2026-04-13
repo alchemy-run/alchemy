@@ -7,6 +7,7 @@ import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import Agent from "./Agent.ts";
 import { Bucket } from "./Bucket.ts";
+import { KV } from "./KV.ts";
 import NotifyWorkflow from "./NotifyWorkflow.ts";
 import Room from "./Room.ts";
 
@@ -33,6 +34,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
     const notifier = yield* NotifyWorkflow;
     const loader = yield* Cloudflare.DynamicWorkerLoader("Loader");
     const bucket = yield* Cloudflare.R2BucketBinding.bind(Bucket);
+    const kv = yield* Cloudflare.KVNamespaceBinding.bind(KV);
 
     return {
       fetch: Effect.gen(function* () {
@@ -40,6 +42,29 @@ export default class Api extends Cloudflare.Worker<Api>()(
 
         if (request.url.startsWith("/auth/")) {
           // return yield* betterAuth.fetch;
+        } else if (request.url.startsWith("/kv/")) {
+          if (request.method === "GET") {
+            const key = request.url.split("/").pop()!;
+            return yield* kv.get(key).pipe(
+              Effect.map((value) =>
+                value
+                  ? HttpServerResponse.text(value)
+                  : HttpServerResponse.empty({ status: 404 }),
+              ),
+              Effect.catch(() =>
+                Effect.succeed(HttpServerResponse.empty({ status: 404 })),
+              ),
+            );
+          } else if (request.method === "POST") {
+            const key = request.url.split("/").pop()!;
+            const value = yield* request.text;
+            return yield* kv.put(key, value).pipe(
+              Effect.map(() => HttpServerResponse.empty({ status: 200 })),
+              Effect.catch(() =>
+                Effect.succeed(HttpServerResponse.empty({ status: 500 })),
+              ),
+            );
+          }
         } else if (request.url.startsWith("/object/")) {
           return yield* bucket.get(request.url.split("/").pop()!).pipe(
             Effect.flatMap((object) =>
@@ -59,7 +84,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
             ),
             Effect.catchTag("R2Error", (error) =>
               Effect.succeed(
-                HttpServerResponse.text("Internal server error", {
+                HttpServerResponse.text(error.message, {
                   status: 500,
                   statusText: error.message,
                 }),
@@ -159,8 +184,15 @@ export default class Api extends Cloudflare.Worker<Api>()(
           const response = yield* room.fetch(request);
           return response;
         }
-        return HttpServerResponse.text("Hello World", { status: 200 });
+        return HttpServerResponse.text("Not Found", { status: 404 });
       }),
     };
-  }).pipe(Effect.provide(Layer.mergeAll(Cloudflare.R2BucketBindingLive))),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Cloudflare.R2BucketBindingLive,
+        Cloudflare.KVNamespaceBindingLive,
+      ),
+    ),
+  ),
 ) {}

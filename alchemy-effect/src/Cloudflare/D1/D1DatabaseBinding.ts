@@ -8,7 +8,7 @@ export const DatabaseBinding = Effect.fn(function* (
   database: D1Database,
 ) {
   if (isWorker(host)) {
-    yield* host.bind`Bind(${database})`({
+    yield* host.bind`${database}`({
       bindings: [
         {
           type: "d1",
