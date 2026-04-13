@@ -66,6 +66,12 @@ export function test(
 }
 
 export namespace test {
+  export function skipIf(condition: boolean) {
+    return (name: string, test: TestEffect<void>, options?: bun.TestOptions) => {
+      bun.test.skipIf(condition)(name, () => run(test), options);
+    };
+  }
+
   export function skip(
     name: string,
     test: TestEffect<void>,
