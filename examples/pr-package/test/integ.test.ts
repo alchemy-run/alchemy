@@ -1,8 +1,9 @@
-import { beforeAll, deploy, expect, test } from "alchemy-effect/Test/Bun";
+import { afterAll, beforeAll, deploy, destroy, expect, test } from "alchemy-effect/Test/Bun";
 import * as Effect from "effect/Effect";
 import Stack from "../alchemy.run.ts";
 
 const stack = beforeAll(deploy(Stack));
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 // --- helpers ---
 
@@ -292,7 +293,7 @@ test(
   }),
 );
 
-test(
+test.skipIf(!!process.env.NO_DESTROY)(
   "download tracking records tag used",
   Effect.gen(function* () {
     const url = yield* stack;
