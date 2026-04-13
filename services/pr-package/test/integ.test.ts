@@ -222,17 +222,24 @@ test(
 );
 
 test(
-  "reject upload with invalid gzip content",
+  "upload requires X-Tags header",
   Effect.gen(function* () {
     const url = yield* stack;
-    const txt = new TextEncoder().encode("not a tgz");
+    const content = createTgz("no-tags");
 
     const res = yield* Effect.promise(() =>
-      upload(url, txt, ["bad"]),
+      fetch(`${url}/packages`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${AUTH_TOKEN}`,
+          "Content-Type": "application/gzip",
+        },
+        body: content,
+      }),
     );
     expect(res.status).toBe(400);
     const body = yield* Effect.promise(() => res.json());
-    expect(body.error).toContain("tgz");
+    expect(body.error).toContain("X-Tags");
   }),
 );
 
@@ -296,36 +303,10 @@ test(
 );
 
 test(
-  "upload same content with different tags deduplicates",
-  Effect.gen(function* () {
-    const url = yield* stack;
-    const content = createTgz("dedup-content");
-
-    const r1 = yield* Effect.promise(() =>
-      upload(url, content, ["dedup-a"]).then((r) => r.json()),
-    );
-    const r2 = yield* Effect.promise(() =>
-      upload(url, content, ["dedup-b"]).then((r) => r.json()),
-    );
-
-    // same content hash => same resourceId
-    expect(r1.resourceId).toBe(r2.resourceId);
-
-    // both tags work
-    const g1 = yield* Effect.promise(() => getByTag(url, "dedup-a"));
-    const g2 = yield* Effect.promise(() => getByTag(url, "dedup-b"));
-    expect(g1.status).toBe(200);
-    expect(g2.status).toBe(200);
-  }),
-);
-
-test(
   "download tracking records tag used",
   Effect.gen(function* () {
     const url = yield* stack;
-    // Use unique content per run to get a fresh DO instance
-    const runId = crypto.randomUUID();
-    const content = createTgz(`stats-content-${runId}`);
+    const content = createTgz("stats-content");
 
     const uploaded = yield* Effect.promise(() =>
       upload(url, content, ["stats-a", "stats-b"]).then((r) => r.json()),

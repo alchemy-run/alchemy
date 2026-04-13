@@ -7,17 +7,6 @@ import { Bucket } from "./Bucket.ts";
 import PackageStore from "./PackageStore.ts";
 import { TagIndex } from "./TagIndex.ts";
 
-function isGzip(bytes: Uint8Array): boolean {
-  return bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
-}
-
-async function sha256(data: ArrayBuffer): Promise<string> {
-  const hash = await crypto.subtle.digest("SHA-256", data);
-  return [...new Uint8Array(hash)]
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
 class Unauthorized {
   readonly _tag = "Unauthorized";
 }
@@ -60,7 +49,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
         });
 
         // --- PUT /packages ---
-        // Body: raw .tgz stream
+        // Body: raw .tgz stream (streamed directly to R2)
         // Headers: X-Tags (JSON array), X-TTL (optional, days), Content-Length
         if (method === "PUT" && path === "/packages") {
           return yield* Effect.gen(function* () {
@@ -68,6 +57,9 @@ export default class Api extends Cloudflare.Worker<Api>()(
 
             const tagsRaw = request.headers["x-tags"];
             const ttlRaw = request.headers["x-ttl"];
+            const contentLength = Number(
+              request.headers["content-length"] ?? 0,
+            );
 
             if (!tagsRaw) {
               return yield* HttpServerResponse.json(
@@ -92,24 +84,15 @@ export default class Api extends Cloudflare.Worker<Api>()(
               );
             }
 
-            // buffer body to compute hash and validate gzip magic
-            const rawRequest =
-              (yield* Cloudflare.Request) as globalThis.Request;
-            const bytes = new Uint8Array(
-              yield* Effect.promise(() => rawRequest.arrayBuffer()),
-            );
-
-            if (!isGzip(bytes)) {
+            if (!contentLength) {
               return yield* HttpServerResponse.json(
-                { error: "body must be a valid .tgz (gzip) archive" },
+                { error: "Content-Length header is required" },
                 { status: 400 },
               );
             }
 
             const ttl = ttlRaw ? Number(ttlRaw) : defaultTtlDays;
-            const resourceId = yield* Effect.promise(() =>
-              sha256(bytes.buffer as ArrayBuffer),
-            );
+            const resourceId = crypto.randomUUID();
             const expiresAt = Date.now() + ttl * 24 * 60 * 60 * 1000;
 
             // reassign tags: remove from old resources, cleanup orphans
@@ -129,8 +112,14 @@ export default class Api extends Cloudflare.Worker<Api>()(
               }
             }
 
-            // store blob
-            yield* r2.put(resourceId + ".tgz", bytes).pipe(Effect.orDie);
+            // Stream body directly to R2 via FixedLengthStream (no buffering).
+            // Uses request.stream from Effect's HttpServerRequest which
+            // provides the raw body as a ReadableStream.
+            yield* r2
+              .put(resourceId + ".tgz", request.stream, {
+                contentLength,
+              })
+              .pipe(Effect.orDie);
 
             // store tag pointers in KV
             for (const tag of tags) {
@@ -290,9 +279,12 @@ export default class Api extends Cloudflare.Worker<Api>()(
 
         return HttpServerResponse.text("Not Found", { status: 404 });
       }).pipe(
-        Effect.catch(() =>
+        Effect.catch((error: any) =>
           Effect.succeed(
-            HttpServerResponse.text("Internal Server Error", { status: 500 }),
+            HttpServerResponse.text(
+              `Internal Server Error: ${error?.message ?? error?._tag ?? String(error)}`,
+              { status: 500 },
+            ),
           ),
         ),
       ),
