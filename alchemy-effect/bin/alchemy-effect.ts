@@ -726,7 +726,7 @@ const parseSince = (value: string): Date => {
   return parsed;
 };
 
-const root = Command.make("alchemy-effect", {}).pipe(
+const root = Command.make("alchemy", {}).pipe(
   Command.withSubcommands([
     bootstrapCommand,
     deployCommand,
