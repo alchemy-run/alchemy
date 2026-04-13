@@ -1,3 +1,24 @@
+## v2.0.0-beta.1
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- Migrate to effect@4.0.0-beta.48 &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(8674e)</samp>](https://github.com/alchemy-run/alchemy/commit/8674e8f)
+- **cloudflare**: Support R2Bucket.bind instead of R2BucketBinding.bind for all CF resources &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(12b50)</samp>](https://github.com/alchemy-run/alchemy/commit/12b50d3)
+- **core**: Alchemy.Stack &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(68e66)</samp>](https://github.com/alchemy-run/alchemy/commit/68e6622)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Release to alchemy package &nbsp;-&nbsp; by **Michael (Pear)** in https://github.com/alchemy-run/alchemy/issues/55 [<samp>(217c5)</samp>](https://github.com/alchemy-run/alchemy/commit/217c5c9)
+- **cloudflare**:
+  - Require Content Length in R2.put and use raw ReadableStream if available &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(1cd6b)</samp>](https://github.com/alchemy-run/alchemy/commit/1cd6bda)
+  - Bundle properly formats windows paths &nbsp;-&nbsp; by **Michael (Pear)** [<samp>(5156c)</samp>](https://github.com/alchemy-run/alchemy/commit/5156c6c)
+- **test**:
+  - Infer and resolve Output types in Test/Bun &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(9853d)</samp>](https://github.com/alchemy-run/alchemy/commit/9853d92)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v0.11.0...v2.0.0-beta.1)
+
+---
+
 ## v0.11.0
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
