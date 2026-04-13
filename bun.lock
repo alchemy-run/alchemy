@@ -290,22 +290,22 @@
         "effect": "catalog:",
       },
     },
-    "examples/pr-package": {
-      "name": "pr-package",
-      "version": "0.0.0",
-      "dependencies": {
-        "@effect/platform-bun": "catalog:",
-        "@effect/platform-node": "catalog:",
-        "alchemy-effect": "workspace:*",
-        "effect": "catalog:",
-      },
-    },
     "packages/better-auth": {
       "name": "@alchemy.run/better-auth",
       "version": "0.11.0",
       "dependencies": {
         "alchemy-effect": "workspace:*",
         "better-auth": "catalog:",
+        "effect": "catalog:",
+      },
+    },
+    "services/pr-package": {
+      "name": "pr-package",
+      "version": "0.0.0",
+      "dependencies": {
+        "@effect/platform-bun": "catalog:",
+        "@effect/platform-node": "catalog:",
+        "alchemy-effect": "workspace:*",
         "effect": "catalog:",
       },
     },
@@ -1968,7 +1968,7 @@
 
     "powershell-utils": ["powershell-utils@0.1.0", "", {}, "sha512-dM0jVuXJPsDN6DvRpea484tCUaMiXWjuCn++HGTqUWzGDjv5tZkEZldAJ/UMlqRYGFrD/etByo4/xOuC/snX2A=="],
 
-    "pr-package": ["pr-package@workspace:examples/pr-package"],
+    "pr-package": ["pr-package@workspace:services/pr-package"],
 
     "prettier": ["prettier@3.6.2", "", { "bin": { "prettier": "bin/prettier.cjs" } }, "sha512-I7AIg5boAr5R0FFtJ6rCfD+LFsWHp81dolrFD8S79U9tb8Az2nGrJncnMSnys+bpQJfRUzqs9hnA81OAA3hCuQ=="],
 
