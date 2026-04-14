@@ -323,6 +323,10 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * at runtime, and `Cloudflare.InferEnv` to extract a fully typed
  * `env` object from those bindings.
  *
+ * See the {@link https://alchemy.run/guides/async-worker | Async Workers Guide}
+ * for a comprehensive walkthrough of all binding types (R2, D1,
+ * Durable Objects, Assets, and more).
+ *
  * @example Defining an async Worker in your stack
  * ```typescript
  * // alchemy.run.ts

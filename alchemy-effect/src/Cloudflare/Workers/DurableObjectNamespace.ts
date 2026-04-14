@@ -394,6 +394,53 @@ export class DurableObjectNamespaceScope extends Context.Service<
  *   }),
  * };
  * ```
+ *
+ * @section Binding in an Async Worker
+ * When using an Async Worker (plain `async fetch` handler, no Effect
+ * runtime), declare Durable Objects in the `bindings` prop of the
+ * Worker resource. Pass a `DurableObjectNamespace` reference with a
+ * `className` matching the exported `DurableObject` subclass in your
+ * worker source file. Use `Cloudflare.InferEnv` to get a fully typed
+ * `env` object that includes the namespace.
+ *
+ * @example Declaring a DO binding in the stack
+ * ```typescript
+ * // alchemy.run.ts
+ * import type { Counter } from "./src/worker.ts";
+ *
+ * export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
+ *
+ * export const Worker = Cloudflare.Worker("Worker", {
+ *   main: "./src/worker.ts",
+ *   bindings: {
+ *     Counter: Cloudflare.DurableObjectNamespace<Counter>("Counter", {
+ *       className: "Counter",
+ *     }),
+ *   },
+ * });
+ * ```
+ *
+ * @example Using the DO from a plain async handler
+ * ```typescript
+ * // src/worker.ts
+ * import { DurableObject } from "cloudflare:workers";
+ * import type { WorkerEnv } from "../alchemy.run.ts";
+ *
+ * export default {
+ *   async fetch(request: Request, env: WorkerEnv) {
+ *     const counter = env.Counter.getByName("my-counter");
+ *     const count = await counter.increment();
+ *     return new Response(JSON.stringify({ count }));
+ *   },
+ * };
+ *
+ * export class Counter extends DurableObject {
+ *   private counter = 0;
+ *   async increment() {
+ *     return ++this.counter;
+ *   }
+ * }
+ * ```
  */
 export const DurableObjectNamespace: DurableObjectNamespaceClass =
   taggedFunction(DurableObjectNamespaceScope, ((

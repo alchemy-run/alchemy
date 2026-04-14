@@ -91,13 +91,26 @@ export function relativeDocLink(fromDocPath: string, toDocPath: string) {
   return toPosix(path.relative(path.dirname(fromDocPath), toDocPath));
 }
 
+/**
+ * Convert JSDoc `{@link url | label}` into standard markdown links.
+ * Absolute `https://alchemy.run/...` URLs are rewritten to relative
+ * paths so the links work in any deployment (localhost, preview, prod).
+ */
+function resolveJSDocLinks(text: string): string {
+  return text.replace(
+    /\{@link\s+(https?:\/\/alchemy\.run(\/[^\s|}]*))\s*\|\s*([^}]+)\}/g,
+    (_match, _url, pathname, label) => `[${label.trim()}](${pathname})`,
+  );
+}
+
 export function cleanDocComment(raw: string) {
-  return raw
+  const cleaned = raw
     .replace(/^\/\*\*?/, "")
     .replace(/\*\/$/, "")
     .split("\n")
     .map((line) => line.replace(/^\s*\*\s?/, ""))
     .join("\n");
+  return resolveJSDocLinks(cleaned);
 }
 
 function getJsDocBlocks(node: Node) {

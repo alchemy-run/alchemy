@@ -15,7 +15,7 @@ const config = {
   srcRoot: path.join(import.meta.dir, "../alchemy-effect/src"),
   outRoot: path.join(websiteRoot, "src/content/docs/providers"),
   tsConfig: path.join(import.meta.dir, "../alchemy-effect/tsconfig.json"),
-  includeDirs: ["AWS", "Cloudflare"],
+  includeDirs: ["AWS", "Cloudflare", "GitHub"],
   excludeFile(baseName: string): boolean {
     if (baseName === "index.ts") return true;
     if (/^[a-z]/.test(baseName)) return true;

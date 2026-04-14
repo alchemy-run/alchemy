@@ -11,15 +11,13 @@ Alchemy v1 uses `async/await` with top-level `await` for orchestration.
 Alchemy-effect replaces this with Effect generators for type-safe error
 handling, composable retries, and declarative resource wiring.
 
-## Key differences
+The main changes are:
 
-| v1                      | alchemy-effect                                 |
-| ----------------------- | ---------------------------------------------- |
-| `await Resource(...)`   | `yield* Resource(...)`                         |
-| `entrypoint` prop       | `main` prop                                    |
-| `await app.finalize()`  | Stack handles lifecycle automatically          |
-| `alchemy("name", opts)` | `Alchemy.Stack("name", { providers }, effect)` |
-| Errors are unchecked    | Errors are in the type system via Effect       |
+- **Resources** are yielded (`yield* Resource(...)`) instead of awaited (`await Resource(...)`).
+- **The `entrypoint` prop** is now called `main`.
+- **Stack lifecycle** is managed automatically — no more `await app.finalize()`.
+- **Stack creation** uses `Alchemy.Stack("name", { providers }, effect)` instead of `alchemy("name", opts)`.
+- **Errors** are tracked in the type system via Effect instead of being unchecked.
 
 ## Migration steps
 
