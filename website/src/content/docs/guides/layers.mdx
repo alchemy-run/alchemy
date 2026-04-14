@@ -1,0 +1,214 @@
+---
+title: Layers
+description: Package resources and bindings into reusable Effect Layers that can be swapped between implementations.
+sidebar:
+  order: 11
+---
+
+import { Steps } from "@astrojs/starlight/components";
+
+Layers let you package resources, bindings, and event sources behind
+an Effect service interface. This separates the contract from the
+implementation — you can swap DynamoDB for S3 or an in-memory store
+without changing any consumer code.
+
+This guide uses a Lambda Function example, but the same pattern works
+with Cloudflare Workers.
+
+## Define a service interface
+
+Start by defining the business contract as an Effect `Context.Service`.
+This is pure types — no infrastructure, no SDK imports.
+
+```typescript
+// src/JobStorage.ts
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import type { Job } from "./Job.ts";
+
+export class JobStorage extends Context.Service<
+  JobStorage,
+  {
+    putJob(job: Job): Effect.Effect<Job>;
+    getJob(jobId: string): Effect.Effect<Job | undefined>;
+  }
+>()("JobStorage") {}
+```
+
+## Implement with a Layer
+
+Inside a Layer, create resources, bind capabilities, wire event
+sources, and return the service implementation.
+
+```typescript
+// src/JobStorageDynamoDB.ts
+import * as DynamoDB from "alchemy-effect/AWS/DynamoDB";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { JobStorage } from "./JobStorage.ts";
+
+export const JobStorageDynamoDB = Layer.effect(
+  JobStorage,
+  Effect.gen(function* () {
+    const table = yield* DynamoDB.Table("JobsTable", {
+      partitionKey: "id",
+      attributes: { id: "S" },
+    });
+    const getItem = yield* DynamoDB.GetItem.bind(table);
+    const putItem = yield* DynamoDB.PutItem.bind(table);
+
+    return JobStorage.of({
+      putJob: (job) =>
+        putItem({
+          Item: { id: { S: job.id }, content: { S: job.content } },
+        }).pipe(Effect.map(() => job)),
+
+      getJob: (jobId) =>
+        getItem({
+          Key: { id: { S: jobId } },
+        }).pipe(
+          Effect.map((result) =>
+            result.Item
+              ? { id: result.Item.id.S!, content: result.Item.content.S! }
+              : undefined,
+          ),
+        ),
+    });
+  }),
+);
+```
+
+## Provide to a Function
+
+Pass the Layer to the Function via `Effect.provide`. The Function
+consumes the service interface — it doesn't know or care which
+implementation is behind it.
+
+```typescript
+// src/Api.ts
+import * as AWS from "alchemy-effect/AWS";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { JobStorage } from "./JobStorage.ts";
+import { JobStorageDynamoDB } from "./JobStorageDynamoDB.ts";
+
+export default class Api extends AWS.Lambda.Function<Api>()(
+  "Api",
+  { main: import.meta.filename, url: true },
+  Effect.gen(function* () {
+    const jobStorage = yield* JobStorage;
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+
+        if (request.method === "POST") {
+          const content = yield* request.text;
+          const job = yield* jobStorage.putJob({
+            id: crypto.randomUUID(),
+            content,
+          });
+          return yield* HttpServerResponse.json(job, { status: 201 });
+        }
+
+        const url = new URL(request.url);
+        const id = url.searchParams.get("id");
+        if (id) {
+          const job = yield* jobStorage.getJob(id);
+          return job
+            ? yield* HttpServerResponse.json(job)
+            : HttpServerResponse.text("Not found", { status: 404 });
+        }
+
+        return HttpServerResponse.text("OK");
+      }),
+    };
+  }).pipe(Effect.provide(JobStorageDynamoDB)),
+) {}
+```
+
+## Swap implementations
+
+Because the Function depends on `JobStorage` (the interface), you can
+swap the backing implementation by changing one Layer:
+
+```typescript
+import { JobStorageS3 } from "./JobStorageS3.ts";
+
+// ...
+Effect.provide(JobStorageS3); // instead of JobStorageDynamoDB
+```
+
+The `JobStorageS3` Layer uses `S3.GetObject.bind(bucket)` and
+`S3.PutObject.bind(bucket)` — same contract, different resources.
+
+## Adding event sources
+
+Layers can also wire event sources and sinks alongside the service
+implementation. For example, subscribing to DynamoDB Streams to
+forward change records to an SQS queue:
+
+```typescript
+export const JobStorageDynamoDB = Layer.effect(
+  JobStorage,
+  Effect.gen(function* () {
+    const table = yield* DynamoDB.Table("JobsTable", {
+      partitionKey: "id",
+      attributes: { id: "S" },
+    });
+    const getItem = yield* DynamoDB.GetItem.bind(table);
+    const putItem = yield* DynamoDB.PutItem.bind(table);
+    const queue = yield* SQS.Queue("JobsQueue");
+    const sink = yield* SQS.QueueSink.bind(queue);
+
+    // subscribe to table changes and forward to queue
+    yield* DynamoDB.streams(table, {
+      StreamViewType: "NEW_AND_OLD_IMAGES",
+    }).process((stream) =>
+      stream.pipe(
+        Stream.map((record) => JSON.stringify(record.dynamodb)),
+        Stream.run(sink),
+      ),
+    );
+
+    return JobStorage.of({ putJob, getJob });
+  }),
+);
+```
+
+## Composing multiple Layers
+
+When a Layer depends on other capability Layers (like event source
+runtimes or SDK bindings), use `Layer.provideMerge` to wire them
+together:
+
+```typescript
+import * as AWS from "alchemy-effect/AWS";
+import * as DynamoDB from "alchemy-effect/AWS/DynamoDB";
+import * as SQS from "alchemy-effect/AWS/SQS";
+
+const storageLayer = Layer.provideMerge(
+  JobStorageDynamoDB,
+  Layer.mergeAll(
+    AWS.Lambda.TableEventSource,
+    SQS.QueueSinkLive,
+  ).pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(
+        DynamoDB.GetItemLive,
+        DynamoDB.PutItemLive,
+        SQS.SendMessageBatchLive,
+      ),
+    ),
+  ),
+);
+```
+
+The Layers split into two groups:
+
+- **Capability layers** (`GetItemLive`, `PutItemLive`,
+  `SendMessageBatchLive`) — runtime SDK wrappers
+- **Composite layers** (`TableEventSource`, `QueueSinkLive`) —
+  event source and sink wiring that depends on the capability layers

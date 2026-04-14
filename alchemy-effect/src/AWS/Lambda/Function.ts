@@ -116,24 +116,232 @@ export type FunctionShape = Main<FunctionServices>;
  * An AWS Lambda host resource that combines code bundling, IAM role
  * provisioning, and runtime binding collection.
  *
- * `Function` is the canonical runtime host for AWS. Resource bindings attach
- * environment variables and IAM statements during deployment, while the runtime
- * execution context collects listeners and exports from the Effect program.
+ * `Function` is the canonical runtime host for AWS. Alchemy automatically
+ * bundles your TypeScript entry module with Rolldown, creates an IAM
+ * execution role, and uploads the zip artifact. On subsequent deploys, the
+ * function is only updated when the bundle hash changes.
  *
- * @section Creating Functions
- * @example Basic Function
+ * There are two ways to define a Lambda Function:
+ *
+ * - **Async** — plain handler export, no Effect runtime in the bundle.
+ * - **Effect** — Effect implementation with typed bindings and event sources.
+ *
+ * See the {@link https://alchemy.run/guides/async-lambda | Async Lambda Guide}
+ * for plain handler patterns, or the
+ * {@link https://alchemy.run/guides/lambda | Effect Lambda Guide}
+ * for the full Effect-based approach with bindings, event sources, and sinks.
+ *
+ * @section Async Functions
+ * Point `main` at a file that exports a standard Lambda handler. No
+ * Effect runtime is included in the bundle. Useful when migrating
+ * existing Lambda functions or when you don't need Effect.
+ *
+ * @example Defining an async Lambda in your stack
  * ```typescript
- * const func = yield* Function("OrdersFunction", {
- *   main: "./src/orders.ts",
+ * // alchemy.run.ts
+ * import * as AWS from "alchemy-effect/AWS";
+ *
+ * const func = yield* AWS.Lambda.Function("ApiFunction", {
+ *   main: "./src/handler.ts",
+ *   url: true,
  * });
  * ```
  *
+ * @example Writing the async handler
+ * ```typescript
+ * // src/handler.ts
+ * export const handler = async (event: any) => {
+ *   return {
+ *     statusCode: 200,
+ *     body: JSON.stringify({ message: "Hello from Lambda!" }),
+ *   };
+ * };
+ * ```
+ *
+ * @section Effect Functions
+ * Pass the Effect implementation as the third argument. Bindings
+ * attach IAM permissions and environment variables at deploy time,
+ * while the runtime execution context collects listeners and exports.
+ *
+ * @example Effect Function with HTTP handler
+ * ```typescript
+ * export default class ApiFunction extends AWS.Lambda.Function<ApiFunction>()(
+ *   "ApiFunction",
+ *   { main: import.meta.filename, url: true },
+ *   Effect.gen(function* () {
+ *     // init: bind resources
+ *     const getItem = yield* DynamoDB.GetItem.bind(table);
+ *
+ *     return {
+ *       // runtime: use them
+ *       fetch: Effect.gen(function* () {
+ *         const request = yield* HttpServerRequest;
+ *         const url = new URL(request.url);
+ *         const id = url.searchParams.get("id");
+ *         const result = yield* getItem({ Key: { pk: { S: id! } } });
+ *         return yield* HttpServerResponse.json(result.Item);
+ *       }),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * @section Configuration
  * @example Function with URL
  * ```typescript
- * const func = yield* Function("ApiFunction", {
- *   main: "./src/api.ts",
+ * const func = yield* AWS.Lambda.Function("ApiFunction", {
+ *   main: "./src/handler.ts",
  *   url: true,
  * });
+ * ```
+ *
+ * @example Function in a VPC
+ * ```typescript
+ * const func = yield* AWS.Lambda.Function("VpcFunction", {
+ *   main: "./src/handler.ts",
+ *   vpc: {
+ *     subnetIds: ["subnet-abc123", "subnet-def456"],
+ *     securityGroupIds: ["sg-xyz789"],
+ *   },
+ * });
+ * ```
+ *
+ * @section S3 Bindings
+ * Bind S3 operations in the init phase to give the function IAM
+ * permissions and inject the bucket name as an environment variable.
+ *
+ * @example Read and write S3 objects
+ * ```typescript
+ * // init
+ * const getObject = yield* S3.GetObject.bind(bucket);
+ * const putObject = yield* S3.PutObject.bind(bucket);
+ *
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     // runtime
+ *     yield* putObject({ Key: "hello.txt", Body: "Hello!" });
+ *     const obj = yield* getObject({ Key: "hello.txt" });
+ *     return HttpServerResponse.text("OK");
+ *   }),
+ * };
+ * ```
+ *
+ * @section DynamoDB Bindings
+ * Bind DynamoDB operations in the init phase to grant table-scoped
+ * IAM permissions.
+ *
+ * @example Get and put items
+ * ```typescript
+ * // init
+ * const getItem = yield* DynamoDB.GetItem.bind(table);
+ * const putItem = yield* DynamoDB.PutItem.bind(table);
+ *
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     // runtime
+ *     yield* putItem({ Item: { pk: { S: "user#1" }, name: { S: "Alice" } } });
+ *     const result = yield* getItem({ Key: { pk: { S: "user#1" } } });
+ *     return yield* HttpServerResponse.json(result.Item);
+ *   }),
+ * };
+ * ```
+ *
+ * @section SQS Bindings
+ * Bind SQS operations in the init phase to send messages to a queue.
+ *
+ * @example Send a message
+ * ```typescript
+ * // init
+ * const sendMessage = yield* SQS.SendMessage.bind(queue);
+ *
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     // runtime
+ *     yield* sendMessage({
+ *       MessageBody: JSON.stringify({ orderId: "123" }),
+ *     });
+ *     return HttpServerResponse.text("Queued");
+ *   }),
+ * };
+ * ```
+ *
+ * @section SNS Bindings
+ * Bind SNS operations in the init phase to publish messages to a
+ * topic.
+ *
+ * @example Publish a notification
+ * ```typescript
+ * // init
+ * const publish = yield* SNS.Publish.bind(topic);
+ *
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     // runtime
+ *     yield* publish({
+ *       Message: JSON.stringify({ event: "order.created" }),
+ *       Subject: "OrderCreated",
+ *     });
+ *     return HttpServerResponse.text("Published");
+ *   }),
+ * };
+ * ```
+ *
+ * @section Kinesis Bindings
+ * Bind Kinesis operations in the init phase to put records into a
+ * stream.
+ *
+ * @example Put a record
+ * ```typescript
+ * // init
+ * const putRecord = yield* Kinesis.PutRecord.bind(stream);
+ *
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     // runtime
+ *     yield* putRecord({
+ *       PartitionKey: "order-123",
+ *       Data: new TextEncoder().encode(JSON.stringify({ orderId: "123" })),
+ *     });
+ *     return HttpServerResponse.text("Sent");
+ *   }),
+ * };
+ * ```
+ *
+ * @section Event Sources
+ * Lambda functions can be triggered by event sources like SQS queues,
+ * DynamoDB streams, S3 notifications, SNS topics, and Kinesis streams.
+ *
+ * @example Process SQS messages
+ * ```typescript
+ * yield* SQS.messages(queue).process(
+ *   Effect.fn(function* (message) {
+ *     yield* Effect.log(`Received: ${message.body}`);
+ *   }),
+ * );
+ * ```
+ *
+ * @example Process DynamoDB stream changes
+ * ```typescript
+ * yield* DynamoDB.streams(table, {
+ *   StreamViewType: "NEW_AND_OLD_IMAGES",
+ * }).process(
+ *   Effect.fn(function* (record) {
+ *     yield* Effect.log(`Change: ${record.eventName}`);
+ *   }),
+ * );
+ * ```
+ *
+ * @example Process S3 notifications
+ * ```typescript
+ * yield* S3.notifications(bucket, {
+ *   events: ["s3:ObjectCreated:*"],
+ * }).subscribe((stream) =>
+ *   stream.pipe(
+ *     Stream.runForEach((event) =>
+ *       Effect.log(`New object: ${event.key}`),
+ *     ),
+ *   ),
+ * );
  * ```
  */
 export const Function: Platform<

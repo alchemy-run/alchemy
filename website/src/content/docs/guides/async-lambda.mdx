@@ -1,0 +1,137 @@
+---
+title: Async Lambda
+description: Deploy an AWS Lambda Function with a plain async handler — no Effect runtime required.
+sidebar:
+  order: 9
+---
+
+import { Steps } from "@astrojs/starlight/components";
+
+Async Lambda functions let you write a plain handler export — no Effect
+runtime in the bundle. Alchemy bundles and deploys your file as-is
+while still managing IAM roles, bundling, and infrastructure
+declaratively.
+
+:::note
+For the Effect-based pattern with typed bindings, event sources, and
+Layer composition, see the [Effect Lambda guide](/guides/lambda).
+:::
+
+## How it works
+
+<Steps>
+
+1. **Point `main`** at a file that exports a `handler` function.
+
+2. **Declare resources** in your stack and pass outputs via `env`.
+
+3. **Write a standard handler** using the AWS SDK or environment
+   variables directly.
+
+</Steps>
+
+## Basic handler
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy-effect";
+import * as AWS from "alchemy-effect/AWS";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: AWS.providers() },
+  Effect.gen(function* () {
+    const func = yield* AWS.Lambda.Function("ApiFunction", {
+      main: "./src/handler.ts",
+      url: true,
+    });
+    return { url: func.functionUrl };
+  }),
+);
+```
+
+```typescript
+// src/handler.ts
+export const handler = async (event: any) => {
+  return {
+    statusCode: 200,
+    body: JSON.stringify({ message: "Hello from Lambda!" }),
+  };
+};
+```
+
+## Passing environment variables
+
+Use the `env` prop to pass configuration values to the handler at
+runtime. These become `process.env` variables in the Lambda execution
+environment.
+
+```typescript
+// alchemy.run.ts
+const table = yield* AWS.DynamoDB.Table("UsersTable", {
+  partitionKey: "pk",
+  attributes: { pk: "S" },
+});
+
+const func = yield* AWS.Lambda.Function("ApiFunction", {
+  main: "./src/handler.ts",
+  url: true,
+  env: {
+    TABLE_NAME: table.tableName,
+  },
+});
+```
+
+```typescript
+// src/handler.ts
+import { DynamoDBClient, GetItemCommand } from "@aws-sdk/client-dynamodb";
+
+const client = new DynamoDBClient({});
+
+export const handler = async (event: any) => {
+  const result = await client.send(new GetItemCommand({
+    TableName: process.env.TABLE_NAME,
+    Key: { pk: { S: event.queryStringParameters?.id ?? "" } },
+  }));
+
+  return {
+    statusCode: 200,
+    body: JSON.stringify(result.Item),
+  };
+};
+```
+
+:::caution
+When using the `env` prop with async handlers, IAM permissions are not
+granted automatically — you'll need to ensure the Lambda execution role
+has the necessary permissions. For automatic IAM wiring, use the
+[Effect Lambda](/guides/lambda) pattern with typed bindings.
+:::
+
+## Function URL
+
+Set `url: true` to create a public Lambda function URL. The URL is
+available as `func.functionUrl` after deployment.
+
+```typescript
+const func = yield* AWS.Lambda.Function("ApiFunction", {
+  main: "./src/handler.ts",
+  url: true,
+});
+```
+
+## VPC connectivity
+
+Attach a function to a VPC for private connectivity to resources like
+RDS or ElastiCache.
+
+```typescript
+const func = yield* AWS.Lambda.Function("VpcFunction", {
+  main: "./src/handler.ts",
+  vpc: {
+    subnetIds: ["subnet-abc123", "subnet-def456"],
+    securityGroupIds: ["sg-xyz789"],
+  },
+});
+```

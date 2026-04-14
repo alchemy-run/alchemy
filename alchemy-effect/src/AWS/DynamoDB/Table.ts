@@ -115,7 +115,9 @@ export interface Table extends Resource<
  * @section Creating Tables
  * @example Basic Table
  * ```typescript
- * const table = yield* Table("UsersTable", {
+ * import * as DynamoDB from "alchemy-effect/AWS/DynamoDB";
+ *
+ * const table = yield* DynamoDB.Table("UsersTable", {
  *   partitionKey: "pk",
  *   attributes: {
  *     pk: "S",
@@ -125,7 +127,7 @@ export interface Table extends Resource<
  *
  * @example Table with Sort Key and TTL
  * ```typescript
- * const table = yield* Table("SessionsTable", {
+ * const table = yield* DynamoDB.Table("SessionsTable", {
  *   partitionKey: "userId",
  *   sortKey: "sessionId",
  *   attributes: {
@@ -140,17 +142,68 @@ export interface Table extends Resource<
  * });
  * ```
  *
- * @section Runtime Operations
- * @example Read an Item
+ * @example Table with Global Secondary Index
  * ```typescript
- * const getItem = yield* GetItem.bind(table);
- *
- * const response = yield* getItem({
- *   Key: {
- *     pk: { S: "user#123" },
+ * const table = yield* DynamoDB.Table("OrdersTable", {
+ *   partitionKey: "pk",
+ *   sortKey: "sk",
+ *   attributes: {
+ *     pk: "S",
+ *     sk: "S",
+ *     gsi1pk: "S",
+ *     gsi1sk: "S",
  *   },
- *   ConsistentRead: true,
+ *   globalSecondaryIndexes: [{
+ *     IndexName: "GSI1",
+ *     KeySchema: [
+ *       { AttributeName: "gsi1pk", KeyType: "HASH" },
+ *       { AttributeName: "gsi1sk", KeyType: "RANGE" },
+ *     ],
+ *     Projection: { ProjectionType: "ALL" },
+ *   }],
  * });
+ * ```
+ *
+ * @section Runtime Operations
+ * Bind DynamoDB operations in the init phase and use them in runtime
+ * handlers. Bindings inject the table name and grant scoped IAM
+ * permissions automatically.
+ *
+ * @example Read and write items
+ * ```typescript
+ * // init
+ * const getItem = yield* DynamoDB.GetItem.bind(table);
+ * const putItem = yield* DynamoDB.PutItem.bind(table);
+ *
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     // runtime
+ *     yield* putItem({
+ *       Item: { pk: { S: "user#123" }, name: { S: "Alice" } },
+ *     });
+ *     const result = yield* getItem({
+ *       Key: { pk: { S: "user#123" } },
+ *     });
+ *     return yield* HttpServerResponse.json(result.Item);
+ *   }),
+ * };
+ * ```
+ *
+ * @section DynamoDB Streams
+ * Process change data capture events from a DynamoDB table using a
+ * Lambda event source mapping. The stream is enabled automatically
+ * through the binding contract.
+ *
+ * @example Process table changes
+ * ```typescript
+ * // init
+ * yield* DynamoDB.streams(table, {
+ *   StreamViewType: "NEW_AND_OLD_IMAGES",
+ * }).process(
+ *   Effect.fn(function* (record) {
+ *     yield* Effect.log(`${record.eventName}: ${JSON.stringify(record.dynamodb)}`);
+ *   }),
+ * );
  * ```
  */
 export const Table = Resource<Table>("AWS.DynamoDB.Table");

@@ -60,20 +60,30 @@ export interface Topic extends Resource<
  * An Amazon SNS topic for fan-out messaging and notifications.
  *
  * `Topic` owns the SNS topic lifecycle while raw AWS topic attributes remain
- * available through the `attributes` prop so the full core pub/sub surface can be
- * configured without waiting on additional typed wrappers.
+ * available through the `attributes` prop so the full core pub/sub surface can
+ * be configured without waiting on additional typed wrappers. A topic name is
+ * auto-generated unless you provide one explicitly.
  *
  * @section Creating Topics
  * @example Standard Topic
  * ```typescript
- * const topic = yield* Topic("OrdersTopic", {
- *   topicName: "orders-events",
+ * import * as SNS from "alchemy-effect/AWS/SNS";
+ *
+ * const topic = yield* SNS.Topic("OrdersTopic");
+ * ```
+ *
+ * @example Topic with Display Name
+ * ```typescript
+ * const topic = yield* SNS.Topic("NotificationsTopic", {
+ *   attributes: {
+ *     DisplayName: "App Notifications",
+ *   },
  * });
  * ```
  *
  * @example FIFO Topic
  * ```typescript
- * const topic = yield* Topic("OrdersFifoTopic", {
+ * const topic = yield* SNS.Topic("OrdersFifoTopic", {
  *   fifo: true,
  *   attributes: {
  *     ContentBasedDeduplication: "true",
@@ -82,14 +92,41 @@ export interface Topic extends Resource<
  * ```
  *
  * @section Runtime Publishing
- * @example Publish from a Lambda Function
+ * Bind publish operations in the init phase and use them in runtime
+ * handlers.
+ *
+ * @example Publish from a handler
  * ```typescript
+ * // init
  * const publish = yield* SNS.Publish.bind(topic);
  *
- * yield* publish({
- *   Message: JSON.stringify({ orderId: "123" }),
- *   Subject: "OrderCreated",
- * });
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     // runtime
+ *     yield* publish({
+ *       Message: JSON.stringify({ orderId: "123" }),
+ *       Subject: "OrderCreated",
+ *     });
+ *     return HttpServerResponse.text("Published");
+ *   }),
+ * };
+ * ```
+ *
+ * @section Subscriptions
+ * Subscribe a Lambda function to process messages published to the
+ * topic. The subscription and invoke permissions are created
+ * automatically.
+ *
+ * @example Process topic notifications
+ * ```typescript
+ * // init
+ * yield* SNS.notifications(topic).subscribe((stream) =>
+ *   stream.pipe(
+ *     Stream.runForEach((message) =>
+ *       Effect.log(`Received: ${message.Message}`),
+ *     ),
+ *   ),
+ * );
  * ```
  */
 export const Topic = Resource<Topic>("AWS.SNS.Topic");

@@ -110,37 +110,44 @@ export interface Bucket extends Resource<
  * });
  * ```
  *
- * @section Reading Objects
- * @example Get an object from a bucket
+ * @section Runtime Operations
+ * Bind S3 operations in the init phase and use them in runtime
+ * handlers. Bindings inject the bucket name and grant scoped IAM
+ * permissions automatically.
+ *
+ * @example Read and write objects
  * ```typescript
+ * // init
  * const getObject = yield* S3.GetObject.bind(bucket);
- *
- * const response = yield* getObject({ Key: "hello.txt" });
- * ```
- *
- * @section Writing Objects
- * @example Put an object into a bucket
- * ```typescript
  * const putObject = yield* S3.PutObject.bind(bucket);
  *
- * yield* putObject({
- *   Key: "hello.txt",
- *   Body: "Hello, World!",
- *   ContentType: "text/plain",
- * });
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     // runtime
+ *     yield* putObject({
+ *       Key: "hello.txt",
+ *       Body: "Hello, World!",
+ *       ContentType: "text/plain",
+ *     });
+ *     const response = yield* getObject({ Key: "hello.txt" });
+ *     return HttpServerResponse.text("OK");
+ *   }),
+ * };
  * ```
  *
- * @section Deleting Objects
- * @example Delete an object from a bucket
+ * @example Delete an object
  * ```typescript
+ * // init
  * const deleteObject = yield* S3.DeleteObject.bind(bucket);
- *
- * yield* deleteObject({ Key: "hello.txt" });
  * ```
  *
  * @section Event Notifications
+ * Subscribe to bucket events from the init phase. The subscription
+ * and Lambda invoke permissions are created automatically.
+ *
  * @example Process object creation events
  * ```typescript
+ * // init
  * yield* S3.notifications(bucket, {
  *   events: ["s3:ObjectCreated:*"],
  * }).subscribe((stream) =>

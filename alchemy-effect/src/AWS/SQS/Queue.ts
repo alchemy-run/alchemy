@@ -87,6 +87,72 @@ export interface Queue extends Resource<
   Providers
 > {}
 
+/**
+ * An Amazon SQS queue for reliable, decoupled message processing.
+ *
+ * `Queue` owns the lifecycle of a standard or FIFO SQS queue. A queue name
+ * is auto-generated from the app, stage, and logical ID unless you provide
+ * one explicitly. FIFO queues automatically append the `.fifo` suffix.
+ *
+ * @section Creating Queues
+ * @example Standard Queue
+ * ```typescript
+ * import * as SQS from "alchemy-effect/AWS/SQS";
+ *
+ * const queue = yield* SQS.Queue("OrdersQueue");
+ * ```
+ *
+ * @example FIFO Queue
+ * ```typescript
+ * const queue = yield* SQS.Queue("OrdersFifoQueue", {
+ *   fifo: true,
+ *   contentBasedDeduplication: true,
+ * });
+ * ```
+ *
+ * @example Queue with Custom Settings
+ * ```typescript
+ * const queue = yield* SQS.Queue("ProcessingQueue", {
+ *   visibilityTimeout: 120,
+ *   messageRetentionPeriod: 86400,
+ *   receiveMessageWaitTimeSeconds: 20,
+ * });
+ * ```
+ *
+ * @section Sending Messages
+ * Bind send operations in the init phase and use them in runtime
+ * handlers.
+ *
+ * @example Send a message from a handler
+ * ```typescript
+ * // init
+ * const sendMessage = yield* SQS.SendMessage.bind(queue);
+ *
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     // runtime
+ *     yield* sendMessage({
+ *       MessageBody: JSON.stringify({ orderId: "123" }),
+ *     });
+ *     return HttpServerResponse.text("Queued");
+ *   }),
+ * };
+ * ```
+ *
+ * @section Event Sources
+ * Process messages from a queue using a Lambda event source mapping.
+ * Messages are automatically deleted after successful processing.
+ *
+ * @example Process queue messages
+ * ```typescript
+ * // init
+ * yield* SQS.messages(queue).process(
+ *   Effect.fn(function* (message) {
+ *     yield* Effect.log(`Received: ${message.body}`);
+ *   }),
+ * );
+ * ```
+ */
 export const Queue = Resource<Queue>("AWS.SQS.Queue");
 
 export const QueueProvider = () =>

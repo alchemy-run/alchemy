@@ -1,30 +1,26 @@
 ---
-title: Lambda Function
-description: Deploy an AWS Lambda Function with granular bindings, event sources, sinks, and Layer composition.
+title: Effect Lambda
+description: Deploy an AWS Lambda Function with Effect-native bindings and request handling.
 sidebar:
-  order: 9
+  order: 10
 ---
 
 import { Steps } from "@astrojs/starlight/components";
 
-This guide walks you through building an AWS Lambda Function that uses
-DynamoDB for storage, SQS for messaging, and DynamoDB Streams for
-change data capture — showing how bindings, event sources, and sinks
-compose together.
+This guide walks you through creating and deploying an AWS Lambda
+Function with alchemy-effect.
 
 :::note
-For binding fundamentals, see [Binding](/concepts/binding).
-For event sources and sinks, see [Event Source](/concepts/event-source)
-and [Sink](/concepts/sink).
+For the plain async handler pattern, see the [Async Lambda guide](/guides/async-lambda).
+For the full API reference, see the [Lambda Function provider](/providers/aws/lambda/function).
 :::
 
 <Steps>
 
-1. **Define a service interface**
+1. **Define the Function class**
 
-   Start by defining the business interface as an Effect `Context.Service`.
-   This separates the contract from the implementation — you can swap
-   DynamoDB for S3 or an in-memory store without changing consumers.
+   Create a file for your Function. The `main` prop tells Alchemy
+   which file to bundle and deploy.
 
    ```typescript
    // src/JobStorage.ts
@@ -186,58 +182,73 @@ and [Sink](/concepts/sink).
    // src/JobFunction.ts
    import * as AWS from "alchemy/AWS";
    import * as Effect from "effect/Effect";
-   import * as Layer from "effect/Layer";
-   import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
    import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-   import { JobStorage, JobStorageDynamoDB } from "./JobStorage.ts";
 
-   export default class JobFunction extends AWS.Lambda.Function<JobFunction>()(
-     "JobFunction",
+   export default class Api extends AWS.Lambda.Function<Api>()(
+     "Api",
      { main: import.meta.filename, url: true },
      Effect.gen(function* () {
-       const jobStorage = yield* JobStorage;
-
        return {
-         fetch: Effect.gen(function* () {
-           const request = yield* HttpServerRequest;
-           const url = new URL(request.url);
-
-           if (request.method === "POST" && url.pathname === "/") {
-             const content = yield* request.text;
-             const job = yield* jobStorage.putJob({
-               id: crypto.randomUUID(),
-               content,
-             });
-             return yield* HttpServerResponse.json(job, { status: 201 });
-           }
-
-           return HttpServerResponse.text("Not found", { status: 404 });
-         }),
+         fetch: Effect.succeed(HttpServerResponse.text("Hello")),
        };
-     }).pipe(Effect.provide(Layer.mergeAll(JobStorageDynamoDB))),
+     }),
    ) {}
    ```
 
-9. **Deploy the Stack**
+2. **Add resource bindings**
 
-   Wire the Function into your `alchemy.run.ts`:
+   Create resources and bind capabilities in the init phase. They
+   become available to all runtime handlers.
+
+   ```typescript
+   import * as DynamoDB from "alchemy-effect/AWS/DynamoDB";
+
+   Effect.gen(function* () {
+     // init — create resources and bind capabilities
+     const table = yield* DynamoDB.Table("UsersTable", {
+       partitionKey: "pk",
+       attributes: { pk: "S" },
+     });
+     const getItem = yield* DynamoDB.GetItem.bind(table);
+     const putItem = yield* DynamoDB.PutItem.bind(table);
+
+     return {
+       // runtime — use them
+       fetch: Effect.gen(function* () {
+         yield* putItem({
+           Item: { pk: { S: "user#1" }, name: { S: "Alice" } },
+         });
+         const result = yield* getItem({
+           Key: { pk: { S: "user#1" } },
+         });
+         return yield* HttpServerResponse.json(result.Item);
+       }),
+     };
+   });
+   ```
+
+3. **Create the Stack**
+
+   Wire the Function into your `alchemy.run.ts` stack file.
 
    ```typescript
    // alchemy.run.ts
    import * as Alchemy from "alchemy";
    import * as AWS from "alchemy/AWS";
    import * as Effect from "effect/Effect";
-   import JobFunction from "./src/JobFunction.ts";
+   import Api from "./src/Api.ts";
 
    export default Alchemy.Stack(
-     "JobLambda",
+     "MyApp",
      { providers: AWS.providers() },
      Effect.gen(function* () {
-       const func = yield* JobFunction;
-       return { url: func.functionUrl };
+       const api = yield* Api;
+       return { url: api.functionUrl };
      }),
    );
    ```
+
+4. **Deploy**
 
    ```sh
    alchemy deploy
@@ -245,20 +256,10 @@ and [Sink](/concepts/sink).
 
 </Steps>
 
-## Swapping implementations
+## Next steps
 
-Because `JobStorage` is defined as a service interface, you can swap
-DynamoDB for S3 by changing one Layer:
-
-```typescript
-Effect.provide(
-  Layer.mergeAll(
-    JobStorageS3, // instead of JobStorageDynamoDB
-    JobNotificationsSNS,
-  ),
-);
-```
-
-The `JobStorageS3` Layer uses `S3.GetObject.bind(bucket)`,
-`S3.PutObject.bind(bucket)`, and `S3.notifications().subscribe()` —
-same patterns, different resources.
+- Add event sources to process SQS messages, DynamoDB streams, or S3
+  notifications — see the binding and event source examples in the
+  [Function API reference](/providers/aws/lambda/function).
+- Package resources and bindings into reusable Effect Layers — see the
+  [Layers guide](/guides/layers).
