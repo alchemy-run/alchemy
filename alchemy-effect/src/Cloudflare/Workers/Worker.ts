@@ -281,8 +281,8 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * page for the full explanation.
  *
  * - **Async** — plain `async fetch` handler, no Effect runtime in the bundle.
- * - **Inline** — Effect implementation passed directly, single file.
- * - **Modular** — class and implementation in separate files for tree-shaking.
+ * - **Effect** — Effect implementation passed directly, single file.
+ * - **Layer** — class and `.make()` in a single file; Rolldown tree-shakes `.make()` from consumers.
  *
  * @section Async Workers
  * You don't have to use Effect for your runtime code. If you create
@@ -325,13 +325,13 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * };
  * ```
  *
- * @section Inline Workers
+ * @section Effect Workers
  * Pass the Effect implementation as the third argument. This is the
  * simplest Effect-based approach — everything lives in one file.
  * Convenient for standalone Workers that don't need to be referenced
  * by other Workers.
  *
- * @example Inline Worker
+ * @example Worker Effect
  * ```typescript
  * export default class MyWorker extends Cloudflare.Worker<MyWorker>()(
  *   "MyWorker",
@@ -351,7 +351,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * ) {}
  * ```
  *
- * @section Modular Workers
+ * @section Worker Layer
  * When two Workers need to reference each other (e.g. WorkerA calls
  * WorkerB and vice versa), or you simply want optimal tree-shaking,
  * define the Worker class separately from its `.make()` call. The
@@ -365,7 +365,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * same pattern used by `Container` and `DurableObjectNamespace`,
  * and is recommended for any cross-Worker or cross-DO bindings.
  *
- * @example Modular Worker (class + .make() in one file)
+ * @example Worker Layer (class + .make() in one file)
  * ```typescript
  * // src/WorkerB.ts
  * export default class WorkerB extends Cloudflare.Worker<WorkerB>()(
@@ -390,7 +390,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * );
  * ```
  *
- * @example Binding a modular Worker from another Worker
+ * @example Binding a Worker Layer from another Worker
  * ```typescript
  * // src/WorkerA.ts — imports WorkerB; bundler tree-shakes .make()
  * import WorkerB from "./WorkerB.ts";

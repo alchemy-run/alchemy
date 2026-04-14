@@ -27,7 +27,7 @@ with alchemy-effect.
 
 :::note
 For the full API reference, see the [Worker provider](/providers/cloudflare/worker).
-For async, inline, and modular patterns, see the [Platform concept](/concepts/platform).
+For async, effect, and layer patterns, see the [Platform concept](/concepts/platform).
 :::
 
 <Steps>
@@ -37,7 +37,7 @@ For async, inline, and modular patterns, see the [Platform concept](/concepts/pl
    Create a file for your Worker. The `main` prop tells Alchemy which
    file to bundle and deploy.
 
-   ```typescript
+   ```typescript twoslash
    // src/Api.ts
    import * as Cloudflare from "alchemy-effect/Cloudflare";
    import * as Effect from "effect/Effect";

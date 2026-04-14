@@ -52,35 +52,27 @@ export type Container = {
  * A Cloudflare Container that runs a long-lived process alongside a
  * Durable Object.
  *
- * Containers always use the **modular** pattern because the class runs
- * in the DO's bundle while the `.make()` runs inside the container
- * process — they are physically separate programs. See the
- * {@link https://alchemy.run/concepts/platform | Platform concept} page
- * for how this fits into the async / inline / modular progression.
+ * Containers always use the **Container Layer** pattern — the class
+ * and `.make()` must live in separate files. A Container must be
+ * bound to a Durable Object, and the DO imports the class to get a
+ * typed handle. If the class and `.make()` lived in the same file,
+ * the DO's bundle would pull in all of the container's runtime
+ * dependencies (process spawners, Node APIs, SDKs, etc.), which
+ * would bloat the bundle and likely break the Cloudflare Workers
+ * runtime. Keeping them separate ensures the bundler only includes
+ * the tiny class in the DO's output.
  *
- * The class declares the container's typed shape — its RPC methods
- * and configuration — while `.make()` provides the runtime
- * implementation that actually runs inside the container process.
- * When a Durable Object imports the class to bind a container, the
- * bundler only pulls in the tiny class file; the `.make()` and all
- * its dependencies (process spawners, SDKs, etc.) are tree-shaken
- * out of the DO's bundle entirely.
+ * See the {@link https://alchemy.run/concepts/platform | Platform
+ * concept} page for how this fits into the async / effect / layer
+ * progression.
  *
- * ```
- * src/Sandbox.ts          <- class + config, ~10 lines
- * src/Sandbox.runtime.ts  <- Sandbox.make() (default export)
- * ```
- *
- * The DO imports only `src/Sandbox.ts`. The container process
- * runs `src/Sandbox.runtime.ts`. The bundler never includes the
- * runtime file in the DO's output.
- *
- * @section Defining the Class
- * The class declares the container's identity, configuration, and
- * typed shape. The second type parameter is a record of method
- * names to Effect-returning functions — these become typed RPC
- * methods callable from the Durable Object that starts the
- * container.
+ * @section Container Layer
+ * Define the class and `.make()` in separate files. The class
+ * declares the container's identity, configuration, and typed
+ * shape. `.make()` provides the runtime implementation as a
+ * default export. Use `Container.of` to construct the typed
+ * shape — it ensures your implementation matches the methods
+ * declared on the class.
  *
  * @example Container class
  * ```typescript
@@ -100,14 +92,7 @@ export type Container = {
  * ) {}
  * ```
  *
- * @section Implementing the Runtime
- * `Container.make()` provides the runtime implementation. Use
- * `Container.of` to construct the typed shape — it ensures your
- * implementation matches the methods declared on the class. The
- * `.make()` call should be the default export of the container's
- * entrypoint file.
- *
- * @example Container runtime
+ * @example Container .make()
  * ```typescript
  * // src/Sandbox.runtime.ts
  * export default Sandbox.make(

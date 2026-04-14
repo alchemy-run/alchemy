@@ -1,6 +1,6 @@
 ---
 title: Platform
-description: How Alchemy deploys Workers, Durable Objects, and Containers — async, inline, and modular styles.
+description: How Alchemy deploys Workers, Durable Objects, and Containers — async, effect, and layer styles.
 sidebar:
   order: 2
 ---
@@ -25,8 +25,8 @@ Effect.gen(function* () {
 There are three ways to define a Platform resource, from simplest to most flexible:
 
 1. **Async** — plain `async fetch` handler. No Effect runtime in the bundle.
-2. **Inline** — Effect implementation passed directly as an argument.
-3. **Modular** — class and `.make()` are separate exports; the bundler tree-shakes `.make()` away from consumers.
+2. **Effect** — Effect implementation passed directly as an argument.
+3. **Layer** — class and `.make()` in a single file; Rolldown tree-shakes `.make()` from consumers.
 
 ## Async Style
 
@@ -72,13 +72,13 @@ export default {
 
 The same pattern works for AWS Lambda — yield a `Function` resource with `main` pointing at a plain handler file and no Effect implementation.
 
-## Inline Style
+## Worker Effect
 
 Pass the Effect implementation directly when defining the class. This is the simplest Effect-based approach — everything lives in one file. Alchemy generates a wrapper that sets up the full Effect runtime, wiring up Layers, ConfigProvider, logging, and platform services so your Effect code runs correctly inside the platform.
 
-Use inline when the service is standalone or only consumed in one direction (nothing else needs to import it without pulling in its runtime code).
+Use a Worker Effect when the service is standalone or only consumed in one direction (nothing else needs to import it without pulling in its runtime code).
 
-### Inline Worker
+### Worker Effect
 
 ```typescript
 export default class Api extends Cloudflare.Worker<Api>()(
@@ -99,7 +99,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 ) {}
 ```
 
-### Inline Durable Object
+### Durable Object Effect
 
 ```typescript
 export default class Counter extends Cloudflare.DurableObjectNamespace<Counter>()(
@@ -126,7 +126,7 @@ export default class Counter extends Cloudflare.DurableObjectNamespace<Counter>(
 ) {}
 ```
 
-### Inline Worker (function call)
+### Worker Effect (function call)
 
 You can also skip the class entirely and use a plain function call. This returns an Effect instead of a class — useful for quick prototypes, but you lose the ability to reference it from other Workers or DOs.
 
@@ -149,9 +149,9 @@ export const Api = Cloudflare.Worker(
 );
 ```
 
-## Modular Style
+## Worker Layer
 
-Define the class separately from its `.make()` call. The class is a lightweight identifier; `.make()` is an `export default` that provides the runtime implementation.
+Define the class separately from its `.make()` call in the same file. The class is a lightweight identifier; `.make()` is an `export default` that provides the runtime implementation.
 
 ```typescript
 // src/WorkerB.ts
@@ -183,7 +183,9 @@ export default WorkerB.make(
 
 The second type parameter on the class declares the shape of the RPC methods. This gives callers a fully typed stub without needing to import the implementation.
 
-The class and `.make()` can live in the same file or in separate files — tree-shaking works either way. Rolldown treats `.make()` as pure, so when another Worker imports this file to bind it, the bundler removes `.make()` and all its dependencies from the consumer's bundle.
+:::tip
+Rolldown treats `.make()` as pure (side-effect-free). When another Worker imports this file to bind it, the bundler removes `.make()` and all its dependencies from the consumer's bundle — so you can keep the class and `.make()` in a single file with no penalty.
+:::
 
 ### Why this matters: tree-shaking
 
@@ -195,7 +197,7 @@ This matters most for:
 - **Shared services** — multiple Workers or DOs bind the same service
 - **Heavy runtimes** — Containers with large dependencies (process spawners, ML models, etc.)
 
-### Modular Durable Object
+### Durable Object Layer
 
 ```typescript
 // src/Counter.ts
@@ -227,9 +229,9 @@ export default Counter.make(
 );
 ```
 
-### Modular Container
+### Container Layer
 
-Containers always use the modular pattern because the class runs in the DO's bundle while the `.make()` runs inside the container process — they are physically separate programs. For containers, the class and `.make()` must be in separate files since they run in different processes.
+Containers are the one exception where the class and `.make()` must live in separate files. A Container must be bound to a Durable Object, and the DO imports the class to get a typed handle. If they shared a file, the DO's bundle would pull in all of the container's runtime dependencies (process spawners, Node APIs, SDKs, etc.), bloating the bundle and likely breaking the Workers runtime.
 
 ```typescript
 // src/Sandbox.ts — class (runs in the DO's bundle)
@@ -259,7 +261,7 @@ export default Sandbox.make(
 );
 ```
 
-## Binding a Modular Service
+## Binding a Layer
 
 The caller imports the class. The bundler tree-shakes `.make()` and its dependencies away.
 
@@ -302,9 +304,9 @@ yield* container.exec("echo hi");
 | Scenario | Style |
 | --- | --- |
 | Plain async handler, no Effect runtime | Async |
-| Quick prototype or script | Inline function call |
-| Standalone Worker, nothing imports it | Inline |
-| Worker → DO (one direction) | Either works; inline is simpler |
-| WorkerA ↔ WorkerB (bi-directional) | Modular (bundler tree-shakes `.make()`) |
-| Multiple Workers bind the same DO | Modular (shared class, one `.make()`) |
-| Container (always separate process) | Modular (required by design) |
+| Quick prototype or script | Effect (function call) |
+| Standalone Worker, nothing imports it | Effect |
+| Worker → DO (one direction) | Either works; Effect is simpler |
+| WorkerA ↔ WorkerB (bi-directional) | Layer (bundler tree-shakes `.make()`) |
+| Multiple Workers bind the same DO | Layer (shared class, one `.make()`) |
+| Container (always separate process) | Layer (required by design) |

@@ -83,5 +83,5 @@ because bindings attach data (policies, env vars) to the host via
 the Stack — they don't create direct import dependencies.
 
 To make circular bindings efficient for bundling, use the
-[modular pattern](/concepts/platform#modular-style) so each
+[layer pattern](/concepts/platform#worker-layer) so each
 Worker only imports the other's tiny class, not its full implementation.

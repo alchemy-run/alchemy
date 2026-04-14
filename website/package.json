@@ -28,6 +28,7 @@
     "alchemy": "workspace:*",
     "astro": "^5.12.8",
     "effect": "catalog:",
+    "expressive-code-twoslash": "^0.6.1",
     "starlight-blog": "0.24.0",
     "tailwindcss": "^4.1.14"
   },

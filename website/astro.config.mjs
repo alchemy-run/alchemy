@@ -49,9 +49,6 @@ export default defineConfig({
           autogenerate: { directory: "providers", collapsed: true },
         },
       ],
-      expressiveCode: {
-        themes: ["github-light", "github-dark-dimmed"],
-      },
       plugins: [starlightBlog()],
     }),
   ],

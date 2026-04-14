@@ -26,7 +26,7 @@ runtime, and starting it from a Durable Object.
 
 :::note
 For the full API reference, see the [Container provider](/providers/cloudflare/container).
-For why the modular pattern matters, see the [Platform concept](/concepts/platform).
+For why the layer pattern matters, see the [Platform concept](/concepts/platform).
 :::
 
 <Steps>
@@ -58,9 +58,12 @@ For why the modular pattern matters, see the [Platform concept](/concepts/platfo
 
 2. **Implement the Runtime**
 
-   In a separate file, provide the runtime logic with
-   `Container.make()`. This is the default export of the container's
-   entrypoint — it only runs inside the container process.
+   Containers are the one case where `.make()` must live in a separate
+   file. Since a Container must be bound to a Durable Object, the DO
+   imports the class to get a typed handle. If the class and `.make()`
+   shared a file, the DO's bundle would pull in all of the container's
+   runtime dependencies, bloating it and likely breaking the Workers
+   runtime.
 
    ```typescript
    // src/Sandbox.runtime.ts
@@ -83,7 +86,7 @@ For why the modular pattern matters, see the [Platform concept](/concepts/platfo
 
 3. **Start from a Durable Object**
 
-   Import only the class (not the runtime file). Bind it in the outer
+   Import only the class. Bind it in the outer
    init phase, then start it in the inner per-instance phase.
 
    ```typescript
