@@ -59,7 +59,7 @@ For Vite-based projects, see the [Vite guide](/guides/vite) instead.
      { providers: Cloudflare.providers() },
      Effect.gen(function* () {
        const site = yield* Cloudflare.StaticSite("Blog", {
-       //    ^?
+         //    ^?
          command: "zola build",
          outdir: "public",
        });

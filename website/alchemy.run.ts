@@ -8,16 +8,12 @@ export default Alchemy.Stack(
     providers: Cloudflare.providers(),
   },
   Effect.gen(function* () {
-    const Website = yield* Cloudflare.Vite("Website", {
+    const Website = yield* Cloudflare.StaticSite("Website", {
+      command: "bun astro build",
+      main: "./src/worker.ts",
+      outdir: "dist",
       memo: {
-        include: [
-          "src/**",
-          "astro.config.mjs",
-          "package.json",
-          "../scripts/generate-api-reference.ts",
-          "../alchemy-effect/src/**",
-          "../bun.lock",
-        ],
+        include: ["src/**", "astro.config.mjs", "package.json", "../bun.lock"],
       },
       compatibility: {
         date: "2026-04-02",

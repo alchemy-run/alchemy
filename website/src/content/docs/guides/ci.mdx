@@ -2,7 +2,7 @@
 title: Continuous Integration
 description: Set up CI/CD pipelines for alchemy-effect projects with GitHub Actions, automated deployments, and PR previews.
 sidebar:
-  order: 9
+  order: 2
 ---
 
 import { Code, Steps, TabItem, Tabs } from "@astrojs/starlight/components";
@@ -155,14 +155,14 @@ fi`,
             run: `${cfg.destroy} destroy --stage \${{ env.STAGE }}`,
             env: {
               PULL_REQUEST: "${{ github.event.number }}",
-            },
-          },
-        ],
-      },
-    },
-  }, { aliasDuplicateObjects: false });
+},
+},
+],
+},
+},
+}, { aliasDuplicateObjects: false });
 
-  return <Code lang="yaml" code={content} />;
+return <Code lang="yaml" code={content} />;
 }
 
 Set up preview deployments and continuous integration for your alchemy-effect projects using GitHub Actions.

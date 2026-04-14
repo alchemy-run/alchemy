@@ -50,7 +50,11 @@ import type { R2Bucket } from "../R2/R2Bucket.ts";
 import type { AssetsConfig, AssetsProps } from "./Assets.ts";
 import { readAssets, uploadAssets } from "./Assets.ts";
 import cloudflare_workers from "./cloudflare_workers.ts";
-import { isDurableObjectExport } from "./DurableObjectNamespace.ts";
+import {
+  isDurableObjectExport,
+  isDurableObjectNamespaceLike,
+  type DurableObjectNamespaceLike,
+} from "./DurableObjectNamespace.ts";
 import { workersHttpHandler } from "./HttpServer.ts";
 import { Request } from "./Request.ts";
 import { makeRpcStub } from "./Rpc.ts";
@@ -161,7 +165,10 @@ export type WorkerServices = Worker | WorkerEnvironment | Request;
 
 export type WorkerShape = Main<WorkerServices>;
 
-export type WorkerBindingResource = R2Bucket | D1Database;
+export type WorkerBindingResource =
+  | R2Bucket
+  | D1Database
+  | DurableObjectNamespaceLike;
 
 export type WorkerBindings = {
   [bindingName in string]: WorkerBindingResource;
@@ -609,30 +616,39 @@ export const Worker: Platform<
           : bindingEff;
 
         const bindingMeta: InputProps<WorkerBinding> | undefined =
-          binding.Type === "Cloudflare.D1Database"
+          isDurableObjectNamespaceLike(binding)
             ? {
-                type: "d1",
-                id: binding.databaseId,
+                type: "durable_object_namespace",
                 name: bindingName,
+                className: binding.className ?? binding.name,
               }
-            : binding.Type === "Cloudflare.R2Bucket"
+            : binding.Type === "Cloudflare.D1Database"
               ? {
-                  type: "r2_bucket",
+                  type: "d1",
+                  id: binding.databaseId,
                   name: bindingName,
-                  bucketName: binding.bucketName,
-                  jurisdiction: binding.jurisdiction.pipe(
-                    Output.map((jurisdiction) =>
-                      jurisdiction === "default" ? undefined : jurisdiction,
-                    ),
-                  ),
                 }
-              : // TODO(sam): handle others
-                undefined;
+              : binding.Type === "Cloudflare.R2Bucket"
+                ? {
+                    type: "r2_bucket",
+                    name: bindingName,
+                    bucketName: binding.bucketName,
+                    jurisdiction: binding.jurisdiction.pipe(
+                      Output.map((jurisdiction) =>
+                        jurisdiction === "default" ? undefined : jurisdiction,
+                      ),
+                    ),
+                  }
+                : // TODO(sam): handle others
+                  undefined;
 
         if (bindingMeta) {
           yield* resource.bind`${bindingName}`({
             bindings: [bindingMeta],
           });
+        } else {
+          console.log(binding);
+          return yield* Effect.die(`Unknown binding type: ${bindingName}`);
         }
       }
     }
@@ -1311,7 +1327,12 @@ ${[
             yield* Effect.logInfo(
               `Cloudflare Worker ${olds ? "update" : "create"}: uploading assets for ${name}`,
             );
-            const { jwt } = yield* uploadAssets(accountId, name, assets, session);
+            const { jwt } = yield* uploadAssets(
+              accountId,
+              name,
+              assets,
+              session,
+            );
             metadataAssets = {
               jwt,
               config: assets.config,

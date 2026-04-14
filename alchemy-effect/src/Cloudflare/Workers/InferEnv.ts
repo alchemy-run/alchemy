@@ -20,4 +20,7 @@ type GetBindingType<T> = T extends Cloudflare.D1Database
     ? R2Bucket
     : T extends Cloudflare.KVNamespace
       ? KVNamespace
-      : never;
+      : T extends Cloudflare.DurableObjectNamespaceLike
+        ? // @ts-expect-error
+          DurableObjectNamespace<Exclude<T["Shape"], undefined>>
+        : never;

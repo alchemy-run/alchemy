@@ -98,10 +98,7 @@ async function encryptValue(
 ): Promise<string> {
   const sodium = await import("libsodium-wrappers");
   await sodium.ready;
-  const binKey = sodium.from_base64(
-    publicKey,
-    sodium.base64_variants.ORIGINAL,
-  );
+  const binKey = sodium.from_base64(publicKey, sodium.base64_variants.ORIGINAL);
   const binMessage = sodium.from_string(plaintext);
   const encrypted = sodium.crypto_box_seal(binMessage, binKey);
   return sodium.to_base64(encrypted, sodium.base64_variants.ORIGINAL);

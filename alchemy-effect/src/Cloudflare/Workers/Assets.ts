@@ -84,20 +84,15 @@ const maybeReadString = Effect.fnUntraced(function* (file: string) {
   return yield* fs.readFileString(file).pipe(
     Effect.catchIf(
       (error) =>
-        error._tag === "PlatformError" &&
-        error.reason._tag === "NotFound",
+        error._tag === "PlatformError" && error.reason._tag === "NotFound",
       () => Effect.succeed(undefined),
     ),
   );
 });
 
-const createIgnoreMatcher = Effect.fnUntraced(function* (
-  patterns: string[],
-) {
+const createIgnoreMatcher = Effect.fnUntraced(function* (patterns: string[]) {
   const matcher = yield* Effect.promise(() =>
-    import("ignore").then(({ default: ignore }) =>
-      ignore().add(patterns),
-    ),
+    import("ignore").then(({ default: ignore }) => ignore().add(patterns)),
   );
   return (file: string) => matcher.ignores(file);
 });
@@ -119,8 +114,7 @@ export const readAssets = Effect.fnUntraced(function* (props: AssetsProps) {
     ...(ignore
       ?.split("\n")
       .map((line) => line.trim())
-      .filter((line) => line.length > 0 && !line.startsWith("#")) ??
-      []),
+      .filter((line) => line.length > 0 && !line.startsWith("#")) ?? []),
   ]);
   const manifest = new Map<string, { hash: string; size: number }>();
   let count = 0;
@@ -156,10 +150,7 @@ export const readAssets = Effect.fnUntraced(function* (props: AssetsProps) {
         });
       }
       manifest.set(
-        (name.startsWith("/") ? name : `/${name}`).replaceAll(
-          "\\",
-          "/",
-        ),
+        (name.startsWith("/") ? name : `/${name}`).replaceAll("\\", "/"),
         {
           hash,
           size,
@@ -171,9 +162,7 @@ export const readAssets = Effect.fnUntraced(function* (props: AssetsProps) {
     directory: props.directory,
     config: props.config,
     manifest: Object.fromEntries(
-      Array.from(manifest.entries()).sort((a, b) =>
-        a[0].localeCompare(b[0]),
-      ),
+      Array.from(manifest.entries()).sort((a, b) => a[0].localeCompare(b[0])),
     ),
     _headers,
     _redirects,
@@ -231,25 +220,19 @@ export const uploadAssets = Effect.fnUntraced(function* (
               hash,
             });
           }
-          const file = yield* fs
-            .readFile(path.join(directory, name))
-            .pipe(
-              Effect.mapError(
-                (error) =>
-                  new FailedToReadAssetError({
-                    message: `Failed to read asset ${name}: ${error.message}`,
-                    name,
-                    cause: error,
-                  }),
-              ),
-            );
-          body[hash] = new File(
-            [Buffer.from(file).toString("base64")],
-            hash,
-            {
-              type: getContentType(name),
-            },
+          const file = yield* fs.readFile(path.join(directory, name)).pipe(
+            Effect.mapError(
+              (error) =>
+                new FailedToReadAssetError({
+                  message: `Failed to read asset ${name}: ${error.message}`,
+                  name,
+                  cause: error,
+                }),
+            ),
           );
+          body[hash] = new File([Buffer.from(file).toString("base64")], hash, {
+            type: getContentType(name),
+          });
         }),
       );
       const result = yield* createAssetUpload({

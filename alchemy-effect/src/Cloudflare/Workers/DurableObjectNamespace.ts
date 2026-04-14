@@ -39,7 +39,26 @@ export type AlarmInvocationInfo = cf.AlarmInvocationInfo;
 type TypeId = "Cloudflare.DurableObjectNamespace";
 const TypeId = "Cloudflare.DurableObjectNamespace";
 
-export interface DurableObjectNamespace<Shape = unknown> {
+export const isDurableObjectNamespaceLike = (
+  value: unknown,
+): value is DurableObjectNamespaceLike =>
+  typeof value === "object" &&
+  value !== null &&
+  "kind" in value &&
+  value.kind === TypeId;
+
+export interface DurableObjectNamespaceLike<Shape = unknown> {
+  kind: TypeId;
+  name: string;
+  /** @internal phantom */
+  className?: string;
+  /** @internal phantom */
+  Shape?: Shape;
+}
+
+export interface DurableObjectNamespace<
+  Shape = unknown,
+> extends DurableObjectNamespaceLike<Shape> {
   Type: TypeId;
   name: string;
   namespaceId: Output.Output<string>;
@@ -79,6 +98,17 @@ export type DurableObjectServices =
   | WorkerServices
   | PlatformServices;
 
+export interface DurableObjectNamespaceProps {
+  /**
+   * @default name
+   */
+  className: string;
+  // scriptName?: string | undefined;
+  // environment?: string | undefined;
+  // sqlite?: boolean | undefined;
+  // namespaceId?: string | undefined;
+}
+
 export interface DurableObjectNamespaceClass extends Effect.Effect<
   DurableObjectNamespace,
   never,
@@ -100,6 +130,10 @@ export interface DurableObjectNamespaceClass extends Effect.Effect<
       new (_: never): Shape;
     };
   };
+  <Shape>(
+    name: string,
+    props?: DurableObjectNamespaceProps,
+  ): DurableObjectNamespaceLike<Shape>;
   <Shape, InitReq = never>(
     name: string,
     impl: Effect.Effect<
@@ -365,6 +399,7 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
   taggedFunction(DurableObjectNamespaceScope, ((
     ...args:
       | []
+      | [name: string, props?: DurableObjectNamespaceProps]
       | [
           name: string,
           impl: Effect.Effect<
@@ -378,137 +413,156 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
   ) =>
     args.length === 0
       ? DurableObjectNamespace
-      : effectClass(
-          Effect.gen(function* () {
-            const [namespace, impl] = args;
-            const worker = yield* Worker;
+      : !Effect.isEffect(args[1])
+        ? ({
+            kind: TypeId,
+            name: args[0],
+            className: (args[1] as DurableObjectNamespaceProps | undefined)
+              ?.className,
+          } satisfies DurableObjectNamespaceLike<any>)
+        : effectClass(
+            Effect.gen(function* () {
+              const [namespace, impl] = args as any as [
+                name: string,
+                impl: Effect.Effect<
+                  Effect.Effect<
+                    DurableObjectNamespace<any>,
+                    never,
+                    DurableObjectState
+                  >
+                >,
+              ];
+              const worker = yield* Worker;
 
-            yield* worker.bind`${namespace}`({
-              // TODO(sam): automate class migrations, probably in the provider
-              bindings: [
-                {
-                  type: "durable_object_namespace",
-                  name: namespace,
-                  className: namespace,
-                  // scriptName:
-                  //   binding.scriptName === props.workerName
-                  //     ? undefined
-                  //     : binding.scriptName,
-                  // environment: binding.environment,
-                  // namespaceId: binding.namespaceId,
-                },
-              ],
-            });
+              yield* worker.bind`${namespace}`({
+                // TODO(sam): automate class migrations, probably in the provider
+                bindings: [
+                  {
+                    type: "durable_object_namespace",
+                    name: namespace,
+                    className: namespace,
+                    // scriptName:
+                    //   binding.scriptName === props.workerName
+                    //     ? undefined
+                    //     : binding.scriptName,
+                    // environment: binding.environment,
+                    // namespaceId: binding.namespaceId,
+                  },
+                ],
+              });
 
-            const services =
-              yield* Effect.context<Effect.Services<typeof impl>>();
+              const services =
+                yield* Effect.context<Effect.Services<typeof impl>>();
 
-            yield* worker.export(namespace, {
-              kind: "durableObject",
-              make: (state: cf.DurableObjectState, env: any) => {
-                const doState = fromDurableObjectState(state);
-                return constructor.pipe(
-                  Effect.provideContext(services),
-                  Effect.provideService(DurableObjectState, doState),
-                  Effect.provideService(WorkerEnvironment, env),
-                  Effect.map((methods: any) => {
-                    console.log(
-                      "[DurableObject] wrapping methods:",
-                      Object.keys(methods),
-                      "own:",
-                      Object.getOwnPropertyNames(methods),
-                    );
-                    const wrapped: Record<string, unknown> = {};
-                    for (const key of Object.getOwnPropertyNames(methods)) {
-                      const value = methods[key];
-                      if (Effect.isEffect(value)) {
-                        wrapped[key] = (
-                          value as Effect.Effect<any, any, any>
-                        ).pipe(
-                          Effect.provideService(DurableObjectState, doState),
-                        );
-                      } else if (typeof value === "function") {
-                        wrapped[key] = (...args: unknown[]) => {
-                          const result = (value as Function)(...args);
-                          if (Effect.isEffect(result)) {
-                            return (
-                              result as Effect.Effect<any, any, any>
-                            ).pipe(
-                              Effect.provideService(
-                                DurableObjectState,
-                                doState,
-                              ),
-                            );
-                          }
-                          return result;
-                        };
-                      } else {
-                        wrapped[key] = value;
+              yield* worker.export(namespace, {
+                kind: "durableObject",
+                make: (state: cf.DurableObjectState, env: any) => {
+                  const doState = fromDurableObjectState(state);
+                  return constructor.pipe(
+                    Effect.provideContext(services),
+                    Effect.provideService(DurableObjectState, doState),
+                    Effect.provideService(WorkerEnvironment, env),
+                    Effect.map((methods: any) => {
+                      console.log(
+                        "[DurableObject] wrapping methods:",
+                        Object.keys(methods),
+                        "own:",
+                        Object.getOwnPropertyNames(methods),
+                      );
+                      const wrapped: Record<string, unknown> = {};
+                      for (const key of Object.getOwnPropertyNames(methods)) {
+                        const value = methods[key];
+                        if (Effect.isEffect(value)) {
+                          wrapped[key] = (
+                            value as Effect.Effect<any, any, any>
+                          ).pipe(
+                            Effect.provideService(DurableObjectState, doState),
+                          );
+                        } else if (typeof value === "function") {
+                          wrapped[key] = (...args: unknown[]) => {
+                            const result = (value as Function)(...args);
+                            if (Effect.isEffect(result)) {
+                              return (
+                                result as Effect.Effect<any, any, any>
+                              ).pipe(
+                                Effect.provideService(
+                                  DurableObjectState,
+                                  doState,
+                                ),
+                              );
+                            }
+                            return result;
+                          };
+                        } else {
+                          wrapped[key] = value;
+                        }
                       }
-                    }
-                    return wrapped;
-                  }),
-                );
-              },
-            } satisfies DurableObjectExport);
-
-            const binding = yield* Effect.serviceOption(WorkerEnvironment).pipe(
-              Effect.map(Option.getOrUndefined),
-              Effect.flatMap((env) => {
-                if (env === undefined) {
-                  // should be fine to return undefined here (it is only undefined at plantime)
-                  return Effect.succeed(undefined);
-                }
-                const ns = env[namespace];
-                if (!ns) {
-                  return Effect.die(
-                    new Error(
-                      `DurableObjectNamespace '${namespace}' not found`,
-                    ),
+                      return wrapped;
+                    }),
                   );
-                } else if (typeof ns.getByName === "function") {
-                  return Effect.succeed(ns);
-                } else {
-                  return Effect.die(
-                    new Error(
-                      `DurableObjectNamespace '${namespace}' is not a DurableObjectNamespace`,
-                    ),
-                  );
-                }
-              }),
-            );
+                },
+              } satisfies DurableObjectExport);
 
-            const namespaceId = worker.durableObjectNamespaces.pipe(
-              Output.map(
-                (durableObjectNamespaces) =>
-                  durableObjectNamespaces?.[namespace],
-              ),
-            );
+              const binding = yield* Effect.serviceOption(
+                WorkerEnvironment,
+              ).pipe(
+                Effect.map(Option.getOrUndefined),
+                Effect.flatMap((env) => {
+                  if (env === undefined) {
+                    // should be fine to return undefined here (it is only undefined at plantime)
+                    return Effect.succeed(undefined);
+                  }
+                  const ns = env[namespace];
+                  if (!ns) {
+                    return Effect.die(
+                      new Error(
+                        `DurableObjectNamespace '${namespace}' not found`,
+                      ),
+                    );
+                  } else if (typeof ns.getByName === "function") {
+                    return Effect.succeed(ns);
+                  } else {
+                    return Effect.die(
+                      new Error(
+                        `DurableObjectNamespace '${namespace}' is not a DurableObjectNamespace`,
+                      ),
+                    );
+                  }
+                }),
+              );
 
-            const self = {
-              Type: TypeId,
-              LogicalId: namespace,
-              name: namespace,
-              namespaceId,
-              getByName: (name: string) => makeRpcStub(binding.getByName(name)),
-              // newUniqueId: () => use((ns) => ns.newUniqueId()),
-              // idFromName: (name: string) => use((ns) => ns.idFromName(name)),
-              // idFromString: (id: string) => use((ns) => ns.idFromString(id)),
-              // get: (
-              //   id: cf.DurableObjectId,
-              //   options?: cf.DurableObjectNamespaceGetDurableObjectOptions,
-              // ) => use((ns) => makeRpcStub(ns.get(id, options))),
-              // jurisdiction: (jurisdiction: cf.DurableObjectJurisdiction) =>
-              //   use((ns) => ns.jurisdiction(jurisdiction) as any),
-            };
+              const namespaceId = worker.durableObjectNamespaces.pipe(
+                Output.map(
+                  (durableObjectNamespaces) =>
+                    durableObjectNamespaces?.[namespace],
+                ),
+              );
 
-            const constructor = yield* impl.pipe(
-              Effect.provideService(DurableObjectNamespaceScope, self as any),
-            );
+              const self = {
+                Type: TypeId,
+                LogicalId: namespace,
+                name: namespace,
+                namespaceId,
+                getByName: (name: string) =>
+                  makeRpcStub(binding.getByName(name)),
+                // newUniqueId: () => use((ns) => ns.newUniqueId()),
+                // idFromName: (name: string) => use((ns) => ns.idFromName(name)),
+                // idFromString: (id: string) => use((ns) => ns.idFromString(id)),
+                // get: (
+                //   id: cf.DurableObjectId,
+                //   options?: cf.DurableObjectNamespaceGetDurableObjectOptions,
+                // ) => use((ns) => makeRpcStub(ns.get(id, options))),
+                // jurisdiction: (jurisdiction: cf.DurableObjectJurisdiction) =>
+                //   use((ns) => ns.jurisdiction(jurisdiction) as any),
+              };
 
-            return self;
-          }),
-        )) as any);
+              const constructor = yield* impl.pipe(
+                Effect.provideService(DurableObjectNamespaceScope, self as any),
+              );
+
+              return self;
+            }),
+          )) as any);
 
 export type DurableObjectStub<Shape> = {
   // TODO(sam): do we need to transform? hopefully not

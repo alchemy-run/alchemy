@@ -59,10 +59,7 @@ export const providers = () =>
       ),
     ),
     Layer.provideMerge(
-      Layer.mergeAll(
-        Build.CommandProvider(),
-        RandomProvider(),
-      ),
+      Layer.mergeAll(Build.CommandProvider(), RandomProvider()),
     ),
     Layer.provideMerge(
       Layer.mergeAll(

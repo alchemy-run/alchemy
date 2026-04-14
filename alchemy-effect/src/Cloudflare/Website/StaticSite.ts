@@ -81,7 +81,9 @@ export const StaticSite = (id: string, props: InputProps<StaticSiteProps>) =>
     // TODO(sam): local dev/hmr support?
     const build = yield* Command("Build", props);
 
-    const worker = yield* Worker("Worker", {
+    const worker = yield* Worker<{
+      // ASSETS: Assets;
+    }>("Worker", {
       ...props,
       assets: {
         path: build.outdir,

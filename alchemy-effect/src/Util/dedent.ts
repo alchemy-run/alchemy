@@ -3,7 +3,10 @@
  *
  * If the first line is empty, it will be ignored.
  */
-export function dedent(strings: TemplateStringsArray, ...values: unknown[]): string;
+export function dedent(
+  strings: TemplateStringsArray,
+  ...values: unknown[]
+): string;
 export function dedent(text: string): string;
 export function dedent(
   stringsOrText: TemplateStringsArray | string,

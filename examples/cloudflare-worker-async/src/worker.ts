@@ -1,3 +1,4 @@
+import { DurableObject } from "cloudflare:workers";
 import type { WorkerEnv } from "../alchemy.run.ts";
 
 export default {
@@ -15,7 +16,17 @@ export default {
         }),
         { status: 201 },
       );
+    } else if (request.method === "POST") {
+      const counter = env.Counter.getByName("counter");
+      return new Response(JSON.stringify({ count: await counter.increment() }));
     }
     return new Response("Not Found", { status: 404 });
   },
 };
+
+export class Counter extends DurableObject {
+  private counter = 0;
+  async increment() {
+    return ++this.counter;
+  }
+}
