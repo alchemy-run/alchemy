@@ -10,7 +10,7 @@ import {
   type SourceFile,
 } from "ts-morph";
 
-const websiteRoot = path.join(import.meta.dir, "../alchemy-effect-website");
+const websiteRoot = path.join(import.meta.dir, "../website");
 
 const config = {
   srcRoot: path.join(import.meta.dir, "../alchemy-effect/src"),

@@ -20,6 +20,14 @@
   ],
   "type": "module",
   "sideEffects": false,
+  "scripts": {
+    "dev": "tsdown --watch",
+    "build": "bun bundle && bun pm pack",
+    "bundle": "tsdown",
+    "bundle:watch": "tsdown --watch",
+    "publish:npm": "cp ../README.md . && bun publish && rm README.md",
+    "test:benchmark": "tsx --tsconfig tsconfig.test.json test/types.benchmark.ts"
+  },
   "exports": {
     ".": {
       "types": "./src/index.d.ts",
@@ -186,14 +194,6 @@
   },
   "publishConfig": {
     "access": "public"
-  },
-  "scripts": {
-    "dev": "tsdown --watch",
-    "build": "bun bundle && bun pm pack",
-    "bundle": "tsdown",
-    "bundle:watch": "tsdown --watch",
-    "publish:npm": "cp ../README.md . && bun publish && rm README.md",
-    "test:benchmark": "tsx --tsconfig tsconfig.test.json test/types.benchmark.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.31",
