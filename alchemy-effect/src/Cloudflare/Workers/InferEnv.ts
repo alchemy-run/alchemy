@@ -14,13 +14,14 @@ export type InferEnv<W> = W extends
     }
   : never;
 
-type GetBindingType<T> = T extends Cloudflare.D1Database
-  ? D1Database
-  : T extends Cloudflare.R2Bucket
-    ? R2Bucket
-    : T extends Cloudflare.KVNamespace
-      ? KVNamespace
-      : T extends Cloudflare.DurableObjectNamespaceLike
-        ? // @ts-expect-error
-          DurableObjectNamespace<Exclude<T["Shape"], undefined>>
-        : never;
+type GetBindingType<T> = T extends Cloudflare.Assets
+  ? Service
+  : T extends Cloudflare.D1Database
+    ? D1Database
+    : T extends Cloudflare.R2Bucket
+      ? R2Bucket
+      : T extends Cloudflare.KVNamespace
+        ? KVNamespace
+        : T extends Cloudflare.DurableObjectNamespaceLike
+          ? DurableObjectNamespace<Exclude<T["Shape"], undefined>>
+          : never;

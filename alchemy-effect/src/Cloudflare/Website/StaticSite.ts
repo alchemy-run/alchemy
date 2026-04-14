@@ -3,10 +3,17 @@ import { Command, type CommandProps } from "../../Build/Command.ts";
 import type { InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
 import type { AssetsConfig } from "../Workers/Assets.ts";
-import { Worker, type WorkerProps } from "../Workers/Worker.ts";
+import {
+  Worker,
+  type WorkerAssetsConfig,
+  type WorkerBindingProps,
+  type WorkerProps,
+} from "../Workers/Worker.ts";
 
-export interface StaticSiteProps
-  extends Omit<WorkerProps, "assets">, Omit<CommandProps, "env"> {
+export interface StaticSiteProps<Bindings extends WorkerBindingProps = {}>
+  extends
+    Omit<WorkerProps<Bindings, WorkerAssetsConfig>, "assets">,
+    Omit<CommandProps, "env"> {
   /**
    * Optional configuration for static asset routing behavior.
    * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
@@ -76,14 +83,21 @@ export type StaticSite = ReturnType<typeof StaticSite>;
  * });
  * ```
  */
-export const StaticSite = (id: string, props: InputProps<StaticSiteProps>) =>
+export const StaticSite = <const Bindings extends WorkerBindingProps = {}>(
+  id: string,
+  props: InputProps<StaticSiteProps<Bindings>>,
+) =>
   Effect.gen(function* () {
     // TODO(sam): local dev/hmr support?
-    const build = yield* Command("Build", props);
+    const build = yield* Command("Build", {
+      command: props.command,
+      cwd: props.cwd,
+      memo: props.memo,
+      outdir: props.outdir,
+      env: props.env,
+    });
 
-    const worker = yield* Worker<{
-      // ASSETS: Assets;
-    }>("Worker", {
+    const worker = yield* Worker<Bindings, WorkerAssetsConfig>("Worker", {
       ...props,
       assets: {
         path: build.outdir,
@@ -94,3 +108,29 @@ export const StaticSite = (id: string, props: InputProps<StaticSiteProps>) =>
 
     return worker;
   }).pipe(Namespace.push(id));
+
+import * as Cloudflare from "../index.ts";
+
+const Bucket = Cloudflare.R2Bucket("DO");
+
+Effect.gen(function* () {
+  const Website = yield* StaticSite("Website", {
+    command: "bun astro build",
+    main: "./src/worker.ts",
+    outdir: "dist",
+    memo: {
+      include: ["src/**", "astro.config.mjs", "package.json", "../bun.lock"],
+    },
+    compatibility: {
+      date: "2026-04-02",
+      flags: ["nodejs_compat"],
+    },
+    bindings: {
+      Bucket,
+    },
+  });
+
+  return {
+    url: Website.url,
+  };
+});

@@ -11,6 +11,9 @@ export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
 
 export const Worker = Cloudflare.Worker("Worker", {
   main: "./src/worker.ts",
+  assets: {
+    directory: "./public",
+  },
   bindings: {
     DB,
     Bucket,

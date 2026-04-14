@@ -47,7 +47,7 @@ export const isDurableObjectNamespaceLike = (
   "kind" in value &&
   value.kind === TypeId;
 
-export interface DurableObjectNamespaceLike<Shape = unknown> {
+export interface DurableObjectNamespaceLike<Shape = any> {
   kind: TypeId;
   name: string;
   /** @internal phantom */

@@ -20,7 +20,7 @@ export default {
       const counter = env.Counter.getByName("counter");
       return new Response(JSON.stringify({ count: await counter.increment() }));
     }
-    return new Response("Not Found", { status: 404 });
+    return env.ASSETS.fetch(request);
   },
 };
 

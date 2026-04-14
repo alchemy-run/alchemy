@@ -26,7 +26,7 @@ import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
 import type { HttpEffect } from "../../Http.ts";
-import type { Input, InputProps } from "../../Input.ts";
+import type { InputProps } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import {
@@ -47,8 +47,14 @@ import { fromCloudflareFetcher } from "../Fetcher.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import type { Providers } from "../Providers.ts";
 import type { R2Bucket } from "../R2/R2Bucket.ts";
-import type { AssetsConfig, AssetsProps } from "./Assets.ts";
-import { readAssets, uploadAssets } from "./Assets.ts";
+import {
+  isAssets,
+  readAssets,
+  uploadAssets,
+  type Assets,
+  type AssetsConfig,
+  type AssetsProps,
+} from "./Assets.ts";
 import cloudflare_workers from "./cloudflare_workers.ts";
 import {
   isDurableObjectExport,
@@ -109,12 +115,12 @@ export interface AssetsWithHash {
   /**
    * Path to the assets directory.
    */
-  path: Input<string>;
+  path: string;
   /**
    * Pre-computed hash of the assets. When provided, this hash is used for diffing
    * to determine if the worker needs to be redeployed.
    */
-  hash: Input<string>;
+  hash: string;
   /**
    * Optional assets configuration.
    */
@@ -166,9 +172,10 @@ export type WorkerServices = Worker | WorkerEnvironment | Request;
 export type WorkerShape = Main<WorkerServices>;
 
 export type WorkerBindingResource =
+  | Assets
   | R2Bucket
   | D1Database
-  | DurableObjectNamespaceLike;
+  | DurableObjectNamespaceLike<any>;
 
 export type WorkerBindings = {
   [bindingName in string]: WorkerBindingResource;
@@ -180,8 +187,26 @@ export type WorkerBindingProps = {
     | Effect.Effect<WorkerBindingResource, any, any>;
 };
 
+type NormalizedBindings<
+  Bindings extends WorkerBindingProps = {},
+  AssetsConfig extends WorkerAssetsConfig | undefined = undefined,
+> = {
+  [B in keyof Bindings]: Bindings[B] extends Effect.Effect<
+    infer T extends WorkerBindingResource,
+    any,
+    any
+  >
+    ? T
+    : Extract<Bindings[B], WorkerBindingResource>;
+} & (undefined extends AssetsConfig ? {} : { ASSETS: Assets });
+
+export type WorkerAssetsConfig = string | AssetsProps | AssetsWithHash;
+
 export interface WorkerProps<
   Bindings extends WorkerBindingProps = any,
+  Assets extends WorkerAssetsConfig | undefined =
+    | WorkerAssetsConfig
+    | undefined,
 > extends PlatformProps {
   /**
    * Worker name override. If omitted, Alchemy derives a deterministic physical
@@ -199,11 +224,7 @@ export interface WorkerProps<
    * - An AssetsProps object with directory and config
    * - An object with path and hash (e.g., from a Build resource)
    */
-  assets?:
-    | string
-    | AssetsProps
-    | AssetsWithHash
-    | (AssetsWithHash & { [K: string]: any });
+  assets?: Assets;
   subdomain?: {
     enabled?: boolean;
     previewsEnabled?: boolean;
@@ -586,18 +607,18 @@ export const Worker: Platform<
   WorkerShape,
   WorkerExecutionContext
 > & {
-  <const Bindings extends WorkerBindingProps>(
+  <
+    const Bindings extends WorkerBindingProps,
+    const Assets extends WorkerAssetsConfig | undefined = undefined,
+  >(
     id: string,
-    props: InputProps<WorkerProps<Bindings>>,
+    props: InputProps<WorkerProps<Bindings, Assets>>,
   ): Effect.Effect<
     Worker<{
-      [B in keyof Bindings]: Bindings[B] extends Effect.Effect<
-        infer T extends WorkerBindingResource,
-        any,
-        any
-      >
-        ? T
-        : Extract<Bindings[B], WorkerBindingResource>;
+      [binding in keyof NormalizedBindings<
+        Bindings,
+        Assets
+      >]: NormalizedBindings<Bindings, Assets>[binding];
     }>
   >;
 } = Platform(WorkerTypeId, {
@@ -615,8 +636,14 @@ export const Worker: Platform<
           ? yield* bindingEff
           : bindingEff;
 
-        const bindingMeta: InputProps<WorkerBinding> | undefined =
-          isDurableObjectNamespaceLike(binding)
+        const bindingMeta: InputProps<WorkerBinding> | undefined = isAssets(
+          binding,
+        )
+          ? {
+              type: "assets",
+              name: bindingName,
+            }
+          : isDurableObjectNamespaceLike(binding)
             ? {
                 type: "durable_object_namespace",
                 name: bindingName,
@@ -647,7 +674,6 @@ export const Worker: Platform<
             bindings: [bindingMeta],
           });
         } else {
-          console.log(binding);
           return yield* Effect.die(`Unknown binding type: ${bindingName}`);
         }
       }
@@ -989,7 +1015,9 @@ export const WorkerProvider = () =>
       const prepareAssets = Effect.fnUntraced(function* (
         assets: WorkerProps["assets"],
       ) {
-        if (!assets) return undefined;
+        if (!assets) {
+          return undefined;
+        }
 
         // Handle AssetsWithHash (from Build resource)
         // Props are resolved by Plan, so Input<string> values are already strings at runtime

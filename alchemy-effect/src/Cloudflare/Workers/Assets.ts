@@ -10,6 +10,13 @@ import { sha256, sha256Object } from "../../Util/index.ts";
 const MAX_ASSET_SIZE = 1024 * 1024 * 25; // 25MB
 const MAX_ASSET_COUNT = 20_000;
 
+export interface Assets {
+  kind: "Cloudflare.Workers.Assets";
+}
+
+export const isAssets = (value: any): value is Assets =>
+  value?.kind === "Cloudflare.Workers.Assets";
+
 export interface AssetsConfig extends Exclude<
   Exclude<workers.PutScriptRequest["metadata"]["assets"], undefined>["config"],
   undefined

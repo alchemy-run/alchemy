@@ -1,8 +1,15 @@
-import type { InputProps } from "../../Input.ts";
 import type { MemoOptions } from "../../Build/Memo.ts";
-import { Worker, type WorkerProps } from "../Workers/Worker.ts";
+import type { InputProps } from "../../Input.ts";
+import {
+  Worker,
+  type WorkerAssetsConfig,
+  type WorkerBindingProps,
+  type WorkerProps,
+} from "../Workers/Worker.ts";
 
-export interface ViteProps extends Omit<WorkerProps, "vite" | "main"> {
+export interface ViteProps<
+  Bindings extends WorkerBindingProps = {},
+> extends Omit<WorkerProps<Bindings>, "vite" | "main"> {
   /**
    * Root directory passed to Vite's `root` option.
    * Defaults to the current working directory (`process.cwd()`).
@@ -99,8 +106,11 @@ export interface ViteProps extends Omit<WorkerProps, "vite" | "main"> {
  * });
  * ```
  */
-export const Vite = (id: string, props: InputProps<ViteProps> = {}) =>
-  Worker(id, {
+export const Vite = <const Bindings extends WorkerBindingProps = {}>(
+  id: string,
+  props: InputProps<ViteProps<Bindings>> = {},
+) =>
+  Worker<Bindings, WorkerAssetsConfig>(id, {
     ...props,
     main: undefined!,
     vite: {
