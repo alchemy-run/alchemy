@@ -48,7 +48,7 @@ import { CloudflareLogs } from "../Logs.ts";
 import type { Providers } from "../Providers.ts";
 import type { R2Bucket } from "../R2/R2Bucket.ts";
 import type { AssetsConfig, AssetsProps } from "./Assets.ts";
-import * as Assets from "./Assets.ts";
+import { readAssets, uploadAssets } from "./Assets.ts";
 import cloudflare_workers from "./cloudflare_workers.ts";
 import { isDurableObjectExport } from "./DurableObjectNamespace.ts";
 import { workersHttpHandler } from "./HttpServer.ts";
@@ -857,7 +857,6 @@ export const WorkerProvider = () =>
       const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
       const stack = yield* Stack;
 
-      const { read, upload } = yield* Assets.Assets;
       const createScriptSubdomain = yield* workers.createScriptSubdomain;
       const createScriptTail = yield* workers.createScriptTail;
       const deleteScript = yield* workers.deleteScript;
@@ -983,7 +982,7 @@ export const WorkerProvider = () =>
           "path" in assets &&
           "hash" in assets
         ) {
-          const result = yield* read({
+          const result = yield* readAssets({
             directory: assets.path as string,
             config: assets.config,
           });
@@ -994,7 +993,7 @@ export const WorkerProvider = () =>
         }
 
         // Handle string path or AssetsProps
-        return yield* read(
+        return yield* readAssets(
           typeof assets === "string" ? { directory: assets } : assets,
         );
       });
@@ -1232,7 +1231,7 @@ ${[
         const [assets, bundle] = yield* Effect.all(
           [
             assetsDirectory
-              ? read({
+              ? readAssets({
                   directory: assetsDirectory,
                   config:
                     typeof props.assets === "object" && "config" in props.assets
@@ -1312,7 +1311,7 @@ ${[
             yield* Effect.logInfo(
               `Cloudflare Worker ${olds ? "update" : "create"}: uploading assets for ${name}`,
             );
-            const { jwt } = yield* upload(accountId, name, assets, session);
+            const { jwt } = yield* uploadAssets(accountId, name, assets, session);
             metadataAssets = {
               jwt,
               config: assets.config,

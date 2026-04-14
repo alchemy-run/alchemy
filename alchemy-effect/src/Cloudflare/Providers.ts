@@ -10,7 +10,6 @@ import * as Containers from "./Container/index.ts";
 import * as D1 from "./D1/index.ts";
 import * as KV from "./KV/index.ts";
 import * as R2 from "./R2/index.ts";
-import * as Assets from "./Workers/Assets.ts";
 import * as Workers from "./Workers/index.ts";
 import * as Workflows from "./Workers/Workflow.ts";
 
@@ -61,7 +60,6 @@ export const providers = () =>
     ),
     Layer.provideMerge(
       Layer.mergeAll(
-        Assets.AssetsProvider(),
         Build.CommandProvider(),
         RandomProvider(),
       ),
