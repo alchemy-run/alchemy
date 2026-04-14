@@ -1,0 +1,78 @@
+---
+title: Overview
+description: How Async programs work in Alchemy — plain handlers with declarative infrastructure.
+sidebar:
+  order: 0
+---
+
+Async programs let you write plain `async` handlers while Alchemy
+manages your infrastructure declaratively. No Effect runtime is
+included in the bundle — your handler file is deployed as-is.
+
+If you haven't read [Effect vs Async](/concepts/effect-vs-async) yet, start
+there for the high-level mental model.
+
+## How it works
+
+Infrastructure is declared in `alchemy.run.ts`. Resources are connected
+to your handler via typed environment variables:
+
+- **Cloudflare** — pass resources via `bindings`, use `Cloudflare.InferEnv`
+  for a fully typed `env` object.
+- **AWS** — pass values via `env`, access them as `process.env` variables.
+  Use the AWS SDK directly.
+
+```typescript
+// alchemy.run.ts
+const Bucket = Cloudflare.R2Bucket("Bucket");
+
+export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
+
+export const Worker = Cloudflare.Worker("Worker", {
+  main: "./src/worker.ts",
+  bindings: { Bucket },
+});
+```
+
+```typescript
+// src/worker.ts
+import type { WorkerEnv } from "../alchemy.run.ts";
+
+export default {
+  async fetch(request: Request, env: WorkerEnv) {
+    const object = await env.Bucket.get("my-key");
+    return new Response(object?.body ?? null);
+  },
+};
+```
+
+## What you trade off
+
+Async programs don't use Alchemy's `bind()` system, which means:
+
+- No automatic IAM policies from capability bindings (AWS)
+- No typed SDK wrappers — you use the platform's native SDK directly
+- No event source helpers (`DynamoDB.streams`, `SQS.messages`, etc.)
+- No Sink composition (`Stream.run(sink)`)
+- No Layer swapping for alternative implementations
+
+You can always upgrade a function from Async to Effect later — they
+coexist in the same stack.
+
+## Guides
+
+### Compute
+
+- [Worker](/guides/async/worker) — deploy a Worker with plain `async fetch`
+- [Durable Object](/guides/async/durable-object) — stateful objects with
+  RPC, SQLite, and hibernatable WebSockets
+- [Lambda Function](/guides/async/lambda-function) — AWS Lambda with plain
+  async handler and environment variables
+- [Container](/guides/async/container) — why Containers require Effect
+- [Dynamic Workers](/guides/async/dynamic-worker) — why multi-Worker RPC
+  requires Effect
+
+### Resources
+
+- [R2 Bucket](/guides/async/r2-bucket) — object storage
+- [D1 Database](/guides/async/d1-database) — serverless SQLite

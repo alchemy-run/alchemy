@@ -1,0 +1,85 @@
+---
+title: R2 Bucket
+description: Use Cloudflare R2 object storage with Effect-native bindings.
+sidebar:
+  order: 13
+---
+
+import { Steps } from "@astrojs/starlight/components";
+import Terminal from "../../../../components/Terminal.astro";
+
+export const deployOutput = `[u]Plan[/u]: [g]2 to create[/g]
+
+[g]+[/g] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d]
+[g]+[/g] [b]Api[/b] [d](Cloudflare.Worker)[/d] [c](1 bindings)[/c]
+[s2][g]+[/g] [c]Bucket[/c]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d] [g]created[/g]
+[g]✓[/g] [b]Api[/b] [d](Cloudflare.Worker)[/d] [g]created[/g]
+[s2][d]• Uploading worker (12.50 KB) ...[/d]
+{
+[s2]url: "https://myapp-api-dev-you-abc123.workers.dev",
+}`;
+
+R2 provides zero-egress-fee object storage with an S3-compatible API.
+With Effect bindings, you get a typed wrapper around the R2 API.
+
+:::note
+For the plain async pattern, see the [Async R2 Bucket](/guides/async/r2-bucket) guide.
+For the full API reference, see the [R2Bucket provider](/providers/cloudflare/r2bucket).
+:::
+
+<Steps>
+
+1. **Create a Worker with an R2 Bucket**
+
+   Create the bucket, bind it in the init phase, and use it in the
+   `fetch` handler.
+
+   ```typescript
+   // src/Api.ts
+   import * as Cloudflare from "alchemy/Cloudflare";
+   import * as Effect from "effect/Effect";
+   import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+   import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+   const Bucket = Cloudflare.R2Bucket("Bucket");
+
+   export default class Api extends Cloudflare.Worker<Api>()(
+     "Api",
+     { main: import.meta.path },
+     Effect.gen(function* () {
+       const r2 = yield* Cloudflare.R2Bucket.bind(Bucket);
+
+       return {
+         fetch: Effect.gen(function* () {
+           const request = yield* HttpServerRequest;
+           const url = new URL(request.url);
+           const key = url.pathname.slice(1);
+
+           if (request.method === "PUT") {
+             yield* r2.put(key, request.body);
+             return HttpServerResponse.text("Created", { status: 201 });
+           }
+
+           const object = yield* r2.get(key);
+           return object
+             ? HttpServerResponse.text(object.body ?? "")
+             : HttpServerResponse.text("Not found", { status: 404 });
+         }),
+       };
+     }),
+   ) {}
+   ```
+
+2. **Deploy**
+
+   ```sh
+   alchemy deploy
+   ```
+
+   <Terminal content={deployOutput} />
+
+</Steps>

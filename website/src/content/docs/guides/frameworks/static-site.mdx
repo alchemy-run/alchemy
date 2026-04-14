@@ -2,11 +2,11 @@
 title: Static Site
 description: Deploy a static site built by a shell command (Hugo, Zola, Eleventy, etc.) to Cloudflare.
 sidebar:
-  order: 3
+  order: 0
 ---
 
 import { Steps } from "@astrojs/starlight/components";
-import Terminal from "../../../components/Terminal.astro";
+import Terminal from "../../../../components/Terminal.astro";
 
 export const deployOutput = `[u]Plan[/u]: [g]1 to create[/g]
 
@@ -25,7 +25,7 @@ This guide walks you through deploying a static site that is built by a
 shell command — [Zola](https://www.getzola.org/), Hugo, Eleventy, or any
 tool that produces a directory of files.
 
-For Vite-based projects, see the [Vite guide](/guides/vite) instead.
+For Vite-based projects, see the [Vite guide](/guides/frameworks/vite) instead.
 
 <Steps>
 
@@ -73,18 +73,17 @@ For Vite-based projects, see the [Vite guide](/guides/vite) instead.
 
 3. **Configure SPA routing (optional)**
 
-   For single-page applications, configure asset handling so all routes
+   For single-page applications, add `assetsConfig` so all routes
    fall back to `index.html`:
 
-   ```typescript
-   yield *
-     Cloudflare.StaticSite("App", {
-       command: "npm run build",
-       outdir: "dist",
-       assetsConfig: {
-         htmlHandling: "auto-trailing-slash",
-         notFoundHandling: "single-page-application",
-       },
+   ```diff lang="typescript"
+     const site = yield* Cloudflare.StaticSite("Blog", {
+       command: "zola build",
+       outdir: "public",
+   +   assetsConfig: {
+   +     htmlHandling: "auto-trailing-slash",
+   +     notFoundHandling: "single-page-application",
+   +   },
      });
    ```
 
@@ -97,14 +96,13 @@ For Vite-based projects, see the [Vite guide](/guides/vite) instead.
    For large projects, narrow the scope with `memo.include` so only
    relevant files trigger rebuilds:
 
-   ```typescript
-   yield *
-     Cloudflare.StaticSite("Docs", {
+   ```diff lang="typescript"
+     const site = yield* Cloudflare.StaticSite("Blog", {
        command: "zola build",
        outdir: "public",
-       memo: {
-         include: ["content/**", "templates/**", "config.toml"],
-       },
+   +   memo: {
+   +     include: ["content/**", "templates/**", "config.toml"],
+   +   },
      });
    ```
 

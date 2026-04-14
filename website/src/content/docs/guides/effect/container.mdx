@@ -2,11 +2,11 @@
 title: Container
 description: Run long-lived processes with full isolation alongside Durable Objects.
 sidebar:
-  order: 8
+  order: 3
 ---
 
 import { Steps } from "@astrojs/starlight/components";
-import Terminal from "../../../components/Terminal.astro";
+import Terminal from "../../../../components/Terminal.astro";
 
 export const deployOutput = `[u]Plan[/u]: [g]2 to create[/g]
 
@@ -24,9 +24,14 @@ Proceed?
 This guide walks you through defining a Container, implementing its
 runtime, and starting it from a Durable Object.
 
+Containers are the one case where the class (Tag) and `.make()` (Layer)
+must live in separate files. Since a Container must be bound to a Durable
+Object, the DO imports the class. If both shared a file, the DO's bundle
+would pull in all of the container's runtime dependencies. See
+[Effect vs Async](/concepts/effect-vs-async) for more on Tags and Layers.
+
 :::note
 For the full API reference, see the [Container provider](/providers/cloudflare/container).
-For why the layer pattern matters, see the [Platform concept](/concepts/platform).
 :::
 
 <Steps>
@@ -55,12 +60,8 @@ For why the layer pattern matters, see the [Platform concept](/concepts/platform
 
 2. **Implement the Runtime**
 
-   Containers are the one case where `.make()` must live in a separate
-   file. Since a Container must be bound to a Durable Object, the DO
-   imports the class to get a typed handle. If the class and `.make()`
-   shared a file, the DO's bundle would pull in all of the container's
-   runtime dependencies, bloating it and likely breaking the Workers
-   runtime.
+   The `.make()` call lives in a separate file so the DO's bundle
+   stays small.
 
    ```typescript
    // src/Sandbox.runtime.ts
@@ -144,9 +145,12 @@ If your container runs an HTTP server, use `getTcpPort` to get a
 fetch handle for a specific port:
 
 ```typescript
-const container = yield * Cloudflare.start(sandbox);
-const { fetch } = yield * container.getTcpPort(3000);
+Effect.gen(function* () {
+  const container = yield* Cloudflare.start(sandbox);
+  const { fetch } = yield* container.getTcpPort(3000);
 
-const response =
-  yield * fetch(HttpClientRequest.get("http://container/health"));
+  const response = yield* fetch(
+    HttpClientRequest.get("http://container/health"),
+  );
+});
 ```

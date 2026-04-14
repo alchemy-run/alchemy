@@ -1,8 +1,8 @@
 ---
-title: Async Lambda
+title: Lambda Function
 description: Deploy an AWS Lambda Function with a plain async handler — no Effect runtime required.
 sidebar:
-  order: 9
+  order: 2
 ---
 
 import { Steps } from "@astrojs/starlight/components";
@@ -14,7 +14,7 @@ declaratively.
 
 :::note
 For the Effect-based pattern with typed bindings, event sources, and
-Layer composition, see the [Effect Lambda guide](/guides/lambda).
+Layer composition, see the [Effect Lambda Function](/guides/effect/lambda-function) guide.
 :::
 
 ## How it works
@@ -69,22 +69,25 @@ environment.
 
 ```typescript
 // alchemy.run.ts
-const table =
-  yield *
-  AWS.DynamoDB.Table("UsersTable", {
-    partitionKey: "pk",
-    attributes: { pk: "S" },
-  });
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: AWS.providers() },
+  Effect.gen(function* () {
+    const table = yield* AWS.DynamoDB.Table("UsersTable", {
+      partitionKey: "pk",
+      attributes: { pk: "S" },
+    });
 
-const func =
-  yield *
-  AWS.Lambda.Function("ApiFunction", {
-    main: "./src/handler.ts",
-    url: true,
-    env: {
-      TABLE_NAME: table.tableName,
-    },
-  });
+    const func = yield* AWS.Lambda.Function("ApiFunction", {
+      main: "./src/handler.ts",
+      url: true,
+      env: {
+        TABLE_NAME: table.tableName,
+      },
+    });
+    return { url: func.functionUrl };
+  }),
+);
 ```
 
 ```typescript
@@ -112,7 +115,7 @@ export const handler = async (event: any) => {
 When using the `env` prop with async handlers, IAM permissions are not
 granted automatically — you'll need to ensure the Lambda execution role
 has the necessary permissions. For automatic IAM wiring, use the
-[Effect Lambda](/guides/lambda) pattern with typed bindings.
+[Effect Lambda Function](/guides/effect/lambda-function) pattern with typed bindings.
 :::
 
 ## Function URL
@@ -121,12 +124,12 @@ Set `url: true` to create a public Lambda function URL. The URL is
 available as `func.functionUrl` after deployment.
 
 ```typescript
-const func =
-  yield *
-  AWS.Lambda.Function("ApiFunction", {
+Effect.gen(function* () {
+  const func = yield* AWS.Lambda.Function("ApiFunction", {
     main: "./src/handler.ts",
     url: true,
   });
+});
 ```
 
 ## VPC connectivity
@@ -135,13 +138,13 @@ Attach a function to a VPC for private connectivity to resources like
 RDS or ElastiCache.
 
 ```typescript
-const func =
-  yield *
-  AWS.Lambda.Function("VpcFunction", {
+Effect.gen(function* () {
+  const func = yield* AWS.Lambda.Function("VpcFunction", {
     main: "./src/handler.ts",
     vpc: {
       subnetIds: ["subnet-abc123", "subnet-def456"],
       securityGroupIds: ["sg-xyz789"],
     },
   });
+});
 ```

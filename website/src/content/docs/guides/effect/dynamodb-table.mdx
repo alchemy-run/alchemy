@@ -1,0 +1,226 @@
+---
+title: DynamoDB Table
+description: Create a DynamoDB Table, bind capabilities, subscribe to streams, and forward changes to sinks.
+sidebar:
+  order: 7
+---
+
+import { Steps } from "@astrojs/starlight/components";
+
+This guide walks through DynamoDB Table from creation to full
+event-driven architecture — bindings, streams, sinks, and Layers.
+
+:::note
+For the full API reference, see the [DynamoDB Table provider](/providers/aws/dynamodb/table).
+:::
+
+<Steps>
+
+1. **Create a Lambda Function with a DynamoDB Table**
+
+   Start with a Lambda Function that creates a table:
+
+   ```typescript
+   // src/Api.ts
+   import * as AWS from "alchemy/AWS";
+   import * as DynamoDB from "alchemy/AWS/DynamoDB";
+   import * as Effect from "effect/Effect";
+   import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+   export default class Api extends AWS.Lambda.Function<Api>()(
+     "Api",
+     { main: import.meta.filename, url: true },
+     Effect.gen(function* () {
+       const table = yield* DynamoDB.Table("UsersTable", {
+         partitionKey: "pk",
+         sortKey: "sk",
+         attributes: { pk: "S", sk: "S" },
+       });
+
+       return {
+         fetch: Effect.succeed(HttpServerResponse.text("OK")),
+       };
+     }),
+   ) {}
+   ```
+
+   For production, set `removalPolicy: "retain"` to prevent accidental
+   data loss on stack teardown.
+
+2. **Bind GetItem and PutItem**
+
+   Each `bind` call grants IAM access (`dynamodb:GetItem` on
+   `table.tableArn`) and returns a typed SDK wrapper:
+
+   ```diff lang="typescript"
+       Effect.gen(function* () {
+         const table = yield* DynamoDB.Table("UsersTable", {
+           partitionKey: "pk",
+           sortKey: "sk",
+           attributes: { pk: "S", sk: "S" },
+         });
+   +     const getItem = yield* DynamoDB.GetItem.bind(table);
+   +     const putItem = yield* DynamoDB.PutItem.bind(table);
+
+         return {
+           fetch: Effect.succeed(HttpServerResponse.text("OK")),
+         };
+       }),
+   ```
+
+3. **Use bindings in the handler**
+
+   Replace the static response with a handler that reads and writes
+   items:
+
+   ```diff lang="typescript"
+         const getItem = yield* DynamoDB.GetItem.bind(table);
+         const putItem = yield* DynamoDB.PutItem.bind(table);
+
+         return {
+   -       fetch: Effect.succeed(HttpServerResponse.text("OK")),
+   +       fetch: Effect.gen(function* () {
+   +         yield* putItem({
+   +           Item: { pk: { S: "user#1" }, sk: { S: "profile" }, name: { S: "Alice" } },
+   +         });
+   +         const result = yield* getItem({
+   +           Key: { pk: { S: "user#1" }, sk: { S: "profile" } },
+   +         });
+   +         return yield* HttpServerResponse.json(result.Item);
+   +       }),
+         };
+       }),
+   ```
+
+4. **Add more capabilities**
+
+   Bind additional operations alongside GetItem and PutItem:
+
+   ```diff lang="typescript"
+         const getItem = yield* DynamoDB.GetItem.bind(table);
+         const putItem = yield* DynamoDB.PutItem.bind(table);
+   +     const deleteItem = yield* DynamoDB.DeleteItem.bind(table);
+   +     const query = yield* DynamoDB.Query.bind(table);
+
+         return {
+   ```
+
+   Use Query in a handler:
+
+   ```typescript
+   // inside fetch: Effect.gen(function* () { ... })
+   const result = yield* query({
+     KeyConditionExpression: "pk = :pk",
+     ExpressionAttributeValues: { ":pk": { S: "user#1" } },
+   });
+   ```
+
+5. **Subscribe to DynamoDB Streams**
+
+   Add a stream subscription in the init phase. The `.process()`
+   callback receives a typed `Stream` of change records:
+
+   ```diff lang="typescript"
+     export default class Api extends AWS.Lambda.Function<Api>()(
+       "Api",
+       { main: import.meta.filename, url: true },
+       Effect.gen(function* () {
+         const table = yield* DynamoDB.Table("UsersTable", { ... });
+         const getItem = yield* DynamoDB.GetItem.bind(table);
+         const putItem = yield* DynamoDB.PutItem.bind(table);
+
+   +     yield* DynamoDB.streams(table, {
+   +       StreamViewType: "NEW_AND_OLD_IMAGES",
+   +       startingPosition: "LATEST",
+   +       batchSize: 10,
+   +     }).process((stream) =>
+   +       stream.pipe(
+   +         Stream.tap((record) => Effect.log(JSON.stringify(record.dynamodb))),
+   +         Stream.runDrain,
+   +       ),
+   +     );
+
+         return {
+           fetch: Effect.gen(function* () {
+   ```
+
+   At deploy time this enables DynamoDB Streams on the table, grants
+   stream read IAM, and creates a Lambda event source mapping.
+
+6. **Forward changes to a Queue (Sink)**
+
+   Replace the log with a Sink that batches records into an SQS queue:
+
+   ```diff lang="typescript"
+   + import * as SQS from "alchemy/AWS/SQS";
+
+     export default class Api extends AWS.Lambda.Function<Api>()(
+       "Api",
+       { main: import.meta.filename, url: true },
+       Effect.gen(function* () {
+         const table = yield* DynamoDB.Table("UsersTable", { ... });
+         const getItem = yield* DynamoDB.GetItem.bind(table);
+         const putItem = yield* DynamoDB.PutItem.bind(table);
+   +     const queue = yield* SQS.Queue("ChangesQueue");
+   +     const sink = yield* SQS.QueueSink.bind(queue);
+
+         yield* DynamoDB.streams(table, {
+           StreamViewType: "NEW_AND_OLD_IMAGES",
+         }).process((stream) =>
+           stream.pipe(
+   -         Stream.tap((record) => Effect.log(JSON.stringify(record.dynamodb))),
+   -         Stream.runDrain,
+   +         Stream.map((record) => JSON.stringify(record.dynamodb)),
+   +         Stream.run(sink),
+           ),
+         );
+
+         return {
+           fetch: Effect.gen(function* () {
+   ```
+
+7. **Encapsulate as a Layer**
+
+   Extract the table, bindings, and stream processing into a reusable
+   service. See the [Layers guide](/guides/effect/layers) for the full
+   pattern.
+
+   ```typescript
+   // src/UserStore.ts
+   import * as Context from "effect/Context";
+   import * as Layer from "effect/Layer";
+
+   class UserStore extends Context.Service<
+     UserStore,
+     {
+       putUser(user: User): Effect.Effect<User>;
+       getUser(id: string): Effect.Effect<User | undefined>;
+     }
+   >()("UserStore") {}
+
+   const UserStoreLive = Layer.effect(
+     UserStore,
+     Effect.gen(function* () {
+       const table = yield* DynamoDB.Table("UsersTable", {
+         partitionKey: "pk",
+         sortKey: "sk",
+         attributes: { pk: "S", sk: "S" },
+       });
+       const getItem = yield* DynamoDB.GetItem.bind(table);
+       const putItem = yield* DynamoDB.PutItem.bind(table);
+
+       return UserStore.of({
+         putUser: (user) =>
+           putItem({
+             Item: { pk: { S: user.id }, sk: { S: "profile" }, name: { S: user.name } },
+           }).pipe(Effect.as(user)),
+         getUser: (id) =>
+           getItem({ Key: { pk: { S: id }, sk: { S: "profile" } } }).pipe(
+             Effect.map((r) => r.Item ? parseUser(r.Item) : undefined),
+           ),
+       });
+     }),
+   );
+   ```
+
+</Steps>

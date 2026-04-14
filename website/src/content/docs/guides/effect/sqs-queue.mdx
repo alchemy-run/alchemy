@@ -1,0 +1,176 @@
+---
+title: SQS Queue
+description: Create an SQS Queue, send messages, consume with event sources, and use as a sink.
+sidebar:
+  order: 8
+---
+
+import { Steps } from "@astrojs/starlight/components";
+
+This guide walks through SQS Queue from creation through sending,
+consuming, and using queues as sinks in streaming pipelines.
+
+:::note
+For the full API reference, see the [SQS Queue provider](/providers/aws/sqs/queue).
+:::
+
+<Steps>
+
+1. **Create a Lambda Function with an SQS Queue**
+
+   Start with a Lambda Function that creates a queue:
+
+   ```typescript
+   // src/Api.ts
+   import * as AWS from "alchemy/AWS";
+   import * as SQS from "alchemy/AWS/SQS";
+   import * as Effect from "effect/Effect";
+   import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+   export default class Api extends AWS.Lambda.Function<Api>()(
+     "Api",
+     { main: import.meta.filename, url: true },
+     Effect.gen(function* () {
+       const queue = yield* SQS.Queue("JobsQueue", {
+         visibilityTimeout: 30,
+       });
+
+       return {
+         fetch: Effect.succeed(HttpServerResponse.text("OK")),
+       };
+     }),
+   ) {}
+   ```
+
+2. **Bind SendMessage**
+
+   Bind the SendMessage capability to get a typed wrapper with
+   automatic IAM permissions:
+
+   ```diff lang="typescript"
+       Effect.gen(function* () {
+         const queue = yield* SQS.Queue("JobsQueue", {
+           visibilityTimeout: 30,
+         });
+   +     const sendMessage = yield* SQS.SendMessage.bind(queue);
+
+         return {
+           fetch: Effect.succeed(HttpServerResponse.text("OK")),
+         };
+       }),
+   ```
+
+3. **Use it in the handler**
+
+   Replace the static response with a handler that sends messages:
+
+   ```diff lang="typescript"
+         const sendMessage = yield* SQS.SendMessage.bind(queue);
+
+         return {
+   -       fetch: Effect.succeed(HttpServerResponse.text("OK")),
+   +       fetch: Effect.gen(function* () {
+   +         yield* sendMessage({
+   +           MessageBody: JSON.stringify({ jobId: "123", action: "process" }),
+   +         });
+   +         return HttpServerResponse.text("Queued");
+   +       }),
+         };
+       }),
+   ```
+
+4. **Add batch sending**
+
+   Bind `SendMessageBatch` for high-throughput scenarios:
+
+   ```diff lang="typescript"
+         const sendMessage = yield* SQS.SendMessage.bind(queue);
+   +     const sendBatch = yield* SQS.SendMessageBatch.bind(queue);
+
+         return {
+   ```
+
+5. **Consume messages (Event Source)**
+
+   Add an event source subscription in the init phase. Messages are
+   delivered as a typed `Stream`:
+
+   ```diff lang="typescript"
+     export default class Api extends AWS.Lambda.Function<Api>()(
+       "Api",
+       { main: import.meta.filename, url: true },
+       Effect.gen(function* () {
+         const queue = yield* SQS.Queue("JobsQueue", {
+           visibilityTimeout: 30,
+         });
+         const sendMessage = yield* SQS.SendMessage.bind(queue);
+
+   +     yield* SQS.messages(queue, {
+   +       batchSize: 10,
+   +     }).process((stream) =>
+   +       stream.pipe(
+   +         Stream.map((message) => JSON.parse(message.body)),
+   +         Stream.tap((job) => Effect.log(`Processing job: ${job.jobId}`)),
+   +         Stream.runDrain,
+   +       ),
+   +     );
+
+         return {
+           fetch: Effect.gen(function* () {
+   ```
+
+   At deploy time this creates a Lambda event source mapping that
+   polls the queue and invokes your function with batches of messages.
+
+6. **Use as a Sink**
+
+   Bind a `QueueSink` for use in streaming pipelines — for example,
+   piping DynamoDB stream changes into the queue:
+
+   ```diff lang="typescript"
+   + import * as DynamoDB from "alchemy/AWS/DynamoDB";
+
+     export default class Api extends AWS.Lambda.Function<Api>()(
+       "Api",
+       { main: import.meta.filename, url: true },
+       Effect.gen(function* () {
+         const queue = yield* SQS.Queue("JobsQueue");
+         const sendMessage = yield* SQS.SendMessage.bind(queue);
+   +     const sink = yield* SQS.QueueSink.bind(queue);
+   +     const table = yield* DynamoDB.Table("UsersTable", { ... });
+
+   +     yield* DynamoDB.streams(table, {
+   +       StreamViewType: "NEW_AND_OLD_IMAGES",
+   +     }).process((stream) =>
+   +       stream.pipe(
+   +         Stream.map((record) => JSON.stringify(record.dynamodb)),
+   +         Stream.run(sink),
+   +       ),
+   +     );
+
+         return {
+           fetch: Effect.gen(function* () {
+   ```
+
+   The sink automatically batches messages into `SendMessageBatch`
+   calls for efficiency.
+
+7. **Add a dead-letter queue**
+
+   Create a DLQ for messages that fail processing:
+
+   ```diff lang="typescript"
+       Effect.gen(function* () {
+   +     const dlq = yield* SQS.Queue("JobsDLQ");
+
+         const queue = yield* SQS.Queue("JobsQueue", {
+           visibilityTimeout: 30,
+   +       redrivePolicy: {
+   +         deadLetterTargetArn: dlq.queueArn,
+   +         maxReceiveCount: 3,
+   +       },
+         });
+         const sendMessage = yield* SQS.SendMessage.bind(queue);
+   ```
+
+</Steps>

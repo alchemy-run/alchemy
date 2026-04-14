@@ -1,0 +1,92 @@
+---
+title: Overview
+description: How Effect programs work in Alchemy — the two-phase pattern, what bind does, and a map of all guides.
+sidebar:
+  order: 0
+---
+
+Effect programs in Alchemy express infrastructure and runtime code as a
+single, connected program. If you haven't read [Effect vs Async](/concepts/effect-vs-async)
+yet, start there for the high-level mental model.
+
+## The two-phase pattern
+
+Every Effect program runs in two phases:
+
+1. **Init** (deploy time) — create resources, bind capabilities, wire
+   event sources. This code runs once when you deploy.
+2. **Runtime** (per request) — handle requests, process events, call
+   bound capabilities. This code runs on every invocation.
+
+```typescript
+Effect.gen(function* () {
+  // Phase 1: init — runs at deploy time
+  const table = yield* DynamoDB.Table("UsersTable", {
+    partitionKey: "pk",
+    attributes: { pk: "S" },
+  });
+  const getItem = yield* DynamoDB.GetItem.bind(table);
+  const putItem = yield* DynamoDB.PutItem.bind(table);
+
+  return {
+    // Phase 2: runtime — runs per request
+    fetch: Effect.gen(function* () {
+      const result = yield* getItem({ Key: { pk: { S: "user#1" } } });
+      return yield* HttpServerResponse.json(result.Item);
+    }),
+  };
+});
+```
+
+## What `bind` does
+
+Calling `bind` on a capability does two things simultaneously:
+
+1. **Deploy time** — attaches an IAM policy (AWS) or native binding
+   (Cloudflare) to the function, granting exactly the permissions
+   needed.
+2. **Runtime** — returns a typed SDK wrapper that you call in your
+   handlers.
+
+This is the core mechanic that makes Effect programs fully connected:
+the type system ensures you can't use a capability you didn't bind,
+and the permissions are always in sync with your code.
+
+## Guides
+
+### Compute
+
+- [Worker](/guides/effect/worker) — deploy a Cloudflare Worker with
+  Effect-native bindings
+- [Durable Object](/guides/effect/durable-object) — stateful objects with
+  RPC methods and WebSocket hibernation
+- [Container](/guides/effect/container) — long-lived processes with full
+  isolation alongside Durable Objects
+- [Dynamic Workers](/guides/effect/dynamic-workers) — multi-Worker composition
+  with typed RPC and tree-shaking
+- [Lambda Function](/guides/effect/lambda-function) — AWS Lambda with
+  Effect-native bindings
+
+### Composition
+
+- [Layers](/guides/effect/layers) — package resources and bindings into
+  reusable, swappable modules
+
+### Cloudflare Resources
+
+- [R2 Bucket](/guides/effect/r2-bucket) — object storage with Effect bindings
+- [D1 Database](/guides/effect/d1-database) — serverless SQLite with
+  Effect bindings
+- [KV Namespace](/guides/effect/kv-namespace) — key-value storage with
+  Effect bindings
+
+### AWS Resources
+
+- [DynamoDB Table](/guides/effect/dynamodb-table) — create tables, bind
+  GetItem/PutItem, subscribe to streams, forward to sinks
+- [SQS Queue](/guides/effect/sqs-queue) — create queues, send messages,
+  consume with event sources, use as sinks
+- [Kinesis Stream](/guides/effect/kinesis-stream) — create streams, put
+  records, consume with event sources
+- [SNS Topic](/guides/effect/sns-topic) — create topics, publish messages,
+  subscribe functions

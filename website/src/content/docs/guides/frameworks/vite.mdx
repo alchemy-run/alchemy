@@ -2,11 +2,11 @@
 title: Vite
 description: Deploy Vite-based SSR frameworks (TanStack Start, SolidStart, Nuxt, etc.) to Cloudflare.
 sidebar:
-  order: 4
+  order: 1
 ---
 
 import { Steps } from "@astrojs/starlight/components";
-import Terminal from "../../../components/Terminal.astro";
+import Terminal from "../../../../components/Terminal.astro";
 
 export const deployOutput = `[u]Plan[/u]: [g]1 to create[/g]
 
@@ -73,28 +73,26 @@ single-page application.
    SolidStart benefits from `runWorkerFirst` so the server handles
    routing before falling back to static assets:
 
-   ```typescript
-   yield *
-     Cloudflare.Vite("SolidStart", {
+   ```diff lang="typescript"
+     const app = yield* Cloudflare.Vite("App", {
        compatibility: { flags: ["nodejs_compat"] },
-       assets: {
-         config: { runWorkerFirst: true },
-       },
+   +   assets: {
+   +     config: { runWorkerFirst: true },
+   +   },
      });
    ```
 
    For SPAs (Vue, React, etc.), configure client-side routing:
 
-   ```typescript
-   yield *
-     Cloudflare.Vite("Vue", {
+   ```diff lang="typescript"
+     const app = yield* Cloudflare.Vite("App", {
        compatibility: { flags: ["nodejs_compat"] },
-       assets: {
-         config: {
-           htmlHandling: "auto-trailing-slash",
-           notFoundHandling: "single-page-application",
-         },
-       },
+   +   assets: {
+   +     config: {
+   +       htmlHandling: "auto-trailing-slash",
+   +       notFoundHandling: "single-page-application",
+   +     },
+   +   },
      });
    ```
 
@@ -107,12 +105,12 @@ single-page application.
    For large projects, narrow the scope with `memo.include` so only
    relevant files trigger rebuilds:
 
-   ```typescript
-   yield *
-     Cloudflare.Vite("Docs", {
-       memo: {
-         include: ["src/**", "content/**", "package.json"],
-       },
+   ```diff lang="typescript"
+     const app = yield* Cloudflare.Vite("App", {
+       compatibility: { flags: ["nodejs_compat"] },
+   +   memo: {
+   +     include: ["src/**", "content/**", "package.json"],
+   +   },
      });
    ```
 

@@ -33,8 +33,8 @@ platform layer handles _how_ it gets wired.
 Subscribe to change records from a DynamoDB table:
 
 ```typescript
-yield *
-  DynamoDB.stream(table, {
+Effect.gen(function* () {
+  yield* DynamoDB.stream(table, {
     streamViewType: "NEW_AND_OLD_IMAGES",
     startingPosition: "LATEST",
     batchSize: 10,
@@ -50,6 +50,7 @@ yield *
       Stream.run(sink),
     ),
   );
+});
 ```
 
 Behind the scenes:
@@ -79,8 +80,8 @@ Effect.provide(
 Subscribe to messages from an SQS queue:
 
 ```typescript
-yield *
-  SQS.messages(queue, {
+Effect.gen(function* () {
+  yield* SQS.messages(queue, {
     batchSize: 10,
   }).subscribe((stream) =>
     stream.pipe(
@@ -88,6 +89,7 @@ yield *
       Stream.runDrain,
     ),
   );
+});
 ```
 
 Same pattern: `SQS.messages()` is the service-level abstraction;

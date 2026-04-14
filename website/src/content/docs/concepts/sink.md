@@ -15,14 +15,15 @@ the target resource.
 Bind the sink in the init phase, then use it with `Stream.run`:
 
 ```typescript
-const sink = yield * SQS.QueueSink.bind(queue);
+Effect.gen(function* () {
+  const sink = yield* SQS.QueueSink.bind(queue);
 
-// drain a stream into the SQS queue
-yield *
-  stream.pipe(
+  // drain a stream into the SQS queue
+  yield* stream.pipe(
     Stream.map((record) => JSON.stringify(record)),
     Stream.run(sink),
   );
+});
 ```
 
 The sink handles batching automatically — `QueueSink` collects
@@ -36,11 +37,10 @@ A common pattern is to subscribe to change events from one resource
 and pipe them into another:
 
 ```typescript
-// subscribe to DynamoDB changes, forward to SQS
-const sink = yield * SQS.QueueSink.bind(queue);
+Effect.gen(function* () {
+  const sink = yield* SQS.QueueSink.bind(queue);
 
-yield *
-  DynamoDB.stream(table, {
+  yield* DynamoDB.stream(table, {
     streamViewType: "NEW_AND_OLD_IMAGES",
     startingPosition: "LATEST",
     batchSize: 10,
@@ -56,6 +56,7 @@ yield *
       Stream.run(sink),
     ),
   );
+});
 ```
 
 ## Available sinks

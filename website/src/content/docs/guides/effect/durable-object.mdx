@@ -2,11 +2,11 @@
 title: Durable Object
 description: Build stateful, globally unique objects with RPC methods and WebSocket hibernation.
 sidebar:
-  order: 7
+  order: 2
 ---
 
 import { Steps } from "@astrojs/starlight/components";
-import Terminal from "../../../components/Terminal.astro";
+import Terminal from "../../../../components/Terminal.astro";
 
 export const deployOutput = `[u]Plan[/u]: [g]1 to create[/g]
 
@@ -27,7 +27,7 @@ methods, and using it from a Worker.
 
 :::note
 For the full API reference, see the [DurableObjectNamespace provider](/providers/cloudflare/durableobjectnamespace).
-For effect and layer patterns, see the [Platform concept](/concepts/platform).
+For how Effect and Async styles differ, see [Effect vs Async](/concepts/effect-vs-async).
 :::
 
 <Steps>
@@ -166,15 +166,17 @@ Return a `fetch` handler that upgrades connections, and
    In your Worker, forward the upgrade request to the DO:
 
    ```typescript
-   const rooms = yield * Room;
+   Effect.gen(function* () {
+     const rooms = yield* Room;
 
-   return {
-     fetch: Effect.gen(function* () {
-       const request = yield* HttpServerRequest;
-       const room = rooms.getByName("lobby");
-       return yield* room.fetch(request);
-     }),
-   };
+     return {
+       fetch: Effect.gen(function* () {
+         const request = yield* HttpServerRequest;
+         const room = rooms.getByName("lobby");
+         return yield* room.fetch(request);
+       }),
+     };
+   });
    ```
 
 </Steps>

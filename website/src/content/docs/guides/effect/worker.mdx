@@ -1,17 +1,16 @@
 ---
-title: Effect Worker
+title: Worker
 description: Deploy a Cloudflare Worker with Effect-native bindings and request handling.
 sidebar:
-  order: 6
+  order: 1
 ---
 
 import { Steps } from "@astrojs/starlight/components";
-import Terminal from "../../../components/Terminal.astro";
+import Terminal from "../../../../components/Terminal.astro";
 
 export const deployOutput = `[u]Plan[/u]: [g]1 to create[/g]
 
-[g]+[/g] [b]Api[/b] [d](Cloudflare.Worker)[/d] [c](1 bindings)[/c]
-[s2][g]+[/g] [c]MyKV[/c]
+[g]+[/g] [b]Api[/b] [d](Cloudflare.Worker)[/d]
 
 Proceed?
 ◉ Yes ○ No
@@ -23,11 +22,11 @@ Proceed?
 }`;
 
 This guide walks you through creating and deploying a Cloudflare Worker
-with alchemy.
+with Effect-native bindings.
 
 :::note
+For the plain async handler pattern, see the [Async Worker](/guides/async/worker) guide.
 For the full API reference, see the [Worker provider](/providers/cloudflare/worker).
-For async, effect, and layer patterns, see the [Platform concept](/concepts/platform).
 :::
 
 <Steps>
@@ -54,30 +53,7 @@ For async, effect, and layer patterns, see the [Platform concept](/concepts/plat
    ) {}
    ```
 
-2. **Add resource bindings**
-
-   Bind KV, R2, Durable Objects, or other services in the init phase.
-   They become available to all runtime handlers.
-
-   ```typescript
-   Effect.gen(function* () {
-     // init — bind resources
-     const kv = yield* Cloudflare.KVNamespace.bind(MyKV);
-     const counters = yield* Counter;
-
-     return {
-       // runtime — use them
-       fetch: Effect.gen(function* () {
-         const value = yield* kv.get("key");
-         const counter = counters.getByName("default");
-         yield* counter.increment();
-         return HttpServerResponse.text(value ?? "no value");
-       }),
-     };
-   });
-   ```
-
-3. **Create the Stack**
+2. **Create the Stack**
 
    Wire the Worker into your `alchemy.run.ts` stack file.
 
@@ -98,7 +74,7 @@ For async, effect, and layer patterns, see the [Platform concept](/concepts/plat
    );
    ```
 
-4. **Deploy**
+3. **Deploy**
 
    ```sh
    alchemy deploy
@@ -107,3 +83,49 @@ For async, effect, and layer patterns, see the [Platform concept](/concepts/plat
    <Terminal content={deployOutput} />
 
 </Steps>
+
+## Binding another Worker (RPC)
+
+Workers can call each other's methods with typed RPC. Bind a sibling
+Worker in the init phase and call its methods at runtime:
+
+```typescript
+// src/Api.ts
+import WorkerB from "./WorkerB.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.path },
+  Effect.gen(function* () {
+    // init — bind the other Worker
+    const b = yield* Cloudflare.Worker.bind(WorkerB);
+
+    return {
+      // runtime — call its RPC methods
+      fetch: Effect.gen(function* () {
+        const greeting = yield* b.greet("world");
+        return HttpServerResponse.text(greeting);
+      }),
+    };
+  }),
+) {}
+```
+
+Importing WorkerB's class (its Tag) doesn't pull in WorkerB's runtime
+code — the bundler tree-shakes the `.make()` implementation. See the
+[Dynamic Workers](/guides/effect/dynamic-workers) guide for
+bi-directional binding.
+
+## Adding resource bindings
+
+Resources like R2, D1, KV, and Durable Objects are bound in the init
+phase and used at runtime. Each has its own guide:
+
+- [R2 Bucket](/guides/effect/r2-bucket) — object storage with
+  Effect bindings
+- [D1 Database](/guides/effect/d1-database) — serverless SQLite with
+  Effect bindings
+- [KV Namespace](/guides/effect/kv-namespace) — key-value storage
+  with Effect bindings
+- [Durable Object](/guides/effect/durable-object) — stateful objects
+  with RPC, WebSocket hibernation, and Effect bindings

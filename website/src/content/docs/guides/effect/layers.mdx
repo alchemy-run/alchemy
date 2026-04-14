@@ -2,23 +2,24 @@
 title: Layers
 description: Package resources and bindings into reusable Effect Layers that can be swapped between implementations.
 sidebar:
-  order: 11
+  order: 6
 ---
 
 import { Steps } from "@astrojs/starlight/components";
 
 Layers let you package resources, bindings, and event sources behind
-an Effect service interface. This separates the contract from the
-implementation — you can swap DynamoDB for S3 or an in-memory store
-without changing any consumer code.
+an Effect service interface — a Tag. This separates the contract from
+the implementation so you can swap DynamoDB for S3 or an in-memory
+store without changing any consumer code.
 
-This guide uses a Lambda Function example, but the same pattern works
-with Cloudflare Workers.
+If you're new to Tags and Layers, read [Effect vs Async](/concepts/effect-vs-async)
+first. This guide uses a Lambda Function example, but the same pattern
+works with Cloudflare Workers.
 
 ## Define a service interface
 
 Start by defining the business contract as an Effect `Context.Service`.
-This is pure types — no infrastructure, no SDK imports.
+This is the Tag — pure types, no infrastructure, no SDK imports.
 
 ```typescript
 // src/JobStorage.ts
@@ -131,7 +132,7 @@ export default class Api extends AWS.Lambda.Function<Api>()(
 
 ## Swap implementations
 
-Because the Function depends on `JobStorage` (the interface), you can
+Because the Function depends on `JobStorage` (the Tag), you can
 swap the backing implementation by changing one Layer:
 
 ```typescript

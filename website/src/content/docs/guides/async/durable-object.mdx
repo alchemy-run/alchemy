@@ -1,0 +1,188 @@
+---
+title: Durable Object
+description: Build stateful objects with RPC methods, SQLite storage, and hibernatable WebSockets.
+sidebar:
+  order: 3
+---
+
+import { Steps } from "@astrojs/starlight/components";
+import Terminal from "../../../../components/Terminal.astro";
+
+export const deployOutput = `[u]Plan[/u]: [g]1 to create[/g]
+
+[g]+[/g] [b]Api[/b] [d](Cloudflare.Worker)[/d] [c](1 bindings)[/c]
+[s2][g]+[/g] [c]Counter[/c]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]Api[/b] [d](Cloudflare.Worker)[/d] [g]created[/g]
+[s2][d]• Uploading worker (11.40 KB) ...[/d]
+[s2][d]• Enabling workers.dev subdomain...[/d]
+{
+[s2]url: "https://myapp-api-dev-you-abc123.workers.dev",
+}`;
+
+Async Durable Objects use the standard Cloudflare `DurableObject` base
+class. You define the DO in your worker source file and reference it
+from the stack with `Cloudflare.DurableObjectNamespace`.
+
+:::note
+For Effect-native Durable Objects with typed RPC and Effect bindings,
+see the [Effect Durable Object](/guides/effect/durable-object) guide.
+:::
+
+<Steps>
+
+1. **Define the Durable Object**
+
+   Create a class that extends `DurableObject`. Public methods become
+   the RPC interface — callers get a fully typed stub.
+
+   ```typescript
+   // src/worker.ts
+   import { DurableObject } from "cloudflare:workers";
+   import type { WorkerEnv } from "../alchemy.run.ts";
+
+   export class Counter extends DurableObject {
+     private count = 0;
+
+     async increment() {
+       this.count++;
+       return this.count;
+     }
+
+     async getCount() {
+       return this.count;
+     }
+   }
+   ```
+
+2. **Bind it to a Worker**
+
+   Reference the DO class in the Worker's `bindings`. The `<Counter>`
+   type parameter gives you typed RPC stubs.
+
+   ```typescript
+   // alchemy.run.ts
+   import type { Counter } from "./src/worker.ts";
+
+   export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
+
+   export const Worker = Cloudflare.Worker("Api", {
+     main: "./src/worker.ts",
+     bindings: {
+       Counter: Cloudflare.DurableObjectNamespace<Counter>("Counter", {
+         className: "Counter",
+       }),
+     },
+   });
+   ```
+
+3. **Call RPC methods from the Worker**
+
+   Use `getByName` or `getById` to get a stub, then call methods
+   directly — they're fully typed.
+
+   ```typescript
+   // src/worker.ts
+   export default {
+     async fetch(request: Request, env: WorkerEnv) {
+       const counter = env.Counter.getByName("my-counter");
+       const count = await counter.increment();
+       return Response.json({ count });
+     },
+   };
+   ```
+
+4. **Deploy**
+
+   ```sh
+   alchemy deploy
+   ```
+
+   <Terminal content={deployOutput} />
+
+</Steps>
+
+## SQLite storage
+
+Durable Objects have built-in SQLite via `this.ctx.storage.sql`. Use it
+for structured data that persists across requests:
+
+```typescript
+export class TodoList extends DurableObject {
+  constructor(ctx: DurableObjectState, env: any) {
+    super(ctx, env);
+    this.ctx.storage.sql.exec(`
+      CREATE TABLE IF NOT EXISTS todos (
+        id TEXT PRIMARY KEY,
+        text TEXT NOT NULL,
+        done INTEGER DEFAULT 0
+      )
+    `);
+  }
+
+  async addTodo(text: string) {
+    const id = crypto.randomUUID();
+    this.ctx.storage.sql.exec(
+      "INSERT INTO todos (id, text) VALUES (?, ?)",
+      id, text,
+    );
+    return { id, text, done: false };
+  }
+
+  async listTodos() {
+    return this.ctx.storage.sql
+      .exec("SELECT * FROM todos")
+      .toArray();
+  }
+}
+```
+
+## Hibernatable WebSockets
+
+Durable Objects support WebSocket hibernation — the DO can go idle
+between messages without losing the connection. Use
+`this.ctx.acceptWebSocket()` to upgrade and `webSocketMessage` /
+`webSocketClose` handlers for events:
+
+```typescript
+export class ChatRoom extends DurableObject {
+  async fetch(request: Request) {
+    const pair = new WebSocketPair();
+    this.ctx.acceptWebSocket(pair[1]);
+    return new Response(null, { status: 101, webSocket: pair[0] });
+  }
+
+  async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
+    const text = typeof message === "string"
+      ? message
+      : new TextDecoder().decode(message);
+
+    for (const client of this.ctx.getWebSockets()) {
+      if (client !== ws) {
+        client.send(text);
+      }
+    }
+  }
+
+  async webSocketClose(ws: WebSocket, code: number, reason: string) {
+    ws.close(code, reason);
+  }
+}
+```
+
+Forward WebSocket upgrades from the Worker:
+
+```typescript
+export default {
+  async fetch(request: Request, env: WorkerEnv) {
+    const url = new URL(request.url);
+    if (url.pathname === "/ws") {
+      const room = env.ChatRoom.getByName("lobby");
+      return room.fetch(request);
+    }
+    return new Response("Not found", { status: 404 });
+  },
+};
+```

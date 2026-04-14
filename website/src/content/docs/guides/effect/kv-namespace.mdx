@@ -1,0 +1,86 @@
+---
+title: KV Namespace
+description: Use Cloudflare KV key-value storage with Effect-native bindings.
+sidebar:
+  order: 15
+---
+
+import { Steps } from "@astrojs/starlight/components";
+import Terminal from "../../../../components/Terminal.astro";
+
+export const deployOutput = `[u]Plan[/u]: [g]2 to create[/g]
+
+[g]+[/g] [b]MyKV[/b] [d](Cloudflare.KVNamespace)[/d]
+[g]+[/g] [b]Api[/b] [d](Cloudflare.Worker)[/d] [c](1 bindings)[/c]
+[s2][g]+[/g] [c]MyKV[/c]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]MyKV[/b] [d](Cloudflare.KVNamespace)[/d] [g]created[/g]
+[g]✓[/g] [b]Api[/b] [d](Cloudflare.Worker)[/d] [g]created[/g]
+[s2][d]• Uploading worker (11.20 KB) ...[/d]
+{
+[s2]url: "https://myapp-api-dev-you-abc123.workers.dev",
+}`;
+
+KV is Cloudflare's global, low-latency key-value store. With Effect
+bindings, you get a typed wrapper with `get`, `put`, `list`, and
+`delete` operations.
+
+:::note
+For the full API reference, see the [KVNamespace provider](/providers/cloudflare/kvnamespace).
+:::
+
+<Steps>
+
+1. **Create a Worker with a KV Namespace**
+
+   Create the namespace, bind it in the init phase, and use it in
+   the `fetch` handler.
+
+   ```typescript
+   // src/Api.ts
+   import * as Cloudflare from "alchemy/Cloudflare";
+   import * as Effect from "effect/Effect";
+   import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+   import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+   const MyKV = Cloudflare.KVNamespace("MyKV");
+
+   export default class Api extends Cloudflare.Worker<Api>()(
+     "Api",
+     { main: import.meta.path },
+     Effect.gen(function* () {
+       const kv = yield* Cloudflare.KVNamespace.bind(MyKV);
+
+       return {
+         fetch: Effect.gen(function* () {
+           const request = yield* HttpServerRequest;
+           const url = new URL(request.url);
+           const key = url.pathname.slice(1);
+
+           if (request.method === "PUT") {
+             const body = yield* request.text;
+             yield* kv.put(key, body);
+             return HttpServerResponse.text("Stored", { status: 201 });
+           }
+
+           const value = yield* kv.get(key);
+           return value
+             ? HttpServerResponse.text(value)
+             : HttpServerResponse.text("Not found", { status: 404 });
+         }),
+       };
+     }),
+   ) {}
+   ```
+
+2. **Deploy**
+
+   ```sh
+   alchemy deploy
+   ```
+
+   <Terminal content={deployOutput} />
+
+</Steps>

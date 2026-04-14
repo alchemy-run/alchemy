@@ -1,0 +1,109 @@
+---
+title: D1 Database
+description: Use Cloudflare D1 serverless SQLite with an Async Worker.
+sidebar:
+  order: 5
+---
+
+import { Steps } from "@astrojs/starlight/components";
+import Terminal from "../../../../components/Terminal.astro";
+
+export const deployOutput = `[u]Plan[/u]: [g]2 to create[/g]
+
+[g]+[/g] [b]DB[/b] [d](Cloudflare.D1Database)[/d]
+[g]+[/g] [b]Api[/b] [d](Cloudflare.Worker)[/d] [c](1 bindings)[/c]
+[s2][g]+[/g] [c]DB[/c]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]DB[/b] [d](Cloudflare.D1Database)[/d] [g]created[/g]
+[g]✓[/g] [b]Api[/b] [d](Cloudflare.Worker)[/d] [g]created[/g]
+[s2][d]• Uploading worker (9.80 KB) ...[/d]
+{
+[s2]url: "https://myapp-api-dev-you-abc123.workers.dev",
+}`;
+
+D1 is Cloudflare's serverless SQLite database. Bind it to run SQL
+queries at the edge.
+
+:::note
+For the Effect-based D1 pattern, see the [Effect D1 Database](/guides/effect/d1-database) guide.
+For the full API reference, see the [D1Database provider](/providers/cloudflare/d1database).
+:::
+
+<Steps>
+
+1. **Create the D1 Database and bind it to a Worker**
+
+   ```typescript
+   // alchemy.run.ts
+   import * as Alchemy from "alchemy";
+   import * as Cloudflare from "alchemy/Cloudflare";
+   import * as Effect from "effect/Effect";
+
+   const DB = Cloudflare.D1Database("DB");
+
+   export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
+
+   export const Worker = Cloudflare.Worker("Api", {
+     main: "./src/worker.ts",
+     bindings: { DB },
+   });
+
+   export default Alchemy.Stack(
+     "MyApp",
+     { providers: Cloudflare.providers() },
+     Effect.gen(function* () {
+       const worker = yield* Worker;
+       return { url: worker.url };
+     }),
+   );
+   ```
+
+2. **Query the database**
+
+   Use `env.DB` with the standard D1 API — `prepare`, `batch`, `exec`,
+   and `dump`:
+
+   ```typescript
+   // src/worker.ts
+   import type { WorkerEnv } from "../alchemy.run.ts";
+
+   export default {
+     async fetch(request: Request, env: WorkerEnv) {
+       if (request.method === "POST") {
+         const { name, email } = await request.json();
+         await env.DB.prepare("INSERT INTO users (name, email) VALUES (?, ?)")
+           .bind(name, email)
+           .run();
+         return Response.json({ ok: true }, { status: 201 });
+       }
+
+       const { results } = await env.DB.prepare("SELECT * FROM users")
+         .all();
+       return Response.json(results);
+     },
+   };
+   ```
+
+3. **Deploy**
+
+   ```sh
+   alchemy deploy
+   ```
+
+   <Terminal content={deployOutput} />
+
+</Steps>
+
+## Batch queries
+
+Run multiple statements in a single round trip with `batch`:
+
+```typescript
+const results = await env.DB.batch([
+  env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(1),
+  env.DB.prepare("SELECT * FROM orders WHERE user_id = ?").bind(1),
+]);
+const [user, orders] = results;
+```

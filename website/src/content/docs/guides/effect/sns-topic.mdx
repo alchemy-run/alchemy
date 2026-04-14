@@ -1,0 +1,123 @@
+---
+title: SNS Topic
+description: Create an SNS Topic, publish messages, and subscribe functions.
+sidebar:
+  order: 10
+---
+
+import { Steps } from "@astrojs/starlight/components";
+
+This guide walks through SNS Topic from creation through publishing
+and subscribing Lambda functions.
+
+:::note
+For the full API reference, see the [SNS Topic provider](/providers/aws/sns/topic).
+:::
+
+<Steps>
+
+1. **Create a Lambda Function with an SNS Topic**
+
+   Start with a Lambda Function that creates a topic:
+
+   ```typescript
+   // src/Api.ts
+   import * as AWS from "alchemy/AWS";
+   import * as SNS from "alchemy/AWS/SNS";
+   import * as Effect from "effect/Effect";
+   import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+   export default class Api extends AWS.Lambda.Function<Api>()(
+     "Api",
+     { main: import.meta.filename, url: true },
+     Effect.gen(function* () {
+       const topic = yield* SNS.Topic("Notifications");
+
+       return {
+         fetch: Effect.succeed(HttpServerResponse.text("OK")),
+       };
+     }),
+   ) {}
+   ```
+
+2. **Bind Publish**
+
+   Bind the Publish capability to get a typed wrapper with automatic
+   IAM permissions:
+
+   ```diff lang="typescript"
+       Effect.gen(function* () {
+         const topic = yield* SNS.Topic("Notifications");
+   +     const publish = yield* SNS.Publish.bind(topic);
+
+         return {
+   -       fetch: Effect.succeed(HttpServerResponse.text("OK")),
+   +       fetch: Effect.gen(function* () {
+   +         yield* publish({
+   +           Message: JSON.stringify({
+   +             type: "order_placed",
+   +             orderId: "abc-123",
+   +           }),
+   +         });
+   +         return HttpServerResponse.text("Published");
+   +       }),
+         };
+       }),
+   ```
+
+3. **Subscribe a Lambda (Event Source)**
+
+   Add an event source subscription in the init phase. Messages are
+   delivered as a typed `Stream`:
+
+   ```diff lang="typescript"
+     export default class Api extends AWS.Lambda.Function<Api>()(
+       "Api",
+       { main: import.meta.filename, url: true },
+       Effect.gen(function* () {
+         const topic = yield* SNS.Topic("Notifications");
+         const publish = yield* SNS.Publish.bind(topic);
+
+   +     yield* SNS.messages(topic).process((stream) =>
+   +       stream.pipe(
+   +         Stream.map((message) => JSON.parse(message.Message)),
+   +         Stream.tap((event) => Effect.log(`Event: ${event.type}`)),
+   +         Stream.runDrain,
+   +       ),
+   +     );
+
+         return {
+           fetch: Effect.gen(function* () {
+             yield* publish({
+   ```
+
+4. **Fan-out to multiple subscribers**
+
+   A topic can have both Lambda and SQS subscribers. Add an SQS queue
+   alongside the Lambda subscription:
+
+   ```diff lang="typescript"
+   + import * as SQS from "alchemy/AWS/SQS";
+
+     export default class Api extends AWS.Lambda.Function<Api>()(
+       "Api",
+       { main: import.meta.filename, url: true },
+       Effect.gen(function* () {
+         const topic = yield* SNS.Topic("Notifications");
+         const publish = yield* SNS.Publish.bind(topic);
+   +     const archive = yield* SQS.Queue("NotificationArchive");
+
+         yield* SNS.messages(topic).process((stream) =>
+           stream.pipe(
+             Stream.tap((msg) => Effect.log(`Processing: ${msg.Message}`)),
+             Stream.runDrain,
+           ),
+         );
+
+   +     yield* SNS.subscribe(topic, archive);
+
+         return {
+           fetch: Effect.gen(function* () {
+   ```
+
+</Steps>

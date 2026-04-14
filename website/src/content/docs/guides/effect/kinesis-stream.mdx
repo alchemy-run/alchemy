@@ -1,0 +1,141 @@
+---
+title: Kinesis Stream
+description: Create a Kinesis Stream, put records, and consume with event sources.
+sidebar:
+  order: 9
+---
+
+import { Steps } from "@astrojs/starlight/components";
+
+This guide walks through Kinesis Stream from creation through writing
+records and consuming them with event sources.
+
+:::note
+For the full API reference, see the [Kinesis Stream provider](/providers/aws/kinesis/stream).
+:::
+
+<Steps>
+
+1. **Create a Lambda Function with a Kinesis Stream**
+
+   Start with a Lambda Function that creates a stream:
+
+   ```typescript
+   // src/Api.ts
+   import * as AWS from "alchemy/AWS";
+   import * as Kinesis from "alchemy/AWS/Kinesis";
+   import * as Effect from "effect/Effect";
+   import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+   export default class Api extends AWS.Lambda.Function<Api>()(
+     "Api",
+     { main: import.meta.filename, url: true },
+     Effect.gen(function* () {
+       const stream = yield* Kinesis.Stream("EventStream", {
+         shardCount: 1,
+       });
+
+       return {
+         fetch: Effect.succeed(HttpServerResponse.text("OK")),
+       };
+     }),
+   ) {}
+   ```
+
+2. **Bind PutRecord**
+
+   Bind the PutRecord capability to get a typed wrapper with automatic
+   IAM permissions:
+
+   ```diff lang="typescript"
+       Effect.gen(function* () {
+         const stream = yield* Kinesis.Stream("EventStream", {
+           shardCount: 1,
+         });
+   +     const putRecord = yield* Kinesis.PutRecord.bind(stream);
+
+         return {
+           fetch: Effect.succeed(HttpServerResponse.text("OK")),
+         };
+       }),
+   ```
+
+3. **Use it in the handler**
+
+   Replace the static response with a handler that writes records:
+
+   ```diff lang="typescript"
+         const putRecord = yield* Kinesis.PutRecord.bind(stream);
+
+         return {
+   -       fetch: Effect.succeed(HttpServerResponse.text("OK")),
+   +       fetch: Effect.gen(function* () {
+   +         yield* putRecord({
+   +           Data: new TextEncoder().encode(
+   +             JSON.stringify({ event: "page_view", url: "/home" }),
+   +           ),
+   +           PartitionKey: "user-123",
+   +         });
+   +         return HttpServerResponse.text("Recorded");
+   +       }),
+         };
+       }),
+   ```
+
+4. **Consume records (Event Source)**
+
+   Add an event source subscription in the init phase. Records are
+   delivered as a typed `Stream`:
+
+   ```diff lang="typescript"
+     export default class Api extends AWS.Lambda.Function<Api>()(
+       "Api",
+       { main: import.meta.filename, url: true },
+       Effect.gen(function* () {
+         const stream = yield* Kinesis.Stream("EventStream", {
+           shardCount: 1,
+         });
+         const putRecord = yield* Kinesis.PutRecord.bind(stream);
+
+   +     yield* Kinesis.records(stream, {
+   +       batchSize: 100,
+   +       startingPosition: "LATEST",
+   +     }).process((recordStream) =>
+   +       recordStream.pipe(
+   +         Stream.map((record) => {
+   +           const data = new TextDecoder().decode(record.data);
+   +           return JSON.parse(data);
+   +         }),
+   +         Stream.tap((event) => Effect.log(`Event: ${event.event}`)),
+   +         Stream.runDrain,
+   +       ),
+   +     );
+
+         return {
+           fetch: Effect.gen(function* () {
+   ```
+
+   At deploy time this creates a Lambda event source mapping that
+   polls the Kinesis stream and invokes your function with batches
+   of records.
+
+5. **Use as a Sink**
+
+   Bind a `StreamSink` for use in streaming pipelines:
+
+   ```diff lang="typescript"
+         const putRecord = yield* Kinesis.PutRecord.bind(stream);
+   +     const sink = yield* Kinesis.StreamSink.bind(stream);
+   ```
+
+   Then pipe a stream into it from the init phase:
+
+   ```typescript
+   // inside Effect.gen(function* () { ... })
+   yield* someSource.pipe(
+     Stream.map((item) => JSON.stringify(item)),
+     Stream.run(sink),
+   );
+   ```
+
+</Steps>

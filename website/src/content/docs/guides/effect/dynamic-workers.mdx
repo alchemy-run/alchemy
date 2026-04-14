@@ -1,0 +1,157 @@
+---
+title: Dynamic Workers
+description: Compose multiple Cloudflare Workers with typed RPC and tree-shaking.
+sidebar:
+  order: 4
+---
+
+import { Steps } from "@astrojs/starlight/components";
+import Terminal from "../../../../components/Terminal.astro";
+
+export const deployOutput = `[u]Plan[/u]: [g]2 to create[/g]
+
+[g]+[/g] [b]WorkerA[/b] [d](Cloudflare.Worker)[/d] [c](1 bindings)[/c]
+[s2][g]+[/g] [c]WorkerB[/c]
+[g]+[/g] [b]WorkerB[/b] [d](Cloudflare.Worker)[/d]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]WorkerA[/b] [d](Cloudflare.Worker)[/d] [g]created[/g]
+[g]✓[/g] [b]WorkerB[/b] [d](Cloudflare.Worker)[/d] [g]created[/g]`;
+
+This guide shows how to compose multiple Workers with typed RPC. Each
+Worker gets its own bundle and scales independently, but they can call
+each other's methods with full type safety.
+
+This is where Tags and Layers — introduced in [Effect vs Async](/concepts/effect-vs-async) —
+become essential. Tags let Workers reference each other without pulling
+in each other's runtime code.
+
+<Steps>
+
+1. **Define two Workers with Tags**
+
+   Each Worker is a class (Tag) + `.make()` (Layer) in one file. The
+   class declares the RPC shape. `.make()` provides the runtime.
+
+   ```typescript
+   // src/WorkerB.ts
+   import * as Cloudflare from "alchemy/Cloudflare";
+   import * as Effect from "effect/Effect";
+
+   export default class WorkerB extends Cloudflare.Worker<
+     WorkerB,
+     { greet: (name: string) => Effect.Effect<string> }
+   >()("WorkerB", { main: import.meta.path }) {}
+
+   export default WorkerB.make(
+     Effect.gen(function* () {
+       return {
+         greet: (name: string) => Effect.succeed(`Hello ${name}!`),
+       };
+     }),
+   );
+   ```
+
+2. **Bind one Worker to another**
+
+   WorkerA imports WorkerB's class and binds it. The bundler strips
+   `.make()` from WorkerA's bundle — only the class (Tag) crosses the
+   boundary.
+
+   ```typescript
+   // src/WorkerA.ts
+   import * as Cloudflare from "alchemy/Cloudflare";
+   import * as Effect from "effect/Effect";
+   import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+   import WorkerB from "./WorkerB.ts";
+
+   export default class WorkerA extends Cloudflare.Worker<WorkerA>()(
+     "WorkerA",
+     { main: import.meta.path },
+     Effect.gen(function* () {
+       const b = yield* Cloudflare.Worker.bind(WorkerB);
+
+       return {
+         fetch: Effect.gen(function* () {
+           const greeting = yield* b.greet("world");
+           return HttpServerResponse.text(greeting);
+         }),
+       };
+     }),
+   ) {}
+   ```
+
+3. **Bi-directional binding**
+
+   Both Workers can bind each other. Each imports the other's class.
+   Neither includes the other's runtime code because Tags carry no
+   implementation.
+
+   ```typescript
+   // src/WorkerA.ts — also declares an RPC shape
+   export default class WorkerA extends Cloudflare.Worker<
+     WorkerA,
+     { process: (data: string) => Effect.Effect<string> }
+   >()("WorkerA", { main: import.meta.path }) {}
+
+   export default WorkerA.make(
+     Effect.gen(function* () {
+       const b = yield* Cloudflare.Worker.bind(WorkerB);
+
+       return {
+         fetch: Effect.gen(function* () {
+           const greeting = yield* b.greet("world");
+           return HttpServerResponse.text(greeting);
+         }),
+         process: (data: string) => Effect.succeed(`processed: ${data}`),
+       };
+     }),
+   );
+   ```
+
+   ```typescript
+   // src/WorkerB.ts — binds WorkerA
+   export default WorkerB.make(
+     Effect.gen(function* () {
+       const a = yield* Cloudflare.Worker.bind(WorkerA);
+
+       return {
+         greet: (name: string) =>
+           Effect.gen(function* () {
+             const result = yield* a.process(name);
+             return `Hello ${result}!`;
+           }),
+       };
+     }),
+   );
+   ```
+
+4. **Deploy**
+
+   Both Workers are deployed together in one stack.
+
+   ```typescript
+   // alchemy.run.ts
+   import * as Alchemy from "alchemy";
+   import * as Cloudflare from "alchemy/Cloudflare";
+   import * as Effect from "effect/Effect";
+   import WorkerA from "./src/WorkerA.ts";
+
+   export default Alchemy.Stack(
+     "MyApp",
+     { providers: Cloudflare.providers() },
+     Effect.gen(function* () {
+       const a = yield* WorkerA;
+       return { url: a.url };
+     }),
+   );
+   ```
+
+   ```sh
+   alchemy deploy
+   ```
+
+   <Terminal content={deployOutput} />
+
+</Steps>

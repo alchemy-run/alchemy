@@ -40,8 +40,30 @@ export default defineConfig({
         },
         {
           label: "Guides",
-          autogenerate: { directory: "guides" },
-          collapsed: true,
+          items: [
+            { label: "Migrating from v1", link: "/guides/migrating-from-v1" },
+            {
+              label: "Plan, Deploy and Destroy",
+              link: "/guides/plan-deploy-destroy",
+            },
+            { label: "Continuous Integration", link: "/guides/ci" },
+            { label: "Testing", link: "/guides/testing" },
+            {
+              label: "Effect",
+              autogenerate: { directory: "guides/effect" },
+              collapsed: true,
+            },
+            {
+              label: "Async",
+              autogenerate: { directory: "guides/async" },
+              collapsed: true,
+            },
+            {
+              label: "Frameworks",
+              autogenerate: { directory: "guides/frameworks" },
+              collapsed: true,
+            },
+          ],
         },
         {
           label: "Providers",

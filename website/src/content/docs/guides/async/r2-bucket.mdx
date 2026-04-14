@@ -1,0 +1,101 @@
+---
+title: R2 Bucket
+description: Use Cloudflare R2 object storage with an Async Worker.
+sidebar:
+  order: 4
+---
+
+import { Steps } from "@astrojs/starlight/components";
+import Terminal from "../../../../components/Terminal.astro";
+
+export const deployOutput = `[u]Plan[/u]: [g]2 to create[/g]
+
+[g]+[/g] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d]
+[g]+[/g] [b]Api[/b] [d](Cloudflare.Worker)[/d] [c](1 bindings)[/c]
+[s2][g]+[/g] [c]Bucket[/c]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d] [g]created[/g]
+[g]✓[/g] [b]Api[/b] [d](Cloudflare.Worker)[/d] [g]created[/g]
+[s2][d]• Uploading worker (10.30 KB) ...[/d]
+{
+[s2]url: "https://myapp-api-dev-you-abc123.workers.dev",
+}`;
+
+R2 provides zero-egress-fee object storage with an S3-compatible API.
+
+:::note
+For the Effect-based R2 pattern, see the [Effect R2 Bucket](/guides/effect/r2-bucket) guide.
+For the full API reference, see the [R2Bucket provider](/providers/cloudflare/r2bucket).
+:::
+
+<Steps>
+
+1. **Create the R2 Bucket and bind it to a Worker**
+
+   ```typescript
+   // alchemy.run.ts
+   import * as Alchemy from "alchemy";
+   import * as Cloudflare from "alchemy/Cloudflare";
+   import * as Effect from "effect/Effect";
+
+   const Bucket = Cloudflare.R2Bucket("Bucket");
+
+   export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
+
+   export const Worker = Cloudflare.Worker("Api", {
+     main: "./src/worker.ts",
+     bindings: { Bucket },
+   });
+
+   export default Alchemy.Stack(
+     "MyApp",
+     { providers: Cloudflare.providers() },
+     Effect.gen(function* () {
+       const worker = yield* Worker;
+       return { url: worker.url };
+     }),
+   );
+   ```
+
+2. **Read and write objects**
+
+   The `env.Bucket` binding exposes the standard R2 API — `get`, `put`,
+   `delete`, `list`, and `head`:
+
+   ```typescript
+   // src/worker.ts
+   import type { WorkerEnv } from "../alchemy.run.ts";
+
+   export default {
+     async fetch(request: Request, env: WorkerEnv) {
+       const url = new URL(request.url);
+       const key = url.pathname.slice(1);
+
+       if (request.method === "PUT") {
+         await env.Bucket.put(key, request.body);
+         return new Response("Created", { status: 201 });
+       }
+
+       const object = await env.Bucket.get(key);
+       if (!object) {
+         return new Response("Not found", { status: 404 });
+       }
+
+       return new Response(object.body, {
+         headers: { "content-type": object.httpMetadata?.contentType ?? "application/octet-stream" },
+       });
+     },
+   };
+   ```
+
+3. **Deploy**
+
+   ```sh
+   alchemy deploy
+   ```
+
+   <Terminal content={deployOutput} />
+
+</Steps>

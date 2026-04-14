@@ -1,0 +1,220 @@
+---
+title: Effect vs Async
+description: Understand the two ways to write programs with Alchemy — Effect for fully connected cloud programs, or Async for plain handlers with declarative infrastructure.
+sidebar:
+  order: 6
+---
+
+import { Steps } from "@astrojs/starlight/components";
+
+Alchemy is an Infrastructure-as-Effects (IaE) framework — a superset of
+Infrastructure-as-Code. Traditional IaC tools define infrastructure in
+config files and application code separately. Alchemy combines both into
+a single TypeScript program where you `yield*` a DynamoDB Table, bind
+`GetItem` to it, and call `getItem(...)` in your request handler — all in
+one expression.
+
+There are two ways to write programs with Alchemy. You pick one per
+function or worker, and they can coexist in the same stack.
+
+## Async
+
+Your handler file is a plain `async` function. Alchemy bundles and
+deploys it without modification. Infrastructure is declared in
+`alchemy.run.ts` and connected via typed environment variables —
+`InferEnv` on Cloudflare, `env` prop on Lambda. You use the platform's
+native SDK at runtime.
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+
+const Bucket = Cloudflare.R2Bucket("Bucket");
+
+export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
+
+export const Worker = Cloudflare.Worker("Api", {
+  main: "./src/worker.ts",
+  bindings: { Bucket },
+});
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Cloudflare.providers() },
+  Effect.gen(function* () {
+    const worker = yield* Worker;
+    return { url: worker.url };
+  }),
+);
+```
+
+```typescript
+// src/worker.ts
+import type { WorkerEnv } from "../alchemy.run.ts";
+
+export default {
+  async fetch(request: Request, env: WorkerEnv) {
+    const object = await env.Bucket.get("my-key");
+    return new Response(object?.body ?? null);
+  },
+};
+```
+
+No Effect runtime is included in the bundle. This is familiar to anyone
+who has written a Cloudflare Worker or AWS Lambda before.
+
+## Effect
+
+Your handler is an `Effect.gen` that runs in two phases. The **init**
+phase creates resources and binds capabilities at deploy time. The
+**runtime** phase handles requests using those bindings. Alchemy wires
+the full Effect runtime into the bundle.
+
+```typescript
+// src/Api.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+const Bucket = Cloudflare.R2Bucket("Bucket");
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.path },
+  Effect.gen(function* () {
+    // init — bind resources at deploy time
+    const r2 = yield* Cloudflare.R2Bucket.bind(Bucket);
+
+    return {
+      // runtime — use them per request
+      fetch: Effect.gen(function* () {
+        const object = yield* r2.get("my-key");
+        return HttpServerResponse.text(object?.body ?? "not found");
+      }),
+    };
+  }),
+) {}
+```
+
+Infrastructure and runtime are one expression. The type system ensures
+you can't use a binding you didn't create. Errors, retries, and
+composition are all typed.
+
+## Tags: decoupling without polluting bundles
+
+Every Effect program is bundled into the platform it runs on — a Worker,
+a Container, a Lambda. When one program binds another, it needs a
+reference to it. If that reference carries runtime code, the bundler
+pulls in everything the other program depends on. Tags solve this.
+
+A **Tag** is a class that declares a program's identity and RPC shape
+but carries no runtime implementation. The implementation lives in a
+separate `.make()` call that the bundler can tree-shake away.
+
+### Worker binding a Container
+
+A Container runs in a separate process from the Durable Object that
+manages it. The DO imports the Container's class to get a typed handle.
+If the class included the Container's runtime code, the DO's bundle
+would pull in process spawners, Node APIs, and anything else the
+Container uses — breaking the Workers runtime.
+
+The Tag/`.make()` split keeps them isolated:
+
+```typescript
+// src/Sandbox.ts — the Tag (imported by the DO)
+export class Sandbox extends Cloudflare.Container<
+  Sandbox,
+  { exec: (cmd: string) => Effect.Effect<{ stdout: string }> }
+>()("Sandbox", { main: import.meta.filename }) {}
+```
+
+```typescript
+// src/Sandbox.runtime.ts — the .make() (bundled into the Container process)
+export default Sandbox.make(
+  Effect.gen(function* () {
+    return Sandbox.of({
+      exec: (cmd) => Effect.succeed({ stdout: `ran: ${cmd}` }),
+    });
+  }),
+);
+```
+
+The DO imports `Sandbox` (the Tag) — a few lines with no dependencies.
+The `.make()` and everything it references stay out of the DO's bundle.
+
+### Worker binding a Worker
+
+When WorkerA calls WorkerB, the same pattern applies. WorkerB is
+defined as a Tag + `.make()` in one file. WorkerA imports the class;
+the bundler strips `.make()`.
+
+```typescript
+// src/WorkerB.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+
+// Tag — declares the RPC shape, no runtime code
+export default class WorkerB extends Cloudflare.Worker<
+  WorkerB,
+  { greet: (name: string) => Effect.Effect<string> }
+>()("WorkerB", { main: import.meta.path }) {}
+
+// .make() — provides the runtime, tree-shaken from consumers
+export default WorkerB.make(
+  Effect.gen(function* () {
+    return {
+      greet: (name: string) => Effect.succeed(`Hello ${name}`),
+    };
+  }),
+);
+```
+
+### Bi-directional Worker binding
+
+WorkerA and WorkerB can call each other. Both are Tags. Each imports
+the other's class — neither includes the other's runtime code.
+
+This is only possible because Tags carry no implementation. Without
+them, circular imports would pull each Worker's entire dependency tree
+into the other's bundle.
+
+See the [Dynamic Workers](/guides/effect/dynamic-workers) guide for the full
+bi-directional example.
+
+## Context.Service and Layers
+
+Tags also power a higher-level pattern: packaging infrastructure and
+bindings into reusable, swappable modules. You define a
+`Context.Service` (the interface), implement it with a `Layer` (which
+creates resources and binds capabilities), and provide it to any
+Function or Worker.
+
+This lets you swap DynamoDB for S3, or a real implementation for a test
+stub, by changing one line. See the [Layers](/guides/effect/layers) guide for
+the full walkthrough.
+
+## When to use which
+
+**Async** bundles your handler as-is — no Effect runtime. You use the
+platform's native SDK (Cloudflare Workers API, AWS SDK) directly. Alchemy
+still manages infrastructure declaratively, but bindings are connected
+via typed environment variables rather than `bind()`.
+
+**Effect** makes infrastructure and runtime a single connected program.
+`bind()` grants permissions and returns typed SDK wrappers automatically.
+Event sources, sinks, streaming pipelines, and Layers for swappable
+implementations are all available. Tags enable cross-program bindings
+(Worker-to-Worker, Worker-to-Container) without polluting bundles.
+
+Both styles coexist in the same stack. An Async Worker can sit alongside
+an Effect Lambda in one deployment.
+
+## Next steps
+
+- [Effect Overview](/guides/effect/overview) — the two-phase pattern in detail,
+  what `bind` does, and a map of all Effect guides
+- [Async Overview](/guides/async/overview) — how bindings work without the
+  Effect runtime, and what trade-offs you're making

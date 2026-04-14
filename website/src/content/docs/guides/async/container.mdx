@@ -1,0 +1,15 @@
+---
+title: Container
+description: Why Containers require the Effect runtime.
+sidebar:
+  order: 4
+---
+
+Containers require the Effect runtime for typed RPC and lifecycle
+management. The Container's class (Tag) declares the RPC shape, and
+`.make()` (Layer) provides the runtime implementation. This Tag/Layer
+split is mandatory because the Container process runs in a different
+runtime than the Durable Object that binds it.
+
+There is no Async variant for Containers. See the
+[Effect Container](/guides/effect/container) guide for the full walkthrough.

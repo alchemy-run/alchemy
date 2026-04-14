@@ -1,0 +1,139 @@
+---
+title: Worker
+description: Deploy a Cloudflare Worker with a plain async fetch handler — no Effect runtime required.
+sidebar:
+  order: 1
+---
+
+import { Steps } from "@astrojs/starlight/components";
+import Terminal from "../../../../components/Terminal.astro";
+
+export const deployOutput = `[u]Plan[/u]: [g]1 to create[/g]
+
+[g]+[/g] [b]Api[/b] [d](Cloudflare.Worker)[/d]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]Api[/b] [d](Cloudflare.Worker)[/d] [g]created[/g]
+[s2][d]• Uploading worker (8.20 KB) ...[/d]
+[s2][d]• Enabling workers.dev subdomain...[/d]
+{
+[s2]url: "https://myapp-api-dev-you-abc123.workers.dev",
+}`;
+
+Async Workers let you write plain `async fetch` handlers — no Effect
+runtime in the bundle. Alchemy bundles and deploys your file as-is while
+still managing your infrastructure resources declaratively.
+
+:::note
+For the Effect-based Worker pattern, see the [Effect Worker](/guides/effect/worker) guide.
+For the full API reference, see the [Worker provider](/providers/cloudflare/worker).
+:::
+
+<Steps>
+
+1. **Create a Worker**
+
+   Declare the Worker in `alchemy.run.ts` with `main` pointing at your
+   handler file. Export a `WorkerEnv` type via `Cloudflare.InferEnv` so
+   your handler gets a fully typed `env` object.
+
+   ```typescript
+   // alchemy.run.ts
+   import * as Alchemy from "alchemy";
+   import * as Cloudflare from "alchemy/Cloudflare";
+   import * as Effect from "effect/Effect";
+
+   export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
+
+   export const Worker = Cloudflare.Worker("Api", {
+     main: "./src/worker.ts",
+   });
+
+   export default Alchemy.Stack(
+     "MyApp",
+     { providers: Cloudflare.providers() },
+     Effect.gen(function* () {
+       const worker = yield* Worker;
+       return { url: worker.url };
+     }),
+   );
+   ```
+
+2. **Write the handler**
+
+   ```typescript
+   // src/worker.ts
+   import type { WorkerEnv } from "../alchemy.run.ts";
+
+   export default {
+     async fetch(request: Request, env: WorkerEnv) {
+       return new Response("Hello!");
+     },
+   };
+   ```
+
+3. **Deploy**
+
+   ```sh
+   alchemy deploy
+   ```
+
+   <Terminal content={deployOutput} />
+
+</Steps>
+
+## Assets
+
+When you set the `assets` prop, Alchemy automatically adds an `ASSETS`
+binding to the environment. Use `env.ASSETS.fetch(request)` to serve
+static files:
+
+```typescript
+// alchemy.run.ts
+export const Worker = Cloudflare.Worker("Api", {
+  main: "./src/worker.ts",
+  assets: { directory: "./public" },
+});
+```
+
+```typescript
+// src/worker.ts
+export default {
+  async fetch(request: Request, env: WorkerEnv) {
+    const url = new URL(request.url);
+
+    if (url.pathname.startsWith("/api/")) {
+      return Response.json({ ok: true });
+    }
+
+    return env.ASSETS.fetch(request);
+  },
+};
+```
+
+## Environment variables
+
+Pass plain configuration values via the `env` prop. These are separate
+from `bindings` and appear directly on the `env` object:
+
+```diff lang="typescript"
+  export const Worker = Cloudflare.Worker("Api", {
+    main: "./src/worker.ts",
++   env: {
++     API_BASE_URL: "https://api.example.com",
++   },
+  });
+```
+
+Access them as `env.API_BASE_URL` in your handler.
+
+## Adding bindings
+
+Resources like R2, D1, KV, and Durable Objects are passed via the
+`bindings` prop. Each has its own guide:
+
+- [R2 Bucket](/guides/async/r2-bucket) — object storage
+- [D1 Database](/guides/async/d1-database) — serverless SQLite
+- [Durable Object](/guides/async/durable-object) — stateful objects
+  with RPC, SQLite, and WebSockets

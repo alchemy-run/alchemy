@@ -25,33 +25,47 @@ to the Worker's config. One binding = full access to every operation
 on that resource.
 
 ```typescript
-const kv = yield * Cloudflare.KVNamespace.bind(MyKV);
-// kv has get, put, list, delete, getWithMetadata ...
+Effect.gen(function* () {
+  // init — bind resources at deploy time
+  const kv = yield* Cloudflare.KVNamespace.bind(MyKV);
+  const bucket = yield* Cloudflare.R2Bucket.bind(MyBucket);
+  const db = yield* Cloudflare.D1Connection.bind(MyDB);
 
-const bucket = yield * Cloudflare.R2Bucket.bind(MyBucket);
-// bucket has get, put, delete, list, head, createMultipartUpload ...
-
-const db = yield * Cloudflare.D1Connection.bind(MyDB);
-// db has prepare, batch, dump, exec ...
+  return {
+    // runtime — use them per request
+    fetch: Effect.gen(function* () {
+      const value = yield* kv.get("key");
+      const object = yield* bucket.get("my-file");
+      const { results } = yield* db.prepare("SELECT * FROM users").all();
+      return HttpServerResponse.json(results);
+    }),
+  };
+});
 ```
 
-Durable Objects and Containers use the same pattern but with
-different entry points:
+Durable Objects, Worker RPC, and Containers follow the same
+init/runtime split:
 
 ```typescript
-// Durable Object — yield the class to get a namespace handle
-const counters = yield * Counter;
-const counter = counters.getByName("user-123");
-yield * counter.increment();
+Effect.gen(function* () {
+  // init — bind at deploy time
+  const counters = yield* Counter;
+  const other = yield* Cloudflare.Worker.bind(OtherWorker);
+  const sandbox = yield* Cloudflare.Container.bind(Sandbox);
 
-// Worker-to-Worker RPC
-const other = yield * Cloudflare.Worker.bind(OtherWorker);
-yield * other.someRpcMethod();
+  return {
+    // runtime — use them per request
+    fetch: Effect.gen(function* () {
+      const counter = counters.getByName("user-123");
+      yield* counter.increment();
 
-// Container
-const sandbox = yield * Cloudflare.Container.bind(Sandbox);
-const container = yield * Cloudflare.start(sandbox);
-yield * container.exec("echo hi");
+      yield* other.someRpcMethod();
+
+      const container = yield* Cloudflare.start(sandbox);
+      yield* container.exec("echo hi");
+    }),
+  };
+});
 ```
 
 ## AWS: granular IAM-scoped bindings
@@ -61,13 +75,20 @@ statement. You compose exactly the permissions your function needs —
 nothing more.
 
 ```typescript
-// each .bind() grants one IAM action on one resource
-const getItem = yield * DynamoDB.GetItem.bind(table);
-const putItem = yield * DynamoDB.PutItem.bind(table);
+Effect.gen(function* () {
+  // init — each .bind() grants one IAM action on one resource
+  const getItem = yield* DynamoDB.GetItem.bind(table);
+  const putItem = yield* DynamoDB.PutItem.bind(table);
 
-// use them at runtime
-const item = yield * getItem({ Key: { id: { S: "123" } } });
-yield * putItem({ Item: { id: { S: "456" }, name: { S: "Alice" } } });
+  return {
+    // runtime — use them per request
+    fetch: Effect.gen(function* () {
+      const item = yield* getItem({ Key: { id: { S: "123" } } });
+      yield* putItem({ Item: { id: { S: "456" }, name: { S: "Alice" } } });
+      return yield* HttpServerResponse.json(item);
+    }),
+  };
+});
 ```
 
 Behind the scenes, `GetItem.bind(table)` does two things:
@@ -81,18 +102,20 @@ Behind the scenes, `GetItem.bind(table)` does two things:
 The same pattern applies across all AWS services:
 
 ```typescript
-// S3
-const getObject = yield * S3.GetObject.bind(bucket);
-const putObject = yield * S3.PutObject.bind(bucket);
+Effect.gen(function* () {
+  // S3
+  const getObject = yield* S3.GetObject.bind(bucket);
+  const putObject = yield* S3.PutObject.bind(bucket);
 
-// SQS
-const sendMessage = yield * SQS.SendMessage.bind(queue);
+  // SQS
+  const sendMessage = yield* SQS.SendMessage.bind(queue);
 
-// Kinesis
-const putRecord = yield * Kinesis.PutRecord.bind(stream);
+  // Kinesis
+  const putRecord = yield* Kinesis.PutRecord.bind(stream);
 
-// SNS
-const publish = yield * SNS.Publish.bind(topic);
+  // SNS
+  const publish = yield* SNS.Publish.bind(topic);
+});
 ```
 
 ## Layer wiring
@@ -132,10 +155,10 @@ bind Worker B and Worker B can bind Worker A. This works because
 bindings attach data (policies, env vars) to the host via the Stack —
 they don't create direct import dependencies.
 
-To keep bundles small with circular bindings, use the
-[modular pattern](/concepts/platform#modular-style) so each
-Worker only imports the other's lightweight class, not its full
-implementation.
+To keep bundles small with circular bindings, use the Tag/Layer split
+so each Worker only imports the other's lightweight class (Tag), not
+its full implementation. See [Effect vs Async](/concepts/effect-vs-async) and
+the [Dynamic Workers](/guides/effect/dynamic-workers) guide.
 
 ## See also
 

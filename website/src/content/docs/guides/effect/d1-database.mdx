@@ -1,0 +1,102 @@
+---
+title: D1 Database
+description: Use Cloudflare D1 serverless SQLite with Effect-native bindings.
+sidebar:
+  order: 14
+---
+
+import { Steps } from "@astrojs/starlight/components";
+import Terminal from "../../../../components/Terminal.astro";
+
+export const deployOutput = `[u]Plan[/u]: [g]2 to create[/g]
+
+[g]+[/g] [b]DB[/b] [d](Cloudflare.D1Database)[/d]
+[g]+[/g] [b]Api[/b] [d](Cloudflare.Worker)[/d] [c](1 bindings)[/c]
+[s2][g]+[/g] [c]DB[/c]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]DB[/b] [d](Cloudflare.D1Database)[/d] [g]created[/g]
+[g]✓[/g] [b]Api[/b] [d](Cloudflare.Worker)[/d] [g]created[/g]
+[s2][d]• Uploading worker (11.80 KB) ...[/d]
+{
+[s2]url: "https://myapp-api-dev-you-abc123.workers.dev",
+}`;
+
+D1 is Cloudflare's serverless SQLite database. With Effect bindings,
+you get a typed `D1Connection` wrapper.
+
+:::note
+For the plain async pattern, see the [Async D1 Database](/guides/async/d1-database) guide.
+For the full API reference, see the [D1Database provider](/providers/cloudflare/d1database).
+:::
+
+<Steps>
+
+1. **Create a Worker with a D1 Database**
+
+   Create the database, bind it in the init phase, and query it in
+   the `fetch` handler.
+
+   ```typescript
+   // src/Api.ts
+   import * as Cloudflare from "alchemy/Cloudflare";
+   import * as Effect from "effect/Effect";
+   import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+   import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+   const DB = Cloudflare.D1Database("DB");
+
+   export default class Api extends Cloudflare.Worker<Api>()(
+     "Api",
+     { main: import.meta.path },
+     Effect.gen(function* () {
+       const db = yield* Cloudflare.D1Connection.bind(DB);
+
+       return {
+         fetch: Effect.gen(function* () {
+           const request = yield* HttpServerRequest;
+
+           if (request.method === "POST") {
+             const { name, email } = yield* request.json;
+             yield* db
+               .prepare("INSERT INTO users (name, email) VALUES (?, ?)")
+               .bind(name, email)
+               .run();
+             return yield* HttpServerResponse.json({ ok: true }, { status: 201 });
+           }
+
+           const { results } = yield* db.prepare("SELECT * FROM users").all();
+           return yield* HttpServerResponse.json(results);
+         }),
+       };
+     }),
+   ) {}
+   ```
+
+2. **Deploy**
+
+   ```sh
+   alchemy deploy
+   ```
+
+   <Terminal content={deployOutput} />
+
+</Steps>
+
+## Batch queries
+
+Run multiple statements in a single round trip by using `db.batch`
+inside a `fetch` handler:
+
+```diff lang="typescript"
+    fetch: Effect.gen(function* () {
+-     const { results } = yield* db.prepare("SELECT * FROM users").all();
+-     return yield* HttpServerResponse.json(results);
++     const [users, orders] = yield* db.batch([
++       db.prepare("SELECT * FROM users WHERE id = ?").bind(1),
++       db.prepare("SELECT * FROM orders WHERE user_id = ?").bind(1),
++     ]);
++     return yield* HttpServerResponse.json({ users, orders });
+    }),
+```

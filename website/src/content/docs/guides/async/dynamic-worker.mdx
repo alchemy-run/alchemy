@@ -1,0 +1,15 @@
+---
+title: Dynamic Workers
+description: Why multi-Worker RPC requires the Effect runtime.
+sidebar:
+  order: 5
+---
+
+Multi-Worker composition with typed RPC requires Tags and Layers to
+decouple Worker interfaces from their runtime implementations. This is
+what enables the bundler to tree-shake `.make()` calls, keeping each
+Worker's bundle free of the other's dependencies.
+
+There is no Async variant for Dynamic Workers. See the
+[Effect Dynamic Workers](/guides/effect/dynamic-workers) guide for the full
+walkthrough, including bi-directional binding.

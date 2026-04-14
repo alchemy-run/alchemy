@@ -1,0 +1,161 @@
+---
+title: Lambda Function
+description: Deploy an AWS Lambda Function with Effect-native bindings and request handling.
+sidebar:
+  order: 5
+---
+
+import { Steps } from "@astrojs/starlight/components";
+import Terminal from "../../../../components/Terminal.astro";
+
+export const deployOutput = `[u]Plan[/u]: [g]1 to create[/g]
+
+[g]+[/g] [b]Api[/b] [d](AWS.Lambda.Function)[/d]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]Api[/b] [d](AWS.Lambda.Function)[/d] [g]created[/g]
+[s2][d]• Creating IAM role ...[/d]
+[s2][d]• Bundling function (24.10 KB) ...[/d]
+[s2][d]• Creating function URL ...[/d]
+{
+[s2]url: "https://abc123.lambda-url.us-east-1.on.aws/",
+}`;
+
+This guide walks you through creating and deploying an AWS Lambda
+Function with Effect-native bindings.
+
+:::note
+For the plain async handler pattern, see the [Async Lambda Function](/guides/async/lambda-function) guide.
+For the full API reference, see the [Lambda Function provider](/providers/aws/lambda/function).
+:::
+
+<Steps>
+
+1. **Define the Function class**
+
+   Create a file for your Function. The `main` prop tells Alchemy
+   which file to bundle and deploy.
+
+   ```typescript
+   // src/Api.ts
+   import * as AWS from "alchemy/AWS";
+   import * as Effect from "effect/Effect";
+   import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+   export default class Api extends AWS.Lambda.Function<Api>()(
+     "Api",
+     { main: import.meta.filename, url: true },
+     Effect.gen(function* () {
+       return {
+         fetch: Effect.succeed(HttpServerResponse.text("Hello")),
+       };
+     }),
+   ) {}
+   ```
+
+2. **Create a resource**
+
+   Add a DynamoDB Table in the init phase:
+
+   ```diff lang="typescript"
+   + import * as DynamoDB from "alchemy/AWS/DynamoDB";
+
+     export default class Api extends AWS.Lambda.Function<Api>()(
+       "Api",
+       { main: import.meta.filename, url: true },
+       Effect.gen(function* () {
+   +     const table = yield* DynamoDB.Table("UsersTable", {
+   +       partitionKey: "pk",
+   +       attributes: { pk: "S" },
+   +     });
+
+         return {
+           fetch: Effect.succeed(HttpServerResponse.text("Hello")),
+         };
+       }),
+     ) {}
+   ```
+
+3. **Bind capabilities**
+
+   Bind GetItem and PutItem to get typed SDK wrappers with
+   automatic IAM permissions:
+
+   ```diff lang="typescript"
+       Effect.gen(function* () {
+         const table = yield* DynamoDB.Table("UsersTable", {
+           partitionKey: "pk",
+           attributes: { pk: "S" },
+         });
+   +     const getItem = yield* DynamoDB.GetItem.bind(table);
+   +     const putItem = yield* DynamoDB.PutItem.bind(table);
+
+         return {
+           fetch: Effect.succeed(HttpServerResponse.text("Hello")),
+         };
+       }),
+   ```
+
+4. **Use bindings in the handler**
+
+   Replace the static response with a handler that reads and writes
+   items using the bound capabilities:
+
+   ```diff lang="typescript"
+         const getItem = yield* DynamoDB.GetItem.bind(table);
+         const putItem = yield* DynamoDB.PutItem.bind(table);
+
+         return {
+   -       fetch: Effect.succeed(HttpServerResponse.text("Hello")),
+   +       fetch: Effect.gen(function* () {
+   +         yield* putItem({
+   +           Item: { pk: { S: "user#1" }, name: { S: "Alice" } },
+   +         });
+   +         const result = yield* getItem({
+   +           Key: { pk: { S: "user#1" } },
+   +         });
+   +         return yield* HttpServerResponse.json(result.Item);
+   +       }),
+         };
+       }),
+   ```
+
+5. **Create the Stack**
+
+   Wire the Function into your `alchemy.run.ts` stack file.
+
+   ```typescript
+   // alchemy.run.ts
+   import * as Alchemy from "alchemy";
+   import * as AWS from "alchemy/AWS";
+   import * as Effect from "effect/Effect";
+   import Api from "./src/Api.ts";
+
+   export default Alchemy.Stack(
+     "MyApp",
+     { providers: AWS.providers() },
+     Effect.gen(function* () {
+       const api = yield* Api;
+       return { url: api.functionUrl };
+     }),
+   );
+   ```
+
+6. **Deploy**
+
+   ```sh
+   alchemy deploy
+   ```
+
+   <Terminal content={deployOutput} />
+
+</Steps>
+
+## Next steps
+
+- Add event sources to process SQS messages, DynamoDB streams, or S3
+  notifications — see the [DynamoDB Table](/guides/effect/dynamodb-table) and
+  [SQS Queue](/guides/effect/sqs-queue) guides.
+- Package resources and bindings into reusable Effect Layers — see the
+  [Layers](/guides/effect/layers) guide.

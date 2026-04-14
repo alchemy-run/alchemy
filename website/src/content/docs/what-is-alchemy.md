@@ -3,7 +3,7 @@ title: What is Alchemy?
 description: Learn about alchemy, an Infrastructure-as-Effects framework built on Effect.
 ---
 
-Alchemy Effect is an Infrastructure-as-Effects (IaE) framework that extends Infrastructure-as-Code (IaC) by combining business logic and infrastructure config into a single, type-safe program expressed as Effects.
+Alchemy is an Infrastructure-as-Effects (IaE) framework that extends Infrastructure-as-Code (IaC) by combining business logic and infrastructure config into a single, type-safe program expressed as Effects.
 
 ## Why Effect?
 
@@ -21,20 +21,29 @@ Effect provides the foundation for type-safe, composable, and testable infrastru
 You write a program using Effect generators that yield Resources. Each Resource is a named entity configured with Input Properties that produces Output Attributes.
 
 ```typescript
-import { Bucket } from "alchemy/AWS/S3";
-import { Function } from "alchemy/AWS/Lambda";
+import * as Alchemy from "alchemy";
+import * as AWS from "alchemy/AWS";
+import * as DynamoDB from "alchemy/AWS/DynamoDB";
+import * as Effect from "effect/Effect";
 
-const bucket =
-  yield *
-  Bucket("my-bucket", {
-    forceDestroy: true,
-  });
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: AWS.providers() },
+  Effect.gen(function* () {
+    const table = yield* DynamoDB.Table("my-table", {
+      partitionKey: "id",
+      attributes: { id: "S" },
+    });
 
-const fn =
-  yield *
-  Function("my-function", {
-    handler: myHandler,
-  });
+    const getItem = yield* DynamoDB.GetItem.bind(table);
+  }),
+);
 ```
 
 Resources are deployed, updated, or deleted by the Alchemy engine based on the difference between desired state and current state.
+
+## Next
+
+Read [Effect vs Async](/concepts/effect-vs-async) to understand the two ways to
+write programs with Alchemy — fully connected Effect programs or plain
+async handlers with declarative infrastructure.
