@@ -15,8 +15,8 @@ Every alchemy-effect project has an `alchemy.run.ts` file that exports
 a default Stack:
 
 ```typescript
-import * as Alchemy from "alchemy-effect";
-import * as Cloudflare from "alchemy-effect/Cloudflare";
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(

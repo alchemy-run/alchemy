@@ -12,8 +12,8 @@ import * as Namespace from "./Namespace.ts";
  * @section Creating Constructs
  * @example Simple Reusable Construct
  * ```typescript
- * import * as Construct from "alchemy-effect/Construct";
- * import { Bucket } from "alchemy-effect/AWS/S3";
+ * import * as Construct from "alchemy/Construct";
+ * import { Bucket } from "alchemy/AWS/S3";
  *
  * export const Logs = Construct.fn(function* (
  *   id: string,

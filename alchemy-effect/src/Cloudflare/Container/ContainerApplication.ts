@@ -483,16 +483,16 @@ ${
   runtime === "bun"
     ? `
 import { BunServices } from "@effect/platform-bun";
-import { BunHttpServer } from "alchemy-effect/Http";
+import { BunHttpServer } from "alchemy/Http";
 const HttpServer = BunHttpServer;
 `
     : `
 import { NodeServices } from "@effect/platform-node";
-import { NodeHttpServer } from "alchemy-effect/Http";
+import { NodeHttpServer } from "alchemy/Http";
 const HttpServer = NodeHttpServer;
 `
 }
-import { Stack } from "alchemy-effect/Stack";
+import { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Layer from "effect/Layer";

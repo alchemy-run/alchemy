@@ -1112,8 +1112,8 @@ import * as Stream from "effect/Stream";
 import { env, DurableObject${hasWfClasses ? ", WorkflowEntrypoint" : ""} } from "cloudflare:workers";
 import { MinimumLogLevel } from "effect/References";
 import { NodeServices } from "@effect/platform-node";
-import { Stack } from "alchemy-effect/Stack";
-import { WorkerEnvironment, makeDurableObjectBridge${hasWfClasses ? ", makeWorkflowBridge" : ""}, ExportedHandlerMethods } from "alchemy-effect/Cloudflare";
+import { Stack } from "alchemy/Stack";
+import { WorkerEnvironment, makeDurableObjectBridge${hasWfClasses ? ", makeWorkflowBridge" : ""}, ExportedHandlerMethods } from "alchemy/Cloudflare";
 
 import entry from "${importPath}";
 

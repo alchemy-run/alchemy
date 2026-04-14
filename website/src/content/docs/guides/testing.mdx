@@ -20,14 +20,14 @@ when finished.
 
    ```typescript
    // src/Bucket.ts
-   import * as Cloudflare from "alchemy-effect/Cloudflare";
+   import * as Cloudflare from "alchemy/Cloudflare";
 
    export const Bucket = Cloudflare.R2Bucket("Bucket");
    ```
 
    ```typescript
    // src/Api.ts
-   import * as Cloudflare from "alchemy-effect/Cloudflare";
+   import * as Cloudflare from "alchemy/Cloudflare";
    import * as Effect from "effect/Effect";
    import * as Layer from "effect/Layer";
    import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -65,8 +65,8 @@ when finished.
 
    ```typescript
    // alchemy.run.ts
-   import * as Alchemy from "alchemy-effect";
-   import * as Cloudflare from "alchemy-effect/Cloudflare";
+   import * as Alchemy from "alchemy";
+   import * as Cloudflare from "alchemy/Cloudflare";
    import * as Effect from "effect/Effect";
    import Api from "./src/Api.ts";
 
@@ -94,7 +94,7 @@ when finished.
      destroy,
      expect,
      test,
-   } from "alchemy-effect/Test/Bun";
+   } from "alchemy/Test/Bun";
    import Stack from "../alchemy.run.ts";
 
    const stack = beforeAll(deploy(Stack));
@@ -126,7 +126,7 @@ when finished.
      destroy,
      expect,
      test,
-   } from "alchemy-effect/Test/Bun";
+   } from "alchemy/Test/Bun";
    import * as Effect from "effect/Effect";
    import * as HttpClient from "effect/unstable/http/HttpClient";
    import * as HttpBody from "effect/unstable/http/HttpBody";

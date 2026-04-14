@@ -1,5 +1,5 @@
-import * as Alchemy from "alchemy-effect";
-import * as Cloudflare from "alchemy-effect/Cloudflare";
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import type { Counter } from "./src/worker.ts";
 

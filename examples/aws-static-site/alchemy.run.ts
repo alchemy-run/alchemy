@@ -1,5 +1,5 @@
-import * as Alchemy from "alchemy-effect";
-import * as AWS from "alchemy-effect/AWS";
+import * as Alchemy from "alchemy";
+import * as AWS from "alchemy/AWS";
 import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(

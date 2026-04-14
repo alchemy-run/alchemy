@@ -47,8 +47,8 @@ and [Sink](/concepts/sink).
    deploy time and available for binding.
 
    ```typescript
-   import * as DynamoDB from "alchemy-effect/AWS/DynamoDB";
-   import * as SQS from "alchemy-effect/AWS/SQS";
+   import * as DynamoDB from "alchemy/AWS/DynamoDB";
+   import * as SQS from "alchemy/AWS/SQS";
 
    export const JobStorageDynamoDB = Layer.effect(
      JobStorage,
@@ -184,7 +184,7 @@ and [Sink](/concepts/sink).
 
    ```typescript
    // src/JobFunction.ts
-   import * as AWS from "alchemy-effect/AWS";
+   import * as AWS from "alchemy/AWS";
    import * as Effect from "effect/Effect";
    import * as Layer from "effect/Layer";
    import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -224,8 +224,8 @@ and [Sink](/concepts/sink).
 
    ```typescript
    // alchemy.run.ts
-   import * as Alchemy from "alchemy-effect";
-   import * as AWS from "alchemy-effect/AWS";
+   import * as Alchemy from "alchemy";
+   import * as AWS from "alchemy/AWS";
    import * as Effect from "effect/Effect";
    import JobFunction from "./src/JobFunction.ts";
 

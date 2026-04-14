@@ -13,7 +13,7 @@ bun add alchemy-effect effect
 A Stack is an Effect that declares Resources and returns outputs. Wire it up with `Stack.make` and provide cloud providers as Layers.
 
 ```typescript
-import { AWS, Stack } from "alchemy-effect";
+import { AWS, Stack } from "alchemy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
@@ -60,9 +60,9 @@ Output Attributes from one Resource can be passed as Input Properties to another
 A Lambda Function is a special Resource whose Effect body defines the runtime behavior. The returned object configures the function's infrastructure.
 
 ```typescript
-import * as Lambda from "alchemy-effect/AWS/Lambda";
-import * as S3 from "alchemy-effect/AWS/S3";
-import * as Http from "alchemy-effect/Http";
+import * as Lambda from "alchemy/AWS/Lambda";
+import * as S3 from "alchemy/AWS/S3";
+import * as Http from "alchemy/Http";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
@@ -94,7 +94,7 @@ export default Effect.gen(function* () {
 Encapsulate Resources and capabilities into Effect Services for clean separation of concerns.
 
 ```typescript
-import * as S3 from "alchemy-effect/AWS/S3";
+import * as S3 from "alchemy/AWS/S3";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Context from "effect/Context";
@@ -252,7 +252,7 @@ export const JobRpcHttpEffect = RpcServer.toHttpEffect(JobRpcs).pipe(
 Control what happens when a Resource is removed from your stack.
 
 ```typescript
-import { RemovalPolicy } from "alchemy-effect";
+import { RemovalPolicy } from "alchemy";
 
 const queue =
   yield * SQS.Queue("JobsQueue").pipe(RemovalPolicy.retain(stage === "prod"));
@@ -263,7 +263,7 @@ const queue =
 Configure AWS credentials and region per stage using Effect Layers and Config.
 
 ```typescript
-import { AWS, Stage } from "alchemy-effect";
+import { AWS, Stage } from "alchemy";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -309,7 +309,7 @@ The sections below explain how to implement your own Resources, Resource Provide
 A Resource is defined by its Props (input) and Attributes (output). Use the `Resource` constructor to register the type.
 
 ```typescript
-import { Resource } from "alchemy-effect/Resource";
+import { Resource } from "alchemy/Resource";
 
 export interface StreamProps {
   streamName?: string;
@@ -440,7 +440,7 @@ A `Binding.Service` wraps an SDK client and exposes a `.bind(resource)` method t
 
 ```typescript
 import * as Kinesis from "@distilled.cloud/aws/kinesis";
-import * as Binding from "alchemy-effect/Binding";
+import * as Binding from "alchemy/Binding";
 
 export class PutRecord extends Binding.Service<
   PutRecord,
@@ -486,7 +486,7 @@ export default Effect.gen(function* () {
 A `Binding.Policy` runs only at deploy time to attach IAM policies (or Cloudflare bindings) to the Function's role. At runtime, `Binding.Policy` uses `Effect.serviceOption` so it gracefully becomes a no-op when the layer is not provided.
 
 ```typescript
-import { isFunction } from "alchemy-effect/AWS/Lambda/Function";
+import { isFunction } from "alchemy/AWS/Lambda/Function";
 
 export class PutRecordPolicy extends Binding.Policy<
   PutRecordPolicy,

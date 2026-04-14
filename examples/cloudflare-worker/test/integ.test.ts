@@ -1,4 +1,4 @@
-import { beforeAll, deploy, expect, test } from "alchemy-effect/Test/Bun";
+import { beforeAll, deploy, expect, test } from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";
 import Stack from "../alchemy.run.ts";
 

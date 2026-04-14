@@ -39,7 +39,7 @@ For why the layer pattern matters, see the [Platform concept](/concepts/platform
 
    ```typescript
    // src/Sandbox.ts
-   import * as Cloudflare from "alchemy-effect/Cloudflare";
+   import * as Cloudflare from "alchemy/Cloudflare";
    import * as Effect from "effect/Effect";
 
    export class Sandbox extends Cloudflare.Container<
@@ -87,7 +87,7 @@ For why the layer pattern matters, see the [Platform concept](/concepts/platform
 
    ```typescript
    // src/Agent.ts
-   import * as Cloudflare from "alchemy-effect/Cloudflare";
+   import * as Cloudflare from "alchemy/Cloudflare";
    import * as Effect from "effect/Effect";
    import { Sandbox } from "./Sandbox.ts"; // class only
 

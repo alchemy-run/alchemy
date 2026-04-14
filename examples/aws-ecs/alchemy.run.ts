@@ -1,7 +1,7 @@
-import * as Alchemy from "alchemy-effect";
-import * as AWS from "alchemy-effect/AWS";
-import * as Output from "alchemy-effect/Output";
-import { Stage } from "alchemy-effect/Stage";
+import * as Alchemy from "alchemy";
+import * as AWS from "alchemy/AWS";
+import * as Output from "alchemy/Output";
+import { Stage } from "alchemy/Stage";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import QueueConsumerTask from "./src/QueueConsumerTask.ts";

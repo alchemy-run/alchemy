@@ -21,8 +21,8 @@ Effect provides the foundation for type-safe, composable, and testable infrastru
 You write a program using Effect generators that yield Resources. Each Resource is a named entity configured with Input Properties that produces Output Attributes.
 
 ```typescript
-import { Bucket } from "alchemy-effect/AWS/S3";
-import { Function } from "alchemy-effect/AWS/Lambda";
+import { Bucket } from "alchemy/AWS/S3";
+import { Function } from "alchemy/AWS/Lambda";
 
 const bucket =
   yield *

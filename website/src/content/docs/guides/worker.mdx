@@ -39,7 +39,7 @@ For async, effect, and layer patterns, see the [Platform concept](/concepts/plat
 
    ```typescript
    // src/Api.ts
-   import * as Cloudflare from "alchemy-effect/Cloudflare";
+   import * as Cloudflare from "alchemy/Cloudflare";
    import * as Effect from "effect/Effect";
    import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
@@ -83,8 +83,8 @@ For async, effect, and layer patterns, see the [Platform concept](/concepts/plat
 
    ```typescript
    // alchemy.run.ts
-   import * as Alchemy from "alchemy-effect";
-   import * as Cloudflare from "alchemy-effect/Cloudflare";
+   import * as Alchemy from "alchemy";
+   import * as Cloudflare from "alchemy/Cloudflare";
    import * as Effect from "effect/Effect";
    import Api from "./src/Api.ts";
 

@@ -1,5 +1,5 @@
-import * as Cloudflare from "alchemy-effect/Cloudflare";
-import { Stack } from "alchemy-effect/Stack";
+import * as Cloudflare from "alchemy/Cloudflare";
+import { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
 import type { PlatformError } from "effect/PlatformError";
 import * as Stream from "effect/Stream";

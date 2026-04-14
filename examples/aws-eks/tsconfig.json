@@ -1,6 +1,8 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["alchemy.run.ts"],
+  "include": [
+    "alchemy.run.ts"
+  ],
   "compilerOptions": {
     "noEmit": true,
     "rootDir": "../..",
@@ -8,8 +10,12 @@
     "moduleResolution": "Bundler",
     "target": "ESNext",
     "paths": {
-      "alchemy-effect": ["../../alchemy-effect/src/index.ts"],
-      "alchemy-effect/*": ["../../alchemy-effect/src/*"]
+      "alchemy": [
+        "../../alchemy-effect/src/index.ts"
+      ],
+      "alchemy/*": [
+        "../../alchemy-effect/src/*"
+      ]
     }
   },
   "references": [

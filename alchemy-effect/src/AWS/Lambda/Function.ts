@@ -433,7 +433,7 @@ export const FunctionProvider = () =>
               virtualEntryPlugin(
                 (importPath) => `
 import { NodeServices } from "@effect/platform-node";
-import { Stack } from "alchemy-effect/Stack";
+import { Stack } from "alchemy/Stack";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Credentials from "@distilled.cloud/aws/Credentials";

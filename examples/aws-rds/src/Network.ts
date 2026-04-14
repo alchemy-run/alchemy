@@ -1,4 +1,4 @@
-import * as AWS from "alchemy-effect/AWS";
+import * as AWS from "alchemy/AWS";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

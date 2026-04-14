@@ -1,4 +1,4 @@
-import * as Cloudflare from "alchemy-effect/Cloudflare";
+import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import Room from "./Room.ts";
 

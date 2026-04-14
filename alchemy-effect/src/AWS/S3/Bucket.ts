@@ -91,7 +91,7 @@ export interface Bucket extends Resource<
  * @section Creating a Bucket
  * @example Basic Bucket
  * ```typescript
- * import * as S3 from "alchemy-effect/AWS/S3";
+ * import * as S3 from "alchemy/AWS/S3";
  *
  * const bucket = yield* S3.Bucket("my-bucket", {});
  * ```

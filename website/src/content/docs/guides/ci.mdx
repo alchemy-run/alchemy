@@ -184,9 +184,9 @@ As part of this guide, we'll:
    same.
 
    ```diff lang="typescript"
-   import * as Alchemy from "alchemy-effect";
-   + import * as GitHub from "alchemy-effect/GitHub";
-   + import * as Output from "alchemy-effect/Output";
+   import * as Alchemy from "alchemy";
+   + import * as GitHub from "alchemy/GitHub";
+   + import * as Output from "alchemy/Output";
    import * as Effect from "effect/Effect";
 
    export default Alchemy.Stack(
@@ -289,9 +289,9 @@ Add your Cloudflare credentials to the GitHub stack:
 
 ```diff lang="typescript"
 // stacks/github.ts
-import * as Alchemy from "alchemy-effect";
-+ import * as Cloudflare from "alchemy-effect/Cloudflare";
-import * as GitHub from "alchemy-effect/GitHub";
+import * as Alchemy from "alchemy";
++ import * as Cloudflare from "alchemy/Cloudflare";
+import * as GitHub from "alchemy/GitHub";
 + import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 + import * as Redacted from "effect/Redacted";
@@ -352,9 +352,9 @@ then configures the repo with the role ARN and region as variables.
 
 ```diff lang="typescript"
 // stacks/github.ts
-import * as Alchemy from "alchemy-effect";
-+ import * as AWS from "alchemy-effect/AWS";
-import * as GitHub from "alchemy-effect/GitHub";
+import * as Alchemy from "alchemy";
++ import * as AWS from "alchemy/AWS";
+import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(
@@ -462,9 +462,9 @@ instead.
 
 ```diff lang="typescript"
 // stacks/github.ts
-import * as Alchemy from "alchemy-effect";
-+ import * as AWS from "alchemy-effect/AWS";
-import * as GitHub from "alchemy-effect/GitHub";
+import * as Alchemy from "alchemy";
++ import * as AWS from "alchemy/AWS";
+import * as GitHub from "alchemy/GitHub";
 + import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 + import * as Redacted from "effect/Redacted";
