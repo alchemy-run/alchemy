@@ -15,7 +15,6 @@ const config = {
   srcRoot: path.join(import.meta.dir, "../alchemy-effect/src"),
   outRoot: path.join(websiteRoot, "src/content/docs/providers"),
   tsConfig: path.join(import.meta.dir, "../alchemy-effect/tsconfig.json"),
-  includeDirs: ["AWS", "Cloudflare", "GitHub"],
   excludeFile(baseName: string): boolean {
     if (baseName === "index.ts") return true;
     if (/^[a-z]/.test(baseName)) return true;
@@ -52,7 +51,14 @@ const normalizeSlashes = (value: string) => value.split(path.sep).join("/");
 async function discoverFiles(): Promise<FileEntry[]> {
   const entries: FileEntry[] = [];
 
-  for (const dir of config.includeDirs) {
+  const topLevelEntries = await fs.readdir(config.srcRoot, {
+    withFileTypes: true,
+  });
+  const dirs = topLevelEntries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
+
+  for (const dir of dirs) {
     const dirPath = path.join(config.srcRoot, dir);
     let files: string[];
     try {
