@@ -45,10 +45,20 @@ export interface Variable extends Resource<
 /**
  * A GitHub Actions repository variable.
  *
- * Variables are stored in plain text and are suitable for non-sensitive
- * configuration like region names or role ARNs.
+ * `Variable` manages the lifecycle of a plain-text configuration variable
+ * in GitHub Actions. Variables are visible in workflow logs and are
+ * suitable for non-sensitive configuration like region names, environment
+ * labels, or feature flags. For sensitive values, use `GitHub.Secret`
+ * instead.
+ *
+ * Authentication is resolved in order: explicit `token` prop,
+ * `GITHUB_ACCESS_TOKEN` env var, `GITHUB_TOKEN` env var. The token needs
+ * `repo` scope for private repositories or `public_repo` for public ones.
  *
  * @section Repository Variables
+ * Store variables accessible to all GitHub Actions workflows in the
+ * repository.
+ *
  * @example Create a Repository Variable
  * ```typescript
  * yield* GitHub.Variable("aws-region", {
@@ -56,6 +66,39 @@ export interface Variable extends Resource<
  *   repository: "my-repo",
  *   name: "AWS_REGION",
  *   value: "us-east-1",
+ * });
+ * ```
+ *
+ * @section Wiring with Other Resources
+ * Pass output attributes from other resources into GitHub variables so
+ * that CI workflows can reference them.
+ *
+ * @example Store a Worker URL for CI
+ * ```typescript
+ * const worker = yield* Cloudflare.Worker("Api", { ... });
+ *
+ * yield* GitHub.Variable("api-url", {
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   name: "API_URL",
+ *   value: worker.url!,
+ * });
+ * ```
+ *
+ * @example Multiple Variables
+ * ```typescript
+ * yield* GitHub.Variable("region", {
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   name: "AWS_REGION",
+ *   value: "us-east-1",
+ * });
+ *
+ * yield* GitHub.Variable("stage", {
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   name: "DEPLOY_STAGE",
+ *   value: "production",
  * });
  * ```
  */

@@ -53,11 +53,19 @@ export interface Secret extends Resource<
 /**
  * A GitHub Actions repository or environment secret.
  *
+ * `Secret` manages the lifecycle of an encrypted secret in GitHub Actions.
  * Secrets are encrypted using the repository's (or environment's) public
- * key before being stored. The resource is idempotent — calling it with
- * the same name will update the secret value in place.
+ * key via `libsodium` before being stored. The resource is idempotent —
+ * calling it with the same name will update the secret value in place.
+ *
+ * Authentication is resolved in order: explicit `token` prop,
+ * `GITHUB_ACCESS_TOKEN` env var, `GITHUB_TOKEN` env var. The token needs
+ * `repo` scope for private repositories or `public_repo` for public ones.
  *
  * @section Repository Secrets
+ * Store secrets accessible to all GitHub Actions workflows in the
+ * repository.
+ *
  * @example Create a Repository Secret
  * ```typescript
  * yield* GitHub.Secret("aws-role", {
@@ -69,6 +77,10 @@ export interface Secret extends Resource<
  * ```
  *
  * @section Environment Secrets
+ * Scope a secret to a specific GitHub Actions environment (e.g.
+ * `production`, `staging`). Environment secrets require environment
+ * protection rules to be satisfied before workflows can access them.
+ *
  * @example Create an Environment Secret
  * ```typescript
  * yield* GitHub.Secret("deploy-key", {
@@ -77,6 +89,42 @@ export interface Secret extends Resource<
  *   environment: "production",
  *   name: "DEPLOY_KEY",
  *   value: Redacted.make("my-secret-value"),
+ * });
+ * ```
+ *
+ * @section Wiring with Other Resources
+ * A common pattern is wiring the output of another resource — like an
+ * IAM role ARN or a database URL — directly into a GitHub secret so
+ * that CI workflows can use it.
+ *
+ * @example Store an IAM Role ARN for CI
+ * ```typescript
+ * const role = yield* AWS.IAM.Role("ci-role", { ... });
+ *
+ * yield* GitHub.Secret("ci-role-arn", {
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   name: "AWS_ROLE_ARN",
+ *   value: Redacted.make(role.roleArn),
+ * });
+ * ```
+ *
+ * @example Store Multiple Secrets
+ * ```typescript
+ * yield* GitHub.Secret("db-url", {
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   environment: "production",
+ *   name: "DATABASE_URL",
+ *   value: Redacted.make(database.connectionString),
+ * });
+ *
+ * yield* GitHub.Secret("api-key", {
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   environment: "production",
+ *   name: "API_KEY",
+ *   value: Redacted.make(apiKey),
  * });
  * ```
  */
@@ -112,7 +160,7 @@ export const SecretProvider = () =>
       return { updatedAt: new Date().toISOString() };
     }),
 
-    update: Effect.fn(function* ({ news, olds, output }) {
+    update: Effect.fn(function* ({ news, olds }) {
       const octokit = createClient(news);
 
       const wasEnv = !!olds.environment;
