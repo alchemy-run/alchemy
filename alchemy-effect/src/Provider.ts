@@ -369,7 +369,7 @@ export const tryFindProviderByType: {
   const Tag = Provider<R>(resourceType) as Context.Service<Provider<R>, any>;
   const direct = yield* Effect.serviceOption(Tag);
   if (Option.isSome(direct)) {
-    return direct.value;
+    return direct;
   }
 
   const context = yield* Effect.context<never>();
