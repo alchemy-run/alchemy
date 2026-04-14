@@ -4,6 +4,7 @@ import * as Schedule from "effect/Schedule";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import type { Providers } from "../Providers.ts";
 import type { Credentials } from "../Credentials.ts";
 import type { Region } from "../Region.ts";
 import {
@@ -33,7 +34,9 @@ export interface KvRoutesUpdate extends Resource<
     namespace: string;
     key: string;
     entry: string;
-  }
+  },
+  never,
+  Providers
 > {}
 
 /**

@@ -6,6 +6,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { Account } from "../Account.ts";
+import type { Providers } from "../Providers.ts";
 import { R2BucketBinding } from "./R2BucketBinding.ts";
 
 export type R2BucketName = string;
@@ -41,7 +42,9 @@ export type R2Bucket = Resource<
     jurisdiction: R2Bucket.Jurisdiction;
     location: R2Bucket.Location | undefined;
     accountId: string;
-  }
+  },
+  never,
+  Providers
 >;
 
 export const R2Bucket = Resource<R2Bucket>("Cloudflare.R2Bucket")({

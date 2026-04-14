@@ -89,9 +89,7 @@ if (versionInput === "beta") {
   const packageName = alchemyPackageJson.name;
   let betaN = 1;
   try {
-    const response = await fetch(
-      `https://registry.npmjs.org/${packageName}`,
-    );
+    const response = await fetch(`https://registry.npmjs.org/${packageName}`);
     if (response.ok) {
       const data = (await response.json()) as {
         versions?: Record<string, unknown>;

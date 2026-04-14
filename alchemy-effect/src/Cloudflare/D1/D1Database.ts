@@ -6,6 +6,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { Account } from "../Account.ts";
+import type { Providers } from "../Providers.ts";
 
 export type Jurisdiction = "default" | "eu" | "fedramp";
 export type PrimaryLocationHint =
@@ -48,7 +49,9 @@ export type D1Database = Resource<
     jurisdiction: Jurisdiction;
     readReplication: { mode: "auto" | "disabled" } | undefined;
     accountId: string;
-  }
+  },
+  never,
+  Providers
 >;
 
 /**

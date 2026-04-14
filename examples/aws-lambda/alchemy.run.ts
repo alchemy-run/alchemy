@@ -4,7 +4,7 @@ import * as Output from "alchemy-effect/Output";
 import { Stage } from "alchemy-effect/Stage";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { JobFunction } from "./src/JobFunction.ts";
+import JobFunction from "./src/JobFunction.ts";
 
 const awsConfig = Layer.effect(
   AWS.StageConfig,
@@ -30,13 +30,7 @@ const dashboardRegion = process.env.AWS_REGION ?? "us-west-2";
 export default Alchemy.Stack(
   "JobLambda",
   {
-    providers: Layer.provideMerge(
-      Layer.empty,
-      Layer.mergeAll(
-        // Fully configured cloud provider Layers go here:
-        aws,
-      ),
-    ),
+    providers: aws,
   },
   Effect.gen(function* () {
     const func = yield* JobFunction;
@@ -82,7 +76,8 @@ export default Alchemy.Stack(
       ),
     });
     const alarm = yield* AWS.CloudWatch.Alarm("JobFunctionErrorsAlarm", {
-      AlarmDescription: "Alerts when the example Lambda function reports errors.",
+      AlarmDescription:
+        "Alerts when the example Lambda function reports errors.",
       MetricName: "Errors",
       Namespace: "AWS/Lambda",
       Statistic: "Sum",

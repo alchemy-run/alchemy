@@ -45,6 +45,7 @@ import { Account } from "../Account.ts";
 import { D1Database } from "../D1/D1Database.ts";
 import { fromCloudflareFetcher } from "../Fetcher.ts";
 import { CloudflareLogs } from "../Logs.ts";
+import type { Providers } from "../Providers.ts";
 import type { R2Bucket } from "../R2/R2Bucket.ts";
 import type { AssetsConfig, AssetsProps } from "./Assets.ts";
 import * as Assets from "./Assets.ts";
@@ -247,7 +248,8 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
   {
     bindings?: WorkerBinding[];
     containers?: { className: string }[];
-  }
+  },
+  Providers
 >;
 
 /**

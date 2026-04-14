@@ -62,7 +62,7 @@
   "scripts": {
     "audit:service": "bun scripts/audit-service.ts",
     "build:clean": "bun clean . && bun i && bun run build && bun download:env",
-    "build": "bun run clean:shallow && bun tsc -b && bun run --filter alchemy-effect build",
+    "build": "bun run clean:shallow && bun tsc -b && bun run --filter alchemy build",
     "bump": "bun ./scripts/bump.ts",
     "clean:shallow": "rm -rf alchemy-effect/*.tgz && bun tsc -b --clean",
     "clean": "git clean -fqdx -e .env",

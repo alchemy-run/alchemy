@@ -4,6 +4,7 @@ import * as Schedule from "effect/Schedule";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import type { Providers } from "../Providers.ts";
 import {
   extractValue,
   getKvsEtag,
@@ -33,7 +34,9 @@ export interface KvEntries extends Resource<
     namespace: string;
     /** Current entries managed under the namespace. */
     entries: Record<string, string>;
-  }
+  },
+  never,
+  Providers
 > {}
 
 /**

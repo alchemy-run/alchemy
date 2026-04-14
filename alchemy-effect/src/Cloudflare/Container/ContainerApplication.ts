@@ -33,6 +33,7 @@ import { sha256Object } from "../../Util/sha256.ts";
 import { normalizeNulls } from "../../Util/stable.ts";
 import { Account } from "../Account.ts";
 import { CloudflareLogs, type TelemetryFilter } from "../Logs.ts";
+import type { Providers } from "../Providers.ts";
 import { Container, ContainerTypeId } from "./Container.ts";
 
 export { Credentials } from "@distilled.cloud/cloudflare/Credentials";
@@ -254,7 +255,8 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
       namespaceId: string;
     };
     env?: Record<string, any>;
-  }
+  },
+  Providers
 > {
   /** @internal phantom */
   Shape: Shape;

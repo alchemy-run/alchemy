@@ -16,7 +16,7 @@ import {
   PutJobError,
 } from "./JobStorage.ts";
 
-export class JobFunction extends AWS.Lambda.Function<JobFunction>()(
+export default class JobFunction extends AWS.Lambda.Function<JobFunction>()(
   "JobFunction",
   Stack.useSync((stack) => ({
     main: import.meta.filename,

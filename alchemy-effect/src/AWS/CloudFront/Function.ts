@@ -6,6 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface FunctionProps {
   /**
@@ -71,7 +72,9 @@ export interface Function extends Resource<
      * Associated KeyValueStore ARNs.
      */
     keyValueStoreArns: string[];
-  }
+  },
+  never,
+  Providers
 > {}
 
 /**

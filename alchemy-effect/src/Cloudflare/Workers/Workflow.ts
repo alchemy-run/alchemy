@@ -320,7 +320,9 @@ export interface WorkflowResource extends Resource<
   WorkflowResourceAttrs
 > {}
 
-const WorkflowResource = Resource<WorkflowResource>(WorkflowResourceTypeId);
+export const WorkflowResource = Resource<WorkflowResource>(
+  WorkflowResourceTypeId,
+);
 
 export const WorkflowProvider = () =>
   Provider.effect(

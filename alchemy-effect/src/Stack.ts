@@ -146,9 +146,9 @@ export const make =
       Effect.map(
         ([output, stack, services]) =>
           ({
+            ...stack,
             output,
             services,
-            ...stack,
           }) satisfies CompiledStack<A, ROut | StackServices> as CompiledStack<
             A,
             ROut | StackServices

@@ -79,7 +79,8 @@ export default Alchemy.Stack(
       ),
     });
     const alarm = yield* AWS.CloudWatch.Alarm("JobFunctionErrorsAlarm", {
-      AlarmDescription: "Alerts when the example Lambda function reports errors.",
+      AlarmDescription:
+        "Alerts when the example Lambda function reports errors.",
       MetricName: "Errors",
       Namespace: "AWS/Lambda",
       Statistic: "Sum",

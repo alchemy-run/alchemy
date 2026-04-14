@@ -5,9 +5,10 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { Account } from "../Account.ts";
+import type { Providers } from "../Providers.ts";
 import { KVNamespaceBinding } from "./KVNamespaceBinding.ts";
 
-export type NamespaceProps = {
+export type KVNamespaceProps = {
   /**
    * A human-readable string name for the namespace.
    * If omitted, a unique name will be generated.
@@ -18,20 +19,22 @@ export type NamespaceProps = {
 
 export type KVNamespace = Resource<
   "Cloudflare.KVNamespace",
-  NamespaceProps,
+  KVNamespaceProps,
   {
     title: string;
     namespaceId: string;
     supportsUrlEncoding: boolean | undefined;
     accountId: string;
-  }
+  },
+  never,
+  Providers
 >;
 
 export const KVNamespace = Resource<KVNamespace>("Cloudflare.KVNamespace")({
   bind: KVNamespaceBinding.bind,
 });
 
-export const NamespaceProvider = () =>
+export const KVNamespaceProvider = () =>
   Provider.effect(
     KVNamespace,
     Effect.gen(function* () {
