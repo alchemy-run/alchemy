@@ -1,3 +1,19 @@
+## v2.0.0-beta.3
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **GitHub**:
+  - Comment Resource and CI guide &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(5e938)</samp>](https://github.com/alchemy-run/alchemy/commit/5e93857)
+  - Secret and Variable &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(0f620)</samp>](https://github.com/alchemy-run/alchemy/commit/0f620bd)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **core**: Fix undefined Provider in plan &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(e0143)</samp>](https://github.com/alchemy-run/alchemy/commit/e01431f)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.2...v2.0.0-beta.3)
+
+---
+
 ## v2.0.0-beta.2
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
