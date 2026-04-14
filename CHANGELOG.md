@@ -1,3 +1,13 @@
+## v2.0.0-beta.2
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- ProviderCollections reduce number of Provider types polluting user's types &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(9f76b)</samp>](https://github.com/alchemy-run/alchemy/commit/9f76b91)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.1...v2.0.0-beta.2)
+
+---
+
 ## v2.0.0-beta.1
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
