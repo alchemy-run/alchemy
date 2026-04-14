@@ -223,6 +223,9 @@ export type ContainerServices =
 
 export type ContainerShape = Main<ContainerServices>;
 
+/**
+ * @internal
+ */
 export interface ContainerApplication<Shape = unknown> extends Resource<
   ContainerTypeId,
   ContainerApplicationProps,

@@ -20,13 +20,3 @@ export default Alchemy.Stack(
     };
   }),
 );
-
-const _eff = Effect.gen(function* () {
-  const api = yield* Api;
-  const bucket = yield* Bucket;
-
-  return {
-    url: api.url.as<string>(),
-    bucket: bucket.bucketName,
-  };
-});

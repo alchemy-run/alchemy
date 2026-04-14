@@ -119,6 +119,248 @@ export class DurableObjectNamespaceScope extends Context.Service<
   DurableObjectNamespace
 >()("Cloudflare.DurableObjectNamespace") {}
 
+/**
+ * A Cloudflare Durable Object namespace that manages globally unique, stateful
+ * instances with WebSocket hibernation support.
+ *
+ * A Durable Object uses a two-phase pattern with two nested `Effect.gen`
+ * blocks. The outer Effect resolves shared dependencies (other DOs,
+ * containers, etc.). The inner Effect runs once per instance and returns
+ * the object's public methods and WebSocket handlers.
+ *
+ * ```typescript
+ * Effect.gen(function* () {
+ *   // Phase 1: resolve shared dependencies
+ *   const db = yield* Cloudflare.D1Connection.bind(MyDB);
+ *
+ *   return Effect.gen(function* () {
+ *     // Phase 2: per-instance setup and public API
+ *     const state = yield* Cloudflare.DurableObjectState;
+ *
+ *     return {
+ *       save: (data: string) => db.exec("INSERT ..."),
+ *       fetch: Effect.gen(function* () { ... }),
+ *       webSocketMessage: Effect.fnUntraced(function* (ws, msg) { ... }),
+ *     };
+ *   });
+ * })
+ * ```
+ *
+ * There are two ways to define a Durable Object. See the
+ * {@link https://alchemy.run/concepts/platform | Platform concept} page
+ * for the full explanation.
+ *
+ * - **Inline** — Effect implementation passed directly, single file.
+ * - **Modular** — class and implementation in separate files for tree-shaking.
+ *
+ * @resource
+ *
+ * @section Inline Durable Objects
+ * Pass the Effect implementation as the second argument. This is the
+ * simplest approach — everything lives in one file. Convenient when
+ * the DO doesn't need to be referenced by other Workers or DOs that
+ * would pull in its runtime dependencies.
+ *
+ * @example Inline Durable Object
+ * ```typescript
+ * export default class Counter extends Cloudflare.DurableObjectNamespace<Counter>()(
+ *   "Counter",
+ *   Effect.gen(function* () {
+ *     // init: bind resources
+ *     const db = yield* Cloudflare.D1Connection.bind(MyDB);
+ *
+ *     return Effect.gen(function* () {
+ *       const state = yield* Cloudflare.DurableObjectState;
+ *       const count = (yield* state.storage.get<number>("count")) ?? 0;
+ *
+ *       return {
+ *         // runtime: use them
+ *         increment: () =>
+ *           Effect.gen(function* () {
+ *             const next = count + 1;
+ *             yield* state.storage.put("count", next);
+ *             return next;
+ *           }),
+ *         get: () => Effect.succeed(count),
+ *       };
+ *     });
+ *   }),
+ * ) {}
+ * ```
+ *
+ * @section Modular Durable Objects
+ * When a Worker and a DO reference each other, or multiple Workers
+ * bind the same DO, define the class separately from its `.make()`
+ * call. The class is a lightweight identifier; `.make()` provides
+ * the runtime implementation as an `export default`. Rolldown treats
+ * `.make()` as pure, so the bundler tree-shakes it and all its
+ * runtime dependencies out of any consumer's bundle.
+ *
+ * The class and `.make()` can live in the same file. This is the
+ * same pattern used by `Worker` and `Container`.
+ *
+ * @example Modular Durable Object (class + .make() in one file)
+ * ```typescript
+ * // src/Counter.ts
+ * export default class Counter extends Cloudflare.DurableObjectNamespace<Counter>()(
+ *   "Counter",
+ * ) {}
+ *
+ * export default Counter.make(
+ *   Effect.gen(function* () {
+ *     // init: bind resources
+ *     const db = yield* Cloudflare.D1Connection.bind(MyDB);
+ *
+ *     return Effect.gen(function* () {
+ *       const state = yield* Cloudflare.DurableObjectState;
+ *       const count = (yield* state.storage.get<number>("count")) ?? 0;
+ *
+ *       return {
+ *         // runtime: use them
+ *         increment: () =>
+ *           Effect.gen(function* () {
+ *             const next = count + 1;
+ *             yield* state.storage.put("count", next);
+ *             yield* db.prepare("INSERT INTO logs (count) VALUES (?)").bind(next).run();
+ *             return next;
+ *           }),
+ *         get: () => Effect.succeed(count),
+ *       };
+ *     });
+ *   }),
+ * );
+ * ```
+ *
+ * @example Binding a modular DO from a Worker
+ * ```typescript
+ * // imports Counter; bundler tree-shakes .make()
+ * import Counter from "./Counter.ts";
+ *
+ * // init
+ * const counters = yield* Counter;
+ *
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     const counter = counters.getByName("user-123");
+ *     return HttpServerResponse.text(String(yield* counter.get()));
+ *   }),
+ * };
+ * ```
+ *
+ * @section RPC Methods
+ * Any function you return from the inner Effect becomes an RPC method
+ * that Workers can call through a stub. Methods must return an `Effect`.
+ * The caller gets a fully typed stub — if your DO returns `increment`
+ * and `get`, the stub exposes `counter.increment()` and `counter.get()`.
+ *
+ * @example Defining RPC methods
+ * ```typescript
+ * return {
+ *   increment: () => Effect.succeed(++count),
+ *   get: () => Effect.succeed(count),
+ *   reset: () => Effect.sync(() => { count = 0; }),
+ * };
+ * ```
+ *
+ * @section Accessing Instance State
+ * Each Durable Object instance has its own transactional key-value
+ * storage via `Cloudflare.DurableObjectState`. Use `storage.get` and
+ * `storage.put` inside the inner Effect to persist data across requests
+ * and restarts.
+ *
+ * @example Reading and writing durable storage
+ * ```typescript
+ * const state = yield* Cloudflare.DurableObjectState;
+ *
+ * yield* state.storage.put("counter", 42);
+ * const value = yield* state.storage.get("counter");
+ * ```
+ *
+ * @section WebSocket Hibernation
+ * Durable Objects support WebSocket hibernation — the runtime can
+ * evict the object from memory while keeping connections open. Use
+ * `Cloudflare.upgrade()` to accept a connection, and return
+ * `webSocketMessage` / `webSocketClose` handlers to process events
+ * when the object wakes back up.
+ *
+ * @example Accepting a WebSocket connection
+ * ```typescript
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     const [response, socket] = yield* Cloudflare.upgrade();
+ *     socket.serializeAttachment({ id: crypto.randomUUID() });
+ *     return response;
+ *   }),
+ * };
+ * ```
+ *
+ * @example Handling messages and close events
+ * ```typescript
+ * return {
+ *   webSocketMessage: Effect.fnUntraced(function* (
+ *     socket: Cloudflare.DurableWebSocket,
+ *     message: string | Uint8Array,
+ *   ) {
+ *     const text = typeof message === "string"
+ *       ? message
+ *       : new TextDecoder().decode(message);
+ *     // process the message
+ *   }),
+ *   webSocketClose: Effect.fnUntraced(function* (
+ *     ws: Cloudflare.DurableWebSocket,
+ *     code: number,
+ *     reason: string,
+ *   ) {
+ *     yield* ws.close(code, reason);
+ *   }),
+ * };
+ * ```
+ *
+ * @example Recovering sessions after hibernation
+ * ```typescript
+ * const state = yield* Cloudflare.DurableObjectState;
+ * const sockets = yield* state.getWebSockets();
+ *
+ * for (const socket of sockets) {
+ *   const data = socket.deserializeAttachment<{ id: string }>();
+ *   // re-populate your session map
+ * }
+ * ```
+ *
+ * @section Using from a Worker
+ * Yield the DO class in your Worker's init phase to get a namespace
+ * handle. Call `getByName` or `getById` to get a typed stub, then
+ * call any RPC method or forward an HTTP request with `fetch`.
+ *
+ * @example Calling RPC methods
+ * ```typescript
+ * // init
+ * const counters = yield* Counter;
+ *
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     const counter = counters.getByName("user-123");
+ *     yield* counter.increment();
+ *     const value = yield* counter.get();
+ *     return HttpServerResponse.text(String(value));
+ *   }),
+ * };
+ * ```
+ *
+ * @example Forwarding an HTTP request
+ * ```typescript
+ * // init
+ * const rooms = yield* Room;
+ *
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     const request = yield* HttpServerRequest;
+ *     const room = rooms.getByName(roomId);
+ *     return yield* room.fetch(request);
+ *   }),
+ * };
+ * ```
+ */
 export const DurableObjectNamespace: DurableObjectNamespaceClass =
   taggedFunction(DurableObjectNamespaceScope, ((
     ...args:

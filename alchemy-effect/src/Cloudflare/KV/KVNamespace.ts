@@ -30,6 +30,31 @@ export type KVNamespace = Resource<
   Providers
 >;
 
+/**
+ * A Cloudflare Workers KV namespace for key-value storage at the edge.
+ *
+ * KV provides eventually-consistent, low-latency reads with global
+ * replication. Create a namespace as a resource, then bind it to a Worker
+ * to get/put values at runtime.
+ *
+ * @section Creating a Namespace
+ * @example Basic KV namespace
+ * ```typescript
+ * const kv = yield* Cloudflare.KVNamespace("MyKV");
+ * ```
+ *
+ * @section Binding to a Worker
+ * @example Using KV inside a Worker
+ * ```typescript
+ * const kv = yield* Cloudflare.KVNamespace.bind(MyKV);
+ *
+ * // Read a value
+ * const value = yield* kv.get("my-key");
+ *
+ * // Write a value
+ * yield* kv.put("my-key", "hello world");
+ * ```
+ */
 export const KVNamespace = Resource<KVNamespace>("Cloudflare.KVNamespace")({
   bind: KVNamespaceBinding.bind,
 });

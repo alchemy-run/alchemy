@@ -47,6 +47,49 @@ export type R2Bucket = Resource<
   Providers
 >;
 
+/**
+ * A Cloudflare R2 object storage bucket with S3-compatible API.
+ *
+ * R2 provides zero-egress-fee object storage. Create a bucket as a resource,
+ * then bind it to a Worker to read and write objects at runtime.
+ *
+ * @section Creating a Bucket
+ * @example Basic R2 bucket
+ * ```typescript
+ * const bucket = yield* Cloudflare.R2Bucket("MyBucket");
+ * ```
+ *
+ * @example Bucket with location hint
+ * ```typescript
+ * const bucket = yield* Cloudflare.R2Bucket("MyBucket", {
+ *   locationHint: "wnam",
+ * });
+ * ```
+ *
+ * @section Binding to a Worker
+ * @example Reading and writing objects
+ * ```typescript
+ * const bucket = yield* Cloudflare.R2Bucket.bind(MyBucket);
+ *
+ * // Write an object
+ * yield* bucket.put("hello.txt", "Hello, World!");
+ *
+ * // Read an object
+ * const object = yield* bucket.get("hello.txt");
+ * if (object) {
+ *   const text = yield* object.text();
+ * }
+ * ```
+ *
+ * @example Streaming upload with content length
+ * ```typescript
+ * const bucket = yield* Cloudflare.R2Bucket.bind(MyBucket);
+ *
+ * yield* bucket.put("upload.bin", request.stream, {
+ *   contentLength: Number(request.headers["content-length"] ?? 0),
+ * });
+ * ```
+ */
 export const R2Bucket = Resource<R2Bucket>("Cloudflare.R2Bucket")({
   bind: R2BucketBinding.bind,
 });
