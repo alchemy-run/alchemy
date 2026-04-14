@@ -54,7 +54,7 @@ jobs:
           else
             bun ./scripts/bump.ts beta
           fi
-          VERSION=$(node -p "require('./alchemy-effect/package.json').version")
+          VERSION=$(node -p "require('./packages.alchemy/package.json').version")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Push version bump
@@ -85,7 +85,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ── Step 2: Build & publish alchemy to npm ──
-  publish-alchemy-effect:
+  publish-alchemy:
     needs: bump
     runs-on: ubuntu-latest
     steps:
@@ -114,12 +114,12 @@ jobs:
 
       - name: Build
         run: bun run build
-        working-directory: alchemy-effect
+        working-directory: alchemy
 
       - name: Publish
         run: |
           VERSION="${{ needs.bump.outputs.version }}"
-          PKG_NAME=$(node -p "require('./alchemy-effect/package.json').name")
+          PKG_NAME=$(node -p "require('./packages.alchemy/package.json').name")
           echo "--- Publishing ${PKG_NAME}@${VERSION} ---"
 
           if npm view "${PKG_NAME}@${VERSION}" version >/dev/null 2>&1; then
@@ -127,7 +127,7 @@ jobs:
             exit 0
           fi
 
-          cd alchemy-effect
+          cd packages/alchemy
           bun pm pack --destination .
           TARBALL=$(ls *.tgz 2>/dev/null | head -1)
           echo "Publishing tarball: ${TARBALL}"
@@ -141,7 +141,7 @@ jobs:
 
   # ── Step 3: Build & publish @alchemy.run/better-auth to npm ──
   publish-better-auth:
-    needs: [bump, publish-alchemy-effect]
+    needs: [bump, publish-alchemy]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -167,9 +167,9 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Build alchemy-effect
+      - name: Build alchemy
         run: bun run build
-        working-directory: alchemy-effect
+        working-directory: alchemy
 
       - name: Build better-auth
         run: bun run build

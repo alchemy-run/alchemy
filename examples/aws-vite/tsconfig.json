@@ -12,7 +12,7 @@
   },
   "references": [
     {
-      "path": "../../alchemy-effect/tsconfig.json"
+      "path": "../../packages/alchemy/tsconfig.json"
     }
   ]
 }

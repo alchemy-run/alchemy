@@ -373,7 +373,7 @@ _No significant changes_
 
 - **core**:
   - Inputs and Outputs &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/19 [<samp>(fa8b8)</samp>](https://github.com/alchemy-run/alchemy/commit/fa8b893)
-  - DefineStack, defineStages and alchemy-effect CLI &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/21 [<samp>(d30da)</samp>](https://github.com/alchemy-run/alchemy/commit/d30da72)
+  - DefineStack, defineStages and alchemy CLI &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/21 [<samp>(d30da)</samp>](https://github.com/alchemy-run/alchemy/commit/d30da72)
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
 

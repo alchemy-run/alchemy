@@ -10,7 +10,7 @@ import type {
 } from "./types.ts";
 
 export const repoRoot = path.resolve(import.meta.dir, "../..");
-export const packageRoot = path.join(repoRoot, "alchemy-effect");
+export const packageRoot = path.join(repoRoot, "alchemy");
 export const srcRoot = path.join(packageRoot, "src");
 export const docsRoot = path.join(packageRoot, "docs");
 export const tsConfigPath = path.join(packageRoot, "tsconfig.json");

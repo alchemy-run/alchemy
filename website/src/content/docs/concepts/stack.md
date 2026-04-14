@@ -5,13 +5,13 @@ sidebar:
   order: 0
 ---
 
-A **Stack** is the top-level unit of deployment in alchemy-effect. It
+A **Stack** is the top-level unit of deployment in alchemy. It
 groups resources together, provides cloud provider credentials, and
 manages the lifecycle of everything inside it.
 
 ## Defining a Stack
 
-Every alchemy-effect project has an `alchemy.run.ts` file that exports
+Every alchemy project has an `alchemy.run.ts` file that exports
 a default Stack:
 
 ```typescript
@@ -94,8 +94,8 @@ directory. For team use, configure a remote state store.
 
 ## Commands
 
-| Command                  | Description                       |
-| ------------------------ | --------------------------------- |
-| `alchemy-effect deploy`  | Create or update all resources    |
-| `alchemy-effect destroy` | Delete all resources in the stack |
-| `alchemy-effect dev`     | Start local development mode      |
+| Command           | Description                       |
+| ----------------- | --------------------------------- |
+| `alchemy deploy`  | Create or update all resources    |
+| `alchemy destroy` | Delete all resources in the stack |
+| `alchemy dev`     | Start local development mode      |

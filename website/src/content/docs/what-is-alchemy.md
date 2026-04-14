@@ -1,6 +1,6 @@
 ---
 title: What is Alchemy?
-description: Learn about alchemy-effect, an Infrastructure-as-Effects framework built on Effect.
+description: Learn about alchemy, an Infrastructure-as-Effects framework built on Effect.
 ---
 
 Alchemy Effect is an Infrastructure-as-Effects (IaE) framework that extends Infrastructure-as-Code (IaC) by combining business logic and infrastructure config into a single, type-safe program expressed as Effects.

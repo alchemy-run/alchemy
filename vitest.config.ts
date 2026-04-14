@@ -13,7 +13,7 @@ export default defineConfig({
     sequence: {
       concurrent: true,
     },
-    include: ["alchemy-effect/test/**/*.test.ts"],
+    include: ["alchemy/test/**/*.test.ts"],
     exclude: [
       "**/node_modules/**",
       "**/dist/**",
@@ -38,6 +38,6 @@ export default defineConfig({
         "**/*.config.*",
       ],
     },
-    setupFiles: ["alchemy-effect/test/vitest.setup.ts"],
+    setupFiles: ["alchemy/test/vitest.setup.ts"],
   },
 });

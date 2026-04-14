@@ -8,7 +8,7 @@ sidebar:
 import { Steps } from "@astrojs/starlight/components";
 
 This guide walks you through creating and deploying an AWS Lambda
-Function with alchemy-effect.
+Function with alchemy.
 
 :::note
 For the plain async handler pattern, see the [Async Lambda guide](/guides/async-lambda).
@@ -195,13 +195,13 @@ For the full API reference, see the [Lambda Function provider](/providers/aws/la
    ) {}
    ```
 
-2. **Add resource bindings**
+9. **Add resource bindings**
 
    Create resources and bind capabilities in the init phase. They
    become available to all runtime handlers.
 
    ```typescript
-   import * as DynamoDB from "alchemy-effect/AWS/DynamoDB";
+   import * as DynamoDB from "alchemy/AWS/DynamoDB";
 
    Effect.gen(function* () {
      // init — create resources and bind capabilities
@@ -227,32 +227,32 @@ For the full API reference, see the [Lambda Function provider](/providers/aws/la
    });
    ```
 
-3. **Create the Stack**
+10. **Create the Stack**
 
-   Wire the Function into your `alchemy.run.ts` stack file.
+    Wire the Function into your `alchemy.run.ts` stack file.
 
-   ```typescript
-   // alchemy.run.ts
-   import * as Alchemy from "alchemy";
-   import * as AWS from "alchemy/AWS";
-   import * as Effect from "effect/Effect";
-   import Api from "./src/Api.ts";
+    ```typescript
+    // alchemy.run.ts
+    import * as Alchemy from "alchemy";
+    import * as AWS from "alchemy/AWS";
+    import * as Effect from "effect/Effect";
+    import Api from "./src/Api.ts";
 
-   export default Alchemy.Stack(
-     "MyApp",
-     { providers: AWS.providers() },
-     Effect.gen(function* () {
-       const api = yield* Api;
-       return { url: api.functionUrl };
-     }),
-   );
-   ```
+    export default Alchemy.Stack(
+      "MyApp",
+      { providers: AWS.providers() },
+      Effect.gen(function* () {
+        const api = yield* Api;
+        return { url: api.functionUrl };
+      }),
+    );
+    ```
 
-4. **Deploy**
+11. **Deploy**
 
-   ```sh
-   alchemy deploy
-   ```
+    ```sh
+    alchemy deploy
+    ```
 
 </Steps>
 

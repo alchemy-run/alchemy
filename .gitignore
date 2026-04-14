@@ -1,7 +1,7 @@
 node_modules/
 dist/
 /lib/
-/alchemy-effect/lib/
+/alchemy/lib/
 .out/
 .test/
 .DS_Store
@@ -36,5 +36,5 @@ smoke
 .cache
 .external
 .bundle-benchmark
-alchemy-effect/docs
+packages/alchemy/docs
 .sonda

@@ -42,7 +42,7 @@ sources, and return the service implementation.
 
 ```typescript
 // src/JobStorageDynamoDB.ts
-import * as DynamoDB from "alchemy-effect/AWS/DynamoDB";
+import * as DynamoDB from "alchemy/AWS/DynamoDB";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { JobStorage } from "./JobStorage.ts";
@@ -86,7 +86,7 @@ implementation is behind it.
 
 ```typescript
 // src/Api.ts
-import * as AWS from "alchemy-effect/AWS";
+import * as AWS from "alchemy/AWS";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -185,16 +185,13 @@ runtimes or SDK bindings), use `Layer.provideMerge` to wire them
 together:
 
 ```typescript
-import * as AWS from "alchemy-effect/AWS";
-import * as DynamoDB from "alchemy-effect/AWS/DynamoDB";
-import * as SQS from "alchemy-effect/AWS/SQS";
+import * as AWS from "alchemy/AWS";
+import * as DynamoDB from "alchemy/AWS/DynamoDB";
+import * as SQS from "alchemy/AWS/SQS";
 
 const storageLayer = Layer.provideMerge(
   JobStorageDynamoDB,
-  Layer.mergeAll(
-    AWS.Lambda.TableEventSource,
-    SQS.QueueSinkLive,
-  ).pipe(
+  Layer.mergeAll(AWS.Lambda.TableEventSource, SQS.QueueSinkLive).pipe(
     Layer.provideMerge(
       Layer.mergeAll(
         DynamoDB.GetItemLive,

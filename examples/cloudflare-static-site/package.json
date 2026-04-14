@@ -5,16 +5,16 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/alchemy-run/alchemy-effect"
+    "url": "https://github.com/alchemy-run/alchemy"
   },
   "type": "module",
   "scripts": {
     "build": "vite build",
     "dev:vite": "vite",
     "preview": "vite preview",
-    "deploy": "bun ../../alchemy-effect/bin/alchemy-effect.ts deploy",
-    "dev": "bun ../../alchemy-effect/bin/alchemy-effect.ts dev",
-    "destroy": "bun ../../alchemy-effect/bin/alchemy-effect.ts destroy"
+    "deploy": "bun ../../packages/alchemy/bin/alchemy.ts deploy",
+    "dev": "bun ../../packages/alchemy/bin/alchemy.ts dev",
+    "destroy": "bun ../../packages/alchemy/bin/alchemy.ts destroy"
   },
   "dependencies": {
     "@distilled.cloud/cloudflare": "catalog:",

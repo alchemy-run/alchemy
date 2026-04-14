@@ -6,7 +6,7 @@ import { defineConfig } from "astro/config";
 import starlightBlog from "starlight-blog";
 
 export default defineConfig({
-  site: "https://alchemy-effect.run",
+  site: "https://alchemy.run",
   prefetch: true,
   trailingSlash: "ignore",
   integrations: [
@@ -17,7 +17,7 @@ export default defineConfig({
         !page.endsWith(".mdx"),
     }),
     starlight({
-      title: "alchemy-effect",
+      title: "alchemy",
       favicon: "/favicon.png",
       customCss: ["./src/styles/global.css", "./src/styles/custom.css"],
       prerender: true,
@@ -25,12 +25,11 @@ export default defineConfig({
         {
           icon: "github",
           label: "GitHub",
-          href: "https://github.com/alchemy-run/alchemy-effect",
+          href: "https://github.com/alchemy-run/alchemy",
         },
       ],
       editLink: {
-        baseUrl:
-          "https://github.com/alchemy-run/alchemy-effect/edit/main/website",
+        baseUrl: "https://github.com/alchemy-run/alchemy/edit/main/website",
       },
       sidebar: [
         { label: "Getting Started", link: "/getting-started" },

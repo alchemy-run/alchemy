@@ -1,11 +1,11 @@
-> **alchemy-effect** is in alpha and not ready for production use (expect breaking changes). Come hang in our [Discord](https://discord.gg/jwKw8dBJdN) to participate in the early stages of development.
+> **alchemy** is in alpha and not ready for production use (expect breaking changes). Come hang in our [Discord](https://discord.gg/jwKw8dBJdN) to participate in the early stages of development.
 
-# alchemy-effect
+# alchemy
 
 **Infrastructure-as-Effects** — unify your business logic and infrastructure into a single, type-safe [Effect](https://effect.website) program.
 
 ```bash
-bun add alchemy-effect effect
+bun add alchemy effect
 ```
 
 ## Define a Stack
@@ -423,7 +423,7 @@ Key design principles:
 - **Idempotent create** — handle the case where the resource already exists (e.g. catch `ResourceInUseException`).
 - **Idempotent delete** — if the resource is already gone, don't error (e.g. catch `ResourceNotFoundException`).
 - **Eventual consistency** — wait for the resource to reach a steady state before returning.
-- **Tags** — use `createInternalTags` and `diffTags` from `alchemy-effect/Tags` to brand resources and diff tag changes.
+- **Tags** — use `createInternalTags` and `diffTags` from `alchemy/Tags` to brand resources and diff tag changes.
 
 ## Binding.Service and Binding.Policy
 

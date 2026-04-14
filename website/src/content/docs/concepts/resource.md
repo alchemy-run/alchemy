@@ -1,11 +1,11 @@
 ---
 title: Resource
-description: The fundamental building block of alchemy-effect — a named entity with input properties and output attributes.
+description: The fundamental building block of alchemy — a named entity with input properties and output attributes.
 sidebar:
   order: 1
 ---
 
-A **Resource** is the fundamental building block of alchemy-effect. It
+A **Resource** is the fundamental building block of alchemy. It
 represents a named cloud entity — an S3 Bucket, a DynamoDB Table, a
 Cloudflare Worker, etc. — that is configured with **Input Properties**
 and produces **Output Attributes**.

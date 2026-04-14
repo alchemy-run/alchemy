@@ -34,8 +34,8 @@ Layer composition, see the [Effect Lambda guide](/guides/lambda).
 
 ```typescript
 // alchemy.run.ts
-import * as Alchemy from "alchemy-effect";
-import * as AWS from "alchemy-effect/AWS";
+import * as Alchemy from "alchemy";
+import * as AWS from "alchemy/AWS";
 import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(
@@ -69,18 +69,22 @@ environment.
 
 ```typescript
 // alchemy.run.ts
-const table = yield* AWS.DynamoDB.Table("UsersTable", {
-  partitionKey: "pk",
-  attributes: { pk: "S" },
-});
+const table =
+  yield *
+  AWS.DynamoDB.Table("UsersTable", {
+    partitionKey: "pk",
+    attributes: { pk: "S" },
+  });
 
-const func = yield* AWS.Lambda.Function("ApiFunction", {
-  main: "./src/handler.ts",
-  url: true,
-  env: {
-    TABLE_NAME: table.tableName,
-  },
-});
+const func =
+  yield *
+  AWS.Lambda.Function("ApiFunction", {
+    main: "./src/handler.ts",
+    url: true,
+    env: {
+      TABLE_NAME: table.tableName,
+    },
+  });
 ```
 
 ```typescript
@@ -90,10 +94,12 @@ import { DynamoDBClient, GetItemCommand } from "@aws-sdk/client-dynamodb";
 const client = new DynamoDBClient({});
 
 export const handler = async (event: any) => {
-  const result = await client.send(new GetItemCommand({
-    TableName: process.env.TABLE_NAME,
-    Key: { pk: { S: event.queryStringParameters?.id ?? "" } },
-  }));
+  const result = await client.send(
+    new GetItemCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { pk: { S: event.queryStringParameters?.id ?? "" } },
+    }),
+  );
 
   return {
     statusCode: 200,
@@ -115,10 +121,12 @@ Set `url: true` to create a public Lambda function URL. The URL is
 available as `func.functionUrl` after deployment.
 
 ```typescript
-const func = yield* AWS.Lambda.Function("ApiFunction", {
-  main: "./src/handler.ts",
-  url: true,
-});
+const func =
+  yield *
+  AWS.Lambda.Function("ApiFunction", {
+    main: "./src/handler.ts",
+    url: true,
+  });
 ```
 
 ## VPC connectivity
@@ -127,11 +135,13 @@ Attach a function to a VPC for private connectivity to resources like
 RDS or ElastiCache.
 
 ```typescript
-const func = yield* AWS.Lambda.Function("VpcFunction", {
-  main: "./src/handler.ts",
-  vpc: {
-    subnetIds: ["subnet-abc123", "subnet-def456"],
-    securityGroupIds: ["sg-xyz789"],
-  },
-});
+const func =
+  yield *
+  AWS.Lambda.Function("VpcFunction", {
+    main: "./src/handler.ts",
+    vpc: {
+      subnetIds: ["subnet-abc123", "subnet-def456"],
+      securityGroupIds: ["sg-xyz789"],
+    },
+  });
 ```

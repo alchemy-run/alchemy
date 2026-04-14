@@ -7,8 +7,8 @@
     "dev": "vite dev --port 3000",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy": "bun ../../alchemy-effect/bin/alchemy-effect.js deploy",
-    "destroy": "bun ../../alchemy-effect/bin/alchemy-effect.js destroy"
+    "deploy": "bun ../../packages/alchemy/bin/alchemy.js deploy",
+    "destroy": "bun ../../packages/alchemy/bin/alchemy.js destroy"
   },
   "license": "MIT",
   "devDependencies": {

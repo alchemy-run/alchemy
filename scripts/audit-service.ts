@@ -3,7 +3,7 @@
  * Spec-Driven Service Audit Script
  *
  * This script analyzes a distilled AWS service spec and compares it against
- * the alchemy-effect implementation to identify gaps in bindings, resources,
+ * the alchemy implementation to identify gaps in bindings, resources,
  * event sources, and helpers.
  *
  * Usage:
@@ -966,9 +966,9 @@ function suggestHelpers(
       basedOn: streamOps.map((op) => op.camelCase),
       existingExample:
         service.toLowerCase() === "s3"
-          ? "alchemy-effect/src/AWS/S3/BucketNotifications.ts"
+          ? "alchemy/src/AWS/S3/BucketNotifications.ts"
           : service.toLowerCase() === "sqs"
-            ? "alchemy-effect/src/AWS/SQS/QueueEventSource.ts"
+            ? "alchemy/src/AWS/SQS/QueueEventSource.ts"
             : null,
     });
   }
@@ -1042,12 +1042,12 @@ async function auditService(serviceName: string): Promise<AuditReport> {
     );
   const distilledPath =
     resolvedDistilledPath ?? `@distilled.cloud/aws/${config.distilled}`;
-  const alchemyPath = path.resolve(`alchemy-effect/src/AWS/${config.alchemy}`);
+  const alchemyPath = path.resolve(`alchemy/src/AWS/${config.alchemy}`);
   const bindingTestPath = path.resolve(
-    `alchemy-effect/test/AWS/${config.alchemy}/Bindings.test.ts`,
+    `alchemy/test/AWS/${config.alchemy}/Bindings.test.ts`,
   );
   const indexPath = path.join(alchemyPath, "index.ts");
-  const providersPath = path.resolve("alchemy-effect/src/AWS/Providers.ts");
+  const providersPath = path.resolve("alchemy/src/AWS/Providers.ts");
 
   // Extract data
   const distilledOps = await extractDistilledOperations(

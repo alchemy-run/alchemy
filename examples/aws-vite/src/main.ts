@@ -8,7 +8,7 @@ if (!app) {
 
 app.innerHTML = `
   <main class="page">
-    <p class="eyebrow">alchemy-effect + vite</p>
+    <p class="eyebrow">alchemy + vite</p>
     <h1>Deploy a Vite SPA to AWS with CloudFront, ACM, and Route 53.</h1>
     <p class="lede">
       This example runs a Vite build and publishes the generated assets with

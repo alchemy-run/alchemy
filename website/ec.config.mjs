@@ -21,8 +21,8 @@ export default defineEcConfig({
           strict: true,
           baseUrl,
           paths: {
-            "alchemy-effect": ["./alchemy-effect/src/index.ts"],
-            "alchemy-effect/*": ["./alchemy-effect/src/*"],
+            alchemy: ["./alchemy/src/index.ts"],
+            "alchemy/*": ["./alchemy/src/*"],
           },
         },
       },

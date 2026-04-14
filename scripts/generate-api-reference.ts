@@ -12,9 +12,9 @@ import {
 const websiteRoot = path.join(import.meta.dir, "../website");
 
 const config = {
-  srcRoot: path.join(import.meta.dir, "../alchemy-effect/src"),
+  srcRoot: path.join(import.meta.dir, "../alchemy/src"),
   outRoot: path.join(websiteRoot, "src/content/docs/providers"),
-  tsConfig: path.join(import.meta.dir, "../alchemy-effect/tsconfig.json"),
+  tsConfig: path.join(import.meta.dir, "../alchemy/tsconfig.json"),
   excludeFile(baseName: string): boolean {
     if (baseName === "index.ts") return true;
     if (/^[a-z]/.test(baseName)) return true;

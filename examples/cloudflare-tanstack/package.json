@@ -5,15 +5,15 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/alchemy-run/alchemy-effect"
+    "url": "https://github.com/alchemy-run/alchemy"
   },
   "type": "module",
   "scripts": {
     "dev": "vite dev --port 3000",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy": "bun ../../alchemy-effect/bin/alchemy-effect.ts deploy",
-    "destroy": "bun ../../alchemy-effect/bin/alchemy-effect.ts destroy"
+    "deploy": "bun ../../packages/alchemy/bin/alchemy.ts deploy",
+    "destroy": "bun ../../packages/alchemy/bin/alchemy.ts destroy"
   },
   "dependencies": {
     "@tanstack/react-router": "^1.167.4",

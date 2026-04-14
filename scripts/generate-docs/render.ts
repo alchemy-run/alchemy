@@ -11,8 +11,8 @@ import type {
 import {
   docsRoot,
   escapeMarkdown,
-  relativeDocLink,
   labelFromDocRelativePath,
+  relativeDocLink,
 } from "./utils.ts";
 
 function renderLinks(links: LinkDoc[]) {
@@ -314,7 +314,7 @@ export function syntheticIndexes(entries: SourceEntry[]) {
         `# ${title}`,
         "",
         directory === "."
-          ? "Static API reference generated from `alchemy-effect/src`."
+          ? "Static API reference generated from `alchemy/src`."
           : `Directory index for \`src/${directory}\`.`,
         "",
         childDirectories.length > 0

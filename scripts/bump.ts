@@ -42,7 +42,7 @@ async function checkNpmVersion(
 async function checkGithubTag(version: string): Promise<boolean> {
   try {
     const response = await fetch(
-      `https://api.github.com/repos/alchemy-run/alchemy-effect/git/refs/tags/v${version}`,
+      `https://api.github.com/repos/alchemy-run/alchemy/git/refs/tags/v${version}`,
     );
     return response.ok;
   } catch {
@@ -53,7 +53,7 @@ async function checkGithubTag(version: string): Promise<boolean> {
 async function checkGithubRelease(version: string): Promise<boolean> {
   try {
     const response = await fetch(
-      `https://api.github.com/repos/alchemy-run/alchemy-effect/releases/tags/v${version}`,
+      `https://api.github.com/repos/alchemy-run/alchemy/releases/tags/v${version}`,
     );
     return response.ok;
   } catch {
@@ -72,11 +72,7 @@ if (!versionInput) {
 
 $.cwd(process.cwd());
 
-const alchemyPackageJsonPath = join(
-  process.cwd(),
-  "alchemy-effect",
-  "package.json",
-);
+const alchemyPackageJsonPath = join(process.cwd(), "alchemy", "package.json");
 const alchemyPackageJson = JSON.parse(
   await readFile(alchemyPackageJsonPath, "utf-8"),
 );
@@ -172,9 +168,9 @@ console.log(`Updated version to ${newVersion} in package.json`);
 // Generate build date for the release
 // console.log("Generating Workers compatibility date...");
 // await $`cd alchemy && bun ./scripts/generate-compatibility-date.ts`;
-// await $`git add package.json alchemy-effect/package.json alchemy/src/cloudflare/compatibility-date.gen.ts bun.lock`;
+// await $`git add package.json alchemy/package.json alchemy/src/cloudflare/compatibility-date.gen.ts bun.lock`;
 
-await $`git add package.json alchemy-effect/package.json packages/better-auth/package.json bun.lock`;
+await $`git add package.json alchemy/package.json packages/better-auth/package.json bun.lock`;
 await $`git commit -m "chore(release): ${newVersion}"`;
 await $`git tag v${newVersion}`;
 
