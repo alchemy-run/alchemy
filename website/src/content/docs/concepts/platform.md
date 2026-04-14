@@ -19,7 +19,7 @@ Effect.gen(function* () {
       return HttpServerResponse.text(value ?? "not found");
     }),
   };
-})
+});
 ```
 
 There are three ways to define a Platform resource, from simplest to most flexible:
@@ -220,7 +220,10 @@ export default Counter.make(
           Effect.gen(function* () {
             const next = count + 1;
             yield* state.storage.put("count", next);
-            yield* db.prepare("INSERT INTO logs (count) VALUES (?)").bind(next).run();
+            yield* db
+              .prepare("INSERT INTO logs (count) VALUES (?)")
+              .bind(next)
+              .run();
             return next;
           }),
       };
@@ -240,10 +243,7 @@ export class Sandbox extends Cloudflare.Container<
   {
     exec: (cmd: string) => Effect.Effect<{ stdout: string }>;
   }
->()(
-  "Sandbox",
-  { main: import.meta.filename },
-) {}
+>()("Sandbox", { main: import.meta.filename }) {}
 ```
 
 ```typescript
@@ -252,10 +252,11 @@ export default Sandbox.make(
   Effect.gen(function* () {
     const cp = yield* ChildProcessSpawner;
     return Sandbox.of({
-      exec: (cmd) => cp.spawn(ChildProcess.make(cmd, { shell: true })).pipe(
-        Effect.map(({ stdout }) => ({ stdout })),
-        Effect.scoped,
-      ),
+      exec: (cmd) =>
+        cp.spawn(ChildProcess.make(cmd, { shell: true })).pipe(
+          Effect.map(({ stdout }) => ({ stdout })),
+          Effect.scoped,
+        ),
     });
   }),
 );
@@ -289,24 +290,24 @@ The same pattern works for Durable Objects and Containers:
 
 ```typescript
 // Binding a DO
-const counters = yield* Counter;
+const counters = yield * Counter;
 const counter = counters.getByName("user-123");
-yield* counter.increment();
+yield * counter.increment();
 
 // Binding a Container
-const sandbox = yield* Cloudflare.Container.bind(Sandbox);
-const container = yield* Cloudflare.start(sandbox);
-yield* container.exec("echo hi");
+const sandbox = yield * Cloudflare.Container.bind(Sandbox);
+const container = yield * Cloudflare.start(sandbox);
+yield * container.exec("echo hi");
 ```
 
 ## When to Use Which
 
-| Scenario | Style |
-| --- | --- |
-| Plain async handler, no Effect runtime | Async |
-| Quick prototype or script | Effect (function call) |
-| Standalone Worker, nothing imports it | Effect |
-| Worker → DO (one direction) | Either works; Effect is simpler |
-| WorkerA ↔ WorkerB (bi-directional) | Layer (bundler tree-shakes `.make()`) |
-| Multiple Workers bind the same DO | Layer (shared class, one `.make()`) |
-| Container (always separate process) | Layer (required by design) |
+| Scenario                               | Style                                 |
+| -------------------------------------- | ------------------------------------- |
+| Plain async handler, no Effect runtime | Async                                 |
+| Quick prototype or script              | Effect (function call)                |
+| Standalone Worker, nothing imports it  | Effect                                |
+| Worker → DO (one direction)            | Either works; Effect is simpler       |
+| WorkerA ↔ WorkerB (bi-directional)     | Layer (bundler tree-shakes `.make()`) |
+| Multiple Workers bind the same DO      | Layer (shared class, one `.make()`)   |
+| Container (always separate process)    | Layer (required by design)            |

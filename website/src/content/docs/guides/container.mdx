@@ -5,8 +5,8 @@ sidebar:
   order: 6
 ---
 
-import { Steps } from '@astrojs/starlight/components';
-import Terminal from '../../../components/Terminal.astro';
+import { Steps } from "@astrojs/starlight/components";
+import Terminal from "../../../components/Terminal.astro";
 
 export const deployOutput = `[u]Plan[/u]: [g]2 to create[/g]
 
@@ -50,10 +50,7 @@ For why the layer pattern matters, see the [Platform concept](/concepts/platform
          stdout: string;
        }>;
      }
-   >()(
-     "Sandbox",
-     { main: import.meta.filename },
-   ) {}
+   >()("Sandbox", { main: import.meta.filename }) {}
    ```
 
 2. **Implement the Runtime**
@@ -74,8 +71,7 @@ For why the layer pattern matters, see the [Platform concept](/concepts/platform
    export default Sandbox.make(
      Effect.gen(function* () {
        return Sandbox.of({
-         exec: (cmd) =>
-           Effect.succeed({ exitCode: 0, stdout: `ran: ${cmd}` }),
+         exec: (cmd) => Effect.succeed({ exitCode: 0, stdout: `ran: ${cmd}` }),
          fetch: Effect.succeed(
            HttpServerResponse.text("Hello from container!"),
          ),
@@ -148,10 +144,9 @@ If your container runs an HTTP server, use `getTcpPort` to get a
 fetch handle for a specific port:
 
 ```typescript
-const container = yield* Cloudflare.start(sandbox);
-const { fetch } = yield* container.getTcpPort(3000);
+const container = yield * Cloudflare.start(sandbox);
+const { fetch } = yield * container.getTcpPort(3000);
 
-const response = yield* fetch(
-  HttpClientRequest.get("http://container/health"),
-);
+const response =
+  yield * fetch(HttpClientRequest.get("http://container/health"));
 ```

@@ -5,8 +5,8 @@ sidebar:
   order: 4
 ---
 
-import { Steps } from '@astrojs/starlight/components';
-import Terminal from '../../../components/Terminal.astro';
+import { Steps } from "@astrojs/starlight/components";
+import Terminal from "../../../components/Terminal.astro";
 
 export const deployOutput = `[u]Plan[/u]: [g]1 to create[/g]
 
@@ -37,7 +37,7 @@ For async, effect, and layer patterns, see the [Platform concept](/concepts/plat
    Create a file for your Worker. The `main` prop tells Alchemy which
    file to bundle and deploy.
 
-   ```typescript twoslash
+   ```typescript
    // src/Api.ts
    import * as Cloudflare from "alchemy-effect/Cloudflare";
    import * as Effect from "effect/Effect";
@@ -74,7 +74,7 @@ For async, effect, and layer patterns, see the [Platform concept](/concepts/plat
          return HttpServerResponse.text(value ?? "no value");
        }),
      };
-   })
+   });
    ```
 
 3. **Create the Stack**

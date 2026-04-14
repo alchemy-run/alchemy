@@ -5,7 +5,7 @@ sidebar:
   order: 1
 ---
 
-import Terminal from '../../../components/Terminal.astro';
+import Terminal from "../../../components/Terminal.astro";
 
 export const planOutput = `[u]Plan[/u]: [g]2 to create[/g]
 
@@ -56,7 +56,7 @@ a default Stack. The CLI provides three commands to manage its
 lifecycle: **plan** to preview changes, **deploy** to apply them, and
 **destroy** to tear everything down.
 
-```typescript
+```typescript twoslash
 // alchemy.run.ts
 import * as Alchemy from "alchemy-effect";
 import * as Cloudflare from "alchemy-effect/Cloudflare";
@@ -67,6 +67,7 @@ export default Alchemy.Stack(
   { providers: Cloudflare.providers() },
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2Bucket("Bucket");
+    //    ^?
     const api = yield* Cloudflare.Worker("Api", {
       main: "./src/api.ts",
       bindings: { Bucket: bucket },
@@ -91,10 +92,10 @@ alchemy plan
 The plan uses `+` for creates, `~` for updates, and `-` for deletes.
 No approval prompt is shown and no changes are made.
 
-| Flag | Description |
-| --- | --- |
-| `--stage <name>` | Stage to plan against (defaults to `dev_$USER`) |
-| `--env-file <path>` | Load environment variables from a file |
+| Flag                | Description                                     |
+| ------------------- | ----------------------------------------------- |
+| `--stage <name>`    | Stage to plan against (defaults to `dev_$USER`) |
+| `--env-file <path>` | Load environment variables from a file          |
 
 ## Deploy
 
@@ -111,13 +112,13 @@ On subsequent deploys, only changed resources are updated:
 
 <Terminal content={updateOutput} />
 
-| Flag | Description |
-| --- | --- |
-| `--stage <name>` | Stage to deploy to (defaults to `dev_$USER`) |
-| `--yes` | Skip the approval prompt |
-| `--dry-run` | Show the plan without applying (same as `alchemy plan`) |
-| `--force` | Force updates for resources that would otherwise no-op |
-| `--env-file <path>` | Load environment variables from a file |
+| Flag                | Description                                             |
+| ------------------- | ------------------------------------------------------- |
+| `--stage <name>`    | Stage to deploy to (defaults to `dev_$USER`)            |
+| `--yes`             | Skip the approval prompt                                |
+| `--dry-run`         | Show the plan without applying (same as `alchemy plan`) |
+| `--force`           | Force updates for resources that would otherwise no-op  |
+| `--env-file <path>` | Load environment variables from a file                  |
 
 ## Destroy
 
@@ -131,12 +132,12 @@ alchemy destroy
 
 <Terminal content={destroyOutput} />
 
-| Flag | Description |
-| --- | --- |
-| `--stage <name>` | Stage to destroy (defaults to `dev_$USER`) |
-| `--yes` | Skip the approval prompt |
-| `--dry-run` | Show what would be deleted without actually deleting |
-| `--env-file <path>` | Load environment variables from a file |
+| Flag                | Description                                          |
+| ------------------- | ---------------------------------------------------- |
+| `--stage <name>`    | Stage to destroy (defaults to `dev_$USER`)           |
+| `--yes`             | Skip the approval prompt                             |
+| `--dry-run`         | Show what would be deleted without actually deleting |
+| `--env-file <path>` | Load environment variables from a file               |
 
 ## Stages
 

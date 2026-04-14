@@ -5,7 +5,7 @@ sidebar:
   order: 0
 ---
 
-import { Steps } from '@astrojs/starlight/components';
+import { Steps } from "@astrojs/starlight/components";
 
 Alchemy v1 uses `async/await` with top-level `await` for orchestration.
 Alchemy-effect replaces this with Effect generators for type-safe error
@@ -13,13 +13,13 @@ handling, composable retries, and declarative resource wiring.
 
 ## Key differences
 
-| v1 | alchemy-effect |
-| --- | --- |
-| `await Resource(...)` | `yield* Resource(...)` |
-| `entrypoint` prop | `main` prop |
-| `await app.finalize()` | Stack handles lifecycle automatically |
+| v1                      | alchemy-effect                                 |
+| ----------------------- | ---------------------------------------------- |
+| `await Resource(...)`   | `yield* Resource(...)`                         |
+| `entrypoint` prop       | `main` prop                                    |
+| `await app.finalize()`  | Stack handles lifecycle automatically          |
 | `alchemy("name", opts)` | `Alchemy.Stack("name", { providers }, effect)` |
-| Errors are unchecked | Errors are in the type system via Effect |
+| Errors are unchecked    | Errors are in the type system via Effect       |
 
 ## Migration steps
 
@@ -28,6 +28,7 @@ handling, composable retries, and declarative resource wiring.
 1. **Replace the stack entry**
 
    **v1:**
+
    ```typescript
    import alchemy from "alchemy";
    import { Worker, R2Bucket } from "alchemy/cloudflare";
@@ -42,6 +43,7 @@ handling, composable retries, and declarative resource wiring.
    ```
 
    **alchemy-effect:**
+
    ```typescript
    import * as Alchemy from "alchemy-effect";
    import * as Cloudflare from "alchemy-effect/Cloudflare";

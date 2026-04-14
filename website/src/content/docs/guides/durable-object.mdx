@@ -5,8 +5,8 @@ sidebar:
   order: 5
 ---
 
-import { Steps } from '@astrojs/starlight/components';
-import Terminal from '../../../components/Terminal.astro';
+import { Steps } from "@astrojs/starlight/components";
+import Terminal from "../../../components/Terminal.astro";
 
 export const deployOutput = `[u]Plan[/u]: [g]1 to create[/g]
 
@@ -145,9 +145,10 @@ Return a `fetch` handler that upgrades connections, and
        socket: Cloudflare.DurableWebSocket,
        message: string | Uint8Array,
      ) {
-       const text = typeof message === "string"
-         ? message
-         : new TextDecoder().decode(message);
+       const text =
+         typeof message === "string"
+           ? message
+           : new TextDecoder().decode(message);
        // process the message
      }),
      webSocketClose: Effect.fnUntraced(function* (
@@ -165,7 +166,7 @@ Return a `fetch` handler that upgrades connections, and
    In your Worker, forward the upgrade request to the DO:
 
    ```typescript
-   const rooms = yield* Room;
+   const rooms = yield * Room;
 
    return {
      fetch: Effect.gen(function* () {

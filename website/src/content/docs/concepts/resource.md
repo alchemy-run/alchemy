@@ -15,9 +15,11 @@ and produces **Output Attributes**.
 Resources are created by yielding them inside an `Effect.gen` block:
 
 ```typescript
-const bucket = yield* S3.Bucket("my-bucket", {
-  forceDestroy: true,
-});
+const bucket =
+  yield *
+  S3.Bucket("my-bucket", {
+    forceDestroy: true,
+  });
 
 // bucket.bucketName, bucket.bucketArn, etc. are Output Attributes
 ```
@@ -47,12 +49,14 @@ After a Resource is created or updated, it produces Output Attributes
 that you can pass as Input Properties to other Resources:
 
 ```typescript
-const bucket = yield* S3.Bucket("my-bucket", {});
-const fn = yield* Lambda.Function("my-function", {
-  main: "./src/handler.ts",
-  // pass an output attribute as an input property
-  environment: { BUCKET_NAME: bucket.bucketName },
-});
+const bucket = yield * S3.Bucket("my-bucket", {});
+const fn =
+  yield *
+  Lambda.Function("my-function", {
+    main: "./src/handler.ts",
+    // pass an output attribute as an input property
+    environment: { BUCKET_NAME: bucket.bucketName },
+  });
 ```
 
 This creates a dependency between the resources — the function depends

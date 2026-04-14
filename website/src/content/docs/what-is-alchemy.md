@@ -24,13 +24,17 @@ You write a program using Effect generators that yield Resources. Each Resource 
 import { Bucket } from "alchemy-effect/AWS/S3";
 import { Function } from "alchemy-effect/AWS/Lambda";
 
-const bucket = yield* Bucket("my-bucket", {
-  forceDestroy: true,
-});
+const bucket =
+  yield *
+  Bucket("my-bucket", {
+    forceDestroy: true,
+  });
 
-const fn = yield* Function("my-function", {
-  handler: myHandler,
-});
+const fn =
+  yield *
+  Function("my-function", {
+    handler: myHandler,
+  });
 ```
 
 Resources are deployed, updated, or deleted by the Alchemy engine based on the difference between desired state and current state.

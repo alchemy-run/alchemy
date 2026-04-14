@@ -120,8 +120,6 @@ if: "${{ github.event.action != 'closed' }}",
             name: "Deploy",
             run: `${cfg.run} deploy --stage \${{ env.STAGE }}`,
             env: {
-              CLOUDFLARE_API_TOKEN: "${{ secrets.CLOUDFLARE_API_TOKEN }}",
-              CLOUDFLARE_ACCOUNT_ID: "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
               PULL_REQUEST: "${{ github.event.number }}",
               GITHUB_SHA: "${{ github.sha }}",
               GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}",
@@ -133,7 +131,6 @@ if: "${{ github.event.action != 'closed' }}",
         "runs-on": "ubuntu-latest",
         if: "${{ github.event_name == 'pull_request' && github.event.action == 'closed' }}",
         permissions: {
-          "id-token": "write",
           contents: "read",
           "pull-requests": "write",
         },
@@ -157,8 +154,6 @@ fi`,
             name: "Destroy Preview Environment",
             run: `${cfg.destroy} destroy --stage \${{ env.STAGE }}`,
             env: {
-              CLOUDFLARE_API_TOKEN: "${{ secrets.CLOUDFLARE_API_TOKEN }}",
-              CLOUDFLARE_ACCOUNT_ID: "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
               PULL_REQUEST: "${{ github.event.number }}",
             },
           },
@@ -174,31 +169,15 @@ Set up preview deployments and continuous integration for your alchemy-effect pr
 
 As part of this guide, we'll:
 
-1. Add a GitHub Workflow to deploy your `prod` stage from the `main` branch
-2. Deploy a preview `pr-<number>` stage for each Pull Request
-3. Post a GitHub Comment on the PR with the preview URL
+1. Create a GitHub Actions workflow with PR previews
+2. Post a GitHub Comment on each PR with the preview URL
+3. Create a GitHub Stack (`stacks/github.ts`) that configures your repository with provider credentials using `GitHub.Secret` and `GitHub.Variable`
+
+## GitHub Actions Workflow
 
 <Steps>
 
-1. **Configure secrets**
-
-   Add the secrets your providers need in your GitHub repository settings
-   (Settings → Secrets and variables → Actions). For a Cloudflare-based
-   project, that's typically:
-
-   ```
-   CLOUDFLARE_API_TOKEN=your-cloudflare-api-token
-   CLOUDFLARE_ACCOUNT_ID=your-cloudflare-account-id
-   ```
-
-   For AWS-based projects, configure `AWS_ACCESS_KEY_ID` /
-   `AWS_SECRET_ACCESS_KEY` or use
-   [OIDC federation](https://docs.github.com/en/actions/security-for-github-actions/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services).
-
-   `GITHUB_TOKEN` is provided automatically by GitHub Actions and is used by
-   the `GitHub.Comment` resource to post PR comments.
-
-2. **Add preview comments to your stack**
+1. **Add preview comments to your stack**
 
    Update your `alchemy.run.ts` to post a preview URL on each pull request.
    The comment auto-updates on every push because the logical ID stays the
@@ -206,17 +185,15 @@ As part of this guide, we'll:
 
    ```diff lang="typescript"
    import * as Alchemy from "alchemy-effect";
-   import * as Cloudflare from "alchemy-effect/Cloudflare";
    + import * as GitHub from "alchemy-effect/GitHub";
    + import * as Output from "alchemy-effect/Output";
    import * as Effect from "effect/Effect";
-   import Api from "./src/Api.ts";
 
    export default Alchemy.Stack(
      "my-app",
-     { providers: Cloudflare.providers() },
+     { providers: /* ... */ },
      Effect.gen(function* () {
-       const api = yield* Api;
+       const app = yield* App;
 
    +   if (process.env.PULL_REQUEST) {
    +     yield* GitHub.Comment("preview-comment", {
@@ -226,7 +203,7 @@ As part of this guide, we'll:
    +       body: Output.interpolate`
    +         ## Preview Deployed
    +
-   +         **URL:** ${api.url}
+   +         **URL:** ${app.url}
    +
    +         Built from commit ${process.env.GITHUB_SHA?.slice(0, 7)}
    +
@@ -236,12 +213,12 @@ As part of this guide, we'll:
    +     });
    +   }
 
-       return { url: api.url };
+       return { url: app.url };
      }),
    );
    ```
 
-3. **Create the deployment workflow**
+2. **Create the base deployment workflow**
 
    Create `.github/workflows/deploy.yml`. This workflow deploys `prod` on
    pushes to `main` and a `pr-<number>` stage for each pull request. When a
@@ -274,7 +251,277 @@ As part of this guide, we'll:
    - Pushes to `main` → `prod`
    - Other branches → the branch name
 
-   The cleanup job includes a safety check to prevent accidental destruction of the production environment.
+   The cleanup job includes a safety check to prevent accidental destruction
+   of the production environment.
    :::
 
+3. **Add provider credentials**
+
+   The base workflow above doesn't include any provider credentials yet.
+   Pick the section below that matches your provider and apply the changes
+   to your workflow.
+
+   `GITHUB_TOKEN` is provided automatically by GitHub Actions and is used
+   by the `GitHub.Comment` resource to post PR comments.
+
 </Steps>
+
+## GitHub Stack
+
+Before CI can deploy, your GitHub repository needs provider credentials
+configured as secrets and variables. We recommend managing this with a
+dedicated `stacks/github.ts` stack that you deploy once locally.
+
+The base stack uses `GitHub.Secret` and `GitHub.Variable` to configure
+your repository programmatically:
+
+Pick the section below that matches your provider for a complete example.
+
+After creating the file, deploy it once locally:
+
+```sh
+alchemy deploy stacks/github.ts
+```
+
+## Cloudflare
+
+Add your Cloudflare credentials to the GitHub stack:
+
+```diff lang="typescript"
+// stacks/github.ts
+import * as Alchemy from "alchemy-effect";
++ import * as Cloudflare from "alchemy-effect/Cloudflare";
+import * as GitHub from "alchemy-effect/GitHub";
++ import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
++ import * as Redacted from "effect/Redacted";
+
+export default Alchemy.Stack(
+  "github",
+  {
++   providers: Cloudflare.providers(),
+  },
+  Effect.gen(function* () {
++   const cfApiToken = yield* Config.string("CLOUDFLARE_API_TOKEN");
++   const cfAccountId = yield* Config.string("CLOUDFLARE_ACCOUNT_ID");
++
++   yield* GitHub.Secret("cf-api-token", {
++     owner: "your-org",
++     repository: "your-repo",
++     name: "CLOUDFLARE_API_TOKEN",
++     value: Redacted.make(cfApiToken),
++   });
++
++   yield* GitHub.Secret("cf-account-id", {
++     owner: "your-org",
++     repository: "your-repo",
++     name: "CLOUDFLARE_ACCOUNT_ID",
++     value: Redacted.make(cfAccountId),
++   });
+  }),
+);
+```
+
+Then add the secrets to your workflow's deploy and cleanup steps:
+
+```diff lang="yaml"
+      - name: Deploy
+        run: bun alchemy deploy --stage ${{ env.STAGE }}
+        env:
++         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
++         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PULL_REQUEST: ${{ github.event.number }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+```diff lang="yaml"
+      - name: Destroy Preview Environment
+        run: bun alchemy destroy --stage ${{ env.STAGE }}
+        env:
++         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
++         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PULL_REQUEST: ${{ github.event.number }}
+```
+
+## AWS with GitHub OIDC (recommended)
+
+GitHub OIDC lets your workflow assume an IAM role without storing long-lived
+access keys. The GitHub stack creates the OIDC provider and IAM role,
+then configures the repo with the role ARN and region as variables.
+
+```diff lang="typescript"
+// stacks/github.ts
+import * as Alchemy from "alchemy-effect";
++ import * as AWS from "alchemy-effect/AWS";
+import * as GitHub from "alchemy-effect/GitHub";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "github",
+  {
++   providers: AWS.providers(),
+  },
+  Effect.gen(function* () {
++   const oidc = yield* AWS.IAM.OpenIDConnectProvider("GitHubOidc", {
++     url: "https://token.actions.githubusercontent.com",
++     clientIDList: ["sts.amazonaws.com"],
++   });
++
++   const role = yield* AWS.IAM.Role("GitHubActionsRole", {
++     roleName: "github-actions",
++     assumeRolePolicyDocument: {
++       Version: "2012-10-17",
++       Statement: [
++         {
++           Effect: "Allow",
++           Principal: {
++             Federated: oidc.openIDConnectProviderArn,
++           },
++           Action: "sts:AssumeRoleWithWebIdentity",
++           Condition: {
++             StringEquals: {
++               "token.actions.githubusercontent.com:aud":
++                 "sts.amazonaws.com",
++             },
++             StringLike: {
++               "token.actions.githubusercontent.com:sub":
++                 "repo:your-org/your-repo:*",
++             },
++           },
++         },
++       ],
++     },
++     managedPolicyArns: [
++       "arn:aws:iam::aws:policy/AdministratorAccess",
++     ],
++   });
++
++   const region = yield* AWS.Region;
++
++   yield* GitHub.Variable("aws-role-arn", {
++     owner: "your-org",
++     repository: "your-repo",
++     name: "AWS_ROLE_ARN",
++     value: role.roleArn,
++   });
++
++   yield* GitHub.Variable("aws-region", {
++     owner: "your-org",
++     repository: "your-repo",
++     name: "AWS_REGION",
++     value: region,
++   });
+  }),
+);
+```
+
+After deploying, update the workflow to add `id-token: write` and the
+`configure-aws-credentials` step:
+
+```diff lang="yaml"
+    deploy:
+      permissions:
++       id-token: write
+        contents: read
+        pull-requests: write
+      steps:
+        - uses: actions/checkout@v4
+        # ...setup and install...
++       - name: Configure AWS credentials
++         uses: aws-actions/configure-aws-credentials@v4
++         with:
++           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
++           aws-region: ${{ vars.AWS_REGION }}
+        - name: Deploy
+          run: bun alchemy deploy --stage ${{ env.STAGE }}
+```
+
+```diff lang="yaml"
+    cleanup:
+      permissions:
++       id-token: write
+        contents: read
+        pull-requests: write
+      steps:
+        - uses: actions/checkout@v4
+        # ...setup, install, and safety check...
++       - name: Configure AWS credentials
++         uses: aws-actions/configure-aws-credentials@v4
++         with:
++           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
++           aws-region: ${{ vars.AWS_REGION }}
+        - name: Destroy Preview Environment
+          run: bun alchemy destroy --stage ${{ env.STAGE }}
+```
+
+## AWS with access keys
+
+If you can't use OIDC, store static IAM access keys as repository secrets
+instead.
+
+```diff lang="typescript"
+// stacks/github.ts
+import * as Alchemy from "alchemy-effect";
++ import * as AWS from "alchemy-effect/AWS";
+import * as GitHub from "alchemy-effect/GitHub";
++ import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
++ import * as Redacted from "effect/Redacted";
+
+export default Alchemy.Stack(
+  "github",
+  {
++   providers: AWS.providers(),
+  },
+  Effect.gen(function* () {
++   const accessKeyId = yield* Config.string("AWS_ACCESS_KEY_ID");
++   const secretAccessKey = yield* Config.string("AWS_SECRET_ACCESS_KEY");
++
++   yield* GitHub.Secret("aws-access-key-id", {
++     owner: "your-org",
++     repository: "your-repo",
++     name: "AWS_ACCESS_KEY_ID",
++     value: Redacted.make(accessKeyId),
++   });
++
++   yield* GitHub.Secret("aws-secret-access-key", {
++     owner: "your-org",
++     repository: "your-repo",
++     name: "AWS_SECRET_ACCESS_KEY",
++     value: Redacted.make(secretAccessKey),
++   });
++
++   yield* GitHub.Variable("aws-region", {
++     owner: "your-org",
++     repository: "your-repo",
++     name: "AWS_REGION",
++     value: "us-east-1",
++   });
+  }),
+);
+```
+
+Then add the secrets to your workflow's deploy and cleanup steps:
+
+```diff lang="yaml"
+      - name: Deploy
+        run: bun alchemy deploy --stage ${{ env.STAGE }}
+        env:
++         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
++         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
++         AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+          PULL_REQUEST: ${{ github.event.number }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+```diff lang="yaml"
+      - name: Destroy Preview Environment
+        run: bun alchemy destroy --stage ${{ env.STAGE }}
+        env:
++         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
++         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
++         AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+          PULL_REQUEST: ${{ github.event.number }}
+```

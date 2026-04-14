@@ -5,8 +5,8 @@ sidebar:
   order: 3
 ---
 
-import { Steps } from '@astrojs/starlight/components';
-import Terminal from '../../../components/Terminal.astro';
+import { Steps } from "@astrojs/starlight/components";
+import Terminal from "../../../components/Terminal.astro";
 
 export const deployOutput = `[u]Plan[/u]: [g]1 to create[/g]
 
@@ -46,7 +46,7 @@ single-page application.
    command, output directory, or Wrangler config needed — Alchemy
    handles it all via the Vite plugin.
 
-   ```typescript
+   ```typescript twoslash
    // alchemy.run.ts
    import * as Alchemy from "alchemy-effect";
    import * as Cloudflare from "alchemy-effect/Cloudflare";
@@ -57,6 +57,7 @@ single-page application.
      { providers: Cloudflare.providers() },
      Effect.gen(function* () {
        const app = yield* Cloudflare.Vite("App", {
+         //    ^?
          compatibility: { flags: ["nodejs_compat"] },
        });
        return { url: app.url };
@@ -73,26 +74,28 @@ single-page application.
    routing before falling back to static assets:
 
    ```typescript
-   yield* Cloudflare.Vite("SolidStart", {
-     compatibility: { flags: ["nodejs_compat"] },
-     assets: {
-       config: { runWorkerFirst: true },
-     },
-   });
+   yield *
+     Cloudflare.Vite("SolidStart", {
+       compatibility: { flags: ["nodejs_compat"] },
+       assets: {
+         config: { runWorkerFirst: true },
+       },
+     });
    ```
 
    For SPAs (Vue, React, etc.), configure client-side routing:
 
    ```typescript
-   yield* Cloudflare.Vite("Vue", {
-     compatibility: { flags: ["nodejs_compat"] },
-     assets: {
-       config: {
-         htmlHandling: "auto-trailing-slash",
-         notFoundHandling: "single-page-application",
+   yield *
+     Cloudflare.Vite("Vue", {
+       compatibility: { flags: ["nodejs_compat"] },
+       assets: {
+         config: {
+           htmlHandling: "auto-trailing-slash",
+           notFoundHandling: "single-page-application",
+         },
        },
-     },
-   });
+     });
    ```
 
 4. **Configure memoization (optional)**
@@ -105,11 +108,12 @@ single-page application.
    relevant files trigger rebuilds:
 
    ```typescript
-   yield* Cloudflare.Vite("Docs", {
-     memo: {
-       include: ["src/**", "content/**", "package.json"],
-     },
-   });
+   yield *
+     Cloudflare.Vite("Docs", {
+       memo: {
+         include: ["src/**", "content/**", "package.json"],
+       },
+     });
    ```
 
    Set `lockfile: false` if your build output doesn't depend on

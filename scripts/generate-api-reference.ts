@@ -165,7 +165,11 @@ function parseJSDoc(node: Node): ParsedJSDoc {
         case "section":
           flushExample();
           flushSectionDesc();
-          currentSection = { title: value || "Examples", description: "", examples: [] };
+          currentSection = {
+            title: value || "Examples",
+            description: "",
+            examples: [],
+          };
           sections.push(currentSection);
           collectingSectionDesc = true;
           break;
@@ -233,9 +237,7 @@ function findPrimaryJSDoc(sourceFile: SourceFile): ParsedJSDoc {
 
   if (firstWithSummary) return firstWithSummary;
 
-  const rawJSDocBlocks = sourceFile
-    .getFullText()
-    .match(/\/\*\*[\s\S]*?\*\//g);
+  const rawJSDocBlocks = sourceFile.getFullText().match(/\/\*\*[\s\S]*?\*\//g);
   if (rawJSDocBlocks) {
     for (const block of rawJSDocBlocks) {
       if (block.includes("@section") || block.includes("@resource")) {
@@ -254,7 +256,11 @@ function findPrimaryJSDoc(sourceFile: SourceFile): ParsedJSDoc {
           if (!currentExample) return;
           currentExample.body = currentExample.body.trim();
           if (!currentSection) {
-            currentSection = { title: "Examples", description: "", examples: [] };
+            currentSection = {
+              title: "Examples",
+              description: "",
+              examples: [],
+            };
             sections.push(currentSection);
           }
           currentSection.examples.push(currentExample);
@@ -276,11 +282,17 @@ function findPrimaryJSDoc(sourceFile: SourceFile): ParsedJSDoc {
             const [, name, rest] = tag;
             const value = (rest ?? "").trim();
             switch (name) {
-              case "resource": hasResourceTag = true; break;
+              case "resource":
+                hasResourceTag = true;
+                break;
               case "section":
                 flushExample();
                 flushSectionDesc();
-                currentSection = { title: value || "Examples", description: "", examples: [] };
+                currentSection = {
+                  title: value || "Examples",
+                  description: "",
+                  examples: [],
+                };
                 sections.push(currentSection);
                 collectingSectionDesc = true;
                 break;
@@ -292,9 +304,15 @@ function findPrimaryJSDoc(sourceFile: SourceFile): ParsedJSDoc {
             }
             continue;
           }
-          if (!sawTag) { summaryLines.push(line); continue; }
-          if (currentExample) { currentExample.body += `${line}\n`; }
-          else if (collectingSectionDesc) { sectionDescLines.push(line); }
+          if (!sawTag) {
+            summaryLines.push(line);
+            continue;
+          }
+          if (currentExample) {
+            currentExample.body += `${line}\n`;
+          } else if (collectingSectionDesc) {
+            sectionDescLines.push(line);
+          }
         }
         flushSectionDesc();
         flushExample();
@@ -326,10 +344,7 @@ function isResourceFile(sourceFile: SourceFile): boolean {
   if (fullText.includes("@resource")) return true;
 
   const text = sourceFile.getFullText();
-  if (
-    text.includes("Binding.Service<") ||
-    text.includes("Binding.Policy<")
-  ) {
+  if (text.includes("Binding.Service<") || text.includes("Binding.Policy<")) {
     if (
       !text.includes("= Resource<") &&
       !text.includes("extends Resource<") &&
@@ -346,7 +361,8 @@ function isResourceFile(sourceFile: SourceFile): boolean {
     const init = decl.getInitializerIfKind(SyntaxKind.CallExpression);
     if (!init) continue;
     const expr = init.getExpression().getText();
-    if (expr === "Resource" || expr === "Host" || expr === "Platform") return true;
+    if (expr === "Resource" || expr === "Host" || expr === "Platform")
+      return true;
     const innerCall = init.getExpression();
     if (Node.isCallExpression(innerCall)) {
       const innerExpr = innerCall.getExpression().getText();
@@ -425,7 +441,8 @@ function renderPageBody(doc: PageDoc): string {
 
 function renderPage(doc: PageDoc): string {
   const sourcePath = `src/${normalizeSlashes(doc.relativePath)}`;
-  const description = firstParagraph(doc.summary) || `API reference for ${doc.title}`;
+  const description =
+    firstParagraph(doc.summary) || `API reference for ${doc.title}`;
   const frontmatter = [
     "---",
     `title: ${yamlString(doc.title)}`,

@@ -5,7 +5,7 @@ sidebar:
   order: 7
 ---
 
-import { Steps } from '@astrojs/starlight/components';
+import { Steps } from "@astrojs/starlight/components";
 
 This guide shows how to write integration tests that deploy your stack,
 make HTTP requests against your live Worker, and tear everything down
@@ -88,7 +88,12 @@ when finished.
 
    ```typescript
    import {
-     afterAll, beforeAll, deploy, destroy, expect, test,
+     afterAll,
+     beforeAll,
+     deploy,
+     destroy,
+     expect,
+     test,
    } from "alchemy-effect/Test/Bun";
    import Stack from "../alchemy.run.ts";
 
@@ -97,7 +102,6 @@ when finished.
    ```
 
    Three things are happening here:
-
    - `deploy(Stack)` returns an Effect that plans and applies the stack,
      resolving to its outputs.
    - `beforeAll(effect)` runs that Effect once before all tests, stores
@@ -116,7 +120,12 @@ when finished.
    ```typescript
    // test/integ.test.ts
    import {
-     afterAll, beforeAll, deploy, destroy, expect, test,
+     afterAll,
+     beforeAll,
+     deploy,
+     destroy,
+     expect,
+     test,
    } from "alchemy-effect/Test/Bun";
    import * as Effect from "effect/Effect";
    import * as HttpClient from "effect/unstable/http/HttpClient";

@@ -5,8 +5,8 @@ sidebar:
   order: 2
 ---
 
-import { Steps } from '@astrojs/starlight/components';
-import Terminal from '../../../components/Terminal.astro';
+import { Steps } from "@astrojs/starlight/components";
+import Terminal from "../../../components/Terminal.astro";
 
 export const deployOutput = `[u]Plan[/u]: [g]1 to create[/g]
 
@@ -47,7 +47,8 @@ For Vite-based projects, see the [Vite guide](/guides/vite) instead.
    `command` at your build script and `outdir` at where it writes
    output.
 
-   ```typescript
+   ```typescript twoslash
+   // @noErrors
    // alchemy.run.ts
    import * as Alchemy from "alchemy-effect";
    import * as Cloudflare from "alchemy-effect/Cloudflare";
@@ -58,6 +59,7 @@ For Vite-based projects, see the [Vite guide](/guides/vite) instead.
      { providers: Cloudflare.providers() },
      Effect.gen(function* () {
        const site = yield* Cloudflare.StaticSite("Blog", {
+       //    ^?
          command: "zola build",
          outdir: "public",
        });
@@ -75,14 +77,15 @@ For Vite-based projects, see the [Vite guide](/guides/vite) instead.
    fall back to `index.html`:
 
    ```typescript
-   yield* Cloudflare.StaticSite("App", {
-     command: "npm run build",
-     outdir: "dist",
-     assetsConfig: {
-       htmlHandling: "auto-trailing-slash",
-       notFoundHandling: "single-page-application",
-     },
-   });
+   yield *
+     Cloudflare.StaticSite("App", {
+       command: "npm run build",
+       outdir: "dist",
+       assetsConfig: {
+         htmlHandling: "auto-trailing-slash",
+         notFoundHandling: "single-page-application",
+       },
+     });
    ```
 
 4. **Configure memoization (optional)**
@@ -95,13 +98,14 @@ For Vite-based projects, see the [Vite guide](/guides/vite) instead.
    relevant files trigger rebuilds:
 
    ```typescript
-   yield* Cloudflare.StaticSite("Docs", {
-     command: "zola build",
-     outdir: "public",
-     memo: {
-       include: ["content/**", "templates/**", "config.toml"],
-     },
-   });
+   yield *
+     Cloudflare.StaticSite("Docs", {
+       command: "zola build",
+       outdir: "public",
+       memo: {
+         include: ["content/**", "templates/**", "config.toml"],
+       },
+     });
    ```
 
    Set `lockfile: false` if your build output doesn't depend on
