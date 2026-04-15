@@ -1,5 +1,3 @@
-import type { Credentials as AwsCredentials } from "@distilled.cloud/aws/Credentials";
-import type { Credentials as CfCredentials } from "@distilled.cloud/cloudflare/Credentials";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import { FileSystem } from "effect/FileSystem";
@@ -25,9 +23,7 @@ export type StackServices =
   | Path
   | DotAlchemy
   | HttpClient
-  | ChildProcessSpawner
-  | AwsCredentials
-  | CfCredentials;
+  | ChildProcessSpawner;
 
 export type Stack = Context.ServiceClass.Shape<
   "Stack",

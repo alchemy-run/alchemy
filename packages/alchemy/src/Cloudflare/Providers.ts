@@ -1,3 +1,4 @@
+import * as Auth from "@distilled.cloud/cloudflare/Auth";
 import * as Layer from "effect/Layer";
 import * as Socket from "effect/unstable/socket/Socket";
 import { Command } from "../Build/Command.ts";
@@ -63,38 +64,9 @@ export const providers = () =>
     Layer.provideMerge(
       Layer.mergeAll(
         Account.fromStageConfig(),
+        Auth.fromEnv(),
         Socket.layerWebSocketConstructorGlobal,
       ),
     ),
     Layer.orDie,
-  );
-
-/**
- * Cloudflare account credentials and auth context.
- */
-export const credentials = () => Account.fromStageConfig();
-
-/**
- * All Cloudflare resource providers.
- */
-export const resources = () =>
-  Layer.mergeAll(
-    Build.CommandProvider(),
-    RandomProvider(),
-    Containers.ContainerProvider(),
-    Workers.WorkerProvider(),
-    Workflows.WorkflowProvider(),
-    D1.DatabaseProvider(),
-    KV.KVNamespaceProvider(),
-    R2.R2BucketProvider(),
-  );
-
-/**
- * All Cloudflare binding policies.
- */
-export const bindings = () =>
-  Layer.mergeAll(
-    D1.D1ConnectionPolicyLive,
-    R2.R2BucketBindingPolicyLive,
-    KV.KVNamespaceBindingPolicyLive,
   );

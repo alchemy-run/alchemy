@@ -73,7 +73,6 @@ type Provided =
   | Path.Path
   | aws.Credentials.Credentials
   | aws.Region.Region
-  | cf.Credentials
   | Cli
   | ExecutionContext
   | Server.ProcessContext
@@ -128,28 +127,12 @@ const awsStageConfig = Layer.effect(
 
 const awsProviders = Layer.provideMerge(
   AWS.providers(),
-  Layer.mergeAll(
-    Credentials.fromStageConfig(),
-    Region.fromStageConfig(),
-    awsStageConfig,
-  ),
-);
-
-const cfStageConfig = Layer.effect(
-  Cloudflare.StageConfig,
-  Effect.gen(function* () {
-    const accountId = yield* Config.string("CLOUDFLARE_ACCOUNT_ID").pipe(
-      Config.withDefault(""),
-    );
-    return Cloudflare.StageConfig.of({
-      account: accountId || undefined,
-    });
-  }),
+  Layer.mergeAll(Credentials.fromStageConfig(), Region.fromStageConfig()),
 );
 
 const cfProviders = Layer.provideMerge(
   Cloudflare.providers(),
-  Layer.mergeAll(cf.CredentialsFromEnv, FetchHttpClient.layer, cfStageConfig),
+  Layer.mergeAll(cf.CredentialsFromEnv, FetchHttpClient.layer),
 );
 
 const deriveStackName = (testPath: string, suffix: string) => {
