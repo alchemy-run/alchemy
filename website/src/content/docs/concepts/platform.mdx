@@ -1,0 +1,112 @@
+---
+title: Platform
+description: Platforms are special resources that combine infrastructure with runtime code — like Lambda Functions and Cloudflare Workers.
+sidebar:
+  order: 3
+---
+
+A **Platform** is a special kind of Resource that combines
+infrastructure configuration with runtime code. Lambda Functions and
+Cloudflare Workers are platforms — they have cloud resources (the
+function/worker itself) and executable code that runs inside them.
+
+## How Platforms differ from Resources
+
+A regular resource like `R2Bucket` only has infrastructure — it's
+created, updated, and deleted by its provider.
+
+A platform resource like `Worker` or `Lambda.Function` also has a
+**runtime implementation** expressed as an Effect. This Effect is
+bundled and deployed alongside the infrastructure.
+
+```typescript
+// Regular resource — infrastructure only
+const bucket = yield* Cloudflare.R2Bucket("Bucket");
+
+// Platform resource — infrastructure + runtime code
+export default Cloudflare.Worker("Worker",
+  { main: import.meta.path },
+  Effect.gen(function* () {
+    // Init phase: bind resources
+    const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
+
+    return {
+      // Exec phase: runtime handler
+      fetch: Effect.gen(function* () {
+        const obj = yield* bucket.get("key");
+        return HttpServerResponse.text(yield* obj.text());
+      }),
+    };
+  }),
+);
+```
+
+## The Self service
+
+Inside a platform's Effect, you can access the resource being created
+via the `Self` service. This is how platforms know their own identity
+during init:
+
+```typescript
+export default class JobFunction extends AWS.Lambda.Function<JobFunction>()(
+  "JobFunction",
+  Stack.useSync((stack) => ({
+    main: import.meta.filename,
+    memory: stack.stage === "prod" ? 1024 : 512,
+    url: true,
+  })),
+  Effect.gen(function* () {
+    // runtime implementation
+  }),
+) {}
+```
+
+`Stack.useSync` is a helper that reads stack metadata synchronously
+to compute props (e.g. adjusting memory based on stage).
+
+## Async vs Effect style
+
+Platforms support two styles for runtime code:
+
+**Effect style** — the runtime handler is an Effect, with full access
+to bindings, typed errors, and composable operations:
+
+```typescript
+export default Cloudflare.Worker("Worker",
+  { main: import.meta.path },
+  Effect.gen(function* () {
+    const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
+    return {
+      fetch: Effect.gen(function* () { /* ... */ }),
+    };
+  }),
+);
+```
+
+**Async style** — the runtime handler is a standard `async fetch`
+function. Bindings are passed as props on the resource and typed via
+`InferEnv`:
+
+```typescript
+export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
+
+export const Worker = Cloudflare.Worker("Worker", {
+  main: "./src/worker.ts",
+  bindings: { Bucket },
+});
+```
+
+```typescript
+// src/worker.ts
+import type { WorkerEnv } from "../alchemy.run.ts";
+
+export default {
+  async fetch(request: Request, env: WorkerEnv) {
+    const object = await env.Bucket.get("key");
+    return new Response(object?.body ?? null);
+  },
+};
+```
+
+Both styles use the same provider, the same deploy pipeline, and the
+same state management.

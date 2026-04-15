@@ -1,0 +1,126 @@
+---
+title: Binding
+description: Bindings give your functions and workers typed access to cloud resources, with automatic IAM policies and environment variables.
+sidebar:
+  order: 7
+---
+
+A **Binding** connects a resource to a function or worker. When you
+bind an S3 Bucket to a Lambda Function, Alchemy automatically:
+
+- Attaches the correct **IAM policies** (e.g. `s3:GetObject`)
+- Sets **environment variables** (e.g. `BUCKET_NAME`, `BUCKET_ARN`)
+- Provides a **typed SDK wrapper** you can call at runtime
+
+You don't write IAM policies by hand or configure environment
+variables — bindings handle it.
+
+## Using bindings
+
+Bind a resource in the Init phase using `.bind()`:
+
+```typescript
+Effect.gen(function* () {
+  const bucket = yield* S3.GetObject.bind(myBucket);
+  const queue = yield* SQS.SendMessage.bind(myQueue);
+
+  return {
+    fetch: Effect.gen(function* () {
+      // bucket and queue are typed SDK wrappers
+      const obj = yield* bucket({ Key: "hello.txt" });
+      yield* queue({ MessageBody: "hello" });
+    }),
+  };
+});
+```
+
+Each `.bind()` call does two things at once:
+1. Grants the function permission to call that API
+2. Gives you a typed function to call at runtime
+
+In the async style, pass resources as `bindings` props instead:
+
+```typescript
+export const Worker = Cloudflare.Worker("Worker", {
+  main: "./src/worker.ts",
+  bindings: { Bucket, KV },
+});
+```
+
+## Automatic IAM policies
+
+On AWS, each binding maps to specific IAM actions. Alchemy generates
+least-privilege policies scoped to the exact resource:
+
+| Binding | IAM Actions | Resource |
+| --- | --- | --- |
+| `S3.GetObject.bind(bucket)` | `s3:GetObject` | `arn:aws:s3:::bucket-name/*` |
+| `S3.PutObject.bind(bucket)` | `s3:PutObject` | `arn:aws:s3:::bucket-name/*` |
+| `SQS.SendMessage.bind(queue)` | `sqs:SendMessage` | Queue ARN |
+| `DynamoDB.GetItem.bind(table)` | `dynamodb:GetItem` | Table ARN |
+| `DynamoDB.PutItem.bind(table)` | `dynamodb:PutItem` | Table ARN |
+
+You never write `PolicyStatement` objects — the binding knows which
+actions and resources to attach.
+
+## Automatic environment variables
+
+Bindings also inject environment variables so the runtime SDK knows
+which resource to talk to. For example, binding an SQS Queue sets
+`QUEUE_URL` and `QUEUE_ARN`. Binding an S3 Bucket sets `BUCKET_NAME`
+and `BUCKET_ARN`.
+
+These are injected automatically and used internally by the SDK
+wrapper — you don't need to read them yourself.
+
+## Event Sources
+
+An **Event Source** is a special binding that triggers your function
+when events occur on a resource:
+
+```typescript
+yield* DynamoDB.stream(table, {
+  streamViewType: "NEW_AND_OLD_IMAGES",
+  startingPosition: "LATEST",
+  batchSize: 10,
+}).process((stream) =>
+  stream.pipe(
+    Stream.map((record) => JSON.stringify(record)),
+    Stream.run(sink),
+  ),
+);
+```
+
+Event sources work the same way as regular bindings — they attach
+the necessary permissions and event source mappings automatically.
+
+## Cloudflare bindings
+
+On Cloudflare, the same concept applies but uses native Worker
+bindings instead of IAM:
+
+```typescript
+const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
+const kv = yield* Cloudflare.KVNamespace.bind(KV);
+```
+
+Alchemy attaches the R2 and KV bindings to the Worker's
+configuration, and provides typed wrappers at runtime.
+
+## How it works under the hood
+
+Each binding is split into two parts internally:
+
+- **`Binding.Service`** — the runtime SDK wrapper that gets bundled
+  into your function. This is what you call when you use
+  `bucket.get(...)` or `queue.send(...)`.
+
+- **`Binding.Policy`** — the deploy-time logic that attaches IAM
+  policies and environment variables. This runs only at plantime
+  and is **not included in the runtime bundle**.
+
+At plantime, the Policy records binding data (IAM statements,
+env vars, Cloudflare bindings) on the stack. The function's provider
+receives this data during create/update and applies it. At runtime,
+the Policy layer is absent, so it gracefully becomes a no-op — only
+the lightweight Service wrapper runs.

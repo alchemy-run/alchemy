@@ -1,0 +1,95 @@
+---
+title: Stack
+description: A Stack is a collection of Resources deployed together as a unit.
+sidebar:
+  order: 0
+---
+
+A **Stack** is the top-level unit of deployment in Alchemy. It groups
+resources together, wires up providers, and tracks state across
+deploys.
+
+## Defining a Stack
+
+Every Alchemy program exports a default Stack from an `alchemy.run.ts`
+file:
+
+```typescript
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Cloudflare.providers() },
+  Effect.gen(function* () {
+    const bucket = yield* Cloudflare.R2Bucket("Bucket");
+    return { bucketName: bucket.bucketName };
+  }),
+);
+```
+
+`Alchemy.Stack` takes three arguments:
+
+1. **Name** — identifies this stack in state storage
+2. **Options** — `providers` (required), `state` (optional)
+3. **Effect** — a generator that declares resources and returns outputs
+
+## Stack outputs
+
+The value returned from the generator becomes the stack's output.
+After a deploy, outputs are printed to the console and available
+programmatically in tests:
+
+```typescript
+Effect.gen(function* () {
+  const bucket = yield* Cloudflare.R2Bucket("Bucket");
+  const worker = yield* Worker;
+
+  return {
+    bucketName: bucket.bucketName,
+    url: worker.url,
+  };
+});
+```
+
+## Stages
+
+Every Stack deploy targets a **stage** — an isolated instance like
+`dev_sam`, `staging`, or `prod`. The stage defaults to `dev_$USER`.
+
+Resources are namespaced by stage, so `dev` and `prod` never
+interfere. Physical names include the stage (e.g.
+`myapp-prod-bucket-abc123`).
+
+```sh
+alchemy deploy --stage prod
+alchemy deploy --stage pr-42
+```
+
+## Accessing the Stack
+
+Inside a resource or layer, you can access the current Stack's
+metadata via the `Stack` service:
+
+```typescript
+import { Stack } from "alchemy/Stack";
+
+const table = yield* DynamoDB.Table("Jobs", {
+  partitionKey: "id",
+  attributes: { id: "S" },
+});
+
+// Access stack metadata
+const stack = yield* Stack;
+console.log(stack.name);  // "MyApp"
+console.log(stack.stage); // "dev_sam"
+```
+
+This is useful for conditional logic based on the stage:
+
+```typescript
+const queue = yield* SQS.Queue("Jobs").pipe(
+  RemovalPolicy.retain(stack.stage === "prod"),
+);
+```

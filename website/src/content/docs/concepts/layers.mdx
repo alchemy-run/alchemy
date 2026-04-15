@@ -1,0 +1,142 @@
+---
+title: Layers
+description: Use Effect Layers and Context.Service to componentize infrastructure into reusable, swappable modules.
+sidebar:
+  order: 8
+---
+
+As your stack grows, you'll want to organize infrastructure into
+reusable components. Alchemy uses Effect's `Context.Service` and
+`Layer` to define **infrastructure modules** with clean interfaces
+and swappable implementations.
+
+## The pattern
+
+1. Define a **service interface** using `Context.Service`
+2. Implement it as a **Layer** that creates resources and binds
+   capabilities
+3. Provide the Layer on your function or worker
+
+## Example: JobStorage
+
+Consider a job storage module that needs a DynamoDB table, an SQS
+queue, and capabilities to read/write items:
+
+**Define the interface:**
+
+```typescript
+// src/JobStorage.ts
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+
+export class JobStorage extends Context.Service<
+  JobStorage,
+  {
+    putJob(job: Job): Effect.Effect<Job, PutJobError>;
+    getJob(jobId: string): Effect.Effect<Job | undefined, GetJobError>;
+  }
+>()("JobStorage") {}
+```
+
+**Implement with DynamoDB:**
+
+```typescript
+export const JobStorageDynamoDB = Layer.provideMerge(
+  Layer.effect(
+    JobStorage,
+    Effect.gen(function* () {
+      const stack = yield* Stack;
+      const table = yield* DynamoDB.Table("JobsTable", {
+        partitionKey: "id",
+        attributes: { id: "S" },
+      });
+      const queue = yield* SQS.Queue("JobsQueue").pipe(
+        RemovalPolicy.retain(stack.stage === "prod"),
+      );
+
+      const getItem = yield* DynamoDB.GetItem.bind(table);
+      const putItem = yield* DynamoDB.PutItem.bind(table);
+
+      return JobStorage.of({
+        putJob: (job) =>
+          putItem({
+            Item: { id: { S: job.id }, content: { S: job.content } },
+          }).pipe(Effect.map(() => job)),
+
+        getJob: (jobId) =>
+          getItem({ Key: { id: { S: jobId } } }).pipe(
+            Effect.map((item) =>
+              item.Item
+                ? { id: item.Item.id.S, content: item.Item.content.S }
+                : undefined,
+            ),
+          ),
+      });
+    }),
+  ),
+  Layer.mergeAll(DynamoDB.GetItemLive, DynamoDB.PutItemLive),
+);
+```
+
+The `Layer.provideMerge` combines:
+- The inner `Layer.effect` that creates resources and returns the
+  service implementation
+- The capability layers (`GetItemLive`, `PutItemLive`) that provide
+  the deploy-time policies
+
+## Using the Layer
+
+Provide the layer on your function:
+
+```typescript
+export default class JobFunction extends AWS.Lambda.Function<JobFunction>()(
+  "JobFunction",
+  { main: import.meta.filename, url: true },
+  Effect.gen(function* () {
+    const storage = yield* JobStorage;
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const job = yield* storage.getJob("some-id");
+        return yield* HttpServerResponse.json(job);
+      }),
+    };
+  }).pipe(
+    Effect.provide(JobStorageDynamoDB),
+  ),
+) {}
+```
+
+## Swapping implementations
+
+The power of this pattern is that the function doesn't know or care
+which backing service is used. You can swap implementations without
+changing the function code:
+
+```typescript
+// DynamoDB implementation
+Effect.provide(JobStorageDynamoDB)
+
+// S3 implementation
+Effect.provide(JobStorageS3)
+```
+
+Each implementation creates different resources (Table vs Bucket),
+binds different capabilities (GetItem vs GetObject), but exposes the
+same `JobStorage` interface.
+
+## Why this works
+
+Because resources are Effects, they compose naturally with Effect's
+dependency injection:
+
+- **`Context.Service`** defines the contract
+- **`Layer.effect`** creates resources and implements the contract
+- **`Layer.provideMerge`** attaches capability policies
+- **`Effect.provide`** wires the implementation to the consumer
+
+The infrastructure (tables, queues, buckets) and the code that uses
+it (the function handler) are all expressed in the same type system.
+The compiler verifies that every capability is provided and every
+service is satisfied.

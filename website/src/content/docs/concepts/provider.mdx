@@ -1,0 +1,91 @@
+---
+title: Provider
+description: Providers implement the lifecycle operations for resources — create, update, delete, and more.
+sidebar:
+  order: 2
+---
+
+A **Provider** implements the lifecycle operations for a resource
+type. When you `yield*` a resource inside a Stack, Alchemy looks up
+the provider for that resource's type and calls the appropriate
+lifecycle method.
+
+## Lifecycle operations
+
+Each provider can implement these operations:
+
+| Operation | Description |
+| --- | --- |
+| **create** | Create a new resource. Must be idempotent. |
+| **update** | Update an existing resource with new properties. |
+| **delete** | Delete a resource. Must be idempotent. |
+| **diff** | Compare old and new properties to decide: update, replace, or no-op. |
+| **read** | Read the current state of a resource from the cloud provider. |
+| **precreate** | Create a stub resource to break circular dependencies. |
+
+## Provider Layers
+
+Providers are registered as Effect Layers. When you call
+`Cloudflare.providers()` or `AWS.providers()()`, you get a Layer
+that includes all the providers for that cloud platform:
+
+```typescript
+Alchemy.Stack(
+  "MyApp",
+  { providers: Cloudflare.providers() },
+  Effect.gen(function* () {
+    // Cloudflare.R2Bucket's provider is now available
+    yield* Cloudflare.R2Bucket("Bucket");
+  }),
+);
+```
+
+The type system enforces this — if you use a Cloudflare resource
+without providing `Cloudflare.providers()`, TypeScript reports a
+type error.
+
+## Combining providers
+
+If your stack uses resources from multiple cloud providers, merge
+the provider layers:
+
+```typescript
+import * as Layer from "effect/Layer";
+
+Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Layer.mergeAll(
+      Cloudflare.providers(),
+      AWS.providers()(),
+    ),
+  },
+  Effect.gen(function* () {
+    const bucket = yield* Cloudflare.R2Bucket("Bucket");
+    const queue = yield* AWS.SQS.Queue("Jobs");
+  }),
+);
+```
+
+## Diff and stable properties
+
+The `diff` function determines what happens when a resource's
+properties change:
+
+- **Return `void`** — apply the default update logic
+- **Return `{ replace: true }`** — delete and recreate the resource
+- **Return `{ stables: [...] }`** — list attributes that won't
+  change during the update
+
+Providers also declare `stables` at the top level for attributes
+that never change across any update (e.g. ARNs, resource IDs).
+
+## Idempotency
+
+Both `create` and `delete` must be idempotent. This is because
+state persistence can fail after the cloud operation succeeds:
+
+- **Create**: use deterministic physical names so re-running create
+  finds the existing resource instead of creating a duplicate
+- **Delete**: if the resource doesn't exist, don't treat it as an
+  error

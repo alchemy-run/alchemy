@@ -1,0 +1,118 @@
+---
+title: Testing
+description: How Alchemy's test harness deploys stacks, runs assertions, and manages lifecycle in tests.
+sidebar:
+  order: 9
+---
+
+Alchemy provides test utilities that integrate with Bun and Vitest,
+wrapping their test APIs with Effect support and stack lifecycle
+management.
+
+## Test harness
+
+The test harness provides Effect-aware versions of `test`,
+`beforeAll`, `afterAll`, and `expect`:
+
+```typescript
+import { beforeAll, deploy, expect, test } from "alchemy/Test/Bun";
+```
+
+Each `test(name, effect)` runs an Effect generator instead of an
+async function. The harness provides platform layers (`HttpClient`,
+etc.) automatically.
+
+## Deploy and destroy
+
+`deploy(Stack)` returns an Effect that plans and applies a stack,
+resolving to its outputs. `destroy(Stack)` tears it down:
+
+```typescript
+import { afterAll, beforeAll, deploy, destroy } from "alchemy/Test/Bun";
+import Stack from "../alchemy.run.ts";
+
+const stack = beforeAll(deploy(Stack));
+afterAll.skipIf(!process.env.CI)(destroy(Stack));
+```
+
+- `beforeAll(effect)` runs the Effect once before all tests and
+  returns a lazy accessor
+- `afterAll.skipIf(!process.env.CI)` skips destroy locally for fast
+  iteration
+- On CI (`CI=true`), the stack is torn down after tests complete
+
+## Accessing outputs
+
+Use `yield* stack` inside a test to get the deployed stack's outputs:
+
+```typescript
+test(
+  "worker is reachable",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    expect(url).toBeString();
+  }),
+);
+```
+
+## HTTP assertions
+
+`HttpClient` is provided automatically by the test harness:
+
+```typescript
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpBody from "effect/unstable/http/HttpBody";
+
+test(
+  "PUT and GET round-trip",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+
+    const put = yield* HttpClient.put(`${url}/hello.txt`, {
+      body: HttpBody.text("Hello!"),
+    });
+    expect(put.status).toBe(201);
+
+    const get = yield* HttpClient.get(`${url}/hello.txt`);
+    expect(yield* get.text).toBe("Hello!");
+  }),
+);
+```
+
+## State in tests
+
+Tests use the same state management as production deploys. By
+default, `LocalState` persists to `.alchemy/` so subsequent test
+runs reuse existing resources (making re-runs fast).
+
+For unit testing providers, Alchemy provides an in-memory state
+store:
+
+```typescript
+import * as TestState from "alchemy/Test/TestState";
+
+// Start with empty state
+const state = TestState.defaultState;
+
+// Or seed with existing resources
+const state = TestState.state({
+  "MyResource": { /* ResourceState */ },
+});
+```
+
+## Test CLI
+
+The test harness includes a `TestCli` that auto-approves plans and
+suppresses interactive prompts. This is provided automatically —
+you don't need to configure it.
+
+## Vitest support
+
+Alchemy also supports Vitest with the same API:
+
+```typescript
+import { beforeAll, deploy, expect, test } from "alchemy/Test/Vitest";
+```
+
+The Vitest harness provides identical functionality with Vitest's
+test runner instead of Bun's.

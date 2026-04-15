@@ -1,0 +1,90 @@
+---
+title: Resource
+description: Resources are named cloud entities with input properties and output attributes.
+sidebar:
+  order: 1
+---
+
+A **Resource** represents a cloud entity managed by Alchemy — a
+bucket, database, queue, function, DNS record, or anything else that
+has a lifecycle of create, update, and delete.
+
+## Declaring a Resource
+
+Resources are declared with a **logical ID** and optional **input
+properties**:
+
+```typescript
+const bucket = yield* Cloudflare.R2Bucket("Bucket");
+const queue = yield* AWS.SQS.Queue("Jobs", {
+  fifoQueue: true,
+});
+```
+
+The logical ID (`"Bucket"`, `"Jobs"`) is stable across deploys. It
+identifies this resource within the stack and is used to track state.
+
+## Input Properties and Output Attributes
+
+Every resource has two sides:
+
+- **Input Properties** — the desired configuration you pass in
+  (e.g. `fifoQueue: true`)
+- **Output Attributes** — the values produced after creation
+  (e.g. `queueUrl`, `queueArn`)
+
+Output attributes are available as `Output` expressions on the
+resource:
+
+```typescript
+const bucket = yield* Cloudflare.R2Bucket("Bucket");
+bucket.bucketName; // Output<string>
+```
+
+These are lazy references that resolve after the resource is created.
+You can pass them as inputs to other resources to express
+dependencies.
+
+## Resources are Effects
+
+A resource declaration like `Cloudflare.R2Bucket("Bucket")` is just
+an Effect — it doesn't execute anything on its own. It only runs when
+you `yield*` it inside a Stack.
+
+This means you can declare resources in separate files and import
+them freely:
+
+```typescript
+// src/bucket.ts
+export const Bucket = Cloudflare.R2Bucket("Bucket");
+
+// src/worker.ts
+import { Bucket } from "./bucket.ts";
+const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
+```
+
+Importing a resource from multiple files is safe — it registers on
+the stack exactly once (keyed by its fully qualified name).
+
+## Physical Names
+
+Each resource gets a **physical name** generated from the stack name,
+stage, and logical ID (e.g. `myapp-dev-bucket-abc123`). The suffix
+is deterministic, derived from the resource's **instance ID**.
+
+Physical names ensure:
+- Resources in different stages don't collide
+- Creates are idempotent (same inputs → same physical name)
+- Resources can be recovered after state persistence failures
+
+## Replacement
+
+When a property change requires replacing a resource (rather than
+updating in-place), Alchemy:
+
+1. Creates a new resource with a new instance ID
+2. Updates downstream resources to reference the new one
+3. Deletes the old resource
+
+The resource's provider determines which property changes trigger
+replacement vs in-place update.

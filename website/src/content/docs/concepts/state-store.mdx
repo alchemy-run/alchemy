@@ -1,0 +1,105 @@
+---
+title: State Store
+description: How Alchemy persists resource state between deploys to compute diffs and track infrastructure.
+sidebar:
+  order: 6
+---
+
+Alchemy persists resource state between deploys so it can compute
+diffs — comparing the desired state in your code against the current
+state of your infrastructure.
+
+## How state is stored
+
+Each resource's state is keyed by its **fully qualified name** (FQN),
+which includes the namespace path and logical ID. State is scoped by
+**stack name** and **stage**, so different stacks and environments
+are fully isolated.
+
+A resource's persisted state includes:
+
+- **Resource type** — e.g. `Cloudflare.R2Bucket`
+- **Input properties** — the props you passed when creating it
+- **Output attributes** — the values returned after creation
+- **Instance ID** — a unique identifier for this instance
+- **Lifecycle status** — `created`, `updating`, `deleting`, etc.
+- **Bindings** — data attached by policies and event sources
+
+## Local state
+
+By default, state is stored on disk in the `.alchemy/` directory:
+
+```
+.alchemy/
+  state/
+    MyApp/
+      dev_sam/
+        Bucket.json
+        Worker.json
+```
+
+Add `.alchemy/` to your `.gitignore`:
+
+```sh
+echo ".alchemy/" >> .gitignore
+```
+
+Local state works for solo development. Each developer gets their own
+state via their default stage (`dev_$USER`).
+
+## Remote state
+
+For teams and CI, configure a remote state store so all deploys share
+the same state. Alchemy includes a Cloudflare-backed store:
+
+```typescript
+Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Cloudflare.providers(),
+    state: Cloudflare.state(),
+  },
+  Effect.gen(function* () {
+    // ...
+  }),
+);
+```
+
+`Cloudflare.state()` deploys a Worker backed by a Durable Object
+with embedded SQLite. The first deploy after adding it migrates local
+state automatically.
+
+## State and lifecycle
+
+State transitions track the lifecycle of each resource:
+
+| Status | Meaning |
+| --- | --- |
+| `creating` | Create operation in progress |
+| `created` | Resource exists and is healthy |
+| `updating` | Update operation in progress |
+| `updated` | Resource was updated successfully |
+| `deleting` | Delete operation in progress |
+| `replacing` | Resource is being replaced (new one created, old pending delete) |
+
+These intermediate states (`creating`, `updating`, `deleting`) exist
+because state is persisted before the cloud operation completes. If
+the process crashes mid-operation, Alchemy uses the intermediate
+state to recover on the next deploy.
+
+## In-memory state (testing)
+
+For tests, Alchemy provides an in-memory state store so tests don't
+touch the filesystem:
+
+```typescript
+import * as TestState from "alchemy/Test/TestState";
+
+// Seed with existing resource state
+const state = TestState.state({
+  "Bucket": { /* ... */ },
+});
+```
+
+The test harness (`alchemy/Test/Bun` and `alchemy/Test/Vitest`)
+handles state setup automatically.
