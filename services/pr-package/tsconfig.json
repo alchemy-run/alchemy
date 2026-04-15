@@ -1,6 +1,6 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["alchemy.run.ts", "src/**/*.ts"],
+  "include": ["alchemy.run.ts", "src/**/*.ts", "test/**/*.ts"],
   "compilerOptions": {
     "noEmit": true,
     "rootDir": ".",
@@ -10,7 +10,7 @@
   },
   "references": [
     {
-      "path": "../../alchemy-effect/tsconfig.json"
+      "path": "../../packages/alchemy/tsconfig.json"
     }
   ]
 }

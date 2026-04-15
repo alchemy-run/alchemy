@@ -1,4 +1,4 @@
-import * as Cloudflare from "alchemy-effect/Cloudflare";
+import * as Cloudflare from "alchemy/Cloudflare";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -101,7 +101,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
             }
 
             const ttlStr = ttlRaw || defaultTtl;
-            const ttlDuration = Duration.fromInput(ttlStr);
+            const ttlDuration = Duration.fromInput(ttlStr as Duration.Input);
             if (ttlDuration._tag === "None") {
               return yield* HttpServerResponse.json(
                 { error: "X-TTL must be an Effect Duration string (e.g. '7 hours', '3 weeks', '30 minutes')" },

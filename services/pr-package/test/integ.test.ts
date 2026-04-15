@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, deploy, destroy, expect, test } from "alchemy-effect/Test/Bun";
+import { afterAll, beforeAll, deploy, destroy, expect, test } from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";
 import Stack from "../alchemy.run.ts";
 
@@ -22,8 +22,9 @@ async function waitForWorker(url: string, maxRetries = 30) {
 // Deploy stack and wait for worker to be reachable
 const stack = beforeAll(
   Effect.gen(function* () {
-    const url = yield* deploy(Stack);
-    yield* Effect.promise(() => waitForWorker(url!));
+    const output = yield* deploy(Stack);
+    const url = output.url as string;
+    yield* Effect.promise(() => waitForWorker(url));
     return url;
   }),
   { timeout: 180_000 },
@@ -35,14 +36,14 @@ const stack = beforeAll(
 const AUTH_TOKEN = "test-bearer-token";
 const DEFAULT_PROJECT = "test-project";
 
-function createTgz(content: string): Uint8Array {
+function createTgz(content: string): Uint8Array<ArrayBuffer> {
   // Minimal valid gzip: 10-byte header + deflated payload + 8-byte trailer.
   // For testing we just need something that starts with 0x1f 0x8b (gzip magic).
   const encoder = new TextEncoder();
   const payload = encoder.encode(content);
   // gzip magic (1f 8b), method deflate (08), no flags, no mtime/xfl/os
   const header = new Uint8Array([0x1f, 0x8b, 0x08, 0, 0, 0, 0, 0, 0, 0]);
-  const result = new Uint8Array(header.length + payload.length);
+  const result = new Uint8Array(new ArrayBuffer(header.length + payload.length));
   result.set(header);
   result.set(payload, header.length);
   return result;
@@ -50,7 +51,7 @@ function createTgz(content: string): Uint8Array {
 
 function upload(
   baseUrl: string,
-  file: Uint8Array,
+  file: Uint8Array<ArrayBuffer>,
   tags: string[],
   options?: { ttl?: string; token?: string; project?: string },
 ) {
