@@ -1,35 +1,410 @@
 ---
 title: alchemy
-description: Effect-native Infrastructure-as-Code framework. Build, test, and deploy cloud programs.
+description: Infrastructure-as-Effects. Build, test, and deploy cloud programs with type-safe infrastructure powered by Effect.
 template: splash
 hero:
   title: |
-    Effect-native <span class="text-gradient">Cloud Programs</span>
-  tagline: Build, test, and deploy infrastructure and application logic in a single type-safe program powered by Effect.
+    Infrastructure as <span class="text-gradient">Effects</span>
+  tagline: Your infrastructure and application logic in a single, type-safe program.
   actions:
     - text: Get Started
       link: /getting-started
       icon: right-arrow
       variant: primary
+    - text: Tutorial
+      link: /tutorial/part-1
+      icon: open-book
+      variant: secondary
     - text: GitHub
       link: https://github.com/alchemy-run/alchemy
       icon: external
       variant: minimal
 ---
 
-import { Card, CardGrid } from "@astrojs/starlight/components";
+import Terminal from "../../components/Terminal.astro";
 
-<CardGrid>
-  <Card title="Infrastructure-as-Effects" icon="puzzle">
-    Your infrastructure and application logic live in the same program.
-  </Card>
-  <Card title="Built on Effect" icon="setting">
-    Type-safe errors, declarative retries, and streams power your infra.
-  </Card>
-  <Card title="If it compiles, it deploys" icon="approve-check">
-    Catch wiring mistakes at compile time, not after a five-minute deploy.
-  </Card>
-  <Card title="Local emulation" icon="laptop">
-    Run the full stack locally with alchemy dev. Instant feedback.
-  </Card>
-</CardGrid>
+<div class="landing">
+
+{/* ── Hero code block ── */}
+<section class="hero-code">
+<div class="hero-code-grid">
+<div class="hero-code-text">
+
+### One program. Infrastructure and logic.
+
+Alchemy extends Infrastructure-as-Code with **Effects** — your cloud resources and the code that uses them are defined together in a single type-safe program.
+
+No YAML. No separate config files. No runtime wiring. If it compiles, it deploys.
+
+</div>
+<div class="hero-code-block">
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import Worker from "./src/worker.ts";
+
+const Bucket = Cloudflare.R2Bucket("Bucket");
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Cloudflare.providers() },
+  Effect.gen(function* () {
+    const bucket = yield* Bucket;
+    const worker = yield* Worker;
+    return { url: worker.url };
+  }),
+);
+```
+
+</div>
+</div>
+</section>
+
+{/* ── Feature grid ── */}
+<section class="features">
+
+<div class="feature">
+<h3>Type-safe from cloud to code</h3>
+
+The type system ensures every resource has its provider, every binding
+is wired correctly, and every dependency is satisfied — before you
+deploy.
+
+```typescript
+// TypeScript catches this at compile time:
+Alchemy.Stack("App", {
+  // Type Error: Layer<never> is not assignable
+  // to Layer<Cloudflare.Providers>
+  providers: Layer.empty,
+}, Effect.gen(function* () {
+  yield* Cloudflare.R2Bucket("Bucket");
+}));
+```
+
+</div>
+
+<div class="feature">
+<h3>Resources are just Effects</h3>
+
+Resources are declared as Effects and composed with `yield*`. Import
+them from any file, bind them to Workers, pass their outputs to other
+resources — it's all just TypeScript.
+
+```typescript
+// src/bucket.ts
+export const Bucket = Cloudflare.R2Bucket("Bucket");
+
+// src/worker.ts
+import { Bucket } from "./bucket.ts";
+
+export default Cloudflare.Worker("Worker",
+  { main: import.meta.path },
+  Effect.gen(function* () {
+    const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
+    return { fetch: /* ... */ };
+  }),
+);
+```
+
+</div>
+
+<div class="feature">
+<h3>Test against real infrastructure</h3>
+
+Deploy your stack in `beforeAll`, make HTTP requests against live
+endpoints, and tear it down in `afterAll`. No mocks, no simulators —
+real integration tests.
+
+```typescript
+// test/integ.test.ts
+const stack = beforeAll(deploy(Stack));
+afterAll.skipIf(!process.env.CI)(destroy(Stack));
+
+test("round-trip an object",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    yield* HttpClient.put(`${url}/hello.txt`, {
+      body: HttpBody.text("Hello!"),
+    });
+    const res = yield* HttpClient.get(`${url}/hello.txt`);
+    expect(yield* res.text).toBe("Hello!");
+  }),
+);
+```
+
+</div>
+
+<div class="feature">
+<h3>Local dev with hot reload</h3>
+
+Run your entire stack locally with a single command. Workers run
+locally in workerd, and changes hot reload instantly.
+
+<Terminal content={`$ alchemy dev
+
+[g]✓[/g] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d] [g]created[/g] [d](local)[/d]
+[g]✓[/g] [b]Worker[/b] [d](Cloudflare.Worker)[/d] [g]created[/g] [d](local)[/d]
+[s2][d]• http://localhost:1337[/d]
+
+[d]Watching for changes ...[/d]`} />
+
+</div>
+
+<div class="feature">
+<h3>Plan, deploy, destroy</h3>
+
+Preview what will change with `plan`, apply it with `deploy`, and
+tear it down with `destroy`. Stages isolate environments so `dev`
+and `prod` never collide.
+
+<Terminal content={`$ alchemy deploy --stage prod
+
+[u]Plan[/u]: [g]2 to create[/g]
+
+[g]+[/g] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d]
+[g]+[/g] [b]Worker[/b] [d](Cloudflare.Worker)[/d] [c](1 bindings)[/c]
+[s2][g]+[/g] [c]Bucket[/c]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d] [g]created[/g]
+[g]✓[/g] [b]Worker[/b] [d](Cloudflare.Worker)[/d] [g]created[/g]`} />
+
+</div>
+
+<div class="feature">
+<h3>CI/CD out of the box</h3>
+
+Push to `main` to deploy prod. Open a PR and get an isolated preview
+environment. Merge and it's cleaned up automatically. Alchemy even
+posts the preview URL as a PR comment.
+
+```yaml
+# .github/workflows/deploy.yml
+jobs:
+  deploy:
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - run: bun alchemy deploy --stage ${{ env.STAGE }}
+  cleanup:
+    if: github.event.action == 'closed'
+    steps:
+      - run: bun alchemy destroy --stage ${{ env.STAGE }}
+```
+
+</div>
+
+</section>
+
+{/* ── Providers ── */}
+<section class="providers-section">
+
+### Cloud providers
+
+Alchemy supports multiple cloud providers with more being added. Each
+provider is a typed Layer that the compiler verifies at build time.
+
+<div class="provider-grid">
+<div class="provider-card">
+
+**Cloudflare**
+
+Workers, R2 Buckets, KV, D1, Durable Objects, Queues, Vectorize, AI
+
+</div>
+<div class="provider-card">
+
+**AWS**
+
+Lambda, S3, DynamoDB, SQS, Kinesis, IAM, EC2, API Gateway
+
+</div>
+<div class="provider-card">
+
+**More**
+
+GitHub, Stripe, DNS, and a growing ecosystem of community providers
+
+</div>
+</div>
+
+</section>
+
+{/* ── CTA ── */}
+<section class="cta-section">
+
+### Ready to start?
+
+Follow the tutorial to go from zero to a deployed Cloudflare Worker
+with R2 bindings, integration tests, local dev, and CI/CD — in under
+30 minutes.
+
+<div class="cta-buttons">
+  <a href="/tutorial/part-1" class="cta-primary">Start the Tutorial</a>
+  <a href="/getting-started" class="cta-secondary">Quick Start</a>
+</div>
+
+</section>
+
+</div>
+
+<style>{`
+  .landing {
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: 0 1.5rem;
+  }
+
+  /* Hero code section */
+  .hero-code {
+    margin: 2rem 0 5rem;
+  }
+  .hero-code-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3rem;
+    align-items: center;
+  }
+  .hero-code-text h3 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 0 0 1rem;
+    color: var(--sl-color-white);
+  }
+  .hero-code-text p {
+    color: var(--sl-color-gray-2);
+    line-height: 1.7;
+    margin: 0 0 0.75rem;
+  }
+  @media (max-width: 768px) {
+    .hero-code-grid {
+      grid-template-columns: 1fr;
+      gap: 2rem;
+    }
+  }
+
+  /* Features */
+  .features {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3rem;
+    margin: 0 0 5rem;
+  }
+  .feature h3 {
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: var(--sl-color-white);
+    margin: 0 0 0.75rem;
+  }
+  .feature p {
+    color: var(--sl-color-gray-3);
+    line-height: 1.6;
+    margin: 0 0 1rem;
+    font-size: 0.95rem;
+  }
+  @media (max-width: 768px) {
+    .features {
+      grid-template-columns: 1fr;
+      gap: 2.5rem;
+    }
+  }
+
+  /* Providers */
+  .providers-section {
+    margin: 0 0 5rem;
+    text-align: center;
+  }
+  .providers-section h3 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--sl-color-white);
+    margin: 0 0 1rem;
+  }
+  .providers-section > p {
+    color: var(--sl-color-gray-3);
+    max-width: 36rem;
+    margin: 0 auto 2rem;
+    line-height: 1.6;
+  }
+  .provider-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+  }
+  .provider-card {
+    background: var(--sl-color-gray-6);
+    border: 1px solid var(--sl-color-hairline);
+    border-radius: 8px;
+    padding: 1.5rem;
+    text-align: left;
+  }
+  .provider-card strong {
+    color: var(--sl-color-white);
+    font-size: 1.05rem;
+  }
+  .provider-card p {
+    color: var(--sl-color-gray-3);
+    font-size: 0.9rem;
+    margin: 0.5rem 0 0;
+    line-height: 1.5;
+  }
+  @media (max-width: 768px) {
+    .provider-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* CTA */
+  .cta-section {
+    text-align: center;
+    padding: 3rem 0 4rem;
+    border-top: 1px solid var(--sl-color-hairline);
+  }
+  .cta-section h3 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--sl-color-white);
+    margin: 0 0 1rem;
+  }
+  .cta-section p {
+    color: var(--sl-color-gray-3);
+    max-width: 36rem;
+    margin: 0 auto 2rem;
+    line-height: 1.6;
+  }
+  .cta-buttons {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .cta-primary {
+    background: var(--sl-color-accent);
+    color: var(--sl-color-text-invert) !important;
+    padding: 0.75rem 2rem;
+    border-radius: 8px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: opacity 0.15s;
+  }
+  .cta-primary:hover {
+    opacity: 0.9;
+  }
+  .cta-secondary {
+    border: 1px solid var(--sl-color-gray-4);
+    color: var(--sl-color-gray-2) !important;
+    padding: 0.75rem 2rem;
+    border-radius: 8px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: border-color 0.15s;
+  }
+  .cta-secondary:hover {
+    border-color: var(--sl-color-gray-2);
+  }
+`}</style>

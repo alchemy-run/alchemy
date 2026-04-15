@@ -16,9 +16,9 @@ locally with hot reloading.
 alchemy dev
 ```
 
-That's it. Alchemy deploys your stack locally using Miniflare (a local
-Cloudflare Workers emulator), watches for file changes, and hot
-reloads your Worker automatically.
+That's it. Alchemy deploys your stack to the cloud and proxies
+requests to Workers running locally in workerd. It watches for file
+changes and hot reloads your Worker automatically.
 
 Your Worker is available at `http://localhost:1337` by default:
 
@@ -30,8 +30,8 @@ curl http://localhost:1337/hello.txt
 
 `alchemy dev` does three things:
 
-1. **Deploys locally** — resources like R2 Buckets are emulated in
-   Miniflare instead of created on Cloudflare
+1. **Deploys to the cloud** — resources like R2 Buckets are created
+   on Cloudflare, while Workers run locally in workerd
 2. **Watches for changes** — when you edit `src/worker.ts` or any
    file it imports, the Worker is rebuilt and reloaded instantly
 3. **Preserves local state** — data in your local R2 Bucket persists
@@ -71,8 +71,8 @@ alchemy dev
 bun test test/integ.test.ts
 ```
 
-The tests deploy the stack (which in dev mode means starting
-Miniflare) and run HTTP assertions against localhost.
+The tests deploy the stack and run HTTP assertions against your
+local Worker.
 
 ## Recap
 
