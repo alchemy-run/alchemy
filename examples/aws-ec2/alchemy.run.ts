@@ -9,7 +9,7 @@ const aws = AWS.providers().pipe(Layer.provide(AWS.DefaultStageConfig));
 
 export default Alchemy.Stack(
   "AwsEc2Example",
-  { providers: aws },,
+  { providers: aws },
   Effect.gen(function* () {
     const instance = yield* Server;
 

@@ -19,7 +19,7 @@ const awsConfig = Layer.effect(
       };
     }
 
-     return yield* AWS.loadDefaultStageConfig();
+    return yield* AWS.loadDefaultStageConfig();
   }).pipe(Effect.orDie),
 );
 

@@ -3,10 +3,12 @@ import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
 import * as EC2 from "alchemy/AWS/EC2";
 import * as EKS from "alchemy/AWS/EKS";
+import { DefaultStageConfig } from "alchemy/AWS/StageConfig";
 import * as Kubernetes from "alchemy/Kubernetes";
 import * as Output from "alchemy/Output";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 
 const aws = AWS.providers().pipe(Layer.provide(DefaultStageConfig));
