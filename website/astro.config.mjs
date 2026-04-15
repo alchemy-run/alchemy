@@ -36,7 +36,7 @@ export default defineConfig({
         { label: "Getting Started", link: "/getting-started" },
         {
           label: "Tutorial",
-          items: [{ label: "Part 1", link: "/tutorial/part-1" }],
+          autogenerate: { directory: "tutorial" },
         },
         {
           label: "Concepts",
@@ -44,15 +44,7 @@ export default defineConfig({
         },
         {
           label: "Guides",
-          items: [
-            { label: "Migrating from v1", link: "/guides/migrating-from-v1" },
-            {
-              label: "Plan, Deploy and Destroy",
-              link: "/guides/plan-deploy-destroy",
-            },
-            { label: "Continuous Integration", link: "/guides/ci" },
-            { label: "Testing", link: "/guides/testing" },
-          ],
+          autogenerate: { directory: "guides" },
         },
         {
           label: "Providers",

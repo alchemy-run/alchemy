@@ -1,0 +1,153 @@
+---
+title: "Part 3: Stages & State"
+description: Use stages to isolate environments and configure a remote state store.
+sidebar:
+  order: 3
+---
+
+import Terminal from "../../../components/Terminal.astro";
+
+In [Part 2](/tutorial/part-2) you deployed a Worker and Bucket. So
+far everything has gone to a single environment. In this part you'll
+learn how stages isolate environments and how state stores track
+what's deployed.
+
+## What is a stage?
+
+A **stage** is an isolated instance of your stack. Each stage gets its
+own set of resources with distinct physical names, so `dev` and `prod`
+never interfere with each other.
+
+By default, `alchemy deploy` uses the stage `dev_$USER` (e.g.
+`dev_sam`), giving each developer their own environment automatically.
+
+## Deploy to a named stage
+
+Use `--stage` to target a specific stage:
+
+```sh
+alchemy deploy --stage staging
+```
+
+<Terminal content={`[u]Plan[/u]: [g]2 to create[/g]
+
+[g]+[/g] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d]
+[g]+[/g] [b]Worker[/b] [d](Cloudflare.Worker)[/d] [c](1 bindings)[/c]
+[s2][g]+[/g] [c]Bucket[/c]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d] [g]created[/g]
+[g]✓[/g] [b]Worker[/b] [d](Cloudflare.Worker)[/d] [g]created[/g]
+{
+[s2]bucketName: "myapp-bucket-f6g7h8i9j0",
+[s2]url: "https://myapp-worker-staging-abc123.workers.dev",
+}`} />
+
+Notice the physical names are different from your dev deployment —
+each stage is fully independent.
+
+## Preview changes with plan
+
+Before deploying, you can preview what will change with
+`alchemy plan`:
+
+```sh
+alchemy plan
+```
+
+<Terminal content={`[u]Plan[/u]: [d]no changes[/d]
+
+{
+[s2]bucketName: "myapp-bucket-a1b2c3d4e5",
+[s2]url: "https://myapp-worker-dev-you-abc123.workers.dev",
+}`} />
+
+Plan shows the diff without applying anything — equivalent to
+`alchemy deploy --dry-run`. Use it to verify changes before deploying,
+especially in shared environments.
+
+## Tear down a stage
+
+Destroy removes every resource in a stage. You'll use this for
+cleaning up preview environments in CI (covered in Part 4):
+
+```sh
+alchemy destroy --stage staging
+```
+
+<Terminal content={`[u]Plan[/u]: [r]2 to delete[/r]
+
+[r]-[/r] [b]Worker[/b] [d](Cloudflare.Worker)[/d]
+[r]-[/r] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d]
+
+Proceed?
+◉ Yes ○ No
+[r]✗[/r] [b]Worker[/b] [d](Cloudflare.Worker)[/d] [r]deleted[/r]
+[r]✗[/r] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d] [r]deleted[/r]`} />
+
+Resources are deleted in dependency order — the Worker is removed
+before the Bucket it depends on.
+
+## How state works
+
+Alchemy persists resource state between deploys so it can compute
+diffs. By default, state is stored locally in the `.alchemy/`
+directory. Add it to `.gitignore`:
+
+```sh
+echo ".alchemy/" >> .gitignore
+```
+
+Local state works fine for solo development, but for teams and CI
+you need a remote state store so everyone sees the same state.
+
+## Add a remote state store
+
+Alchemy includes a Cloudflare-backed state store that uses a Durable
+Object with embedded SQLite. Add `state` to your Stack options:
+
+```diff lang="typescript"
+// alchemy.run.ts
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Cloudflare.providers(),
++   state: Cloudflare.state(),
+  },
+  Effect.gen(function* () {
+    // ...
+  }),
+);
+```
+
+The first deploy after adding `Cloudflare.state()` will create a
+state Worker and migrate local state automatically. From that point on,
+every deploy reads and writes state from Cloudflare — no shared
+filesystem needed.
+
+## Skip confirmation with --yes
+
+In automated environments (CI, scripts), skip the interactive
+confirmation prompt:
+
+```sh
+alchemy deploy --yes
+alchemy destroy --yes --stage pr-42
+```
+
+This will be important in the next part when we set up GitHub Actions.
+
+## Recap
+
+You now understand:
+
+- **Stages** isolate environments (`dev_sam`, `staging`, `prod`)
+- **Plan** previews changes without applying them
+- **Destroy** tears down a stage in dependency order
+- **State stores** track deployed resources between deploys
+- **`Cloudflare.state()`** enables remote state for teams and CI
+- **`--yes`** skips the approval prompt for automation
+
+In [Part 4](/tutorial/part-4), you'll wire everything together with
+GitHub Actions for automated deployments and PR previews.
