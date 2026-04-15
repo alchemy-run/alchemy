@@ -19,8 +19,8 @@ const awsConfig = Layer.effect(
       };
     }
 
-    return yield* AWS.StageConfig;
-  }),
+    return yield* AWS.loadDefaultStageConfig();
+  }).pipe(Effect.orDie),
 );
 
 const aws = AWS.providers().pipe(Layer.provide(awsConfig));

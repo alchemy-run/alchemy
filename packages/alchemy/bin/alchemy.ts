@@ -1,3 +1,4 @@
+import * as Auth from "@distilled.cloud/aws/Auth";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -17,11 +18,12 @@ import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import packageJson from "../package.json" with { type: "json" };
 import { apply } from "../src/Apply.ts";
 import { provideFreshArtifactStore } from "../src/Artifacts.ts";
-import * as Auth from "../src/Auth/index.ts";
+import * as AWSAccount from "../src/AWS/Account.ts";
 import {
   bootstrap as bootstrapAws,
   destroyBootstrap as destroyBootstrapAws,
 } from "../src/AWS/Bootstrap.ts";
+import * as AWSCredentials from "../src/AWS/Credentials.ts";
 import * as AWSRegion from "../src/AWS/Region.ts";
 import * as CLI from "../src/Cli/index.ts";
 import { dotAlchemy } from "../src/Config.ts";
@@ -106,18 +108,6 @@ const main = Argument.file("main", {
   Argument.withDefault("alchemy.run.ts"),
 );
 
-const configure = Flag.boolean("configure").pipe(
-  Flag.withDescription(
-    "Runs login in configure mode allowing setup of credentials",
-  ),
-  Flag.withDefault(false),
-);
-
-const profile = Flag.string("profile").pipe(
-  Flag.withDescription("Credentials profile to use"),
-  Flag.withDefault("default"),
-);
-
 const deployCommand = Command.make(
   "deploy",
   {
@@ -127,7 +117,6 @@ const deployCommand = Command.make(
     envFile,
     stage,
     yes,
-    profile,
   },
   (args) => execStack(args),
 );
@@ -140,7 +129,6 @@ const destroyCommand = Command.make(
     envFile,
     stage,
     yes,
-    profile,
   },
   (args) =>
     execStack({
@@ -155,7 +143,6 @@ const planCommand = Command.make(
     main,
     envFile,
     stage,
-    profile,
   },
   (args) =>
     execStack({
@@ -169,7 +156,6 @@ const execStack = Effect.fn(function* ({
   main,
   stage,
   envFile,
-  profile: profileName,
   dryRun = false,
   force = false,
   yes = false,
@@ -178,7 +164,6 @@ const execStack = Effect.fn(function* ({
   main: string;
   stage: string;
   envFile: Option.Option<string>;
-  profile: string;
   dryRun?: boolean;
   force?: boolean;
   yes?: boolean;
@@ -203,11 +188,6 @@ const execStack = Effect.fn(function* ({
 
   // TODO(sam): implement local and watch
   const platform = Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer);
-
-  const stackAuthLayer = Layer.provide(
-      Auth.layer(profileName),
-      Layer.provideMerge(Auth.AuthLive, platform),
-    );
 
   const rootLogger = Logger.layer([fileLogger("out")]);
 
@@ -257,7 +237,6 @@ const execStack = Effect.fn(function* ({
       // Effect.provide(Logger.layer([fileLogger("stacks", stack.name, stage)])),
     );
   }).pipe(
-    Effect.provide(stackAuthLayer),
     Effect.provide(
       Layer.provideMerge(
         alchemy,
@@ -284,20 +263,17 @@ const tailCommand = Command.make(
     main,
     envFile,
     stage,
-    profile,
     filter: resourceFilter,
   },
   Effect.fnUntraced(function* ({
     main,
     stage,
     envFile,
-    profile: profileName,
     filter,
   }: {
     main: string;
     stage: string;
     envFile: Option.Option<string>;
-    profile: string;
     filter: string | undefined;
   }) {
     const path = yield* Path;
@@ -318,10 +294,6 @@ const tailCommand = Command.make(
     const configProvider = yield* loadConfigProvider(envFile);
 
     const platform = Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer);
-    const stackAuthLayer = Layer.provide(
-      Auth.layer(profileName),
-      Layer.provideMerge(Auth.AuthLive, platform),
-    );
 
     const rootLogger = Logger.layer([fileLogger("out")]);
 
@@ -415,7 +387,6 @@ const tailCommand = Command.make(
         }).pipe(Stream.runForEach((line) => Console.log(line)));
       }).pipe(Effect.provide(stack.services));
     }).pipe(
-      Effect.provide(stackAuthLayer),
       Effect.provide(
         Layer.provideMerge(
           alchemy,
@@ -426,6 +397,12 @@ const tailCommand = Command.make(
       Effect.scoped,
     ) as Effect.Effect<void, any, never>;
   }),
+);
+
+const awsProfile = Flag.string("profile").pipe(
+  Flag.withDescription("AWS profile to use for credentials"),
+  Flag.optional,
+  Flag.map(Option.getOrElse(() => "default")),
 );
 
 const awsRegion = Flag.string("region").pipe(
@@ -445,16 +422,11 @@ const bootstrapCommand = Command.make(
   "bootstrap",
   {
     envFile,
-    profile,
+    profile: awsProfile,
     region: awsRegion,
     destroy: bootstrapDestroy,
   },
-  Effect.fnUntraced(function* ({
-    envFile,
-    profile: profileName,
-    region,
-    destroy,
-  }) {
+  Effect.fnUntraced(function* ({ envFile, profile, region, destroy }) {
     const platform = Layer.mergeAll(
       NodeServices.layer,
       FetchHttpClient.layer,
@@ -464,42 +436,49 @@ const bootstrapCommand = Command.make(
       ),
     );
 
-    const stackAuthLayer = Layer.provide(
-      Auth.layer(profileName),
-      Layer.provideMerge(Auth.AuthLive, platform),
-    );
-
     return yield* Effect.gen(function* () {
-      const provider = yield* loadConfigProvider(envFile);
-      const bootstrapLayer = Layer.mergeAll(
-        region ? AWSRegion.of(region) : AWSRegion.fromStageConfig(),
-        Layer.succeed(ConfigProvider.ConfigProvider, provider),
+      const ssoProfile = yield* Auth.loadProfile(profile);
+
+      const credentials = yield* Auth.loadProfileCredentials(profile);
+
+      const awsLayers = Layer.mergeAll(
+        Layer.succeed(AWSAccount.Account, profile),
+        Layer.succeed(
+          AWSRegion.Region,
+          region ?? ssoProfile.region ?? "us-east-1",
+        ),
+        Layer.succeed(AWSCredentials.Credentials, Effect.succeed(credentials)),
       );
-      if (destroy) {
-        yield* destroyBootstrapAws().pipe(
-          Effect.tap((result) =>
-            result.destroyed === 0
-              ? Console.log("✓ No bootstrap buckets found to destroy")
-              : Console.log(
-                  `✓ Destroyed ${result.destroyed} bootstrap bucket(s): ${result.bucketNames.join(", ")}`,
-                ),
+
+      return yield* Effect.gen(function* () {
+        const provider = yield* loadConfigProvider(envFile);
+        const bootstrapLayer = Layer.provide(
+          awsLayers,
+          Layer.succeed(ConfigProvider.ConfigProvider, provider),
+        );
+        if (destroy) {
+          yield* destroyBootstrapAws().pipe(
+            Effect.tap((result) =>
+              result.destroyed === 0
+                ? Console.log("✓ No bootstrap buckets found to destroy")
+                : Console.log(
+                    `✓ Destroyed ${result.destroyed} bootstrap bucket(s): ${result.bucketNames.join(", ")}`,
+                  ),
+            ),
+            Effect.provide(bootstrapLayer),
+          );
+          return;
+        }
+        yield* bootstrapAws().pipe(
+          Effect.tap(({ bucketName, created }) =>
+            created
+              ? Console.log(`✓ Created assets bucket: ${bucketName}`)
+              : Console.log(`✓ Assets bucket already exists: ${bucketName}`),
           ),
           Effect.provide(bootstrapLayer),
         );
-        return;
-      }
-      yield* bootstrapAws().pipe(
-        Effect.tap(({ bucketName, created }) =>
-          created
-            ? Console.log(`✓ Created assets bucket: ${bucketName}`)
-            : Console.log(`✓ Assets bucket already exists: ${bucketName}`),
-        ),
-        Effect.provide(bootstrapLayer),
-      );
-    }).pipe(
-      Effect.provide(stackAuthLayer),
-      Effect.provide(platform),
-    ) as Effect.Effect<void, any, never>;
+      });
+    }).pipe(Effect.provide(platform)) as Effect.Effect<void, any, never>;
   }),
 );
 
@@ -574,7 +553,6 @@ const logsCommand = Command.make(
     main,
     envFile,
     stage,
-    profile,
     filter: resourceFilter,
     limit: logsLimit,
     since: logsSince,
@@ -583,7 +561,6 @@ const logsCommand = Command.make(
     main,
     stage,
     envFile,
-    profile: profileName,
     filter,
     limit,
     since,
@@ -591,7 +568,6 @@ const logsCommand = Command.make(
     main: string;
     stage: string;
     envFile: Option.Option<string>;
-    profile: string;
     filter: string | undefined;
     limit: number;
     since: string | undefined;
@@ -614,10 +590,6 @@ const logsCommand = Command.make(
     const configProvider = yield* loadConfigProvider(envFile);
 
     const platform = Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer);
-    const stackAuthLayer = Layer.provide(
-      Auth.layer(profileName),
-      Layer.provideMerge(Auth.AuthLive, platform),
-    );
 
     const rootLogger = Logger.layer([fileLogger("out")]);
 
@@ -706,7 +678,6 @@ const logsCommand = Command.make(
         }
       }).pipe(Effect.provide(stack.services));
     }).pipe(
-      Effect.provide(stackAuthLayer),
       Effect.provide(
         Layer.provideMerge(
           alchemy,
@@ -755,47 +726,9 @@ const parseSince = (value: string): Date => {
   return parsed;
 };
 
-const authServicesLayer = Layer.provide(
-  Auth.AuthLive,
-  Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer),
-);
-
-const loginCommand = Command.make(
-  "login",
-  {
-    profile,
-    configure,
-  },
-  Effect.fnUntraced(function* ({ profile, configure }) {
-    yield* (configure
-      ? Auth.configure(profile)
-      : Auth.login(profile)
-    ).pipe(Effect.provide(authServicesLayer));
-  }),
-);
-
-const logoutCommand = Command.make(
-  "logout",
-  { profile },
-  Effect.fnUntraced(function* ({ profile }) {
-    yield* Auth.logout(profile).pipe(Effect.provide(authServicesLayer));
-  }),
-);
-
-const viewAuthCommand = Command.make(
-  "view-auth",
-  { profile },
-  Effect.fnUntraced(function* ({ profile: profileName }) {
-    yield* Auth.viewAuth(profileName).pipe(Effect.provide(authServicesLayer));
-  }),
-);
-
 const root = Command.make("alchemy", {}).pipe(
   Command.withSubcommands([
     bootstrapCommand,
-    loginCommand,
-    logoutCommand,
-    viewAuthCommand,
     deployCommand,
     destroyCommand,
     planCommand,
