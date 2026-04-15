@@ -595,11 +595,15 @@ const waitForVpcEndpointAvailable = (
       return yield* new VpcEndpointNotFound({ vpcEndpointId });
     }
 
-    if (ep.State === "Available") {
+    // AWS returns State in lowercase on the wire ("available", "failed", …)
+    // even though the SDK types it as PascalCase. Normalize before compare.
+    const state = ep.State?.toLowerCase();
+
+    if (state === "available") {
       return ep;
     }
 
-    if (ep.State === "Failed" || ep.State === "Rejected") {
+    if (state === "failed" || state === "rejected") {
       return yield* new VpcEndpointFailed({
         vpcEndpointId,
         errorCode: ep.LastError?.Code,
@@ -641,7 +645,8 @@ const waitForVpcEndpointDeleted = (
 
     const ep = result.VpcEndpoints?.[0];
 
-    if (!ep || ep.State === "Deleted") {
+    // Same lowercase-wire-format gotcha as waitForVpcEndpointAvailable.
+    if (!ep || ep.State?.toLowerCase() === "deleted") {
       return; // Successfully deleted
     }
 
