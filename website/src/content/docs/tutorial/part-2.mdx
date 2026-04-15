@@ -51,7 +51,7 @@ Now let's bind the R2 Bucket from Part 1 to our new Worker. The
 problem is that the Bucket is declared inside the Stack's generator
 in `alchemy.run.ts` — we can't import it from there.
 
-The common pattern in Alchemy is to give each resource its own file.
+A common pattern in Alchemy is to give each resource its own file.
 Create `src/bucket.ts`:
 
 ```typescript
@@ -172,6 +172,35 @@ The Worker now handles two routes:
 - **`PUT /:key`** — stores the request body in the bucket
 - **`GET /:key`** — retrieves the object, returning 404 if missing
 
+## Wire the Worker into the Stack
+
+Add the Worker to `alchemy.run.ts` and expose its URL as a stack
+output:
+
+```diff lang="typescript"
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import { Bucket } from "./src/bucket.ts";
++import Worker from "./src/worker.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Cloudflare.providers(),
+  },
+  Effect.gen(function* () {
+    const bucket = yield* Bucket;
++    const worker = yield* Worker;
+
+    return {
+      bucketName: bucket.bucketName,
++      url: worker.url,
+    };
+  }),
+);
+```
+
 ## Deploy
 
 Deploy again. Alchemy detects the new Worker and the unchanged Bucket:
@@ -209,35 +238,6 @@ curl -X PUT https://myapp-worker-dev-you-abc123.workers.dev/hello.txt \
 # Retrieve it
 curl https://myapp-worker-dev-you-abc123.workers.dev/hello.txt
 # → Hello, world!
-```
-
-## Update the stack outputs
-
-Add the Worker URL to your stack outputs so it's always visible after
-deploys:
-
-```diff lang="typescript"
-// alchemy.run.ts
-import * as Alchemy from "alchemy";
-import * as Effect from "effect/Effect";
-import { Bucket } from "./src/bucket.ts";
-+import Worker from "./src/worker.ts";
-
-export default Alchemy.Stack(
-  "MyApp",
-  {
-    providers: Cloudflare.providers(),
-  },
-  Effect.gen(function* () {
-    const bucket = yield* Bucket;
-+   const worker = yield* Worker;
-
-    return {
-      bucketName: bucket.bucketName,
-+     url: worker.url,
-    };
-  }),
-);
 ```
 
 ## Recap

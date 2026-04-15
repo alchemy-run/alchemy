@@ -19,7 +19,7 @@ minutes.
 ## Prerequisites
 
 - [Bun](https://bun.sh) (recommended) or Node.js 20+
-- A [Cloudflare](https://dash.cloudflare.com/sign-up) account with an API token
+- A [Cloudflare](https://dash.cloudflare.com/sign-up) account
 
 ## Create a project
 
@@ -81,7 +81,7 @@ Resources represent cloud infrastructure — buckets, queues, functions,
 databases, and so on. Each resource is `yield*`-ed inside the Stack's
 Effect generator.
 
-Add a Cloudflare R2 Bucket:
+Let's add a Cloudflare R2 Bucket to our Stack and observe the type error:
 
 ```typescript twoslash ins={3,13}
 // @errors: 2322

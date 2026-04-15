@@ -1,153 +1,172 @@
 ---
-title: "Part 3: Stages & State"
-description: Use stages to isolate environments and configure a remote state store.
+title: "Part 3: Testing"
+description: Write integration tests that deploy your stack and make HTTP requests against your live Worker.
 sidebar:
   order: 3
 ---
 
-import Terminal from "../../../components/Terminal.astro";
+In [Part 2](/tutorial/part-2) you deployed a Worker with R2 Bucket
+bindings. Now you'll write integration tests that deploy the stack,
+hit the live Worker over HTTP, and verify it works.
 
-In [Part 2](/tutorial/part-2) you deployed a Worker and Bucket. So
-far everything has gone to a single environment. In this part you'll
-learn how stages isolate environments and how state stores track
-what's deployed.
+## Create the test file
 
-## What is a stage?
+Alchemy ships test utilities for Bun that wrap `bun:test` with Effect
+support. Create an empty test file:
 
-A **stage** is an isolated instance of your stack. Each stage gets its
-own set of resources with distinct physical names, so `dev` and `prod`
-never interfere with each other.
-
-By default, `alchemy deploy` uses the stage `dev_$USER` (e.g.
-`dev_sam`), giving each developer their own environment automatically.
-
-## Deploy to a named stage
-
-Use `--stage` to target a specific stage:
-
-```sh
-alchemy deploy --stage staging
+```typescript
+// test/integ.test.ts
+import { beforeAll, deploy, expect, test } from "alchemy/Test/Bun";
+import * as Effect from "effect/Effect";
+import Stack from "../alchemy.run.ts";
 ```
 
-<Terminal content={`[u]Plan[/u]: [g]2 to create[/g]
+## Deploy the stack before tests
 
-[g]+[/g] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d]
-[g]+[/g] [b]Worker[/b] [d](Cloudflare.Worker)[/d] [c](1 bindings)[/c]
-[s2][g]+[/g] [c]Bucket[/c]
+Use `beforeAll` with `deploy` to deploy your stack once before any
+tests run:
 
-Proceed?
-◉ Yes ○ No
-[g]✓[/g] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d] [g]created[/g]
-[g]✓[/g] [b]Worker[/b] [d](Cloudflare.Worker)[/d] [g]created[/g]
-{
-[s2]bucketName: "myapp-bucket-f6g7h8i9j0",
-[s2]url: "https://myapp-worker-staging-abc123.workers.dev",
-}`} />
+```typescript ins={5}
+// test/integ.test.ts
+import { beforeAll, deploy, expect, test } from "alchemy/Test/Bun";
+import * as Effect from "effect/Effect";
+import Stack from "../alchemy.run.ts";
 
-Notice the physical names are different from your dev deployment —
-each stage is fully independent.
-
-## Preview changes with plan
-
-Before deploying, you can preview what will change with
-`alchemy plan`:
-
-```sh
-alchemy plan
+const stack = beforeAll(deploy(Stack));
 ```
 
-<Terminal content={`[u]Plan[/u]: [d]no changes[/d]
+`deploy(Stack)` returns an Effect that plans and applies the stack.
+`beforeAll` runs it once, then returns a lazy accessor you can
+`yield*` inside each test to get the stack outputs.
 
-{
-[s2]bucketName: "myapp-bucket-a1b2c3d4e5",
-[s2]url: "https://myapp-worker-dev-you-abc123.workers.dev",
-}`} />
+## Access the stack outputs
 
-Plan shows the diff without applying anything — equivalent to
-`alchemy deploy --dry-run`. Use it to verify changes before deploying,
-especially in shared environments.
+Write your first test. Use `yield* stack` to get the outputs you
+returned from your Stack in Part 2:
 
-## Tear down a stage
+```typescript ins={8-14}
+// test/integ.test.ts
+import { beforeAll, deploy, expect, test } from "alchemy/Test/Bun";
+import * as Effect from "effect/Effect";
+import Stack from "../alchemy.run.ts";
 
-Destroy removes every resource in a stage. You'll use this for
-cleaning up preview environments in CI (covered in Part 4):
+const stack = beforeAll(deploy(Stack));
 
-```sh
-alchemy destroy --stage staging
-```
-
-<Terminal content={`[u]Plan[/u]: [r]2 to delete[/r]
-
-[r]-[/r] [b]Worker[/b] [d](Cloudflare.Worker)[/d]
-[r]-[/r] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d]
-
-Proceed?
-◉ Yes ○ No
-[r]✗[/r] [b]Worker[/b] [d](Cloudflare.Worker)[/d] [r]deleted[/r]
-[r]✗[/r] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d] [r]deleted[/r]`} />
-
-Resources are deleted in dependency order — the Worker is removed
-before the Bucket it depends on.
-
-## How state works
-
-Alchemy persists resource state between deploys so it can compute
-diffs. By default, state is stored locally in the `.alchemy/`
-directory. Add it to `.gitignore`:
-
-```sh
-echo ".alchemy/" >> .gitignore
-```
-
-Local state works fine for solo development, but for teams and CI
-you need a remote state store so everyone sees the same state.
-
-## Add a remote state store
-
-Alchemy includes a Cloudflare-backed state store that uses a Durable
-Object with embedded SQLite. Add `state` to your Stack options:
-
-```diff lang="typescript"
-// alchemy.run.ts
-export default Alchemy.Stack(
-  "MyApp",
-  {
-    providers: Cloudflare.providers(),
-+   state: Cloudflare.state(),
-  },
+test(
+  "worker returns a url",
   Effect.gen(function* () {
-    // ...
+    const { url } = yield* stack;
+
+    expect(url).toBeString();
   }),
 );
 ```
 
-The first deploy after adding `Cloudflare.state()` will create a
-state Worker and migrate local state automatically. From that point on,
-every deploy reads and writes state from Cloudflare — no shared
-filesystem needed.
+`test(name, effect)` wraps `bun:test` — you write an Effect generator
+instead of an async function.
 
-## Skip confirmation with --yes
-
-In automated environments (CI, scripts), skip the interactive
-confirmation prompt:
+## Run the tests
 
 ```sh
-alchemy deploy --yes
-alchemy destroy --yes --stage pr-42
+bun test test/integ.test.ts
 ```
 
-This will be important in the next part when we set up GitHub Actions.
+The first run deploys the stack (or reuses the existing one if
+already deployed). Subsequent runs are fast because Alchemy diffs
+and skips unchanged resources.
+
+## Add HTTP assertions
+
+The basic test just checks that a URL exists. Let's verify the Worker
+actually handles requests:
+
+```diff lang="typescript"
+// test/integ.test.ts
+import { beforeAll, deploy, expect, test } from "alchemy/Test/Bun";
+import * as Effect from "effect/Effect";
++import * as HttpClient from "effect/unstable/http/HttpClient";
++import * as HttpBody from "effect/unstable/http/HttpBody";
+import Stack from "../alchemy.run.ts";
+
+const stack = beforeAll(deploy(Stack));
+
+-test(
+-  "worker returns a url",
+-  Effect.gen(function* () {
+-    const { url } = yield* stack;
+-
+-    expect(url).toBeString();
+-  }),
+-);
++test(
++  "PUT and GET round-trip an object",
++  Effect.gen(function* () {
++    const { url } = yield* stack;
++
++    const put = yield* HttpClient.put(`${url}/hello.txt`, {
++      body: HttpBody.text("Hello, World!"),
++    });
++    expect(put.status).toBe(201);
++
++    const get = yield* HttpClient.get(`${url}/hello.txt`);
++    expect(yield* get.text).toBe("Hello, World!");
++  }),
++);
++
++test(
++  "GET missing key returns 404",
++  Effect.gen(function* () {
++    const { url } = yield* stack;
++    const response = yield* HttpClient.get(`${url}/no-such-key`);
++    expect(response.status).toBe(404);
++  }),
++);
+```
+
+`HttpClient` is provided automatically by the test harness — no
+extra setup needed.
+
+## Destroy after tests on CI
+
+Right now the stack stays deployed after tests finish. That's great
+locally — you can re-run tests instantly against the already-deployed
+stack. But on CI you want to clean up.
+
+Add `afterAll` with `destroy`, using `skipIf` to only tear down when
+`CI` is set:
+
+```diff lang="typescript"
+import {
++ afterAll,
+  beforeAll,
+  deploy,
++ destroy,
+  expect,
+  test,
+} from "alchemy/Test/Bun";
++import * as Effect from "effect/Effect";
++import * as HttpClient from "effect/unstable/http/HttpClient";
++import * as HttpBody from "effect/unstable/http/HttpBody";
+import Stack from "../alchemy.run.ts";
+
+const stack = beforeAll(deploy(Stack));
++afterAll.skipIf(!process.env.CI)(destroy(Stack));
+```
+
+- **Locally** — `CI` is not set, so `skipIf` skips the destroy. You
+  iterate fast against the live stack.
+- **On CI** — set `CI=true` and the stack is torn down automatically
+  after tests complete.
 
 ## Recap
 
-You now understand:
+You now have:
 
-- **Stages** isolate environments (`dev_sam`, `staging`, `prod`)
-- **Plan** previews changes without applying them
-- **Destroy** tears down a stage in dependency order
-- **State stores** track deployed resources between deploys
-- **`Cloudflare.state()`** enables remote state for teams and CI
-- **`--yes`** skips the approval prompt for automation
+- `beforeAll(deploy(Stack))` to deploy once before tests
+- `yield* stack` to access outputs in each test
+- HTTP assertions using Effect's `HttpClient`
+- `afterAll.skipIf(!process.env.CI)(destroy(Stack))` for automatic
+  cleanup on CI with fast iteration locally
 
-In [Part 4](/tutorial/part-4), you'll wire everything together with
-GitHub Actions for automated deployments and PR previews.
+In [Part 4](/tutorial/part-4), you'll run your stack locally with
+`alchemy dev` for instant feedback during development.

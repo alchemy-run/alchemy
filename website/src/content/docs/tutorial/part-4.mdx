@@ -1,251 +1,86 @@
 ---
-title: "Part 4: CI/CD"
-description: Set up GitHub Actions to deploy on push to main and create PR preview environments.
+title: "Part 4: Local Dev"
+description: Run your stack locally with alchemy dev for hot reloading and instant feedback.
 sidebar:
   order: 4
 ---
 
-import { Steps } from "@astrojs/starlight/components";
+In [Part 3](/tutorial/part-3) you wrote integration tests against
+your deployed stack. But deploying to Cloudflare on every code change
+is slow. In this part you'll use `alchemy dev` to run everything
+locally with hot reloading.
 
-In [Part 3](/tutorial/part-3) you learned about stages and state
-stores. Now you'll set up GitHub Actions so that:
+## Start dev mode
 
-- Pushes to `main` deploy to **prod**
-- Pull requests get an isolated **pr-\<number\>** preview environment
-- Merged/closed PRs automatically **destroy** their preview
+```sh
+alchemy dev
+```
+
+That's it. Alchemy deploys your stack locally using Miniflare (a local
+Cloudflare Workers emulator), watches for file changes, and hot
+reloads your Worker automatically.
+
+Your Worker is available at `http://localhost:1337` by default:
+
+```sh
+curl http://localhost:1337/hello.txt
+```
 
 ## How it works
 
-The CI pipeline uses stages to isolate every deployment:
+`alchemy dev` does three things:
 
-| Event | Stage | Action |
-| --- | --- | --- |
-| Push to `main` | `prod` | Deploy |
-| PR opened/updated | `pr-42` | Deploy |
-| PR closed/merged | `pr-42` | Destroy |
+1. **Deploys locally** — resources like R2 Buckets are emulated in
+   Miniflare instead of created on Cloudflare
+2. **Watches for changes** — when you edit `src/worker.ts` or any
+   file it imports, the Worker is rebuilt and reloaded instantly
+3. **Preserves local state** — data in your local R2 Bucket persists
+   across restarts
 
-Each PR gets its own infrastructure, its own URL, and its own state.
-When the PR is closed, everything is cleaned up automatically.
+The same `alchemy.run.ts` is used for both `dev` and `deploy` — no
+separate dev config needed.
 
-## Store credentials in GitHub
+## Custom port
 
-<Steps>
-
-1. **Create a GitHub stack**
-
-   Rather than manually adding secrets through the GitHub UI, use
-   Alchemy to manage them as code. Create `stacks/github.ts`:
-
-   ```typescript
-   // stacks/github.ts
-   import * as Alchemy from "alchemy";
-   import * as Cloudflare from "alchemy/Cloudflare";
-   import * as GitHub from "alchemy/GitHub";
-   import * as Config from "effect/Config";
-   import * as Effect from "effect/Effect";
-   import * as Redacted from "effect/Redacted";
-
-   export default Alchemy.Stack(
-     "github",
-     {
-       providers: Cloudflare.providers(),
-     },
-     Effect.gen(function* () {
-       const cfApiToken = yield* Config.string("CLOUDFLARE_API_TOKEN");
-       const cfAccountId = yield* Config.string("CLOUDFLARE_ACCOUNT_ID");
-
-       yield* GitHub.Secret("cf-api-token", {
-         owner: "your-org",
-         repository: "your-repo",
-         name: "CLOUDFLARE_API_TOKEN",
-         value: Redacted.make(cfApiToken),
-       });
-
-       yield* GitHub.Secret("cf-account-id", {
-         owner: "your-org",
-         repository: "your-repo",
-         name: "CLOUDFLARE_ACCOUNT_ID",
-         value: Redacted.make(cfAccountId),
-       });
-     }),
-   );
-   ```
-
-2. **Deploy the GitHub stack once locally**
-
-   ```sh
-   alchemy deploy stacks/github.ts
-   ```
-
-   This reads your local `CLOUDFLARE_API_TOKEN` and
-   `CLOUDFLARE_ACCOUNT_ID` environment variables and writes them as
-   encrypted secrets to your GitHub repository.
-
-</Steps>
-
-## Create the workflow
-
-Create `.github/workflows/deploy.yml`:
-
-```yaml
-name: Deploy
-on:
-  push:
-    branches: [main]
-  pull_request:
-    types: [opened, reopened, synchronize, closed]
-
-concurrency:
-  group: deploy-${{ github.ref }}
-  cancel-in-progress: false
-
-env:
-  STAGE: >-
-    ${{ github.event_name == 'pull_request'
-      && format('pr-{0}', github.event.number)
-      || (github.ref == 'refs/heads/main' && 'prod' || github.ref_name) }}
-
-jobs:
-  deploy:
-    if: github.event.action != 'closed'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install
-      - name: Deploy
-        run: bun alchemy deploy --stage ${{ env.STAGE }}
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          PULL_REQUEST: ${{ github.event.number }}
-          GITHUB_SHA: ${{ github.sha }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  cleanup:
-    if: github.event_name == 'pull_request' && github.event.action == 'closed'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install
-      - name: Safety Check
-        run: |
-          if [ "${{ env.STAGE }}" = "prod" ]; then
-            echo "ERROR: Cannot destroy prod environment in cleanup job"
-            exit 1
-          fi
-      - name: Destroy Preview
-        run: bun alchemy destroy --stage ${{ env.STAGE }}
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          PULL_REQUEST: ${{ github.event.number }}
-```
-
-:::note[How STAGE is computed]
-- Pull requests → `pr-{number}` (e.g. `pr-42`)
-- Push to `main` → `prod`
-- Other branches → the branch name
-
-The cleanup job includes a safety check so `prod` can never be
-accidentally destroyed.
-:::
-
-## Add PR preview comments
-
-Post the live URL as a comment on every PR so reviewers can click
-straight through to the preview. Update your `alchemy.run.ts`:
+Set a custom port for your Worker:
 
 ```diff lang="typescript"
-// alchemy.run.ts
-import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
-+import * as GitHub from "alchemy/GitHub";
-+import * as Output from "alchemy/Output";
-import * as Effect from "effect/Effect";
-import Worker from "./src/worker.ts";
-
-export const Bucket = Cloudflare.R2Bucket("Bucket");
-
-export default Alchemy.Stack(
-  "MyApp",
+// src/worker.ts
+export default Cloudflare.Worker(
+  "Worker",
   {
-    providers: Cloudflare.providers(),
-    state: Cloudflare.state(),
+    main: import.meta.path,
++   dev: {
++     port: 3000,
++   },
   },
-  Effect.gen(function* () {
-    const bucket = yield* Bucket;
-    const worker = yield* Worker;
-
-+   if (process.env.PULL_REQUEST) {
-+     yield* GitHub.Comment("preview-comment", {
-+       owner: "your-org",
-+       repository: "your-repo",
-+       issueNumber: Number(process.env.PULL_REQUEST),
-+       body: Output.interpolate`
-+         ## Preview Deployed
-+
-+         **URL:** ${worker.url}
-+
-+         Built from commit ${process.env.GITHUB_SHA?.slice(0, 7)}
-+
-+         ---
-+         _This comment updates automatically with each push._
-+       `,
-+     });
-+   }
-
-    return {
-      bucketName: bucket.bucketName,
-      url: worker.url,
-    };
-  }),
+  // ...
 );
 ```
 
-Because the logical ID `"preview-comment"` stays the same, Alchemy
-updates the existing comment on each push instead of creating a new
-one.
+## Run tests against dev
 
-## The full picture
+Since your Worker runs on localhost in dev mode, you can point your
+integration tests at it for an even faster feedback loop:
 
-Here's how everything fits together:
+```sh
+# Terminal 1: start dev mode
+alchemy dev
 
-1. **Developer** pushes a branch and opens a PR
-2. **GitHub Actions** deploys `--stage pr-42`, creating isolated
-   infrastructure
-3. **Alchemy** posts a comment with the preview URL
-4. **Reviewer** clicks the URL and tests the preview
-5. **PR is merged** — GitHub Actions triggers the cleanup job,
-   destroying the `pr-42` stage
-6. **Push to main** deploys to `--stage prod`
+# Terminal 2: run tests against local
+bun test test/integ.test.ts
+```
 
-Each environment is fully isolated with its own bucket, worker, and
-state — no resource conflicts, no manual cleanup.
+The tests deploy the stack (which in dev mode means starting
+Miniflare) and run HTTP assertions against localhost.
 
 ## Recap
 
-You've completed the tutorial. You now know how to:
+You now have:
 
-- **Part 1** — Create a Stack and deploy a resource
-- **Part 2** — Add a Worker with bindings to other resources
-- **Part 3** — Use stages for environment isolation and remote state
-- **Part 4** — Automate everything with GitHub Actions CI/CD
+- Local development with `alchemy dev`
+- Hot reloading on file changes
+- Local emulation of Cloudflare resources
 
-## What's next
-
-- Read the [Plan, Deploy and Destroy](/guides/plan-deploy-destroy)
-  guide for all CLI flags and options
-- Explore the [CI guide](/guides/ci) for AWS credential setup
-  (OIDC and access keys)
-- Check out the [Testing guide](/guides/testing) to write integration
-  tests against deployed stacks
-- Browse the [Providers](/providers) reference for all available
-  resources
+In [Part 5](/tutorial/part-5), you'll set up GitHub Actions for
+automated deployments and PR preview environments.
