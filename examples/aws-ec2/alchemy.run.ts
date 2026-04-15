@@ -2,6 +2,7 @@ import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { NetworkLive } from "./src/Network.ts";
 import Server from "./src/Server.ts";
 
