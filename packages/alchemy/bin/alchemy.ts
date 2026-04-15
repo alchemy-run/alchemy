@@ -191,18 +191,19 @@ const execStack = Effect.fn(function* ({
 
   const rootLogger = Logger.layer([fileLogger("out")]);
 
-  // override alchemy state store, CLI/reporting and dotAlchemy
   const alchemy = Layer.mergeAll(
-    // TODO(sam): support overriding these
-    State.LocalState,
     CLI.inkCLI(),
-    // optional
     Layer.provideMerge(rootLogger, dotAlchemy),
   );
 
   yield* Effect.gen(function* () {
     const cli = yield* CLI.Cli;
     const stack = yield* stackEffect;
+
+    // Stack may supply its own State layer via `Stack(name, { state })`.
+    // Its deps are a subset of `stack.services`, so we provide it inside
+    // the stack's service context. Default: LocalState.
+    const stateLayer = stack.state ?? State.LocalState;
 
     yield* Effect.gen(function* () {
       const updatePlan = yield* Plan.make(
@@ -232,6 +233,7 @@ const execStack = Effect.fn(function* ({
         yield* Console.log(outputs);
       }
     }).pipe(
+      Effect.provide(stateLayer),
       Effect.provide(stack.services),
       provideFreshArtifactStore,
       // Effect.provide(Logger.layer([fileLogger("stacks", stack.name, stage)])),
@@ -297,16 +299,14 @@ const tailCommand = Command.make(
 
     const rootLogger = Logger.layer([fileLogger("out")]);
 
-    const alchemy = Layer.mergeAll(
-      State.LocalState,
-      Layer.provideMerge(rootLogger, dotAlchemy),
-    );
+    const alchemy = Layer.provideMerge(rootLogger, dotAlchemy);
 
     yield* Effect.gen(function* () {
-      const state = yield* State.State;
       const stack = yield* stackEffect;
+      const stateLayer = stack.state ?? State.LocalState;
 
       yield* Effect.gen(function* () {
+        const state = yield* State.State;
         const filterSet = parseResourceFilter(filter);
         const availableIds = [
           ...new Set(Object.values(stack.resources).map((r) => r.LogicalId)),
@@ -385,7 +385,10 @@ const tailCommand = Command.make(
         yield* Stream.mergeAll(taggedStreams, {
           concurrency: "unbounded",
         }).pipe(Stream.runForEach((line) => Console.log(line)));
-      }).pipe(Effect.provide(stack.services));
+      }).pipe(
+        Effect.provide(stateLayer),
+        Effect.provide(stack.services),
+      );
     }).pipe(
       Effect.provide(
         Layer.provideMerge(
@@ -593,18 +596,16 @@ const logsCommand = Command.make(
 
     const rootLogger = Logger.layer([fileLogger("out")]);
 
-    const alchemy = Layer.mergeAll(
-      State.LocalState,
-      Layer.provideMerge(rootLogger, dotAlchemy),
-    );
+    const alchemy = Layer.provideMerge(rootLogger, dotAlchemy);
 
     const sinceDate = since ? parseSince(since) : undefined;
 
     yield* Effect.gen(function* () {
-      const state = yield* State.State;
       const stack = yield* stackEffect;
+      const stateLayer = stack.state ?? State.LocalState;
 
       yield* Effect.gen(function* () {
+        const state = yield* State.State;
         const filterSet = parseResourceFilter(filter);
         const availableIds = [
           ...new Set(Object.values(stack.resources).map((r) => r.LogicalId)),
@@ -676,7 +677,10 @@ const logsCommand = Command.make(
         for (const entry of merged) {
           yield* Console.log(entry.formatted);
         }
-      }).pipe(Effect.provide(stack.services));
+      }).pipe(
+        Effect.provide(stateLayer),
+        Effect.provide(stack.services),
+      );
     }).pipe(
       Effect.provide(
         Layer.provideMerge(

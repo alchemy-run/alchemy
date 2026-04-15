@@ -13,6 +13,7 @@ import * as Output from "./Output.ts";
 import { ref } from "./Ref.ts";
 import type { ResourceBinding, ResourceLike } from "./Resource.ts";
 import { Stage } from "./Stage.ts";
+import type { State } from "./State/State.ts";
 import { taggedFunction } from "./Util/effect.ts";
 
 export type StackServices =
@@ -50,6 +51,12 @@ export const Stack: Context.ServiceClass<
       stackName: string,
       options: {
         providers: Layer.Layer<NoInfer<Req>, never, StackServices>;
+        /**
+         * Optional state backend layer. Falls back to `LocalState` when omitted.
+         * May depend on any service the stack's `providers` or platform
+         * provides (e.g. AWS `Credentials`, `Region`, `HttpClient`).
+         */
+        state?: Layer.Layer<State, any, NoInfer<Req> | StackServices>;
       },
       eff: Effect.Effect<A, never, Req>,
     ): Effect.Effect<Self> & {
@@ -75,6 +82,12 @@ export const Stack: Context.ServiceClass<
     stackName: string,
     options: {
       providers: Layer.Layer<NoInfer<Req>, never, StackServices>;
+      /**
+       * Optional state backend layer. Falls back to `LocalState` when omitted.
+       * May depend on any service the stack's `providers` or platform
+       * provides (e.g. AWS `Credentials`, `Region`, `HttpClient`).
+       */
+      state?: Layer.Layer<State, any, NoInfer<Req> | StackServices>;
     },
     eff: Effect.Effect<A, never, Req | StackServices>,
   ): Effect.Effect<CompiledStack<A>>;
@@ -85,23 +98,26 @@ export const Stack: Context.ServiceClass<
       stackName: string,
       options: {
         providers: Layer.Layer<NoInfer<Req>, never, StackServices>;
+        state?: Layer.Layer<State, any, NoInfer<Req> | StackServices>;
       },
       eff: Effect.Effect<A, never, Req>,
     ) =>
-      eff.pipe(make(stackName, options.providers), (eff) =>
-        Object.assign(eff, {
-          stage: new Proxy(
-            {},
-            {
-              get: (_, stage: string) =>
-                ref({
-                  stack: stackName,
-                  stage,
-                  id: stackName,
-                }),
-            },
-          ),
-        }),
+      eff.pipe(
+        make(stackName, options.providers, undefined, options.state),
+        (eff) =>
+          Object.assign(eff, {
+            stage: new Proxy(
+              {},
+              {
+                get: (_, stage: string) =>
+                  ref({
+                    stack: stackName,
+                    stage,
+                    id: stackName,
+                  }),
+              },
+            ),
+          }),
       ),
   ),
 ) as any;
@@ -124,6 +140,13 @@ export interface CompiledStack<
   Services = any,
 > extends StackSpec<Output> {
   services: Context.Context<Services>;
+  /**
+   * Optional state backend layer supplied via `Stack(name, { state })`.
+   * When omitted, the runtime (CLI / test harness) falls back to
+   * `LocalState`. Its residual requirements are a subset of `Services`,
+   * so it can be provided after `services` is applied.
+   */
+  state?: Layer.Layer<State, any, Services>;
 }
 
 export const StackName = Stack.use((stack) => Effect.succeed(stack.name));
@@ -134,6 +157,7 @@ export const make =
     providers: Layer.Layer<ROut, never, StackServices>,
     /** @internal */
     stack?: StackSpec,
+    state?: Layer.Layer<State, any, ROut | StackServices>,
   ) =>
   <A, Err = never, Req extends ROut | StackServices = never>(
     effect: Effect.Effect<A, Err, Req>,
@@ -149,6 +173,7 @@ export const make =
             ...stack,
             output,
             services,
+            state,
           }) satisfies CompiledStack<A, ROut | StackServices> as CompiledStack<
             A,
             ROut | StackServices

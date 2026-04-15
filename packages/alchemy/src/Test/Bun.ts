@@ -30,12 +30,8 @@ type TestEffect<A, Req = never> = Effect.Effect<
 
 const platform = Layer.mergeAll(BunServices.layer, FetchHttpClient.layer);
 
-// override alchemy state store, CLI/reporting and dotAlchemy
 const alchemy = Layer.mergeAll(
-  // TODO(sam): support overriding these
-  State.LocalState,
   // CLI.inkCLI(),
-  // optional
   Logger.layer([Logger.consolePretty()]),
   dotAlchemy,
 );
@@ -204,9 +200,11 @@ const exec = <A, B>(
   Effect.gen(function* () {
     const stack = yield* effect;
     const configProvider = yield* loadConfigProvider(Option.none());
+    const stateLayer = stack.state ?? State.LocalState;
 
     return yield* fn(stack).pipe(
       provideFreshArtifactStore,
+      Effect.provide(stateLayer),
       Effect.provide(stack.services),
       Effect.provide(Layer.succeed(ConfigProvider, configProvider)),
     );
