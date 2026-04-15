@@ -33,8 +33,6 @@ export const fromStageConfig = () =>
       if (!account) {
         return yield* Effect.die("CLOUDFLARE_ACCOUNT_ID is not set");
       }
-      return yield* Effect.die(
-        "Cloudflare account ID not found. Configure via: alchemy-effect login --configure",
-      );
+      return account;
     }),
   );

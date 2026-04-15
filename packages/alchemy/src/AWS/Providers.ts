@@ -1,4 +1,3 @@
-import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
 import { Command, CommandProvider } from "../Build/Command.ts";
 import * as Provider from "../Provider.ts";
@@ -33,6 +32,7 @@ import * as Scheduler from "./Scheduler/index.ts";
 import * as SecretsManager from "./SecretsManager/index.ts";
 import * as SNS from "./SNS/index.ts";
 import * as SQS from "./SQS/index.ts";
+import { DefaultStageConfig } from "./StageConfig.ts";
 import * as Website from "./Website/index.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()(
@@ -520,17 +520,6 @@ export const providers = () =>
     Layer.provideMerge(Region.fromStageConfig()),
     Layer.provideMerge(Credentials.fromStageConfig()),
     Layer.provideMerge(Endpoint.fromStageConfig()),
+    Layer.provideMerge(DefaultStageConfig),
     Layer.orDie,
-  );
-
-/**
- * Minimal AWS credential and account context without registering any resource
- * providers.
- */
-export const credentials = () =>
-  pipe(
-    Account.fromStageConfig(),
-    Layer.provideMerge(Region.fromStageConfig()),
-    Layer.provideMerge(Credentials.fromStageConfig()),
-    Layer.provideMerge(Endpoint.fromStageConfig()),
   );
