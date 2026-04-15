@@ -57,5 +57,6 @@
   "[javascriptreact]": {
     "editor.indentSize": 2,
     "editor.defaultFormatter": "oxc.oxc-vscode"
-  }
+  },
+  "oxc.enable.oxfmt": true
 }

@@ -1,0 +1,351 @@
+---
+title: Getting Started
+description: Install Alchemy and deploy your first stack in under five minutes.
+sidebar:
+  order: 1
+---
+
+import Terminal from "../../components/Terminal.astro";
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+import { alchemyVersion, effectVersion } from "../../versions";
+
+export const bunPkgs = `alchemy@${alchemyVersion} effect@${effectVersion} @effect/platform-bun@${effectVersion}`;
+export const nodePkgs = `alchemy@${alchemyVersion} effect@${effectVersion} @effect/platform-node@${effectVersion}`;
+
+This guide walks you through installing Alchemy and Effect, deploying an R2 Bucket and Worker to Cloudflare, and tearing it all down.
+
+## Install
+
+Install <code>alchemy@{alchemyVersion}</code> and <code>effect@{effectVersion}</code> as dependencies.
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun"><Code code={`bun add ${bunPkgs}`} lang="sh" /></TabItem>
+  <TabItem label="npm" icon="npm"><Code code={`npm install ${nodePkgs}`} lang="sh" /></TabItem>
+  <TabItem label="pnpm" icon="pnpm"><Code code={`pnpm add ${nodePkgs}`} lang="sh" /></TabItem>
+  <TabItem label="yarn" icon="seti:yarn"><Code code={`yarn add ${nodePkgs}`} lang="sh" /></TabItem>
+</Tabs>
+
+:::tip
+We recommend using Bun instead of Node.js for the best development experience, but both are supported.
+:::
+
+
+## Stack 
+
+Every Alchemy program starts with a `Stack` exported as `default` from an `alchemy.run.ts` file. A Stack is a collection of **Resources** that are managed by **Providers** with state stored in a **State Store**. 
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export default Alchemy.Stack(
+  "App",
+  { 
+    providers: Layer.empty,
+  },
+  Effect.gen(function* () {
+    // TODO: create resources here
+  }),
+);
+```
+
+:::note
+Notice the `Layer.empty` and `TODO` comments. This is because we haven't added any providers or resources yet.
+:::
+
+## Resources
+
+Resources are created inside a Stack, e.g. `Cloudflare.R2Bucket` is a resource that creates an R2 Bucket on Cloudflare.
+
+```typescript twoslash ins={3,13}
+// @errors: 2322
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export default Alchemy.Stack(
+  "App",
+  { 
+    providers: Layer.empty,
+  },
+  Effect.gen(function* () {
+    const bucket = yield* Cloudflare.R2Bucket("Bucket");
+  }),
+);
+```
+
+## Providers
+
+After creating the R2Bucket, we now have a type error complaining about missing `Cloudflare.Providers`. This is because our Stack's provider layer is empty.
+
+Replace it with `Cloudflare.providers()`
+
+```diff lang="typescript"
+// @errors: 1117
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+-import * as Layer from "effect/Layer";
+import * as Cloudflare from "alchemy/Cloudflare";
+
+export default Alchemy.Stack(
+  "App",
+  { 
+-    providers: Layer.empty,
++    providers: Cloudflare.providers(),
+  },
+  Effect.gen(function* () {
+    const bucket = yield* Cloudflare.R2Bucket("Bucket");
+  }),
+);
+```
+
+## Stack outputs
+
+
+```typescript twoslash ins={15}
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export default Alchemy.Stack(
+  "App",
+  { 
+    providers: Cloudflare.providers(),
+  },
+  Effect.gen(function* () {
+    const bucket = yield* Cloudflare.R2Bucket("Bucket");
+
+    return { 
+      bucketName: bucket.bucketName,
+//      ^?
+    };
+  }),
+);
+```
+
+
+
+## State Store
+
+Add `Cloudflare.state()` to persist your stack's state in a Cloudflare Worker backed by a Durable Object and Sqlite:
+
+```typescript twoslash ins={9}
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export default Alchemy.Stack(
+  "App",
+  { 
+    providers: Cloudflare.providers(),
+    // state: Cloudflare.state(),
+  },
+  Effect.gen(function* () {
+    const bucket = yield* Cloudflare.R2Bucket("Bucket");
+
+    return { 
+      bucketName: bucket.bucketName,
+    };
+  }),
+);
+```
+
+
+## Deploy the Stack
+
+Run `alchemy deploy` to create the Bucket on Cloudflare.
+
+```sh
+alchemy deploy
+```
+
+<Terminal content={`[u]Plan[/u]: [g]1 to create[/g]
+[g]+[/g] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d] [g]created[/g]
+{
+[s2]bucketName: "app-bucket-1234567890",
+}`} />
+
+:::tip
+By convention, alchemy looks for an `alchemy.run.ts` at the root of your project but you can specify a different file name with the `alchemy deploy <file>` command.
+:::
+
+:::note
+This will create the `default` Alchemy Profile if it does not exist and initialize the Alchemy State Store in Cloudflare. 
+
+See the [Profiles](/concepts/profiles) documentation for more information.
+:::
+
+## Add a Cloudflare Worker
+
+Create a Worker in `src/worker.ts`. For now, just return a simple `"Hello, world!"` response.
+
+```typescript mark={9} ins={12,14}
+// src/worker.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+export default Cloudflare.Worker(
+  "Worker", 
+  {
+    main: import.meta.path,
+  },
+  Effect.gen(function* () {
+    // TODO: Init phase: bind resources and bindings here
+    return {
+      // TODO: Exec phase: use resources here
+      fetch: Effect.gen(function*() {
+        return HttpServerResponse.text("Hello, world!")
+      }),
+    };
+  })
+);
+```
+
+:::note
+Notice this "Effect returning an Effect" pattern:
+```ts
+Effect.gen(function*() {
+  // Init phase: bind resources
+
+  return {
+    // Exec phase: use resources here
+    fetch: Effect.gen(function*() { .. })
+  }
+});
+```
+
+This pattern is used throughout Alchemy to separate the **Init** and **Exec** phases of an Alchemy program.
+
+Init phase code runs in both **Plan** and **Runtime**.
+Code in the Exec phase runs only in Runtime.
+:::
+
+## Bind the Bucket to the Worker
+
+Bindings connect resources to a Worker, giving it access to the Bucket at runtime.
+
+```diff lang="typescript"
+// src/worker.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
++import { Bucket } from "../alchemy.run.ts";
+
+export default Cloudflare.Worker(
+  "Worker", 
+  {
+    main: import.meta.path,
+  },
+  Effect.gen(function* () {
++    const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
+
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("Hello, world!")),
+    };
+  })
+);
+```
+
+## Implement Fetch Handler
+
+Implement `GET` and `PUT` routes to read and write objects in the Bucket.
+
+```diff lang="typescript"
+// src/worker.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
++import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+
+import { Bucket } from "../alchemy.run.ts";
+
+export default Cloudflare.Worker("Worker", {
+  main: import.meta.path,
+}, Effect.gen(function* () {
+    const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
+
+    return {
+-    fetch: Effect.succeed(HttpServerResponse.text("Hello, world!")),
++    fetch: Effect.gen(function* () {
++      const request = yield* HttpServerRequest;
++      const key = request.url.split("/").pop()!;
++
++      if (request.method === "PUT") {
++        yield* bucket.put(key, request.stream, {
++          contentLength: Number(request.headers["content-length"] ?? 0),
++        });
++        return HttpServerResponse.empty({ status: 201 });
++      }
++
++      const object = yield* bucket.get(key);
++      if (object === null) {
++        return HttpServerResponse.text("Not found", { status: 404 });
++      }
++      const text = yield* object.text();
++      return HttpServerResponse.text(text);
++    }),
+  };
+}));
+```
+
+## Re-deploy the Stack
+
+Deploy again to create the Worker. The Bucket is unchanged and shows as a no-op.
+
+```sh
+alchemy deploy
+```
+
+<Terminal content={`[u]Plan[/u]: [g]1 to create[/g]
+
+[g]+[/g] [b]Worker[/b] [d](Cloudflare.Worker)[/d] [c](1 bindings)[/c]
+[s2][g]+[/g] [c]Bucket[/c]
+[d]•[/d] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d]
+
+Proceed?
+◉ Yes ○ No
+[d]•[/d] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d] [d]no change[/d]
+[g]✓[/g] [b]Worker[/b] [d](Cloudflare.Worker)[/d] [g]created[/g]
+[s2][d]• Uploading worker (14.20 KB) ...[/d]
+[s2][d]• Enabling workers.dev subdomain...[/d]
+{
+[s2]url: "https://app-worker-dev-you-abc123.workers.dev",
+}`} />
+
+## (Optional) Destroy the Stack
+
+Tear everything down when you're done. Resources are deleted in dependency order.
+
+```sh
+alchemy destroy
+```
+
+<Terminal content={`[u]Plan[/u]: [r]2 to delete[/r]
+
+[r]-[/r] [b]Worker[/b] [d](Cloudflare.Worker)[/d]
+[r]-[/r] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d]
+
+Proceed?
+◉ Yes ○ No
+[r]✗[/r] [b]Worker[/b] [d](Cloudflare.Worker)[/d] [r]deleted[/r]
+[r]✗[/r] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d] [r]deleted[/r]`} />
+
+## What's next
+
+- Read [Effect vs Async](/concepts/effect-vs-async) to understand the two ways
+  to write programs with Alchemy.
+- Jump into the [Effect](/guides/effect/overview) or [Async](/guides/async/overview)
+  guides to start building.

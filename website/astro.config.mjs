@@ -32,8 +32,12 @@ export default defineConfig({
         baseUrl: "https://github.com/alchemy-run/alchemy/edit/main/website",
       },
       sidebar: [
-        { label: "Getting Started", link: "/getting-started" },
         { label: "What is Alchemy?", link: "/what-is-alchemy" },
+        { label: "Getting Started", link: "/getting-started" },
+        {
+          label: "Tutorial",
+          items: [{ label: "Part 1", link: "/tutorial/part-1" }],
+        },
         {
           label: "Concepts",
           autogenerate: { directory: "concepts" },
@@ -48,21 +52,6 @@ export default defineConfig({
             },
             { label: "Continuous Integration", link: "/guides/ci" },
             { label: "Testing", link: "/guides/testing" },
-            {
-              label: "Effect",
-              autogenerate: { directory: "guides/effect" },
-              collapsed: true,
-            },
-            {
-              label: "Async",
-              autogenerate: { directory: "guides/async" },
-              collapsed: true,
-            },
-            {
-              label: "Frameworks",
-              autogenerate: { directory: "guides/frameworks" },
-              collapsed: true,
-            },
           ],
         },
         {
