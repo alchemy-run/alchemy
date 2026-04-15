@@ -3,8 +3,8 @@ import * as FileSystem from "effect/FileSystem";
 import type { PlatformError } from "effect/PlatformError";
 import os from "node:os";
 import nodePath from "node:path";
-import type { AwsAuthConfig } from "./AWS/index.ts";
-import type { CloudflareAuthConfig } from "./Cloudflare/index.ts";
+import type { AwsAuthConfig } from "./AWS/AuthProvider.ts";
+import type { CloudflareAuthConfig } from "./Cloudflare/AuthProvider.ts";
 
 export const rootDir = nodePath.join(os.homedir(), ".alchemy");
 export const configFilePath = nodePath.join(rootDir, "config.json");

@@ -11,15 +11,9 @@ export interface AuthProvider<Config, Credentials> {
 
   login(profileName: string, config: Config): Effect.Effect<void>;
 
-  logout(
-    profileName: string,
-    config: Config,
-  ): Effect.Effect<void>;
+  logout(profileName: string, config: Config): Effect.Effect<void>;
 
-  viewAuth(
-    profileName: string,
-    config: Config,
-  ): Effect.Effect<void>;
+  prettyPrint(profileName: string, config: Config): Effect.Effect<void>;
 
   credentialsLayer(
     profileName: string,

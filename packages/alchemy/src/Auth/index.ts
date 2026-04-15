@@ -1,9 +1,13 @@
 import * as p from "@clack/prompts";
+import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import type * as FileSystem from "effect/FileSystem";
+import type * as Path from "effect/Path";
 import * as Layer from "effect/Layer";
-import * as AWS from "./AWS/index.ts";
-import * as Cloudflare from "./Cloudflare/index.ts";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
+import type * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
+import * as AWS from "./AWS/AuthProvider.ts";
+import * as Cloudflare from "./Cloudflare/AuthProvider.ts";
 import { type AlchemyProfile, getProfile, setProfile } from "./Config.ts";
 
 export type { AuthProvider } from "./AuthProvider.ts";
@@ -23,12 +27,6 @@ export {
   writeCredentials,
 } from "./Credentials.ts";
 export { AWS, Cloudflare };
-
-/**
- * Combined layer that provides both AwsAuth and CfAuth services.
- * Requires: FileSystem, Path, HttpClient, ChildProcessSpawner
- */
-export const AuthLive = Layer.mergeAll(AWS.AwsAuthLive, Cloudflare.CfAuthLive);
 
 type ProviderKey = "aws" | "cloudflare";
 
@@ -59,7 +57,7 @@ const configureProvider = (
 ): Effect.Effect<
   AWS.AwsAuthConfig | Cloudflare.CloudflareAuthConfig | "remove" | undefined,
   never,
-  AWS.AwsAuth | Cloudflare.CfAuth
+  AuthRequirements
 > =>
   Effect.gen(function* () {
     if (key === "aws") {
@@ -105,9 +103,10 @@ const logoutProvider = (
   });
 
 type AuthRequirements =
-  | AWS.AwsAuth
-  | Cloudflare.CfAuth
-  | FileSystem.FileSystem;
+  | FileSystem.FileSystem
+  | Path.Path
+  | HttpClient.HttpClient
+  | ChildProcessSpawner.ChildProcessSpawner;
 
 export const layer = (profileName: string) =>
   Layer.unwrap(
@@ -141,16 +140,14 @@ export const layer = (profileName: string) =>
 
 export const configure = (
   profileName: string,
-): Effect.Effect<
-  boolean,
-  never,
-  AuthRequirements
-> =>
+): Effect.Effect<boolean, never, AuthRequirements> =>
   Effect.gen(function* () {
     const existing = yield* getProfile(profileName);
     const isFirstTime = !existing;
 
-    p.intro(`Alchemy Effect — Configure profile: ${profileName}`);
+    yield* Effect.sync(() =>
+      p.intro(`Alchemy Effect — Configure profile: ${profileName}`),
+    );
 
     if (isFirstTime) {
       return yield* configureFirstTime(profileName);
@@ -160,11 +157,7 @@ export const configure = (
 
 const configureFirstTime = (
   profileName: string,
-): Effect.Effect<
-  boolean,
-  never,
-  AuthRequirements
-> =>
+): Effect.Effect<boolean, never, AuthRequirements> =>
   Effect.gen(function* () {
     const selected = yield* Effect.promise(() =>
       p.multiselect({
@@ -211,11 +204,7 @@ const configureFirstTime = (
 const configureExisting = (
   profileName: string,
   existing: AlchemyProfile,
-): Effect.Effect<
-  boolean,
-  never,
-  AuthRequirements
-> =>
+): Effect.Effect<boolean, never, AuthRequirements> =>
   Effect.gen(function* () {
     const enabled = ALL_PROVIDERS.filter((k) => existing[k]);
     const disabled = ALL_PROVIDERS.filter((k) => !existing[k]);
@@ -381,28 +370,30 @@ export const viewAuth = (
     const profile = yield* getProfile(profileName);
 
     if (!profile) {
-      console.log(
+      yield* Console.log(
         `No profile found for "${profileName}". Run: alchemy-effect login`,
       );
       return;
     }
 
-    console.log(`\nAlchemy Effect — View Auth (profile: ${profileName})\n`);
+    yield* Console.log(
+      `\nAlchemy Effect — View Auth (profile: ${profileName})\n`,
+    );
 
     if (profile.aws) {
       const aws = yield* AWS.AwsAuth;
-      yield* aws.viewAuth(profileName, profile.aws);
-      console.log();
+      yield* aws.prettyPrint(profileName, profile.aws);
+      yield* Console.log("");
     }
 
     if (profile.cloudflare) {
       const cf = yield* Cloudflare.CfAuth;
-      yield* cf.viewAuth(profileName, profile.cloudflare);
-      console.log();
+      yield* cf.prettyPrint(profileName, profile.cloudflare);
+      yield* Console.log("");
     }
 
     if (!profile.aws && !profile.cloudflare) {
-      console.log(
+      yield* Console.log(
         `No providers configured for "${profileName}". Run: alchemy-effect login`,
       );
     }
