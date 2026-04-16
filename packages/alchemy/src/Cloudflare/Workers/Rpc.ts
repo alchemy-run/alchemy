@@ -225,7 +225,7 @@ export const makeDurableObjectBridge =
   ) =>
   (className: string) =>
     class DurableObjectBridge extends DurableObject {
-      readonly object: Promise<any>;
+      readonly object: Promise<DurableObjectShape>;
 
       async fetch(request: cf.Request): Promise<cf.Response> {
         const methods = await this.object;
@@ -237,6 +237,13 @@ export const makeDurableObjectBridge =
           return response as any;
         } else {
           return new Response("Method not found", { status: 404 }) as any;
+        }
+      }
+
+      async alarm(alarmInfo?: cf.AlarmInvocationInfo) {
+        const methods = await this.object;
+        if (methods.alarm) {
+          await Effect.runPromise(methods.alarm(alarmInfo));
         }
       }
 
@@ -288,7 +295,10 @@ export const makeDurableObjectBridge =
               ? target[prop]
               : async (...args: unknown[]) => {
                   const methods = await this.object;
-                  const value = methods[prop as string](...args);
+                  const method = methods[
+                    prop as keyof DurableObjectShape
+                  ] as any; // TODO(sam): what should the type be? Is it safe to always call it?
+                  const value = method(...args);
                   if (Effect.isEffect(value)) {
                     const exit = await Effect.runPromiseExit(
                       value as Effect.Effect<unknown, never>,
@@ -374,6 +384,7 @@ export const makeWorkflowBridge =
       }
     };
 
+import type { DurableObjectShape } from "./DurableObjectNamespace.ts";
 import {
   WorkflowEvent as WorkflowEventService,
   WorkflowStep,

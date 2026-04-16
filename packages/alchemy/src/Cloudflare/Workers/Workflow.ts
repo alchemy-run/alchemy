@@ -444,3 +444,4 @@ const wrapInstance = (raw: any): WorkflowInstance => ({
   resume: () => Effect.tryPromise(() => raw.resume()).pipe(Effect.orDie),
   terminate: () => Effect.tryPromise(() => raw.terminate()).pipe(Effect.orDie),
 });
+
