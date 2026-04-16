@@ -6,7 +6,6 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import { DotAlchemy } from "../Config.ts";
@@ -68,10 +67,7 @@ const bodyToString = (body: S3.GetObjectOutput["Body"]) =>
     ? Effect.succeed("")
     : (body as Stream.Stream<Uint8Array, Error, never>).pipe(
         Stream.decodeText({ encoding: "utf-8" }),
-        Stream.runFold(
-          () => "",
-          (acc: string, chunk: string) => acc + chunk,
-        ),
+        Stream.mkString,
       );
 
 const wrapError = (message: string) => (cause: unknown) =>
@@ -81,28 +77,6 @@ const wrapError = (message: string) => (cause: unknown) =>
     }`,
     cause: cause instanceof Error ? cause : undefined,
   });
-
-/**
- * Tags we consider transient — worth retrying with backoff. Mirrors the
- * retry policy used in `AWS/Bootstrap.ts` for its S3 operations.
- */
-const TRANSIENT_TAGS = new Set<string>([
-  "OperationAborted",
-  "ServiceUnavailable",
-  "ThrottlingException",
-  "RequestTimeoutException",
-  "InternalFailure",
-]);
-
-const retryTransient = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  effect.pipe(
-    Effect.retry({
-      while: (e) => TRANSIENT_TAGS.has((e as any)?._tag ?? ""),
-      schedule: Schedule.exponential(100).pipe(
-        Schedule.both(Schedule.recurs(5)),
-      ),
-    }),
-  );
 
 /**
  * If the S3 prefix is empty but the local `.alchemy/state/` directory is
@@ -197,11 +171,16 @@ export const S3State = (
     Effect.gen(function* () {
       // Bind S3 operations — resolves Credentials | Region | HttpClient once
       // and captures them so the returned StateService methods have
-      // `never` requirements.
+      // `never` requirements. `.pages` / `.items` pagination streams live
+      // on the unbound operation and still type their R channel, so we
+      // also capture the AWS context here to feed them back in.
       const listObjectsV2 = yield* S3.listObjectsV2;
       const getObject = yield* S3.getObject;
       const putObject = yield* S3.putObject;
       const deleteObject = yield* S3.deleteObject;
+      const awsContext = yield* Effect.context<
+        Credentials | Region | HttpClient
+      >();
 
       // Verify the bucket exists and is accessible. Fail loudly — the
       // bucket is a deploy-time prerequisite, not something alchemy
@@ -213,7 +192,6 @@ export const S3State = (
         Prefix: prefix,
         MaxKeys: 1,
       }).pipe(
-        retryTransient,
         Effect.catchTag("NoSuchBucket", () =>
           Effect.fail(
             new StateStoreError({
@@ -266,47 +244,52 @@ export const S3State = (
       };
 
       const listDirectories = (fullPrefix: string) =>
-        Effect.gen(function* () {
-          const names = new Set<string>();
-          let ContinuationToken: string | undefined;
-          do {
-            const res = yield* listObjectsV2({
-              Bucket: bucketName,
-              Prefix: fullPrefix,
-              Delimiter: "/",
-              ContinuationToken,
-            }).pipe(retryTransient);
-            for (const cp of res.CommonPrefixes ?? []) {
-              const name = stripCommonPrefix(fullPrefix, cp.Prefix);
-              if (name) names.add(name);
-            }
-            ContinuationToken = res.NextContinuationToken;
-          } while (ContinuationToken);
-          return Array.from(names);
-        }).pipe(Effect.mapError(wrapError("listObjectsV2 failed")));
+        S3.listObjectsV2
+          .pages({
+            Bucket: bucketName,
+            Prefix: fullPrefix,
+            Delimiter: "/",
+          })
+          .pipe(
+            Stream.runFold(
+              () => new Set<string>(),
+              (acc, page) => {
+                for (const cp of page.CommonPrefixes ?? []) {
+                  const name = stripCommonPrefix(fullPrefix, cp.Prefix);
+                  if (name) acc.add(name);
+                }
+                return acc;
+              },
+            ),
+            Effect.map((names) => Array.from(names)),
+            Effect.mapError(wrapError("listObjectsV2 failed")),
+            Effect.provide(awsContext),
+          );
 
-      const listResources = (stack: string, stage: string) =>
-        Effect.gen(function* () {
-          const full = stagePrefix(stack, stage);
-          const fqns: string[] = [];
-          let ContinuationToken: string | undefined;
-          do {
-            const res = yield* listObjectsV2({
-              Bucket: bucketName,
-              Prefix: full,
-              ContinuationToken,
-            }).pipe(retryTransient);
-            for (const obj of res.Contents ?? []) {
-              if (!obj.Key) continue;
-              if (!obj.Key.endsWith(".json")) continue;
-              const filename = obj.Key.slice(full.length, -".json".length);
-              if (filename.length === 0) continue;
-              fqns.push(decodeFqn(filename));
-            }
-            ContinuationToken = res.NextContinuationToken;
-          } while (ContinuationToken);
-          return fqns;
-        }).pipe(Effect.mapError(wrapError("listObjectsV2 failed")));
+      const listResources = (stack: string, stage: string) => {
+        const full = stagePrefix(stack, stage);
+        return S3.listObjectsV2
+          .pages({
+            Bucket: bucketName,
+            Prefix: full,
+          })
+          .pipe(
+            Stream.runFold(
+              () => [] as string[],
+              (acc, page) => {
+                for (const obj of page.Contents ?? []) {
+                  if (!obj.Key?.endsWith(".json")) continue;
+                  const filename = obj.Key.slice(full.length, -".json".length);
+                  if (filename.length === 0) continue;
+                  acc.push(decodeFqn(filename));
+                }
+                return acc;
+              },
+            ),
+            Effect.mapError(wrapError("listObjectsV2 failed")),
+            Effect.provide(awsContext),
+          );
+      };
 
       const state: StateService = {
         listStacks: () => listDirectories(prefix),
@@ -318,7 +301,6 @@ export const S3State = (
             Bucket: bucketName,
             Key: objectKey(request),
           }).pipe(
-            retryTransient,
             Effect.flatMap((res) => bodyToString(res.Body)),
             Effect.map((content) => JSON.parse(content) as ResourceState),
             Effect.catchTag("NoSuchKey", () =>
@@ -352,7 +334,6 @@ export const S3State = (
             Body: serializeResourceState(request.value),
             ContentType: "application/json",
           }).pipe(
-            retryTransient,
             Effect.as(request.value),
             Effect.mapError(wrapError("putObject failed")),
           ),
@@ -364,7 +345,6 @@ export const S3State = (
             Bucket: bucketName,
             Key: objectKey(request),
           }).pipe(
-            retryTransient,
             Effect.asVoid,
             Effect.mapError(wrapError("deleteObject failed")),
           ),
