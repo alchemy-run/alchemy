@@ -11,17 +11,16 @@ import * as Redacted from "effect/Redacted";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
-import { AuthError, type AuthProvider } from "../AuthProvider.ts";
-import * as Clank from "../Clank.ts";
+import { AuthError, type AuthProvider } from "../../Auth/AuthProvider.ts";
 import {
   deleteCredentials,
   displayRedacted,
   readCredentials,
   writeCredentials,
-} from "../Credentials.ts";
-import { getEnv, getEnvRedacted, retryOnce } from "../util.ts";
+} from "../../Auth/Credentials.ts";
+import { getEnv, getEnvRedacted, retryOnce } from "../../Auth/Env.ts";
+import * as Clank from "../../Util/Clank.ts";
 import * as OAuthClient from "./OAuthClient.ts";
-import { ALL_SCOPES, DEFAULT_SCOPES } from "./Scopes.ts";
 
 export type CloudflareAuthConfig =
   | { method: "env"; accountId?: string }
@@ -536,3 +535,136 @@ const prettyPrint = (profileName: string, config: CloudflareAuthConfig) =>
       Console.error(`  Failed to retrieve credentials: ${e}`),
     ),
   );
+
+export const ALL_SCOPES = {
+  "access:read":
+    "See Cloudflare Access data such as zones, applications, certificates, device postures, groups, identity providers, login counts, organizations, policies, service tokens, and users",
+  "access:write":
+    "See and change Cloudflare Access data such as zones, applications, certificates, device postures, groups, identity providers, login counts, organizations, policies, service tokens, and users",
+  "account:read":
+    "See your account info such as account details, analytics, and memberships",
+  "agw:read": "Grants read level access to Agents Gateway",
+  "agw:run": "Grants run level access to Agents Gateway",
+  "agw:write": "Grants read and write level access to Agents Gateway",
+  "ai:read": "Grants read level access to Workers AI",
+  "ai:write": "Grants write level access to Workers AI",
+  "aiaudit:read": "Grants read level access to AI Audit",
+  "aiaudit:write": "Grants write level access to AI Audit",
+  "aig:read": "Grants read level access to AI Gateway",
+  "aig:write": "Grants write level access to AI Gateway",
+  "auditlogs:read": "View Cloudflare Account Audit Logs",
+  "browser:read": "Grants read level access to Browser Rendering",
+  "browser:write": "Grants write level access to Browser Rendering",
+  "cfone:read": "Grants read level access to Cloudforce One data",
+  "cfone:write": "Grants write level access to Cloudforce One data",
+  "cloudchamber:write": "See and make changes to Cloudchamber",
+  "connectivity:admin":
+    "See, change, and bind to Connectivity Directory services, including creating services targeting Cloudflare Tunnel",
+  "connectivity:bind":
+    "read, list, and bind to Connectivity Directory services, as well as read and list Cloudflare Tunnels",
+  "connectivity:read":
+    "See Connectivity Directory services and Cloudflare Tunnels",
+  "constellation:write":
+    "Grants write access to Constellation configuration and models",
+  "containers:write": "See and make changes to Workers Containers",
+  "d1:write": "See and make changes to D1",
+  "dex:read": "Grants read level access to Cloudflare DEX",
+  "dex:write": "Grants write level access to Cloudflare DEX",
+  "dns_analytics:read": "Grants read level access to Cloudflare DNS Analytics",
+  "dns_records:edit": "Grants edit level access to dns records",
+  "dns_records:read": "Grants read level access to dns records",
+  "dns_settings:read": "Grants read level access to Cloudflare DNS Settings",
+  "firstpartytags:write":
+    "Can see, edit and publish Google tag gateway configuration.",
+  "lb:edit": "Grants edit level access to lb and lb pools",
+  "lb:read": "Grants read level access to lb and lb pools",
+  "logpush:read": "See Cloudflare Logpush data",
+  "logpush:write": "See and change Cloudflare Logpush data",
+  "notification:read": "View Cloudflare Notifications",
+  "notification:write": "View and Modify Cloudflare Notifications",
+  "pages:read": "See Cloudflare Pages projects, settings and deployments",
+  "pages:write":
+    "See and change Cloudflare Pages projects, settings and deployments",
+  "pipelines:read": "Grants read level access to Cloudflare Pipelines",
+  "pipelines:setup":
+    "Grants permission to generate R2 tokens for Workers Pipelines",
+  "pipelines:write": "Grants write level access to Cloudflare Pipelines",
+  "query_cache:write": "See and make changes to Hyperdrive",
+  "queues:write": "See and change Cloudflare Queues settings and data",
+  "r2_catalog:write": "Grants write level access to R2 Data Catalog",
+  "radar:read": "Grants access to read Cloudflare Radar data",
+  "ai-search:read": "Grants read level access to AI Search",
+  "ai-search:write": "Grants write level access to AI Search",
+  "ai-search:run": "Grants run level access to AI Search",
+  "secrets_store:read": "Grants read level access to Secrets Store",
+  "secrets_store:write": "Grants write level access to Secrets Store",
+  "ssl_certs:write":
+    "Grants read and write access to SSL MTLS certificates or Certificate Store",
+  "sso-connector:read": "See Cloudflare SSO connectors",
+  "sso-connector:write":
+    "See Cloudflare SSO connectors to toggle activation and deactivation of SSO",
+  "teams:pii": "See personally identifiable Cloudflare Teams data",
+  "teams:read":
+    "See Cloudflare Teams data such as zones, gateway, and argo tunnel details",
+  "teams:secure_location":
+    "See all DNS Location data but can only change secure DNS Locations",
+  "teams:write":
+    "See and change Cloudflare Teams data such as zones, gateway, and argo tunnel details",
+  "url_scanner:read": "Grants read level access to URL Scanner",
+  "url_scanner:write": "Grants write level access to URL Scanner",
+  "user:read":
+    "See your user info such as name, email address, and account memberships",
+  "vectorize:write": "See and make changes to Vectorize",
+  "workers:read":
+    "See Cloudflare Workers data such as zones, KV storage, R2 storage, scripts, and routes",
+  "workers:write":
+    "See and change Cloudflare Workers data such as zones, KV storage, R2 storage, scripts, and routes",
+  "workers_builds:read":
+    "See Cloudflare Workers Builds data such as builds, build configuration, and build logs",
+  "workers_builds:write":
+    "See and change Cloudflare Workers Builds data such as builds, build configuration, and build logs",
+  "workers_kv:write":
+    "See and change Cloudflare Workers KV Storage data such as keys and namespaces",
+  "workers_observability:read":
+    "Grants read access to Cloudflare Workers Observability",
+  "workers_observability_telemetry:write":
+    "Grants write access to Cloudflare Workers Observability Telemetry API",
+  "workers_routes:write":
+    "See and change Cloudflare Workers data such as filters and routes",
+  "workers_scripts:write":
+    "See and change Cloudflare Workers scripts, durable objects, subdomains, triggers, and tail data",
+  "workers_tail:read": "See Cloudflare Workers tail and script data",
+  "zone:read": "Grants read level access to account zone",
+};
+
+export const DEFAULT_SCOPES = [
+  "account:read",
+  "ai-search:write",
+  "ai-search:run",
+  "ai:write",
+  "cloudchamber:write",
+  "connectivity:admin",
+  "containers:write",
+  "d1:write",
+  "pages:write",
+  "pipelines:write",
+  "queues:write",
+  "secrets_store:write",
+  "ssl_certs:write",
+  "user:read",
+  "vectorize:write",
+  "workers_kv:write",
+  "workers_routes:write",
+  "workers_scripts:write",
+  "workers_tail:read",
+  "workers:write",
+  "zone:read",
+];
+
+export const OAUTH_CLIENT_ID = "6d8c2255-0773-45f6-b376-2914632e6f91";
+export const OAUTH_REDIRECT_URI = "http://localhost:9976/auth/callback";
+export const OAUTH_ENDPOINTS = {
+  authorize: "https://dash.cloudflare.com/oauth2/authorize",
+  token: "https://dash.cloudflare.com/oauth2/token",
+  revoke: "https://dash.cloudflare.com/oauth2/revoke",
+};

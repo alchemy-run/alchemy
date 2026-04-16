@@ -12,20 +12,20 @@ import {
 } from "effect/unstable/process";
 import * as NodeCrypto from "node:crypto";
 import * as NodeOs from "node:os";
-import { AuthError, type AuthProvider } from "../AuthProvider.ts";
-import * as Clank from "../Clank.ts";
+import { AuthError, type AuthProvider } from "../Auth/AuthProvider.ts";
 import {
   deleteCredentials,
   displayRedacted,
   readCredentials,
   writeCredentials,
-} from "../Credentials.ts";
+} from "../Auth/Credentials.ts";
 import {
   getEnv,
   getEnvRedacted,
   getEnvRedactedRequired,
   retryOnce,
-} from "../util.ts";
+} from "../Auth/Env.ts";
+import * as Clank from "../Util/Clank.ts";
 
 export type AwsAuthConfig =
   | { method: "sso"; ssoProfile: string }

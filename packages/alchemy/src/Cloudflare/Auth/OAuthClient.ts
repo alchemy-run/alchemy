@@ -1,12 +1,12 @@
-import crypto from "node:crypto";
-import http from "node:http";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import crypto from "node:crypto";
+import http from "node:http";
 import {
   OAUTH_CLIENT_ID,
   OAUTH_ENDPOINTS,
   OAUTH_REDIRECT_URI,
-} from "./Scopes.ts";
+} from "./AuthProvider.ts";
 
 export class OAuthError extends Data.TaggedError("OAuthError")<{
   error: string;
@@ -230,8 +230,7 @@ function callbackPromise(
         reject(
           new OAuthError({
             error,
-            errorDescription:
-              errorDescription ?? "An unknown error occurred.",
+            errorDescription: errorDescription ?? "An unknown error occurred.",
           }),
         );
         return;
@@ -283,15 +282,18 @@ function callbackPromise(
       }
     });
 
-    const timeout = setTimeout(() => {
-      cleanup();
-      reject(
-        new OAuthError({
-          error: "timeout",
-          errorDescription: "The authorization process timed out.",
-        }),
-      );
-    }, 5 * 60 * 1000);
+    const timeout = setTimeout(
+      () => {
+        cleanup();
+        reject(
+          new OAuthError({
+            error: "timeout",
+            errorDescription: "The authorization process timed out.",
+          }),
+        );
+      },
+      5 * 60 * 1000,
+    );
 
     function cleanup() {
       clearTimeout(timeout);
