@@ -1,11 +1,17 @@
 import { defineEcConfig } from "@astrojs/starlight/expressive-code";
 import ecTwoSlash from "expressive-code-twoslash";
+import {
+  twoslashDiffPrefixAnnotate,
+  twoslashDiffPrefixStrip,
+} from "./plugins/twoslash-diff-prefix.mjs";
+import { twoslashErrorTransform } from "./plugins/twoslash-error-transform.mjs";
 
 const baseUrl = new URL("../", import.meta.url).pathname;
 
 export default defineEcConfig({
   themes: ["github-light", "github-dark-dimmed"],
   plugins: [
+    twoslashDiffPrefixStrip(),
     ecTwoSlash({
       instanceConfigs: {
         twoslash: {
@@ -14,6 +20,7 @@ export default defineEcConfig({
         },
       },
       twoslashOptions: {
+        customTags: ["error", "warn", "log", "annotate"],
         compilerOptions: {
           moduleResolution: /** @type {any} */ (100), // Bundler
           module: /** @type {any} */ (99), // ESNext
@@ -27,5 +34,7 @@ export default defineEcConfig({
         },
       },
     }),
+    twoslashDiffPrefixAnnotate(),
+    twoslashErrorTransform(),
   ],
 });

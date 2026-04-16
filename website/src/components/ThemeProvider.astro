@@ -1,0 +1,12 @@
+---
+/**
+ * Override Starlight's ThemeProvider to force dark mode.
+ * This replaces the default component that reads system/localStorage preferences.
+ */
+---
+
+<script is:inline>
+  document.documentElement.dataset.theme = "dark";
+  try { localStorage.setItem("starlight-theme", "dark"); } catch (e) {}
+  window.StarlightThemeProvider = { updatePickers() {} };
+</script>

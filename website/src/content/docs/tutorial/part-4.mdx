@@ -1,0 +1,86 @@
+---
+title: "Part 4: Local Dev"
+description: Run your stack locally with alchemy dev for hot reloading and instant feedback.
+sidebar:
+  order: 4
+---
+
+In [Part 3](/tutorial/part-3) you wrote integration tests against
+your deployed stack. But deploying to Cloudflare on every code change
+is slow. In this part you'll use `alchemy dev` to run everything
+locally with hot reloading.
+
+## Start dev mode
+
+```sh
+alchemy dev
+```
+
+That's it. Alchemy deploys your stack to the cloud and proxies
+requests to Workers running locally in workerd. It watches for file
+changes and hot reloads your Worker automatically.
+
+Your Worker is available at `http://localhost:1337` by default:
+
+```sh
+curl http://localhost:1337/hello.txt
+```
+
+## How it works
+
+`alchemy dev` does three things:
+
+1. **Deploys to the cloud** — resources like R2 Buckets are created
+   on Cloudflare, while Workers run locally in workerd
+2. **Watches for changes** — when you edit `src/worker.ts` or any
+   file it imports, the Worker is rebuilt and reloaded instantly
+3. **Preserves local state** — data in your local R2 Bucket persists
+   across restarts
+
+The same `alchemy.run.ts` is used for both `dev` and `deploy` — no
+separate dev config needed.
+
+## Custom port
+
+Set a custom port for your Worker:
+
+```diff lang="typescript"
+// src/worker.ts
+export default Cloudflare.Worker(
+  "Worker",
+  {
+    main: import.meta.path,
++   dev: {
++     port: 3000,
++   },
+  },
+  // ...
+);
+```
+
+## Run tests against dev
+
+Since your Worker runs on localhost in dev mode, you can point your
+integration tests at it for an even faster feedback loop:
+
+```sh
+# Terminal 1: start dev mode
+alchemy dev
+
+# Terminal 2: run tests against local
+bun test test/integ.test.ts
+```
+
+The tests deploy the stack and run HTTP assertions against your
+local Worker.
+
+## Recap
+
+You now have:
+
+- Local development with `alchemy dev`
+- Hot reloading on file changes
+- Local emulation of Cloudflare resources
+
+In [Part 5](/tutorial/part-5), you'll set up GitHub Actions for
+automated deployments and PR preview environments.

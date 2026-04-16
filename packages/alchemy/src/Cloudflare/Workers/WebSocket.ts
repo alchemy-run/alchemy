@@ -2,7 +2,7 @@ import type * as cf from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { DurableObjectState } from "./DurableObjectNamespace.ts";
+import { DurableObjectState } from "./DurableObjectState.ts";
 
 export type RawWebSocket = cf.WebSocket;
 

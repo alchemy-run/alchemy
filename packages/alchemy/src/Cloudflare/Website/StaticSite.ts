@@ -83,54 +83,41 @@ export type StaticSite = ReturnType<typeof StaticSite>;
  * });
  * ```
  */
-export const StaticSite = <const Bindings extends WorkerBindingProps = {}>(
+export const StaticSite = <
+  const Bindings extends WorkerBindingProps = {},
+  Req = never,
+>(
   id: string,
-  props: InputProps<StaticSiteProps<Bindings>>,
+  propsEff:
+    | InputProps<StaticSiteProps<Bindings>>
+    | Effect.Effect<InputProps<StaticSiteProps<Bindings>>, never, Req>,
 ) =>
   Effect.gen(function* () {
+    const props = Effect.isEffect(propsEff)
+      ? propsEff
+      : Effect.succeed(propsEff);
+
     // TODO(sam): local dev/hmr support?
-    const build = yield* Command("Build", {
-      command: props.command,
-      cwd: props.cwd,
-      memo: props.memo,
-      outdir: props.outdir,
-      env: props.env,
-    });
+    const build = yield* Command(
+      "Build",
+      Effect.map(props, (props) => ({
+        command: props.command,
+        cwd: props.cwd,
+        memo: props.memo,
+        outdir: props.outdir,
+        env: props.env,
+      })),
+    );
 
-    const worker = yield* Worker<Bindings, WorkerAssetsConfig>("Worker", {
-      ...props,
-      assets: {
-        path: build.outdir,
-        hash: build.hash,
-        config: props.assetsConfig,
-      },
-    });
-
-    return worker;
+    return yield* Worker<Bindings, WorkerAssetsConfig, Req>(
+      "Worker",
+      Effect.map(props, (props) => ({
+        ...props,
+        assets: {
+          path: build.outdir,
+          hash: build.hash,
+          config: props.assetsConfig,
+        },
+      })),
+    );
   }).pipe(Namespace.push(id));
-
-import * as Cloudflare from "../index.ts";
-
-const Bucket = Cloudflare.R2Bucket("DO");
-
-Effect.gen(function* () {
-  const Website = yield* StaticSite("Website", {
-    command: "bun astro build",
-    main: "./src/worker.ts",
-    outdir: "dist",
-    memo: {
-      include: ["src/**", "astro.config.mjs", "package.json", "../bun.lock"],
-    },
-    compatibility: {
-      date: "2026-04-02",
-      flags: ["nodejs_compat"],
-    },
-    bindings: {
-      Bucket,
-    },
-  });
-
-  return {
-    url: Website.url,
-  };
-});

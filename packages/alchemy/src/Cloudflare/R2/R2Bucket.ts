@@ -6,7 +6,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { Account } from "../Account.ts";
-import type { Providers } from "../Providers.ts";
+import type * as Cloudflare from "../Providers.ts";
 import { R2BucketBinding } from "./R2BucketBinding.ts";
 
 export type R2BucketName = string;
@@ -44,7 +44,7 @@ export type R2Bucket = Resource<
     accountId: string;
   },
   never,
-  Providers
+  Cloudflare.Providers
 >;
 
 /**

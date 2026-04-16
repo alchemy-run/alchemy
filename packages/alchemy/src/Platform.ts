@@ -220,10 +220,15 @@ export const Platform = <
             //     return new Response("Hello, world!");
             //   }
             // }
-            resource(id, {
-              ...props,
-              isExternal: true,
-            })
+            resource(
+              id,
+              Effect.isEffect(props)
+                ? Effect.map(props, (p: any) => ({ ...p, isExternal: true }))
+                : {
+                    ...props,
+                    isExternal: true,
+                  },
+            )
           : Effect.flatMap(
               // this is a tagged resource
               Effect.serviceOption(cls.Self),

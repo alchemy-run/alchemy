@@ -4,5 +4,10 @@
   "compilerOptions": {
     "noEmit": true,
     "types": ["astro/client"]
-  }
+  },
+  "references": [
+    {
+      "path": "../packages/alchemy/tsconfig.json"
+    }
+  ]
 }

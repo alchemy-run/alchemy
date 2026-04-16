@@ -1,6 +1,6 @@
 import type * as aws from "@distilled.cloud/aws";
 import * as cf from "@distilled.cloud/cloudflare";
-import { NodeServices } from "@effect/platform-node";
+// import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Logger } from "effect";
 import * as Config from "effect/Config";
@@ -44,6 +44,7 @@ import * as Serverless from "../Serverless/index.ts";
 import * as Stack from "../Stack.ts";
 import * as Stage from "../Stage.ts";
 import * as State from "../State/index.ts";
+import { PlatformServices } from "../Util/PlatformServices.ts";
 import { TestCli } from "./TestCli.ts";
 
 export const expectEmptyObject = () =>
@@ -90,7 +91,7 @@ const quietLogger = Logger.make(() => {
 });
 
 const platform = Layer.mergeAll(
-  NodeServices.layer,
+  PlatformServices,
   FetchHttpClient.layer,
   Logger.layer([process.env.VERBOSE ? Logger.consolePretty() : quietLogger]),
 );
@@ -212,7 +213,7 @@ const runWithContext = <A, Err>(
       MinimumLogLevel,
       process.env.DEBUG ? "Debug" : "Info",
     ),
-    Effect.provide(NodeServices.layer),
+    Effect.provide(PlatformServices),
   );
 };
 

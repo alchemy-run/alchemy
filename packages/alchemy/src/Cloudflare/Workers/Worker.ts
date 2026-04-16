@@ -2,6 +2,7 @@ import type * as cf from "@cloudflare/workers-types";
 import cloudflareRolldown from "@distilled.cloud/cloudflare-rolldown-plugin";
 import cloudflareVite from "@distilled.cloud/cloudflare-vite-plugin";
 import * as workers from "@distilled.cloud/cloudflare/workers";
+import * as zones from "@distilled.cloud/cloudflare/zones";
 import type * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
@@ -247,6 +248,12 @@ export interface WorkerProps<
   env?: Record<string, string | Redacted.Redacted<string>>;
   exports?: string[];
   bindings?: Bindings;
+  /**
+   * One or more custom hostnames (e.g. `"app.example.com"`) to bind to this
+   * Worker. The Cloudflare Zone is inferred from the hostname — the zone must
+   * already exist in the account.
+   */
+  domain?: string | string[];
   build?: {
     /**
      * Whether to generate a metafile for the worker bundle.
@@ -267,6 +274,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
     tags: string[] | undefined;
     durableObjectNamespaces: Record<string, string>;
     accountId: string;
+    domains: { hostname: string; id: string; zoneId: string }[];
     hash?: {
       assets: string | undefined;
       bundle: string | undefined;
@@ -614,16 +622,21 @@ export const Worker: Platform<
   <
     const Bindings extends WorkerBindingProps,
     const Assets extends WorkerAssetsConfig | undefined = undefined,
+    Req = never,
   >(
     id: string,
-    props: InputProps<WorkerProps<Bindings, Assets>>,
+    props:
+      | InputProps<WorkerProps<Bindings, Assets>>
+      | Effect.Effect<InputProps<WorkerProps<Bindings, Assets>>, never, Req>,
   ): Effect.Effect<
     Worker<{
       [binding in keyof NormalizedBindings<
         Bindings,
         Assets
       >]: NormalizedBindings<Bindings, Assets>[binding];
-    }>
+    }>,
+    never,
+    Req | Providers
   >;
 } = Platform(WorkerTypeId, {
   onCreate: Effect.fnUntraced(function* (
@@ -912,6 +925,10 @@ export const WorkerProvider = () =>
       const getSubdomain = yield* workers.getSubdomain;
       const listScripts = yield* workers.listScripts;
       const putScript = yield* workers.putScript;
+      const putDomain = yield* workers.putDomain;
+      const listDomains = yield* workers.listDomains;
+      const deleteDomain = yield* workers.deleteDomain;
+      const listZones = yield* zones.listZones;
       const telemetry = yield* CloudflareLogs;
       const defaultCompatibilityDate = yield* Effect.promise(() =>
         // @ts-expect-error no types for workerd
@@ -937,6 +954,95 @@ export const WorkerProvider = () =>
               id,
               maxLength: 54,
             }).pipe(Effect.map((name) => name.toLowerCase()));
+
+      const normalizeDomains = (
+        domain: string | string[] | undefined,
+      ): string[] =>
+        domain === undefined
+          ? []
+          : Array.isArray(domain)
+            ? Array.from(new Set(domain))
+            : [domain];
+
+      /**
+       * Infer the Cloudflare Zone ID for a given hostname by listing the
+       * account's zones and matching the hostname against each zone's name —
+       * walking up the DNS label hierarchy until a match is found.
+       */
+      const inferZoneIdForHostname = (
+        hostname: string,
+        zoneCache: Map<string, string>,
+      ) =>
+        Effect.gen(function* () {
+          const cached = zoneCache.get(hostname);
+          if (cached) return cached;
+
+          const zoneList = yield* listZones({}).pipe(
+            Effect.map((response) => response.result ?? []),
+          );
+          for (const zone of zoneList) {
+            zoneCache.set(zone.name, zone.id);
+          }
+
+          const parts = hostname.split(".");
+          for (let i = 0; i < parts.length - 1; i++) {
+            const candidate = parts.slice(i).join(".");
+            const match = zoneList.find((z) => z.name === candidate);
+            if (match) {
+              zoneCache.set(hostname, match.id);
+              return match.id;
+            }
+          }
+          return yield* Effect.die(
+            `Could not infer Cloudflare Zone for hostname "${hostname}". ` +
+              "Ensure the parent zone exists in this account.",
+          );
+        });
+
+      const reconcileDomains = (
+        scriptName: string,
+        desired: string[],
+        previous: Worker["Attributes"]["domains"],
+      ) =>
+        Effect.gen(function* () {
+          const desiredSet = new Set(desired);
+          const toRemove = previous.filter((p) => !desiredSet.has(p.hostname));
+          yield* Effect.all(
+            toRemove.map((d) =>
+              deleteDomain({ accountId, domainId: d.id }).pipe(
+                Effect.catchTag("DomainNotFound", () => Effect.void),
+              ),
+            ),
+            { concurrency: "unbounded" },
+          );
+
+          if (desired.length === 0) return [];
+
+          const zoneCache = new Map<string, string>();
+          const applied = yield* Effect.all(
+            desired.map((hostname) =>
+              Effect.gen(function* () {
+                const zoneId = yield* inferZoneIdForHostname(
+                  hostname,
+                  zoneCache,
+                );
+                const res = yield* putDomain({
+                  accountId,
+                  hostname,
+                  service: scriptName,
+                  zoneId,
+                });
+                return {
+                  hostname,
+                  id: res.id ?? "",
+                  zoneId: res.zoneId ?? zoneId,
+                };
+              }),
+            ),
+            { concurrency: "unbounded" },
+          );
+          return applied;
+        });
 
       const createAlchemyWorkerTags = (id: string) => [
         `alchemy:stack:${stack.name}`,
@@ -1638,6 +1744,18 @@ ${[
           );
           yield* setWorkerSubdomain(name, enable);
         }
+        const desiredDomains = normalizeDomains(news.domain);
+        const previousDomains = output?.domains ?? [];
+        if (desiredDomains.length > 0 || previousDomains.length > 0) {
+          yield* session.note(
+            `Reconciling custom domains (${desiredDomains.length}) ...`,
+          );
+        }
+        const domains = yield* reconcileDomains(
+          name,
+          desiredDomains,
+          previousDomains,
+        );
         return {
           workerId: worker.id ?? name,
           workerName: name,
@@ -1649,6 +1767,7 @@ ${[
           tags: settings.tags ?? metadata.tags,
           durableObjectNamespaces,
           accountId,
+          domains,
           hash,
         } satisfies Worker["Attributes"];
       });
@@ -1694,7 +1813,14 @@ ${[
           if (!output) {
             return;
           }
-          if (yield* hasChanged(id, news, output)) {
+          const newDomains = normalizeDomains(news.domain).sort();
+          const oldDomains = (output?.domains ?? [])
+            .map((d) => d.hostname)
+            .sort();
+          const domainsChanged =
+            newDomains.length !== oldDomains.length ||
+            newDomains.some((d, i) => d !== oldDomains[i]);
+          if (domainsChanged || (yield* hasChanged(id, news, output))) {
             return {
               action: "update",
               stables:
@@ -1823,6 +1949,7 @@ ${[
             tags: existingSettings?.tags ?? tags,
             durableObjectNamespaces,
             accountId,
+            domains: [],
           } satisfies Worker["Attributes"];
         }),
         read: Effect.fnUntraced(
@@ -1832,23 +1959,28 @@ ${[
             yield* Effect.logInfo(
               `Cloudflare Worker read: checking ${workerName}`,
             );
-            const [worker, subdomain, settings] = yield* Effect.all([
-              listScripts({
-                accountId,
-              }).pipe(
-                Effect.map((workers) =>
-                  workers.result.find((worker) => worker.id === workerName),
+            const [worker, subdomain, settings, domainsList] =
+              yield* Effect.all([
+                listScripts({
+                  accountId,
+                }).pipe(
+                  Effect.map((workers) =>
+                    workers.result.find((worker) => worker.id === workerName),
+                  ),
                 ),
-              ),
-              getScriptSubdomain({
-                accountId,
-                scriptName: workerName,
-              }),
-              getScriptSettings({
-                accountId,
-                scriptName: workerName,
-              }),
-            ]);
+                getScriptSubdomain({
+                  accountId,
+                  scriptName: workerName,
+                }),
+                getScriptSettings({
+                  accountId,
+                  scriptName: workerName,
+                }),
+                listDomains({
+                  accountId,
+                  service: workerName,
+                }).pipe(Effect.map((r) => r.result ?? [])),
+              ]);
             if (!worker) {
               yield* Effect.logInfo(
                 `Cloudflare Worker read: ${workerName} not found in script list`,
@@ -1869,6 +2001,11 @@ ${[
               tags: settings.tags ?? undefined,
               durableObjectNamespaces: getDurableObjectNamespaces(
                 settings.bindings,
+              ),
+              domains: domainsList.flatMap((d) =>
+                d.id && d.hostname && d.zoneId
+                  ? [{ id: d.id, hostname: d.hostname, zoneId: d.zoneId }]
+                  : [],
               ),
             } satisfies Worker["Attributes"];
           },
@@ -1971,6 +2108,17 @@ ${[
           yield* Effect.logInfo(
             `Cloudflare Worker delete: deleting ${output.workerName}`,
           );
+          if (output.domains?.length) {
+            yield* Effect.all(
+              output.domains.map((d) =>
+                deleteDomain({
+                  accountId: output.accountId,
+                  domainId: d.id,
+                }).pipe(Effect.catchTag("DomainNotFound", () => Effect.void)),
+              ),
+              { concurrency: "unbounded" },
+            );
+          }
           yield* deleteScript({
             accountId: output.accountId,
             scriptName: output.workerName,

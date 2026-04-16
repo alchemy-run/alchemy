@@ -5,10 +5,8 @@ import {
   toCloudflareFetcher,
   type Fetcher,
 } from "../Fetcher.ts";
-import {
-  DurableObjectNamespace,
-  DurableObjectState,
-} from "../Workers/DurableObjectNamespace.ts";
+import { DurableObjectNamespace } from "../Workers/DurableObjectNamespace.ts";
+import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { Worker } from "../Workers/Worker.ts";
 import type { Container } from "./Container.ts";
 import type { ContainerApplication } from "./ContainerApplication.ts";
