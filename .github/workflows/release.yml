@@ -131,10 +131,16 @@ jobs:
           bun pm pack --destination .
           TARBALL=$(ls *.tgz 2>/dev/null | head -1)
           echo "Publishing tarball: ${TARBALL}"
-          TAG="latest"
-          if echo "${VERSION}" | grep -q '-'; then
+          if echo "${VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            TAG="latest"
+          elif echo "${VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$'; then
             TAG="next"
+          else
+            # Custom prerelease — derive a unique dist-tag from the prerelease portion
+            # so it doesn't clobber `next` or `latest`.
+            TAG=$(echo "${VERSION}" | sed 's/^[0-9]*\.[0-9]*\.[0-9]*-//' | tr '.' '-')
           fi
+          echo "Using npm dist-tag: ${TAG}"
           npm publish "${TARBALL}" --access public --tag "${TAG}"
           rm -f *.tgz
           echo "--- Published ${PKG_NAME}@${VERSION} ---"
@@ -190,10 +196,16 @@ jobs:
           bun pm pack --destination .
           TARBALL=$(ls *.tgz 2>/dev/null | head -1)
           echo "Publishing tarball: ${TARBALL}"
-          TAG="latest"
-          if echo "${VERSION}" | grep -q '-'; then
+          if echo "${VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            TAG="latest"
+          elif echo "${VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$'; then
             TAG="next"
+          else
+            # Custom prerelease — derive a unique dist-tag from the prerelease portion
+            # so it doesn't clobber `next` or `latest`.
+            TAG=$(echo "${VERSION}" | sed 's/^[0-9]*\.[0-9]*\.[0-9]*-//' | tr '.' '-')
           fi
+          echo "Using npm dist-tag: ${TAG}"
           npm publish "${TARBALL}" --access public --tag "${TAG}"
           rm -f *.tgz
           echo "--- Published ${PKG_NAME}@${VERSION} ---"
