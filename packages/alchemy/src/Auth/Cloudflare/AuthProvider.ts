@@ -261,28 +261,11 @@ export const CfAuth: Effect.Effect<
     FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner
   >();
 
-  const provide = <A, E>(
-    effect: Effect.Effect<
-      A,
-      E,
-      FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner
-    >,
-  ) => Effect.provideContext(effect, context);
-
-  const provideLayer = <A>(
-    layer: Layer.Layer<
-      A,
-      never,
-      FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner
-    >,
-  ) => Layer.provide(layer, Layer.succeedContext(context));
-
   const oauthLogin = (
     profileName: string,
     scopes: string[],
   ): Effect.Effect<OAuthClient.OAuthCredentials | undefined> =>
-    provide(
-      Effect.gen(function* () {
+    Effect.gen(function* () {
         const allScopes = [...scopes, "offline_access"];
         const authorization = OAuthClient.authorize(allScopes);
 
@@ -319,8 +302,9 @@ export const CfAuth: Effect.Effect<
             return undefined;
           }),
         ),
-      ),
-    );
+        Effect.provideContext(context),
+        Effect.orDie,
+      );
 
   const oauthProvider = (
     profileName: string,
@@ -371,8 +355,7 @@ export const CfAuth: Effect.Effect<
   const resolveFromStored = (
     profileName: string,
   ): Effect.Effect<CloudflareResolvedCredentials | undefined> =>
-    provide(
-      Effect.gen(function* () {
+    Effect.gen(function* () {
         const creds = yield* readCredentials<CloudflareStoredCredentials>(
           profileName,
           "cloudflare",
@@ -399,16 +382,14 @@ export const CfAuth: Effect.Effect<
           })),
           Match.exhaustive,
         );
-      }),
-    );
+      }).pipe(Effect.provideContext(context));
 
   return {
     name: "Cloudflare",
 
     configure: (profileName, isReconfigure = false) =>
       Effect.orDie(
-        provide(
-          Effect.gen(function* () {
+        Effect.gen(function* () {
             const options: {
               value: "oauth" | "env" | "stored" | "remove";
               label: string;
@@ -578,14 +559,12 @@ export const CfAuth: Effect.Effect<
               ),
               Match.exhaustive,
             );
-          }),
-        ),
+          }).pipe(Effect.provideContext(context)),
       ),
 
     login: (profileName, config) =>
       Effect.orDie(
-        provide(
-          Match.value(config).pipe(
+        Match.value(config).pipe(
             matchMethod("env", () =>
               Effect.sync(() =>
                 p.log.info(
@@ -641,13 +620,12 @@ export const CfAuth: Effect.Effect<
               }),
             ),
             Match.exhaustive,
+            Effect.provideContext(context),
           ),
-        ),
       ),
 
     logout: (profileName, config) =>
-      provide(
-        Match.value(config).pipe(
+      Match.value(config).pipe(
           matchMethod("stored", () =>
             Effect.gen(function* () {
               yield* deleteCredentials(profileName, "cloudflare");
@@ -688,8 +666,8 @@ export const CfAuth: Effect.Effect<
             }),
           ),
           Match.exhaustive,
+          Effect.provideContext(context),
         ),
-      ),
 
     prettyPrint: (profileName, config) =>
       Match.value(config).pipe(
@@ -743,66 +721,62 @@ export const CfAuth: Effect.Effect<
       Match.value(config).pipe(
         matchMethod("env", () => CfCredentialsModule.fromEnv()),
         matchMethod("stored", () =>
-          provideLayer(
-            Layer.unwrap(
-              readCredentials<CloudflareStoredCredentials>(
-                profileName,
-                "cloudflare",
-              ).pipe(
-                Effect.map((creds) => {
-                  if (!creds) {
-                    return Layer.effectDiscard(
-                      Effect.die(
-                        "Cloudflare stored credentials not found. Run: alchemy-effect login --configure",
-                      ),
-                    ) as Layer.Layer<CfCredentialsModule.Credentials>;
-                  }
-                  return Match.value(creds).pipe(
-                    Match.when({ type: "apiToken" }, (c) =>
-                      CfCredentialsModule.fromApiToken({
-                        apiToken: c.apiToken,
-                      }),
+          Layer.unwrap(
+            readCredentials<CloudflareStoredCredentials>(
+              profileName,
+              "cloudflare",
+            ).pipe(
+              Effect.map((creds) => {
+                if (!creds) {
+                  return Layer.effectDiscard(
+                    Effect.die(
+                      "Cloudflare stored credentials not found. Run: alchemy-effect login --configure",
                     ),
-                    Match.when({ type: "apiKey" }, (c) =>
-                      CfCredentialsModule.fromApiKey({
-                        apiKey: c.apiKey,
-                        email: c.email,
-                      }),
+                  ) as Layer.Layer<CfCredentialsModule.Credentials>;
+                }
+                return Match.value(creds).pipe(
+                  Match.when({ type: "apiToken" }, (c) =>
+                    CfCredentialsModule.fromApiToken({
+                      apiToken: c.apiToken,
+                    }),
+                  ),
+                  Match.when({ type: "apiKey" }, (c) =>
+                    CfCredentialsModule.fromApiKey({
+                      apiKey: c.apiKey,
+                      email: c.email,
+                    }),
+                  ),
+                  Match.when({ type: "oauth" }, (c) =>
+                    CfCredentialsModule.fromOAuth(
+                      oauthProvider(profileName, c),
                     ),
-                    Match.when({ type: "oauth" }, (c) =>
-                      CfCredentialsModule.fromOAuth(
-                        oauthProvider(profileName, c),
-                      ),
-                    ),
-                    Match.exhaustive,
-                  );
-                }),
-              ),
+                  ),
+                  Match.exhaustive,
+                );
+              }),
             ),
-          ),
+          ).pipe(Layer.provide(Layer.succeedContext(context))),
         ),
         matchMethod("oauth", () =>
-          provideLayer(
-            Layer.unwrap(
-              readCredentials<OAuthClient.OAuthCredentials>(
-                profileName,
-                "cloudflare",
-              ).pipe(
-                Effect.map((creds) => {
-                  if (!creds || creds.type !== "oauth") {
-                    return Layer.effectDiscard(
-                      Effect.die(
-                        "Cloudflare OAuth credentials not found. Run: alchemy-effect login",
-                      ),
-                    ) as Layer.Layer<CfCredentialsModule.Credentials>;
-                  }
-                  return CfCredentialsModule.fromOAuth(
-                    oauthProvider(profileName, creds),
-                  );
-                }),
-              ),
+          Layer.unwrap(
+            readCredentials<OAuthClient.OAuthCredentials>(
+              profileName,
+              "cloudflare",
+            ).pipe(
+              Effect.map((creds) => {
+                if (!creds || creds.type !== "oauth") {
+                  return Layer.effectDiscard(
+                    Effect.die(
+                      "Cloudflare OAuth credentials not found. Run: alchemy-effect login",
+                    ),
+                  ) as Layer.Layer<CfCredentialsModule.Credentials>;
+                }
+                return CfCredentialsModule.fromOAuth(
+                  oauthProvider(profileName, creds),
+                );
+              }),
             ),
-          ),
+          ).pipe(Layer.provide(Layer.succeedContext(context))),
         ),
         Match.exhaustive,
       ),

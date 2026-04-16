@@ -120,7 +120,7 @@ export const layer = (profileName: string) =>
       const awsLayer = profile.aws
         ? Layer.merge(
             awsAuth.credentialsLayer(profileName, profile.aws),
-            AWS.stageConfigLayer(profile.aws),
+            AWS.stageConfigLayer(profileName, profile.aws),
           )
         : undefined;
 
