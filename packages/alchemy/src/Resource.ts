@@ -31,10 +31,10 @@ export type ResourceConstructor<R extends ResourceLike, Req = never> = {
           },
         ]
   ): Effect.Effect<R, never, Req>;
-  // <PropsReq = never>(
-  //   id: string,
-  //   props: Effect.Effect<Input<R["Props"]>, never, PropsReq>,
-  // ): Effect.Effect<R, never, PropsReq | Req>;
+  <PropsReq = never>(
+    id: string,
+    props: Effect.Effect<Input<R["Props"]>, never, PropsReq>,
+  ): Effect.Effect<R, never, PropsReq | Req>;
 };
 
 export type ResourceClassWithMethods<

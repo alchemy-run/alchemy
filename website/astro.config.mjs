@@ -20,7 +20,9 @@ function copyMarkdownSources() {
     name: "copy-markdown-sources",
     hooks: {
       "astro:build:done": async ({ dir }) => {
-        const srcDir = fileURLToPath(new URL("./src/content/docs/", import.meta.url));
+        const srcDir = fileURLToPath(
+          new URL("./src/content/docs/", import.meta.url),
+        );
         const outDir = fileURLToPath(dir);
 
         /** @param {string} current */

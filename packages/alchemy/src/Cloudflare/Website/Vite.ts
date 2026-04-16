@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import type { MemoOptions } from "../../Build/Memo.ts";
 import type { InputProps } from "../../Input.ts";
 import {
@@ -106,15 +107,26 @@ export interface ViteProps<
  * });
  * ```
  */
-export const Vite = <const Bindings extends WorkerBindingProps = {}>(
+export const Vite = <
+  const Bindings extends WorkerBindingProps = {},
+  Req = never,
+>(
   id: string,
-  props: InputProps<ViteProps<Bindings>> = {},
+  propsEff?:
+    | InputProps<ViteProps<Bindings>>
+    | Effect.Effect<InputProps<ViteProps<Bindings>>, never, Req>,
 ) =>
-  Worker<Bindings, WorkerAssetsConfig>(id, {
-    ...props,
-    main: undefined!,
-    vite: {
-      rootDir: props.rootDir,
-      memo: props.memo,
-    },
-  });
+  Worker<Bindings, WorkerAssetsConfig, Req>(
+    id,
+    Effect.map(
+      Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
+      (props) => ({
+        ...props,
+        main: undefined!,
+        vite: {
+          rootDir: props?.rootDir,
+          memo: props?.memo,
+        },
+      }),
+    ),
+  );

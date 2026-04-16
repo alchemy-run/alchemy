@@ -226,29 +226,51 @@ starlight-theme-select {
    Visual row 1 (features 1,2) occupies grid rows 1-3,
    visual row 2 (features 3,4) occupies rows 5-7 (row 4 is the gap),
    visual row 3 (features 5,6) occupies rows 9-11 (row 8 is the gap). */
-.features > .feature:nth-of-type(odd) > * { grid-column: 1; }
-.features > .feature:nth-of-type(even) > * { grid-column: 2; }
+.features > .feature:nth-of-type(odd) > * {
+  grid-column: 1;
+}
+.features > .feature:nth-of-type(even) > * {
+  grid-column: 2;
+}
 
 .features > .feature:nth-of-type(1) > :nth-child(1),
-.features > .feature:nth-of-type(2) > :nth-child(1) { grid-row: 1; }
+.features > .feature:nth-of-type(2) > :nth-child(1) {
+  grid-row: 1;
+}
 .features > .feature:nth-of-type(1) > :nth-child(2),
-.features > .feature:nth-of-type(2) > :nth-child(2) { grid-row: 2; }
+.features > .feature:nth-of-type(2) > :nth-child(2) {
+  grid-row: 2;
+}
 .features > .feature:nth-of-type(1) > :nth-child(3),
-.features > .feature:nth-of-type(2) > :nth-child(3) { grid-row: 3; }
+.features > .feature:nth-of-type(2) > :nth-child(3) {
+  grid-row: 3;
+}
 
 .features > .feature:nth-of-type(3) > :nth-child(1),
-.features > .feature:nth-of-type(4) > :nth-child(1) { grid-row: 5; }
+.features > .feature:nth-of-type(4) > :nth-child(1) {
+  grid-row: 5;
+}
 .features > .feature:nth-of-type(3) > :nth-child(2),
-.features > .feature:nth-of-type(4) > :nth-child(2) { grid-row: 6; }
+.features > .feature:nth-of-type(4) > :nth-child(2) {
+  grid-row: 6;
+}
 .features > .feature:nth-of-type(3) > :nth-child(3),
-.features > .feature:nth-of-type(4) > :nth-child(3) { grid-row: 7; }
+.features > .feature:nth-of-type(4) > :nth-child(3) {
+  grid-row: 7;
+}
 
 .features > .feature:nth-of-type(5) > :nth-child(1),
-.features > .feature:nth-of-type(6) > :nth-child(1) { grid-row: 9; }
+.features > .feature:nth-of-type(6) > :nth-child(1) {
+  grid-row: 9;
+}
 .features > .feature:nth-of-type(5) > :nth-child(2),
-.features > .feature:nth-of-type(6) > :nth-child(2) { grid-row: 10; }
+.features > .feature:nth-of-type(6) > :nth-child(2) {
+  grid-row: 10;
+}
 .features > .feature:nth-of-type(5) > :nth-child(3),
-.features > .feature:nth-of-type(6) > :nth-child(3) { grid-row: 11; }
+.features > .feature:nth-of-type(6) > :nth-child(3) {
+  grid-row: 11;
+}
 
 /* Larger gap between visual rows via empty tracks 4 and 8. */
 .features {

@@ -8,6 +8,7 @@ const Website = Cloudflare.StaticSite("Website", {
   command: "bun astro build",
   main: "./src/worker.ts",
   outdir: "dist",
+  domain: "v2.alchemy-test-3.us",
   memo: {
     include: ["src/**", "astro.config.mjs", "package.json", "../bun.lock"],
   },
