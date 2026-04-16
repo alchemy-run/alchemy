@@ -15,10 +15,12 @@ Resources are declared with a **logical ID** and optional **input
 properties**:
 
 ```typescript
-const bucket = yield* Cloudflare.R2Bucket("Bucket");
-const queue = yield* AWS.SQS.Queue("Jobs", {
-  fifoQueue: true,
-});
+const bucket = yield * Cloudflare.R2Bucket("Bucket");
+const queue =
+  yield *
+  AWS.SQS.Queue("Jobs", {
+    fifoQueue: true,
+  });
 ```
 
 The logical ID (`"Bucket"`, `"Jobs"`) is stable across deploys. It
@@ -37,7 +39,7 @@ Output attributes are available as `Output` expressions on the
 resource:
 
 ```typescript
-const bucket = yield* Cloudflare.R2Bucket("Bucket");
+const bucket = yield * Cloudflare.R2Bucket("Bucket");
 bucket.bucketName; // Output<string>
 ```
 
@@ -60,7 +62,7 @@ export const Bucket = Cloudflare.R2Bucket("Bucket");
 
 // src/worker.ts
 import { Bucket } from "./bucket.ts";
-const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
+const bucket = yield * Cloudflare.R2Bucket.bind(Bucket);
 ```
 
 Importing a resource from multiple files is safe — it registers on
@@ -73,6 +75,7 @@ stage, and logical ID (e.g. `myapp-dev-bucket-abc123`). The suffix
 is deterministic, derived from the resource's **instance ID**.
 
 Physical names ensure:
+
 - Resources in different stages don't collide
 - Creates are idempotent (same inputs → same physical name)
 - Resources can be recovered after state persistence failures

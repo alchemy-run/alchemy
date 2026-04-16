@@ -1,0 +1,242 @@
+---
+title: Effect HTTP API
+description: Build a schema-validated HTTP API with Effect's HttpApi module and deploy it as a Cloudflare Worker.
+sidebar:
+  order: 4
+---
+
+In the [tutorial](/tutorial/part-2), you built a Worker with manual
+`if/else` routing and raw request parsing. That works, but as your
+API grows you lose type safety at the boundary — request payloads
+aren't validated, response shapes aren't enforced, and errors slip
+through untyped.
+
+Effect's `HttpApi` module solves this. You declare endpoints with
+schemas for payloads, responses, and errors, then implement handlers
+against those schemas. The result is an `HttpEffect` — the same type
+a Worker's `fetch` expects — so it plugs in directly.
+
+## Define a schema
+
+Start with a domain model. Create `src/task.ts`:
+
+```typescript
+// src/task.ts
+import * as Schema from "effect/Schema";
+
+export class Task extends Schema.Class<Task>("Task")({
+  id: Schema.String,
+  title: Schema.String,
+  completed: Schema.Boolean,
+}) {}
+```
+
+`Schema.Class` gives you a runtime-validated class with an inferred
+TypeScript type. You'll use `Task` as the success schema for your
+GET endpoint.
+
+## Define the API
+
+Create `src/api.ts` with two endpoints — one to create a task and
+one to retrieve it:
+
+```typescript
+// src/api.ts
+import * as Schema from "effect/Schema";
+import * as HttpApi from "effect/unstable/httpapi/HttpApi";
+import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
+import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
+import { Task } from "./task.ts";
+
+const getTask = HttpApiEndpoint.get("getTask", "/:id", {
+  success: Task,
+});
+
+const createTask = HttpApiEndpoint.post("createTask", "/", {
+  success: Task,
+  payload: Schema.Struct({
+    title: Schema.String,
+  }),
+});
+
+export const TaskApi = HttpApi.make("TaskApi").add(
+  HttpApiGroup.make("Tasks").add(getTask, createTask),
+);
+```
+
+`HttpApiEndpoint.get` and `.post` declare the HTTP method, path,
+success schema, and (optionally) payload / query / error schemas.
+`HttpApiGroup` groups related endpoints, and `HttpApi.make` combines
+groups into a full API definition.
+
+Nothing executes yet — this is purely a description.
+
+## Implement the handlers
+
+Now wire up the handlers. For simplicity, we'll use an in-memory
+`Map`:
+
+```typescript ins={3,10-11,14-42}
+// src/api.ts
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import * as HttpApi from "effect/unstable/httpapi/HttpApi";
+import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
+import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Task } from "./task.ts";
+
+const getTask = HttpApiEndpoint.get("getTask", "/:id", {
+  success: Task,
+});
+
+const createTask = HttpApiEndpoint.post("createTask", "/", {
+  success: Task,
+  payload: Schema.Struct({
+    title: Schema.String,
+  }),
+});
+
+export const TaskApi = HttpApi.make("TaskApi").add(
+  HttpApiGroup.make("Tasks").add(getTask, createTask),
+);
+
+const tasks = new Map<string, Task>();
+
+export const TaskApiLive = HttpApiBuilder.layer(TaskApi).pipe(
+  Layer.provide(
+    HttpApiBuilder.group(TaskApi, "Tasks", (handlers) =>
+      Effect.gen(function* () {
+        return handlers
+          .handle(
+            "getTask",
+            Effect.fn(function* (req) {
+              const task = tasks.get(req.path.id);
+              if (!task) {
+                return HttpServerResponse.text("Not found", { status: 404 });
+              }
+              return task;
+            }),
+          )
+          .handle(
+            "createTask",
+            Effect.fn(function* (req) {
+              const task = new Task({
+                id: crypto.randomUUID(),
+                title: req.payload.title,
+                completed: false,
+              });
+              tasks.set(task.id, task);
+              return task;
+            }),
+          );
+      }),
+    ),
+  ),
+);
+```
+
+`HttpApiBuilder.group` gives you a `handlers` object with a
+`.handle(endpointName, effectFn)` method for each endpoint in the
+group. The request type is inferred from the endpoint schema —
+`req.path.id` and `req.payload.title` are fully typed.
+
+## Wire into a Worker
+
+The key step: convert the API layer into an `HttpEffect` and assign
+it to the Worker's `fetch`. Create `src/worker.ts`:
+
+```typescript
+// src/worker.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Etag from "effect/unstable/http/Etag";
+import * as HttpPlatform from "effect/unstable/http/HttpPlatform";
+import * as HttpRouter from "effect/unstable/http/HttpRouter";
+import { TaskApiLive } from "./api.ts";
+
+export default Cloudflare.Worker(
+  "Worker",
+  { main: import.meta.path },
+  HttpRouter.toHttpEffect(TaskApiLive).pipe(
+    Effect.map((fetch) => ({ fetch })),
+    Effect.provide(Layer.mergeAll(HttpPlatform.layer, Etag.layer)),
+  ),
+);
+```
+
+`HttpRouter.toHttpEffect` takes the API layer and returns an
+`HttpEffect` — an Effect that reads `HttpServerRequest`, can fail
+with `HttpServerError | HttpBodyError`, and succeeds with
+`HttpServerResponse`. This is the exact type a Worker's `fetch`
+expects, so `Effect.map((fetch) => ({ fetch }))` is all it takes to
+bridge them.
+
+:::note
+`HttpPlatform.layer` and `Etag.layer` are required by the HTTP API
+builder for content negotiation and ETag generation. You provide them
+once at the Worker level.
+:::
+
+## Add to the Stack
+
+Create `alchemy.run.ts`:
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import Worker from "./src/worker.ts";
+
+export default Alchemy.Stack(
+  "TaskApi",
+  {
+    providers: Cloudflare.providers(),
+  },
+  Effect.gen(function* () {
+    const worker = yield* Worker;
+
+    return {
+      url: worker.url,
+    };
+  }),
+);
+```
+
+## Deploy and test
+
+```sh
+alchemy deploy
+```
+
+Use `curl` to create and retrieve a task:
+
+```sh
+# Create a task
+curl -X POST https://your-worker.workers.dev/ \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Write docs"}'
+# → {"id":"...","title":"Write docs","completed":false}
+
+# Retrieve it
+curl https://your-worker.workers.dev/<id>
+# → {"id":"...","title":"Write docs","completed":false}
+```
+
+Invalid payloads get automatic 400 responses with validation errors
+— no manual checking needed.
+
+## Recap
+
+- `HttpApiEndpoint` declares endpoints with schemas for payloads,
+  responses, and errors
+- `HttpApiGroup` and `HttpApi.make` compose endpoints into an API
+  definition
+- `HttpApiBuilder.group` implements handlers with full type inference
+- `HttpRouter.toHttpEffect` converts the API layer into an
+  `HttpEffect` — the same type a Worker's `fetch` expects
+- The API validates requests and serializes responses automatically

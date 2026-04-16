@@ -21,10 +21,11 @@ bundled and deployed alongside the infrastructure.
 
 ```typescript
 // Regular resource — infrastructure only
-const bucket = yield* Cloudflare.R2Bucket("Bucket");
+const bucket = yield * Cloudflare.R2Bucket("Bucket");
 
 // Platform resource — infrastructure + runtime code
-export default Cloudflare.Worker("Worker",
+export default Cloudflare.Worker(
+  "Worker",
   { main: import.meta.path },
   Effect.gen(function* () {
     // Init phase: bind resources
@@ -72,12 +73,15 @@ Platforms support two styles for runtime code:
 to bindings, typed errors, and composable operations:
 
 ```typescript
-export default Cloudflare.Worker("Worker",
+export default Cloudflare.Worker(
+  "Worker",
   { main: import.meta.path },
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
     return {
-      fetch: Effect.gen(function* () { /* ... */ }),
+      fetch: Effect.gen(function* () {
+        /* ... */
+      }),
     };
   }),
 );

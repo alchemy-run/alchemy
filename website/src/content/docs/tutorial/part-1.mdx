@@ -26,10 +26,18 @@ minutes.
 Start with an empty directory and initialize a `package.json`:
 
 <Tabs syncKey="pkgManager">
-  <TabItem label="bun" icon="bun"><Code code="mkdir my-app && cd my-app && bun init -y" lang="sh" /></TabItem>
-  <TabItem label="npm" icon="npm"><Code code="mkdir my-app && cd my-app && npm init -y" lang="sh" /></TabItem>
-  <TabItem label="pnpm" icon="pnpm"><Code code="mkdir my-app && cd my-app && pnpm init" lang="sh" /></TabItem>
-  <TabItem label="yarn" icon="seti:yarn"><Code code="mkdir my-app && cd my-app && yarn init -y" lang="sh" /></TabItem>
+  <TabItem label="bun" icon="bun">
+    <Code code="mkdir my-app && cd my-app && bun init -y" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="mkdir my-app && cd my-app && npm init -y" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="mkdir my-app && cd my-app && pnpm init" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="mkdir my-app && cd my-app && yarn init -y" lang="sh" />
+  </TabItem>
 </Tabs>
 
 ## Install dependencies
@@ -37,10 +45,18 @@ Start with an empty directory and initialize a `package.json`:
 Install <code>alchemy@{alchemyVersion}</code> and <code>effect@{effectVersion}</code>:
 
 <Tabs syncKey="pkgManager">
-  <TabItem label="bun" icon="bun"><Code code={`bun add ${bunPkgs}`} lang="sh" /></TabItem>
-  <TabItem label="npm" icon="npm"><Code code={`npm install ${nodePkgs}`} lang="sh" /></TabItem>
-  <TabItem label="pnpm" icon="pnpm"><Code code={`pnpm add ${nodePkgs}`} lang="sh" /></TabItem>
-  <TabItem label="yarn" icon="seti:yarn"><Code code={`yarn add ${nodePkgs}`} lang="sh" /></TabItem>
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun add ${bunPkgs}`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm install ${nodePkgs}`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm add ${nodePkgs}`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn add ${nodePkgs}`} lang="sh" />
+  </TabItem>
 </Tabs>
 
 :::tip
@@ -83,7 +99,7 @@ Effect generator.
 
 Let's add a Cloudflare R2 Bucket to our Stack and observe the type error:
 
-```typescript twoslash ins={3,13}
+```typescript twoslash ins={3,13} errorReplace='ProviderCollectionShape<"Cloudflare">::Cloudflare.Providers'
 // @errors: 2322
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
@@ -154,7 +170,7 @@ export default Alchemy.Stack(
 
     return {
       bucketName: bucket.bucketName,
-//    ^?
+      //    ^?
     };
   }),
 );

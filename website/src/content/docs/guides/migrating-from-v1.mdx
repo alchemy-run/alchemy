@@ -201,12 +201,12 @@ export default Alchemy.Stack(
 
 ## Summary
 
-| | v1 (async) | v2 (async style) | v2 (Effect style) |
-| --- | --- | --- | --- |
-| Stack | `await alchemy("name")` | `Alchemy.Stack("name", ...)` | `Alchemy.Stack("name", ...)` |
-| Resources | `await R2Bucket(...)` | `Cloudflare.R2Bucket(...)` | `Cloudflare.R2Bucket(...)` |
-| Worker entry | `entrypoint` | `main` | `main: import.meta.path` |
-| Bindings | `bindings: { KEY: resource }` | `bindings: { Key: resource }` | `yield* Resource.bind(ref)` |
-| Runtime code | `async fetch(req, env)` | `async fetch(req, env)` | `Effect.gen(function* () { ... })` |
-| Lifecycle | `await app.finalize()` | automatic | automatic |
-| Type safety | runtime errors | typed `env` via `InferEnv` | full Effect type system |
+|              | v1 (async)                    | v2 (async style)              | v2 (Effect style)                  |
+| ------------ | ----------------------------- | ----------------------------- | ---------------------------------- |
+| Stack        | `await alchemy("name")`       | `Alchemy.Stack("name", ...)`  | `Alchemy.Stack("name", ...)`       |
+| Resources    | `await R2Bucket(...)`         | `Cloudflare.R2Bucket(...)`    | `Cloudflare.R2Bucket(...)`         |
+| Worker entry | `entrypoint`                  | `main`                        | `main: import.meta.path`           |
+| Bindings     | `bindings: { KEY: resource }` | `bindings: { Key: resource }` | `yield* Resource.bind(ref)`        |
+| Runtime code | `async fetch(req, env)`       | `async fetch(req, env)`       | `Effect.gen(function* () { ... })` |
+| Lifecycle    | `await app.finalize()`        | automatic                     | automatic                          |
+| Type safety  | runtime errors                | typed `env` via `InferEnv`    | full Effect type system            |

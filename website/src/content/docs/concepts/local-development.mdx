@@ -100,11 +100,11 @@ export default Cloudflare.Worker("Worker", {
 
 ## Dev vs Deploy
 
-| | `alchemy dev` | `alchemy deploy` |
-| --- | --- | --- |
-| Infrastructure | Deployed to cloud | Deployed to cloud |
-| Application code | Runs locally in workerd | Deployed to cloud |
-| File watching | Hot reload on change | Manual redeploy |
-| Debugging | Attach local debugger | Tail logs |
-| Speed | Milliseconds | Seconds to minutes |
-| Fidelity | Real cloud resources | Real cloud resources |
+|                  | `alchemy dev`           | `alchemy deploy`     |
+| ---------------- | ----------------------- | -------------------- |
+| Infrastructure   | Deployed to cloud       | Deployed to cloud    |
+| Application code | Runs locally in workerd | Deployed to cloud    |
+| File watching    | Hot reload on change    | Manual redeploy      |
+| Debugging        | Attach local debugger   | Tail logs            |
+| Speed            | Milliseconds            | Seconds to minutes   |
+| Fidelity         | Real cloud resources    | Real cloud resources |

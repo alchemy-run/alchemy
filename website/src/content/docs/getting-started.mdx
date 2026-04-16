@@ -20,19 +20,35 @@ export const nodePkgs = `alchemy@${alchemyVersion} effect@${effectVersion} @effe
 ## Create a project
 
 <Tabs syncKey="pkgManager">
-  <TabItem label="bun" icon="bun"><Code code="mkdir my-app && cd my-app && bun init -y" lang="sh" /></TabItem>
-  <TabItem label="npm" icon="npm"><Code code="mkdir my-app && cd my-app && npm init -y" lang="sh" /></TabItem>
-  <TabItem label="pnpm" icon="pnpm"><Code code="mkdir my-app && cd my-app && pnpm init" lang="sh" /></TabItem>
-  <TabItem label="yarn" icon="seti:yarn"><Code code="mkdir my-app && cd my-app && yarn init -y" lang="sh" /></TabItem>
+  <TabItem label="bun" icon="bun">
+    <Code code="mkdir my-app && cd my-app && bun init -y" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="mkdir my-app && cd my-app && npm init -y" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="mkdir my-app && cd my-app && pnpm init" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="mkdir my-app && cd my-app && yarn init -y" lang="sh" />
+  </TabItem>
 </Tabs>
 
 ## Install
 
 <Tabs syncKey="pkgManager">
-  <TabItem label="bun" icon="bun"><Code code={`bun add ${bunPkgs}`} lang="sh" /></TabItem>
-  <TabItem label="npm" icon="npm"><Code code={`npm install ${nodePkgs}`} lang="sh" /></TabItem>
-  <TabItem label="pnpm" icon="pnpm"><Code code={`pnpm add ${nodePkgs}`} lang="sh" /></TabItem>
-  <TabItem label="yarn" icon="seti:yarn"><Code code={`yarn add ${nodePkgs}`} lang="sh" /></TabItem>
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun add ${bunPkgs}`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm install ${nodePkgs}`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm add ${nodePkgs}`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn add ${nodePkgs}`} lang="sh" />
+  </TabItem>
 </Tabs>
 
 ## Create your Stack
@@ -84,12 +100,18 @@ That's it — you have a live R2 Bucket on Cloudflare.
 
 <a href="/tutorial/part-1" class="next-card">
   <strong>Tutorial</strong>
-  <span>New to Alchemy? Follow the hands-on tutorial from zero to CI/CD in five parts.</span>
+  <span>
+    New to Alchemy? Follow the hands-on tutorial from zero to CI/CD in five
+    parts.
+  </span>
 </a>
 
 <a href="/guides/migrating-from-v1" class="next-card">
   <strong>Migrating from v1</strong>
-  <span>Already using Alchemy v1 with async/await? Learn what changed and how to upgrade.</span>
+  <span>
+    Already using Alchemy v1 with async/await? Learn what changed and how to
+    upgrade.
+  </span>
 </a>
 
 </div>

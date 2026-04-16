@@ -79,6 +79,7 @@ export const JobStorageDynamoDB = Layer.provideMerge(
 ```
 
 The `Layer.provideMerge` combines:
+
 - The inner `Layer.effect` that creates resources and returns the
   service implementation
 - The capability layers (`GetItemLive`, `PutItemLive`) that provide
@@ -102,9 +103,7 @@ export default class JobFunction extends AWS.Lambda.Function<JobFunction>()(
         return yield* HttpServerResponse.json(job);
       }),
     };
-  }).pipe(
-    Effect.provide(JobStorageDynamoDB),
-  ),
+  }).pipe(Effect.provide(JobStorageDynamoDB)),
 ) {}
 ```
 
@@ -116,10 +115,10 @@ changing the function code:
 
 ```typescript
 // DynamoDB implementation
-Effect.provide(JobStorageDynamoDB)
+Effect.provide(JobStorageDynamoDB);
 
 // S3 implementation
-Effect.provide(JobStorageS3)
+Effect.provide(JobStorageS3);
 ```
 
 Each implementation creates different resources (Table vs Bucket),

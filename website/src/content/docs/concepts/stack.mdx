@@ -75,21 +75,22 @@ metadata via the `Stack` service:
 ```typescript
 import { Stack } from "alchemy/Stack";
 
-const table = yield* DynamoDB.Table("Jobs", {
-  partitionKey: "id",
-  attributes: { id: "S" },
-});
+const table =
+  yield *
+  DynamoDB.Table("Jobs", {
+    partitionKey: "id",
+    attributes: { id: "S" },
+  });
 
 // Access stack metadata
-const stack = yield* Stack;
-console.log(stack.name);  // "MyApp"
+const stack = yield * Stack;
+console.log(stack.name); // "MyApp"
 console.log(stack.stage); // "dev_sam"
 ```
 
 This is useful for conditional logic based on the stage:
 
 ```typescript
-const queue = yield* SQS.Queue("Jobs").pipe(
-  RemovalPolicy.retain(stack.stage === "prod"),
-);
+const queue =
+  yield * SQS.Queue("Jobs").pipe(RemovalPolicy.retain(stack.stage === "prod"));
 ```

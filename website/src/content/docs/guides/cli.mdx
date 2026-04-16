@@ -23,10 +23,10 @@ current directory.
 
 These options are shared across most commands:
 
-| Option | Description |
-| --- | --- |
-| `--stage <name>` | Stage to target. Defaults to `dev_$USER` (e.g. `dev_sam`). Must match `[a-z0-9][-_a-z0-9]*`. |
-| `--env-file <path>` | Load environment variables from a file before running. |
+| Option              | Description                                                                                  |
+| ------------------- | -------------------------------------------------------------------------------------------- |
+| `--stage <name>`    | Stage to target. Defaults to `dev_$USER` (e.g. `dev_sam`). Must match `[a-z0-9][-_a-z0-9]*`. |
+| `--env-file <path>` | Load environment variables from a file before running.                                       |
 
 ## `deploy`
 
@@ -67,13 +67,13 @@ Proceed?
 [s2]url: "https://myapp-worker-dev-you-abc123.workers.dev",
 }`} />
 
-| Option | Description |
-| --- | --- |
-| `--stage <name>` | Stage to deploy to (defaults to `dev_$USER`) |
-| `--yes` | Skip the approval prompt |
-| `--dry-run` | Show the plan without applying (same as `alchemy plan`) |
-| `--force` | Force updates for resources that would otherwise no-op |
-| `--env-file <path>` | Load environment variables from a file |
+| Option              | Description                                             |
+| ------------------- | ------------------------------------------------------- |
+| `--stage <name>`    | Stage to deploy to (defaults to `dev_$USER`)            |
+| `--yes`             | Skip the approval prompt                                |
+| `--dry-run`         | Show the plan without applying (same as `alchemy plan`) |
+| `--force`           | Force updates for resources that would otherwise no-op  |
+| `--env-file <path>` | Load environment variables from a file                  |
 
 ```sh
 # Deploy to production, skip the prompt
@@ -104,10 +104,10 @@ The plan uses `+` for creates, `~` for updates, `-` for deletes,
 and `•` for no-ops. No approval prompt is shown and no changes are
 made.
 
-| Option | Description |
-| --- | --- |
-| `--stage <name>` | Stage to plan against (defaults to `dev_$USER`) |
-| `--env-file <path>` | Load environment variables from a file |
+| Option              | Description                                     |
+| ------------------- | ----------------------------------------------- |
+| `--stage <name>`    | Stage to plan against (defaults to `dev_$USER`) |
+| `--env-file <path>` | Load environment variables from a file          |
 
 ## `destroy`
 
@@ -129,12 +129,12 @@ Proceed?
 [r]✗[/r] [b]Worker[/b] [d](Cloudflare.Worker)[/d] [r]deleted[/r]
 [r]✗[/r] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d] [r]deleted[/r]`} />
 
-| Option | Description |
-| --- | --- |
-| `--stage <name>` | Stage to destroy (defaults to `dev_$USER`) |
-| `--yes` | Skip the approval prompt |
-| `--dry-run` | Show what would be deleted without actually deleting |
-| `--env-file <path>` | Load environment variables from a file |
+| Option              | Description                                          |
+| ------------------- | ---------------------------------------------------- |
+| `--stage <name>`    | Stage to destroy (defaults to `dev_$USER`)           |
+| `--yes`             | Skip the approval prompt                             |
+| `--dry-run`         | Show what would be deleted without actually deleting |
+| `--env-file <path>` | Load environment variables from a file               |
 
 ```sh
 # Destroy a PR preview environment
@@ -152,10 +152,10 @@ alchemy dev [file] [options]
 Resources are deployed to the cloud while Workers run locally in
 workerd. File changes trigger automatic rebuilds and hot reloads.
 
-| Option | Description |
-| --- | --- |
-| `--stage <name>` | Stage to use for dev (defaults to `dev_$USER`) |
-| `--env-file <path>` | Load environment variables from a file |
+| Option              | Description                                    |
+| ------------------- | ---------------------------------------------- |
+| `--stage <name>`    | Stage to use for dev (defaults to `dev_$USER`) |
+| `--env-file <path>` | Load environment variables from a file         |
 
 ```sh
 # Start dev mode
@@ -183,11 +183,11 @@ Logs from multiple resources are interleaved and color-coded by
 resource. The command streams indefinitely until you interrupt it
 with `Ctrl+C`.
 
-| Option | Description |
-| --- | --- |
-| `--stage <name>` | Stage to tail (defaults to `dev_$USER`) |
-| `--filter <ids>` | Comma-separated logical resource IDs to include (e.g. `Worker,Api`) |
-| `--env-file <path>` | Load environment variables from a file |
+| Option              | Description                                                         |
+| ------------------- | ------------------------------------------------------------------- |
+| `--stage <name>`    | Stage to tail (defaults to `dev_$USER`)                             |
+| `--filter <ids>`    | Comma-separated logical resource IDs to include (e.g. `Worker,Api`) |
+| `--env-file <path>` | Load environment variables from a file                              |
 
 ```sh
 # Tail only the Worker resource
@@ -207,13 +207,13 @@ alchemy logs [file] [options]
 
 Unlike `tail`, `logs` fetches a batch of past log entries and exits.
 
-| Option | Description |
-| --- | --- |
-| `--stage <name>` | Stage to fetch logs from (defaults to `dev_$USER`) |
-| `--filter <ids>` | Comma-separated logical resource IDs to include |
-| `--limit <n>` | Number of log entries to fetch (default: 100) |
-| `--since <time>` | Fetch logs since this time — a duration (`1h`, `30m`, `2d`) or ISO date |
-| `--env-file <path>` | Load environment variables from a file |
+| Option              | Description                                                             |
+| ------------------- | ----------------------------------------------------------------------- |
+| `--stage <name>`    | Stage to fetch logs from (defaults to `dev_$USER`)                      |
+| `--filter <ids>`    | Comma-separated logical resource IDs to include                         |
+| `--limit <n>`       | Number of log entries to fetch (default: 100)                           |
+| `--since <time>`    | Fetch logs since this time — a duration (`1h`, `30m`, `2d`) or ISO date |
+| `--env-file <path>` | Load environment variables from a file                                  |
 
 ```sh
 # Last 50 log entries from all resources
@@ -235,12 +235,12 @@ and other AWS resources that need artifact storage.
 alchemy bootstrap [options]
 ```
 
-| Option | Description |
-| --- | --- |
-| `--profile <name>` | AWS profile to use for credentials (default: `default`) |
+| Option              | Description                                                |
+| ------------------- | ---------------------------------------------------------- |
+| `--profile <name>`  | AWS profile to use for credentials (default: `default`)    |
 | `--region <region>` | AWS region to bootstrap (defaults to `AWS_REGION` env var) |
-| `--destroy` | Destroy all bootstrap buckets in the selected region |
-| `--env-file <path>` | Load environment variables from a file |
+| `--destroy`         | Destroy all bootstrap buckets in the selected region       |
+| `--env-file <path>` | Load environment variables from a file                     |
 
 ```sh
 # Bootstrap with the default profile

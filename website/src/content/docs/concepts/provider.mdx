@@ -14,14 +14,14 @@ lifecycle method.
 
 Each provider can implement these operations:
 
-| Operation | Description |
-| --- | --- |
-| **create** | Create a new resource. Must be idempotent. |
-| **update** | Update an existing resource with new properties. |
-| **delete** | Delete a resource. Must be idempotent. |
-| **diff** | Compare old and new properties to decide: update, replace, or no-op. |
-| **read** | Read the current state of a resource from the cloud provider. |
-| **precreate** | Create a stub resource to break circular dependencies. |
+| Operation     | Description                                                          |
+| ------------- | -------------------------------------------------------------------- |
+| **create**    | Create a new resource. Must be idempotent.                           |
+| **update**    | Update an existing resource with new properties.                     |
+| **delete**    | Delete a resource. Must be idempotent.                               |
+| **diff**      | Compare old and new properties to decide: update, replace, or no-op. |
+| **read**      | Read the current state of a resource from the cloud provider.        |
+| **precreate** | Create a stub resource to break circular dependencies.               |
 
 ## Provider Layers
 
@@ -55,10 +55,7 @@ import * as Layer from "effect/Layer";
 Alchemy.Stack(
   "MyApp",
   {
-    providers: Layer.mergeAll(
-      Cloudflare.providers(),
-      AWS.providers()(),
-    ),
+    providers: Layer.mergeAll(Cloudflare.providers(), AWS.providers()()),
   },
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2Bucket("Bucket");

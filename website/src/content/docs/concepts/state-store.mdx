@@ -73,13 +73,13 @@ state automatically.
 
 State transitions track the lifecycle of each resource:
 
-| Status | Meaning |
-| --- | --- |
-| `creating` | Create operation in progress |
-| `created` | Resource exists and is healthy |
-| `updating` | Update operation in progress |
-| `updated` | Resource was updated successfully |
-| `deleting` | Delete operation in progress |
+| Status      | Meaning                                                          |
+| ----------- | ---------------------------------------------------------------- |
+| `creating`  | Create operation in progress                                     |
+| `created`   | Resource exists and is healthy                                   |
+| `updating`  | Update operation in progress                                     |
+| `updated`   | Resource was updated successfully                                |
+| `deleting`  | Delete operation in progress                                     |
 | `replacing` | Resource is being replaced (new one created, old pending delete) |
 
 These intermediate states (`creating`, `updating`, `deleting`) exist
@@ -97,7 +97,9 @@ import * as TestState from "alchemy/Test/TestState";
 
 // Seed with existing resource state
 const state = TestState.state({
-  "Bucket": { /* ... */ },
+  Bucket: {
+    /* ... */
+  },
 });
 ```
 

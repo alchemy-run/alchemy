@@ -26,6 +26,7 @@ import Terminal from "../../components/Terminal.astro";
 <div class="landing">
 
 {/* ── Hero code block ── */}
+
 <section class="hero-code">
 <div class="hero-code-grid">
 <div class="hero-code-text">
@@ -64,6 +65,7 @@ export default Alchemy.Stack(
 </section>
 
 {/* ── Feature grid ── */}
+
 <section class="features">
 
 <div class="feature">
@@ -75,13 +77,17 @@ deploy.
 
 ```typescript
 // TypeScript catches this at compile time:
-Alchemy.Stack("App", {
-  // Type Error: Layer<never> is not assignable
-  // to Layer<Cloudflare.Providers>
-  providers: Layer.empty,
-}, Effect.gen(function* () {
-  yield* Cloudflare.R2Bucket("Bucket");
-}));
+Alchemy.Stack(
+  "App",
+  {
+    // Type Error: Layer<never> is not assignable
+    // to Layer<Cloudflare.Providers>
+    providers: Layer.empty,
+  },
+  Effect.gen(function* () {
+    yield* Cloudflare.R2Bucket("Bucket");
+  }),
+);
 ```
 
 </div>
@@ -123,7 +129,8 @@ real integration tests.
 const stack = beforeAll(deploy(Stack));
 afterAll.skipIf(!process.env.CI)(destroy(Stack));
 
-test("round-trip an object",
+test(
+  "round-trip an object",
   Effect.gen(function* () {
     const { url } = yield* stack;
     yield* HttpClient.put(`${url}/hello.txt`, {
@@ -202,6 +209,7 @@ jobs:
 </section>
 
 {/* ── Providers ── */}
+
 <section class="providers-section">
 
 ### Cloud providers
@@ -236,6 +244,7 @@ GitHub, Stripe, DNS, and a growing ecosystem of community providers
 </section>
 
 {/* ── CTA ── */}
+
 <section class="cta-section">
 
 ### Ready to start?
@@ -245,11 +254,14 @@ with R2 bindings, integration tests, local dev, and CI/CD — in under
 30 minutes.
 
 <div class="cta-buttons">
-  <a href="/tutorial/part-1" class="cta-primary">Start the Tutorial</a>
-  <a href="/getting-started" class="cta-secondary">Quick Start</a>
+  <a href="/tutorial/part-1" class="cta-primary">
+    Start the Tutorial
+  </a>
+  <a href="/getting-started" class="cta-secondary">
+    Quick Start
+  </a>
 </div>
 
 </section>
 
 </div>
-

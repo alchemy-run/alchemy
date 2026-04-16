@@ -35,6 +35,7 @@ Effect.gen(function* () {
 ```
 
 Each `.bind()` call does two things at once:
+
 1. Grants the function permission to call that API
 2. Gives you a typed function to call at runtime
 
@@ -52,13 +53,13 @@ export const Worker = Cloudflare.Worker("Worker", {
 On AWS, each binding maps to specific IAM actions. Alchemy generates
 least-privilege policies scoped to the exact resource:
 
-| Binding | IAM Actions | Resource |
-| --- | --- | --- |
-| `S3.GetObject.bind(bucket)` | `s3:GetObject` | `arn:aws:s3:::bucket-name/*` |
-| `S3.PutObject.bind(bucket)` | `s3:PutObject` | `arn:aws:s3:::bucket-name/*` |
-| `SQS.SendMessage.bind(queue)` | `sqs:SendMessage` | Queue ARN |
-| `DynamoDB.GetItem.bind(table)` | `dynamodb:GetItem` | Table ARN |
-| `DynamoDB.PutItem.bind(table)` | `dynamodb:PutItem` | Table ARN |
+| Binding                        | IAM Actions        | Resource                     |
+| ------------------------------ | ------------------ | ---------------------------- |
+| `S3.GetObject.bind(bucket)`    | `s3:GetObject`     | `arn:aws:s3:::bucket-name/*` |
+| `S3.PutObject.bind(bucket)`    | `s3:PutObject`     | `arn:aws:s3:::bucket-name/*` |
+| `SQS.SendMessage.bind(queue)`  | `sqs:SendMessage`  | Queue ARN                    |
+| `DynamoDB.GetItem.bind(table)` | `dynamodb:GetItem` | Table ARN                    |
+| `DynamoDB.PutItem.bind(table)` | `dynamodb:PutItem` | Table ARN                    |
 
 You never write `PolicyStatement` objects — the binding knows which
 actions and resources to attach.
@@ -79,16 +80,17 @@ An **Event Source** is a special binding that triggers your function
 when events occur on a resource:
 
 ```typescript
-yield* DynamoDB.stream(table, {
-  streamViewType: "NEW_AND_OLD_IMAGES",
-  startingPosition: "LATEST",
-  batchSize: 10,
-}).process((stream) =>
-  stream.pipe(
-    Stream.map((record) => JSON.stringify(record)),
-    Stream.run(sink),
-  ),
-);
+yield *
+  DynamoDB.stream(table, {
+    streamViewType: "NEW_AND_OLD_IMAGES",
+    startingPosition: "LATEST",
+    batchSize: 10,
+  }).process((stream) =>
+    stream.pipe(
+      Stream.map((record) => JSON.stringify(record)),
+      Stream.run(sink),
+    ),
+  );
 ```
 
 Event sources work the same way as regular bindings — they attach
@@ -100,8 +102,8 @@ On Cloudflare, the same concept applies but uses native Worker
 bindings instead of IAM:
 
 ```typescript
-const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
-const kv = yield* Cloudflare.KVNamespace.bind(KV);
+const bucket = yield * Cloudflare.R2Bucket.bind(Bucket);
+const kv = yield * Cloudflare.KVNamespace.bind(KV);
 ```
 
 Alchemy attaches the R2 and KV bindings to the Worker's

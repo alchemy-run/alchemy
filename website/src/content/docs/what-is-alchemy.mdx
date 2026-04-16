@@ -48,7 +48,8 @@ import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Bucket } from "./bucket.ts";
 
-export default Cloudflare.Worker("Worker",
+export default Cloudflare.Worker(
+  "Worker",
   { main: import.meta.path },
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
@@ -105,9 +106,9 @@ databases, queues, workers, IAM roles, DNS records, and more. Each
 resource is declared as an Effect and `yield*`-ed inside a Stack:
 
 ```typescript
-const bucket = yield* Cloudflare.R2Bucket("Bucket");
-const db = yield* Cloudflare.D1Database("DB");
-const queue = yield* AWS.SQS.Queue("Jobs");
+const bucket = yield * Cloudflare.R2Bucket("Bucket");
+const db = yield * Cloudflare.D1Database("DB");
+const queue = yield * AWS.SQS.Queue("Jobs");
 ```
 
 Resources are just descriptions until they're yielded. You can
@@ -121,7 +122,7 @@ export const Bucket = Cloudflare.R2Bucket("Bucket");
 ```typescript
 // src/worker.ts
 import { Bucket } from "./bucket.ts";
-const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
+const bucket = yield * Cloudflare.R2Bucket.bind(Bucket);
 ```
 
 ## Stacks and stages
@@ -145,14 +146,20 @@ expressed as Effect Layers and checked by the type system:
 
 ```typescript
 // Cloudflare
-Alchemy.Stack("App", {
-  providers: Cloudflare.providers(),
-}, /* ... */);
+Alchemy.Stack(
+  "App",
+  {
+    providers: Cloudflare.providers(),
+  } /* ... */,
+);
 
 // AWS
-Alchemy.Stack("App", {
-  providers: AWS.providers()(),
-}, /* ... */);
+Alchemy.Stack(
+  "App",
+  {
+    providers: AWS.providers()(),
+  } /* ... */,
+);
 ```
 
 If your Stack uses Cloudflare resources but you provide AWS
@@ -166,7 +173,8 @@ Alchemy supports two styles for writing Workers:
 composable retries, and bindings resolved through the Effect system:
 
 ```typescript
-export default Cloudflare.Worker("Worker",
+export default Cloudflare.Worker(
+  "Worker",
   { main: import.meta.path },
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);

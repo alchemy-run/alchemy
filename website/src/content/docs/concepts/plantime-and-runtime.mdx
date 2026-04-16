@@ -11,10 +11,10 @@ resources like Workers and Lambda Functions.
 
 ## The two phases
 
-| Phase | When it runs | What it does |
-| --- | --- | --- |
+| Phase               | When it runs                     | What it does                                             |
+| ------------------- | -------------------------------- | -------------------------------------------------------- |
 | **Plantime** (Init) | During `alchemy deploy` / `plan` | Declares resources, resolves bindings, computes the plan |
-| **Runtime** (Exec) | When handling a request | Executes your application logic |
+| **Runtime** (Exec)  | When handling a request          | Executes your application logic                          |
 
 ## Init and Exec in code
 
@@ -22,7 +22,8 @@ Platform resources express this split with the "Effect returning an
 Effect" pattern:
 
 ```typescript
-Cloudflare.Worker("Worker",
+Cloudflare.Worker(
+  "Worker",
   { main: import.meta.path },
   Effect.gen(function* () {
     // ─── Init phase (plantime + runtime) ───
@@ -40,6 +41,7 @@ Cloudflare.Worker("Worker",
 ```
 
 **Init phase code** runs in both plantime and runtime:
+
 - At **plantime**, it registers bindings and resolves dependencies
 - At **runtime**, it initializes SDK clients and prepares the handler
 
@@ -51,11 +53,11 @@ arrives.
 The current phase is exposed as the `ALCHEMY_PHASE` environment
 variable / config:
 
-| Value | Context |
-| --- | --- |
-| `plan` | Default. Running `alchemy deploy` or `alchemy plan`. |
-| `dev` | Running `alchemy dev` (local development with hot reload). |
-| `runtime` | Running inside a deployed Worker or Lambda Function. |
+| Value     | Context                                                    |
+| --------- | ---------------------------------------------------------- |
+| `plan`    | Default. Running `alchemy deploy` or `alchemy plan`.       |
+| `dev`     | Running `alchemy dev` (local development with hot reload). |
+| `runtime` | Running inside a deployed Worker or Lambda Function.       |
 
 This is used internally by Alchemy — for example, `Binding.Policy`
 enforces that policy providers are registered at plantime but
