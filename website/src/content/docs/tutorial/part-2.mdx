@@ -94,7 +94,7 @@ Stack. You can safely import them from multiple files.
 
 Now the Worker can import `Bucket` and bind it in the Init phase:
 
-```typescript twoslash ins={5,13} errorReplace='.*::Type 'R2BucketBinding' is not assignable to type 'WorkerServices | PlatformServices'.'
+```typescript twoslash errorReplace='.*::Type 'R2BucketBinding' is not assignable to type 'WorkerServices | PlatformServices'.'
 // @errors: 2345
 // @noEmit: true
 // @allowImportingTsExtensions: true
@@ -107,7 +107,7 @@ export const Bucket = Cloudflare.R2Bucket("Bucket");
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { Bucket } from "./bucket.ts";
++import { Bucket } from "./bucket.ts";
 
 export default Cloudflare.Worker(
   "Worker",
@@ -115,7 +115,7 @@ export default Cloudflare.Worker(
     main: import.meta.path,
   },
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
++    const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
 
     return {
       fetch: Effect.gen(function* () {
@@ -132,7 +132,7 @@ The previous step showed a type error — `R2Bucket.bind` requires the
 `R2BucketBinding` service. Fix it by piping the outer Effect through
 `R2BucketBindingLive`:
 
-```typescript twoslash ins={9} errorReplace='.*::Type 'R2Error' is not assignable to type 'HttpServerError | HttpBodyError'.'
+```typescript twoslash errorReplace='.*::Type 'R2Error' is not assignable to type 'HttpServerError | HttpBodyError'.'
 // @noEmit: true
 // @allowImportingTsExtensions: true
 // @filename: bucket.ts
@@ -155,7 +155,7 @@ export default Cloudflare.Worker(
         return HttpServerResponse.text("Hello, world!");
       }),
     };
-  }).pipe(Effect.provide(Cloudflare.R2BucketBindingLive)),
++  }).pipe(Effect.provide(Cloudflare.R2BucketBindingLive)),
   // ---cut-after---
 );
 ```
@@ -170,7 +170,7 @@ Let's replace the placeholder response with a PUT route that stores
 objects in the bucket. Add `HttpServerRequest` to access the incoming
 request:
 
-```typescript twoslash ins={11-16} errorReplace=".*::Type 'R2Error' is not assignable to type 'HttpServerError | HttpBodyError'."
+```typescript twoslash errorReplace=".*::Type 'R2Error' is not assignable to type 'HttpServerError | HttpBodyError'."
 // @errors: 2345
 // @noEmit: true
 // @allowImportingTsExtensions: true
@@ -194,12 +194,12 @@ export default Cloudflare.Worker(
         const request = yield* HttpServerRequest;
         const key = request.url.split("/").pop()!;
 
-        if (request.method === "PUT") {
-          yield* bucket.put(key, request.stream, {
-            contentLength: Number(request.headers["content-length"] ?? 0),
-          });
-          return HttpServerResponse.empty({ status: 201 });
-        }
++        if (request.method === "PUT") {
++          yield* bucket.put(key, request.stream, {
++            contentLength: Number(request.headers["content-length"] ?? 0),
++          });
++          return HttpServerResponse.empty({ status: 201 });
++        }
 
         return HttpServerResponse.text("Hello, world!");
       }),
@@ -219,7 +219,7 @@ system — you can't forget to handle it.
 Pipe the fetch Effect through `Effect.catchTag` to convert `R2Error`
 into a 500 response:
 
-```typescript twoslash ins={2-8}
+```typescript twoslash
 // @noEmit: true
 // @allowImportingTsExtensions: true
 // @filename: bucket.ts
@@ -250,13 +250,13 @@ export default Cloudflare.Worker(
 
         // ---cut---
         return HttpServerResponse.text("Hello, world!");
-      }).pipe(
-        Effect.catchTag("R2Error", (error) =>
-          Effect.succeed(
-            HttpServerResponse.text(error.message, { status: 500 }),
-          ),
-        ),
-      ),
++      }).pipe(
++        Effect.catchTag("R2Error", (error) =>
++          Effect.succeed(
++            HttpServerResponse.text(error.message, { status: 500 }),
++          ),
++        ),
++      ),
       // ---cut-after---
     };
   }).pipe(Effect.provide(Cloudflare.R2BucketBindingLive)),
@@ -273,7 +273,7 @@ fully handled.
 Complete the fetch handler by reading objects from the bucket when the
 request isn't a PUT:
 
-```typescript twoslash ins={12-17}
+```typescript twoslash
 // @noEmit: true
 // @allowImportingTsExtensions: true
 // @filename: bucket.ts
@@ -303,12 +303,12 @@ export default Cloudflare.Worker(
           return HttpServerResponse.empty({ status: 201 });
         }
 
-        const object = yield* bucket.get(key);
-        if (object === null) {
-          return HttpServerResponse.text("Not found", { status: 404 });
-        }
-        const text = yield* object.text();
-        return HttpServerResponse.text(text);
++        const object = yield* bucket.get(key);
++        if (object === null) {
++          return HttpServerResponse.text("Not found", { status: 404 });
++        }
++        const text = yield* object.text();
++        return HttpServerResponse.text(text);
       }).pipe(
         Effect.catchTag("R2Error", (error) =>
           Effect.succeed(

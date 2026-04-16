@@ -99,11 +99,11 @@ Effect generator.
 
 Let's add a Cloudflare R2 Bucket to our Stack and observe the type error:
 
-```typescript twoslash ins={3,13} errorReplace='ProviderCollectionShape<"Cloudflare">::Cloudflare.Providers'
+```typescript twoslash errorReplace='ProviderCollectionShape<"Cloudflare">::Cloudflare.Providers'
 // @errors: 2322
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
++import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
@@ -113,7 +113,7 @@ export default Alchemy.Stack(
     providers: Layer.empty,
   },
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2Bucket("Bucket");
++    const bucket = yield* Cloudflare.R2Bucket("Bucket");
   }),
 );
 ```
@@ -154,7 +154,7 @@ forget to wire it up.
 Stack outputs let you see important values after a deploy. Return an
 object from the generator to expose them:
 
-```typescript twoslash ins={13-15}
+```typescript twoslash
 // ---cut---
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -168,9 +168,9 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2Bucket("Bucket");
 
-    return {
-      bucketName: bucket.bucketName,
-      //    ^?
++    return {
++      bucketName: bucket.bucketName,
++      //    ^?
     };
   }),
 );
