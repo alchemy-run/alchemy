@@ -113,7 +113,7 @@ if (versionInput === "beta") {
   console.log(`Bumping to next beta version: ${newVersion}`);
 } else {
   // Validate specific version format (x.y.z or x.y.z-pre.N)
-  if (!/^\d+\.\d+\.\d+(-[\w.]+)?$/.test(versionInput)) {
+  if (!/^\d+\.\d+\.\d+(-[\w.-]+)?$/.test(versionInput)) {
     console.error(
       "Version must be in format x.y.z or x.y.z-pre.N, or use 'beta'",
     );
