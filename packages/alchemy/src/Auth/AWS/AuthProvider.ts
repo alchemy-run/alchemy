@@ -10,6 +10,8 @@ import {
   ChildProcess,
   type ChildProcessSpawner,
 } from "effect/unstable/process";
+import * as NodeCrypto from "node:crypto";
+import * as NodeOs from "node:os";
 import { AuthError, type AuthProvider } from "../AuthProvider.ts";
 import * as Clank from "../Clank.ts";
 import {
@@ -223,6 +225,32 @@ const prettyPrint = (profileName: string, config: AwsAuthConfig) =>
     ),
   );
 
+/**
+ * `aws sso logout` only clears AWS CLI's own caches — it does not know about the
+ * `<sha1(sso_session)>.credentials.json` file that `@distilled.cloud/aws`
+ * writes alongside the SSO token. Without this cleanup, `loadProfileCredentials`
+ * short-circuits on the stale distilled cache file after logout and appears to
+ * stay logged in until the role creds hit their TTL.
+ */
+const clearDistilledSsoCache = (ssoProfile: string) =>
+  Effect.gen(function* () {
+    const auth = yield* DistilledAuth.Default;
+    const profile = yield* auth.loadProfile(ssoProfile);
+    const ssoSession = (profile as { sso_session?: string }).sso_session;
+    if (!ssoSession) return;
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const hash = NodeCrypto.createHash("sha1").update(ssoSession).digest("hex");
+    const cacheFile = path.join(
+      NodeOs.homedir(),
+      ".aws",
+      "sso",
+      "cache",
+      `${hash}.credentials.json`,
+    );
+    yield* fs.remove(cacheFile).pipe(Effect.catch(() => Effect.void));
+  }).pipe(Effect.catch(() => Effect.void));
+
 const logout = (profileName: string, config: AwsAuthConfig) =>
   Match.value(config).pipe(
     Match.when({ method: "env" }, () => Effect.void),
@@ -230,8 +258,9 @@ const logout = (profileName: string, config: AwsAuthConfig) =>
       Clank.info(
         `AWS: running 'aws sso logout --profile ${config.ssoProfile}'...`,
       ).pipe(
-        Effect.andThen(runSsoCommand("logout", config.ssoProfile)),
-        Effect.matchEffect({
+        Effect.zip(runSsoCommand("logout", config.ssoProfile)),
+        Effect.zip(clearDistilledSsoCache(config.ssoProfile)),
+        Effect.match({
           onSuccess: () => Clank.success("AWS: SSO logout complete"),
           onFailure: (e) =>
             Clank.warn(`AWS: SSO logout failed: \`${e.message}\``),
@@ -341,15 +370,14 @@ const loginStored = Effect.fnUntraced(function* (profileName: string) {
   }).pipe(retryOnce);
 
   const sessionToken = yield* Clank.text({
-    message: "AWS Session Token (optional — press Enter to skip)",
+    message: "AWS Session Token (optional — press Enter or Esc to skip)",
     placeholder: "(none)",
-  }).pipe(retryOnce);
+  }).pipe(Effect.catch(() => Effect.succeed("")));
 
   const region = yield* Clank.text({
     message: "AWS Region",
     placeholder: "us-east-1",
     defaultValue: "us-east-1",
-    validate: (v) => (v.length === 0 ? "Required" : undefined),
   }).pipe(retryOnce);
 
   yield* writeCredentials<AwsStoredCredentials>(profileName, "aws", {
