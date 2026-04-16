@@ -40,7 +40,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 
         const env = yield* Cloudflare.WorkerEnvironment;
         const authToken = (env as any).AUTH_TOKEN as string;
-        const defaultTtl = (env as any).DEFAULT_TTL as string || "3 weeks";
+        const defaultTtl = ((env as any).DEFAULT_TTL as string) || "3 weeks";
 
         const requireAuth = Effect.gen(function* () {
           const authHeader = request.headers.authorization;
@@ -104,14 +104,20 @@ export default class Api extends Cloudflare.Worker<Api>()(
             const ttlDuration = Duration.fromInput(ttlStr as Duration.Input);
             if (ttlDuration._tag === "None") {
               return yield* HttpServerResponse.json(
-                { error: "X-TTL must be an Effect Duration string (e.g. '7 hours', '3 weeks', '30 minutes')" },
+                {
+                  error:
+                    "X-TTL must be an Effect Duration string (e.g. '7 hours', '3 weeks', '30 minutes')",
+                },
                 { status: 400 },
               );
             }
             const ttlMillis = Duration.toMillis(ttlDuration.value);
             if (ttlMillis <= 0) {
               return yield* HttpServerResponse.json(
-                { error: "X-TTL must be a positive duration (e.g. '7 hours', '3 weeks')" },
+                {
+                  error:
+                    "X-TTL must be a positive duration (e.g. '7 hours', '3 weeks')",
+                },
                 { status: 400 },
               );
             }
@@ -127,9 +133,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
                   .removeTag(tag)
                   .pipe(Effect.orDie);
                 if (orphaned) {
-                  yield* r2
-                    .delete(oldResourceId + ".tgz")
-                    .pipe(Effect.orDie);
+                  yield* r2.delete(oldResourceId + ".tgz").pipe(Effect.orDie);
                   yield* kv.delete(`metadata:${oldResourceId}`);
                 }
               }
@@ -194,7 +198,9 @@ export default class Api extends Cloudflare.Worker<Api>()(
           return HttpServerResponse.fromWeb(
             new Response(null, {
               status: 302,
-              headers: { location: `/projects/${encodeURIComponent(project)}/packages/${resourceId}` },
+              headers: {
+                location: `/projects/${encodeURIComponent(project)}/packages/${resourceId}`,
+              },
             }),
           );
         }
@@ -206,9 +212,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
           !subPath.endsWith("/stats")
         ) {
           const resourceId = subPath.slice("/packages/".length);
-          const object = yield* r2
-            .get(resourceId + ".tgz")
-            .pipe(Effect.orDie);
+          const object = yield* r2.get(resourceId + ".tgz").pipe(Effect.orDie);
           if (!object) {
             return yield* HttpServerResponse.json(
               { error: "resource not found" },
@@ -243,16 +247,12 @@ export default class Api extends Cloudflare.Worker<Api>()(
             }
 
             const store = packages.getByName(resourceId);
-            const { orphaned } = yield* store
-              .removeTag(tag)
-              .pipe(Effect.orDie);
+            const { orphaned } = yield* store.removeTag(tag).pipe(Effect.orDie);
 
             yield* kv.delete(`tag:${project}:${tag}`);
 
             if (orphaned) {
-              yield* r2
-                .delete(resourceId + ".tgz")
-                .pipe(Effect.orDie);
+              yield* r2.delete(resourceId + ".tgz").pipe(Effect.orDie);
               yield* kv.delete(`metadata:${resourceId}`);
             }
 

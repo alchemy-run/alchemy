@@ -4,6 +4,9 @@ import * as Effect from "effect/Effect";
 /**
  * Ephemeral chat room: broadcasts each text message to every connected client.
  * Uses Durable Object storage of WebSocket attachments so sessions survive hibernation.
+ *
+ * Also demonstrates scheduled events: send `/remind <seconds> <message>` to
+ * schedule a broadcast that fires after the given delay.
  */
 export default class Room extends Cloudflare.DurableObjectNamespace<Room>()(
   "Rooms",
@@ -20,26 +23,33 @@ export default class Room extends Cloudflare.DurableObjectNamespace<Room>()(
         }
       }
 
+      const broadcast = (text: string) =>
+        Effect.gen(function* () {
+          for (const peer of sessions.values()) {
+            yield* peer.send(text);
+          }
+        });
+
       return {
         fetch: Effect.gen(function* () {
-          console.log("upgrading");
           const [response, socket] = yield* Cloudflare.upgrade();
-          console.log("upgraded");
           const id = crypto.randomUUID();
           socket.serializeAttachment({ id });
           sessions.set(id, socket);
-          console.log("sessions", sessions.size);
           return response;
         }),
-        broadcast: (text: string) =>
+        broadcast,
+        alarm: () =>
           Effect.gen(function* () {
-            for (const peer of sessions.values()) {
-              yield* peer.send(text);
+            const fired = yield* Cloudflare.processScheduledEvents;
+            for (const event of fired) {
+              const payload = event.payload as { message: string };
+              yield* broadcast(`[reminder] ${payload.message}`);
             }
           }),
         webSocketMessage: Effect.fnUntraced(function* (
           socket: Cloudflare.DurableWebSocket,
-          message: string | Uint8Array,
+          message: string | ArrayBuffer,
         ) {
           const attachment = socket.deserializeAttachment<{ id: string }>();
           if (!attachment) return;
@@ -47,6 +57,20 @@ export default class Room extends Cloudflare.DurableObjectNamespace<Room>()(
             typeof message === "string"
               ? message
               : new TextDecoder().decode(message);
+
+          const remindMatch = text.match(/^\/remind\s+(\d+)\s+(.+)$/);
+          if (remindMatch) {
+            const delaySec = parseInt(remindMatch[1], 10);
+            const msg = remindMatch[2];
+            const id = crypto.randomUUID();
+            const runAt = new Date(Date.now() + delaySec * 1000);
+            yield* Cloudflare.scheduleEvent(id, runAt, { message: msg });
+            yield* socket.send(
+              `[system] Reminder scheduled in ${delaySec}s: "${msg}"`,
+            );
+            return;
+          }
+
           const label = attachment.id.slice(0, 8);
           for (const peer of sessions.values()) {
             yield* peer.send(`[${label}] ${text}`);

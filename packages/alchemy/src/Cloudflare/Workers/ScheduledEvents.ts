@@ -175,10 +175,7 @@ const reconcileAlarm: Effect.Effect<void, never, DurableObjectState> =
       run_at: number;
     }>(
       `SELECT run_at FROM alchemy_scheduled_events ORDER BY run_at ASC LIMIT 1`,
-    )).pipe(
-      Stream.take(1),
-      Stream.runHead,
-    );
+    )).pipe(Stream.take(1), Stream.runHead);
 
     if (Option.isSome(next)) {
       yield* ctx.storage.setAlarm(next.value.run_at);

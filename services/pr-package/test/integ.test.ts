@@ -1,4 +1,11 @@
-import { afterAll, beforeAll, deploy, destroy, expect, test } from "alchemy/Test/Bun";
+import {
+  afterAll,
+  beforeAll,
+  deploy,
+  destroy,
+  expect,
+  test,
+} from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";
 import Stack from "../alchemy.run.ts";
 
@@ -43,7 +50,9 @@ function createTgz(content: string): Uint8Array<ArrayBuffer> {
   const payload = encoder.encode(content);
   // gzip magic (1f 8b), method deflate (08), no flags, no mtime/xfl/os
   const header = new Uint8Array([0x1f, 0x8b, 0x08, 0, 0, 0, 0, 0, 0, 0]);
-  const result = new Uint8Array(new ArrayBuffer(header.length + payload.length));
+  const result = new Uint8Array(
+    new ArrayBuffer(header.length + payload.length),
+  );
   result.set(header);
   result.set(payload, header.length);
   return result;
@@ -75,17 +84,31 @@ function getByTag(baseUrl: string, tag: string, project?: string) {
   return fetch(`${baseUrl}/projects/${project ?? DEFAULT_PROJECT}/tags/${tag}`);
 }
 
-function deleteTag(baseUrl: string, tag: string, options?: { token?: string; project?: string }) {
-  return fetch(`${baseUrl}/projects/${options?.project ?? DEFAULT_PROJECT}/tags/${tag}`, {
-    method: "DELETE",
-    headers: { Authorization: `Bearer ${options?.token ?? AUTH_TOKEN}` },
-  });
+function deleteTag(
+  baseUrl: string,
+  tag: string,
+  options?: { token?: string; project?: string },
+) {
+  return fetch(
+    `${baseUrl}/projects/${options?.project ?? DEFAULT_PROJECT}/tags/${tag}`,
+    {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${options?.token ?? AUTH_TOKEN}` },
+    },
+  );
 }
 
-function getStats(baseUrl: string, resourceId: string, options?: { token?: string; project?: string }) {
-  return fetch(`${baseUrl}/projects/${options?.project ?? DEFAULT_PROJECT}/packages/${resourceId}/stats`, {
-    headers: { Authorization: `Bearer ${options?.token ?? AUTH_TOKEN}` },
-  });
+function getStats(
+  baseUrl: string,
+  resourceId: string,
+  options?: { token?: string; project?: string },
+) {
+  return fetch(
+    `${baseUrl}/projects/${options?.project ?? DEFAULT_PROJECT}/packages/${resourceId}/stats`,
+    {
+      headers: { Authorization: `Bearer ${options?.token ?? AUTH_TOKEN}` },
+    },
+  );
 }
 
 // --- tests ---
@@ -117,7 +140,9 @@ test(
       fetch(`${url}/projects/${DEFAULT_PROJECT}/tags/latest`),
     );
     expect(redirectRes.redirected).toBe(true);
-    expect(redirectRes.url).toContain(`/projects/${DEFAULT_PROJECT}/packages/${body.resourceId}`);
+    expect(redirectRes.url).toContain(
+      `/projects/${DEFAULT_PROJECT}/packages/${body.resourceId}`,
+    );
 
     // verify the resource URL is cacheable
     const directRes = yield* Effect.promise(() =>
@@ -172,12 +197,8 @@ test(
     expect(g1.status).toBe(200);
     expect(g2.status).toBe(200);
 
-    const d1 = new Uint8Array(
-      yield* Effect.promise(() => g1.arrayBuffer()),
-    );
-    const d2 = new Uint8Array(
-      yield* Effect.promise(() => g2.arrayBuffer()),
-    );
+    const d1 = new Uint8Array(yield* Effect.promise(() => g1.arrayBuffer()));
+    const d2 = new Uint8Array(yield* Effect.promise(() => g2.arrayBuffer()));
     expect(d1).toEqual(content);
     expect(d2).toEqual(content);
   }),
@@ -201,9 +222,7 @@ test(
     // tagB still works
     const gB = yield* Effect.promise(() => getByTag(url, "tagB"));
     expect(gB.status).toBe(200);
-    const data = new Uint8Array(
-      yield* Effect.promise(() => gB.arrayBuffer()),
-    );
+    const data = new Uint8Array(yield* Effect.promise(() => gB.arrayBuffer()));
     expect(data).toEqual(content);
   }),
 );
@@ -267,7 +286,9 @@ test(
 
     // DELETE without token
     const noAuthDel = yield* Effect.promise(() =>
-      fetch(`${url}/projects/${DEFAULT_PROJECT}/tags/auth-tag`, { method: "DELETE" }),
+      fetch(`${url}/projects/${DEFAULT_PROJECT}/tags/auth-tag`, {
+        method: "DELETE",
+      }),
     );
     expect(noAuthDel.status).toBe(401);
 
@@ -298,9 +319,7 @@ test(
   Effect.gen(function* () {
     const url = yield* stack;
 
-    const res = yield* Effect.promise(() =>
-      getByTag(url, "does-not-exist"),
-    );
+    const res = yield* Effect.promise(() => getByTag(url, "does-not-exist"));
     expect(res.status).toBe(404);
   }),
 );
@@ -366,9 +385,7 @@ test(
     yield* Effect.promise(() => upload(url, v2, ["orphan-tag"]));
 
     // stats for old resource should 404 (it was cleaned up)
-    const statsRes = yield* Effect.promise(() =>
-      getStats(url, r1.resourceId),
-    );
+    const statsRes = yield* Effect.promise(() => getStats(url, r1.resourceId));
     expect(statsRes.status).toBe(404);
   }),
 );

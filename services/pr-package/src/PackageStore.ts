@@ -22,13 +22,11 @@ export default class PackageStore extends Cloudflare.DurableObjectNamespace<Pack
       const doState = yield* Cloudflare.DurableObjectState;
 
       const getState = Effect.gen(function* () {
-        const stored =
-          yield* doState.storage.get<PackageState>("state");
+        const stored = yield* doState.storage.get<PackageState>("state");
         return stored ?? emptyState;
       });
 
-      const setState = (s: PackageState) =>
-        doState.storage.put("state", s);
+      const setState = (s: PackageState) => doState.storage.put("state", s);
 
       return {
         init: (tags: string[], expiresAt: number) =>
