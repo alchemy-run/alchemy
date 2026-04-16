@@ -29,172 +29,172 @@
   },
   "exports": {
     ".": {
-      "types": "./src/index.d.ts",
       "bun": "./src/index.ts",
       "worker": "./src/index.ts",
-      "import": "./lib/index.js"
+      "import": "./lib/index.js",
+      "types": "./src/index.d.ts"
     },
     "./*": {
-      "types": "./src/*.d.ts",
       "bun": "./src/*.ts",
+      "import": "./lib/*.js",
       "worker": "./src/*.ts",
-      "import": "./lib/*.js"
+      "types": "./src/*.d.ts"
     },
     "./Agent": {
-      "types": "./src/Agent/index.d.ts",
       "bun": "./src/Agent/index.ts",
       "worker": "./src/Agent/index.ts",
-      "import": "./lib/Agent/index.js"
+      "import": "./lib/Agent/index.js",
+      "types": "./src/Agent/index.d.ts"
     },
     "./AWS": {
-      "types": "./src/AWS/index.d.ts",
       "bun": "./src/AWS/index.ts",
       "worker": "./src/AWS/index.ts",
-      "import": "./lib/AWS/index.js"
+      "import": "./lib/AWS/index.js",
+      "types": "./src/AWS/index.d.ts"
     },
     "./AWS/*": {
-      "types": "./src/AWS/*/index.d.ts",
       "bun": "./src/AWS/*/index.ts",
       "worker": "./src/AWS/*/index.ts",
-      "import": "./lib/AWS/*/index.js"
+      "import": "./lib/AWS/*/index.js",
+      "types": "./src/AWS/*/index.d.ts"
     },
     "./AWS/Credentials": {
-      "types": "./src/AWS/Credentials/index.d.ts",
       "bun": "./src/AWS/Credentials/index.ts",
       "worker": "./src/AWS/Credentials/index.ts",
-      "import": "./lib/AWS/Credentials/index.js"
+      "import": "./lib/AWS/Credentials/index.js",
+      "types": "./src/AWS/Credentials/index.d.ts"
     },
     "./AWS/Endpoint": {
-      "types": "./src/AWS/Endpoint/index.d.ts",
       "bun": "./src/AWS/Endpoint/index.ts",
       "worker": "./src/AWS/Endpoint/index.ts",
-      "import": "./lib/AWS/Endpoint/index.js"
+      "import": "./lib/AWS/Endpoint/index.js",
+      "types": "./src/AWS/Endpoint/index.d.ts"
     },
     "./AWS/Region": {
-      "types": "./src/AWS/Region/index.d.ts",
       "bun": "./src/AWS/Region/index.ts",
       "worker": "./src/AWS/Region/index.ts",
-      "import": "./lib/AWS/Region/index.js"
+      "import": "./lib/AWS/Region/index.js",
+      "types": "./src/AWS/Region/index.d.ts"
     },
     "./AWS/Profile": {
-      "types": "./src/AWS/Profile/index.d.ts",
       "bun": "./src/AWS/Profile/index.ts",
       "worker": "./src/AWS/Profile/index.ts",
-      "import": "./lib/AWS/Profile/index.js"
+      "import": "./lib/AWS/Profile/index.js",
+      "types": "./src/AWS/Profile/index.d.ts"
     },
     "./AWS/Lambda/*": {
-      "types": "./src/AWS/Lambda/*.d.ts",
       "bun": "./src/AWS/Lambda/*.ts",
       "worker": "./src/AWS/Lambda/*.ts",
-      "import": "./lib/AWS/Lambda/*.js"
+      "import": "./lib/AWS/Lambda/*.js",
+      "types": "./src/AWS/Lambda/*.d.ts"
     },
     "./Build": {
-      "types": "./src/Build/index.d.ts",
       "bun": "./src/Build/index.ts",
       "worker": "./src/Build/index.ts",
-      "import": "./lib/Build/index.js"
+      "import": "./lib/Build/index.js",
+      "types": "./src/Build/index.d.ts"
     },
     "./Construct": {
-      "types": "./src/Construct/index.d.ts",
       "bun": "./src/Construct/index.ts",
       "worker": "./src/Construct/index.ts",
-      "import": "./lib/Construct/index.js"
+      "import": "./lib/Construct/index.js",
+      "types": "./src/Construct/index.d.ts"
     },
     "./Bundle": {
-      "types": "./src/Bundle/index.d.ts",
       "bun": "./src/Bundle/index.ts",
       "worker": "./src/Bundle/index.ts",
-      "import": "./lib/Bundle/index.js"
+      "import": "./lib/Bundle/index.js",
+      "types": "./src/Bundle/index.d.ts"
     },
     "./ContentType": {
-      "types": "./src/ContentType.d.ts",
       "bun": "./src/ContentType.ts",
       "worker": "./src/ContentType.ts",
-      "import": "./lib/ContentType.js"
+      "import": "./lib/ContentType.js",
+      "types": "./src/ContentType.d.ts"
     },
     "./Cloudflare": {
-      "types": "./src/Cloudflare/index.d.ts",
       "bun": "./src/Cloudflare/index.ts",
       "worker": "./src/Cloudflare/index.ts",
-      "import": "./lib/Cloudflare/index.js"
+      "import": "./lib/Cloudflare/index.js",
+      "types": "./src/Cloudflare/index.d.ts"
     },
     "./Cloudflare/Live": {
-      "types": "./src/Cloudflare/Live.d.ts",
       "bun": "./src/Cloudflare/Live.ts",
       "worker": "./src/Cloudflare/Live.ts",
-      "import": "./lib/Cloudflare/Live.js"
+      "import": "./lib/Cloudflare/Live.js",
+      "types": "./src/Cloudflare/Live.d.ts"
     },
     "./Cloudflare/*": {
-      "types": "./src/Cloudflare/*/index.d.ts",
       "bun": "./src/Cloudflare/*/index.ts",
       "worker": "./src/Cloudflare/*/index.ts",
-      "import": "./lib/Cloudflare/*/index.js"
+      "import": "./lib/Cloudflare/*/index.js",
+      "types": "./src/Cloudflare/*/index.d.ts"
     },
     "./GitHub": {
-      "types": "./src/GitHub/index.d.ts",
       "bun": "./src/GitHub/index.ts",
       "worker": "./src/GitHub/index.ts",
-      "import": "./lib/GitHub/index.js"
+      "import": "./lib/GitHub/index.js",
+      "types": "./src/GitHub/index.d.ts"
     },
     "./Endpoint": {
-      "types": "./src/Endpoint/index.d.ts",
       "bun": "./src/Endpoint/index.ts",
       "worker": "./src/Endpoint/index.ts",
-      "import": "./lib/Endpoint/index.js"
+      "import": "./lib/Endpoint/index.js",
+      "types": "./src/Endpoint/index.d.ts"
     },
     "./Kubernetes": {
-      "types": "./src/Kubernetes/index.d.ts",
       "bun": "./src/Kubernetes/index.ts",
       "worker": "./src/Kubernetes/index.ts",
-      "import": "./lib/Kubernetes/index.js"
+      "import": "./lib/Kubernetes/index.js",
+      "types": "./src/Kubernetes/index.d.ts"
     },
     "./Output": {
-      "types": "./src/Output.d.ts",
       "bun": "./src/Output.ts",
       "worker": "./src/Output.ts",
-      "import": "./lib/Output.js"
+      "import": "./lib/Output.js",
+      "types": "./src/Output.d.ts"
     },
     "./Process": {
-      "types": "./src/Process/index.d.ts",
       "bun": "./src/Process/index.ts",
       "worker": "./src/Process/index.ts",
-      "import": "./lib/Process/index.js"
+      "import": "./lib/Process/index.js",
+      "types": "./src/Process/index.d.ts"
     },
     "./SQLite": {
-      "types": "./src/SQLite/index.d.ts",
       "bun": "./src/SQLite/index.ts",
       "worker": "./src/SQLite/index.ts",
-      "import": "./lib/SQLite/index.js"
+      "import": "./lib/SQLite/index.js",
+      "types": "./src/SQLite/index.d.ts"
     },
     "./TUI": {
-      "types": "./src/TUI/index.d.ts",
       "bun": "./src/TUI/index.ts",
       "worker": "./src/TUI/index.ts",
-      "import": "./lib/TUI/index.js"
+      "import": "./lib/TUI/index.js",
+      "types": "./src/TUI/index.d.ts"
     },
     "./Server": {
-      "types": "./src/Server/index.d.ts",
       "bun": "./src/Server/index.ts",
       "worker": "./src/Server/index.ts",
-      "import": "./lib/Server/index.js"
+      "import": "./lib/Server/index.js",
+      "types": "./src/Server/index.d.ts"
     },
     "./State": {
-      "types": "./src/State/index.d.ts",
       "bun": "./src/State/index.ts",
       "worker": "./src/State/index.ts",
-      "import": "./lib/State/index.js"
+      "import": "./lib/State/index.js",
+      "types": "./src/State/index.d.ts"
     },
     "./Test/Bun": {
-      "types": "./src/Test/Bun.d.ts",
       "bun": "./src/Test/Bun.ts",
       "worker": "./src/Test/Bun.ts",
-      "import": "./lib/Test/Bun.js"
+      "import": "./lib/Test/Bun.js",
+      "types": "./src/Test/Bun.d.ts"
     },
     "./Util": {
-      "types": "./src/Util/index.d.ts",
       "bun": "./src/Util/index.ts",
       "worker": "./src/Util/index.ts",
-      "import": "./lib/Util/index.js"
+      "import": "./lib/Util/index.js",
+      "types": "./src/Util/index.d.ts"
     }
   },
   "publishConfig": {
