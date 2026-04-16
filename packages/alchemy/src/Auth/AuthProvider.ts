@@ -1,22 +1,33 @@
 import type * as Effect from "effect/Effect";
-import type * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+
+export class AuthError extends Schema.TaggedErrorClass<AuthError>()(
+  "AuthError",
+  {
+    message: Schema.String,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {}
 
 export interface AuthProvider<Config, Credentials> {
   readonly name: string;
 
-  configure(
+  configure(profileName: string): Effect.Effect<Config, AuthError>;
+
+  login(
     profileName: string,
-    isReconfigure: boolean,
-  ): Effect.Effect<Config | "remove" | undefined>;
+    config: Config,
+  ): Effect.Effect<void, AuthError, never>;
 
-  login(profileName: string, config: Config): Effect.Effect<void>;
-
-  logout(profileName: string, config: Config): Effect.Effect<void>;
+  logout(
+    profileName: string,
+    config: Config,
+  ): Effect.Effect<void, AuthError, never>;
 
   prettyPrint(profileName: string, config: Config): Effect.Effect<void>;
 
-  credentialsLayer(
+  read(
     profileName: string,
     config: Config,
-  ): Layer.Layer<Credentials>;
+  ): Effect.Effect<Credentials, AuthError, never>;
 }
