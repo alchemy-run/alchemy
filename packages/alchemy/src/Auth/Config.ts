@@ -3,8 +3,6 @@ import * as FileSystem from "effect/FileSystem";
 import type { PlatformError } from "effect/PlatformError";
 import os from "node:os";
 import nodePath from "node:path";
-import type { AwsAuthConfig } from "./AWS/AuthProvider.ts";
-import type { CloudflareAuthConfig } from "./Cloudflare/AuthProvider.ts";
 
 export const rootDir = nodePath.join(os.homedir(), ".alchemy");
 export const configFilePath = nodePath.join(rootDir, "config.json");
@@ -16,10 +14,7 @@ export interface AlchemyConfig {
   profiles: Record<string, AlchemyProfile>;
 }
 
-export interface AlchemyProfile {
-  aws?: AwsAuthConfig;
-  cloudflare?: CloudflareAuthConfig;
-}
+export type AlchemyProfile = Record<string, { method: string }>;
 
 const emptyConfig = (): AlchemyConfig => ({
   version: CONFIG_VERSION,

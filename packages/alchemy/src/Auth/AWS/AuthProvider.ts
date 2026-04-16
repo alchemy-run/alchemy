@@ -27,7 +27,7 @@ import {
 
 export type AwsAuthConfig =
   | { method: "sso"; ssoProfile: string }
-  | { method: "stored"; storedAlias: string }
+  | { method: "stored" }
   | { method: "env" };
 
 const options: Array<{
@@ -86,35 +86,8 @@ export const AwsAuth = Effect.gen(function* () {
     login: (profileName, config) =>
       login(profileName, config).pipe(Effect.provide(context)),
 
-    prettyPrint: Effect.fnUntraced(function* (profileName, config) {
-      yield* resolveCredentials(profileName, config).pipe(
-        Effect.tap((creds) =>
-          Effect.all([
-            Console.log(
-              `  accessKeyId:     ${displayRedacted(creds.accessKeyId)}`,
-            ),
-            Console.log(
-              `  secretAccessKey: ${displayRedacted(creds.secretAccessKey)}`,
-            ),
-            creds.sessionToken
-              ? Console.log(
-                  `  sessionToken:    ${displayRedacted(creds.sessionToken)}`,
-                )
-              : Effect.void,
-            creds.region
-              ? Console.log(`  region:          ${creds.region}`)
-              : Effect.void,
-            Console.log(
-              `  source: ${creds.source.details ? `${creds.source.type} - ${creds.source.details}` : creds.source.type}`,
-            ),
-          ]),
-        ),
-        Effect.catch((e) =>
-          Console.error(`  Failed to retrieve credentials: ${e}`),
-        ),
-        Effect.provide(context),
-      );
-    }),
+    prettyPrint: (profileName, config) =>
+      prettyPrint(profileName, config).pipe(Effect.provide(context)),
 
     read: (profileName, config) =>
       resolveCredentials(profileName, config).pipe(Effect.provide(context)),
@@ -144,76 +117,110 @@ const runSsoCommand = (command: "login" | "logout", ssoProfile: string) =>
   }).pipe(Effect.scoped);
 
 const resolveCredentials = (profileName: string, config: AwsAuthConfig) =>
-  Match.value(config).pipe(
-    Match.when(
-      { method: "env" },
-      Effect.fnUntraced(function* () {
-        const accessKeyId = yield* getEnvRedactedRequired("AWS_ACCESS_KEY_ID");
-        const secretAccessKey = yield* getEnvRedactedRequired(
-          "AWS_SECRET_ACCESS_KEY",
-        );
-        const sessionToken = yield* getEnvRedacted("AWS_SESSION_TOKEN");
-        const region = yield* (
-          getEnv("AWS_REGION") ?? getEnv("AWS_DEFAULT_REGION") ?? undefined
-        );
-        return {
-          accessKeyId,
-          secretAccessKey,
-          sessionToken,
-          region,
-          source: { type: "env" },
-        } as AwsResolvedCredentials;
-      }),
-    ),
-    Match.when({ method: "stored" }, (config) =>
-      readCredentials<AwsStoredCredentials>(
-        profileName,
-        `aws-${config.storedAlias}`,
-      ).pipe(
-        Effect.flatMap((creds) =>
-          creds == null
-            ? Effect.die(
-                "AWS stored credentials not found. Run: alchemy-effect login --configure",
-              )
-            : Effect.succeed({
-                accessKeyId: Redacted.make(creds.accessKeyId),
-                secretAccessKey: Redacted.make(creds.secretAccessKey),
-                sessionToken: creds.sessionToken
-                  ? Redacted.make(creds.sessionToken)
-                  : undefined,
-                region: creds.region,
-                source: { type: "stored", details: config.storedAlias },
-              } as AwsResolvedCredentials),
+  Match.value(config)
+    .pipe(
+      Match.when(
+        { method: "env" },
+        Effect.fnUntraced(function* () {
+          const accessKeyId =
+            yield* getEnvRedactedRequired("AWS_ACCESS_KEY_ID");
+          const secretAccessKey = yield* getEnvRedactedRequired(
+            "AWS_SECRET_ACCESS_KEY",
+          );
+          const sessionToken = yield* getEnvRedacted("AWS_SESSION_TOKEN");
+          const region = yield* (
+            getEnv("AWS_REGION") ?? getEnv("AWS_DEFAULT_REGION") ?? undefined
+          );
+          return {
+            accessKeyId,
+            secretAccessKey,
+            sessionToken,
+            region,
+            source: { type: "env" as const },
+          };
+        }),
+      ),
+      Match.when({ method: "stored" }, () =>
+        readCredentials<AwsStoredCredentials>(profileName, "aws").pipe(
+          Effect.flatMap((creds) =>
+            creds == null
+              ? Effect.fail(
+                  new AuthError({
+                    message:
+                      "AWS stored credentials not found. Run: alchemy-effect login --configure",
+                  }),
+                )
+              : Effect.succeed({
+                  accessKeyId: Redacted.make(creds.accessKeyId),
+                  secretAccessKey: Redacted.make(creds.secretAccessKey),
+                  sessionToken: creds.sessionToken
+                    ? Redacted.make(creds.sessionToken)
+                    : undefined,
+                  region: creds.region,
+                  source: { type: "stored" as const },
+                }),
+          ),
         ),
       ),
+      Match.when({ method: "sso" }, (config) =>
+        Effect.gen(function* () {
+          const auth = yield* DistilledAuth.Default;
+          const creds = yield* auth
+            .loadProfileCredentials(config.ssoProfile)
+            .pipe(
+              Effect.mapError(
+                (e) =>
+                  new AuthError({
+                    message: "failed to load credentials",
+                    cause: e,
+                  }),
+              ),
+            );
+          const profile = yield* auth
+            .loadProfile(config.ssoProfile)
+            .pipe(Effect.catch(() => Effect.succeed(undefined)));
+          return {
+            accessKeyId: creds.accessKeyId,
+            secretAccessKey: creds.secretAccessKey,
+            sessionToken: creds.sessionToken,
+            region: profile?.region,
+            source: { type: "sso" as const, details: config.ssoProfile },
+          };
+        }),
+      ),
+      Match.exhaustive,
+    )
+    .pipe(
+      Effect.mapError(
+        (e) => new AuthError({ message: "login failed", cause: e }),
+      ),
+    );
+
+const prettyPrint = (profileName: string, config: AwsAuthConfig) =>
+  resolveCredentials(profileName, config).pipe(
+    Effect.tap((creds) =>
+      Effect.all([
+        Console.log(`  accessKeyId:     ${displayRedacted(creds.accessKeyId)}`),
+        Console.log(
+          `  secretAccessKey: ${displayRedacted(creds.secretAccessKey)}`,
+        ),
+        creds.sessionToken
+          ? Console.log(
+              `  sessionToken:    ${displayRedacted(creds.sessionToken)}`,
+            )
+          : Effect.void,
+        creds.region
+          ? Console.log(`  region:          ${creds.region}`)
+          : Effect.void,
+        Console.log(
+          //@ts-expect-error
+          `  source: ${creds.source.details ? `${creds.source.type} - ${creds.source.details}` : creds.source.type}`,
+        ),
+      ]),
     ),
-    Match.when({ method: "sso" }, (config) =>
-      Effect.gen(function* () {
-        const auth = yield* DistilledAuth.Default;
-        const creds = yield* auth
-          .loadProfileCredentials(config.ssoProfile)
-          .pipe(
-            Effect.mapError(
-              (e) =>
-                new AuthError({
-                  message: "failed to load credentials",
-                  cause: e,
-                }),
-            ),
-          );
-        const profile = yield* auth
-          .loadProfile(config.ssoProfile)
-          .pipe(Effect.catch(() => Effect.succeed(undefined)));
-        return {
-          accessKeyId: creds.accessKeyId,
-          secretAccessKey: creds.secretAccessKey,
-          sessionToken: creds.sessionToken,
-          region: profile?.region,
-          source: { type: "sso", details: config.ssoProfile },
-        } as AwsResolvedCredentials;
-      }),
+    Effect.catch((e) =>
+      Console.error(`  Failed to retrieve credentials: ${e}`),
     ),
-    Match.exhaustive,
   );
 
 const logout = (profileName: string, config: AwsAuthConfig) =>
@@ -221,19 +228,19 @@ const logout = (profileName: string, config: AwsAuthConfig) =>
     Match.when({ method: "env" }, () => Effect.void),
     Match.when({ method: "sso" }, (config) =>
       Clank.info(
-        `AWS SSO: running 'aws sso logout --profile ${config.ssoProfile}'...`,
+        `AWS: running 'aws sso logout --profile ${config.ssoProfile}'...`,
       ).pipe(
         Effect.andThen(runSsoCommand("logout", config.ssoProfile)),
         Effect.matchEffect({
-          onSuccess: () => Clank.success("AWS SSO: logout complete"),
+          onSuccess: () => Clank.success("AWS: SSO logout complete"),
           onFailure: (e) =>
-            Clank.warn(`AWS SSO: logut faield: \`${e.message}\``),
+            Clank.warn(`AWS: SSO logout failed: \`${e.message}\``),
         }),
       ),
     ),
-    Match.when({ method: "stored" }, (config) =>
-      deleteCredentials(profileName, `aws-${config.storedAlias}`).pipe(
-        Effect.andThen(Clank.success("AWS stored credentials removed")),
+    Match.when({ method: "stored" }, () =>
+      deleteCredentials(profileName, "aws").pipe(
+        Effect.andThen(Clank.success("AWS: stored credentials removed")),
       ),
     ),
     Match.exhaustive,
@@ -248,17 +255,14 @@ const login = (profileName: string, config: AwsAuthConfig) =>
           Effect.matchEffect({
             onSuccess: () =>
               Clank.info(
-                `AWS SSO: profile '${config.ssoProfile}' already has valid credentials.`,
+                `AWS: SSO profile '${config.ssoProfile}' already has valid credentials`,
               ),
             onFailure: () => loginSSO(config),
           }),
         ),
       ),
-      Match.when({ method: "stored" }, (config) =>
-        readCredentials<AwsStoredCredentials>(
-          profileName,
-          `aws-${config.storedAlias}`,
-        ).pipe(
+      Match.when({ method: "stored" }, () =>
+        readCredentials<AwsStoredCredentials>(profileName, "aws").pipe(
           Effect.flatMap((creds) =>
             creds == null ? loginStored(profileName) : Effect.void,
           ),
@@ -273,39 +277,46 @@ const login = (profileName: string, config: AwsAuthConfig) =>
     );
 
 const configureCredentials = (profileName: string) =>
-  Effect.gen(function* () {
-    const method = yield* Clank.select({
-      message: "AWS authentication method",
-      options,
-    });
-    if (method === undefined) {
-      return yield* new AuthError({ message: "User cancelled AWS login" });
-    }
+  Clank.select({
+    message: "AWS authentication method",
+    options,
+  })
+    .pipe(
+      Effect.flatMap((method) =>
+        Match.value(method).pipe(
+          Match.when("env", () => Effect.succeed({ method: "env" as const })),
+          Match.when("sso", () =>
+            Effect.gen(function* () {
+              const ssoProfile = yield* Clank.text({
+                message: "AWS profile name (from ~/.aws/config)",
+                placeholder: "default",
+                defaultValue: "default",
+              });
 
-    return yield* Match.value(method).pipe(
-      Match.when("env", () => Effect.succeed({ method: "env" as const })),
-      Match.when("sso", () =>
-        Effect.gen(function* () {
-          const ssoProfile = yield* Clank.text({
-            message: "AWS profile name (from ~/.aws/config)",
-            placeholder: "default",
-            defaultValue: "default",
-          });
+              const config = {
+                method: "sso" as const,
+                ssoProfile: ssoProfile ?? "default",
+              };
 
-          const config = {
-            method: "sso" as const,
-            ssoProfile: ssoProfile ?? "default",
-          };
+              yield* loginSSO(config);
 
-          yield* loginSSO(config);
-
-          return config;
-        }),
+              return config;
+            }),
+          ),
+          Match.when("stored", () => loginStored(profileName)),
+          Match.exhaustive,
+        ),
       ),
-      Match.when("stored", () => loginStored(profileName)),
-      Match.exhaustive,
+    )
+    .pipe(
+      Effect.mapError(
+        (e) =>
+          new AuthError({
+            message: "failed to configure credentials",
+            cause: e,
+          }),
+      ),
     );
-  }).pipe(Effect.orDie);
 
 const loginSSO = (config: Extract<AwsAuthConfig, { method: "sso" }>) =>
   Clank.info(
@@ -319,11 +330,6 @@ const loginSSO = (config: Extract<AwsAuthConfig, { method: "sso" }>) =>
   );
 
 const loginStored = Effect.fnUntraced(function* (profileName: string) {
-  const alias = yield* Clank.text({
-    message: "AWS Access Key ID",
-    validate: (v) => (v.length === 0 ? "Required" : undefined),
-  }).pipe(retryOnce);
-
   const accessKeyId = yield* Clank.text({
     message: "AWS Access Key ID",
     validate: (v) => (v.length === 0 ? "Required" : undefined),
@@ -346,7 +352,7 @@ const loginStored = Effect.fnUntraced(function* (profileName: string) {
     validate: (v) => (v.length === 0 ? "Required" : undefined),
   }).pipe(retryOnce);
 
-  yield* writeCredentials<AwsStoredCredentials>(profileName, `aws-${alias}`, {
+  yield* writeCredentials<AwsStoredCredentials>(profileName, "aws", {
     accessKeyId,
     secretAccessKey,
     sessionToken,
@@ -354,5 +360,5 @@ const loginStored = Effect.fnUntraced(function* (profileName: string) {
   });
   yield* Clank.success("AWS credentials saved.");
 
-  return { method: "stored" as const, storedAlias: alias };
+  return { method: "stored" as const };
 });

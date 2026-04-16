@@ -50,6 +50,10 @@ export const password = (opts: p.PasswordOptions) =>
   prompt(() => p.password(opts));
 export const select = <Value>(opts: p.SelectOptions<Value>) =>
   prompt(() => p.select<Value>(opts));
+export const confirm = (opts: p.ConfirmOptions) =>
+  prompt(() => p.confirm(opts));
+export const multiselect = <Value>(opts: p.MultiSelectOptions<Value>) =>
+  prompt(() => p.multiselect<Value>(opts));
 
 /**
  * Open a URL in the user's default browser.
