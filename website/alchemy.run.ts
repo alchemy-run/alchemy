@@ -2,8 +2,6 @@ import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 
-const Bucket = Cloudflare.R2Bucket("DO");
-
 export default Alchemy.Stack(
   "AlchemyEffectWebsite",
   {
@@ -20,9 +18,6 @@ export default Alchemy.Stack(
       compatibility: {
         date: "2026-04-02",
         flags: ["nodejs_compat"],
-      },
-      bindings: {
-        Bucket,
       },
     });
 
