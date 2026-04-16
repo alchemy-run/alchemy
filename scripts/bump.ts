@@ -72,7 +72,12 @@ if (!versionInput) {
 
 $.cwd(process.cwd());
 
-const alchemyPackageJsonPath = join(process.cwd(), "alchemy", "package.json");
+const alchemyPackageJsonPath = join(
+  process.cwd(),
+  "packages",
+  "alchemy",
+  "package.json",
+);
 const alchemyPackageJson = JSON.parse(
   await readFile(alchemyPackageJsonPath, "utf-8"),
 );
@@ -108,7 +113,7 @@ if (versionInput === "beta") {
   console.log(`Bumping to next beta version: ${newVersion}`);
 } else {
   // Validate specific version format (x.y.z or x.y.z-pre.N)
-  if (!/^\d+\.\d+\.\d+(-[\w.]+)?$/.test(versionInput)) {
+  if (!/^\d+\.\d+\.\d+(-[\w.-]+)?$/.test(versionInput)) {
     console.error(
       "Version must be in format x.y.z or x.y.z-pre.N, or use 'beta'",
     );
@@ -170,7 +175,7 @@ console.log(`Updated version to ${newVersion} in package.json`);
 // await $`cd alchemy && bun ./scripts/generate-compatibility-date.ts`;
 // await $`git add package.json alchemy/package.json alchemy/src/cloudflare/compatibility-date.gen.ts bun.lock`;
 
-await $`git add package.json alchemy/package.json packages/better-auth/package.json bun.lock`;
+await $`git add package.json packages/alchemy/package.json packages/better-auth/package.json bun.lock`;
 await $`git commit -m "chore(release): ${newVersion}"`;
 await $`git tag v${newVersion}`;
 

@@ -1,3 +1,47 @@
+## v2.0.0-beta.test-export-fix-4
+
+*No significant changes*
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.test-export-fix-3...v2.0.0-beta.test-export-fix-4)
+
+---
+
+## v2.0.0-beta.test-export-fix-3
+
+*No significant changes*
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.test-export-fix-2...v2.0.0-beta.test-export-fix-3)
+
+---
+
+## v2.0.0-beta.test-export-fix-2
+
+*No significant changes*
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.test-export-fix...v2.0.0-beta.test-export-fix-2)
+
+---
+
+## v2.0.0-beta.test-export-fix
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- Pr-package service &nbsp;-&nbsp; by **Michael (Pear)** in https://github.com/alchemy-run/alchemy/issues/54 [<samp>(6edd8)</samp>](https://github.com/alchemy-run/alchemy/commit/6edd8dd)
+- **cloudflare**:
+  - Async DurableObjetNamespace binding &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(25b90)</samp>](https://github.com/alchemy-run/alchemy/commit/25b9012)
+  - Async Assets binding &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(f1a3c)</samp>](https://github.com/alchemy-run/alchemy/commit/f1a3c6f)
+  - Alarms and ScheduledEvents &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(1f183)</samp>](https://github.com/alchemy-run/alchemy/commit/1f183c0)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Rename cli binary from "alchemy-effect" to "alchemy" &nbsp;-&nbsp; by **John Royal** [<samp>(b8b3a)</samp>](https://github.com/alchemy-run/alchemy/commit/b8b3a8c)
+- Fix export order &nbsp;-&nbsp; by **Michael (Pear)** [<samp>(7bea9)</samp>](https://github.com/alchemy-run/alchemy/commit/7bea945)
+- **core**: Use platform-bun when running in bun, otherwise platform-node &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(3b0d6)</samp>](https://github.com/alchemy-run/alchemy/commit/3b0d6b0)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.3...v2.0.0-beta.test-export-fix)
+
+---
+
 ## v2.0.0-beta.3
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features

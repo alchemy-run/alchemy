@@ -54,7 +54,7 @@ jobs:
           else
             bun ./scripts/bump.ts beta
           fi
-          VERSION=$(node -p "require('./packages.alchemy/package.json').version")
+          VERSION=$(node -p "require('./packages/alchemy/package.json').version")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Push version bump
@@ -114,12 +114,12 @@ jobs:
 
       - name: Build
         run: bun run build
-        working-directory: alchemy
+        working-directory: packages/alchemy
 
       - name: Publish
         run: |
           VERSION="${{ needs.bump.outputs.version }}"
-          PKG_NAME=$(node -p "require('./packages.alchemy/package.json').name")
+          PKG_NAME=$(node -p "require('./packages/alchemy/package.json').name")
           echo "--- Publishing ${PKG_NAME}@${VERSION} ---"
 
           if npm view "${PKG_NAME}@${VERSION}" version >/dev/null 2>&1; then
@@ -131,10 +131,16 @@ jobs:
           bun pm pack --destination .
           TARBALL=$(ls *.tgz 2>/dev/null | head -1)
           echo "Publishing tarball: ${TARBALL}"
-          TAG="latest"
-          if echo "${VERSION}" | grep -q '-'; then
+          if echo "${VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            TAG="latest"
+          elif echo "${VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$'; then
             TAG="next"
+          else
+            # Custom prerelease — derive a unique dist-tag from the prerelease portion
+            # so it doesn't clobber `next` or `latest`.
+            TAG=$(echo "${VERSION}" | sed 's/^[0-9]*\.[0-9]*\.[0-9]*-//' | tr '.' '-')
           fi
+          echo "Using npm dist-tag: ${TAG}"
           npm publish "${TARBALL}" --access public --tag "${TAG}"
           rm -f *.tgz
           echo "--- Published ${PKG_NAME}@${VERSION} ---"
@@ -169,7 +175,7 @@ jobs:
 
       - name: Build alchemy
         run: bun run build
-        working-directory: alchemy
+        working-directory: packages/alchemy
 
       - name: Build better-auth
         run: bun run build
@@ -190,10 +196,16 @@ jobs:
           bun pm pack --destination .
           TARBALL=$(ls *.tgz 2>/dev/null | head -1)
           echo "Publishing tarball: ${TARBALL}"
-          TAG="latest"
-          if echo "${VERSION}" | grep -q '-'; then
+          if echo "${VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            TAG="latest"
+          elif echo "${VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$'; then
             TAG="next"
+          else
+            # Custom prerelease — derive a unique dist-tag from the prerelease portion
+            # so it doesn't clobber `next` or `latest`.
+            TAG=$(echo "${VERSION}" | sed 's/^[0-9]*\.[0-9]*\.[0-9]*-//' | tr '.' '-')
           fi
+          echo "Using npm dist-tag: ${TAG}"
           npm publish "${TARBALL}" --access public --tag "${TAG}"
           rm -f *.tgz
           echo "--- Published ${PKG_NAME}@${VERSION} ---"
