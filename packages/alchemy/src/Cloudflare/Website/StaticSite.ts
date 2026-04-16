@@ -108,29 +108,3 @@ export const StaticSite = <const Bindings extends WorkerBindingProps = {}>(
 
     return worker;
   }).pipe(Namespace.push(id));
-
-import * as Cloudflare from "../index.ts";
-
-const Bucket = Cloudflare.R2Bucket("DO");
-
-Effect.gen(function* () {
-  const Website = yield* StaticSite("Website", {
-    command: "bun astro build",
-    main: "./src/worker.ts",
-    outdir: "dist",
-    memo: {
-      include: ["src/**", "astro.config.mjs", "package.json", "../bun.lock"],
-    },
-    compatibility: {
-      date: "2026-04-02",
-      flags: ["nodejs_compat"],
-    },
-    bindings: {
-      Bucket,
-    },
-  });
-
-  return {
-    url: Website.url,
-  };
-});

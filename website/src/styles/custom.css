@@ -4,9 +4,18 @@
   --sl-font: "Inter", sans-serif;
   --sl-font-mono: "JetBrains Mono", monospace;
   --sl-font-headings: "Inter", sans-serif;
+  color-scheme: dark;
 }
 
-[data-theme="dark"] {
+/* Hide the theme toggle — dark mode only */
+starlight-theme-select {
+  display: none !important;
+}
+
+/* Apply dark theme to both data-theme values so light mode never appears */
+:root,
+[data-theme="dark"],
+[data-theme="light"] {
   --sl-color-text-invert: black;
   --sl-color-text-accent: white;
   --sl-color-accent: #00e599;
@@ -29,18 +38,197 @@
   --sl-color-hairline: rgba(255, 255, 255, 0.1);
 }
 
-[data-theme="light"] {
-  --sl-color-text-invert: white;
-  --sl-color-text-accent: black;
-  --sl-color-accent: #059669;
-  --sl-color-accent-high: #059669;
-  --sl-color-accent-low: color-mix(in srgb, #059669 20%, transparent);
-  --sl-color-accent-light: color-mix(in srgb, #059669 40%, white);
-}
-
 .text-gradient {
   background: linear-gradient(to right, white, #00e599);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+/* ── Landing page ── */
+
+.landing {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+.hero-code {
+  margin: 2rem 0 5rem;
+}
+.hero-code-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3rem;
+  align-items: center;
+}
+.hero-code-text h3 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 1rem;
+  color: var(--sl-color-white);
+}
+.hero-code-text p {
+  color: var(--sl-color-gray-2);
+  line-height: 1.7;
+  margin: 0 0 0.75rem;
+}
+@media (max-width: 768px) {
+  .hero-code-grid {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+}
+
+.features {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3rem;
+  margin: 0 0 5rem;
+}
+.feature h3 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--sl-color-white);
+  margin: 0 0 0.75rem;
+}
+.feature p {
+  color: var(--sl-color-gray-3);
+  line-height: 1.6;
+  margin: 0 0 1rem;
+  font-size: 0.95rem;
+}
+@media (max-width: 768px) {
+  .features {
+    grid-template-columns: 1fr;
+    gap: 2.5rem;
+  }
+}
+
+.providers-section {
+  margin: 0 0 5rem;
+  text-align: center;
+}
+.providers-section h3 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--sl-color-white);
+  margin: 0 0 1rem;
+}
+.providers-section > p {
+  color: var(--sl-color-gray-3);
+  max-width: 36rem;
+  margin: 0 auto 2rem;
+  line-height: 1.6;
+}
+.provider-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+}
+.provider-card {
+  background: var(--sl-color-gray-6);
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 8px;
+  padding: 1.5rem;
+  text-align: left;
+}
+.provider-card strong {
+  color: var(--sl-color-white);
+  font-size: 1.05rem;
+}
+.provider-card p {
+  color: var(--sl-color-gray-3);
+  font-size: 0.9rem;
+  margin: 0.5rem 0 0;
+  line-height: 1.5;
+}
+@media (max-width: 768px) {
+  .provider-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cta-section {
+  text-align: center;
+  padding: 3rem 0 4rem;
+  border-top: 1px solid var(--sl-color-hairline);
+}
+.cta-section h3 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--sl-color-white);
+  margin: 0 0 1rem;
+}
+.cta-section p {
+  color: var(--sl-color-gray-3);
+  max-width: 36rem;
+  margin: 0 auto 2rem;
+  line-height: 1.6;
+}
+.cta-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.cta-primary {
+  background: var(--sl-color-accent);
+  color: var(--sl-color-text-invert) !important;
+  padding: 0.75rem 2rem;
+  border-radius: 8px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: opacity 0.15s;
+}
+.cta-primary:hover {
+  opacity: 0.9;
+}
+.cta-secondary {
+  border: 1px solid var(--sl-color-gray-4);
+  color: var(--sl-color-gray-2) !important;
+  padding: 0.75rem 2rem;
+  border-radius: 8px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: border-color 0.15s;
+}
+.cta-secondary:hover {
+  border-color: var(--sl-color-gray-2);
+}
+
+/* ── Getting Started next-steps cards ── */
+
+.next-steps {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.next-card {
+  display: block;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 8px;
+  text-decoration: none;
+  transition: border-color 0.15s;
+}
+.next-card:hover {
+  border-color: var(--sl-color-accent);
+}
+.next-card strong {
+  display: block;
+  color: var(--sl-color-white);
+  font-size: 1.05rem;
+  margin-bottom: 0.35rem;
+}
+.next-card span {
+  color: var(--sl-color-gray-3);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+@media (max-width: 600px) {
+  .next-steps {
+    grid-template-columns: 1fr;
+  }
 }

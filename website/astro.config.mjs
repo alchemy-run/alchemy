@@ -20,6 +20,10 @@ export default defineConfig({
       title: "alchemy",
       favicon: "/favicon.png",
       customCss: ["./src/styles/global.css", "./src/styles/custom.css"],
+      components: {
+        ThemeProvider: "./src/components/ThemeProvider.astro",
+        ThemeSelect: "./src/components/ThemeProvider.astro",
+      },
       prerender: true,
       social: [
         {
