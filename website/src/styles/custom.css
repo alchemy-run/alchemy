@@ -52,6 +52,110 @@ starlight-theme-select {
   margin: 0 auto;
   padding: 0 1.5rem;
 }
+.landing :is(pre, .expressive-code, figure) {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.landing pre code {
+  white-space: pre;
+}
+/* Allow grid/flex items to shrink below their content width so long code blocks
+   scroll internally instead of forcing the page wider than the viewport. */
+.hero-code-grid > *,
+.features > *,
+.provider-grid > * {
+  min-width: 0;
+}
+.landing {
+  overflow-x: clip;
+}
+/* Hide the auto-generated heading anchor link icon on the landing page —
+   these are marketing headings, not navigable anchors. */
+.landing .sl-anchor-link {
+  display: none;
+}
+@media (max-width: 480px) {
+  .landing {
+    padding: 0 1rem;
+  }
+}
+@media (max-width: 640px) {
+  .landing pre code {
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+  .hero-code {
+    margin: 2.5rem 0 3rem;
+  }
+  .hero-code-grid {
+    gap: 1.25rem;
+  }
+  .hero-code-text h3 {
+    font-size: 1.35rem;
+    margin-bottom: 0.75rem;
+  }
+  .hero-code-text p {
+    font-size: 0.95rem;
+  }
+  .features {
+    gap: 1.75rem;
+    margin-bottom: 3rem;
+  }
+  .feature h3 {
+    font-size: 1.05rem;
+  }
+  .providers-section {
+    margin-bottom: 3rem;
+  }
+  .providers-section h3,
+  .cta-section h3 {
+    font-size: 1.25rem;
+  }
+  .cta-section {
+    padding: 2rem 0 2.5rem;
+  }
+}
+@media (max-width: 420px) {
+  .cta-buttons {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .cta-buttons > * {
+    justify-content: center;
+    text-align: center;
+  }
+}
+
+/* ── Hero overrides: center on mobile/tablet, keep 3 actions on one row ── */
+
+@media (max-width: 60rem) {
+  .hero .stack {
+    text-align: center;
+  }
+  .hero .copy {
+    align-items: center;
+  }
+  .hero .copy > * {
+    margin-inline: auto;
+  }
+  .hero .actions {
+    justify-content: center;
+    gap: 0.75rem;
+  }
+  .hero .actions > a {
+    padding-inline: 1rem;
+  }
+}
+
+@media (max-width: 30rem) {
+  .hero .actions {
+    gap: 0.5rem;
+  }
+  .hero .actions > a {
+    padding-inline: 0.75rem;
+    font-size: 0.9rem;
+  }
+}
 
 .hero-code {
   margin: 2rem 0 5rem;
@@ -80,28 +184,97 @@ starlight-theme-select {
   }
 }
 
+/* Features grid: .feature uses display: contents so each feature's three
+   children (heading / body / code) become direct grid items of .features.
+   We then explicitly pin each child to a grid row and column. This guarantees
+   headings, paragraphs, and code blocks all align across the two columns in
+   a visual row, regardless of content height. */
 .features {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 3rem;
+  column-gap: 3rem;
+  row-gap: 0.75rem;
   margin: 0 0 5rem;
 }
-.feature h3 {
+.feature {
+  display: contents;
+}
+.features > .feature > * {
+  margin: 0 !important;
+  min-width: 0;
+}
+.features > .feature > :nth-child(1) {
+  /* heading row */
   font-size: 1.15rem;
   font-weight: 600;
   color: var(--sl-color-white);
-  margin: 0 0 0.75rem;
 }
-.feature p {
+.features > .feature > :nth-child(2) {
+  /* body row */
   color: var(--sl-color-gray-3);
   line-height: 1.6;
-  margin: 0 0 1rem;
   font-size: 0.95rem;
 }
+.features > .feature > :nth-child(3) {
+  /* code row – anchor to the top of the row so terminals and code blocks
+     sit directly under the paragraph, regardless of snippet height. */
+  align-self: start;
+  width: 100%;
+}
+
+/* Explicit row/column placement for each of the 6 features.
+   Visual row 1 (features 1,2) occupies grid rows 1-3,
+   visual row 2 (features 3,4) occupies rows 5-7 (row 4 is the gap),
+   visual row 3 (features 5,6) occupies rows 9-11 (row 8 is the gap). */
+.features > .feature:nth-of-type(odd) > * { grid-column: 1; }
+.features > .feature:nth-of-type(even) > * { grid-column: 2; }
+
+.features > .feature:nth-of-type(1) > :nth-child(1),
+.features > .feature:nth-of-type(2) > :nth-child(1) { grid-row: 1; }
+.features > .feature:nth-of-type(1) > :nth-child(2),
+.features > .feature:nth-of-type(2) > :nth-child(2) { grid-row: 2; }
+.features > .feature:nth-of-type(1) > :nth-child(3),
+.features > .feature:nth-of-type(2) > :nth-child(3) { grid-row: 3; }
+
+.features > .feature:nth-of-type(3) > :nth-child(1),
+.features > .feature:nth-of-type(4) > :nth-child(1) { grid-row: 5; }
+.features > .feature:nth-of-type(3) > :nth-child(2),
+.features > .feature:nth-of-type(4) > :nth-child(2) { grid-row: 6; }
+.features > .feature:nth-of-type(3) > :nth-child(3),
+.features > .feature:nth-of-type(4) > :nth-child(3) { grid-row: 7; }
+
+.features > .feature:nth-of-type(5) > :nth-child(1),
+.features > .feature:nth-of-type(6) > :nth-child(1) { grid-row: 9; }
+.features > .feature:nth-of-type(5) > :nth-child(2),
+.features > .feature:nth-of-type(6) > :nth-child(2) { grid-row: 10; }
+.features > .feature:nth-of-type(5) > :nth-child(3),
+.features > .feature:nth-of-type(6) > :nth-child(3) { grid-row: 11; }
+
+/* Larger gap between visual rows via empty tracks 4 and 8. */
+.features {
+  grid-template-rows:
+    auto auto auto /* row 1: h, p, code */
+    3rem /* gap */
+    auto auto auto /* row 2 */
+    3rem /* gap */
+    auto auto auto; /* row 3 */
+}
+
 @media (max-width: 768px) {
+  /* Collapse to single column: each .feature stacks naturally. */
   .features {
     grid-template-columns: 1fr;
-    gap: 2.5rem;
+    grid-template-rows: none;
+    row-gap: 2.5rem;
+  }
+  .feature {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .features > .feature > * {
+    grid-row: auto !important;
+    grid-column: auto !important;
   }
 }
 
@@ -125,13 +298,21 @@ starlight-theme-select {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 1.5rem;
+  align-items: stretch;
 }
 .provider-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
   background: var(--sl-color-gray-6);
   border: 1px solid var(--sl-color-hairline);
   border-radius: 8px;
   padding: 1.5rem;
   text-align: left;
+  height: 100%;
+}
+.provider-card > * {
+  margin: 0;
 }
 .provider-card strong {
   color: var(--sl-color-white);
@@ -140,7 +321,6 @@ starlight-theme-select {
 .provider-card p {
   color: var(--sl-color-gray-3);
   font-size: 0.9rem;
-  margin: 0.5rem 0 0;
   line-height: 1.5;
 }
 @media (max-width: 768px) {
@@ -160,7 +340,7 @@ starlight-theme-select {
   color: var(--sl-color-white);
   margin: 0 0 1rem;
 }
-.cta-section p {
+.cta-section > p {
   color: var(--sl-color-gray-3);
   max-width: 36rem;
   margin: 0 auto 2rem;
@@ -172,30 +352,17 @@ starlight-theme-select {
   justify-content: center;
   flex-wrap: wrap;
 }
-.cta-primary {
-  background: var(--sl-color-accent);
-  color: var(--sl-color-text-invert) !important;
-  padding: 0.75rem 2rem;
-  border-radius: 8px;
-  font-weight: 600;
-  text-decoration: none;
-  transition: opacity 0.15s;
+/* Neutralize Starlight's default LinkButton margins inside .sl-markdown-content
+   so our flex container controls spacing. */
+.cta-buttons .sl-link-button,
+.cta-buttons > p {
+  margin: 0 !important;
 }
-.cta-primary:hover {
-  opacity: 0.9;
+.cta-buttons > p {
+  display: contents;
 }
-.cta-secondary {
-  border: 1px solid var(--sl-color-gray-4);
-  color: var(--sl-color-gray-2) !important;
-  padding: 0.75rem 2rem;
-  border-radius: 8px;
-  font-weight: 500;
-  text-decoration: none;
-  transition: border-color 0.15s;
-}
-.cta-secondary:hover {
-  border-color: var(--sl-color-gray-2);
-}
+/* CTA buttons use Starlight's <LinkButton> so they match the hero actions;
+   no custom .cta-primary / .cta-secondary styles are needed. */
 
 /* ── Getting Started next-steps cards ── */
 

@@ -15,15 +15,12 @@ hero:
       link: /tutorial/part-1
       icon: open-book
       variant: secondary
-    - text: GitHub
-      link: https://github.com/alchemy-run/alchemy
-      icon: external
-      variant: minimal
 ---
 
 import Terminal from "../../components/Terminal.astro";
+import { LinkButton } from "@astrojs/starlight/components";
 
-<div class="landing">
+<div class="landing not-content">
 
 {/* ── Hero code block ── */}
 
@@ -42,11 +39,6 @@ No YAML. No separate config files. No runtime wiring. If it compiles, it deploys
 
 ```typescript
 // alchemy.run.ts
-import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Effect from "effect/Effect";
-import Worker from "./src/worker.ts";
-
 const Bucket = Cloudflare.R2Bucket("Bucket");
 
 export default Alchemy.Stack(
@@ -75,8 +67,7 @@ The type system ensures every resource has its provider, every binding
 is wired correctly, and every dependency is satisfied — before you
 deploy.
 
-```typescript
-// TypeScript catches this at compile time:
+```typescript title="alchemy.run.ts"
 Alchemy.Stack(
   "App",
   {
@@ -254,12 +245,12 @@ with R2 bindings, integration tests, local dev, and CI/CD — in under
 30 minutes.
 
 <div class="cta-buttons">
-  <a href="/tutorial/part-1" class="cta-primary">
+  <LinkButton href="/tutorial/part-1" variant="primary" icon="right-arrow">
     Start the Tutorial
-  </a>
-  <a href="/getting-started" class="cta-secondary">
+  </LinkButton>
+  <LinkButton href="/getting-started" variant="secondary" icon="open-book">
     Quick Start
-  </a>
+  </LinkButton>
 </div>
 
 </section>
