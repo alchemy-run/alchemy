@@ -10,11 +10,6 @@ import {
   ChildProcess,
   type ChildProcessSpawner,
 } from "effect/unstable/process";
-import {
-  getEnv,
-  getEnvRedacted,
-  getEnvRedactedRequired,
-} from "../../Util/config-accessors.ts";
 import { AuthError, type AuthProvider } from "../AuthProvider.ts";
 import * as Clank from "../Clank.ts";
 import {
@@ -23,6 +18,12 @@ import {
   readCredentials,
   writeCredentials,
 } from "../Credentials.ts";
+import {
+  getEnv,
+  getEnvRedacted,
+  getEnvRedactedRequired,
+  retryOnce,
+} from "../util.ts";
 
 export type AwsAuthConfig =
   | { method: "sso"; ssoProfile: string }
@@ -315,19 +316,6 @@ const loginSSO = (config: Extract<AwsAuthConfig, { method: "sso" }>) =>
       onSuccess: () => Clank.success("AWS SSO: login complete"),
       onFailure: (e) => Clank.warn(`AWS SSO: login faield: \`${e.message}\``),
     }),
-  );
-
-export const retryOnce = <A, R>(
-  self: Effect.Effect<A, Clank.PromptCancelled, R>,
-) =>
-  self.pipe(
-    Effect.retry({
-      times: 1,
-      while: (e) => e instanceof Clank.PromptCancelled,
-    }),
-    Effect.mapError(
-      (e) => new AuthError({ message: "User cancelled prompt", cause: e }),
-    ),
   );
 
 const loginStored = Effect.fnUntraced(function* (profileName: string) {
