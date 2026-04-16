@@ -38,3 +38,4 @@ smoke
 .bundle-benchmark
 packages/alchemy/docs
 .sonda
+examples/cloudflare-worker/src/scratch.ts
