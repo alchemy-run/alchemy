@@ -9,10 +9,10 @@ import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 import type { AccountID } from "../Account.ts";
 import { Account } from "../Account.ts";
+import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import type { RouteTableId } from "./RouteTable.ts";
 import type { SecurityGroupId } from "./SecurityGroup.ts";
@@ -595,11 +595,11 @@ const waitForVpcEndpointAvailable = (
       return yield* new VpcEndpointNotFound({ vpcEndpointId });
     }
 
-    if (ep.State === "Available") {
+    if (ep.State === "available") {
       return ep;
     }
 
-    if (ep.State === "Failed" || ep.State === "Rejected") {
+    if (ep.State === "failed" || ep.State === "rejected") {
       return yield* new VpcEndpointFailed({
         vpcEndpointId,
         errorCode: ep.LastError?.Code,
@@ -641,7 +641,7 @@ const waitForVpcEndpointDeleted = (
 
     const ep = result.VpcEndpoints?.[0];
 
-    if (!ep || ep.State === "Deleted") {
+    if (!ep || ep.State === "deleted") {
       return; // Successfully deleted
     }
 
