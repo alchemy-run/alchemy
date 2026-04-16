@@ -54,7 +54,7 @@ jobs:
           else
             bun ./scripts/bump.ts beta
           fi
-          VERSION=$(node -p "require('./packages.alchemy/package.json').version")
+          VERSION=$(node -p "require('./packages/alchemy/package.json').version")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Push version bump
@@ -114,12 +114,12 @@ jobs:
 
       - name: Build
         run: bun run build
-        working-directory: alchemy
+        working-directory: packages/alchemy
 
       - name: Publish
         run: |
           VERSION="${{ needs.bump.outputs.version }}"
-          PKG_NAME=$(node -p "require('./packages.alchemy/package.json').name")
+          PKG_NAME=$(node -p "require('./packages/alchemy/package.json').name")
           echo "--- Publishing ${PKG_NAME}@${VERSION} ---"
 
           if npm view "${PKG_NAME}@${VERSION}" version >/dev/null 2>&1; then
@@ -169,7 +169,7 @@ jobs:
 
       - name: Build alchemy
         run: bun run build
-        working-directory: alchemy
+        working-directory: packages/alchemy
 
       - name: Build better-auth
         run: bun run build
