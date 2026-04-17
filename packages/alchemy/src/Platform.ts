@@ -159,7 +159,7 @@ export interface Platform<
   ): Effect.Effect<
     Resource & Rpc<Shape>,
     never,
-    | Provider<Resource>
+    | Resource["Providers"]
     | PropsReq
     | Exclude<InitReq, Services | PlatformServices>
   >;
