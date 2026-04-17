@@ -21,7 +21,7 @@
   "sideEffects": false,
   "scripts": {
     "dev": "tsdown --watch",
-    "build": "bun bundle && bun pm pack",
+    "build": "tsc -b && bun bundle",
     "bundle": "tsdown",
     "bundle:watch": "tsdown --watch",
     "publish:npm": "cp ../README.md . && bun publish && rm README.md",
@@ -37,8 +37,8 @@
     "./*": {
       "types": "./src/*.ts",
       "bun": "./src/*.ts",
-      "import": "./lib/*.js",
-      "worker": "./src/*.ts"
+      "worker": "./src/*.ts",
+      "import": "./lib/*.js"
     },
     "./Agent": {
       "types": "./src/Agent/index.ts",
