@@ -9,9 +9,6 @@
     "url": "git+https://github.com/alchemy-run/alchemy-effect.git",
     "directory": "alchemy"
   },
-  "bin": {
-    "alchemy": "bin/alchemy.sh"
-  },
   "files": [
     "bin",
     "lib",
@@ -201,10 +198,15 @@
       "bun": "./src/Util/index.ts",
       "worker": "./src/Util/index.ts",
       "import": "./lib/Util/index.js"
-    }
+    },
+    "./bin/alchemy.js": "./bin/alchemy.js"
   },
   "publishConfig": {
     "access": "public"
+  },
+  "optionalDependencies": {
+    "@alchemy.run/cli-posix": "workspace:*",
+    "@alchemy.run/cli-win32": "workspace:*"
   },
   "dependencies": {
     "@clack/prompts": "^0.11.0",

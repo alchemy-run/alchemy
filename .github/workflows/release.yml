@@ -90,9 +90,123 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # ── Step 2: Build & publish alchemy to npm ──
-  publish-alchemy:
+  # ── Step 2a: Publish @alchemy.run/cli-posix to npm ──
+  # No build step — this package is just a shell script launcher.
+  # Must publish before `alchemy` so its optionalDependencies resolve.
+  publish-cli-posix:
     needs: bump
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.bump.outputs.sha }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          registry-url: https://registry.npmjs.org/
+          node-version: 24
+
+      - name: Upgrade npm for OIDC trusted publishing
+        run: |
+          npm install -g npm@latest && npm --version
+          sed -i '/always-auth/d' ~/.npmrc 2>/dev/null || true
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Publish
+        run: |
+          VERSION="${{ needs.bump.outputs.version }}"
+          PKG_NAME=$(node -p "require('./packages/cli-posix/package.json').name")
+          echo "--- Publishing ${PKG_NAME}@${VERSION} ---"
+
+          if npm view "${PKG_NAME}@${VERSION}" version >/dev/null 2>&1; then
+            echo "${PKG_NAME}@${VERSION} already published, skipping"
+            exit 0
+          fi
+
+          cd packages/cli-posix
+          bun pm pack --destination .
+          TARBALL=$(ls *.tgz 2>/dev/null | head -1)
+          echo "Publishing tarball: ${TARBALL}"
+          if echo "${VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            TAG="latest"
+          elif echo "${VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$'; then
+            TAG="next"
+          else
+            TAG=$(echo "${VERSION}" | sed 's/^[0-9]*\.[0-9]*\.[0-9]*-//' | tr '.' '-')
+          fi
+          echo "Using npm dist-tag: ${TAG}"
+          npm publish "${TARBALL}" --access public --tag "${TAG}"
+          rm -f *.tgz
+          echo "--- Published ${PKG_NAME}@${VERSION} ---"
+
+  # ── Step 2b: Publish @alchemy.run/cli-win32 to npm ──
+  # No build step — this package is just a Windows .cmd launcher.
+  # Must publish before `alchemy` so its optionalDependencies resolve.
+  publish-cli-win32:
+    needs: bump
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.bump.outputs.sha }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          registry-url: https://registry.npmjs.org/
+          node-version: 24
+
+      - name: Upgrade npm for OIDC trusted publishing
+        run: |
+          npm install -g npm@latest && npm --version
+          sed -i '/always-auth/d' ~/.npmrc 2>/dev/null || true
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Publish
+        run: |
+          VERSION="${{ needs.bump.outputs.version }}"
+          PKG_NAME=$(node -p "require('./packages/cli-win32/package.json').name")
+          echo "--- Publishing ${PKG_NAME}@${VERSION} ---"
+
+          if npm view "${PKG_NAME}@${VERSION}" version >/dev/null 2>&1; then
+            echo "${PKG_NAME}@${VERSION} already published, skipping"
+            exit 0
+          fi
+
+          cd packages/cli-win32
+          bun pm pack --destination .
+          TARBALL=$(ls *.tgz 2>/dev/null | head -1)
+          echo "Publishing tarball: ${TARBALL}"
+          if echo "${VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            TAG="latest"
+          elif echo "${VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$'; then
+            TAG="next"
+          else
+            TAG=$(echo "${VERSION}" | sed 's/^[0-9]*\.[0-9]*\.[0-9]*-//' | tr '.' '-')
+          fi
+          echo "Using npm dist-tag: ${TAG}"
+          npm publish "${TARBALL}" --access public --tag "${TAG}"
+          rm -f *.tgz
+          echo "--- Published ${PKG_NAME}@${VERSION} ---"
+
+  # ── Step 3: Build & publish alchemy to npm ──
+  publish-alchemy:
+    needs: [bump, publish-cli-posix, publish-cli-win32]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -151,7 +265,7 @@ jobs:
           rm -f *.tgz
           echo "--- Published ${PKG_NAME}@${VERSION} ---"
 
-  # ── Step 3: Build & publish @alchemy.run/better-auth to npm ──
+  # ── Step 4: Build & publish @alchemy.run/better-auth to npm ──
   publish-better-auth:
     needs: [bump, publish-alchemy]
     runs-on: ubuntu-latest
