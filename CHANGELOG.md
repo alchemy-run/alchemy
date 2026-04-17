@@ -1,3 +1,13 @@
+## v2.0.0-beta.9
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- CLI packages &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy/issues/66 [<samp>(73e2a)</samp>](https://github.com/alchemy-run/alchemy/commit/73e2a45)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.8...v2.0.0-beta.9)
+
+---
+
 ## v2.0.0-beta.8
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
