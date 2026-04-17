@@ -1,3 +1,13 @@
+## v2.0.0-beta.6
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Set nodejs_compat by default for Effect Workers &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(ff780)</samp>](https://github.com/alchemy-run/alchemy/commit/ff780f3)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.5...v2.0.0-beta.6)
+
+---
+
 ## v2.0.0-beta.5
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
