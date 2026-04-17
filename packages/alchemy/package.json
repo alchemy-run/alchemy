@@ -178,6 +178,12 @@
       "worker": "./src/Server/index.ts",
       "import": "./lib/Server/index.js"
     },
+    "./Stack": {
+      "types": "./src/Stack.ts",
+      "bun": "./src/Stack.ts",
+      "worker": "./src/Stack.ts",
+      "import": "./lib/Stack.js"
+    },
     "./State": {
       "types": "./src/State/index.ts",
       "bun": "./src/State/index.ts",
