@@ -930,10 +930,12 @@ export const WorkerProvider = () =>
       const deleteDomain = yield* workers.deleteDomain;
       const listZones = yield* zones.listZones;
       const telemetry = yield* CloudflareLogs;
-      const defaultCompatibilityDate = yield* Effect.promise(() =>
-        // @ts-expect-error no types for workerd
-        import("workerd").then((m) => m.compatibilityDate as string),
-      );
+      // TODO(sam): figure out why the later one from workerd breaks
+      const defaultCompatibilityDate = "2026-03-17";
+      // const defaultCompatibilityDate = yield* Effect.promise(() =>
+      //   // @ts-expect-error no types for workerd
+      //   import("workerd").then((m) => m.compatibilityDate as string),
+      // );
 
       const getAccountSubdomain = (accountId: string) =>
         getSubdomain({
@@ -1152,6 +1154,19 @@ export const WorkerProvider = () =>
         );
       });
 
+      const getCompatibility = (props: WorkerProps) => ({
+        compatibilityDate:
+          props.compatibility?.date ?? defaultCompatibilityDate,
+        compatibilityFlags: props.compatibility?.flags
+          ? [
+              ...props.compatibility.flags,
+              ...(props.isExternal ? [] : ["nodejs_compat"]),
+            ].filter((value, index, self) => self.indexOf(value) === index)
+          : props.isExternal
+            ? []
+            : ["nodejs_compat"],
+      });
+
       const prepareBundle = (id: string, props: WorkerProps) =>
         Effect.gen(function* () {
           const main = yield* fs.realPath(props.main);
@@ -1162,20 +1177,7 @@ export const WorkerProvider = () =>
                 input: main,
                 cwd,
                 plugins: [
-                  cloudflareRolldown({
-                    compatibilityDate:
-                      props.compatibility?.date ?? defaultCompatibilityDate,
-                    compatibilityFlags: props.compatibility?.flags
-                      ? [
-                          ...props.compatibility.flags,
-                          ...(props.isExternal ? [] : ["nodejs_compat"]),
-                        ].filter(
-                          (value, index, self) => self.indexOf(value) === index,
-                        )
-                      : props.isExternal
-                        ? []
-                        : ["nodejs_compat"],
-                  }),
+                  cloudflareRolldown(getCompatibility(props)),
                   plugins,
                   ...(props.build?.metafile ? [Sonda({ open: false })] : []),
                 ],
@@ -1354,11 +1356,7 @@ ${[
                 sharedConfigBuild: true,
               },
               plugins: [
-                cloudflareVite({
-                  compatibilityDate:
-                    props.compatibility?.date ?? defaultCompatibilityDate,
-                  compatibilityFlags: props.compatibility?.flags,
-                }),
+                cloudflareVite(getCompatibility(props)),
                 {
                   name: "output:ssr",
                   applyToEnvironment(environment) {
@@ -1681,8 +1679,7 @@ ${[
           assets: metadataAssets,
           bindings: metadataBindings,
           bodyPart: undefined,
-          compatibilityDate: news.compatibility?.date ?? "2026-03-10",
-          compatibilityFlags: news.compatibility?.flags,
+          ...getCompatibility(news),
           containers:
             metadataContainers.length > 0 ? metadataContainers : undefined,
           keepAssets,
@@ -1908,9 +1905,7 @@ ${[
                         className,
                       }))
                     : undefined,
-                compatibilityDate:
-                  news.compatibility?.date ?? defaultCompatibilityDate,
-                compatibilityFlags: news.compatibility?.flags,
+                ...getCompatibility(news),
                 containers,
                 migrations:
                   doClasses.length > 0
