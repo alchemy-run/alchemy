@@ -1,3 +1,14 @@
+## v2.0.0-beta.5
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Running with bun no longer runs unbundled alchemy bin &nbsp;-&nbsp; by **Michael (Pear)** [<samp>(61198)</samp>](https://github.com/alchemy-run/alchemy/commit/61198ca)
+- **core**: Use Provider collection as requirements &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(f81cc)</samp>](https://github.com/alchemy-run/alchemy/commit/f81cccb)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.4...v2.0.0-beta.5)
+
+---
+
 ## v2.0.0-beta.4
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
