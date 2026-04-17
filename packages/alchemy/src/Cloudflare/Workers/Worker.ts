@@ -1165,7 +1165,16 @@ export const WorkerProvider = () =>
                   cloudflareRolldown({
                     compatibilityDate:
                       props.compatibility?.date ?? defaultCompatibilityDate,
-                    compatibilityFlags: props.compatibility?.flags,
+                    compatibilityFlags: props.compatibility?.flags
+                      ? [
+                          ...props.compatibility.flags,
+                          ...(props.isExternal ? [] : ["nodejs_compat"]),
+                        ].filter(
+                          (value, index, self) => self.indexOf(value) === index,
+                        )
+                      : props.isExternal
+                        ? []
+                        : ["nodejs_compat"],
                   }),
                   plugins,
                   ...(props.build?.metafile ? [Sonda({ open: false })] : []),
