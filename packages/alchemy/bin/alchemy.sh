@@ -7,7 +7,7 @@ else
   dir="$(cd "$(dirname "$0")" && pwd)"
 fi
 if command -v bun >/dev/null 2>&1; then
-  exec bun "$dir/alchemy.ts" "$@"
+  exec bun "$dir/alchemy.js" "$@"
 else
   exec node "$dir/alchemy.js" "$@"
 fi
