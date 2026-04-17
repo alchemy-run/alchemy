@@ -1,5 +1,5 @@
 #!/bin/sh
-# @alchemy.run/cli-posix launcher
+# @alchemy/cli-posix launcher
 #
 # Resolves the alchemy CLI entrypoint via node/bun module resolution so we
 # don't have to care where the package manager placed it (flat, hoisted,

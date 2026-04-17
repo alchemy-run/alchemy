@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 
-rem @alchemy.run/cli-win32 launcher
+rem @alchemy/cli-win32 launcher
 rem
 rem Resolves the alchemy CLI entrypoint via node/bun module resolution.
 rem Runtime selection:

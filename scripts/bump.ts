@@ -151,51 +151,18 @@ await writeFile(
 
 // Bump sibling packages in lockstep with `alchemy`.
 // Each is published from its own directory and references the others via
-// `workspace:*`, which `bun pm pack` rewrites to the resolved version at
-// publish time.
+// `workspace:*`, which `bun pm pack` rewrites to the resolved version.
 const siblingPackageDirs = [
   "better-auth", // @alchemy.run/better-auth
   "cli-posix", // @alchemy.run/cli-posix
   "cli-win32", // @alchemy.run/cli-win32
 ];
 
-// Track the npm names so we know which entries to rewrite in bun.lock.
-const workspacePackageNames = new Set<string>([alchemyPackageJson.name]);
-
 for (const dir of siblingPackageDirs) {
   const pkgPath = join(process.cwd(), "packages", dir, "package.json");
   const pkg = JSON.parse(await readFile(pkgPath, "utf-8"));
   pkg.version = newVersion;
   await writeFile(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
-  workspacePackageNames.add(pkg.name);
-}
-
-// Update workspace versions directly in bun.lock so `bun pm pack` resolves
-// `workspace:*` to the new version. `bun install` won't do this: it treats
-// `workspace:*` as already satisfied (the version field doesn't affect
-// resolution) and leaves the lockfile's recorded version stale. `bun pm pack`
-// reads that stale version when rewriting `workspace:*` in published
-// peerDependencies / optionalDependencies, which leaks the wrong version to
-// consumers. Walk the lockfile and rewrite the `"version"` line of any entry
-// whose `"name"` matches one of our workspace packages.
-const lockfilePath = join(process.cwd(), "bun.lock");
-try {
-  const lockfile = await readFile(lockfilePath, "utf-8");
-  const lines = lockfile.split("\n");
-  let updated = false;
-  for (let i = 1; i < lines.length; i++) {
-    const versionMatch = lines[i].match(/^(\s*"version": ")[^"]*(".*)/);
-    if (!versionMatch) continue;
-    const nameMatch = lines[i - 1].match(/"name": "([^"]*)"/);
-    if (!nameMatch || !workspacePackageNames.has(nameMatch[1])) continue;
-    lines[i] = `${versionMatch[1]}${newVersion}${versionMatch[2]}`;
-    updated = true;
-  }
-  if (updated) {
-    await writeFile(lockfilePath, lines.join("\n"));
-  }
-} catch {
-  // bun.lock may not exist on a fresh clone — skip silently.
 }
 
 await $`bun install`;
