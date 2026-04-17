@@ -220,7 +220,7 @@
     },
     "packages/alchemy": {
       "name": "alchemy",
-      "version": "2.0.0-beta.cli-platform-split-2",
+      "version": "2.0.0-beta.pkg-setup-rc",
       "dependencies": {
         "@ai-sdk/anthropic": "^3.0.31",
         "@ai-sdk/openai": "^3.0.23",
@@ -296,7 +296,7 @@
     },
     "packages/better-auth": {
       "name": "@alchemy.run/better-auth",
-      "version": "2.0.0-beta.cli-platform-split-2",
+      "version": "2.0.0-beta.pkg-setup-rc",
       "dependencies": {
         "alchemy": "workspace:*",
         "better-auth": "catalog:",
@@ -305,7 +305,7 @@
     },
     "packages/cli-posix": {
       "name": "@alchemy.run/cli-posix",
-      "version": "2.0.0-beta.cli-platform-split-2",
+      "version": "2.0.0-beta.pkg-setup-rc",
       "bin": {
         "alchemy": "./alchemy",
       },
@@ -315,7 +315,7 @@
     },
     "packages/cli-win32": {
       "name": "@alchemy.run/cli-win32",
-      "version": "2.0.0-beta.cli-platform-split-2",
+      "version": "2.0.0-beta.pkg-setup-rc",
       "bin": {
         "alchemy": "./alchemy.cmd",
       },
