@@ -1,3 +1,13 @@
+## v2.0.0-beta.8
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Add stack export to package.json &nbsp;-&nbsp; by **John Royal** [<samp>(0ede2)</samp>](https://github.com/alchemy-run/alchemy/commit/0ede2c3)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.7...v2.0.0-beta.8)
+
+---
+
 ## v2.0.0-beta.7
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
