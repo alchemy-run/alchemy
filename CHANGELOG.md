@@ -1,3 +1,13 @@
+## v2.0.0-beta.7
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Use consistent comaptibility date and flags in Worker &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(deda3)</samp>](https://github.com/alchemy-run/alchemy/commit/deda381)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.6...v2.0.0-beta.7)
+
+---
+
 ## v2.0.0-beta.6
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
