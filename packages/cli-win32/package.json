@@ -1,0 +1,27 @@
+{
+  "name": "@alchemy.run/cli-win32",
+  "version": "2.0.0-beta.cli-platform-split",
+  "description": "Windows launcher for the alchemy CLI",
+  "license": "Apache-2.0",
+  "author": "Sam Goodwin <sam@alchemy.run>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy-effect.git",
+    "directory": "packages/cli-win32"
+  },
+  "os": [
+    "win32"
+  ],
+  "bin": {
+    "alchemy": "./alchemy.cmd"
+  },
+  "files": [
+    "alchemy.cmd"
+  ],
+  "peerDependencies": {
+    "alchemy": "workspace:*"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

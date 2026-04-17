@@ -1,0 +1,25 @@
+#!/bin/sh
+# @alchemy/cli-posix launcher
+#
+# Resolves the alchemy CLI entrypoint via node/bun module resolution so we
+# don't have to care where the package manager placed it (flat, hoisted,
+# pnpm-style nested, workspace, etc.).
+#
+# Runtime selection:
+#   1. If the invoking package manager is bun ($npm_execpath contains "bun"),
+#      use bun.
+#   2. Otherwise, if `bun` is on PATH, prefer it.
+#   3. Otherwise fall back to node.
+
+set -e
+
+RUNTIME=node
+case "$npm_execpath" in
+  *bun*) RUNTIME=bun ;;
+esac
+if [ "$RUNTIME" = "node" ] && command -v bun >/dev/null 2>&1; then
+  RUNTIME=bun
+fi
+
+ENTRY=$("$RUNTIME" -e "console.log(require.resolve('alchemy/bin/alchemy.js'))")
+exec "$RUNTIME" "$ENTRY" "$@"

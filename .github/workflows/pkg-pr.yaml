@@ -23,4 +23,4 @@ jobs:
         run: bun run build
 
       - name: Publish
-        run: bun pkg-pr-new publish --bun ./alchemy ./packages/better-auth
+        run: bun pkg-pr-new publish --bun ./packages/alchemy ./packages/better-auth ./packages/cli-posix ./packages/cli-win32

@@ -13,7 +13,7 @@
     "audit:service": "bun scripts/audit-service.ts",
     "build:clean": "bun clean . && bun run build && bun download:env",
     "build:clean:shallow": "bun clean:shallow . && bun run build",
-    "build": "bun tsc -b && bun run --filter ./website --filter './packages/*' build",
+    "build": "bun run --filter ./website --filter './packages/*' build",
     "bump": "bun ./scripts/bump.ts",
     "clean:shallow": "rm -rf alchemy/*.tgz && bun tsc -b --clean",
     "clean": "git clean -fqdx -e .env",
