@@ -33,6 +33,12 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.bot-token.outputs.token }}
 
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          registry-url: https://registry.npmjs.org/
+          node-version: 24
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
