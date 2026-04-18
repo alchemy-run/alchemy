@@ -48,6 +48,8 @@ import { fromCloudflareFetcher } from "../Fetcher.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import type { Providers } from "../Providers.ts";
 import type { R2Bucket } from "../R2/R2Bucket.ts";
+import type { KVNamespace } from "../KV/KVNamespace.ts";
+import type { Queue as CloudflareQueue } from "../Queue/Queue.ts";
 import {
   isAssets,
   readAssets,
@@ -176,6 +178,8 @@ export type WorkerBindingResource =
   | Assets
   | R2Bucket
   | D1Database
+  | KVNamespace
+  | CloudflareQueue
   | DurableObjectNamespaceLike<any>;
 
 export type WorkerBindings = {
@@ -683,8 +687,20 @@ export const Worker: Platform<
                       ),
                     ),
                   }
-                : // TODO(sam): handle others
-                  undefined;
+                : binding.Type === "Cloudflare.KVNamespace"
+                  ? {
+                      type: "kv_namespace",
+                      name: bindingName,
+                      namespaceId: binding.namespaceId,
+                    }
+                  : binding.Type === "Cloudflare.Queue"
+                    ? {
+                        type: "queue",
+                        name: bindingName,
+                        queueName: binding.queueName,
+                      }
+                    : // TODO(sam): handle others
+                      undefined;
 
         if (bindingMeta) {
           yield* resource.bind`${bindingName}`({
