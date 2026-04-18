@@ -16,6 +16,9 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as Socket from "effect/unstable/socket/Socket";
+import { createRequire } from "node:module";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 import type * as rolldown from "rolldown";
 import Sonda from "sonda/rolldown";
 import type * as vite from "vite";
@@ -1332,11 +1335,11 @@ ${[
         }).pipe(Artifacts.cached("build"));
 
       const viteBuild = Effect.fnUntraced(function* (props: WorkerProps) {
-        const vite = yield* Effect.promise(() => import("vite"));
         let assetsDirectory: string | undefined;
         let serverBundle: vite.Rolldown.OutputBundle | undefined;
 
         yield* Effect.promise(async () => {
+          const vite = await loadVite();
           const builder = await vite.createBuilder(
             {
               root: props.vite?.rootDir,
@@ -2268,3 +2271,33 @@ const contentTypeFromExtension = (extension: string) => {
       return "application/octet-stream";
   }
 };
+
+type ViteModule = typeof import("vite");
+let _viteModule: ViteModule | null = null;
+
+/**
+ * Dynamically load Vite from the project root. Falls back to the bundled
+ * copy if the project doesn't have its own Vite installation.
+ */
+async function loadVite(): Promise<ViteModule> {
+  if (_viteModule) return _viteModule;
+
+  const projectRoot = process.cwd();
+  let vitePath: string;
+
+  try {
+    // Resolve "vite" from the project root, not from vinext's location
+    const require = createRequire(path.join(projectRoot, "package.json"));
+    vitePath = require.resolve("vite");
+  } catch {
+    // Fallback: use the Vite that ships with vinext (works for non-linked installs)
+    vitePath = "vite";
+  }
+
+  // On Windows, absolute paths must be file:// URLs for ESM import().
+  // The fallback ("vite") is a bare specifier and works as-is.
+  const viteUrl = vitePath === "vite" ? vitePath : pathToFileURL(vitePath).href;
+  const vite = (await import(/* @vite-ignore */ viteUrl)) as ViteModule;
+  _viteModule = vite;
+  return vite;
+}
