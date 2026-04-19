@@ -175,6 +175,7 @@ export const QueueConsumerProvider = () =>
             queueId: output.queueId,
             consumerId: output.consumerId,
             scriptName: news.scriptName,
+            type: "worker",
             settings: news.settings,
             deadLetterQueue: news.deadLetterQueue,
           });
