@@ -948,14 +948,32 @@ await Effect.runPromise(serverEffect).catch((err) => {
         if (dos.length === 0) {
           return Effect.succeed(undefined);
         }
-        if (dos.length === 1) {
-          return Effect.succeed(dos[0]);
+        if (dos.length > 1) {
+          return Effect.die(
+            new Error(
+              `A Container can only be bound to one Durable Object namespace. Found ${dos.length} namespaces in bindings: ${bindings.map((b) => b.data.durableObjects?.namespaceId).join(", ")}`,
+            ),
+          );
         }
-        return Effect.die(
-          new Error(
-            `A Container can only be bound to one Durable Object namespace. Found ${dos.length} namespaces in bindings: ${bindings.map((b) => b.data.durableObjects?.namespaceId).join(", ")}`,
-          ),
-        );
+        const only = dos[0]!;
+        // Fail loudly when the binding arrived with an unresolved namespaceId.
+        // Silently forwarding `{ namespaceId: undefined }` to the Cloudflare API
+        // previously produced container applications with no DO linkage, which
+        // caused the runtime error "no container application assigned to this
+        // Durable Object namespace" without any deploy-time signal.
+        // See: https://github.com/alchemy-run/alchemy-effect/issues/72
+        if (typeof only.namespaceId !== "string" || only.namespaceId.length === 0) {
+          return Effect.die(
+            new Error(
+              `Container binding has an unresolved Durable Object namespaceId. ` +
+              `This usually means the DurableObjectNamespace output was not resolved ` +
+              `before the Container resource was applied (circular dependency in bindContainer). ` +
+              `Received: ${JSON.stringify(only)}. ` +
+              `See https://github.com/alchemy-run/alchemy-effect/issues/72`,
+            ),
+          );
+        }
+        return Effect.succeed(only);
       };
 
       return Container.Provider.of({
