@@ -323,13 +323,14 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
           yield* worker.export(name, {
             kind: "workflow",
             make: (env: unknown) =>
-              Effect.succeed(body).pipe(
-                Effect.provideContext(services),
-                Effect.provideService(
-                  WorkerEnvironment,
-                  env as Record<string, any>,
+              Effect.succeed(
+                body.pipe(
+                  Effect.provideService(
+                    WorkerEnvironment,
+                    env as Record<string, any>,
+                  ),
                 ),
-              ),
+              ).pipe(Effect.provideContext(services)),
           } satisfies WorkflowExport);
 
           return self;
