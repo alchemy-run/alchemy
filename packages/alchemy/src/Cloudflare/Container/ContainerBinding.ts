@@ -70,7 +70,8 @@ export const bindContainer = Effect.fnUntraced(function* <Shape, Req = never>(
             state.container!.interceptAllOutboundHttp(binding),
           ),
         ),
-      monitor: () => Effect.sync(() => state.container?.monitor()),
+      monitor: () =>
+        Effect.promise(() => state.container?.monitor() ?? Promise.resolve()),
       start: (options?: ContainerStartupOptions) =>
         Effect.sync(() => state.container!.start(options)),
     } satisfies Container as Shape;
