@@ -418,7 +418,7 @@ export const ContainerProvider = () =>
           isExternal: props.isExternal,
         });
 
-        const finalDockerfile = buildFinalDockerfile(props.dockerfile, runtime);
+        const finalDockerfile = buildFinalDockerfile(props.dockerfile, runtime, props.external);
         const imageHash = (yield* sha256Object({
           bundleHash,
           dockerfile: finalDockerfile,
@@ -561,15 +561,21 @@ await Effect.runPromise(serverEffect).catch((err) => {
       const buildFinalDockerfile = (
         userDockerfile: string | undefined,
         runtime: "bun" | "node",
+        external: string[] = [],
       ): string => {
         const base =
           userDockerfile?.trim() ??
           (runtime === "bun" ? "FROM oven/bun:1" : "FROM node:22-slim");
         const runtimeBin = runtime === "bun" ? "bun" : "node";
+        const installStep =
+          external.length > 0 && runtime === "bun"
+            ? `RUN bun add ${external.join(" ")}`
+            : "";
         return [
           base,
           "",
           "WORKDIR /app",
+          ...installStep ? [installStep, ""] : [],
           "COPY index.mjs /app/index.mjs",
           `ENTRYPOINT ["${runtimeBin}", "/app/index.mjs"]`,
           "",
@@ -597,7 +603,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
           dotAlchemy,
           `${id}-container`,
         );
-        const finalDockerfile = buildFinalDockerfile(props.dockerfile, runtime);
+        const finalDockerfile = buildFinalDockerfile(props.dockerfile, runtime, props.external);
         yield* materializeDockerfile(finalDockerfile, contextDir);
         yield* writeContextFiles(contextDir, [
           { path: "index.mjs", content: code },
