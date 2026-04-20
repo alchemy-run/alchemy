@@ -83,8 +83,17 @@ export const sleepUntil = (
 
 /**
  * The services available inside a workflow run body.
+ *
+ * `WorkerEnvironment` is provided to the body at runtime by the workflow
+ * export wrapper (see `make(env)` below), so users can access env bindings
+ * from inside workflow steps via `yield* WorkerEnvironment` — the type must
+ * reflect that or `yield* WorkerEnvironment` fails to type-check inside a
+ * body even though it succeeds at runtime.
  */
-export type WorkflowRunServices = WorkflowEvent | WorkflowStep;
+export type WorkflowRunServices =
+  | WorkflowEvent
+  | WorkflowStep
+  | WorkerEnvironment;
 
 export type WorkflowServices = WorkerServices | PlatformServices;
 
