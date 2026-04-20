@@ -1,4 +1,5 @@
 import * as Containers from "@distilled.cloud/cloudflare/containers";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -85,6 +86,195 @@ export namespace ContainerApplication {
     kind?: "full_auto";
     stepPercentage?: number;
   }
+}
+
+/**
+ * Raised (via `Effect.die`) when a Container resource has more than one
+ * Durable Object namespace bound to it. A Container may only back a single
+ * DO namespace.
+ */
+export class ContainerMultipleDurableObjectNamespacesError extends Data.TaggedError(
+  "ContainerMultipleDurableObjectNamespacesError",
+)<{
+  readonly count: number;
+  readonly namespaceIds: readonly (string | undefined)[];
+}> {
+  override get message() {
+    return (
+      `A Container can only be bound to one Durable Object namespace. ` +
+      `Found ${this.count} namespaces in bindings: ${this.namespaceIds.join(", ")}`
+    );
+  }
+}
+
+/**
+ * Raised (via `Effect.die`) when a Container binding arrives with an
+ * unresolved `namespaceId` (typically `undefined`). This indicates the
+ * `DurableObjectNamespace` Output could not be resolved before the Container
+ * resource was applied — the circular dependency tracked in
+ * https://github.com/alchemy-run/alchemy-effect/issues/72.
+ *
+ * Previously this was silently forwarded to the Cloudflare API, producing
+ * a container application with no DO linkage and the runtime error
+ * `no container application assigned to this Durable Object namespace`
+ * without any deploy-time signal.
+ */
+export class ContainerUnresolvedDurableObjectNamespaceIdError extends Data.TaggedError(
+  "ContainerUnresolvedDurableObjectNamespaceIdError",
+)<{
+  readonly received: unknown;
+}> {
+  override get message() {
+    return (
+      `Container binding has an unresolved Durable Object namespaceId. ` +
+      `This usually means the DurableObjectNamespace output was not resolved ` +
+      `before the Container resource was applied (circular dependency in bindContainer). ` +
+      `Received: ${JSON.stringify(this.received)}. ` +
+      `See https://github.com/alchemy-run/alchemy-effect/issues/72`
+    );
+  }
+}
+export namespace ContainerApplication {
+  export type InstanceType = NonNullable<
+    Containers.CreateContainerApplicationRequest["configuration"]["instanceType"]
+  >;
+  export type SchedulingPolicy = NonNullable<
+    Containers.CreateContainerApplicationRequest["schedulingPolicy"]
+  >;
+  export type Observability = NonNullable<
+    Containers.CreateContainerApplicationRequest["configuration"]["observability"]
+  >;
+  export type Secret = NonNullable<
+    Containers.CreateContainerApplicationRequest["configuration"]["secrets"]
+  >[number];
+  export type Disk = NonNullable<
+    Containers.CreateContainerApplicationRequest["configuration"]["disk"]
+  >;
+  export type EnvironmentVariable = NonNullable<
+    Containers.CreateContainerApplicationRequest["configuration"]["environmentVariables"]
+  >[number];
+  export type Label = NonNullable<
+    Containers.CreateContainerApplicationRequest["configuration"]["labels"]
+  >[number];
+  export type Network = NonNullable<
+    Containers.CreateContainerApplicationRequest["configuration"]["network"]
+  >;
+  export type Dns = NonNullable<
+    Containers.CreateContainerApplicationRequest["configuration"]["dns"]
+  >;
+  export type Port = NonNullable<
+    Containers.CreateContainerApplicationRequest["configuration"]["ports"]
+  >[number];
+  export type Check = NonNullable<
+    Containers.CreateContainerApplicationRequest["configuration"]["checks"]
+  >[number];
+  export type Constraints = {
+    tier?: number;
+  };
+  export type Affinities = {
+    colocation?: "datacenter";
+  };
+  export type Configuration =
+    Containers.CreateContainerApplicationRequest["configuration"];
+  export interface Rollout {
+    strategy?: "rolling" | "immediate";
+    kind?: "full_auto";
+    stepPercentage?: number;
+  }
+=======
+/**
+ * Raised (via `Effect.die`) when a Container resource has more than one
+ * Durable Object namespace bound to it. A Container may only back a single
+ * DO namespace.
+ */
+export class ContainerMultipleDurableObjectNamespacesError extends Data.TaggedError(
+  "ContainerMultipleDurableObjectNamespacesError",
+)<{
+  readonly count: number;
+  readonly namespaceIds: readonly (string | undefined)[];
+}> {
+  override get message() {
+    return (
+      `A Container can only be bound to one Durable Object namespace. ` +
+      `Found ${this.count} namespaces in bindings: ${this.namespaceIds.join(", ")}`
+    );
+  }
+}
+
+/**
+ * Raised (via `Effect.die`) when a Container binding arrives with an
+ * unresolved `namespaceId` (typically `undefined`). This indicates the
+ * `DurableObjectNamespace` Output could not be resolved before the Container
+ * resource was applied — the circular dependency tracked in
+ * https://github.com/alchemy-run/alchemy-effect/issues/72.
+ *
+ * Previously this was silently forwarded to the Cloudflare API, producing
+ * a container application with no DO linkage and the runtime error
+ * `no container application assigned to this Durable Object namespace`
+ * with no deploy-time signal.
+ */
+export class ContainerUnresolvedDurableObjectNamespaceIdError extends Data.TaggedError(
+  "ContainerUnresolvedDurableObjectNamespaceIdError",
+)<{
+  readonly received: unknown;
+}> {
+  override get message() {
+    return (
+      `Container binding has an unresolved Durable Object namespaceId. ` +
+      `This usually means the DurableObjectNamespace output was not resolved ` +
+      `before the Container resource was applied (circular dependency in bindContainer). ` +
+      `Received: ${JSON.stringify(this.received)}. ` +
+      `See https://github.com/alchemy-run/alchemy-effect/issues/72`
+    );
+  }
+}
+
+export type InstanceType = NonNullable<
+  Containers.CreateContainerApplicationRequest["configuration"]["instanceType"]
+>;
+export type SchedulingPolicy = NonNullable<
+  Containers.CreateContainerApplicationRequest["schedulingPolicy"]
+>;
+export type Observability = NonNullable<
+  Containers.CreateContainerApplicationRequest["configuration"]["observability"]
+>;
+export type Secret = NonNullable<
+  Containers.CreateContainerApplicationRequest["configuration"]["secrets"]
+>[number];
+export type Disk = NonNullable<
+  Containers.CreateContainerApplicationRequest["configuration"]["disk"]
+>;
+export type EnvironmentVariable = NonNullable<
+  Containers.CreateContainerApplicationRequest["configuration"]["environmentVariables"]
+>[number];
+export type Label = NonNullable<
+  Containers.CreateContainerApplicationRequest["configuration"]["labels"]
+>[number];
+export type Network = NonNullable<
+  Containers.CreateContainerApplicationRequest["configuration"]["network"]
+>;
+export type Dns = NonNullable<
+  Containers.CreateContainerApplicationRequest["configuration"]["dns"]
+>;
+export type Port = NonNullable<
+  Containers.CreateContainerApplicationRequest["configuration"]["ports"]
+>[number];
+export type Check = NonNullable<
+  Containers.CreateContainerApplicationRequest["configuration"]["checks"]
+>[number];
+export type Constraints = {
+  tier?: number;
+};
+export type Affinities = {
+  colocation?: "datacenter";
+};
+export type Configuration =
+  Containers.CreateContainerApplicationRequest["configuration"];
+export interface Rollout {
+  strategy?: "rolling" | "immediate";
+  kind?: "full_auto";
+  stepPercentage?: number;
+>>>>>>> 3754e067 (refactor(Cloudflare/Container): use Data.TaggedError for getDurableObjects failures)
 }
 
 export interface ContainerApplicationProps extends PlatformProps {
@@ -945,14 +1135,54 @@ await Effect.runPromise(serverEffect).catch((err) => {
         const dos = bindings.flatMap((b) =>
           b.data.durableObjects ? [b.data.durableObjects] : [],
         );
+        // A single DO namespace may appear in multiple bindings (e.g. when
+        // a Container is referenced by several resources). Dedupe by namespaceId.
+        const uniqueDos = dos.filter(
+          (d, i, arr) => arr.findIndex((other) => other.namespaceId === d.namespaceId) === i,
+        );
+        if (uniqueDos.length === 0) {
+          return Effect.succeed(undefined);
+        }
+        if (uniqueDos.length > 1) {
+          return Effect.die(
+            new ContainerMultipleDurableObjectNamespacesError({
+              count: uniqueDos.length,
+              namespaceIds: uniqueDos.map((d) => d.namespaceId),
+            }),
+          );
+        }
+        const only = uniqueDos[0]!;
+        // Fail loudly when the binding arrived with an unresolved namespaceId.
+        // Silently forwarding `{ namespaceId: undefined }` to the Cloudflare API
+        // previously produced container applications with no DO linkage, which
+        // caused the runtime error "no container application assigned to this
+        // Durable Object namespace" without any deploy-time signal.
+        // See: https://github.com/alchemy-run/alchemy-effect/issues/72
+        if (typeof only.namespaceId !== "string" || only.namespaceId.length === 0) {
+          return Effect.die(
+            new ContainerUnresolvedDurableObjectNamespaceIdError({
+              received: only,
+            }),
+          );
+        }
+        return Effect.succeed(only);
+      };
+        bindings: ResourceBinding<ContainerApplication["Binding"]>[],
+      ) => {
+        const dos = bindings.flatMap((b) =>
+          b.data.durableObjects ? [b.data.durableObjects] : [],
+        );
         if (dos.length === 0) {
           return Effect.succeed(undefined);
         }
         if (dos.length > 1) {
           return Effect.die(
-            new Error(
-              `A Container can only be bound to one Durable Object namespace. Found ${dos.length} namespaces in bindings: ${bindings.map((b) => b.data.durableObjects?.namespaceId).join(", ")}`,
-            ),
+            new ContainerMultipleDurableObjectNamespacesError({
+              count: dos.length,
+              namespaceIds: bindings.map(
+                (b) => b.data.durableObjects?.namespaceId,
+              ),
+            }),
           );
         }
         const only = dos[0]!;
@@ -964,13 +1194,9 @@ await Effect.runPromise(serverEffect).catch((err) => {
         // See: https://github.com/alchemy-run/alchemy-effect/issues/72
         if (typeof only.namespaceId !== "string" || only.namespaceId.length === 0) {
           return Effect.die(
-            new Error(
-              `Container binding has an unresolved Durable Object namespaceId. ` +
-              `This usually means the DurableObjectNamespace output was not resolved ` +
-              `before the Container resource was applied (circular dependency in bindContainer). ` +
-              `Received: ${JSON.stringify(only)}. ` +
-              `See https://github.com/alchemy-run/alchemy-effect/issues/72`,
-            ),
+            new ContainerUnresolvedDurableObjectNamespaceIdError({
+              received: only,
+            }),
           );
         }
         return Effect.succeed(only);
