@@ -201,18 +201,20 @@ function Footer() {
 }
 
 // Code block & terminal — shared
-function CodeBlock({ filename = "alchemy.run.ts", children, compact }) {
+function CodeBlock({ filename = "alchemy.run.ts", children, compact, maxHeight }) {
   return (
     <div style={{
       background: "var(--alc-bg-code)", border: "1px solid var(--alc-hairline)",
       borderRadius: 10, overflow: "hidden",
       boxShadow: "var(--alc-shadow-sm)",
+      display: "flex", flexDirection: "column",
     }}>
       <div style={{
         display: "flex", alignItems: "center", gap: 6,
         padding: "10px 14px",
         borderBottom: "1px solid rgba(232,220,192,0.08)",
         background: "rgba(255,255,255,0.02)",
+        flex: "0 0 auto",
       }}>
         <span style={{ width: 10, height: 10, borderRadius: "50%", background: "var(--alc-danger)" }} />
         <span style={{ width: 10, height: 10, borderRadius: "50%", background: "var(--alc-warn)" }} />
@@ -224,7 +226,10 @@ function CodeBlock({ filename = "alchemy.run.ts", children, compact }) {
       <pre style={{
         margin: 0, padding: compact ? "12px 16px" : "18px 20px",
         fontFamily: "var(--alc-font-mono)", fontSize: compact ? 12 : 13, lineHeight: 1.7,
-        color: "var(--alc-code-var)", overflowX: "auto",
+        color: "var(--alc-code-var)",
+        overflowX: "auto",
+        overflowY: maxHeight ? "auto" : "visible",
+        maxHeight: maxHeight || "none",
       }}>{children}</pre>
     </div>
   );

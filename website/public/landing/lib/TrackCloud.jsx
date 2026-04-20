@@ -13,11 +13,13 @@ function CloudHero() {
     {
       name: "AWS",
       color: "#FF9900",
-      // simple-icons removed AWS in v15 (trademark review) and devicon only
-      // ships wordmark variants — which would duplicate the "AWS" heading.
-      // Self-hosted square smile-glyph keeps it visually consistent with the
-      // single Cloudflare cloud glyph.
-      logos: [{ slug: "aws", src: "/landing/logos/aws-smile.svg" }],
+      // Official AWS wordmark (smile + "aws"). simple-icons removed AWS in v15
+      // for trademark review, so we use devicon's hosted version.
+      logos: [{
+        slug: "aws",
+        src: "https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/amazonwebservices/amazonwebservices-original-wordmark.svg",
+        w: 56, h: 32,
+      }],
       desc: "Lambda · S3 · DynamoDB · SQS · Kinesis · IAM · EC2",
     },
     {
@@ -104,8 +106,10 @@ function CloudStackExample() {
 {"  "}{"{ providers: "}{T.v("Cloudflare")}.{T.f("providers")}() {"}"},{"\n"}
 {"  "}{T.v("Effect")}.{T.f("gen")}({T.k("function")}* () {"{"}{"\n"}
 {"    "}{T.k("const")} bucket = {T.k("yield")}* {T.v("Bucket")};{"\n"}
-{"    "}{T.k("const")} kv     = {T.k("yield")}* {T.v("KV")};{"\n"}
+{"    "}{T.k("const")} queue  = {T.k("yield")}* {T.v("Queue")};{"\n"}
 {"    "}{T.k("const")} api    = {T.k("yield")}* {T.v("Api")};{"\n"}
+{"\n"}
+{"    "}{T.c("// typed url returned to the caller")}{"\n"}
 {"    "}{T.k("return")} {"{ url: api.url };"}{"\n"}
 {"  "}{"}),"}{"\n"}
 {");"}
@@ -220,61 +224,365 @@ function CloudResourcesAndWorker() {
   );
 }
 
-// Tabs for Cloudflare feature breadth (all grounded in the real example)
-function CloudFeatureTabs() {
-  const [tab, setTab] = useState3("do");
-  const tabs = [
-    { k: "do",   label: "Durable Objects" },
-    { k: "wf",   label: "Workflows" },
-    { k: "ctr",  label: "Containers" },
-  ];
-  const code = {
-    do: <>
-{T.c("// src/Room.ts — a Durable Object, typed WebSocket + hibernation")}{"\n"}
-{T.k("export default")} {T.k("class")} {T.t("Room")} {T.k("extends")} {T.v("Cloudflare")}.{T.f("DurableObjectNamespace")}{"<"}{T.t("Room")}{">()"}({"\n"}
-{"  "}{T.s('"Rooms"')},{"\n"}
-{"  "}{T.v("Effect")}.{T.f("gen")}({T.k("function")}* () {"{"}{"\n"}
-{"    "}{T.k("const")} state = {T.k("yield")}* {T.v("Cloudflare")}.{T.v("DurableObjectState")};{"\n\n"}
-{"    "}{T.k("return")} {"{"}{"\n"}
-{"      "}fetch: {T.v("Cloudflare")}.{T.f("upgrade")}(),{"\n"}
-{"      "}webSocketMessage: {T.c("/* broadcast to peers */")},{"\n"}
-{"    "}{"};"}{"\n"}
-{"  "}{"}),"}{"\n"}
-{") {"}{"}"}
-    </>,
-    wf: <>
-{T.c("// start a Workflow from inside a Worker — typed input, typed handle")}{"\n"}
-{T.k("const")} notifier = {T.k("yield")}* {T.v("NotifyWorkflow")};{"\n\n"}
-{T.k("const")} instance = {T.k("yield")}* notifier.{T.f("create")}({"{"}{"\n"}
-{"  "}roomId: {T.s('"general"')},{"\n"}
-{"  "}message: {T.s('"hello from workflow"')},{"\n"}
-{"}"});{"\n\n"}
-{T.k("const")} status = {T.k("yield")}* ({T.k("yield")}* notifier.{T.f("get")}(instance.id)).{T.f("status")}();{"\n"}
-{T.k("return")} {T.k("yield")}* {T.v("HttpServerResponse")}.{T.f("json")}(status);
-    </>,
-    ctr: <>
-{T.c("// bind a Container, start it from a DO, speak HTTP to it")}{"\n"}
-{T.k("const")} sandbox = {T.k("yield")}* {T.v("Cloudflare")}.{T.v("Container")}.{T.f("bind")}({T.v("Sandbox")});{"\n"}
-{T.k("const")} container = {T.k("yield")}* {T.v("Cloudflare")}.{T.f("start")}(sandbox);{"\n\n"}
-{T.k("const")} {"{ fetch }"} = {T.k("yield")}* container.{T.f("getTcpPort")}({T.n("3000")});{"\n"}
-{T.k("const")} response = {T.k("yield")}* fetch({"\n"}
-{"  "}{T.v("HttpClientRequest")}.{T.f("post")}({T.s('"http://container/increment"')}),{"\n"}
-{");"}{"\n"}
-{T.k("return")} {T.k("yield")}* response.text;
-    </>,
-  };
-  const filenames = { do: "src/Room.ts", wf: "src/Api.ts", ctr: "src/Agent.ts" };
+// ---------------------------------------------------------------------------
+// CloudFeatureTabs — full export defaults from real examples + block diagrams
+// ---------------------------------------------------------------------------
+
+// Lightweight TS highlighter — single-pass regex over the source text.
+function highlightTS(src) {
+  const re = /(\/\/[^\n]*)|(\/\*[\s\S]*?\*\/)|("(?:[^"\\]|\\.)*")|('(?:[^'\\]|\\.)*')|(`(?:[^`\\]|\\.)*`)|\b(import|export|default|class|extends|const|let|var|function|return|yield|if|else|for|of|in|as|new|typeof|async|await|from|interface|type|null|true|false|this|void|throw)\b|\b(\d+)\b|([A-Z][a-zA-Z0-9_]*)|([a-z_$][a-zA-Z0-9_$]*)/g;
+  const out = [];
+  let last = 0, m, k = 0;
+  const push = (node) => out.push(node);
+  while ((m = re.exec(src)) !== null) {
+    if (m.index > last) push(src.slice(last, m.index));
+    if (m[1] || m[2]) {
+      push(<span key={k++} style={{ color: "var(--alc-code-comment)", fontStyle: "italic" }}>{m[0]}</span>);
+    } else if (m[3] || m[4] || m[5]) {
+      push(<span key={k++} style={{ color: "var(--alc-code-string)" }}>{m[0]}</span>);
+    } else if (m[6]) {
+      push(<span key={k++} style={{ color: "var(--alc-code-keyword)" }}>{m[0]}</span>);
+    } else if (m[7]) {
+      push(<span key={k++} style={{ color: "var(--alc-code-literal)" }}>{m[0]}</span>);
+    } else if (m[8]) {
+      push(<span key={k++} style={{ color: "var(--alc-code-type)" }}>{m[0]}</span>);
+    } else if (m[9]) {
+      push(<span key={k++} style={{ color: "var(--alc-code-var)" }}>{m[0]}</span>);
+    }
+    last = re.lastIndex;
+  }
+  if (last < src.length) push(src.slice(last));
+  return out;
+}
+
+// ---- Inline SVG icons for the diagram nodes ----
+// Each icon is a 32x32 viewBox; we tint via stroke/fill on currentColor / accent.
+
+function IconClient({ size = 26 }) {
   return (
-    <Section padding="96px 32px">
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden>
+      <circle cx="16" cy="16" r="11" stroke="var(--alc-fg-3)" strokeWidth="1.4" />
+      <ellipse cx="16" cy="16" rx="5" ry="11" stroke="var(--alc-fg-3)" strokeWidth="1.2" />
+      <line x1="5" y1="16" x2="27" y2="16" stroke="var(--alc-fg-3)" strokeWidth="1.2" />
+    </svg>
+  );
+}
+
+function IconWorker({ size = 26 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden>
+      <rect x="3" y="3" width="26" height="26" rx="6"
+            fill="var(--alc-accent-12)" stroke="var(--alc-accent)" strokeWidth="1.4" />
+      <path d="M19 7 L10 18 H15 L13 25 L22 13 H17 Z"
+            fill="var(--alc-accent)" stroke="none" />
+    </svg>
+  );
+}
+
+function IconR2({ size = 26 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden>
+      <ellipse cx="16" cy="9" rx="10" ry="3"
+               fill="var(--alc-accent-12)" stroke="var(--alc-accent)" strokeWidth="1.5" />
+      <path d="M6 9 V23 C6 24.7 10.5 26 16 26 C21.5 26 26 24.7 26 23 V9"
+            fill="var(--alc-accent-12)" stroke="var(--alc-accent)" strokeWidth="1.5" />
+      <path d="M6 16 C6 17.7 10.5 19 16 19 C21.5 19 26 17.7 26 16"
+            stroke="var(--alc-accent)" strokeWidth="1" strokeOpacity="0.55" fill="none" />
+    </svg>
+  );
+}
+
+function IconKV({ size = 26 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden>
+      <circle cx="11" cy="16" r="6"
+              fill="var(--alc-accent-12)" stroke="var(--alc-accent)" strokeWidth="1.5" />
+      <circle cx="11" cy="16" r="2.2" fill="var(--alc-accent)" />
+      <path d="M17 16 L27 16 M23 16 L23 21 M27 16 L27 12"
+            stroke="var(--alc-accent)" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconDO({ size = 26 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden>
+      <path d="M16 3 L28 10 L28 22 L16 29 L4 22 L4 10 Z"
+            fill="var(--alc-accent-12)" stroke="var(--alc-accent)" strokeWidth="1.5" />
+      <circle cx="16" cy="16" r="3.5" fill="var(--alc-accent)" />
+    </svg>
+  );
+}
+
+// ---- Node + connector primitives ----
+
+function DiagNode({ icon, label, sub, accent, dim }) {
+  return (
+    <div style={{
+      background: dim ? "var(--alc-bg)" : "var(--alc-bg-elev-1)",
+      border: `1px solid ${accent ? "var(--alc-accent-40)" : "var(--alc-hairline-2)"}`,
+      borderRadius: 10,
+      padding: "10px 12px 8px",
+      minWidth: 92,
+      display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+      boxShadow: accent ? "0 0 0 2px var(--alc-accent-12)" : "none",
+      textAlign: "center",
+    }}>
+      {icon}
+      <div style={{
+        fontFamily: "var(--alc-font-sans)", fontSize: 12, fontWeight: 600,
+        color: "var(--alc-fg-1)", lineHeight: 1.2,
+      }}>{label}</div>
+      {sub && (
+        <div style={{
+          fontFamily: "var(--alc-font-mono)", fontSize: 10,
+          color: "var(--alc-fg-3)", lineHeight: 1.25,
+        }}>{sub}</div>
+      )}
+    </div>
+  );
+}
+
+function DiagArrow({ label, height = 22 }) {
+  return (
+    <div style={{
+      display: "flex", flexDirection: "column", alignItems: "center",
+      gap: 2, padding: "2px 0",
+    }}>
+      {label && (
+        <div style={{
+          fontFamily: "var(--alc-font-mono)", fontSize: 10,
+          color: "var(--alc-fg-3)",
+        }}>{label}</div>
+      )}
+      <svg width="14" height={height} viewBox={`0 0 14 ${height}`}>
+        <path d={`M7 0 L7 ${height - 6}`} stroke="var(--alc-accent)" strokeWidth="1.4" />
+        <path d={`M3 ${height - 8} L7 ${height - 1} L11 ${height - 8}`}
+          stroke="var(--alc-accent)" strokeWidth="1.4" fill="none"
+          strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </div>
+  );
+}
+
+// Bidirectional arrow (one up + one down, side-by-side) with optional labels.
+function DiagBidir({ topLabel, bottomLabel, height = 30 }) {
+  return (
+    <div style={{
+      display: "flex", flexDirection: "column", alignItems: "center",
+      gap: 2, padding: "2px 0",
+    }}>
+      {topLabel && (
+        <div style={{ fontFamily: "var(--alc-font-mono)", fontSize: 10, color: "var(--alc-fg-3)" }}>
+          {topLabel}
+        </div>
+      )}
+      <svg width="28" height={height} viewBox={`0 0 28 ${height}`}>
+        {/* up arrow on the left */}
+        <path d={`M9 ${height - 1} L9 5`} stroke="var(--alc-accent)" strokeWidth="1.4" />
+        <path d={`M6 7 L9 1 L12 7`} stroke="var(--alc-accent)" strokeWidth="1.4" fill="none"
+          strokeLinecap="round" strokeLinejoin="round" />
+        {/* down arrow on the right */}
+        <path d={`M19 1 L19 ${height - 5}`} stroke="var(--alc-accent)" strokeWidth="1.4" />
+        <path d={`M16 ${height - 7} L19 ${height - 1} L22 ${height - 7}`}
+          stroke="var(--alc-accent)" strokeWidth="1.4" fill="none"
+          strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      {bottomLabel && (
+        <div style={{ fontFamily: "var(--alc-font-mono)", fontSize: 10, color: "var(--alc-fg-3)" }}>
+          {bottomLabel}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Fan-out: parent on top, N children below, connected by a horizontal bus.
+function DiagFanOut({ parent, children: kids, label }) {
+  const N = kids.length;
+  const startPct = 100 / (N * 2);
+  return (
+    <div style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center" }}>
+      {parent}
+      {label && (
+        <div style={{
+          marginTop: 4,
+          fontFamily: "var(--alc-font-mono)", fontSize: 10, color: "var(--alc-fg-3)",
+        }}>{label}</div>
+      )}
+      {/* connector area: trunk -> bus -> drops + arrowheads */}
+      <div style={{ position: "relative", height: 28, width: "100%", marginTop: 2 }}>
+        {/* trunk (parent center → bus) */}
+        <div style={{
+          position: "absolute", left: "50%", top: 0, height: 9, width: 0,
+          borderLeft: "1.4px solid var(--alc-accent)", transform: "translateX(-0.5px)",
+        }} />
+        {/* horizontal bus */}
+        <div style={{
+          position: "absolute", top: 8, left: `${startPct}%`, right: `${startPct}%`,
+          borderTop: "1.4px solid var(--alc-accent)",
+        }} />
+        {/* drops + arrowheads into each child */}
+        {kids.map((_, i) => {
+          const x = `${startPct * (2 * i + 1)}%`;
+          return (
+            <React.Fragment key={i}>
+              <div style={{
+                position: "absolute", top: 9, left: x, height: 14, width: 0,
+                borderLeft: "1.4px solid var(--alc-accent)", transform: "translateX(-0.5px)",
+              }} />
+              <svg width="8" height="6" style={{
+                position: "absolute", top: 22, left: x, transform: "translateX(-4px)",
+              }}>
+                <path d="M0 0 L4 6 L8 0" stroke="var(--alc-accent)" strokeWidth="1.4"
+                  fill="none" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </React.Fragment>
+          );
+        })}
+      </div>
+      <div style={{
+        display: "grid", gridTemplateColumns: `repeat(${N}, 1fr)`, gap: 6, width: "100%",
+      }}>
+        {kids.map((c, i) => (
+          <div key={i} style={{ display: "flex", justifyContent: "center" }}>{c}</div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DiagWrap({ children }) {
+  return (
+    <div style={{
+      display: "flex", flexDirection: "column", alignItems: "center",
+      padding: "8px 4px", gap: 0, width: "100%",
+    }}>{children}</div>
+  );
+}
+
+// ---- Diagrams per tab — each topology is intentionally different ----
+
+// Linear: Client → Worker → Bucket
+function DiagramR2() {
+  return (
+    <DiagWrap>
+      <DiagNode icon={<IconClient />} label="Client" sub="HTTP" dim />
+      <DiagArrow label="GET /key" />
+      <DiagNode icon={<IconWorker />} label="Api" sub="Worker" accent />
+      <DiagArrow label=".bind(Bucket)" />
+      <DiagNode icon={<IconR2 />} label="Bucket" sub="R2" />
+    </DiagWrap>
+  );
+}
+
+// Bidirectional: Worker ↔ KV (read + write)
+function DiagramKV() {
+  return (
+    <DiagWrap>
+      <DiagNode icon={<IconWorker />} label="Api" sub="Worker" accent />
+      <DiagBidir topLabel="kv.put(k, v)" bottomLabel="kv.get(k)" height={36} />
+      <DiagNode icon={<IconKV />} label="KV" sub="key/value" />
+    </DiagWrap>
+  );
+}
+
+// Fan-out: one Worker routes to many Room instances by name
+function DiagramRoom() {
+  return (
+    <DiagWrap>
+      <DiagFanOut
+        parent={<DiagNode icon={<IconWorker />} label="Api" sub="Worker" accent />}
+        label="rooms.getByName(id)"
+        children={[
+          <DiagNode icon={<IconDO />} label="Room" sub="#alpha" />,
+          <DiagNode icon={<IconDO />} label="Room" sub="#beta" />,
+          <DiagNode icon={<IconDO />} label="Room" sub="#gamma" />,
+        ]}
+      />
+    </DiagWrap>
+  );
+}
+
+// ---- Source snippets per tab — tight binding-only views ----
+
+const SRC_R2 = `import { Bucket } from "./Bucket.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  Effect.gen(function* () {
+    const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
+    return { fetch: (req) => bucket.get(req.url) };
+  }),
+) {}
+`;
+
+const SRC_KV = `import { KV } from "./KV.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  Effect.gen(function* () {
+    const kv = yield* Cloudflare.KVNamespace.bind(KV);
+    return { fetch: (req) => kv.get(req.url) };
+  }),
+) {}
+`;
+
+const SRC_DO = `import Room from "./Room.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  Effect.gen(function* () {
+    const rooms = yield* Room;
+    return { fetch: (req) => rooms.getByName(req.url).fetch(req) };
+  }),
+) {}
+`;
+
+// Tabs for Cloudflare feature breadth — full export defaults, side-by-side diagrams.
+function CloudFeatureTabs() {
+  const [tab, setTab] = useState3("r2");
+  const examples = [
+    {
+      k: "r2",
+      label: "R2 Bucket",
+      filename: "src/Api.ts",
+      caption: "Bind an R2 bucket inside a Worker — typed client, deploy-time wiring.",
+      src: SRC_R2,
+      diagram: <DiagramR2 />,
+    },
+    {
+      k: "kv",
+      label: "KV",
+      filename: "src/Api.ts",
+      caption: "The same .bind() shape — get and put from the same typed client.",
+      src: SRC_KV,
+      diagram: <DiagramKV />,
+    },
+    {
+      k: "do",
+      label: "Durable Object",
+      filename: "src/Api.ts",
+      caption: "Yield the Room namespace, then route by name — one DO instance per id.",
+      src: SRC_DO,
+      diagram: <DiagramRoom />,
+    },
+  ];
+  const active = examples.find(e => e.k === tab) || examples[0];
+
+  return (
+    <Section padding="80px 32px" maxWidth={1000}>
       <div style={{ textAlign: "center", marginBottom: 36 }}>
-        <Eyebrow>everything cloudflare ships</Eyebrow>
+        <Eyebrow>bindings · the same shape, every primitive</Eyebrow>
         <h2 className="alc-h2" style={{ margin: "12px 0 12px" }}>Typed all the way down.</h2>
-        <p style={{ fontSize: 16, lineHeight: 1.65, color: "var(--alc-fg-2)", maxWidth: 640, margin: "12px auto 0" }}>
-          Durable Objects, Workflows, Containers, R2, KV, D1 — all first-class. Write the runtime as Effect; alchemy handles the deploy wiring.
+        <p style={{ fontSize: 16, lineHeight: 1.65, color: "var(--alc-fg-2)", maxWidth: 620, margin: "12px auto 0" }}>
+          Declare a resource once. Bind it inside a Worker. The runtime client is typed,
+          the deploy-time wiring is automatic.
         </p>
       </div>
-      <div style={{ display: "flex", justifyContent: "center", gap: 4, marginBottom: 20, flexWrap: "wrap" }}>
-        {tabs.map(t => (
+
+      <div style={{ display: "flex", justifyContent: "center", gap: 4, marginBottom: 18, flexWrap: "wrap" }}>
+        {examples.map(t => (
           <button key={t.k} onClick={() => setTab(t.k)} style={{
             border: "1px solid var(--alc-hairline-2)",
             background: tab === t.k ? "var(--alc-bg-code)" : "var(--alc-bg-elev-1)",
@@ -284,8 +592,28 @@ function CloudFeatureTabs() {
           }}>{t.label}</button>
         ))}
       </div>
-      <div style={{ maxWidth: 900, margin: "0 auto" }}>
-        <CodeBlock filename={filenames[tab]}>{code[tab]}</CodeBlock>
+
+      <div style={{
+        textAlign: "center", maxWidth: 680, margin: "0 auto 18px",
+        fontFamily: "var(--alc-font-sans)", fontSize: 13.5,
+        color: "var(--alc-fg-3)", lineHeight: 1.55,
+      }}>
+        {active.caption}
+      </div>
+
+      <div className="feature-tab-grid">
+        <CodeBlock filename={active.filename} compact>
+          {highlightTS(active.src)}
+        </CodeBlock>
+        <div className="feature-tab-diagram">
+          <div style={{
+            background: "var(--alc-bg-elev-1)",
+            border: "1px solid var(--alc-hairline)",
+            borderRadius: 10, padding: "14px 12px",
+          }}>
+            {active.diagram}
+          </div>
+        </div>
       </div>
     </Section>
   );

@@ -403,3 +403,27 @@ body.alc-root,
     width: 120px;
   }
 }
+
+/* ---------- Cloud feature tabs: code + architecture diagram ---------- */
+.feature-tab-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr);
+  gap: 24px;
+  max-width: 960px;
+  margin: 0 auto;
+  align-items: start;
+}
+.feature-tab-diagram {
+  position: sticky;
+  top: 88px;
+}
+@media (max-width: 980px) {
+  .feature-tab-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .feature-tab-diagram {
+    position: static;
+    order: -1;
+  }
+}

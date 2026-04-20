@@ -1,49 +1,56 @@
-// DeployTerminal — replays a real `alchemy deploy` run inside a fake terminal.
-// Mirrors the Ink CLI in `packages/alchemy/src/Cli/components/{Plan,PlanProgress}.tsx`:
-//   • underlined "Plan: N to create" header
-//   • plan rows with `+` `~` `-` `!` icons and action colors
-//   • progress rows with the same braille spinner used by useGlobalSpinner
-//   • status words colored per ApplyStatus
-//   • final "✓ deployed in Xs" line + bound URL
-// Auto-loops every ~5s of idle.
+// LifecycleTerminal — replays the full alchemy lifecycle inside a fake terminal.
+//
+// It cycles through three commands, with a single shared list of resources
+// that transforms in place rather than re-printing:
+//
+//   1. alchemy plan      — accent CYAN   — rows appear with `+` icons
+//   2. alchemy deploy    — accent GREEN  — same rows spin → ✓ created
+//   3. alchemy destroy   — accent RED    — rows flip to `-` then spin → ✓ deleted
+//
+// Spinner frames, action icons, and status colors mirror the real Ink CLI in
+// packages/alchemy/src/Cli/components/{Plan,PlanProgress}.tsx.
 
-const { useEffect, useState: useDeployState, useRef: useDeployRef } = React;
+const { useEffect, useState: useDA, useRef: useDARef } = React;
 
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
-// Status -> token color (matches statusColor in PlanProgress.tsx)
-const STATUS_COLOR = {
-  pending:  "var(--alc-code-comment)",  // gray
-  creating: "var(--alc-success)",       // green
-  created:  "var(--alc-success)",       // green
-  updating: "var(--alc-warn)",          // yellow
-  updated:  "var(--alc-warn)",          // yellow
-  deleting: "var(--alc-danger)",        // red
-  deleted:  "var(--alc-danger)",        // red
-  fail:     "var(--alc-danger)",
-};
-
-// Action -> color/icon (matches getActionColor / getActionIcon in Plan.tsx)
+// Action -> icon (Plan.tsx getActionIcon)
+const ACTION_ICON = { create: "+", update: "~", delete: "-", replace: "!", noop: "•" };
+// Action -> color
 const ACTION_COLOR = {
   create:  "var(--alc-success)",
   update:  "var(--alc-warn)",
   delete:  "var(--alc-danger)",
-  replace: "#c4729a",                   // magenta
-  noop:    "var(--alc-code-comment)",
+  replace: "#c4729a",
 };
-const ACTION_ICON = { create: "+", update: "~", delete: "-", replace: "!", noop: "•" };
+// Per-mode accent (the prompt $, the underlined verb, the mode badge).
+// Animated via CSS transition so the swap between commands feels intentional.
+const MODE_ACCENT = {
+  idle:    "var(--alc-code-comment)",
+  plan:    "var(--alc-code-type)",      // cyan / sky
+  deploy:  "var(--alc-accent-bright)",  // moss / spring green
+  destroy: "var(--alc-danger)",         // brick red
+};
+const MODE_LABEL = {
+  plan: "PLAN", deploy: "DEPLOY", destroy: "DESTROY",
+};
 
-// Static plan we'll animate. Mirrors what the real CLI would print for the
-// Stack on the left of the diagram (Bucket + KV + Api with 2 bindings).
+// The lifecycle subject. Static — only its display state mutates as the
+// timeline ticks through plan/deploy/destroy. Bindings render as nested
+// children under their owning resource (matching the real CLI plan output).
 const RESOURCES = [
-  { id: "Bucket", type: "Cloudflare.R2Bucket",   action: "create", duration: 1200 },
-  { id: "KV",     type: "Cloudflare.KVNamespace", action: "create", duration: 900  },
-  { id: "Api",    type: "Cloudflare.Worker",     action: "create", duration: 1800,
-    bindingCount: 2, startsAfter: ["Bucket", "KV"] },
+  {
+    id: "Api", type: "Cloudflare.Worker",
+    bindings: ["Bucket", "Queue"],
+  },
+  { id: "Bucket", type: "Cloudflare.R2Bucket", bindings: [] },
+  { id: "Queue",  type: "Cloudflare.Queue",    bindings: [] },
 ];
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 function useSpinner(active, intervalMs = 80) {
-  const [i, setI] = useDeployState(0);
+  const [i, setI] = useDA(0);
   useEffect(() => {
     if (!active) return;
     const t = setInterval(() => setI((v) => (v + 1) % SPINNER_FRAMES.length), intervalMs);
@@ -52,130 +59,219 @@ function useSpinner(active, intervalMs = 80) {
   return SPINNER_FRAMES[i];
 }
 
-function DeployTerminal({ title = "~/my-app · alchemy deploy --stage prod", autoplay = true }) {
-  // Phase machine. Each phase reveals more of the output.
-  //  0: typing the command
-  //  1: plan header + plan rows (revealed line by line)
-  //  2: progress (each resource transitions pending -> creating -> created on its own timer)
-  //  3: success summary
-  //  4: rest (then loop)
-  const [phase, setPhase] = useDeployState(0);
-  const [typed, setTyped] = useDeployState("");
-  const [planRowsShown, setPlanRowsShown] = useDeployState(0);
-  const [progressStartedAt, setProgressStartedAt] = useDeployState(null);
-  const [statuses, setStatuses] = useDeployState({}); // id -> "pending" | "creating" | "created"
-  const [elapsedMs, setElapsedMs] = useDeployState(0);
-  const containerRef = useDeployRef(null);
+function LifecycleTerminal({ title = "~/my-app" }) {
+  // Whole-terminal state
+  const [mode, setMode]         = useDA("idle");          // "idle" | "plan" | "deploy" | "destroy"
+  const [cmd, setCmd]           = useDA("");              // currently visible command after the $
+  const [caret, setCaret]       = useDA(false);           // blinking caret while typing
+  const [header, setHeader]     = useDA(null);            // { verb, count, action } | null
+  const [rows, setRows]         = useDA([]);              // [{ id, type, action, status, bindings: [] }]
+  const [summary, setSummary]   = useDA(null);            // { verb, secs, url? } | null
+  const [proceed, setProceed]   = useDA(null);            // null | "show" | "confirmed"
 
-  const command = "alchemy deploy --stage prod";
+  const cancelRef = useDARef(false);
 
-  // PHASE 0: type the command, char by char
+  // ────────────────────────────────────────────────────────────────────────
+  // Timeline. Plays once on mount, loops forever, cancels on unmount.
+  // ────────────────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (phase !== 0) return;
-    setTyped("");
-    let i = 0;
-    const t = setInterval(() => {
-      i += 1;
-      setTyped(command.slice(0, i));
-      if (i >= command.length) {
-        clearInterval(t);
-        setTimeout(() => setPhase(1), 350);
+    cancelRef.current = false;
+    const aborted = () => cancelRef.current;
+
+    // Helpers (close over setters)
+    const typeCmd = async (text) => {
+      setCmd(""); setCaret(true);
+      for (let i = 1; i <= text.length; i++) {
+        if (aborted()) return;
+        setCmd(text.slice(0, i));
+        await sleep(36 + Math.random() * 24);
       }
-    }, 38);
-    return () => clearInterval(t);
-  }, [phase]);
+      await sleep(180);
+      setCaret(false);
+    };
 
-  // PHASE 1: reveal plan rows one at a time
-  useEffect(() => {
-    if (phase !== 1) return;
-    setPlanRowsShown(0);
-    let i = 0;
-    const total = RESOURCES.length;
-    const t = setInterval(() => {
-      i += 1;
-      setPlanRowsShown(i);
-      if (i >= total) {
-        clearInterval(t);
-        setTimeout(() => {
-          setPhase(2);
-          setProgressStartedAt(Date.now());
-          setStatuses(Object.fromEntries(RESOURCES.map((r) => [r.id, "pending"])));
-        }, 600);
+    const updateRow = (id, patch) =>
+      setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+
+    const setAllRowsAction = (action, status = "pending") =>
+      setRows((rs) => rs.map((r) => ({ ...r, action, status })));
+
+    const revealRows = async (action, perRowMs = 130) => {
+      setRows([]);
+      for (const r of RESOURCES) {
+        if (aborted()) return;
+        setRows((rs) => [...rs, { ...r, action, status: "ready" }]);
+        await sleep(perRowMs);
       }
-    }, 180);
-    return () => clearInterval(t);
-  }, [phase]);
+    };
 
-  // PHASE 2: drive each resource through pending -> creating -> created on its own schedule
-  useEffect(() => {
-    if (phase !== 2) return;
-    const start = progressStartedAt ?? Date.now();
-    const timers = [];
-    let staggerOffset = 0;
-    const finishTimes = {};
-    for (const r of RESOURCES) {
-      const earliestStart = (r.startsAfter ?? [])
-        .map((dep) => finishTimes[dep] ?? 0)
-        .reduce((a, b) => Math.max(a, b), 0);
-      const startAt = Math.max(staggerOffset, earliestStart);
-      const finishAt = startAt + r.duration;
-      finishTimes[r.id] = finishAt;
-      staggerOffset += 250; // small stagger between starts of independent resources
-      timers.push(setTimeout(() => {
-        setStatuses((s) => ({ ...s, [r.id]: "creating" }));
-      }, startAt));
-      timers.push(setTimeout(() => {
-        setStatuses((s) => ({ ...s, [r.id]: "created" }));
-      }, finishAt));
-    }
-    const total = Math.max(...Object.values(finishTimes));
-    timers.push(setTimeout(() => {
-      setElapsedMs(Date.now() - start);
-      setPhase(3);
-    }, total + 250));
-    return () => timers.forEach(clearTimeout);
-  }, [phase, progressStartedAt]);
+    const startResource = async (id, status, ms) => {
+      if (aborted()) return;
+      updateRow(id, { status });
+      await sleep(ms);
+      if (aborted()) return;
+      const done = status === "creating" ? "created" : "deleted";
+      updateRow(id, { status: done });
+    };
 
-  // PHASE 3 -> 4 -> loop
-  useEffect(() => {
-    if (phase !== 3 || !autoplay) return;
-    const t = setTimeout(() => setPhase(4), 4500);
-    return () => clearTimeout(t);
-  }, [phase, autoplay]);
+    const run = async () => {
+      while (!aborted()) {
+        // ────────── PLAN ──────────
+        setMode("plan");
+        setHeader(null); setRows([]); setSummary(null); setProceed(null);
+        await typeCmd("alchemy plan");
+        if (aborted()) return;
+        await sleep(250);
+        setHeader({ verb: "Plan", count: RESOURCES.length, action: "create" });
+        await sleep(150);
+        await revealRows("create");
+        await sleep(2400);
 
-  useEffect(() => {
-    if (phase !== 4) return;
-    const t = setTimeout(() => {
-      setTyped("");
-      setPlanRowsShown(0);
-      setStatuses({});
-      setElapsedMs(0);
-      setProgressStartedAt(null);
-      setPhase(0);
-    }, 700);
-    return () => clearTimeout(t);
-  }, [phase]);
+        // ────────── DEPLOY ──────────
+        if (aborted()) return;
+        setMode("deploy");
+        setSummary(null);
+        await typeCmd("alchemy deploy");
+        if (aborted()) return;
+        setHeader({ verb: "Apply", count: RESOURCES.length, action: "create" });
+        await sleep(300);
+        // Show the Proceed? ◉ Yes ○ No prompt briefly
+        setProceed("show");
+        await sleep(900);
+        if (aborted()) return;
+        setProceed("confirmed");
+        await sleep(450);
+        if (aborted()) return;
+        setProceed(null);
+        // Leaves (Bucket, Queue) in parallel first, then Api once they're done.
+        const t0 = Date.now();
+        await Promise.all([
+          startResource("Bucket", "creating", 1000),
+          (async () => { await sleep(220); await startResource("Queue", "creating", 900); })(),
+        ]);
+        if (aborted()) return;
+        await startResource("Api", "creating", 1300);
+        if (aborted()) return;
+        const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+        setSummary({ verb: "deployed", secs: elapsed, url: "https://api.my-app.workers.dev" });
+        await sleep(2600);
 
-  const anyInProgress = Object.values(statuses).some((s) => s === "creating");
-  const spinner = useSpinner(anyInProgress);
+        // ────────── DESTROY ──────────
+        if (aborted()) return;
+        setMode("destroy");
+        setSummary(null);
+        await typeCmd("alchemy destroy");
+        if (aborted()) return;
+        setHeader({ verb: "Apply", count: RESOURCES.length, action: "delete" });
+        // Flip every row to delete-pending (icon `-`, red), preserving order.
+        setAllRowsAction("delete", "ready");
+        await sleep(350);
+        setProceed("show");
+        await sleep(900);
+        setProceed("confirmed");
+        await sleep(400);
+        setProceed(null);
+        // Reverse dependency order: Api first, then leaves in parallel.
+        const tD = Date.now();
+        await startResource("Api", "deleting", 900);
+        if (aborted()) return;
+        await Promise.all([
+          startResource("Bucket", "deleting", 700),
+          (async () => { await sleep(180); await startResource("Queue", "deleting", 650); })(),
+        ]);
+        if (aborted()) return;
+        const elapsedD = ((Date.now() - tD) / 1000).toFixed(1);
+        setSummary({ verb: "destroyed", secs: elapsedD });
+        await sleep(2800);
+      }
+    };
 
-  // ── Render ──────────────────────────────────────────────────────────────
+    run();
+    return () => { cancelRef.current = true; };
+  }, []);
+
+  const anyInFlight = rows.some((r) => r.status === "creating" || r.status === "deleting");
+  const spinner = useSpinner(anyInFlight);
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Render
+  // ────────────────────────────────────────────────────────────────────────
+  const accent = MODE_ACCENT[mode];
+
   const Line = ({ children, style }) => (
-    <div style={{ minHeight: "1.6em", whiteSpace: "pre", ...style }}>{children}</div>
+    <div style={{ minHeight: "1.55em", whiteSpace: "pre", ...style }}>{children}</div>
   );
 
-  const showPlan      = phase >= 1;
-  const showProgress  = phase >= 2;
-  const showSummary   = phase >= 3;
+  const renderRow = (r) => {
+    const actionColor = ACTION_COLOR[r.action] ?? "var(--alc-code-comment)";
+    let icon, iconColor, statusWord, statusColor;
+    if (r.status === "ready") {
+      icon = ACTION_ICON[r.action];
+      iconColor = actionColor;
+      statusWord = null;
+    } else if (r.status === "creating" || r.status === "deleting") {
+      icon = spinner;
+      iconColor = actionColor;
+      statusWord = r.status;
+      statusColor = actionColor;
+    } else if (r.status === "created" || r.status === "deleted") {
+      icon = "✓";
+      iconColor = actionColor;
+      statusWord = r.status;
+      statusColor = actionColor;
+    } else {
+      icon = " ";
+      iconColor = "transparent";
+    }
+
+    const bindingIcon = ACTION_ICON[r.action] ?? "+";
+    const bindingCount = r.bindings?.length ?? 0;
+
+    return (
+      <div key={r.id}>
+        <div style={{
+          minHeight: "1.55em", whiteSpace: "pre",
+          transition: "opacity 200ms var(--alc-ease, ease)",
+        }}>
+          <span style={{
+            color: iconColor, width: "1.2em", display: "inline-block",
+            transition: "color 200ms ease",
+          }}>{icon}</span>
+          <span style={{ color: "var(--alc-fg-invert)", fontWeight: 600 }}>{r.id}</span>
+          <span style={{ color: "var(--alc-code-comment)" }}>{` (${r.type})`}</span>
+          {bindingCount > 0 && (
+            <span style={{ color: "var(--alc-code-type)" }}>{` (${bindingCount} bindings)`}</span>
+          )}
+          {statusWord && (
+            <span style={{
+              color: statusColor, marginLeft: 6,
+              transition: "color 200ms ease",
+            }}>{statusWord}</span>
+          )}
+        </div>
+        {bindingCount > 0 && r.bindings.map((b) => (
+          <div key={`${r.id}-${b}`} style={{ minHeight: "1.55em", whiteSpace: "pre" }}>
+            <span style={{ width: "1.2em", display: "inline-block" }}> </span>
+            <span style={{
+              color: actionColor, width: "1.2em", display: "inline-block",
+              transition: "color 200ms ease",
+            }}>{bindingIcon}</span>
+            <span style={{ color: "var(--alc-code-type)" }}>{b}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   return (
-    <div ref={containerRef} style={{
+    <div style={{
       background: "var(--alc-bg-code)",
       border: "1px solid var(--alc-hairline)",
       borderRadius: 10, overflow: "hidden",
       boxShadow: "var(--alc-shadow-sm)",
       fontFamily: "var(--alc-font-mono)",
     }}>
+      {/* chrome — mac dots, file path, and a mode pill that swaps color per phase */}
       <div style={{
         display: "flex", alignItems: "center", gap: 6,
         padding: "10px 14px",
@@ -188,73 +284,96 @@ function DeployTerminal({ title = "~/my-app · alchemy deploy --stage prod", aut
         <span style={{ marginLeft: 10, fontSize: 11, color: "var(--alc-code-comment)" }}>
           {title}
         </span>
+        <span style={{ flex: 1 }} />
+        {mode !== "idle" && (
+          <span style={{
+            fontSize: 10, letterSpacing: "0.14em", fontWeight: 700,
+            padding: "2px 8px", borderRadius: 4,
+            color: accent,
+            border: `1px solid ${accent}`,
+            background: "transparent",
+            transition: "color 280ms ease, border-color 280ms ease",
+          }}>{MODE_LABEL[mode]}</span>
+        )}
       </div>
 
       <div style={{
-        padding: "16px 18px", fontSize: 12.5, lineHeight: 1.7,
-        color: "var(--alc-code-var)", minHeight: 280,
+        padding: "14px 18px", fontSize: 12.5, lineHeight: 1.65,
+        color: "var(--alc-code-var)",
+        // sized to match the alchemy.run.ts on the left and big enough to fit
+        // the tallest phase (deploy w/ Proceed? + 3 resources + 2 bindings +
+        // summary ≈ 13 lines) without text reflow as phases swap.
+        minHeight: 296,
       }}>
-        {/* Command line */}
+        {/* prompt + currently-typed command */}
         <Line>
-          <span style={{ color: "var(--alc-code-comment)" }}>$ </span>
-          {typed}
-          {phase === 0 && <span style={{ color: "var(--alc-fg-invert)" }}>▍</span>}
+          <span style={{
+            color: accent,
+            transition: "color 280ms ease",
+          }}>$ </span>
+          {cmd}
+          {caret && <span style={{ color: "var(--alc-fg-invert)" }}>▍</span>}
         </Line>
 
-        {/* Plan section */}
-        {showPlan && (
+        {header && (
           <>
             <Line> </Line>
             <Line>
-              <span style={{ textDecoration: "underline", color: "var(--alc-fg-invert)" }}>Plan</span>
+              <span style={{
+                textDecoration: "underline",
+                color: accent,
+                transition: "color 280ms ease",
+                fontWeight: 600,
+              }}>{header.verb}</span>
               <span>: </span>
-              <span style={{ color: ACTION_COLOR.create }}>{RESOURCES.length} to create</span>
-            </Line>
-            <Line> </Line>
-            {RESOURCES.slice(0, planRowsShown).map((r) => (
-              <PlanRow key={`plan-${r.id}`} r={r} />
-            ))}
-          </>
-        )}
-
-        {/* Progress section — same rows, but reactive to status */}
-        {showProgress && (
-          <>
-            <Line> </Line>
-            {RESOURCES.map((r) => {
-              const status = statuses[r.id] ?? "pending";
-              const isDone = status === "created" || status === "updated" || status === "deleted";
-              const isPending = status === "pending";
-              const icon = isDone ? "✓" : isPending ? " " : spinner;
-              const color = STATUS_COLOR[status];
-              return (
-                <ProgressRow
-                  key={`prog-${r.id}`}
-                  r={r}
-                  icon={icon}
-                  iconColor={color}
-                  status={status}
-                />
-              );
-            })}
-          </>
-        )}
-
-        {/* Success summary */}
-        {showSummary && (
-          <>
-            <Line> </Line>
-            <Line>
-              <span style={{ color: "var(--alc-success)" }}>✓ </span>
-              <span>deployed in </span>
-              <span style={{ color: "var(--alc-fg-invert)", fontWeight: 600 }}>
-                {(elapsedMs / 1000).toFixed(1)}s
+              <span style={{ color: ACTION_COLOR[header.action] }}>
+                {header.count} to {header.action}
               </span>
             </Line>
+          </>
+        )}
+
+        {rows.length > 0 && (
+          <>
+            <Line> </Line>
+            {rows.map(renderRow)}
+          </>
+        )}
+
+        {proceed && (
+          <>
+            <Line> </Line>
+            <Line>Proceed?</Line>
             <Line>
-              <span style={{ color: "var(--alc-code-comment)" }}>{"  → "}</span>
-              <span style={{ color: "var(--alc-success)" }}>https://api.my-app.workers.dev</span>
+              {proceed === "confirmed" ? (
+                <>
+                  <span style={{ color: accent, transition: "color 200ms ease" }}>{"◉ Yes "}</span>
+                  <span style={{ color: "var(--alc-code-comment)" }}>{"○ No"}</span>
+                </>
+              ) : (
+                <>
+                  <span style={{ color: "var(--alc-fg-invert)" }}>{"◉ Yes "}</span>
+                  <span style={{ color: "var(--alc-code-comment)" }}>{"○ No"}</span>
+                </>
+              )}
             </Line>
+          </>
+        )}
+
+        {summary && (
+          <>
+            <Line> </Line>
+            <Line>
+              <span style={{ color: accent, transition: "color 280ms ease" }}>✓ </span>
+              <span>{summary.verb} in </span>
+              <span style={{ color: "var(--alc-fg-invert)", fontWeight: 600 }}>{summary.secs}s</span>
+            </Line>
+            {summary.url && (
+              <Line>
+                <span style={{ color: "var(--alc-code-comment)" }}>{"  → "}</span>
+                <span style={{ color: accent, transition: "color 280ms ease" }}>{summary.url}</span>
+              </Line>
+            )}
           </>
         )}
       </div>
@@ -262,30 +381,7 @@ function DeployTerminal({ title = "~/my-app · alchemy deploy --stage prod", aut
   );
 }
 
-function PlanRow({ r }) {
-  const color = ACTION_COLOR[r.action];
-  const icon = ACTION_ICON[r.action];
-  return (
-    <div style={{ minHeight: "1.6em", whiteSpace: "pre" }}>
-      <span style={{ color, width: "1.2em", display: "inline-block" }}>{icon}</span>
-      <span style={{ color: "var(--alc-fg-invert)", fontWeight: 600 }}>{r.id}</span>
-      <span style={{ color: "var(--alc-code-comment)" }}>{` (${r.type})`}</span>
-      {r.bindingCount > 0 && (
-        <span style={{ color: "var(--alc-code-type)" }}>{` (${r.bindingCount} bindings)`}</span>
-      )}
-    </div>
-  );
-}
+// Back-compat: anything that imported `DeployTerminal` keeps working.
+const DeployTerminal = LifecycleTerminal;
 
-function ProgressRow({ r, icon, iconColor, status }) {
-  return (
-    <div style={{ minHeight: "1.6em", whiteSpace: "pre" }}>
-      <span style={{ color: iconColor, width: "1.2em", display: "inline-block" }}>{icon}</span>
-      <span style={{ color: "var(--alc-fg-invert)", fontWeight: 600 }}>{r.id}</span>
-      <span style={{ color: "var(--alc-code-comment)" }}>{` (${r.type})`}</span>
-      <span style={{ color: iconColor }}>{` ${status}`}</span>
-    </div>
-  );
-}
-
-Object.assign(window, { DeployTerminal });
+Object.assign(window, { LifecycleTerminal, DeployTerminal });
