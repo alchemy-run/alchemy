@@ -291,8 +291,8 @@ const resolveDurableObjectApplicationRecovery = ({
   };
 };
 
-const containerApplicationReadinessSchedule = Schedule.exponential(100).pipe(
-  Schedule.both(Schedule.recurs(20)),
+const containerApplicationReadinessSchedule = Schedule.exponential(150).pipe(
+  Schedule.both(Schedule.recurs(10)),
 );
 
 const isContainerApplicationNotFound = (
