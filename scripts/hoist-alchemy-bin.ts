@@ -34,13 +34,38 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 
 const repoRoot = process.cwd();
 const isWin = process.platform === "win32";
 
-const tsEntry = resolve(repoRoot, "packages", "alchemy", "bin", "alchemy.ts");
-const jsEntry = resolve(repoRoot, "packages", "alchemy", "bin", "alchemy.js");
+// Use forward slashes in paths embedded in the shim text. Bun and Windows
+// both accept forward slashes, and avoiding backslashes in shim args sidesteps
+// any chance of `\c`, `\p` etc. being mis-handled as escape sequences.
+const toShimPath = (p: string) => p.replace(/\\/g, "/");
+
+const tsEntry = toShimPath(
+  resolve(repoRoot, "packages", "alchemy", "bin", "alchemy.ts"),
+);
+const jsEntry = toShimPath(
+  resolve(repoRoot, "packages", "alchemy", "bin", "alchemy.js"),
+);
+const tsconfigPath = resolve(
+  repoRoot,
+  "packages",
+  "alchemy",
+  "tsconfig.json",
+);
+// Pin bun's tsconfig to the alchemy package, not whatever happens to be in
+// the invoking workspace's cwd. Bun's default is `$cwd/tsconfig.json`,
+// which means invoking `alchemy` from e.g. `examples/cloudflare-solidstart`
+// would transpile alchemy's own .tsx files with that example's JSX settings
+// (jsx: "preserve", jsxImportSource: "solid-js"), breaking React files
+// inside the alchemy CLI.
+//
+// The path is computed per-shim as relative-from-the-shim's-dir, anchored
+// at runtime with `%~dp0` (cmd) or `$(dirname "$0")` (sh) so it survives
+// the repo being checked out at different absolute paths.
 
 if (!existsSync(tsEntry)) {
   console.warn(`[hoist-alchemy-bin] entry not found at ${tsEntry}; skipping`);
@@ -75,7 +100,7 @@ if [ "$RUNTIME" = "node" ] && command -v bun >/dev/null 2>&1; then
   RUNTIME=bun
 fi
 if [ "$RUNTIME" = "bun" ]; then
-  exec bun "${tsEntry}" "$@"
+  exec bun --tsconfig-override="$(dirname "$0")/__TSCONFIG_REL__" "${tsEntry}" "$@"
 else
   exec node "${jsEntry}" "$@"
 fi
@@ -93,7 +118,7 @@ if "!RUNTIME!"=="node" (
   where bun >nul 2>nul && set "RUNTIME=bun"
 )
 if "!RUNTIME!"=="bun" (
-  bun "${tsEntry}" %*
+  bun --tsconfig-override="%~dp0__TSCONFIG_REL__" "${tsEntry}" %*
 ) else (
   node "${jsEntry}" %*
 )
@@ -113,11 +138,20 @@ function writeShim(binDir: string) {
     }
   }
 
+  // Relative path from this shim's dir to the tsconfig, resolved at runtime
+  // via `%~dp0` / `$(dirname "$0")`.
+  const tsconfigRel = toShimPath(relative(binDir, tsconfigPath));
+
   if (isWin) {
-    writeFileSync(join(binDir, "alchemy.cmd"), windowsShim);
+    writeFileSync(
+      join(binDir, "alchemy.cmd"),
+      windowsShim.replace("__TSCONFIG_REL__", tsconfigRel),
+    );
   } else {
     const shimPath = join(binDir, "alchemy");
-    writeFileSync(shimPath, posixShim, { mode: 0o755 });
+    writeFileSync(shimPath, posixShim.replace("__TSCONFIG_REL__", tsconfigRel), {
+      mode: 0o755,
+    });
   }
 }
 
