@@ -1,7 +1,7 @@
 // Shared shell: Button, Nav, Footer, Eyebrow, SectionTitle, Badge, DiscordCallout
 const { useState, useEffect } = React;
 
-function Button({ variant = "primary", icon, children, href = "#", ...rest }) {
+function Button({ variant = "primary", icon, children, href = "#", className, ...rest }) {
   const base = {
     fontFamily: "var(--alc-font-sans)",
     fontSize: 14,
@@ -15,7 +15,7 @@ function Button({ variant = "primary", icon, children, href = "#", ...rest }) {
     whiteSpace: "nowrap",
     cursor: "pointer",
     textDecoration: "none",
-    transition: "background 120ms var(--alc-ease), border-color 120ms var(--alc-ease), color 120ms var(--alc-ease)",
+    transition: "background 120ms var(--alc-ease), border-color 120ms var(--alc-ease), color 120ms var(--alc-ease), transform 120ms var(--alc-ease), box-shadow 120ms var(--alc-ease)",
   };
   const variants = {
     primary:   { background: "var(--alc-accent)", color: "var(--alc-fg-on-accent)" },
@@ -23,12 +23,17 @@ function Button({ variant = "primary", icon, children, href = "#", ...rest }) {
     ghost:     { background: "transparent", color: "var(--alc-fg-2)" },
     accent:    { background: "var(--alc-terracotta)", color: "var(--alc-fg-on-accent)" },
   };
+  const cls = ["alc-btn", `alc-btn--${variant}`, className].filter(Boolean).join(" ");
   return (
-    <a href={href} {...rest} style={{ ...base, ...variants[variant], ...(rest.style || {}) }}>
+    <a href={href} {...rest} className={cls} style={{ ...base, ...variants[variant], ...(rest.style || {}) }}>
+      {icon === "github" && (
+        <svg aria-hidden width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ display: "inline-block" }}>
+          <path d="M12 .5C5.73.5.5 5.73.5 12c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.69-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.71.08-.71 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.04 11.04 0 0 1 5.79 0c2.21-1.49 3.18-1.18 3.18-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.69 5.39-5.25 5.68.41.36.78 1.07.78 2.16 0 1.56-.01 2.81-.01 3.19 0 .31.21.67.8.56C20.71 21.39 24 17.08 24 12 24 5.73 18.27.5 12 .5z" />
+        </svg>
+      )}
       {children}
       {icon === "arrow" && <span aria-hidden style={{ fontSize: 14 }}>→</span>}
       {icon === "book" && <span aria-hidden style={{ fontSize: 14 }}>❏</span>}
-      {icon === "github" && <span aria-hidden style={{ fontSize: 14 }}>☰</span>}
       {icon === "discord" && <span aria-hidden style={{ fontSize: 14 }}>✱</span>}
     </a>
   );

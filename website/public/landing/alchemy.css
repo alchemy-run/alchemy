@@ -327,7 +327,7 @@ body.alc-root,
 
 .stack-deploy-diagram {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(160px, 220px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px) minmax(0, 1fr);
   gap: 0;
   align-items: center;
   max-width: 1240px;
@@ -373,12 +373,13 @@ body.alc-root,
 }
 .stack-deploy-diagram__label {
   font-family: var(--alc-font-hand);
-  font-size: 30px;
+  font-size: 24px;
   font-weight: 700;
   line-height: 1;
   color: var(--alc-accent-deep);
   transform: rotate(-4deg);
   white-space: nowrap;
+  max-width: 100%;
 }
 .stack-deploy-diagram__sublabel {
   font-family: var(--alc-font-mono);
@@ -407,23 +408,117 @@ body.alc-root,
 /* ---------- Cloud feature tabs: code + architecture diagram ---------- */
 .feature-tab-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr);
-  gap: 24px;
+  grid-template-columns: minmax(0, 1.4fr) minmax(260px, 1fr);
+  gap: 20px;
   max-width: 960px;
   margin: 0 auto;
-  align-items: start;
+  align-items: stretch;
 }
-.feature-tab-diagram {
-  position: sticky;
-  top: 88px;
+/* Within a single tab the code + diagram match each other (whichever is
+   taller). We don't force a global min-height so each tab sizes to its own
+   content and there's no dead space. */
+.feature-tab-grid > *:first-child {
+  display: flex;
+  flex-direction: column;
 }
+.feature-tab-grid > *:first-child > pre {
+  flex: 1;
+}
+.feature-tab-diagram { display: flex; }
+.feature-tab-diagram > * {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 @media (max-width: 980px) {
   .feature-tab-grid {
     grid-template-columns: 1fr;
-    gap: 20px;
+    gap: 16px;
   }
-  .feature-tab-diagram {
-    position: static;
-    order: -1;
+  .feature-tab-grid > *:first-child { display: block; }
+  .feature-tab-grid > *:first-child > pre { flex: none; }
+  .feature-tab-diagram { order: -1; }
+}
+
+/* ---------- Cloud layers: animated Layer-swap demo ---------- */
+.layers-swap-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 1fr);
+  gap: 24px;
+  align-items: stretch;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+@media (max-width: 980px) {
+  .layers-swap-grid {
+    grid-template-columns: 1fr;
+    gap: 18px;
   }
+}
+
+/* Each swap cycle:
+     fade in → hold → "selection" highlight pulse → cut/fade out.
+   The element is re-keyed by React on `onAnimationEnd`, which restarts the
+   animation with the next Layer in the rotation. */
+@keyframes layer-cycle {
+  0%        { opacity: 0; transform: translateY(-3px); filter: blur(2px); background: transparent; box-shadow: none; }
+  10%       { opacity: 1; transform: translateY(0);    filter: blur(0);   background: transparent; box-shadow: none; }
+  62%, 78%  { background: rgba(184, 138, 74, 0.32); box-shadow: 0 0 0 1px rgba(184, 138, 74, 0.55); }
+  90%       { opacity: 0; transform: translateY(3px);  filter: blur(2px); background: transparent; box-shadow: none; }
+  100%      { opacity: 0; }
+}
+.layer-swap {
+  display: inline-block;
+  padding: 1px 5px;
+  margin: 0 1px;
+  border-radius: 3px;
+  animation: layer-cycle 3000ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* Diagram nodes morph in lockstep with the code token. */
+@keyframes layer-cycle-node {
+  0%   { opacity: 0; transform: scale(0.92) translateY(-4px); filter: blur(2px); }
+  14%  { opacity: 1; transform: scale(1) translateY(0);       filter: blur(0); }
+  100% { opacity: 1; }
+}
+.layer-swap-node {
+  animation: layer-cycle-node 3000ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+@keyframes layer-cycle-edge {
+  0%   { opacity: 0; }
+  20%  { opacity: 1; }
+  100% { opacity: 1; }
+}
+.layer-swap-edge {
+  animation: layer-cycle-edge 3000ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .layer-swap, .layer-swap-node, .layer-swap-edge { animation: none; opacity: 1; }
+}
+
+/* Buttons */
+.alc-btn { position: relative; }
+.alc-btn:hover { text-decoration: none; }
+.alc-btn--primary:hover {
+  background: var(--alc-accent-deep) !important;
+  box-shadow: 0 1px 0 rgba(42, 38, 32, 0.06), 0 6px 16px -8px var(--alc-accent-40);
+}
+.alc-btn--primary:active { background: var(--alc-accent-deep) !important; transform: translateY(1px); }
+.alc-btn--secondary:hover {
+  background: var(--alc-bg-elev-2) !important;
+  border-color: var(--alc-accent) !important;
+  color: var(--alc-accent-deep) !important;
+}
+.alc-btn--secondary:active { background: var(--alc-accent-12) !important; }
+.alc-btn--ghost:hover {
+  background: var(--alc-accent-12) !important;
+  color: var(--alc-accent-deep) !important;
+}
+.alc-btn--ghost:active { background: var(--alc-accent-12) !important; }
+.alc-btn--accent:hover {
+  background: var(--alc-terracotta-deep) !important;
+  box-shadow: 0 1px 0 rgba(42, 38, 32, 0.06), 0 6px 16px -8px rgba(197, 110, 60, 0.45);
 }
