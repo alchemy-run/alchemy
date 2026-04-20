@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>alchemy — landing page explorations</title>
+  <link rel="stylesheet" href="alchemy.css" />
+  <style>
+    html, body { margin: 0; padding: 0; background: var(--alc-bg); color: var(--alc-fg-2); font-family: var(--alc-font-sans); -webkit-font-smoothing: antialiased; }
+    a:focus-visible { outline: 2px solid var(--alc-accent); outline-offset: 2px; }
+    .track-card:hover { border-color: var(--alc-accent) !important; transform: translateY(-2px); }
+    .track-card { transition: border-color 150ms var(--alc-ease), transform 150ms var(--alc-ease); }
+  </style>
+</head>
+<body class="alc-root">
+  <div id="root"></div>
+  <script>const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{ "track": "overview" }/*EDITMODE-END*/;</script>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <script type="text/babel" src="lib/Shell.jsx"></script>
+
+  <script type="text/babel">
+    function TrackCard({ num, title, headline, pitch, angle, href }) {
+      return (
+        <a href={href} className="track-card" style={{
+          display: "block",
+          background: "var(--alc-bg-elev-1)",
+          border: "1px solid var(--alc-hairline-2)",
+          borderRadius: 14, padding: 28,
+          textDecoration: "none",
+          color: "var(--alc-fg-1)",
+        }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 18 }}>
+            <div style={{
+              fontFamily: "var(--alc-font-mono)", fontSize: 11,
+              letterSpacing: "0.12em", textTransform: "uppercase",
+              color: "var(--alc-accent-deep)",
+            }}>track 0{num} · {title}</div>
+            <span style={{ color: "var(--alc-fg-4)", fontSize: 16 }}>→</span>
+          </div>
+          <h3 style={{
+            fontFamily: "var(--alc-font-serif)", fontSize: 32, fontWeight: 500,
+            letterSpacing: "-0.015em", lineHeight: 1.1, margin: "0 0 14px",
+            color: "var(--alc-fg-1)",
+          }}>{headline}</h3>
+          <p style={{ fontSize: 14.5, lineHeight: 1.6, color: "var(--alc-fg-2)", margin: "0 0 18px" }}>
+            {pitch}
+          </p>
+          <div style={{
+            fontFamily: "var(--alc-font-mono)", fontSize: 11,
+            color: "var(--alc-fg-3)", lineHeight: 1.6,
+            padding: "10px 12px", background: "var(--alc-bg)",
+            borderRadius: 6, border: "1px solid var(--alc-hairline)",
+          }}>
+            <span style={{ color: "var(--alc-terracotta-deep)" }}>angle ·</span> {angle}
+          </div>
+        </a>
+      );
+    }
+
+    function App() {
+      return (
+        <div data-screen-label="Overview — four landing page tracks">
+          <Nav currentTrack="overview" />
+          <Section padding="72px 32px 32px">
+            <div style={{ textAlign: "center", marginBottom: 28 }}>
+              <AlphaBadge />
+            </div>
+            <div style={{ textAlign: "center", maxWidth: 820, margin: "0 auto" }}>
+              <Eyebrow>landing page exploration · alchemy v2</Eyebrow>
+              <h1 style={{
+                fontFamily: "var(--alc-font-serif)", fontWeight: 500,
+                fontSize: 68, lineHeight: 1.04, letterSpacing: "-0.02em",
+                margin: "18px 0 20px", color: "var(--alc-fg-1)",
+              }}>
+                Four tracks. One product.
+              </h1>
+              <p style={{ fontSize: 17, lineHeight: 1.6, color: "var(--alc-fg-2)", margin: "0 auto 12px", maxWidth: 640 }}>
+                Alchemy v2 is an <em style={{ fontFamily: "var(--alc-font-serif)", color: "var(--alc-accent-deep)" }}>infrastructure-as-effects</em> framework.
+                Each landing below takes the same product and targets a different audience — different hero, different layout, different copy angle.
+              </p>
+              <p style={{ fontSize: 14, color: "var(--alc-fg-3)", fontFamily: "var(--alc-font-mono)" }}>
+                open in new tabs to A/B · use the <b style={{ color: "var(--alc-accent-deep)" }}>tweaks panel</b> on any page to jump between tracks
+              </p>
+            </div>
+          </Section>
+
+          <Section padding="20px 32px 64px">
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+              <TrackCard num="1" title="effect" href="effect.html"
+                headline="Your cloud is one Effect."
+                pitch="For engineers already deep in Effect. Positions alchemy as the natural extension of Effect's service/layer model to infrastructure. Hand-drawn Function → Binding → Resource diagram, primitive map from Effect concepts to alchemy concepts, OTEL observability demo."
+                angle="effect community · Effect.gen, Context.Service, Layer as the vocabulary" />
+              <TrackCard num="2" title="iac" href="iac.html"
+                headline="Infrastructure as code, just TypeScript."
+                pitch="For Pulumi / SST / Terraform / CDK users. Head-to-head comparison table, cold-plan speed chart, 'add a resource in one file' extension demo, 'embed in your CLI' story. Performance- and portability-forward."
+                angle="iac community · speed, embeddable, extensible, no go binary" />
+              <TrackCard num="3" title="cloud" href="cloud.html"
+                headline="Deep on the clouds you actually ship on."
+                pitch="For builders on Cloudflare, AWS, or Planetscale. Tabbed code examples per cloud, product screenshots of typed hover + typed IAM errors, resource catalog. Cloud-provider-forward while keeping the engine story underneath."
+                angle="cloudflare + aws + planetscale · typed resources, typed bindings, typed plans" />
+              <TrackCard num="4" title="ai" href="ai.html"
+                headline="The shape your agent can ship."
+                pitch="For AI-native development. Alchemy as a narrow, type-safe surface an agent can generate — one TypeScript file per app. End-to-end lifecycle (design → build → test → deploy → observe → alarm), typed-primitives-prevent-hallucinations side-by-side, prompt→deploy terminal loop."
+                angle="ai / agents · type system as guardrail, one program across the whole lifecycle" />
+            </div>
+          </Section>
+
+          <Section padding="48px 32px 0">
+            <DiscordCallout />
+          </Section>
+
+          <Section padding="48px 32px 20px" maxWidth={860}>
+            <div style={{
+              background: "var(--alc-bg-elev-1)",
+              border: "1px solid var(--alc-hairline-2)",
+              borderRadius: 12, padding: 28,
+            }}>
+              <Eyebrow>notes for review</Eyebrow>
+              <ul style={{ fontSize: 14.5, lineHeight: 1.7, color: "var(--alc-fg-2)", margin: "14px 0 0", paddingLeft: 18 }}>
+                <li>each track is a standalone full landing — hero, features, code, comparison, CTA, footer.</li>
+                <li>distinct visual treatment per track (sketch-forward, stats-strip, tabbed providers, split-panel diff).</li>
+                <li>voice is the existing docs voice — lowercase brand, no hype, em-dashes, concrete numbers.</li>
+                <li>comparison numbers (cold plan times, bundle sizes) are placeholders — replace with real benchmarks before launch.</li>
+                <li>claude code / cursor / mcp integrations on track 4 are forward-looking — ask if any of these already ship.</li>
+              </ul>
+            </div>
+          </Section>
+
+          <Footer />
+          <TweaksPanel currentTrack="overview" />
+        </div>
+      );
+    }
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

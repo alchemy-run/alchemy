@@ -57,6 +57,13 @@ export default defineConfig({
   site: "https://alchemy.run",
   prefetch: true,
   trailingSlash: "ignore",
+  redirects: {
+    "/landing": "/landing/index.html",
+    "/effect": "/landing/effect.html",
+    "/iac": "/landing/iac.html",
+    "/cloud": "/landing/cloud.html",
+    "/ai": "/landing/ai.html",
+  },
   integrations: [
     copyMarkdownSources(),
     sitemap({

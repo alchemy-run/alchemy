@@ -28,11 +28,13 @@ import { LinkButton } from "@astrojs/starlight/components";
 <div class="hero-code-grid">
 <div class="hero-code-text">
 
-### One program. Infrastructure and logic.
+<span class="section-eyebrow">One program · zero glue</span>
+
+### Infrastructure and logic, together.
 
 Alchemy extends Infrastructure-as-Code with **Effects** — your cloud resources and the code that uses them are defined together in a single type-safe program.
 
-No YAML. No separate config files. No runtime wiring. If it compiles, it deploys.
+No YAML. No separate config files. No runtime wiring. <span class="alc-text-accent">If it compiles, it deploys.</span>
 
 </div>
 <div class="hero-code-block">
@@ -54,6 +56,14 @@ export default Alchemy.Stack(
 
 </div>
 </div>
+</section>
+
+{/* ── Section break ── */}
+
+<section class="section-intro">
+<span class="section-eyebrow">What you get</span>
+<h2 class="section-title">A type system that knows your cloud.</h2>
+<p class="section-lede">Six properties of an alchemy stack. Each one is the language doing the work for you — not a tool you bolt on.</p>
 </section>
 
 {/* ── Feature grid ── */}
@@ -203,10 +213,9 @@ jobs:
 
 <section class="providers-section">
 
-### Cloud providers
-
-Alchemy supports multiple cloud providers with more being added. Each
-provider is a typed Layer that the compiler verifies at build time.
+<span class="section-eyebrow">Providers</span>
+<h2 class="section-title">Deep on the clouds you actually ship on.</h2>
+<p class="section-lede">Each provider is a typed Layer the compiler verifies at build time. Bring your own — every resource is just an Effect.</p>
 
 <div class="provider-grid">
 <div class="provider-card">
@@ -234,15 +243,54 @@ GitHub, Stripe, DNS, and a growing ecosystem of community providers
 
 </section>
 
+{/* ── Alternate framings (AB test) ── */}
+
+<section class="providers-section explore-section">
+
+<span class="section-eyebrow">A/B test · pick a lens</span>
+<h2 class="section-title">Four ways to think about alchemy.</h2>
+<p class="section-lede">Same product, different framings. Open the one that matches how you build.</p>
+
+<div class="provider-grid">
+<a class="provider-card" href="/effect">
+
+**Effect**
+
+Your cloud is one Effect. For engineers already deep in `Effect.gen`, `Context.Service`, and `Layer`.
+
+</a>
+<a class="provider-card" href="/iac">
+
+**Infrastructure as Code**
+
+Just TypeScript. Head-to-head against Pulumi, SST, Terraform, and CDK — speed, portability, no Go binary.
+
+</a>
+<a class="provider-card" href="/cloud">
+
+**Cloud-first**
+
+Deep on Cloudflare, AWS, and Planetscale. Typed resources, typed bindings, typed plans.
+
+</a>
+<a class="provider-card" href="/ai">
+
+**AI / agents**
+
+The shape your agent can ship. One TypeScript file from design to deploy — type system as guardrail.
+
+</a>
+</div>
+
+</section>
+
 {/* ── CTA ── */}
 
 <section class="cta-section">
 
-### Ready to start?
-
-Follow the tutorial to go from zero to a deployed Cloudflare Worker
-with R2 bindings, integration tests, local dev, and CI/CD — in under
-30 minutes.
+<span class="section-eyebrow">Get your hands dirty</span>
+<h2 class="section-title">Zero to deployed Worker in 30 minutes.</h2>
+<p class="section-lede">Follow the tutorial: a Cloudflare Worker with R2 bindings, real integration tests, local dev, and CI/CD — end to end.</p>
 
 <div class="cta-buttons">
   <LinkButton href="/tutorial/part-1" variant="primary" icon="right-arrow">

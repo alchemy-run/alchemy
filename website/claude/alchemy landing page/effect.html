@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>alchemy — Your cloud is one Effect</title>
+  <link rel="stylesheet" href="alchemy.css" />
+  <style>
+    html, body { margin: 0; padding: 0; background: var(--alc-bg); color: var(--alc-fg-2); font-family: var(--alc-font-sans); -webkit-font-smoothing: antialiased; }
+    a:focus-visible { outline: 2px solid var(--alc-accent); outline-offset: 2px; }
+    ::selection { background: var(--alc-accent-soft); color: var(--alc-fg-1); }
+  </style>
+</head>
+<body class="alc-root">
+  <div id="root"></div>
+
+  <script>
+    const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{ "track": "effect" }/*EDITMODE-END*/;
+  </script>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" src="lib/Shell.jsx"></script>
+  <script type="text/babel" src="lib/TrackEffect.jsx"></script>
+
+  <script type="text/babel">
+    function App() {
+      return (
+        <div data-screen-label="Effect track landing">
+          <Nav currentTrack="effect" />
+          <EffectHero />
+          <EffectPrimitivesMap />
+          <EffectCodeShowcase />
+          <EffectObservability />
+          <EffectFeatureRow />
+          <EffectComparison />
+          <div style={{ padding: "20px 32px 0" }}>
+            <DiscordCallout />
+          </div>
+          <EffectCTA />
+          <Footer />
+          <TweaksPanel currentTrack="effect" />
+        </div>
+      );
+    }
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

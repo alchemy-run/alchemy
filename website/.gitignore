@@ -3,5 +3,5 @@
 node_modules
 .DS_Store
 static/
-public/
+# public/
 src/content/docs/providers/

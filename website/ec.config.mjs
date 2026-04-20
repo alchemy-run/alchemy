@@ -1,5 +1,6 @@
 import { defineEcConfig } from "@astrojs/starlight/expressive-code";
 import ecTwoSlash from "expressive-code-twoslash";
+import { alchemyWalnutTheme } from "./plugins/alchemy-walnut-theme.mjs";
 import {
   twoslashDiffPrefixAnnotate,
   twoslashDiffPrefixStrip,
@@ -9,7 +10,7 @@ import { twoslashErrorTransform } from "./plugins/twoslash-error-transform.mjs";
 const baseUrl = new URL("../", import.meta.url).pathname;
 
 export default defineEcConfig({
-  themes: ["github-light", "github-dark-dimmed"],
+  themes: [alchemyWalnutTheme],
   plugins: [
     twoslashDiffPrefixStrip(),
     ecTwoSlash({
