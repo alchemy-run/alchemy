@@ -4,7 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import { decodeFqn, encodeFqn } from "../FQN.ts";
-import { isResource } from "../Resource.ts";
+import { deserializeResourceState, serializeResourceState } from "./Serde.ts";
 import { State, StateStoreError, type StateService } from "./State.ts";
 
 export const LocalState = Layer.effect(
@@ -65,8 +65,9 @@ export const LocalState = Layer.effect(
         ),
       get: (request) =>
         fs.readFile(resource(request)).pipe(
-          Effect.map((file) => JSON.parse(file.toString())),
+          Effect.map((file) => deserializeResourceState(file.toString())),
           recover,
+          Effect.map((v) => v || undefined),
         ),
       getReplacedResources: Effect.fnUntraced(function* (request) {
         return (yield* Effect.all(
@@ -84,21 +85,7 @@ export const LocalState = Layer.effect(
           Effect.flatMap(() =>
             fs.writeFileString(
               resource(request),
-              JSON.stringify(
-                request.value,
-                (k, v) => {
-                  if (isResource(v)) {
-                    return {
-                      id: v.LogicalId,
-                      type: v.Type,
-                      props: v.Props,
-                      attr: v.Attributes,
-                    };
-                  }
-                  return v;
-                },
-                2,
-              ),
+              serializeResourceState(request.value),
             ),
           ),
           recover,

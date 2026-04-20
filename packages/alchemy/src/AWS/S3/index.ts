@@ -11,4 +11,5 @@ export * from "./HeadObject.ts";
 export * from "./ListObjectsV2.ts";
 export * from "./PutObject.ts";
 export * from "./S3Event.ts";
+export * from "./State.ts";
 export * from "./UploadPart.ts";
