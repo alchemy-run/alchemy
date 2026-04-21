@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "include": ["bin/**/*.ts"],
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": true,
+    "rootDir": ".",
+    "module": "Preserve",
+    "moduleResolution": "Bundler",
+    "target": "ESNext",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "lib": ["DOM", "DOM.Iterable", "ES2023"],
+    // bin/ is run directly with bun (no emit), so the rewrite-extensions
+    // cross-project safety check from the base config doesn't apply.
+    "rewriteRelativeImportExtensions": false
+  },
+  "references": [{ "path": "./tsconfig.json" }]
+}

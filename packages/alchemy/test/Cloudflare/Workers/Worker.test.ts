@@ -1,4 +1,4 @@
-import { Account } from "@/Cloudflare/Account";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as R2 from "@/Cloudflare/R2";
 import { destroy } from "@/Destroy";
@@ -23,7 +23,7 @@ const main = pathe.resolve(import.meta.dirname, "worker.ts");
 test(
   "create, update, delete worker",
   Effect.gen(function* () {
-    const accountId = yield* Account;
+    const { accountId } = yield* CloudflareEnvironment;
     const stack = yield* Stack;
 
     yield* destroy();
@@ -99,7 +99,7 @@ test(
 test(
   "create, update, delete worker with assets",
   Effect.gen(function* () {
-    const accountId = yield* Account;
+    const { accountId } = yield* CloudflareEnvironment;
     const stack = yield* Stack;
 
     yield* destroy();
@@ -182,7 +182,7 @@ test(
 test(
   "create, update, delete internal worker",
   Effect.gen(function* () {
-    const accountId = yield* Account;
+    const { accountId } = yield* CloudflareEnvironment;
     const stack = yield* Stack;
 
     yield* destroy();

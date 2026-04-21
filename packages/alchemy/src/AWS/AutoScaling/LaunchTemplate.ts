@@ -16,8 +16,8 @@ import type { Providers } from "../Providers.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import { createInternalTags, diffTags, hasTags } from "../../Tags.ts";
-import type { AccountID } from "../Account.ts";
-import { Account } from "../Account.ts";
+import type { AccountID } from "../Environment.ts";
+import { AWSEnvironment } from "../Environment.ts";
 import { Assets } from "../Assets.ts";
 import type { SecurityGroupId } from "../EC2/SecurityGroup.ts";
 import {
@@ -175,7 +175,7 @@ export const LaunchTemplateProvider = () =>
   Provider.effect(
     LaunchTemplate,
     Effect.gen(function* () {
-      const accountId = yield* Account;
+      const { accountId } = yield* AWSEnvironment;
       const region = yield* Region;
       const stack = yield* Stack;
       const stage = yield* Stage;

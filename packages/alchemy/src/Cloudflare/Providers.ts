@@ -1,12 +1,12 @@
-import * as Auth from "@distilled.cloud/cloudflare/Auth";
 import * as Layer from "effect/Layer";
-import * as Socket from "effect/unstable/socket/Socket";
 import { Command } from "../Build/Command.ts";
 import * as Build from "../Build/index.ts";
 import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
-import * as Account from "./Account.ts";
+import { CloudflareAuth } from "./Auth/AuthProvider.ts";
+import * as CloudflareEnvironment from "./CloudflareEnvironment.ts";
 import * as Containers from "./Container/index.ts";
+import * as Credentials from "./Credentials.ts";
 import * as D1 from "./D1/index.ts";
 import * as KV from "./KV/index.ts";
 import * as R2 from "./R2/index.ts";
@@ -61,12 +61,8 @@ export const providers = () =>
     Layer.provideMerge(
       Layer.mergeAll(Build.CommandProvider(), RandomProvider()),
     ),
-    Layer.provideMerge(
-      Layer.mergeAll(
-        Account.fromStageConfig(),
-        Auth.fromEnv(),
-        Socket.layerWebSocketConstructorGlobal,
-      ),
-    ),
+    Layer.provideMerge(Credentials.fromAuthProvider()),
+    Layer.provideMerge(CloudflareEnvironment.fromProfile()),
+    Layer.provideMerge(CloudflareAuth),
     Layer.orDie,
   );

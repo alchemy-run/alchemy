@@ -90,7 +90,7 @@ export interface Permission extends Resource<
  *   functionName: yield* fn.functionArn(),
  *   principal: "s3.amazonaws.com",
  *   sourceArn: yield* bucket.bucketArn,
- *   sourceAccount: yield* Account,
+ *   sourceAccount: (yield* AWSEnvironment).accountId,
  * });
  * ```
  *

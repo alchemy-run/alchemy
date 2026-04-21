@@ -5,7 +5,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { Account } from "../Account.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
 export type Jurisdiction = "default" | "eu" | "fedramp";
@@ -95,7 +95,7 @@ export const DatabaseProvider = () =>
   Provider.effect(
     D1Database,
     Effect.gen(function* () {
-      const accountId = yield* Account;
+      const { accountId } = yield* CloudflareEnvironment;
       const createDb = yield* d1.createDatabase;
       const getDb = yield* d1.getDatabase;
       const patchDb = yield* d1.patchDatabase;

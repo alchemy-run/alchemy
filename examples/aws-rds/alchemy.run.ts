@@ -1,10 +1,9 @@
 import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import ServiceFunction from "./src/ServiceFunction.ts";
 
-const aws = AWS.providers().pipe(Layer.provide(AWS.DefaultStageConfig));
+const aws = AWS.providers();
 
 export default Alchemy.Stack(
   "AwsRdsExample",

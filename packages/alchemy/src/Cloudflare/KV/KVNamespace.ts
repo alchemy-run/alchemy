@@ -4,7 +4,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { Account } from "../Account.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { KVNamespaceBinding } from "./KVNamespaceBinding.ts";
 
@@ -63,7 +63,7 @@ export const KVNamespaceProvider = () =>
   Provider.effect(
     KVNamespace,
     Effect.gen(function* () {
-      const accountId = yield* Account;
+      const { accountId } = yield* CloudflareEnvironment;
       const createNamespace = yield* kv.createNamespace;
       const updateNamespace = yield* kv.updateNamespace;
       const deleteNamespace = yield* kv.deleteNamespace;

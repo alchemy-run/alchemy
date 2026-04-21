@@ -30,7 +30,7 @@ import type { Providers } from "../Providers.ts";
 import type { ProcessContext, ServerHost } from "../../Server/Process.ts";
 import { Stack } from "../../Stack.ts";
 import { createInternalTags, createTagsList, hasTags } from "../../Tags.ts";
-import { Account } from "../Account.ts";
+import { AWSEnvironment } from "../Environment.ts";
 import type { Credentials } from "../Credentials.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 
@@ -223,7 +223,7 @@ export const TaskProvider = () =>
     Task,
     Effect.gen(function* () {
       const stack = yield* Stack;
-      const accountId = yield* Account;
+      const { accountId } = yield* AWSEnvironment;
       const region = yield* Region;
       const dotAlchemy = yield* DotAlchemy;
       const fs = yield* FileSystem.FileSystem;

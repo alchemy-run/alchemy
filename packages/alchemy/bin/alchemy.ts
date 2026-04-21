@@ -1,5 +1,5 @@
 import * as Auth from "@distilled.cloud/aws/Auth";
-import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Console from "effect/Console";
@@ -12,18 +12,27 @@ import * as S from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 import * as CliError from "effect/unstable/cli/CliError";
+import type { FileSystem } from "effect/FileSystem";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import type { HttpClient } from "effect/unstable/http/HttpClient";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 
 import packageJson from "../package.json" with { type: "json" };
 import { apply } from "../src/Apply.ts";
 import { provideFreshArtifactStore } from "../src/Artifacts.ts";
-import * as AWSAccount from "../src/AWS/Account.ts";
+import { AuthError, AuthProviders } from "../src/Auth/AuthProvider.ts";
+import {
+  getProfile,
+  setProfile,
+  withProfileOverride,
+} from "../src/Auth/Profile.ts";
+import { PromptCancelled } from "../src/Util/Clank.ts";
 import {
   bootstrap as bootstrapAws,
   destroyBootstrap as destroyBootstrapAws,
 } from "../src/AWS/Bootstrap.ts";
 import * as AWSCredentials from "../src/AWS/Credentials.ts";
+import * as AWSEnvironment from "../src/AWS/Environment.ts";
 import * as AWSRegion from "../src/AWS/Region.ts";
 import * as CLI from "../src/Cli/index.ts";
 import { dotAlchemy } from "../src/Config.ts";
@@ -34,6 +43,7 @@ import { Stage } from "../src/Stage.ts";
 import * as State from "../src/State/index.ts";
 import { loadConfigProvider } from "../src/Util/ConfigProvider.ts";
 import { fileLogger } from "../src/Util/FileLogger.ts";
+import { PlatformServices, runMain } from "../src/Util/PlatformServices.ts";
 
 const USER = Config.string("USER").pipe(
   Config.orElse(() => Config.string("USERNAME")),
@@ -45,6 +55,57 @@ const STAGE = Config.string("stage").pipe(
   (a) => a.asEffect(),
   Effect.map(Option.getOrUndefined),
 );
+
+/**
+ * `true` if `e` is a {@link PromptCancelled}, or an {@link AuthError} whose
+ * `cause` chain bottoms out in one. Schema-tagged errors don't always
+ * survive `instanceof` across module boundaries, so we also accept any
+ * object whose `_tag` matches.
+ */
+const isPromptCancellation = (e: unknown): boolean => {
+  for (let cur: unknown = e, i = 0; cur != null && i < 16; i++) {
+    if (cur instanceof PromptCancelled) return true;
+    if (
+      typeof cur === "object" &&
+      (cur as { _tag?: unknown })._tag === "PromptCancelled"
+    ) {
+      return true;
+    }
+    if (
+      cur instanceof AuthError ||
+      (typeof cur === "object" &&
+        (cur as { _tag?: unknown })._tag === "AuthError")
+    ) {
+      cur = (cur as { cause?: unknown }).cause;
+      continue;
+    }
+    return false;
+  }
+  return false;
+};
+
+/**
+ * Catches user cancellations (Ctrl+C inside a prompt, surfaced as
+ * {@link PromptCancelled} or wrapped in an {@link AuthError}) and exits
+ * the CLI cleanly with a friendly message instead of dumping a stack
+ * trace.
+ */
+const handleCancellation = <A, E, R>(self: Effect.Effect<A, E, R>) =>
+  self.pipe(
+    Effect.catchCause((cause) => {
+      const cancelled = cause.reasons.some((r) => {
+        if (Cause.isFailReason(r)) return isPromptCancellation(r.error);
+        if (Cause.isDieReason(r)) return isPromptCancellation(r.defect);
+        return false;
+      });
+      return cancelled
+        ? Console.log("\nCancelled.")
+        : (Effect.failCause(cause) as Effect.Effect<never, E, never>);
+    }),
+    // A bare fiber interrupt (Ctrl+C while not inside a prompt) shouldn't
+    // dump a stack trace either.
+    Effect.onInterrupt(() => Console.log("\nInterrupted.")),
+  );
 
 const stage = Flag.string("stage").pipe(
   Flag.withSchema(S.String.check(S.isPattern(/^[a-z0-9]+([-_a-z0-9]+)*$/gi))),
@@ -108,6 +169,14 @@ const main = Argument.file("main", {
   Argument.withDefault("alchemy.run.ts"),
 );
 
+const profile = Flag.string("profile").pipe(
+  Flag.withDescription(
+    "Auth profile to use (~/.alchemy/profiles.json). Defaults to 'default' or $ALCHEMY_PROFILE.",
+  ),
+  Flag.optional,
+  Flag.map(Option.getOrUndefined),
+);
+
 const deployCommand = Command.make(
   "deploy",
   {
@@ -117,6 +186,7 @@ const deployCommand = Command.make(
     envFile,
     stage,
     yes,
+    profile,
   },
   (args) => execStack(args),
 );
@@ -129,6 +199,7 @@ const destroyCommand = Command.make(
     envFile,
     stage,
     yes,
+    profile,
   },
   (args) =>
     execStack({
@@ -143,6 +214,7 @@ const planCommand = Command.make(
     main,
     envFile,
     stage,
+    profile,
   },
   (args) =>
     execStack({
@@ -156,6 +228,7 @@ const execStack = Effect.fn(function* ({
   main,
   stage,
   envFile,
+  profile,
   dryRun = false,
   force = false,
   yes = false,
@@ -164,6 +237,7 @@ const execStack = Effect.fn(function* ({
   main: string;
   stage: string;
   envFile: Option.Option<string>;
+  profile: string | undefined;
   dryRun?: boolean;
   force?: boolean;
   yes?: boolean;
@@ -184,10 +258,17 @@ const execStack = Effect.fn(function* ({
     );
   }
 
-  const configProvider = yield* loadConfigProvider(envFile);
+  const configProvider = withProfileOverride(
+    yield* loadConfigProvider(envFile),
+    profile,
+  );
+
+  // Shared registry that AuthProviderLayer entries write themselves into when
+  // the stack's providers Layer is built.
+  const authProviders: AuthProviders["Service"] = {};
 
   // TODO(sam): implement local and watch
-  const platform = Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer);
+  const platform = Layer.mergeAll(PlatformServices, FetchHttpClient.layer);
 
   const rootLogger = Logger.layer([fileLogger("out")]);
 
@@ -237,6 +318,9 @@ const execStack = Effect.fn(function* ({
       // Effect.provide(Logger.layer([fileLogger("stacks", stack.name, stage)])),
     );
   }).pipe(
+    // AuthProviders must be in scope when the stack's providers Layer is
+    // built so each provider's AuthProviderLayer can register itself.
+    Effect.provideService(AuthProviders, authProviders),
     Effect.provide(
       Layer.provideMerge(
         alchemy,
@@ -248,6 +332,7 @@ const execStack = Effect.fn(function* ({
   // TODO(sam): figure out why we need to cast to remove the Provider<never> requirement
   // Effect.Effect<void, any, Provider<never>>;
 });
+
 
 const resourceFilter = Flag.string("filter").pipe(
   Flag.withDescription(
@@ -293,7 +378,7 @@ const tailCommand = Command.make(
 
     const configProvider = yield* loadConfigProvider(envFile);
 
-    const platform = Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer);
+    const platform = Layer.mergeAll(PlatformServices, FetchHttpClient.layer);
 
     const rootLogger = Logger.layer([fileLogger("out")]);
 
@@ -428,7 +513,7 @@ const bootstrapCommand = Command.make(
   },
   Effect.fnUntraced(function* ({ envFile, profile, region, destroy }) {
     const platform = Layer.mergeAll(
-      NodeServices.layer,
+      PlatformServices,
       FetchHttpClient.layer,
       Layer.provideMerge(
         Logger.layer([fileLogger("bootstrap.txt")]),
@@ -438,16 +523,33 @@ const bootstrapCommand = Command.make(
 
     return yield* Effect.gen(function* () {
       const ssoProfile = yield* Auth.loadProfile(profile);
+      if (!ssoProfile.sso_account_id) {
+        return yield* Effect.die(
+          `AWS SSO profile '${profile}' is missing sso_account_id`,
+        );
+      }
 
-      const credentials = yield* Auth.loadProfileCredentials(profile);
-
-      const awsLayers = Layer.mergeAll(
-        Layer.succeed(AWSAccount.Account, profile),
-        Layer.succeed(
-          AWSRegion.Region,
-          region ?? ssoProfile.region ?? "us-east-1",
+      // Build a single AWSEnvironment, then derive Region/Credentials from
+      // it so resource providers downstream see a consistent view. The
+      // credentials Effect captures FileSystem/Path/HttpClient via the
+      // ambient context; AWSEnvironment expects R=never, so we provide it
+      // here.
+      const ambient = yield* Effect.context<FileSystem | Path | HttpClient>();
+      const environment = AWSEnvironment.makeEnvironment({
+        accountId: ssoProfile.sso_account_id,
+        region: region ?? ssoProfile.region ?? "us-east-1",
+        credentials: Auth.loadProfileCredentials(profile).pipe(
+          Effect.provide(ambient),
         ),
-        Layer.succeed(AWSCredentials.Credentials, Effect.succeed(credentials)),
+        profile,
+      });
+
+      const awsLayers = Layer.provideMerge(
+        Layer.mergeAll(
+          AWSRegion.fromEnvironment,
+          AWSCredentials.fromEnvironment,
+        ),
+        environment,
       );
 
       return yield* Effect.gen(function* () {
@@ -503,6 +605,122 @@ const devCommand = Command.make(
       proc.stderr;
       proc.all;
     }),
+);
+
+const loginConfigure = Flag.boolean("configure").pipe(
+  Flag.withDescription(
+    "Run the provider's interactive configure step before logging in",
+  ),
+  Flag.withDefault(false),
+);
+
+const loginCommand = Command.make(
+  "login",
+  {
+    main,
+    envFile,
+    stage,
+    profile,
+    configure: loginConfigure,
+  },
+  Effect.fnUntraced(function* ({
+    main,
+    stage,
+    envFile,
+    profile: profileArg,
+    configure,
+  }: {
+    main: string;
+    stage: string;
+    envFile: Option.Option<string>;
+    profile: string | undefined;
+    configure: boolean;
+  }) {
+    const path = yield* Path;
+    const module = yield* Effect.promise(
+      () => import(path.resolve(process.cwd(), main)),
+    );
+    const stackEffect = module.default as ReturnType<
+      ReturnType<typeof Stack.make>
+    >;
+    if (!stackEffect) {
+      return yield* Effect.die(
+        new Error(
+          `Main file '${main}' must export a default stack definition (export default defineStack({...}))`,
+        ),
+      );
+    }
+
+    const profile = profileArg ?? "default";
+    const authProviders: AuthProviders["Service"] = {};
+
+    const configProvider = withProfileOverride(
+      yield* loadConfigProvider(envFile),
+      profile,
+    );
+
+    const platform = Layer.mergeAll(PlatformServices, FetchHttpClient.layer);
+
+    const rootLogger = Logger.layer([fileLogger("out")]);
+
+    const alchemy = Layer.mergeAll(
+      State.LocalState,
+      Layer.provideMerge(rootLogger, dotAlchemy),
+    );
+
+    yield* Effect.gen(function* () {
+      // Build the stack — this triggers each provider's AuthProviderLayer,
+      // which registers itself into the shared `authProviders` registry.
+      yield* stackEffect;
+
+      const ci = yield* Config.boolean("CI").pipe(Config.withDefault(false));
+      const providers = Object.values(authProviders);
+
+      if (providers.length === 0) {
+        yield* Console.log(
+          "No AuthProviders registered. Make sure the stack's providers() layer includes AuthProviderLayer entries.",
+        );
+        return;
+      }
+
+      yield* Effect.forEach(
+        providers,
+        (provider) =>
+          Effect.gen(function* () {
+            const existing = yield* getProfile(profile);
+            const stored = existing?.[provider.name];
+
+            let cfg: { method: string };
+            if (configure || stored == null) {
+              cfg = yield* provider.configure(profile, { ci });
+              yield* setProfile(profile, {
+                ...existing,
+                [provider.name]: cfg,
+              });
+            } else {
+              cfg = stored;
+            }
+
+            yield* provider.login(profile, cfg);
+            yield* provider.prettyPrint(profile, cfg);
+          }),
+        { discard: true },
+      );
+    }).pipe(
+      // AuthProviders MUST be provided before the stack module runs so the
+      // factory calls inside each provider's layer write into the same
+      // registry we read from below.
+      Effect.provideService(AuthProviders, authProviders),
+      Effect.provide(
+        Layer.provideMerge(
+          alchemy,
+          Layer.mergeAll(platform, Layer.succeed(Stage, stage)),
+        ),
+      ),
+      Effect.provideService(ConfigProvider.ConfigProvider, configProvider),
+      Effect.scoped,
+    );
+  }),
 );
 
 const TAIL_COLORS = [
@@ -589,7 +807,7 @@ const logsCommand = Command.make(
 
     const configProvider = yield* loadConfigProvider(envFile);
 
-    const platform = Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer);
+    const platform = Layer.mergeAll(PlatformServices, FetchHttpClient.layer);
 
     const rootLogger = Logger.layer([fileLogger("out")]);
 
@@ -734,6 +952,7 @@ const root = Command.make("alchemy", {}).pipe(
     planCommand,
     tailCommand,
     logsCommand,
+    loginCommand,
   ]),
 );
 
@@ -750,7 +969,8 @@ cli.pipe(
     ConfigProvider.ConfigProvider,
     ConfigProvider.fromEnv(),
   ),
-  Effect.provide(NodeServices.layer),
+  Effect.provide(PlatformServices),
   Effect.scoped,
-  NodeRuntime.runMain,
+  handleCancellation,
+  runMain,
 );

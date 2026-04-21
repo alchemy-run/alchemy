@@ -2,9 +2,9 @@ import * as Layer from "effect/Layer";
 import { Command, CommandProvider } from "../Build/Command.ts";
 import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
-import * as Account from "./Account.ts";
 import * as ACM from "./ACM/index.ts";
 import * as Assets from "./Assets.ts";
+import { AwsAuth } from "./AuthProvider.ts";
 import * as AutoScaling from "./AutoScaling/index.ts";
 import * as CloudFront from "./CloudFront/index.ts";
 import * as CloudWatch from "./CloudWatch/index.ts";
@@ -32,7 +32,7 @@ import * as Scheduler from "./Scheduler/index.ts";
 import * as SecretsManager from "./SecretsManager/index.ts";
 import * as SNS from "./SNS/index.ts";
 import * as SQS from "./SQS/index.ts";
-import { DefaultStageConfig } from "./StageConfig.ts";
+import { Default as DefaultEnvironment } from "./Environment.ts";
 import * as Website from "./Website/index.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()(
@@ -516,10 +516,10 @@ export const providers = () =>
         Assets.AssetsProvider(),
       ),
     ),
-    Layer.provideMerge(Account.fromStageConfig()),
-    Layer.provideMerge(Region.fromStageConfig()),
-    Layer.provideMerge(Credentials.fromStageConfig()),
-    Layer.provideMerge(Endpoint.fromStageConfig()),
-    Layer.provideMerge(DefaultStageConfig),
+    Layer.provideMerge(Region.fromEnvironment),
+    Layer.provideMerge(Credentials.fromEnvironment),
+    Layer.provideMerge(Endpoint.fromEnvironment),
+    Layer.provideMerge(DefaultEnvironment),
+    Layer.provideMerge(AwsAuth),
     Layer.orDie,
   );

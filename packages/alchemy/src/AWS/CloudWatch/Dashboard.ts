@@ -4,7 +4,7 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
-import { Account, type AccountID } from "../Account.ts";
+import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import { createName, retryConcurrent } from "./common.ts";
 
 export type DashboardName = string;
@@ -163,7 +163,7 @@ export const DashboardProvider = () =>
   Provider.effect(
     Dashboard,
     Effect.gen(function* () {
-      const accountId = yield* Account;
+      const { accountId } = yield* AWSEnvironment;
 
       const createDashboardName = (id: string, props: { name?: string } = {}) =>
         createName(id, props.name, 255);

@@ -1,5 +1,5 @@
 import * as Cloudflare from "@/Cloudflare";
-import { Account } from "@/Cloudflare/Account";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { destroy } from "@/Destroy";
 import { test } from "@/Test/Vitest";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
@@ -17,7 +17,7 @@ const logLevel = Effect.provideService(
 test(
   "create and delete bucket with default props",
   Effect.gen(function* () {
-    const accountId = yield* Account;
+    const { accountId } = yield* CloudflareEnvironment;
 
     yield* destroy();
 
@@ -46,7 +46,7 @@ test(
 test(
   "create, update, delete bucket",
   Effect.gen(function* () {
-    const accountId = yield* Account;
+    const { accountId } = yield* CloudflareEnvironment;
 
     yield* destroy();
 

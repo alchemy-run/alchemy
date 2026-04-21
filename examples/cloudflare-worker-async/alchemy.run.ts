@@ -1,11 +1,18 @@
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
-import type { Counter } from "./src/worker.ts";
+import type { Counter as CounterClass } from "./src/worker.ts";
 
 export const DB = Cloudflare.D1Database("DB");
 
 export const Bucket = Cloudflare.R2Bucket("Bucket");
+
+export const Counter = Cloudflare.DurableObjectNamespace<CounterClass>(
+  "Counter",
+  {
+    className: "Counter",
+  },
+);
 
 export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
 
@@ -17,9 +24,7 @@ export const Worker = Cloudflare.Worker("Worker", {
   bindings: {
     DB,
     Bucket,
-    Counter: Cloudflare.DurableObjectNamespace<Counter>("Counter", {
-      className: "Counter",
-    }),
+    Counter,
   },
 });
 
