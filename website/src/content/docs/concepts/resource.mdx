@@ -91,3 +91,82 @@ updating in-place), Alchemy:
 
 The resource's provider determines which property changes trigger
 replacement vs in-place update.
+
+## Defining your own Resource type
+
+A resource is just a typed Effect. To support a new cloud or
+third-party API, declare a `Resource` type with its input props and
+output attributes — then implement the [provider](/concepts/provider)
+as a `Layer`. Same engine plans, deploys, and destroys it.
+
+```typescript
+// 1. Declare the type + constructor.
+export type StripeProduct = Resource<
+  "Stripe.Product",
+  { name: string; price: number },          // input props
+  { productId: string; priceId: string }    // output attrs
+>;
+export const StripeProduct =
+  Resource<StripeProduct>("Stripe.Product");
+
+// 3. Use it like any built-in resource.
+const Pro = yield* StripeProduct("Pro", {
+  name: "Pro plan",
+  price: 2900,
+});
+// ^? typed Pro.productId, Pro.priceId
+```
+
+- **Inputs & outputs are typed** — Props you pass in, attributes the
+  provider returns. Both fully typed, both checked at the call site.
+- **Compose with built-in providers** — Merge your provider Layer with
+  `Cloudflare.providers()` or `AWS.providers()`. One stack, mixed
+  clouds.
+
+## Outputs and the resource graph
+
+A resource's output attributes — `bucketName`, `queueUrl`,
+`domainName` — aren't strings. They're `Output<T>` values that resolve
+after the resource is created. Pass an `Output` as input to another
+resource and you've drawn an edge in the dependency graph: alchemy
+deploys in topological order, resolving Outputs as they become
+available.
+
+- **`Output.map`** — Transform an Output without forcing it. The
+  mapping runs after the upstream resource resolves.
+- **`Output.interpolate`** — Tagged template that splices Outputs into
+  strings. Typed, lazy, and tracks the dependency.
+- **Topological deploy** — The graph drives the order. Independent
+  resources deploy in parallel. Cycles get a two-phase plan (see
+  below).
+
+## Circular references
+
+Real systems have cycles. Two Workers that call each other. A Lambda
+that invokes another Lambda. Tables that reference each other. Most
+IaC engines reject these — alchemy resolves them in two passes:
+create the resources, then wire the bindings, using deferred Outputs
+so types stay sound.
+
+```typescript
+// Worker A binds Worker B. Worker B binds Worker A.
+// Most IaC engines refuse to plan this. Alchemy resolves
+// it in two passes: create the resources, then wire bindings.
+
+export default class A extends Cloudflare.Worker<A>()(
+  "A",
+  Effect.gen(function* () {
+    const b = yield* B;
+    return { fetch: (req) => b.fetch(req) };
+  }),
+) {}
+
+export default class B extends Cloudflare.Worker<B>()(
+  "B",
+  Effect.gen(function* () {
+    const a = yield* A;
+    return { fetch: (req) => a.fetch(req) };
+  }),
+) {}
+```
+

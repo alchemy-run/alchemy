@@ -94,3 +94,34 @@ This is useful for conditional logic based on the stage:
 const queue =
   yield * SQS.Queue("Jobs").pipe(RemovalPolicy.retain(stack.stage === "prod"));
 ```
+
+## Stack and stages — the engine
+
+`Alchemy.Stack` takes a name, a provider Layer, and an Effect that
+declares resources. After every deploy, alchemy persists the state of
+each resource so the next plan knows exactly what changed.
+
+Every deploy targets a **stage**. State and physical names are
+namespaced per stage, so `dev_sam`, `pr-147`, and `prod` are
+completely isolated. Same program. Different stages.
+
+```sh
+# Each stage = its own state file + its own physical names.
+$ alchemy deploy --stage dev_sam     # -> myapp-dev_sam-photos-a3f1
+$ alchemy deploy --stage pr-147      # -> myapp-pr_147-photos-9b2c
+$ alchemy deploy --stage prod        # -> myapp-prod-photos-7d4e
+
+# Three independent deployments. Destroying one
+# never touches the others.
+```
+
+- **State, per stack** — Each stack gets a state file (local, S3, R2,
+  D1 — pluggable). The plan diffs declared resources against persisted
+  state.
+- **Stages = isolation** — Stages namespace both state and physical
+  names. Two PRs deploy the same code into different resources without
+  colliding.
+- **Deterministic physical names** — Physical names derive from
+  `stack/stage/logical-id`. Re-running create is idempotent — alchemy
+  finds the existing resource.
+

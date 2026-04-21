@@ -3,19 +3,18 @@ import Logo from "./Logo.astro";
 import Button from "./Button.astro";
 
 const products = [
-  { href: "/product/iac",           label: "Infrastructure as Code", desc: "Plan, deploy, destroy. Circular refs supported." },
-  { href: "/product/effect",        label: "Effect-native",          desc: "Typed errors, retries, streams, sinks." },
-  { href: "/product/providers",     label: "Providers",              desc: "AWS · Cloudflare · Planetscale (soon)." },
-  { href: "/product/frontends",     label: "Frontend frameworks",    desc: "Vite + StaticSite. Deploy to Cloudflare." },
-  { href: "/product/iterate",       label: "Local dev + tests",      desc: "Hybrid dev mode. Real-infra integration tests." },
-  { href: "/product/cicd",          label: "CI/CD",                  desc: "Preview environments on every PR." },
-  { href: "/product/observability", label: "Observability",          desc: "OTel everywhere. Dashboards in code." },
+  { href: "/#plan-deploy-destroy", label: "Plan, deploy, destroy",    desc: "One TypeScript program. Any cloud." },
+  { href: "/#bindings-iam",        label: "Typesafe bindings",        desc: "Bindings are the IAM policy." },
+  { href: "/#local-dev",           label: "Local dev",                desc: "Workers run locally. Resources run real." },
+  { href: "/#per-test-stacks",     label: "Per-test stacks",          desc: "Real infra. Per test suite." },
+  { href: "/#pr-previews",         label: "PR previews",              desc: "Every PR. Deployed. Destroyed on merge." },
+  { href: "/#observability",       label: "Observability",            desc: "OTel + dashboards & alarms in code." },
 ];
 
 const providers = [
-  { href: "/product/providers/aws",         label: "AWS" },
-  { href: "/product/providers/cloudflare",  label: "Cloudflare" },
-  { href: "/product/providers/planetscale", label: "Planetscale", soon: true },
+  { href: "/providers/aws",         label: "AWS" },
+  { href: "/providers/cloudflare",  label: "Cloudflare" },
+  { href: "/providers/planetscale", label: "Planetscale", soon: true },
 ];
 ---
 

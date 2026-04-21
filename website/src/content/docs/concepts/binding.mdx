@@ -126,3 +126,21 @@ env vars, Cloudflare bindings) on the stack. The function's provider
 receives this data during create/update and applies it. At runtime,
 the Policy layer is absent, so it gracefully becomes a no-op — only
 the lightweight Service wrapper runs.
+
+## All of Effect, on every binding
+
+Bindings return `Effect` values. That means `Effect.retry`,
+`timeout`, `catchTag`, `Stream`, `Sink` — they all just work, with
+typed error channels:
+
+```typescript
+// All Effect operators work out of the box on bindings.
+const sendWithRetry = send({ MessageBody: msg }).pipe(
+  Effect.retry({ times: 3, schedule: Schedule.exponential("100 millis") }),
+  Effect.timeout("5 seconds"),
+  Effect.catchTag("ThrottlingException", () => Effect.succeed(undefined)),
+);
+```
+
+A Cloudflare R2 binding and an AWS S3 binding obey the same shape.
+Code that consumes one consumes the other.

@@ -167,6 +167,21 @@ return <Code lang="yaml" code={content} />;
 
 Set up preview deployments and continuous integration for your alchemy projects using GitHub Actions.
 
+## How PR previews work
+
+Open a PR. Alchemy does the rest.
+
+1. **A pull request is opened.** GitHub fires `pull_request`. The
+   workflow computes `STAGE = pr-{number}` and runs the deploy job.
+2. **Alchemy deploys the stack to that stage.** An isolated copy of
+   every resource — Workers, Lambdas, queues, tables. Stage state
+   lives separately, so PRs can't touch each other or prod.
+3. **A bot comment is posted (or updated) on the PR.** The
+   `GitHub.Comment` resource keeps its logical id stable, so the
+   comment updates in place on each push.
+4. **PR is merged or closed → cleanup runs.** A second job runs
+   `alchemy destroy --stage pr-{n}`. Resources gone. Costs gone.
+
 As part of this guide, we'll:
 
 1. Create a GitHub Actions workflow with PR previews
