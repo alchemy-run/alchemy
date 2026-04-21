@@ -21,7 +21,7 @@ import {
   diffTags,
   hasTags,
 } from "../../Tags.ts";
-import type { AccountID } from "../Account.ts";
+import type { AccountID } from "../Environment.ts";
 import type { RegionID } from "../Region.ts";
 
 export type TableName = string;

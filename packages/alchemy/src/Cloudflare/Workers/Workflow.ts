@@ -6,7 +6,7 @@ import type { PlatformServices } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
-import { Account } from "../Account.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { Worker, WorkerEnvironment, type WorkerServices } from "./Worker.ts";
 
 type WorkflowTypeId = "Cloudflare.Workflow";
@@ -380,7 +380,7 @@ export const WorkflowProvider = () =>
   Provider.effect(
     WorkflowResource,
     Effect.gen(function* () {
-      const accountId = yield* Account;
+      const { accountId } = yield* CloudflareEnvironment;
       const putWorkflow = yield* workflows.putWorkflow;
       const deleteWorkflow = yield* workflows.deleteWorkflow;
 

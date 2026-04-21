@@ -11,8 +11,8 @@ import {
   diffTags,
   hasTags,
 } from "../../Tags.ts";
-import type { AccountID } from "../Account.ts";
-import { Account } from "../Account.ts";
+import type { AccountID } from "../Environment.ts";
+import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyDocument } from "./Policy.ts";
 import {
   parsePolicyDocument,
@@ -107,7 +107,7 @@ export const RoleProvider = () =>
   Provider.effect(
     Role,
     Effect.gen(function* () {
-      yield* Account;
+      yield* AWSEnvironment;
 
       const toRoleName = (id: string, props: { roleName?: string } = {}) =>
         props.roleName
@@ -337,7 +337,7 @@ export const RoleProvider = () =>
           });
 
           const roleArn = (created.Role?.Arn ??
-            `arn:aws:iam::${yield* Account}:role/${roleName}`) as RoleArn;
+            `arn:aws:iam::${(yield* AWSEnvironment).accountId}:role/${roleName}`) as RoleArn;
           yield* session.note(roleArn);
 
           return {

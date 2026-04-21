@@ -15,8 +15,8 @@ import {
   createTagsList,
   diffTags,
 } from "../../Tags.ts";
-import type { AccountID } from "../Account.ts";
-import { Account } from "../Account.ts";
+import type { AccountID } from "../Environment.ts";
+import { AWSEnvironment } from "../Environment.ts";
 import type { RegionID } from "../Region.ts";
 import type { AllocationId } from "./EIP.ts";
 import type { SubnetId } from "./Subnet.ts";
@@ -166,7 +166,7 @@ export const NatGatewayProvider = () =>
     NatGateway,
     Effect.gen(function* () {
       const region = yield* Region;
-      const accountId = yield* Account;
+      const { accountId } = yield* AWSEnvironment;
 
       const createTags = Effect.fn(function* (
         id: string,

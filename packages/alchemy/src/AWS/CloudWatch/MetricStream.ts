@@ -6,7 +6,7 @@ import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
-import { Account, type AccountID } from "../Account.ts";
+import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { RegionID } from "../Region.ts";
 import {
   createName,
@@ -75,7 +75,7 @@ export const MetricStreamProvider = () =>
     MetricStream,
     Effect.gen(function* () {
       const region = yield* Region;
-      const accountId = yield* Account;
+      const { accountId } = yield* AWSEnvironment;
       const createMetricStreamName = (
         id: string,
         props: { name?: string } = {},

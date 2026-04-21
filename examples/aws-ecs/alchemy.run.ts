@@ -1,29 +1,11 @@
 import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
 import * as Output from "alchemy/Output";
-import { Stage } from "alchemy/Stage";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import QueueConsumerTask from "./src/QueueConsumerTask.ts";
 import ApiTask from "./src/Task.ts";
 
-const awsConfig = Layer.effect(
-  AWS.StageConfig,
-  Effect.gen(function* () {
-    const stage = yield* Stage;
-
-    if (stage === "prod") {
-      return {
-        account: "123456789012",
-        region: "us-west-2",
-      };
-    }
-
-    return yield* AWS.loadDefaultStageConfig();
-  }).pipe(Effect.orDie),
-);
-
-const aws = AWS.providers().pipe(Layer.provide(awsConfig));
+const aws = AWS.providers();
 
 export default Alchemy.Stack(
   "AwsEcsExample",

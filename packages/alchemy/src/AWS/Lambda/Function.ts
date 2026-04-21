@@ -29,7 +29,7 @@ import { Stack } from "../../Stack.ts";
 import { createInternalTags, createTagsList, hasTags } from "../../Tags.ts";
 import { sha256 } from "../../Util/sha256.ts";
 import { zipCode } from "../../Util/zip.ts";
-import { Account } from "../Account.ts";
+import { AWSEnvironment } from "../Environment.ts";
 import { Assets } from "../Assets.ts";
 import * as IAM from "../IAM/index.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
@@ -428,7 +428,7 @@ export const FunctionProvider = () =>
     Function,
     Effect.gen(function* () {
       const stack = yield* Stack;
-      const accountId = yield* Account;
+      const { accountId } = yield* AWSEnvironment;
       const region = yield* Region;
       const fs = yield* FileSystem.FileSystem;
       const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;

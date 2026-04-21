@@ -45,7 +45,7 @@ import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { Self } from "../../Self.ts";
 import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
-import { Account } from "../Account.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { D1Database } from "../D1/D1Database.ts";
 import { fromCloudflareFetcher } from "../Fetcher.ts";
 import { CloudflareLogs } from "../Logs.ts";
@@ -915,7 +915,7 @@ export const WorkerProvider = () =>
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
 
-      const accountId = yield* Account;
+      const { accountId } = yield* CloudflareEnvironment;
       const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
       const stack = yield* Stack;
 
@@ -1174,13 +1174,15 @@ export const WorkerProvider = () =>
         Effect.gen(function* () {
           const main = yield* fs.realPath(props.main);
           const cwd = yield* findCwdForBundle(main);
+          const { compatibilityDate, compatibilityFlags } =
+            getCompatibility(props);
           const buildBundle = (plugins?: rolldown.RolldownPluginOption) =>
             Bundle.build(
               {
                 input: main,
                 cwd,
                 plugins: [
-                  cloudflareRolldown(getCompatibility(props)),
+                  cloudflareRolldown({ compatibilityDate, compatibilityFlags }),
                   plugins,
                   ...(props.build?.metafile ? [Sonda({ open: false })] : []),
                 ],
@@ -1337,6 +1339,8 @@ ${[
       const viteBuild = Effect.fnUntraced(function* (props: WorkerProps) {
         let assetsDirectory: string | undefined;
         let serverBundle: vite.Rolldown.OutputBundle | undefined;
+        const { compatibilityDate, compatibilityFlags } =
+          getCompatibility(props);
 
         yield* Effect.promise(async () => {
           const vite = await loadVite();
@@ -1359,7 +1363,10 @@ ${[
                 sharedConfigBuild: true,
               },
               plugins: [
-                cloudflareVite(getCompatibility(props)),
+                cloudflareVite({
+                  compatibilityDate,
+                  compatibilityFlags,
+                }),
                 {
                   name: "output:ssr",
                   applyToEnvironment(environment) {

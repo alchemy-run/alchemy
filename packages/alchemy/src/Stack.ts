@@ -7,6 +7,7 @@ import { Path } from "effect/Path";
 import type { Scope } from "effect/Scope";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
+import type { AuthProviders } from "./Auth/AuthProvider.ts";
 import { DotAlchemy } from "./Config.ts";
 import type { Input, InputProps } from "./Input.ts";
 import * as Output from "./Output.ts";
@@ -23,7 +24,8 @@ export type StackServices =
   | Path
   | DotAlchemy
   | HttpClient
-  | ChildProcessSpawner;
+  | ChildProcessSpawner
+  | AuthProviders;
 
 export type Stack = Context.ServiceClass.Shape<
   "Stack",

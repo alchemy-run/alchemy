@@ -18,7 +18,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
-import type { AccountID } from "../Account.ts";
+import type { AccountID } from "../Environment.ts";
 import type { RegionID } from "../Region.ts";
 
 export type ClusterName = string;

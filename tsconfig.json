@@ -9,6 +9,9 @@
       "path": "./packages/alchemy/tsconfig.json"
     },
     {
+      "path": "./packages/alchemy/tsconfig.bin.json"
+    },
+    {
       "path": "./packages/alchemy/tsconfig.test.json"
     },
     {

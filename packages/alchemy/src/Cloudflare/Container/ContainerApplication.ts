@@ -31,7 +31,7 @@ import * as Server from "../../Server/index.ts";
 import { Stack } from "../../Stack.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { normalizeNulls } from "../../Util/stable.ts";
-import { Account } from "../Account.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { CloudflareLogs, type TelemetryFilter } from "../Logs.ts";
 import type { Providers } from "../Providers.ts";
 import { Container, ContainerTypeId } from "./Container.ts";
@@ -327,7 +327,7 @@ export const ContainerProvider = () =>
     Container,
     Effect.gen(function* () {
       const stack = yield* Stack;
-      const accountId = yield* Account;
+      const { accountId } = yield* CloudflareEnvironment;
       const adoptPolicy = yield* Effect.serviceOption(AdoptPolicy).pipe(
         Effect.map(Option.getOrElse(() => false)),
       );

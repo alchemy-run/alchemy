@@ -13,7 +13,7 @@ import {
   diffTags,
   hasAlchemyTags,
 } from "../../Tags.ts";
-import { Account, type AccountID } from "../Account.ts";
+import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { RegionID } from "../Region.ts";
 import type { QueueArn } from "../SQS/Queue.ts";
 
@@ -121,7 +121,7 @@ export const EventBusProvider = () =>
     EventBus,
     Effect.gen(function* () {
       const region = yield* Region;
-      const accountId = yield* Account;
+      const { accountId } = yield* AWSEnvironment;
 
       const createEventBusName = (id: string, props: { name?: string } = {}) =>
         Effect.gen(function* () {

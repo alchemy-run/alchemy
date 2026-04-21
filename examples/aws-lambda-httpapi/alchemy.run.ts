@@ -1,30 +1,11 @@
 import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
 import * as Output from "alchemy/Output";
-import { Stage } from "alchemy/Stage";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import JobFunction from "./src/JobFunction.ts";
 
-const awsConfig = Layer.effect(
-  AWS.StageConfig,
-  Effect.gen(function* () {
-    const stage = yield* Stage;
-
-    if (stage === "prod") {
-      // example of how to programatically configure a stage, e.g. hard-code account for prod
-      return {
-        account: "123456789012",
-        region: "us-west-2",
-      };
-    }
-
-    return yield* AWS.loadDefaultStageConfig();
-  }).pipe(Effect.orDie),
-);
-
-// const aws = AWS.providers() // <- can also use the default aws stage config by omitting
-const aws = AWS.providers().pipe(Layer.provide(awsConfig));
+const aws = AWS.providers();
 const dashboardRegion = process.env.AWS_REGION ?? "us-west-2";
 
 export default Alchemy.Stack(
