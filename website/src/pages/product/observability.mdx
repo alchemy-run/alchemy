@@ -1,0 +1,145 @@
+---
+layout: ../../layouts/Marketing.astro
+title: "Observability + Operations · alchemy"
+description: "Effect emits OpenTelemetry. Ship traces, metrics, and logs to Axiom, Datadog, CloudWatch, or any OTLP endpoint. Declare dashboards and alarms in code."
+---
+
+import Section from "../../components/marketing/Section.astro";
+import Eyebrow from "../../components/marketing/Eyebrow.astro";
+import Button from "../../components/marketing/Button.astro";
+import CodeBlock from "../../components/marketing/CodeBlock.astro";
+import CTA from "../../components/marketing/CTA.astro";
+import PageHero from "../../components/marketing/PageHero.astro";
+import IllustrationObs from "../../components/marketing/illustrations/IllustrationObs.astro";
+
+export const OTEL_SRC = `// Effect emits OpenTelemetry by default.
+// Pick an exporter Layer; the Worker code never changes.
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  Effect.gen(function* () {
+    yield* Effect.logInfo("request received");
+    yield* Metric.increment(requestsTotal);
+    return { fetch: handler };
+  }).pipe(
+    Effect.provide(AxiomExporter),       // or CloudWatch, Datadog, OTLP …
+  ),
+) {}`;
+
+export const DASH_SRC = `// alchemy.run.ts — same program. same diff. operations included.
+export const Dashboard = AWS.CloudWatch.Dashboard("ApiHealth", {
+  widgets: [
+    Widget.line({   title: "p99 latency",     metric: api.metrics.p99 }),
+    Widget.line({   title: "requests / sec",  metric: api.metrics.rps }),
+    Widget.number({ title: "5xx ratio",       metric: api.metrics.errorRate }),
+  ],
+});
+
+export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
+  metric: api.metrics.p99,
+  threshold: 500,
+  comparisonOperator: ">",
+  evaluationPeriods: 5,
+  alarmActions: [pagerDuty, slackWebhook],
+});`;
+
+<Section padding="60px 32px 36px">
+  <PageHero
+    eyebrow="product · observability + ops"
+    title="watch your stack."
+    highlight="OpenTelemetry, in code."
+    description="Effect already emits traces, metrics, and logs. Alchemy declares the exporter as a Layer — point it at Axiom, Datadog, CloudWatch, or any OTLP endpoint. Then declare your dashboards and alarms next to the code that emits the metrics."
+  >
+    <Button slot="cta" variant="primary" icon="arrow" href="/getting-started">Get started</Button>
+    <Button slot="cta" variant="secondary" href="https://github.com/alchemy-run/alchemy">GitHub</Button>
+  </PageHero>
+</Section>
+
+{/* ───── OTEL EVERYWHERE ───── */}
+
+<Section padding="48px 32px 80px">
+  <div style="text-align:center;margin-bottom:32px;">
+    <Eyebrow>otel everywhere</Eyebrow>
+    <h2 class="alc-h2" style="margin:10px 0 12px;">Metrics, traces, logs — typed end to end.</h2>
+    <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:700px;margin:0 auto;">
+      Every Effect spans a trace. Every <code class="alc-code-inline" style="color:var(--alc-accent-deep);">Metric</code> increments a counter. Every <code class="alc-code-inline" style="color:var(--alc-accent-deep);">logInfo</code> ships a log line. The exporter is a Layer — swap one line, ship to a different vendor.
+    </p>
+  </div>
+  <div style="max-width:880px;margin:0 auto;">
+    <CodeBlock filename="src/Api.ts" code={OTEL_SRC} />
+  </div>
+
+  <div style="max-width:920px;margin:32px auto 0;display:grid;grid-template-columns:repeat(4, 1fr);gap:14px;">
+    <div class="otel-card" style="--c:#9F6FFF;">
+      <div class="otel-card__name">Axiom</div>
+      <div class="otel-card__sub">api.axiom.co</div>
+    </div>
+    <div class="otel-card" style="--c:#632CA6;">
+      <div class="otel-card__name">Datadog</div>
+      <div class="otel-card__sub">trace.agent.datadoghq.com</div>
+    </div>
+    <div class="otel-card" style="--c:#E7157B;">
+      <div class="otel-card__name">CloudWatch</div>
+      <div class="otel-card__sub">logs.aws.amazon.com</div>
+    </div>
+    <div class="otel-card" style="--c:#F5A623;">
+      <div class="otel-card__name">Any OTLP</div>
+      <div class="otel-card__sub">collector:4318</div>
+    </div>
+  </div>
+</Section>
+
+{/* ───── DASHBOARDS + ALARMS IN CODE ───── */}
+
+<Section padding="80px 32px" background="var(--alc-bg-nav)">
+  <div style="display:grid;grid-template-columns:minmax(0, 1.1fr) minmax(0, 1fr);gap:24px;align-items:center;max-width:1080px;margin:0 auto;">
+    <div>
+      <Eyebrow>dashboards · alarms · in code</Eyebrow>
+      <h2 class="alc-h2" style="margin:10px 0 12px;">Operations stops being a console click-fest.</h2>
+      <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);margin:0 0 12px;">
+        Declare CloudWatch (or Grafana, or Datadog) dashboards and alarms next to the resources they observe. Threshold change? It's a diff in the PR — reviewable, revertable, audited.
+      </p>
+      <ul style="font-size:14px;color:var(--alc-fg-2);line-height:1.7;margin:0;padding-left:18px;">
+        <li>Widgets reference typed <code class="alc-code-inline" style="color:var(--alc-accent-deep);">.metrics</code> outputs from your resources.</li>
+        <li>Alarms compose. Same alarm wired to PagerDuty, Slack, SQS — typed actions.</li>
+        <li>Per-stage dashboards: <code class="alc-code-inline" style="color:var(--alc-accent-deep);">prod</code>, <code class="alc-code-inline" style="color:var(--alc-accent-deep);">staging</code>, <code class="alc-code-inline" style="color:var(--alc-accent-deep);">pr-42</code> all separate.</li>
+      </ul>
+    </div>
+    <div style="background:var(--alc-bg-elev-1);border:1px solid var(--alc-hairline);border-radius:14px;padding:14px;">
+      <IllustrationObs />
+    </div>
+  </div>
+
+  <div style="max-width:880px;margin:32px auto 0;">
+    <CodeBlock filename="alchemy.run.ts" code={DASH_SRC} />
+  </div>
+</Section>
+
+{/* ───── ALERTS WIRED TO ANYTHING ───── */}
+
+<Section padding="80px 32px">
+  <div style="text-align:center;margin-bottom:32px;">
+    <Eyebrow>alerts · wired to anything</Eyebrow>
+    <h2 class="alc-h2" style="margin:10px 0 12px;">Get paged. From the same program.</h2>
+    <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:700px;margin:0 auto;">
+      Alarm actions are typed resources too. Wire your alarms to PagerDuty, Slack, an SQS queue, an SNS topic — reuse the same notification channel across every alarm in the stack.
+    </p>
+  </div>
+
+  <div style="max-width:1080px;margin:0 auto;display:grid;grid-template-columns:repeat(3, 1fr);gap:14px;">
+    <div class="alc-card">
+      <div class="alc-card__title">Threshold + window</div>
+      <div class="alc-card__body">Configure evaluation periods, statistic, comparison operator — all typed, autocompleted in your editor.</div>
+    </div>
+    <div class="alc-card">
+      <div class="alc-card__title">Composite alarms</div>
+      <div class="alc-card__body">AND/OR multiple alarm states into a higher-level alert — declared as values, not console rules.</div>
+    </div>
+    <div class="alc-card">
+      <div class="alc-card__title">Audit trail in git</div>
+      <div class="alc-card__body">Every threshold and channel lives in source. Who changed it, when, and why — answered by <code>git blame</code>.</div>
+    </div>
+  </div>
+</Section>
+
+<CTA heading="Ship it. Then watch it." />
+

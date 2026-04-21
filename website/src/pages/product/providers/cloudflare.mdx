@@ -1,0 +1,247 @@
+---
+layout: ../../../layouts/Marketing.astro
+title: "Cloudflare · alchemy"
+description: "Alchemy is a TypeScript IaC layer over Cloudflare. Workers, Durable Objects, Hibernatable WebSockets, Containers, Workflows, R2, KV, D1, Queues — declared and deployed from one program. Compatible with the standard async Worker style."
+---
+
+import Section from "../../../components/marketing/Section.astro";
+import Eyebrow from "../../../components/marketing/Eyebrow.astro";
+import Button from "../../../components/marketing/Button.astro";
+import CodeBlock from "../../../components/marketing/CodeBlock.astro";
+import CTA from "../../../components/marketing/CTA.astro";
+import PageHero from "../../../components/marketing/PageHero.astro";
+import CodeTabs from "../../../components/marketing/CodeTabs.astro";
+
+export const WORKER_SRC = `import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import { Bucket } from "./Bucket.ts";
+import { KV } from "./KV.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.path, assets: "./assets" },
+  Effect.gen(function* () {
+    const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
+    const kv     = yield* Cloudflare.KVNamespace.bind(KV);
+
+    return { fetch: handleRequest(bucket, kv) };
+  }),
+) {}`;
+
+export const ASYNC_RUN_SRC = `// alchemy.run.ts — async style. Identical to v1.
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import type { Counter } from "./src/worker.ts";
+
+export const DB     = Cloudflare.D1Database("DB");
+export const Bucket = Cloudflare.R2Bucket("Bucket");
+
+export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
+
+export const Worker = Cloudflare.Worker("Worker", {
+  main: "./src/worker.ts",
+  bindings: {
+    DB,
+    Bucket,
+    Counter: Cloudflare.DurableObjectNamespace<Counter>("Counter", {
+      className: "Counter",
+    }),
+  },
+});
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Cloudflare.providers() },
+  Effect.gen(function* () {
+    const worker = yield* Worker;
+    return worker.url;
+  }),
+);`;
+
+export const ASYNC_WORKER_SRC = `// src/worker.ts — your standard async fetch handler.
+// No Effect required. env is fully typed via InferEnv.
+import { DurableObject } from "cloudflare:workers";
+import type { WorkerEnv } from "../alchemy.run.ts";
+
+export default {
+  async fetch(request: Request, env: WorkerEnv) {
+    const url = new URL(request.url);
+
+    if (request.method === "GET") {
+      return new Response((await env.Bucket.get(url.pathname))?.body ?? null);
+    }
+    if (request.method === "PUT") {
+      await env.Bucket.put(url.pathname, request.body);
+      return new Response(null, { status: 201 });
+    }
+    if (request.method === "POST") {
+      const counter = env.Counter.getByName("counter");
+      return new Response(String(await counter.increment()));
+    }
+    return env.ASSETS.fetch(request);
+  },
+};
+
+export class Counter extends DurableObject {
+  private counter = 0;
+  async increment() { return ++this.counter; }
+}`;
+
+export const DO_SRC = `// Durable Objects with Hibernatable WebSockets.
+// Idle sockets sleep without holding instance memory.
+export default class Room extends Cloudflare.DurableObjectNamespace<Room>()(
+  "Room",
+  Effect.gen(function* () {
+    return {
+      fetch: function (this: Room, req) {
+        const pair = new WebSocketPair();
+        // Accept as a hibernatable socket — no JS heap held while idle.
+        this.state.acceptWebSocket(pair[1]);
+        return new Response(null, { status: 101, webSocket: pair[0] });
+      },
+
+      webSocketMessage: function (this: Room, ws, msg) {
+        for (const peer of this.state.getWebSockets()) peer.send(msg);
+      },
+    };
+  }),
+) {}`;
+
+export const CONTAINER_SRC = `// Bind a Container to a Durable Object — alchemy builds the
+// image, starts it on demand, and gives you a typed .fetch handle.
+export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
+  "Agents",
+  Effect.gen(function* () {
+    const sandbox   = yield* Cloudflare.Container.bind(Sandbox);
+    const container = yield* Cloudflare.start(sandbox);
+    return { fetch: (req) => container.fetch(req) };
+  }),
+) {}`;
+
+export const WORKFLOW_SRC = `// Durable workflows. Sleep, retry, resume across restarts.
+export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>()(
+  "NotifyWorkflow",
+  Effect.gen(function* () {
+    const room = yield* Room;
+    return {
+      run: (event) => Effect.gen(function* () {
+        yield* Effect.sleep("5 seconds");
+        yield* room.getByName(event.payload.roomId)
+                   .broadcast(event.payload.message);
+      }),
+    };
+  }),
+) {}`;
+
+<Section padding="60px 32px 24px">
+  <PageHero
+    eyebrow="provider · cloudflare"
+    title="A TypeScript IaC layer over Cloudflare."
+    highlight="Workers, deployed."
+    description="Workers, Durable Objects (with hibernatable WebSockets), Containers, Workflows, R2, KV, D1, Queues — declared in one program. Bindings are typed at deploy and at runtime. Existing async fetch handlers work as-is."
+  >
+    <Button slot="cta" variant="primary" icon="arrow" href="https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-worker">See the example</Button>
+    <Button slot="cta" variant="secondary" href="/getting-started">Get started</Button>
+  </PageHero>
+</Section>
+
+{/* ───── EFFECT-STYLE WORKER ───── */}
+
+<Section padding="48px 32px 80px">
+  <div style="text-align:center;margin-bottom:32px;">
+    <Eyebrow>workers</Eyebrow>
+    <h2 class="alc-h2" style="margin:10px 0 12px;">Workers as classes. Bindings as Effects.</h2>
+    <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:680px;margin:0 auto;">
+      Extend <code class="alc-code-inline" style="color:var(--alc-accent-deep);">Cloudflare.Worker&lt;T&gt;</code>. Yield bindings to R2, KV, D1, Queues. The runtime client is typed; the binding deploys with the Worker.
+    </p>
+  </div>
+  <div style="max-width:880px;margin:0 auto;">
+    <CodeBlock filename="src/Api.ts" code={WORKER_SRC} />
+  </div>
+</Section>
+
+{/* ───── ASYNC / V1 COMPATIBILITY — direct, factual ───── */}
+
+<Section padding="80px 32px" background="var(--alc-bg-nav)">
+  <div style="text-align:center;margin-bottom:32px;">
+    <Eyebrow>async style · v1 compatibility</Eyebrow>
+    <h2 class="alc-h2" style="margin:10px 0 12px;">Effect is optional in your handler.</h2>
+    <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:740px;margin:0 auto;">
+      The Effect-based class is one option. You can also declare resources at the module top level and write a normal <code class="alc-code-inline" style="color:var(--alc-accent-deep);">async fetch(request, env)</code> handler. <code class="alc-code-inline" style="color:var(--alc-accent-deep);">Cloudflare.InferEnv</code> derives a typed <code>env</code> from the bindings you passed to the Worker — same type safety, no Effect in the runtime code. Existing Workers and v1 projects migrate by replacing <code class="alc-code-inline" style="color:var(--alc-accent-deep);">await alchemy(...)</code> with an exported <code class="alc-code-inline" style="color:var(--alc-accent-deep);">Alchemy.Stack</code>.
+    </p>
+  </div>
+
+  <CodeTabs tabs={[
+    { key: "run",    label: "alchemy.run.ts", filename: "alchemy.run.ts", code: ASYNC_RUN_SRC },
+    { key: "worker", label: "src/worker.ts",  filename: "src/worker.ts",  code: ASYNC_WORKER_SRC },
+  ]} />
+
+  <div style="max-width:1080px;margin:32px auto 0;display:grid;grid-template-columns:repeat(3, 1fr);gap:14px;">
+    <div class="alc-card">
+      <div class="alc-card__title">Existing handlers, unchanged</div>
+      <div class="alc-card__body">
+        Your <code class="alc-code-inline" style="color:var(--alc-accent-deep);">async fetch</code> code keeps working. Only the IaC entrypoint moves to <code>alchemy.run.ts</code>.
+      </div>
+    </div>
+    <div class="alc-card">
+      <div class="alc-card__title">Typed env via InferEnv</div>
+      <div class="alc-card__body">
+        <code class="alc-code-inline" style="color:var(--alc-accent-deep);">Cloudflare.InferEnv&lt;typeof Worker&gt;</code> generates the env type from your bindings. Rename a binding, the handler fails to compile.
+      </div>
+    </div>
+    <div class="alc-card">
+      <div class="alc-card__title">Migration path from v1</div>
+      <div class="alc-card__body">
+        Drop <code class="alc-code-inline" style="color:var(--alc-accent-deep);">await app.finalize()</code>, export an <code class="alc-code-inline" style="color:var(--alc-accent-deep);">Alchemy.Stack</code>, keep your handler. <a href="/guides/migrating-from-v1" style="color:var(--alc-accent-deep);">Full guide &rarr;</a>
+      </div>
+    </div>
+  </div>
+</Section>
+
+{/* ───── DURABLE OBJECTS ───── */}
+
+<Section padding="80px 32px">
+  <div style="text-align:center;margin-bottom:32px;">
+    <Eyebrow>durable objects · hibernatable websockets</Eyebrow>
+    <h2 class="alc-h2" style="margin:10px 0 12px;">Stateful instances. Idle sockets sleep.</h2>
+    <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:700px;margin:0 auto;">
+      Each DO instance has its own storage and its own WebSockets. Calling <code class="alc-code-inline" style="color:var(--alc-accent-deep);">acceptWebSocket()</code> on a socket lets it hibernate when idle — Cloudflare evicts your instance from memory and revives it when a message arrives.
+    </p>
+  </div>
+  <div style="max-width:880px;margin:0 auto;">
+    <CodeBlock filename="src/Room.ts" code={DO_SRC} />
+  </div>
+</Section>
+
+{/* ───── CONTAINERS ───── */}
+
+<Section padding="80px 32px" background="var(--alc-bg-nav)">
+  <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1.2fr);gap:24px;align-items:center;max-width:1080px;margin:0 auto;">
+    <div>
+      <Eyebrow>containers</Eyebrow>
+      <h2 class="alc-h2" style="margin:10px 0 12px;">Run a container from a DO.</h2>
+      <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);margin:0;">
+        Bind <code class="alc-code-inline" style="color:var(--alc-accent-deep);">Cloudflare.Container</code> to a Durable Object. Alchemy builds the image, starts the container on demand, and gives you a typed <code class="alc-code-inline" style="color:var(--alc-accent-deep);">.fetch</code> handle. Useful for Python, Rust, or any process you can package.
+      </p>
+    </div>
+    <CodeBlock filename="src/Agent.ts" code={CONTAINER_SRC} compact />
+  </div>
+</Section>
+
+{/* ───── WORKFLOWS ───── */}
+
+<Section padding="80px 32px">
+  <div style="display:grid;grid-template-columns:minmax(0, 1.2fr) minmax(0, 1fr);gap:24px;align-items:center;max-width:1080px;margin:0 auto;">
+    <CodeBlock filename="src/NotifyWorkflow.ts" code={WORKFLOW_SRC} compact />
+    <div>
+      <Eyebrow>workflows</Eyebrow>
+      <h2 class="alc-h2" style="margin:10px 0 12px;">Long-running, resumable.</h2>
+      <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);margin:0;">
+        <code class="alc-code-inline" style="color:var(--alc-accent-deep);">Cloudflare.Workflow</code> sleeps, retries, and resumes across restarts. The body is an Effect — typed input, typed errors, typed status.
+      </p>
+    </div>
+  </div>
+</Section>
+
+<CTA heading="Deploy Workers from one TypeScript program." />

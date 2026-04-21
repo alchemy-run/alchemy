@@ -4,18 +4,21 @@ interface Props {
   padding?: string;
   background?: string;
   class?: string;
+  step?: number;
 }
 const {
   maxWidth = 1152,
   padding = "88px 32px",
   background,
   class: className,
+  step,
 } = Astro.props;
 ---
 
 <section
   class:list={["alc-section", className]}
   style={`padding:${padding};${background ? `background:${background};` : ""}`}
+  data-step={step}
 >
   <div class="alc-section__inner" style={`max-width:${maxWidth}px;`}>
     <slot />

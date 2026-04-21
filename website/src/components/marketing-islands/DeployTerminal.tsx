@@ -26,9 +26,9 @@ interface Resource {
   bindings: string[];
 }
 const RESOURCES: Resource[] = [
-  { id: "Api", type: "Cloudflare.Worker", bindings: ["Bucket", "Queue"] },
-  { id: "Bucket", type: "Cloudflare.R2Bucket", bindings: [] },
-  { id: "Queue", type: "Cloudflare.Queue", bindings: [] },
+  { id: "Photos", type: "Cloudflare.R2Bucket", bindings: [] },
+  { id: "Sessions", type: "Cloudflare.KVNamespace", bindings: [] },
+  { id: "Api", type: "Cloudflare.Worker", bindings: ["Photos", "Sessions"] },
 ];
 
 type RowStatus = "ready" | "creating" | "deleting" | "created" | "deleted";
@@ -115,8 +115,8 @@ export default function DeployTerminal({ title = "~/my-app" }: { title?: string 
         setProceed(null);
         const t0 = Date.now();
         await Promise.all([
-          startResource("Bucket", "creating", 1000),
-          (async () => { await sleep(220); await startResource("Queue", "creating", 900); })(),
+          startResource("Photos", "creating", 1000),
+          (async () => { await sleep(220); await startResource("Sessions", "creating", 900); })(),
         ]);
         if (aborted()) return;
         await startResource("Api", "creating", 1300);
@@ -142,8 +142,8 @@ export default function DeployTerminal({ title = "~/my-app" }: { title?: string 
         await startResource("Api", "deleting", 900);
         if (aborted()) return;
         await Promise.all([
-          startResource("Bucket", "deleting", 700),
-          (async () => { await sleep(180); await startResource("Queue", "deleting", 650); })(),
+          startResource("Photos", "deleting", 700),
+          (async () => { await sleep(180); await startResource("Sessions", "deleting", 650); })(),
         ]);
         if (aborted()) return;
         const elapsedD = ((Date.now() - tD) / 1000).toFixed(1);

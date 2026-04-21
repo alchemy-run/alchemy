@@ -1,0 +1,126 @@
+---
+layout: ../../layouts/Marketing.astro
+title: "Deploy any frontend · alchemy"
+description: "Deploy Vite-based frameworks (TanStack Start, Astro, SolidStart, Nuxt, React) and any custom-built static site (Hugo, Eleventy) to Cloudflare. One declaration. alchemy builds and ships."
+---
+
+import Section from "../../components/marketing/Section.astro";
+import Eyebrow from "../../components/marketing/Eyebrow.astro";
+import Button from "../../components/marketing/Button.astro";
+import CodeBlock from "../../components/marketing/CodeBlock.astro";
+import CTA from "../../components/marketing/CTA.astro";
+import PageHero from "../../components/marketing/PageHero.astro";
+import CodeTabs from "../../components/marketing/CodeTabs.astro";
+
+export const VITE_TANSTACK_SRC = `import * as Cloudflare from "alchemy/Cloudflare";
+
+export const App = Cloudflare.Vite("App", {
+  compatibility: { flags: ["nodejs_compat"] },
+});`;
+
+export const VITE_ASTRO_SRC = `import * as Cloudflare from "alchemy/Cloudflare";
+
+// Astro builds via Vite — one declaration, static or SSR.
+export const Site = Cloudflare.Vite("Site");`;
+
+export const VITE_REACT_SRC = `import * as Cloudflare from "alchemy/Cloudflare";
+
+export const App = Cloudflare.Vite("App");`;
+
+export const STATICSITE_SRC = `import * as Cloudflare from "alchemy/Cloudflare";
+
+// Any custom build pipeline — point command at the script,
+// outdir at the output directory.
+export const Blog = Cloudflare.StaticSite("Blog", {
+  command: "hugo --minify",
+  outdir: "public",
+});`;
+
+export const BIND_SRC = `// Frontend Workers can bind to backend resources.
+import { Bucket } from "./Bucket.ts";
+import { DB } from "./DB.ts";
+
+export const App = Cloudflare.Vite("App", {
+  bindings: { Bucket, DB },
+});
+
+// In your SSR loader / server function:
+//   env.Bucket.get(key)   // typed via Cloudflare.InferEnv
+//   env.DB.prepare(sql)`;
+
+<Section padding="60px 32px 24px">
+  <PageHero
+    eyebrow="product · frontend"
+    title="Vite. StaticSite. Both bind to your backend."
+    highlight="Deploy any frontend."
+    description="Cloudflare.Vite covers TanStack Start, Astro, SolidStart, Nuxt, plain React. Cloudflare.StaticSite wraps any custom build pipeline — Hugo, Eleventy, your own. One declaration. alchemy builds and deploys to Cloudflare."
+  >
+    <Button slot="cta" variant="primary" icon="arrow" href="/getting-started">Get started</Button>
+    <Button slot="cta" variant="secondary" href="https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-tanstack">See the example</Button>
+  </PageHero>
+</Section>
+
+{/* ───── VITE FRAMEWORKS ───── */}
+
+<Section padding="48px 32px 80px">
+  <div style="text-align:center;margin-bottom:32px;">
+    <Eyebrow>cloudflare.vite · ssr or static</Eyebrow>
+    <h2 class="alc-h2" style="margin:10px 0 12px;">One resource. Every Vite framework.</h2>
+    <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:700px;margin:0 auto;">
+      <code class="alc-code-inline" style="color:var(--alc-accent-deep);">Cloudflare.Vite</code> uses Cloudflare's Vite plugin to build the server bundle and client assets in one <code class="alc-code-inline" style="color:var(--alc-accent-deep);">vite build</code>. No manual entrypoint, no Wrangler config, no asset directory plumbing. Inputs are content-hashed so unchanged projects skip the build entirely.
+    </p>
+  </div>
+
+  <CodeTabs tabs={[
+    { key: "tanstack", label: "TanStack Start", filename: "alchemy.run.ts", code: VITE_TANSTACK_SRC },
+    { key: "astro",    label: "Astro",          filename: "alchemy.run.ts", code: VITE_ASTRO_SRC },
+    { key: "react",    label: "React + Vite",   filename: "alchemy.run.ts", code: VITE_REACT_SRC },
+  ]} />
+
+  <div style="max-width:1080px;margin:32px auto 0;display:grid;grid-template-columns:repeat(3, 1fr);gap:14px;">
+    <div class="alc-card">
+      <div class="alc-card__title">SSR with nodejs_compat</div>
+      <div class="alc-card__body">For frameworks that need Node APIs at runtime (TanStack Start, SolidStart, Nuxt), enable <code>nodejs_compat</code> in one line.</div>
+    </div>
+    <div class="alc-card">
+      <div class="alc-card__title">Static — also one line</div>
+      <div class="alc-card__body">Pure SPA or static site? Drop the <code>compatibility</code> option. The Worker just serves the built assets.</div>
+    </div>
+    <div class="alc-card">
+      <div class="alc-card__title">Content-hashed builds</div>
+      <div class="alc-card__body">Every input file is hashed (respecting <code>.gitignore</code> by default). Unchanged projects skip both build and deploy.</div>
+    </div>
+  </div>
+</Section>
+
+{/* ───── STATIC SITE ───── */}
+
+<Section padding="80px 32px" background="var(--alc-bg-nav)">
+  <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1.1fr);gap:24px;align-items:center;max-width:1080px;margin:0 auto;">
+    <div>
+      <Eyebrow>cloudflare.staticsite · any build pipeline</Eyebrow>
+      <h2 class="alc-h2" style="margin:10px 0 12px;">For everything Vite doesn't build.</h2>
+      <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);margin:0;">
+        <code class="alc-code-inline" style="color:var(--alc-accent-deep);">Cloudflare.StaticSite</code> runs a shell command, hashes the output directory, and deploys the result as a Worker with static assets. Hugo, Eleventy, mdBook, Jekyll — anything that produces a directory of files.
+      </p>
+    </div>
+    <CodeBlock filename="alchemy.run.ts" code={STATICSITE_SRC} compact />
+  </div>
+</Section>
+
+{/* ───── BIND TO BACKEND ───── */}
+
+<Section padding="80px 32px">
+  <div style="text-align:center;margin-bottom:32px;">
+    <Eyebrow>frontend + backend, same program</Eyebrow>
+    <h2 class="alc-h2" style="margin:10px 0 12px;">Bind backend resources from your SSR Worker.</h2>
+    <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:720px;margin:0 auto;">
+      The Worker that powers your SSR app can bind to R2, KV, D1, DynamoDB — anything you've declared elsewhere in the stack. Server functions and loaders read a typed <code class="alc-code-inline" style="color:var(--alc-accent-deep);">env</code> with no extra wiring.
+    </p>
+  </div>
+  <div style="max-width:760px;margin:0 auto;">
+    <CodeBlock filename="alchemy.run.ts" code={BIND_SRC} compact />
+  </div>
+</Section>
+
+<CTA heading="One framework. One file. Deployed." />

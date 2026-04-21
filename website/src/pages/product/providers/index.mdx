@@ -1,0 +1,66 @@
+---
+layout: ../../../layouts/Marketing.astro
+title: "Cloud Providers · alchemy"
+description: "Deploy AWS Lambda, Cloudflare Workers, and more — declared as TypeScript, typed end to end. Planetscale support coming soon."
+---
+
+import Section from "../../../components/marketing/Section.astro";
+import Eyebrow from "../../../components/marketing/Eyebrow.astro";
+import Button from "../../../components/marketing/Button.astro";
+import CTA from "../../../components/marketing/CTA.astro";
+import PageHero from "../../../components/marketing/PageHero.astro";
+
+<Section padding="60px 32px 36px">
+  <PageHero
+    eyebrow="product · providers"
+    title="cloud, declared in TypeScript."
+    highlight="Any"
+    description="The same shape across providers: declare a resource, bind it inside your function, get a typed client and a least-privilege policy."
+  >
+    <Button slot="cta" variant="primary" icon="arrow" href="/getting-started">Get started</Button>
+    <Button slot="cta" variant="secondary" href="https://github.com/alchemy-run/alchemy">GitHub</Button>
+  </PageHero>
+</Section>
+
+<Section padding="48px 32px 96px">
+  <div class="provider-overview">
+    <a class="provider-overview__card" href="/product/providers/aws" style="--prov-color:#FF9900;">
+      <div class="provider-overview__head">
+        <svg width="44" height="32" viewBox="0 0 64 64" fill="none" aria-hidden>
+          <path d="M22 20 L42 20 L42 36 L32 44 L22 36 Z" fill="rgba(255,153,0,0.16)" stroke="#FF9900" stroke-width="2" stroke-linejoin="round" />
+          <path d="M22 20 L32 26 L42 20 M32 26 L32 44" stroke="#FF9900" stroke-width="2" fill="none" />
+        </svg>
+        <span class="provider-overview__name">AWS</span>
+      </div>
+      <p class="provider-overview__body">Lambda, S3, DynamoDB, SQS, Kinesis, EventBridge, IAM, EC2, VPC, ECS, EKS, RDS — and least-privilege IAM generated from every <code>.bind()</code>.</p>
+      <span class="provider-overview__cta">Read more <span aria-hidden>&rarr;</span></span>
+    </a>
+
+    <a class="provider-overview__card" href="/product/providers/cloudflare" style="--prov-color:#F38020;">
+      <div class="provider-overview__head">
+        <svg width="44" height="32" viewBox="0 0 64 64" fill="none" aria-hidden>
+          <path d="M14 42 C8 42, 8 32, 14 32 C16 22, 36 22, 38 32 C48 32, 50 44, 40 44 L18 44 Z" fill="rgba(243,128,32,0.16)" stroke="#F38020" stroke-width="2" stroke-linejoin="round" />
+        </svg>
+        <span class="provider-overview__name">Cloudflare</span>
+      </div>
+      <p class="provider-overview__body">Workers, Durable Objects (with Hibernatable WebSockets), Containers, Workflows, R2, KV, D1, Queues, Pages — every primitive, typed.</p>
+      <span class="provider-overview__cta">Read more <span aria-hidden>&rarr;</span></span>
+    </a>
+
+    <a class="provider-overview__card provider-overview__card--soon" href="/product/providers/planetscale" style="--prov-color:#56C7B7;">
+      <div class="provider-overview__head">
+        <svg width="44" height="32" viewBox="0 0 64 64" fill="none" aria-hidden>
+          <circle cx="32" cy="32" r="22" fill="rgba(86,199,183,0.16)" stroke="#56C7B7" stroke-width="2" stroke-dasharray="4 4" />
+          <path d="M32 10 A22 22 0 0 1 54 32 L32 32 Z" fill="#56C7B7" opacity="0.85" />
+        </svg>
+        <span class="provider-overview__name">Planetscale</span>
+        <span class="provider-overview__badge">soon</span>
+      </div>
+      <p class="provider-overview__body">Serverless MySQL with branching. Coming next: declare a database, bind it from any Worker or Lambda — same shape, same types.</p>
+      <span class="provider-overview__cta">See roadmap <span aria-hidden>&rarr;</span></span>
+    </a>
+  </div>
+</Section>
+
+<CTA heading="Pick a cloud. Declare your stack." />
+

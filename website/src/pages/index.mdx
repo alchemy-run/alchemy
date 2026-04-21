@@ -1,96 +1,43 @@
 ---
 layout: ../layouts/Marketing.astro
-title: "alchemy — Cloudflare, AWS, and any cloud you bring"
-description: "Alchemy is a TypeScript IaC runtime. Any cloud, any resource — declared in one program, emulated locally, tested against the real thing, shipped on every PR."
+title: "alchemy — zero to production in one TypeScript program"
+description: "Alchemy is a TypeScript IaC runtime built on Effect. Deploy any cloud, run locally, test against the real thing, ship on every PR — and watch it in production."
 ---
 
 import Section from "../components/marketing/Section.astro";
 import Eyebrow from "../components/marketing/Eyebrow.astro";
 import Button from "../components/marketing/Button.astro";
 import AlphaBadge from "../components/marketing/AlphaBadge.astro";
-import SketchLabel from "../components/marketing/SketchLabel.astro";
-import CodeBlock from "../components/marketing/CodeBlock.astro";
-import ProviderGrid from "../components/marketing/ProviderGrid.astro";
 import DiscordCallout from "../components/marketing/DiscordCallout.astro";
 import CTA from "../components/marketing/CTA.astro";
-import FeatureTabs from "../components/marketing/FeatureTabs.astro";
-import DeployArrow from "../components/marketing/diagrams/DeployArrow.astro";
-import BindingArrows from "../components/marketing/diagrams/BindingArrows.astro";
 
-import DeployTerminal from "../components/marketing-islands/DeployTerminal.tsx";
-import TestTerminal from "../components/marketing-islands/TestTerminal.tsx";
-import DevTerminal from "../components/marketing-islands/DevTerminal.tsx";
-import LayersSwap from "../components/marketing-islands/LayersSwap.tsx";
-
-export const STACK_SRC = `export default Alchemy.Stack(
-  "MyApp",
-  { providers: Cloudflare.providers() },
-  Effect.gen(function* () {
-    const bucket = yield* Bucket;
-    const queue  = yield* Queue;
-    const api    = yield* Api;
-
-    // typed url returned to the caller
-    return { url: api.url };
-  }),
-);`;
-
-export const API_SRC = `export default class Api extends Cloudflare.Worker<Api>()(
-  "Api",
-  { main: import.meta.path, assets: "./assets" },
-  Effect.gen(function* () {
-    // typed runtime clients · bindings wired at deploy
-    const bucket = yield* R2Bucket.bind(Bucket);
-    const kv     = yield* KVNamespace.bind(KV);
-
-    return { fetch: /* your handler uses bucket & kv */ };
-  }),
-) {}`;
-
-export const BUCKET_SRC = `export const Bucket = Cloudflare.R2Bucket("Bucket");`;
-export const KV_SRC = `export const KV = Cloudflare.KVNamespace("KV");`;
-
-export const TEST_SRC = `// 1. deploy the real stack once, into an isolated stage
-const stack = beforeAll(deploy(Stack, { stage: \`pr-\${Date.now()}\` }));
-afterAll.skipIf(!process.env.CI)(destroy(Stack));
-
-// 2. each test yields the live URL and hits it over HTTP
-test("PUT + GET round-trips through R2", Effect.gen(function* () {
-  const { url } = yield* stack;
-
-  yield* HttpClient.put(\`\${url}/object/hello.txt\`, {
-    body: HttpBody.text("hi!"),
-  });
-
-  const res = yield* HttpClient.get(\`\${url}/object/hello.txt\`);
-  expect(yield* res.text).toBe("hi!");
-}));
-
-// 3. assert durable state — no mocks, just the live DO
-test("Room DO preserves state across requests", Effect.gen(function* () {
-  const { url } = yield* stack;
-  yield* HttpClient.post(\`\${url}/room/general/join\`);
-  const res = yield* HttpClient.get(\`\${url}/room/general\`);
-  expect((yield* res.json).members).toHaveLength(1);
-}));`;
+import ProductGrid from "../components/marketing/ProductGrid.astro";
+import ProductCard from "../components/marketing/ProductCard.astro";
+import IllustrationIaC from "../components/marketing/illustrations/IllustrationIaC.astro";
+import IllustrationProviders from "../components/marketing/illustrations/IllustrationProviders.astro";
+import IllustrationFrontends from "../components/marketing/illustrations/IllustrationFrontends.astro";
+import IllustrationIterate from "../components/marketing/illustrations/IllustrationIterate.astro";
+import IllustrationCICD from "../components/marketing/illustrations/IllustrationCICD.astro";
+import IllustrationObs from "../components/marketing/illustrations/IllustrationObs.astro";
 
 {/* ───────────────────────── HERO ───────────────────────── */}
 
-<Section padding="72px 32px 48px">
+<Section padding="72px 32px 40px">
   <div style="text-align:center;margin-bottom:24px;"><AlphaBadge /></div>
-  <div style="text-align:center;max-width:880px;margin:0 auto 48px;">
-    <Eyebrow>typescript · cloudflare · aws · any cloud</Eyebrow>
+  <div style="text-align:center;max-width:880px;margin:0 auto 16px;">
+    <Eyebrow>typescript · effect · infrastructure as code</Eyebrow>
     <h1
       style="
         font-family:var(--alc-font-serif);
         font-weight:500;
-        font-size:76px;line-height:1.02;letter-spacing:-0.02em;
-        margin:18px 0 20px;color:var(--alc-fg-1);"
+        font-size:72px;line-height:1.04;letter-spacing:-0.02em;
+        margin:18px 0 18px;color:var(--alc-fg-1);"
     >
-      <span style="color:var(--alc-accent-deep);font-style:italic;">Deploy</span> anything, anywhere.
+      <span style="color:var(--alc-accent-deep);font-style:italic;">Zero</span> &rarr; production. <br />
+      One TypeScript program.
     </h1>
-    <p style="font-size:19px;line-height:1.55;color:var(--alc-fg-2);max-width:640px;margin:0 auto 32px;">
-      Alchemy is a TypeScript IaC runtime. Any cloud, any resource — declared in one program, emulated locally, tested against the real thing, shipped on every PR.
+    <p style="font-size:18px;line-height:1.55;color:var(--alc-fg-2);max-width:660px;margin:0 auto 28px;">
+      Alchemy is a TypeScript IaC runtime built on Effect. Declare your stack, run it locally, test it against real infrastructure, ship on every PR — and operate it in production. All from one program.
     </p>
     <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
       <Button variant="primary" icon="arrow" href="/getting-started">Get started</Button>
@@ -98,249 +45,69 @@ test("Room DO preserves state across requests", Effect.gen(function* () {
       <Button variant="ghost" icon="github" href="https://github.com/alchemy-run/alchemy">GitHub</Button>
     </div>
   </div>
-  <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:16px;max-width:1100px;margin:0 auto;">
-    <div class="alc-card alc-card--lg" style="display:flex;flex-direction:column;gap:10px;">
-      <div style="height:36px;display:flex;align-items:center;gap:10px;">
-        <img src="https://cdn.simpleicons.org/cloudflare/F38020" alt="Cloudflare logo" width="32" height="32" />
-      </div>
-      <div class="alc-card__title alc-card__title--lg">Cloudflare</div>
-      <div class="alc-card__body">Workers · R2 · KV · D1 · Durable Objects · Queues · Workflows · Containers</div>
-    </div>
-    <div class="alc-card alc-card--lg" style="display:flex;flex-direction:column;gap:10px;">
-      <div style="height:36px;display:flex;align-items:center;gap:10px;">
-        <img
-          src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/amazonwebservices/amazonwebservices-original-wordmark.svg"
-          alt="AWS logo"
-          width="56"
-          height="32"
-        />
-      </div>
-      <div class="alc-card__title alc-card__title--lg">AWS</div>
-      <div class="alc-card__body">Lambda · S3 · DynamoDB · SQS · Kinesis · IAM · EC2</div>
-    </div>
-    <div class="alc-card alc-card--lg" style="display:flex;flex-direction:column;gap:10px;">
-      <div style="height:36px;display:flex;align-items:center;gap:10px;">
-        <img src="https://cdn.simpleicons.org/github/2A2620" alt="GitHub" width="26" height="26" />
-        <img src="https://cdn.simpleicons.org/stripe/635BFF" alt="Stripe" width="26" height="26" />
-        <img src="https://cdn.simpleicons.org/namecheap/DE3910" alt="Namecheap" width="26" height="26" />
-      </div>
-      <div class="alc-card__title alc-card__title--lg">+ more</div>
-      <div class="alc-card__body">GitHub · Stripe · DNS · and a growing community ecosystem</div>
-    </div>
-  </div>
 </Section>
 
-{/* ─────────────────── STACK DEPLOY EXAMPLE ─────────────────── */}
+{/* ───────────────────────── PRODUCT GRID ───────────────────────── */}
 
-<Section padding="40px 32px 80px">
-  <div style="text-align:center;margin-bottom:36px;">
-    <Eyebrow>plan · deploy · destroy</Eyebrow>
-    <h2 class="alc-h2" style="margin:12px 0 12px;">Plan, deploy, and destroy a Stack of resources.</h2>
-    <p style="font-size:16px;line-height:1.65;color:var(--alc-fg-2);max-width:640px;margin:12px auto 0;">
-      A <code class="alc-code-inline" style="color:var(--alc-accent-deep);">Stack</code> is an Effect that declares your resources. <code class="alc-code-inline" style="color:var(--alc-accent-deep);">alchemy plan</code> previews the diff, <code class="alc-code-inline" style="color:var(--alc-accent-deep);">deploy</code> applies it, and <code class="alc-code-inline" style="color:var(--alc-accent-deep);">destroy</code> tears it back down — same program, full lifecycle.
-    </p>
-  </div>
+<Section padding="48px 32px 80px">
+  <ProductGrid>
+    <ProductCard
+      eyebrow="infrastructure as code"
+      title="One IaC engine. Any cloud."
+      body="Declare resources, plan the diff, deploy. The first IaC engine to support circular references between resources — natively."
+      href="/product/iac"
+    >
+      <IllustrationIaC />
+    </ProductCard>
 
-  <div class="stack-deploy-diagram">
-    <div class="stack-deploy-diagram__col">
-      <CodeBlock filename="alchemy.run.ts" code={STACK_SRC} />
-      <div class="stack-deploy-diagram__caption">
-        <SketchLabel>Stack</SketchLabel>
-        <span>one TypeScript program</span>
-      </div>
-    </div>
+    <ProductCard
+      eyebrow="cloud providers"
+      title="AWS, Cloudflare, more."
+      body="Lambda, DynamoDB, VPCs. Workers, Durable Objects, Containers. Same shape across providers, with Planetscale on the way."
+      href="/product/providers"
+    >
+      <IllustrationProviders />
+    </ProductCard>
 
-    <DeployArrow />
+    <ProductCard
+      eyebrow="frontend frameworks"
+      title="Vite. StaticSite. Bound."
+      body="TanStack Start, Astro, SolidStart, Nuxt, React — through Cloudflare.Vite. Hugo and friends through Cloudflare.StaticSite. Bind your backend from the SSR Worker."
+      href="/product/frontends"
+    >
+      <IllustrationFrontends />
+    </ProductCard>
 
-    <div class="stack-deploy-diagram__col">
-      <DeployTerminal client:visible />
-      <div class="stack-deploy-diagram__caption">
-        <SketchLabel>Resources</SketchLabel>
-        <span>live in your accounts</span>
-      </div>
-    </div>
-  </div>
+    <ProductCard
+      eyebrow="iterate fast"
+      title="Local dev. Real tests."
+      body="Hybrid local + cloud dev mode. Spin up isolated stack copies inside your test suite — for APIs, streams, async jobs."
+      href="/product/iterate"
+    >
+      <IllustrationIterate />
+    </ProductCard>
+
+    <ProductCard
+      eyebrow="ci/cd"
+      title="Preview every PR."
+      body="One workflow. Open a PR — alchemy deploys an isolated stage, comments the URL on the PR, and tears it down on merge."
+      href="/product/cicd"
+    >
+      <IllustrationCICD />
+    </ProductCard>
+
+    <ProductCard
+      eyebrow="observability + ops"
+      title="Watch your stack."
+      body="Effect emits OpenTelemetry. Ship to Axiom, Datadog, CloudWatch. Declare dashboards and alarms in code, alongside the resources they monitor."
+      href="/product/observability"
+    >
+      <IllustrationObs />
+    </ProductCard>
+  </ProductGrid>
 </Section>
 
-{/* ─────────────────── RESOURCES + WORKER ─────────────────── */}
-
-<Section padding="80px 32px" background="var(--alc-bg-nav)">
-  <div style="text-align:center;margin-bottom:40px;">
-    <Eyebrow>resources · bindings · workers</Eyebrow>
-    <h2 class="alc-h2" style="margin:12px 0 12px;">Declare once. Bind where you use it.</h2>
-    <p style="font-size:16px;line-height:1.65;color:var(--alc-fg-2);max-width:620px;margin:12px auto 0;">
-      A resource is a one-liner. <code class="alc-code-inline" style="color:var(--alc-accent-deep);">.bind()</code> inside a Worker gives you a typed runtime client — and wires the binding at deploy time.
-    </p>
-  </div>
-
-  <div class="binding-diagram">
-    <div class="binding-diagram__left">
-      <CodeBlock filename="src/Api.ts" code={API_SRC} />
-    </div>
-
-    <BindingArrows />
-
-    <div class="binding-diagram__right">
-      <CodeBlock filename="src/Bucket.ts" code={BUCKET_SRC} compact />
-      <CodeBlock filename="src/KV.ts" code={KV_SRC} compact />
-    </div>
-  </div>
-
-  <div style="max-width:920px;margin:32px auto 0;display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
-    <div class="alc-card">
-      <div class="alc-card__title">Resources are Effects</div>
-      <div class="alc-card__body">Each resource returns typed Outputs that flow into other resources automatically.</div>
-    </div>
-    <div class="alc-card">
-      <div class="alc-card__title">Bindings are typed</div>
-      <div class="alc-card__body">.bind(resource) returns an Effect-flavored client. The deploy-time policy attaches itself.</div>
-    </div>
-    <div class="alc-card">
-      <div class="alc-card__title">Workers are classes</div>
-      <div class="alc-card__body">Extend Cloudflare.Worker&lt;T&gt;. The body is Effect.gen — your runtime code, typed.</div>
-    </div>
-  </div>
-</Section>
-
-{/* ─────────────────── FEATURE TABS ─────────────────── */}
-
-<Section padding="80px 32px" maxWidth={1040}>
-  <div style="text-align:center;margin-bottom:36px;">
-    <Eyebrow>bindings · the same shape, every primitive</Eyebrow>
-    <h2 class="alc-h2" style="margin:12px 0 12px;">Typed all the way down.</h2>
-    <p style="font-size:16px;line-height:1.65;color:var(--alc-fg-2);max-width:660px;margin:12px auto 0;">
-      Declare a resource once. Bind it inside a Worker or a Lambda — the runtime client is typed,
-      the deploy-time wiring is automatic. On AWS, every <code class="alc-code-inline" style="color:var(--alc-accent-deep);">.bind()</code> compiles to a single IAM action: least-privilege by construction.
-    </p>
-  </div>
-
-  <FeatureTabs />
-</Section>
-
-{/* ─────────────────── INTEGRATION TESTS ─────────────────── */}
-
-<Section padding="96px 32px" background="var(--alc-bg-nav)">
-  <div style="text-align:center;margin-bottom:48px;">
-    <Eyebrow>integration tests · against real infra</Eyebrow>
-    <h2 class="alc-h2" style="margin:12px 0 14px;">
-      <span style="font-style:italic;color:var(--alc-accent-deep);">Deploy</span>, test, destroy — in one file.
-    </h2>
-    <p style="font-size:16px;line-height:1.65;color:var(--alc-fg-2);max-width:640px;margin:0 auto;">
-      Because a stack is just an <code class="alc-code-inline" style="color:var(--alc-accent-deep);">Effect</code>, you can yield it from a test. Spin up a fresh environment in <code class="alc-code-inline" style="color:var(--alc-accent-deep);">beforeAll</code>, hit the live URL, tear it down in <code class="alc-code-inline" style="color:var(--alc-accent-deep);">afterAll</code>.
-    </p>
-  </div>
-
-  <div style="display:grid;grid-template-columns:minmax(260px, 360px) 1fr;gap:32px;max-width:1100px;margin:0 auto;align-items:start;">
-    <div style="position:sticky;top:100px;">
-      <div style="font-family:var(--alc-font-mono);font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--alc-fg-3);margin-bottom:14px;">
-        what this replaces
-      </div>
-      <div style="display:flex;flex-direction:column;gap:14px;">
-        <div style="border-left:2px solid var(--alc-accent);padding-left:14px;">
-          <div style="font-family:var(--alc-font-sans);font-size:14.5px;font-weight:600;color:var(--alc-fg-1);margin-bottom:3px;">Mocks that lie</div>
-          <div style="font-size:13px;line-height:1.6;color:var(--alc-fg-3);">LocalStack and mocks drift. alchemy deploys the real resource — R2 buckets, Workers, DOs — every run.</div>
-        </div>
-        <div style="border-left:2px solid var(--alc-accent);padding-left:14px;">
-          <div style="font-family:var(--alc-font-sans);font-size:14.5px;font-weight:600;color:var(--alc-fg-1);margin-bottom:3px;">Long-lived test envs</div>
-          <div style="font-size:13px;line-height:1.6;color:var(--alc-fg-3);">No shared "dev" account to reset. A per-suite stage spins up in seconds and disappears when the test ends.</div>
-        </div>
-        <div style="border-left:2px solid var(--alc-accent);padding-left:14px;">
-          <div style="font-family:var(--alc-font-sans);font-size:14.5px;font-weight:600;color:var(--alc-fg-1);margin-bottom:3px;">A separate tooling tier</div>
-          <div style="font-size:13px;line-height:1.6;color:var(--alc-fg-3);">No Terratest, no Pulumi CrossGuard. Your test runner — vitest, bun:test — runs the stack.</div>
-        </div>
-      </div>
-    </div>
-
-    <div>
-      <CodeBlock filename="test/api.test.ts" code={TEST_SRC} />
-      <div style="margin-top:20px;">
-        <TestTerminal client:visible />
-      </div>
-    </div>
-  </div>
-
-  <div style="max-width:1100px;margin:40px auto 0;display:grid;grid-template-columns:repeat(3, 1fr);gap:16px;">
-    <div class="alc-card">
-      <div class="alc-card__title">Per-PR environments</div>
-      <div class="alc-card__body">Stage named from the PR number. Every pull request gets its own URL, automatically cleaned up on merge.</div>
-    </div>
-    <div class="alc-card">
-      <div class="alc-card__title">Same binary, any stage</div>
-      <div class="alc-card__body">alchemy dev, alchemy deploy, and alchemy test all execute the same Effect — just with different stage / provider layers.</div>
-    </div>
-    <div class="alc-card">
-      <div class="alc-card__title">Typed URLs, typed clients</div>
-      <div class="alc-card__body">stack's output type is exactly what Stack returns. url, queue, bucket — autocompleted in your test body.</div>
-    </div>
-  </div>
-</Section>
-
-{/* ─────────────────── PROVIDER GRID ─────────────────── */}
-
-<Section padding="96px 32px">
-  <div style="text-align:center;margin-bottom:48px;">
-    <Eyebrow>catalog</Eyebrow>
-    <h2 class="alc-h2" style="margin:12px 0 12px;">What you can deploy, today.</h2>
-  </div>
-  <ProviderGrid />
-</Section>
-
-{/* ─────────────────── DEV TERMINAL ─────────────────── */}
-
-<Section padding="0 32px 96px">
-  <div style="max-width:980px;margin:0 auto;">
-    <div style="text-align:center;margin-bottom:32px;">
-      <Eyebrow>local emulation · hot reload · hot deploys</Eyebrow>
-      <h2 class="alc-h2" style="margin:12px 0 12px;">
-        <code class="alc-code-inline" style="font-size:0.92em;color:var(--alc-accent-deep);">alchemy dev</code> — your whole stack, live in your terminal.
-      </h2>
-      <p style="font-size:16px;line-height:1.65;color:var(--alc-fg-2);max-width:640px;margin:12px auto 0;">
-        Run one command. alchemy boots a local emulator for every resource, watches your source graph, and hot-reloads Workers — and the resources behind them — the moment you save.
-      </p>
-    </div>
-    <div style="display:grid;grid-template-columns:minmax(0, 1.25fr) minmax(0, 1fr);gap:24px;align-items:start;">
-      <DevTerminal client:visible />
-      <div style="display:flex;flex-direction:column;gap:14px;">
-        <div class="alc-card">
-          <div class="alc-card__title">Local emulation, real bindings</div>
-          <div class="alc-card__body">Workers, R2, KV, D1, Queues — all run in-process. Your .bind() clients hit the local emulator, with the same types you'll get in production.</div>
-        </div>
-        <div class="alc-card">
-          <div class="alc-card__title">Hot reload in milliseconds</div>
-          <div class="alc-card__body">Edit a Worker handler, save, and the running instance swaps in under 100ms. State on bound resources persists across reloads.</div>
-        </div>
-        <div class="alc-card">
-          <div class="alc-card__title">Resource graph hot deploys</div>
-          <div class="alc-card__body">Add a Queue or change a binding and alchemy detects the diff, spins up the new resource locally, and rewires the Worker — no restart.</div>
-        </div>
-      </div>
-    </div>
-  </div>
-</Section>
-
-{/* ─────────────────── LAYERS ─────────────────── */}
-
-<Section padding="80px 32px" maxWidth={1100}>
-  <div style="text-align:center;margin-bottom:40px;">
-    <Eyebrow>cloud services · interface + layer, distributed on npm</Eyebrow>
-    <h2 class="alc-h2" style="margin:12px 0 12px;">
-      Cloud services, as <span style="font-style:italic;color:var(--alc-accent-deep);">libraries</span>.
-    </h2>
-    <p style="font-size:16px;line-height:1.65;color:var(--alc-fg-2);max-width:740px;margin:12px auto 0;">
-      A cloud service is a <code class="alc-code-inline" style="color:var(--alc-accent-deep);">Context.Service</code> interface that any Effect <code class="alc-code-inline" style="color:var(--alc-accent-deep);">Layer</code> can implement. Layers bundle infrastructure declarations <em>and</em> the runtime client into a single TypeScript module — <code class="alc-code-inline" style="color:var(--alc-accent-deep);">npm install</code> the service, <code class="alc-code-inline" style="color:var(--alc-accent-deep);">Effect.provide</code> a Layer, and the resources, bindings, and typed client wire themselves up.
-    </p>
-  </div>
-
-  <LayersSwap client:visible />
-
-  <div style="text-align:center;max-width:720px;margin:20px auto 0;font-size:13.5px;color:var(--alc-fg-3);line-height:1.6;">
-    One <code class="alc-code-inline" style="color:var(--alc-accent-deep);">Effect.provide</code> call swaps the Layer — and the whole resource graph swaps with it. The <code class="alc-code-inline" style="color:var(--alc-accent-deep);">Sessions</code> consumer never changes.
-  </div>
-</Section>
-
-{/* ─────────────────── DISCORD CALLOUT + CTA ─────────────────── */}
-
-<Section padding="20px 32px 0">
+<Section padding="0 32px 16px">
   <DiscordCallout />
 </Section>
 

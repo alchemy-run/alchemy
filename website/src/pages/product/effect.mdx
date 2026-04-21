@@ -1,0 +1,138 @@
+---
+layout: ../../layouts/Marketing.astro
+title: "Effect-native · alchemy"
+description: "Alchemy is built on Effect. Typed errors, retries, structured concurrency, streams, and sinks — for both your runtime code and your infrastructure declarations."
+---
+
+import Section from "../../components/marketing/Section.astro";
+import Eyebrow from "../../components/marketing/Eyebrow.astro";
+import Button from "../../components/marketing/Button.astro";
+import CodeBlock from "../../components/marketing/CodeBlock.astro";
+import CTA from "../../components/marketing/CTA.astro";
+import PageHero from "../../components/marketing/PageHero.astro";
+import IllustrationEffect from "../../components/marketing/illustrations/IllustrationEffect.astro";
+
+export const BIND_SRC = `import * as Effect from "effect/Effect";
+import * as DynamoDB from "alchemy/AWS/DynamoDB";
+import * as SQS from "alchemy/AWS/SQS";
+import { JobsTable, JobsQueue } from "./resources.ts";
+
+export default class JobApi extends AWS.Lambda.Function<JobApi>()(
+  "JobApi",
+  Effect.gen(function* () {
+    // Two binds — typed clients + IAM policies attached at deploy.
+    const put  = yield* DynamoDB.PutItem.bind(JobsTable);
+    const send = yield* SQS.SendMessage.bind(JobsQueue);
+
+    return {
+      fetch: Effect.gen(function* () {
+        yield* put({ Item: { id: { S: "1" }, body: { S: "hi" } } });
+        yield* send({ MessageBody: "1" });
+      }),
+    };
+  }),
+) {}`;
+
+export const RETRY_SRC = `// All Effect operators work out of the box on bindings.
+const sendWithRetry = send({ MessageBody: msg }).pipe(
+  Effect.retry({ times: 3, schedule: Schedule.exponential("100 millis") }),
+  Effect.timeout("5 seconds"),
+  Effect.catchTag("ThrottlingException", () => Effect.succeed(undefined)),
+);`;
+
+export const LAYER_SRC = `// Bindings split into Service + Policy:
+//   Binding.Service — the typed SDK wrapper, runs in your function
+//   Binding.Policy  — the deploy-time IAM/env wiring, runs at plantime
+//
+// At runtime the Policy layer is absent, so it gracefully no-ops.
+// Same code. Different layers. No conditionals.
+
+const Live = Layer.mergeAll(
+  DynamoDB.PutItemLive,
+  SQS.SendMessageLive,
+);`;
+
+<Section padding="60px 32px 36px">
+  <PageHero
+    eyebrow="product · effect-native"
+    title="Built on Effect, end to end."
+    highlight="Typed."
+    description="Errors, retries, streams, sinks, structured concurrency — the same primitives that power your handlers also power your infrastructure declarations."
+  >
+    <Button slot="cta" variant="primary" icon="arrow" href="/getting-started">Get started</Button>
+    <Button slot="cta" variant="secondary" href="/concepts/binding">Read the docs</Button>
+  </PageHero>
+</Section>
+
+{/* ───── BINDINGS = TYPED CLIENTS + IAM ───── */}
+
+<Section padding="48px 32px 80px">
+  <div style="display:grid;grid-template-columns:minmax(0, 1.2fr) minmax(0, 1fr);gap:28px;align-items:center;max-width:1100px;margin:0 auto;">
+    <div>
+      <Eyebrow>bindings</Eyebrow>
+      <h2 class="alc-h2" style="margin:10px 0 12px;">A binding is two things at once.</h2>
+      <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);margin:0 0 14px;">
+        Each <code class="alc-code-inline" style="color:var(--alc-accent-deep);">.bind()</code> grants the function permission to call that exact API <em>and</em> hands you a typed function to call at runtime. No JSON policies. No env-var plumbing.
+      </p>
+      <ul style="font-size:14.5px;color:var(--alc-fg-2);line-height:1.7;margin:0;padding-left:18px;">
+        <li>Typed SDK wrapper — <code class="alc-code-inline" style="color:var(--alc-accent-deep);">put({"{ Item }"})</code> with full DynamoDB types.</li>
+        <li>Least-privilege IAM action — <code class="alc-code-inline" style="color:var(--alc-accent-deep);">dynamodb:PutItem</code> on the exact table ARN.</li>
+        <li>Auto-injected env vars — <code class="alc-code-inline" style="color:var(--alc-accent-deep);">TABLE_NAME</code>, <code class="alc-code-inline" style="color:var(--alc-accent-deep);">QUEUE_URL</code>, etc.</li>
+      </ul>
+    </div>
+    <div style="background:var(--alc-bg-elev-1);border:1px solid var(--alc-hairline);border-radius:14px;padding:14px;">
+      <IllustrationEffect />
+    </div>
+  </div>
+
+  <div style="max-width:880px;margin:32px auto 0;">
+    <CodeBlock filename="src/JobApi.ts" code={BIND_SRC} />
+  </div>
+</Section>
+
+{/* ───── EFFECT OPERATORS ───── */}
+
+<Section padding="80px 32px" background="var(--alc-bg-nav)">
+  <div style="text-align:center;margin-bottom:32px;">
+    <Eyebrow>retries · timeouts · streams · sinks</Eyebrow>
+    <h2 class="alc-h2" style="margin:10px 0 12px;">All of Effect, on every binding.</h2>
+    <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:680px;margin:0 auto;">
+      Bindings return <code class="alc-code-inline" style="color:var(--alc-accent-deep);">Effect</code> values. That means <code class="alc-code-inline" style="color:var(--alc-accent-deep);">Effect.retry</code>, <code class="alc-code-inline" style="color:var(--alc-accent-deep);">timeout</code>, <code class="alc-code-inline" style="color:var(--alc-accent-deep);">catchTag</code>, <code class="alc-code-inline" style="color:var(--alc-accent-deep);">Stream</code>, <code class="alc-code-inline" style="color:var(--alc-accent-deep);">Sink</code> — they all just work, with typed error channels.
+    </p>
+  </div>
+  <div style="max-width:760px;margin:0 auto;">
+    <CodeBlock filename="src/JobApi.ts" code={RETRY_SRC} compact />
+  </div>
+</Section>
+
+{/* ───── SERVICE + POLICY SPLIT ───── */}
+
+<Section padding="80px 32px">
+  <div style="text-align:center;margin-bottom:32px;">
+    <Eyebrow>under the hood · service + policy</Eyebrow>
+    <h2 class="alc-h2" style="margin:10px 0 12px;">Plantime and runtime, separated by Layers.</h2>
+    <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:720px;margin:0 auto;">
+      Each binding is split into a <code class="alc-code-inline" style="color:var(--alc-accent-deep);">Binding.Service</code> (the runtime SDK wrapper that ships in your function) and a <code class="alc-code-inline" style="color:var(--alc-accent-deep);">Binding.Policy</code> (the deploy-time IAM and env-var wiring). The Policy runs only at plantime — at runtime it's absent and gracefully no-ops. Same source. Two execution contexts.
+    </p>
+  </div>
+  <div style="max-width:760px;margin:0 auto;">
+    <CodeBlock filename="alchemy.run.ts" code={LAYER_SRC} compact />
+  </div>
+
+  <div style="max-width:1080px;margin:36px auto 0;display:grid;grid-template-columns:repeat(3, 1fr);gap:14px;">
+    <div class="alc-card">
+      <div class="alc-card__title">Effect Layers everywhere</div>
+      <div class="alc-card__body">Wire dependencies with <code class="alc-code-inline" style="color:var(--alc-accent-deep);">Effect.provide</code>. Swap the implementation, the resource graph swaps with it.</div>
+    </div>
+    <div class="alc-card">
+      <div class="alc-card__title">Context.Service interfaces</div>
+      <div class="alc-card__body">Cloud services are interfaces. Layers implement them. Your code depends on the interface, not the cloud.</div>
+    </div>
+    <div class="alc-card">
+      <div class="alc-card__title">Same model, every provider</div>
+      <div class="alc-card__body">A Cloudflare R2 binding and an AWS S3 binding obey the same shape. Code that consumes one consumes the other.</div>
+    </div>
+  </div>
+</Section>
+
+<CTA heading="Effect for runtime. Effect for infrastructure." />
