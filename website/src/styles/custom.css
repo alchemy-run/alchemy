@@ -1,48 +1,172 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
+/* Light parchment theme — single mode (no dark). Tokens come from tokens.css. */
 
 :root {
-  --sl-font: "Inter", sans-serif;
-  --sl-font-mono: "JetBrains Mono", monospace;
-  --sl-font-headings: "Inter", sans-serif;
-  color-scheme: dark;
+  --sl-font: var(--alc-font-sans);
+  --sl-font-mono: var(--alc-font-mono);
+  --sl-font-headings: var(--alc-font-serif);
+  /* Match the marketing header (64px tall, 32px horizontal padding, no
+     vertical padding) so docs and landing pages line up pixel-for-pixel. */
+  --sl-nav-height: 4rem;
+  --sl-nav-pad-x: 2rem;
+  --sl-nav-pad-y: 0;
+  color-scheme: light;
 }
 
-/* Hide the theme toggle — dark mode only */
+/* Hide the theme toggle — single light mode. */
 starlight-theme-select {
   display: none !important;
 }
 
-/* Apply dark theme to both data-theme values so light mode never appears */
+/* Force the same parchment palette across every Starlight theme attribute so
+   no flash-of-dark-mode is possible even before JS hydrates. */
 :root,
 [data-theme="dark"],
 [data-theme="light"] {
-  --sl-color-text-invert: black;
-  --sl-color-text-accent: white;
-  --sl-color-accent: #00e599;
-  --sl-color-accent-high: #00e599;
-  --sl-color-accent-low: color-mix(in srgb, #00e599 40%, transparent);
-  --sl-color-accent-light: color-mix(in srgb, #00e599 60%, transparent);
+  /* Page surfaces */
+  --sl-color-bg: var(--alc-bg);
+  --sl-color-bg-nav: var(--alc-bg-nav);
+  --sl-color-bg-sidebar: var(--alc-bg-nav);
+  --sl-color-bg-inline-code: var(--alc-bg-sunk);
+  --sl-color-bg-accent: var(--alc-accent);
 
-  --sl-color-bg-nav: #111111;
-  --sl-color-bg-sidebar: #111111;
-  --sl-color-bg: #0a0a0a;
-  --sl-color-black: #0a0a0a;
-  --sl-color-gray-1: #f4f4f5;
-  --sl-color-gray-2: #d4d4d8;
-  --sl-color-gray-3: #a1a1aa;
-  --sl-color-gray-4: #71717a;
-  --sl-color-gray-5: #27272a;
-  --sl-color-gray-6: #18181b;
-  --sl-color-gray-7: #111111;
-  --sl-color-hairline-light: rgba(255, 255, 255, 0.06);
-  --sl-color-hairline: rgba(255, 255, 255, 0.1);
+  /* Walnut neutral scale — light-mode convention: gray-1 = darkest text,
+     gray-7 = lightest surface. Starlight's hero `.tagline`, body copy,
+     and muted prose all read off this scale. */
+  --sl-color-white: var(--alc-fg-1);
+  --sl-color-black: var(--alc-fg-1);
+  --sl-color-gray-1: var(--alc-walnut-900);
+  --sl-color-gray-2: var(--alc-walnut-700);
+  --sl-color-gray-3: var(--alc-walnut-600);
+  --sl-color-gray-4: var(--alc-walnut-500);
+  --sl-color-gray-5: var(--alc-walnut-300);
+  --sl-color-gray-6: var(--alc-walnut-100);
+  --sl-color-gray-7: var(--alc-bg-nav);
+
+  /* Text */
+  --sl-color-text: var(--alc-fg-2);
+  --sl-color-text-accent: var(--alc-accent-deep);
+  --sl-color-text-invert: var(--alc-fg-invert);
+
+  /* Accent (moss) */
+  --sl-color-accent: var(--alc-accent);
+  --sl-color-accent-high: var(--alc-accent-deep);
+  --sl-color-accent-low: var(--alc-accent-12);
+  --sl-color-accent-light: var(--alc-accent-40);
+
+  /* Hairlines */
+  --sl-color-hairline-light: var(--alc-hairline);
+  --sl-color-hairline: var(--alc-hairline-2);
+  --sl-color-hairline-shade: var(--alc-hairline-3);
+
+  /* Selection */
+  --sl-color-selection-bg: var(--alc-accent-soft);
+  --sl-color-selection-text: var(--alc-fg-1);
 }
 
+/* ── Headings: serif for h1/h2, sans for h3/h4 (matches alc-h* scale) ── */
+.sl-markdown-content :is(h1, h2),
+h1.hero-title,
+.hero h1 {
+  font-family: var(--alc-font-serif);
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  color: var(--alc-fg-1);
+}
+.sl-markdown-content :is(h3, h4, h5, h6) {
+  font-family: var(--alc-font-sans);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--alc-fg-1);
+}
+
+/* ── Hero "Effects" italic-serif accent ── deep moss, the design-system
+   "alc-text-accent" treatment used in the Claude landing variants. */
 .text-gradient {
-  background: linear-gradient(to right, white, #00e599);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  font-family: var(--alc-font-serif);
+  font-style: italic;
+  font-weight: 500;
+  color: var(--alc-accent-deep);
+  background: none;
+  -webkit-text-fill-color: currentColor;
+}
+
+/* ── Starlight hero refinements (splash template) ── */
+.hero h1 {
+  font-family: var(--alc-font-serif);
+  font-weight: 500;
+  font-size: clamp(44px, 7vw, 76px);
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+  color: var(--alc-fg-1);
+}
+.hero .tagline {
+  font-family: var(--alc-font-sans);
+  font-size: clamp(17px, 1.8vw, 20px);
+  line-height: 1.55;
+  color: var(--alc-fg-2);
+  max-width: 36rem;
+}
+.hero .actions a[data-variant="primary"] {
+  background: var(--alc-accent);
+  color: var(--alc-fg-on-accent);
+  border-color: var(--alc-accent);
+}
+.hero .actions a[data-variant="primary"]:hover {
+  background: var(--alc-accent-deep);
+  border-color: var(--alc-accent-deep);
+  color: var(--alc-fg-on-accent);
+}
+.hero .actions a[data-variant="secondary"] {
+  background: transparent;
+  color: var(--alc-fg-1);
+  border: 1px solid var(--alc-hairline-3);
+}
+.hero .actions a[data-variant="secondary"]:hover {
+  background: var(--alc-bg-elev-1);
+  border-color: var(--alc-accent);
+  color: var(--alc-fg-1);
+}
+
+/* ── Section eyebrow (mono uppercase, deep moss) ── */
+.section-eyebrow {
+  font-family: var(--alc-font-mono);
+  font-size: 12px;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--alc-accent-deep);
+  display: block;
+  margin: 0 0 0.75rem;
+}
+
+/* Serif H2 for section headers on the landing page. */
+.section-title {
+  font-family: var(--alc-font-serif);
+  font-size: clamp(28px, 3vw, 34px);
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  font-weight: 500;
+  color: var(--alc-fg-1);
+  margin: 0 0 1rem;
+}
+.section-lede {
+  font-family: var(--alc-font-sans);
+  font-size: 1rem;
+  line-height: 1.65;
+  color: var(--alc-fg-2);
+  max-width: 36rem;
+  margin: 0 auto 2.25rem;
+}
+
+/* Centered intro block above a section grid (features, providers, etc). */
+.section-intro {
+  text-align: center;
+  max-width: 48rem;
+  margin: 0 auto 3rem;
+}
+.section-intro .section-lede {
+  margin-bottom: 0;
 }
 
 /* ── Landing page ── */
@@ -167,13 +291,15 @@ starlight-theme-select {
   align-items: center;
 }
 .hero-code-text h3 {
-  font-size: 1.5rem;
-  font-weight: 700;
+  font-family: var(--alc-font-serif);
+  font-size: 1.75rem;
+  font-weight: 500;
+  letter-spacing: -0.015em;
   margin: 0 0 1rem;
-  color: var(--sl-color-white);
+  color: var(--alc-fg-1);
 }
 .hero-code-text p {
-  color: var(--sl-color-gray-2);
+  color: var(--alc-fg-2);
   line-height: 1.7;
   margin: 0 0 0.75rem;
 }
@@ -205,13 +331,14 @@ starlight-theme-select {
 }
 .features > .feature > :nth-child(1) {
   /* heading row */
+  font-family: var(--alc-font-sans);
   font-size: 1.15rem;
   font-weight: 600;
-  color: var(--sl-color-white);
+  color: var(--alc-fg-1);
 }
 .features > .feature > :nth-child(2) {
   /* body row */
-  color: var(--sl-color-gray-3);
+  color: var(--alc-fg-2);
   line-height: 1.6;
   font-size: 0.95rem;
 }
@@ -305,13 +432,15 @@ starlight-theme-select {
   text-align: center;
 }
 .providers-section h3 {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--sl-color-white);
+  font-family: var(--alc-font-serif);
+  font-size: 1.75rem;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  color: var(--alc-fg-1);
   margin: 0 0 1rem;
 }
 .providers-section > p {
-  color: var(--sl-color-gray-3);
+  color: var(--alc-fg-2);
   max-width: 36rem;
   margin: 0 auto 2rem;
   line-height: 1.6;
@@ -326,22 +455,30 @@ starlight-theme-select {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  background: var(--sl-color-gray-6);
-  border: 1px solid var(--sl-color-hairline);
-  border-radius: 8px;
+  background: var(--alc-bg-elev-1);
+  border: 1px solid var(--alc-hairline-2);
+  border-radius: var(--alc-radius);
   padding: 1.5rem;
   text-align: left;
   height: 100%;
+  box-shadow: var(--alc-shadow-sm);
+  transition: border-color var(--alc-dur) var(--alc-ease),
+              box-shadow var(--alc-dur) var(--alc-ease);
+}
+.provider-card:hover {
+  border-color: var(--alc-accent);
+  box-shadow: var(--alc-shadow);
 }
 .provider-card > * {
   margin: 0;
 }
 .provider-card strong {
-  color: var(--sl-color-white);
+  color: var(--alc-fg-1);
   font-size: 1.05rem;
+  font-weight: 600;
 }
 .provider-card p {
-  color: var(--sl-color-gray-3);
+  color: var(--alc-fg-2);
   font-size: 0.9rem;
   line-height: 1.5;
 }
@@ -351,19 +488,40 @@ starlight-theme-select {
   }
 }
 
+/* 4-column variant for the AB-test "Explore alternate framings" cards. */
+.explore-section .provider-grid {
+  grid-template-columns: repeat(4, 1fr);
+}
+.explore-section a.provider-card {
+  text-decoration: none;
+  color: inherit;
+}
+@media (max-width: 1024px) {
+  .explore-section .provider-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 540px) {
+  .explore-section .provider-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .cta-section {
   text-align: center;
   padding: 3rem 0 4rem;
-  border-top: 1px solid var(--sl-color-hairline);
+  border-top: 1px solid var(--alc-hairline-2);
 }
 .cta-section h3 {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--sl-color-white);
+  font-family: var(--alc-font-serif);
+  font-size: 1.75rem;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  color: var(--alc-fg-1);
   margin: 0 0 1rem;
 }
 .cta-section > p {
-  color: var(--sl-color-gray-3);
+  color: var(--alc-fg-2);
   max-width: 36rem;
   margin: 0 auto 2rem;
   line-height: 1.6;
@@ -383,8 +541,6 @@ starlight-theme-select {
 .cta-buttons > p {
   display: contents;
 }
-/* CTA buttons use Starlight's <LinkButton> so they match the hero actions;
-   no custom .cta-primary / .cta-secondary styles are needed. */
 
 /* ── Getting Started next-steps cards ── */
 
@@ -397,22 +553,27 @@ starlight-theme-select {
 .next-card {
   display: block;
   padding: 1.25rem 1.5rem;
-  border: 1px solid var(--sl-color-hairline);
-  border-radius: 8px;
+  background: var(--alc-bg-elev-1);
+  border: 1px solid var(--alc-hairline-2);
+  border-radius: var(--alc-radius);
   text-decoration: none;
-  transition: border-color 0.15s;
+  transition: border-color var(--alc-dur) var(--alc-ease),
+              box-shadow var(--alc-dur) var(--alc-ease);
+  box-shadow: var(--alc-shadow-sm);
 }
 .next-card:hover {
-  border-color: var(--sl-color-accent);
+  border-color: var(--alc-accent);
+  box-shadow: var(--alc-shadow);
 }
 .next-card strong {
   display: block;
-  color: var(--sl-color-white);
+  color: var(--alc-fg-1);
   font-size: 1.05rem;
+  font-weight: 600;
   margin-bottom: 0.35rem;
 }
 .next-card span {
-  color: var(--sl-color-gray-3);
+  color: var(--alc-fg-2);
   font-size: 0.9rem;
   line-height: 1.5;
 }
@@ -420,4 +581,207 @@ starlight-theme-select {
   .next-steps {
     grid-template-columns: 1fr;
   }
+}
+
+/* ============================================================
+   Starlight Asides (Note / Tip / Caution / Danger)
+
+   Starlight's defaults use saturated info-blue / yellow / red
+   panels that clash with the warm parchment + moss palette.
+   Override to match the design-system callout spec from
+   claude/design-system/preview/components-callouts.html:
+     - tip:     moss green
+     - note:    slate teal (--alc-info)
+     - caution: honey amber (--alc-warn)
+     - danger:  brick red  (--alc-danger)
+   ============================================================ */
+
+.sl-markdown-content .starlight-aside {
+  border-radius: 8px;
+  border-width: 1px;
+  border-style: solid;
+  padding: 12px 14px;
+  margin: 1rem 0;
+  background: var(--aside-tint, var(--alc-bg-elev-1));
+  border-color: var(--aside-border, var(--alc-hairline-2));
+  color: var(--alc-fg-2);
+  font-family: var(--alc-font-sans);
+}
+
+.sl-markdown-content .starlight-aside__title {
+  color: var(--aside-accent, var(--alc-fg-1));
+  font-family: var(--alc-font-sans);
+  font-weight: 600;
+  font-size: 13.5px;
+  letter-spacing: 0;
+  text-transform: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sl-markdown-content .starlight-aside__icon {
+  color: var(--aside-accent, var(--alc-fg-1));
+  font-size: 1rem;
+}
+
+.sl-markdown-content .starlight-aside__content {
+  color: var(--alc-fg-2);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.sl-markdown-content .starlight-aside__content > :first-child {
+  margin-top: 4px;
+}
+.sl-markdown-content .starlight-aside__content > :last-child {
+  margin-bottom: 0;
+}
+.sl-markdown-content .starlight-aside__content a {
+  color: var(--aside-accent, var(--alc-accent-deep));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.sl-markdown-content .starlight-aside__content a:hover {
+  color: var(--alc-accent-deep);
+}
+.sl-markdown-content .starlight-aside__content code {
+  background: var(--alc-bg-sunk);
+  border: 1px solid var(--alc-hairline);
+  color: var(--alc-fg-1);
+}
+.sl-markdown-content .starlight-aside__content strong {
+  color: var(--alc-fg-1);
+}
+
+/* ── Variants ── */
+.sl-markdown-content .starlight-aside--note {
+  --aside-accent: var(--alc-info);
+  --aside-tint:   color-mix(in srgb, var(--alc-info) 14%, transparent);
+  --aside-border: color-mix(in srgb, var(--alc-info) 45%, transparent);
+}
+.sl-markdown-content .starlight-aside--tip {
+  --aside-accent: var(--alc-accent-deep);
+  --aside-tint:   color-mix(in srgb, var(--alc-accent) 14%, transparent);
+  --aside-border: color-mix(in srgb, var(--alc-accent) 45%, transparent);
+}
+.sl-markdown-content .starlight-aside--caution {
+  --aside-accent: color-mix(in srgb, var(--alc-warn) 75%, var(--alc-fg-1));
+  --aside-tint:   color-mix(in srgb, var(--alc-warn) 16%, transparent);
+  --aside-border: color-mix(in srgb, var(--alc-warn) 50%, transparent);
+}
+.sl-markdown-content .starlight-aside--danger {
+  --aside-accent: var(--alc-danger);
+  --aside-tint:   color-mix(in srgb, var(--alc-danger) 14%, transparent);
+  --aside-border: color-mix(in srgb, var(--alc-danger) 45%, transparent);
+}
+
+/* ============================================================
+   Expressive Code frames (the file-name tab on docs code blocks)
+
+   The default Starlight rendering of the editor-style frame paints
+   the tab title with a very low-contrast walnut on a near-walnut
+   strip — practically unreadable on the cream page. Force the
+   active tab to use the bright sunrise palette so the file name
+   reads cleanly against the dark code surface.
+   ============================================================ */
+
+.expressive-code .frame {
+  --ec-frm-edBg: var(--alc-bg-code);
+  --ec-frm-edTabBarBg: var(--alc-bg-code);
+  --ec-frm-edTabBarBrdBtmCol: var(--alc-walnut-700);
+  --ec-frm-edActTabBg: var(--alc-bg-code);
+  --ec-frm-edActTabFg: var(--alc-walnut-100);
+  --ec-frm-edActTabBrdCol: var(--alc-walnut-700);
+  --ec-frm-edActTabIndTopCol: var(--alc-accent-warm);
+  --ec-frm-edActTabIndBtmCol: transparent;
+  --ec-frm-edTabsMargBlkStart: 0;
+  --ec-frm-edTabsMargInlStart: 0;
+  --ec-frm-trmTtbBg: var(--alc-bg-code);
+  --ec-frm-trmTtbBrdBtmCol: var(--alc-walnut-700);
+  --ec-frm-trmTtbFg: var(--alc-walnut-100);
+}
+
+.expressive-code .frame.has-title:not(.is-terminal) .title {
+  color: var(--alc-walnut-100);
+  font-family: var(--alc-font-mono);
+  font-weight: 500;
+}
+
+.expressive-code .frame.is-terminal .title {
+  color: var(--alc-walnut-100);
+}
+
+/* ============================================================
+   Starlight Tabs (Code/Tabs component used on Getting Started
+   for bun / npm / pnpm / yarn).
+
+   - Tab labels use a soft mushroom for inactive and deep moss
+     for the active tab; the active underline is the moss accent.
+   - Icons are sized larger (1.25em) and painted with each
+     product's official brand color via positional selectors
+     (the package-manager tab order is bun → npm → pnpm → yarn,
+     and is consistent across the docs).
+   ============================================================ */
+
+starlight-tabs [role="tablist"] {
+  border-bottom-color: var(--alc-hairline-2);
+}
+
+starlight-tabs [role="tab"] {
+  color: var(--alc-fg-3);
+  font-family: var(--alc-font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0;
+  border-bottom-color: transparent;
+  gap: 0.45rem;
+  transition: color 160ms ease, border-color 160ms ease;
+}
+
+starlight-tabs [role="tab"]:hover {
+  color: var(--alc-accent-deep);
+}
+
+starlight-tabs [role="tab"][aria-selected="true"] {
+  color: var(--alc-accent-deep);
+  border-bottom-color: var(--alc-accent);
+}
+
+/* Icon sizing — undo Starlight's tight 1em so the package-manager
+   marks read at glance, and lock dimensions so the SVG can't shrink
+   below this when the tab text is small. */
+starlight-tabs [role="tab"] > svg {
+  width: 1.25em;
+  height: 1.25em;
+  flex: 0 0 auto;
+  font-size: inherit;
+}
+
+/* ── Per-package brand colors ──
+   The Tabs.astro markup wraps each tab anchor in <li class="tab">,
+   so we color the SVG icon inside each LI by position. Order on
+   our docs is bun(1), npm(2), pnpm(3), yarn(4). Colors come from
+   each project's brand guidelines, tuned slightly for contrast
+   on the warm cream surface. */
+starlight-tabs [role="tablist"] > li:nth-child(1) [role="tab"] > svg {
+  color: #cf8f3a; /* bun — warm gold */
+}
+starlight-tabs [role="tablist"] > li:nth-child(2) [role="tab"] > svg {
+  color: #cb3837; /* npm — npm red */
+}
+starlight-tabs [role="tablist"] > li:nth-child(3) [role="tab"] > svg {
+  color: #f59f00; /* pnpm — orange */
+}
+starlight-tabs [role="tablist"] > li:nth-child(4) [role="tab"] > svg {
+  color: #2c8ebb; /* yarn — yarn blue */
+}
+
+/* Match Starlight's docs <header> chrome to the marketing <header>: same
+   translucent cream + backdrop-blur + hairline border. Defined in custom.css
+   (rather than scoped to a single component) so the docs layout picks it up
+   without a Page/Header override. */
+.header {
+  background: color-mix(in srgb, var(--alc-bg-nav) 92%, transparent) !important;
+  backdrop-filter: saturate(140%) blur(8px);
+  border-bottom: 1px solid var(--alc-hairline) !important;
 }

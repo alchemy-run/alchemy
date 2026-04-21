@@ -1,4 +1,6 @@
 // @ts-check
+import mdx from "@astrojs/mdx";
+import react from "@astrojs/react";
 import sitemap from "@astrojs/sitemap";
 import starlight from "@astrojs/starlight";
 import tailwindcss from "@tailwindcss/vite";
@@ -20,24 +22,29 @@ function copyMarkdownSources() {
     name: "copy-markdown-sources",
     hooks: {
       "astro:build:done": async ({ dir }) => {
-        const srcDir = fileURLToPath(
-          new URL("./src/content/docs/", import.meta.url),
-        );
         const outDir = fileURLToPath(dir);
 
-        /** @param {string} current */
-        async function walk(current) {
-          const entries = await fs.readdir(current, { withFileTypes: true });
+        /**
+         * @param {string} srcDir
+         * @param {string} relTo
+         */
+        async function walk(srcDir, relTo = srcDir) {
+          let entries;
+          try {
+            entries = await fs.readdir(srcDir, { withFileTypes: true });
+          } catch {
+            return;
+          }
           for (const entry of entries) {
-            const full = path.join(current, entry.name);
+            const full = path.join(srcDir, entry.name);
             if (entry.isDirectory()) {
-              await walk(full);
+              await walk(full, relTo);
               continue;
             }
             if (!entry.isFile()) continue;
             const ext = path.extname(entry.name).toLowerCase();
             if (ext !== ".md" && ext !== ".mdx") continue;
-            const rel = path.relative(srcDir, full);
+            const rel = path.relative(relTo, full);
             const target = path.join(
               outDir,
               rel.slice(0, rel.length - ext.length) + ".md",
@@ -47,7 +54,14 @@ function copyMarkdownSources() {
           }
         }
 
-        await walk(srcDir);
+        // Docs (Starlight content collection) — preserves nested layout under
+        // /content/docs/ → /<path>.md
+        await walk(
+          fileURLToPath(new URL("./src/content/docs/", import.meta.url)),
+        );
+        // Marketing pages (top-level Astro pages) — exposes /<page>.md so
+        // agents can fetch raw MDX via the worker's content negotiation.
+        await walk(fileURLToPath(new URL("./src/pages/", import.meta.url)));
       },
     },
   };
@@ -58,6 +72,7 @@ export default defineConfig({
   prefetch: true,
   trailingSlash: "ignore",
   integrations: [
+    react(),
     copyMarkdownSources(),
     sitemap({
       filter: (page) =>
@@ -72,6 +87,7 @@ export default defineConfig({
       components: {
         ThemeProvider: "./src/components/ThemeProvider.astro",
         ThemeSelect: "./src/components/ThemeProvider.astro",
+        Header: "./src/components/marketing/Nav.astro",
       },
       prerender: true,
       social: [
@@ -106,6 +122,7 @@ export default defineConfig({
       ],
       plugins: [starlightBlog()],
     }),
+    mdx(),
   ],
   vite: {
     plugins: [tailwindcss()],

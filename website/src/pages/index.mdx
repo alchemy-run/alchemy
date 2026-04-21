@@ -1,0 +1,295 @@
+---
+layout: ../layouts/Marketing.astro
+title: "alchemy — zero to production. TypeScript IaC on Effect."
+description: "Alchemy is the IaC tool that's actually TypeScript. Deploy frontends, ship backends, and define the cloud they run on — all from one typed program on Effect. Bindings are the IAM policy. Run locally against real resources. Spin up isolated stacks per test. Preview every PR. Watch it in production."
+---
+
+import Section from "../components/marketing/Section.astro";
+import Eyebrow from "../components/marketing/Eyebrow.astro";
+import Button from "../components/marketing/Button.astro";
+import AlphaBadge from "../components/marketing/AlphaBadge.astro";
+import DiscordCallout from "../components/marketing/DiscordCallout.astro";
+import CTA from "../components/marketing/CTA.astro";
+import CodeBlock from "../components/marketing/CodeBlock.astro";
+import SketchLabel from "../components/marketing/SketchLabel.astro";
+import IllustrationObs from "../components/marketing/illustrations/IllustrationObs.astro";
+
+import DeployTerminal from "../components/marketing-islands/DeployTerminal.tsx";
+import BindingsToIAM from "../components/marketing-islands/BindingsToIAM.tsx";
+import DevTerminal from "../components/marketing-islands/DevTerminal.tsx";
+import TestTerminal from "../components/marketing-islands/TestTerminal.tsx";
+import PRLifecycle from "../components/marketing-islands/PRLifecycle.tsx";
+
+export const STACK_SRC = `// alchemy.run.ts — the entrypoint
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Cloudflare.providers() },
+  Effect.gen(function* () {
+    yield* Photos;
+    yield* Sessions;
+    const api = yield* Api;
+
+    return { url: api.url };
+  }),
+);`;
+
+export const TEST_SRC = `const stack = beforeAll(deploy(Stack));
+
+test("PUT + GET round-trips through R2", Effect.gen(function* () {
+  const { url } = yield* stack;
+  const res = yield* HttpClient.get(\`\${url}/object/hello.txt\`);
+  expect(yield* res.text).toBe("hi!");
+}));`;
+
+export const OTEL_SRC = `// Effect emits OpenTelemetry by default.
+// Pick an exporter Layer; the Worker code never changes.
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  Effect.gen(function* () {
+    yield* Effect.logInfo("request received");
+    yield* Metric.increment(requestsTotal);
+    return { fetch: handler };
+  }).pipe(
+    Effect.provide(AxiomExporter),       // or CloudWatch, Datadog, OTLP …
+  ),
+) {}`;
+
+export const DASH_SRC = `// alchemy.run.ts — same program. operations included.
+export const Dashboard = AWS.CloudWatch.Dashboard("ApiHealth", {
+  widgets: [
+    Widget.line({   title: "p99 latency",     metric: api.metrics.p99 }),
+    Widget.line({   title: "requests / sec",  metric: api.metrics.rps }),
+    Widget.number({ title: "5xx ratio",       metric: api.metrics.errorRate }),
+  ],
+});
+
+export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
+  metric: api.metrics.p99,
+  threshold: 500,
+  comparisonOperator: ">",
+  evaluationPeriods: 5,
+  alarmActions: [pagerDuty, slackWebhook],
+});`;
+
+export const WORKFLOW_STAGE_SRC = `# .github/workflows/deploy.yml
+env:
+  STAGE: \${{ github.event_name == 'pull_request'
+            && format('pr-{0}', github.event.number)
+            || (github.ref == 'refs/heads/main' && 'prod' || github.ref_name) }}`;
+
+{/* ───────────────────────── HERO ───────────────────────── */}
+
+<Section padding="72px 32px 40px" class="alc-hero">
+  <div style="text-align:center;margin-bottom:24px;"><AlphaBadge /></div>
+  <div class="alc-hero__inner">
+    <Eyebrow>typescript · effect · infrastructure as code</Eyebrow>
+    <h1 class="alc-hero__title">
+      <span style="color:var(--alc-accent-deep);font-style:italic;">Zero</span> &rarr; production.
+    </h1>
+    <h2 class="alc-hero__subtitle">
+      Pure TypeScript Infrastructure as Code. For frontends, backends, and the cloud they run on.
+    </h2>
+    <div class="alc-hero__cta">
+      <Button variant="primary" icon="arrow" href="/getting-started">Get started</Button>
+      <Button variant="secondary" href="/tutorial">Tutorial</Button>
+      <Button variant="ghost" icon="github" href="https://github.com/alchemy-run/alchemy">GitHub</Button>
+    </div>
+  </div>
+</Section>
+
+{/* ───── 1 · PLAN · DEPLOY · DESTROY ───── */}
+
+<Section padding="40px 32px 96px" id="plan-deploy-destroy">
+  <div style="text-align:center;margin-bottom:36px;">
+    <Eyebrow>plan · deploy · destroy</Eyebrow>
+    <h2 class="alc-h2" style="margin:10px 0 12px;">Plan, deploy, destroy.</h2>
+    <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:660px;margin:0 auto;">
+      Declare resources inside an <code class="alc-code-inline" style="color:var(--alc-accent-deep);">Alchemy.Stack</code>. <code class="alc-code-inline" style="color:var(--alc-accent-deep);">alchemy plan</code> shows you exactly what will change. <code class="alc-code-inline" style="color:var(--alc-accent-deep);">deploy</code> applies it. <code class="alc-code-inline" style="color:var(--alc-accent-deep);">destroy</code> reverses it. <a class="alc-learn-more" href="/concepts/deploy-and-destroy">Learn more &rarr;</a>
+    </p>
+  </div>
+
+  <div class="stack-deploy-diagram">
+    <div class="stack-deploy-diagram__col">
+      <CodeBlock filename="alchemy.run.ts" code={STACK_SRC} />
+      <div class="stack-deploy-diagram__caption">
+        <SketchLabel>Stack</SketchLabel>
+        <span>one TypeScript program</span>
+      </div>
+    </div>
+    <div class="stack-deploy-diagram__arrow" aria-hidden>
+      <span>plan</span>
+      <span style="font-size:24px;line-height:1;">&rarr;</span>
+      <span>deploy</span>
+    </div>
+    <div class="stack-deploy-diagram__col">
+      <DeployTerminal client:visible />
+      <div class="stack-deploy-diagram__caption">
+        <SketchLabel>Resources</SketchLabel>
+        <span>live in your accounts</span>
+      </div>
+    </div>
+  </div>
+</Section>
+
+{/* ───── 2 · BINDINGS = IAM ───── */}
+
+<Section padding="80px 32px" background="var(--alc-bg-nav)" id="bindings-iam">
+  <div style="text-align:center;margin-bottom:36px;">
+    <Eyebrow>type-safe bindings · least-privilege iam</Eyebrow>
+    <h2 class="alc-h2" style="margin:10px 0 12px;">
+      The IAM policy <span style="color:var(--alc-accent-deep);font-style:italic;">writes itself</span>.
+    </h2>
+    <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:720px;margin:0 auto;">
+      Least-privilege IAM, generated from how you use resources in TypeScript. Connect a Worker to an R2 bucket, a DynamoDB table, an SQS queue &mdash; Alchemy emits the exact policy. Subscribe to a stream and you get the <code class="alc-code-inline" style="color:var(--alc-accent-deep);">EventSourceMapping</code> with the right permissions, automatically. <a class="alc-learn-more" href="/concepts/binding">Learn more &rarr;</a>
+    </p>
+  </div>
+
+  <BindingsToIAM client:visible />
+</Section>
+
+{/* ───── 3 · LOCAL DEV ───── */}
+
+<Section padding="80px 32px" id="local-dev">
+  <div style="text-align:center;margin-bottom:32px;">
+    <Eyebrow>alchemy dev · hybrid local + remote</Eyebrow>
+    <h2 class="alc-h2" style="margin:10px 0 12px;">Workers run locally. Resources run live.</h2>
+    <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:680px;margin:0 auto;">
+      <code class="alc-code-inline" style="color:var(--alc-accent-deep);">alchemy dev</code> deploys your R2 buckets, KV namespaces, D1 databases — the actual cloud resources — and runs your Worker code locally in <code class="alc-code-inline" style="color:var(--alc-accent-deep);">workerd</code>, the same runtime as production. Edit a file, the Worker reloads. Add a resource, alchemy diffs and wires it. <a class="alc-learn-more" href="/concepts/local-development">Learn more &rarr;</a>
+    </p>
+  </div>
+
+  <div class="alc-split-2 alc-split-2--wide-left">
+    <DevTerminal client:visible />
+    <div class="alc-card-stack">
+      <div class="alc-card">
+        <div class="alc-card__title">No emulation. No fidelity gaps.</div>
+        <div class="alc-card__body">Your R2 bucket is a real R2 bucket. Your D1 database is a real D1 database. Only your Worker runs locally.</div>
+      </div>
+      <div class="alc-card">
+        <div class="alc-card__title">Hot reload in milliseconds</div>
+        <div class="alc-card__body">Edit a handler, save — the running instance swaps in under 100ms. State on bound resources persists across reloads.</div>
+      </div>
+      <div class="alc-card">
+        <div class="alc-card__title">Resource graph hot-deploys</div>
+        <div class="alc-card__body">Add a Queue or change a binding — alchemy detects the diff, creates the resource, rewires the Worker. No restart.</div>
+      </div>
+      <div class="alc-card">
+        <div class="alc-card__title">Attach a debugger</div>
+        <div class="alc-card__body">Workers run in <code class="alc-code-inline" style="color:var(--alc-accent-deep);">workerd</code> as a local process. Set breakpoints, inspect variables, profile.</div>
+      </div>
+    </div>
+  </div>
+</Section>
+
+{/* ───── 4 · PER-TEST STACKS ───── */}
+
+<Section padding="80px 32px" background="var(--alc-bg-nav)" id="per-test-stacks">
+  <div style="text-align:center;margin-bottom:32px;">
+    <Eyebrow>iac in your tests</Eyebrow>
+    <h2 class="alc-h2" style="margin:10px 0 12px;">Tests deploy. Tests destroy. One stack per suite.</h2>
+    <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:680px;margin:0 auto;">
+      A Stack is just an Effect, so you can yield it from a test. <code class="alc-code-inline" style="color:var(--alc-accent-deep);">deploy</code> in <code class="alc-code-inline" style="color:var(--alc-accent-deep);">beforeAll</code>, <code class="alc-code-inline" style="color:var(--alc-accent-deep);">destroy</code> in <code class="alc-code-inline" style="color:var(--alc-accent-deep);">afterAll</code>. Each suite gets its own stage; runs in parallel without collision. <a class="alc-learn-more" href="/concepts/testing">Learn more &rarr;</a>
+    </p>
+  </div>
+
+  <div class="alc-split-2">
+    <CodeBlock filename="test/api.test.ts" code={TEST_SRC} compact />
+    <TestTerminal client:visible />
+  </div>
+
+  <div class="alc-cards-3">
+    <div class="alc-card">
+      <div class="alc-card__title">No mocks</div>
+      <div class="alc-card__body">Your tests run against real R2, real DynamoDB, real Workers. What passes locally passes in prod.</div>
+    </div>
+    <div class="alc-card">
+      <div class="alc-card__title">Per-suite isolation</div>
+      <div class="alc-card__body">Stage names from PR or test ID. Two suites run the same tests in parallel without collision.</div>
+    </div>
+    <div class="alc-card">
+      <div class="alc-card__title">Effect-aware test runner</div>
+      <div class="alc-card__body">Vitest and Bun test wrapped with Effect support. Yield from any test, get typed errors at the assertion line.</div>
+    </div>
+  </div>
+</Section>
+
+{/* ───── 5 · PR PREVIEWS (reworked) ───── */}
+
+<Section padding="80px 32px" id="pr-previews">
+  <div style="text-align:center;margin-bottom:32px;">
+    <Eyebrow>ci/cd · preview branch per pr</Eyebrow>
+    <h2 class="alc-h2" style="margin:10px 0 12px;">Every PR is a preview. Auto-destroyed on merge.</h2>
+    <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:720px;margin:0 auto;">
+      Open a PR — alchemy deploys an isolated stage, comments the URL on the PR, and tears it down on merge. One workflow file. Every environment. <a class="alc-learn-more" href="/guides/ci">Learn more &rarr;</a>
+    </p>
+  </div>
+
+  <PRLifecycle client:visible />
+
+  <div style="max-width:880px;margin:36px auto 0;">
+    <CodeBlock filename=".github/workflows/deploy.yml" code={WORKFLOW_STAGE_SRC} compact />
+  </div>
+
+  <div class="alc-cards-3" style="margin-top:24px;">
+    <div class="alc-card">
+      <div class="alc-card__title">Stage from event</div>
+      <div class="alc-card__body"><code class="alc-code-inline" style="color:var(--alc-accent-deep);">pr-{`{`}n{`}`}</code> for PRs, <code class="alc-code-inline" style="color:var(--alc-accent-deep);">prod</code> for main, branch name otherwise — one expression, no scripting.</div>
+    </div>
+    <div class="alc-card">
+      <div class="alc-card__title">Safety check on cleanup</div>
+      <div class="alc-card__body">The cleanup job refuses to destroy <code class="alc-code-inline" style="color:var(--alc-accent-deep);">prod</code>. Even if you manage to trigger it on the wrong event.</div>
+    </div>
+    <div class="alc-card">
+      <div class="alc-card__title">Auth via GitHub OIDC</div>
+      <div class="alc-card__body">Trade GitHub identity for an IAM role at runtime. No long-lived AWS keys in your repo.</div>
+    </div>
+  </div>
+</Section>
+
+{/* ───── 6 · OBSERVABILITY ───── */}
+
+<Section padding="80px 32px" background="var(--alc-bg-nav)" id="observability">
+  <div style="text-align:center;margin-bottom:32px;">
+    <Eyebrow>observability · otel + iac</Eyebrow>
+    <h2 class="alc-h2" style="margin:10px 0 12px;">Observability is just more infrastructure.</h2>
+    <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:720px;margin:0 auto;">
+      Effect already emits OpenTelemetry by default. Alchemy declares the exporter as a Layer — point it at Axiom, Datadog, CloudWatch, or any OTLP endpoint — and you ship the dashboard with the service. Alarms live next to the metrics they watch, in the same <code class="alc-code-inline" style="color:var(--alc-accent-deep);">alchemy.run.ts</code>. <a class="alc-learn-more" href="/concepts/observability">Learn more &rarr;</a>
+    </p>
+  </div>
+
+  <div class="alc-split-2">
+    <div style="display:flex;flex-direction:column;gap:14px;">
+      <CodeBlock filename="src/Api.ts" code={OTEL_SRC} compact />
+      <div class="alc-cards-2">
+        <div class="otel-card" style="--c:#9F6FFF;">
+          <div class="otel-card__name">Axiom</div>
+          <div class="otel-card__sub">api.axiom.co</div>
+        </div>
+        <div class="otel-card" style="--c:#632CA6;">
+          <div class="otel-card__name">Datadog</div>
+          <div class="otel-card__sub">trace.agent.datadoghq.com</div>
+        </div>
+        <div class="otel-card" style="--c:#E7157B;">
+          <div class="otel-card__name">CloudWatch</div>
+          <div class="otel-card__sub">logs.aws.amazon.com</div>
+        </div>
+        <div class="otel-card" style="--c:#F5A623;">
+          <div class="otel-card__name">Any OTLP</div>
+          <div class="otel-card__sub">collector:4318</div>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:14px;">
+      <div style="background:var(--alc-bg-elev-1);border:1px solid var(--alc-hairline);border-radius:14px;padding:14px;">
+        <IllustrationObs />
+      </div>
+      <CodeBlock filename="alchemy.run.ts" code={DASH_SRC} compact />
+    </div>
+  </div>
+</Section>
+
+<Section padding="40px 32px 16px">
+  <DiscordCallout />
+</Section>
+
+<CTA heading="Ship your cloud as one typed program." />

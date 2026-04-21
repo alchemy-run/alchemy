@@ -1,0 +1,92 @@
+---
+import Logo from "./Logo.astro";
+import Button from "./Button.astro";
+---
+
+<nav class="alc-nav">
+  <a href="/" class="alc-nav__brand">
+    <Logo />
+  </a>
+
+  <div class="alc-nav__spacer"></div>
+  <div class="alc-nav__search">
+    <span class="alc-nav__search-icon">⌕</span>
+    <span class="alc-nav__search-text">Search docs</span>
+    <span class="alc-nav__spacer"></span>
+    <span class="alc-kbd">⌘</span>
+    <span class="alc-kbd">K</span>
+  </div>
+  <a href="/getting-started" class="alc-nav__link">Docs</a>
+  <a href="https://github.com/alchemy-run/alchemy" class="alc-nav__link">GitHub</a>
+  <a href="#" class="alc-nav__link">Discord</a>
+  <Button variant="primary" icon="arrow" href="/getting-started">Get Started</Button>
+</nav>
+
+<style>
+  .alc-nav,
+  .alc-nav * {
+    box-sizing: border-box;
+  }
+  .alc-nav {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+  }
+  .alc-nav__brand {
+    text-decoration: none;
+  }
+  .alc-nav__spacer {
+    flex: 1;
+  }
+  .alc-nav__search {
+    display: flex;
+    align-items: center;
+    width: 220px;
+    height: 32px;
+    padding: 0 8px 0 12px;
+    background: var(--alc-bg);
+    border: 1px solid var(--alc-hairline-2);
+    border-radius: 8px;
+    font-size: 13px;
+  }
+  .alc-nav__search-icon,
+  .alc-nav__search-text {
+    color: var(--alc-fg-4);
+  }
+  .alc-nav__search-icon {
+    margin-right: 8px;
+  }
+  .alc-nav__search-text {
+    font-size: 12px;
+  }
+  .alc-kbd {
+    font-family: var(--alc-font-mono);
+    font-size: 11px;
+    background: var(--alc-bg-elev-1);
+    border: 1px solid var(--alc-hairline-2);
+    border-radius: 4px;
+    padding: 1px 5px;
+    color: var(--alc-fg-2);
+    margin-left: 3px;
+  }
+  .alc-nav__link {
+    color: var(--alc-fg-2);
+    text-decoration: none;
+    font-size: 14px;
+  }
+  .alc-nav__link:hover {
+    color: var(--alc-accent-deep);
+  }
+
+  @media (max-width: 880px) {
+    .alc-nav__search,
+    .alc-nav__link[href="#"] {
+      display: none;
+    }
+  }
+  @media (max-width: 640px) {
+    .alc-nav { gap: 16px; }
+    .alc-nav :global(.alc-btn) { display: none; }
+  }
+</style>

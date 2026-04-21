@@ -86,3 +86,30 @@ state persistence can fail after the cloud operation succeeds:
   finds the existing resource instead of creating a duplicate
 - **Delete**: if the resource doesn't exist, don't treat it as an
   error
+
+## Implementing your own provider
+
+To add support for a new cloud or third-party API, declare a
+[Resource type](/concepts/resource) and implement its provider as an
+`Effect.Layer`:
+
+```typescript
+// 2. Implement the provider as an Effect Layer.
+export const StripeProductLive = Layer.effect(
+  StripeProduct.Provider,
+  Effect.gen(function* () {
+    const stripe = yield* StripeClient;
+    return {
+      create: ({ props }) => stripe.products.create(props),
+      update: ({ props, output }) => /* ... */,
+      delete: ({ output }) => stripe.products.del(output.productId),
+    };
+  }),
+);
+```
+
+- **Effect Layer = provider** — Provide a Layer that implements
+  `create`, `update`, `delete`. No registry, no schema, no codegen.
+- **Compose with built-in providers** — Merge your provider Layer with
+  `Cloudflare.providers()` or `AWS.providers()`. One stack, mixed
+  clouds.

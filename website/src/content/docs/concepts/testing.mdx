@@ -118,3 +118,34 @@ import { beforeAll, deploy, expect, test } from "alchemy/Test/Vitest";
 
 The Vitest harness provides identical functionality with Vitest's
 test runner instead of Bun's.
+
+## Async and streaming pipelines
+
+The same harness works for offline jobs and streaming pipelines —
+write to the source, await the sink, no mocks:
+
+```typescript
+// Async / streaming jobs — same pattern.
+test("DynamoDB stream → SQS pipeline", Effect.gen(function* () {
+  const { tableName, queueUrl } = yield* stack;
+
+  yield* DynamoDB.putItem({
+    TableName: tableName,
+    Item: { id: { S: "1" } },
+  });
+
+  // wait for the Lambda to fan out into the queue
+  const msg = yield* SQS.receive(queueUrl).pipe(
+    Effect.timeout("10 seconds"),
+  );
+  expect(msg.Body).toContain('"id":"1"');
+}));
+```
+
+- **No mocks** — Your tests run against real R2, real DynamoDB, real
+  Workers. What passes locally passes in prod.
+- **Per-suite isolation** — Stage names from PR or test ID. Two suites
+  run the same tests in parallel without collision.
+- **Effect-aware test runner** — Vitest and Bun test wrapped with
+  Effect support. Yield from any test, get typed errors at the
+  assertion line.

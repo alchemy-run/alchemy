@@ -42,22 +42,23 @@ const html = content
 
 <style>
   .terminal {
-    background: #111111;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
+    background: var(--alc-bg-code);
+    border: 1px solid var(--alc-walnut-700);
+    border-radius: var(--alc-radius);
     overflow: hidden;
     margin: 1rem 0;
-    font-family: var(--sl-font-mono, 'JetBrains Mono', monospace);
+    font-family: var(--alc-font-mono, 'JetBrains Mono', monospace);
     font-size: 0.85rem;
     line-height: 1.6;
+    box-shadow: var(--alc-shadow);
   }
   .terminal-header {
     display: flex;
     align-items: center;
     gap: 6px;
     padding: 10px 14px;
-    background: #1a1a1a;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: var(--alc-walnut-950);
+    border-bottom: 1px solid var(--alc-walnut-700);
   }
   .terminal-dot {
     width: 12px;
@@ -66,23 +67,24 @@ const html = content
   }
   .terminal-title {
     margin-left: 8px;
-    color: #a1a1aa;
+    color: var(--alc-walnut-400);
     font-size: 0.8rem;
+    font-family: var(--alc-font-mono);
   }
   .terminal-body {
     padding: 16px 20px;
     margin: 0;
-    color: #d4d4d8;
+    color: var(--alc-fg-invert);
     overflow-x: auto;
     white-space: pre;
     background: transparent;
     border: none;
   }
-  .terminal-body :global(.t-g) { color: #4ade80; }
-  .terminal-body :global(.t-r) { color: #f87171; }
-  .terminal-body :global(.t-y) { color: #fbbf24; }
-  .terminal-body :global(.t-c) { color: #22d3ee; }
-  .terminal-body :global(.t-b) { font-weight: 700; color: #f4f4f5; }
-  .terminal-body :global(.t-d) { color: #71717a; }
+  .terminal-body :global(.t-g) { color: var(--alc-accent-bright); }
+  .terminal-body :global(.t-r) { color: #e07a5f; }
+  .terminal-body :global(.t-y) { color: var(--alc-warn); }
+  .terminal-body :global(.t-c) { color: var(--alc-code-type); }
+  .terminal-body :global(.t-b) { font-weight: 700; color: var(--alc-fg-invert); }
+  .terminal-body :global(.t-d) { color: var(--alc-walnut-400); }
   .terminal-body :global(.t-u) { text-decoration: underline; }
 </style>
