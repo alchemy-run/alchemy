@@ -64,11 +64,9 @@ export default {
    */
   async queue(batch: MessageBatch<QueueMessage>, env: WorkerEnv) {
     for (const msg of batch.messages) {
-      await env.Bucket.put(
-        `/queue/${msg.body.id}`,
-        JSON.stringify(msg.body),
-        { httpMetadata: { contentType: "application/json" } },
-      );
+      await env.Bucket.put(`/queue/${msg.body.id}`, JSON.stringify(msg.body), {
+        httpMetadata: { contentType: "application/json" },
+      });
       msg.ack();
     }
   },

@@ -93,8 +93,9 @@ export type QueueConsumer = Resource<
  * });
  * ```
  */
-export const QueueConsumer =
-  Resource<QueueConsumer>("Cloudflare.QueueConsumer");
+export const QueueConsumer = Resource<QueueConsumer>(
+  "Cloudflare.QueueConsumer",
+);
 
 export const QueueConsumerProvider = () =>
   Provider.effect(
@@ -147,8 +148,7 @@ export const QueueConsumerProvider = () =>
                   queueId: news.queueId!,
                 });
                 const match = existing.result.find(
-                  (c) =>
-                    "script" in c && c.script === news.scriptName,
+                  (c) => "script" in c && c.script === news.scriptName,
                 );
                 if (match && match.consumerId) {
                   return match as {

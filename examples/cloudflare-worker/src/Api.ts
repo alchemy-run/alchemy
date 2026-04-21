@@ -231,7 +231,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
-Cloudflare.R2BucketBindingLive,
+        Cloudflare.R2BucketBindingLive,
         Cloudflare.KVNamespaceBindingLive,
         Cloudflare.QueueBindingLive,
       ),

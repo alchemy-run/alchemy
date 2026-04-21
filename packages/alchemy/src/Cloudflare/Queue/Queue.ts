@@ -75,12 +75,10 @@ export const QueueProvider = () =>
       const createQueueName = (id: string, name: string | undefined) =>
         Effect.gen(function* () {
           if (name) return name;
-          return (
-            yield* createPhysicalName({
-              id,
-              maxLength: 63,
-            })
-          ).toLowerCase();
+          return (yield* createPhysicalName({
+            id,
+            maxLength: 63,
+          })).toLowerCase();
         });
 
       return {
@@ -161,9 +159,7 @@ export const QueueProvider = () =>
           }
           const queueName = yield* createQueueName(id, olds?.name);
           const allQueues = yield* listQueues({ accountId });
-          const match = allQueues.result.find(
-            (q) => q.queueName === queueName,
-          );
+          const match = allQueues.result.find((q) => q.queueName === queueName);
           if (match && match.queueId && match.queueName) {
             return {
               queueId: match.queueId,

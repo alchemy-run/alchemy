@@ -40,12 +40,12 @@ export const QueueBindingLive = Layer.effect(
       yield* bind(queue);
       const env = WorkerEnvironment.asEffect();
       const raw = env.pipe(
-        Effect.map(
-          (env) => (env as Record<string, any>)[queue.LogicalId],
-        ),
+        Effect.map((env) => (env as Record<string, any>)[queue.LogicalId]),
       );
 
-      const tryPromise = <T>(fn: () => Promise<T>): Effect.Effect<T, QueueSendError> =>
+      const tryPromise = <T>(
+        fn: () => Promise<T>,
+      ): Effect.Effect<T, QueueSendError> =>
         Effect.tryPromise({
           try: fn,
           catch: (error: any) =>
@@ -59,9 +59,7 @@ export const QueueBindingLive = Layer.effect(
         raw,
         send: (body: unknown, options?: { contentType?: "json" | "text" }) =>
           raw.pipe(
-            Effect.flatMap((q) =>
-              tryPromise(() => q.send(body, options)),
-            ),
+            Effect.flatMap((q) => tryPromise(() => q.send(body, options))),
           ),
         sendBatch: (
           messages: ReadonlyArray<{
