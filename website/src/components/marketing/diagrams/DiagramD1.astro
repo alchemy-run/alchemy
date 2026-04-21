@@ -1,0 +1,20 @@
+---
+import { CF_COLOR } from "./_colors";
+import DiagWrap from "./DiagWrap.astro";
+import DiagNode from "./DiagNode.astro";
+import DiagArrow from "./DiagArrow.astro";
+import IconWorker from "./icons/IconWorker.astro";
+import IconD1 from "./icons/IconD1.astro";
+---
+
+<DiagWrap>
+  <DiagNode label="Api" sub="Worker" accent color={CF_COLOR}>
+    <IconWorker slot="icon" color={CF_COLOR} />
+  </DiagNode>
+  <DiagArrow label="D1Connection.bind(DB)" color={CF_COLOR} />
+  <DiagNode label="DB" sub="D1Database">
+    <IconD1 slot="icon" color={CF_COLOR} />
+  </DiagNode>
+  <DiagArrow label='.prepare("SELECT …")' color={CF_COLOR} />
+  <DiagNode label="rows" sub="typed result" dim />
+</DiagWrap>

@@ -1,0 +1,67 @@
+---
+import { AWS_COLOR, tint } from "./_colors";
+import IconIAM from "./icons/IconIAM.astro";
+
+interface Props {
+  actions: string[];
+  color?: string;
+}
+
+const { actions, color = AWS_COLOR } = Astro.props;
+---
+
+<div class="diag-policy" style={`border-color:${color};`}>
+  <div class="diag-policy__header">
+    <IconIAM size={16} color={color} />
+    <span>IAM Policy</span>
+    <span class="diag-policy__auto">auto</span>
+  </div>
+  <div class="diag-policy__actions">
+    {actions.map((a) => (
+      <span class="diag-policy__action" style={`background:${tint(color, 0.1)};`}>{a}</span>
+    ))}
+  </div>
+</div>
+
+<style>
+  .diag-policy {
+    background: var(--alc-bg-elev-1);
+    border-width: 1px;
+    border-style: dashed;
+    border-radius: 10px;
+    padding: 8px 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    min-width: 160px;
+  }
+  .diag-policy__header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--alc-font-sans);
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--alc-fg-2);
+  }
+  .diag-policy__auto {
+    font-family: var(--alc-font-mono);
+    font-size: 10px;
+    color: var(--alc-fg-4);
+    font-weight: 400;
+  }
+  .diag-policy__actions {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    align-items: center;
+  }
+  .diag-policy__action {
+    font-family: var(--alc-font-mono);
+    font-size: 10.5px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    color: var(--alc-fg-2);
+  }
+</style>

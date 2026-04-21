@@ -1,0 +1,406 @@
+/* ============================================================
+   Marketing layout primitives — ported from public/landing/alchemy.css.
+   Token defs live in tokens.css. This file contains only:
+     - layout grids (binding-diagram, stack-deploy-diagram, feature-tab-grid, layers-swap-grid)
+     - keyframes for the LayersSwap island
+     - root body class, eyebrow, code-block, terminal helpers
+   ============================================================ */
+
+body.alc-root,
+.alc-root {
+  background: var(--alc-bg);
+  color: var(--alc-fg-2);
+  font-family: var(--alc-font-sans);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: var(--alc-accent-soft);
+  color: var(--alc-fg-1);
+}
+
+/* ============================================================
+   Code block — terminal-themed wrapper used by static <CodeBlock>
+   and inside the .mdx pages around expressive-code output.
+   ============================================================ */
+
+.alc-code-block {
+  background: var(--alc-bg-code);
+  border: 1px solid var(--alc-hairline);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: var(--alc-shadow-sm);
+  display: flex;
+  flex-direction: column;
+}
+.alc-code-block__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(232, 220, 192, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  flex: 0 0 auto;
+}
+.alc-code-block__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.alc-code-block__filename {
+  margin-left: 10px;
+  font-family: var(--alc-font-mono);
+  font-size: 11px;
+  color: var(--alc-code-comment);
+}
+.alc-code-block__pre {
+  margin: 0;
+  padding: 18px 20px;
+  font-family: var(--alc-font-mono);
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--alc-code-var);
+  overflow-x: auto;
+}
+.alc-code-block--compact .alc-code-block__pre {
+  padding: 12px 16px;
+  font-size: 12px;
+}
+
+/* TS token colors used inside .alc-code-block */
+.alc-tok-k { color: var(--alc-code-keyword); }
+.alc-tok-s { color: var(--alc-code-string); }
+.alc-tok-f { color: var(--alc-code-fn); }
+.alc-tok-t { color: var(--alc-code-type); }
+.alc-tok-c { color: var(--alc-code-comment); font-style: italic; }
+.alc-tok-v { color: var(--alc-code-var); }
+.alc-tok-n { color: var(--alc-code-literal); }
+
+/* ============================================================
+   Terminal — used by Dev/Deploy/Test terminal islands
+   ============================================================ */
+
+.alc-term {
+  background: var(--alc-bg-code);
+  border: 1px solid var(--alc-hairline);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: var(--alc-shadow-sm);
+}
+.alc-term__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(232, 220, 192, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+}
+.alc-term__title {
+  margin-left: 10px;
+  font-family: var(--alc-font-mono);
+  font-size: 11px;
+  color: var(--alc-code-comment);
+}
+.alc-term__body {
+  margin: 0;
+  padding: 16px 18px;
+  font-family: var(--alc-font-mono);
+  font-size: 12.5px;
+  line-height: 1.75;
+  color: var(--alc-code-var);
+  white-space: pre-wrap;
+  min-height: 300px;
+}
+
+.alc-t-g { color: var(--alc-success); }
+.alc-t-b { color: var(--alc-fg-invert); font-weight: 600; }
+.alc-t-d { color: var(--alc-code-comment); }
+.alc-t-u { text-decoration: underline; color: var(--alc-fg-invert); }
+.alc-t-c { color: var(--alc-code-type); }
+.alc-t-a { color: var(--alc-code-fn); }
+.alc-t-w { color: var(--alc-warn); }
+.alc-t-r { color: var(--alc-danger); }
+.alc-t-y { color: var(--alc-code-string); }
+
+/* ============================================================
+   Binding diagram — Api on the left, hand-drawn arrows in
+   the middle, declared resources stacked on the right.
+   ============================================================ */
+
+.binding-diagram {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) 110px minmax(0, 1fr);
+  gap: 0;
+  align-items: center;
+  max-width: 1080px;
+  margin: 0 auto;
+}
+.binding-diagram__left { min-width: 0; }
+.binding-diagram__right {
+  min-width: 0;
+  display: grid;
+  gap: 16px;
+}
+.binding-diagram__arrows {
+  position: relative;
+  align-self: stretch;
+  min-height: 280px;
+}
+.binding-diagram__arrows svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.binding-diagram__label {
+  position: absolute;
+  font-family: var(--alc-font-hand);
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--alc-accent-deep);
+  white-space: nowrap;
+  pointer-events: none;
+  background: var(--alc-bg-nav);
+  padding: 0 6px;
+  border-radius: 4px;
+}
+.binding-diagram__label--top {
+  top: 18%;
+  left: 50%;
+  transform: translateX(-50%) rotate(-6deg);
+}
+.binding-diagram__label--bottom {
+  bottom: 18%;
+  left: 50%;
+  transform: translateX(-50%) rotate(5deg);
+}
+@media (max-width: 880px) {
+  .binding-diagram { grid-template-columns: 1fr; gap: 16px; }
+  .binding-diagram__arrows { display: none; }
+}
+
+/* ============================================================
+   Stack → Deploy diagram
+   ============================================================ */
+
+.stack-deploy-diagram {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px) minmax(0, 1fr);
+  gap: 0;
+  align-items: center;
+  max-width: 1240px;
+  margin: 0 auto;
+}
+.stack-deploy-diagram__col {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.stack-deploy-diagram__caption {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 2px;
+  margin-top: 4px;
+}
+.stack-deploy-diagram__caption span {
+  font-family: var(--alc-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--alc-fg-3);
+}
+.stack-deploy-diagram__bridge {
+  position: relative;
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  pointer-events: none;
+}
+.stack-deploy-diagram__arrow {
+  display: block;
+  width: 100%;
+  height: 60px;
+  overflow: visible;
+}
+.stack-deploy-diagram__label {
+  font-family: var(--alc-font-hand);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--alc-accent-deep);
+  transform: rotate(-4deg);
+  white-space: nowrap;
+}
+@media (max-width: 980px) {
+  .stack-deploy-diagram { grid-template-columns: 1fr; gap: 24px; }
+  .stack-deploy-diagram__bridge { flex-direction: column; padding: 0; }
+  .stack-deploy-diagram__arrow { transform: rotate(90deg); height: 80px; width: 120px; }
+}
+
+/* ============================================================
+   Cloud feature tabs
+   ============================================================ */
+
+.feature-tab-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(260px, 1fr);
+  gap: 20px;
+  max-width: 960px;
+  margin: 0 auto;
+  align-items: stretch;
+}
+.feature-tab-grid > *:first-child {
+  display: flex;
+  flex-direction: column;
+}
+.feature-tab-grid > *:first-child > pre { flex: 1; }
+.feature-tab-diagram { display: flex; }
+.feature-tab-diagram > * {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+@media (max-width: 980px) {
+  .feature-tab-grid { grid-template-columns: 1fr; gap: 16px; }
+  .feature-tab-grid > *:first-child { display: block; }
+  .feature-tab-grid > *:first-child > pre { flex: none; }
+  .feature-tab-diagram { order: -1; }
+}
+
+/* Tab buttons */
+.feature-tabs__nav {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+.feature-tabs__divider {
+  width: 1px;
+  height: 18px;
+  background: var(--alc-hairline-2);
+  margin: 0 6px;
+}
+.feature-tabs__btn {
+  border: 1px solid var(--alc-hairline-2);
+  background: var(--alc-bg-elev-1);
+  color: var(--alc-fg-2);
+  font-family: var(--alc-font-mono);
+  font-size: 12.5px;
+  padding: 7px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.feature-tabs__btn[data-active="true"] {
+  background: var(--alc-bg-code);
+  color: var(--alc-fg-invert);
+}
+.feature-tabs__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+.feature-tabs__panel { display: none; }
+.feature-tabs__panel[data-active="true"] { display: grid; }
+.feature-tabs__caption {
+  text-align: center;
+  max-width: 680px;
+  margin: 0 auto 18px;
+  font-family: var(--alc-font-sans);
+  font-size: 13.5px;
+  color: var(--alc-fg-3);
+  line-height: 1.55;
+}
+
+/* ============================================================
+   Cloud layers: animated Layer-swap demo
+   ============================================================ */
+
+.layers-swap-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 1fr);
+  gap: 24px;
+  align-items: stretch;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+@media (max-width: 980px) {
+  .layers-swap-grid { grid-template-columns: 1fr; gap: 18px; }
+}
+
+@keyframes layer-cycle {
+  0%        { opacity: 0; transform: translateY(-3px); filter: blur(2px); background: transparent; box-shadow: none; }
+  10%       { opacity: 1; transform: translateY(0);    filter: blur(0);   background: transparent; box-shadow: none; }
+  62%, 78%  { background: rgba(184, 138, 74, 0.32); box-shadow: 0 0 0 1px rgba(184, 138, 74, 0.55); }
+  90%       { opacity: 0; transform: translateY(3px);  filter: blur(2px); background: transparent; box-shadow: none; }
+  100%      { opacity: 0; }
+}
+.layer-swap {
+  display: inline-block;
+  padding: 1px 5px;
+  margin: 0 1px;
+  border-radius: 3px;
+  animation: layer-cycle 3000ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+@keyframes layer-cycle-node {
+  0%   { opacity: 0; transform: scale(0.92) translateY(-4px); filter: blur(2px); }
+  14%  { opacity: 1; transform: scale(1) translateY(0);       filter: blur(0); }
+  100% { opacity: 1; }
+}
+.layer-swap-node { animation: layer-cycle-node 3000ms cubic-bezier(0.4, 0, 0.2, 1) both; }
+@keyframes layer-cycle-edge {
+  0%   { opacity: 0; }
+  20%  { opacity: 1; }
+  100% { opacity: 1; }
+}
+.layer-swap-edge { animation: layer-cycle-edge 3000ms ease-out both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .layer-swap, .layer-swap-node, .layer-swap-edge { animation: none; opacity: 1; }
+}
+
+/* ============================================================
+   Card / panel utilities
+   ============================================================ */
+
+.alc-card {
+  background: var(--alc-bg-elev-1);
+  border: 1px solid var(--alc-hairline);
+  border-radius: 10px;
+  padding: 18px;
+}
+.alc-card--lg {
+  border-radius: 12px;
+  padding: 22px;
+}
+.alc-card__title {
+  font-family: var(--alc-font-sans);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--alc-fg-1);
+  margin-bottom: 6px;
+}
+.alc-card__title--lg {
+  font-size: 17px;
+}
+.alc-card__body {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--alc-fg-3);
+}

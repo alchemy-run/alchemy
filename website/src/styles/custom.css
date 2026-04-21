@@ -4,6 +4,11 @@
   --sl-font: var(--alc-font-sans);
   --sl-font-mono: var(--alc-font-mono);
   --sl-font-headings: var(--alc-font-serif);
+  /* Match the marketing header (64px tall, 32px horizontal padding, no
+     vertical padding) so docs and landing pages line up pixel-for-pixel. */
+  --sl-nav-height: 4rem;
+  --sl-nav-pad-x: 2rem;
+  --sl-nav-pad-y: 0;
   color-scheme: light;
 }
 
@@ -576,4 +581,106 @@ h1.hero-title,
   .next-steps {
     grid-template-columns: 1fr;
   }
+}
+
+/* ============================================================
+   Starlight Asides (Note / Tip / Caution / Danger)
+
+   Starlight's defaults use saturated info-blue / yellow / red
+   panels that clash with the warm parchment + moss palette.
+   Override to match the design-system callout spec from
+   claude/design-system/preview/components-callouts.html:
+     - tip:     moss green
+     - note:    slate teal (--alc-info)
+     - caution: honey amber (--alc-warn)
+     - danger:  brick red  (--alc-danger)
+   ============================================================ */
+
+.sl-markdown-content .starlight-aside {
+  border-radius: 8px;
+  border-width: 1px;
+  border-style: solid;
+  padding: 12px 14px;
+  margin: 1rem 0;
+  background: var(--aside-tint, var(--alc-bg-elev-1));
+  border-color: var(--aside-border, var(--alc-hairline-2));
+  color: var(--alc-fg-2);
+  font-family: var(--alc-font-sans);
+}
+
+.sl-markdown-content .starlight-aside__title {
+  color: var(--aside-accent, var(--alc-fg-1));
+  font-family: var(--alc-font-sans);
+  font-weight: 600;
+  font-size: 13.5px;
+  letter-spacing: 0;
+  text-transform: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sl-markdown-content .starlight-aside__icon {
+  color: var(--aside-accent, var(--alc-fg-1));
+  font-size: 1rem;
+}
+
+.sl-markdown-content .starlight-aside__content {
+  color: var(--alc-fg-2);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.sl-markdown-content .starlight-aside__content > :first-child {
+  margin-top: 4px;
+}
+.sl-markdown-content .starlight-aside__content > :last-child {
+  margin-bottom: 0;
+}
+.sl-markdown-content .starlight-aside__content a {
+  color: var(--aside-accent, var(--alc-accent-deep));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.sl-markdown-content .starlight-aside__content a:hover {
+  color: var(--alc-accent-deep);
+}
+.sl-markdown-content .starlight-aside__content code {
+  background: var(--alc-bg-sunk);
+  border: 1px solid var(--alc-hairline);
+  color: var(--alc-fg-1);
+}
+.sl-markdown-content .starlight-aside__content strong {
+  color: var(--alc-fg-1);
+}
+
+/* ── Variants ── */
+.sl-markdown-content .starlight-aside--note {
+  --aside-accent: var(--alc-info);
+  --aside-tint:   color-mix(in srgb, var(--alc-info) 14%, transparent);
+  --aside-border: color-mix(in srgb, var(--alc-info) 45%, transparent);
+}
+.sl-markdown-content .starlight-aside--tip {
+  --aside-accent: var(--alc-accent-deep);
+  --aside-tint:   color-mix(in srgb, var(--alc-accent) 14%, transparent);
+  --aside-border: color-mix(in srgb, var(--alc-accent) 45%, transparent);
+}
+.sl-markdown-content .starlight-aside--caution {
+  --aside-accent: color-mix(in srgb, var(--alc-warn) 75%, var(--alc-fg-1));
+  --aside-tint:   color-mix(in srgb, var(--alc-warn) 16%, transparent);
+  --aside-border: color-mix(in srgb, var(--alc-warn) 50%, transparent);
+}
+.sl-markdown-content .starlight-aside--danger {
+  --aside-accent: var(--alc-danger);
+  --aside-tint:   color-mix(in srgb, var(--alc-danger) 14%, transparent);
+  --aside-border: color-mix(in srgb, var(--alc-danger) 45%, transparent);
+}
+
+/* Match Starlight's docs <header> chrome to the marketing <header>: same
+   translucent cream + backdrop-blur + hairline border. Defined in custom.css
+   (rather than scoped to a single component) so the docs layout picks it up
+   without a Page/Header override. */
+.header {
+  background: color-mix(in srgb, var(--alc-bg-nav) 92%, transparent) !important;
+  backdrop-filter: saturate(140%) blur(8px);
+  border-bottom: 1px solid var(--alc-hairline) !important;
 }

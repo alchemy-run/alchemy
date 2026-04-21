@@ -1,0 +1,18 @@
+---
+import { CF_COLOR } from "./_colors";
+import DiagWrap from "./DiagWrap.astro";
+import DiagNode from "./DiagNode.astro";
+import DiagBidir from "./DiagBidir.astro";
+import IconWorker from "./icons/IconWorker.astro";
+import IconKV from "./icons/IconKV.astro";
+---
+
+<DiagWrap>
+  <DiagNode label="Api" sub="Worker" accent color={CF_COLOR}>
+    <IconWorker slot="icon" color={CF_COLOR} />
+  </DiagNode>
+  <DiagBidir topLabel="kv.put(k, v)" bottomLabel="kv.get(k)" height={36} color={CF_COLOR} />
+  <DiagNode label="KV" sub="key/value">
+    <IconKV slot="icon" color={CF_COLOR} />
+  </DiagNode>
+</DiagWrap>

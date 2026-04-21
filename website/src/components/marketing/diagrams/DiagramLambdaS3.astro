@@ -1,0 +1,21 @@
+---
+import { AWS_COLOR } from "./_colors";
+import DiagWrap from "./DiagWrap.astro";
+import DiagNode from "./DiagNode.astro";
+import DiagArrow from "./DiagArrow.astro";
+import DiagPolicy from "./DiagPolicy.astro";
+import IconLambda from "./icons/IconLambda.astro";
+import IconS3 from "./icons/IconS3.astro";
+---
+
+<DiagWrap>
+  <DiagNode label="ImageFn" sub="AWS.Lambda" accent color={AWS_COLOR}>
+    <IconLambda slot="icon" color={AWS_COLOR} />
+  </DiagNode>
+  <DiagArrow label=".bind(bucket) ×2" color={AWS_COLOR} />
+  <DiagPolicy actions={["s3:GetObject", "s3:PutObject"]} color={AWS_COLOR} />
+  <DiagArrow color={AWS_COLOR} />
+  <DiagNode label="Photos" sub="S3.Bucket">
+    <IconS3 slot="icon" color={AWS_COLOR} />
+  </DiagNode>
+</DiagWrap>

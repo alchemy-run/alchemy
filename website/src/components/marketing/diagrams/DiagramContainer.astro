@@ -1,0 +1,20 @@
+---
+import { CF_COLOR } from "./_colors";
+import DiagWrap from "./DiagWrap.astro";
+import DiagNode from "./DiagNode.astro";
+import DiagArrow from "./DiagArrow.astro";
+import IconDO from "./icons/IconDO.astro";
+import IconContainer from "./icons/IconContainer.astro";
+---
+
+<DiagWrap>
+  <DiagNode label="Agent" sub="DurableObject" accent color={CF_COLOR}>
+    <IconDO slot="icon" color={CF_COLOR} />
+  </DiagNode>
+  <DiagArrow label="Container.bind(Sandbox)" color={CF_COLOR} />
+  <DiagNode label="Sandbox" sub="Cloudflare.Container">
+    <IconContainer slot="icon" color={CF_COLOR} />
+  </DiagNode>
+  <DiagArrow label="container.fetch(req)" color={CF_COLOR} />
+  <DiagNode label=":3000" sub="HTTP server" dim />
+</DiagWrap>
