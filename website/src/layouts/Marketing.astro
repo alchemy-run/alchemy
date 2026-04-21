@@ -42,6 +42,7 @@ const { title, description } = Astro.props;
     color: var(--alc-fg-2);
     font-family: var(--alc-font-sans);
     -webkit-font-smoothing: antialiased;
+    overflow-x: clip;
   }
   a:focus-visible {
     outline: 2px solid var(--alc-accent);
@@ -56,5 +57,11 @@ const { title, description } = Astro.props;
     background: color-mix(in srgb, var(--alc-bg-nav) 92%, transparent);
     backdrop-filter: saturate(140%) blur(8px);
     border-bottom: 1px solid var(--alc-hairline);
+  }
+  @media (max-width: 640px) {
+    .alc-marketing-header { padding: 0 20px; }
+  }
+  @media (max-width: 480px) {
+    .alc-marketing-header { padding: 0 16px; }
   }
 </style>

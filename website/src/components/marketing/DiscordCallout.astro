@@ -32,8 +32,20 @@ import Button from "./Button.astro";
   }
   .alc-discord__body {
     flex: 1;
+    min-width: 0;
     font-size: 14px;
     color: var(--alc-fg-2);
     line-height: 1.5;
+  }
+  @media (max-width: 640px) {
+    .alc-discord {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 16px;
+    }
+    .alc-discord__hand { font-size: 26px; }
+    .alc-discord__body { font-size: 13.5px; }
+    .alc-discord :global(.alc-btn) { align-self: stretch; justify-content: center; }
   }
 </style>

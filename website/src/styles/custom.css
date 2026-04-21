@@ -675,6 +675,107 @@ h1.hero-title,
   --aside-border: color-mix(in srgb, var(--alc-danger) 45%, transparent);
 }
 
+/* ============================================================
+   Expressive Code frames (the file-name tab on docs code blocks)
+
+   The default Starlight rendering of the editor-style frame paints
+   the tab title with a very low-contrast walnut on a near-walnut
+   strip — practically unreadable on the cream page. Force the
+   active tab to use the bright sunrise palette so the file name
+   reads cleanly against the dark code surface.
+   ============================================================ */
+
+.expressive-code .frame {
+  --ec-frm-edBg: var(--alc-bg-code);
+  --ec-frm-edTabBarBg: var(--alc-bg-code);
+  --ec-frm-edTabBarBrdBtmCol: var(--alc-walnut-700);
+  --ec-frm-edActTabBg: var(--alc-bg-code);
+  --ec-frm-edActTabFg: var(--alc-walnut-100);
+  --ec-frm-edActTabBrdCol: var(--alc-walnut-700);
+  --ec-frm-edActTabIndTopCol: var(--alc-accent-warm);
+  --ec-frm-edActTabIndBtmCol: transparent;
+  --ec-frm-edTabsMargBlkStart: 0;
+  --ec-frm-edTabsMargInlStart: 0;
+  --ec-frm-trmTtbBg: var(--alc-bg-code);
+  --ec-frm-trmTtbBrdBtmCol: var(--alc-walnut-700);
+  --ec-frm-trmTtbFg: var(--alc-walnut-100);
+}
+
+.expressive-code .frame.has-title:not(.is-terminal) .title {
+  color: var(--alc-walnut-100);
+  font-family: var(--alc-font-mono);
+  font-weight: 500;
+}
+
+.expressive-code .frame.is-terminal .title {
+  color: var(--alc-walnut-100);
+}
+
+/* ============================================================
+   Starlight Tabs (Code/Tabs component used on Getting Started
+   for bun / npm / pnpm / yarn).
+
+   - Tab labels use a soft mushroom for inactive and deep moss
+     for the active tab; the active underline is the moss accent.
+   - Icons are sized larger (1.25em) and painted with each
+     product's official brand color via positional selectors
+     (the package-manager tab order is bun → npm → pnpm → yarn,
+     and is consistent across the docs).
+   ============================================================ */
+
+starlight-tabs [role="tablist"] {
+  border-bottom-color: var(--alc-hairline-2);
+}
+
+starlight-tabs [role="tab"] {
+  color: var(--alc-fg-3);
+  font-family: var(--alc-font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0;
+  border-bottom-color: transparent;
+  gap: 0.45rem;
+  transition: color 160ms ease, border-color 160ms ease;
+}
+
+starlight-tabs [role="tab"]:hover {
+  color: var(--alc-accent-deep);
+}
+
+starlight-tabs [role="tab"][aria-selected="true"] {
+  color: var(--alc-accent-deep);
+  border-bottom-color: var(--alc-accent);
+}
+
+/* Icon sizing — undo Starlight's tight 1em so the package-manager
+   marks read at glance, and lock dimensions so the SVG can't shrink
+   below this when the tab text is small. */
+starlight-tabs [role="tab"] > svg {
+  width: 1.25em;
+  height: 1.25em;
+  flex: 0 0 auto;
+  font-size: inherit;
+}
+
+/* ── Per-package brand colors ──
+   The Tabs.astro markup wraps each tab anchor in <li class="tab">,
+   so we color the SVG icon inside each LI by position. Order on
+   our docs is bun(1), npm(2), pnpm(3), yarn(4). Colors come from
+   each project's brand guidelines, tuned slightly for contrast
+   on the warm cream surface. */
+starlight-tabs [role="tablist"] > li:nth-child(1) [role="tab"] > svg {
+  color: #cf8f3a; /* bun — warm gold */
+}
+starlight-tabs [role="tablist"] > li:nth-child(2) [role="tab"] > svg {
+  color: #cb3837; /* npm — npm red */
+}
+starlight-tabs [role="tablist"] > li:nth-child(3) [role="tab"] > svg {
+  color: #f59f00; /* pnpm — orange */
+}
+starlight-tabs [role="tablist"] > li:nth-child(4) [role="tab"] > svg {
+  color: #2c8ebb; /* yarn — yarn blue */
+}
+
 /* Match Starlight's docs <header> chrome to the marketing <header>: same
    translucent cream + backdrop-blur + hairline border. Defined in custom.css
    (rather than scoped to a single component) so the docs layout picks it up

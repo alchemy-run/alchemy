@@ -20,6 +20,21 @@ body.alc-root,
   color: var(--alc-fg-1);
 }
 
+/* Inline "Learn more →" link used at the end of section descriptions. */
+.alc-learn-more {
+  color: var(--alc-accent-deep);
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  margin-left: 4px;
+  transition: opacity 140ms ease;
+}
+.alc-learn-more:hover {
+  opacity: 0.7;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 /* ============================================================
    Code block — terminal-themed wrapper used by static <CodeBlock>
    ============================================================ */
@@ -32,6 +47,8 @@ body.alc-root,
   box-shadow: var(--alc-shadow-sm);
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  max-width: 100%;
 }
 .alc-code-block__header {
   display: flex;
@@ -79,6 +96,8 @@ body.alc-root,
   box-shadow: var(--alc-shadow-sm);
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  max-width: 100%;
 }
 .alc-term__header {
   display: flex;
@@ -114,7 +133,7 @@ body.alc-root,
 .bindings-iam {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) 200px minmax(0, 0.85fr);
-  grid-template-rows: minmax(280px, auto) auto;
+  grid-template-rows: minmax(280px, auto);
   gap: 18px;
   align-items: stretch;
   max-width: 1180px;
@@ -171,11 +190,7 @@ body.alc-root,
   margin-top: 2px;
 }
 .bindings-iam__policy {
-  grid-column: 1 / -1;
-  grid-row: 2;
-  background: var(--alc-bg-code);
-  border: 1px solid var(--alc-hairline);
-  border-radius: 10px;
+  display: none;
   overflow: hidden;
   box-shadow: var(--alc-shadow-sm);
 }
@@ -1309,6 +1324,176 @@ body.alc-root,
   }
   .pr-lc__step {
     font-size: 11.5px;
+  }
+}
+@media (max-width: 480px) {
+  .pr-lc__step-num { display: none; }
+  .pr-lc__step { padding: 8px 10px; font-size: 11px; }
+}
+
+/* ============================================================
+   Hero (home page)
+   ============================================================ */
+
+.alc-hero__inner {
+  text-align: center;
+  max-width: 880px;
+  margin: 0 auto 16px;
+}
+.alc-hero__title {
+  font-family: var(--alc-font-serif);
+  font-weight: 500;
+  font-size: clamp(40px, 8.4vw, 72px);
+  line-height: 1.04;
+  letter-spacing: -0.02em;
+  margin: 18px 0 0;
+  color: var(--alc-fg-1);
+}
+.alc-hero__subtitle {
+  font-family: var(--alc-font-serif);
+  font-weight: 400;
+  font-size: clamp(18px, 3.4vw, 30px);
+  line-height: 1.25;
+  letter-spacing: -0.005em;
+  margin: 8px auto 32px;
+  color: var(--alc-fg-2);
+  max-width: 780px;
+}
+.alc-hero__cta {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* ============================================================
+   Responsive overrides for home page sections
+   ============================================================ */
+
+/* Reduce side gutters on small phones. Inline padding on <Section>
+   uses shorthand, so we override via a more-specific selector. */
+@media (max-width: 640px) {
+  section.alc-section { padding-left: 20px !important; padding-right: 20px !important; }
+}
+@media (max-width: 480px) {
+  section.alc-section { padding-left: 16px !important; padding-right: 16px !important; }
+}
+
+/* Fluid section heading */
+.alc-h2 {
+  font-size: clamp(26px, 4.8vw, 34px);
+}
+
+/* Two-column code+illustration splits */
+.alc-split-2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+.alc-split-2 > * { min-width: 0; }
+.alc-split-2--wide-left { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
+@media (max-width: 880px) {
+  .alc-split-2,
+  .alc-split-2--wide-left { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+}
+
+/* Three-up cards */
+.alc-cards-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  max-width: 1080px;
+  margin: 32px auto 0;
+}
+.alc-cards-3 > * { min-width: 0; }
+@media (max-width: 880px) {
+  .alc-cards-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .alc-cards-3 { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Two-up small cards (e.g. OTel destinations) */
+.alc-cards-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.alc-cards-2 > * { min-width: 0; }
+@media (max-width: 380px) {
+  .alc-cards-2 { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Local-dev right-hand card column: fills space at >tablet, then
+   becomes 2-up on tablet, then a single column on phones. */
+.alc-card-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.alc-card-stack > * { min-width: 0; }
+@media (max-width: 880px) {
+  .alc-card-stack {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 560px) {
+  .alc-card-stack { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ============================================================
+   Bindings -> IAM mobile additions
+   When the arrows column is hidden (<=980px), each resource card
+   shows its IAM action inline so the binding -> permission
+   relationship isn't lost.
+   ============================================================ */
+
+.bindings-iam__resource-iam {
+  display: none;
+  font-family: var(--alc-font-mono);
+  font-size: 10.5px;
+  color: var(--alc-fg-3);
+  margin-top: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bindings-iam__resource-iam[data-stream] { font-style: italic; }
+
+@media (max-width: 980px) {
+  .bindings-iam__resource-iam { display: block; }
+  .bindings-iam__code .alc-code-block__pre { font-size: 11.5px; padding: 14px 14px; }
+}
+
+/* ============================================================
+   Mobile tweaks for Plan / Deploy / Destroy diagram
+   ============================================================ */
+
+@media (max-width: 640px) {
+  .stack-deploy-diagram__col > .alc-code-block,
+  .stack-deploy-diagram__col > .alc-term {
+    min-height: 220px;
+  }
+  .stack-deploy-diagram__col > .alc-code-block .alc-code-block__pre,
+  .stack-deploy-diagram__col > .alc-term .alc-term__body {
+    font-size: 12px;
+    padding: 12px 14px;
+    min-height: auto;
+  }
+  .stack-deploy-diagram__arrow {
+    transform: none;
+    flex-direction: row;
+    gap: 8px;
+    padding: 4px 0;
+    font-size: 14px;
+  }
+  .stack-deploy-diagram__arrow span:nth-child(2) {
+    transform: rotate(90deg);
   }
 }
 

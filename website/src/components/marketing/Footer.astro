@@ -3,7 +3,6 @@ import Logo from "./Logo.astro";
 
 const cols = [
   { h: "Product", links: ["Docs", "Tutorial", "Examples", "Providers", "Changelog"] },
-  { h: "Tracks", links: ["Effect", "IaC", "Cloud", "AI"] },
   { h: "Community", links: ["Discord", "GitHub", "X / Twitter", "Blog"] },
   { h: "Compare", links: ["vs Pulumi", "vs SST", "vs Terraform", "vs CDK"] },
 ];
@@ -41,8 +40,28 @@ const cols = [
     max-width: 1152px;
     margin: 0 auto;
     display: grid;
-    grid-template-columns: 1.4fr 1fr 1fr 1fr 1fr;
+    grid-template-columns: 1.6fr repeat(3, minmax(0, 1fr));
     gap: 40px;
+  }
+  @media (max-width: 880px) {
+    .alc-footer__grid {
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 28px 24px;
+    }
+    .alc-footer__grid > :first-child {
+      grid-column: 1 / -1;
+      max-width: 520px;
+    }
+  }
+  @media (max-width: 640px) {
+    .alc-footer { padding: 32px 20px; }
+    .alc-footer__grid {
+      grid-template-columns: 1fr 1fr;
+      gap: 24px 20px;
+    }
+  }
+  @media (max-width: 380px) {
+    .alc-footer__grid { grid-template-columns: 1fr; }
   }
   .alc-footer__tag {
     font-family: var(--alc-font-sans);

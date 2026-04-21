@@ -1,57 +1,12 @@
 ---
 import Logo from "./Logo.astro";
 import Button from "./Button.astro";
-
-const products = [
-  { href: "/#plan-deploy-destroy", label: "Plan, deploy, destroy",    desc: "One TypeScript program. Any cloud." },
-  { href: "/#bindings-iam",        label: "Typesafe bindings",        desc: "Bindings are the IAM policy." },
-  { href: "/#local-dev",           label: "Local dev",                desc: "Workers run locally. Resources run real." },
-  { href: "/#per-test-stacks",     label: "Per-test stacks",          desc: "Real infra. Per test suite." },
-  { href: "/#pr-previews",         label: "PR previews",              desc: "Every PR. Deployed. Destroyed on merge." },
-  { href: "/#observability",       label: "Observability",            desc: "OTel + dashboards & alarms in code." },
-];
-
-const providers = [
-  { href: "/providers/aws",         label: "AWS" },
-  { href: "/providers/cloudflare",  label: "Cloudflare" },
-  { href: "/providers/planetscale", label: "Planetscale", soon: true },
-];
 ---
 
 <nav class="alc-nav">
   <a href="/" class="alc-nav__brand">
     <Logo />
   </a>
-
-  <div class="alc-nav__menu">
-    <details class="alc-nav__details">
-      <summary class="alc-nav__link alc-nav__menu-trigger">
-        Product
-        <span aria-hidden class="alc-nav__chev">▾</span>
-      </summary>
-      <div class="alc-nav__panel" role="menu">
-        <div class="alc-nav__panel-grid">
-          {products.map((p) => (
-            <a href={p.href} class="alc-nav__panel-item" role="menuitem">
-              <span class="alc-nav__panel-item-label">{p.label}</span>
-              <span class="alc-nav__panel-item-desc">{p.desc}</span>
-            </a>
-          ))}
-        </div>
-        <div class="alc-nav__panel-sub">
-          <div class="alc-nav__panel-sub-eyebrow">Providers</div>
-          <div class="alc-nav__panel-sub-row">
-            {providers.map((pr) => (
-              <a href={pr.href} class="alc-nav__panel-sub-item">
-                {pr.label}
-                {pr.soon && <span class="alc-nav__soon">soon</span>}
-              </a>
-            ))}
-          </div>
-        </div>
-      </div>
-    </details>
-  </div>
 
   <div class="alc-nav__spacer"></div>
   <div class="alc-nav__search">
@@ -124,143 +79,14 @@ const providers = [
     color: var(--alc-accent-deep);
   }
 
-  /* ── Product dropdown ──────────────────────────────────────── */
-  .alc-nav__menu {
-    display: flex;
-    align-items: center;
-  }
-  .alc-nav__details {
-    position: relative;
-  }
-  .alc-nav__details > summary {
-    list-style: none;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    user-select: none;
-  }
-  .alc-nav__details > summary::-webkit-details-marker {
-    display: none;
-  }
-  .alc-nav__chev {
-    font-size: 10px;
-    transition: transform 160ms ease;
-    color: var(--alc-fg-3);
-  }
-  .alc-nav__details[open] .alc-nav__chev {
-    transform: rotate(180deg);
-  }
-  .alc-nav__panel {
-    position: absolute;
-    top: calc(100% + 14px);
-    left: -20px;
-    width: 540px;
-    background: var(--alc-bg-elev-1);
-    border: 1px solid var(--alc-hairline);
-    border-radius: 12px;
-    box-shadow: 0 14px 40px rgba(58, 38, 14, 0.15);
-    padding: 14px;
-    z-index: 100;
-    animation: alc-nav-fade 140ms ease-out;
-  }
-  @keyframes alc-nav-fade {
-    from { opacity: 0; transform: translateY(-4px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-  .alc-nav__panel-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 4px;
-  }
-  .alc-nav__panel-item {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    padding: 10px 12px;
-    border-radius: 8px;
-    text-decoration: none;
-    color: inherit;
-    transition: background 140ms ease;
-  }
-  .alc-nav__panel-item:hover {
-    background: var(--alc-bg-nav);
-  }
-  .alc-nav__panel-item-label {
-    font-family: var(--alc-font-sans);
-    font-size: 13.5px;
-    font-weight: 600;
-    color: var(--alc-fg-1);
-  }
-  .alc-nav__panel-item-desc {
-    font-size: 11.5px;
-    color: var(--alc-fg-3);
-    line-height: 1.4;
-  }
-  .alc-nav__panel-sub {
-    margin-top: 10px;
-    padding-top: 12px;
-    border-top: 1px solid var(--alc-hairline);
-  }
-  .alc-nav__panel-sub-eyebrow {
-    font-family: var(--alc-font-mono);
-    font-size: 10px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--alc-fg-3);
-    padding: 0 12px 6px;
-  }
-  .alc-nav__panel-sub-row {
-    display: flex;
-    gap: 6px;
-    padding: 0 8px;
-    flex-wrap: wrap;
-  }
-  .alc-nav__panel-sub-item {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
-    border-radius: 999px;
-    font-size: 12.5px;
-    font-family: var(--alc-font-mono);
-    color: var(--alc-fg-2);
-    text-decoration: none;
-    background: var(--alc-bg);
-    border: 1px solid var(--alc-hairline-2);
-    transition: border-color 140ms ease, color 140ms ease;
-  }
-  .alc-nav__panel-sub-item:hover {
-    border-color: var(--alc-accent-deep);
-    color: var(--alc-accent-deep);
-  }
-  .alc-nav__soon {
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    color: var(--alc-accent-deep);
-    background: rgba(184, 138, 74, 0.14);
-    padding: 1px 5px;
-    border-radius: 3px;
-  }
-
   @media (max-width: 880px) {
-    .alc-nav__menu,
     .alc-nav__search,
     .alc-nav__link[href="#"] {
       display: none;
     }
   }
-</style>
-
-<script>
-  // Close dropdown on outside click + Escape
-  for (const det of document.querySelectorAll<HTMLDetailsElement>(".alc-nav__details")) {
-    document.addEventListener("click", (e) => {
-      if (!det.contains(e.target as Node)) det.open = false;
-    });
-    det.addEventListener("keydown", (e) => {
-      if ((e as KeyboardEvent).key === "Escape") det.open = false;
-    });
+  @media (max-width: 640px) {
+    .alc-nav { gap: 16px; }
+    .alc-nav :global(.alc-btn) { display: none; }
   }
-</script>
+</style>

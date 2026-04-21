@@ -82,18 +82,33 @@ const walnutSunrise = {
         "entity.name.function",
         "support.function",
         "meta.function-call entity.name.function",
+        "meta.function-call.method entity.name.function",
         "variable.function",
+        "meta.definition.method entity.name.function",
       ],
-      settings: { foreground: "#ffb968" },
+      settings: { foreground: "#7ddfff" },
     },
     {
       scope: [
         "entity.name.type",
         "entity.name.class",
         "entity.name.interface",
+        "entity.name.namespace",
         "support.type",
         "support.class",
+        "support.other.namespace",
+        "support.module",
         "meta.type",
+      ],
+      settings: { foreground: "#7ddfff" },
+    },
+    {
+      scope: [
+        "variable.other.object",
+        "variable.other.readwrite.alias",
+        "meta.import variable.other.readwrite",
+        "meta.export variable.other.readwrite",
+        "meta.object-literal.key support.type.object",
       ],
       settings: { foreground: "#7ddfff" },
     },
@@ -115,7 +130,11 @@ const walnutSunrise = {
       settings: { foreground: "#faf5e3" },
     },
     {
-      scope: ["variable.other.constant", "variable.other.enummember"],
+      scope: ["variable.other.constant"],
+      settings: { foreground: "#7ddfff" },
+    },
+    {
+      scope: ["variable.other.enummember"],
       settings: { foreground: "#ff9a6b" },
     },
     {

@@ -1,6 +1,7 @@
 import { defineEcConfig } from "@astrojs/starlight/expressive-code";
 import ecTwoSlash from "expressive-code-twoslash";
 import { alchemyWalnutTheme } from "./plugins/alchemy-walnut-theme.mjs";
+import { capitalizedIdentifierColor } from "./plugins/capitalized-identifier-color.mjs";
 import {
   twoslashDiffPrefixAnnotate,
   twoslashDiffPrefixStrip,
@@ -37,5 +38,6 @@ export default defineEcConfig({
     }),
     twoslashDiffPrefixAnnotate(),
     twoslashErrorTransform(),
+    capitalizedIdentifierColor(),
   ],
 });

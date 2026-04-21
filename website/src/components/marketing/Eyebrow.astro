@@ -18,4 +18,16 @@ const { color } = Astro.props;
     color: var(--alc-accent-deep);
     font-weight: 500;
   }
+  @media (max-width: 480px) {
+    .alc-eyebrow {
+      font-size: 9.5px;
+      letter-spacing: 0.08em;
+    }
+  }
+  @media (max-width: 360px) {
+    .alc-eyebrow {
+      font-size: 9px;
+      letter-spacing: 0.06em;
+    }
+  }
 </style>
