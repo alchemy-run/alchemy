@@ -267,6 +267,10 @@ body.alc-root,
   .stack-deploy-diagram { grid-template-columns: 1fr; }
   .stack-deploy-diagram__arrow { transform: rotate(90deg); padding: 12px 0; }
 }
+@media (max-width: 560px) {
+  .stack-deploy-diagram__col:first-child,
+  .stack-deploy-diagram__arrow { display: none; }
+}
 
 /* ============================================================
    Animated Output / resource-graph (/product/iac)
@@ -1413,7 +1417,7 @@ body.alc-root,
   .alc-cards-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 560px) {
-  .alc-cards-3 { grid-template-columns: minmax(0, 1fr); }
+  .alc-cards-3 { display: none; }
 }
 
 /* Two-up small cards (e.g. OTel destinations) */
@@ -1425,6 +1429,9 @@ body.alc-root,
 .alc-cards-2 > * { min-width: 0; }
 @media (max-width: 380px) {
   .alc-cards-2 { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .alc-cards-2 { display: none; }
 }
 
 /* Local-dev right-hand card column: fills space at >tablet, then
@@ -1443,7 +1450,7 @@ body.alc-root,
   }
 }
 @media (max-width: 560px) {
-  .alc-card-stack { grid-template-columns: minmax(0, 1fr); }
+  .alc-card-stack { display: none; }
 }
 
 /* ============================================================
