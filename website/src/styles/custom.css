@@ -31,9 +31,16 @@ starlight-theme-select {
 
   /* Walnut neutral scale — light-mode convention: gray-1 = darkest text,
      gray-7 = lightest surface. Starlight's hero `.tagline`, body copy,
-     and muted prose all read off this scale. */
+     and muted prose all read off this scale.
+
+     IMPORTANT: Starlight uses `--sl-color-white` as the darkest text token
+     and `--sl-color-black` as the lightest surface token in light mode
+     (the names refer to their dark-mode roles; the values flip in light).
+     The mobile sidebar pane and mobile TOC dropdown both paint their
+     background with `--sl-color-black`, so it MUST resolve to a light
+     surface — otherwise we get dark walnut text on a dark walnut panel. */
   --sl-color-white: var(--alc-fg-1);
-  --sl-color-black: var(--alc-fg-1);
+  --sl-color-black: var(--alc-bg-nav);
   --sl-color-gray-1: var(--alc-walnut-900);
   --sl-color-gray-2: var(--alc-walnut-700);
   --sl-color-gray-3: var(--alc-walnut-600);
