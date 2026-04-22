@@ -150,36 +150,32 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
   <StackDeployMobile client:visible code={STACK_SRC} />
 </Section>
 
-{/* ───── 2 · TYPE IAM + ENV VARS ───── */}
+{/* ───── 2 · EFFECT-PILLED MODE ───── */}
 
-<Section padding="80px 32px" id="bindings-iam">
+<Section padding="80px 32px" id="effect-pilled">
   <div style="text-align:center;margin-bottom:36px;">
-    <Eyebrow>typed bindings · least-privilege permissions</Eyebrow>
+    <Eyebrow>effect-pilled · type-checked bindings</Eyebrow>
     <h2 class="alc-h2" style="margin:10px 0 12px;">
-      Type-checked IAM policies and env vars. <span style="color:var(--alc-accent-deep);font-style:italic;">Never forget another permission.</span>
+      <span style="color:var(--alc-accent-deep);font-style:italic;">Effect-pilled</span> mode.
     </h2>
     <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:760px;margin:0 auto;">
-      Bind a resource to a function. Alchemy generates the exact IAM policy and env vars it actually uses — nothing more, nothing missing. <a class="alc-learn-more" href="/concepts/binding">Learn more &rarr;</a>
-    </p>
-  </div>
-
-  <div class="alc-mode-head" style="text-align:center;max-width:760px;margin:0 auto 28px;">
-    <h3 class="alc-h3">
-      <span style="color:var(--alc-accent-deep);font-style:italic;">Effect-pilled</span> mode.
-    </h3>
-    <p class="alc-mode__lede" style="text-align:center;margin-top:10px;">
-      Combine infra and app code into a single type-safe program. Bindings carry through the type system, so a missing policy or env var is a compile error — not a 3am page.
+      Combine infra and app code into a single type-safe program. Bindings carry through the type system, so a missing policy or env var is a compile error — not a 3am page. <a class="alc-learn-more" href="/concepts/binding">Learn more &rarr;</a>
     </p>
   </div>
 
   <BindingsToIAM client:visible />
+</Section>
 
-  <div class="alc-mode-head" style="text-align:center;max-width:760px;margin:64px auto 18px;">
-    <h3 class="alc-h3">
+{/* ───── 3 · ASYNC FETCH ESCAPE HATCH ───── */}
+
+<Section padding="80px 32px" id="async-fetch">
+  <div style="text-align:center;margin-bottom:36px;">
+    <Eyebrow>async fetch · plain handlers · typed bindings</Eyebrow>
+    <h2 class="alc-h2" style="margin:10px 0 12px;">
       Don't worry — you can still <code class="alc-code-inline" style="color:var(--alc-accent-deep);">export&nbsp;default&nbsp;{"{"} async&nbsp;fetch {"}"}</code>.
-    </h3>
-    <p class="alc-mode__lede" style="text-align:center;margin-top:10px;">
-      It's just Infrastructure as Code, after all. Declare resources, attach them as bindings, and your handler stays the plain async function you already know. Bindings stay fully typed in <code class="alc-code-inline">env</code>.
+    </h2>
+    <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:760px;margin:0 auto;">
+      It's just Infrastructure as Code, after all. Declare resources, attach them as bindings, and your handler stays the plain async function you already know — bindings stay fully typed in <code class="alc-code-inline">env</code>. <a class="alc-learn-more" href="/guides/migrating-from-v1">Learn more &rarr;</a>
     </p>
   </div>
 
