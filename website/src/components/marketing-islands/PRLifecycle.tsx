@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { Line, sleep, TermChrome, useSpinner } from "./_terminal";
 
-type Phase = "open" | "deploy" | "comment" | "destroy";
+type Phase = "open" | "deploy" | "comment" | "observe" | "destroy";
 
 const PHASES: { id: Phase; label: string }[] = [
   { id: "open", label: "PR opened" },
   { id: "deploy", label: "Deploy" },
   { id: "comment", label: "Comment" },
-  { id: "destroy", label: "Merged & destroyed" },
+  { id: "observe", label: "Observe" },
+  { id: "destroy", label: "Destroyed" },
 ];
 
 const RESOURCES = [
@@ -82,10 +83,16 @@ export default function PRLifecycle() {
 
         // Frame 3: comment posted
         setPhase("comment");
-        await sleep(2600);
+        await sleep(2400);
         if (aborted()) return;
 
-        // Frame 4: merged → destroy
+        // Frame 4: observe — same alchemy.run.ts also declares
+        // dashboards/alarms; show a live dashboard mock.
+        setPhase("observe");
+        await sleep(3600);
+        if (aborted()) return;
+
+        // Frame 5: merged → destroy
         setPhase("destroy");
         setCmd("");
         setDone(null);
@@ -118,7 +125,11 @@ export default function PRLifecycle() {
   const spinner = useSpinner(anyInFlight);
 
   const accent =
-    phase === "destroy" ? "var(--alc-danger)" : "var(--alc-accent-bright)";
+    phase === "destroy"
+      ? "var(--alc-danger)"
+      : phase === "observe"
+        ? "var(--alc-success)"
+        : "var(--alc-accent-bright)";
   const badge =
     phase === "open"
       ? "PR OPENED"
@@ -126,7 +137,9 @@ export default function PRLifecycle() {
         ? "DEPLOY"
         : phase === "comment"
           ? "PREVIEW LIVE"
-          : "DESTROY";
+          : phase === "observe"
+            ? "OBSERVE"
+            : "DESTROY";
 
   return (
     <div className="pr-lc">
@@ -176,19 +189,28 @@ export default function PRLifecycle() {
                 <span className="pr-lc__check-status">success</span>
               )}
             </div>
-            {(phase === "comment" || phase === "destroy") && (
+            {(phase === "comment" || phase === "observe" || phase === "destroy") && (
               <div className="pr-lc__check pr-lc__check--done">
                 <span className="pr-lc__check-dot" />
                 <span>alchemy-bot commented</span>
                 <span className="pr-lc__check-status">just now</span>
               </div>
             )}
+            {(phase === "observe" || phase === "destroy") && (
+              <div className="pr-lc__check pr-lc__check--done">
+                <span className="pr-lc__check-dot" />
+                <span>Dashboard live</span>
+                <span className="pr-lc__check-status">2 widgets · 1 alarm</span>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* RIGHT: terminal OR github comment, depending on phase */}
+        {/* RIGHT: terminal, github comment, or dashboard, depending on phase */}
         <div className="pr-lc__panel">
-          {phase === "comment" ? (
+          {phase === "observe" ? (
+            <DashboardMock />
+          ) : phase === "comment" ? (
             <div className="gh-mock pr-lc__gh">
               <div className="gh-mock__head">
                 <div className="gh-mock__avatar">a</div>
@@ -294,3 +316,109 @@ export default function PRLifecycle() {
     </div>
   );
 }
+
+/* ============================================================
+   Dashboard mock — shown during the `observe` phase.
+   Three tiles: p99 latency sparkline (Axiom violet),
+   requests/sec sparkline (Datadog purple), 5xx ratio big-number
+   (CloudWatch pink). Live-feel via cheap interval ticks.
+   ============================================================ */
+
+const SPARK_W = 220;
+const SPARK_H = 44;
+const SPARK_POINTS = 24;
+
+function useSeries(seed: number, range: [number, number]): number[] {
+  const [series, setSeries] = useState<number[]>(() => {
+    const arr: number[] = [];
+    let v = (range[0] + range[1]) / 2;
+    for (let i = 0; i < SPARK_POINTS; i++) {
+      v = clamp(v + (pseudo(seed + i) - 0.5) * (range[1] - range[0]) * 0.35, range[0], range[1]);
+      arr.push(v);
+    }
+    return arr;
+  });
+  useEffect(() => {
+    let i = SPARK_POINTS;
+    const t = setInterval(() => {
+      setSeries((prev) => {
+        const last = prev[prev.length - 1] ?? (range[0] + range[1]) / 2;
+        const next = clamp(
+          last + (pseudo(seed + i++) - 0.5) * (range[1] - range[0]) * 0.35,
+          range[0],
+          range[1],
+        );
+        return [...prev.slice(1), next];
+      });
+    }, 600);
+    return () => clearInterval(t);
+  }, [seed, range[0], range[1]]);
+  return series;
+}
+
+function pseudo(n: number): number {
+  const x = Math.sin(n * 9301 + 49297) * 233280;
+  return x - Math.floor(x);
+}
+function clamp(v: number, lo: number, hi: number) {
+  return Math.max(lo, Math.min(hi, v));
+}
+
+function Sparkline({ data, color, range }: { data: number[]; color: string; range: [number, number] }) {
+  const [lo, hi] = range;
+  const stepX = SPARK_W / (data.length - 1);
+  const yFor = (v: number) => SPARK_H - ((v - lo) / (hi - lo)) * SPARK_H;
+  const d = data
+    .map((v, i) => `${i === 0 ? "M" : "L"} ${(i * stepX).toFixed(1)} ${yFor(v).toFixed(1)}`)
+    .join(" ");
+  const fillD = `${d} L ${SPARK_W} ${SPARK_H} L 0 ${SPARK_H} Z`;
+  return (
+    <svg viewBox={`0 0 ${SPARK_W} ${SPARK_H}`} className="pr-lc__spark" preserveAspectRatio="none">
+      <path d={fillD} fill={color} fillOpacity={0.12} />
+      <path d={d} fill="none" stroke={color} strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function DashboardMock() {
+  const p99 = useSeries(11, [120, 320]);
+  const rps = useSeries(29, [180, 540]);
+  const errSeries = useSeries(53, [0.0, 0.9]);
+  const p99Last = p99[p99.length - 1] ?? 0;
+  const rpsLast = rps[rps.length - 1] ?? 0;
+  const errLast = errSeries[errSeries.length - 1] ?? 0;
+  return (
+    <div className="pr-lc__dash">
+      <div className="pr-lc__dash-head">
+        <span className="pr-lc__dash-title">ApiHealth</span>
+        <span className="pr-lc__dash-meta">stage · pr-{147} · live</span>
+        <span className="pr-lc__dash-pulse" aria-hidden />
+      </div>
+      <div className="pr-lc__dash-grid">
+        <div className="pr-lc__tile" style={{ ["--c" as never]: "#9F6FFF" }}>
+          <div className="pr-lc__tile-label">p99 latency</div>
+          <div className="pr-lc__tile-value">
+            {Math.round(p99Last)}<span className="pr-lc__tile-unit">ms</span>
+          </div>
+          <Sparkline data={p99} color="#9F6FFF" range={[120, 320]} />
+        </div>
+        <div className="pr-lc__tile" style={{ ["--c" as never]: "#632CA6" }}>
+          <div className="pr-lc__tile-label">requests / sec</div>
+          <div className="pr-lc__tile-value">{Math.round(rpsLast)}</div>
+          <Sparkline data={rps} color="#632CA6" range={[180, 540]} />
+        </div>
+        <div className="pr-lc__tile" style={{ ["--c" as never]: "#E7157B" }}>
+          <div className="pr-lc__tile-label">5xx ratio</div>
+          <div className="pr-lc__tile-value">
+            {errLast.toFixed(2)}<span className="pr-lc__tile-unit">%</span>
+          </div>
+          <div className="pr-lc__tile-foot">alarm &gt; 1.00 · ok</div>
+        </div>
+      </div>
+      <div className="pr-lc__dash-foot">
+        declared in <code>alchemy.run.ts</code> · exporter: Axiom
+      </div>
+    </div>
+  );
+}
+
