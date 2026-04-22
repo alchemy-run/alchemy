@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/cli-win32",
-  "version": "2.0.0-beta.10",
+  "version": "2.0.0-beta.11",
   "description": "Windows launcher for the alchemy CLI",
   "license": "Apache-2.0",
   "author": "Sam Goodwin <sam@alchemy.run>",

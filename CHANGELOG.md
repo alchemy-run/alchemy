@@ -1,3 +1,24 @@
+## v2.0.0-beta.11
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- Support vite 7 &nbsp;-&nbsp; by **John Royal** and **Michael (Pear)** in https://github.com/alchemy-run/alchemy/issues/68 [<samp>(28d0e)</samp>](https://github.com/alchemy-run/alchemy/commit/28d0ef2)
+- **Cloudflare**:
+  - Install external deps in container Dockerfile &nbsp;-&nbsp; by **Christopher Yovanovitch** and **Sisyphus** in https://github.com/alchemy-run/alchemy/issues/75 [<samp>(f8493)</samp>](https://github.com/alchemy-run/alchemy/commit/f84934f)
+  - Add Queue, QueueBinding, and QueueConsumer resources &nbsp;-&nbsp; by **Christopher Yovanovitch** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/69 [<samp>(09e97)</samp>](https://github.com/alchemy-run/alchemy/commit/09e971b)
+- **cli**:
+  - Alchemy login &nbsp;-&nbsp; by **Sam Goodwin** and **Michael (Pear)** in https://github.com/alchemy-run/alchemy/issues/67 [<samp>(fc57d)</samp>](https://github.com/alchemy-run/alchemy/commit/fc57db8)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **Cloudflare**:
+  - Provide WorkerEnvironment to Workflow body, not wrapper &nbsp;-&nbsp; by **Christopher Yovanovitch** in https://github.com/alchemy-run/alchemy/issues/71 [<samp>(a0ae1)</samp>](https://github.com/alchemy-run/alchemy/commit/a0ae1d6)
+  - Write all bundle chunks to container image context &nbsp;-&nbsp; by **Christopher Yovanovitch** in https://github.com/alchemy-run/alchemy/issues/78 [<samp>(03306)</samp>](https://github.com/alchemy-run/alchemy/commit/0330605)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.10...v2.0.0-beta.11)
+
+---
+
 ## v2.0.0-beta.10
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
