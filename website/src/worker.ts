@@ -2,10 +2,7 @@ import type { WorkerEnv } from "../alchemy.run.ts";
 
 export default {
   fetch: async (request: Request, env: WorkerEnv) => {
-    if (
-      request.method === "GET" &&
-      prefersMarkdown(request.headers.get("accept"))
-    ) {
+    if (request.method === "GET" && prefersMarkdown(request)) {
       const mdUrl = toMarkdownUrl(new URL(request.url)).toString();
       const res = await env.ASSETS.fetch(new Request(mdUrl, request));
       if (res.status !== 404) return res;
@@ -14,12 +11,49 @@ export default {
   },
 };
 
-function prefersMarkdown(accept: string | null): boolean {
+/**
+ * Returns true if the accept header prefers markdown or plain text over HTML.
+ *
+ * Examples:
+ * - opencode - accept: text/markdown;q=1.0, text/x-markdown;q=0.9, text/plain;q=0.8, text/html;q=0.7, *\/*;q=0.1
+ * - claude code - accept: application/json, text/plain, *\/*
+ *
+ * Notes:
+ * - ChatGPT and Claude web don't set an accept header; maybe check the user agent instead?
+ * - Cursor's headers are too generic (accept: *, user-agent: https://github.com/sindresorhus/got)
+ */
+const prefersMarkdown = (request: Request) => {
+  const accept = request.headers.get("accept");
   if (!accept) return false;
-  const lower = accept.toLowerCase();
-  if (lower.includes("text/html")) return false;
-  return lower.includes("text/markdown") || lower.includes("text/plain");
-}
+
+  // parse accept header and sort by quality; highest quality first
+  const types = accept
+    .split(",")
+    .map((part) => {
+      const type = part.split(";")[0].trim();
+      const q = part.match(/q=([^,]+)/)?.[1];
+      return { type, q: q ? Number.parseFloat(q) : 1 };
+    })
+    .sort((a, b) => b.q - a.q)
+    .map((type) => type.type);
+
+  const markdown = types.indexOf("text/markdown");
+  const plain = types.indexOf("text/plain");
+  const html = types.indexOf("text/html");
+
+  // if no HTML is specified, and either markdown or plain text is specified, prefer markdown
+  if (html === -1) {
+    return markdown !== -1 || plain !== -1;
+  }
+
+  // prefer markdown if higher quality than HTML
+  if ((markdown !== -1 && markdown < html) || (plain !== -1 && plain < html)) {
+    return true;
+  }
+
+  // otherwise, prefer HTML
+  return false;
+};
 
 function toMarkdownUrl(url: URL): URL {
   const md = new URL(url.toString());

@@ -13,7 +13,7 @@ import {
   diffTags,
   hasAlchemyTags,
 } from "../../Tags.ts";
-import { Account, type AccountID } from "../Account.ts";
+import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { RegionID } from "../Region.ts";
 
 export type {
@@ -273,7 +273,7 @@ export const RuleProvider = () =>
     Rule,
     Effect.gen(function* () {
       const region = yield* Region;
-      const accountId = yield* Account;
+      const { accountId } = yield* AWSEnvironment;
 
       const createRuleName = (id: string, props: { name?: string } = {}) => {
         if (props.name) {

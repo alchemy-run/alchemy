@@ -19,10 +19,6 @@ export default class Api extends Cloudflare.Worker<Api>()(
     observability: {
       enabled: true,
     },
-    compatibility: {
-      flags: ["nodejs_compat"],
-      date: "2026-03-17",
-    },
     assets: "./assets",
     build: {
       // metafile: true,
@@ -104,14 +100,12 @@ export default class Api extends Cloudflare.Worker<Api>()(
               .pipe(
                 Effect.map(() => HttpServerResponse.empty({ status: 201 })),
                 Effect.catch((err) =>
-                  Effect.succeed(
-                    HttpServerResponse.jsonUnsafe(
-                      {
-                        error: err.message,
-                        headers: request.headers,
-                      },
-                      { status: 500 },
-                    ),
+                  HttpServerResponse.json(
+                    {
+                      error: err.message,
+                      headers: request.headers,
+                    },
+                    { status: 500 },
                   ),
                 ),
               );
@@ -124,7 +118,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
           const agent = agents.getByName("sandbox-test");
           const body = yield* agent.increment().pipe(Effect.orDie);
           const room = rooms.getByName("default");
-          yield* room.broadcast(`[container] ${body}`).pipe(Effect.orDie);
+          yield* room.broadcast(`[container] ${body}`);
           return HttpServerResponse.text(body, {
             headers: { "content-type": "application/json" },
           });
@@ -226,7 +220,15 @@ export default class Api extends Cloudflare.Worker<Api>()(
           );
         }
         return HttpServerResponse.text("Not Found", { status: 404 });
-      }),
+      }).pipe(
+        Effect.catch(() =>
+          Effect.succeed(
+            HttpServerResponse.text("Internal Server Error", {
+              status: 500,
+            }),
+          ),
+        ),
+      ),
     };
   }).pipe(
     Effect.provide(

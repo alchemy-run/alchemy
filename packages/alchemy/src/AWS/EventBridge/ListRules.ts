@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { Account } from "../Account.ts";
+import { AWSEnvironment } from "../Environment.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { EventBus } from "./EventBus.ts";
 
@@ -58,7 +58,7 @@ export class ListRulesPolicy extends Binding.Policy<
 export const ListRulesPolicyLive = ListRulesPolicy.layer.effect(
   Effect.gen(function* () {
     const region = yield* Region;
-    const accountId = yield* Account;
+    const { accountId } = yield* AWSEnvironment;
 
     return Effect.fn(function* (host, bus?: EventBus) {
       if (isFunction(host)) {

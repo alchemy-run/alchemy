@@ -17,7 +17,7 @@ import {
   hasAlchemyTags,
   type Tags,
 } from "../../Tags.ts";
-import { Account, type AccountID } from "../Account.ts";
+import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { RegionID } from "../Region.ts";
 
 export type StreamRecord = lambda.KinesisStreamRecord;
@@ -445,7 +445,7 @@ export const StreamProvider = () =>
     Stream,
     Effect.gen(function* () {
       const region = yield* Region;
-      const accountId = yield* Account;
+      const { accountId } = yield* AWSEnvironment;
 
       return {
         stables: ["streamName", "streamArn"],

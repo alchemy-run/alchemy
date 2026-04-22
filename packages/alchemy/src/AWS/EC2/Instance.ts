@@ -24,8 +24,8 @@ import {
   createInternalTags,
   diffTags,
 } from "../../Tags.ts";
-import type { AccountID } from "../Account.ts";
-import { Account } from "../Account.ts";
+import type { AccountID } from "../Environment.ts";
+import { AWSEnvironment } from "../Environment.ts";
 import { Assets } from "../Assets.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { RegionID } from "../Region.ts";
@@ -316,7 +316,7 @@ export const InstanceProvider = () =>
     Instance,
     Effect.gen(function* () {
       const region = yield* Region;
-      const accountId = yield* Account;
+      const { accountId } = yield* AWSEnvironment;
       const stack = yield* Stack;
       const stage = yield* Stage;
       const fs = yield* FileSystem.FileSystem;

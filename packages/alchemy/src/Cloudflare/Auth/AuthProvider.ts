@@ -6,27 +6,28 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
-import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
-import { AuthError, type AuthProvider } from "../../Auth/AuthProvider.ts";
+import {
+  AuthError,
+  AuthProviderLayer,
+  type ConfigureContext,
+} from "../../Auth/AuthProvider.ts";
 import {
   deleteCredentials,
   displayRedacted,
   readCredentials,
   writeCredentials,
 } from "../../Auth/Credentials.ts";
-import { getEnv, getEnvRedacted, retryOnce } from "../../Auth/Env.ts";
+import {
+  getEnv,
+  getEnvRedacted,
+  getEnvRequired,
+  retryOnce,
+} from "../../Auth/Env.ts";
 import * as Clank from "../../Util/Clank.ts";
 import * as OAuthClient from "./OAuthClient.ts";
-
-export type CloudflareAuthConfig =
-  | { method: "env"; accountId?: string }
-  | { method: "stored"; credentialType: "apiToken"; accountId?: string }
-  | { method: "stored"; credentialType: "apiKey"; accountId?: string }
-  | { method: "oauth"; scopes: string[]; accountId?: string };
 
 const options: Array<{
   value: CloudflareAuthConfig["method"];
@@ -50,69 +51,77 @@ const options: Array<{
   },
 ];
 
+export type CloudflareAuthConfig =
+  | { method: "env" }
+  | { method: "stored"; credentialType: "apiToken" }
+  | { method: "stored"; credentialType: "apiKey" }
+  | { method: "oauth"; scopes: string[]; accountId: string };
+
 export type CloudflareStoredCredentials =
-  | { type: "apiToken"; apiToken: string }
-  | { type: "apiKey"; apiKey: string; email: string };
+  | { type: "apiToken"; apiToken: string; accountId: string }
+  | { type: "apiKey"; apiKey: string; email: string; accountId: string };
 
 export type CloudflareResolvedCredentials =
   | {
       type: "apiToken";
       apiToken: Redacted.Redacted<string>;
+      accountId: string;
       source: { type: CloudflareAuthConfig["method"]; details?: string };
     }
   | {
       type: "apiKey";
       apiKey: Redacted.Redacted<string>;
       email: Redacted.Redacted<string>;
+      accountId: string;
       source: { type: CloudflareAuthConfig["method"]; details?: string };
     }
   | {
       type: "oauth";
       accessToken: Redacted.Redacted<string>;
       expires: number;
+      accountId: string;
       source: { type: CloudflareAuthConfig["method"]; details?: string };
     };
 
-export const CloudflareAuth = Effect.gen(function* () {
-  const context = yield* Effect.context<
-    FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
-  >();
+export const CLOUDFLARE_AUTH_PROVIDER_NAME = "Cloudflare";
 
-  return {
-    name: "Cloudflare",
-
-    configure: (profileName) =>
-      configureCredentials(profileName).pipe(Effect.provide(context)),
-
-    logout: (profileName, config) =>
-      logout(profileName, config).pipe(Effect.provide(context)),
-
-    login: (profileName, config) =>
-      login(profileName, config).pipe(Effect.provide(context)),
-
-    prettyPrint: (profileName, config) =>
-      prettyPrint(profileName, config).pipe(Effect.provide(context)),
-
-    read: (profileName, config) =>
-      resolveCredentials(profileName, config).pipe(Effect.provide(context)),
-  } satisfies AuthProvider<CloudflareAuthConfig, CloudflareResolvedCredentials>;
+/**
+ * Layer that registers the Cloudflare {@link AuthProvider} into the
+ * {@link AuthProviders} registry when built. Include this in the Cloudflare
+ * `providers()` layer so `alchemy login` can discover it.
+ */
+export const CloudflareAuth = AuthProviderLayer<
+  CloudflareAuthConfig,
+  CloudflareResolvedCredentials
+>()(CLOUDFLARE_AUTH_PROVIDER_NAME, {
+  configure: (profileName, ctx) => configureCredentials(profileName, ctx),
+  logout: (profileName, config) => logout(profileName, config),
+  login: (profileName, config) => login(profileName, config),
+  prettyPrint: (profileName, config) => prettyPrint(profileName, config),
+  read: (profileName, config) => resolveCredentials(profileName, config),
 });
 
 const resolveCredentials = (
   profileName: string,
   config: CloudflareAuthConfig,
-) =>
+): Effect.Effect<
+  CloudflareResolvedCredentials,
+  AuthError,
+  FileSystem.FileSystem
+> =>
   Match.value(config).pipe(
     Match.when(
       { method: "env" },
       Effect.fnUntraced(function* () {
+        const accountId = yield* getEnvRequired("CLOUDFLARE_ACCOUNT_ID");
         const apiToken = yield* getEnvRedacted("CLOUDFLARE_API_TOKEN");
         if (apiToken) {
           return {
             type: "apiToken" as const,
             apiToken,
-            source: { type: "env" },
-          } as CloudflareResolvedCredentials;
+            accountId,
+            source: { type: "env" as const },
+          };
         }
         const apiKey = yield* getEnvRedacted("CLOUDFLARE_API_KEY");
         const email = yield* getEnvRedacted("CLOUDFLARE_EMAIL");
@@ -121,8 +130,9 @@ const resolveCredentials = (
             type: "apiKey" as const,
             apiKey,
             email,
-            source: { type: "env" },
-          } as CloudflareResolvedCredentials;
+            accountId,
+            source: { type: "env" as const },
+          };
         }
         return yield* new AuthError({
           message:
@@ -148,41 +158,63 @@ const resolveCredentials = (
                   Match.when({ type: "apiToken" }, (c) => ({
                     type: "apiToken" as const,
                     apiToken: Redacted.make(c.apiToken),
+                    accountId: c.accountId,
                     source: { type: "stored" as const },
                   })),
                   Match.when({ type: "apiKey" }, (c) => ({
                     type: "apiKey" as const,
                     apiKey: Redacted.make(c.apiKey),
                     email: Redacted.make(c.email),
+                    accountId: c.accountId,
                     source: { type: "stored" as const },
                   })),
                   Match.exhaustive,
-                ) as CloudflareResolvedCredentials,
+                ),
               ),
         ),
       ),
     ),
-    Match.when({ method: "oauth" }, () =>
-      readCredentials<OAuthClient.OAuthCredentials>(
-        profileName,
-        "cf-oauth",
-      ).pipe(
-        Effect.flatMap((creds) =>
-          creds == null || creds.type !== "oauth"
-            ? Effect.fail(
-                new AuthError({
-                  message:
-                    "Cloudflare OAuth credentials not found. Run: alchemy-effect login",
-                }),
-              )
-            : Effect.succeed({
-                type: "oauth" as const,
-                accessToken: Redacted.make(creds.access),
-                expires: creds.expires,
-                source: { type: "oauth" as const },
-              } as CloudflareResolvedCredentials),
-        ),
-      ),
+    Match.when({ method: "oauth" }, (cfg) =>
+      Effect.gen(function* () {
+        const creds = yield* readCredentials<OAuthClient.OAuthCredentials>(
+          profileName,
+          "cf-oauth",
+        );
+        if (creds == null || creds.type !== "oauth") {
+          return yield* Effect.fail(
+            new AuthError({
+              message:
+                "Cloudflare OAuth credentials not found. Run: alchemy login",
+            }),
+          );
+        }
+        // Refresh proactively if the token has expired (or is within
+        // 10s of expiring). Persist the refreshed creds so subsequent
+        // resolves don't repeat the round-trip.
+        const fresh =
+          creds.expires > Date.now() + 10_000
+            ? creds
+            : yield* OAuthClient.refresh(creds).pipe(
+                Effect.tap((refreshed) =>
+                  writeCredentials(profileName, "cf-oauth", refreshed),
+                ),
+                Effect.mapError(
+                  (e) =>
+                    new AuthError({
+                      message:
+                        "Cloudflare OAuth refresh failed. Run: alchemy login",
+                      cause: e,
+                    }),
+                ),
+              );
+        return {
+          type: "oauth" as const,
+          accessToken: Redacted.make(fresh.access),
+          expires: fresh.expires,
+          accountId: cfg.accountId,
+          source: { type: "oauth" as const },
+        };
+      }),
     ),
     Match.exhaustive,
   );
@@ -272,30 +304,36 @@ const login = (profileName: string, config: CloudflareAuthConfig) =>
       ),
     );
 
-const configureCredentials = (profileName: string) =>
+const configureCredentials = (profileName: string, ctx: ConfigureContext) =>
+  Effect.gen(function* () {
+    if (ctx.ci) {
+      return { method: "env" as const };
+    }
+    return yield* configureInteractive(profileName);
+  }).pipe(
+    Effect.mapError(
+      (e) =>
+        new AuthError({
+          message: "failed to configure credentials",
+          cause: e,
+        }),
+    ),
+  );
+
+const configureInteractive = (profileName: string) =>
   Clank.select({
     message: "Cloudflare authentication method",
     options,
-  })
-    .pipe(
-      Effect.flatMap((method) =>
-        Match.value(method).pipe(
-          Match.when("env", () => Effect.succeed({ method: "env" as const })),
-          Match.when("oauth", () => configureOAuth(profileName)),
-          Match.when("stored", () => loginStored(profileName)),
-          Match.exhaustive,
-        ),
+  }).pipe(
+    Effect.flatMap((method) =>
+      Match.value(method).pipe(
+        Match.when("env", () => Effect.succeed({ method: "env" as const })),
+        Match.when("oauth", () => configureOAuth(profileName)),
+        Match.when("stored", () => loginStored(profileName)),
+        Match.exhaustive,
       ),
-    )
-    .pipe(
-      Effect.mapError(
-        (e) =>
-          new AuthError({
-            message: "failed to configure credentials",
-            cause: e,
-          }),
-      ),
-    );
+    ),
+  );
 
 const configureOAuth = Effect.fnUntraced(function* (profileName: string) {
   const scopes = yield* promptOAuthScopes();
@@ -335,18 +373,17 @@ const loginStored = Effect.fnUntraced(function* (profileName: string) {
           message: "Cloudflare API Token",
           validate: (v) => (v.length === 0 ? "Required" : undefined),
         }).pipe(retryOnce);
+        const accountId = yield* promptAccountId();
 
         yield* writeCredentials<CloudflareStoredCredentials>(
           profileName,
           "cf-stored",
-          { type: "apiToken", apiToken },
+          { type: "apiToken", apiToken, accountId },
         );
         yield* Clank.success("Cloudflare: credentials saved.");
-        const accountId = yield* promptAccountId();
         return {
           method: "stored" as const,
           credentialType: "apiToken" as const,
-          ...(accountId ? { accountId } : {}),
         };
       }),
     ),
@@ -361,18 +398,17 @@ const loginStored = Effect.fnUntraced(function* (profileName: string) {
           message: "Cloudflare Email",
           validate: (v) => (v.length === 0 ? "Required" : undefined),
         }).pipe(retryOnce);
+        const accountId = yield* promptAccountId();
 
         yield* writeCredentials<CloudflareStoredCredentials>(
           profileName,
           "cf-stored",
-          { type: "apiKey", apiKey, email },
+          { type: "apiKey", apiKey, email, accountId },
         );
         yield* Clank.success("Cloudflare: credentials saved.");
-        const accountId = yield* promptAccountId();
         return {
           method: "stored" as const,
           credentialType: "apiKey" as const,
-          ...(accountId ? { accountId } : {}),
         };
       }),
     ),
@@ -495,6 +531,7 @@ const prettyPrint = (profileName: string, config: CloudflareAuthConfig) =>
         Match.when({ type: "apiToken" }, (c) =>
           Effect.all([
             Console.log(`  apiToken: ${displayRedacted(c.apiToken, 9)}`),
+            Console.log(`  accountId: ${c.accountId}`),
             Console.log(`  source: ${sourceStr}`),
           ]),
         ),
@@ -502,6 +539,7 @@ const prettyPrint = (profileName: string, config: CloudflareAuthConfig) =>
           Effect.all([
             Console.log(`  apiKey: ${displayRedacted(c.apiKey)}`),
             Console.log(`  email:  ${displayRedacted(c.email)}`),
+            Console.log(`  accountId: ${c.accountId}`),
             Console.log(`  source: ${sourceStr}`),
           ]),
         ),
@@ -515,22 +553,13 @@ const prettyPrint = (profileName: string, config: CloudflareAuthConfig) =>
           return Effect.all([
             Console.log(`  accessToken: ${displayRedacted(c.accessToken)}`),
             Console.log(`  expires: ${expiresStr}`),
+            Console.log(`  accountId: ${c.accountId}`),
             Console.log(`  source: ${sourceStr}`),
           ]);
         }),
         Match.exhaustive,
       );
     }),
-    Effect.andThen(
-      getEnv("CLOUDFLARE_ACCOUNT_ID").pipe(
-        Effect.flatMap((envAccountId) => {
-          const resolved = config.accountId ?? envAccountId;
-          return Console.log(
-            `  accountId: ${resolved ?? "(not set — configure or set CLOUDFLARE_ACCOUNT_ID)"}`,
-          );
-        }),
-      ),
-    ),
     Effect.catch((e) =>
       Console.error(`  Failed to retrieve credentials: ${e}`),
     ),

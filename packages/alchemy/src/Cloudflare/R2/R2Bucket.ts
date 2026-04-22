@@ -5,7 +5,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { Account } from "../Account.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type * as Cloudflare from "../Providers.ts";
 import { R2BucketBinding } from "./R2BucketBinding.ts";
 
@@ -104,7 +104,7 @@ export const R2BucketProvider = () =>
   Provider.effect(
     R2Bucket,
     Effect.gen(function* () {
-      const accountId = yield* Account;
+      const { accountId } = yield* CloudflareEnvironment;
       const createBucket = yield* r2.createBucket;
       const patchBucket = yield* r2.patchBucket;
       const deleteBucket = yield* r2.deleteBucket;

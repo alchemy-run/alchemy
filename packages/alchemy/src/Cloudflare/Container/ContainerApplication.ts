@@ -31,7 +31,7 @@ import * as Server from "../../Server/index.ts";
 import { Stack } from "../../Stack.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { normalizeNulls } from "../../Util/stable.ts";
-import { Account } from "../Account.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { CloudflareLogs, type TelemetryFilter } from "../Logs.ts";
 import type { Providers } from "../Providers.ts";
 import { Container, ContainerTypeId } from "./Container.ts";
@@ -102,6 +102,32 @@ export interface ContainerApplicationProps extends PlatformProps {
    * @default "bun"
    */
   runtime?: "bun" | "node";
+  /**
+   * Module specifiers that Rolldown should mark as external when bundling
+   * the container entrypoint. The matching packages are installed inside the
+   * image via the runtime's package manager (`bun add` for `runtime: "bun"`,
+   * `npm install` for `runtime: "node"`) before the entrypoint runs.
+   *
+   * Use this for native dependencies that must not be bundled (e.g. `sharp`,
+   * `impit`) or for packages that intentionally ship in the base image.
+   *
+   * Install inside the image is controlled by {@link autoInstallExternals}
+   * (default `true`); set it to `false` if your custom `dockerfile` already
+   * installs these packages and you want to avoid the redundant step.
+   */
+  external?: string[];
+  /**
+   * Whether to auto-install the packages listed in {@link external} inside
+   * the container image (via `bun add` or `npm install`) before running the
+   * entrypoint.
+   *
+   * @default true
+   *
+   * Set to `false` when your custom `dockerfile` already installs these
+   * packages (for example, via a base image that pre-installs `sharp`), to
+   * avoid the redundant install step.
+   */
+  autoInstallExternals?: boolean;
   /**
    * Human-readable application name. If omitted, Alchemy derives a deterministic
    * physical name from the stack, stage, and logical ID.
@@ -296,8 +322,8 @@ const resolveDurableObjectApplicationRecovery = ({
   };
 };
 
-const containerApplicationReadinessSchedule = Schedule.exponential(100).pipe(
-  Schedule.both(Schedule.recurs(20)),
+const containerApplicationReadinessSchedule = Schedule.exponential(150).pipe(
+  Schedule.both(Schedule.recurs(10)),
 );
 
 const isContainerApplicationNotFound = (
@@ -332,7 +358,7 @@ export const ContainerProvider = () =>
     Container,
     Effect.gen(function* () {
       const stack = yield* Stack;
-      const accountId = yield* Account;
+      const { accountId } = yield* CloudflareEnvironment;
       const adoptPolicy = yield* Effect.serviceOption(AdoptPolicy).pipe(
         Effect.map(Option.getOrElse(() => false)),
       );
@@ -415,7 +441,7 @@ export const ContainerProvider = () =>
           );
         }
         const runtime = props.runtime ?? "bun";
-        const { code, hash: bundleHash } = yield* bundleProgram({
+        const { files, hash: bundleHash } = yield* bundleProgram({
           id,
           main,
           runtime,
@@ -424,7 +450,12 @@ export const ContainerProvider = () =>
           external: props.external,
         });
 
-        const finalDockerfile = buildFinalDockerfile(props.dockerfile, runtime);
+        const finalDockerfile = buildFinalDockerfile(
+          props.dockerfile,
+          runtime,
+          props.external,
+          props.autoInstallExternals,
+        );
         const imageHash = (yield* sha256Object({
           bundleHash,
           dockerfile: finalDockerfile,
@@ -435,7 +466,7 @@ export const ContainerProvider = () =>
         const repositoryName = name.toLowerCase();
         const imageRef = `${registryId}/${accountId}/${repositoryName}:${imageHash}`;
 
-        return { code, imageRef, imageHash };
+        return { files, imageRef, imageHash };
       });
 
       const bundleProgram = Effect.fnUntraced(function* ({
@@ -558,28 +589,49 @@ await Effect.runPromise(serverEffect).catch((err) => {
               ),
             );
 
-        const mainFile = bundleOutput.files[0];
-        const code =
-          typeof mainFile.content === "string"
-            ? new TextEncoder().encode(mainFile.content)
-            : mainFile.content;
+        // Rolldown can emit multiple chunk files (entry + shared chunks).
+        // Return every file so downstream code can materialize all of them
+        // into the Docker build context — dropping any of them produces a
+        // `Cannot find module './chunk-XXX.js'` runtime crash inside the
+        // container (with zero stdout, because it crashes before any user
+        // code runs).
+        const files = bundleOutput.files.map((f) => ({
+          path: f.path,
+          content:
+            typeof f.content === "string"
+              ? new TextEncoder().encode(f.content)
+              : f.content,
+        }));
 
-        return { code, hash: bundleOutput.hash };
+        return { files, hash: bundleOutput.hash };
       });
 
       const buildFinalDockerfile = (
         userDockerfile: string | undefined,
         runtime: "bun" | "node",
+        external: string[] = [],
+        autoInstallExternals = true,
       ): string => {
         const base =
           userDockerfile?.trim() ??
           (runtime === "bun" ? "FROM oven/bun:1" : "FROM node:22-slim");
         const runtimeBin = runtime === "bun" ? "bun" : "node";
+        const installCmd = runtime === "bun" ? "bun add" : "npm install";
+        const installStep =
+          autoInstallExternals && external.length > 0
+            ? `RUN ${installCmd} ${external.join(" ")}`
+            : "";
         return [
           base,
           "",
           "WORKDIR /app",
+          ...installStep ? [installStep, ""] : [],
           "COPY index.mjs /app/index.mjs",
+          // Copy any additional rolldown chunks (`chunk-XXX.js`,
+          // `BunServices-YYY.js`, …). The glob matches zero or more files;
+          // non-trivial bundles always emit at least one chunk, minimal
+          // bundles emit none and the COPY no-ops.
+          "COPY *.js /app/",
           `ENTRYPOINT ["${runtimeBin}", "/app/index.mjs"]`,
           "",
         ].join("\n");
@@ -588,7 +640,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
       const buildAndPushImage = Effect.fnUntraced(function* (
         id: string,
         props: ContainerApplicationProps,
-        code: Uint8Array,
+        files: ReadonlyArray<{ path: string; content: Uint8Array }>,
         imageRef: string,
         session?: { note: (message: string) => Effect.Effect<void> },
       ) {
@@ -606,11 +658,24 @@ await Effect.runPromise(serverEffect).catch((err) => {
           dotAlchemy,
           `${id}-container`,
         );
-        const finalDockerfile = buildFinalDockerfile(props.dockerfile, runtime);
+        const finalDockerfile = buildFinalDockerfile(
+          props.dockerfile,
+          runtime,
+          props.external,
+          props.autoInstallExternals,
+        );
         yield* materializeDockerfile(finalDockerfile, contextDir);
-        yield* writeContextFiles(contextDir, [
-          { path: "index.mjs", content: code },
-        ]);
+        yield* writeContextFiles(
+          contextDir,
+          files.map((f, i) => ({
+            // Keep the entry rename to `index.mjs` so the Dockerfile
+            // ENTRYPOINT (`ENTRYPOINT ["bun", "/app/index.mjs"]`) stays
+            // valid; preserve rolldown-assigned fileNames for every other
+            // chunk so intra-bundle relative imports resolve at runtime.
+            path: i === 0 ? "index.mjs" : f.path,
+            content: f.content,
+          })),
+        );
         yield* dockerBuild({
           tag: imageRef,
           context: contextDir,
@@ -830,11 +895,11 @@ await Effect.runPromise(serverEffect).catch((err) => {
         yield* Effect.logInfo(
           `Cloudflare Container update: preparing ${existing.applicationName}`,
         );
-        const { code, imageRef, imageHash } = yield* computeImageHash(id, news);
+        const { files, imageRef, imageHash } = yield* computeImageHash(id, news);
         const configuration = desiredConfiguration(news, imageRef);
 
         if (imageHash !== existing.hash?.image) {
-          yield* buildAndPushImage(id, news, code, imageRef, session);
+          yield* buildAndPushImage(id, news, files, imageRef, session);
         }
 
         yield* session.note(
@@ -936,12 +1001,10 @@ await Effect.runPromise(serverEffect).catch((err) => {
             `Cloudflare Container precreate: starting ${name}`,
           );
 
-          const { code, imageRef, imageHash } = yield* computeImageHash(
-            id,
-            news,
-          );
+          const { files, imageRef, imageHash } = yield* computeImageHash(id,
+          news,);
           const configuration = desiredConfiguration(news, imageRef);
-          yield* buildAndPushImage(id, news, code, imageRef, session);
+          yield* buildAndPushImage(id, news, files, imageRef, session);
 
           // Precreate intentionally omits the Durable Object attachment so the
           // worker can bind to this application id and break the circular
@@ -976,10 +1039,8 @@ await Effect.runPromise(serverEffect).catch((err) => {
             `Cloudflare Container create: starting ${name}${adoptPolicy ? " with adopt" : ""}`,
           );
           const durableObjects = yield* getDurableObjects(bindings);
-          const { code, imageRef, imageHash } = yield* computeImageHash(
-            id,
-            news,
-          );
+          const { files, imageRef, imageHash } = yield* computeImageHash(id,
+          news,);
           const configuration = desiredConfiguration(news, imageRef);
 
           if (
@@ -1028,7 +1089,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
               ),
             );
             if (imageHash !== output.hash?.image) {
-              yield* buildAndPushImage(id, news, code, imageRef, session);
+              yield* buildAndPushImage(id, news, files, imageRef, session);
             }
             const result = yield* createApplication({
               id,
@@ -1053,7 +1114,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
             });
           }
 
-          yield* buildAndPushImage(id, news, code, imageRef, session);
+          yield* buildAndPushImage(id, news, files, imageRef, session);
 
           const result = yield* createApplication({
             id,

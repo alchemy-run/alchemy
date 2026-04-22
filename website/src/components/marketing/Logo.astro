@@ -1,0 +1,32 @@
+---
+interface Props {
+  size?: number;
+}
+const { size = 22 } = Astro.props;
+---
+
+<span class="alc-logo">
+  <span class="alc-logo__dot"></span>
+  <span class="alc-logo__word" style={`font-size:${size}px;`}>alchemy</span>
+</span>
+
+<style>
+  .alc-logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .alc-logo__dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--alc-accent);
+  }
+  .alc-logo__word {
+    font-family: var(--alc-font-serif);
+    font-style: italic;
+    font-weight: 500;
+    color: var(--alc-fg-1);
+    letter-spacing: -0.01em;
+  }
+</style>

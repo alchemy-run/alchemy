@@ -1,3 +1,15 @@
+## v2.0.0-beta.10
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **Cloudflare**:
+  - Reduce readiness retry schedule from 104s to 30s &nbsp;-&nbsp; by **Christopher Yovanovitch** and **Sisyphus** in https://github.com/alchemy-run/alchemy/issues/76 [<samp>(bb2bf)</samp>](https://github.com/alchemy-run/alchemy/commit/bb2bff2)
+  - Await monitor() Promise instead of discarding it &nbsp;-&nbsp; by **Christopher Yovanovitch** and **Sisyphus** in https://github.com/alchemy-run/alchemy/issues/74 [<samp>(d75e6)</samp>](https://github.com/alchemy-run/alchemy/commit/d75e6dd)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.9...v2.0.0-beta.10)
+
+---
+
 ## v2.0.0-beta.9
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features

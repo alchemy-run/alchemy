@@ -139,3 +139,16 @@ The infrastructure (tables, queues, buckets) and the code that uses
 it (the function handler) are all expressed in the same type system.
 The compiler verifies that every capability is provided and every
 service is satisfied.
+
+## Resources move with the Layer
+
+Swap `SessionsKV` for `SessionsDynamoDB` — alchemy creates the table,
+attaches the IAM, destroys the old KV namespace. One line of code.
+Whole-stack diffs.
+
+- **Distribute on npm** — A Service is just a TypeScript module that
+  exports an interface and a Layer. Publish `@org/sessions`,
+  `npm install` it elsewhere, `Effect.provide` it.
+- **Test against any backend** — Provide an in-memory Layer in tests;
+  provide the cloud Layer in CI. The handler under test never
+  changes.

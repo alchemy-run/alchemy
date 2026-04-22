@@ -5,7 +5,7 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
-import { Account } from "../Account.ts";
+import { AWSEnvironment } from "../Environment.ts";
 import type { AlarmArn } from "./Alarm.ts";
 import {
   createName,
@@ -66,7 +66,7 @@ export const CompositeAlarmProvider = () =>
     CompositeAlarm,
     Effect.gen(function* () {
       const region = yield* Region;
-      const accountId = yield* Account;
+      const { accountId } = yield* AWSEnvironment;
 
       const createAlarmName = (id: string, props: { name?: string } = {}) =>
         createName(id, props.name, 255);

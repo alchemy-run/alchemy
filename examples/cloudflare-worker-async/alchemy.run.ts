@@ -1,7 +1,7 @@
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
-import type { Counter } from "./src/worker.ts";
+import type { Counter as CounterClass } from "./src/worker.ts";
 
 export const DB = Cloudflare.D1Database("DB");
 
@@ -12,6 +12,13 @@ export const Bucket = Cloudflare.R2Bucket("Bucket");
 // then receives and persists it via its `queue(batch)` handler — end-to-end
 // regression guard for the Queue, QueueBinding, and QueueConsumer resources.
 export const Queue = Cloudflare.Queue("Queue");
+
+export const Counter = Cloudflare.DurableObjectNamespace<CounterClass>(
+  "Counter",
+  {
+    className: "Counter",
+  },
+);
 
 export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
 
@@ -24,9 +31,7 @@ export const Worker = Cloudflare.Worker("Worker", {
     DB,
     Bucket,
     Queue,
-    Counter: Cloudflare.DurableObjectNamespace<Counter>("Counter", {
-      className: "Counter",
-    }),
+    Counter,
   },
 });
 

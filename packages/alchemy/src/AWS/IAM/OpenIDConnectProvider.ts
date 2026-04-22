@@ -5,7 +5,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 import { diffTags } from "../../Tags.ts";
-import { Account } from "../Account.ts";
+import { AWSEnvironment } from "../Environment.ts";
 import { toTagRecord } from "./common.ts";
 
 export interface OpenIDConnectProviderProps {
@@ -65,7 +65,7 @@ export const OpenIDConnectProviderProvider = () =>
   Provider.effect(
     OpenIDConnectProvider,
     Effect.gen(function* () {
-      const accountId = yield* Account;
+      const { accountId } = yield* AWSEnvironment;
       const oidcArnFromUrl = (url: string) =>
         `arn:aws:iam::${accountId}:oidc-provider/${url.replace(/^https?:\/\//, "")}`;
 

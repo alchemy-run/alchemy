@@ -1,6 +1,6 @@
 {
   "name": "alchemy",
-  "version": "2.0.0-beta.9",
+  "version": "2.0.0-beta.10",
   "homepage": "https://alchemy.run",
   "license": "Apache-2.0",
   "author": "Sam Goodwin <sam@alchemy.run>",
@@ -209,11 +209,11 @@
     "@alchemy.run/cli-win32": "workspace:*"
   },
   "dependencies": {
-    "@clack/prompts": "^0.11.0",
     "@ai-sdk/anthropic": "^3.0.31",
     "@ai-sdk/openai": "^3.0.23",
     "@ai-sdk/provider": "^3.0.8",
     "@aws-sdk/credential-providers": "catalog:",
+    "@clack/prompts": "^0.11.0",
     "@distilled.cloud/aws": "catalog:",
     "@distilled.cloud/cloudflare": "catalog:",
     "@distilled.cloud/cloudflare-rolldown-plugin": "catalog:",

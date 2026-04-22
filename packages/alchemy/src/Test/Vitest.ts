@@ -24,8 +24,10 @@ import * as Cloudflare from "../Cloudflare/index.ts";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import { apply } from "../Apply.ts";
 import { Artifacts, provideFreshArtifactStore } from "../Artifacts.ts";
-import * as Credentials from "../AWS/Credentials.ts";
-import * as Region from "../AWS/Region.ts";
+import { AuthProviders } from "../Auth/AuthProvider.ts";
+import * as AWSCredentials from "../AWS/Credentials.ts";
+import * as AWSEnvironment from "../AWS/Environment.ts";
+import * as AWSRegion from "../AWS/Region.ts";
 import type { Command } from "../Build/Command.ts";
 import type { Cli } from "../Cli/index.ts";
 import {
@@ -79,12 +81,13 @@ type Provided =
   | Server.ProcessContext
   | Server.ServerHost
   | Serverless.FunctionContext
-  | AWS.StageConfig
+  | AWSEnvironment.AWSEnvironment
   | Artifacts
   | Provider<Command>
   | AWS.Providers
   | Cloudflare.Providers
-  | ChildProcessSpawner;
+  | ChildProcessSpawner
+  | AuthProviders;
 
 const quietLogger = Logger.make(() => {
   // console.log(options.message);
@@ -96,39 +99,43 @@ const platform = Layer.mergeAll(
   Logger.layer([process.env.VERBOSE ? Logger.consolePretty() : quietLogger]),
 );
 
-const awsStageConfig = Layer.effect(
-  AWS.StageConfig,
+const awsEnvironment = Layer.unwrap(
   Effect.gen(function* () {
-    const AWS_PROFILE = yield* Config.string("AWS_PROFILE").pipe(
+    const profileName = yield* Config.string("AWS_PROFILE").pipe(
       Config.withDefault("default"),
     );
-
     const LOCAL = yield* Config.boolean("LOCAL").pipe(
       Config.withDefault(false),
     );
-
     const LOCALSTACK_ENDPOINT = yield* Config.string(
       "LOCALSTACK_ENDPOINT",
     ).pipe(Config.withDefault("http://localhost.localstack.cloud:4566"));
 
-    return AWS.StageConfig.of({
-      profile: LOCAL ? undefined : AWS_PROFILE,
-      region: LOCAL ? "us-east-1" : undefined,
-      credentials: LOCAL
-        ? {
-            accessKeyId: "test",
-            secretAccessKey: "test",
-            sessionToken: "test",
-          }
-        : undefined,
-      endpoint: LOCAL ? LOCALSTACK_ENDPOINT : undefined,
-    });
+    if (LOCAL) {
+      return AWSEnvironment.makeEnvironment({
+        accountId: "000000000000",
+        region: "us-east-1",
+        credentials: {
+          accessKeyId: "test",
+          secretAccessKey: "test",
+          sessionToken: "test",
+        },
+        endpoint: LOCALSTACK_ENDPOINT,
+      });
+    }
+    return Layer.effect(
+      AWSEnvironment.AWSEnvironment,
+      AWSEnvironment.loadDefault(),
+    ).pipe(Layer.orDie);
   }),
 );
 
 const awsProviders = Layer.provideMerge(
   AWS.providers(),
-  Layer.mergeAll(Credentials.fromStageConfig(), Region.fromStageConfig()),
+  Layer.provideMerge(
+    Layer.mergeAll(AWSRegion.fromEnvironment, AWSCredentials.fromEnvironment),
+    awsEnvironment,
+  ),
 );
 
 const cfProviders = Layer.provideMerge(
@@ -170,7 +177,7 @@ const runWithContext = <A, Err>(
 
   const alchemy = Layer.provideMerge(
     Layer.mergeAll(options.state ?? State.LocalState, TestCli),
-    Layer.mergeAll(awsStageConfig, stack, dotAlchemy),
+    Layer.mergeAll(stack, dotAlchemy),
   );
 
   const context = {
@@ -205,6 +212,7 @@ const runWithContext = <A, Err>(
       ),
     ),
     Effect.provideService(Stage.Stage, "test"),
+    Effect.provideService(AuthProviders, {}),
     Effect.provideService(ExecutionContext, context as any),
     Effect.provideService(Server.ServerHost, {
       run: (_effect) => Effect.void,

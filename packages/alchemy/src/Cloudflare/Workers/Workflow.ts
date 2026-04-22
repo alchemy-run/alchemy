@@ -6,7 +6,7 @@ import type { PlatformServices } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
-import { Account } from "../Account.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { Worker, WorkerEnvironment, type WorkerServices } from "./Worker.ts";
 
 type WorkflowTypeId = "Cloudflare.Workflow";
@@ -83,8 +83,17 @@ export const sleepUntil = (
 
 /**
  * The services available inside a workflow run body.
+ *
+ * `WorkerEnvironment` is provided to the body at runtime by the workflow
+ * export wrapper (see `make(env)` below), so users can access env bindings
+ * from inside workflow steps via `yield* WorkerEnvironment` — the type must
+ * reflect that or `yield* WorkerEnvironment` fails to type-check inside a
+ * body even though it succeeds at runtime.
  */
-export type WorkflowRunServices = WorkflowEvent | WorkflowStep;
+export type WorkflowRunServices =
+  | WorkflowEvent
+  | WorkflowStep
+  | WorkerEnvironment;
 
 export type WorkflowServices = WorkerServices | PlatformServices;
 
@@ -323,13 +332,14 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
           yield* worker.export(name, {
             kind: "workflow",
             make: (env: unknown) =>
-              Effect.succeed(body).pipe(
-                Effect.provideContext(services),
-                Effect.provideService(
-                  WorkerEnvironment,
-                  env as Record<string, any>,
+              Effect.succeed(
+                body.pipe(
+                  Effect.provideService(
+                    WorkerEnvironment,
+                    env as Record<string, any>,
+                  ),
                 ),
-              ),
+              ).pipe(Effect.provideContext(services)),
           } satisfies WorkflowExport);
 
           return self;
@@ -370,7 +380,7 @@ export const WorkflowProvider = () =>
   Provider.effect(
     WorkflowResource,
     Effect.gen(function* () {
-      const accountId = yield* Account;
+      const { accountId } = yield* CloudflareEnvironment;
       const putWorkflow = yield* workflows.putWorkflow;
       const deleteWorkflow = yield* workflows.deleteWorkflow;
 

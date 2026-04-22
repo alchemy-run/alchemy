@@ -9,7 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 import { createInternalTags, diffTags, hasTags } from "../../Tags.ts";
-import { Account } from "../Account.ts";
+import { AWSEnvironment } from "../Environment.ts";
 
 export type StartingPosition = "TRIM_HORIZON" | "LATEST" | "AT_TIMESTAMP";
 
@@ -180,7 +180,7 @@ export const EventSourceMappingProvider = () =>
     EventSourceMapping,
     Effect.gen(function* () {
       const region = yield* Region;
-      const accountId = yield* Account;
+      const { accountId } = yield* AWSEnvironment;
 
       const createEventSourceMappingTags = Effect.fn(function* (id: string) {
         const internalTags = yield* createInternalTags(id);

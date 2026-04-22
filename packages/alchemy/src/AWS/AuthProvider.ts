@@ -5,14 +5,14 @@ import * as FileSystem from "effect/FileSystem";
 import * as Match from "effect/Match";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import {
-  ChildProcess,
-  type ChildProcessSpawner,
-} from "effect/unstable/process";
+import { ChildProcess } from "effect/unstable/process";
 import * as NodeCrypto from "node:crypto";
 import * as NodeOs from "node:os";
-import { AuthError, type AuthProvider } from "../Auth/AuthProvider.ts";
+import {
+  AuthError,
+  AuthProviderLayer,
+  type ConfigureContext,
+} from "../Auth/AuthProvider.ts";
 import {
   deleteCredentials,
   displayRedacted,
@@ -26,6 +26,24 @@ import {
   retryOnce,
 } from "../Auth/Env.ts";
 import * as Clank from "../Util/Clank.ts";
+
+export const AWS_AUTH_PROVIDER_NAME = "AWS";
+
+/**
+ * Layer that registers the AWS {@link AuthProvider} into the
+ * {@link AuthProviders} registry when built. Include this in the AWS
+ * `providers()` layer so `alchemy login` can discover it.
+ */
+export const AwsAuth = AuthProviderLayer<
+  AwsAuthConfig,
+  AwsResolvedCredentials
+>()(AWS_AUTH_PROVIDER_NAME, {
+  configure: (profileName, ctx) => configureCredentials(profileName, ctx),
+  login: (profileName, config) => login(profileName, config),
+  logout: (profileName, config) => logout(profileName, config),
+  prettyPrint: (profileName, config) => prettyPrint(profileName, config),
+  read: (profileName, config) => resolveCredentials(profileName, config),
+});
 
 export type AwsAuthConfig =
   | { method: "sso"; ssoProfile: string }
@@ -66,35 +84,11 @@ export interface AwsResolvedCredentials {
   secretAccessKey: Redacted.Redacted<string>;
   sessionToken?: Redacted.Redacted<string>;
   region?: string;
-  source: { type: AwsAuthConfig["method"]; details?: string };
+  source: {
+    type: AwsAuthConfig["method"];
+    details?: string;
+  };
 }
-
-export const AwsAuth = Effect.gen(function* () {
-  const context = yield* Effect.context<
-    | FileSystem.FileSystem
-    | Path.Path
-    | HttpClient.HttpClient
-    | ChildProcessSpawner.ChildProcessSpawner
-  >();
-
-  return {
-    name: "AWS",
-    configure: (profileName: string) =>
-      configureCredentials(profileName).pipe(Effect.provide(context)),
-
-    logout: (profileName, config) =>
-      logout(profileName, config).pipe(Effect.provide(context)),
-
-    login: (profileName, config) =>
-      login(profileName, config).pipe(Effect.provide(context)),
-
-    prettyPrint: (profileName, config) =>
-      prettyPrint(profileName, config).pipe(Effect.provide(context)),
-
-    read: (profileName, config) =>
-      resolveCredentials(profileName, config).pipe(Effect.provide(context)),
-  } satisfies AuthProvider<AwsAuthConfig, AwsResolvedCredentials>;
-});
 
 const runSsoCommand = (command: "login" | "logout", ssoProfile: string) =>
   Effect.gen(function* () {
@@ -305,47 +299,53 @@ const login = (profileName: string, config: AwsAuthConfig) =>
       ),
     );
 
-const configureCredentials = (profileName: string) =>
+const configureCredentials = (profileName: string, ctx: ConfigureContext) =>
+  Effect.gen(function* () {
+    if (ctx.ci) {
+      return { method: "env" as const };
+    }
+    return yield* configureInteractive(profileName);
+  }).pipe(
+    Effect.mapError(
+      (e) =>
+        new AuthError({
+          message: "failed to configure credentials",
+          cause: e,
+        }),
+    ),
+  );
+
+const configureInteractive = (profileName: string) =>
   Clank.select({
     message: "AWS authentication method",
     options,
-  })
-    .pipe(
-      Effect.flatMap((method) =>
-        Match.value(method).pipe(
-          Match.when("env", () => Effect.succeed({ method: "env" as const })),
-          Match.when("sso", () =>
-            Effect.gen(function* () {
-              const ssoProfile = yield* Clank.text({
-                message: "AWS profile name (from ~/.aws/config)",
-                placeholder: "default",
-                defaultValue: "default",
-              });
+  }).pipe(
+    Effect.flatMap((method) =>
+      Match.value(method).pipe(
+        Match.when("env", () => Effect.succeed({ method: "env" as const })),
+        Match.when("sso", () =>
+          Effect.gen(function* () {
+            const ssoProfile = yield* Clank.text({
+              message: "AWS profile name (from ~/.aws/config)",
+              placeholder: "default",
+              defaultValue: "default",
+            });
 
-              const config = {
-                method: "sso" as const,
-                ssoProfile: ssoProfile ?? "default",
-              };
+            const config = {
+              method: "sso" as const,
+              ssoProfile: ssoProfile ?? "default",
+            };
 
-              yield* loginSSO(config);
+            yield* loginSSO(config);
 
-              return config;
-            }),
-          ),
-          Match.when("stored", () => loginStored(profileName)),
-          Match.exhaustive,
-        ),
-      ),
-    )
-    .pipe(
-      Effect.mapError(
-        (e) =>
-          new AuthError({
-            message: "failed to configure credentials",
-            cause: e,
+            return config;
           }),
+        ),
+        Match.when("stored", () => loginStored(profileName)),
+        Match.exhaustive,
       ),
-    );
+    ),
+  );
 
 const loginSSO = (config: Extract<AwsAuthConfig, { method: "sso" }>) =>
   Clank.info(

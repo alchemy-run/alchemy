@@ -2,6 +2,7 @@ import type { BunServices } from "@effect/platform-bun/BunServices";
 import type { NodeServices } from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type { Teardown } from "effect/Runtime";
 
 const isBun = typeof Bun !== "undefined";
 
@@ -19,3 +20,21 @@ export const PlatformServices: Layer.Layer<
     (platform) => platform.NodeServices.layer,
   );
 }).pipe(Layer.unwrap);
+
+export const runMain = <E, A>(
+  effect: Effect.Effect<A, E>,
+  options?: {
+    readonly disableErrorReporting?: boolean | undefined;
+    readonly teardown?: Teardown | undefined;
+  },
+): void => {
+  if (isBun) {
+    void import("@effect/platform-bun").then((platform) =>
+      platform.BunRuntime.runMain(effect, options),
+    );
+  } else {
+    void import("@effect/platform-node").then((platform) =>
+      platform.NodeRuntime.runMain(effect, options),
+    );
+  }
+};

@@ -11,8 +11,8 @@ import {
   diffTags,
   hasTags,
 } from "../../Tags.ts";
-import type { AccountID } from "../Account.ts";
-import { Account } from "../Account.ts";
+import type { AccountID } from "../Environment.ts";
+import { AWSEnvironment } from "../Environment.ts";
 import {
   oldestNondefaultPolicyVersion,
   parsePolicyDocument,
@@ -113,7 +113,7 @@ export const PolicyProvider = () =>
   Provider.effect(
     Policy,
     Effect.gen(function* () {
-      const accountId = yield* Account;
+      const { accountId } = yield* AWSEnvironment;
 
       const toPolicyName = (id: string, props: PolicyProps) =>
         props.policyName

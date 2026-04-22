@@ -1,5 +1,5 @@
 import * as Cloudflare from "@/Cloudflare";
-import { Account } from "@/Cloudflare/Account";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as KV from "@/Cloudflare/KV/index";
 import { destroy } from "@/Destroy";
 import { test } from "@/Test/Vitest";
@@ -18,7 +18,7 @@ const logLevel = Effect.provideService(
 test(
   "create and delete namespace with default props",
   Effect.gen(function* () {
-    const accountId = yield* Account;
+    const { accountId } = yield* CloudflareEnvironment;
 
     yield* destroy();
 
@@ -46,7 +46,7 @@ test(
 test(
   "create, update, delete namespace",
   Effect.gen(function* () {
-    const accountId = yield* Account;
+    const { accountId } = yield* CloudflareEnvironment;
 
     yield* destroy();
 

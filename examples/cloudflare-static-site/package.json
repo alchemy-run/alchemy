@@ -12,9 +12,9 @@
     "build": "vite build",
     "dev:vite": "vite",
     "preview": "vite preview",
-    "deploy": "bun ../../packages/alchemy/bin/alchemy.ts deploy",
-    "dev": "bun ../../packages/alchemy/bin/alchemy.ts dev",
-    "destroy": "bun ../../packages/alchemy/bin/alchemy.ts destroy"
+    "deploy": "alchemy deploy",
+    "dev": "alchemy dev",
+    "destroy": "alchemy destroy"
   },
   "dependencies": {
     "@distilled.cloud/cloudflare": "catalog:",

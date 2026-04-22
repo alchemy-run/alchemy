@@ -12,8 +12,8 @@
     "dev": "vite dev --port 3000",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy": "bun ../../packages/alchemy/bin/alchemy.ts deploy",
-    "destroy": "bun ../../packages/alchemy/bin/alchemy.ts destroy"
+    "deploy": "alchemy deploy",
+    "destroy": "alchemy destroy"
   },
   "dependencies": {
     "@tanstack/react-router": "^1.167.4",

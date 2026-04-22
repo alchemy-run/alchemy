@@ -10,7 +10,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 import { diffTags } from "../../Tags.ts";
-import { Account, type AccountID } from "../Account.ts";
+import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { RegionID } from "../Region.ts";
 
@@ -257,7 +257,7 @@ export const BucketProvider = () =>
         news: BucketProps;
       }) {
         const region = yield* Region;
-        const accountId = yield* Account;
+        const { accountId } = yield* AWSEnvironment;
         const bucketName = yield* createBucketName(id, news);
 
         yield* Effect.logInfo(
