@@ -15,6 +15,7 @@ import DeployTerminal from "../components/marketing-islands/DeployTerminal.tsx";
 import AsyncTabs from "../components/marketing-islands/AsyncTabs.tsx";
 import EffectPilledShowcase from "../components/marketing-islands/EffectPilledShowcase.tsx";
 import DevTerminal from "../components/marketing-islands/DevTerminal.tsx";
+import BrowserHotReload from "../components/marketing-islands/BrowserHotReload.tsx";
 import TestTerminal from "../components/marketing-islands/TestTerminal.tsx";
 import PRLifecycle from "../components/marketing-islands/PRLifecycle.tsx";
 import CopyForAgent from "../components/marketing-islands/CopyForAgent.tsx";
@@ -228,9 +229,7 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
     </p>
   </div>
 
-  <div class="alc-dev-stage">
-    <DevTerminal client:visible />
-  </div>
+  <BrowserHotReload client:visible />
 
   <div class="alc-stat-strip">
     <span class="alc-stat-strip__item"><strong>workerd</strong> locally</span>
