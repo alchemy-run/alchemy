@@ -2311,6 +2311,51 @@ body.alc-root,
 
 .alc-hero {
   position: relative;
+  isolation: isolate;
+}
+/* Aged-paper plate behind the entire hero. Two layers of SVG fractal
+   noise — a fine fiber grain plus a large-scale foxing/aging blotch
+   pattern — combine to read as old printed paper rather than a uniform
+   texture. No directional banding (which would look like slats). */
+/* Faint paper-fiber grain behind the hero. Single layer of fine SVG
+   fractal noise, multiply-blended into the parchment background and
+   feathered with a vignette so it never reads as a hard plate. */
+.alc-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.28;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='280' height='280'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='1.3' numOctaves='2' seed='6' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.30  0 0 0 0 0.22  0 0 0 0 0.13  0 0 0 0.5 0'/></filter><rect width='100%' height='100%' filter='url(%23g)'/></svg>");
+  background-size: 280px 280px;
+  -webkit-mask-image: radial-gradient(ellipse 100% 95% at 50% 45%, #000 55%, transparent 100%);
+          mask-image: radial-gradient(ellipse 100% 95% at 50% 45%, #000 55%, transparent 100%);
+}
+/* Animated transparent video texture behind the hero. The asset is a
+   pre-keyed VP9/HEVC with a true alpha channel (luminance-as-alpha
+   mask), so the parchment + paper grain show through naturally. Sits
+   above the ::before paper grain (z-index: -1) and below the content
+   layer (z-index: 1). */
+.alc-hero__bg-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  object-fit: cover;
+  object-position: center;
+  pointer-events: none;
+  opacity: 0.55;
+  mix-blend-mode: multiply;
+  -webkit-mask-image: radial-gradient(ellipse 90% 80% at 50% 45%, #000 35%, transparent 95%);
+          mask-image: radial-gradient(ellipse 90% 80% at 50% 45%, #000 35%, transparent 95%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .alc-hero__bg-video {
+    display: none;
+  }
 }
 .alc-hero__inner {
   position: relative;
@@ -2318,6 +2363,18 @@ body.alc-root,
   text-align: center;
   max-width: 880px;
   margin: 0 auto 16px;
+}
+/* Centered alchemical glyph above the title — the "title-page mark"
+   in the spirit of an engraved frontispiece. */
+.alc-hero__mark {
+  display: flex;
+  justify-content: center;
+  margin: 0 auto 18px;
+  color: var(--alc-fg-3);
+  opacity: 0.65;
+}
+.alc-hero__mark svg {
+  display: block;
 }
 .alc-hero__title {
   font-family: var(--alc-font-serif);

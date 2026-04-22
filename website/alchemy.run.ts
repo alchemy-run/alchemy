@@ -12,7 +12,13 @@ const Website = Cloudflare.StaticSite(
     outdir: "dist",
     domain: stack.stage === "prod" ? "v2.alchemy.run" : "v2.alchemy-test-3.us",
     memo: {
-      include: ["src/**", "astro.config.mjs", "package.json", "../bun.lock"],
+      include: [
+        "src/**",
+        "astro.config.mjs",
+        "package.json",
+        "public/**",
+        "../bun.lock",
+      ],
     },
     compatibility: {
       date: "2026-04-02",

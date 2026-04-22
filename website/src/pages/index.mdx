@@ -20,6 +20,8 @@ import TestTerminal from "../components/marketing-islands/TestTerminal.tsx";
 import PRLifecycle from "../components/marketing-islands/PRLifecycle.tsx";
 import CopyForAgent from "../components/marketing-islands/CopyForAgent.tsx";
 import HeroCta from "../components/marketing-islands/HeroCta.tsx";
+import HeadingOrnament from "../components/marketing/HeadingOrnament.astro";
+import AlchemicalDivider from "../components/marketing/AlchemicalDivider.astro";
 
 export const STACK_SRC = `export default Alchemy.Stack(
   "MyApp",
@@ -96,10 +98,35 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
 {/* ───────────────────────── HERO ───────────────────────── */}
 
 <Section padding="72px 32px 40px" class="alc-hero">
-  <div style="text-align:center;margin-bottom:24px;">
+  <video
+    class="alc-hero__bg-video"
+    autoplay
+    muted
+    loop
+    playsinline
+    preload="auto"
+    aria-hidden="true"
+  >
+    <source src="/video/hero-bg.webm" type="video/webm" />
+    <source src="/video/hero-bg.mov" type='video/mp4; codecs="hvc1"' />
+  </video>
+  <div style="position:relative;z-index:1;text-align:center;margin-bottom:24px;">
     <BetaBadge />
   </div>
   <div class="alc-hero__inner">
+    <div class="alc-hero__mark" aria-hidden="true">
+      {/* Downward water-triangle inscribed in a circle — the
+          Sri-Yantra-style descending triangle, also the alchemical
+          mark for water / dissolution. Used as a frontispiece glyph. */}
+      <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="miter" stroke-miterlimit="6">
+        <circle cx="12" cy="12" r="9.5" />
+        {/* Equilateral triangle inscribed in the circle (apex down):
+            apex at (12, 12 + r), top vertices at (12 ± r·cos30°, 12 - r·sin30°).
+            Centroid coincides with the circle center, so the dot sits at (12,12). */}
+        <path d="M12 21.5 L3.77 7.25 L20.23 7.25 Z" />
+        <circle cx="12" cy="12" r="1.1" fill="var(--alc-accent-deep)" stroke="none" />
+      </svg>
+    </div>
     <Eyebrow>typescript · effect · infrastructure as code</Eyebrow>
     <h1 class="alc-hero__title">
       <span style="color:var(--alc-accent-deep);font-style:italic;">Zero</span>{" "}
@@ -112,12 +139,14 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
   </div>
 </Section>
 
+<AlchemicalDivider variant="line" />
+
 {/* ───── 1 · STAND UP / TEAR DOWN ───── */}
 
 <Section padding="40px 32px 96px" id="plan-deploy-destroy">
   <div style="text-align:center;margin-bottom:36px;">
     <Eyebrow>plan · deploy · destroy</Eyebrow>
-    <h2 class="alc-h2" style="margin:10px 0 12px;">Stand up infrastructure. <span style="color:var(--alc-accent-deep);font-style:italic;">Tear it down just as fast.</span></h2>
+    <h2 class="alc-h2" style="margin:10px 0 12px;"><HeadingOrnament variant="sulphur" position="prefix" />Stand up infrastructure. <span style="color:var(--alc-accent-deep);font-style:italic;">Tear it down just as fast.</span></h2>
     <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:720px;margin:0 auto;">
       Your whole cloud as one TypeScript program. <code class="alc-code-inline" style="color:var(--alc-accent-deep);">plan</code> previews the diff, <code class="alc-code-inline" style="color:var(--alc-accent-deep);">deploy</code> applies it, <code class="alc-code-inline" style="color:var(--alc-accent-deep);">destroy</code> unwinds it — predictably, every time. <a class="alc-learn-more" href="/concepts/deploy-and-destroy">Learn more &rarr;</a>
     </p>
@@ -152,6 +181,8 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
   </div>
 </Section>
 
+<AlchemicalDivider variant="triangle" />
+
 {/* ───── 2 · EFFECT-PILLED MODE ───── */}
 
 <Section padding="80px 32px" id="effect-pilled">
@@ -167,6 +198,8 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
 
   <EffectPilledShowcase client:visible />
 </Section>
+
+<AlchemicalDivider variant="square" />
 
 {/* ───── 3 · ASYNC FETCH ESCAPE HATCH ───── */}
 
@@ -217,6 +250,8 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
   </div>
 </Section>
 
+<AlchemicalDivider variant="pentagon" />
+
 {/* ───── 3 · HOT RELOAD AS YOU DEVELOP ───── */}
 
 <Section padding="80px 32px" background="var(--alc-bg-nav)" id="hot-reload">
@@ -240,6 +275,8 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
     <span class="alc-stat-strip__item">live <strong>R2 / KV / D1</strong></span>
   </div>
 </Section>
+
+<AlchemicalDivider variant="hexagon" />
 
 {/* ───── 4 · TEST AGAINST LIVE CLOUD ───── */}
 
@@ -268,6 +305,8 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
   </div>
 </Section>
 
+<AlchemicalDivider variant="heptagon" />
+
 {/* ───── 5 · PR PREVIEW ENVIRONMENTS ───── */}
 
 <Section padding="80px 32px" background="var(--alc-bg-nav)" id="ci-previews">
@@ -282,12 +321,14 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
   <PRLifecycle client:visible />
 </Section>
 
+<AlchemicalDivider variant="octagon" />
+
 {/* ───── 6 · PRODUCTIONIZE FROM DAY ONE ───── */}
 
 <Section padding="80px 32px" id="operational-readiness">
   <div style="text-align:center;margin-bottom:32px;">
     <Eyebrow>observability as iac · otel from effect</Eyebrow>
-    <h2 class="alc-h2" style="margin:10px 0 12px;">Dashboards and alarms <span style="color:var(--alc-accent-deep);font-style:italic;">ship with the resources</span>.</h2>
+    <h2 class="alc-h2" style="margin:10px 0 12px;">Dashboards and alarms <span style="color:var(--alc-accent-deep);font-style:italic;">ship with the resources</span>.<HeadingOrnament variant="sol" position="suffix" /></h2>
     <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:760px;margin:0 auto;">
       Effect emits logs, spans, and metrics by default. Wire dashboards and alarms in the same <code class="alc-code-inline" style="color:var(--alc-accent-deep);">alchemy.run.ts</code> as the workers they watch — swap the OTLP exporter for Axiom, Datadog, or anywhere else. <a class="alc-learn-more" href="/concepts/observability">Learn more &rarr;</a>
     </p>
@@ -307,12 +348,14 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
   </div>
 </Section>
 
+<AlchemicalDivider variant="circle" />
+
 {/* ───── OUTRO ───── */}
 
 <Section padding="56px 32px 64px" id="outro">
   <DiscordCallout />
   <div class="alc-cta" style="margin-top:48px;text-align:center;">
-    <h2 class="alc-h2">Paste this into your coding agent <span style="color:var(--alc-accent-deep);font-style:italic;">to get started</span>.</h2>
+    <h2 class="alc-h2"><HeadingOrnament variant="fleuron" position="prefix" />Paste this into your coding agent <span style="color:var(--alc-accent-deep);font-style:italic;">to get started</span>.</h2>
     <CopyForAgent client:load />
     <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:24px;">
       <Button variant="secondary" href="/getting-started">
