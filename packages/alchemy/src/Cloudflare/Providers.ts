@@ -10,6 +10,7 @@ import * as Credentials from "./Credentials.ts";
 import * as D1 from "./D1/index.ts";
 import * as KV from "./KV/index.ts";
 import * as R2 from "./R2/index.ts";
+import * as Queue from "./Queue/index.ts";
 import * as Workers from "./Workers/index.ts";
 import * as Workflows from "./Workers/Workflow.ts";
 
@@ -34,6 +35,9 @@ export const providers = () =>
       D1.D1Database,
       KV.KVNamespace,
       KV.KVNamespaceBindingPolicy,
+      Queue.Queue,
+      Queue.QueueBindingPolicy,
+      Queue.QueueConsumer,
       R2.R2Bucket,
       R2.R2BucketBindingPolicy,
       Random,
@@ -50,6 +54,9 @@ export const providers = () =>
         D1.DatabaseProvider(),
         KV.KVNamespaceBindingPolicyLive,
         KV.KVNamespaceProvider(),
+        Queue.QueueBindingPolicyLive,
+        Queue.QueueProvider(),
+        Queue.QueueConsumerProvider(),
         R2.R2BucketBindingPolicyLive,
         R2.R2BucketProvider(),
         Workers.BindWorkerPolicyLive,

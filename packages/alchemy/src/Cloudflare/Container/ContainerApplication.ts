@@ -240,6 +240,11 @@ export interface ContainerApplicationProps extends PlatformProps {
    * Exports passed to the container runtime.
    */
   exports?: string[];
+  /**
+   * Module specifiers to exclude from the bundle and leave as external imports.
+   * Useful for native addons or packages that cannot be bundled (e.g. `sharp`, `impit`).
+   */
+  external?: string[];
 }
 
 export type ContainerServices =
@@ -442,6 +447,7 @@ export const ContainerProvider = () =>
           runtime,
           handler: props.handler,
           isExternal: props.isExternal,
+          external: props.external,
         });
 
         const finalDockerfile = buildFinalDockerfile(
@@ -468,12 +474,14 @@ export const ContainerProvider = () =>
         runtime,
         handler = "default",
         isExternal = false,
+        external = [],
       }: {
         id: string;
         main: string;
         runtime: "bun" | "node";
         handler: string | undefined;
         isExternal?: boolean;
+        external?: string[];
       }) {
         const realMain = yield* fs.realPath(main);
         const cwd = yield* findCwdForBundle(realMain);
@@ -490,6 +498,7 @@ export const ContainerProvider = () =>
                 "cloudflare:workers",
                 "cloudflare:workflows",
                 ...(runtime === "bun" ? ["bun", "bun:*"] : []),
+                ...external,
               ],
               platform: "node",
               plugins,

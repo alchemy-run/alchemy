@@ -22,6 +22,8 @@ type GetBindingType<T> = T extends Cloudflare.Assets
       ? R2Bucket
       : T extends Cloudflare.KVNamespace
         ? KVNamespace
-        : T extends Cloudflare.DurableObjectNamespaceLike
-          ? DurableObjectNamespace<Exclude<T["Shape"], undefined>>
-          : never;
+        : T extends Cloudflare.Queue
+          ? Queue<unknown>
+          : T extends Cloudflare.DurableObjectNamespaceLike
+            ? DurableObjectNamespace<Exclude<T["Shape"], undefined>>
+            : never;

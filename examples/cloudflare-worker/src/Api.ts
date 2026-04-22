@@ -8,6 +8,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import Agent from "./Agent.ts";
 import { Bucket } from "./Bucket.ts";
 import { KV } from "./KV.ts";
+import { Queue } from "./Queue.ts";
 import NotifyWorkflow from "./NotifyWorkflow.ts";
 import Room from "./Room.ts";
 
@@ -31,6 +32,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
     const loader = yield* Cloudflare.DynamicWorkerLoader("Loader");
     const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
     const kv = yield* Cloudflare.KVNamespace.bind(KV);
+    const queue = yield* Cloudflare.QueueBinding.bind(Queue);
 
     return {
       fetch: Effect.gen(function* () {
@@ -203,6 +205,20 @@ export default class Api extends Cloudflare.Worker<Api>()(
           const response = yield* room.fetch(request);
           return response;
         }
+        // Queue producer smoke test — POST /queue/send?text=...
+        //
+        // Exercises Cloudflare.QueueBinding by calling `queue.send(...)`.
+        // The consumer side runs in examples/cloudflare-worker-async (Effect-
+        // based workers currently only expose a `fetch` handler via `Main`,
+        // so `queue()` handler support here is a follow-up).
+        if (request.url === "/queue/send" && request.method === "POST") {
+          const text = yield* request.text;
+          yield* queue.send({ text, sentAt: Date.now() }).pipe(Effect.orDie);
+          return HttpServerResponse.jsonUnsafe(
+            { sent: { text } },
+            { status: 202 },
+          );
+        }
         return HttpServerResponse.text("Not Found", { status: 404 });
       }).pipe(
         Effect.catch(() =>
@@ -219,6 +235,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
       Layer.mergeAll(
         Cloudflare.R2BucketBindingLive,
         Cloudflare.KVNamespaceBindingLive,
+        Cloudflare.QueueBindingLive,
       ),
     ),
   ),
