@@ -2,13 +2,15 @@
 import { alchemyVersion } from "../../versions";
 ---
 
-<div class="alc-alpha-badge">
-  <span class="alc-alpha-badge__dot"></span>
+<div class="alc-beta-badge">
+  <span class="alc-beta-badge__dot"></span>
+  <span class="alc-beta-badge__label">BETA</span>
+  <span class="alc-beta-badge__sep">·</span>
   v{alchemyVersion}
 </div>
 
 <style>
-  .alc-alpha-badge {
+  .alc-beta-badge {
     display: inline-flex;
     align-items: center;
     gap: 8px;
@@ -22,10 +24,18 @@ import { alchemyVersion } from "../../versions";
     color: var(--alc-fg-3);
     letter-spacing: 0.02em;
   }
-  .alc-alpha-badge__dot {
+  .alc-beta-badge__dot {
     width: 6px;
     height: 6px;
     border-radius: 50%;
     background: var(--alc-terracotta);
+  }
+  .alc-beta-badge__label {
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--alc-terracotta-deep);
+  }
+  .alc-beta-badge__sep {
+    color: var(--alc-fg-4);
   }
 </style>
