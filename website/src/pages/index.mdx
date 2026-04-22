@@ -120,7 +120,7 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
     <Eyebrow>plan · deploy · destroy</Eyebrow>
     <h2 class="alc-h2" style="margin:10px 0 12px;">Stand up your cloud. <span style="color:var(--alc-accent-deep);font-style:italic;">Tear it down just as fast.</span></h2>
     <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:720px;margin:0 auto;">
-      Your whole cloud in one TypeScript program. <code class="alc-code-inline" style="color:var(--alc-accent-deep);">plan</code> shows the diff, <code class="alc-code-inline" style="color:var(--alc-accent-deep);">deploy</code> applies it, <code class="alc-code-inline" style="color:var(--alc-accent-deep);">destroy</code> reverses it. <a class="alc-learn-more" href="/concepts/deploy-and-destroy">Learn more &rarr;</a>
+      Your whole cloud as one TypeScript program. <code class="alc-code-inline" style="color:var(--alc-accent-deep);">plan</code> previews the diff, <code class="alc-code-inline" style="color:var(--alc-accent-deep);">deploy</code> applies it, <code class="alc-code-inline" style="color:var(--alc-accent-deep);">destroy</code> unwinds it — predictably, every time. <a class="alc-learn-more" href="/concepts/deploy-and-destroy">Learn more &rarr;</a>
     </p>
   </div>
 
@@ -154,12 +154,12 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
 
 <Section padding="80px 32px" id="effect-pilled">
   <div style="text-align:center;margin-bottom:36px;">
-    <Eyebrow>effect-pilled · type-checked bindings</Eyebrow>
+    <Eyebrow>effect-pilled · bindings as iam</Eyebrow>
     <h2 class="alc-h2" style="margin:10px 0 12px;">
       <span style="color:var(--alc-accent-deep);font-style:italic;">Effect-pilled</span> mode.
     </h2>
     <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:760px;margin:0 auto;">
-      Combine infra and app code into a single type-safe program. Bindings carry through the type system, so a missing policy or env var is a compile error — not a 3am page. <a class="alc-learn-more" href="/concepts/binding">Learn more &rarr;</a>
+      Infra and app code in one type-safe program. Bindings flow through the type system, so a missing IAM policy or env var is a compile error — not a 3am page. <a class="alc-learn-more" href="/concepts/binding">Learn more &rarr;</a>
     </p>
   </div>
 
@@ -170,12 +170,12 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
 
 <Section padding="80px 32px" id="async-fetch">
   <div style="text-align:center;margin-bottom:36px;">
-    <Eyebrow>async fetch · plain handlers · typed bindings</Eyebrow>
+    <Eyebrow>async fetch · plain handlers · same typed bindings</Eyebrow>
     <h2 class="alc-h2" style="margin:10px 0 12px;">
       Don't worry — you can still <code class="alc-code-inline" style="color:var(--alc-accent-deep);">async&nbsp;fetch</code>.
     </h2>
     <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:760px;margin:0 auto;">
-      It's just Infrastructure as Code, after all. Declare resources, attach them as bindings, and your handler stays the plain async function you already know — bindings stay fully typed in <code class="alc-code-inline">env</code>. <a class="alc-learn-more" href="/guides/migrating-from-v1">Learn more &rarr;</a>
+      Effect's optional. Declare resources, wire them as bindings, and your handler stays the plain async function you already wrote — <code class="alc-code-inline">env</code> stays fully typed either way. <a class="alc-learn-more" href="/guides/migrating-from-v1">Learn more &rarr;</a>
     </p>
   </div>
 
@@ -189,10 +189,10 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
 
 <Section padding="80px 32px" background="var(--alc-bg-nav)" id="hot-reload">
   <div style="text-align:center;margin-bottom:32px;">
-    <Eyebrow>alchemy dev · live cloud · hot reload</Eyebrow>
-    <h2 class="alc-h2" style="margin:10px 0 12px;">Hot reload your cloud resources <span style="color:var(--alc-accent-deep);font-style:italic;">as you develop</span>.</h2>
+    <Eyebrow>alchemy dev · live cloud · ~100ms reloads</Eyebrow>
+    <h2 class="alc-h2" style="margin:10px 0 12px;">Hot-reload your cloud, <span style="color:var(--alc-accent-deep);font-style:italic;">not just your code</span>.</h2>
     <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:720px;margin:0 auto;">
-      Iterate on your frontend and backend at the same time. Both your infrastructure and application update in real-time — add a queue in <code class="alc-code-inline" style="color:var(--alc-accent-deep);">alchemy.run.ts</code>, the worker reloads with the binding already wired. <a class="alc-learn-more" href="/concepts/local-development">Learn more &rarr;</a>
+      Add a queue in <code class="alc-code-inline" style="color:var(--alc-accent-deep);">alchemy.run.ts</code> and the worker reloads with the binding already wired. Frontend and backend together, against real R2 / KV / D1. <a class="alc-learn-more" href="/concepts/local-development">Learn more &rarr;</a>
     </p>
   </div>
 
@@ -215,10 +215,10 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
 
 <Section padding="80px 32px" id="live-tests">
   <div style="text-align:center;margin-bottom:32px;">
-    <Eyebrow>alchemy test · isolated stages · no mocks</Eyebrow>
-    <h2 class="alc-h2" style="margin:10px 0 12px;">Run tests against <span style="color:var(--alc-accent-deep);font-style:italic;">live cloud resources</span>.</h2>
+    <Eyebrow>alchemy test · isolated stages · live cloud</Eyebrow>
+    <h2 class="alc-h2" style="margin:10px 0 12px;">Test against the real cloud. <span style="color:var(--alc-accent-deep);font-style:italic;">Not a fake of it.</span></h2>
     <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:720px;margin:0 auto;">
-      Have agents write tests against your real API and run them against the actual cloud — every suite gets its own isolated stack, deployed and destroyed automatically. <a class="alc-learn-more" href="/concepts/testing">Learn more &rarr;</a>
+      Each suite spins up its own isolated stack — real R2, real DynamoDB, real Workers — runs your assertions, and tears it back down. No mocks to babysit, no drift between fixture and production. <a class="alc-learn-more" href="/concepts/testing">Learn more &rarr;</a>
     </p>
   </div>
 
@@ -242,10 +242,10 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
 
 <Section padding="80px 32px" background="var(--alc-bg-nav)" id="ci-previews">
   <div style="text-align:center;margin-bottom:32px;">
-    <Eyebrow>github actions · preview environments</Eyebrow>
-    <h2 class="alc-h2" style="margin:10px 0 12px;">Preview every PR with an <span style="color:var(--alc-accent-deep);font-style:italic;">ephemeral</span> environment.</h2>
+    <Eyebrow>github actions · per-pr environments</Eyebrow>
+    <h2 class="alc-h2" style="margin:10px 0 12px;">Every PR gets a <span style="color:var(--alc-accent-deep);font-style:italic;">real</span> environment.</h2>
     <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:720px;margin:0 auto;">
-      Alchemy programs run anywhere. Drop one into GitHub Actions to deploy a real environment per PR for testing — and tear it down when the PR merges or closes. <a class="alc-learn-more" href="/guides/ci">Learn more &rarr;</a>
+      An Alchemy program is just TypeScript — drop one into GitHub Actions to deploy a per-PR stack for review, then let merge or close tear it down. <a class="alc-learn-more" href="/guides/ci">Learn more &rarr;</a>
     </p>
   </div>
 
@@ -256,10 +256,10 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
 
 <Section padding="80px 32px" id="operational-readiness">
   <div style="text-align:center;margin-bottom:32px;">
-    <Eyebrow>observability as iac · effect-native otel</Eyebrow>
-    <h2 class="alc-h2" style="margin:10px 0 12px;">Don't forget to productionize. <span style="color:var(--alc-accent-deep);font-style:italic;">Dashboards, alarms, and metrics</span> from day one.</h2>
+    <Eyebrow>observability as iac · otel from effect</Eyebrow>
+    <h2 class="alc-h2" style="margin:10px 0 12px;">Dashboards and alarms <span style="color:var(--alc-accent-deep);font-style:italic;">ship with the resources</span>.</h2>
     <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:760px;margin:0 auto;">
-      Metrics and dashboards shouldn't be an afterthought. Record metrics and spans with Effect's built-in OpenTelemetry, then export them to your favorite analytics tool — all declared next to the resources they watch. <a class="alc-learn-more" href="/concepts/observability">Learn more &rarr;</a>
+      Effect emits logs, spans, and metrics by default. Wire dashboards and alarms in the same <code class="alc-code-inline" style="color:var(--alc-accent-deep);">alchemy.run.ts</code> as the workers they watch — swap the OTLP exporter for Axiom, Datadog, or anywhere else. <a class="alc-learn-more" href="/concepts/observability">Learn more &rarr;</a>
     </p>
   </div>
 
