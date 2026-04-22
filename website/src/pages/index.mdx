@@ -13,7 +13,7 @@ import CodeBlock from "../components/marketing/CodeBlock.astro";
 import SketchLabel from "../components/marketing/SketchLabel.astro";
 import DeployTerminal from "../components/marketing-islands/DeployTerminal.tsx";
 import StackDeployMobile from "../components/marketing-islands/StackDeployMobile.tsx";
-import BindingsToIAM from "../components/marketing-islands/BindingsToIAM.tsx";
+import EffectPilledShowcase from "../components/marketing-islands/EffectPilledShowcase.tsx";
 import DevTerminal from "../components/marketing-islands/DevTerminal.tsx";
 import TestTerminal from "../components/marketing-islands/TestTerminal.tsx";
 import PRLifecycle from "../components/marketing-islands/PRLifecycle.tsx";
@@ -159,11 +159,11 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
       Compose <span style="color:var(--alc-accent-deep);font-style:italic;">Effects</span> and <span style="color:var(--alc-accent-deep);font-style:italic;">Layers</span> into type-safe cloud applications.
     </h2>
     <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:760px;margin:20px auto 0;">
-      Every <code class="alc-code-inline" style="color:var(--alc-accent-deep);">.bind()</code> generates the exact IAM policy and environment variables your function actually uses — nothing more, nothing missing. <span style="color:var(--alc-fg-1);font-weight:500;">Never forget another IAM policy or env var.</span> <a class="alc-learn-more" href="/concepts/binding">Learn more &rarr;</a>
+      Every <code class="alc-code-inline" style="color:var(--alc-accent-deep);">.bind()</code> generates the exact IAM policy and environment variables your function needs. Every <code class="alc-code-inline" style="color:var(--alc-accent-deep);">.stream(…).process(…)</code> wires up the matching event source. <span style="color:var(--alc-fg-1);font-weight:500;">Never forget another IAM policy, env var, or subscription.</span> <a class="alc-learn-more" href="/concepts/binding">Learn more &rarr;</a>
     </p>
   </div>
 
-  <BindingsToIAM client:visible />
+  <EffectPilledShowcase client:visible />
 </Section>
 
 {/* ───── 3 · ASYNC FETCH ESCAPE HATCH ───── */}
@@ -216,9 +216,9 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
 <Section padding="80px 32px" id="live-tests">
   <div style="text-align:center;margin-bottom:32px;">
     <Eyebrow>alchemy test · isolated stages · live cloud</Eyebrow>
-    <h2 class="alc-h2" style="margin:10px 0 12px;">Test against the real cloud. <span style="color:var(--alc-accent-deep);font-style:italic;">Not a fake of it.</span></h2>
+    <h2 class="alc-h2" style="margin:10px 0 12px;">Verify against live resources: <span style="color:var(--alc-success);font-style:italic;">deploy</span> &rarr; <span style="color:var(--alc-warn);font-style:italic;">assert</span> &rarr; <span style="color:var(--alc-danger);font-style:italic;">destroy</span>.</h2>
     <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:720px;margin:0 auto;">
-      Each suite spins up its own isolated stack — real R2, real DynamoDB, real Workers — runs your assertions, and tears it back down. No mocks to babysit, no drift between fixture and production. <a class="alc-learn-more" href="/concepts/testing">Learn more &rarr;</a>
+      Each suite spins up its own isolated stack — live R2, DynamoDB, Workers — runs your assertions, then tears it back down. No mocks to babysit, no drift between fixture and production. <a class="alc-learn-more" href="/concepts/testing">Learn more &rarr;</a>
     </p>
   </div>
 
@@ -243,7 +243,7 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
 <Section padding="80px 32px" background="var(--alc-bg-nav)" id="ci-previews">
   <div style="text-align:center;margin-bottom:32px;">
     <Eyebrow>github actions · per-pr environments</Eyebrow>
-    <h2 class="alc-h2" style="margin:10px 0 12px;">Every PR gets a <span style="color:var(--alc-accent-deep);font-style:italic;">real</span> environment.</h2>
+    <h2 class="alc-h2" style="margin:10px 0 12px;">Preview every PR with an <span style="color:var(--alc-accent-deep);font-style:italic;">ephemeral</span> environment.</h2>
     <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:720px;margin:0 auto;">
       An Alchemy program is just TypeScript — drop one into GitHub Actions to deploy a per-PR stack for review, then let merge or close tear it down. <a class="alc-learn-more" href="/guides/ci">Learn more &rarr;</a>
     </p>

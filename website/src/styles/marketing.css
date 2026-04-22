@@ -282,6 +282,583 @@ body.alc-root,
 }
 
 /* ============================================================
+   Effect-pilled showcase (home page section 2)
+   One terminal-chromed card with two tabs (IAM bindings / Event
+   sources). Each panel is code on the left and a stylized
+   "generated artifact" panel on the right. On narrow screens the
+   split collapses into a vertical stack with a "↓ generates" cue
+   between code and artifact, so nothing depends on SVG arrows that
+   break on mobile.
+   ============================================================ */
+
+.eff-showcase {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 1080px;
+  margin: 0 auto;
+}
+.eff-showcase__chrome {
+  background: var(--alc-bg-code);
+  border: 1px solid var(--alc-hairline);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: var(--alc-shadow-sm);
+  display: flex;
+  flex-direction: column;
+}
+.eff-showcase__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(232, 220, 192, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+}
+.eff-showcase__tabs {
+  display: flex;
+  gap: 4px;
+  margin-left: 12px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.eff-showcase__tabs::-webkit-scrollbar {
+  display: none;
+}
+.eff-showcase__tab {
+  flex: 0 0 auto;
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--alc-code-comment);
+  font-family: var(--alc-font-mono);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition:
+    color 160ms ease,
+    background 160ms ease,
+    border-color 160ms ease;
+}
+.eff-showcase__tab:hover {
+  color: var(--alc-fg-invert);
+}
+.eff-showcase__tab[data-active="true"] {
+  color: var(--alc-fg-invert);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(232, 220, 192, 0.12);
+}
+.eff-showcase__body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.eff-showcase__panel {
+  display: flex;
+  flex-direction: column;
+}
+.eff-showcase__panel[hidden] {
+  display: none;
+}
+.eff-showcase__split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 0;
+  /* Fixed height keeps the page below stable as the auto-cycle swaps
+     between tabs whose code/artifact have different intrinsic heights. */
+  height: 420px;
+}
+.eff-showcase__code {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-right: 1px solid rgba(232, 220, 192, 0.08);
+}
+.eff-showcase__pre {
+  margin: 0;
+  padding: 16px 18px;
+  font-family: var(--alc-font-mono);
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--alc-code-var);
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+.eff-showcase__artifact {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 18px 20px;
+  /* Slightly sunken vs the main terminal bg so the lifted cards inside
+     read as "panels on a panel" rather than "dark on dark". */
+  background: var(--alc-walnut-950);
+  min-width: 0;
+  overflow: auto;
+  min-height: 0;
+}
+.eff-showcase__group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.eff-showcase__group-title {
+  font-family: var(--alc-font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--alc-walnut-300);
+}
+.eff-showcase__perm {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--alc-walnut-700);
+  border: 1px solid var(--alc-walnut-600);
+  border-radius: 8px;
+  font-family: var(--alc-font-mono);
+  font-size: 12.5px;
+  color: var(--alc-fg-invert);
+  min-width: 0;
+  opacity: 0;
+  animation: eff-fade-up 460ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+.eff-showcase__perm-icon {
+  flex: 0 0 auto;
+  border-radius: 4px;
+}
+.eff-showcase__perm-action {
+  color: var(--alc-code-keyword);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.eff-showcase__perm-arrow {
+  color: var(--alc-accent-bright);
+  flex: 0 0 auto;
+}
+.eff-showcase__perm-target {
+  color: var(--alc-fg-invert);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.eff-showcase__envs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.eff-showcase__env {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--alc-walnut-700);
+  border: 1px solid var(--alc-walnut-600);
+  border-left: 2px solid var(--alc-accent-bright);
+  border-radius: 6px;
+  font-family: var(--alc-font-mono);
+  font-size: 12px;
+  color: var(--alc-fg-invert);
+  min-width: 0;
+  opacity: 0;
+  animation: eff-fade-up 460ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+.eff-showcase__env-name {
+  color: var(--alc-code-keyword);
+  font-weight: 600;
+  flex: 0 0 auto;
+}
+.eff-showcase__env-eq {
+  color: var(--alc-code-comment);
+}
+.eff-showcase__env-value {
+  color: var(--alc-fg-invert);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
+}
+
+/* Feature row — used by Durable Objects / Containers / Layers tabs.
+   Icon on the left, label + sub stacked on the right. Same lifted card
+   treatment as .eff-showcase__perm so the artifact panels feel related. */
+.eff-showcase__feature {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--alc-walnut-700);
+  border: 1px solid var(--alc-walnut-600);
+  border-radius: 8px;
+  min-width: 0;
+  opacity: 0;
+  animation: eff-fade-up 460ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+.eff-showcase__feature-icon {
+  flex: 0 0 auto;
+}
+.eff-showcase__feature-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.eff-showcase__feature-label {
+  font-family: var(--alc-font-mono);
+  font-size: 12.5px;
+  color: var(--alc-code-keyword);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.eff-showcase__feature-sub {
+  font-family: var(--alc-font-mono);
+  font-size: 11px;
+  color: var(--alc-walnut-300);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Workflow steps — numbered ordered list with rounded badges. */
+.eff-showcase__steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.eff-showcase__step {
+  display: grid;
+  grid-template-columns: 22px minmax(0, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--alc-walnut-700);
+  border: 1px solid var(--alc-walnut-600);
+  border-radius: 8px;
+  min-width: 0;
+  opacity: 0;
+  animation: eff-fade-up 460ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+.eff-showcase__step-num {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--alc-accent-bright);
+  color: var(--alc-bg-code);
+  font-family: var(--alc-font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.eff-showcase__step-label {
+  font-family: var(--alc-font-mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--alc-code-keyword);
+  white-space: nowrap;
+}
+.eff-showcase__step-sub {
+  font-family: var(--alc-font-mono);
+  font-size: 11px;
+  color: var(--alc-walnut-300);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: right;
+}
+
+/* Event source flow — three nodes connected by labelled edges. */
+.eff-showcase__flow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+.eff-showcase__node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 10px;
+  background: var(--alc-walnut-700);
+  border: 1px solid var(--alc-walnut-600);
+  border-radius: 10px;
+  text-align: center;
+  min-width: 0;
+  opacity: 0;
+  animation: eff-fade-up 460ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+.eff-showcase__node--accent {
+  background: var(--alc-walnut-600);
+  border-color: var(--alc-accent-bright);
+  box-shadow: 0 0 0 2px rgba(143, 177, 94, 0.18);
+}
+.eff-showcase__node-label {
+  font-family: var(--alc-font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--alc-fg-invert);
+  line-height: 1.2;
+}
+.eff-showcase__node-sub {
+  font-family: var(--alc-font-mono);
+  font-size: 10px;
+  color: var(--alc-walnut-300);
+  line-height: 1.2;
+}
+.eff-showcase__edge {
+  position: relative;
+  width: 28px;
+  height: 1.6px;
+  background: var(--alc-accent-bright);
+  opacity: 0;
+  animation: eff-fade-in 320ms ease both;
+}
+.eff-showcase__edge::after {
+  content: "";
+  position: absolute;
+  right: -1px;
+  top: 50%;
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 6px solid var(--alc-accent-bright);
+  transform: translateY(-50%);
+}
+.eff-showcase__edge::before {
+  content: attr(data-label);
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  transform: translate(-50%, -2px);
+  font-family: var(--alc-font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--alc-walnut-300);
+  white-space: nowrap;
+  background: var(--alc-walnut-950);
+  padding: 0 4px;
+}
+
+.eff-showcase__hint {
+  font-family: var(--alc-font-mono);
+  font-size: 10.5px;
+  color: var(--alc-fg-3);
+  text-align: center;
+  letter-spacing: 0.04em;
+}
+
+@keyframes eff-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes eff-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Used on the code <pre> so it fades in alongside the artifact rows
+   when the panel remounts (tab switch). */
+.eff-showcase__fade {
+  animation: eff-fade-in 320ms ease both;
+}
+
+/* ------------------------------------------------------------
+   Layer tab — diff renderer with overlay variant crossfade.
+   Common lines render statically. Each diff segment is a "slot"
+   that overlays both variants in the same grid cell so only the
+   active one is visible — the inactive fades to opacity 0 and is
+   replaced by the active in a long ease-in-out crossfade.
+   ------------------------------------------------------------ */
+
+.eff-showcase__diff {
+  margin: 0;
+  padding: 14px 16px 14px 12px;
+  font-family: var(--alc-font-mono);
+  font-size: 11.5px;
+  line-height: 1.7;
+  /* Bright parchment for any character that isn't tokenized by
+     highlightTS (punctuation: <, =, (, ), {, }, ;, etc.) so symbols
+     don't disappear into the walnut bg. */
+  color: var(--alc-code-var);
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.eff-diff__common {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Slot: a CSS grid with one cell. Both variants share that cell, so the
+   slot's height is the max of the two variants and the panel never jumps
+   when the impl swaps. */
+.eff-diff__slot {
+  display: grid;
+  grid-template-areas: "stack";
+}
+.eff-diff__variant {
+  grid-area: stack;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 1100ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.eff-diff__variant[data-active="true"] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.eff-diff__line {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 6px;
+  padding: 0 6px;
+  margin: 0 -6px;
+}
+.eff-diff__marker {
+  display: inline-block;
+  width: 12px;
+  text-align: center;
+  font-weight: 700;
+  user-select: none;
+  color: var(--alc-accent-bright);
+}
+.eff-diff__content {
+  display: block;
+  white-space: pre;
+  min-width: 0;
+}
+
+/* Diff lines get a subtle green tint background so the whole line
+   reads as "added" — not just the "+" prefix. The tint is soft enough
+   not to fight the syntax-highlighted tokens. */
+.eff-diff__line--ddb,
+.eff-diff__line--d1 {
+  background-color: rgba(143, 177, 94, 0.12);
+  box-shadow: inset 2px 0 0 var(--alc-accent-bright);
+}
+.eff-diff__line--ddb .eff-diff__marker::before,
+.eff-diff__line--d1 .eff-diff__marker::before {
+  content: "+";
+}
+
+/* ------------------------------------------------------------
+   Layer tab — artifact panel uses the same overlay pattern for
+   the "Composed from" group so the ddb / d1 feature-row stacks
+   crossfade in place rather than competing for visual weight.
+   ------------------------------------------------------------ */
+
+.eff-showcase__variant-stack {
+  display: grid;
+  grid-template-areas: "stack";
+}
+.eff-showcase__variant {
+  grid-area: stack;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 1100ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.eff-showcase__variant[data-active="true"] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Mobile: stack code above artifact with a "↓ generates" cue. The flow
+   diagram also rotates from horizontal 3-up to vertical so the nodes
+   stack and the edges become down-pointing arrows. */
+@media (max-width: 720px) {
+  .eff-showcase__split {
+    grid-template-columns: minmax(0, 1fr);
+    /* Stacked layout: let each panel size naturally instead of squashing
+       both halves into a fixed 420px combined height. */
+    height: auto;
+  }
+  .eff-showcase__code {
+    border-right: 0;
+    border-bottom: 1px solid rgba(232, 220, 192, 0.08);
+  }
+  .eff-showcase__pre {
+    overflow-x: auto;
+  }
+  .eff-showcase__artifact {
+    overflow: visible;
+  }
+  .eff-showcase__artifact {
+    position: relative;
+    padding-top: 30px;
+  }
+  .eff-showcase__artifact::before {
+    content: "↓ generates";
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: var(--alc-font-mono);
+    font-size: 10.5px;
+    color: var(--alc-fg-3);
+    letter-spacing: 0.04em;
+  }
+  .eff-showcase__flow {
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-flow: row;
+    gap: 4px;
+    justify-items: stretch;
+  }
+  .eff-showcase__edge {
+    width: 1.6px;
+    height: 24px;
+    margin: 0 auto;
+  }
+  .eff-showcase__edge::after {
+    right: 50%;
+    top: auto;
+    bottom: -1px;
+    transform: translateX(50%);
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 6px solid var(--alc-accent-bright);
+    border-bottom: 0;
+  }
+  .eff-showcase__edge::before {
+    left: 100%;
+    bottom: 50%;
+    transform: translate(4px, 50%);
+  }
+}
+
+/* ============================================================
    Stack ↔ Deploy mobile toggle (home page section 1)
    On narrow screens the side-by-side diagram is replaced by a single
    tabbed card that auto-cycles between the source and the deploy
