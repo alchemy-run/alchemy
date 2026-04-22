@@ -496,6 +496,12 @@ export const ContainerProvider = () =>
                 ...external,
               ],
               platform: "node",
+              resolve: {
+                conditionNames:
+                  runtime === "bun"
+                    ? ["bun", "import", "module", "default"]
+                    : ["node", "import", "module", "default"],
+              },
               plugins,
               treeshake: true,
             },
