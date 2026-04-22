@@ -45,8 +45,10 @@ interface Row extends Resource {
 
 export default function DeployTerminal({
   title = "~/my-app",
+  bare,
 }: {
   title?: string;
+  bare?: boolean;
 }) {
   const [mode, setMode] = useState<"idle" | "plan" | "deploy" | "destroy">(
     "idle",
@@ -300,6 +302,7 @@ export default function DeployTerminal({
       badge={mode !== "idle" ? MODE_LABEL[mode] : undefined}
       badgeColor={accent}
       bodyMinHeight={296}
+      bare={bare}
     >
       <Line>
         <span style={{ color: accent, transition: "color 280ms ease" }}>

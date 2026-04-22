@@ -65,13 +65,30 @@ export function TermChrome({
   badgeColor,
   children,
   bodyMinHeight,
+  bare,
 }: {
   title: string;
   badge?: string;
   badgeColor?: string;
   children: ReactNode;
   bodyMinHeight?: number;
+  /**
+   * When true, omit the outer `.alc-term` wrapper and the dots/title header.
+   * Useful when this terminal is embedded inside another chrome (e.g. the
+   * mobile tab toggle that combines code + deploy into one card).
+   */
+  bare?: boolean;
 }) {
+  if (bare) {
+    return (
+      <pre
+        className="alc-term__body"
+        style={bodyMinHeight ? { minHeight: bodyMinHeight } : undefined}
+      >
+        {children}
+      </pre>
+    );
+  }
   return (
     <div className="alc-term">
       <div className="alc-term__header">

@@ -33,8 +33,8 @@ const ROWS: BindRow[] = [
     id: "get",
     call: (
       <>
-        <K>const</K> get = <K>yield</K>* <V>S3</V>.<V>GetObject</V>.<F>bind</F>(
-        <T>Photos</T>);
+        <K>const</K> getPhoto = <K>yield</K>* <V>S3</V>.<V>GetObject</V>.
+        <F>bind</F>(<T>Photos</T>);
       </>
     ),
     resource: { label: "Photos", sub: "S3.Bucket", kind: "s3" },
@@ -44,7 +44,7 @@ const ROWS: BindRow[] = [
     id: "put",
     call: (
       <>
-        <K>const</K> put = <K>yield</K>* <V>DynamoDB</V>.<V>PutItem</V>.
+        <K>const</K> putJob = <K>yield</K>* <V>DynamoDB</V>.<V>PutItem</V>.
         <F>bind</F>(<T>Jobs</T>);
       </>
     ),
@@ -184,7 +184,23 @@ export default function BindingsToIAM() {
               {"\n    "}
             </span>
           ))}
-          <C>{"// handler uses get / put / stream …"}</C>
+          {"\n    "}
+          <K>return</K> {"{"}
+          {"\n      "}
+          <V>fetch</V>: (<V>req</V>) {"=>"} <V>Effect</V>.<F>gen</F>(
+          <K>function</K>* () {"{"}
+          {"\n        "}
+          <K>const</K> photo = <K>yield</K>* <F>getPhoto</F>({"{ "}
+          <V>key</V>: <V>req</V>.<V>key</V> {"}"});
+          {"\n        "}
+          <K>yield</K>* <F>putJob</F>({"{ "}
+          <V>id</V>: <V>req</V>.<V>id</V>, <V>photo</V> {"}"});
+          {"\n        "}
+          <K>return</K> <K>new</K> <T>Response</T>(<S>"ok"</S>);
+          {"\n      "}
+          {"}),"}
+          {"\n    "}
+          {"};"}
           {"\n  "}
           {"}),"}
           {"\n"}
