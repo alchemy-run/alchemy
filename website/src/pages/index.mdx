@@ -1,7 +1,7 @@
 ---
 layout: ../layouts/Marketing.astro
 title: "alchemy — zero to production. TypeScript IaC on Effect."
-description: "Alchemy is the IaC tool that's actually TypeScript. Deploy frontends, ship backends, and define the cloud they run on — all from one typed program on Effect. Bindings are the IAM policy. Run locally against real resources. Spin up isolated stacks per test. Preview every PR. Watch it in production."
+description: "Alchemy is the IaC tool that's actually TypeScript. Stand up your whole cloud in one program, type the IAM, hot-reload it locally, run tests against the real cloud, preview every PR, and ship dashboards & alarms in the same file."
 ---
 
 import Section from "../components/marketing/Section.astro";
@@ -13,12 +13,13 @@ import CodeBlock from "../components/marketing/CodeBlock.astro";
 import SketchLabel from "../components/marketing/SketchLabel.astro";
 import DeployTerminal from "../components/marketing-islands/DeployTerminal.tsx";
 import BindingsToIAM from "../components/marketing-islands/BindingsToIAM.tsx";
-import DevTestTerminal from "../components/marketing-islands/DevTestTerminal.tsx";
+import DevTerminal from "../components/marketing-islands/DevTerminal.tsx";
+import TestTerminal from "../components/marketing-islands/TestTerminal.tsx";
 import PRLifecycle from "../components/marketing-islands/PRLifecycle.tsx";
 import CopyForAgent from "../components/marketing-islands/CopyForAgent.tsx";
 import HeroCta from "../components/marketing-islands/HeroCta.tsx";
 
-export const STACK_SRC = `// alchemy.run.ts — the entrypoint
+export const STACK_SRC = `// alchemy.run.ts — your whole cloud, one program.
 export default Alchemy.Stack(
   "MyApp",
   { providers: Layer.mergeAll(AWS.providers(), Cloudflare.providers()) },
@@ -31,6 +32,21 @@ export default Alchemy.Stack(
     return { url: api.url };
   }),
 );`;
+
+export const EFFECT_PILLED_SRC = `// alchemy.run.ts — infra + runtime in one program.
+const Photos = yield* Cloudflare.R2Bucket("Photos");
+
+yield* Cloudflare.Worker("Api", Effect.gen(function* () {
+  const photos = yield* R2.GetObject.bind(Photos);   // ← typed handle
+  return {
+    fetch: (req) => Effect.gen(function* () {
+      const obj = yield* photos({ key: "hello.txt" });
+      return new Response(obj?.body ?? "Not found");
+    }),
+  };
+}));
+// Alchemy infers IAM + bindings from .bind() calls.
+// Forget a permission? It won't compile.`;
 
 export const ASYNC_RUN_SRC = `// alchemy.run.ts — declare resources, attach as bindings.
 export const Bucket = Cloudflare.R2Bucket("Bucket");
@@ -52,12 +68,14 @@ export default {
   },
 };`;
 
-export const TEST_SRC = `const stack = beforeAll(deploy(Stack));
+export const TEST_SRC = `// test/api.test.ts — isolated stack per suite.
+const stack = beforeAll(deploy(Stack));   // real R2, real DynamoDB
+afterAll(destroy(stack));                 // torn down at the end
 
 test("PUT + GET round-trips through R2", Effect.gen(function* () {
-const { url } = yield* stack;
-const res = yield* HttpClient.get(\`\${url}/object/hello.txt\`);
-expect(yield* res.text).toBe("hi!");
+  const { url } = yield* stack;
+  const res = yield* HttpClient.get(\`\${url}/object/hello.txt\`);
+  expect(yield* res.text).toBe("hi!");
 }));`;
 
 export const OTEL_SRC = `// src/Api.ts — Effect emits OpenTelemetry. Exporter is a Layer.
@@ -101,24 +119,21 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
       &rarr; production.
     </h1>
     <h2 class="alc-hero__subtitle">
-      Infrastructure as code in pure TypeScript. Move fast in dev; operate at
-      scale{" "}
-      <span style="color:var(--alc-accent-deep);font-style:italic;">
-        without compromise
-      </span>
-      .
+      Infrastructure as code in pure TypeScript. Optimized for{" "}
+      <span style="color:var(--alc-accent-deep);font-style:italic;">rapid development</span>{" "}
+      without compromising production readiness.
     </h2>
     <HeroCta client:load />
   </div>
 </Section>
 
-{/* ───── 1 · PLAN · DEPLOY · DESTROY ───── */}
+{/* ───── 1 · STAND UP / TEAR DOWN ───── */}
 
 <Section padding="40px 32px 96px" id="plan-deploy-destroy">
   <div style="text-align:center;margin-bottom:36px;">
-    <Eyebrow>diff · deploy · destroy</Eyebrow>
+    <Eyebrow>plan · deploy · destroy</Eyebrow>
     <h2 class="alc-h2" style="margin:10px 0 12px;">Stand up your cloud. <span style="color:var(--alc-accent-deep);font-style:italic;">Tear it down just as fast.</span></h2>
-    <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:680px;margin:0 auto;">
+    <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:720px;margin:0 auto;">
       Your whole cloud in one TypeScript program. <code class="alc-code-inline" style="color:var(--alc-accent-deep);">plan</code> shows the diff, <code class="alc-code-inline" style="color:var(--alc-accent-deep);">deploy</code> applies it, <code class="alc-code-inline" style="color:var(--alc-accent-deep);">destroy</code> reverses it. <a class="alc-learn-more" href="/concepts/deploy-and-destroy">Learn more &rarr;</a>
     </p>
   </div>
@@ -146,56 +161,68 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
   </div>
 </Section>
 
-{/* ───── 2 · BINDINGS = IAM ───── */}
+{/* ───── 2 · TYPE IAM + ENV VARS ───── */}
 
 <Section padding="80px 32px" id="bindings-iam">
   <div style="text-align:center;margin-bottom:36px;">
-    <Eyebrow>bindings · least-privilege permissions</Eyebrow>
+    <Eyebrow>typed bindings · least-privilege permissions</Eyebrow>
     <h2 class="alc-h2" style="margin:10px 0 12px;">
-      Bindings <span style="color:var(--alc-accent-deep);font-style:italic;">are</span> the IAM policy.
+      Type IAM policies and env vars. <span style="color:var(--alc-accent-deep);font-style:italic;">Never forget another permission.</span>
     </h2>
-    <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:720px;margin:0 auto;">
-      Bind a resource to a function. Alchemy generates the exact IAM and Worker bindings it actually uses. Nothing more. <a class="alc-learn-more" href="/concepts/binding">Learn more &rarr;</a>
+    <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:760px;margin:0 auto;">
+      Bind a resource to a function. Alchemy generates the exact IAM policy and env vars it actually uses — nothing more, nothing missing. <a class="alc-learn-more" href="/concepts/binding">Learn more &rarr;</a>
     </p>
   </div>
 
   <BindingsToIAM client:visible />
+
+  {/* Two sub-sections: Effect-pilled (recommended) + async fetch (escape hatch). */}
+  <div class="alc-modes" style="margin-top:64px;">
+    <div class="alc-mode">
+      <div class="alc-mode__head">
+        <SketchLabel>Recommended</SketchLabel>
+        <h3 class="alc-h3">
+          <span style="color:var(--alc-accent-deep);font-style:italic;">Effect-pilled</span> mode.
+        </h3>
+        <p class="alc-mode__lede">
+          Combine infra and app code into a single type-safe program. Bindings carry through the type system, so a missing policy or env var is a compile error — not a 3am page.
+        </p>
+      </div>
+      <CodeBlock filename="alchemy.run.ts" code={EFFECT_PILLED_SRC} compact />
+    </div>
+
+    <div class="alc-mode alc-mode--escape">
+      <div class="alc-mode__head">
+        <SketchLabel>Escape hatch</SketchLabel>
+        <h3 class="alc-h3">
+          Don't worry — you can still <code class="alc-code-inline" style="color:var(--alc-accent-deep);">export&nbsp;default&nbsp;{"{"} async&nbsp;fetch {"}"}</code>.
+        </h3>
+        <p class="alc-mode__lede">
+          It's just Infrastructure as Code, after all. Declare resources, attach them as bindings, and your handler stays the plain async function you already know. Bindings stay fully typed in <code class="alc-code-inline">env</code>.
+        </p>
+      </div>
+      <div class="alc-split-2">
+        <CodeBlock filename="alchemy.run.ts" code={ASYNC_RUN_SRC} compact />
+        <CodeBlock filename="src/worker.ts" code={ASYNC_WORKER_SRC} compact />
+      </div>
+    </div>
+  </div>
 </Section>
 
-{/* ───── 3 · EFFECT-NATIVE, ASYNC-COMPATIBLE ───── */}
+{/* ───── 3 · HOT RELOAD AS YOU DEVELOP ───── */}
 
-<Section padding="64px 32px" id="effect-and-async">
+<Section padding="80px 32px" background="var(--alc-bg-nav)" id="hot-reload">
   <div style="text-align:center;margin-bottom:32px;">
-    <Eyebrow>effect-native · async-compatible</Eyebrow>
-    <h2 class="alc-h2" style="margin:10px 0 12px;">
-      Effect <span style="color:var(--alc-accent-deep);font-style:italic;">when you want it</span>. <code class="alc-code-inline">async fetch</code> when you don't.
-    </h2>
+    <Eyebrow>alchemy dev · live cloud · hot reload</Eyebrow>
+    <h2 class="alc-h2" style="margin:10px 0 12px;">Hot reload your cloud resources <span style="color:var(--alc-accent-deep);font-style:italic;">as you develop</span>.</h2>
     <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:720px;margin:0 auto;">
-      Use Effect for typed errors and composition. Or stick with <code class="alc-code-inline" style="color:var(--alc-accent-deep);">async fetch(req, env)</code>. Bindings stay fully typed either way. <a class="alc-learn-more" href="/guides/migrating-from-v1">Learn more &rarr;</a>
+      Iterate on your frontend and backend at the same time. Both your infrastructure and application update in real-time — add a queue in <code class="alc-code-inline" style="color:var(--alc-accent-deep);">alchemy.run.ts</code>, the worker reloads with the binding already wired. <a class="alc-learn-more" href="/concepts/local-development">Learn more &rarr;</a>
     </p>
   </div>
 
-  <div class="alc-split-2">
-    <CodeBlock filename="alchemy.run.ts" code={ASYNC_RUN_SRC} compact />
-    <CodeBlock filename="src/worker.ts" code={ASYNC_WORKER_SRC} compact />
+  <div class="alc-dev-stage">
+    <DevTerminal client:visible />
   </div>
-</Section>
-
-{/* ───── 4 · DEV + TEST (merged) ───── */}
-
-<Section padding="80px 32px" background="var(--alc-bg-nav)" id="dev-and-test">
-  <div style="text-align:center;margin-bottom:32px;">
-    <Eyebrow>alchemy dev · alchemy test · no mocks, isolated stages</Eyebrow>
-    <h2 class="alc-h2" style="margin:10px 0 12px;">Dev hot-reloads. Tests run against live cloud resources.</h2>
-    <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:680px;margin:0 auto;">
-      A <code class="alc-code-inline" style="color:var(--alc-accent-deep);">Stack</code> is just an Effect. <code class="alc-code-inline" style="color:var(--alc-accent-deep);">alchemy dev</code> hot-reloads against your live cloud. Tests yield the same stack into an isolated stage. <a class="alc-learn-more" href="/concepts/local-development">Learn more &rarr;</a>
-    </p>
-  </div>
-
-<div class="alc-split-2 alc-split-2--wide-left">
-  <DevTestTerminal client:visible />
-  <CodeBlock filename="test/api.test.ts" code={TEST_SRC} compact />
-</div>
 
   <div class="alc-stat-strip">
     <span class="alc-stat-strip__item"><strong>workerd</strong> locally</span>
@@ -204,34 +231,59 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
     <span class="alc-stat-strip__sep">·</span>
     <span class="alc-stat-strip__item">live <strong>R2 / KV / D1</strong></span>
     <span class="alc-stat-strip__sep">·</span>
-    <span class="alc-stat-strip__item"><strong>per-suite</strong> stages</span>
-    <span class="alc-stat-strip__sep">·</span>
-    <span class="alc-stat-strip__item">vitest + bun, <strong>Effect-aware</strong></span>
+    <span class="alc-stat-strip__item">infra + app in <strong>one watcher</strong></span>
   </div>
 </Section>
 
-{/* ───── 4 · CI · PREVIEW ENVIRONMENTS ───── */}
+{/* ───── 4 · TEST AGAINST LIVE CLOUD ───── */}
+
+<Section padding="80px 32px" id="live-tests">
+  <div style="text-align:center;margin-bottom:32px;">
+    <Eyebrow>alchemy test · isolated stages · no mocks</Eyebrow>
+    <h2 class="alc-h2" style="margin:10px 0 12px;">Run tests against <span style="color:var(--alc-accent-deep);font-style:italic;">live cloud resources</span>.</h2>
+    <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:720px;margin:0 auto;">
+      Have agents write tests against your real API and run them against the actual cloud — every suite gets its own isolated stack, deployed and destroyed automatically. <a class="alc-learn-more" href="/concepts/testing">Learn more &rarr;</a>
+    </p>
+  </div>
+
+  <div class="alc-split-2 alc-split-2--wide-left">
+    <TestTerminal client:visible />
+    <CodeBlock filename="test/api.test.ts" code={TEST_SRC} compact />
+  </div>
+
+  <div class="alc-stat-strip">
+    <span class="alc-stat-strip__item"><strong>per-suite</strong> stages</span>
+    <span class="alc-stat-strip__sep">·</span>
+    <span class="alc-stat-strip__item">vitest + bun, <strong>Effect-aware</strong></span>
+    <span class="alc-stat-strip__sep">·</span>
+    <span class="alc-stat-strip__item">deploy → assert → <strong>destroy</strong></span>
+    <span class="alc-stat-strip__sep">·</span>
+    <span class="alc-stat-strip__item"><strong>no mocks</strong>, no fakes</span>
+  </div>
+</Section>
+
+{/* ───── 5 · PR PREVIEW ENVIRONMENTS ───── */}
 
 <Section padding="80px 32px" background="var(--alc-bg-nav)" id="ci-previews">
   <div style="text-align:center;margin-bottom:32px;">
-    <Eyebrow>continuous integration · preview environments</Eyebrow>
-    <h2 class="alc-h2" style="margin:10px 0 12px;">Every PR gets an <span style="color:var(--alc-accent-deep);font-style:italic;">ephemeral</span> preview environment.</h2>
-    <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:680px;margin:0 auto;">
-      One workflow file. The stage name comes from the event (<code class="alc-code-inline" style="color:var(--alc-accent-deep);">pr-{`{`}n{`}`}</code>, <code class="alc-code-inline" style="color:var(--alc-accent-deep);">prod</code>, branch), and prod refuses to be destroyed. <a class="alc-learn-more" href="/guides/ci">Learn more &rarr;</a>
+    <Eyebrow>github actions · preview environments</Eyebrow>
+    <h2 class="alc-h2" style="margin:10px 0 12px;">Preview every PR with an <span style="color:var(--alc-accent-deep);font-style:italic;">ephemeral</span> environment.</h2>
+    <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:720px;margin:0 auto;">
+      Alchemy programs run anywhere. Drop one into GitHub Actions to deploy a real environment per PR for testing — and tear it down when the PR merges or closes. <a class="alc-learn-more" href="/guides/ci">Learn more &rarr;</a>
     </p>
   </div>
 
   <PRLifecycle client:visible />
 </Section>
 
-{/* ───── 5 · OPERATIONAL READINESS ───── */}
+{/* ───── 6 · PRODUCTIONIZE FROM DAY ONE ───── */}
 
 <Section padding="80px 32px" id="operational-readiness">
   <div style="text-align:center;margin-bottom:32px;">
-    <Eyebrow>operational readiness · observability as iac</Eyebrow>
-    <h2 class="alc-h2" style="margin:10px 0 12px;">Dashboards and alarms <span style="color:var(--alc-accent-deep);font-style:italic;">ship with</span> the resources.</h2>
-    <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:680px;margin:0 auto;">
-      Dashboards, alarms, and OTel exporters sit in the same <code class="alc-code-inline" style="color:var(--alc-accent-deep);">alchemy.run.ts</code> as the workers they watch. Ship the system and operate it from one program. <a class="alc-learn-more" href="/concepts/observability">Learn more &rarr;</a>
+    <Eyebrow>observability as iac · effect-native otel</Eyebrow>
+    <h2 class="alc-h2" style="margin:10px 0 12px;">Don't forget to productionize. <span style="color:var(--alc-accent-deep);font-style:italic;">Dashboards, alarms, and metrics</span> from day one.</h2>
+    <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:760px;margin:0 auto;">
+      Metrics and dashboards shouldn't be an afterthought. Record metrics and spans with Effect's built-in OpenTelemetry, then export them to your favorite analytics tool — all declared next to the resources they watch. <a class="alc-learn-more" href="/concepts/observability">Learn more &rarr;</a>
     </p>
   </div>
 
@@ -239,7 +291,7 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
     <div class="alc-ops-col">
       <SketchLabel>OTel from Effect</SketchLabel>
       <CodeBlock filename="src/Api.ts" code={OTEL_SRC} compact />
-      <p class="alc-ops-caption">Effect already emits logs, spans, and metrics. Swap the OTLP Layer to ship them to <strong>Axiom</strong>, <strong>Datadog</strong>, <strong>CloudWatch</strong>, or any OTLP endpoint. Your Worker code doesn't change.</p>
+      <p class="alc-ops-caption">Effect already emits logs, spans, and metrics. Swap the OTLP Layer to ship them to <strong>Axiom</strong>, <strong>Datadog</strong>, <strong>CloudWatch</strong>, or any OTLP endpoint. Your worker code doesn't change.</p>
     </div>
     <div class="alc-ops-col">
       <SketchLabel>Dashboards &amp; alarms</SketchLabel>

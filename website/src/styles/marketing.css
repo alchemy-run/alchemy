@@ -1647,6 +1647,94 @@ body.alc-root,
   font-size: clamp(26px, 4.8vw, 34px);
 }
 
+/* Sub-section heading inside a section (e.g. Effect-pilled / async fetch
+   modes inside the bindings-iam section). */
+.alc-h3 {
+  font-family: var(--alc-font-serif);
+  font-weight: 500;
+  font-size: clamp(20px, 2.6vw, 24px);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--alc-fg-1);
+  margin: 6px 0 0;
+}
+
+/* ============================================================
+   Modes stack — used inside the "Type IAM + env vars" section
+   to present the Effect-pilled (recommended) and async-fetch
+   (escape hatch) sub-sections one above the other. The escape
+   hatch is visually softened so the recommended path leads.
+   ============================================================ */
+
+.alc-modes {
+  display: flex;
+  flex-direction: column;
+  gap: 56px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+.alc-mode {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 28px;
+  align-items: start;
+}
+.alc-mode__head {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding-top: 4px;
+}
+.alc-mode__lede {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--alc-fg-2);
+}
+.alc-mode__lede code {
+  font-family: var(--alc-font-mono);
+  font-size: 0.92em;
+  color: var(--alc-accent-deep);
+  background: rgba(184, 138, 74, 0.1);
+  padding: 0 4px;
+  border-radius: 3px;
+}
+/* The escape-hatch mode keeps a 2-up code split inside the right column,
+   so on desktop we let it span the full row instead of competing with
+   the head column. Keeps reading order: title → details → 2 code blocks. */
+.alc-mode--escape {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+}
+.alc-mode--escape .alc-mode__head {
+  text-align: center;
+  align-items: center;
+  max-width: 760px;
+  margin: 0 auto;
+}
+.alc-mode--escape .alc-mode__lede {
+  text-align: center;
+}
+@media (max-width: 880px) {
+  .alc-mode {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+  .alc-modes {
+    gap: 44px;
+  }
+}
+
+/* ============================================================
+   Dev terminal stage (Hot reload section). Single, centered
+   terminal — narrower than full-width so it doesn't sprawl.
+   ============================================================ */
+.alc-dev-stage {
+  max-width: 880px;
+  margin: 0 auto;
+}
+
 /* Two-column code+illustration splits */
 .alc-split-2 {
   display: grid;
