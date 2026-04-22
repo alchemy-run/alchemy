@@ -262,16 +262,27 @@ body.alc-root,
 }
 /* Lock both panels to the same fixed height so the captions align and
    the right terminal's animated content can't push it taller than the
-   left code block (or vice versa). */
-.stack-deploy-diagram__col > .alc-code-block,
-.stack-deploy-diagram__col > .alc-term {
+   left code block (or vice versa). The terminal is rendered inside an
+   <astro-island> hydration wrapper, so the selectors must be descendant
+   (not direct-child) and the wrapper itself must stretch. */
+.stack-deploy-diagram__col,
+.stack-deploy-diagram__col > astro-island {
+  display: flex;
+  flex-direction: column;
+}
+.stack-deploy-diagram__col > astro-island {
+  flex: 0 0 auto;
+}
+.stack-deploy-diagram__col .alc-code-block,
+.stack-deploy-diagram__col .alc-term {
   flex: 0 0 auto;
   height: 360px;
   min-height: 360px;
   max-height: 360px;
+  box-sizing: border-box;
 }
-.stack-deploy-diagram__col > .alc-code-block .alc-code-block__pre,
-.stack-deploy-diagram__col > .alc-term .alc-term__body {
+.stack-deploy-diagram__col .alc-code-block .alc-code-block__pre,
+.stack-deploy-diagram__col .alc-term .alc-term__body {
   flex: 1;
   min-height: 0;
   overflow: auto;

@@ -21,8 +21,7 @@ import PRLifecycle from "../components/marketing-islands/PRLifecycle.tsx";
 import CopyForAgent from "../components/marketing-islands/CopyForAgent.tsx";
 import HeroCta from "../components/marketing-islands/HeroCta.tsx";
 
-export const STACK_SRC = `// alchemy.run.ts — your whole cloud, one program.
-export default Alchemy.Stack(
+export const STACK_SRC = `export default Alchemy.Stack(
   "MyApp",
   { providers: Cloudflare.providers() },
   Effect.gen(function* () {
@@ -118,7 +117,7 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
 <Section padding="40px 32px 96px" id="plan-deploy-destroy">
   <div style="text-align:center;margin-bottom:36px;">
     <Eyebrow>plan · deploy · destroy</Eyebrow>
-    <h2 class="alc-h2" style="margin:10px 0 12px;">Deploy your stack. <span style="color:var(--alc-accent-deep);font-style:italic;">Tear it down just as fast.</span></h2>
+    <h2 class="alc-h2" style="margin:10px 0 12px;">Stand up infrastructure. <span style="color:var(--alc-accent-deep);font-style:italic;">Tear it down just as fast.</span></h2>
     <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:720px;margin:0 auto;">
       Your whole cloud as one TypeScript program. <code class="alc-code-inline" style="color:var(--alc-accent-deep);">plan</code> previews the diff, <code class="alc-code-inline" style="color:var(--alc-accent-deep);">deploy</code> applies it, <code class="alc-code-inline" style="color:var(--alc-accent-deep);">destroy</code> unwinds it — predictably, every time. <a class="alc-learn-more" href="/concepts/deploy-and-destroy">Learn more &rarr;</a>
     </p>
@@ -222,23 +221,23 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
 
 <Section padding="80px 32px" background="var(--alc-bg-nav)" id="hot-reload">
   <div style="text-align:center;margin-bottom:32px;">
-    <Eyebrow>alchemy dev · live cloud · ~100ms reloads</Eyebrow>
-    <h2 class="alc-h2" style="margin:10px 0 12px;">Hot-reload your cloud, <span style="color:var(--alc-accent-deep);font-style:italic;">not just your code</span>.</h2>
-    <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:720px;margin:0 auto;">
-      Add a queue in <code class="alc-code-inline" style="color:var(--alc-accent-deep);">alchemy.run.ts</code> and the worker reloads with the binding already wired. Frontend and backend together, against real R2 / KV / D1. <a class="alc-learn-more" href="/concepts/local-development">Learn more &rarr;</a>
+    <Eyebrow>any vite framework · one dev loop · live cloud</Eyebrow>
+    <h2 class="alc-h2" style="margin:10px 0 12px;">Bring any frontend. <span style="color:var(--alc-accent-deep);font-style:italic;">Hot-reload the cloud underneath it.</span></h2>
+    <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:680px;margin:0 auto;">
+      Vite, Astro, TanStack, SolidStart — frontend, backend, and infra hot-reload together against real R2 / KV / D1. <a class="alc-learn-more" href="/concepts/local-development">Learn more &rarr;</a>
     </p>
   </div>
 
   <BrowserHotReload client:visible />
 
   <div class="alc-stat-strip">
-    <span class="alc-stat-strip__item"><strong>workerd</strong> locally</span>
+    <span class="alc-stat-strip__item"><strong>TanStack · SolidStart · Nuxt · Vue</strong></span>
+    <span class="alc-stat-strip__sep">·</span>
+    <span class="alc-stat-strip__item">infra + app in <strong>one watcher</strong></span>
     <span class="alc-stat-strip__sep">·</span>
     <span class="alc-stat-strip__item"><strong>~100ms</strong> hot reload</span>
     <span class="alc-stat-strip__sep">·</span>
     <span class="alc-stat-strip__item">live <strong>R2 / KV / D1</strong></span>
-    <span class="alc-stat-strip__sep">·</span>
-    <span class="alc-stat-strip__item">infra + app in <strong>one watcher</strong></span>
   </div>
 </Section>
 
