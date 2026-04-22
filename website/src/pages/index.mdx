@@ -1,7 +1,7 @@
 ---
 layout: ../layouts/Marketing.astro
 title: "alchemy — zero to production. TypeScript IaC on Effect."
-description: "Alchemy is the IaC tool that's actually TypeScript. Stand up your whole cloud in one program, type the IAM, hot-reload it locally, run tests against the real cloud, preview every PR, and ship dashboards & alarms in the same file."
+description: "Alchemy is the IaC tool that's actually TypeScript. Stand up your whole cloud in one program, type-check the IAM, hot-reload it locally, run tests against the real cloud, preview every PR, and ship dashboards & alarms in the same file."
 ---
 
 import Section from "../components/marketing/Section.astro";
@@ -167,7 +167,7 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
   <div style="text-align:center;margin-bottom:36px;">
     <Eyebrow>typed bindings · least-privilege permissions</Eyebrow>
     <h2 class="alc-h2" style="margin:10px 0 12px;">
-      Type IAM policies and env vars. <span style="color:var(--alc-accent-deep);font-style:italic;">Never forget another permission.</span>
+      Type-checked IAM policies and env vars. <span style="color:var(--alc-accent-deep);font-style:italic;">Never forget another permission.</span>
     </h2>
     <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:760px;margin:0 auto;">
       Bind a resource to a function. Alchemy generates the exact IAM policy and env vars it actually uses — nothing more, nothing missing. <a class="alc-learn-more" href="/concepts/binding">Learn more &rarr;</a>
@@ -180,7 +180,6 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
   <div class="alc-modes" style="margin-top:64px;">
     <div class="alc-mode">
       <div class="alc-mode__head">
-        <SketchLabel>Recommended</SketchLabel>
         <h3 class="alc-h3">
           <span style="color:var(--alc-accent-deep);font-style:italic;">Effect-pilled</span> mode.
         </h3>
@@ -193,7 +192,6 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
 
     <div class="alc-mode alc-mode--escape">
       <div class="alc-mode__head">
-        <SketchLabel>Escape hatch</SketchLabel>
         <h3 class="alc-h3">
           Don't worry — you can still <code class="alc-code-inline" style="color:var(--alc-accent-deep);">export&nbsp;default&nbsp;{"{"} async&nbsp;fetch {"}"}</code>.
         </h3>
