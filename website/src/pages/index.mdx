@@ -33,21 +33,6 @@ export default Alchemy.Stack(
   }),
 );`;
 
-export const EFFECT_PILLED_SRC = `// alchemy.run.ts — infra + runtime in one program.
-const Photos = yield* Cloudflare.R2Bucket("Photos");
-
-yield* Cloudflare.Worker("Api", Effect.gen(function* () {
-  const photos = yield* R2.GetObject.bind(Photos);   // ← typed handle
-  return {
-    fetch: (req) => Effect.gen(function* () {
-      const obj = yield* photos({ key: "hello.txt" });
-      return new Response(obj?.body ?? "Not found");
-    }),
-  };
-}));
-// Alchemy infers IAM + bindings from .bind() calls.
-// Forget a permission? It won't compile.`;
-
 export const ASYNC_RUN_SRC = `// alchemy.run.ts — declare resources, attach as bindings.
 export const Bucket = Cloudflare.R2Bucket("Bucket");
 
@@ -174,36 +159,29 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
     </p>
   </div>
 
+  <div class="alc-mode-head" style="text-align:center;max-width:760px;margin:0 auto 28px;">
+    <h3 class="alc-h3">
+      <span style="color:var(--alc-accent-deep);font-style:italic;">Effect-pilled</span> mode.
+    </h3>
+    <p class="alc-mode__lede" style="text-align:center;margin-top:10px;">
+      Combine infra and app code into a single type-safe program. Bindings carry through the type system, so a missing policy or env var is a compile error — not a 3am page.
+    </p>
+  </div>
+
   <BindingsToIAM client:visible />
 
-  {/* Two sub-sections: Effect-pilled (recommended) + async fetch (escape hatch). */}
-  <div class="alc-modes" style="margin-top:64px;">
-    <div class="alc-mode">
-      <div class="alc-mode__head">
-        <h3 class="alc-h3">
-          <span style="color:var(--alc-accent-deep);font-style:italic;">Effect-pilled</span> mode.
-        </h3>
-        <p class="alc-mode__lede">
-          Combine infra and app code into a single type-safe program. Bindings carry through the type system, so a missing policy or env var is a compile error — not a 3am page.
-        </p>
-      </div>
-      <CodeBlock filename="alchemy.run.ts" code={EFFECT_PILLED_SRC} compact />
-    </div>
+  <div class="alc-mode-head" style="text-align:center;max-width:760px;margin:64px auto 18px;">
+    <h3 class="alc-h3">
+      Don't worry — you can still <code class="alc-code-inline" style="color:var(--alc-accent-deep);">export&nbsp;default&nbsp;{"{"} async&nbsp;fetch {"}"}</code>.
+    </h3>
+    <p class="alc-mode__lede" style="text-align:center;margin-top:10px;">
+      It's just Infrastructure as Code, after all. Declare resources, attach them as bindings, and your handler stays the plain async function you already know. Bindings stay fully typed in <code class="alc-code-inline">env</code>.
+    </p>
+  </div>
 
-    <div class="alc-mode alc-mode--escape">
-      <div class="alc-mode__head">
-        <h3 class="alc-h3">
-          Don't worry — you can still <code class="alc-code-inline" style="color:var(--alc-accent-deep);">export&nbsp;default&nbsp;{"{"} async&nbsp;fetch {"}"}</code>.
-        </h3>
-        <p class="alc-mode__lede">
-          It's just Infrastructure as Code, after all. Declare resources, attach them as bindings, and your handler stays the plain async function you already know. Bindings stay fully typed in <code class="alc-code-inline">env</code>.
-        </p>
-      </div>
-      <div class="alc-split-2">
-        <CodeBlock filename="alchemy.run.ts" code={ASYNC_RUN_SRC} compact />
-        <CodeBlock filename="src/worker.ts" code={ASYNC_WORKER_SRC} compact />
-      </div>
-    </div>
+  <div class="alc-split-2">
+    <CodeBlock filename="alchemy.run.ts" code={ASYNC_RUN_SRC} compact />
+    <CodeBlock filename="src/worker.ts" code={ASYNC_WORKER_SRC} compact />
   </div>
 </Section>
 
