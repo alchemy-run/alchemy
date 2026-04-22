@@ -23,12 +23,13 @@ import HeroCta from "../components/marketing-islands/HeroCta.tsx";
 export const STACK_SRC = `// alchemy.run.ts — your whole cloud, one program.
 export default Alchemy.Stack(
   "MyApp",
-  { providers: Layer.mergeAll(AWS.providers(), Cloudflare.providers()) },
+  { providers: Cloudflare.providers() },
   Effect.gen(function* () {
-    yield* Cloudflare.R2Bucket("Photos");
-    yield* AWS.DynamoDB.Table("Sessions");
+    const Photos = yield* Cloudflare.R2Bucket("Photos");
+    const Sessions = yield* Cloudflare.KVNamespace("Sessions");
     const api = yield* Cloudflare.Worker("Api", {
       main: "./src/worker.ts",
+      bindings: { Photos, Sessions },
     });
     return { url: api.url };
   }),
@@ -116,7 +117,7 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
 <Section padding="40px 32px 96px" id="plan-deploy-destroy">
   <div style="text-align:center;margin-bottom:36px;">
     <Eyebrow>plan · deploy · destroy</Eyebrow>
-    <h2 class="alc-h2" style="margin:10px 0 12px;">Stand up your cloud. <span style="color:var(--alc-accent-deep);font-style:italic;">Tear it down just as fast.</span></h2>
+    <h2 class="alc-h2" style="margin:10px 0 12px;">Deploy your stack. <span style="color:var(--alc-accent-deep);font-style:italic;">Tear it down just as fast.</span></h2>
     <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:720px;margin:0 auto;">
       Your whole cloud as one TypeScript program. <code class="alc-code-inline" style="color:var(--alc-accent-deep);">plan</code> previews the diff, <code class="alc-code-inline" style="color:var(--alc-accent-deep);">deploy</code> applies it, <code class="alc-code-inline" style="color:var(--alc-accent-deep);">destroy</code> unwinds it — predictably, every time. <a class="alc-learn-more" href="/concepts/deploy-and-destroy">Learn more &rarr;</a>
     </p>
@@ -160,7 +161,7 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
       Compose <span style="color:var(--alc-accent-deep);font-style:italic;">Effects</span> and <span style="color:var(--alc-accent-deep);font-style:italic;">Layers</span> into type-safe cloud applications.
     </h2>
     <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:760px;margin:20px auto 0;">
-      Every <code class="alc-code-inline" style="color:var(--alc-accent-deep);">.bind()</code> generates the exact IAM policy and environment variables your function needs. Every <code class="alc-code-inline" style="color:var(--alc-accent-deep);">.stream(…).process(…)</code> wires up the matching event source. <span style="color:var(--alc-fg-1);font-weight:500;">Never forget another IAM policy, env var, or subscription.</span> <a class="alc-learn-more" href="/concepts/binding">Learn more &rarr;</a>
+      <code class="alc-code-inline" style="color:var(--alc-accent-deep);">export default</code> your function and Alchemy derives the rest: <code class="alc-code-inline" style="color:var(--alc-accent-deep);">.bind()</code> generates the IAM and env vars, <code class="alc-code-inline" style="color:var(--alc-accent-deep);">.stream(…).process(…)</code> wires up the event sources. <span style="color:var(--alc-fg-1);font-weight:500;">No more missing policies or subscriptions.</span> <a class="alc-learn-more" href="/concepts/binding">Learn more &rarr;</a>
     </p>
   </div>
 
@@ -176,7 +177,7 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
       Drop down to <code class="alc-code-inline" style="color:var(--alc-accent-deep);">async&nbsp;fetch</code> when you need it.
     </h2>
     <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:760px;margin:0 auto;">
-      Effect's optional. Declare resources, wire them as bindings, and your handler stays the plain async function you already wrote — <code class="alc-code-inline">env</code> stays fully typed either way. <a class="alc-learn-more" href="/guides/migrating-from-v1">Learn more &rarr;</a>
+      Effect is optional. Declare resources, attach them as bindings, and Alchemy infers a fully typed <code class="alc-code-inline">env</code> for your async worker — no codegen, no <code class="alc-code-inline">wrangler types</code>, no manual interfaces. <a class="alc-learn-more" href="/guides/migrating-from-v1">Learn more &rarr;</a>
     </p>
   </div>
 
