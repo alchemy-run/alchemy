@@ -1758,6 +1758,19 @@ body.alc-root,
   font-size: clamp(26px, 4.8vw, 34px);
 }
 
+/* Hero-scale serif statement used in place of an .alc-h2 + small lede
+   when a section's value-prop reads better as one big sentence. */
+.alc-section-statement {
+  font-family: var(--alc-font-serif);
+  font-weight: 400;
+  font-size: clamp(22px, 3.6vw, 34px);
+  line-height: 1.25;
+  letter-spacing: -0.005em;
+  color: var(--alc-fg-1);
+  max-width: 820px;
+  margin: 12px auto 0;
+}
+
 /* Sub-section heading inside a section (e.g. Effect-pilled / async fetch
    modes inside the bindings-iam section). */
 .alc-h3 {
