@@ -2333,29 +2333,45 @@ body.alc-root,
   -webkit-mask-image: radial-gradient(ellipse 100% 95% at 50% 45%, #000 55%, transparent 100%);
           mask-image: radial-gradient(ellipse 100% 95% at 50% 45%, #000 55%, transparent 100%);
 }
-/* Animated transparent video texture behind the hero. The asset is a
-   pre-keyed VP9/HEVC with a true alpha channel (luminance-as-alpha
-   mask), so the parchment + paper grain show through naturally. Sits
-   above the ::before paper grain (z-index: -1) and below the content
-   layer (z-index: 1). */
-.alc-hero__bg-video {
+/* Parchment "halo" between the animation canvas and the hero text.
+   Solid parchment at the center (where the headline + subtitle live)
+   so the animation never competes with type, fading to transparent
+   well before the edges so the corners of the canvas stay visible.
+   z-index 0 + source order (rendered after the canvas) keeps it
+   above the canvas (z:0) and below the content (z:1). */
+.alc-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 55% 50% at 50% 52%,
+    rgba(245, 239, 227, 0.92) 0%,
+    rgba(245, 239, 227, 0.78) 30%,
+    rgba(245, 239, 227, 0.40) 60%,
+    transparent 100%
+  );
+}
+
+/* Animated 3D cubic-coordinate tunnel behind the hero, rendered to
+   <canvas>. Sits above the ::before paper grain (z-index: -1) and below
+   the ::after parchment halo + content layer. */
+.alc-hero__bg-graph {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   z-index: 0;
-  object-fit: cover;
-  object-position: center;
   pointer-events: none;
-  opacity: 0.32;
+  opacity: 0.9;
   mix-blend-mode: multiply;
-  -webkit-mask-image: radial-gradient(ellipse 85% 75% at 50% 45%, #000 15%, transparent 90%);
-          mask-image: radial-gradient(ellipse 85% 75% at 50% 45%, #000 15%, transparent 90%);
-}
-@media (prefers-reduced-motion: reduce) {
-  .alc-hero__bg-video {
-    display: none;
-  }
+  color: var(--alc-fg-1);
+  /* Just feather the canvas at the outer edges so it doesn't reach
+     the page borders. Center protection is handled by the parchment
+     halo in .alc-hero::after. */
+  -webkit-mask-image: radial-gradient(ellipse 95% 90% at 50% 50%, #000 60%, transparent 100%);
+          mask-image: radial-gradient(ellipse 95% 90% at 50% 50%, #000 60%, transparent 100%);
 }
 .alc-hero__inner {
   position: relative;
