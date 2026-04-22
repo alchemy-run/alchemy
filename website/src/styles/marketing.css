@@ -282,6 +282,117 @@ body.alc-root,
 }
 
 /* ============================================================
+   Stack ↔ Deploy mobile toggle (home page section 1)
+   On narrow screens the side-by-side diagram is replaced by a single
+   tabbed card that auto-cycles between the source and the deploy
+   terminal. Saves vertical space and keeps both views accessible.
+   ============================================================ */
+
+.stack-mobile {
+  display: none; /* hidden on desktop — see media query below */
+  flex-direction: column;
+  gap: 8px;
+  max-width: 560px;
+  margin: 0 auto;
+}
+.stack-mobile__chrome {
+  background: var(--alc-bg-code);
+  border: 1px solid var(--alc-hairline);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: var(--alc-shadow-sm);
+  display: flex;
+  flex-direction: column;
+}
+.stack-mobile__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(232, 220, 192, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+}
+.stack-mobile__tabs {
+  display: flex;
+  gap: 4px;
+  margin-left: 12px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.stack-mobile__tabs::-webkit-scrollbar {
+  display: none;
+}
+.stack-mobile__tab {
+  flex: 0 0 auto;
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--alc-code-comment);
+  font-family: var(--alc-font-mono);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition:
+    color 160ms ease,
+    background 160ms ease,
+    border-color 160ms ease;
+}
+.stack-mobile__tab:hover {
+  color: var(--alc-fg-invert);
+}
+.stack-mobile__tab[data-active="true"] {
+  color: var(--alc-fg-invert);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(232, 220, 192, 0.12);
+}
+.stack-mobile__body {
+  position: relative;
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+}
+.stack-mobile__panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.stack-mobile__panel[hidden] {
+  display: none;
+}
+.stack-mobile__pre {
+  margin: 0;
+  padding: 14px 16px;
+  font-family: var(--alc-font-mono);
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--alc-code-var);
+  overflow-x: auto;
+  flex: 1;
+  min-height: 296px;
+}
+.stack-mobile__hint {
+  font-family: var(--alc-font-mono);
+  font-size: 10.5px;
+  color: var(--alc-fg-3);
+  text-align: center;
+  letter-spacing: 0.04em;
+}
+
+/* Swap the side-by-side diagram for the tabbed toggle on narrow screens. */
+@media (max-width: 880px) {
+  .stack-deploy-diagram {
+    display: none;
+  }
+  .stack-mobile {
+    display: flex;
+  }
+}
+
+/* ============================================================
    Animated Output / resource-graph (/product/iac)
    Code on the left, progressive nodes/edges on the right with
    a step indicator + rotating annotation.

@@ -12,6 +12,7 @@ import DiscordCallout from "../components/marketing/DiscordCallout.astro";
 import CodeBlock from "../components/marketing/CodeBlock.astro";
 import SketchLabel from "../components/marketing/SketchLabel.astro";
 import DeployTerminal from "../components/marketing-islands/DeployTerminal.tsx";
+import StackDeployMobile from "../components/marketing-islands/StackDeployMobile.tsx";
 import BindingsToIAM from "../components/marketing-islands/BindingsToIAM.tsx";
 import DevTerminal from "../components/marketing-islands/DevTerminal.tsx";
 import TestTerminal from "../components/marketing-islands/TestTerminal.tsx";
@@ -144,6 +145,9 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
       </div>
     </div>
   </div>
+
+  {/* Mobile-only: combined card with tabbed code/deploy that auto-cycles. */}
+  <StackDeployMobile client:visible code={STACK_SRC} />
 </Section>
 
 {/* ───── 2 · TYPE IAM + ENV VARS ───── */}
