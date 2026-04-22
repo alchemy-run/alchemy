@@ -1685,3 +1685,159 @@ body.alc-root,
   }
 }
 
+/* ============================================================
+   Outro: copy-prompt-for-coding-agent pill.
+   ============================================================ */
+
+.alc-copy-agent {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  max-width: 720px;
+  margin: 24px auto 0;
+  background: var(--alc-bg-sunk);
+  border: 1px solid var(--alc-hairline);
+  border-radius: 10px;
+  overflow: hidden;
+  text-align: left;
+}
+.alc-copy-agent__text {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 12px 16px;
+  font-family: var(--alc-font-mono);
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--alc-fg-1);
+  background: transparent;
+  border: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.alc-copy-agent__btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px;
+  background: transparent;
+  border: 0;
+  border-left: 1px solid var(--alc-hairline);
+  font-family: var(--alc-font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--alc-fg-2);
+  cursor: pointer;
+  transition: color 120ms ease, background 120ms ease;
+}
+.alc-copy-agent__btn:hover {
+  color: var(--alc-accent-deep);
+  background: var(--alc-accent-soft);
+}
+
+@media (max-width: 640px) {
+  .alc-copy-agent {
+    flex-direction: column;
+  }
+  .alc-copy-agent__btn {
+    border-left: 0;
+    border-top: 1px solid var(--alc-hairline);
+    padding: 10px 16px;
+    justify-content: center;
+  }
+}
+
+/* ============================================================
+   Button styles (also defined scoped in Button.astro). Copied
+   here so React islands can render the same look.
+   ============================================================ */
+
+.alc-btn {
+  font-family: var(--alc-font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 10px 18px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    background 120ms var(--alc-ease, cubic-bezier(0.2, 0, 0, 1)),
+    border-color 120ms var(--alc-ease, cubic-bezier(0.2, 0, 0, 1)),
+    color 120ms var(--alc-ease, cubic-bezier(0.2, 0, 0, 1));
+}
+.alc-btn--primary {
+  background: var(--alc-accent);
+  color: var(--alc-fg-on-accent);
+}
+.alc-btn--primary:hover {
+  background: var(--alc-accent-deep);
+}
+.alc-btn--secondary {
+  background: transparent;
+  border-color: var(--alc-hairline-3);
+  color: var(--alc-fg-1);
+}
+.alc-btn--secondary:hover {
+  border-color: var(--alc-accent);
+  color: var(--alc-accent-deep);
+}
+.alc-btn--ghost {
+  background: transparent;
+  color: var(--alc-fg-2);
+}
+.alc-btn--ghost:hover {
+  color: var(--alc-accent-deep);
+}
+.alc-btn--accent {
+  background: var(--alc-terracotta);
+  color: var(--alc-fg-on-accent);
+}
+
+/* ============================================================
+   Hero CTA — primary buttons + "Using a coding agent?" chip.
+   ============================================================ */
+
+.hero-cta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+}
+.hero-cta__buttons {
+  display: inline-flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.hero-cta__line {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--alc-fg-3);
+}
+.hero-cta__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  background: var(--alc-bg-sunk);
+  border: 1px solid var(--alc-hairline);
+  border-radius: 6px;
+  font-family: var(--alc-font-mono);
+  font-size: 12px;
+  color: var(--alc-fg-1);
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+.hero-cta__chip:hover {
+  color: var(--alc-accent-deep);
+  border-color: var(--alc-accent);
+}
+
