@@ -1,26 +1,37 @@
 import { useState } from "react";
 
 const PROMPT =
-  "Read https://alchemy.run/getting-started.md and help me scaffold an Alchemy app.";
+  "Read https://alchemy.run/getting-started and help me scaffold an Alchemy app.";
 
 export default function HeroCta() {
   return (
-    <div className="hero-cta">
-      <div className="hero-cta__buttons">
-        <a className="alc-btn alc-btn--primary" href="/getting-started">
-          Get started <span aria-hidden>→</span>
+    <>
+      <div className="hero-cta hero-cta--cards">
+        <a className="hero-cta__card hero-cta__card--human" href="/getting-started">
+          <span className="hero-cta__eyebrow">For humans</span>
+          <span className="hero-cta__title">
+            Get started <span aria-hidden>→</span>
+          </span>
         </a>
-        <a className="alc-btn alc-btn--secondary" href="/tutorial">
-          Tutorial
-        </a>
+        <CopyCard />
       </div>
-      <div className="hero-cta__line">
-        <span>
-          <span aria-hidden>🤖</span> Using a coding agent?
-        </span>
-        <InlineCopyChip />
+      <div className="hero-cta hero-cta--simple">
+        <div className="hero-cta__buttons">
+          <a className="alc-btn alc-btn--primary" href="/getting-started">
+            Get started <span aria-hidden>→</span>
+          </a>
+          <a className="alc-btn alc-btn--secondary" href="/tutorial">
+            Tutorial
+          </a>
+        </div>
+        <div className="hero-cta__line">
+          <span>
+            <span aria-hidden>🤖</span> Using a coding agent?
+          </span>
+          <InlineCopyChip />
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -36,6 +47,27 @@ function InlineCopyChip() {
     >
       {copied ? <CheckIcon /> : <CopyIcon />}
       <span>{copied ? "Copied" : "Copy prompt"}</span>
+    </button>
+  );
+}
+
+function CopyCard() {
+  const [copied, setCopied] = useState(false);
+  const onCopy = () => copy(PROMPT, setCopied);
+  return (
+    <button
+      type="button"
+      className="hero-cta__card hero-cta__card--agent"
+      onClick={onCopy}
+      aria-label={copied ? "Copied prompt" : "Copy prompt for your coding agent"}
+    >
+      <span className="hero-cta__eyebrow">
+        For coding agents
+        <span className="hero-cta__icon" aria-hidden>
+          {copied ? <CheckIcon /> : <CopyIcon />}
+        </span>
+      </span>
+      <code className="hero-cta__prompt-code">{PROMPT}</code>
     </button>
   );
 }
@@ -67,8 +99,8 @@ function CopyIcon() {
   return (
     <svg
       aria-hidden
-      width="14"
-      height="14"
+      width="13"
+      height="13"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -86,8 +118,8 @@ function CheckIcon() {
   return (
     <svg
       aria-hidden
-      width="14"
-      height="14"
+      width="13"
+      height="13"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"

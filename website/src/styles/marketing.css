@@ -1799,16 +1799,105 @@ body.alc-root,
 }
 
 /* ============================================================
-   Hero CTA — primary buttons + "Using a coding agent?" chip.
+   Hero CTA — two-up "for humans / for coding agents".
+   Tight: eyebrow + single content row.
    ============================================================ */
 
 .hero-cta {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.7fr) 1fr;
+  gap: 10px;
+  max-width: 520px;
+  margin: 6px auto 0;
+  text-align: left;
+}
+.hero-cta__card {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  margin-top: 6px;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 10px 14px;
+  min-width: 0;
+  border: 1px solid var(--alc-hairline);
+  border-radius: 10px;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  font-family: var(--alc-font-sans);
+  text-align: left;
+  background: var(--alc-bg-sunk);
+  transition: border-color 140ms ease, transform 140ms ease;
 }
+.hero-cta__card:hover {
+  transform: translateY(-1px);
+}
+.hero-cta__eyebrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--alc-fg-3);
+}
+.hero-cta__icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--alc-fg-2);
+}
+.hero-cta__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--alc-fg-1);
+}
+.hero-cta__card--human {
+  background: var(--alc-accent-soft);
+  border-color: var(--alc-accent);
+}
+.hero-cta__card--human:hover {
+  border-color: var(--alc-accent-deep);
+}
+.hero-cta__card--agent {
+  background: var(--alc-terracotta-soft);
+  border-color: var(--alc-terracotta);
+}
+.hero-cta__card--agent:hover {
+  border-color: var(--alc-terracotta-deep);
+}
+.hero-cta__prompt-code {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  font-family: var(--alc-font-mono);
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--alc-fg-2);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hero-cta--simple { display: none; }
+
+@media (max-width: 640px) {
+  .hero-cta--cards { display: none; }
+  .hero-cta--simple {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    margin-top: 6px;
+  }
+}
+
 .hero-cta__buttons {
   display: inline-flex;
   gap: 10px;
