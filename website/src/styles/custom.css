@@ -462,8 +462,9 @@ h1.hero-title,
   text-align: left;
   height: 100%;
   box-shadow: var(--alc-shadow-sm);
-  transition: border-color var(--alc-dur) var(--alc-ease),
-              box-shadow var(--alc-dur) var(--alc-ease);
+  transition:
+    border-color var(--alc-dur) var(--alc-ease),
+    box-shadow var(--alc-dur) var(--alc-ease);
 }
 .provider-card:hover {
   border-color: var(--alc-accent);
@@ -557,8 +558,9 @@ h1.hero-title,
   border: 1px solid var(--alc-hairline-2);
   border-radius: var(--alc-radius);
   text-decoration: none;
-  transition: border-color var(--alc-dur) var(--alc-ease),
-              box-shadow var(--alc-dur) var(--alc-ease);
+  transition:
+    border-color var(--alc-dur) var(--alc-ease),
+    box-shadow var(--alc-dur) var(--alc-ease);
   box-shadow: var(--alc-shadow-sm);
 }
 .next-card:hover {
@@ -656,22 +658,22 @@ h1.hero-title,
 /* ── Variants ── */
 .sl-markdown-content .starlight-aside--note {
   --aside-accent: var(--alc-info);
-  --aside-tint:   color-mix(in srgb, var(--alc-info) 14%, transparent);
+  --aside-tint: color-mix(in srgb, var(--alc-info) 14%, transparent);
   --aside-border: color-mix(in srgb, var(--alc-info) 45%, transparent);
 }
 .sl-markdown-content .starlight-aside--tip {
   --aside-accent: var(--alc-accent-deep);
-  --aside-tint:   color-mix(in srgb, var(--alc-accent) 14%, transparent);
+  --aside-tint: color-mix(in srgb, var(--alc-accent) 14%, transparent);
   --aside-border: color-mix(in srgb, var(--alc-accent) 45%, transparent);
 }
 .sl-markdown-content .starlight-aside--caution {
   --aside-accent: color-mix(in srgb, var(--alc-warn) 75%, var(--alc-fg-1));
-  --aside-tint:   color-mix(in srgb, var(--alc-warn) 16%, transparent);
+  --aside-tint: color-mix(in srgb, var(--alc-warn) 16%, transparent);
   --aside-border: color-mix(in srgb, var(--alc-warn) 50%, transparent);
 }
 .sl-markdown-content .starlight-aside--danger {
   --aside-accent: var(--alc-danger);
-  --aside-tint:   color-mix(in srgb, var(--alc-danger) 14%, transparent);
+  --aside-tint: color-mix(in srgb, var(--alc-danger) 14%, transparent);
   --aside-border: color-mix(in srgb, var(--alc-danger) 45%, transparent);
 }
 
@@ -735,7 +737,9 @@ starlight-tabs [role="tab"] {
   letter-spacing: 0;
   border-bottom-color: transparent;
   gap: 0.45rem;
-  transition: color 160ms ease, border-color 160ms ease;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease;
 }
 
 starlight-tabs [role="tab"]:hover {

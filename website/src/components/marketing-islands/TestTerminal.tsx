@@ -23,28 +23,50 @@ type RunningStep = Step & { status: "running" | "done" };
 
 const TEST_STEPS: Step[] = [
   {
-    id: "deploy", kind: "phase", label: "deploy", detail: "3 resources",
-    runMs: 1100, durSec: "4.2", url: `https://api.${TEST_STAGE}.workers.dev`,
+    id: "deploy",
+    kind: "phase",
+    label: "deploy",
+    detail: "3 resources",
+    runMs: 1100,
+    durSec: "4.2",
+    url: `https://api.${TEST_STAGE}.workers.dev`,
   },
   {
-    id: "t1", kind: "test", label: "PUT + GET round-trips through R2",
-    runMs: 850, durMs: "312",
+    id: "t1",
+    kind: "test",
+    label: "PUT + GET round-trips through R2",
+    runMs: 850,
+    durMs: "312",
   },
   {
-    id: "t2", kind: "test", label: "Room DO preserves state across requests",
-    runMs: 700, durMs: "184",
+    id: "t2",
+    kind: "test",
+    label: "Room DO preserves state across requests",
+    runMs: 700,
+    durMs: "184",
   },
   {
-    id: "destroy", kind: "phase", label: "destroy", detail: "3 resources",
-    runMs: 900, durSec: "1.8",
+    id: "destroy",
+    kind: "phase",
+    label: "destroy",
+    detail: "3 resources",
+    runMs: 900,
+    durSec: "1.8",
   },
 ];
 
-export default function TestTerminal({ title = `CI · ${TEST_STAGE}` }: { title?: string }) {
+export default function TestTerminal({
+  title = `CI · ${TEST_STAGE}`,
+}: {
+  title?: string;
+}) {
   const [cmd, setCmd] = useState("");
   const [caret, setCaret] = useState(false);
   const [steps, setSteps] = useState<RunningStep[]>([]);
-  const [summary, setSummary] = useState<{ tests: number; secs: string } | null>(null);
+  const [summary, setSummary] = useState<{
+    tests: number;
+    secs: string;
+  } | null>(null);
 
   const cancelRef = useRef(false);
 
@@ -53,7 +75,8 @@ export default function TestTerminal({ title = `CI · ${TEST_STAGE}` }: { title?
     const aborted = () => cancelRef.current;
 
     const typeCmd = async (text: string) => {
-      setCmd(""); setCaret(true);
+      setCmd("");
+      setCaret(true);
       for (let i = 1; i <= text.length; i++) {
         if (aborted()) return;
         setCmd(text.slice(0, i));
@@ -65,7 +88,8 @@ export default function TestTerminal({ title = `CI · ${TEST_STAGE}` }: { title?
 
     const run = async () => {
       while (!aborted()) {
-        setSteps([]); setSummary(null);
+        setSteps([]);
+        setSummary(null);
         await typeCmd("bun test");
         if (aborted()) return;
         await sleep(280);
@@ -76,7 +100,9 @@ export default function TestTerminal({ title = `CI · ${TEST_STAGE}` }: { title?
           setSteps((arr) => [...arr, { ...s, status: "running" }]);
           await sleep(s.runMs);
           if (aborted()) return;
-          setSteps((arr) => arr.map((r) => (r.id === s.id ? { ...r, status: "done" } : r)));
+          setSteps((arr) =>
+            arr.map((r) => (r.id === s.id ? { ...r, status: "done" } : r)),
+          );
           await sleep(160);
         }
         if (aborted()) return;
@@ -87,7 +113,9 @@ export default function TestTerminal({ title = `CI · ${TEST_STAGE}` }: { title?
     };
 
     run();
-    return () => { cancelRef.current = true; };
+    return () => {
+      cancelRef.current = true;
+    };
   }, []);
 
   const anyRunning = steps.some((s) => s.status === "running");
@@ -103,14 +131,26 @@ export default function TestTerminal({ title = `CI · ${TEST_STAGE}` }: { title?
       return (
         <Fragment key={s.id}>
           <Line>
-            <span style={{ color: iconColor, width: "1.2em", display: "inline-block" }}>{icon}</span>
-            <span style={{ color: "var(--alc-fg-invert)", fontWeight: 600 }}>{s.label}</span>
+            <span
+              style={{
+                color: iconColor,
+                width: "1.2em",
+                display: "inline-block",
+              }}
+            >
+              {icon}
+            </span>
+            <span style={{ color: "var(--alc-fg-invert)", fontWeight: 600 }}>
+              {s.label}
+            </span>
             {!isRunning ? (
               <span style={{ color: "var(--alc-code-comment)" }}>
                 {` (${s.detail} · ${s.durSec}s)`}
               </span>
             ) : (
-              <span style={{ color: "var(--alc-code-comment)" }}>{` (${s.detail})`}</span>
+              <span
+                style={{ color: "var(--alc-code-comment)" }}
+              >{` (${s.detail})`}</span>
             )}
           </Line>
           {s.url && !isRunning && (
@@ -125,17 +165,28 @@ export default function TestTerminal({ title = `CI · ${TEST_STAGE}` }: { title?
     }
     return (
       <Line key={s.id}>
-        <span style={{ color: iconColor, width: "1.2em", display: "inline-block" }}>{icon}</span>
+        <span
+          style={{ color: iconColor, width: "1.2em", display: "inline-block" }}
+        >
+          {icon}
+        </span>
         <span style={{ color: "var(--alc-fg-invert)" }}>{s.label}</span>
         {!isRunning && (
-          <span style={{ color: "var(--alc-code-comment)" }}>{` (${s.durMs}ms)`}</span>
+          <span
+            style={{ color: "var(--alc-code-comment)" }}
+          >{` (${s.durMs}ms)`}</span>
         )}
       </Line>
     );
   };
 
   return (
-    <TermChrome title={title} badge="TEST" badgeColor={accent} bodyMinHeight={232}>
+    <TermChrome
+      title={title}
+      badge="TEST"
+      badgeColor={accent}
+      bodyMinHeight={232}
+    >
       <Line>
         <span style={{ color: accent }}>$ </span>
         {cmd}
@@ -163,7 +214,9 @@ export default function TestTerminal({ title = `CI · ${TEST_STAGE}` }: { title?
               {" PASS "}
             </span>
             <span>{summary.tests} tests · </span>
-            <span style={{ color: "var(--alc-fg-invert)", fontWeight: 600 }}>{summary.secs}s</span>
+            <span style={{ color: "var(--alc-fg-invert)", fontWeight: 600 }}>
+              {summary.secs}s
+            </span>
           </Line>
         </>
       )}

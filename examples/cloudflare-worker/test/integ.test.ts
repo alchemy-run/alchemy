@@ -34,34 +34,40 @@ test(
     // Start the workflow instance.
     const startResponse = yield* Effect.tryPromise({
       try: () => fetch(`${url}/workflow/start/${roomId}`, { method: "POST" }),
-      catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+      catch: (cause) =>
+        cause instanceof Error ? cause : new Error(String(cause)),
     });
     expect(startResponse.status).toBe(200);
 
-    const { instanceId } = (yield* Effect.tryPromise({
+    const { instanceId } = yield* Effect.tryPromise({
       try: () => startResponse.json() as Promise<{ instanceId: string }>,
-      catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
-    }));
+      catch: (cause) =>
+        cause instanceof Error ? cause : new Error(String(cause)),
+    });
     expect(instanceId).toBeString();
 
     // Poll status until complete / errored / timeout (~60s).
     const deadline = Date.now() + 60_000;
-    let lastStatus: { status: string; output?: unknown; error?: unknown } | undefined;
+    let lastStatus:
+      | { status: string; output?: unknown; error?: unknown }
+      | undefined;
     while (Date.now() < deadline) {
       const statusResponse = yield* Effect.tryPromise({
         try: () => fetch(`${url}/workflow/status/${instanceId}`),
-        catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+        catch: (cause) =>
+          cause instanceof Error ? cause : new Error(String(cause)),
       });
       expect(statusResponse.status).toBe(200);
-      lastStatus = (yield* Effect.tryPromise({
+      lastStatus = yield* Effect.tryPromise({
         try: () =>
           statusResponse.json() as Promise<{
             status: string;
             output?: unknown;
             error?: unknown;
           }>,
-        catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
-      }));
+        catch: (cause) =>
+          cause instanceof Error ? cause : new Error(String(cause)),
+      });
       if (lastStatus.status === "complete" || lastStatus.status === "errored") {
         break;
       }

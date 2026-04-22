@@ -7,7 +7,10 @@ export default function HeroCta() {
   return (
     <>
       <div className="hero-cta hero-cta--cards">
-        <a className="hero-cta__card hero-cta__card--human" href="/getting-started">
+        <a
+          className="hero-cta__card hero-cta__card--human"
+          href="/getting-started"
+        >
           <span className="hero-cta__eyebrow">For humans</span>
           <span className="hero-cta__title">
             Get started <span aria-hidden>→</span>
@@ -59,7 +62,9 @@ function CopyCard() {
       type="button"
       className="hero-cta__card hero-cta__card--agent"
       onClick={onCopy}
-      aria-label={copied ? "Copied prompt" : "Copy prompt for your coding agent"}
+      aria-label={
+        copied ? "Copied prompt" : "Copy prompt for your coding agent"
+      }
     >
       <span className="hero-cta__eyebrow">
         For coding agents

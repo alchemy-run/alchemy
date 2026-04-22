@@ -1,8 +1,11 @@
 /* Shared card harness — keep previews consistent. */
 @import url("../colors_and_type.css");
 
-* { box-sizing: border-box; }
-html, body {
+* {
+  box-sizing: border-box;
+}
+html,
+body {
   margin: 0;
   padding: 0;
   background: var(--alc-bg);

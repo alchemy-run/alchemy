@@ -1,7 +1,16 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 
 export const SPINNER_FRAMES = [
-  "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏",
+  "⠋",
+  "⠙",
+  "⠹",
+  "⠸",
+  "⠼",
+  "⠴",
+  "⠦",
+  "⠧",
+  "⠇",
+  "⠏",
 ];
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -66,9 +75,18 @@ export function TermChrome({
   return (
     <div className="alc-term">
       <div className="alc-term__header">
-        <span className="alc-code-block__dot" style={{ background: "var(--alc-danger)" }} />
-        <span className="alc-code-block__dot" style={{ background: "var(--alc-warn)" }} />
-        <span className="alc-code-block__dot" style={{ background: "var(--alc-accent-bright)" }} />
+        <span
+          className="alc-code-block__dot"
+          style={{ background: "var(--alc-danger)" }}
+        />
+        <span
+          className="alc-code-block__dot"
+          style={{ background: "var(--alc-warn)" }}
+        />
+        <span
+          className="alc-code-block__dot"
+          style={{ background: "var(--alc-accent-bright)" }}
+        />
         <span className="alc-term__title">{title}</span>
         <span style={{ flex: 1 }} />
         {badge && badgeColor && (

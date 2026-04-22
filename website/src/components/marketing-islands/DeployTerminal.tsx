@@ -2,7 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { Line, sleep, TermChrome, useSpinner } from "./_terminal";
 
 const ACTION_ICON: Record<string, string> = {
-  create: "+", update: "~", delete: "-", replace: "!", noop: "•",
+  create: "+",
+  update: "~",
+  delete: "-",
+  replace: "!",
+  noop: "•",
 };
 const ACTION_COLOR: Record<string, string> = {
   create: "var(--alc-success)",
@@ -17,7 +21,9 @@ const MODE_ACCENT: Record<string, string> = {
   destroy: "var(--alc-danger)",
 };
 const MODE_LABEL: Record<string, string> = {
-  plan: "PLAN", deploy: "DEPLOY", destroy: "DESTROY",
+  plan: "PLAN",
+  deploy: "DEPLOY",
+  destroy: "DESTROY",
 };
 
 interface Resource {
@@ -37,13 +43,27 @@ interface Row extends Resource {
   status: RowStatus;
 }
 
-export default function DeployTerminal({ title = "~/my-app" }: { title?: string }) {
-  const [mode, setMode] = useState<"idle" | "plan" | "deploy" | "destroy">("idle");
+export default function DeployTerminal({
+  title = "~/my-app",
+}: {
+  title?: string;
+}) {
+  const [mode, setMode] = useState<"idle" | "plan" | "deploy" | "destroy">(
+    "idle",
+  );
   const [cmd, setCmd] = useState("");
   const [caret, setCaret] = useState(false);
-  const [header, setHeader] = useState<{ verb: string; count: number; action: string } | null>(null);
+  const [header, setHeader] = useState<{
+    verb: string;
+    count: number;
+    action: string;
+  } | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
-  const [summary, setSummary] = useState<{ verb: string; secs: string; url?: string } | null>(null);
+  const [summary, setSummary] = useState<{
+    verb: string;
+    secs: string;
+    url?: string;
+  } | null>(null);
   const [proceed, setProceed] = useState<null | "show" | "confirmed">(null);
 
   const cancelRef = useRef(false);
@@ -53,7 +73,8 @@ export default function DeployTerminal({ title = "~/my-app" }: { title?: string 
     const aborted = () => cancelRef.current;
 
     const typeCmd = async (text: string) => {
-      setCmd(""); setCaret(true);
+      setCmd("");
+      setCaret(true);
       for (let i = 1; i <= text.length; i++) {
         if (aborted()) return;
         setCmd(text.slice(0, i));
@@ -73,7 +94,10 @@ export default function DeployTerminal({ title = "~/my-app" }: { title?: string 
       setRows([]);
       for (const r of RESOURCES) {
         if (aborted()) return;
-        setRows((rs) => [...rs, { ...r, action, status: "ready" as RowStatus }]);
+        setRows((rs) => [
+          ...rs,
+          { ...r, action, status: "ready" as RowStatus },
+        ]);
         await sleep(perRowMs);
       }
     };
@@ -90,7 +114,10 @@ export default function DeployTerminal({ title = "~/my-app" }: { title?: string 
     const run = async () => {
       while (!aborted()) {
         setMode("plan");
-        setHeader(null); setRows([]); setSummary(null); setProceed(null);
+        setHeader(null);
+        setRows([]);
+        setSummary(null);
+        setProceed(null);
         await typeCmd("alchemy plan");
         if (aborted()) return;
         await sleep(250);
@@ -116,13 +143,20 @@ export default function DeployTerminal({ title = "~/my-app" }: { title?: string 
         const t0 = Date.now();
         await Promise.all([
           startResource("Photos", "creating", 1000),
-          (async () => { await sleep(220); await startResource("Sessions", "creating", 900); })(),
+          (async () => {
+            await sleep(220);
+            await startResource("Sessions", "creating", 900);
+          })(),
         ]);
         if (aborted()) return;
         await startResource("Api", "creating", 1300);
         if (aborted()) return;
         const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
-        setSummary({ verb: "deployed", secs: elapsed, url: "https://api.my-app.workers.dev" });
+        setSummary({
+          verb: "deployed",
+          secs: elapsed,
+          url: "https://api.my-app.workers.dev",
+        });
         await sleep(2600);
 
         if (aborted()) return;
@@ -143,7 +177,10 @@ export default function DeployTerminal({ title = "~/my-app" }: { title?: string 
         if (aborted()) return;
         await Promise.all([
           startResource("Photos", "deleting", 700),
-          (async () => { await sleep(180); await startResource("Sessions", "deleting", 650); })(),
+          (async () => {
+            await sleep(180);
+            await startResource("Sessions", "deleting", 650);
+          })(),
         ]);
         if (aborted()) return;
         const elapsedD = ((Date.now() - tD) / 1000).toFixed(1);
@@ -153,16 +190,23 @@ export default function DeployTerminal({ title = "~/my-app" }: { title?: string 
     };
 
     run();
-    return () => { cancelRef.current = true; };
+    return () => {
+      cancelRef.current = true;
+    };
   }, []);
 
-  const anyInFlight = rows.some((r) => r.status === "creating" || r.status === "deleting");
+  const anyInFlight = rows.some(
+    (r) => r.status === "creating" || r.status === "deleting",
+  );
   const spinner = useSpinner(anyInFlight);
   const accent = MODE_ACCENT[mode]!;
 
   const renderRow = (r: Row) => {
     const actionColor = ACTION_COLOR[r.action] ?? "var(--alc-code-comment)";
-    let icon: string, iconColor: string, statusWord: string | null = null, statusColor = "";
+    let icon: string,
+      iconColor: string,
+      statusWord: string | null = null,
+      statusColor = "";
     if (r.status === "ready") {
       icon = ACTION_ICON[r.action] ?? "•";
       iconColor = actionColor;
@@ -186,22 +230,63 @@ export default function DeployTerminal({ title = "~/my-app" }: { title?: string 
 
     return (
       <div key={r.id}>
-        <div style={{ minHeight: "1.55em", whiteSpace: "pre", transition: "opacity 200ms ease" }}>
-          <span style={{ color: iconColor, width: "1.2em", display: "inline-block", transition: "color 200ms ease" }}>{icon}</span>
-          <span style={{ color: "var(--alc-fg-invert)", fontWeight: 600 }}>{r.id}</span>
-          <span style={{ color: "var(--alc-code-comment)" }}>{` (${r.type})`}</span>
+        <div
+          style={{
+            minHeight: "1.55em",
+            whiteSpace: "pre",
+            transition: "opacity 200ms ease",
+          }}
+        >
+          <span
+            style={{
+              color: iconColor,
+              width: "1.2em",
+              display: "inline-block",
+              transition: "color 200ms ease",
+            }}
+          >
+            {icon}
+          </span>
+          <span style={{ color: "var(--alc-fg-invert)", fontWeight: 600 }}>
+            {r.id}
+          </span>
+          <span
+            style={{ color: "var(--alc-code-comment)" }}
+          >{` (${r.type})`}</span>
           {bindingCount > 0 && (
-            <span style={{ color: "var(--alc-code-type)" }}>{` (${bindingCount} bindings)`}</span>
+            <span
+              style={{ color: "var(--alc-code-type)" }}
+            >{` (${bindingCount} bindings)`}</span>
           )}
           {statusWord && (
-            <span style={{ color: statusColor, marginLeft: 6, transition: "color 200ms ease" }}>{statusWord}</span>
+            <span
+              style={{
+                color: statusColor,
+                marginLeft: 6,
+                transition: "color 200ms ease",
+              }}
+            >
+              {statusWord}
+            </span>
           )}
         </div>
         {bindingCount > 0 &&
           r.bindings.map((b) => (
-            <div key={`${r.id}-${b}`} style={{ minHeight: "1.55em", whiteSpace: "pre" }}>
+            <div
+              key={`${r.id}-${b}`}
+              style={{ minHeight: "1.55em", whiteSpace: "pre" }}
+            >
               <span style={{ width: "1.2em", display: "inline-block" }}> </span>
-              <span style={{ color: actionColor, width: "1.2em", display: "inline-block", transition: "color 200ms ease" }}>{bindingIcon}</span>
+              <span
+                style={{
+                  color: actionColor,
+                  width: "1.2em",
+                  display: "inline-block",
+                  transition: "color 200ms ease",
+                }}
+              >
+                {bindingIcon}
+              </span>
               <span style={{ color: "var(--alc-code-type)" }}>{b}</span>
             </div>
           ))}
@@ -210,9 +295,16 @@ export default function DeployTerminal({ title = "~/my-app" }: { title?: string 
   };
 
   return (
-    <TermChrome title={title} badge={mode !== "idle" ? MODE_LABEL[mode] : undefined} badgeColor={accent} bodyMinHeight={296}>
+    <TermChrome
+      title={title}
+      badge={mode !== "idle" ? MODE_LABEL[mode] : undefined}
+      badgeColor={accent}
+      bodyMinHeight={296}
+    >
       <Line>
-        <span style={{ color: accent, transition: "color 280ms ease" }}>$ </span>
+        <span style={{ color: accent, transition: "color 280ms ease" }}>
+          ${" "}
+        </span>
         {cmd}
         {caret && <span style={{ color: "var(--alc-fg-invert)" }}>▍</span>}
       </Line>
@@ -220,7 +312,16 @@ export default function DeployTerminal({ title = "~/my-app" }: { title?: string 
         <>
           <Line> </Line>
           <Line>
-            <span style={{ textDecoration: "underline", color: accent, transition: "color 280ms ease", fontWeight: 600 }}>{header.verb}</span>
+            <span
+              style={{
+                textDecoration: "underline",
+                color: accent,
+                transition: "color 280ms ease",
+                fontWeight: 600,
+              }}
+            >
+              {header.verb}
+            </span>
             <span>: </span>
             <span style={{ color: ACTION_COLOR[header.action] }}>
               {header.count} to {header.action}
@@ -241,13 +342,21 @@ export default function DeployTerminal({ title = "~/my-app" }: { title?: string 
           <Line>
             {proceed === "confirmed" ? (
               <>
-                <span style={{ color: accent, transition: "color 200ms ease" }}>{"◉ Yes "}</span>
-                <span style={{ color: "var(--alc-code-comment)" }}>{"○ No"}</span>
+                <span style={{ color: accent, transition: "color 200ms ease" }}>
+                  {"◉ Yes "}
+                </span>
+                <span style={{ color: "var(--alc-code-comment)" }}>
+                  {"○ No"}
+                </span>
               </>
             ) : (
               <>
-                <span style={{ color: "var(--alc-fg-invert)" }}>{"◉ Yes "}</span>
-                <span style={{ color: "var(--alc-code-comment)" }}>{"○ No"}</span>
+                <span style={{ color: "var(--alc-fg-invert)" }}>
+                  {"◉ Yes "}
+                </span>
+                <span style={{ color: "var(--alc-code-comment)" }}>
+                  {"○ No"}
+                </span>
               </>
             )}
           </Line>
@@ -257,14 +366,20 @@ export default function DeployTerminal({ title = "~/my-app" }: { title?: string 
         <>
           <Line> </Line>
           <Line>
-            <span style={{ color: accent, transition: "color 280ms ease" }}>✓ </span>
+            <span style={{ color: accent, transition: "color 280ms ease" }}>
+              ✓{" "}
+            </span>
             <span>{summary.verb} in </span>
-            <span style={{ color: "var(--alc-fg-invert)", fontWeight: 600 }}>{summary.secs}s</span>
+            <span style={{ color: "var(--alc-fg-invert)", fontWeight: 600 }}>
+              {summary.secs}s
+            </span>
           </Line>
           {summary.url && (
             <Line>
               <span style={{ color: "var(--alc-code-comment)" }}>{"  → "}</span>
-              <span style={{ color: accent, transition: "color 280ms ease" }}>{summary.url}</span>
+              <span style={{ color: accent, transition: "color 280ms ease" }}>
+                {summary.url}
+              </span>
             </Line>
           )}
         </>

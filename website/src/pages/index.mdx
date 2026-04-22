@@ -55,9 +55,9 @@ export default {
 export const TEST_SRC = `const stack = beforeAll(deploy(Stack));
 
 test("PUT + GET round-trips through R2", Effect.gen(function* () {
-  const { url } = yield* stack;
-  const res = yield* HttpClient.get(\`\${url}/object/hello.txt\`);
-  expect(yield* res.text).toBe("hi!");
+const { url } = yield* stack;
+const res = yield* HttpClient.get(\`\${url}/object/hello.txt\`);
+expect(yield* res.text).toBe("hi!");
 }));`;
 
 export const OTEL_SRC = `// src/Api.ts — Effect emits OpenTelemetry. Exporter is a Layer.
@@ -91,14 +91,22 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
 {/* ───────────────────────── HERO ───────────────────────── */}
 
 <Section padding="72px 32px 40px" class="alc-hero">
-  <div style="text-align:center;margin-bottom:24px;"><BetaBadge /></div>
+  <div style="text-align:center;margin-bottom:24px;">
+    <BetaBadge />
+  </div>
   <div class="alc-hero__inner">
     <Eyebrow>typescript · effect · infrastructure as code</Eyebrow>
     <h1 class="alc-hero__title">
-      <span style="color:var(--alc-accent-deep);font-style:italic;">Zero</span> &rarr; production.
+      <span style="color:var(--alc-accent-deep);font-style:italic;">Zero</span>{" "}
+      &rarr; production.
     </h1>
     <h2 class="alc-hero__subtitle">
-      Infrastructure as code in pure TypeScript. Move fast in dev; operate at scale <span style="color:var(--alc-accent-deep);font-style:italic;">without compromise</span>.
+      Infrastructure as code in pure TypeScript. Move fast in dev; operate at
+      scale{" "}
+      <span style="color:var(--alc-accent-deep);font-style:italic;">
+        without compromise
+      </span>
+      .
     </h2>
     <HeroCta client:load />
   </div>
@@ -184,10 +192,10 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
     </p>
   </div>
 
-  <div class="alc-split-2 alc-split-2--wide-left">
-    <DevTestTerminal client:visible />
-    <CodeBlock filename="test/api.test.ts" code={TEST_SRC} compact />
-  </div>
+<div class="alc-split-2 alc-split-2--wide-left">
+  <DevTestTerminal client:visible />
+  <CodeBlock filename="test/api.test.ts" code={TEST_SRC} compact />
+</div>
 
   <div class="alc-stat-strip">
     <span class="alc-stat-strip__item"><strong>workerd</strong> locally</span>
@@ -246,11 +254,25 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
 <Section padding="56px 32px 64px" id="outro">
   <DiscordCallout />
   <div class="alc-cta" style="margin-top:48px;text-align:center;">
-    <h2 class="alc-h2">Paste this into your coding agent <span style="color:var(--alc-accent-deep);font-style:italic;">to get started</span>.</h2>
+    <h2 class="alc-h2">
+      Paste this into your coding agent{" "}
+      <span style="color:var(--alc-accent-deep);font-style:italic;">
+        to get started
+      </span>
+      .
+    </h2>
     <CopyForAgent client:load />
     <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:24px;">
-      <Button variant="secondary" href="/getting-started">Read the tutorial</Button>
-      <Button variant="ghost" icon="github" href="https://github.com/alchemy-run/alchemy">GitHub</Button>
+      <Button variant="secondary" href="/getting-started">
+        Read the tutorial
+      </Button>
+      <Button
+        variant="ghost"
+        icon="github"
+        href="https://github.com/alchemy-run/alchemy"
+      >
+        GitHub
+      </Button>
     </div>
   </div>
 </Section>

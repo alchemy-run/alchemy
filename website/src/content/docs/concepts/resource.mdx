@@ -103,17 +103,18 @@ as a `Layer`. Same engine plans, deploys, and destroys it.
 // 1. Declare the type + constructor.
 export type StripeProduct = Resource<
   "Stripe.Product",
-  { name: string; price: number },          // input props
-  { productId: string; priceId: string }    // output attrs
+  { name: string; price: number }, // input props
+  { productId: string; priceId: string } // output attrs
 >;
-export const StripeProduct =
-  Resource<StripeProduct>("Stripe.Product");
+export const StripeProduct = Resource<StripeProduct>("Stripe.Product");
 
 // 3. Use it like any built-in resource.
-const Pro = yield* StripeProduct("Pro", {
-  name: "Pro plan",
-  price: 2900,
-});
+const Pro =
+  yield *
+  StripeProduct("Pro", {
+    name: "Pro plan",
+    price: 2900,
+  });
 // ^? typed Pro.productId, Pro.priceId
 ```
 
@@ -169,4 +170,3 @@ export default class B extends Cloudflare.Worker<B>()(
   }),
 ) {}
 ```
-

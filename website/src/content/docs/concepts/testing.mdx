@@ -126,20 +126,21 @@ write to the source, await the sink, no mocks:
 
 ```typescript
 // Async / streaming jobs — same pattern.
-test("DynamoDB stream → SQS pipeline", Effect.gen(function* () {
-  const { tableName, queueUrl } = yield* stack;
+test(
+  "DynamoDB stream → SQS pipeline",
+  Effect.gen(function* () {
+    const { tableName, queueUrl } = yield* stack;
 
-  yield* DynamoDB.putItem({
-    TableName: tableName,
-    Item: { id: { S: "1" } },
-  });
+    yield* DynamoDB.putItem({
+      TableName: tableName,
+      Item: { id: { S: "1" } },
+    });
 
-  // wait for the Lambda to fan out into the queue
-  const msg = yield* SQS.receive(queueUrl).pipe(
-    Effect.timeout("10 seconds"),
-  );
-  expect(msg.Body).toContain('"id":"1"');
-}));
+    // wait for the Lambda to fan out into the queue
+    const msg = yield* SQS.receive(queueUrl).pipe(Effect.timeout("10 seconds"));
+    expect(msg.Body).toContain('"id":"1"');
+  }),
+);
 ```
 
 - **No mocks** — Your tests run against real R2, real DynamoDB, real

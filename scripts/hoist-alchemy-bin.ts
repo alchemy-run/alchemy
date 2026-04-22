@@ -50,12 +50,7 @@ const tsEntry = toShimPath(
 const jsEntry = toShimPath(
   resolve(repoRoot, "packages", "alchemy", "bin", "alchemy.js"),
 );
-const tsconfigPath = resolve(
-  repoRoot,
-  "packages",
-  "alchemy",
-  "tsconfig.json",
-);
+const tsconfigPath = resolve(repoRoot, "packages", "alchemy", "tsconfig.json");
 // Pin bun's tsconfig to the alchemy package, not whatever happens to be in
 // the invoking workspace's cwd. Bun's default is `$cwd/tsconfig.json`,
 // which means invoking `alchemy` from e.g. `examples/cloudflare-solidstart`
@@ -149,9 +144,13 @@ function writeShim(binDir: string) {
     );
   } else {
     const shimPath = join(binDir, "alchemy");
-    writeFileSync(shimPath, posixShim.replace("__TSCONFIG_REL__", tsconfigRel), {
-      mode: 0o755,
-    });
+    writeFileSync(
+      shimPath,
+      posixShim.replace("__TSCONFIG_REL__", tsconfigRel),
+      {
+        mode: 0o755,
+      },
+    );
   }
 }
 

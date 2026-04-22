@@ -4,15 +4,20 @@ import { tint } from "../marketing/diagrams/_colors";
 const ACCENT = "var(--alc-accent-deep)";
 const ACCENT_TINT = tint("#B88A4A", 0.18);
 
-const tok = (color: string) =>
-  ({ children }: { children: ReactNode }) => <span style={{ color }}>{children}</span>;
+const tok =
+  (color: string) =>
+  ({ children }: { children: ReactNode }) => (
+    <span style={{ color }}>{children}</span>
+  );
 const K = tok("var(--alc-code-keyword)");
 const S = tok("var(--alc-code-string)");
 const F = tok("var(--alc-code-fn)");
 const V = tok("var(--alc-code-var)");
 const T = tok("var(--alc-code-type)");
 const C = ({ children }: { children: ReactNode }) => (
-  <span style={{ color: "var(--alc-code-comment)", fontStyle: "italic" }}>{children}</span>
+  <span style={{ color: "var(--alc-code-comment)", fontStyle: "italic" }}>
+    {children}
+  </span>
 );
 
 interface Step {
@@ -68,12 +73,17 @@ export default function OutputGraphAnim() {
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
     let cancelled = false;
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const reduced = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
 
     const tick = (i: number) => {
       if (cancelled) return;
       setStep(i);
-      if (reduced) { setStep(STEPS.length - 1); return; }
+      if (reduced) {
+        setStep(STEPS.length - 1);
+        return;
+      }
       timer = setTimeout(() => tick((i + 1) % STEPS.length), STEP_DWELL[i]);
     };
 
@@ -99,7 +109,13 @@ export default function OutputGraphAnim() {
   const s = STEPS[step]!;
 
   // Highlight wrapper for code spans active in the current step.
-  const Hl = ({ active, children }: { active: boolean; children: ReactNode }) => (
+  const Hl = ({
+    active,
+    children,
+  }: {
+    active: boolean;
+    children: ReactNode;
+  }) => (
     <span
       style={{
         background: active ? ACCENT_TINT : "transparent",
@@ -119,29 +135,38 @@ export default function OutputGraphAnim() {
       {/* LEFT — code panel with progressive highlight */}
       <div className="alc-code-block">
         <div className="alc-code-block__header">
-          <span className="alc-code-block__dot" style={{ background: "var(--alc-danger)" }} />
-          <span className="alc-code-block__dot" style={{ background: "var(--alc-warn)" }} />
-          <span className="alc-code-block__dot" style={{ background: "var(--alc-accent-bright)" }} />
+          <span
+            className="alc-code-block__dot"
+            style={{ background: "var(--alc-danger)" }}
+          />
+          <span
+            className="alc-code-block__dot"
+            style={{ background: "var(--alc-warn)" }}
+          />
+          <span
+            className="alc-code-block__dot"
+            style={{ background: "var(--alc-accent-bright)" }}
+          />
           <span className="alc-code-block__filename">alchemy.run.ts</span>
         </div>
         <pre className="alc-code-block__pre">
           <Hl active={step === 0}>
-            <K>const</K> bucket = <K>yield</K>* <V>Cloudflare</V>.<F>R2Bucket</F>(<S>"Photos"</S>);
+            <K>const</K> bucket = <K>yield</K>* <V>Cloudflare</V>.
+            <F>R2Bucket</F>(<S>"Photos"</S>);
             {"\n"}
             bucket.<V>bucketName</V>; <C>{"// Output<string>"}</C>
           </Hl>
           {"\n\n"}
           <Hl active={step === 1}>
-            <K>const</K> dist = <K>yield</K>* <V>CloudFront</V>.<F>Distribution</F>(<S>"CDN"</S>, {"{"}
+            <K>const</K> dist = <K>yield</K>* <V>CloudFront</V>.
+            <F>Distribution</F>(<S>"CDN"</S>, {"{"}
             {"\n  "}
-            <V>origin</V>: bucket.<V>bucketName</V>,
-            {"\n"}
+            <V>origin</V>: bucket.<V>bucketName</V>,{"\n"}
             {"});"}
           </Hl>
           {"\n\n"}
           <Hl active={step === 2}>
-            <K>const</K> homepage = dist.<V>domainName</V>.<F>pipe</F>(
-            {"\n  "}
+            <K>const</K> homepage = dist.<V>domainName</V>.<F>pipe</F>({"\n  "}
             <V>Output</V>.<F>map</F>((d) {"=>"} <S>{"`https://${d}`"}</S>),
             {"\n"}
             {");"}
@@ -207,9 +232,7 @@ export default function OutputGraphAnim() {
           ))}
         </div>
 
-        <div className="output-anim-annotation">
-          {s.annotation}
-        </div>
+        <div className="output-anim-annotation">{s.annotation}</div>
       </div>
     </div>
   );

@@ -1,21 +1,30 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Icon } from "@iconify/react";
 
-const tok = (color: string) =>
-  ({ children }: { children: ReactNode }) => <span style={{ color }}>{children}</span>;
+const tok =
+  (color: string) =>
+  ({ children }: { children: ReactNode }) => (
+    <span style={{ color }}>{children}</span>
+  );
 const K = tok("var(--alc-code-keyword)");
 const S = tok("var(--alc-code-string)");
 const F = tok("var(--alc-code-fn)");
 const T = tok("var(--alc-code-type)");
 const V = tok("var(--alc-code-var)");
 const C = ({ children }: { children: ReactNode }) => (
-  <span style={{ color: "var(--alc-code-comment)", fontStyle: "italic" }}>{children}</span>
+  <span style={{ color: "var(--alc-code-comment)", fontStyle: "italic" }}>
+    {children}
+  </span>
 );
 
 interface BindRow {
   id: string;
   call: ReactNode;
-  resource: { label: string; sub: string; kind: "s3" | "ddb" | "ddb-stream" | "sqs" };
+  resource: {
+    label: string;
+    sub: string;
+    kind: "s3" | "ddb" | "ddb-stream" | "sqs";
+  };
   arrow: { kind: "iam" | "stream"; label: string };
 }
 
@@ -24,7 +33,8 @@ const ROWS: BindRow[] = [
     id: "get",
     call: (
       <>
-        <K>const</K> get = <K>yield</K>* <V>S3</V>.<V>GetObject</V>.<F>bind</F>(<T>Photos</T>);
+        <K>const</K> get = <K>yield</K>* <V>S3</V>.<V>GetObject</V>.<F>bind</F>(
+        <T>Photos</T>);
       </>
     ),
     resource: { label: "Photos", sub: "S3.Bucket", kind: "s3" },
@@ -34,7 +44,8 @@ const ROWS: BindRow[] = [
     id: "put",
     call: (
       <>
-        <K>const</K> put = <K>yield</K>* <V>DynamoDB</V>.<V>PutItem</V>.<F>bind</F>(<T>Jobs</T>);
+        <K>const</K> put = <K>yield</K>* <V>DynamoDB</V>.<V>PutItem</V>.
+        <F>bind</F>(<T>Jobs</T>);
       </>
     ),
     resource: { label: "Jobs", sub: "DynamoDB.Table", kind: "ddb" },
@@ -44,20 +55,28 @@ const ROWS: BindRow[] = [
     id: "stream",
     call: (
       <>
-        <K>yield</K>* <V>DynamoDB</V>.<F>stream</F>(<T>Jobs</T>).<F>process</F>(handler);
+        <K>yield</K>* <V>DynamoDB</V>.<F>stream</F>(<T>Jobs</T>).<F>process</F>
+        (handler);
       </>
     ),
-    resource: { label: "Jobs.stream", sub: "EventSourceMapping", kind: "ddb-stream" },
+    resource: {
+      label: "Jobs.stream",
+      sub: "EventSourceMapping",
+      kind: "ddb-stream",
+    },
     arrow: { kind: "stream", label: "EventSource" },
   },
 ];
 
 function ResourceIcon({ kind }: { kind: BindRow["resource"]["kind"] }) {
   const icon =
-    kind === "s3" ? "logos:aws-s3"
-    : kind === "ddb" ? "logos:aws-dynamodb"
-    : kind === "ddb-stream" ? "logos:aws-lambda"
-    : "logos:aws-sqs";
+    kind === "s3"
+      ? "logos:aws-s3"
+      : kind === "ddb"
+        ? "logos:aws-dynamodb"
+        : kind === "ddb-stream"
+          ? "logos:aws-lambda"
+          : "logos:aws-sqs";
   return (
     <div
       style={{
@@ -81,14 +100,19 @@ export default function BindingsToIAM() {
   const [active, setActive] = useState(-1);
 
   useEffect(() => {
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const reduced = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let cancelled = false;
 
     const cycle = (i: number) => {
       if (cancelled) return;
       setActive(i);
-      if (reduced) { setActive(ROWS.length - 1); return; }
+      if (reduced) {
+        setActive(ROWS.length - 1);
+        return;
+      }
       const next = (i + 1) % (ROWS.length + 1); // +1 = "all visible" pause frame
       const dwell = i === ROWS.length - 1 ? 2200 : 1300;
       timer = setTimeout(() => cycle(next === ROWS.length ? -1 : next), dwell);
@@ -118,16 +142,25 @@ export default function BindingsToIAM() {
       {/* LEFT — Lambda code */}
       <div className="alc-code-block bindings-iam__code">
         <div className="alc-code-block__header">
-          <span className="alc-code-block__dot" style={{ background: "var(--alc-danger)" }} />
-          <span className="alc-code-block__dot" style={{ background: "var(--alc-warn)" }} />
-          <span className="alc-code-block__dot" style={{ background: "var(--alc-accent-bright)" }} />
+          <span
+            className="alc-code-block__dot"
+            style={{ background: "var(--alc-danger)" }}
+          />
+          <span
+            className="alc-code-block__dot"
+            style={{ background: "var(--alc-warn)" }}
+          />
+          <span
+            className="alc-code-block__dot"
+            style={{ background: "var(--alc-accent-bright)" }}
+          />
           <span className="alc-code-block__filename">src/JobApi.ts</span>
         </div>
         <pre className="alc-code-block__pre">
-          <K>export default</K> <V>AWS</V>.<V>Lambda</V>.<F>Function</F>{"("}
+          <K>export default</K> <V>AWS</V>.<V>Lambda</V>.<F>Function</F>
+          {"("}
           {"\n  "}
-          <S>"JobApi"</S>,
-          {"\n  "}
+          <S>"JobApi"</S>,{"\n  "}
           <V>Effect</V>.<F>gen</F>(<K>function</K>* () {"{"}
           {"\n    "}
           {ROWS.map((r, i) => (
@@ -139,8 +172,10 @@ export default function BindingsToIAM() {
                   padding: "1px 5px",
                   margin: "0 -5px",
                   borderRadius: 4,
-                  background: active === i ? "rgba(74, 110, 60, 0.22)" : "transparent",
-                  boxShadow: active === i ? "0 0 0 1px rgba(74, 110, 60, 0.55)" : "none",
+                  background:
+                    active === i ? "rgba(74, 110, 60, 0.22)" : "transparent",
+                  boxShadow:
+                    active === i ? "0 0 0 1px rgba(74, 110, 60, 0.55)" : "none",
                   transition: "background 280ms ease, box-shadow 280ms ease",
                 }}
               >
@@ -161,20 +196,44 @@ export default function BindingsToIAM() {
       <div className="bindings-iam__arrows" aria-hidden>
         <svg viewBox="0 0 200 280" preserveAspectRatio="none">
           <defs>
-            <marker id="bia-arrow-active" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+            <marker
+              id="bia-arrow-active"
+              viewBox="0 0 8 8"
+              refX="7"
+              refY="4"
+              markerWidth="6"
+              markerHeight="6"
+              orient="auto"
+            >
               <path d="M0 0 L8 4 L0 8 Z" fill="var(--alc-accent-deep)" />
             </marker>
-            <marker id="bia-arrow-idle" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+            <marker
+              id="bia-arrow-idle"
+              viewBox="0 0 8 8"
+              refX="7"
+              refY="4"
+              markerWidth="6"
+              markerHeight="6"
+              orient="auto"
+            >
               <path d="M0 0 L8 4 L0 8 Z" fill="var(--alc-fg-3)" />
             </marker>
           </defs>
           {ROWS.map((r, i) => {
             const y = 50 + i * 90;
             const isActive = active === i;
-            const stroke = isActive ? "var(--alc-accent-deep)" : "var(--alc-fg-3)";
-            const marker = isActive ? "url(#bia-arrow-active)" : "url(#bia-arrow-idle)";
+            const stroke = isActive
+              ? "var(--alc-accent-deep)"
+              : "var(--alc-fg-3)";
+            const marker = isActive
+              ? "url(#bia-arrow-active)"
+              : "url(#bia-arrow-idle)";
             return (
-              <g key={r.id} opacity={isActive ? 1 : 0.55} style={{ transition: "opacity 320ms ease" }}>
+              <g
+                key={r.id}
+                opacity={isActive ? 1 : 0.55}
+                style={{ transition: "opacity 320ms ease" }}
+              >
                 <path
                   d={`M 0 ${y} L 190 ${y}`}
                   stroke={stroke}
@@ -182,7 +241,9 @@ export default function BindingsToIAM() {
                   fill="none"
                   markerEnd={marker}
                   strokeDasharray={r.arrow.kind === "stream" ? "5 4" : "0"}
-                  style={{ transition: "stroke 280ms ease, stroke-width 280ms ease" }}
+                  style={{
+                    transition: "stroke 280ms ease, stroke-width 280ms ease",
+                  }}
                 />
                 <text
                   x="100"
@@ -210,15 +271,23 @@ export default function BindingsToIAM() {
               key={r.id}
               className="bindings-iam__resource"
               style={{
-                borderColor: isActive ? "var(--alc-accent-deep)" : "var(--alc-hairline)",
-                boxShadow: isActive ? "0 0 0 2px rgba(74, 110, 60, 0.18)" : "none",
+                borderColor: isActive
+                  ? "var(--alc-accent-deep)"
+                  : "var(--alc-hairline)",
+                boxShadow: isActive
+                  ? "0 0 0 2px rgba(74, 110, 60, 0.18)"
+                  : "none",
                 transition: "border-color 280ms ease, box-shadow 280ms ease",
               }}
             >
               <ResourceIcon kind={r.resource.kind} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="bindings-iam__resource-label">{r.resource.label}</div>
-                <div className="bindings-iam__resource-sub">{r.resource.sub}</div>
+                <div className="bindings-iam__resource-label">
+                  {r.resource.label}
+                </div>
+                <div className="bindings-iam__resource-sub">
+                  {r.resource.sub}
+                </div>
                 <div
                   className="bindings-iam__resource-iam"
                   data-stream={r.arrow.kind === "stream" ? "true" : undefined}

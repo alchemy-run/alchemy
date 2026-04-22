@@ -147,12 +147,12 @@ Add `afterAll` with `destroy`, using `skipIf` to only tear down when
 ```typescript twoslash
 // @filename: ../alchemy.run.ts
 // ---cut---
-import { 
-+   afterAll, 
-  beforeAll, 
-  deploy, 
-+   destroy, 
-  expect, 
+import {
++   afterAll,
+  beforeAll,
+  deploy,
++   destroy,
+  expect,
   test,
 } from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";

@@ -26,7 +26,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
     yield* Metric.increment(requestsTotal);
     return { fetch: handler };
   }).pipe(
-    Effect.provide(AxiomExporter),       // or CloudWatch, Datadog, OTLP …
+    Effect.provide(AxiomExporter), // or CloudWatch, Datadog, OTLP …
   ),
 ) {}
 ```
@@ -44,9 +44,9 @@ the PR — reviewable, revertable, audited.
 // alchemy.run.ts — same program. same diff. operations included.
 export const Dashboard = AWS.CloudWatch.Dashboard("ApiHealth", {
   widgets: [
-    Widget.line({   title: "p99 latency",     metric: api.metrics.p99 }),
-    Widget.line({   title: "requests / sec",  metric: api.metrics.rps }),
-    Widget.number({ title: "5xx ratio",       metric: api.metrics.errorRate }),
+    Widget.line({ title: "p99 latency", metric: api.metrics.p99 }),
+    Widget.line({ title: "requests / sec", metric: api.metrics.rps }),
+    Widget.number({ title: "5xx ratio", metric: api.metrics.errorRate }),
   ],
 });
 

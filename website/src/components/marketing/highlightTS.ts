@@ -7,19 +7,43 @@
 // use expressive-code via standard MDX ```ts fences.
 
 const KEYWORDS = new Set([
-  "import", "export", "default", "class", "extends", "const", "let", "var",
-  "function", "return", "yield", "if", "else", "for", "of", "in", "as", "new",
-  "typeof", "async", "await", "from", "interface", "type", "null", "true",
-  "false", "this", "void", "throw",
+  "import",
+  "export",
+  "default",
+  "class",
+  "extends",
+  "const",
+  "let",
+  "var",
+  "function",
+  "return",
+  "yield",
+  "if",
+  "else",
+  "for",
+  "of",
+  "in",
+  "as",
+  "new",
+  "typeof",
+  "async",
+  "await",
+  "from",
+  "interface",
+  "type",
+  "null",
+  "true",
+  "false",
+  "this",
+  "void",
+  "throw",
 ]);
 
-const RE = /(\/\/[^\n]*)|(\/\*[\s\S]*?\*\/)|("(?:[^"\\]|\\.)*")|('(?:[^'\\]|\\.)*')|(`(?:[^`\\]|\\.)*`)|\b([A-Za-z_$][a-zA-Z0-9_$]*)\b|\b(\d+)\b/g;
+const RE =
+  /(\/\/[^\n]*)|(\/\*[\s\S]*?\*\/)|("(?:[^"\\]|\\.)*")|('(?:[^'\\]|\\.)*')|(`(?:[^`\\]|\\.)*`)|\b([A-Za-z_$][a-zA-Z0-9_$]*)\b|\b(\d+)\b/g;
 
 function escape(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 export function highlightTS(src: string): string {

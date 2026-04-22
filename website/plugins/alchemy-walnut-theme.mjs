@@ -58,7 +58,11 @@ const walnutSunrise = {
       settings: { foreground: "#d4f26a" },
     },
     {
-      scope: ["keyword.operator", "punctuation.separator", "punctuation.terminator"],
+      scope: [
+        "keyword.operator",
+        "punctuation.separator",
+        "punctuation.terminator",
+      ],
       settings: { foreground: "#c7b795" },
     },
     {
@@ -74,7 +78,11 @@ const walnutSunrise = {
       settings: { foreground: "#ff9a6b" },
     },
     {
-      scope: ["constant.language.boolean", "constant.language.null", "constant.language.undefined"],
+      scope: [
+        "constant.language.boolean",
+        "constant.language.null",
+        "constant.language.undefined",
+      ],
       settings: { foreground: "#ff9a6b" },
     },
     {
