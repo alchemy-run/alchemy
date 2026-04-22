@@ -2347,10 +2347,10 @@ body.alc-root,
   object-fit: cover;
   object-position: center;
   pointer-events: none;
-  opacity: 0.55;
+  opacity: 0.32;
   mix-blend-mode: multiply;
-  -webkit-mask-image: radial-gradient(ellipse 90% 80% at 50% 45%, #000 35%, transparent 95%);
-          mask-image: radial-gradient(ellipse 90% 80% at 50% 45%, #000 35%, transparent 95%);
+  -webkit-mask-image: radial-gradient(ellipse 85% 75% at 50% 45%, #000 15%, transparent 90%);
+          mask-image: radial-gradient(ellipse 85% 75% at 50% 45%, #000 15%, transparent 90%);
 }
 @media (prefers-reduced-motion: reduce) {
   .alc-hero__bg-video {
