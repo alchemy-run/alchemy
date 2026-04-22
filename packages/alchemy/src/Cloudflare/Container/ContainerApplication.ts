@@ -103,6 +103,32 @@ export interface ContainerApplicationProps extends PlatformProps {
    */
   runtime?: "bun" | "node";
   /**
+   * Module specifiers that Rolldown should mark as external when bundling
+   * the container entrypoint. The matching packages are installed inside the
+   * image via the runtime's package manager (`bun add` for `runtime: "bun"`,
+   * `npm install` for `runtime: "node"`) before the entrypoint runs.
+   *
+   * Use this for native dependencies that must not be bundled (e.g. `sharp`,
+   * `impit`) or for packages that intentionally ship in the base image.
+   *
+   * Install inside the image is controlled by {@link autoInstallExternals}
+   * (default `true`); set it to `false` if your custom `dockerfile` already
+   * installs these packages and you want to avoid the redundant step.
+   */
+  external?: string[];
+  /**
+   * Whether to auto-install the packages listed in {@link external} inside
+   * the container image (via `bun add` or `npm install`) before running the
+   * entrypoint.
+   *
+   * @default true
+   *
+   * Set to `false` when your custom `dockerfile` already installs these
+   * packages (for example, via a base image that pre-installs `sharp`), to
+   * avoid the redundant install step.
+   */
+  autoInstallExternals?: boolean;
+  /**
    * Human-readable application name. If omitted, Alchemy derives a deterministic
    * physical name from the stack, stage, and logical ID.
    */
@@ -418,7 +444,12 @@ export const ContainerProvider = () =>
           isExternal: props.isExternal,
         });
 
-        const finalDockerfile = buildFinalDockerfile(props.dockerfile, runtime);
+        const finalDockerfile = buildFinalDockerfile(
+          props.dockerfile,
+          runtime,
+          props.external,
+          props.autoInstallExternals,
+        );
         const imageHash = (yield* sha256Object({
           bundleHash,
           dockerfile: finalDockerfile,
@@ -561,15 +592,23 @@ await Effect.runPromise(serverEffect).catch((err) => {
       const buildFinalDockerfile = (
         userDockerfile: string | undefined,
         runtime: "bun" | "node",
+        external: string[] = [],
+        autoInstallExternals = true,
       ): string => {
         const base =
           userDockerfile?.trim() ??
           (runtime === "bun" ? "FROM oven/bun:1" : "FROM node:22-slim");
         const runtimeBin = runtime === "bun" ? "bun" : "node";
+        const installCmd = runtime === "bun" ? "bun add" : "npm install";
+        const installStep =
+          autoInstallExternals && external.length > 0
+            ? `RUN ${installCmd} ${external.join(" ")}`
+            : "";
         return [
           base,
           "",
           "WORKDIR /app",
+          ...installStep ? [installStep, ""] : [],
           "COPY index.mjs /app/index.mjs",
           `ENTRYPOINT ["${runtimeBin}", "/app/index.mjs"]`,
           "",
@@ -597,7 +636,12 @@ await Effect.runPromise(serverEffect).catch((err) => {
           dotAlchemy,
           `${id}-container`,
         );
-        const finalDockerfile = buildFinalDockerfile(props.dockerfile, runtime);
+        const finalDockerfile = buildFinalDockerfile(
+          props.dockerfile,
+          runtime,
+          props.external,
+          props.autoInstallExternals,
+        );
         yield* materializeDockerfile(finalDockerfile, contextDir);
         yield* writeContextFiles(contextDir, [
           { path: "index.mjs", content: code },
