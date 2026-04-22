@@ -240,11 +240,6 @@ export interface ContainerApplicationProps extends PlatformProps {
    * Exports passed to the container runtime.
    */
   exports?: string[];
-  /**
-   * Module specifiers to exclude from the bundle and leave as external imports.
-   * Useful for native addons or packages that cannot be bundled (e.g. `sharp`, `impit`).
-   */
-  external?: string[];
 }
 
 export type ContainerServices =

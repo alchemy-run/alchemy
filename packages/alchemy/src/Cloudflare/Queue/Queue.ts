@@ -4,7 +4,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { Account } from "../Account.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { QueueBinding } from "./QueueBinding.ts";
 
@@ -65,7 +65,7 @@ export const QueueProvider = () =>
   Provider.effect(
     Queue,
     Effect.gen(function* () {
-      const accountId = yield* Account;
+      const { accountId } = yield* CloudflareEnvironment;
       const createQueue = yield* queues.createQueue;
       const getQueue = yield* queues.getQueue;
       const updateQueue = yield* queues.updateQueue;

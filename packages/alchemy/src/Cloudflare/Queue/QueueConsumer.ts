@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { Account } from "../Account.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
 export type QueueConsumerProps = {
@@ -101,7 +101,7 @@ export const QueueConsumerProvider = () =>
   Provider.effect(
     QueueConsumer,
     Effect.gen(function* () {
-      const accountId = yield* Account;
+      const { accountId } = yield* CloudflareEnvironment;
       const createConsumer = yield* queues.createConsumer;
       const getConsumer = yield* queues.getConsumer;
       const updateConsumer = yield* queues.updateConsumer;
