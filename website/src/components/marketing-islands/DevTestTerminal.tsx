@@ -243,7 +243,7 @@ export default function DevTestTerminal() {
   const badge = mode === "dev" ? "DEV" : "TEST";
 
   return (
-    <TermChrome title={title} badge={badge} badgeColor={accent} bodyMinHeight={360}>
+    <TermChrome title={title} badge={badge} badgeColor={accent} bodyMinHeight={280}>
       {mode === "dev" ? (
         <>
           {devLines.map((l) => (

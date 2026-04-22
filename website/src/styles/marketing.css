@@ -132,7 +132,7 @@ body.alc-root,
 
 .bindings-iam {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) 200px minmax(0, 0.85fr);
+  grid-template-columns: minmax(0, 1fr) 200px minmax(0, 0.85fr);
   grid-template-rows: minmax(280px, auto);
   gap: 18px;
   align-items: stretch;

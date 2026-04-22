@@ -124,8 +124,7 @@ export default function BindingsToIAM() {
           <span className="alc-code-block__filename">src/JobApi.ts</span>
         </div>
         <pre className="alc-code-block__pre">
-          <K>export default</K> <K>class</K> <T>JobApi</T> <K>extends</K>{" "}
-          <V>AWS</V>.<V>Lambda</V>.<F>Function</F>{"<"}<T>JobApi</T>{">()("}
+          <K>export default</K> <V>AWS</V>.<V>Lambda</V>.<F>Function</F>{"("}
           {"\n  "}
           <S>"JobApi"</S>,
           {"\n  "}
@@ -154,7 +153,7 @@ export default function BindingsToIAM() {
           {"\n  "}
           {"}),"}
           {"\n"}
-          {") {}"}
+          {");"}
         </pre>
       </div>
 
