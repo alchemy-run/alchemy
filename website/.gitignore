@@ -5,3 +5,4 @@ node_modules
 static/
 # public/
 src/content/docs/providers/
+.link-checker/broken-links.log

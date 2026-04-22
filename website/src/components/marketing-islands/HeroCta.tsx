@@ -23,7 +23,7 @@ export default function HeroCta() {
           <a className="alc-btn alc-btn--primary" href="/getting-started">
             Get started <span aria-hidden>→</span>
           </a>
-          <a className="alc-btn alc-btn--secondary" href="/tutorial">
+          <a className="alc-btn alc-btn--secondary" href="/tutorial/part-1">
             Tutorial
           </a>
         </div>

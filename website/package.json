@@ -43,6 +43,7 @@
     "tailwindcss": "^4.1.14"
   },
   "devDependencies": {
+    "astro-broken-links-checker": "^1.1.0",
     "typescript": "catalog:",
     "zod": "^3"
   }

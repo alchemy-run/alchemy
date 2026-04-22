@@ -5,6 +5,7 @@ import sitemap from "@astrojs/sitemap";
 import starlight from "@astrojs/starlight";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "astro/config";
+import astroBrokenLinksChecker from "astro-broken-links-checker";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -74,6 +75,10 @@ export default defineConfig({
   integrations: [
     react(),
     copyMarkdownSources(),
+    astroBrokenLinksChecker({
+      checkExternalLinks: false,
+      throwError: true,
+    }),
     sitemap({
       filter: (page) =>
         !page.endsWith(".html") &&
