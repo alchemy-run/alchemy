@@ -219,6 +219,20 @@
   background: var(--alc-bg-sunk);
   border: 1px solid var(--alc-hairline);
   color: var(--alc-fg-1);
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+
+/* In large headings the inline-code pill's padding + border makes the box
+   taller than the heading's line-height, so it visually clips into adjacent
+   lines. Shrink it slightly and align to baseline so it sits cleanly. */
+h1 .alc-code-inline,
+h2 .alc-code-inline,
+h3 .alc-code-inline {
+  font-size: 0.78em;
+  padding: 0.08em 0.34em;
+  vertical-align: 0.04em;
+  line-height: 1;
 }
 
 .alc-hand {

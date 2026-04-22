@@ -70,6 +70,37 @@ body.alc-root,
   font-size: 11px;
   color: var(--alc-code-comment);
 }
+/* Wrapper used when CodeBlock has a caption — keeps the block + the
+   hand-written caption visually grouped beneath the window chrome. */
+.alc-code-block__wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.alc-code-block__caption {
+  font-family: var(--alc-font-hand);
+  font-size: 20px;
+  line-height: 1.2;
+  color: var(--alc-accent-deep);
+  text-align: center;
+  letter-spacing: 0.01em;
+  animation: alc-code-caption-in 320ms ease;
+}
+@keyframes alc-code-caption-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .alc-code-block__caption {
+    animation: none;
+  }
+}
 .alc-code-block__pre {
   margin: 0;
   padding: 18px 20px;
@@ -264,21 +295,6 @@ body.alc-root,
   color: var(--alc-accent-deep);
   font-family: var(--alc-font-hand);
   font-size: 16px;
-}
-@media (max-width: 980px) {
-  .stack-deploy-diagram {
-    grid-template-columns: 1fr;
-  }
-  .stack-deploy-diagram__arrow {
-    transform: rotate(90deg);
-    padding: 12px 0;
-  }
-}
-@media (max-width: 560px) {
-  .stack-deploy-diagram__col:first-child,
-  .stack-deploy-diagram__arrow {
-    display: none;
-  }
 }
 
 /* ============================================================
@@ -795,40 +811,24 @@ body.alc-root,
   pointer-events: auto;
 }
 
-/* Mobile: stack code above artifact with a "↓ generates" cue. The flow
-   diagram also rotates from horizontal 3-up to vertical so the nodes
-   stack and the edges become down-pointing arrows. */
-@media (max-width: 720px) {
+/* Mobile: drop the right-hand artifact panel entirely — the generated
+   permissions / environment / flow visualizations don't read well at narrow
+   widths and the code itself is the primary story. */
+@media (max-width: 880px) {
   .eff-showcase__split {
     grid-template-columns: minmax(0, 1fr);
-    /* Stacked layout: let each panel size naturally instead of squashing
-       both halves into a fixed 420px combined height. */
+    /* Code-only: let the panel size to the code's natural height instead
+       of holding the desktop's fixed 420px slot. */
     height: auto;
   }
   .eff-showcase__code {
     border-right: 0;
-    border-bottom: 1px solid rgba(232, 220, 192, 0.08);
   }
   .eff-showcase__pre {
     overflow-x: auto;
   }
   .eff-showcase__artifact {
-    overflow: visible;
-  }
-  .eff-showcase__artifact {
-    position: relative;
-    padding-top: 30px;
-  }
-  .eff-showcase__artifact::before {
-    content: "↓ generates";
-    position: absolute;
-    top: 8px;
-    left: 50%;
-    transform: translateX(-50%);
-    font-family: var(--alc-font-mono);
-    font-size: 10.5px;
-    color: var(--alc-fg-3);
-    letter-spacing: 0.04em;
+    display: none;
   }
   .eff-showcase__flow {
     grid-template-columns: minmax(0, 1fr);
@@ -859,20 +859,49 @@ body.alc-root,
 }
 
 /* ============================================================
-   Stack ↔ Deploy mobile toggle (home page section 1)
-   On narrow screens the side-by-side diagram is replaced by a single
-   tabbed card that auto-cycles between the source and the deploy
-   terminal. Saves vertical space and keeps both views accessible.
+   Stack / Deploy — narrow-screen fallback (home page section 1)
+   The 3-column "code + arrow + terminal" diagram needs horizontal
+   room to read well. On iPad-and-narrower we drop the source code
+   panel entirely and just show the live deploy terminal — the
+   Alchemy.Stack code is already visible elsewhere on the page.
    ============================================================ */
 
-.stack-mobile {
-  display: none; /* hidden on desktop — see media query below */
-  flex-direction: column;
-  gap: 8px;
-  max-width: 560px;
+.stack-deploy-mobile {
+  display: none;
+  max-width: 720px;
   margin: 0 auto;
 }
-.stack-mobile__chrome {
+.stack-deploy-mobile > .alc-term {
+  width: 100%;
+}
+
+@media (max-width: 880px) {
+  .stack-deploy-diagram {
+    display: none;
+  }
+  .stack-deploy-mobile {
+    display: block;
+  }
+}
+
+/* ============================================================
+   Async-fetch escape hatch — narrow-screen tabs
+   On wide screens the two files sit side-by-side. Below 1024px
+   they collapse into a single tabbed card that auto-flips between
+   alchemy.run.ts and src/worker.ts with a short caption.
+   ============================================================ */
+
+.async-split-mobile {
+  display: none;
+}
+.async-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 720px;
+  margin: 0 auto;
+}
+.async-tabs__chrome {
   background: var(--alc-bg-code);
   border: 1px solid var(--alc-hairline);
   border-radius: 10px;
@@ -881,7 +910,7 @@ body.alc-root,
   display: flex;
   flex-direction: column;
 }
-.stack-mobile__header {
+.async-tabs__header {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -889,7 +918,7 @@ body.alc-root,
   border-bottom: 1px solid rgba(232, 220, 192, 0.08);
   background: rgba(255, 255, 255, 0.02);
 }
-.stack-mobile__tabs {
+.async-tabs__tabs {
   display: flex;
   gap: 4px;
   margin-left: 12px;
@@ -898,10 +927,10 @@ body.alc-root,
   overflow-x: auto;
   scrollbar-width: none;
 }
-.stack-mobile__tabs::-webkit-scrollbar {
+.async-tabs__tabs::-webkit-scrollbar {
   display: none;
 }
-.stack-mobile__tab {
+.async-tabs__tab {
   flex: 0 0 auto;
   appearance: none;
   background: transparent;
@@ -917,30 +946,29 @@ body.alc-root,
     background 160ms ease,
     border-color 160ms ease;
 }
-.stack-mobile__tab:hover {
+.async-tabs__tab:hover {
   color: var(--alc-fg-invert);
 }
-.stack-mobile__tab[data-active="true"] {
+.async-tabs__tab[data-active="true"] {
   color: var(--alc-fg-invert);
   background: rgba(255, 255, 255, 0.05);
   border-color: rgba(232, 220, 192, 0.12);
 }
-.stack-mobile__body {
+.async-tabs__body {
   position: relative;
-  min-height: 320px;
   display: flex;
   flex-direction: column;
 }
-.stack-mobile__panel {
+.async-tabs__panel {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-width: 0;
 }
-.stack-mobile__panel[hidden] {
+.async-tabs__panel[hidden] {
   display: none;
 }
-.stack-mobile__pre {
+.async-tabs__pre {
   margin: 0;
   padding: 14px 16px;
   font-family: var(--alc-font-mono);
@@ -949,23 +977,13 @@ body.alc-root,
   color: var(--alc-code-var);
   overflow-x: auto;
   flex: 1;
-  min-height: 296px;
 }
-.stack-mobile__hint {
-  font-family: var(--alc-font-mono);
-  font-size: 10.5px;
-  color: var(--alc-fg-3);
-  text-align: center;
-  letter-spacing: 0.04em;
-}
-
-/* Swap the side-by-side diagram for the tabbed toggle on narrow screens. */
 @media (max-width: 880px) {
-  .stack-deploy-diagram {
+  .alc-split-2.async-split-desktop {
     display: none;
   }
-  .stack-mobile {
-    display: flex;
+  .async-split-mobile {
+    display: block;
   }
 }
 
@@ -2601,33 +2619,6 @@ body.alc-root,
   .bindings-iam__code .alc-code-block__pre {
     font-size: 11.5px;
     padding: 14px 14px;
-  }
-}
-
-/* ============================================================
-   Mobile tweaks for Plan / Deploy / Destroy diagram
-   ============================================================ */
-
-@media (max-width: 640px) {
-  .stack-deploy-diagram__col > .alc-code-block,
-  .stack-deploy-diagram__col > .alc-term {
-    min-height: 220px;
-  }
-  .stack-deploy-diagram__col > .alc-code-block .alc-code-block__pre,
-  .stack-deploy-diagram__col > .alc-term .alc-term__body {
-    font-size: 12px;
-    padding: 12px 14px;
-    min-height: auto;
-  }
-  .stack-deploy-diagram__arrow {
-    transform: none;
-    flex-direction: row;
-    gap: 8px;
-    padding: 4px 0;
-    font-size: 14px;
-  }
-  .stack-deploy-diagram__arrow span:nth-child(2) {
-    transform: rotate(90deg);
   }
 }
 

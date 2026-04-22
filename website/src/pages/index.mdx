@@ -12,7 +12,7 @@ import DiscordCallout from "../components/marketing/DiscordCallout.astro";
 import CodeBlock from "../components/marketing/CodeBlock.astro";
 import SketchLabel from "../components/marketing/SketchLabel.astro";
 import DeployTerminal from "../components/marketing-islands/DeployTerminal.tsx";
-import StackDeployMobile from "../components/marketing-islands/StackDeployMobile.tsx";
+import AsyncTabs from "../components/marketing-islands/AsyncTabs.tsx";
 import EffectPilledShowcase from "../components/marketing-islands/EffectPilledShowcase.tsx";
 import DevTerminal from "../components/marketing-islands/DevTerminal.tsx";
 import TestTerminal from "../components/marketing-islands/TestTerminal.tsx";
@@ -146,8 +146,11 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
     </div>
   </div>
 
-  {/* Mobile-only: combined card with tabbed code/deploy that auto-cycles. */}
-  <StackDeployMobile client:visible code={STACK_SRC} />
+  {/* Mobile-only: just the deploy terminal — the alchemy.run.ts source
+      reads poorly when stacked above it on narrow screens. */}
+  <div class="stack-deploy-mobile">
+    <DeployTerminal client:visible />
+  </div>
 </Section>
 
 {/* ───── 2 · EFFECT-PILLED MODE ───── */}
@@ -172,16 +175,46 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
   <div style="text-align:center;margin-bottom:36px;">
     <Eyebrow>no effect required · still fully typed</Eyebrow>
     <h2 class="alc-h2" style="margin:10px 0 12px;">
-      Don't worry — you can still <code class="alc-code-inline" style="color:var(--alc-accent-deep);">async&nbsp;fetch</code>.
+      Don't worry — you can still use <code class="alc-code-inline" style="color:var(--alc-accent-deep);">async&nbsp;fetch</code>.
     </h2>
     <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:760px;margin:0 auto;">
       Effect's optional. Declare resources, wire them as bindings, and your handler stays the plain async function you already wrote — <code class="alc-code-inline">env</code> stays fully typed either way. <a class="alc-learn-more" href="/guides/migrating-from-v1">Learn more &rarr;</a>
     </p>
   </div>
 
-  <div class="alc-split-2">
-    <CodeBlock filename="alchemy.run.ts" code={ASYNC_RUN_SRC} compact />
-    <CodeBlock filename="src/worker.ts" code={ASYNC_WORKER_SRC} compact />
+  <div class="alc-split-2 async-split-desktop">
+    <CodeBlock
+      filename="alchemy.run.ts"
+      code={ASYNC_RUN_SRC}
+      caption="infer your WorkerEnv"
+      compact
+    />
+    <CodeBlock
+      filename="src/worker.ts"
+      code={ASYNC_WORKER_SRC}
+      caption="import and use in your worker"
+      compact
+    />
+  </div>
+
+  {/* Narrow-screen replacement: a single tabbed card that auto-flips
+      between the two files with a short caption explaining each step. */}
+  <div class="async-split-mobile">
+    <AsyncTabs
+      client:visible
+      panels={[
+        {
+          filename: "alchemy.run.ts",
+          code: ASYNC_RUN_SRC,
+          caption: "infer your WorkerEnv",
+        },
+        {
+          filename: "src/worker.ts",
+          code: ASYNC_WORKER_SRC,
+          caption: "import and use in your worker",
+        },
+      ]}
+    />
   </div>
 </Section>
 
@@ -216,7 +249,7 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
 <Section padding="80px 32px" id="live-tests">
   <div style="text-align:center;margin-bottom:32px;">
     <Eyebrow>alchemy test · isolated stages · live cloud</Eyebrow>
-    <h2 class="alc-h2" style="margin:10px 0 12px;">Verify against live resources: <span style="color:var(--alc-success);font-style:italic;">deploy</span> &rarr; <span style="color:var(--alc-warn);font-style:italic;">assert</span> &rarr; <span style="color:var(--alc-danger);font-style:italic;">destroy</span>.</h2>
+    <h2 class="alc-h2" style="margin:10px 0 12px;">Verify against live resources: <span style="color:var(--alc-accent-deep);font-style:italic;">deploy</span> &rarr; <span style="color:var(--alc-accent-deep);font-style:italic;">assert</span> &rarr; <span style="color:var(--alc-accent-deep);font-style:italic;">destroy</span>.</h2>
     <p style="font-size:15.5px;line-height:1.6;color:var(--alc-fg-2);max-width:720px;margin:0 auto;">
       Each suite spins up its own isolated stack — live R2, DynamoDB, Workers — runs your assertions, then tears it back down. No mocks to babysit, no drift between fixture and production. <a class="alc-learn-more" href="/concepts/testing">Learn more &rarr;</a>
     </p>
