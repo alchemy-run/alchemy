@@ -1,25 +1,47 @@
-import type { BunServices } from "@effect/platform-bun/BunServices";
-import type { NodeServices } from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
+import type { FileSystem } from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import type { Path } from "effect/Path";
 import type { Teardown } from "effect/Runtime";
+import type { Stdio } from "effect/Stdio";
+import type { Terminal } from "effect/Terminal";
+import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
+import type { WebSocketConstructor } from "effect/unstable/socket/Socket";
 
 const isBun = typeof Bun !== "undefined";
 
-export const PlatformServices: Layer.Layer<
-  NodeServices | BunServices,
-  never,
-  never
-> = Effect.promise(() => {
-  if (isBun) {
-    return import("@effect/platform-bun/BunServices").then(
-      (BunServices) => BunServices.layer,
-    );
-  }
-  return import("@effect/platform-node/NodeServices").then(
-    (NodeServices) => NodeServices.layer,
-  );
-}).pipe(Layer.unwrap);
+export type PlatformServices =
+  | ChildProcessSpawner
+  | FileSystem
+  | Path
+  | Stdio
+  | Terminal
+  // WebSocketConstructor is not included in NodeServices/BunServices, but required for Workers tail
+  | WebSocketConstructor;
+
+export const PlatformServices: Layer.Layer<PlatformServices> = Effect.promise(
+  async () => {
+    if (isBun) {
+      const [BunServices, BunSocket] = await Promise.all([
+        import("@effect/platform-bun/BunServices"),
+        import("@effect/platform-bun/BunSocket"),
+      ]);
+      return Layer.merge(
+        BunServices.layer,
+        BunSocket.layerWebSocketConstructor,
+      );
+    } else {
+      const [NodeServices, NodeSocket] = await Promise.all([
+        import("@effect/platform-node/NodeServices"),
+        import("@effect/platform-node/NodeSocket"),
+      ]);
+      return Layer.merge(
+        NodeServices.layer,
+        NodeSocket.layerWebSocketConstructor,
+      );
+    }
+  },
+).pipe(Layer.unwrap);
 
 export const runMain = <E, A>(
   effect: Effect.Effect<A, E>,
