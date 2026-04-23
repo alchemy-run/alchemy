@@ -5,5 +5,6 @@ export * from "./KV/index.ts";
 export * from "./Queue/index.ts";
 export * from "./Providers.ts";
 export * from "./R2/index.ts";
+export * from "./SecretsStore/index.ts";
 export * from "./Website/index.ts";
 export * from "./Workers/index.ts";

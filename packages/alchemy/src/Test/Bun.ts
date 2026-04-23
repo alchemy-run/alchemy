@@ -11,6 +11,7 @@ import type { HttpClient } from "effect/unstable/http/HttpClient";
 import type { HookOptions } from "node:test";
 import * as Apply from "../Apply.ts";
 import { provideFreshArtifactStore } from "../Artifacts.ts";
+import { AuthProviders } from "../Auth/AuthProvider.ts";
 import { DotAlchemy, dotAlchemy } from "../Config.ts";
 import type { Input } from "../Input.ts";
 import * as Plan from "../Plan.ts";
@@ -49,6 +50,7 @@ const run = <A>(effect: TestEffect<A>) =>
       Effect.provide(Layer.succeed(ConfigProvider, configProvider)),
     );
   }).pipe(
+    Effect.provideService(AuthProviders, {}),
     Effect.provide(Layer.provideMerge(alchemy, platform)),
     Effect.scoped,
     Effect.runPromise,
@@ -211,6 +213,7 @@ const exec = <A, B>(
       Effect.provide(Layer.succeed(ConfigProvider, configProvider)),
     );
   }).pipe(
+    Effect.provideService(AuthProviders, {}),
     Effect.provide(Layer.succeed(Stage, options?.stage ?? "test")),
     Effect.provide(TestCli),
     Effect.provide(Layer.provideMerge(alchemy, platform)),
