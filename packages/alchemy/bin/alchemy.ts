@@ -1,8 +1,11 @@
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
-import { Command } from "effect/unstable/cli";
+import * as Layer from "effect/Layer";
+import * as Command from "effect/unstable/cli/Command";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
 import packageJson from "../package.json" with { type: "json" };
+import { dotAlchemy } from "../src/Config.ts";
 import { PlatformServices, runMain } from "../src/Util/PlatformServices.ts";
 
 import { handleCancellation } from "./commands/_shared.ts";
@@ -33,13 +36,15 @@ const cli = Command.run(root, {
   version: packageJson.version,
 });
 
+const services = Layer.mergeAll(
+  Layer.provideMerge(dotAlchemy, PlatformServices),
+  FetchHttpClient.layer,
+  ConfigProvider.layer(ConfigProvider.fromEnv()),
+);
+
 cli.pipe(
   // $USER and $STAGE are set by the environment
-  Effect.provideService(
-    ConfigProvider.ConfigProvider,
-    ConfigProvider.fromEnv(),
-  ),
-  Effect.provide(PlatformServices),
+  Effect.provide(services),
   Effect.scoped,
   handleCancellation,
   runMain,

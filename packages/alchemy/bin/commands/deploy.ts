@@ -4,28 +4,24 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
-import { Path } from "effect/Path";
-import { Command } from "effect/unstable/cli";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as Command from "effect/unstable/cli/Command";
 
 import { apply } from "../../src/Apply.ts";
-import { provideFreshArtifactStore } from "../../src/Artifacts.ts";
+import { ArtifactStore, createArtifactStore } from "../../src/Artifacts.ts";
 import { AuthProviders } from "../../src/Auth/AuthProvider.ts";
 import { withProfileOverride } from "../../src/Auth/Profile.ts";
 import * as CLI from "../../src/Cli/index.ts";
-import { dotAlchemy } from "../../src/Config.ts";
 import * as Plan from "../../src/Plan.ts";
-import * as Stack from "../../src/Stack.ts";
 import { Stage } from "../../src/Stage.ts";
 import * as State from "../../src/State/index.ts";
 import { loadConfigProvider } from "../../src/Util/ConfigProvider.ts";
 import { fileLogger } from "../../src/Util/FileLogger.ts";
-import { PlatformServices } from "../../src/Util/PlatformServices.ts";
 
 import {
   dryRun as dryRunFlag,
   envFile,
   force,
+  importStack,
   main,
   profile,
   stage,
@@ -45,48 +41,24 @@ const execStack = Effect.fn(function* ({
   main: string;
   stage: string;
   envFile: Option.Option<string>;
-  profile: string | undefined;
+  profile: string;
   dryRun?: boolean;
   force?: boolean;
   yes?: boolean;
   destroy?: boolean;
 }) {
-  const path = yield* Path;
-  const module = yield* Effect.promise(
-    () => import(path.resolve(process.cwd(), main)),
-  );
-  const stackEffect = module.default as ReturnType<
-    ReturnType<typeof Stack.make>
-  >;
-  if (!stackEffect) {
-    return yield* Effect.die(
-      new Error(
-        `Main file '${main}' must export a default stack definition (export default defineStack({...}))`,
-      ),
-    );
-  }
+  const stackEffect = yield* importStack(main);
 
-  const configProvider = withProfileOverride(
-    yield* loadConfigProvider(envFile),
-    profile,
-  );
-
-  // Shared registry that AuthProviderLayer entries write themselves into when
-  // the stack's providers Layer is built.
-  const authProviders: AuthProviders["Service"] = {};
-
-  // TODO(sam): implement local and watch
-  const platform = Layer.mergeAll(PlatformServices, FetchHttpClient.layer);
-
-  const rootLogger = Logger.layer([fileLogger("out")]);
-
-  // override alchemy state store, CLI/reporting and dotAlchemy
-  const alchemy = Layer.mergeAll(
-    // TODO(sam): support overriding these
-    State.LocalState,
+  const services = Layer.mergeAll(
+    Layer.succeed(ArtifactStore, createArtifactStore()),
+    Layer.succeed(AuthProviders, {}),
+    ConfigProvider.layer(
+      withProfileOverride(yield* loadConfigProvider(envFile), profile),
+    ),
     CLI.inkCLI(),
-    // optional
-    Layer.provideMerge(rootLogger, dotAlchemy),
+    Logger.layer([fileLogger("out")]),
+    Layer.succeed(Stage, stage),
+    State.LocalState,
   );
 
   yield* Effect.gen(function* () {
@@ -120,25 +92,8 @@ const execStack = Effect.fn(function* ({
 
         yield* Console.log(outputs);
       }
-    }).pipe(
-      Effect.provide(stack.services),
-      provideFreshArtifactStore,
-      // Effect.provide(Logger.layer([fileLogger("stacks", stack.name, stage)])),
-    );
-  }).pipe(
-    // AuthProviders must be in scope when the stack's providers Layer is
-    // built so each provider's AuthProviderLayer can register itself.
-    Effect.provideService(AuthProviders, authProviders),
-    Effect.provide(
-      Layer.provideMerge(
-        alchemy,
-        Layer.mergeAll(platform, Layer.succeed(Stage, stage)),
-      ),
-    ),
-    Effect.provideService(ConfigProvider.ConfigProvider, configProvider),
-  ) as Effect.Effect<void, any, never>;
-  // TODO(sam): figure out why we need to cast to remove the Provider<never> requirement
-  // Effect.Effect<void, any, Provider<never>>;
+    }).pipe(Effect.provide(stack.services));
+  }).pipe(Effect.provide(services));
 });
 
 export const deployCommand = Command.make(
@@ -152,7 +107,7 @@ export const deployCommand = Command.make(
     yes,
     profile,
   },
-  (args) => execStack(args),
+  execStack,
 );
 
 export const destroyCommand = Command.make(

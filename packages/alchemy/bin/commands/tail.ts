@@ -3,26 +3,24 @@ import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
-import type * as Option from "effect/Option";
-import { Path } from "effect/Path";
 import * as Stream from "effect/Stream";
-import { Command } from "effect/unstable/cli";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as Command from "effect/unstable/cli/Command";
 
-import { dotAlchemy } from "../../src/Config.ts";
 import { findProviderByType, type LogLine } from "../../src/Provider.ts";
-import * as Stack from "../../src/Stack.ts";
 import { Stage } from "../../src/Stage.ts";
 import * as State from "../../src/State/index.ts";
 import { loadConfigProvider } from "../../src/Util/ConfigProvider.ts";
 import { fileLogger } from "../../src/Util/FileLogger.ts";
-import { PlatformServices } from "../../src/Util/PlatformServices.ts";
 
+import { AuthProviders } from "../../src/Auth/AuthProvider.ts";
+import { withProfileOverride } from "../../src/Auth/Profile.ts";
 import {
   envFile,
   formatLocalTimestamp,
+  importStack,
   main,
   parseResourceFilter,
+  profile,
   resourceFilter,
   stage,
   TAIL_COLORS,
@@ -35,43 +33,20 @@ export const tailCommand = Command.make(
     main,
     envFile,
     stage,
+    profile,
     filter: resourceFilter,
   },
-  Effect.fnUntraced(function* ({
-    main,
-    stage,
-    envFile,
-    filter,
-  }: {
-    main: string;
-    stage: string;
-    envFile: Option.Option<string>;
-    filter: string | undefined;
-  }) {
-    const path = yield* Path;
-    const module = yield* Effect.promise(
-      () => import(path.resolve(process.cwd(), main)),
-    );
-    const stackEffect = module.default as ReturnType<
-      ReturnType<typeof Stack.make>
-    >;
-    if (!stackEffect) {
-      return yield* Effect.die(
-        new Error(
-          `Main file '${main}' must export a default stack definition (export default defineStack({...}))`,
-        ),
-      );
-    }
+  Effect.fnUntraced(function* ({ main, stage, envFile, profile, filter }) {
+    const stackEffect = yield* importStack(main);
 
-    const configProvider = yield* loadConfigProvider(envFile);
-
-    const platform = Layer.mergeAll(PlatformServices, FetchHttpClient.layer);
-
-    const rootLogger = Logger.layer([fileLogger("out")]);
-
-    const alchemy = Layer.mergeAll(
+    const services = Layer.mergeAll(
+      ConfigProvider.layer(
+        withProfileOverride(yield* loadConfigProvider(envFile), profile),
+      ),
+      Layer.succeed(AuthProviders, {}),
+      Layer.succeed(Stage, stage),
+      Logger.layer([fileLogger("out")]),
       State.LocalState,
-      Layer.provideMerge(rootLogger, dotAlchemy),
     );
 
     yield* Effect.gen(function* () {
@@ -158,15 +133,6 @@ export const tailCommand = Command.make(
           concurrency: "unbounded",
         }).pipe(Stream.runForEach((line) => Console.log(line)));
       }).pipe(Effect.provide(stack.services));
-    }).pipe(
-      Effect.provide(
-        Layer.provideMerge(
-          alchemy,
-          Layer.mergeAll(platform, Layer.succeed(Stage, stage)),
-        ),
-      ),
-      Effect.provideService(ConfigProvider.ConfigProvider, configProvider),
-      Effect.scoped,
-    ) as Effect.Effect<void, any, never>;
+    }).pipe(Effect.provide(services));
   }),
 );

@@ -3,11 +3,14 @@ import * as Config from "effect/Config";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as S from "effect/Schema";
-import { Argument, Flag } from "effect/unstable/cli";
+import * as Argument from "effect/unstable/cli/Argument";
 import * as CliError from "effect/unstable/cli/CliError";
+import * as Flag from "effect/unstable/cli/Flag";
 
 import { AuthError } from "../../src/Auth/AuthProvider.ts";
+import type * as Stack from "../../src/Stack.ts";
 import { PromptCancelled } from "../../src/Util/Clank.ts";
 
 export const USER = Config.string("USER").pipe(
@@ -139,7 +142,7 @@ export const profile = Flag.string("profile").pipe(
     "Auth profile to use (~/.alchemy/profiles.json). Defaults to 'default' or $ALCHEMY_PROFILE.",
   ),
   Flag.optional,
-  Flag.map(Option.getOrUndefined),
+  Flag.map(Option.getOrElse(() => "default")),
 );
 
 export const resourceFilter = Flag.string("filter").pipe(
@@ -214,3 +217,21 @@ export const parseSince = (value: string): Date => {
   }
   return parsed;
 };
+
+export const importStack = Effect.fn(function* (main: string) {
+  const path = yield* Path.Path;
+  const module = yield* Effect.promise(
+    () => import(path.resolve(process.cwd(), main)),
+  );
+  const stackEffect = module.default as ReturnType<
+    ReturnType<typeof Stack.make>
+  >;
+  if (!Effect.isEffect(stackEffect)) {
+    return yield* Effect.die(
+      new Error(
+        `Main file '${main}' must export a default stack definition (export default Alchemy.Stack({...}))`,
+      ),
+    );
+  }
+  return stackEffect;
+});

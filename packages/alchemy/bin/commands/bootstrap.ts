@@ -7,8 +7,8 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import { Path } from "effect/Path";
-import { Command, Flag } from "effect/unstable/cli";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as Command from "effect/unstable/cli/Command";
+import * as Flag from "effect/unstable/cli/Flag";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 
 import {
@@ -18,10 +18,8 @@ import {
 import * as AWSCredentials from "../../src/AWS/Credentials.ts";
 import * as AWSEnvironment from "../../src/AWS/Environment.ts";
 import * as AWSRegion from "../../src/AWS/Region.ts";
-import { dotAlchemy } from "../../src/Config.ts";
 import { loadConfigProvider } from "../../src/Util/ConfigProvider.ts";
 import { fileLogger } from "../../src/Util/FileLogger.ts";
-import { PlatformServices } from "../../src/Util/PlatformServices.ts";
 
 import { envFile } from "./_shared.ts";
 
@@ -53,14 +51,7 @@ export const bootstrapCommand = Command.make(
     destroy: bootstrapDestroy,
   },
   Effect.fnUntraced(function* ({ envFile, profile, region, destroy }) {
-    const platform = Layer.mergeAll(
-      PlatformServices,
-      FetchHttpClient.layer,
-      Layer.provideMerge(
-        Logger.layer([fileLogger("bootstrap.txt")]),
-        dotAlchemy,
-      ),
-    );
+    const logger = Logger.layer([fileLogger("bootstrap.txt")]);
 
     return yield* Effect.gen(function* () {
       const ssoProfile = yield* Auth.loadProfile(profile);
@@ -121,6 +112,6 @@ export const bootstrapCommand = Command.make(
           Effect.provide(bootstrapLayer),
         );
       });
-    }).pipe(Effect.provide(platform)) as Effect.Effect<void, any, never>;
+    }).pipe(Effect.provide(logger));
   }),
 );
