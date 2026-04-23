@@ -14,6 +14,7 @@ export class LockError extends Schema.TaggedErrorClass<LockError>()(
   "LockError",
   {
     reason: Schema.Literals([
+      "Cancelled",
       "Conflict",
       "Invalid",
       "Timeout",
@@ -135,20 +136,24 @@ export const make = Effect.gen(function* () {
     ),
   );
 
-  const deferred = yield* Deferred.make<void>();
+  const deferred = yield* Deferred.make<never, LockError>();
   const releaseLock = assertOwnLock.pipe(
-    Effect.andThen(() => removeLock),
-    Effect.tap(() => Deferred.complete(deferred, Effect.void)),
+    Effect.andThen(() => {
+      // TODO(john): Remove log after CLI is fixed
+      console.log("[Lock] releaseLock called, removing lock");
+      return removeLock;
+    }),
   );
-
-  yield* Effect.addFinalizer(() => {
-    console.log("releasing lock");
-    return Effect.ignore(releaseLock);
-  });
 
   return Lock.of({
     check: isLockValid,
-    release: releaseLock,
+    release: Effect.all([
+      Deferred.fail(
+        deferred,
+        new LockError({ reason: "Cancelled", message: "Lock cancelled" }),
+      ),
+      releaseLock,
+    ]),
     acquire: makeLockFile.pipe(
       Effect.catchIf(
         (e) => e.reason === "Conflict",

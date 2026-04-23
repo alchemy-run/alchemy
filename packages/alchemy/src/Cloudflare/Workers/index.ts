@@ -1,5 +1,6 @@
 export * from "./Assets.ts";
 export * from "./ConfigProvider.ts";
+export * from "./DevServer.ts";
 export * from "./DurableObjectNamespace.ts";
 export * from "./DurableObjectState.ts";
 export * from "./DurableObjectStorage.ts";
@@ -7,6 +8,7 @@ export * from "./DynamicWorkerLoader.ts";
 export * from "./Fetch.ts";
 export * from "./HttpServer.ts";
 export * from "./InferEnv.ts";
+export * from "./LocalWorkerProvider.ts";
 export * from "./Request.ts";
 export * from "./Rpc.ts";
 export * from "./ScheduledEvents.ts";

@@ -55,14 +55,14 @@ export const layer = <Self, T extends RpcHandlers>(
 const maybeStartRpcServer = Effect.fn(function* (main: string) {
   const lock = yield* Lock.Lock;
   if (!(yield* lock.check)) {
-    yield* Effect.logDebug("Starting RPC server", main);
+    console.log("[RpcClient] Starting RPC server", main);
     yield* ChildProcess.make("bun", ["run", main], {
       stdout: "inherit",
       stderr: "inherit",
       detached: true,
     });
   } else {
-    yield* Effect.logDebug("RPC server already running", main);
+    console.log("[RpcClient] RPC server already running", main);
   }
 });
 
@@ -109,7 +109,11 @@ const RpcSession = Effect.gen(function* () {
     ),
     (session) => Effect.sync(() => session[Symbol.dispose]()),
   );
-  yield* Effect.promise(() => session.heartbeat()).pipe(
+  yield* Effect.promise(() => {
+    // TODO(john): Remove log after CLI is fixed
+    console.log("[RpcClient] sending heartbeat");
+    return session.heartbeat();
+  }).pipe(
     Effect.repeat(Schedule.spaced(Duration.times(Lock.LOCK_TTL, 0.4))),
     Effect.ensuring(Effect.promise(() => session.shutdown())),
     Effect.forkScoped,

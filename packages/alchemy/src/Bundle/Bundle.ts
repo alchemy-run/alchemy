@@ -1,8 +1,8 @@
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import assert from "node:assert";
 import * as rolldown from "rolldown";
@@ -26,10 +26,13 @@ export interface BundleFile {
   readonly hash: string;
 }
 
-export class BundleError extends Data.TaggedError("BundleError")<{
-  readonly message: string;
-  readonly cause?: unknown;
-}> {}
+export class BundleError extends Schema.TaggedErrorClass<BundleError>()(
+  "BundleError",
+  {
+    message: Schema.String,
+    cause: Schema.optional(Schema.DefectWithStack),
+  },
+) {}
 
 /**
  * Build a bundle using rolldown from the given input options and output options.
