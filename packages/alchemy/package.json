@@ -230,6 +230,7 @@
     "ai": "catalog:",
     "aws4fetch": "catalog:",
     "capnp-es": "catalog:",
+    "capnweb": "^0.6.1",
     "cloudflare": "catalog:",
     "fast-glob": "^3.3.2",
     "fast-xml-parser": "catalog:",
