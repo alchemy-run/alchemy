@@ -1,6 +1,7 @@
-import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
+import type { StackServices } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Counter as CounterClass } from "./src/worker.ts";
 
 export const DB = Cloudflare.D1Database("DB");
@@ -30,12 +31,26 @@ export const Worker = Cloudflare.Worker("Worker", {
   bindings: {
     DB,
     Bucket,
-    Queue,
+    // Queue,
     Counter,
   },
 });
 
-export default Alchemy.Stack(
+function defineStack<A, R>(
+  name: string,
+  options: {
+    providers: Layer.Layer<NoInfer<R>, never, StackServices>;
+  },
+  effect: Effect.Effect<A, never, R>,
+) {
+  return {
+    name,
+    providers: options.providers,
+    effect,
+  };
+}
+
+export default defineStack(
   "CloudflareWorker",
   {
     providers: Cloudflare.providers(),

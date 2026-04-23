@@ -4,6 +4,7 @@ import * as AuthProviders from "alchemy/Auth/AuthProvider";
 import * as Cli from "alchemy/Cli/Cli";
 import * as Config from "alchemy/Config";
 import * as Plan from "alchemy/Plan";
+import * as Stack from "alchemy/Stack";
 import * as Stage from "alchemy/Stage";
 import * as State from "alchemy/State";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
@@ -14,6 +15,12 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 const services = Layer.provideMerge(
   Layer.mergeAll(
     Layer.succeed(Stage.Stage, "dev"),
+    Layer.succeed(Stack.Stack, {
+      name: "CloudflareWorker",
+      stage: "dev",
+      resources: {},
+      bindings: {},
+    }),
     Layer.succeed(AuthProviders.AuthProviders, {}),
     Config.dotAlchemy,
     FetchHttpClient.layer,
@@ -21,26 +28,26 @@ const services = Layer.provideMerge(
   PlatformServices,
 );
 
-Effect.gen(function* () {
-  const output = yield* Effect.promise(() => import("./alchemy.run.ts")).pipe(
-    Effect.flatMap((m) => m.default),
-    Effect.flatMap((stack) => {
-      console.log("[stack]", stack);
-      return Plan.make(stack).pipe(
-        Effect.flatMap((plan) => {
-          console.log("[plan]", plan);
-          return Apply.apply(plan);
-        }),
-        Effect.provide(stack.services),
-      );
-    }),
-  );
+const entry = (await import("./alchemy.run.ts")).default;
 
+Effect.gen(function* () {
+  const stack = yield* Stack.Stack;
+  const compiledStack = {
+    ...stack,
+    output: yield* entry.effect,
+  };
+  console.log("[stack]", stack);
+
+  const plan = yield* Plan.make(compiledStack);
+  console.log("[plan]", plan);
+
+  const output = yield* Apply.apply(plan);
   console.log("[output]", output);
 
   yield* Effect.never;
 }).pipe(
   Effect.provide(State.LocalState),
+  Effect.provide(entry.providers),
   Effect.provide(services),
   Effect.provideService(Cli.Cli, {
     approvePlan: () => Effect.succeed(true),

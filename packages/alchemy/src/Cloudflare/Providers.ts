@@ -9,8 +9,8 @@ import * as Containers from "./Container/index.ts";
 import * as Credentials from "./Credentials.ts";
 import * as D1 from "./D1/index.ts";
 import * as KV from "./KV/index.ts";
-import * as R2 from "./R2/index.ts";
 import * as Queue from "./Queue/index.ts";
+import * as R2 from "./R2/index.ts";
 import * as Workers from "./Workers/index.ts";
 import * as Workflows from "./Workers/Workflow.ts";
 
@@ -61,7 +61,11 @@ export const providers = () =>
         R2.R2BucketProvider(),
         Workers.BindWorkerPolicyLive,
         Workers.FetchPolicyLive,
-        Workers.WorkerProvider(),
+        // Workers.WorkerProvider(),
+        Layer.provide(
+          Workers.LocalWorkerProvider(),
+          Workers.DevServerClientLive,
+        ),
         Workflows.WorkflowProvider(),
       ),
     ),
