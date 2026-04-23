@@ -944,12 +944,6 @@ export const WorkerProvider = () =>
       const deleteDomain = yield* workers.deleteDomain;
       const listZones = yield* zones.listZones;
       const telemetry = yield* CloudflareLogs;
-      // TODO(sam): figure out why the later one from workerd breaks
-      const defaultCompatibilityDate = "2026-03-17";
-      // const defaultCompatibilityDate = yield* Effect.promise(() =>
-      //   // @ts-expect-error no types for workerd
-      //   import("workerd").then((m) => m.compatibilityDate as string),
-      // );
 
       const getAccountSubdomain = (accountId: string) =>
         getSubdomain({
