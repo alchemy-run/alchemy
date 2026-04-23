@@ -174,7 +174,7 @@ export const Platform = <
     string,
     | {
         env?: Record<string, any>;
-        exports?: string[];
+        exports?: string[] | Record<string, any>;
       }
     | undefined
   >,

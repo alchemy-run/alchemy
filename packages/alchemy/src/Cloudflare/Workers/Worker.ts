@@ -58,6 +58,7 @@ import { getCompatibility } from "./Compatibility.ts";
 import {
   isDurableObjectExport,
   isDurableObjectNamespaceLike,
+  type DurableObjectExport,
   type DurableObjectNamespaceLike,
 } from "./DurableObjectNamespace.ts";
 import { workersHttpHandler } from "./HttpServer.ts";
@@ -65,6 +66,7 @@ import { Request } from "./Request.ts";
 import { makeRpcStub } from "./Rpc.ts";
 import { WorkerBundle } from "./WorkerBundle.ts";
 import { createWorkerName } from "./WorkerName.ts";
+import type { WorkflowExport } from "./Workflow.ts";
 
 const WorkerTypeId = "Cloudflare.Worker";
 type WorkerTypeId = typeof WorkerTypeId;
@@ -247,7 +249,7 @@ export interface WorkerProps<
   limits?: WorkerLimits;
   placement?: WorkerPlacement;
   env?: Record<string, string | Redacted.Redacted<string>>;
-  exports?: string[];
+  exports?: Record<string, DurableObjectExport | WorkflowExport>;
   bindings?: Bindings;
   /**
    * One or more custom hostnames (e.g. `"app.example.com"`) to bind to this
@@ -1169,7 +1171,7 @@ export const WorkerProvider = () =>
               }
             : {
                 kind: "effect",
-                exports: (props.exports ?? {}) as any,
+                exports: props.exports ?? {},
               },
           stack,
         });
