@@ -58,5 +58,10 @@ export const makeRpcServer = Effect.fn(function* <T extends RpcHandlers>(
   yield* Effect.addFinalizer(() =>
     Effect.ignore(fs.remove(paths.url, { force: true })),
   );
-  yield* lock.monitor;
+  yield* lock.monitor.pipe(
+    Effect.catchIf(
+      (e) => e.reason === "Cancelled",
+      () => Effect.void,
+    ),
+  );
 });
