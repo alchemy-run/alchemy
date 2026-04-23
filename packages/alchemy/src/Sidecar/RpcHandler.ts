@@ -1,5 +1,7 @@
 import type { RpcCompatible } from "capnweb";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
 
 type RpcHandler<Args extends Array<any>, Success, Error> = (
@@ -10,9 +12,17 @@ type SerializedRpcHandler<Args extends Array<any>, Success, Error> = (
   ...args: Args
 ) => Promise<SerializedExit<RpcCompatible<Success>, RpcCompatible<Error>>>;
 
+type SerializedCause<Error> =
+  | { _tag: "Fail"; error: Error }
+  | { _tag: "Die"; defect: unknown }
+  | { _tag: "Interrupt"; fiberId: number | undefined };
+
 type SerializedExit<Success, Error> =
   | { _tag: "Success"; value: Success }
-  | { _tag: "Failure"; cause: Error };
+  | {
+      _tag: "Failure";
+      cause: Array<SerializedCause<Error>>;
+    };
 
 export type RpcHandlers = Record<string, RpcHandler<any, any, any>>;
 
@@ -58,18 +68,35 @@ const serializeRpcHandler =
   (...args) =>
     handler(...args).pipe(
       Effect.exit,
-      Effect.map(
-        (exit): SerializedExit<Success, Error> =>
-          exit._tag === "Success"
-            ? {
-                _tag: "Success",
-                value: Schema.encodeSync(schema.success)(exit.value),
-              }
-            : {
-                _tag: "Failure",
-                cause: Schema.encodeSync(schema.error)(exit.cause),
-              },
-      ),
+      Effect.map((exit): SerializedExit<Success, Error> => {
+        if (exit._tag === "Success") {
+          return {
+            _tag: "Success",
+            value: Schema.encodeSync(schema.success)(exit.value),
+          } as const;
+        }
+        return {
+          _tag: "Failure",
+          cause: exit.cause.reasons.map((reason): SerializedCause<Error> => {
+            switch (reason._tag) {
+              case "Fail":
+                return {
+                  _tag: "Fail",
+                  error: Schema.encodeSync(schema.error)(reason.error),
+                };
+              case "Die":
+                return {
+                  _tag: "Die",
+                  defect: Schema.encodeSync(Schema.DefectWithStack)(
+                    reason.defect,
+                  ),
+                };
+              case "Interrupt":
+                return { _tag: "Interrupt", fiberId: reason.fiberId };
+            }
+          }),
+        } as const;
+      }),
       Effect.runPromise,
     );
 
@@ -98,11 +125,30 @@ const deserializeRpcHandler =
         throw error;
       }
     }).pipe(
-      Effect.flatMap((exit) =>
-        exit._tag === "Success"
-          ? Effect.succeed(Schema.decodeSync(schema.success)(exit.value))
-          : Effect.fail(Schema.decodeSync(schema.error)(exit.cause)),
-      ),
+      Effect.map((exit): Exit.Exit<Success, Error> => {
+        if (exit._tag === "Success") {
+          return Exit.succeed(Schema.decodeSync(schema.success)(exit.value));
+        }
+        return Exit.failCause(
+          Cause.fromReasons(
+            exit.cause.map((reason): Cause.Reason<Error> => {
+              switch (reason._tag) {
+                case "Fail":
+                  return Cause.makeFailReason(
+                    Schema.decodeSync(schema.error)(reason.error),
+                  );
+                case "Die":
+                  return Cause.makeDieReason(
+                    Schema.decodeSync(Schema.DefectWithStack)(reason.defect),
+                  );
+                case "Interrupt":
+                  return Cause.makeInterruptReason(reason.fiberId);
+              }
+            }),
+          ),
+        );
+      }),
+      Effect.flatMap((exit) => exit),
     );
 
 export const deserializeRpcHandlers = <T extends RpcHandlers>(
