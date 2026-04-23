@@ -22,6 +22,7 @@ import CopyForAgent from "../components/marketing-islands/CopyForAgent.tsx";
 import HeroCta from "../components/marketing-islands/HeroCta.tsx";
 import HeadingOrnament from "../components/marketing/HeadingOrnament.astro";
 import AlchemicalDivider from "../components/marketing/AlchemicalDivider.astro";
+import HeroBgGraph from "../components/marketing/HeroBgGraph.astro";
 
 export const STACK_SRC = `export default Alchemy.Stack(
   "MyApp",
@@ -98,18 +99,8 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
 {/* ───────────────────────── HERO ───────────────────────── */}
 
 <Section padding="72px 32px 40px" class="alc-hero">
-  <video
-    class="alc-hero__bg-video"
-    autoplay
-    muted
-    loop
-    playsinline
-    preload="auto"
-    aria-hidden="true"
-  >
-    <source src="/video/hero-bg.webm" type="video/webm" />
-    <source src="/video/hero-bg.mov" type='video/mp4; codecs="hvc1"' />
-  </video>
+  <HeroBgGraph />
+
   <div style="position:relative;z-index:1;text-align:center;margin-bottom:24px;">
     <BetaBadge />
   </div>

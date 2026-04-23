@@ -38,51 +38,53 @@ import { Container, ContainerTypeId } from "./Container.ts";
 
 export { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 
-export type InstanceType = NonNullable<
-  Containers.CreateContainerApplicationRequest["configuration"]["instanceType"]
->;
-export type SchedulingPolicy = NonNullable<
-  Containers.CreateContainerApplicationRequest["schedulingPolicy"]
->;
-export type Observability = NonNullable<
-  Containers.CreateContainerApplicationRequest["configuration"]["observability"]
->;
-export type Secret = NonNullable<
-  Containers.CreateContainerApplicationRequest["configuration"]["secrets"]
->[number];
-export type Disk = NonNullable<
-  Containers.CreateContainerApplicationRequest["configuration"]["disk"]
->;
-export type EnvironmentVariable = NonNullable<
-  Containers.CreateContainerApplicationRequest["configuration"]["environmentVariables"]
->[number];
-export type Label = NonNullable<
-  Containers.CreateContainerApplicationRequest["configuration"]["labels"]
->[number];
-export type Network = NonNullable<
-  Containers.CreateContainerApplicationRequest["configuration"]["network"]
->;
-export type Dns = NonNullable<
-  Containers.CreateContainerApplicationRequest["configuration"]["dns"]
->;
-export type Port = NonNullable<
-  Containers.CreateContainerApplicationRequest["configuration"]["ports"]
->[number];
-export type Check = NonNullable<
-  Containers.CreateContainerApplicationRequest["configuration"]["checks"]
->[number];
-export type Constraints = {
-  tier?: number;
-};
-export type Affinities = {
-  colocation?: "datacenter";
-};
-export type Configuration =
-  Containers.CreateContainerApplicationRequest["configuration"];
-export interface Rollout {
-  strategy?: "rolling" | "immediate";
-  kind?: "full_auto";
-  stepPercentage?: number;
+export namespace ContainerApplication {
+  export type InstanceType = NonNullable<
+    Containers.CreateContainerApplicationRequest["configuration"]["instanceType"]
+  >;
+  export type SchedulingPolicy = NonNullable<
+    Containers.CreateContainerApplicationRequest["schedulingPolicy"]
+  >;
+  export type Observability = NonNullable<
+    Containers.CreateContainerApplicationRequest["configuration"]["observability"]
+  >;
+  export type Secret = NonNullable<
+    Containers.CreateContainerApplicationRequest["configuration"]["secrets"]
+  >[number];
+  export type Disk = NonNullable<
+    Containers.CreateContainerApplicationRequest["configuration"]["disk"]
+  >;
+  export type EnvironmentVariable = NonNullable<
+    Containers.CreateContainerApplicationRequest["configuration"]["environmentVariables"]
+  >[number];
+  export type Label = NonNullable<
+    Containers.CreateContainerApplicationRequest["configuration"]["labels"]
+  >[number];
+  export type Network = NonNullable<
+    Containers.CreateContainerApplicationRequest["configuration"]["network"]
+  >;
+  export type Dns = NonNullable<
+    Containers.CreateContainerApplicationRequest["configuration"]["dns"]
+  >;
+  export type Port = NonNullable<
+    Containers.CreateContainerApplicationRequest["configuration"]["ports"]
+  >[number];
+  export type Check = NonNullable<
+    Containers.CreateContainerApplicationRequest["configuration"]["checks"]
+  >[number];
+  export type Constraints = {
+    tier?: number;
+  };
+  export type Affinities = {
+    colocation?: "datacenter";
+  };
+  export type Configuration =
+    Containers.CreateContainerApplicationRequest["configuration"];
+  export interface Rollout {
+    strategy?: "rolling" | "immediate";
+    kind?: "full_auto";
+    stepPercentage?: number;
+  }
 }
 
 export interface ContainerApplicationProps extends PlatformProps {
@@ -153,16 +155,16 @@ export interface ContainerApplicationProps extends PlatformProps {
    * Scheduling policy used by Cloudflare's containers control plane.
    * @default "default"
    */
-  schedulingPolicy?: SchedulingPolicy;
+  schedulingPolicy?: ContainerApplication.SchedulingPolicy;
   /**
    * Instance type for each deployment.
    * @default "dev"
    */
-  instanceType?: InstanceType;
+  instanceType?: ContainerApplication.InstanceType;
   /**
    * Observability settings for the deployment.
    */
-  observability?: Observability;
+  observability?: ContainerApplication.Observability;
   /**
    * SSH public keys to install into the deployment.
    */
@@ -170,7 +172,7 @@ export interface ContainerApplicationProps extends PlatformProps {
   /**
    * Secrets exposed to the container runtime as environment variables.
    */
-  secrets?: Secret[];
+  secrets?: ContainerApplication.Secret[];
   /**
    * CPU allocation override for each deployment.
    */
@@ -182,19 +184,19 @@ export interface ContainerApplicationProps extends PlatformProps {
   /**
    * Disk allocation override for each deployment.
    */
-  disk?: Disk;
+  disk?: ContainerApplication.Disk;
   /**
    * Plain environment variables passed to the container runtime.
    */
-  environmentVariables?: EnvironmentVariable[];
+  environmentVariables?: ContainerApplication.EnvironmentVariable[];
   /**
    * Labels attached to the deployment.
    */
-  labels?: Label[];
+  labels?: ContainerApplication.Label[];
   /**
    * Network configuration for the deployment.
    */
-  network?: Network;
+  network?: ContainerApplication.Network;
   /**
    * Command override for the container image.
    */
@@ -206,27 +208,27 @@ export interface ContainerApplicationProps extends PlatformProps {
   /**
    * DNS configuration for the deployment.
    */
-  dns?: Dns;
+  dns?: ContainerApplication.Dns;
   /**
    * Exposed ports for the deployment.
    */
-  ports?: Port[];
+  ports?: ContainerApplication.Port[];
   /**
    * Health and readiness checks for the deployment.
    */
-  checks?: Check[];
+  checks?: ContainerApplication.Check[];
   /**
    * Resource constraints for the application.
    */
-  constraints?: Constraints;
+  constraints?: ContainerApplication.Constraints;
   /**
    * Affinity hints for scheduling.
    */
-  affinities?: Affinities;
+  affinities?: ContainerApplication.Affinities;
   /**
    * Progressive rollout settings applied after updates.
    */
-  rollout?: Rollout;
+  rollout?: ContainerApplication.Rollout;
   /**
    * Container registry host to use for generated Dockerfile builds.
    * @default "registry.cloudflare.com"
@@ -259,12 +261,12 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
     applicationId: string;
     applicationName: string;
     accountId: string;
-    schedulingPolicy: SchedulingPolicy;
+    schedulingPolicy: ContainerApplication.SchedulingPolicy;
     instances: number;
     maxInstances: number;
-    constraints: Constraints | undefined;
-    affinities: Affinities | undefined;
-    configuration: Configuration;
+    constraints: ContainerApplication.Constraints | undefined;
+    affinities: ContainerApplication.Affinities | undefined;
+    configuration: ContainerApplication.Configuration;
     durableObjects:
       | {
           namespaceId: string;
@@ -423,7 +425,7 @@ export const ContainerProvider = () =>
           dns: props.dns,
           ports: props.ports,
           checks: props.checks,
-        }) as Configuration;
+        }) as ContainerApplication.Configuration;
 
       const computeImageHash = Effect.fnUntraced(function* (
         id: string,
@@ -713,8 +715,8 @@ await Effect.runPromise(serverEffect).catch((err) => {
         rollout,
       }: {
         applicationId: string;
-        configuration: Configuration;
-        rollout: Rollout | undefined;
+        configuration: ContainerApplication.Configuration;
+        rollout: ContainerApplication.Rollout | undefined;
       }) {
         const strategy = rollout?.strategy ?? "immediate";
         const stepPercentage =
@@ -749,7 +751,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
         id: string;
         news: ContainerApplicationProps;
         name: string;
-        configuration: Configuration;
+        configuration: ContainerApplication.Configuration;
         durableObjects:
           | {
               namespaceId: string;
@@ -1234,10 +1236,14 @@ const toAttributes = (
   instances: application.instances,
   maxInstances: application.maxInstances,
   constraints: normalizeNulls(
-    application.constraints as Constraints | undefined,
+    application.constraints as ContainerApplication.Constraints | undefined,
   ),
-  affinities: normalizeNulls(application.affinities as Affinities | undefined),
-  configuration: normalizeNulls(application.configuration as Configuration),
+  affinities: normalizeNulls(
+    application.affinities as ContainerApplication.Affinities | undefined,
+  ),
+  configuration: normalizeNulls(
+    application.configuration as ContainerApplication.Configuration,
+  ),
   durableObjects: normalizeNulls(application.durableObjects) as
     | { namespaceId: string }
     | undefined,

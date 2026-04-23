@@ -1,0 +1,282 @@
+---
+/**
+ * Animated 3D coordinate-system tunnel for the hero background.
+ *
+ * Renders a perspective-projected scene viewed from a fixed off-axis
+ * angle (mild yaw + pitch, like a textbook diagram of a Cartesian
+ * frame). Three axes (x, y, z) extend from the origin in both
+ * directions. A stack of concentric wireframe cubes, log-spaced in
+ * size, continuously expand outward at the same proportional rate —
+ * an infinite zoom into the origin of the coordinate system. Each
+ * cube fades in near the origin and fades out before the canvas edge,
+ * so when one wraps from "far → small" the recycle is invisible.
+ */
+
+interface Props {
+  /** Stroke color for axes + cubes. */
+  color?: string;
+  /** Multiplier on stroke alpha (0..1). */
+  intensity?: number;
+  /** How many cubes are visible at once. */
+  cubes?: number;
+  /** Zoom rate. ~0.06 = one octave of growth per ~16s. */
+  zoom?: number;
+  /** Camera yaw (radians). */
+  yaw?: number;
+  /** Camera pitch (radians). */
+  pitch?: number;
+}
+
+const {
+  color = "var(--alc-fg-1)",
+  intensity = 1,
+  cubes = 8,
+  zoom = 0.06,
+  yaw = -0.55,
+  pitch = -0.35,
+} = Astro.props;
+---
+
+<canvas
+  class="alc-hero__bg-graph"
+  data-intensity={intensity}
+  data-cubes={cubes}
+  data-zoom={zoom}
+  data-yaw={yaw}
+  data-pitch={pitch}
+  style={`color: ${color};`}
+  aria-hidden="true"
+></canvas>
+
+<script>
+  /* eslint-disable */
+  type Vec3 = [number, number, number];
+
+  const init = (canvas: HTMLCanvasElement) => {
+    const ctx = canvas.getContext("2d", { alpha: true });
+    if (!ctx) return;
+
+    const intensity = Number(canvas.dataset.intensity ?? 1);
+    const nCubes = Math.max(1, Number(canvas.dataset.cubes ?? 8));
+    const zoom = Number(canvas.dataset.zoom ?? 0.06);
+    const yaw = Number(canvas.dataset.yaw ?? -0.55);
+    const pitch = Number(canvas.dataset.pitch ?? -0.35);
+    const reduced = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+
+    let dpr = Math.min(window.devicePixelRatio || 1, 2);
+    let width = 0;
+    let height = 0;
+
+    const resize = () => {
+      const rect = canvas.getBoundingClientRect();
+      width = rect.width;
+      height = rect.height;
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.round(width * dpr);
+      canvas.height = Math.round(height * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+
+    /** Resolve the CSS-declared `color` (set inline by the component or
+     * overridden in stylesheet) into r,g,b. */
+    const resolveRGB = (): [number, number, number] => {
+      const rgb = getComputedStyle(canvas).color;
+      const m = rgb.match(/\d+(\.\d+)?/g);
+      if (!m) return [0, 0, 0];
+      return [Number(m[0]), Number(m[1]), Number(m[2])];
+    };
+
+    let rgb = resolveRGB();
+
+    // Precomputed rotation matrix entries (yaw around Y then pitch
+    // around X).
+    const cy = Math.cos(yaw);
+    const sy = Math.sin(yaw);
+    const cp = Math.cos(pitch);
+    const sp = Math.sin(pitch);
+
+    /** Project a 3D point to canvas (x, y), with `scale` applied to the
+     * model coordinates and a perspective divide based on the viewer's
+     * distance from origin. Returns [x, y, depth] — depth used for
+     * culling/alpha. */
+    const project = (
+      p: Vec3,
+      scale: number,
+      cx0: number,
+      cy0: number,
+      focal: number,
+      camDist: number,
+    ): [number, number, number] => {
+      const x = p[0] * scale;
+      const y = p[1] * scale;
+      const z = p[2] * scale;
+      // Yaw (around Y): X and Z mix.
+      const x1 = x * cy + z * sy;
+      const z1 = -x * sy + z * cy;
+      // Pitch (around X): Y and Z mix.
+      const y2 = y * cp - z1 * sp;
+      const z2 = y * sp + z1 * cp;
+      // Perspective: viewer at (0,0,camDist) looking toward -z.
+      const zv = camDist - z2;
+      if (zv <= 0.0001) return [cx0, cy0, zv];
+      const d = focal / zv;
+      return [cx0 + x1 * d, cy0 - y2 * d, zv];
+    };
+
+    /** Cube edges as pairs of corner indices (0..7).
+     * Corner i has bits = (x, y, z) in that order. */
+    const cubeEdges: [number, number][] = [
+      // bottom face (z = -1)
+      [0b000, 0b001], [0b001, 0b011], [0b011, 0b010], [0b010, 0b000],
+      // top face (z = +1)
+      [0b100, 0b101], [0b101, 0b111], [0b111, 0b110], [0b110, 0b100],
+      // verticals
+      [0b000, 0b100], [0b001, 0b101], [0b011, 0b111], [0b010, 0b110],
+    ];
+    const corners: Vec3[] = [];
+    for (let i = 0; i < 8; i++) {
+      const x = (i & 1) ? 1 : -1;
+      const y = (i & 2) ? 1 : -1;
+      const z = (i & 4) ? 1 : -1;
+      corners.push([x, y, z]);
+    }
+
+    const draw = (t: number) => {
+      ctx.clearRect(0, 0, width, height);
+
+      const cx0 = width / 2;
+      const cy0 = height / 2;
+      // Focal length and camera distance scale with the canvas so the
+      // scene fills nicely on any aspect ratio. Camera distance in
+      // model units of `maxScale`; focal in pixels.
+      const focal = Math.min(width, height) * 0.9;
+      const camDist = 3.2;
+
+      // Log-radius range: smallest cube has scale = minScale, largest
+      // = maxScale. Log-linear spacing means uniform "octaves".
+      const minScale = 0.04;
+      const maxScale = 1.4;
+      const logRange = Math.log(maxScale / minScale);
+
+      // Continuous phase clock ∈ [0..1).
+      const clock = ((t * 0.001 * zoom) % 1 + 1) % 1;
+
+      // ---- coordinate axes ----
+      // Drawn first, very faint — so the cubes layer over them. Each
+      // axis goes from -maxScale to +maxScale.
+      const axisA = 0.28 * intensity;
+      ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${axisA.toFixed(3)})`;
+      ctx.lineWidth = 1;
+      const axes: Vec3[] = [
+        [1, 0, 0], [0, 1, 0], [0, 0, 1],
+      ];
+      for (const a of axes) {
+        const p1 = project(
+          [-a[0] * maxScale, -a[1] * maxScale, -a[2] * maxScale],
+          1, cx0, cy0, focal, camDist,
+        );
+        const p2 = project(
+          [a[0] * maxScale, a[1] * maxScale, a[2] * maxScale],
+          1, cx0, cy0, focal, camDist,
+        );
+        ctx.beginPath();
+        ctx.moveTo(p1[0], p1[1]);
+        ctx.lineTo(p2[0], p2[1]);
+        ctx.stroke();
+      }
+
+      // Tiny origin marker (project [0,0,0] just in case the canvas
+      // is shifted by some future transform).
+      const o = project([0, 0, 0], 1, cx0, cy0, focal, camDist);
+      ctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${(0.55 * intensity).toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(o[0], o[1], 1.8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // ---- concentric cubes ----
+      // Each cube's phase ∈ [0..1] maps log-linearly to its scale.
+      // Alpha = sin(phase·π) so cubes fade in near origin and fade out
+      // before reaching their max projected size.
+      ctx.lineWidth = 1.05;
+      const cubeMax = 0.55 * intensity;
+      // Cache projected corners per cube to avoid 12× redundant work
+      // on shared corners.
+      const projected: [number, number, number][] = new Array(8);
+      for (let i = 0; i < nCubes; i++) {
+        const phase = (i / nCubes + clock) % 1;
+        const scale = minScale * Math.exp(phase * logRange);
+        const fade = Math.pow(Math.sin(phase * Math.PI), 1.2);
+        const a = cubeMax * fade;
+        if (a < 0.01) continue;
+
+        for (let k = 0; k < 8; k++) {
+          projected[k] = project(corners[k], scale, cx0, cy0, focal, camDist);
+        }
+
+        ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${a.toFixed(3)})`;
+        ctx.beginPath();
+        for (const [a1, b1] of cubeEdges) {
+          const p = projected[a1];
+          const q = projected[b1];
+          ctx.moveTo(p[0], p[1]);
+          ctx.lineTo(q[0], q[1]);
+        }
+        ctx.stroke();
+      }
+    };
+
+    let raf = 0;
+    let visible = true;
+    const loop = (t: number) => {
+      draw(t);
+      if (visible && !reduced) raf = requestAnimationFrame(loop);
+    };
+
+    resize();
+    if (reduced) {
+      draw(0);
+    } else {
+      raf = requestAnimationFrame(loop);
+    }
+
+    let resizeQueued = false;
+    const onResize = () => {
+      if (resizeQueued) return;
+      resizeQueued = true;
+      requestAnimationFrame(() => {
+        resizeQueued = false;
+        resize();
+        rgb = resolveRGB();
+      });
+    };
+    window.addEventListener("resize", onResize, { passive: true });
+
+    const io = new IntersectionObserver(
+      (entries) => {
+        const wasVisible = visible;
+        visible = entries[0]?.isIntersecting ?? true;
+        if (visible && !wasVisible && !reduced) {
+          raf = requestAnimationFrame(loop);
+        } else if (!visible) {
+          cancelAnimationFrame(raf);
+        }
+      },
+      { threshold: 0 },
+    );
+    io.observe(canvas);
+  };
+
+  const start = () => {
+    document
+      .querySelectorAll<HTMLCanvasElement>("canvas.alc-hero__bg-graph")
+      .forEach(init);
+  };
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start, { once: true });
+  } else {
+    start();
+  }
+</script>

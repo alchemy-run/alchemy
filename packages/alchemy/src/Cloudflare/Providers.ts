@@ -11,6 +11,7 @@ import * as D1 from "./D1/index.ts";
 import * as KV from "./KV/index.ts";
 import * as Queue from "./Queue/index.ts";
 import * as R2 from "./R2/index.ts";
+import * as SecretsStore from "./SecretsStore/index.ts";
 import * as Workers from "./Workers/index.ts";
 import * as Workflows from "./Workers/Workflow.ts";
 
@@ -40,6 +41,9 @@ export const providers = () =>
       Queue.QueueConsumer,
       R2.R2Bucket,
       R2.R2BucketBindingPolicy,
+      SecretsStore.SecretBindingPolicy,
+      SecretsStore.SecretsStore,
+      SecretsStore.Secret,
       Random,
       Workers.BindWorkerPolicy,
       Workers.FetchPolicy,
@@ -59,13 +63,12 @@ export const providers = () =>
         Queue.QueueConsumerProvider(),
         R2.R2BucketBindingPolicyLive,
         R2.R2BucketProvider(),
+        SecretsStore.SecretBindingPolicyLive,
+        SecretsStore.SecretsStoreProvider(),
+        SecretsStore.StoreSecretProvider(),
         Workers.BindWorkerPolicyLive,
         Workers.FetchPolicyLive,
-        // Workers.WorkerProvider(),
-        Layer.provide(
-          Workers.LocalWorkerProvider(),
-          Workers.DevServerClientLive,
-        ),
+        Workers.WorkerProvider(),
         Workflows.WorkflowProvider(),
       ),
     ),
