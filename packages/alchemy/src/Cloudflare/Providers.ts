@@ -68,7 +68,11 @@ export const providers = () =>
         SecretsStore.StoreSecretProvider(),
         Workers.BindWorkerPolicyLive,
         Workers.FetchPolicyLive,
-        Workers.WorkerProvider(),
+        // Workers.WorkerProvider(),
+        Layer.provide(
+          Workers.LocalWorkerProvider(),
+          Workers.DevServerClientLive,
+        ),
         Workflows.WorkflowProvider(),
       ),
     ),

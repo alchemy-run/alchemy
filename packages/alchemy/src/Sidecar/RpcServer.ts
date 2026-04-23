@@ -1,6 +1,6 @@
-import { Layer } from "effect";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
 import * as Config from "../Config.ts";
 import * as Lock from "./Lock.ts";
 import {
@@ -18,11 +18,7 @@ export const layerServices = (main: string) =>
       Effect.gen(function* () {
         const lock = yield* Lock.make;
         yield* lock.acquire;
-        yield* Effect.addFinalizer(() => {
-          // TODO(john): Remove log after CLI is fixed
-          console.log("[RpcServer] finalizer called, maybe releasing lock");
-          return Effect.ignore(lock.release);
-        });
+        yield* Effect.addFinalizer(() => Effect.ignore(lock.release));
         return lock;
       }),
     ),
@@ -41,11 +37,7 @@ export const makeRpcServer = Effect.fn(function* <T extends RpcHandlers>(
       makeBunWebSocketRpcServer(() =>
         Object.assign(serializeRpcHandlers(handlers, schema), {
           heartbeat: () => Effect.runPromise(lock.touch),
-          shutdown: () => {
-            // TODO(john): Remove log after CLI is fixed
-            console.log("[RpcServer] shutting down");
-            return Effect.runPromise(lock.release);
-          },
+          shutdown: () => Effect.runPromise(lock.release),
         }),
       ),
     ),

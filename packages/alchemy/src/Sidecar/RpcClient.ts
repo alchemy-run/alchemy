@@ -109,11 +109,7 @@ const RpcSession = Effect.gen(function* () {
     ),
     (session) => Effect.sync(() => session[Symbol.dispose]()),
   );
-  yield* Effect.promise(() => {
-    // TODO(john): Remove log after CLI is fixed
-    console.log("[RpcClient] sending heartbeat");
-    return session.heartbeat();
-  }).pipe(
+  yield* Effect.promise(() => session.heartbeat()).pipe(
     Effect.repeat(Schedule.spaced(Duration.times(Lock.LOCK_TTL, 0.4))),
     Effect.ensuring(Effect.promise(() => session.shutdown())),
     Effect.forkScoped,

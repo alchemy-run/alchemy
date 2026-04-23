@@ -69,12 +69,6 @@ export const LocalWorkerProvider = () =>
         } satisfies Worker["Attributes"];
       });
 
-      // TODO(john): Remove after CLI is fixed - this is for debugging when the finalizer is called too soon in a provider
-      yield* Effect.addFinalizer(() => {
-        console.log("[LocalWorkerProvider] finalizer called");
-        return Effect.void;
-      });
-
       return {
         diff: Effect.fn(function* ({ id, olds, news, output }) {
           if (!isResolved(news)) return undefined;

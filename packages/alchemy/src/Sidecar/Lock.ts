@@ -137,13 +137,7 @@ export const make = Effect.gen(function* () {
   );
 
   const deferred = yield* Deferred.make<never, LockError>();
-  const releaseLock = assertOwnLock.pipe(
-    Effect.andThen(() => {
-      // TODO(john): Remove log after CLI is fixed
-      console.log("[Lock] releaseLock called, removing lock");
-      return removeLock;
-    }),
-  );
+  const releaseLock = assertOwnLock.pipe(Effect.andThen(() => removeLock));
 
   return Lock.of({
     check: isLockValid,
