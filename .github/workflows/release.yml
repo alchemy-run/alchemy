@@ -3,8 +3,22 @@ name: Release NPM Package
 on:
   workflow_dispatch:
     inputs:
-      version-override:
-        description: "Exact version override (e.g. 2.0.0-beta.5). Leave empty to auto-increment beta."
+      channel:
+        description: "Release channel"
+        required: true
+        type: choice
+        default: beta
+        options:
+          - release
+          - beta
+          - alpha
+          - tag
+      spec:
+        description: >-
+          Channel-specific value.
+          tag: REQUIRED, the explicit full version (e.g. 2.0.0-experimental.1).
+          release: REQUIRED, patch|minor|major or an explicit x.y.z.
+          beta|alpha: optional, an integer N to force 2.0.0-<channel>.N; leave blank to auto-increment.
         required: false
         type: string
 
@@ -12,13 +26,234 @@ permissions:
   contents: write
   id-token: write
 
+env:
+  NODE_VERSION: "24"
+  # Files produced by the bump job and consumed by every publish job + the
+  # final commit job. Listed once here so additions stay in sync.
+  BUMP_ARTIFACT_PATHS: |
+    packages/alchemy/package.json
+    packages/better-auth/package.json
+    packages/cli-posix/package.json
+    packages/cli-win32/package.json
+    bun.lock
+
 jobs:
-  # ── Step 1: Bump version, commit, tag, create GitHub release ──
+  # ── Step 1: Compute the next version and stage the bump in-memory. ──
+  # No git commit: we want a failed publish to leave no orphan commit
+  # behind. The staged files ride to the publish jobs (and the final commit
+  # job) as an artifact.
   bump:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.bump.outputs.version }}
+      channel: ${{ inputs.channel }}
       sha: ${{ steps.sha.outputs.sha }}
+    steps:
+      - name: Validate inputs
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          SPEC: ${{ inputs.spec }}
+        run: |
+          case "$CHANNEL" in
+            tag)
+              if [ -z "$SPEC" ]; then
+                echo "::error::'tag' channel requires an explicit version in 'spec' (e.g. 2.0.0-experimental.1)"
+                exit 1
+              fi
+              ;;
+            release)
+              if [ -z "$SPEC" ]; then
+                echo "::error::'release' channel requires a 'spec' (patch|minor|major|x.y.z)"
+                exit 1
+              fi
+              ;;
+          esac
+
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - id: sha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v6
+        with:
+          registry-url: https://registry.npmjs.org/
+          node-version: ${{ env.NODE_VERSION }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - run: bun install
+
+      - id: bump
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          SPEC: ${{ inputs.spec }}
+        run: |
+          if [ -n "$SPEC" ]; then
+            VERSION=$(bun ./scripts/release/bump.ts "$CHANNEL" "$SPEC")
+          else
+            VERSION=$(bun ./scripts/release/bump.ts "$CHANNEL")
+          fi
+          echo "Resolved version: $VERSION (channel: $CHANNEL)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bump-files
+          path: ${{ env.BUMP_ARTIFACT_PATHS }}
+          if-no-files-found: error
+          retention-days: 7
+
+  # ── Step 2a: Publish the platform CLI launchers (no build). ──
+  # cli-posix and cli-win32 are independent — run them in parallel via matrix.
+  # Must land before `alchemy` so its optionalDependencies resolve on install.
+  publish-cli:
+    needs: bump
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [cli-posix, cli-win32]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.bump.outputs.sha }}
+
+      - uses: actions/setup-node@v6
+        with:
+          registry-url: https://registry.npmjs.org/
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Upgrade npm for OIDC trusted publishing
+        run: |
+          npm install -g npm@latest && npm --version
+          sed -i '/always-auth/d' ~/.npmrc 2>/dev/null || true
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # Overlay the bumped package.jsons + bun.lock on top of the checkout.
+      - uses: actions/download-artifact@v4
+        with:
+          name: bump-files
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - run: bun install
+
+      - run: bun scripts/release/publish-package.ts packages/${{ matrix.package }} ${{ needs.bump.outputs.channel }}
+
+  # ── Step 2b: Build and publish `alchemy`. ──
+  publish-alchemy:
+    needs: [bump, publish-cli]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.bump.outputs.sha }}
+
+      - uses: actions/setup-node@v6
+        with:
+          registry-url: https://registry.npmjs.org/
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Upgrade npm for OIDC trusted publishing
+        run: |
+          npm install -g npm@latest && npm --version
+          sed -i '/always-auth/d' ~/.npmrc 2>/dev/null || true
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: bump-files
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - run: bun install
+
+      - run: bun run build
+        working-directory: packages/alchemy
+
+      - run: bun scripts/release/publish-package.ts packages/alchemy ${{ needs.bump.outputs.channel }}
+
+  # ── Step 2c: Build and publish `@alchemy.run/better-auth`. ──
+  publish-better-auth:
+    needs: [bump, publish-alchemy]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.bump.outputs.sha }}
+
+      - uses: actions/setup-node@v6
+        with:
+          registry-url: https://registry.npmjs.org/
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Upgrade npm for OIDC trusted publishing
+        run: |
+          npm install -g npm@latest && npm --version
+          sed -i '/always-auth/d' ~/.npmrc 2>/dev/null || true
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: bump-files
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - run: bun install
+
+      - run: bun run build
+        working-directory: packages/alchemy
+
+      - run: bun run build
+        working-directory: packages/better-auth
+
+      - run: bun scripts/release/publish-package.ts packages/better-auth ${{ needs.bump.outputs.channel }}
+
+  # ── Step 3: Commit the version bump, tag, push, create GitHub release. ──
+  # Runs only if every publish job succeeded. Every step is idempotent so
+  # re-running a partially-completed release leaves a consistent state.
+  # We check out the latest ref (not the pre-bump SHA) so a re-run after a
+  # successful earlier commit lands on top of the current tip rather than
+  # producing a non-fast-forward push.
+  commit-and-release:
+    needs: [bump, publish-cli, publish-alchemy, publish-better-auth]
+    runs-on: ubuntu-latest
     steps:
       - name: Generate bot token
         id: bot-token
@@ -29,303 +264,85 @@ jobs:
 
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.inputs.ref || github.ref }}
+          ref: ${{ github.ref }}
           fetch-depth: 0
           token: ${{ steps.bot-token.outputs.token }}
 
-      - name: Setup Node
-        uses: actions/setup-node@v6
+      - uses: actions/setup-node@v6
         with:
-          registry-url: https://registry.npmjs.org/
-          node-version: 24
+          node-version: ${{ env.NODE_VERSION }}
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
-      - name: Install dependencies
-        run: bun install
+      - uses: actions/download-artifact@v4
+        with:
+          name: bump-files
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - run: bun install
 
       - name: Configure git
         run: |
-          git config --local user.email "alchemy-version-bot[bot]@users.noreply.github.com"
-          git config --local user.name "alchemy-version-bot[bot]"
+          git config user.email "alchemy-version-bot[bot]@users.noreply.github.com"
+          git config user.name "alchemy-version-bot[bot]"
 
-      - name: Bump version
-        id: bump
+      - name: Commit, tag, push
+        env:
+          VERSION: ${{ needs.bump.outputs.version }}
         run: |
-          if [ -n "${{ inputs.version-override }}" ]; then
-            bun ./scripts/bump.ts "${{ inputs.version-override }}"
+          set -euo pipefail
+          TAG="v${VERSION}"
+
+          # 1. Commit the bump. If the bump is already present on HEAD
+          # (resumed release), the diff is empty and we skip.
+          git add packages/alchemy/package.json \
+                  packages/better-auth/package.json \
+                  packages/cli-posix/package.json \
+                  packages/cli-win32/package.json \
+                  bun.lock
+          if git diff --cached --quiet; then
+            echo "Bump already committed on current HEAD"
           else
-            bun ./scripts/bump.ts beta
+            git commit -m "chore(release): ${VERSION}"
           fi
-          VERSION=$(node -p "require('./packages/alchemy/package.json').version")
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Push version bump
-        run: git push
+          # 2. Tag the bump commit locally if no local tag exists.
+          if ! git rev-parse --verify "refs/tags/${TAG}" >/dev/null 2>&1; then
+            git tag -a "${TAG}" -m "Release ${TAG}"
+          fi
 
-      - name: Capture commit SHA
-        id: sha
-        run: echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+          # 3. Push the bump + tag before touching CHANGELOG.md. Doing it in
+          # this order means the tag and the version bump land atomically as
+          # far as the release is concerned, and any retry can no-op via the
+          # idempotency checks above instead of needing `--force`.
+          git push origin HEAD
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "Tag ${TAG} already on remote, skipping tag push"
+          else
+            git push origin "refs/tags/${TAG}"
+          fi
 
-      - name: Create and push tag
-        run: |
-          git tag -a "v${{ steps.bump.outputs.version }}" -m "Release v${{ steps.bump.outputs.version }}"
-          git push --tags
+          # 4. Generate release notes into CHANGELOG.md (idempotent) and
+          # commit them on top of the bump. Kept as a separate commit so a
+          # retry after the bump push doesn't need to amend + force-push.
+          bun scripts/release/release-notes.ts "${TAG}"
+          if ! git diff --quiet CHANGELOG.md; then
+            git add CHANGELOG.md
+            git commit -m "docs(changelog): ${TAG}"
+            git push origin HEAD
+          fi
 
       - name: Create GitHub Release
-        run: |
-          if ! gh release view "v${{ steps.bump.outputs.version }}" >/dev/null 2>&1; then
-            PREV_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
-            if [ -n "$PREV_TAG" ]; then
-              bunx changelogithub --from "$PREV_TAG"
-            else
-              bunx changelogithub --from "v${{ steps.bump.outputs.version }}"
-            fi
-          else
-            echo "Release v${{ steps.bump.outputs.version }} already exists, skipping"
-          fi
         env:
+          VERSION: ${{ needs.bump.outputs.version }}
+          CHANNEL: ${{ needs.bump.outputs.channel }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # ── Step 2a: Publish @alchemy.run/cli-posix to npm ──
-  # No build step — this package is just a shell script launcher.
-  # Must publish before `alchemy` so its optionalDependencies resolve.
-  publish-cli-posix:
-    needs: bump
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ needs.bump.outputs.sha }}
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          registry-url: https://registry.npmjs.org/
-          node-version: 24
-
-      - name: Upgrade npm for OIDC trusted publishing
-        run: |
-          npm install -g npm@latest && npm --version
-          sed -i '/always-auth/d' ~/.npmrc 2>/dev/null || true
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install
-
-      - name: Publish
-        run: |
-          VERSION="${{ needs.bump.outputs.version }}"
-          PKG_NAME=$(node -p "require('./packages/cli-posix/package.json').name")
-          echo "--- Publishing ${PKG_NAME}@${VERSION} ---"
-
-          if npm view "${PKG_NAME}@${VERSION}" version >/dev/null 2>&1; then
-            echo "${PKG_NAME}@${VERSION} already published, skipping"
-            exit 0
-          fi
-
-          cd packages/cli-posix
-          bun pm pack --destination .
-          TARBALL=$(ls *.tgz 2>/dev/null | head -1)
-          echo "Publishing tarball: ${TARBALL}"
-          if echo "${VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-            TAG="latest"
-          elif echo "${VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$'; then
-            TAG="next"
-          else
-            TAG=$(echo "${VERSION}" | sed 's/^[0-9]*\.[0-9]*\.[0-9]*-//' | tr '.' '-')
-          fi
-          echo "Using npm dist-tag: ${TAG}"
-          npm publish "${TARBALL}" --access public --tag "${TAG}"
-          rm -f *.tgz
-          echo "--- Published ${PKG_NAME}@${VERSION} ---"
-
-  # ── Step 2b: Publish @alchemy.run/cli-win32 to npm ──
-  # No build step — this package is just a Windows .cmd launcher.
-  # Must publish before `alchemy` so its optionalDependencies resolve.
-  publish-cli-win32:
-    needs: bump
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ needs.bump.outputs.sha }}
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          registry-url: https://registry.npmjs.org/
-          node-version: 24
-
-      - name: Upgrade npm for OIDC trusted publishing
-        run: |
-          npm install -g npm@latest && npm --version
-          sed -i '/always-auth/d' ~/.npmrc 2>/dev/null || true
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install
-
-      - name: Publish
-        run: |
-          VERSION="${{ needs.bump.outputs.version }}"
-          PKG_NAME=$(node -p "require('./packages/cli-win32/package.json').name")
-          echo "--- Publishing ${PKG_NAME}@${VERSION} ---"
-
-          if npm view "${PKG_NAME}@${VERSION}" version >/dev/null 2>&1; then
-            echo "${PKG_NAME}@${VERSION} already published, skipping"
-            exit 0
-          fi
-
-          cd packages/cli-win32
-          bun pm pack --destination .
-          TARBALL=$(ls *.tgz 2>/dev/null | head -1)
-          echo "Publishing tarball: ${TARBALL}"
-          if echo "${VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-            TAG="latest"
-          elif echo "${VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$'; then
-            TAG="next"
-          else
-            TAG=$(echo "${VERSION}" | sed 's/^[0-9]*\.[0-9]*\.[0-9]*-//' | tr '.' '-')
-          fi
-          echo "Using npm dist-tag: ${TAG}"
-          npm publish "${TARBALL}" --access public --tag "${TAG}"
-          rm -f *.tgz
-          echo "--- Published ${PKG_NAME}@${VERSION} ---"
-
-  # ── Step 3: Build & publish alchemy to npm ──
-  publish-alchemy:
-    needs: [bump, publish-cli-posix, publish-cli-win32]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ needs.bump.outputs.sha }}
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          registry-url: https://registry.npmjs.org/
-          node-version: 24
-
-      - name: Upgrade npm for OIDC trusted publishing
-        run: |
-          npm install -g npm@latest && npm --version
-          sed -i '/always-auth/d' ~/.npmrc 2>/dev/null || true
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install
-
-      - name: Build
-        run: bun run build
-        working-directory: packages/alchemy
-
-      - name: Publish
-        run: |
-          VERSION="${{ needs.bump.outputs.version }}"
-          PKG_NAME=$(node -p "require('./packages/alchemy/package.json').name")
-          echo "--- Publishing ${PKG_NAME}@${VERSION} ---"
-
-          if npm view "${PKG_NAME}@${VERSION}" version >/dev/null 2>&1; then
-            echo "${PKG_NAME}@${VERSION} already published, skipping"
-            exit 0
-          fi
-
-          cd packages/alchemy
-          bun pm pack --destination .
-          TARBALL=$(ls *.tgz 2>/dev/null | head -1)
-          echo "Publishing tarball: ${TARBALL}"
-          if echo "${VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-            TAG="latest"
-          elif echo "${VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$'; then
-            TAG="next"
-          else
-            # Custom prerelease — derive a unique dist-tag from the prerelease portion
-            # so it doesn't clobber `next` or `latest`.
-            TAG=$(echo "${VERSION}" | sed 's/^[0-9]*\.[0-9]*\.[0-9]*-//' | tr '.' '-')
-          fi
-          echo "Using npm dist-tag: ${TAG}"
-          npm publish "${TARBALL}" --access public --tag "${TAG}"
-          rm -f *.tgz
-          echo "--- Published ${PKG_NAME}@${VERSION} ---"
-
-  # ── Step 4: Build & publish @alchemy.run/better-auth to npm ──
-  publish-better-auth:
-    needs: [bump, publish-alchemy]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ needs.bump.outputs.sha }}
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          registry-url: https://registry.npmjs.org/
-          node-version: 24
-
-      - name: Upgrade npm for OIDC trusted publishing
-        run: |
-          npm install -g npm@latest && npm --version
-          sed -i '/always-auth/d' ~/.npmrc 2>/dev/null || true
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install
-
-      - name: Build alchemy
-        run: bun run build
-        working-directory: packages/alchemy
-
-      - name: Build better-auth
-        run: bun run build
-        working-directory: packages/better-auth
-
-      - name: Publish
-        run: |
-          VERSION="${{ needs.bump.outputs.version }}"
-          PKG_NAME=$(node -p "require('./packages/better-auth/package.json').name")
-          echo "--- Publishing ${PKG_NAME}@${VERSION} ---"
-
-          if npm view "${PKG_NAME}@${VERSION}" version >/dev/null 2>&1; then
-            echo "${PKG_NAME}@${VERSION} already published, skipping"
-            exit 0
-          fi
-
-          cd packages/better-auth
-          bun pm pack --destination .
-          TARBALL=$(ls *.tgz 2>/dev/null | head -1)
-          echo "Publishing tarball: ${TARBALL}"
-          if echo "${VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-            TAG="latest"
-          elif echo "${VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$'; then
-            TAG="next"
-          else
-            # Custom prerelease — derive a unique dist-tag from the prerelease portion
-            # so it doesn't clobber `next` or `latest`.
-            TAG=$(echo "${VERSION}" | sed 's/^[0-9]*\.[0-9]*\.[0-9]*-//' | tr '.' '-')
-          fi
-          echo "Using npm dist-tag: ${TAG}"
-          npm publish "${TARBALL}" --access public --tag "${TAG}"
-          rm -f *.tgz
-          echo "--- Published ${PKG_NAME}@${VERSION} ---"
+        run: bun scripts/release/github-release.ts "v${VERSION}" "${CHANNEL}"
