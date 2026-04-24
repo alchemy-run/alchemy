@@ -14,7 +14,7 @@
     "build:clean": "bun clean . && bun run build && bun download:env",
     "build:clean:shallow": "bun clean:shallow . && bun run build",
     "build": "bun run --filter ./website --filter './packages/*' build",
-    "bump": "bun ./scripts/bump.ts",
+    "bump": "bun ./scripts/release/bump.ts",
     "clean:shallow": "rm -rf alchemy/*.tgz && bun tsc -b --clean",
     "clean": "git clean -fqdx -e .env",
     "dev": "tsc -b -w & bun run --filter alchemy dev",
