@@ -1,3 +1,23 @@
+## v2.0.0-beta.12
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **AWS**: Use account-regional S3 bucket names for assets &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(6ab3f)</samp>](https://github.com/alchemy-run/alchemy/commit/6ab3fba)
+- **cloudflare**: Secret store resources &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy/issues/64 [<samp>(9b107)</samp>](https://github.com/alchemy-run/alchemy/commit/9b10769)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Providers not inheriting parent scope &nbsp;-&nbsp; by **John Royal** [<samp>(8317b)</samp>](https://github.com/alchemy-run/alchemy/commit/8317bcc)
+- Include WebSocketConstructor in PlatformServices &nbsp;-&nbsp; by **John Royal** [<samp>(2dfb0)</samp>](https://github.com/alchemy-run/alchemy/commit/2dfb06e)
+
+### &nbsp;&nbsp;&nbsp;🏎 Performance
+
+- Use subpath imports for PlatformServices &nbsp;-&nbsp; by **John Royal** [<samp>(1867a)</samp>](https://github.com/alchemy-run/alchemy/commit/1867a42)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.11...v2.0.0-beta.12)
+
+---
+
 ## v2.0.0-beta.11
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
