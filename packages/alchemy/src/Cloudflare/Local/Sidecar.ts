@@ -8,8 +8,8 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as RpcClient from "../../Sidecar/RpcClient.ts";
 import { defineSchema } from "../../Sidecar/RpcHandler.ts";
-import type { WorkerBinding } from "./Worker.ts";
-import { type WorkerBundleOptions } from "./WorkerBundle.ts";
+import type { WorkerBinding } from "../Workers/Worker.ts";
+import type { WorkerBundleOptions } from "../Workers/WorkerBundle.ts";
 
 export interface ServeOptions extends WorkerBundleOptions {
   name: string;
@@ -18,24 +18,22 @@ export interface ServeOptions extends WorkerBundleOptions {
   durableObjectNamespaces: DurableObjectNamespaceInput[];
 }
 
-export const DevServerSchema = defineSchema<DevServer>({
+export const SidecarSchema = defineSchema<Sidecar["Service"]>({
   serve: { success: ServeResult, error: ServeError },
   stop: { success: Schema.Void, error: BridgeError },
 });
 
-export type DevServer = {
-  readonly serve: (
-    options: ServeOptions,
-  ) => Effect.Effect<ServeResult, ServeError>;
-  readonly stop: (name: string) => Effect.Effect<void, BridgeError>;
-};
+export class Sidecar extends RpcClient.RpcClientService<
+  Sidecar,
+  {
+    readonly serve: (
+      options: ServeOptions,
+    ) => Effect.Effect<ServeResult, ServeError>;
+    readonly stop: (name: string) => Effect.Effect<void, BridgeError>;
+  }
+>()("Sidecar") {}
 
-export class DevServerClient extends RpcClient.RpcClientService<
-  DevServerClient,
-  DevServer
->()("DevServerClient") {}
-
-export const DevServerClientLive = RpcClient.layer(DevServerClient, {
-  main: import.meta.resolve("./DevServerLive.ts", import.meta.url),
-  schema: DevServerSchema,
+export const SidecarLive = RpcClient.layer(Sidecar, {
+  main: import.meta.resolve("./SidecarServer.ts", import.meta.url),
+  schema: SidecarSchema,
 });

@@ -15,6 +15,7 @@ import { ref } from "./Ref.ts";
 import type { ResourceBinding, ResourceLike } from "./Resource.ts";
 import { Stage } from "./Stage.ts";
 import { taggedFunction } from "./Util/effect.ts";
+import { provideLayerScoped } from "./Util/layer-scoped.ts";
 
 export type StackServices =
   | Stack
@@ -140,45 +141,39 @@ export const make =
   <A, Err = never, Req extends ROut | StackServices = never>(
     effect: Effect.Effect<A, Err, Req>,
   ) =>
-    Effect.scope.pipe(
-      Effect.flatMap((scope) => {
-        const stackLayer = Layer.effect(
-          Stack,
-          Stage.asEffect().pipe(
-            Effect.map(
-              (stage) =>
-                stack ?? {
-                  name,
-                  stage,
-                  resources: {},
-                  bindings: {},
-                },
+    Effect.all([
+      effect,
+      Stack.asEffect(),
+      Effect.context<ROut | StackServices>(),
+    ]).pipe(
+      Effect.map(
+        ([output, stack, services]): CompiledStack<
+          A,
+          ROut | StackServices
+        > => ({
+          ...stack,
+          output,
+          services,
+        }),
+      ),
+      provideLayerScoped(
+        Layer.provideMerge(
+          providers,
+          Layer.effect(
+            Stack,
+            Stage.asEffect().pipe(
+              Effect.map(
+                (stage) =>
+                  stack ?? {
+                    name,
+                    stage,
+                    resources: {},
+                    bindings: {},
+                  },
+              ),
+              Effect.tap(Effect.logInfo),
             ),
-            Effect.tap(Effect.logInfo),
           ),
-        );
-        return providers.pipe(
-          Layer.provideMerge(stackLayer),
-          Layer.buildWithScope(scope),
-        );
-      }),
-      Effect.flatMap((context) =>
-        Effect.all([
-          effect,
-          Stack.asEffect(),
-          Effect.context<ROut | StackServices>(),
-        ]).pipe(
-          Effect.map(
-            ([output, stack, services]): CompiledStack<
-              A,
-              ROut | StackServices
-            > => ({
-              ...stack,
-              output,
-              services,
-            }),
-          ),
-          Effect.provideContext(context),
         ),
       ),
     );

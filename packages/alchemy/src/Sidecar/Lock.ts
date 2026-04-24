@@ -141,13 +141,16 @@ export const make = Effect.gen(function* () {
 
   return Lock.of({
     check: isLockValid,
-    release: Effect.all([
-      Deferred.fail(
-        deferred,
-        new LockError({ reason: "Cancelled", message: "Lock cancelled" }),
-      ),
-      releaseLock,
-    ]),
+    release: Effect.all(
+      [
+        Deferred.fail(
+          deferred,
+          new LockError({ reason: "Cancelled", message: "Lock cancelled" }),
+        ),
+        releaseLock,
+      ],
+      { concurrency: "unbounded" },
+    ),
     acquire: makeLockFile.pipe(
       Effect.catchIf(
         (e) => e.reason === "Conflict",

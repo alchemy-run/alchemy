@@ -1,6 +1,5 @@
 export * from "./Assets.ts";
 export * from "./ConfigProvider.ts";
-export * from "./DevServer.ts";
 export * from "./DurableObjectNamespace.ts";
 export * from "./DurableObjectState.ts";
 export * from "./DurableObjectStorage.ts";

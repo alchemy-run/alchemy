@@ -4,8 +4,8 @@ import * as Provider from "../../Provider.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { Sidecar } from "../Local/Sidecar.ts";
 import { getCompatibility } from "./Compatibility.ts";
-import { DevServerClient } from "./DevServer.ts";
 import { Worker, type WorkerBinding, type WorkerProps } from "./Worker.ts";
 import { createWorkerName } from "./WorkerName.ts";
 
@@ -15,7 +15,7 @@ export const LocalWorkerProvider = () =>
     Effect.gen(function* () {
       const { accountId } = yield* CloudflareEnvironment;
       const stack = yield* Stack;
-      const devServer = yield* DevServerClient;
+      const sidecar = yield* Sidecar;
 
       const run = Effect.fn(function* (
         id: string,
@@ -33,7 +33,7 @@ export const LocalWorkerProvider = () =>
             }
           }
         }
-        const result = yield* devServer.serve({
+        const result = yield* sidecar.serve({
           id,
           name,
           main: props.main,
@@ -81,7 +81,7 @@ export const LocalWorkerProvider = () =>
         }),
         create: ({ id, news, bindings }) => run(id, news, bindings),
         update: ({ id, news, bindings }) => run(id, news, bindings),
-        delete: ({ output }) => devServer.stop(output.workerName),
+        delete: ({ output }) => sidecar.stop(output.workerName),
       };
     }),
   );

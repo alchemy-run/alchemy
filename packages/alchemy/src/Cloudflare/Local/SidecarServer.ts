@@ -1,6 +1,5 @@
 import * as Server from "@distilled.cloud/cloudflare-runtime/server";
 import * as Auth from "@distilled.cloud/cloudflare/Auth";
-import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -11,15 +10,12 @@ import * as Stream from "effect/Stream";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import * as RpcServer from "../../Sidecar/RpcServer.ts";
-import { PlatformServices } from "../../Util/PlatformServices.ts";
-import {
-  DevServerSchema,
-  type DevServer,
-  type ServeOptions,
-} from "./DevServer.ts";
-import { WorkerBundle } from "./WorkerBundle.ts";
+import { provideLayerScoped } from "../../Util/layer-scoped.ts";
+import { PlatformServices, runMain } from "../../Util/PlatformServices.ts";
+import { WorkerBundle } from "../Workers/WorkerBundle.ts";
+import { Sidecar, SidecarSchema, type ServeOptions } from "./Sidecar.ts";
 
-const DevServerLive = Effect.gen(function* () {
+const SidecarServer = Effect.gen(function* () {
   const server = yield* Server.Server;
   const fibers = new Map<
     string,
@@ -37,7 +33,7 @@ const DevServerLive = Effect.gen(function* () {
     }
   });
 
-  return {
+  return Sidecar.of({
     serve: Effect.fn(function* (worker: ServeOptions) {
       yield* stop(worker.name);
       const deferred = yield* Deferred.make<
@@ -50,7 +46,7 @@ const DevServerLive = Effect.gen(function* () {
         Stream.mapEffect((modules) =>
           server
             .start({
-              name: worker.name,
+              name: worker.id.toLowerCase(),
               accountId: worker.accountId,
               compatibilityDate: worker.compatibility.date,
               compatibilityFlags: worker.compatibility.flags,
@@ -68,12 +64,10 @@ const DevServerLive = Effect.gen(function* () {
         Scope.provide(scope),
       );
       fibers.set(worker.name, fiber);
-      const result = yield* Deferred.await(deferred);
-      console.log("result", result);
-      return result;
+      return yield* Deferred.await(deferred);
     }),
     stop,
-  } satisfies DevServer;
+  });
 });
 
 function bundleOutputToWorkerd(
@@ -92,22 +86,18 @@ function bundleOutputToWorkerd(
   return modules;
 }
 
-const services = Layer.provideMerge(
-  Layer.merge(
+const server = SidecarServer.pipe(
+  provideLayerScoped(
     Layer.provide(
       Server.layer({ port: 1337, storage: ".alchemy/local" }),
       Layer.merge(FetchHttpClient.layer, Auth.fromEnv()),
     ),
-    RpcServer.layerServices(import.meta.url),
   ),
-  PlatformServices,
 );
 
-DevServerLive.pipe(
-  Effect.flatMap((handlers) =>
-    RpcServer.makeRpcServer(handlers, DevServerSchema),
-  ),
-  Effect.provide(services),
+RpcServer.makeRpcServer(server, SidecarSchema).pipe(
+  Effect.provide(RpcServer.layerServices(import.meta.url)),
+  Effect.provide(PlatformServices),
   Effect.scoped,
-  NodeRuntime.runMain,
+  runMain,
 );
