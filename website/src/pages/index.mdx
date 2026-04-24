@@ -165,8 +165,8 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
   </div>
 </div>
 
-{/* Mobile-only: just the deploy terminal — the alchemy.run.ts source
-reads poorly when stacked above it on narrow screens. */}
+{/_ Mobile-only: just the deploy terminal — the alchemy.run.ts source
+reads poorly when stacked above it on narrow screens. _/}
 
   <div class="stack-deploy-mobile">
     <DeployTerminal client:visible />
@@ -221,8 +221,8 @@ reads poorly when stacked above it on narrow screens. */}
   />
 </div>
 
-{/* Narrow-screen replacement: a single tabbed card that auto-flips
-between the two files with a short caption explaining each step. */}
+{/_ Narrow-screen replacement: a single tabbed card that auto-flips
+between the two files with a short caption explaining each step. _/}
 
   <div class="async-split-mobile">
     <AsyncTabs

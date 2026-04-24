@@ -67,9 +67,7 @@ if (channel === "release") {
     const releases = raw
       ? (JSON.parse(raw) as Array<{ tagName: string; isPrerelease: boolean }>)
       : [];
-    hasStable = releases.some(
-      (r) => isStableTag(r.tagName) && !r.isPrerelease,
-    );
+    hasStable = releases.some((r) => isStableTag(r.tagName) && !r.isPrerelease);
   }
   if (hasStable) {
     prerelease = true;
