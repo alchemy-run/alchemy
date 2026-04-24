@@ -2330,8 +2330,16 @@ body.alc-root,
   mix-blend-mode: multiply;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='280' height='280'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='1.3' numOctaves='2' seed='6' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.30  0 0 0 0 0.22  0 0 0 0 0.13  0 0 0 0.5 0'/></filter><rect width='100%' height='100%' filter='url(%23g)'/></svg>");
   background-size: 280px 280px;
-  -webkit-mask-image: radial-gradient(ellipse 100% 95% at 50% 45%, #000 55%, transparent 100%);
-          mask-image: radial-gradient(ellipse 100% 95% at 50% 45%, #000 55%, transparent 100%);
+  -webkit-mask-image: radial-gradient(
+    ellipse 100% 95% at 50% 45%,
+    #000 55%,
+    transparent 100%
+  );
+  mask-image: radial-gradient(
+    ellipse 100% 95% at 50% 45%,
+    #000 55%,
+    transparent 100%
+  );
 }
 /* Parchment "halo" between the animation canvas and the hero text.
    Solid parchment at the center (where the headline + subtitle live)
@@ -2349,7 +2357,7 @@ body.alc-root,
     ellipse 55% 50% at 50% 52%,
     rgba(245, 239, 227, 0.92) 0%,
     rgba(245, 239, 227, 0.78) 30%,
-    rgba(245, 239, 227, 0.40) 60%,
+    rgba(245, 239, 227, 0.4) 60%,
     transparent 100%
   );
 }
@@ -2370,8 +2378,16 @@ body.alc-root,
   /* Just feather the canvas at the outer edges so it doesn't reach
      the page borders. Center protection is handled by the parchment
      halo in .alc-hero::after. */
-  -webkit-mask-image: radial-gradient(ellipse 95% 90% at 50% 50%, #000 60%, transparent 100%);
-          mask-image: radial-gradient(ellipse 95% 90% at 50% 50%, #000 60%, transparent 100%);
+  -webkit-mask-image: radial-gradient(
+    ellipse 95% 90% at 50% 50%,
+    #000 60%,
+    transparent 100%
+  );
+  mask-image: radial-gradient(
+    ellipse 95% 90% at 50% 50%,
+    #000 60%,
+    transparent 100%
+  );
 }
 .alc-hero__inner {
   position: relative;
@@ -2684,11 +2700,18 @@ body.alc-root,
   animation: bhr-pulse 1800ms ease-in-out infinite;
 }
 @keyframes bhr-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .bhr-browser__hmrdot { animation: none; }
+  .bhr-browser__hmrdot {
+    animation: none;
+  }
 }
 
 .bhr-browser__body {
@@ -2715,11 +2738,18 @@ body.alc-root,
   animation: bhr-progress 900ms ease-in-out infinite;
 }
 @keyframes bhr-progress {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(350%); }
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(350%);
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .bhr-browser__progress { animation: none; opacity: 0.4; }
+  .bhr-browser__progress {
+    animation: none;
+    opacity: 0.4;
+  }
 }
 
 /* Sample "rendered app" inside the browser. */
@@ -2730,11 +2760,19 @@ body.alc-root,
   animation: bhr-fade-in 280ms ease;
 }
 @keyframes bhr-fade-in {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .bhr-app { animation: none; }
+  .bhr-app {
+    animation: none;
+  }
 }
 .bhr-app__header {
   display: flex;
@@ -2773,8 +2811,14 @@ body.alc-root,
   animation: bhr-pop 320ms ease;
 }
 @keyframes bhr-pop {
-  from { opacity: 0; transform: scale(0.92); }
-  to   { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 .bhr-app__grid {
   display: grid;
@@ -2798,7 +2842,11 @@ body.alc-root,
   background: linear-gradient(135deg, #d4b888, var(--alc-bg-sunk));
 }
 .bhr-tile:nth-child(3) .bhr-tile__img {
-  background: linear-gradient(135deg, var(--alc-accent-warm), var(--alc-accent-soft));
+  background: linear-gradient(
+    135deg,
+    var(--alc-accent-warm),
+    var(--alc-accent-soft)
+  );
 }
 .bhr-tile:nth-child(4) .bhr-tile__img {
   background: linear-gradient(135deg, #c89a6a, var(--alc-accent-soft));
@@ -2857,10 +2905,14 @@ body.alc-root,
   margin-top: 8px;
 }
 @keyframes bhr-shimmer {
-  to { background-position: -200% 0; }
+  to {
+    background-position: -200% 0;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .bhr-app--boot .bhr-app__skeleton { animation: none; }
+  .bhr-app--boot .bhr-app__skeleton {
+    animation: none;
+  }
 }
 
 /* Two-column code+illustration splits */

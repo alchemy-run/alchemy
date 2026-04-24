@@ -63,9 +63,9 @@ const stack = beforeAll(deploy(Stack));   // real R2, real DynamoDB
 afterAll(destroy(stack));                 // torn down at the end
 
 test("PUT + GET round-trips through R2", Effect.gen(function* () {
-  const { url } = yield* stack;
-  const res = yield* HttpClient.get(\`\${url}/object/hello.txt\`);
-  expect(yield* res.text).toBe("hi!");
+const { url } = yield* stack;
+const res = yield* HttpClient.get(\`\${url}/object/hello.txt\`);
+expect(yield* res.text).toBe("hi!");
 }));`;
 
 export const OTEL_SRC = `// src/Api.ts — Effect emits OpenTelemetry. Exporter is a Layer.
@@ -143,30 +143,31 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
     </p>
   </div>
 
-  <div class="stack-deploy-diagram">
-    <div class="stack-deploy-diagram__col">
-      <CodeBlock filename="alchemy.run.ts" code={STACK_SRC} />
-      <div class="stack-deploy-diagram__caption">
-        <SketchLabel>Stack</SketchLabel>
-        <span>one TypeScript program</span>
-      </div>
-    </div>
-    <div class="stack-deploy-diagram__arrow" aria-hidden>
-      <span>plan</span>
-      <span style="font-size:24px;line-height:1;">&rarr;</span>
-      <span>deploy</span>
-    </div>
-    <div class="stack-deploy-diagram__col">
-      <DeployTerminal client:visible />
-      <div class="stack-deploy-diagram__caption">
-        <SketchLabel>Resources</SketchLabel>
-        <span>live across your accounts</span>
-      </div>
+<div class="stack-deploy-diagram">
+  <div class="stack-deploy-diagram__col">
+    <CodeBlock filename="alchemy.run.ts" code={STACK_SRC} />
+    <div class="stack-deploy-diagram__caption">
+      <SketchLabel>Stack</SketchLabel>
+      <span>one TypeScript program</span>
     </div>
   </div>
+  <div class="stack-deploy-diagram__arrow" aria-hidden>
+    <span>plan</span>
+    <span style="font-size:24px;line-height:1;">&rarr;</span>
+    <span>deploy</span>
+  </div>
+  <div class="stack-deploy-diagram__col">
+    <DeployTerminal client:visible />
+    <div class="stack-deploy-diagram__caption">
+      <SketchLabel>Resources</SketchLabel>
+      <span>live across your accounts</span>
+    </div>
+  </div>
+</div>
 
-  {/* Mobile-only: just the deploy terminal — the alchemy.run.ts source
-      reads poorly when stacked above it on narrow screens. */}
+{/_ Mobile-only: just the deploy terminal — the alchemy.run.ts source
+reads poorly when stacked above it on narrow screens. _/}
+
   <div class="stack-deploy-mobile">
     <DeployTerminal client:visible />
   </div>
@@ -205,23 +206,24 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
     </p>
   </div>
 
-  <div class="alc-split-2 async-split-desktop">
-    <CodeBlock
-      filename="alchemy.run.ts"
-      code={ASYNC_RUN_SRC}
-      caption="infer your WorkerEnv"
-      compact
-    />
-    <CodeBlock
-      filename="src/worker.ts"
-      code={ASYNC_WORKER_SRC}
-      caption="import and use in your worker"
-      compact
-    />
-  </div>
+<div class="alc-split-2 async-split-desktop">
+  <CodeBlock
+    filename="alchemy.run.ts"
+    code={ASYNC_RUN_SRC}
+    caption="infer your WorkerEnv"
+    compact
+  />
+  <CodeBlock
+    filename="src/worker.ts"
+    code={ASYNC_WORKER_SRC}
+    caption="import and use in your worker"
+    compact
+  />
+</div>
 
-  {/* Narrow-screen replacement: a single tabbed card that auto-flips
-      between the two files with a short caption explaining each step. */}
+{/_ Narrow-screen replacement: a single tabbed card that auto-flips
+between the two files with a short caption explaining each step. _/}
+
   <div class="async-split-mobile">
     <AsyncTabs
       client:visible
@@ -254,7 +256,7 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
     </p>
   </div>
 
-  <BrowserHotReload client:visible />
+<BrowserHotReload client:visible />
 
   <div class="alc-stat-strip">
     <span class="alc-stat-strip__item"><strong>TanStack · SolidStart · Nuxt · Vue</strong></span>
@@ -280,10 +282,10 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
     </p>
   </div>
 
-  <div class="alc-split-2 alc-split-2--wide-left">
-    <TestTerminal client:visible />
-    <CodeBlock filename="test/api.test.ts" code={TEST_SRC} compact />
-  </div>
+<div class="alc-split-2 alc-split-2--wide-left">
+  <TestTerminal client:visible />
+  <CodeBlock filename="test/api.test.ts" code={TEST_SRC} compact />
+</div>
 
   <div class="alc-stat-strip">
     <span class="alc-stat-strip__item"><strong>per-suite</strong> stages</span>
@@ -346,7 +348,14 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
 <Section padding="56px 32px 64px" id="outro">
   <DiscordCallout />
   <div class="alc-cta" style="margin-top:48px;text-align:center;">
-    <h2 class="alc-h2"><HeadingOrnament variant="fleuron" position="prefix" />Paste this into your coding agent <span style="color:var(--alc-accent-deep);font-style:italic;">to get started</span>.</h2>
+    <h2 class="alc-h2">
+      <HeadingOrnament variant="fleuron" position="prefix" />
+      Paste this into your coding agent{" "}
+      <span style="color:var(--alc-accent-deep);font-style:italic;">
+        to get started
+      </span>
+      .
+    </h2>
     <CopyForAgent client:load />
     <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:24px;">
       <Button variant="secondary" href="/getting-started">

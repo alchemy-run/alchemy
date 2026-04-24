@@ -124,7 +124,9 @@ function requestLine() {
 const DIFF_LINE = mkLine(
   <>
     <span style={{ color: "var(--alc-success)" }}>+ </span>
-    <span style={{ color: "var(--alc-fg-invert)", fontWeight: 600 }}>Queue</span>
+    <span style={{ color: "var(--alc-fg-invert)", fontWeight: 600 }}>
+      Queue
+    </span>
     <span
       style={{ color: "var(--alc-code-comment)" }}
     >{` (Cloudflare.Queue)`}</span>
@@ -185,9 +187,7 @@ function isReloading(phase: Phase) {
 
 function isBooting(phase: Phase) {
   return (
-    phase === "boot-photos" ||
-    phase === "boot-sessions" ||
-    phase === "boot-api"
+    phase === "boot-photos" || phase === "boot-sessions" || phase === "boot-api"
   );
 }
 
@@ -223,9 +223,15 @@ function PreviewApp({ version }: { version: AppVersion }) {
       </div>
       {version === "v3" && (
         <div className="bhr-app__footer">
-          <span className="bhr-app__chip">queue: <strong>uploads</strong></span>
-          <span className="bhr-app__chip">bucket: <strong>Photos</strong></span>
-          <span className="bhr-app__chip">kv: <strong>Sessions</strong></span>
+          <span className="bhr-app__chip">
+            queue: <strong>uploads</strong>
+          </span>
+          <span className="bhr-app__chip">
+            bucket: <strong>Photos</strong>
+          </span>
+          <span className="bhr-app__chip">
+            kv: <strong>Sessions</strong>
+          </span>
         </div>
       )}
     </div>

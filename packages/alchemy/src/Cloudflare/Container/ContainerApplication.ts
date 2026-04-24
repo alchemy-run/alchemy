@@ -622,7 +622,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
           base,
           "",
           "WORKDIR /app",
-          ...installStep ? [installStep, ""] : [],
+          ...(installStep ? [installStep, ""] : []),
           "COPY index.mjs /app/index.mjs",
           // Copy any additional rolldown chunks (`chunk-XXX.js`,
           // `BunServices-YYY.js`, …). The glob matches zero or more files;
@@ -892,7 +892,10 @@ await Effect.runPromise(serverEffect).catch((err) => {
         yield* Effect.logInfo(
           `Cloudflare Container update: preparing ${existing.applicationName}`,
         );
-        const { files, imageRef, imageHash } = yield* computeImageHash(id, news);
+        const { files, imageRef, imageHash } = yield* computeImageHash(
+          id,
+          news,
+        );
         const configuration = desiredConfiguration(news, imageRef);
 
         if (imageHash !== existing.hash?.image) {
@@ -998,8 +1001,10 @@ await Effect.runPromise(serverEffect).catch((err) => {
             `Cloudflare Container precreate: starting ${name}`,
           );
 
-          const { files, imageRef, imageHash } = yield* computeImageHash(id,
-          news,);
+          const { files, imageRef, imageHash } = yield* computeImageHash(
+            id,
+            news,
+          );
           const configuration = desiredConfiguration(news, imageRef);
           yield* buildAndPushImage(id, news, files, imageRef, session);
 
@@ -1036,8 +1041,10 @@ await Effect.runPromise(serverEffect).catch((err) => {
             `Cloudflare Container create: starting ${name}${adoptPolicy ? " with adopt" : ""}`,
           );
           const durableObjects = yield* getDurableObjects(bindings);
-          const { files, imageRef, imageHash } = yield* computeImageHash(id,
-          news,);
+          const { files, imageRef, imageHash } = yield* computeImageHash(
+            id,
+            news,
+          );
           const configuration = desiredConfiguration(news, imageRef);
 
           if (

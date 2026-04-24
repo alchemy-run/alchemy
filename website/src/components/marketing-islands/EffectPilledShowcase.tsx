@@ -137,7 +137,7 @@ const LAYER_SEGMENTS: LayerSegment[] = [
       "export class JobStorage extends Context.Service<JobStorage, {",
       "  putJob: (job: Job) => Effect.Effect<Job, PutJobError>;",
       "  getJob: (id: string) => Effect.Effect<Job | undefined, GetJobError>;",
-      "}>()(\"JobStorage\") {}",
+      '}>()("JobStorage") {}',
       "",
     ],
   },
@@ -145,13 +145,13 @@ const LAYER_SEGMENTS: LayerSegment[] = [
     kind: "diff",
     ddb: [
       "export const JobStorageDynamoDB = Layer.effect(JobStorage, Effect.gen(function* () {",
-      "  const table   = yield* DynamoDB.Table(\"JobsTable\", { partitionKey: \"id\" });",
+      '  const table   = yield* DynamoDB.Table("JobsTable", { partitionKey: "id" });',
       "  const putItem = yield* DynamoDB.PutItem.bind(table);",
       "  const getItem = yield* DynamoDB.GetItem.bind(table);",
     ],
     d1: [
       "export const JobStorageD1 = Layer.effect(JobStorage, Effect.gen(function* () {",
-      "  const db   = yield* Cloudflare.D1Database(\"JobsDB\");",
+      '  const db   = yield* Cloudflare.D1Database("JobsDB");',
       "  const conn = yield* Cloudflare.D1Connection.bind(db);",
       "",
     ],
@@ -255,8 +255,7 @@ export default function EffectPilledShowcase() {
     setTab(next);
   };
 
-  const codeHtml =
-    tab === "layer" ? null : highlightTS(CODE_BY_TAB[tab]);
+  const codeHtml = tab === "layer" ? null : highlightTS(CODE_BY_TAB[tab]);
   // Drives the fade-in for the whole panel on tab switch. Intentionally
   // does NOT include layerImpl — the Layer tab uses CSS transitions to
   // breathe between its two impls without remounting.
@@ -266,9 +265,18 @@ export default function EffectPilledShowcase() {
     <div ref={wrapRef} className="eff-showcase">
       <div className="eff-showcase__chrome">
         <div className="eff-showcase__header">
-          <span className="alc-code-block__dot" style={{ background: "var(--alc-danger)" }} />
-          <span className="alc-code-block__dot" style={{ background: "var(--alc-warn)" }} />
-          <span className="alc-code-block__dot" style={{ background: "var(--alc-accent-bright)" }} />
+          <span
+            className="alc-code-block__dot"
+            style={{ background: "var(--alc-danger)" }}
+          />
+          <span
+            className="alc-code-block__dot"
+            style={{ background: "var(--alc-warn)" }}
+          />
+          <span
+            className="alc-code-block__dot"
+            style={{ background: "var(--alc-accent-bright)" }}
+          />
           <div className="eff-showcase__tabs" role="tablist">
             {TABS.map((t) => (
               <button
@@ -305,19 +313,17 @@ export default function EffectPilledShowcase() {
         </div>
       </div>
       <div className="eff-showcase__hint" aria-hidden>
-        {pinned ? <span>tap a tab to switch</span> : <span>cycling · tap to pin</span>}
+        {pinned ? (
+          <span>tap a tab to switch</span>
+        ) : (
+          <span>cycling · tap to pin</span>
+        )}
       </div>
     </div>
   );
 }
 
-function ArtifactPanel({
-  tab,
-  layerImpl,
-}: {
-  tab: Tab;
-  layerImpl: LayerImpl;
-}) {
+function ArtifactPanel({ tab, layerImpl }: { tab: Tab; layerImpl: LayerImpl }) {
   switch (tab) {
     case "iam":
       return <IamPanel />;
@@ -355,9 +361,17 @@ function IamPanel() {
             key={p.action}
             style={{ animationDelay: `${120 + i * 120}ms` }}
           >
-            <Icon icon={p.icon} width={20} height={20} aria-hidden className="eff-showcase__perm-icon" />
+            <Icon
+              icon={p.icon}
+              width={20}
+              height={20}
+              aria-hidden
+              className="eff-showcase__perm-icon"
+            />
             <span className="eff-showcase__perm-action">{p.action}</span>
-            <span className="eff-showcase__perm-arrow" aria-hidden>→</span>
+            <span className="eff-showcase__perm-arrow" aria-hidden>
+              →
+            </span>
             <span className="eff-showcase__perm-target">{p.target}</span>
           </div>
         ))}
@@ -372,7 +386,9 @@ function IamPanel() {
               style={{ animationDelay: `${360 + i * 100}ms` }}
             >
               <span className="eff-showcase__env-name">{e.name}</span>
-              <span className="eff-showcase__env-eq" aria-hidden>=</span>
+              <span className="eff-showcase__env-eq" aria-hidden>
+                =
+              </span>
               <span className="eff-showcase__env-value">{e.value}</span>
             </div>
           ))}
@@ -647,7 +663,10 @@ function FeatureRow({
   delay?: number;
 }) {
   return (
-    <div className="eff-showcase__feature" style={{ animationDelay: `${delay}ms` }}>
+    <div
+      className="eff-showcase__feature"
+      style={{ animationDelay: `${delay}ms` }}
+    >
       <Icon
         icon={icon}
         width={22}

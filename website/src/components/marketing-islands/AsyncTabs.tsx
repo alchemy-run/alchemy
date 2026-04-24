@@ -95,11 +95,7 @@ export default function AsyncTabs({ panels }: { panels: Panel[] }) {
           ))}
         </div>
       </div>
-      <div
-        key={active}
-        className="alc-code-block__caption"
-        aria-live="polite"
-      >
+      <div key={active} className="alc-code-block__caption" aria-live="polite">
         {panels[active].caption}
       </div>
     </div>
