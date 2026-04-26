@@ -9,6 +9,9 @@
     "url": "git+https://github.com/alchemy-run/alchemy-effect.git",
     "directory": "package/alchemy"
   },
+  "bin": {
+    "alchemy": "./bin/cli.js"
+  },
   "files": [
     "bin",
     "lib",
@@ -204,10 +207,6 @@
   "publishConfig": {
     "access": "public"
   },
-  "optionalDependencies": {
-    "@alchemy.run/cli-posix": "workspace:*",
-    "@alchemy.run/cli-win32": "workspace:*"
-  },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.31",
     "@ai-sdk/openai": "^3.0.23",
@@ -233,6 +232,7 @@
     "cloudflare": "catalog:",
     "fast-glob": "^3.3.2",
     "fast-xml-parser": "catalog:",
+    "foreground-child": "^4.0.3",
     "ignore": "^7.0.5",
     "jszip": "^3.10.1",
     "libsodium-wrappers": "^0.8.3",
@@ -265,9 +265,9 @@
     "typescript": "catalog:"
   },
   "peerDependencies": {
-    "@effect/platform-bun": "*",
-    "@effect/platform-node": "*",
-    "effect": "*",
+    "@effect/platform-bun": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "effect": "catalog:",
     "vite": "catalog:"
   },
   "peerDependenciesMeta": {
@@ -275,9 +275,6 @@
       "optional": true
     },
     "@effect/platform-bun": {
-      "optional": true
-    },
-    "effect": {
       "optional": true
     },
     "vite": {

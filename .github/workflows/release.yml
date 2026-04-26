@@ -33,8 +33,6 @@ env:
   BUMP_ARTIFACT_PATHS: |
     packages/alchemy/package.json
     packages/better-auth/package.json
-    packages/cli-posix/package.json
-    packages/cli-win32/package.json
     bun.lock
 
 jobs:
@@ -115,54 +113,9 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # ── Step 2a: Publish the platform CLI launchers (no build). ──
-  # cli-posix and cli-win32 are independent — run them in parallel via matrix.
-  # Must land before `alchemy` so its optionalDependencies resolve on install.
-  publish-cli:
-    needs: bump
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        package: [cli-posix, cli-win32]
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ needs.bump.outputs.sha }}
-
-      - uses: actions/setup-node@v6
-        with:
-          registry-url: https://registry.npmjs.org/
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Upgrade npm for OIDC trusted publishing
-        run: |
-          npm install -g npm@latest && npm --version
-          sed -i '/always-auth/d' ~/.npmrc 2>/dev/null || true
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      # Overlay the bumped package.jsons + bun.lock on top of the checkout.
-      - uses: actions/download-artifact@v4
-        with:
-          name: bump-files
-
-      - uses: actions/cache@v4
-        with:
-          path: ~/.bun/install/cache
-          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
-          restore-keys: |
-            bun-${{ runner.os }}-
-
-      - run: bun install
-
-      - run: bun scripts/release/publish-package.ts packages/${{ matrix.package }} ${{ needs.bump.outputs.channel }}
-
-  # ── Step 2b: Build and publish `alchemy`. ──
+  # ── Step 2a: Build and publish `alchemy`. ──
   publish-alchemy:
-    needs: [bump, publish-cli]
+    needs: bump
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -201,7 +154,7 @@ jobs:
 
       - run: bun scripts/release/publish-package.ts packages/alchemy ${{ needs.bump.outputs.channel }}
 
-  # ── Step 2c: Build and publish `@alchemy.run/better-auth`. ──
+  # ── Step 2b: Build and publish `@alchemy.run/better-auth`. ──
   publish-better-auth:
     needs: [bump, publish-alchemy]
     runs-on: ubuntu-latest
@@ -252,7 +205,7 @@ jobs:
   # successful earlier commit lands on top of the current tip rather than
   # producing a non-fast-forward push.
   commit-and-release:
-    needs: [bump, publish-cli, publish-alchemy, publish-better-auth]
+    needs: [bump, publish-alchemy, publish-better-auth]
     runs-on: ubuntu-latest
     steps:
       - name: Generate bot token
@@ -305,8 +258,6 @@ jobs:
           # (resumed release), the diff is empty and we skip.
           git add packages/alchemy/package.json \
                   packages/better-auth/package.json \
-                  packages/cli-posix/package.json \
-                  packages/cli-win32/package.json \
                   bun.lock
           if git diff --cached --quiet; then
             echo "Bump already committed on current HEAD"

@@ -29,7 +29,6 @@
     "nuke:aws:run": "bash scripts/nuke-aws.sh --no-dry-run --no-prompt --prompt-delay 3",
     "nuke:aws": "bash scripts/nuke-aws.sh",
     "opencode": "OPENCODE_EXPERIMENTAL_OXFMT=true opencode",
-    "postinstall": "bun scripts/hoist-alchemy-bin.ts",
     "publish:npm": "bun run build && bun run --filter alchemy publish:npm",
     "setup": "effect-language-service patch && bun run download:external",
     "sync:submodules": "git submodule sync --recursive && git submodule update --init --recursive",

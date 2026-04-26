@@ -71,8 +71,9 @@ const { name, version } = pkg;
 
 console.log(`--- Publishing ${name}@${version} (channel: ${channel}) ---`);
 
-const existing =
-  await $`npm view ${`${name}@${version}`} version`.nothrow().quiet();
+const existing = await $`npm view ${`${name}@${version}`} version`
+  .nothrow()
+  .quiet();
 if (existing.exitCode === 0 && existing.stdout.toString().trim().length > 0) {
   console.log(`${name}@${version} already published, skipping`);
   process.exit(0);

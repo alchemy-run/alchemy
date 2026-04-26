@@ -2,7 +2,7 @@
 /**
  * Compute and apply a version bump across all publishable workspace packages.
  *
- * Writes: packages/{alchemy,better-auth,cli-posix,cli-win32}/package.json
+ * Writes: packages/{alchemy,better-auth}/package.json
  * and (via `bun install`) bun.lock.
  *
  * Prints the chosen version to stdout. All progress messages go to stderr,
@@ -44,19 +44,9 @@ import { $ } from "bun";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-const PUBLISHABLE_DIRS = [
-  "alchemy",
-  "better-auth",
-  "cli-posix",
-  "cli-win32",
-] as const;
+const PUBLISHABLE_DIRS = ["alchemy", "better-auth"] as const;
 
-const PUBLISHABLE_NAMES = [
-  "alchemy",
-  "@alchemy.run/better-auth",
-  "@alchemy.run/cli-posix",
-  "@alchemy.run/cli-win32",
-] as const;
+const PUBLISHABLE_NAMES = ["alchemy", "@alchemy.run/better-auth"] as const;
 
 // Pre-release versions the beta/alpha auto-increment considers when deciding
 // whether to resume. Keeps the line `2.0.0-...` since that is the series
@@ -119,17 +109,16 @@ function compareSemver(a: string, b: string): number {
 }
 
 async function remoteTagExists(tag: string): Promise<boolean> {
-  const r = await $`git ls-remote --exit-code --tags origin ${`refs/tags/${tag}`}`
-    .nothrow()
-    .quiet();
+  const r =
+    await $`git ls-remote --exit-code --tags origin ${`refs/tags/${tag}`}`
+      .nothrow()
+      .quiet();
   return r.exitCode === 0;
 }
 
 async function resolveRelease(spec: string | undefined): Promise<string> {
   if (!spec) {
-    console.error(
-      "release channel requires a spec: patch|minor|major|<x.y.z>",
-    );
+    console.error("release channel requires a spec: patch|minor|major|<x.y.z>");
     process.exit(1);
   }
   if (/^\d+\.\d+\.\d+$/.test(spec)) {
@@ -205,9 +194,7 @@ async function resolvePrerelease(
       )}). Resuming at ${channel}.${nextN}.`,
     );
   } else if (
-    !(await remoteTagExists(
-      `v${CURRENT_MAJOR_MINOR_PATCH}-${channel}.${maxN}`,
-    ))
+    !(await remoteTagExists(`v${CURRENT_MAJOR_MINOR_PATCH}-${channel}.${maxN}`))
   ) {
     nextN = maxN;
     console.error(
