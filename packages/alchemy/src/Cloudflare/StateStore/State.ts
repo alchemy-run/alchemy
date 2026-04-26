@@ -53,7 +53,6 @@ export const state = (props?: {
 
       // TODO(sam): support upgrading state store, right now we only deploy once
       if (credentials) {
-        yield* deployStateStore(scriptName);
         // it's in the profile, let's go
         return yield* makeHttpStateStore(credentials);
       } else {
