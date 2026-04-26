@@ -103,6 +103,7 @@
     "pkg-pr-new": "^0.0.62",
     "ts-morph": "^27.0.2",
     "typescript": "latest",
+    "vite-tsconfig-paths": "^6.1.1",
     "vitest": "^4.0.18",
     "yaml": "^2.8.2"
   }

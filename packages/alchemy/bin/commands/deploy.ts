@@ -13,7 +13,6 @@ import { withProfileOverride } from "../../src/Auth/Profile.ts";
 import * as CLI from "../../src/Cli/index.ts";
 import * as Plan from "../../src/Plan.ts";
 import { Stage } from "../../src/Stage.ts";
-import * as State from "../../src/State/index.ts";
 import { loadConfigProvider } from "../../src/Util/ConfigProvider.ts";
 import { fileLogger } from "../../src/Util/FileLogger.ts";
 
@@ -51,14 +50,18 @@ const execStack = Effect.fn(function* ({
 
   const services = Layer.mergeAll(
     Layer.succeed(ArtifactStore, createArtifactStore()),
-    Layer.succeed(AuthProviders, {}),
+    Layer.succeed(
+      AuthProviders,
+      yield* Effect.serviceOption(AuthProviders).pipe(
+        Effect.map(Option.getOrElse(() => ({}))),
+      ),
+    ),
     ConfigProvider.layer(
       withProfileOverride(yield* loadConfigProvider(envFile), profile),
     ),
     CLI.inkCLI(),
     Logger.layer([fileLogger("out")]),
     Layer.succeed(Stage, stage),
-    State.LocalState,
   );
 
   yield* Effect.gen(function* () {

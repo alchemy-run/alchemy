@@ -3,53 +3,13 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
-import * as Redacted from "effect/Redacted";
 import { decodeFqn, encodeFqn } from "../FQN.ts";
-import { isResource } from "../Resource.ts";
 import { State, StateStoreError, type StateService } from "./State.ts";
+import { encodeState, reviveState } from "./StateEncoding.ts";
 
-const REDACTED_MARKER = "__redacted__";
+export const localState = () => Layer.effect(State, makeLocalState());
 
-const encodeState = (value: unknown): unknown => {
-  if (value === null || value === undefined) return value;
-  if (Redacted.isRedacted(value)) {
-    return {
-      [REDACTED_MARKER]: encodeState(Redacted.value(value)),
-    };
-  }
-  if (isResource(value)) {
-    return {
-      id: value.LogicalId,
-      type: value.Type,
-      props: encodeState(value.Props),
-      attr: encodeState(value.Attributes),
-    };
-  }
-  if (Array.isArray(value)) return value.map(encodeState);
-  if (typeof value === "object") {
-    const result: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value)) {
-      result[k] = encodeState(v);
-    }
-    return result;
-  }
-  return value;
-};
-
-const reviveState = (_key: string, value: unknown): unknown => {
-  if (
-    value !== null &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    REDACTED_MARKER in value
-  ) {
-    return Redacted.make((value as Record<string, unknown>)[REDACTED_MARKER]);
-  }
-  return value;
-};
-
-export const LocalState = Layer.effect(
-  State,
+export const makeLocalState = () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -132,6 +92,15 @@ export const LocalState = Layer.effect(
           Effect.map(() => request.value),
         ),
       delete: (request) => fs.remove(resource(request)).pipe(recover),
+      deleteStack: ({ stack, stage }) =>
+        fs
+          .remove(
+            stage === undefined
+              ? path.join(stateDir, stack)
+              : stageDir({ stack, stage }),
+            { recursive: true },
+          )
+          .pipe(recover),
       list: (request) =>
         fs.readDirectory(stageDir(request)).pipe(
           recover,
@@ -143,5 +112,4 @@ export const LocalState = Layer.effect(
         ),
     };
     return state;
-  }),
-);
+  });

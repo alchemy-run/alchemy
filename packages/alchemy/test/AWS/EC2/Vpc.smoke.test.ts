@@ -15,8 +15,7 @@ import {
   Vpc,
   VpcEndpoint,
 } from "@/AWS/EC2";
-import { destroy } from "@/Destroy";
-import { test } from "@/Test/Vitest";
+import { destroy, test } from "@/Test/Vitest";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import { expect } from "@effect/vitest";

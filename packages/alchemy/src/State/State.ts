@@ -9,7 +9,7 @@ export class StateStoreError extends Data.TaggedError("StateStoreError")<{
 }> {}
 
 export class State extends Context.Service<State, StateService>()(
-  "AWS::Lambda::State",
+  "alchemy/State",
 ) {}
 
 /**
@@ -21,8 +21,10 @@ export class State extends Context.Service<State, StateService>()(
  * for provider operations.
  */
 export interface StateService {
-  listStacks(): Effect.Effect<string[], StateStoreError, never>;
-  listStages(stack: string): Effect.Effect<string[], StateStoreError, never>;
+  listStacks(): Effect.Effect<readonly string[], StateStoreError, never>;
+  listStages(
+    stack: string,
+  ): Effect.Effect<readonly string[], StateStoreError, never>;
   /**
    * Get a resource by its FQN (namespace-qualified key).
    */
@@ -63,10 +65,17 @@ export interface StateService {
     fqn: string;
   }): Effect.Effect<void, StateStoreError, never>;
   /**
+   * Delete an entire stack, or a single stage when `stage` is provided.
+   */
+  deleteStack(request: {
+    stack: string;
+    stage?: string;
+  }): Effect.Effect<void, StateStoreError, never>;
+  /**
    * List all resource FQNs in a stack/stage.
    */
   list(request: {
     stack: string;
     stage: string;
-  }): Effect.Effect<string[], StateStoreError, never>;
+  }): Effect.Effect<readonly string[], StateStoreError, never>;
 }

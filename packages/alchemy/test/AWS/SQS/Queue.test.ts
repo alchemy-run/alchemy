@@ -1,7 +1,6 @@
 import * as AWS from "@/AWS";
 import { Queue } from "@/AWS/SQS";
-import { destroy } from "@/Destroy";
-import { test } from "@/Test/Vitest";
+import { destroy, test } from "@/Test/Vitest";
 import * as SQS from "@distilled.cloud/aws/sqs";
 import { expect } from "@effect/vitest";
 import * as Console from "effect/Console";

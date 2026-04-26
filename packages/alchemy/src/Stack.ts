@@ -1,20 +1,29 @@
+import { ConfigProvider } from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import { FileSystem } from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import { Path } from "effect/Path";
 import type { Scope } from "effect/Scope";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
-import type { AuthProviders } from "./Auth/AuthProvider.ts";
-import { DotAlchemy } from "./Config.ts";
+import { AlchemyContext, AlchemyContextLive } from "./AlchemyContext.ts";
+import { provideFreshArtifactStore } from "./Artifacts.ts";
+import { AuthProviders } from "./Auth/AuthProvider.ts";
+import { inkCLIAutoApprove } from "./Cli/InkCLI.tsx";
 import type { Input, InputProps } from "./Input.ts";
 import * as Output from "./Output.ts";
 import { ref } from "./Ref.ts";
 import type { ResourceBinding, ResourceLike } from "./Resource.ts";
 import { Stage } from "./Stage.ts";
+import type { State } from "./State/State.ts";
+import { loadConfigProvider } from "./Util/ConfigProvider.ts";
 import { taggedFunction } from "./Util/effect.ts";
+import { fileLogger } from "./Util/FileLogger.ts";
+import { PlatformServices } from "./Util/PlatformServices.ts";
 
 export type StackServices =
   | Stack
@@ -22,15 +31,32 @@ export type StackServices =
   | Scope
   | FileSystem
   | Path
-  | DotAlchemy
+  | AlchemyContext
   | HttpClient
   | ChildProcessSpawner
   | AuthProviders;
+
+export type StackEffect<A, Err = never, Req = never> = Effect.Effect<
+  A,
+  Err,
+  | PlatformServices
+  | HttpClient
+  | Scope
+  | AuthProviders
+  | AlchemyContext
+  | State
+  | Req
+>;
 
 export type Stack = Context.ServiceClass.Shape<
   "Stack",
   Omit<StackSpec, "output">
 >;
+
+export interface StackProps<Req> {
+  providers: Layer.Layer<NoInfer<Req>, never, StackServices>;
+  state: Layer.Layer<State, never, StackServices>;
+}
 
 export const Stack: Context.ServiceClass<
   Stack,
@@ -50,9 +76,7 @@ export const Stack: Context.ServiceClass<
   <Self>(): {
     <A, Req>(
       stackName: string,
-      options: {
-        providers: Layer.Layer<NoInfer<Req>, never, StackServices>;
-      },
+      options: StackProps<NoInfer<Req>>,
       eff: Effect.Effect<A, never, Req>,
     ): Effect.Effect<Self> & {
       new (_: never): A extends object ? A : {};
@@ -75,9 +99,7 @@ export const Stack: Context.ServiceClass<
   };
   <A, Req>(
     stackName: string,
-    options: {
-      providers: Layer.Layer<NoInfer<Req>, never, StackServices>;
-    },
+    options: StackProps<NoInfer<Req>>,
     eff: Effect.Effect<A, never, Req | StackServices>,
   ): Effect.Effect<CompiledStack<A>>;
 } = Object.assign(
@@ -87,23 +109,29 @@ export const Stack: Context.ServiceClass<
       stackName: string,
       options: {
         providers: Layer.Layer<NoInfer<Req>, never, StackServices>;
+        state: Layer.Layer<State, never, StackServices>;
       },
       eff: Effect.Effect<A, never, Req>,
     ) =>
-      eff.pipe(make(stackName, options.providers), (eff) =>
-        Object.assign(eff, {
-          stage: new Proxy(
-            {},
-            {
-              get: (_, stage: string) =>
-                ref({
-                  stack: stackName,
-                  stage,
-                  id: stackName,
-                }),
-            },
-          ),
+      eff.pipe(
+        make({
+          name: stackName,
+          ...options,
         }),
+        (eff) =>
+          Object.assign(eff, {
+            stage: new Proxy(
+              {},
+              {
+                get: (_, stage: string) =>
+                  ref({
+                    stack: stackName,
+                    stage,
+                    id: stackName,
+                  }),
+              },
+            ),
+          }),
       ),
   ),
 ) as any;
@@ -130,38 +158,42 @@ export interface CompiledStack<
 
 export const StackName = Stack.use((stack) => Effect.succeed(stack.name));
 
+export interface MakeStackProps<ROut = never> {
+  name: string;
+  providers: Layer.Layer<ROut, never, StackServices>;
+  state: Layer.Layer<State, never, StackServices>;
+  /** @internal */
+  stack?: StackSpec;
+}
+
 export const make =
-  <ROut = never>(
-    name: string,
-    providers: Layer.Layer<ROut, never, StackServices>,
-    /** @internal */
-    stack?: StackSpec,
-  ) =>
+  <ROut = never>(options: MakeStackProps<ROut>) =>
   <A, Err = never, Req extends ROut | StackServices = never>(
     effect: Effect.Effect<A, Err, Req>,
   ) =>
     Effect.scope.pipe(
-      Effect.flatMap((scope) => {
-        const stackLayer = Layer.effect(
-          Stack,
-          Stage.asEffect().pipe(
-            Effect.map(
-              (stage) =>
-                stack ?? {
-                  name,
-                  stage,
-                  resources: {},
-                  bindings: {},
-                },
+      Effect.flatMap((scope) =>
+        options.providers.pipe(
+          Layer.provideMerge(options.state),
+          Layer.provideMerge(
+            Layer.effect(
+              Stack,
+              Stage.asEffect().pipe(
+                Effect.map(
+                  (stage) =>
+                    options.stack ?? {
+                      name: options.name,
+                      stage,
+                      resources: {},
+                      bindings: {},
+                    },
+                ),
+              ),
             ),
-            Effect.tap(Effect.logInfo),
           ),
-        );
-        return providers.pipe(
-          Layer.provideMerge(stackLayer),
           Layer.buildWithScope(scope),
-        );
-      }),
+        ),
+      ),
       Effect.flatMap((context) =>
         Effect.all([
           effect,
@@ -175,7 +207,7 @@ export const make =
             > => ({
               ...stack,
               output,
-              services,
+              services: Context.merge(services, context),
             }),
           ),
           Effect.provideContext(context),
@@ -186,3 +218,46 @@ export const make =
 export const CurrentStack = Effect.serviceOption(Stack)
   .asEffect()
   .pipe(Effect.map(Option.getOrUndefined));
+
+const platform = Layer.mergeAll(
+  PlatformServices,
+  FetchHttpClient.layer,
+  Logger.layer([fileLogger("out")]),
+);
+// override alchemy state store, CLI/reporting, state, and Config
+const alchemy = Layer.mergeAll(
+  // CLI.inkCLI(),
+  // optional
+  AlchemyContextLive,
+);
+
+export const evalStack = <A, B, Err, Req>(
+  effect: StackEffect<CompiledStack<A>, Stage | AlchemyContext>,
+  fn: (stack: CompiledStack<A>) => Effect.Effect<B, Err, Req>,
+  options: {
+    stage: string;
+  },
+) =>
+  Effect.gen(function* () {
+    const stack = yield* effect;
+    const configProvider = yield* loadConfigProvider(Option.none());
+
+    return yield* fn(stack).pipe(
+      provideFreshArtifactStore,
+      Effect.provide(stack.services),
+      Effect.provide(Layer.succeed(ConfigProvider, configProvider)),
+    );
+  }).pipe(
+    Effect.provide(
+      Layer.effect(
+        AuthProviders,
+        Effect.serviceOption(AuthProviders).pipe(
+          Effect.map(Option.getOrElse(() => ({}))),
+        ),
+      ),
+    ),
+    Effect.provide(Layer.succeed(Stage, options.stage)),
+    Effect.provide(inkCLIAutoApprove()),
+    Effect.provide(Layer.provideMerge(alchemy, platform)),
+    Effect.scoped,
+  );

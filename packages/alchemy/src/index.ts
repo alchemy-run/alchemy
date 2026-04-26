@@ -1,4 +1,5 @@
 export * as AdoptPolicy from "./AdoptPolicy.ts";
+export * from "./AlchemyContext.ts";
 export * from "./Apply.ts";
 export {
   Service as BindingService,
@@ -8,7 +9,6 @@ export {
   type PolicyLike,
   type PolicyShape,
 } from "./Binding.ts";
-export * from "./Config.ts";
 export * from "./Destroy.ts";
 export * from "./Diff.ts";
 export * from "./Input.ts";
@@ -27,6 +27,7 @@ export * as Server from "./Server/index.ts";
 export * as Serverless from "./Serverless/index.ts";
 export { Stack } from "./Stack.ts";
 export * from "./Stage.ts";
+export { inMemoryState, localState } from "./State/index.ts";
 export * from "./Trait.ts";
 
 export * as Construct from "./Construct.ts";

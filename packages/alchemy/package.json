@@ -46,6 +46,12 @@
       "worker": "./src/Agent/index.ts",
       "import": "./lib/Agent/index.js"
     },
+    "./Auth": {
+      "types": "./src/Auth/index.ts",
+      "bun": "./src/Auth/index.ts",
+      "worker": "./src/Auth/index.ts",
+      "import": "./lib/Auth/index.js"
+    },
     "./AWS": {
       "types": "./src/AWS/index.ts",
       "bun": "./src/AWS/index.ts",
@@ -190,6 +196,12 @@
       "worker": "./src/State/index.ts",
       "import": "./lib/State/index.js"
     },
+    "./State/*": {
+      "types": "./src/State/*.ts",
+      "bun": "./src/State/*.ts",
+      "worker": "./src/State/*.ts",
+      "import": "./lib/State/*.js"
+    },
     "./Test/Bun": {
       "types": "./src/Test/Bun.ts",
       "bun": "./src/Test/Bun.ts",
@@ -201,6 +213,12 @@
       "bun": "./src/Util/index.ts",
       "worker": "./src/Util/index.ts",
       "import": "./lib/Util/index.js"
+    },
+    "./Util/Clank": {
+      "types": "./src/Util/Clank.ts",
+      "bun": "./src/Util/Clank.ts",
+      "worker": "./src/Util/Clank.ts",
+      "import": "./lib/Util/Clank.js"
     },
     "./bin/alchemy.js": "./bin/alchemy.js"
   },

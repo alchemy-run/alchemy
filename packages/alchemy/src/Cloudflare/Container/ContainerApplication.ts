@@ -5,6 +5,7 @@ import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
 import { AdoptPolicy } from "../../AdoptPolicy.ts";
+import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import {
   dockerBuild,
@@ -16,7 +17,6 @@ import {
   findCwdForBundle,
   getStableContextDir,
 } from "../../Bundle/TempRoot.ts";
-import { DotAlchemy } from "../../Config.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import {
@@ -359,7 +359,7 @@ export const ContainerProvider = () =>
       const adoptPolicy = yield* Effect.serviceOption(AdoptPolicy).pipe(
         Effect.map(Option.getOrElse(() => false)),
       );
-      const dotAlchemy = yield* DotAlchemy;
+      const { dotAlchemy } = yield* AlchemyContext;
       const fs = yield* FileSystem.FileSystem;
       const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
       const createContainerApplication =

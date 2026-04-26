@@ -19,6 +19,16 @@ export const inkCLI = () =>
     }),
   );
 
+export const inkCLIAutoApprove = () =>
+  Layer.succeed(
+    Cli,
+    Cli.of({
+      approvePlan: () => Effect.succeed(true),
+      displayPlan,
+      startApplySession,
+    }),
+  );
+
 const approvePlan = Effect.fn(function* <P extends Plan>(plan: P) {
   let approved = false;
   const { waitUntilExit } = render(

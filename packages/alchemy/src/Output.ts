@@ -208,8 +208,6 @@ export const map: {
         new ApplyExpr(output as Expr<A, Req>, args[0]) as any
     : new ApplyExpr(args[0] as any, args[1])) as any;
 
-type _ = Parameters<typeof map>;
-
 //Output.ApplyExpr<any, any, ResourceLike, any>
 export const isApplyExpr = <In = any, Out = any, Req = any>(
   node: Output<Out, Req>,

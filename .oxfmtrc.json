@@ -14,6 +14,8 @@
     "*.min.js",
     "**/lib/**",
     "**/mdx/**",
+    "**/*.mdx",
+    "**/*.md",
     "**/.vendor/**",
     "**/package.json"
   ]

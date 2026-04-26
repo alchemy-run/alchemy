@@ -1,9 +1,8 @@
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as R2 from "@/Cloudflare/R2";
-import { destroy } from "@/Destroy";
 import { Stack } from "@/Stack";
-import { test } from "@/Test/Vitest";
+import { destroy, test } from "@/Test/Vitest";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
@@ -30,7 +29,7 @@ test(
 
     const worker = yield* test.deploy(
       Effect.gen(function* () {
-        const bucket = yield* R2.R2Bucket("Bucket", {
+        yield* R2.R2Bucket("Bucket", {
           storageClass: "Standard",
         });
 

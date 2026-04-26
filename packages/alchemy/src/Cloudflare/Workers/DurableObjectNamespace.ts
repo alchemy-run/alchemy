@@ -100,6 +100,7 @@ export type DurableObjectServices =
   | DurableObjectNamespace
   | DurableObjectState
   | WorkerServices
+  | WorkerEnvironment
   | PlatformServices;
 
 export interface DurableObjectNamespaceProps {
@@ -514,12 +515,6 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
                     Effect.provideService(DurableObjectState, doState),
                     Effect.provideService(WorkerEnvironment, env),
                     Effect.map((methods: any) => {
-                      console.log(
-                        "[DurableObject] wrapping methods:",
-                        Object.keys(methods),
-                        "own:",
-                        Object.getOwnPropertyNames(methods),
-                      );
                       const wrapped: Record<string, unknown> = {};
                       for (const key of Object.getOwnPropertyNames(methods)) {
                         const value = methods[key];

@@ -1,7 +1,6 @@
 import * as AWS from "@/AWS";
 import { Bucket } from "@/AWS/S3";
-import { destroy } from "@/Destroy";
-import { test } from "@/Test/Vitest";
+import { destroy, test } from "@/Test/Vitest";
 import * as S3 from "@distilled.cloud/aws/s3";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";

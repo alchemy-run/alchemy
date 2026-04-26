@@ -6,6 +6,7 @@ sidebar:
 ---
 
 import Terminal from "../../../components/Terminal.astro";
+import StateStoreBootstrap from "../../../components/marketing-islands/StateStoreBootstrap.tsx";
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 import { alchemyVersion, effectVersion } from "../../../versions";
 
@@ -72,6 +73,7 @@ Resources managed by Providers with state tracked between deploys.
 Create an `alchemy.run.ts` file:
 
 ```typescript twoslash
+// @errors: 2345
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
@@ -88,8 +90,51 @@ export default Alchemy.Stack(
 );
 ```
 
-This is a valid program, but it doesn't do anything yet. The
-`Layer.empty` providers and empty generator body are placeholders.
+TypeScript is unhappy: the `state` property is required. Every Stack
+needs a **state store** so Alchemy can persist resource state between
+deploys and compute diffs against your infrastructure.
+
+## Configure state
+
+For this tutorial we'll use `Cloudflare.state()`, which persists state
+in a Cloudflare-hosted Worker backed by a Durable Object:
+
+```typescript twoslash
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
++import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Layer.empty,
++   state: Cloudflare.state(),
+  },
+  Effect.gen(function* () {
+    // we'll add resources here next
+  }),
+);
+```
+
+The first time you run `alchemy deploy`, `plan`, or `dev`, Alchemy
+will prompt for permission and bootstrap the state-store Worker into
+your Cloudflare account. It looks like this:
+
+<StateStoreBootstrap client:visible />
+
+This is a one-time event — the state-store Worker, its Durable
+Object, and the Secrets Store entries holding its auth token and
+encryption key are reused across every stack and stage on this
+Cloudflare account. See [State Store](/concepts/state-store) for
+the full picture.
+
+:::note[Other state stores]
+Don't want to deploy a Worker just for state? Swap `Cloudflare.state()`
+for `State.localState()` from `alchemy/State` to keep state on disk
+under `.alchemy/`, or [write your own](/concepts/state-store).
+:::
 
 ## Add a Resource
 
@@ -103,7 +148,7 @@ Let's add a Cloudflare R2 Bucket to our Stack and observe the type error:
 // @errors: 2322
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
@@ -111,9 +156,10 @@ export default Alchemy.Stack(
   "MyApp",
   {
     providers: Layer.empty,
+    state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-+    const bucket = yield* Cloudflare.R2Bucket("Bucket");
++   const bucket = yield* Cloudflare.R2Bucket("Bucket");
   }),
 );
 ```
@@ -137,6 +183,7 @@ export default Alchemy.Stack(
   "MyApp",
   {
 +   providers: Cloudflare.providers(),
+    state: Cloudflare.state(),
   },
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2Bucket("Bucket");
@@ -163,13 +210,14 @@ export default Alchemy.Stack(
   "MyApp",
   {
     providers: Cloudflare.providers(),
+    state: Cloudflare.state(),
   },
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2Bucket("Bucket");
 
-+    return {
-+      bucketName: bucket.bucketName,
-+      //    ^?
++   return {
++     bucketName: bucket.bucketName,
++     //    ^?
     };
   }),
 );

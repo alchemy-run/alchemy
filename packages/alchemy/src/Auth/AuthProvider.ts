@@ -206,7 +206,7 @@ export const getAuthProvider = <
     registry[name] == null
       ? Effect.fail(
           new AuthError({
-            message: `AuthProvider '${name}' is not registered. Make sure its layer has been built.`,
+            message: `AuthProvider '${name}' is not registered. Make sure its layer has been provided.`,
           }),
         )
       : Effect.succeed(registry[name] as AuthProvider<Config, Credentials>),

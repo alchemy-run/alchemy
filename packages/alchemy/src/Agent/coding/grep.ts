@@ -3,7 +3,6 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as S from "effect/Schema";
 import { ChildProcess } from "effect/unstable/process";
-import { cwd } from "../../Config.ts";
 import { AspectConfig } from "../Aspect.ts";
 import { Tool } from "../tool/tool.ts";
 import { exec } from "../util/exec.ts";
@@ -18,7 +17,7 @@ Supports full regex syntax (e.g., "log.*Error", "function\\s+\\w+", etc.)` {}
 class path extends Tool.input(
   "path",
   S.optional(S.String),
-)`The directory to search in. Defaults to ${cwd} if not specified.` {}
+)`The directory to search in. Defaults to cwd if not specified.` {}
 
 class include extends Tool.input(
   "include",

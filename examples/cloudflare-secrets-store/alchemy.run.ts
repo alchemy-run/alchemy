@@ -9,6 +9,7 @@ export default Alchemy.Stack(
   "CloudflareSecretsStoreExample",
   {
     providers: Cloudflare.providers(),
+    state: Cloudflare.state(),
   },
   Effect.gen(function* () {
     const store = yield* Store;

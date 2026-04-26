@@ -8,8 +8,8 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import Agent from "./Agent.ts";
 import { Bucket } from "./Bucket.ts";
 import { KV } from "./KV.ts";
-import { Queue } from "./Queue.ts";
 import NotifyWorkflow from "./NotifyWorkflow.ts";
+import { Queue } from "./Queue.ts";
 import Room from "./Room.ts";
 
 export default class Api extends Cloudflare.Worker<Api>()(
