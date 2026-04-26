@@ -13,7 +13,7 @@ import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSp
 import { AlchemyContext, AlchemyContextLive } from "./AlchemyContext.ts";
 import { provideFreshArtifactStore } from "./Artifacts.ts";
 import { AuthProviders } from "./Auth/AuthProvider.ts";
-import { LoggingCli } from "./Cli/LoggingCli.ts";
+import { inkCLIAutoApprove } from "./Cli/InkCLI.tsx";
 import type { Input, InputProps } from "./Input.ts";
 import * as Output from "./Output.ts";
 import { ref } from "./Ref.ts";
@@ -22,6 +22,7 @@ import { Stage } from "./Stage.ts";
 import type { State } from "./State/State.ts";
 import { loadConfigProvider } from "./Util/ConfigProvider.ts";
 import { taggedFunction } from "./Util/effect.ts";
+import { fileLogger } from "./Util/FileLogger.ts";
 import { PlatformServices } from "./Util/PlatformServices.ts";
 
 export type StackServices =
@@ -221,7 +222,7 @@ export const CurrentStack = Effect.serviceOption(Stack)
 const platform = Layer.mergeAll(
   PlatformServices,
   FetchHttpClient.layer,
-  Logger.layer([Logger.consolePretty()]),
+  Logger.layer([fileLogger("out")]),
 );
 // override alchemy state store, CLI/reporting, state, and Config
 const alchemy = Layer.mergeAll(
@@ -256,7 +257,7 @@ export const evalStack = <A, B, Err, Req>(
       ),
     ),
     Effect.provide(Layer.succeed(Stage, options.stage)),
-    Effect.provide(LoggingCli),
+    Effect.provide(inkCLIAutoApprove()),
     Effect.provide(Layer.provideMerge(alchemy, platform)),
     Effect.scoped,
   );
