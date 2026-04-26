@@ -10,9 +10,15 @@ export type InferEnv<W> = W extends
   | Worker<infer Bindings>
   | Effect.Effect<Worker<infer Bindings>, any, any>
   ? {
-      [K in keyof Bindings]: GetBindingType<UnwrapEffect<Bindings[K]>>;
+      [K in keyof Bindings]: GetBindingType<UnwrapBinding<Bindings[K]>>;
     }
   : never;
+
+type UnwrapBinding<T> = T extends {
+  asEffect(): Effect.Effect<infer A, any, any>;
+}
+  ? A
+  : UnwrapEffect<T>;
 
 type GetBindingType<T> = T extends Cloudflare.Assets
   ? Service
@@ -24,6 +30,8 @@ type GetBindingType<T> = T extends Cloudflare.Assets
         ? KVNamespace
         : T extends Cloudflare.Queue
           ? Queue<unknown>
-          : T extends Cloudflare.DurableObjectNamespaceLike
-            ? DurableObjectNamespace<Exclude<T["Shape"], undefined>>
-            : never;
+          : T extends Cloudflare.Worker
+            ? Fetcher
+            : T extends Cloudflare.DurableObjectNamespaceLike
+              ? DurableObjectNamespace<Exclude<T["Shape"], undefined>>
+              : never;

@@ -1,3 +1,5 @@
+/// <reference types="@cloudflare/workers-types" />
+
 import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -135,3 +137,32 @@ export const Api3Live = Api3.make(
     };
   }),
 );
+
+export class AuthWorker extends Cloudflare.Worker<AuthWorker>()("AuthWorker", {
+  main: import.meta.filename,
+}) {}
+
+export const ViteApp = Cloudflare.Vite<{ AUTH: typeof AuthWorker }>("ViteApp", {
+  rootDir: import.meta.dirname,
+  bindings: {
+    AUTH: AuthWorker,
+  },
+});
+
+type ViteAppEnv = Cloudflare.InferEnv<typeof ViteApp>;
+type Assert<T extends true> = T;
+type IsNever<T> = [T] extends [never] ? true : false;
+type _ViteWorkerBindingIsNotNever = Assert<
+  IsNever<ViteAppEnv["AUTH"]> extends false ? true : false
+>;
+type _ViteWorkerBindingIsFetcher = ViteAppEnv["AUTH"] extends Fetcher
+  ? true
+  : false;
+type _ViteWorkerBindingAcceptsFetcher = Assert<_ViteWorkerBindingIsFetcher>;
+type _InferEnvWorkerBindingIsFetcher = Cloudflare.InferEnv<
+  Cloudflare.Worker<{ AUTH: Cloudflare.Worker<{}> }>
+>["AUTH"] extends Fetcher
+  ? true
+  : false;
+type _InferEnvWorkerBindingAcceptsFetcher =
+  Assert<_InferEnvWorkerBindingIsFetcher>;

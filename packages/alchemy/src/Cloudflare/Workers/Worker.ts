@@ -183,29 +183,56 @@ export type WorkerBindingResource =
   | D1Database
   | KVNamespace
   | CloudflareQueue
-  | DurableObjectNamespaceLike<any>;
+  | DurableObjectNamespaceLike<any>
+  | Worker<any>;
+
+type WorkerBindingInput =
+  | WorkerBindingResource
+  | Effect.Effect<WorkerBindingResource, any, any>
+  | WorkerBindingEffectClass;
+
+type WorkerBindingEffectClass = {
+  asEffect(): Effect.Effect<WorkerBindingResource, any, any>;
+};
+
+const isWorkerBindingEffectClass = (
+  binding: WorkerBindingInput,
+): binding is WorkerBindingEffectClass =>
+  (typeof binding === "object" || typeof binding === "function") &&
+  binding !== null &&
+  "asEffect" in binding &&
+  typeof binding.asEffect === "function";
 
 export type WorkerBindings = {
   [bindingName in string]: WorkerBindingResource;
 };
 
 export type WorkerBindingProps = {
-  [bindingName in string]:
-    | WorkerBindingResource
-    | Effect.Effect<WorkerBindingResource, any, any>;
+  [bindingName in string]: WorkerBindingInput;
 };
+
+type UnwrapWorkerBindingInput<T> =
+  T extends Effect.Effect<
+    infer Resource extends WorkerBindingResource,
+    any,
+    any
+  >
+    ? Resource
+    : T extends {
+          asEffect(): Effect.Effect<
+            infer Resource extends WorkerBindingResource,
+            any,
+            any
+          >;
+        }
+      ? Resource
+      : Extract<T, WorkerBindingResource>;
 
 type NormalizedBindings<
   Bindings extends WorkerBindingProps = {},
   AssetsConfig extends WorkerAssetsConfig | undefined = undefined,
 > = {
-  [B in keyof Bindings]: Bindings[B] extends Effect.Effect<
-    infer T extends WorkerBindingResource,
-    any,
-    any
-  >
-    ? T
-    : Extract<Bindings[B], WorkerBindingResource>;
+  [B in keyof Bindings]: UnwrapWorkerBindingInput<Bindings[B]>;
 } & (undefined extends AssetsConfig ? {} : { ASSETS: Assets });
 
 export type WorkerAssetsConfig = string | AssetsProps | AssetsWithHash;
@@ -653,12 +680,12 @@ export const Worker: Platform<
     if (props.bindings) {
       for (const bindingName in props.bindings) {
         // @ts-expect-error
-        const bindingEff = props.bindings?.[bindingName] as
-          | WorkerBindingResource
-          | Effect.Effect<WorkerBindingResource>;
-        const binding = Effect.isEffect(bindingEff)
-          ? yield* bindingEff
-          : bindingEff;
+        const bindingEff = props.bindings?.[bindingName] as WorkerBindingInput;
+        const binding: WorkerBindingResource = Effect.isEffect(bindingEff)
+          ? yield* bindingEff as Effect.Effect<WorkerBindingResource>
+          : isWorkerBindingEffectClass(bindingEff)
+            ? yield* bindingEff.asEffect() as Effect.Effect<WorkerBindingResource>
+            : bindingEff;
 
         const bindingMeta: InputProps<WorkerBinding> | undefined = isAssets(
           binding,
@@ -673,37 +700,43 @@ export const Worker: Platform<
                 name: bindingName,
                 className: binding.className ?? binding.name,
               }
-            : binding.Type === "Cloudflare.D1Database"
+            : isWorker(binding)
               ? {
-                  type: "d1",
-                  id: binding.databaseId,
+                  type: "service",
                   name: bindingName,
+                  service: binding.workerName,
                 }
-              : binding.Type === "Cloudflare.R2Bucket"
+              : binding.Type === "Cloudflare.D1Database"
                 ? {
-                    type: "r2_bucket",
+                    type: "d1",
+                    id: binding.databaseId,
                     name: bindingName,
-                    bucketName: binding.bucketName,
-                    jurisdiction: binding.jurisdiction.pipe(
-                      Output.map((jurisdiction) =>
-                        jurisdiction === "default" ? undefined : jurisdiction,
-                      ),
-                    ),
                   }
-                : binding.Type === "Cloudflare.KVNamespace"
+                : binding.Type === "Cloudflare.R2Bucket"
                   ? {
-                      type: "kv_namespace",
+                      type: "r2_bucket",
                       name: bindingName,
-                      namespaceId: binding.namespaceId,
+                      bucketName: binding.bucketName,
+                      jurisdiction: binding.jurisdiction.pipe(
+                        Output.map((jurisdiction) =>
+                          jurisdiction === "default" ? undefined : jurisdiction,
+                        ),
+                      ),
                     }
-                  : binding.Type === "Cloudflare.Queue"
+                  : binding.Type === "Cloudflare.KVNamespace"
                     ? {
-                        type: "queue",
+                        type: "kv_namespace",
                         name: bindingName,
-                        queueName: binding.queueName,
+                        namespaceId: binding.namespaceId,
                       }
-                    : // TODO(sam): handle others
-                      undefined;
+                    : binding.Type === "Cloudflare.Queue"
+                      ? {
+                          type: "queue",
+                          name: bindingName,
+                          queueName: binding.queueName,
+                        }
+                      : // TODO(sam): handle others
+                        undefined;
 
         if (bindingMeta) {
           yield* resource.bind`${bindingName}`({
