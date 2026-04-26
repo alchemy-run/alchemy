@@ -2,7 +2,6 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as S from "effect/Schema";
 import { ChildProcess } from "effect/unstable/process";
-import { cwd } from "../../Config.ts";
 import { AspectConfig } from "../Aspect.ts";
 import { Tool } from "../tool/tool.ts";
 import { CommandValidator } from "../util/command-validator.ts";
@@ -18,7 +17,7 @@ export class timeout extends Tool.input(
 export class workdir extends Tool.input(
   "workdir",
   S.optional(S.String),
-)`The working directory to run the command in. Defaults to ${cwd}. Use this instead of 'cd' commands.` {}
+)`The working directory to run the command in. Defaults to cwd. Use this instead of 'cd' commands.` {}
 
 export class description extends Tool.input(
   "description",
@@ -51,7 +50,7 @@ export class bash extends Tool("bash", {
 Returns the ${exitCode} and ${stdout} containing both stdout and stderr.
 If the command is invalid, an error message will be returned as a ${S.String}.
 
-All commands run in ${cwd} by default. Use the ${workdir} parameter if you need to run a command in a different directory. AVOID using \`cd <directory> && <command>\` patterns - use \`workdir\` instead.
+All commands run in cwd by default. Use the ${workdir} parameter if you need to run a command in a different directory. AVOID using \`cd <directory> && <command>\` patterns - use \`workdir\` instead.
 
 IMPORTANT: This tool is for terminal operations like git, npm, docker, etc. DO NOT use it for file operations (reading, writing, editing, searching, finding files) - use the specialized tools for this instead.
 

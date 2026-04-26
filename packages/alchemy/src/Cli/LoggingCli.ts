@@ -1,8 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { Cli } from "../Cli/Cli.ts";
+import { Cli } from "./Cli.ts";
 
-export const TestCli = Layer.succeed(
+export const LoggingCli = Layer.succeed(
   Cli,
   Cli.of({
     approvePlan: () => Effect.succeed(true),

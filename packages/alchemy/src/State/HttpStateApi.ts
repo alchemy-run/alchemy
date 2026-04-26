@@ -65,7 +65,8 @@ export const StateAuthLive: Layer.Layer<
   StateAuth,
   never,
   BearerTokenValidator
-> = Layer.effect(StateAuth)(
+> = Layer.effect(
+  StateAuth,
   Effect.gen(function* () {
     const validator = yield* BearerTokenValidator;
     return {

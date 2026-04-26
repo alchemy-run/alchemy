@@ -1,6 +1,5 @@
 import { Random } from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
-import { STATE_STORE_AUTH_TOKEN_SECRET_NAME } from "alchemy/State/HttpStateStoreConstants";
 import * as Effect from "effect/Effect";
 
 /**
@@ -18,6 +17,11 @@ export const Store = Cloudflare.SecretsStore("StateStoreSecrets");
 export const TokenValue = Random("StateStoreAuthTokenValue");
 
 /**
+ * The name of the secret in the Cloudflare Secrets Store that contains the bearer token.
+ */
+export const AuthTokenSecretName = "AlchemyStateStoreToken" as const;
+
+/**
  * The bearer token used to authenticate every request to the state
  * store worker. The value comes from {@link TokenValue} and lives in
  * the account-wide Cloudflare Secrets Store so it can be bound into
@@ -26,7 +30,7 @@ export const TokenValue = Random("StateStoreAuthTokenValue");
 export const AuthToken = Effect.gen(function* () {
   const store = yield* Store;
   const random = yield* TokenValue;
-  return yield* Cloudflare.Secret(STATE_STORE_AUTH_TOKEN_SECRET_NAME, {
+  return yield* Cloudflare.Secret(AuthTokenSecretName, {
     store,
     value: random.text,
   });

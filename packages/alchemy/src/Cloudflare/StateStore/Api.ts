@@ -4,7 +4,6 @@ import {
   StateApi,
   StateAuthLive,
 } from "alchemy/State/HttpStateApi";
-import { STATE_STORE_SCRIPT_NAME } from "alchemy/State/HttpStateStoreConstants";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
@@ -16,6 +15,8 @@ import * as HttpApiError from "effect/unstable/httpapi/HttpApiError";
 import crypto from "node:crypto";
 import Store from "./Store.ts";
 import { AuthToken } from "./Token.ts";
+
+export const STATE_STORE_SCRIPT_NAME = "alchemy-state-store" as const;
 
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",

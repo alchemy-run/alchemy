@@ -1,16 +1,28 @@
-import * as Effect from "effect/Effect";
-import { apply } from "./Apply.ts";
-import { provideFreshArtifactStore } from "./Artifacts.ts";
+import { Effect } from "effect";
+import type { AlchemyContext } from "./AlchemyContext.ts";
+import * as Apply from "./Apply.ts";
 import * as Plan from "./Plan.ts";
-import { Stack } from "./Stack.ts";
+import type { CompiledStack, StackEffect } from "./Stack.ts";
+import { evalStack } from "./Stack.ts";
+import type { Stage } from "./Stage.ts";
 
-export const destroy = () =>
-  Stack.use((stack) =>
-    Plan.make({
-      name: stack.name,
-      stage: stack.stage,
-      resources: {},
-      bindings: {},
-      output: {},
-    }).pipe(Effect.flatMap(apply), provideFreshArtifactStore),
+export const destroy = ({
+  stack,
+  stage,
+}: {
+  stack: StackEffect<CompiledStack, Stage | AlchemyContext>;
+  stage: string;
+}) =>
+  evalStack(
+    stack,
+    (stack) =>
+      Plan.make({
+        ...stack,
+        // zero these out (destroy will treat all as orphans)
+        // TODO(sam): probably better to have Plan.destroy and Plan.update
+        resources: {},
+        bindings: {},
+        output: {},
+      }).pipe(Effect.flatMap(Apply.apply)),
+    { stage },
   );

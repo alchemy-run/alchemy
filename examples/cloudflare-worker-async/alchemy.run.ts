@@ -39,6 +39,7 @@ export default Alchemy.Stack(
   "CloudflareWorker",
   {
     providers: Cloudflare.providers(),
+    state: Cloudflare.state(),
   },
   Effect.gen(function* () {
     const queue = yield* Queue;

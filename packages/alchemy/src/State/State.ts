@@ -9,7 +9,7 @@ export class StateStoreError extends Data.TaggedError("StateStoreError")<{
 }> {}
 
 export class State extends Context.Service<State, StateService>()(
-  "AWS::Lambda::State",
+  "alchemy/State",
 ) {}
 
 /**

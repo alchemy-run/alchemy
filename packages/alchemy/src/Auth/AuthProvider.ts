@@ -123,6 +123,7 @@ export const AuthProvider =
       const service = yield* Effect.isEffect(impl)
         ? impl
         : Effect.succeed(impl);
+      console.log("register AuthProviderLayer", name);
       return yield* Effect.sync(
         () =>
           (providers[name] = {
@@ -202,12 +203,13 @@ export const getAuthProvider = <
 >(
   name: string,
 ): Effect.Effect<AuthProvider<Config, Credentials>, AuthError, AuthProviders> =>
-  Effect.flatMap(AuthProviders.asEffect(), (registry) =>
-    registry[name] == null
+  Effect.flatMap(AuthProviders.asEffect(), (registry) => {
+    console.log("getAuthProvider", name, registry);
+    return registry[name] == null
       ? Effect.fail(
           new AuthError({
-            message: `AuthProvider '${name}' is not registered. Make sure its layer has been built.`,
+            message: `AuthProvider '${name}' is not registered. Make sure its layer has been provided.`,
           }),
         )
-      : Effect.succeed(registry[name] as AuthProvider<Config, Credentials>),
-  );
+      : Effect.succeed(registry[name] as AuthProvider<Config, Credentials>);
+  });

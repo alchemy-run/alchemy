@@ -2,12 +2,12 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Logger from "effect/Logger";
 import { Path } from "effect/Path";
-import { DotAlchemy } from "../Config.ts";
+import { AlchemyContext } from "../AlchemyContext.ts";
 
 export const fileLogger = Effect.fnUntraced(function* (
   ...segments: ReadonlyArray<string>
 ) {
-  const dotAlchemy = yield* DotAlchemy;
+  const { dotAlchemy } = yield* AlchemyContext;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path;
   const logFile = path.join(dotAlchemy, "log", ...segments);

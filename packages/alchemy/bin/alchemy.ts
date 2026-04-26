@@ -5,7 +5,7 @@ import * as Command from "effect/unstable/cli/Command";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
 import packageJson from "../package.json" with { type: "json" };
-import { dotAlchemy } from "../src/Config.ts";
+import { AlchemyContextLive } from "../src/AlchemyContext.ts";
 import { PlatformServices, runMain } from "../src/Util/PlatformServices.ts";
 
 import { handleCancellation } from "./commands/_shared.ts";
@@ -37,7 +37,7 @@ const cli = Command.run(root, {
 });
 
 const services = Layer.mergeAll(
-  Layer.provideMerge(dotAlchemy, PlatformServices),
+  Layer.provideMerge(AlchemyContextLive, PlatformServices),
   FetchHttpClient.layer,
   ConfigProvider.layer(ConfigProvider.fromEnv()),
 );
