@@ -131,8 +131,8 @@ export default class Store extends Cloudflare.DurableObjectNamespace<Store>()(
           storage
             .get<string>(resourceKey(stage, fqn))
             .pipe(
-              Effect.map((entry) =>
-                entry == null ? undefined : decryptEntry(entry),
+              Effect.flatMap((entry) =>
+                entry == null ? Effect.succeed(undefined) : decryptEntry(entry),
               ),
             ),
 
