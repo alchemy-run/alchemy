@@ -176,9 +176,21 @@ export default class Store extends Cloudflare.DurableObjectNamespace<Store>()(
           storage.delete(resourceKey(stage, fqn)),
 
         /**
-         * (Stack DO only) Delete every resource in this stack.
+         * (Stack DO only) Delete every resource in this stack, or every
+         * resource in a single stage when specified.
          */
-        deleteStack: () => storage.deleteAll(),
+        deleteStack: ({ stage }: { stage?: string } = {}) =>
+          stage === undefined
+            ? storage.deleteAll()
+            : storage
+                .list<string>({ prefix: stagePrefix(stage) })
+                .pipe(
+                  Effect.flatMap((entries) =>
+                    entries.size === 0
+                      ? Effect.void
+                      : storage.delete([...entries.keys()]).pipe(Effect.asVoid),
+                  ),
+                ),
 
         /**
          * (Stack DO only) Return every resource in a stage whose

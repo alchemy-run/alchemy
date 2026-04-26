@@ -53,55 +53,62 @@ export default Cloudflare.Worker(
         .handle("listStacks", () =>
           store.getByName(Store.ROOT_DO_NAME).listStacks(),
         )
-        .handle("listStages", ({ query }) =>
-          store.getByName(query.stack).listStages(),
+        .handle("listStages", ({ params }) =>
+          store.getByName(params.stack).listStages(),
         )
-        .handle("listResources", ({ query }) =>
-          store.getByName(query.stack).listResources({ stage: query.stage }),
-        )
-        .handle("getState", ({ query }) =>
+        .handle("listResources", ({ params }) =>
           store
-            .getByName(query.stack)
-            .get({ stage: query.stage, fqn: query.fqn }),
+            .getByName(params.stack)
+            .listResources({ stage: params.stage }),
         )
-        .handle("setState", ({ payload }) =>
+        .handle("getState", ({ params }) =>
           store
-            .getByName(payload.stack)
+            .getByName(params.stack)
+            .get({ stage: params.stage, fqn: decodeURIComponent(params.fqn) }),
+        )
+        .handle("setState", ({ params, payload }) =>
+          store
+            .getByName(params.stack)
             .set({
-              stage: payload.stage,
-              fqn: payload.fqn,
-              value: payload.value as any,
+              stage: params.stage,
+              fqn: decodeURIComponent(params.fqn),
+              value: payload as any,
             })
             .pipe(
               Effect.tap(() =>
                 store
                   .getByName(Store.ROOT_DO_NAME)
-                  .registerStack({ stack: payload.stack }),
+                  .registerStack({ stack: params.stack }),
               ),
             ),
         )
-        .handle("deleteState", ({ payload }) =>
+        .handle("deleteState", ({ params }) =>
           // The DO method is `remove`, not `delete` — `delete` is
           // reserved by Cloudflare's RPC stub proxy.
           store
-            .getByName(payload.stack)
-            .remove({ stage: payload.stage, fqn: payload.fqn })
+            .getByName(params.stack)
+            .remove({
+              stage: params.stage,
+              fqn: decodeURIComponent(params.fqn),
+            })
             .pipe(Effect.asVoid),
         )
-        .handle("getReplacedResources", ({ query }) =>
+        .handle("getReplacedResources", ({ params }) =>
           store
-            .getByName(query.stack)
-            .getReplacedResources({ stage: query.stage }),
+            .getByName(params.stack)
+            .getReplacedResources({ stage: params.stage }),
         )
-        .handle("deleteStack", ({ payload }) =>
+        .handle("deleteStack", ({ params, query }) =>
           store
-            .getByName(payload.stack)
-            .deleteStack()
+            .getByName(params.stack)
+            .deleteStack(query.stage === undefined ? {} : { stage: query.stage })
             .pipe(
               Effect.flatMap(() =>
-                store
-                  .getByName(Store.ROOT_DO_NAME)
-                  .unregisterStack({ stack: payload.stack }),
+                query.stage === undefined
+                  ? store
+                      .getByName(Store.ROOT_DO_NAME)
+                      .unregisterStack({ stack: params.stack })
+                  : Effect.void,
               ),
               Effect.asVoid,
             ),

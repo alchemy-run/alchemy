@@ -89,13 +89,23 @@ export const StateAuthLive: Layer.Layer<
  */
 export const ResourceStateSchema = Schema.Any;
 
-/** Common `(stack, stage)` payload shared by several endpoints. */
+/** `stack` path segment for nested REST resources. */
+const StackParams = Schema.Struct({
+  stack: Schema.String,
+});
+
+/** Optional stage selector for stack deletion. */
+const OptionalStageQuery = Schema.Struct({
+  stage: Schema.optional(Schema.String),
+});
+
+/** `(stack, stage)` path segments shared by stage-scoped endpoints. */
 const StackStage = Schema.Struct({
   stack: Schema.String,
   stage: Schema.String,
 });
 
-/** `(stack, stage, fqn)` payload — the canonical resource key. */
+/** `(stack, stage, fqn)` path segments for a single resource. */
 const ResourceKey = Schema.Struct({
   stack: Schema.String,
   stage: Schema.String,
@@ -104,66 +114,71 @@ const ResourceKey = Schema.Struct({
 
 export const ListStacks = HttpApiEndpoint.get(
   "listStacks",
-  "/state/listStacks",
+  "/state/stacks",
   { success: Schema.Array(Schema.String) },
 );
 
 export const ListStages = HttpApiEndpoint.get(
   "listStages",
-  "/state/listStages",
+  "/state/stacks/:stack/stages",
   {
-    query: Schema.Struct({ stack: Schema.String }),
+    params: StackParams,
     success: Schema.Array(Schema.String),
   },
 );
 
 export const ListResources = HttpApiEndpoint.get(
   "listResources",
-  "/state/list",
+  "/state/stacks/:stack/stages/:stage/resources",
   {
-    query: StackStage,
+    params: StackStage,
     success: Schema.Array(Schema.String),
   },
 );
 
-export const GetState = HttpApiEndpoint.get("getState", "/state/get", {
-  query: ResourceKey,
-  success: Schema.UndefinedOr(ResourceStateSchema),
-});
+export const GetState = HttpApiEndpoint.get(
+  "getState",
+  "/state/stacks/:stack/stages/:stage/resources/:fqn",
+  {
+    params: ResourceKey,
+    success: Schema.UndefinedOr(ResourceStateSchema),
+  },
+);
 
-export const SetState = HttpApiEndpoint.put("setState", "/state/set", {
-  payload: Schema.Struct({
-    stack: Schema.String,
-    stage: Schema.String,
-    fqn: Schema.String,
-    value: ResourceStateSchema,
-  }),
-  success: ResourceStateSchema,
-});
+export const SetState = HttpApiEndpoint.put(
+  "setState",
+  "/state/stacks/:stack/stages/:stage/resources/:fqn",
+  {
+    params: ResourceKey,
+    payload: ResourceStateSchema,
+    success: ResourceStateSchema,
+  },
+);
 
 export const DeleteState = HttpApiEndpoint.delete(
   "deleteState",
-  "/state/delete",
+  "/state/stacks/:stack/stages/:stage/resources/:fqn",
   {
-    payload: ResourceKey,
+    params: ResourceKey,
     success: HttpApiSchema.NoContent,
   },
 );
 
 export const DeleteStack = HttpApiEndpoint.delete(
   "deleteStack",
-  "/state/deleteStack",
+  "/state/stacks/:stack",
   {
-    payload: Schema.Struct({ stack: Schema.String }),
+    params: StackParams,
+    query: OptionalStageQuery,
     success: HttpApiSchema.NoContent,
   },
 );
 
 export const GetReplacedResources = HttpApiEndpoint.get(
   "getReplacedResources",
-  "/state/getReplacedResources",
+  "/state/stacks/:stack/stages/:stage/replaced-resources",
   {
-    query: StackStage,
+    params: StackStage,
     success: Schema.Array(ResourceStateSchema),
   },
 );

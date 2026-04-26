@@ -103,6 +103,18 @@ export const state = (props?: {
             }),
           );
         }
+
+        const shouldDeploy = yield* Clank.confirm({
+          message:
+            "Cloudflare State Store not found. Do you want to deploy it?",
+        });
+
+        if (!shouldDeploy) {
+          return yield* Effect.die(
+            "Cloudflare State Store not found. Deploy it first.",
+          );
+        }
+
         const { url, authToken, localState } =
           yield* deployStateStore(scriptName);
 
@@ -118,6 +130,11 @@ export const state = (props?: {
             authToken,
           },
         );
+
+        yield* localState.deleteStack({
+          stack: "CloudflareStateStore",
+          stage: scriptName,
+        });
 
         return httpState;
       }
