@@ -16,14 +16,13 @@ import {
   type StackEffect,
   type StackServices,
 } from "../Stack.ts";
-import { Stage } from "../Stage.ts";
 import * as State from "../State/index.ts";
 import { loadConfigProvider } from "../Util/ConfigProvider.ts";
 import { PlatformServices } from "../Util/PlatformServices.ts";
 
 export type ProvidedServices = StackServices;
 
-type TestEffect<A, Req = never> = StackEffect<A, Req>;
+type TestEffect<A, Req = never> = StackEffect<A, any, Req>;
 
 const platform = Layer.mergeAll(PlatformServices, FetchHttpClient.layer);
 
@@ -140,7 +139,7 @@ export function afterEach(eff: TestEffect<void>, options?: HookOptions) {
 }
 
 export const deploy = <A>(
-  stack: TestEffect<CompiledStack<A>, Stage | AlchemyContext>,
+  stack: TestEffect<CompiledStack<A>, AlchemyContext>,
   options?: {
     /** @default test */
     stage?: string;
@@ -152,7 +151,7 @@ export const deploy = <A>(
   });
 
 export const destroy = (
-  stack: TestEffect<CompiledStack, Stage | AlchemyContext>,
+  stack: TestEffect<CompiledStack, AlchemyContext>,
   options?: {
     /** @default test */
     stage?: string;

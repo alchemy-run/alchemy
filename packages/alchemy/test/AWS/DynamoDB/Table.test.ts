@@ -1,7 +1,6 @@
 import * as AWS from "@/AWS";
 import { Table } from "@/AWS/DynamoDB";
-import { destroy } from "@/Destroy";
-import { test } from "@/Test/Vitest";
+import { destroy, test } from "@/Test/Vitest";
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import { describe, expect } from "@effect/vitest";
 import * as Data from "effect/Data";

@@ -1,6 +1,5 @@
 import { Cli } from "@/Cli/Cli";
 import * as Construct from "@/Construct";
-import { destroy } from "@/Destroy";
 import * as Output from "@/Output";
 import * as Stack from "@/Stack";
 import {
@@ -9,7 +8,7 @@ import {
   type ResourceState,
   State,
 } from "@/State";
-import { test } from "@/Test/Vitest";
+import { destroy, test } from "@/Test/Vitest";
 import { describe, expect } from "@effect/vitest";
 import { Data, Layer } from "effect";
 import * as Effect from "effect/Effect";

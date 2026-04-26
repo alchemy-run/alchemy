@@ -1,5 +1,4 @@
-import { destroy } from "@/Destroy";
-import { afterAll, beforeAll, test } from "@/Test/Vitest";
+import { afterAll, beforeAll, destroy, test } from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
