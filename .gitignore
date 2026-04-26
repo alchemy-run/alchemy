@@ -39,3 +39,5 @@ smoke
 packages/alchemy/docs
 .sonda
 examples/cloudflare-worker/src/scratch.ts
+
+!/packages/alchemy/bin/cli.js

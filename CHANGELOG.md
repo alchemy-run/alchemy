@@ -1,3 +1,13 @@
+## v2.0.0-beta.13
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cli**: Cli ships correct platform versions &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy/issues/91 [<samp>(e3597)</samp>](https://github.com/alchemy-run/alchemy/commit/e3597ab)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.12...v2.0.0-beta.13)
+
+---
+
 ## v2.0.0-beta.12
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
