@@ -112,11 +112,9 @@ const ResourceKey = Schema.Struct({
   fqn: Schema.String,
 });
 
-export const ListStacks = HttpApiEndpoint.get(
-  "listStacks",
-  "/state/stacks",
-  { success: Schema.Array(Schema.String) },
-);
+export const ListStacks = HttpApiEndpoint.get("listStacks", "/state/stacks", {
+  success: Schema.Array(Schema.String),
+});
 
 export const ListStages = HttpApiEndpoint.get(
   "listStages",

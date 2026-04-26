@@ -8,76 +8,83 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 
 describe("syncState", () => {
-  it.effect("copies source resources and overwrites matching destination resources", () =>
-    Effect.gen(function* () {
-      const sourceA = resource("resource-a", { value: "source-a" });
-      const sourceB = resource("resource-b", { value: "source-b" });
-      const destinationA = resource("resource-a", { value: "destination-a" });
+  it.effect(
+    "copies source resources and overwrites matching destination resources",
+    () =>
+      Effect.gen(function* () {
+        const sourceA = resource("resource-a", { value: "source-a" });
+        const sourceB = resource("resource-b", { value: "source-b" });
+        const destinationA = resource("resource-a", { value: "destination-a" });
 
-      const source = InMemoryService({
-        app: {
-          dev: {
-            "resource-a": sourceA,
-            "resource-b": sourceB,
+        const source = InMemoryService({
+          app: {
+            dev: {
+              "resource-a": sourceA,
+              "resource-b": sourceB,
+            },
           },
-        },
-      });
-      const destination = InMemoryService({
-        app: {
-          dev: {
-            "resource-a": destinationA,
+        });
+        const destination = InMemoryService({
+          app: {
+            dev: {
+              "resource-a": destinationA,
+            },
           },
-        },
-      });
+        });
 
-      yield* syncState(source, destination);
+        yield* syncState(source, destination);
 
-      yield* expectStage(destination, "app", "dev", {
-        "resource-a": sourceA,
-        "resource-b": sourceB,
-      });
-    }),
+        yield* expectStage(destination, "app", "dev", {
+          "resource-a": sourceA,
+          "resource-b": sourceB,
+        });
+      }),
   );
 
-  it.effect("deletes resources from destination when they are absent from source", () =>
-    Effect.gen(function* () {
-      const source = InMemoryService({
-        app: {
-          dev: {
-            "resource-a": resource("resource-a", { value: "source-a" }),
+  it.effect(
+    "deletes resources from destination when they are absent from source",
+    () =>
+      Effect.gen(function* () {
+        const source = InMemoryService({
+          app: {
+            dev: {
+              "resource-a": resource("resource-a", { value: "source-a" }),
+            },
           },
-        },
-      });
-      const destination = InMemoryService({
-        app: {
-          dev: {
-            "resource-a": resource("resource-a", { value: "destination-a" }),
-            "resource-b": resource("resource-b", { value: "destination-b" }),
+        });
+        const destination = InMemoryService({
+          app: {
+            dev: {
+              "resource-a": resource("resource-a", { value: "destination-a" }),
+              "resource-b": resource("resource-b", { value: "destination-b" }),
+            },
+            prod: {
+              "resource-c": resource("resource-c", { value: "destination-c" }),
+            },
           },
-          prod: {
-            "resource-c": resource("resource-c", { value: "destination-c" }),
+          oldApp: {
+            dev: {
+              "resource-d": resource("resource-d", { value: "destination-d" }),
+            },
           },
-        },
-        oldApp: {
-          dev: {
-            "resource-d": resource("resource-d", { value: "destination-d" }),
-          },
-        },
-      });
+        });
 
-      yield* syncState(source, destination);
+        yield* syncState(source, destination);
 
-      yield* expectStage(destination, "app", "dev", {
-        "resource-a": resource("resource-a", { value: "source-a" }),
-      });
-      yield* expectStage(destination, "app", "prod", {});
-      yield* expectStage(destination, "oldApp", "dev", {});
-      expect(yield* destination.listStacks()).toEqual(["app"]);
-    }),
+        yield* expectStage(destination, "app", "dev", {
+          "resource-a": resource("resource-a", { value: "source-a" }),
+        });
+        yield* expectStage(destination, "app", "prod", {});
+        yield* expectStage(destination, "oldApp", "dev", {});
+        expect(yield* destination.listStacks()).toEqual(["app"]);
+      }),
   );
 });
 
-const resource = (fqn: string, attr: Record<string, unknown>): ResourceState => ({
+const resource = (
+  fqn: string,
+  attr: Record<string, unknown>,
+): ResourceState => ({
   resourceType: "test:resource",
   namespace: undefined,
   fqn,

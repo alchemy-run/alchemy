@@ -13,7 +13,9 @@ import { CloudflareEnvironment } from "./CloudflareEnvironment.ts";
 type EdgeMetadata = NonNullable<
   NonNullable<workers.CreateScriptEdgePreviewRequest["metadata"]>
 >;
-export type EdgeBinding = NonNullable<NonNullable<EdgeMetadata["bindings"]>>[number];
+export type EdgeBinding = NonNullable<
+  NonNullable<EdgeMetadata["bindings"]>
+>[number];
 
 export class EdgeSessionError extends Data.TaggedError("EdgeSessionError")<{
   readonly message: string;
@@ -48,9 +50,7 @@ const DEFAULT_COMPATIBILITY_DATE = "2025-04-28";
 
 const wrap = <A, E, R>(effect: Effect.Effect<A, E, R>, message: string) =>
   effect.pipe(
-    Effect.mapError(
-      (cause) => new EdgeSessionError({ message, cause }),
-    ),
+    Effect.mapError((cause) => new EdgeSessionError({ message, cause })),
   );
 
 /**
@@ -68,13 +68,11 @@ const createUploadToken = Effect.gen(function* () {
     accountId: env.accountId,
   });
   if (!exchangeUrl) return token;
-  const json = yield* http
-    .get(exchangeUrl)
-    .pipe(
-      Effect.flatMap((r) => r.json),
-      Effect.timeout(30_000),
-      Effect.catch(() => Effect.succeed(null as unknown)),
-    );
+  const json = yield* http.get(exchangeUrl).pipe(
+    Effect.flatMap((r) => r.json),
+    Effect.timeout(30_000),
+    Effect.catch(() => Effect.succeed(null as unknown)),
+  );
   if (
     typeof json === "object" &&
     json !== null &&
@@ -134,9 +132,7 @@ export const createEdgeSession = (
   Effect.gen(function* () {
     const [{ previewToken }, host] = yield* Effect.all(
       [
-        createUploadToken.pipe(
-          Effect.flatMap((t) => uploadScript(options, t)),
-        ),
+        createUploadToken.pipe(Effect.flatMap((t) => uploadScript(options, t))),
         workerHost(options.scriptName),
       ],
       { concurrency: "unbounded" },

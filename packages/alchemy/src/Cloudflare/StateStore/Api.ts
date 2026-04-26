@@ -57,9 +57,7 @@ export default Cloudflare.Worker(
           store.getByName(params.stack).listStages(),
         )
         .handle("listResources", ({ params }) =>
-          store
-            .getByName(params.stack)
-            .listResources({ stage: params.stage }),
+          store.getByName(params.stack).listResources({ stage: params.stage }),
         )
         .handle("getState", ({ params }) =>
           store
@@ -101,7 +99,9 @@ export default Cloudflare.Worker(
         .handle("deleteStack", ({ params, query }) =>
           store
             .getByName(params.stack)
-            .deleteStack(query.stage === undefined ? {} : { stage: query.stage })
+            .deleteStack(
+              query.stage === undefined ? {} : { stage: query.stage },
+            )
             .pipe(
               Effect.flatMap(() =>
                 query.stage === undefined

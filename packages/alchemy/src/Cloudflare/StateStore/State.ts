@@ -110,9 +110,7 @@ export const state = (props?: {
         });
 
         if (!shouldDeploy) {
-          return yield* Effect.die(
-            "Cloudflare State Store not found. Deploy it first.",
-          );
+          return yield* Effect.die(new Clank.PromptCancelled());
         }
 
         const { url, authToken, localState } =
