@@ -206,6 +206,7 @@ jobs:
   # producing a non-fast-forward push.
   commit-and-release:
     needs: [bump, publish-alchemy, publish-better-auth]
+    if: inputs.channel != 'tag'
     runs-on: ubuntu-latest
     steps:
       - name: Generate bot token
