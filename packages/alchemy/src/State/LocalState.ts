@@ -92,6 +92,8 @@ export const makeLocalState = () =>
           Effect.map(() => request.value),
         ),
       delete: (request) => fs.remove(resource(request)).pipe(recover),
+      deleteStack: ({ stack }) =>
+        fs.remove(path.join(stateDir, stack), { recursive: true }).pipe(recover),
       list: (request) =>
         fs.readDirectory(stageDir(request)).pipe(
           recover,

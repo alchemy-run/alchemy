@@ -29,10 +29,10 @@ export const syncState = Effect.fnUntraced(function* (
     source.listStacks(),
     destination.listStacks(),
   ]);
-  const stacks = union(sourceStacks, destStacks);
+  const sourceStackSet = new Set(sourceStacks);
 
   yield* Effect.forEach(
-    stacks,
+    sourceStacks,
     Effect.fnUntraced(function* (stack) {
       const [sourceStages, destStages] = yield* Effect.all([
         source.listStages(stack),
@@ -73,6 +73,11 @@ export const syncState = Effect.fnUntraced(function* (
         { concurrency: "unbounded" },
       );
     }),
+  );
+
+  yield* Effect.forEach(
+    destStacks.filter((stack) => !sourceStackSet.has(stack)),
+    (stack) => destination.deleteStack({ stack }),
   );
 });
 

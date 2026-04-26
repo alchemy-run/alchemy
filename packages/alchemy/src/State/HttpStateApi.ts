@@ -150,6 +150,15 @@ export const DeleteState = HttpApiEndpoint.delete(
   },
 );
 
+export const DeleteStack = HttpApiEndpoint.delete(
+  "deleteStack",
+  "/state/deleteStack",
+  {
+    payload: Schema.Struct({ stack: Schema.String }),
+    success: HttpApiSchema.NoContent,
+  },
+);
+
 export const GetReplacedResources = HttpApiEndpoint.get(
   "getReplacedResources",
   "/state/getReplacedResources",
@@ -167,6 +176,7 @@ export class StateGroup extends HttpApiGroup.make("state")
   .add(SetState)
   .add(DeleteState)
   .add(GetReplacedResources)
+  .add(DeleteStack)
   .middleware(StateAuth) {}
 
 export class StateApi extends HttpApi.make("alchemy-state").add(StateGroup) {}

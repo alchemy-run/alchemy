@@ -72,6 +72,7 @@ describe("syncState", () => {
       });
       yield* expectStage(destination, "app", "prod", {});
       yield* expectStage(destination, "oldApp", "dev", {});
+      expect(yield* destination.listStacks()).toEqual(["app"]);
     }),
   );
 });

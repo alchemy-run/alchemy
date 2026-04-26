@@ -76,6 +76,10 @@ export const makeHttpStateStore = ({ url, authToken }: HttpStateStoreProps) =>
         state
           .deleteState({ payload: request })
           .pipe(Effect.asVoid, mapStateStoreError),
+      deleteStack: (request) =>
+        state
+          .deleteStack({ payload: request })
+          .pipe(Effect.asVoid, mapStateStoreError),
     };
     return service;
   });

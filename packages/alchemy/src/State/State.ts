@@ -65,6 +65,12 @@ export interface StateService {
     fqn: string;
   }): Effect.Effect<void, StateStoreError, never>;
   /**
+   * Delete an entire stack and all stages/resources within it.
+   */
+  deleteStack(request: {
+    stack: string;
+  }): Effect.Effect<void, StateStoreError, never>;
+  /**
    * List all resource FQNs in a stack/stage.
    */
   list(request: {

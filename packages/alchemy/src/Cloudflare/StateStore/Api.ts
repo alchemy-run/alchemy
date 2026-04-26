@@ -92,6 +92,19 @@ export default Cloudflare.Worker(
           store
             .getByName(query.stack)
             .getReplacedResources({ stage: query.stage }),
+        )
+        .handle("deleteStack", ({ payload }) =>
+          store
+            .getByName(payload.stack)
+            .deleteStack()
+            .pipe(
+              Effect.flatMap(() =>
+                store
+                  .getByName(Store.ROOT_DO_NAME)
+                  .unregisterStack({ stack: payload.stack }),
+              ),
+              Effect.asVoid,
+            ),
         ),
     );
 
