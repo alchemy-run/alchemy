@@ -33,7 +33,7 @@ const WEBSITE_ALIASES = Config.string("WEBSITE_ALIASES").pipe(
 
 export default Alchemy.Stack(
   "AwsViteExample",
-  { providers: aws },
+  { providers: aws, state: Alchemy.localState() },
   Effect.gen(function* () {
     /**
      * Optional Route 53 / ACM config.

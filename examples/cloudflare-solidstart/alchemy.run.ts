@@ -6,6 +6,7 @@ export default Alchemy.Stack(
   "CloudflareSolidStartExample",
   {
     providers: Cloudflare.providers(),
+    state: Cloudflare.state(),
   },
   Effect.gen(function* () {
     const worker = yield* Cloudflare.Vite("CloudflareSolidStart", {

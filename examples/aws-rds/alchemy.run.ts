@@ -7,7 +7,7 @@ const aws = AWS.providers();
 
 export default Alchemy.Stack(
   "AwsRdsExample",
-  { providers: aws },
+  { providers: aws, state: Alchemy.localState() },
   Effect.gen(function* () {
     const service = yield* ServiceFunction;
     return {

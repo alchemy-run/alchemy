@@ -14,6 +14,7 @@ export default Alchemy.Stack(
   "JobLambda",
   {
     providers: aws,
+    state: Alchemy.localState(),
   },
   Effect.gen(function* () {
     const func = yield* JobFunction;

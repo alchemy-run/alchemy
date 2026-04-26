@@ -61,9 +61,6 @@
     },
     {
       "path": "./packages/better-auth/tsconfig.json"
-    },
-    {
-      "path": "./services/cloudflare-state-store/tsconfig.json"
     }
   ],
   "compilerOptions": {

@@ -6,6 +6,7 @@ export default Alchemy.Stack(
   "AwsStaticSiteExample",
   {
     providers: AWS.providers(),
+    state: Alchemy.localState(),
   },
   Effect.gen(function* () {
     const site = yield* AWS.Website.StaticSite("MarketingSite", {
