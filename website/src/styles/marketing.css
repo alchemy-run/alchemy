@@ -1,8 +1,11 @@
 /* ============================================================
    Marketing layout primitives. Lean — only the pieces actually
    used by the home + product pages remain. Token defs live in
-   tokens.css.
+   tokens.css; terminal chrome (shared with docs) lives in
+   terminal.css.
    ============================================================ */
+
+@import "./terminal.css";
 
 body.alc-root,
 .alc-root {
@@ -59,11 +62,6 @@ body.alc-root,
   background: rgba(255, 255, 255, 0.02);
   flex: 0 0 auto;
 }
-.alc-code-block__dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-}
 .alc-code-block__filename {
   margin-left: 10px;
   font-family: var(--alc-font-mono);
@@ -113,46 +111,6 @@ body.alc-root,
 .alc-code-block--compact .alc-code-block__pre {
   padding: 12px 16px;
   font-size: 12px;
-}
-
-/* ============================================================
-   Terminal — DeployTerminal / DevTerminal islands
-   ============================================================ */
-
-.alc-term {
-  background: var(--alc-bg-code);
-  border: 1px solid var(--alc-hairline);
-  border-radius: 10px;
-  overflow: hidden;
-  box-shadow: var(--alc-shadow-sm);
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  max-width: 100%;
-}
-.alc-term__header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 14px;
-  border-bottom: 1px solid rgba(232, 220, 192, 0.08);
-  background: rgba(255, 255, 255, 0.02);
-}
-.alc-term__title {
-  margin-left: 10px;
-  font-family: var(--alc-font-mono);
-  font-size: 11px;
-  color: var(--alc-code-comment);
-}
-.alc-term__body {
-  margin: 0;
-  padding: 14px 18px;
-  font-family: var(--alc-font-mono);
-  font-size: 12.5px;
-  line-height: 1.65;
-  color: var(--alc-code-var);
-  white-space: pre-wrap;
-  min-height: 296px;
 }
 
 /* ============================================================

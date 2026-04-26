@@ -90,7 +90,7 @@ export function TermChrome({
     );
   }
   return (
-    <div className="alc-term">
+    <div className="alc-term not-content">
       <div className="alc-term__header">
         <span
           className="alc-code-block__dot"

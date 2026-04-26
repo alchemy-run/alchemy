@@ -77,6 +77,7 @@ export default Alchemy.Stack(
   "MyApp",
   {
     providers: Cloudflare.providers(),
+    state: Cloudflare.state(),
   },
   Effect.gen(function* () {
 -   const bucket = yield* Cloudflare.R2Bucket("Bucket");
@@ -347,6 +348,7 @@ export default Alchemy.Stack(
   "MyApp",
   {
     providers: Cloudflare.providers(),
+    state: Cloudflare.state(),
   },
   Effect.gen(function* () {
     const bucket = yield* Bucket;
