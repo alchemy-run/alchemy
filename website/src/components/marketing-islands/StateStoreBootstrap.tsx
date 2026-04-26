@@ -212,8 +212,7 @@ export default function StateStoreBootstrap({
             <span
               style={{
                 marginLeft: 4,
-                color:
-                  prompt === "confirmed" ? ACCENT : "var(--alc-fg-invert)",
+                color: prompt === "confirmed" ? ACCENT : "var(--alc-fg-invert)",
                 transition: "color 200ms ease",
               }}
             >

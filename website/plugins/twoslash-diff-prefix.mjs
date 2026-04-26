@@ -55,13 +55,19 @@ export function twoslashDiffPrefixStrip() {
       preprocessCode({ codeBlock }) {
         if (!isTwoslash(codeBlock)) return;
         for (const line of codeBlock.getLines()) {
-          // Match a `+` or `-` at column 0 (but not `++`/`--`/`+-`/`-+`),
-          // optionally followed by a single separating space.
-          const match = line.text.match(/^([+-])(?![+-]) ?(.*)$/);
+          // Match a `+` or `-` at column 0 (but not `++`/`--`/`+-`/`-+`).
+          // If followed by a space (or end of line), replace the marker with
+          // a single space so column alignment of the rest of the line is
+          // preserved exactly as authored. If followed by a non-space
+          // character (e.g. `+import ...`), drop the marker entirely so
+          // top-level statements stay flush-left.
+          const match = line.text.match(/^([+-])(?![+-])(.*)$/);
           if (!match) continue;
           const [, marker, rest] = match;
           const tag = marker === "+" ? INS_TAG : DEL_TAG;
-          line.editText(0, line.text.length, `${rest} ${tag}`);
+          const replacement =
+            rest.length === 0 || rest.startsWith(" ") ? ` ${rest}` : rest;
+          line.editText(0, line.text.length, `${replacement} ${tag}`);
         }
       },
     },
