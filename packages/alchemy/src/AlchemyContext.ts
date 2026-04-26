@@ -8,6 +8,7 @@ export class AlchemyContext extends EffectContext.Service<
   AlchemyContext,
   {
     dotAlchemy: string;
+    updateStateStore: boolean;
   }
 >()("alchemy/Context") {}
 
@@ -20,6 +21,7 @@ export const AlchemyContextLive = Layer.effect(
     yield* fs.makeDirectory(dir, { recursive: true });
     return {
       dotAlchemy: dir,
+      updateStateStore: false,
     };
   }),
 );

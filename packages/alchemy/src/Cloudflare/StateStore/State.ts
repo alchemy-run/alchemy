@@ -20,8 +20,9 @@ import {
 import * as CloudflareEnvironment from "../CloudflareEnvironment.ts";
 import * as Credentials from "../Credentials.ts";
 
+import { AlchemyContext } from "../../AlchemyContext.ts";
 import { makeLocalState } from "../../State/LocalState.ts";
-import { State } from "../../State/State.ts";
+import { State, type StateService } from "../../State/State.ts";
 import { syncState } from "../../State/Sync.ts";
 import * as Clank from "../../Util/Clank.ts";
 import { CloudflareAuth } from "../Auth/AuthProvider.ts";
@@ -43,6 +44,7 @@ export const state = (props?: {
     State,
     Effect.gen(function* () {
       const isCI = yield* Config.boolean("CI").pipe(Config.withDefault(false));
+      const alchemyContext = yield* AlchemyContext;
       const profileName = yield* ALCHEMY_PROFILE;
       const credentials = yield* readCredentials<HttpStateStoreProps>(
         profileName,
@@ -54,9 +56,15 @@ export const state = (props?: {
       // TODO(sam): support upgrading state store, right now we only deploy once
       if (credentials) {
         // it's in the profile, let's go
-        return yield* makeHttpStateStore(credentials);
+        const httpState = yield* makeHttpStateStore(credentials);
+
+        if (alchemyContext.updateStateStore) {
+          yield* deployStateStore(scriptName, httpState);
+        }
+
+        return httpState;
       } else {
-        // our profile does n
+        // our profile does not contain a reference to the state store, let's try and resolve it
         const { accountId } =
           yield* CloudflareEnvironment.CloudflareEnvironment;
         const workerExists = yield* workers
@@ -70,6 +78,7 @@ export const state = (props?: {
           );
 
         if (workerExists) {
+          // it exists, so fetch the secret token
           const credentials = yield* loginWithCloudflare();
           if (!isCI) {
             yield* writeCredentials<HttpStateStoreProps>(
@@ -78,7 +87,13 @@ export const state = (props?: {
               credentials,
             );
           }
-          return yield* makeHttpStateStore(credentials);
+          const httpState = yield* makeHttpStateStore(credentials);
+
+          if (alchemyContext.updateStateStore) {
+            yield* deployStateStore(scriptName, httpState);
+          }
+
+          return httpState;
         } else if (isCI) {
           // TODO(sam): do we want to support bootstrapping the state store from CI?
           // for now - just die here
@@ -114,11 +129,11 @@ export const state = (props?: {
     Layer.orDie,
   );
 
-const deployStateStore = (scriptName: string) =>
+const deployStateStore = (scriptName: string, state?: StateService) =>
   Effect.gen(function* () {
-    const localState = yield* makeLocalState();
+    const localState = state ?? (yield* makeLocalState());
     // deploy it with local state (which we will then hoist into the Cloudflare state store)
-    const state = Layer.succeed(State, localState);
+    const stateLayer = Layer.succeed(State, localState);
     const { url, authToken } = yield* deploy({
       // use the script name as the stage name (so the user can have multiple state stores)
       stage: scriptName,
@@ -126,7 +141,7 @@ const deployStateStore = (scriptName: string) =>
         "CloudflareStateStore",
         {
           providers: Cloudflare.providers(),
-          state,
+          state: stateLayer,
         },
         Effect.gen(function* () {
           const token = yield* TokenValue;
@@ -143,7 +158,7 @@ const deployStateStore = (scriptName: string) =>
       ),
     }).pipe(
       // TODO(sam): we should not need to do this, but types do complain. fix deploy
-      Effect.provide(state),
+      Effect.provide(stateLayer),
     );
     return { url, authToken, localState };
   });
