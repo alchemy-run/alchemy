@@ -87,7 +87,7 @@ export const StateAuthLive: Layer.Layer<
  * concerns like `Redacted<T>` round-tripping live in the consumer
  * (see {@link HttpStateStore} which wraps the client).
  */
-export const ResourceStateSchema = Schema.Unknown;
+export const ResourceStateSchema = Schema.Any;
 
 /** Common `(stack, stage)` payload shared by several endpoints. */
 const StackStage = Schema.Struct({
@@ -102,36 +102,36 @@ const ResourceKey = Schema.Struct({
   fqn: Schema.String,
 });
 
-export const ListStacks = HttpApiEndpoint.post(
+export const ListStacks = HttpApiEndpoint.get(
   "listStacks",
   "/state/listStacks",
   { success: Schema.Array(Schema.String) },
 );
 
-export const ListStages = HttpApiEndpoint.post(
+export const ListStages = HttpApiEndpoint.get(
   "listStages",
   "/state/listStages",
   {
-    payload: Schema.Struct({ stack: Schema.String }),
+    query: Schema.Struct({ stack: Schema.String }),
     success: Schema.Array(Schema.String),
   },
 );
 
-export const ListResources = HttpApiEndpoint.post(
+export const ListResources = HttpApiEndpoint.get(
   "listResources",
   "/state/list",
   {
-    payload: StackStage,
+    query: StackStage,
     success: Schema.Array(Schema.String),
   },
 );
 
-export const GetState = HttpApiEndpoint.post("getState", "/state/get", {
-  payload: ResourceKey,
-  success: Schema.NullOr(ResourceStateSchema),
+export const GetState = HttpApiEndpoint.get("getState", "/state/get", {
+  query: ResourceKey,
+  success: Schema.UndefinedOr(ResourceStateSchema),
 });
 
-export const SetState = HttpApiEndpoint.post("setState", "/state/set", {
+export const SetState = HttpApiEndpoint.put("setState", "/state/set", {
   payload: Schema.Struct({
     stack: Schema.String,
     stage: Schema.String,
@@ -141,7 +141,7 @@ export const SetState = HttpApiEndpoint.post("setState", "/state/set", {
   success: ResourceStateSchema,
 });
 
-export const DeleteState = HttpApiEndpoint.post(
+export const DeleteState = HttpApiEndpoint.delete(
   "deleteState",
   "/state/delete",
   {
@@ -150,11 +150,11 @@ export const DeleteState = HttpApiEndpoint.post(
   },
 );
 
-export const GetReplacedResources = HttpApiEndpoint.post(
+export const GetReplacedResources = HttpApiEndpoint.get(
   "getReplacedResources",
   "/state/getReplacedResources",
   {
-    payload: StackStage,
+    query: StackStage,
     success: Schema.Array(ResourceStateSchema),
   },
 );

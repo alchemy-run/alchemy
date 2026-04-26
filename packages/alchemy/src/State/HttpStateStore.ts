@@ -31,18 +31,18 @@ export const makeHttpStateStore = ({ url, authToken }: HttpStateStoreProps) =>
           mapStateStoreError,
         ),
       listStages: (stack) =>
-        state.listStages({ payload: { stack } }).pipe(mapStateStoreError),
+        state.listStages({ query: { stack } }).pipe(mapStateStoreError),
       list: (request) =>
-        state.listResources({ payload: request }).pipe(mapStateStoreError),
+        state.listResources({ query: request }).pipe(mapStateStoreError),
       get: (request) =>
-        state.getState({ payload: request }).pipe(
+        state.getState({ query: request }).pipe(
           Effect.map((s) =>
             s == null ? undefined : (reviveStateRecursive(s) as ResourceState),
           ),
           mapStateStoreError,
         ),
       getReplacedResources: (request) =>
-        state.getReplacedResources({ payload: request }).pipe(
+        state.getReplacedResources({ query: request }).pipe(
           Effect.map((resources) =>
             resources.map(
               (s) => reviveStateRecursive(s) as ReplacedResourceState,

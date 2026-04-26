@@ -48,11 +48,11 @@ import { Stack } from "../../Stack.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { D1Database } from "../D1/D1Database.ts";
 import { fromCloudflareFetcher } from "../Fetcher.ts";
+import type { KVNamespace } from "../KV/KVNamespace.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import type { Providers } from "../Providers.ts";
-import type { R2Bucket } from "../R2/R2Bucket.ts";
-import type { KVNamespace } from "../KV/KVNamespace.ts";
 import type { Queue as CloudflareQueue } from "../Queue/Queue.ts";
+import type { R2Bucket } from "../R2/R2Bucket.ts";
 import {
   isAssets,
   readAssets,
@@ -173,9 +173,9 @@ export interface WorkerExecutionContext extends Serverless.FunctionContext {
   export(name: string, value: any): Effect.Effect<void>;
 }
 
-export type WorkerServices = Worker | WorkerEnvironment | Request;
+export type WorkerServices = Worker | Request;
 
-export type WorkerShape = Main<WorkerServices>;
+export type WorkerShape = Main<WorkerServices | WorkerEnvironment>;
 
 export type WorkerBindingResource =
   | Assets
@@ -764,8 +764,9 @@ export const Worker: Platform<
           );
           return key;
         }),
-      serve: <Req = never>(handler: HttpEffect<Req>) =>
-        ctx.listen(workersHttpHandler(handler)),
+      serve: <Req = never>(
+        handler: HttpEffect<Req> | Effect.Effect<HttpEffect<Req>>,
+      ) => ctx.listen(workersHttpHandler(handler)),
       listen: ((
         handler:
           | Serverless.FunctionListener
@@ -1280,7 +1281,6 @@ const stack = Layer.succeed(
 
 const exportsEffect = tag.asEffect().pipe(
   Effect.flatMap(func => func.ExecutionContext.exports),
-  Effect.map(exports => exports),
   Effect.provide(
     layer.pipe(
       Layer.provideMerge(stack),

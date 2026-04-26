@@ -53,6 +53,7 @@ export const state = (props?: {
 
       // TODO(sam): support upgrading state store, right now we only deploy once
       if (credentials) {
+        yield* deployStateStore(scriptName);
         // it's in the profile, let's go
         return yield* makeHttpStateStore(credentials);
       } else {
@@ -88,35 +89,8 @@ export const state = (props?: {
             }),
           );
         }
-        const localState = yield* makeLocalState();
-        // deploy it with local state (which we will then hoist into the Cloudflare state store)
-        const state = Layer.succeed(State, localState);
-        const { url, authToken } = yield* deploy({
-          // use the script name as the stage name (so the user can have multiple state stores)
-          stage: scriptName,
-          stack: Alchemy.Stack(
-            "CloudflareStateStore",
-            {
-              providers: Cloudflare.providers(),
-              state,
-            },
-            Effect.gen(function* () {
-              const token = yield* TokenValue;
-              const api = yield* Api;
-
-              // Surface the bearer token so tests and clients can authenticate
-              // after deploy. The underlying value lives in the Cloudflare
-              // Secrets Store; this output carries the same generated string.
-              return {
-                url: api.url.as<string>(),
-                authToken: token.text.pipe(Output.map(Redacted.value)),
-              };
-            }),
-          ),
-        }).pipe(
-          // TODO(sam): we should not need to do this, but types do complain. fix deploy
-          Effect.provide(state),
-        );
+        const { url, authToken, localState } =
+          yield* deployStateStore(scriptName);
 
         const httpState = yield* makeHttpStateStore({ url, authToken });
 
@@ -140,6 +114,40 @@ export const state = (props?: {
     Layer.provideMerge(CloudflareAuth),
     Layer.orDie,
   );
+
+const deployStateStore = (scriptName: string) =>
+  Effect.gen(function* () {
+    const localState = yield* makeLocalState();
+    // deploy it with local state (which we will then hoist into the Cloudflare state store)
+    const state = Layer.succeed(State, localState);
+    const { url, authToken } = yield* deploy({
+      // use the script name as the stage name (so the user can have multiple state stores)
+      stage: scriptName,
+      stack: Alchemy.Stack(
+        "CloudflareStateStore",
+        {
+          providers: Cloudflare.providers(),
+          state,
+        },
+        Effect.gen(function* () {
+          const token = yield* TokenValue;
+          const api = yield* Api;
+
+          // Surface the bearer token so tests and clients can authenticate
+          // after deploy. The underlying value lives in the Cloudflare
+          // Secrets Store; this output carries the same generated string.
+          return {
+            url: api.url.as<string>(),
+            authToken: token.text.pipe(Output.map(Redacted.value)),
+          };
+        }),
+      ),
+    }).pipe(
+      // TODO(sam): we should not need to do this, but types do complain. fix deploy
+      Effect.provide(state),
+    );
+    return { url, authToken, localState };
+  });
 
 /**
  * Log in to a Cloudflare-deployed HTTP state-store.

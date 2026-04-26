@@ -1,4 +1,3 @@
-import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Sink from "effect/Sink";
@@ -30,7 +29,7 @@ export const QueueSinkLive = Layer.effect(
             Id: `${i}`,
             MessageBody: message,
           })),
-        }).pipe(Effect.tapError(Console.log), Effect.orDie, Effect.asVoid),
+        }).pipe(Effect.orDie, Effect.asVoid),
       );
     });
   }),

@@ -23,16 +23,16 @@ import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
 import type { LogLine, LogsInput } from "../../Provider.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
 import { createInternalTags, createTagsList, hasTags } from "../../Tags.ts";
 import { sha256 } from "../../Util/sha256.ts";
 import { zipCode } from "../../Util/zip.ts";
-import { AWSEnvironment } from "../Environment.ts";
 import { Assets } from "../Assets.ts";
+import { AWSEnvironment } from "../Environment.ts";
 import * as IAM from "../IAM/index.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import type { Providers } from "../Providers.ts";
 import { makeFunctionHttpHandler } from "./HttpServer.ts";
 
 export const FunctionTypeId = "AWS.Lambda.Function" as const;
@@ -403,7 +403,6 @@ export const Function: Platform<
           }),
           (handlers) =>
             async (event: any, context: lambda.Context): Promise<any> => {
-              console.log({ event, handlers });
               for (const handler of handlers) {
                 const eff = handler(event);
                 if (Effect.isEffect(eff)) {

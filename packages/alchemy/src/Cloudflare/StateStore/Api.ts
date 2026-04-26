@@ -18,7 +18,7 @@ import { AuthToken } from "./Token.ts";
 
 export const STATE_STORE_SCRIPT_NAME = "alchemy-state-store" as const;
 
-export default class Api extends Cloudflare.Worker<Api>()(
+export default Cloudflare.Worker(
   "Api",
   {
     name: STATE_STORE_SCRIPT_NAME,
@@ -35,16 +35,17 @@ export default class Api extends Cloudflare.Worker<Api>()(
 
     const bearerTokenValidator = Layer.effect(
       BearerTokenValidator,
-      Effect.gen(function* () {
-        const expected = yield* secret.get().pipe(Effect.orDie);
-
-        return BearerTokenValidator.of({
-          validate: (token) =>
-            !!expected && timingSafeEqual(token, expected)
-              ? Effect.void
-              : Effect.fail(new HttpApiError.Unauthorized()),
-        });
-      }),
+      secret.get().pipe(
+        Effect.map((expected) =>
+          BearerTokenValidator.of({
+            validate: (token) =>
+              !!expected && timingSafeEqual(token, expected)
+                ? Effect.void
+                : Effect.fail(new HttpApiError.Unauthorized()),
+          }),
+        ),
+        Effect.orDie,
+      ),
     );
 
     const stateApi = HttpApiBuilder.group(StateApi, "state", (handlers) =>
@@ -52,18 +53,16 @@ export default class Api extends Cloudflare.Worker<Api>()(
         .handle("listStacks", () =>
           store.getByName(Store.ROOT_DO_NAME).listStacks(),
         )
-        .handle("listStages", ({ payload }) =>
-          store.getByName(payload.stack).listStages(),
+        .handle("listStages", ({ query }) =>
+          store.getByName(query.stack).listStages(),
         )
-        .handle("listResources", ({ payload }) =>
-          store
-            .getByName(payload.stack)
-            .listResources({ stage: payload.stage }),
+        .handle("listResources", ({ query }) =>
+          store.getByName(query.stack).listResources({ stage: query.stage }),
         )
-        .handle("getState", ({ payload }) =>
+        .handle("getState", ({ query }) =>
           store
-            .getByName(payload.stack)
-            .get({ stage: payload.stage, fqn: payload.fqn }),
+            .getByName(query.stack)
+            .get({ stage: query.stage, fqn: query.fqn }),
         )
         .handle("setState", ({ payload }) =>
           store
@@ -89,15 +88,15 @@ export default class Api extends Cloudflare.Worker<Api>()(
             .remove({ stage: payload.stage, fqn: payload.fqn })
             .pipe(Effect.asVoid),
         )
-        .handle("getReplacedResources", ({ payload }) =>
+        .handle("getReplacedResources", ({ query }) =>
           store
-            .getByName(payload.stack)
-            .getReplacedResources({ stage: payload.stage }),
+            .getByName(query.stack)
+            .getReplacedResources({ stage: query.stage }),
         ),
     );
 
     return {
-      fetch: yield* HttpApiBuilder.layer(StateApi).pipe(
+      fetch: HttpApiBuilder.layer(StateApi).pipe(
         Layer.provide(stateApi),
         Layer.provide(StateAuthLive),
         Layer.provide(bearerTokenValidator),
@@ -108,7 +107,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
       ),
     };
   }).pipe(Effect.provide(Layer.mergeAll(Cloudflare.SecretBindingLive))),
-) {}
+);
 
 /**
  * Stub `HttpPlatform` for the worker. The state-store API never

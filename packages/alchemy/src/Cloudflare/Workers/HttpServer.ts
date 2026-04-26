@@ -14,7 +14,7 @@ import { isWorkerEvent, type WorkerServices } from "./Worker.ts";
 export type HttpEffect = Http.HttpEffect<WorkerServices>;
 
 export const workersHttpHandler = <Req = never>(
-  handler: Http.HttpEffect<Req>,
+  handler: Http.HttpEffect<Req> | Effect.Effect<Http.HttpEffect<Req>>,
 ) => {
   const safeHandler = Http.safeHttpEffect(handler);
   return (event: any) => {

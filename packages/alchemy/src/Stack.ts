@@ -52,6 +52,11 @@ export type Stack = Context.ServiceClass.Shape<
   Omit<StackSpec, "output">
 >;
 
+export interface StackProps<Req> {
+  providers: Layer.Layer<NoInfer<Req>, never, StackServices>;
+  state: Layer.Layer<State, never, StackServices>;
+}
+
 export const Stack: Context.ServiceClass<
   Stack,
   "Stack",
@@ -70,9 +75,7 @@ export const Stack: Context.ServiceClass<
   <Self>(): {
     <A, Req>(
       stackName: string,
-      options: {
-        providers: Layer.Layer<NoInfer<Req>, never, StackServices>;
-      },
+      options: StackProps<NoInfer<Req>>,
       eff: Effect.Effect<A, never, Req>,
     ): Effect.Effect<Self> & {
       new (_: never): A extends object ? A : {};
@@ -95,10 +98,7 @@ export const Stack: Context.ServiceClass<
   };
   <A, Req>(
     stackName: string,
-    options: {
-      providers: Layer.Layer<NoInfer<Req>, never, StackServices>;
-      state: Layer.Layer<State, never, StackServices>;
-    },
+    options: StackProps<NoInfer<Req>>,
     eff: Effect.Effect<A, never, Req | StackServices>,
   ): Effect.Effect<CompiledStack<A>>;
 } = Object.assign(
@@ -112,20 +112,25 @@ export const Stack: Context.ServiceClass<
       },
       eff: Effect.Effect<A, never, Req>,
     ) =>
-      eff.pipe(make(stackName, options), (eff) =>
-        Object.assign(eff, {
-          stage: new Proxy(
-            {},
-            {
-              get: (_, stage: string) =>
-                ref({
-                  stack: stackName,
-                  stage,
-                  id: stackName,
-                }),
-            },
-          ),
+      eff.pipe(
+        make({
+          name: stackName,
+          ...options,
         }),
+        (eff) =>
+          Object.assign(eff, {
+            stage: new Proxy(
+              {},
+              {
+                get: (_, stage: string) =>
+                  ref({
+                    stack: stackName,
+                    stage,
+                    id: stackName,
+                  }),
+              },
+            ),
+          }),
       ),
   ),
 ) as any;
@@ -152,36 +157,36 @@ export interface CompiledStack<
 
 export const StackName = Stack.use((stack) => Effect.succeed(stack.name));
 
+export interface MakeStackProps<ROut = never> {
+  name: string;
+  providers: Layer.Layer<ROut, never, StackServices>;
+  state: Layer.Layer<State, never, StackServices>;
+  /** @internal */
+  stack?: StackSpec;
+}
+
 export const make =
-  <ROut = never>(
-    name: string,
-    options: {
-      providers: Layer.Layer<ROut, never, StackServices>;
-      state: Layer.Layer<State, never, StackServices>;
-    },
-    /** @internal */
-    stack?: StackSpec,
-  ) =>
+  <ROut = never>(options: MakeStackProps<ROut>) =>
   <A, Err = never, Req extends ROut | StackServices = never>(
     effect: Effect.Effect<A, Err, Req>,
   ) =>
     Effect.scope.pipe(
       Effect.flatMap((scope) =>
-        Layer.provideMerge(options.state, options.providers).pipe(
+        options.providers.pipe(
+          Layer.provideMerge(options.state),
           Layer.provideMerge(
             Layer.effect(
               Stack,
               Stage.asEffect().pipe(
                 Effect.map(
                   (stage) =>
-                    stack ?? {
-                      name,
+                    options.stack ?? {
+                      name: options.name,
                       stage,
                       resources: {},
                       bindings: {},
                     },
                 ),
-                Effect.tap(Effect.logInfo),
               ),
             ),
           ),
@@ -242,7 +247,14 @@ export const evalStack = <A, B, Err, Req>(
       Effect.provide(Layer.succeed(ConfigProvider, configProvider)),
     );
   }).pipe(
-    Effect.provideService(AuthProviders, {}),
+    Effect.provide(
+      Layer.effect(
+        AuthProviders,
+        Effect.serviceOption(AuthProviders).pipe(
+          Effect.map(Option.getOrElse(() => ({}))),
+        ),
+      ),
+    ),
     Effect.provide(Layer.succeed(Stage, options.stage)),
     Effect.provide(LoggingCli),
     Effect.provide(Layer.provideMerge(alchemy, platform)),

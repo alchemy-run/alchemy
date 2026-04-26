@@ -381,7 +381,5 @@ export const tryFindProviderByType: {
       }
     }
   }
-
-  console.log(context.mapUnsafe.keys());
   return Option.none();
 }) as any;
