@@ -1,3 +1,20 @@
+## v2.0.0-beta.14
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **Cloudflare**: Cloudflare State Store &nbsp;-&nbsp; by **Sam Goodwin** and **Michael (Pear)** in https://github.com/alchemy-run/alchemy/issues/94 [<samp>(d3b12)</samp>](https://github.com/alchemy-run/alchemy/commit/d3b1298)
+- **cli**: Alchemy state command &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(b4a1d)</samp>](https://github.com/alchemy-run/alchemy/commit/b4a1d94)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **Cloudflare**: Set rolldown resolve.conditionNames for bun/node in container bundle &nbsp;-&nbsp; by **Christopher Yovanovitch** in https://github.com/alchemy-run/alchemy/issues/86 [<samp>(779bb)</samp>](https://github.com/alchemy-run/alchemy/commit/779bbd1)
+- **cli**: Use a cli.js shim to support node/bun and make effect a non-optional peer &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/92 [<samp>(9b69b)</samp>](https://github.com/alchemy-run/alchemy/commit/9b69ba3)
+- **core**: Harden HttpStateStore to transient errors &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(4071e)</samp>](https://github.com/alchemy-run/alchemy/commit/4071e8a)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.13...v2.0.0-beta.14)
+
+---
+
 ## v2.0.0-beta.13
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
