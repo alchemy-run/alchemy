@@ -104,16 +104,39 @@ export const makeHttpStateStore = ({ url, authToken }: HttpStateStoreProps) =>
     return service;
   });
 
+/**
+ * Predicate over an `HttpClientError`-shaped failure that returns `true`
+ * for failures we expect to clear up on their own.
+ *
+ * We retry:
+ * - all transport-level errors (no `response` — DNS, TCP reset, TLS,
+ *   abort, etc.)
+ * - 408 (request timeout) and 429 (rate limit)
+ * - 404, which is normal in the seconds after a worker is first
+ *   deployed and the route hasn't propagated yet
+ * - every 5xx
+ *
+ * Anything else (400/401/403/etc.) is a real client-side problem and
+ * shouldn't be hidden behind retries.
+ */
+const isTransient = (e: any): boolean => {
+  if (e?._tag !== "HttpClientError") return false;
+  const status: number | undefined = e.response?.status;
+  if (status == null) return true;
+  if (status === 404 || status === 408 || status === 429) return true;
+  return status >= 500 && status < 600;
+};
+
 const retryTransient = <A, Err, Req>(eff: Effect.Effect<A, Err, Req>) =>
   Effect.retry(eff, {
-    while: (e: any) =>
-      e._tag === "HttpClientError" &&
-      (e.response?.status === 500 ||
-        e.response?.status === 502 ||
-        // not founds are usually after the worker has just been created
-        e.response?.status === 404),
+    while: isTransient,
+    // Exponential backoff capped at 2s, no attempt limit. The state
+    // store is on the deploy critical path; we'd rather block than
+    // surface a transient blip as a hard failure (which historically
+    // stranded `syncState` mid-flight, leaving the remote store
+    // partially populated).
     schedule: Schedule.exponential(100).pipe(
-      Schedule.both(Schedule.recurs(10)),
+      Schedule.either(Schedule.spaced("2 seconds")),
     ),
   });
 

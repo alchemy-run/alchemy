@@ -17,6 +17,7 @@ export const syncState = Effect.fnUntraced(function* (
   source: StateService,
   destination: StateService,
   options?: {
+    stacks?: string[];
     /**
      * Maximum number of resources to copy in parallel within a single stage.
      * @default "unbounded".
@@ -29,7 +30,9 @@ export const syncState = Effect.fnUntraced(function* (
     source.listStacks(),
     destination.listStacks(),
   ]);
-  const sourceStackSet = new Set(sourceStacks);
+  const sourceStackSet = new Set(
+    sourceStacks.filter((stack) => options?.stacks?.includes(stack) ?? true),
+  );
 
   yield* Effect.forEach(
     sourceStacks,
