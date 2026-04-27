@@ -6,8 +6,11 @@ import { rootDir } from "./Profile.ts";
 
 const credentialsDirPath = path.join(rootDir, "credentials");
 
+export const profileCredentialsDirPath = (profile: string) =>
+  path.join(credentialsDirPath, profile);
+
 export const credentialsFilePath = (profile: string, provider: string) =>
-  path.join(credentialsDirPath, profile, `${provider}.json`);
+  path.join(profileCredentialsDirPath(profile), `${provider}.json`);
 
 export const readCredentials = Effect.fnUntraced(function* <T>(
   profile: string,
@@ -43,6 +46,19 @@ export const deleteCredentials = Effect.fnUntraced(function* (
   const fs = yield* FileSystem.FileSystem;
   yield* fs
     .remove(credentialsFilePath(profile, provider))
+    .pipe(Effect.catch(() => Effect.void));
+});
+
+/**
+ * Recursively remove the `~/.alchemy/credentials/{profile}` directory
+ * containing all per-provider secrets for `profile`. No-op if it doesn't exist.
+ */
+export const deleteProfileCredentials = Effect.fnUntraced(function* (
+  profile: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  yield* fs
+    .remove(profileCredentialsDirPath(profile), { recursive: true })
     .pipe(Effect.catch(() => Effect.void));
 });
 

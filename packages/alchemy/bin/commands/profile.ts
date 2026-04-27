@@ -6,7 +6,9 @@ import * as Logger from "effect/Logger";
 import { Command } from "effect/unstable/cli";
 
 import { AuthProviders } from "../../src/Auth/AuthProvider.ts";
+import { deleteProfileCredentials } from "../../src/Auth/Credentials.ts";
 import {
+  deleteProfile,
   getProfile,
   readConfig,
   withProfileOverride,
@@ -81,6 +83,24 @@ const showCommand = Command.make(
   }),
 );
 
+const clearCommand = Command.make(
+  "clear",
+  { profile },
+  Effect.fnUntraced(function* ({ profile }) {
+    const removed = yield* deleteProfile(profile);
+    yield* deleteProfileCredentials(profile);
+    if (removed) {
+      yield* Console.log(
+        `Cleared profile '${profile}' and all its credentials.`,
+      );
+    } else {
+      yield* Console.log(
+        `Profile '${profile}' not found in profiles.json; removed any stray credentials directory.`,
+      );
+    }
+  }),
+);
+
 export const profileCommand = Command.make("profile", {}).pipe(
-  Command.withSubcommands([showCommand]),
+  Command.withSubcommands([showCommand, clearCommand]),
 );
