@@ -100,10 +100,10 @@ export const UserApiTokenProvider = () =>
           const oldName = output?.name ?? (yield* resolveName(id, olds?.name));
           const newName = yield* resolveName(id, news.name);
           const oldPolicyFp = policyFingerprint(
-            resolvePolicies(olds?.policies ?? [], olds?.accountId),
+            resolvePolicies(olds?.policies ?? []),
           );
           const newPolicyFp = policyFingerprint(
-            resolvePolicies(news.policies, news.accountId),
+            resolvePolicies(news.policies),
           );
           const oldCondFp = conditionFingerprint(olds?.condition);
           const newCondFp = conditionFingerprint(news.condition);
@@ -119,7 +119,7 @@ export const UserApiTokenProvider = () =>
         }),
         create: Effect.fn(function* ({ id, news }) {
           const name = yield* resolveName(id, news.name);
-          const policies = resolvePolicies(news.policies, news.accountId);
+          const policies = resolvePolicies(news.policies);
           const result = yield* createToken({
             name,
             policies,
@@ -136,7 +136,7 @@ export const UserApiTokenProvider = () =>
         }),
         update: Effect.fn(function* ({ id, news, output }) {
           const name = yield* resolveName(id, news.name);
-          const policies = resolvePolicies(news.policies, news.accountId);
+          const policies = resolvePolicies(news.policies);
           const result = yield* updateToken({
             tokenId: output.tokenId,
             name,

@@ -50,6 +50,7 @@ export type AccountApiToken = Resource<
  * ```typescript
  * const token = yield* Cloudflare.AccountApiToken("ci-token", {
  *   name: "my-ci-token",
+ *   accountId,
  *   policies: [
  *     {
  *       effect: "allow",
@@ -57,7 +58,7 @@ export type AccountApiToken = Resource<
  *         "Workers Scripts Write",
  *         "Workers KV Storage Write",
  *       ],
- *       resources: { "com.cloudflare.api.account": "*" },
+ *       resources: { [`com.cloudflare.api.account.${accountId}`]: "*" },
  *     },
  *   ],
  * });
@@ -120,10 +121,10 @@ export const AccountApiTokenProvider = () =>
           const oldName = output?.name ?? (yield* resolveName(id, olds?.name));
           const newName = yield* resolveName(id, news.name);
           const oldPolicyFp = policyFingerprint(
-            resolvePolicies(olds?.policies ?? [], oldAccountId),
+            resolvePolicies(olds?.policies ?? []),
           );
           const newPolicyFp = policyFingerprint(
-            resolvePolicies(news.policies, newAccountId),
+            resolvePolicies(news.policies),
           );
           const oldCondFp = conditionFingerprint(olds?.condition);
           const newCondFp = conditionFingerprint(news.condition);
@@ -140,7 +141,7 @@ export const AccountApiTokenProvider = () =>
         create: Effect.fn(function* ({ id, news }) {
           const accountId = news.accountId ?? defaultAccountId;
           const name = yield* resolveName(id, news.name);
-          const policies = resolvePolicies(news.policies, accountId);
+          const policies = resolvePolicies(news.policies);
           const result = yield* createToken({
             accountId,
             name,
@@ -163,7 +164,7 @@ export const AccountApiTokenProvider = () =>
         update: Effect.fn(function* ({ id, news, output }) {
           const accountId = news.accountId ?? defaultAccountId;
           const name = yield* resolveName(id, news.name);
-          const policies = resolvePolicies(news.policies, accountId);
+          const policies = resolvePolicies(news.policies);
           const result = yield* updateToken({
             accountId,
             tokenId: output.tokenId,

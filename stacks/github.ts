@@ -55,7 +55,7 @@ const token = (
           "Workers Tail Read",
         ],
         resources: {
-          "com.cloudflare.api.account": "*",
+          [`com.cloudflare.api.account.${props.accountId}`]: "*",
         },
       },
     ],

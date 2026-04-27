@@ -6,14 +6,13 @@ import {
 /**
  * Resource keys recognized by Cloudflare API token policies.
  *
- * The literal `"com.cloudflare.api.account"` is rewritten by the account-scoped
- * provider to `"com.cloudflare.api.account.${accountId}"` so callers don't have
- * to splice the account ID themselves.
+ * Cloudflare requires the account ID to be embedded directly in the resource
+ * key (e.g. `com.cloudflare.api.account.<accountId>`); pass the fully-qualified
+ * key — no rewriting is performed.
  *
  * @see https://developers.cloudflare.com/fundamentals/api/reference/permissions/
  */
 export type ApiTokenResourceKey =
-  | "com.cloudflare.api.account"
   | `com.cloudflare.api.account.${string}`
   | `com.cloudflare.api.account.zone.${string}`
   | `com.cloudflare.edge.r2.bucket.${string}`
@@ -86,35 +85,24 @@ export const resolvePermissionGroup = (ref: ApiTokenPermissionGroupRef) => {
   return ref.meta ? { id: ref.id, meta: ref.meta } : { id: ref.id };
 };
 
-/**
- * Rewrite the bare `"com.cloudflare.api.account"` key to the
- * account-scoped form. Pass `accountId: undefined` to leave keys unchanged
- * (e.g. for user-owned tokens whose policies don't carry an account scope).
- */
-export const resolveResources = (
+const resolveResources = (
   resources: ApiTokenPolicy["resources"],
-  accountId: string | undefined,
 ): Record<string, string> => {
   const out: Record<string, string> = {};
   for (const [key, value] of Object.entries(resources)) {
     if (value === undefined) continue;
-    if (key === "com.cloudflare.api.account" && accountId) {
-      out[`com.cloudflare.api.account.${accountId}`] = value;
-    } else {
-      out[key] = value;
-    }
+    out[key] = value;
   }
   return out;
 };
 
 export const resolvePolicies = (
   policies: ApiTokenPolicy[],
-  accountId: string | undefined,
 ): ResolvedPolicy[] =>
   policies.map((policy) => ({
     effect: policy.effect,
     permissionGroups: policy.permissionGroups.map(resolvePermissionGroup),
-    resources: resolveResources(policy.resources, accountId),
+    resources: resolveResources(policy.resources),
   }));
 
 export const policyFingerprint = (policies: ResolvedPolicy[]): string =>

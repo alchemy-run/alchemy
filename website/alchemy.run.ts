@@ -36,7 +36,7 @@ const Website = Cloudflare.StaticSite(
 export default Alchemy.Stack(
   "AlchemyEffectWebsite",
   {
-    providers: Layer.mergeAll(Cloudflare.providers(), GitHub.CommentProvider()),
+    providers: Layer.mergeAll(Cloudflare.providers(), GitHub.providers()),
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {

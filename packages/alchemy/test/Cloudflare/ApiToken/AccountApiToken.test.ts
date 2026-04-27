@@ -28,7 +28,9 @@ test(
             {
               effect: "allow",
               permissionGroups: ["Workers Scripts Read"],
-              resources: { "com.cloudflare.api.account": "*" },
+              resources: {
+                [`com.cloudflare.api.account.${accountId}`]: "*",
+              },
             },
           ],
         });
@@ -68,7 +70,9 @@ test(
             {
               effect: "allow",
               permissionGroups: ["Workers Scripts Read"],
-              resources: { "com.cloudflare.api.account": "*" },
+              resources: {
+                [`com.cloudflare.api.account.${accountId}`]: "*",
+              },
             },
           ],
         });
@@ -89,7 +93,9 @@ test(
                 "Workers Scripts Read",
                 "Workers KV Storage Read",
               ],
-              resources: { "com.cloudflare.api.account": "*" },
+              resources: {
+                [`com.cloudflare.api.account.${accountId}`]: "*",
+              },
             },
           ],
         });
@@ -116,6 +122,8 @@ test(
 test(
   "noop when account token props unchanged",
   Effect.gen(function* () {
+    const { accountId } = yield* CloudflareEnvironment;
+
     yield* destroy();
 
     const props = {
@@ -124,7 +132,9 @@ test(
         {
           effect: "allow" as const,
           permissionGroups: ["Workers Scripts Read" as const],
-          resources: { "com.cloudflare.api.account": "*" },
+          resources: {
+            [`com.cloudflare.api.account.${accountId}`]: "*",
+          },
         },
       ],
     };

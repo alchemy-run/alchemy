@@ -128,7 +128,7 @@ export default Alchemy.Stack(
             "Workers Tail Read",
           ],
           resources: {
-            "com.cloudflare.api.account": "*",
+            [`com.cloudflare.api.account.${accountId}`]: "*",
           },
         },
       ],

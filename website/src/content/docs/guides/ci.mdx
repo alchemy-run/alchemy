@@ -399,7 +399,7 @@ export default Alchemy.Stack(
             "Workers Tail Read",
           ],
           resources: {
-            "com.cloudflare.api.account": "*",
+            [`com.cloudflare.api.account.${accountId}`]: "*",
           },
         },
       ],
@@ -487,7 +487,7 @@ export default Alchemy.Stack(
     const testAccountId = yield* Config.string("TEST_CLOUDFLARE_ACCOUNT_ID");
     const prodAccountId = yield* Config.string("PROD_CLOUDFLARE_ACCOUNT_ID");
 
-    const policies = [
+    const policies = (accountId: string) => [
       {
         effect: "allow" as const,
         permissionGroups: [
@@ -500,18 +500,18 @@ export default Alchemy.Stack(
           "Account Settings Write",
           "Workers Tail Read",
         ],
-        resources: { "com.cloudflare.api.account": "*" },
+        resources: { [`com.cloudflare.api.account.${accountId}`]: "*" },
       },
     ];
 
     const testToken = yield* Cloudflare.AccountApiToken("TestApiToken", {
       accountId: testAccountId,
-      policies,
+      policies: policies(testAccountId),
     });
 
     const prodToken = yield* Cloudflare.AccountApiToken("ProdApiToken", {
       accountId: prodAccountId,
-      policies,
+      policies: policies(prodAccountId),
     });
 
     const secrets: Record<string, Redacted.Redacted<string>> = {
