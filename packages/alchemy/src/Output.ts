@@ -3,6 +3,7 @@ import type { Yieldable } from "effect/Effect";
 import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
 import type { Pipeable } from "effect/Pipeable";
+import * as Redacted from "effect/Redacted";
 import { SingleShotGen } from "effect/Utils";
 import { ExecutionContext } from "./ExecutionContext.ts";
 import { getRefMetadata, isRef, ref as stageRef, type Ref } from "./Ref.ts";
@@ -468,6 +469,8 @@ export const evaluate: <A, Req = never>(
     }
     if (Array.isArray(expr)) {
       return yield* Effect.all(expr.map((item) => evaluate(item, upstream)));
+    } else if (Redacted.isRedacted(expr)) {
+      return expr;
     } else if (typeof expr === "object" && expr !== null) {
       return Object.fromEntries(
         yield* Effect.all(
