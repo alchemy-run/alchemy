@@ -172,8 +172,33 @@ export const make =
     effect: Effect.Effect<A, Err, Req>,
   ) =>
     Effect.scope.pipe(
-      Effect.flatMap((scope) =>
-        options.providers.pipe(
+      Effect.flatMap((scope) => {
+        if (options.state == null) {
+          return Effect.die(
+            new Error(
+              `Stack "${options.name}" is missing a state store. ` +
+                `Add a \`state\` layer to the stack options, e.g.:\n` +
+                `  Alchemy.Stack("${options.name}", {\n` +
+                `    providers: Cloudflare.providers(),\n` +
+                `    state: Cloudflare.state(), // <-- required\n` +
+                `  }, ...)\n` +
+                `See https://alchemy.run/concepts/state-store for available state stores.`,
+            ),
+          );
+        }
+        if (options.providers == null) {
+          return Effect.die(
+            new Error(
+              `Stack "${options.name}" is missing a providers layer. ` +
+                `Add a \`providers\` layer to the stack options, e.g.:\n` +
+                `  Alchemy.Stack("${options.name}", {\n` +
+                `    providers: Cloudflare.providers(), // <-- required\n` +
+                `    state: Cloudflare.state(),\n` +
+                `  }, ...)`,
+            ),
+          );
+        }
+        return options.providers.pipe(
           Layer.provideMerge(options.state),
           Layer.provideMerge(
             Layer.effect(
@@ -192,8 +217,8 @@ export const make =
             ),
           ),
           Layer.buildWithScope(scope),
-        ),
-      ),
+        );
+      }),
       Effect.flatMap((context) =>
         Effect.all([
           effect,
