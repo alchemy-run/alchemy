@@ -1,3 +1,24 @@
+## v2.0.0-beta.15
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **Cloudflare**: UserApiToken and AccountApiToken &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(56e0f)</samp>](https://github.com/alchemy-run/alchemy/commit/56e0f79)
+- **GitHub**: Export a providers() Layer &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(e5cd4)</samp>](https://github.com/alchemy-run/alchemy/commit/e5cd471)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Properly handle redacted outputs &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy/issues/101 [<samp>(0d049)</samp>](https://github.com/alchemy-run/alchemy/commit/0d049aa)
+- **Cloudflare**:
+  - Prefix State Store secrets with Alchemy &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(e2533)</samp>](https://github.com/alchemy-run/alchemy/commit/e25338e)
+- **core**:
+  - Clearer error when Stack is missing state or providers &nbsp;-&nbsp; by **Michael K** [<samp>(52cf4)</samp>](https://github.com/alchemy-run/alchemy/commit/52cf431)
+  - Core no longer requires cli &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy/issues/100 [<samp>(aba0e)</samp>](https://github.com/alchemy-run/alchemy/commit/aba0ea4)
+  - Handle Redacted values in Plan &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(4fc48)</samp>](https://github.com/alchemy-run/alchemy/commit/4fc4874)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.14...v2.0.0-beta.15)
+
+---
+
 ## v2.0.0-beta.14
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
