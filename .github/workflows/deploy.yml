@@ -1,0 +1,90 @@
+name: Deploy Website
+
+on:
+  workflow_dispatch:
+    # TODO(sam): re-enable
+    # push:
+    #   branches:
+    #     - main
+    #   paths:
+    #     - "website/**"
+    #     - "packages/alchemy/**"
+    #     - "bun.lock"
+    #     - ".github/workflows/deploy.yml"
+    # pull_request:
+    #   types:
+    #     - opened
+    #     - reopened
+    #     - synchronize
+    #     - closed
+    #   paths:
+    #     - "website/**"
+    #     - "packages/alchemy/**"
+    #     - "bun.lock"
+    #     - ".github/workflows/deploy.yml"
+
+concurrency:
+  group: deploy-website-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  STAGE: ${{ github.event_name == 'pull_request' && format('pr-{0}',
+    github.event.number) || (github.ref == 'refs/heads/main' && 'prod' ||
+    github.ref_name) }}
+
+jobs:
+  deploy:
+    if: ${{ github.event.action != 'closed' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Deploy
+        working-directory: website
+        run: bun alchemy deploy --stage ${{ env.STAGE }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PULL_REQUEST: ${{ github.event.number }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  cleanup:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'pull_request' && github.event.action == 'closed'
+      }}
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Safety Check
+        run: |-
+          if [ "${{ env.STAGE }}" = "prod" ]; then
+            echo "ERROR: Cannot destroy prod environment in cleanup job"
+            exit 1
+          fi
+
+      - name: Destroy Preview Environment
+        working-directory: website
+        run: bun alchemy destroy --stage ${{ env.STAGE }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PULL_REQUEST: ${{ github.event.number }}

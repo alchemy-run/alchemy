@@ -18,6 +18,9 @@
       "path": "./website/tsconfig.json"
     },
     {
+      "path": "./stacks/tsconfig.json"
+    },
+    {
       "path": "./examples/aws-ec2/tsconfig.json"
     },
     {

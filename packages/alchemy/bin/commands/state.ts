@@ -23,7 +23,9 @@ import { envFile, importStack, main, profile, stage } from "./_shared.ts";
  * bootstrap.
  */
 const localFlag = Flag.boolean("local").pipe(
-  Flag.withDescription("Read from local .alchemy/state instead of the stack's configured state store"),
+  Flag.withDescription(
+    "Read from local .alchemy/state instead of the stack's configured state store",
+  ),
   Flag.withDefault(false),
 );
 
@@ -62,7 +64,10 @@ const withStateService = <A, E>(
     const services = Layer.mergeAll(
       Layer.succeed(AuthProviders, {}),
       ConfigProvider.layer(
-        withProfileOverride(yield* loadConfigProvider(args.envFile), args.profile),
+        withProfileOverride(
+          yield* loadConfigProvider(args.envFile),
+          args.profile,
+        ),
       ),
       Logger.layer([fileLogger("out")]),
       Layer.succeed(Stage, args.stage),
@@ -171,9 +176,7 @@ const getCommand = Command.make(
           fqn,
         });
         if (value === undefined) {
-          yield* Console.log(
-            `(not found: ${stackName}/${stageName}/${fqn})`,
-          );
+          yield* Console.log(`(not found: ${stackName}/${stageName}/${fqn})`);
           return;
         }
         // encodeState produces a JSON-friendly view: redacted secrets

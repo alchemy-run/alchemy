@@ -359,13 +359,17 @@ export namespace test {
   ): Effect.Effect<Input.Resolve<A>, Err, Req | Stack.Stack> =>
     Stack.Stack.use((stack) =>
       effect.pipe(
-        // Effect.tap(Effect.logInfo),
-        // @ts-expect-error
-        Stack.make(stack.name, Layer.effectContext(Effect.context<never>()), {
-          ...stack,
-          resources: {},
-          bindings: {},
-          output: {},
+        // @ts-expect-error - test harness reuses ambient runtime context
+        Stack.make({
+          name: stack.name,
+          providers: Layer.effectContext(Effect.context<never>()),
+          state: State.localState(),
+          stack: {
+            ...stack,
+            resources: {},
+            bindings: {},
+            output: {},
+          },
         }),
         Effect.flatMap(Plan.make),
         Effect.tap((plan) => Effect.logInfo(formatPlan(plan))),

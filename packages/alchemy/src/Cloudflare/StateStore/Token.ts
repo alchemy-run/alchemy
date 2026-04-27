@@ -1,13 +1,14 @@
 import { Random } from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
+import * as Secret from "../SecretsStore/Secret.ts";
+import { SecretsStore } from "../SecretsStore/SecretsStore.ts";
 
 /**
  * The account-wide Secrets Store that backs every secret used by the
  * state store worker. `SecretsStore` adopts the single store that
  * already exists on the account, or creates one if none exists.
  */
-export const Store = Cloudflare.SecretsStore("StateStoreSecrets");
+export const Store = SecretsStore("StateStoreSecrets");
 
 /**
  * The randomly generated bearer token value. Generated once on create
@@ -30,7 +31,7 @@ export const AuthTokenSecretName = "AlchemyStateStoreToken" as const;
 export const AuthToken = Effect.gen(function* () {
   const store = yield* Store;
   const random = yield* TokenValue;
-  return yield* Cloudflare.Secret(AuthTokenSecretName, {
+  return yield* Secret.Secret(AuthTokenSecretName, {
     store,
     value: random.text,
   });
@@ -55,7 +56,7 @@ export const EncryptionKeyValue = Random("StateStoreEncryptionKeyValue", {
 export const EncryptionKey = Effect.gen(function* () {
   const store = yield* Store;
   const random = yield* EncryptionKeyValue;
-  return yield* Cloudflare.Secret("StateStoreEncryptionKey", {
+  return yield* Secret.Secret("StateStoreEncryptionKey", {
     store,
     value: random.text,
   });

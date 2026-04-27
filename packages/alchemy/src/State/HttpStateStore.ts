@@ -143,6 +143,7 @@ const retryTransient = <A, Err, Req>(eff: Effect.Effect<A, Err, Req>) =>
 /** Collapse any client failure into a {@link StateStoreError}. */
 const mapStateStoreError = <A, E, R>(eff: Effect.Effect<A, E, R>) =>
   eff.pipe(
+    Effect.tapError(Effect.log),
     retryTransient,
     Effect.catch((e: E) =>
       Effect.fail(
