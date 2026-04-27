@@ -34,6 +34,7 @@ export default Alchemy.Stack(
   "AlchemyEffectWebsite",
   {
     providers: Cloudflare.providers(),
+    state: Cloudflare.state(),
   },
   Effect.gen(function* () {
     const website = yield* Website;

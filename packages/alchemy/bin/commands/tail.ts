@@ -46,7 +46,7 @@ export const tailCommand = Command.make(
       Layer.succeed(AuthProviders, {}),
       Layer.succeed(Stage, stage),
       Logger.layer([fileLogger("out")]),
-      State.LocalState,
+      State.localState(),
     );
 
     yield* Effect.gen(function* () {

@@ -3,7 +3,6 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as S from "effect/Schema";
-import { cwd } from "../../Config.ts";
 import { AspectConfig } from "../Aspect.ts";
 import { Tool } from "../tool/tool.ts";
 import * as Ripgrep from "../util/ripgrep.ts";
@@ -21,7 +20,7 @@ Examples:
 export class path extends Tool.input(
   "path",
   S.optional(S.String),
-)`The directory to search in. Defaults to ${cwd} if not specified.` {}
+)`The directory to search in. Defaults to cwd if not specified.` {}
 
 export class files extends Tool.output(
   "files",

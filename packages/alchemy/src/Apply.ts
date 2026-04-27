@@ -88,70 +88,68 @@ export const apply = <P extends Plan>(
   Output.InvalidReferenceError | Output.MissingSourceError | StateStoreError,
   Cli | State | Stack | Stage
 > =>
-  ensureArtifactStore(
-    Effect.gen(function* () {
-      const cli = yield* Cli;
-      const session = yield* cli.startApplySession(plan);
-      const state = yield* State;
-      const stack = yield* Stack;
-      const stage = yield* Stage;
-      const stackName = stack.name;
+  Effect.gen(function* () {
+    const cli = yield* Cli;
+    const session = yield* cli.startApplySession(plan);
+    const state = yield* State;
+    const stack = yield* Stack;
+    const stage = yield* Stage;
+    const stackName = stack.name;
 
-      const tracker: Record<string, ResourceTracker> = {};
-      const terminalStatuses = new Map<
-        string,
-        {
-          id: string;
-          type: string;
-          status: Extract<ApplyStatus, "created" | "updated">;
-        }
-      >();
-
-      yield* executePlan(
-        plan,
-        tracker,
-        terminalStatuses,
-        session,
-        state,
-        stackName,
-        stage,
-      );
-
-      // TODO(sam): support roll back to previous state if errors occur during expansion
-      // -> RISK: some UPDATEs may not be reversible (i.e. trigger replacements)
-      // TODO(sam): should pivot be done separately? E.g shift traffic?
-
-      yield* collectGarbage(plan, session);
-
-      yield* converge(
-        plan,
-        tracker,
-        terminalStatuses,
-        session,
-        state,
-        stackName,
-        stage,
-      );
-
-      yield* Effect.forEach(
-        Array.from(terminalStatuses.values()),
-        ({ id, type, status }) =>
-          session.emit({ kind: "status-change", id, type, status }),
-        { concurrency: "unbounded" },
-      );
-
-      yield* session.done();
-
-      if (!plan.output) {
-        return undefined;
+    const tracker: Record<string, ResourceTracker> = {};
+    const terminalStatuses = new Map<
+      string,
+      {
+        id: string;
+        type: string;
+        status: Extract<ApplyStatus, "created" | "updated">;
       }
+    >();
 
-      const outputs = Object.fromEntries(
-        Object.entries(tracker).map(([fqn, t]) => [fqn, t.output]),
-      );
-      return yield* Output.evaluate(plan.output, outputs);
-    }),
-  );
+    yield* executePlan(
+      plan,
+      tracker,
+      terminalStatuses,
+      session,
+      state,
+      stackName,
+      stage,
+    );
+
+    // TODO(sam): support roll back to previous state if errors occur during expansion
+    // -> RISK: some UPDATEs may not be reversible (i.e. trigger replacements)
+    // TODO(sam): should pivot be done separately? E.g shift traffic?
+
+    yield* collectGarbage(plan, session);
+
+    yield* converge(
+      plan,
+      tracker,
+      terminalStatuses,
+      session,
+      state,
+      stackName,
+      stage,
+    );
+
+    yield* Effect.forEach(
+      Array.from(terminalStatuses.values()),
+      ({ id, type, status }) =>
+        session.emit({ kind: "status-change", id, type, status }),
+      { concurrency: "unbounded" },
+    );
+
+    yield* session.done();
+
+    if (!plan.output) {
+      return undefined;
+    }
+
+    const outputs = Object.fromEntries(
+      Object.entries(tracker).map(([fqn, t]) => [fqn, t.output]),
+    );
+    return yield* Output.evaluate(plan.output, outputs);
+  }).pipe(ensureArtifactStore);
 
 // ── Phase 1: concurrent initial execution ──────────────────────────────────
 //

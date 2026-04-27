@@ -25,7 +25,6 @@ export const serve = <Req = never>(
 ) =>
   Effect.serviceOption(HttpServer).pipe(
     Effect.map(Option.getOrUndefined),
-    Effect.tap((http) => Effect.logInfo("http", http)),
     Effect.flatMap((http) => (http ? http.serve(handler) : Effect.void)),
   );
 
@@ -45,22 +44,38 @@ export class HttpServer extends Context.Service<
   }
 >()("HttpServer") {}
 
-export const safeHttpEffect = <Req = never>(handler: HttpEffect<Req>) =>
-  Effect.catchCause(handler, (cause) => {
-    const message = Option.match(Cause.findErrorOption(cause), {
-      onNone: () => "Internal Server Error",
-      onSome: (error) => error.message ?? "Internal Server Error",
-    });
+export const safeHttpEffect = <Req = never>(
+  handler: HttpEffect<Req> | Effect.Effect<HttpEffect<Req>>,
+): Effect.Effect<
+  HttpServerResponse.HttpServerResponse,
+  never,
+  Req | HttpServerRequest | Scope
+> =>
+  Effect.catchCause(
+    handler.pipe(
+      // @ts-expect-error
+      Effect.flatMap((response) =>
+        HttpServerResponse.isHttpServerResponse(response)
+          ? Effect.succeed(response)
+          : response,
+      ),
+    ) as any as HttpEffect<Req>,
+    (cause) => {
+      const message = Option.match(Cause.findErrorOption(cause), {
+        onNone: () => "Internal Server Error",
+        onSome: (error) => error.message ?? "Internal Server Error",
+      });
 
-    return Effect.map(
-      Effect.all([Effect.logInfo(message), Effect.logInfo(cause)]),
-      () =>
-        HttpServerResponse.text(message, {
-          status: 500,
-          statusText: message,
-        }),
-    );
-  });
+      return Effect.map(
+        Effect.all([Effect.logError(message), Effect.logError(cause)]),
+        () =>
+          HttpServerResponse.text(message, {
+            status: 500,
+            statusText: message,
+          }),
+      );
+    },
+  );
 
 export const resolvePort = (options: { port?: number } | undefined) =>
   options?.port !== undefined

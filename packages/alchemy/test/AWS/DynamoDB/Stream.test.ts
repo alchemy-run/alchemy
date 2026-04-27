@@ -1,6 +1,5 @@
 import * as AWS from "@/AWS";
-import { destroy } from "@/Destroy";
-import { test } from "@/Test/Vitest";
+import { destroy, test } from "@/Test/Vitest";
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as SQS from "@distilled.cloud/aws/sqs";

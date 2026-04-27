@@ -1,6 +1,6 @@
 {
   "name": "alchemy",
-  "version": "2.0.0-beta.11",
+  "version": "2.0.0-beta.14",
   "homepage": "https://alchemy.run",
   "license": "Apache-2.0",
   "author": "Sam Goodwin <sam@alchemy.run>",
@@ -8,6 +8,9 @@
     "type": "git",
     "url": "git+https://github.com/alchemy-run/alchemy-effect.git",
     "directory": "package/alchemy"
+  },
+  "bin": {
+    "alchemy": "./bin/cli.js"
   },
   "files": [
     "bin",
@@ -42,6 +45,12 @@
       "bun": "./src/Agent/index.ts",
       "worker": "./src/Agent/index.ts",
       "import": "./lib/Agent/index.js"
+    },
+    "./Auth": {
+      "types": "./src/Auth/index.ts",
+      "bun": "./src/Auth/index.ts",
+      "worker": "./src/Auth/index.ts",
+      "import": "./lib/Auth/index.js"
     },
     "./AWS": {
       "types": "./src/AWS/index.ts",
@@ -187,6 +196,12 @@
       "worker": "./src/State/index.ts",
       "import": "./lib/State/index.js"
     },
+    "./State/*": {
+      "types": "./src/State/*.ts",
+      "bun": "./src/State/*.ts",
+      "worker": "./src/State/*.ts",
+      "import": "./lib/State/*.js"
+    },
     "./Test/Bun": {
       "types": "./src/Test/Bun.ts",
       "bun": "./src/Test/Bun.ts",
@@ -199,14 +214,16 @@
       "worker": "./src/Util/index.ts",
       "import": "./lib/Util/index.js"
     },
+    "./Util/Clank": {
+      "types": "./src/Util/Clank.ts",
+      "bun": "./src/Util/Clank.ts",
+      "worker": "./src/Util/Clank.ts",
+      "import": "./lib/Util/Clank.js"
+    },
     "./bin/alchemy.js": "./bin/alchemy.js"
   },
   "publishConfig": {
     "access": "public"
-  },
-  "optionalDependencies": {
-    "@alchemy.run/cli-posix": "workspace:*",
-    "@alchemy.run/cli-win32": "workspace:*"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.31",
@@ -235,11 +252,11 @@
     "cloudflare": "catalog:",
     "fast-glob": "^3.3.2",
     "fast-xml-parser": "catalog:",
+    "foreground-child": "^4.0.3",
     "ignore": "^7.0.5",
     "jszip": "^3.10.1",
     "libsodium-wrappers": "^0.8.3",
     "rolldown": "catalog:",
-    "solid-js": "catalog:",
     "sonda": "catalog:",
     "web-tree-sitter": "catalog:",
     "workerd": "catalog:",
@@ -261,15 +278,16 @@
     "pathe": "^2.0.3",
     "react": "^19.2.0",
     "react-devtools-core": "^7.0.1",
+    "solid-js": "catalog:",
     "tsconfig-paths": "^4.2.0",
     "tsdown": "^0.15.4",
     "tsx": "^4.20.6",
     "typescript": "catalog:"
   },
   "peerDependencies": {
-    "@effect/platform-bun": "*",
-    "@effect/platform-node": "*",
-    "effect": "*",
+    "@effect/platform-bun": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "effect": "catalog:",
     "vite": "catalog:"
   },
   "peerDependenciesMeta": {
@@ -277,9 +295,6 @@
       "optional": true
     },
     "@effect/platform-bun": {
-      "optional": true
-    },
-    "effect": {
       "optional": true
     },
     "vite": {

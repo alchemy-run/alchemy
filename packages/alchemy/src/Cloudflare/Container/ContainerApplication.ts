@@ -5,6 +5,7 @@ import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
 import { AdoptPolicy } from "../../AdoptPolicy.ts";
+import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import {
   dockerBuild,
@@ -16,7 +17,6 @@ import {
   findCwdForBundle,
   getStableContextDir,
 } from "../../Bundle/TempRoot.ts";
-import { DotAlchemy } from "../../Config.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import {
@@ -359,7 +359,7 @@ export const ContainerProvider = () =>
       const adoptPolicy = yield* Effect.serviceOption(AdoptPolicy).pipe(
         Effect.map(Option.getOrElse(() => false)),
       );
-      const dotAlchemy = yield* DotAlchemy;
+      const { dotAlchemy } = yield* AlchemyContext;
       const fs = yield* FileSystem.FileSystem;
       const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
       const createContainerApplication =
@@ -498,6 +498,12 @@ export const ContainerProvider = () =>
                 ...external,
               ],
               platform: "node",
+              resolve: {
+                conditionNames:
+                  runtime === "bun"
+                    ? ["bun", "import", "module", "default"]
+                    : ["node", "import", "module", "default"],
+              },
               plugins,
               treeshake: true,
             },
@@ -622,7 +628,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
           base,
           "",
           "WORKDIR /app",
-          ...installStep ? [installStep, ""] : [],
+          ...(installStep ? [installStep, ""] : []),
           "COPY index.mjs /app/index.mjs",
           // Copy any additional rolldown chunks (`chunk-XXX.js`,
           // `BunServices-YYY.js`, …). The glob matches zero or more files;
@@ -892,7 +898,10 @@ await Effect.runPromise(serverEffect).catch((err) => {
         yield* Effect.logInfo(
           `Cloudflare Container update: preparing ${existing.applicationName}`,
         );
-        const { files, imageRef, imageHash } = yield* computeImageHash(id, news);
+        const { files, imageRef, imageHash } = yield* computeImageHash(
+          id,
+          news,
+        );
         const configuration = desiredConfiguration(news, imageRef);
 
         if (imageHash !== existing.hash?.image) {
@@ -998,8 +1007,10 @@ await Effect.runPromise(serverEffect).catch((err) => {
             `Cloudflare Container precreate: starting ${name}`,
           );
 
-          const { files, imageRef, imageHash } = yield* computeImageHash(id,
-          news,);
+          const { files, imageRef, imageHash } = yield* computeImageHash(
+            id,
+            news,
+          );
           const configuration = desiredConfiguration(news, imageRef);
           yield* buildAndPushImage(id, news, files, imageRef, session);
 
@@ -1036,8 +1047,10 @@ await Effect.runPromise(serverEffect).catch((err) => {
             `Cloudflare Container create: starting ${name}${adoptPolicy ? " with adopt" : ""}`,
           );
           const durableObjects = yield* getDurableObjects(bindings);
-          const { files, imageRef, imageHash } = yield* computeImageHash(id,
-          news,);
+          const { files, imageRef, imageHash } = yield* computeImageHash(
+            id,
+            news,
+          );
           const configuration = desiredConfiguration(news, imageRef);
 
           if (

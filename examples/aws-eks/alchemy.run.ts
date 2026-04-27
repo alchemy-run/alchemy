@@ -62,6 +62,7 @@ export default Alchemy.Stack(
   "AwsEksExample",
   {
     providers: aws,
+    state: Alchemy.localState(),
   },
   Effect.gen(function* () {
     const tags = {

@@ -1,32 +1,23 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type { ResourceState } from "./ResourceState.ts";
-import { State, type StateService } from "./State.ts";
+import { State } from "./State.ts";
 
 type StackId = string;
 type StageId = string;
 type Fqn = string;
 
-export const InMemory = (
+export const inMemoryState = (
   initialState: Record<
     StackId,
     Record<StageId, Record<Fqn, ResourceState>>
   > = {},
-) =>
-  Layer.succeed(State, InMemoryService(initialState)) as Layer.Layer<
-    State,
-    never,
-    never
-  >;
+) => Layer.succeed(State, InMemoryService(initialState));
 
 export const InMemoryService = (
-  initialState: Record<
-    StackId,
-    Record<StageId, Record<Fqn, ResourceState>>
-  > = {},
-) => {
-  const state = initialState;
-  return {
+  state: Record<StackId, Record<StageId, Record<Fqn, ResourceState>>> = {},
+) =>
+  State.of({
     listStacks: () => Effect.succeed(Array.from(Object.keys(state))),
     listStages: (stack: string) =>
       Effect.succeed(
@@ -78,9 +69,16 @@ export const InMemoryService = (
       stage: string;
       fqn: string;
     }) => Effect.succeed(delete state[stack]?.[stage]?.[fqn]),
+    deleteStack: ({ stack, stage }: { stack: string; stage?: string }) =>
+      Effect.sync(() => {
+        if (stage === undefined) {
+          delete state[stack];
+        } else {
+          delete state[stack]?.[stage];
+        }
+      }),
     list: ({ stack, stage }: { stack: string; stage: string }) =>
       Effect.succeed(
         Array.from(Object.keys(state[stack]?.[stage] ?? {}) ?? []),
       ),
-  } satisfies StateService;
-};
+  });

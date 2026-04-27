@@ -8,6 +8,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import type * as rolldown from "rolldown";
+import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import {
   dockerBuild,
@@ -19,20 +20,19 @@ import {
   findCwdForBundle,
   getStableContextDir,
 } from "../../Bundle/TempRoot.ts";
-import { DotAlchemy } from "../../Config.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import type { ProcessContext, ServerHost } from "../../Server/Process.ts";
 import { Stack } from "../../Stack.ts";
 import { createInternalTags, createTagsList, hasTags } from "../../Tags.ts";
-import { AWSEnvironment } from "../Environment.ts";
 import type { Credentials } from "../Credentials.ts";
+import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import type { Providers } from "../Providers.ts";
 
 export const isTask = (value: any): value is Task => {
   return (
@@ -225,7 +225,7 @@ export const TaskProvider = () =>
       const stack = yield* Stack;
       const { accountId } = yield* AWSEnvironment;
       const region = yield* Region;
-      const dotAlchemy = yield* DotAlchemy;
+      const { dotAlchemy } = yield* AlchemyContext;
       const fs = yield* FileSystem.FileSystem;
       const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
 

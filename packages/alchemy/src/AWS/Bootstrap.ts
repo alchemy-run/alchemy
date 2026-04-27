@@ -4,6 +4,7 @@ import * as s3 from "@distilled.cloud/aws/s3";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
+import { AWSEnvironment } from "./Environment.ts";
 
 /**
  * Tag key used to identify the alchemy assets bucket.
@@ -15,8 +16,16 @@ export const ASSETS_BUCKET_TAG = "alchemy::assets-bucket";
  */
 export const ASSETS_BUCKET_REGION_TAG = "alchemy::assets-bucket-region";
 
-const createAssetsBucketName = (region: string) =>
-  `alchemy-assets-${region}-${crypto.randomUUID().replaceAll("-", "").slice(0, 16)}`.toLowerCase();
+/**
+ * Build an account-regional namespace bucket name.
+ *
+ * Account-regional buckets must follow the naming convention:
+ *   `<prefix>-<accountId>-<region>-an`
+ *
+ * @see https://docs.aws.amazon.com/AmazonS3/latest/userguide/gpbucketnamespaces.html#account-regional-gp-buckets
+ */
+const createAssetsBucketName = (accountId: string, region: string) =>
+  `alchemy-assets-${accountId}-${region}-an`.toLowerCase();
 
 const createAssetsBucketTags = (region: string) => [
   { Key: ASSETS_BUCKET_TAG, Value: "true" },
@@ -208,39 +217,28 @@ export const bootstrap = Effect.fn(function* () {
     return { bucketName: existingBucket.value, created: false };
   }
 
-  const bucketName = createAssetsBucketName(region);
-  // Create the bucket
-  if (region === "us-east-1") {
-    yield* s3
-      .createBucket({
-        Bucket: bucketName,
-      })
-      .pipe(
-        Effect.retry({
-          while: (e) =>
-            e._tag === "OperationAborted" || e._tag === "ServiceUnavailable",
-          schedule: Schedule.exponential(100),
-        }),
-      );
-  } else {
-    yield* s3
-      .createBucket({
-        Bucket: bucketName,
-        CreateBucketConfiguration: {
-          LocationConstraint: region as BucketLocationConstraint,
-        },
-      })
-      .pipe(
-        Effect.catchTag("BucketAlreadyOwnedByYou", () => Effect.void),
-        Effect.retry({
-          while: (e) =>
-            e._tag === "OperationAborted" || e._tag === "ServiceUnavailable",
-          schedule: Schedule.exponential(100),
-        }),
-      );
-  }
+  const { accountId } = yield* AWSEnvironment;
+  const bucketName = createAssetsBucketName(accountId, region);
+  yield* s3
+    .createBucket({
+      Bucket: bucketName,
+      BucketNamespace: "account-regional",
+      CreateBucketConfiguration: {
+        Tags: createAssetsBucketTags(region),
+        ...(region === "us-east-1"
+          ? {}
+          : { LocationConstraint: region as BucketLocationConstraint }),
+      },
+    })
+    .pipe(
+      Effect.catchTag("BucketAlreadyOwnedByYou", () => Effect.void),
+      Effect.retry({
+        while: (e) =>
+          e._tag === "OperationAborted" || e._tag === "ServiceUnavailable",
+        schedule: Schedule.exponential(100),
+      }),
+    );
 
-  // Wait for bucket to exist (eventual consistency)
   yield* s3.headBucket({ Bucket: bucketName }).pipe(
     Effect.retry({
       schedule: Schedule.exponential(100).pipe(
@@ -248,9 +246,6 @@ export const bootstrap = Effect.fn(function* () {
       ),
     }),
   );
-
-  // Tag the bucket
-  yield* ensureAssetsBucketTags(bucketName, region);
 
   yield* Effect.logInfo(`Created assets bucket: ${bucketName}`);
 

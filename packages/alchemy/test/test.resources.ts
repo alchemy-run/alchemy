@@ -717,4 +717,4 @@ export const TestLayers = () =>
   );
 
 export const InMemoryTestLayers = () =>
-  Layer.mergeAll(TestLayers(), State.InMemory());
+  Layer.mergeAll(TestLayers(), State.inMemoryState());

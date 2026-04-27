@@ -22,6 +22,7 @@ import * as AWS from "../AWS/index.ts";
 import * as Cloudflare from "../Cloudflare/index.ts";
 
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
+import { AlchemyContext, AlchemyContextLive } from "../AlchemyContext.ts";
 import { apply } from "../Apply.ts";
 import { Artifacts, provideFreshArtifactStore } from "../Artifacts.ts";
 import { AuthProviders } from "../Auth/AuthProvider.ts";
@@ -30,12 +31,12 @@ import * as AWSEnvironment from "../AWS/Environment.ts";
 import * as AWSRegion from "../AWS/Region.ts";
 import type { Command } from "../Build/Command.ts";
 import type { Cli } from "../Cli/index.ts";
+import { LoggingCli } from "../Cli/LoggingCli.ts";
 import {
   buildNamespaceTree,
   flattenTree,
   type DerivedAction,
 } from "../Cli/NamespaceTree.ts";
-import { DotAlchemy, dotAlchemy } from "../Config.ts";
 import { ExecutionContext } from "../ExecutionContext.ts";
 import type { Input } from "../Input.ts";
 import type { Output } from "../Output.ts";
@@ -47,7 +48,6 @@ import * as Stack from "../Stack.ts";
 import * as Stage from "../Stage.ts";
 import * as State from "../State/index.ts";
 import { PlatformServices } from "../Util/PlatformServices.ts";
-import { TestCli } from "./TestCli.ts";
 
 export const expectEmptyObject = () =>
   expect.toSatisfy(
@@ -70,7 +70,7 @@ type Provided =
   | Stack.Stack
   | State.State
   | Stage.Stage
-  | DotAlchemy
+  | AlchemyContext
   | HttpClient.HttpClient
   | FileSystem.FileSystem
   | Path.Path
@@ -101,7 +101,7 @@ const platform = Layer.mergeAll(
 
 const awsEnvironment = Layer.unwrap(
   Effect.gen(function* () {
-    const profileName = yield* Config.string("AWS_PROFILE").pipe(
+    const _profileName = yield* Config.string("AWS_PROFILE").pipe(
       Config.withDefault("default"),
     );
     const LOCAL = yield* Config.boolean("LOCAL").pipe(
@@ -176,8 +176,8 @@ const runWithContext = <A, Err>(
   );
 
   const alchemy = Layer.provideMerge(
-    Layer.mergeAll(options.state ?? State.LocalState, TestCli),
-    Layer.mergeAll(stack, dotAlchemy),
+    Layer.mergeAll(options.state ?? State.localState(), LoggingCli),
+    Layer.mergeAll(stack, AlchemyContextLive),
   );
 
   const context = {
@@ -357,23 +357,22 @@ export namespace test {
   export const deploy = <A, Err = never, Req = any>(
     effect: Effect.Effect<A, Err, Req>,
   ): Effect.Effect<Input.Resolve<A>, Err, Req | Stack.Stack> =>
-    Stack.Stack.use((stack) => {
-      return provideFreshArtifactStore(
-        effect.pipe(
-          // Effect.tap(Effect.logInfo),
-          // @ts-expect-error
-          Stack.make(stack.name, Layer.effectContext(Effect.context<never>()), {
-            ...stack,
-            resources: {},
-            bindings: {},
-            output: {},
-          }),
-          Effect.flatMap(Plan.make),
-          Effect.tap((plan) => Effect.logInfo(formatPlan(plan))),
-          Effect.flatMap(apply),
-        ),
-      );
-    });
+    Stack.Stack.use((stack) =>
+      effect.pipe(
+        // Effect.tap(Effect.logInfo),
+        // @ts-expect-error
+        Stack.make(stack.name, Layer.effectContext(Effect.context<never>()), {
+          ...stack,
+          resources: {},
+          bindings: {},
+          output: {},
+        }),
+        Effect.flatMap(Plan.make),
+        Effect.tap((plan) => Effect.logInfo(formatPlan(plan))),
+        Effect.flatMap(apply),
+        provideFreshArtifactStore,
+      ),
+    );
 }
 
 type AnyAction = Plan.CRUD["action"] | Plan.BindingAction | DerivedAction;
@@ -528,3 +527,13 @@ export function afterAll<A, E, R extends Provided = never>(
     options?.timeout,
   );
 }
+export const destroy = () =>
+  Stack.Stack.use((stack) =>
+    Plan.make({
+      name: stack.name,
+      stage: stack.stage,
+      resources: {},
+      bindings: {},
+      output: {},
+    }).pipe(Effect.flatMap(apply), provideFreshArtifactStore),
+  );

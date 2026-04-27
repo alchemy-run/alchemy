@@ -1,7 +1,6 @@
 import * as AWS from "@/AWS";
 import { Group, GroupMembership, InstanceProfile, Role, User } from "@/AWS/IAM";
-import { destroy } from "@/Destroy";
-import { test } from "@/Test/Vitest";
+import { destroy, test } from "@/Test/Vitest";
 import * as IAM from "@distilled.cloud/aws/iam";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";

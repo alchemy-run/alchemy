@@ -15,6 +15,7 @@ export default Alchemy.Stack(
       // Fully configured cloud provider Layers go here:
       aws,
     ),
+    state: Alchemy.localState(),
   },
   Effect.gen(function* () {
     const func = yield* JobFunction;

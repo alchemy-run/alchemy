@@ -11,6 +11,7 @@ export default Alchemy.Stack(
   "AwsEcsExample",
   {
     providers: aws,
+    state: Alchemy.localState(),
   },
   Effect.gen(function* () {
     const network = yield* AWS.EC2.Network("ExampleNetwork", {

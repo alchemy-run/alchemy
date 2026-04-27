@@ -26,7 +26,7 @@ Each provider can implement these operations:
 ## Provider Layers
 
 Providers are registered as Effect Layers. When you call
-`Cloudflare.providers()` or `AWS.providers()()`, you get a Layer
+`Cloudflare.providers()` or `AWS.providers()`, you get a Layer
 that includes all the providers for that cloud platform:
 
 ```typescript
@@ -55,7 +55,7 @@ import * as Layer from "effect/Layer";
 Alchemy.Stack(
   "MyApp",
   {
-    providers: Layer.mergeAll(Cloudflare.providers(), AWS.providers()()),
+    providers: Layer.mergeAll(Cloudflare.providers(), AWS.providers()),
   },
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2Bucket("Bucket");

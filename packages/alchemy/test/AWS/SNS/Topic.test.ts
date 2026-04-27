@@ -1,7 +1,6 @@
 import * as AWS from "@/AWS";
 import { Topic } from "@/AWS/SNS";
-import { destroy } from "@/Destroy";
-import { test } from "@/Test/Vitest";
+import { destroy, test } from "@/Test/Vitest";
 import * as SNS from "@distilled.cloud/aws/sns";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";

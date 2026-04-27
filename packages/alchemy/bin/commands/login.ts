@@ -47,7 +47,7 @@ export const loginCommand = Command.make(
       ),
       Logger.layer([fileLogger("out")]),
       Layer.succeed(Stage, stage),
-      State.LocalState,
+      State.localState(),
     );
 
     yield* Effect.gen(function* () {

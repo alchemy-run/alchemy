@@ -28,8 +28,14 @@ export interface PlatformProps {
   isExternal?: boolean;
 }
 
-export type Main<Services = never> = void | {
-  fetch: HttpEffect<Services | PlatformServices>;
+export type Main<InitServices = never> = void | {
+  fetch:
+    | HttpEffect<InitServices | PlatformServices>
+    | Effect.Effect<
+        HttpEffect<InitServices | PlatformServices>,
+        never,
+        InitServices | PlatformServices
+      >;
 };
 
 export type Rpc<Shape> = {

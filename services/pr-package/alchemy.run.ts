@@ -8,6 +8,7 @@ export default Alchemy.Stack(
   "PrPackage",
   {
     providers: Cloudflare.providers(),
+    state: Cloudflare.state(),
   },
   Effect.gen(function* () {
     const api = yield* Api;

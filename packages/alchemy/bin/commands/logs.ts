@@ -70,7 +70,7 @@ export const logsCommand = Command.make(
       Layer.succeed(AuthProviders, {}),
       Layer.succeed(Stage, stage),
       Logger.layer([fileLogger("out")]),
-      State.LocalState,
+      State.localState(),
     );
 
     const sinceDate = since ? parseSince(since) : undefined;

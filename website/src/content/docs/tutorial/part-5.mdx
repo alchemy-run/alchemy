@@ -12,51 +12,33 @@ set up GitHub Actions so that pushes to `main` deploy to production,
 pull requests get isolated preview environments, and merged PRs clean
 up after themselves.
 
-## Add a remote state store
+## Confirm your state store is remote
 
-So far, Alchemy has been storing state locally in the `.alchemy/`
-directory. That works for solo development, but CI needs to share
-state across runs. Add `Cloudflare.state()` to your Stack:
+CI needs to share state across runs, so a local `.alchemy/` directory
+won't cut it. You already configured `Cloudflare.state()` back in
+[Part 1](/tutorial/part-1#configure-state), which deploys a Worker
+backed by a Durable Object with SQLite. Every deploy — local or
+from CI — reads and writes state remotely through that Worker.
 
-```diff lang="typescript"
+Double-check it's still wired up in `alchemy.run.ts`:
+
+```typescript
 // alchemy.run.ts
-import * as Alchemy from "alchemy";
-+import * as Cloudflare from "alchemy/Cloudflare";
-import * as Effect from "effect/Effect";
-import { Bucket } from "./src/bucket.ts";
-import Worker from "./src/worker.ts";
-
 export default Alchemy.Stack(
   "MyApp",
   {
     providers: Cloudflare.providers(),
-+   state: Cloudflare.state(),
+    state: Cloudflare.state(),
   },
-  Effect.gen(function* () {
-    const bucket = yield* Bucket;
-    const worker = yield* Worker;
-
-    return {
-      bucketName: bucket.bucketName,
-      url: worker.url,
-    };
-  }),
+  // ...
 );
 ```
 
-The next deploy creates a state Worker on Cloudflare backed by a
-Durable Object with SQLite. From that point on, every deploy reads
-and writes state remotely — no shared filesystem needed.
-
-```sh
-alchemy deploy
-```
-
-Also add `.alchemy/` to your `.gitignore`:
-
-```sh
-echo ".alchemy/" >> .gitignore
-```
+:::caution
+If you're using `State.localState()` instead, switch it to
+`Cloudflare.state()` (or another shared store) before continuing —
+GitHub Actions runners can't see your local filesystem.
+:::
 
 ## Store credentials in GitHub
 

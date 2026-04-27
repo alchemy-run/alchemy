@@ -5,7 +5,8 @@ import * as Command from "effect/unstable/cli/Command";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
 import packageJson from "../package.json" with { type: "json" };
-import { dotAlchemy } from "../src/Config.ts";
+import { AlchemyContextLive } from "../src/AlchemyContext.ts";
+import { inkCLI } from "../src/Cli/InkCLI.tsx";
 import { PlatformServices, runMain } from "../src/Util/PlatformServices.ts";
 
 import { handleCancellation } from "./commands/_shared.ts";
@@ -17,6 +18,7 @@ import {
 } from "./commands/deploy.ts";
 import { loginCommand } from "./commands/login.ts";
 import { logsCommand } from "./commands/logs.ts";
+import { stateCommand } from "./commands/state.ts";
 import { tailCommand } from "./commands/tail.ts";
 
 const root = Command.make("alchemy", {}).pipe(
@@ -28,6 +30,7 @@ const root = Command.make("alchemy", {}).pipe(
     tailCommand,
     logsCommand,
     loginCommand,
+    stateCommand,
   ]),
 );
 
@@ -37,9 +40,10 @@ const cli = Command.run(root, {
 });
 
 const services = Layer.mergeAll(
-  Layer.provideMerge(dotAlchemy, PlatformServices),
+  Layer.provideMerge(AlchemyContextLive, PlatformServices),
   FetchHttpClient.layer,
   ConfigProvider.layer(ConfigProvider.fromEnv()),
+  inkCLI(),
 );
 
 cli.pipe(

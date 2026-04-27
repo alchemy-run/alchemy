@@ -1,7 +1,6 @@
 import * as AWS from "@/AWS";
 import { Vpc } from "@/AWS/EC2";
-import { destroy } from "@/Destroy";
-import { test } from "@/Test/Vitest";
+import { destroy, test } from "@/Test/Vitest";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";

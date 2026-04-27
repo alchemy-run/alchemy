@@ -1,3 +1,50 @@
+## v2.0.0-beta.14
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **Cloudflare**: Cloudflare State Store &nbsp;-&nbsp; by **Sam Goodwin** and **Michael (Pear)** in https://github.com/alchemy-run/alchemy/issues/94 [<samp>(d3b12)</samp>](https://github.com/alchemy-run/alchemy/commit/d3b1298)
+- **cli**: Alchemy state command &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(b4a1d)</samp>](https://github.com/alchemy-run/alchemy/commit/b4a1d94)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **Cloudflare**: Set rolldown resolve.conditionNames for bun/node in container bundle &nbsp;-&nbsp; by **Christopher Yovanovitch** in https://github.com/alchemy-run/alchemy/issues/86 [<samp>(779bb)</samp>](https://github.com/alchemy-run/alchemy/commit/779bbd1)
+- **cli**: Use a cli.js shim to support node/bun and make effect a non-optional peer &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/92 [<samp>(9b69b)</samp>](https://github.com/alchemy-run/alchemy/commit/9b69ba3)
+- **core**: Harden HttpStateStore to transient errors &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(4071e)</samp>](https://github.com/alchemy-run/alchemy/commit/4071e8a)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.13...v2.0.0-beta.14)
+
+---
+
+## v2.0.0-beta.13
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cli**: Cli ships correct platform versions &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy/issues/91 [<samp>(e3597)</samp>](https://github.com/alchemy-run/alchemy/commit/e3597ab)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.12...v2.0.0-beta.13)
+
+---
+
+## v2.0.0-beta.12
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **AWS**: Use account-regional S3 bucket names for assets &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(6ab3f)</samp>](https://github.com/alchemy-run/alchemy/commit/6ab3fba)
+- **cloudflare**: Secret store resources &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy/issues/64 [<samp>(9b107)</samp>](https://github.com/alchemy-run/alchemy/commit/9b10769)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Providers not inheriting parent scope &nbsp;-&nbsp; by **John Royal** [<samp>(8317b)</samp>](https://github.com/alchemy-run/alchemy/commit/8317bcc)
+- Include WebSocketConstructor in PlatformServices &nbsp;-&nbsp; by **John Royal** [<samp>(2dfb0)</samp>](https://github.com/alchemy-run/alchemy/commit/2dfb06e)
+
+### &nbsp;&nbsp;&nbsp;🏎 Performance
+
+- Use subpath imports for PlatformServices &nbsp;-&nbsp; by **John Royal** [<samp>(1867a)</samp>](https://github.com/alchemy-run/alchemy/commit/1867a42)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.11...v2.0.0-beta.12)
+
+---
+
 ## v2.0.0-beta.11
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features

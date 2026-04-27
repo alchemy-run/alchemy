@@ -1,5 +1,4 @@
-import { destroy } from "@/Destroy";
-import { afterAll, beforeAll, test } from "@/Test/Vitest";
+import { afterAll, beforeAll, destroy, test } from "@/Test/Vitest";
 import * as SQS from "@distilled.cloud/aws/sqs";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
