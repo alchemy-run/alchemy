@@ -9,8 +9,10 @@
   },
   "type": "module",
   "scripts": {
-    "deploy:github": "alchemy deploy ./github.ts",
-    "destroy:github": "alchemy destroy ./github.ts"
+    "download:env": "doppler secrets download -c dev --project alchemy-v2 --no-file --format env > .env",
+    "login": "alchemy login ./github.ts --profile admin",
+    "deploy": "alchemy deploy ./github.ts --profile admin",
+    "destroy": "alchemy destroy ./github.ts --profile admin"
   },
   "dependencies": {
     "alchemy": "workspace:*",

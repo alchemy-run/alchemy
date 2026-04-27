@@ -1,6 +1,7 @@
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as GitHub from "alchemy/GitHub";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -8,56 +9,68 @@ import * as Redacted from "effect/Redacted";
 export default Alchemy.Stack(
   "AlchemyGitHubSecrets",
   {
-    providers: Layer.mergeAll(
-      Cloudflare.providers(),
-      GitHub.SecretProvider(),
-      GitHub.VariableProvider(),
-    ),
+    providers: Layer.mergeAll(Cloudflare.providers(), GitHub.providers()),
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-    const { stage } = yield* Alchemy.Stack;
-    const { accountId } = yield* Cloudflare.CloudflareEnvironment;
+    const testAccountId = yield* Config.string("TEST_CLOUDFLARE_ACCOUNT_ID");
+    const prodAccountId = yield* Config.string("PROD_CLOUDFLARE_ACCOUNT_ID");
 
-    const apiToken = yield* Cloudflare.UserApiToken("ApiToken", {
-      name: "alchemy-effect-ci",
-      policies: [
-        {
-          effect: "allow",
-          permissionGroups: [
-            "Workers Scripts Write",
-            "Workers KV Storage Write",
-            "Workers R2 Storage Write",
-            "D1 Write",
-            "Queues Write",
-            "Pages Write",
-            "Account Settings Write",
-            "Workers Tail Read",
-          ],
-          resources: {
-            "com.cloudflare.api.account": "*",
-          },
-        },
-      ],
+    const testApiToken = yield* token("TestApiToken", {
+      accountId: testAccountId,
     });
 
-    yield* Effect.all(
-      secrets({
-        [`${stage.toUpperCase()}_CLOUDFLARE_API_TOKEN`]: apiToken.value,
-        [`${stage.toUpperCase()}_CLOUDFLARE_ACCOUNT_ID`]: accountId,
-      }),
-    );
+    const prodApiToken = yield* token("ProdApiToken", {
+      accountId: prodAccountId,
+    });
+
+    yield* secrets({
+      TEST_CLOUDFLARE_API_TOKEN: testApiToken.value,
+      TEST_CLOUDFLARE_ACCOUNT_ID: testAccountId,
+      PROD_CLOUDFLARE_API_TOKEN: prodApiToken.value,
+      PROD_CLOUDFLARE_ACCOUNT_ID: prodAccountId,
+    });
   }).pipe(Effect.orDie),
 );
+
+const token = (
+  id: string,
+  props: {
+    accountId: string;
+  },
+) =>
+  Cloudflare.AccountApiToken(id, {
+    accountId: props.accountId,
+    policies: [
+      {
+        effect: "allow",
+        permissionGroups: [
+          "Workers Scripts Write",
+          "Workers KV Storage Write",
+          "Workers R2 Storage Write",
+          "D1 Write",
+          "Queues Write",
+          "Pages Write",
+          "Account Settings Write",
+          "Workers Tail Read",
+        ],
+        resources: {
+          "com.cloudflare.api.account": "*",
+        },
+      },
+    ],
+  });
 
 const secrets = (
   secrets: Record<string, Alchemy.Input<string | Redacted.Redacted<string>>>,
 ) =>
-  Object.entries(secrets).map(([name, value]) =>
-    GitHub.Secret(name, {
-      owner: "alchemy-run",
-      repository: "alchemy-effect",
-      name,
-      value: Redacted.make(value),
-    }),
+  Effect.all(
+    Object.entries(secrets).map(([name, value]) =>
+      GitHub.Secret(name, {
+        owner: "alchemy-run",
+        repository: "alchemy-effect",
+        name,
+        value: Redacted.make(value),
+      }),
+    ),
   );
