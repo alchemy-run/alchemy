@@ -1,6 +1,6 @@
 import * as Layer from "effect/Layer";
 import * as Provider from "../Provider.ts";
-import { GitHubAuth } from "./Auth/AuthProvider.ts";
+import { GitHubAuth } from "./AuthProvider.ts";
 import * as Credentials from "./Credentials.ts";
 import { Secret, SecretProvider } from "./Secret.ts";
 import { Variable, VariableProvider } from "./Variable.ts";

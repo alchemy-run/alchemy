@@ -10,7 +10,7 @@ import {
   GITHUB_AUTH_PROVIDER_NAME,
   type GitHubAuthConfig,
   type GitHubResolvedCredentials,
-} from "./Auth/AuthProvider.ts";
+} from "./AuthProvider.ts";
 
 export interface GitHubCredentialsService {
   readonly token: Redacted.Redacted<string>;
@@ -49,11 +49,12 @@ export const fromEnv = () =>
         Config.option,
       );
       const token = yield* Config.redacted("GITHUB_TOKEN").pipe(Config.option);
-      const value = access._tag === "Some"
-        ? access.value
-        : token._tag === "Some"
-          ? token.value
-          : undefined;
+      const value =
+        access._tag === "Some"
+          ? access.value
+          : token._tag === "Some"
+            ? token.value
+            : undefined;
       if (value == null) {
         return yield* new AuthError({
           message:

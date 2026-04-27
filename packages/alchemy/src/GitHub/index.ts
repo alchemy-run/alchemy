@@ -1,4 +1,4 @@
-export * as Auth from "./Auth/AuthProvider.ts";
+export * as Auth from "./AuthProvider.ts";
 export * from "./Comment.ts";
 export { GitHubCredentials, fromEnv, fromToken } from "./Credentials.ts";
 export * from "./Providers.ts";

@@ -10,15 +10,15 @@ import {
   AuthError,
   AuthProviderLayer,
   type ConfigureContext,
-} from "../../Auth/AuthProvider.ts";
+} from "../Auth/AuthProvider.ts";
 import {
   deleteCredentials,
   displayRedacted,
   readCredentials,
   writeCredentials,
-} from "../../Auth/Credentials.ts";
-import { getEnvRedacted, retryOnce } from "../../Auth/Env.ts";
-import * as Clank from "../../Util/Clank.ts";
+} from "../Auth/Credentials.ts";
+import { getEnvRedacted, retryOnce } from "../Auth/Env.ts";
+import * as Clank from "../Util/Clank.ts";
 
 const options: Array<{
   value: GitHubAuthConfig["method"];
