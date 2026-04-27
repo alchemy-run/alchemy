@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { dedent } from "../Util/dedent.ts";
+import * as GitHub from "./Providers.ts";
 
 export interface CommentProps {
   /**
@@ -62,7 +63,9 @@ export interface Comment extends Resource<
      * ISO-8601 timestamp of the last update.
      */
     updatedAt: string;
-  }
+  },
+  never,
+  GitHub.Providers
 > {}
 
 /**

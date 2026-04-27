@@ -4,7 +4,7 @@ import * as Redacted from "effect/Redacted";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { GitHubCredentials } from "./Credentials.ts";
-import type { Providers } from "./Providers.ts";
+import type * as GitHub from "./Providers.ts";
 
 export interface SecretProps {
   /**
@@ -45,7 +45,7 @@ export interface Secret extends Resource<
     updatedAt: string;
   },
   never,
-  Providers
+  GitHub.Providers
 > {}
 
 /**
