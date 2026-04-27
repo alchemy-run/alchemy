@@ -32,6 +32,7 @@ export const AuthToken = Effect.gen(function* () {
   const store = yield* Store;
   const random = yield* TokenValue;
   return yield* Secret.Secret(AuthTokenSecretName, {
+    name: AuthTokenSecretName,
     store,
     value: random.text,
   });
@@ -47,6 +48,9 @@ export const EncryptionKeyValue = Random("StateStoreEncryptionKeyValue", {
   bytes: 32,
 });
 
+export const EncryptionKeySecretName =
+  "AlchemyStateStoreEncryptionKey" as const;
+
 /**
  * The encryption key secret. The raw hex-encoded bytes live inside
  * Cloudflare's Secrets Store; the Durable Object binds to it at
@@ -57,6 +61,7 @@ export const EncryptionKey = Effect.gen(function* () {
   const store = yield* Store;
   const random = yield* EncryptionKeyValue;
   return yield* Secret.Secret("StateStoreEncryptionKey", {
+    name: EncryptionKeySecretName,
     store,
     value: random.text,
   });
