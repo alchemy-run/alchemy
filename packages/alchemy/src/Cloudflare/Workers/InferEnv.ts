@@ -1,5 +1,4 @@
 /// <reference types="@cloudflare/workers-types" />
-// import type * as cf from "@cloudflare/workers-types";
 
 import type * as Effect from "effect/Effect";
 import type { UnwrapEffect } from "../../Util/effect.ts";
@@ -24,6 +23,8 @@ type GetBindingType<T> = T extends Cloudflare.Assets
         ? KVNamespace
         : T extends Cloudflare.Queue
           ? Queue<unknown>
-          : T extends Cloudflare.DurableObjectNamespaceLike
-            ? DurableObjectNamespace<Exclude<T["Shape"], undefined>>
-            : never;
+          : T extends Cloudflare.Artifacts
+            ? Artifacts
+            : T extends Cloudflare.DurableObjectNamespaceLike
+              ? DurableObjectNamespace<Exclude<T["Shape"], undefined>>
+              : never;

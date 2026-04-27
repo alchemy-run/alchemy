@@ -10,6 +10,7 @@ import { Bucket } from "./Bucket.ts";
 import { KV } from "./KV.ts";
 import NotifyWorkflow from "./NotifyWorkflow.ts";
 import { Queue } from "./Queue.ts";
+import { Repos } from "./Repos.ts";
 import Room from "./Room.ts";
 
 export default class Api extends Cloudflare.Worker<Api>()(
@@ -33,6 +34,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
     const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
     const kv = yield* Cloudflare.KVNamespace.bind(KV);
     const queue = yield* Cloudflare.QueueBinding.bind(Queue);
+    const repos = yield* Cloudflare.Artifacts.bind(Repos);
 
     return {
       fetch: Effect.gen(function* () {
@@ -205,6 +207,121 @@ export default class Api extends Cloudflare.Worker<Api>()(
           const response = yield* room.fetch(request);
           return response;
         }
+        // Cloudflare Artifacts — Git-compatible versioned repos.
+        // Exercises Cloudflare.ArtifactsConnection by creating a repo,
+        // looking it up, and minting short-lived clone tokens.
+        if (
+          request.url.startsWith("/repos/create") &&
+          request.method === "POST"
+        ) {
+          const text = yield* request.text;
+          const body = JSON.parse(text || "{}") as {
+            name?: string;
+            description?: string;
+          };
+          const name = body.name?.trim();
+          if (!name) {
+            return yield* HttpServerResponse.json(
+              { error: "name is required" },
+              { status: 400 },
+            );
+          }
+          return yield* repos
+            .create(name, {
+              description: body.description,
+              setDefaultBranch: "main",
+            })
+            .pipe(
+              Effect.flatMap((created) =>
+                HttpServerResponse.json({
+                  id: created.id,
+                  name: created.name,
+                  remote: created.remote,
+                  token: created.token,
+                  tokenExpiresAt: created.tokenExpiresAt,
+                  defaultBranch: created.defaultBranch,
+                }),
+              ),
+              Effect.catchTag("ArtifactsError", (err) =>
+                HttpServerResponse.json(
+                  { error: err.message },
+                  { status: 409 },
+                ),
+              ),
+            );
+        }
+        if (request.url.startsWith("/repos/list") && request.method === "GET") {
+          return yield* repos.list({ limit: 50 }).pipe(
+            Effect.flatMap((res) => HttpServerResponse.json(res)),
+            Effect.catchTag("ArtifactsError", (err) =>
+              HttpServerResponse.json({ error: err.message }, { status: 500 }),
+            ),
+          );
+        }
+        if (request.url.startsWith("/repos/info") && request.method === "GET") {
+          const name = new URL(request.url, "http://x").searchParams.get(
+            "name",
+          );
+          if (!name) {
+            return yield* HttpServerResponse.json(
+              { error: "name is required" },
+              { status: 400 },
+            );
+          }
+          return yield* repos.get(name).pipe(
+            Effect.flatMap((repo) =>
+              HttpServerResponse.json({
+                id: repo.raw.id,
+                name: repo.raw.name,
+                description: repo.raw.description,
+                defaultBranch: repo.raw.defaultBranch,
+                remote: repo.raw.remote,
+                createdAt: repo.raw.createdAt,
+                updatedAt: repo.raw.updatedAt,
+                lastPushAt: repo.raw.lastPushAt,
+                readOnly: repo.raw.readOnly,
+              }),
+            ),
+            Effect.catchTag("ArtifactsError", (err) =>
+              HttpServerResponse.json(
+                { name, error: err.message },
+                { status: 404 },
+              ),
+            ),
+          );
+        }
+        if (
+          request.url.startsWith("/repos/token") &&
+          request.method === "POST"
+        ) {
+          const text = yield* request.text;
+          const body = JSON.parse(text || "{}") as {
+            name?: string;
+            scope?: "read" | "write";
+            ttl?: number;
+          };
+          const name = body.name?.trim();
+          if (!name) {
+            return yield* HttpServerResponse.json(
+              { error: "name is required" },
+              { status: 400 },
+            );
+          }
+          return yield* repos.get(name).pipe(
+            Effect.flatMap((repo) =>
+              repo.createToken(body.scope ?? "read", body.ttl ?? 3600),
+            ),
+            Effect.flatMap((token) =>
+              HttpServerResponse.json({ name, ...token }),
+            ),
+            Effect.catchTag("ArtifactsError", (err) =>
+              HttpServerResponse.json(
+                { name, error: err.message },
+                { status: 404 },
+              ),
+            ),
+          );
+        }
         // Queue producer smoke test — POST /queue/send?text=...
         //
         // Exercises Cloudflare.QueueBinding by calling `queue.send(...)`.
@@ -214,7 +331,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
         if (request.url === "/queue/send" && request.method === "POST") {
           const text = yield* request.text;
           yield* queue.send({ text, sentAt: Date.now() }).pipe(Effect.orDie);
-          return HttpServerResponse.jsonUnsafe(
+          return yield* HttpServerResponse.json(
             { sent: { text } },
             { status: 202 },
           );
@@ -236,6 +353,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
         Cloudflare.R2BucketBindingLive,
         Cloudflare.KVNamespaceBindingLive,
         Cloudflare.QueueBindingLive,
+        Cloudflare.ArtifactsBindingLive,
       ),
     ),
   ),

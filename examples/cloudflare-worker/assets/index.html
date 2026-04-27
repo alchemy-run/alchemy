@@ -217,6 +217,31 @@
         min-height: 2.5rem;
         line-height: 1.4;
       }
+      #artifacts-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        padding: 0.75rem;
+        background: #1e293b;
+        border-radius: 0.5rem;
+        border: 1px solid #334155;
+      }
+      #artifacts-panel h2 {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #94a3b8;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      #artifacts-status {
+        font-size: 0.75rem;
+        font-family: "SF Mono", "Fira Code", monospace;
+        color: #cbd5e1;
+        white-space: pre-wrap;
+        word-break: break-word;
+        min-height: 2.5rem;
+        line-height: 1.4;
+      }
       #auth-panel {
         display: none;
         flex-direction: column;
@@ -405,6 +430,58 @@
         >
           Type /remind &lt;seconds&gt; &lt;message&gt; in chat, or use the form
           above.
+        </div>
+      </div>
+      <div id="artifacts-panel">
+        <h2>Artifacts (Git for Agents)</h2>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap">
+          <input
+            id="artifacts-name"
+            type="text"
+            placeholder="repo name (e.g. starter-1234)"
+            style="
+              flex: 1;
+              min-width: 12rem;
+              padding: 0.6rem 0.75rem;
+              border-radius: 0.375rem;
+              border: 1px solid #334155;
+              background: #0f172a;
+              color: #e2e8f0;
+              font-size: 0.9rem;
+              outline: none;
+            "
+          />
+          <button
+            id="artifacts-create"
+            type="button"
+            style="background: #10b981"
+          >
+            Create
+          </button>
+          <button
+            id="artifacts-info"
+            type="button"
+            style="background: #6366f1"
+          >
+            Info
+          </button>
+          <button
+            id="artifacts-token"
+            type="button"
+            style="background: #eab308; color: #1f2937"
+          >
+            New token
+          </button>
+          <button
+            id="artifacts-list"
+            type="button"
+            style="background: #475569"
+          >
+            List
+          </button>
+        </div>
+        <div id="artifacts-status">
+          Create a repo, then mint scoped tokens for git clone/push.
         </div>
       </div>
       <div id="workflow-panel">
@@ -709,6 +786,117 @@
           workflowStatusEl.textContent = `Error: ${err.message}`;
           addMessage(`Workflow start failed: ${err.message}`, true);
           workflowRunBtn.disabled = false;
+        }
+      });
+
+      const artifactsNameEl = document.getElementById("artifacts-name");
+      const artifactsStatusEl = document.getElementById("artifacts-status");
+      const artifactsCreateBtn = document.getElementById("artifacts-create");
+      const artifactsInfoBtn = document.getElementById("artifacts-info");
+      const artifactsTokenBtn = document.getElementById("artifacts-token");
+      const artifactsListBtn = document.getElementById("artifacts-list");
+
+      function setArtifactsStatus(label, payload) {
+        const body =
+          typeof payload === "string"
+            ? payload
+            : JSON.stringify(payload, null, 2);
+        artifactsStatusEl.textContent = `${label}\n${body}`;
+      }
+
+      async function callArtifacts(method, path, body) {
+        const init = { method };
+        if (body !== undefined) {
+          init.headers = { "content-type": "application/json" };
+          init.body = JSON.stringify(body);
+        }
+        const resp = await fetch(path, init);
+        const text = await resp.text();
+        let parsed;
+        try {
+          parsed = JSON.parse(text);
+        } catch {
+          parsed = text;
+        }
+        return { status: resp.status, body: parsed };
+      }
+
+      function getRepoName() {
+        const name = artifactsNameEl.value.trim();
+        if (!name) {
+          setArtifactsStatus("error", "repo name is required");
+          return null;
+        }
+        return name;
+      }
+
+      artifactsCreateBtn.addEventListener("click", async () => {
+        const name = getRepoName();
+        if (!name) return;
+        artifactsCreateBtn.disabled = true;
+        setArtifactsStatus(`POST /repos/create ${name}`, "...");
+        try {
+          const { status, body } = await callArtifacts(
+            "POST",
+            "/repos/create",
+            { name, description: "Created from Room Chat" },
+          );
+          setArtifactsStatus(`HTTP ${status}`, body);
+          addMessage(`Artifacts: created repo "${name}" -> HTTP ${status}`, true);
+        } catch (e) {
+          setArtifactsStatus("request failed", e.message);
+        } finally {
+          artifactsCreateBtn.disabled = false;
+        }
+      });
+
+      artifactsInfoBtn.addEventListener("click", async () => {
+        const name = getRepoName();
+        if (!name) return;
+        artifactsInfoBtn.disabled = true;
+        setArtifactsStatus(`GET /repos/info?name=${name}`, "...");
+        try {
+          const { status, body } = await callArtifacts(
+            "GET",
+            `/repos/info?name=${encodeURIComponent(name)}`,
+          );
+          setArtifactsStatus(`HTTP ${status}`, body);
+        } catch (e) {
+          setArtifactsStatus("request failed", e.message);
+        } finally {
+          artifactsInfoBtn.disabled = false;
+        }
+      });
+
+      artifactsTokenBtn.addEventListener("click", async () => {
+        const name = getRepoName();
+        if (!name) return;
+        artifactsTokenBtn.disabled = true;
+        setArtifactsStatus(`POST /repos/token ${name}`, "...");
+        try {
+          const { status, body } = await callArtifacts(
+            "POST",
+            "/repos/token",
+            { name, scope: "write", ttl: 3600 },
+          );
+          setArtifactsStatus(`HTTP ${status}`, body);
+        } catch (e) {
+          setArtifactsStatus("request failed", e.message);
+        } finally {
+          artifactsTokenBtn.disabled = false;
+        }
+      });
+
+      artifactsListBtn.addEventListener("click", async () => {
+        artifactsListBtn.disabled = true;
+        setArtifactsStatus("GET /repos/list", "...");
+        try {
+          const { status, body } = await callArtifacts("GET", "/repos/list");
+          setArtifactsStatus(`HTTP ${status}`, body);
+        } catch (e) {
+          setArtifactsStatus("request failed", e.message);
+        } finally {
+          artifactsListBtn.disabled = false;
         }
       });
 
