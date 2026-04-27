@@ -121,8 +121,6 @@ export const CapacityProviderProvider = () =>
   Provider.effect(
     CapacityProvider,
     Effect.gen(function* () {
-      const region = yield* Region;
-      const { accountId } = yield* AWSEnvironment;
       const adoptPolicy = yield* Effect.serviceOption(AdoptPolicy).pipe(
         Effect.map(Option.getOrElse(() => false)),
       );
@@ -197,6 +195,8 @@ export const CapacityProviderProvider = () =>
         }),
 
         create: Effect.fn(function* ({ id, news, session }) {
+          const region = yield* Region;
+          const { accountId } = yield* AWSEnvironment;
           const name = yield* toName(id, news);
           const internalTags = yield* createInternalTags(id);
           const tags = { ...internalTags, ...news.tags };
@@ -303,12 +303,21 @@ export const CapacityProviderProvider = () =>
             });
           }
 
+          const found = yield* describe(output.name);
           yield* session.note(output.capacityProviderArn);
           return {
             ...output,
-            managedScaling: news.managedScaling,
-            managedTerminationProtection: news.managedTerminationProtection,
-            managedDraining: news.managedDraining,
+            status: (found?.status ?? output.status) as ecs.CapacityProviderStatus,
+            updateStatus: found?.updateStatus ?? output.updateStatus,
+            managedScaling:
+              found?.autoScalingGroupProvider?.managedScaling ??
+              news.managedScaling,
+            managedTerminationProtection:
+              found?.autoScalingGroupProvider?.managedTerminationProtection ??
+              news.managedTerminationProtection,
+            managedDraining:
+              found?.autoScalingGroupProvider?.managedDraining ??
+              news.managedDraining,
             tags: newTags,
           };
         }),
