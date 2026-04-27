@@ -1,3 +1,24 @@
+## v2.0.0-beta.16
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **Cloudflare**:
+  - Artifacts Store &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(e531f)</samp>](https://github.com/alchemy-run/alchemy/commit/e531fbe)
+  - Allow account ID to be passed into AccountApiToken and UserApiToken &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(0f8ac)</samp>](https://github.com/alchemy-run/alchemy/commit/0f8ac88)
+- **GitHub**:
+  - Auth provider for github supporting env, PAT and gh cli &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(1de51)</samp>](https://github.com/alchemy-run/alchemy/commit/1de5180)
+- **cli**:
+  - Alchemy profile show &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(f83e2)</samp>](https://github.com/alchemy-run/alchemy/commit/f83e216)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **Cloudflare**: Remove InstanceId from Artifact store requirement &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(de489)</samp>](https://github.com/alchemy-run/alchemy/commit/de489c7)
+- **cli**: Don't fail on broken profiles when logging in &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(d8296)</samp>](https://github.com/alchemy-run/alchemy/commit/d829616)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.15...v2.0.0-beta.16)
+
+---
+
 ## v2.0.0-beta.15
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
