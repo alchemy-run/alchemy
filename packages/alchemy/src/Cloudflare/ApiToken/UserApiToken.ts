@@ -11,14 +11,12 @@ import {
   conditionFingerprint,
   policyFingerprint,
   resolvePolicies,
-  type BaseApiTokenProps,
+  type ApiTokenProps,
 } from "./Common.ts";
-
-export type UserApiTokenProps = BaseApiTokenProps;
 
 export type UserApiToken = Resource<
   "Cloudflare.UserApiToken",
-  UserApiTokenProps,
+  ApiTokenProps,
   {
     tokenId: string;
     name: string;
@@ -102,10 +100,10 @@ export const UserApiTokenProvider = () =>
           const oldName = output?.name ?? (yield* resolveName(id, olds?.name));
           const newName = yield* resolveName(id, news.name);
           const oldPolicyFp = policyFingerprint(
-            resolvePolicies(olds?.policies ?? [], undefined),
+            resolvePolicies(olds?.policies ?? [], olds?.accountId),
           );
           const newPolicyFp = policyFingerprint(
-            resolvePolicies(news.policies, undefined),
+            resolvePolicies(news.policies, news.accountId),
           );
           const oldCondFp = conditionFingerprint(olds?.condition);
           const newCondFp = conditionFingerprint(news.condition);
@@ -121,7 +119,7 @@ export const UserApiTokenProvider = () =>
         }),
         create: Effect.fn(function* ({ id, news }) {
           const name = yield* resolveName(id, news.name);
-          const policies = resolvePolicies(news.policies, undefined);
+          const policies = resolvePolicies(news.policies, news.accountId);
           const result = yield* createToken({
             name,
             policies,
@@ -138,7 +136,7 @@ export const UserApiTokenProvider = () =>
         }),
         update: Effect.fn(function* ({ id, news, output }) {
           const name = yield* resolveName(id, news.name);
-          const policies = resolvePolicies(news.policies, undefined);
+          const policies = resolvePolicies(news.policies, news.accountId);
           const result = yield* updateToken({
             tokenId: output.tokenId,
             name,

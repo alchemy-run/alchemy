@@ -12,14 +12,12 @@ import {
   conditionFingerprint,
   policyFingerprint,
   resolvePolicies,
-  type BaseApiTokenProps,
+  type ApiTokenProps,
 } from "./Common.ts";
-
-export type AccountApiTokenProps = BaseApiTokenProps;
 
 export type AccountApiToken = Resource<
   "Cloudflare.AccountApiToken",
-  AccountApiTokenProps,
+  ApiTokenProps,
   {
     tokenId: string;
     name: string;
@@ -87,7 +85,7 @@ export const AccountApiTokenProvider = () =>
   Provider.effect(
     AccountApiToken,
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId: defaultAccountId } = yield* CloudflareEnvironment;
       const createToken = yield* accounts.createToken;
       const updateToken = yield* accounts.updateToken;
       const deleteToken = yield* accounts.deleteToken;
@@ -100,6 +98,7 @@ export const AccountApiTokenProvider = () =>
           status?: "active" | "disabled" | "expired" | null;
         },
         value: Redacted.Redacted<string>,
+        accountId: string,
       ): AccountApiTokenAttributes => ({
         tokenId: tokenData.id ?? "",
         name: tokenData.name ?? "",
@@ -112,16 +111,19 @@ export const AccountApiTokenProvider = () =>
         stables: ["tokenId", "accountId"],
         diff: Effect.fn(function* ({ id, olds, news, output }) {
           if (!isResolved(news)) return undefined;
-          if ((output?.accountId ?? accountId) !== accountId) {
+          const newAccountId = news.accountId ?? defaultAccountId;
+          const oldAccountId =
+            output?.accountId ?? olds?.accountId ?? defaultAccountId;
+          if (oldAccountId !== newAccountId) {
             return { action: "replace" } as const;
           }
           const oldName = output?.name ?? (yield* resolveName(id, olds?.name));
           const newName = yield* resolveName(id, news.name);
           const oldPolicyFp = policyFingerprint(
-            resolvePolicies(olds?.policies ?? [], accountId),
+            resolvePolicies(olds?.policies ?? [], oldAccountId),
           );
           const newPolicyFp = policyFingerprint(
-            resolvePolicies(news.policies, accountId),
+            resolvePolicies(news.policies, newAccountId),
           );
           const oldCondFp = conditionFingerprint(olds?.condition);
           const newCondFp = conditionFingerprint(news.condition);
@@ -136,6 +138,7 @@ export const AccountApiTokenProvider = () =>
           }
         }),
         create: Effect.fn(function* ({ id, news }) {
+          const accountId = news.accountId ?? defaultAccountId;
           const name = yield* resolveName(id, news.name);
           const policies = resolvePolicies(news.policies, accountId);
           const result = yield* createToken({
@@ -151,9 +154,14 @@ export const AccountApiTokenProvider = () =>
               `Cloudflare did not return a value for token "${name}".`,
             );
           }
-          return buildAttributes(result, Redacted.make(result.value));
+          return buildAttributes(
+            result,
+            Redacted.make(result.value),
+            accountId,
+          );
         }),
         update: Effect.fn(function* ({ id, news, output }) {
+          const accountId = news.accountId ?? defaultAccountId;
           const name = yield* resolveName(id, news.name);
           const policies = resolvePolicies(news.policies, accountId);
           const result = yield* updateToken({
@@ -167,7 +175,7 @@ export const AccountApiTokenProvider = () =>
           });
           // Cloudflare doesn't return the value on update; preserve the
           // value captured at creation.
-          return buildAttributes(result, output.value);
+          return buildAttributes(result, output.value, accountId);
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* deleteToken({
@@ -187,7 +195,9 @@ export const AccountApiTokenProvider = () =>
             accountId: output.accountId,
             tokenId: output.tokenId,
           }).pipe(
-            Effect.map((token) => buildAttributes(token, output.value)),
+            Effect.map((token) =>
+              buildAttributes(token, output.value, output.accountId),
+            ),
             Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
             Effect.catchTag("TokenNotFound", () => Effect.succeed(undefined)),
           );

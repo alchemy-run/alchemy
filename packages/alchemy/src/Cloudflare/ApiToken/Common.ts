@@ -41,12 +41,17 @@ export interface ApiTokenCondition {
   };
 }
 
-export type BaseApiTokenProps = {
+export type ApiTokenProps = {
   /**
    * Token name. Defaults to a generated physical name based on the
    * resource's logical id, app name, and stage.
    */
   name?: string;
+  /**
+   * The Cloudflare account ID that owns this token. Defaults to the
+   * account ID resolved from the ambient {@link CloudflareEnvironment}.
+   */
+  accountId?: string;
   /**
    * Access policies attached to the token. At least one policy is required
    * by Cloudflare.
