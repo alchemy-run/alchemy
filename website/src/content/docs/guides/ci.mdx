@@ -1,6 +1,6 @@
 ---
 title: Continuous Integration
-description: Set up CI/CD pipelines for alchemy projects with GitHub Actions, automated deployments, and PR previews.
+description: Set up CI/CD pipelines for alchemy projects with GitHub Actions, automated deployments, and PR previews — with provider credentials managed as code.
 sidebar:
   order: 2
 ---
@@ -165,7 +165,16 @@ fi`,
 return <Code lang="yaml" code={content} />;
 }
 
-Set up preview deployments and continuous integration for your alchemy projects using GitHub Actions.
+This guide walks you through wiring up GitHub Actions for an Alchemy
+project: a deploy workflow with PR previews, a `stacks/github.ts`
+that mints scoped CI credentials and pushes them into your repo, and
+provider-specific recipes for Cloudflare and AWS.
+
+The unifying idea is **credentials as code**. Rather than copy-paste
+API keys into the GitHub UI, you let Alchemy provision exactly the
+credentials your CI needs — a scoped Cloudflare API token, an AWS
+IAM role for OIDC, etc. — and write them straight into the repo as
+encrypted secrets.
 
 ## How PR previews work
 
@@ -182,11 +191,16 @@ Open a PR. Alchemy does the rest.
 4. **PR is merged or closed → cleanup runs.** A second job runs
    `alchemy destroy --stage pr-{n}`. Resources gone. Costs gone.
 
-As part of this guide, we'll:
+## What we'll build
 
-1. Create a GitHub Actions workflow with PR previews
-2. Post a GitHub Comment on each PR with the preview URL
-3. Create a GitHub Stack (`stacks/github.ts`) that configures your repository with provider credentials using `GitHub.Secret` and `GitHub.Variable`
+By the end you'll have:
+
+1. A GitHub Actions workflow (`.github/workflows/deploy.yml`) with
+   PR previews, prod deploys, and automatic cleanup.
+2. A `stacks/github.ts` that creates provider credentials and writes
+   them to your repo as `GitHub.Secret` / `GitHub.Variable`.
+3. A PR-comment resource in your `alchemy.run.ts` that posts the
+   preview URL on each push.
 
 ## GitHub Actions Workflow
 
@@ -194,9 +208,9 @@ As part of this guide, we'll:
 
 1. **Add preview comments to your stack**
 
-   Update your `alchemy.run.ts` to post a preview URL on each pull request.
-   The comment auto-updates on every push because the logical ID stays the
-   same.
+   Update your `alchemy.run.ts` to post a preview URL on each pull
+   request. The comment auto-updates on every push because the
+   logical ID stays the same.
 
    ```diff lang="typescript"
    import * as Alchemy from "alchemy";
@@ -281,61 +295,145 @@ As part of this guide, we'll:
 
 </Steps>
 
-## GitHub Stack
+## The GitHub Stack
 
-Before CI can deploy, your GitHub repository needs provider credentials
-configured as secrets and variables. We recommend managing this with a
-dedicated `stacks/github.ts` stack that you deploy once locally.
+Before CI can deploy, your repo needs provider credentials configured
+as Actions secrets and variables. We recommend managing this with a
+dedicated `stacks/github.ts` that you deploy once locally — that way
+the credential set is reviewable, diffable, and reproducible.
 
-The base stack uses `GitHub.Secret` and `GitHub.Variable` to configure
-your repository programmatically:
+The stack uses `GitHub.Secret` and `GitHub.Variable` to write into
+your repository, and provider resources like
+`Cloudflare.AccountApiToken` or `AWS.IAM.Role` to mint the
+credentials themselves.
 
-Pick the section below that matches your provider for a complete example.
+### Set up an `admin` profile
 
-After creating the file, deploy it once locally:
+The `stacks/github.ts` you're about to write needs more privilege
+than your day-to-day app stack. Creating a Cloudflare API token
+requires `API Tokens > Write`; creating an IAM role and OIDC
+provider requires IAM admin rights.
+
+Rather than hand those rights to your default profile, create a
+separate `admin` profile:
 
 ```sh
-alchemy deploy stacks/github.ts
+alchemy login --profile admin
 ```
+
+:::danger[Heads up]
+The credentials stored under `--profile admin` can mint new tokens
+and roles with arbitrary scope. Treat it like root. Use it only
+when deploying `stacks/github.ts`, and keep your default profile
+on a narrowly scoped credential (OAuth, a scoped API token, or
+OIDC) for everyday `alchemy deploy` runs.
+:::
+
+After creating the file, deploy it once locally under the admin
+profile:
+
+```sh
+alchemy deploy stacks/github.ts --profile admin
+```
+
+You only need to re-run this stack when you want to rotate
+credentials or change permissions.
 
 ## Cloudflare
 
-Add your Cloudflare credentials to the GitHub stack:
+The simplest case: a single Cloudflare account, used for both prod
+and PR previews. Your `admin` profile mints a scoped API token, and
+the stack pushes it into your repo as a GitHub Actions secret.
 
-```diff lang="typescript"
+:::caution[Required Cloudflare permissions]
+The credential behind `--profile admin` must be allowed to create
+API tokens. The two practical options are:
+
+- The **Global API Key** (API Key + Email) — has full account
+  access, including token management.
+- An **API Token** with at least `User > API Tokens > Write` (for
+  user-owned tokens) **and** `Account > API Tokens > Write` for the
+  target account.
+
+A standard "Edit Cloudflare Workers" token is **not** enough — it
+can deploy Workers but cannot mint other tokens. Use the Global API
+Key for `--profile admin` unless you've explicitly configured a
+token-management token.
+:::
+
+```typescript
 // stacks/github.ts
 import * as Alchemy from "alchemy";
-+ import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "alchemy/Cloudflare";
 import * as GitHub from "alchemy/GitHub";
-+ import * as Config from "effect/Config";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
-+ import * as Redacted from "effect/Redacted";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 
 export default Alchemy.Stack(
   "github",
   {
-+   providers: Cloudflare.providers(),
+    providers: Layer.mergeAll(
+      Cloudflare.providers(),
+      GitHub.providers(),
+    ),
+    state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-+   const cfApiToken = yield* Config.string("CLOUDFLARE_API_TOKEN");
-+   const cfAccountId = yield* Config.string("CLOUDFLARE_ACCOUNT_ID");
-+
-+   yield* GitHub.Secret("cf-api-token", {
-+     owner: "your-org",
-+     repository: "your-repo",
-+     name: "CLOUDFLARE_API_TOKEN",
-+     value: Redacted.make(cfApiToken),
-+   });
-+
-+   yield* GitHub.Secret("cf-account-id", {
-+     owner: "your-org",
-+     repository: "your-repo",
-+     name: "CLOUDFLARE_ACCOUNT_ID",
-+     value: Redacted.make(cfAccountId),
-+   });
+    const accountId = yield* Config.string("CLOUDFLARE_ACCOUNT_ID");
+
+    const apiToken = yield* Cloudflare.AccountApiToken("CIToken", {
+      accountId,
+      policies: [
+        {
+          effect: "allow",
+          permissionGroups: [
+            "Workers Scripts Write",
+            "Workers KV Storage Write",
+            "Workers R2 Storage Write",
+            "D1 Write",
+            "Queues Write",
+            "Pages Write",
+            "Account Settings Write",
+            "Workers Tail Read",
+          ],
+          resources: {
+            "com.cloudflare.api.account": "*",
+          },
+        },
+      ],
+    });
+
+    yield* GitHub.Secret("cf-api-token", {
+      owner: "your-org",
+      repository: "your-repo",
+      name: "CLOUDFLARE_API_TOKEN",
+      value: apiToken.value,
+    });
+
+    yield* GitHub.Secret("cf-account-id", {
+      owner: "your-org",
+      repository: "your-repo",
+      name: "CLOUDFLARE_ACCOUNT_ID",
+      value: Redacted.make(accountId),
+    });
   }),
 );
 ```
+
+A few details worth knowing:
+
+- `Cloudflare.AccountApiToken` calls
+  `POST /accounts/{account_id}/tokens` and Cloudflare returns the
+  freshly minted token value exactly once. Alchemy captures it,
+  stores it in state, and pipes it straight into `GitHub.Secret` —
+  the raw token never appears in your terminal or in CI logs.
+- Trim the `permissionGroups` list to just what your app needs.
+  Listed above is a sensible default for a Workers + KV + R2 + D1
+  app.
+- The resource diff is stable across redeploys. Editing a policy
+  produces a clean update against the same token ID.
 
 Then add the secrets to your workflow's deploy and cleanup steps:
 
@@ -359,80 +457,197 @@ Then add the secrets to your workflow's deploy and cleanup steps:
           PULL_REQUEST: ${{ github.event.number }}
 ```
 
-## AWS with GitHub OIDC (recommended)
+### Optional: separate test and prod accounts
 
-GitHub OIDC lets your workflow assume an IAM role without storing long-lived
-access keys. The GitHub stack creates the OIDC provider and IAM role,
-then configures the repo with the role ARN and region as variables.
+For stricter isolation you can run preview environments on one
+Cloudflare account and production on another. Mint two tokens from
+the same `stacks/github.ts` and prefix the secrets so the workflow
+can pick the right pair based on `STAGE`.
 
-```diff lang="typescript"
+```typescript
 // stacks/github.ts
 import * as Alchemy from "alchemy";
-+ import * as AWS from "alchemy/AWS";
+import * as Cloudflare from "alchemy/Cloudflare";
 import * as GitHub from "alchemy/GitHub";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 
 export default Alchemy.Stack(
   "github",
   {
-+   providers: AWS.providers(),
+    providers: Layer.mergeAll(
+      Cloudflare.providers(),
+      GitHub.providers(),
+    ),
+    state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-+   const oidc = yield* AWS.IAM.OpenIDConnectProvider("GitHubOidc", {
-+     url: "https://token.actions.githubusercontent.com",
-+     clientIDList: ["sts.amazonaws.com"],
-+   });
-+
-+   const role = yield* AWS.IAM.Role("GitHubActionsRole", {
-+     roleName: "github-actions",
-+     assumeRolePolicyDocument: {
-+       Version: "2012-10-17",
-+       Statement: [
-+         {
-+           Effect: "Allow",
-+           Principal: {
-+             Federated: oidc.openIDConnectProviderArn,
-+           },
-+           Action: "sts:AssumeRoleWithWebIdentity",
-+           Condition: {
-+             StringEquals: {
-+               "token.actions.githubusercontent.com:aud":
-+                 "sts.amazonaws.com",
-+             },
-+             StringLike: {
-+               "token.actions.githubusercontent.com:sub":
-+                 "repo:your-org/your-repo:*",
-+             },
-+           },
-+         },
-+       ],
-+     },
-+     managedPolicyArns: [
-+       "arn:aws:iam::aws:policy/AdministratorAccess",
-+     ],
-+   });
-+
-+   const region = yield* AWS.Region;
-+
-+   yield* GitHub.Variable("aws-role-arn", {
-+     owner: "your-org",
-+     repository: "your-repo",
-+     name: "AWS_ROLE_ARN",
-+     value: role.roleArn,
-+   });
-+
-+   yield* GitHub.Variable("aws-region", {
-+     owner: "your-org",
-+     repository: "your-repo",
-+     name: "AWS_REGION",
-+     value: region,
-+   });
+    const testAccountId = yield* Config.string("TEST_CLOUDFLARE_ACCOUNT_ID");
+    const prodAccountId = yield* Config.string("PROD_CLOUDFLARE_ACCOUNT_ID");
+
+    const policies = [
+      {
+        effect: "allow" as const,
+        permissionGroups: [
+          "Workers Scripts Write",
+          "Workers KV Storage Write",
+          "Workers R2 Storage Write",
+          "D1 Write",
+          "Queues Write",
+          "Pages Write",
+          "Account Settings Write",
+          "Workers Tail Read",
+        ],
+        resources: { "com.cloudflare.api.account": "*" },
+      },
+    ];
+
+    const testToken = yield* Cloudflare.AccountApiToken("TestApiToken", {
+      accountId: testAccountId,
+      policies,
+    });
+
+    const prodToken = yield* Cloudflare.AccountApiToken("ProdApiToken", {
+      accountId: prodAccountId,
+      policies,
+    });
+
+    const secrets: Record<string, Redacted.Redacted<string>> = {
+      TEST_CLOUDFLARE_API_TOKEN: testToken.value,
+      TEST_CLOUDFLARE_ACCOUNT_ID: Redacted.make(testAccountId),
+      PROD_CLOUDFLARE_API_TOKEN: prodToken.value,
+      PROD_CLOUDFLARE_ACCOUNT_ID: Redacted.make(prodAccountId),
+    };
+
+    yield* Effect.all(
+      Object.entries(secrets).map(([name, value]) =>
+        GitHub.Secret(name, {
+          owner: "your-org",
+          repository: "your-repo",
+          name,
+          value,
+        }),
+      ),
+    );
   }),
 );
 ```
 
-After deploying, update the workflow to add `id-token: write` and the
-`configure-aws-credentials` step:
+Your `admin` profile needs API-token-write permission on **both**
+accounts. The simplest setup is to log in with the Global API Key of
+a user that's a member of both.
+
+In your workflow, switch on `STAGE` to choose the right credential
+pair:
+
+```diff lang="yaml"
+      - name: Deploy
+        run: bun alchemy deploy --stage ${{ env.STAGE }}
+        env:
++         CLOUDFLARE_API_TOKEN: ${{ env.STAGE == 'prod' && secrets.PROD_CLOUDFLARE_API_TOKEN || secrets.TEST_CLOUDFLARE_API_TOKEN }}
++         CLOUDFLARE_ACCOUNT_ID: ${{ env.STAGE == 'prod' && secrets.PROD_CLOUDFLARE_ACCOUNT_ID || secrets.TEST_CLOUDFLARE_ACCOUNT_ID }}
+          PULL_REQUEST: ${{ github.event.number }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+## AWS with GitHub OIDC (recommended)
+
+GitHub OIDC lets your workflow assume an IAM role without storing
+long-lived access keys. The GitHub stack creates the OIDC provider
+and an IAM role scoped to your repo, then writes the role ARN and
+region to the repo as Actions **variables** (not secrets — they're
+not sensitive).
+
+Your `--profile admin` AWS credentials need IAM admin rights for
+this stack: it creates an `OpenIDConnectProvider` and an IAM `Role`.
+Run `alchemy login --profile admin` and choose a credential
+(SSO/OIDC, access keys, etc.) that's authorized for IAM
+administration.
+
+```typescript
+// stacks/github.ts
+import * as Alchemy from "alchemy";
+import * as AWS from "alchemy/AWS";
+import * as GitHub from "alchemy/GitHub";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export default Alchemy.Stack(
+  "github",
+  {
+    providers: Layer.mergeAll(
+      AWS.providers(),
+      GitHub.providers(),
+    ),
+  },
+  Effect.gen(function* () {
+    const oidc = yield* AWS.IAM.OpenIDConnectProvider("GitHubOidc", {
+      url: "https://token.actions.githubusercontent.com",
+      clientIDList: ["sts.amazonaws.com"],
+    });
+
+    const role = yield* AWS.IAM.Role("GitHubActionsRole", {
+      roleName: "github-actions",
+      assumeRolePolicyDocument: {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Principal: {
+              Federated: oidc.openIDConnectProviderArn,
+            },
+            Action: "sts:AssumeRoleWithWebIdentity",
+            Condition: {
+              StringEquals: {
+                "token.actions.githubusercontent.com:aud":
+                  "sts.amazonaws.com",
+              },
+              StringLike: {
+                "token.actions.githubusercontent.com:sub":
+                  "repo:your-org/your-repo:*",
+              },
+            },
+          },
+        ],
+      },
+      managedPolicyArns: [
+        "arn:aws:iam::aws:policy/AdministratorAccess",
+      ],
+    });
+
+    const region = yield* AWS.Region;
+
+    yield* GitHub.Variable("aws-role-arn", {
+      owner: "your-org",
+      repository: "your-repo",
+      name: "AWS_ROLE_ARN",
+      value: role.roleArn,
+    });
+
+    yield* GitHub.Variable("aws-region", {
+      owner: "your-org",
+      repository: "your-repo",
+      name: "AWS_REGION",
+      value: region,
+    });
+  }),
+);
+```
+
+:::tip[Tighten the role]
+`AdministratorAccess` is the path of least resistance for getting
+CI working, but for production you should swap it for a
+custom-managed policy that grants only the actions your app needs
+(for example, `lambda:*`, `dynamodb:*`, and the bucket actions
+you use). The `assumeRolePolicyDocument` already restricts who can
+assume the role to your specific repo via the `sub` condition.
+:::
+
+After deploying, update the workflow to add `id-token: write` and
+the `configure-aws-credentials` step. No secrets needed:
 
 ```diff lang="yaml"
     deploy:
@@ -472,47 +687,50 @@ After deploying, update the workflow to add `id-token: write` and the
 
 ## AWS with access keys
 
-If you can't use OIDC, store static IAM access keys as repository secrets
-instead.
+If OIDC isn't an option (some sandbox accounts disallow it, or
+you're targeting an account you don't fully control), fall back to
+static IAM access keys stored as repo secrets. The stack pushes
+existing keys from your environment into the repo — it does **not**
+mint a new IAM user, since most teams prefer to do that step in the
+AWS console.
 
-```diff lang="typescript"
+```typescript
 // stacks/github.ts
 import * as Alchemy from "alchemy";
-+ import * as AWS from "alchemy/AWS";
 import * as GitHub from "alchemy/GitHub";
-+ import * as Config from "effect/Config";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
-+ import * as Redacted from "effect/Redacted";
+import * as Redacted from "effect/Redacted";
 
 export default Alchemy.Stack(
   "github",
   {
-+   providers: AWS.providers(),
+    providers: GitHub.providers(),
   },
   Effect.gen(function* () {
-+   const accessKeyId = yield* Config.string("AWS_ACCESS_KEY_ID");
-+   const secretAccessKey = yield* Config.string("AWS_SECRET_ACCESS_KEY");
-+
-+   yield* GitHub.Secret("aws-access-key-id", {
-+     owner: "your-org",
-+     repository: "your-repo",
-+     name: "AWS_ACCESS_KEY_ID",
-+     value: Redacted.make(accessKeyId),
-+   });
-+
-+   yield* GitHub.Secret("aws-secret-access-key", {
-+     owner: "your-org",
-+     repository: "your-repo",
-+     name: "AWS_SECRET_ACCESS_KEY",
-+     value: Redacted.make(secretAccessKey),
-+   });
-+
-+   yield* GitHub.Variable("aws-region", {
-+     owner: "your-org",
-+     repository: "your-repo",
-+     name: "AWS_REGION",
-+     value: "us-east-1",
-+   });
+    const accessKeyId = yield* Config.string("AWS_ACCESS_KEY_ID");
+    const secretAccessKey = yield* Config.redacted("AWS_SECRET_ACCESS_KEY");
+
+    yield* GitHub.Secret("aws-access-key-id", {
+      owner: "your-org",
+      repository: "your-repo",
+      name: "AWS_ACCESS_KEY_ID",
+      value: Redacted.make(accessKeyId),
+    });
+
+    yield* GitHub.Secret("aws-secret-access-key", {
+      owner: "your-org",
+      repository: "your-repo",
+      name: "AWS_SECRET_ACCESS_KEY",
+      value: secretAccessKey,
+    });
+
+    yield* GitHub.Variable("aws-region", {
+      owner: "your-org",
+      repository: "your-repo",
+      name: "AWS_REGION",
+      value: "us-east-1",
+    });
   }),
 );
 ```

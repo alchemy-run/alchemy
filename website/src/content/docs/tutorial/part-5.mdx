@@ -1,16 +1,22 @@
 ---
 title: "Part 5: CI/CD"
-description: Set up GitHub Actions for automated deployments, PR previews, and remote state.
+description: Set up GitHub Actions for automated deployments, PR previews, and remote state — with Cloudflare credentials managed as code.
 sidebar:
   order: 5
 ---
 
-import { Steps } from "@astrojs/starlight/components";
+import { Steps, Tabs, TabItem } from "@astrojs/starlight/components";
 
 In [Part 4](/tutorial/part-4) you ran your stack locally. Now you'll
-set up GitHub Actions so that pushes to `main` deploy to production,
+hand it off to GitHub Actions: pushes to `main` deploy to production,
 pull requests get isolated preview environments, and merged PRs clean
 up after themselves.
+
+The trick to doing this safely is **letting Alchemy provision its own
+CI credentials**. Instead of pasting your personal Cloudflare API key
+into GitHub, you'll write a small `stacks/github.ts` that mints a
+scoped Cloudflare API token, then stores it as a GitHub Actions
+secret — all from code, all checked in.
 
 ## Confirm your state store is remote
 
@@ -40,60 +46,142 @@ If you're using `State.localState()` instead, switch it to
 GitHub Actions runners can't see your local filesystem.
 :::
 
-## Store credentials in GitHub
+## Set up an `admin` profile
 
-<Steps>
+Your `alchemy.run.ts` only needs enough permission to deploy your
+app. The `stacks/github.ts` you're about to write needs more: it
+creates a brand-new Cloudflare API token, which requires the
+`API Tokens > Write` permission.
 
-1. **Create a GitHub stack**
+Rather than hand those elevated rights to your day-to-day profile,
+create a dedicated `admin` profile:
 
-   Use Alchemy to manage your repository secrets as code. Create
-   `stacks/github.ts`:
+```sh
+alchemy login --profile admin
+```
 
-   ```typescript
-   // stacks/github.ts
-   import * as Alchemy from "alchemy";
-   import * as Cloudflare from "alchemy/Cloudflare";
-   import * as GitHub from "alchemy/GitHub";
-   import * as Config from "effect/Config";
-   import * as Effect from "effect/Effect";
-   import * as Redacted from "effect/Redacted";
+When prompted for a Cloudflare credential, pick one of:
 
-   export default Alchemy.Stack(
-     "github",
-     {
-       providers: Cloudflare.providers(),
-     },
-     Effect.gen(function* () {
-       const cfApiToken = yield* Config.string("CLOUDFLARE_API_TOKEN");
-       const cfAccountId = yield* Config.string("CLOUDFLARE_ACCOUNT_ID");
+- **API Key + Email** (the Global API Key) — has full account
+  access, including the ability to mint tokens.
+- **API Token** — must be a token with at least
+  `User > API Tokens > Write` (for user-owned tokens) **and**
+  `Account > API Tokens > Write` (for the account whose tokens
+  you'll be creating). Most people use the Global API Key here
+  because the token-permissions UI in the Cloudflare dashboard is
+  fiddly.
 
-       yield* GitHub.Secret("cf-api-token", {
-         owner: "your-org",
-         repository: "your-repo",
-         name: "CLOUDFLARE_API_TOKEN",
-         value: Redacted.make(cfApiToken),
-       });
+:::danger[Heads up]
+The credential stored under `--profile admin` can create new API
+tokens with arbitrary scopes. Treat it like root. Do **not** use it
+for everyday `alchemy deploy` runs against your application — keep
+your default profile on a narrowly scoped API Token (or OAuth) and
+only reach for `admin` when you're touching `stacks/github.ts`.
+:::
 
-       yield* GitHub.Secret("cf-account-id", {
-         owner: "your-org",
-         repository: "your-repo",
-         name: "CLOUDFLARE_ACCOUNT_ID",
-         value: Redacted.make(cfAccountId),
-       });
-     }),
-   );
-   ```
+You'll also be prompted for a GitHub credential. Pick `gh-cli` if
+you have the GitHub CLI installed, otherwise paste a Personal
+Access Token with the `repo` scope.
 
-2. **Deploy the GitHub stack once locally**
+## Create the GitHub stack
 
-   ```sh
-   alchemy deploy stacks/github.ts
-   ```
+Create `stacks/github.ts`. This is a one-shot stack you'll deploy
+from your laptop (under the `admin` profile) to provision the
+Cloudflare API token CI will use, and to push it into your repo as
+an encrypted GitHub Actions secret.
 
-   This reads your local environment variables and writes them as
-   encrypted secrets to your GitHub repository.
+```typescript
+// stacks/github.ts
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as GitHub from "alchemy/GitHub";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 
-</Steps>
+export default Alchemy.Stack(
+  "github",
+  {
+    providers: Layer.mergeAll(
+      Cloudflare.providers(),
+      GitHub.providers(),
+    ),
+    state: Cloudflare.state(),
+  },
+  Effect.gen(function* () {
+    const accountId = yield* Config.string("CLOUDFLARE_ACCOUNT_ID");
+
+    const apiToken = yield* Cloudflare.AccountApiToken("CIToken", {
+      accountId,
+      policies: [
+        {
+          effect: "allow",
+          permissionGroups: [
+            "Workers Scripts Write",
+            "Workers KV Storage Write",
+            "Workers R2 Storage Write",
+            "D1 Write",
+            "Queues Write",
+            "Pages Write",
+            "Account Settings Write",
+            "Workers Tail Read",
+          ],
+          resources: {
+            "com.cloudflare.api.account": "*",
+          },
+        },
+      ],
+    });
+
+    yield* GitHub.Secret("cf-api-token", {
+      owner: "your-org",
+      repository: "your-repo",
+      name: "CLOUDFLARE_API_TOKEN",
+      value: apiToken.value,
+    });
+
+    yield* GitHub.Secret("cf-account-id", {
+      owner: "your-org",
+      repository: "your-repo",
+      name: "CLOUDFLARE_ACCOUNT_ID",
+      value: Redacted.make(accountId),
+    });
+  }),
+);
+```
+
+A few things worth pointing out:
+
+- `Cloudflare.AccountApiToken` calls
+  `POST /accounts/{account_id}/tokens` and returns the freshly minted
+  secret. Cloudflare only reveals that value once, so Alchemy stores
+  it in state and pipes it straight into `GitHub.Secret` — the raw
+  token never touches your terminal.
+- The token is **scoped down** to exactly the permissions your app
+  needs. If you don't use D1 or R2, drop those entries.
+- The same stack reuses your remote `Cloudflare.state()`, so the
+  token's ID is tracked and any future edit (rename, policy change)
+  produces a clean diff.
+
+Replace `your-org` and `your-repo` with your GitHub org and repo
+slug.
+
+## Deploy the GitHub stack
+
+Run it once from your laptop, under the `admin` profile:
+
+```sh
+alchemy deploy stacks/github.ts --profile admin
+```
+
+You'll see Alchemy plan two creates — the Cloudflare token and the
+GitHub secret — then apply them. When it's done, head to your repo's
+**Settings → Secrets and variables → Actions** page; you should see
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` listed there.
+
+You only need to re-run this stack when you want to rotate the token
+or change its permissions.
 
 ## Create the workflow
 
@@ -223,21 +311,103 @@ export default Alchemy.Stack(
 
 The logical ID `"preview-comment"` stays the same across pushes, so
 Alchemy updates the existing comment instead of creating a new one.
+`GITHUB_TOKEN` is provided automatically by Actions and authorizes
+the comment.
 
 ## The full picture
 
 Here's how everything fits together:
 
-1. Developer pushes a branch and opens a PR
-2. GitHub Actions deploys `--stage pr-42`, creating isolated
-   infrastructure
-3. Alchemy posts a comment with the preview URL
-4. Reviewer clicks the URL and tests the preview
-5. PR is merged — the cleanup job destroys the `pr-42` stage
-6. Push to `main` deploys `--stage prod`
+1. You ran `stacks/github.ts` once under `--profile admin`. That
+   minted a scoped Cloudflare API token and pushed it into your
+   repo as a GitHub Actions secret.
+2. A developer pushes a branch and opens a PR.
+3. GitHub Actions checks out the code, installs deps, and runs
+   `alchemy deploy --stage pr-42` using the CI token.
+4. Alchemy creates an isolated copy of every resource (bucket,
+   worker, etc.) under the `pr-42` stage and posts the preview URL
+   as a PR comment.
+5. The reviewer clicks the URL and tests the preview.
+6. The PR is merged — the cleanup job runs
+   `alchemy destroy --stage pr-42` and the preview infrastructure
+   disappears.
+7. The push to `main` deploys `--stage prod`.
 
 Each environment is fully isolated with its own bucket, worker, and
 state.
+
+## Optional: separate test and prod Cloudflare accounts
+
+If you want to keep preview environments on one Cloudflare account
+and production on another, deploy two tokens from the same
+`stacks/github.ts` and prefix the secrets accordingly.
+
+```typescript
+// stacks/github.ts
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as GitHub from "alchemy/GitHub";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+
+export default Alchemy.Stack(
+  "github",
+  {
+    providers: Layer.mergeAll(
+      Cloudflare.providers(),
+      GitHub.providers(),
+    ),
+    state: Cloudflare.state(),
+  },
+  Effect.gen(function* () {
+    const testAccountId = yield* Config.string("TEST_CLOUDFLARE_ACCOUNT_ID");
+    const prodAccountId = yield* Config.string("PROD_CLOUDFLARE_ACCOUNT_ID");
+
+    const testToken = yield* Cloudflare.AccountApiToken("TestApiToken", {
+      accountId: testAccountId,
+      policies: [/* same policies as above */],
+    });
+
+    const prodToken = yield* Cloudflare.AccountApiToken("ProdApiToken", {
+      accountId: prodAccountId,
+      policies: [/* same policies as above */],
+    });
+
+    const secrets: Record<string, Redacted.Redacted<string>> = {
+      TEST_CLOUDFLARE_API_TOKEN: testToken.value,
+      TEST_CLOUDFLARE_ACCOUNT_ID: Redacted.make(testAccountId),
+      PROD_CLOUDFLARE_API_TOKEN: prodToken.value,
+      PROD_CLOUDFLARE_ACCOUNT_ID: Redacted.make(prodAccountId),
+    };
+
+    yield* Effect.all(
+      Object.entries(secrets).map(([name, value]) =>
+        GitHub.Secret(name, {
+          owner: "your-org",
+          repository: "your-repo",
+          name,
+          value,
+        }),
+      ),
+    );
+  }),
+);
+```
+
+In your workflow, choose which set of credentials to expose based
+on `STAGE`:
+
+```yaml
+env:
+  CLOUDFLARE_API_TOKEN: ${{ env.STAGE == 'prod' && secrets.PROD_CLOUDFLARE_API_TOKEN || secrets.TEST_CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ env.STAGE == 'prod' && secrets.PROD_CLOUDFLARE_ACCOUNT_ID || secrets.TEST_CLOUDFLARE_ACCOUNT_ID }}
+```
+
+Your `admin` profile needs API-token-write permission on **both**
+accounts. The simplest way is to log in with the Global API Key of
+a user that's a member of both.
 
 ## Recap
 
@@ -247,14 +417,16 @@ You've completed the tutorial. You now know how to:
 - **Part 2** — Add a Worker with bindings to other resources
 - **Part 3** — Write integration tests against deployed stacks
 - **Part 4** — Run locally with `alchemy dev`
-- **Part 5** — Automate everything with GitHub Actions CI/CD
+- **Part 5** — Mint scoped CI credentials with
+  `Cloudflare.AccountApiToken`, push them to GitHub with
+  `GitHub.Secret`, and deploy from Actions
 
 ## What's next
 
 - Read the [Plan, Deploy and Destroy](/concepts/deploy-and-destroy)
   guide for all CLI flags and options
-- Explore the [CI guide](/guides/ci) for AWS credential setup
-  (OIDC and access keys)
+- Explore the [CI guide](/guides/ci) for the AWS equivalents
+  (OIDC and access keys) and more workflow patterns
 - Check out the [Testing guide](/guides/testing) for more advanced
   testing patterns
 - Browse the [Providers](/providers) reference for all available
