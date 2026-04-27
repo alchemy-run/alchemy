@@ -3,6 +3,7 @@ import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import * as Option from "effect/Option";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 
 import { AuthProviders } from "../../src/Auth/AuthProvider.ts";
@@ -10,10 +11,11 @@ import { withProfileOverride } from "../../src/Auth/Profile.ts";
 import { Stage } from "../../src/Stage.ts";
 import * as State from "../../src/State/index.ts";
 import { encodeState } from "../../src/State/StateEncoding.ts";
+import * as Clank from "../../src/Util/Clank.ts";
 import { loadConfigProvider } from "../../src/Util/ConfigProvider.ts";
 import { fileLogger } from "../../src/Util/FileLogger.ts";
 
-import { envFile, importStack, main, profile, stage } from "./_shared.ts";
+import { envFile, importStack, main, profile, stage, yes } from "./_shared.ts";
 
 /**
  * When set, the State service is replaced with the on-disk
@@ -222,6 +224,93 @@ const treeCommand = Command.make(
   }),
 );
 
+const clearStackArg = Argument.string("stack").pipe(
+  Argument.withDescription(
+    "Stack name to clear. Omit to clear ALL stacks in the store.",
+  ),
+  Argument.optional,
+);
+
+const clearStageArg = Argument.string("stage").pipe(
+  Argument.withDescription(
+    "Stage to clear within the stack. Omit to clear all stages in the stack.",
+  ),
+  Argument.optional,
+);
+
+/**
+ * Destructive: removes resource state from the store. The actual cloud
+ * resources are NOT touched — this only affects what alchemy thinks
+ * exists. Always confirms before deleting unless `--yes` is passed.
+ */
+const clearCommand = Command.make(
+  "clear",
+  {
+    stack: clearStackArg,
+    stageName: clearStageArg,
+    main,
+    envFile,
+    stage,
+    profile,
+    local: localFlag,
+    yes,
+  },
+  Effect.fnUntraced(function* ({ stack: stackOpt, stageName: stageOpt, yes: yesFlag, ...rest }) {
+    const stackName = Option.getOrUndefined(stackOpt);
+    const stageName = Option.getOrUndefined(stageOpt);
+
+    if (stageName !== undefined && stackName === undefined) {
+      yield* Console.log(
+        "Error: cannot specify <stage> without <stack>. Pass the stack name as the first argument.",
+      );
+      return yield* Effect.fail(new Error("missing stack"));
+    }
+
+    yield* withStateService(rest, (state) =>
+      Effect.gen(function* () {
+        const targets: ReadonlyArray<{ stack: string; stage?: string }> =
+          stackName === undefined
+            ? [...(yield* state.listStacks())]
+                .sort()
+                .map((s) => ({ stack: s }))
+            : stageName === undefined
+              ? [{ stack: stackName }]
+              : [{ stack: stackName, stage: stageName }];
+
+        if (targets.length === 0) {
+          yield* Console.log("(nothing to clear)");
+          return;
+        }
+
+        const scope =
+          stackName === undefined
+            ? `ALL stacks (${targets.length}): ${targets.map((t) => t.stack).join(", ")}`
+            : stageName === undefined
+              ? `stack '${stackName}' (all stages)`
+              : `stage '${stageName}' in stack '${stackName}'`;
+
+        if (!yesFlag) {
+          const ok = yield* Clank.confirm({
+            message: `About to delete ${scope} from the state store. This cannot be undone. Continue?`,
+            initialValue: false,
+          });
+          if (!ok) {
+            yield* Console.log("Cancelled.");
+            return;
+          }
+        }
+
+        for (const target of targets) {
+          yield* state.deleteStack(target);
+          yield* Console.log(
+            `cleared ${target.stack}${target.stage ? `/${target.stage}` : ""}`,
+          );
+        }
+      }),
+    );
+  }),
+);
+
 export const stateCommand = Command.make("state", {}).pipe(
   Command.withSubcommands([
     stacksCommand,
@@ -229,5 +318,6 @@ export const stateCommand = Command.make("state", {}).pipe(
     resourcesCommand,
     getCommand,
     treeCommand,
+    clearCommand,
   ]),
 );
