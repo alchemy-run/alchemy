@@ -5,7 +5,12 @@ import * as Plan from "@/Plan";
 import { UnsatisfiedResourceCycle } from "@/Plan";
 import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
-import { State, type ResourceState, type ResourceStatus } from "@/State";
+import {
+  inMemoryState,
+  State,
+  type ResourceState,
+  type ResourceStatus,
+} from "@/State";
 import {
   test as baseTest,
   expectEmptyObject,
@@ -16,6 +21,7 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import {
   ArtifactProbe,
   BindingTarget,
@@ -67,7 +73,11 @@ const makePlan = <A, Err = never, Req = never>(
     // @ts-expect-error
     return yield* effect.pipe(
       // @ts-expect-error
-      Stack.make(stack.name, Layer.empty),
+      Stack.make({
+        name: stack.name,
+        providers: Layer.empty,
+        state: inMemoryState(),
+      }),
       Effect.provideService(Stage, stack.stage),
       Effect.flatMap((stackSpec) => Plan.make(stackSpec, options)),
       Effect.provide(TestLayers()),
@@ -85,7 +95,12 @@ const makePlanWithCustomStack =
       // @ts-expect-error
       return yield* effect.pipe(
         // @ts-expect-error
-        Stack.make(stack.name, Layer.empty, stackSpec),
+        Stack.make({
+          name: stack.name,
+          providers: Layer.empty,
+          state: inMemoryState(),
+          stack: stackSpec,
+        }),
         Effect.provideService(Stage, stack.stage),
         Effect.flatMap(Plan.make),
         Effect.provide(TestLayers()),
@@ -451,11 +466,6 @@ test(
     }),
   },
   Effect.gen(function* () {
-    const state = yield* State;
-    const resourceIds = yield* state.list({
-      stack: "test",
-      stage: "test",
-    });
     expect(
       yield* makePlan(
         Effect.gen(function* () {
@@ -2134,6 +2144,191 @@ describe("unresolved plan inputs in diff should conservatively update", () => {
 
       expect(plan.resources.A.action).toBe("create");
       expect(plan.resources.B.action).toBe("update");
+    }),
+  );
+});
+
+describe("Redacted props/outputs are preserved through plan", () => {
+  test(
+    "Redacted prop on a new resource is preserved as a Redacted in the plan",
+    {
+      state: test.state(),
+    },
+    Effect.gen(function* () {
+      const plan = yield* Effect.gen(function* () {
+        yield* TestResource("A", {
+          string: "x",
+          redacted: Redacted.make("hunter2"),
+        });
+      }).pipe(makePlan);
+
+      const node: any = plan.resources.A!;
+      expect(node.action).toBe("create");
+      const props = node.props as TestResourceProps;
+      expect(Redacted.isRedacted(props.redacted)).toBe(true);
+      expect(Redacted.value(props.redacted!)).toBe("hunter2");
+    }),
+  );
+
+  test(
+    "Redacted prop nested inside an array is preserved through the plan",
+    {
+      state: test.state(),
+    },
+    Effect.gen(function* () {
+      const plan = yield* Effect.gen(function* () {
+        yield* TestResource("A", {
+          string: "x",
+          redactedArray: [Redacted.make("a"), Redacted.make("b")],
+        });
+      }).pipe(makePlan);
+
+      const node: any = plan.resources.A!;
+      expect(node.action).toBe("create");
+      const props = node.props as TestResourceProps;
+      expect(props.redactedArray).toBeDefined();
+      expect(props.redactedArray!.length).toBe(2);
+      expect(Redacted.isRedacted(props.redactedArray![0]!)).toBe(true);
+      expect(Redacted.isRedacted(props.redactedArray![1]!)).toBe(true);
+      expect(Redacted.value(props.redactedArray![0]!)).toBe("a");
+      expect(Redacted.value(props.redactedArray![1]!)).toBe("b");
+    }),
+  );
+
+  test(
+    "no-op when prior state has the same Redacted value",
+    {
+      state: test.state({
+        A: {
+          instanceId,
+          providerVersion: 0,
+          logicalId: "A",
+          fqn: "A",
+          namespace: undefined,
+          resourceType: "Test.TestResource",
+          status: "created",
+          props: {
+            string: "x",
+            redacted: Redacted.make("hunter2"),
+          },
+          attr: {
+            string: "x",
+            stringArray: [],
+            stableString: "A",
+            stableArray: ["A"],
+            replaceString: undefined,
+            redacted: Redacted.make("hunter2"),
+            redactedArray: undefined,
+          },
+          downstream: [],
+          bindings: [],
+        },
+      }),
+    },
+    Effect.gen(function* () {
+      const plan = yield* Effect.gen(function* () {
+        yield* TestResource("A", {
+          string: "x",
+          redacted: Redacted.make("hunter2"),
+        });
+      }).pipe(makePlan);
+
+      expect(plan.resources.A!.action).toBe("noop");
+    }),
+  );
+
+  test(
+    "update when Redacted prop value changes",
+    {
+      state: test.state({
+        A: {
+          instanceId,
+          providerVersion: 0,
+          logicalId: "A",
+          fqn: "A",
+          namespace: undefined,
+          resourceType: "Test.TestResource",
+          status: "created",
+          props: {
+            string: "x",
+            redacted: Redacted.make("old"),
+          },
+          attr: {
+            string: "x",
+            stringArray: [],
+            stableString: "A",
+            stableArray: ["A"],
+            replaceString: undefined,
+            redacted: Redacted.make("old"),
+            redactedArray: undefined,
+          },
+          downstream: [],
+          bindings: [],
+        },
+      }),
+    },
+    Effect.gen(function* () {
+      const plan = yield* Effect.gen(function* () {
+        yield* TestResource("A", {
+          string: "x",
+          redacted: Redacted.make("new"),
+        });
+      }).pipe(makePlan);
+
+      expect(plan.resources.A!.action).toBe("update");
+      const node: any = plan.resources.A!;
+      const props = node.props as TestResourceProps;
+      expect(Redacted.isRedacted(props.redacted)).toBe(true);
+      expect(Redacted.value(props.redacted!)).toBe("new");
+    }),
+  );
+
+  test(
+    "Redacted output flowing into a downstream resource preserves its redaction",
+    {
+      state: test.state({
+        A: {
+          instanceId,
+          providerVersion: 0,
+          logicalId: "A",
+          fqn: "A",
+          namespace: undefined,
+          resourceType: "Test.TestResource",
+          status: "created",
+          props: {
+            string: "x",
+            redacted: Redacted.make("hunter2"),
+          },
+          attr: {
+            string: "x",
+            stringArray: [],
+            stableString: "A",
+            stableArray: ["A"],
+            replaceString: undefined,
+            redacted: Redacted.make("hunter2"),
+            redactedArray: undefined,
+          },
+          downstream: [],
+          bindings: [],
+        },
+      }),
+    },
+    Effect.gen(function* () {
+      const plan = yield* Effect.gen(function* () {
+        const A = yield* TestResource("A", {
+          string: "x",
+          redacted: Redacted.make("hunter2"),
+        });
+        yield* TestResource("B", {
+          string: "y",
+          redacted: A.redacted as any,
+        });
+      }).pipe(makePlan);
+
+      const bNode: any = plan.resources.B!;
+      const bProps = bNode.props as TestResourceProps;
+      expect(Redacted.isRedacted(bProps.redacted)).toBe(true);
+      expect(Redacted.value(bProps.redacted!)).toBe("hunter2");
     }),
   );
 });

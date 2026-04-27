@@ -245,7 +245,7 @@
     },
     "packages/alchemy": {
       "name": "alchemy",
-      "version": "2.0.0-beta.13",
+      "version": "2.0.0-beta.14",
       "bin": {
         "alchemy": "./bin/cli.js",
       },
@@ -279,7 +279,6 @@
         "jszip": "^3.10.1",
         "libsodium-wrappers": "^0.8.3",
         "rolldown": "catalog:",
-        "solid-js": "catalog:",
         "sonda": "catalog:",
         "web-tree-sitter": "catalog:",
         "workerd": "catalog:",
@@ -301,6 +300,7 @@
         "pathe": "^2.0.3",
         "react": "^19.2.0",
         "react-devtools-core": "^7.0.1",
+        "solid-js": "catalog:",
         "tsconfig-paths": "^4.2.0",
         "tsdown": "^0.15.4",
         "tsx": "^4.20.6",
@@ -320,7 +320,7 @@
     },
     "packages/better-auth": {
       "name": "@alchemy.run/better-auth",
-      "version": "2.0.0-beta.13",
+      "version": "2.0.0-beta.14",
       "dependencies": {
         "alchemy": "workspace:*",
         "better-auth": "catalog:",

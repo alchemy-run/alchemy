@@ -8,6 +8,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 
 // Bucket
 export type BucketProps = {
@@ -340,6 +341,8 @@ export type TestResourceProps = {
     string: string;
   };
   replaceString?: string;
+  redacted?: Redacted.Redacted<string>;
+  redactedArray?: Redacted.Redacted<string>[];
 };
 
 export interface TestResource extends Resource<
@@ -351,6 +354,8 @@ export interface TestResource extends Resource<
     stableString: string;
     stableArray: string[];
     replaceString: TestResourceProps["replaceString"];
+    redacted: Redacted.Redacted<string> | undefined;
+    redactedArray: Redacted.Redacted<string>[] | undefined;
   }
 > {}
 
@@ -389,13 +394,26 @@ export const testResourceProvider = () =>
               action: "replace",
             };
           }
+          const redactedValue = (
+            r: Redacted.Redacted<string> | undefined,
+          ): string | undefined =>
+            r && Redacted.isRedacted(r) ? Redacted.value(r) : undefined;
+          const redactedArrayValues = (
+            arr: Redacted.Redacted<string>[] | undefined,
+          ): string[] | undefined => arr?.map((r) => Redacted.value(r));
+          const oldRedactedArr = redactedArrayValues(o.redactedArray);
+          const newRedactedArr = redactedArrayValues(n.redactedArray);
           return isUnknown(n.string) ||
             isUnknown(n.stringArray) ||
             n.string !== o.string ||
             n.stringArray?.length !== o.stringArray?.length ||
             !!n.stringArray !== !!o.stringArray ||
             n.stringArray?.some(isUnknown) ||
-            n.stringArray?.some((s, i) => s !== o.stringArray?.[i])
+            n.stringArray?.some((s, i) => s !== o.stringArray?.[i]) ||
+            redactedValue(n.redacted) !== redactedValue(o.redacted) ||
+            oldRedactedArr?.length !== newRedactedArr?.length ||
+            !!oldRedactedArr !== !!newRedactedArr ||
+            newRedactedArr?.some((s, i) => s !== oldRedactedArr?.[i])
             ? {
                 action: "update",
                 stables: ["stableString", "stableArray"],
@@ -415,6 +433,8 @@ export const testResourceProvider = () =>
             stableString: id,
             stableArray: [id],
             replaceString: news.replaceString,
+            redacted: news.redacted,
+            redactedArray: news.redactedArray,
           };
         }),
         update: Effect.fn(function* ({ id, news = {}, output }) {
@@ -430,6 +450,8 @@ export const testResourceProvider = () =>
             stableString: id,
             stableArray: [id],
             replaceString: news.replaceString,
+            redacted: news.redacted,
+            redactedArray: news.redactedArray,
           };
         }),
         delete: Effect.fn(function* ({ id }) {
