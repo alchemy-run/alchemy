@@ -1,5 +1,4 @@
 import * as Effect from "effect/Effect";
-import { InstanceId } from "../../InstanceId.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import { ArtifactsBinding } from "./ArtifactsBinding.ts";
@@ -43,11 +42,11 @@ export type ArtifactsProps = {
  * and emits the corresponding `{ type: "artifacts", name, namespace }` binding
  * to the script.
  */
-export interface Artifacts {
+export type Artifacts = {
   kind: ArtifactsTypeId;
   name: string;
   namespace: string;
-}
+};
 
 export const isArtifacts = (value: unknown): value is Artifacts =>
   typeof value === "object" &&
@@ -113,7 +112,7 @@ export const Artifacts: {
   (
     name: string,
     props?: ArtifactsProps,
-  ): Effect.Effect<Artifacts, never, Stack | Stage | InstanceId>;
+  ): Effect.Effect<Artifacts, never, Stack | Stage>;
   /**
    * Bind a Cloudflare Artifacts namespace to the surrounding Worker, returning
    * an Effect-native client. See {@link ArtifactsBinding}.
