@@ -1,8 +1,10 @@
-import { Octokit } from "@octokit/rest";
+import type { Octokit } from "@octokit/rest";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { GitHubCredentials } from "./Credentials.ts";
+import type { Providers } from "./Providers.ts";
 
 export interface SecretProps {
   /**
@@ -31,12 +33,6 @@ export interface SecretProps {
    * GitHub Actions environment instead of the whole repository.
    */
   environment?: string;
-
-  /**
-   * GitHub API token. If not provided, falls back to
-   * `GITHUB_ACCESS_TOKEN` or `GITHUB_TOKEN` environment variables.
-   */
-  token?: string;
 }
 
 export interface Secret extends Resource<
@@ -47,7 +43,9 @@ export interface Secret extends Resource<
      * ISO-8601 timestamp of the last update.
      */
     updatedAt: string;
-  }
+  },
+  never,
+  Providers
 > {}
 
 /**
@@ -58,9 +56,10 @@ export interface Secret extends Resource<
  * key via `libsodium` before being stored. The resource is idempotent —
  * calling it with the same name will update the secret value in place.
  *
- * Authentication is resolved in order: explicit `token` prop,
- * `GITHUB_ACCESS_TOKEN` env var, `GITHUB_TOKEN` env var. The token needs
- * `repo` scope for private repositories or `public_repo` for public ones.
+ * Authentication is resolved via the `GitHubCredentials` service supplied
+ * by `GitHub.providers()` (which uses the Alchemy AuthProvider — env,
+ * stored PAT, `gh` CLI, or OAuth). The token needs `repo` scope for
+ * private repositories or `public_repo` for public ones.
  *
  * @section Repository Secrets
  * Store secrets accessible to all GitHub Actions workflows in the
@@ -130,21 +129,20 @@ export interface Secret extends Resource<
  */
 export const Secret = Resource<Secret>("GitHub.Secret");
 
-function resolveToken(props: SecretProps): string | undefined {
-  return (
-    props.token ?? process.env.GITHUB_ACCESS_TOKEN ?? process.env.GITHUB_TOKEN
-  );
-}
-
-function createClient(props: SecretProps): Octokit {
-  return new Octokit({ auth: resolveToken(props) });
-}
+const getOctokit = Effect.gen(function* () {
+  const creds = yield* GitHubCredentials;
+  return creds.octokit();
+});
 
 async function encryptValue(
   plaintext: string,
   publicKey: string,
 ): Promise<string> {
-  const sodium = await import("libsodium-wrappers");
+  const mod = await import("libsodium-wrappers");
+  // Bun/ESM interop: the actual sodium API lives on `.default` when the
+  // CJS module is wrapped, but is the module itself under other loaders.
+  const sodium: typeof import("libsodium-wrappers") =
+    (mod as any).default ?? mod;
   await sodium.ready;
   const binKey = sodium.from_base64(publicKey, sodium.base64_variants.ORIGINAL);
   const binMessage = sodium.from_string(plaintext);
@@ -155,13 +153,13 @@ async function encryptValue(
 export const SecretProvider = () =>
   Provider.succeed(Secret, {
     create: Effect.fn(function* ({ news }) {
-      const octokit = createClient(news);
+      const octokit = yield* getOctokit;
       yield* upsertSecret(octokit, news);
       return { updatedAt: new Date().toISOString() };
     }),
 
     update: Effect.fn(function* ({ news, olds }) {
-      const octokit = createClient(news);
+      const octokit = yield* getOctokit;
 
       const wasEnv = !!olds.environment;
       const isEnv = !!news.environment;
@@ -174,7 +172,7 @@ export const SecretProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ olds }) {
-      const octokit = createClient(olds);
+      const octokit = yield* getOctokit;
       yield* deleteSecret(octokit, olds);
     }),
   });

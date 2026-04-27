@@ -1,7 +1,8 @@
-import { Octokit } from "@octokit/rest";
 import * as Effect from "effect/Effect";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { GitHubCredentials } from "./Credentials.ts";
+import type { Providers } from "./Providers.ts";
 
 export interface VariableProps {
   /**
@@ -23,12 +24,6 @@ export interface VariableProps {
    * Variable value.
    */
   value: string;
-
-  /**
-   * GitHub API token. If not provided, falls back to
-   * `GITHUB_ACCESS_TOKEN` or `GITHUB_TOKEN` environment variables.
-   */
-  token?: string;
 }
 
 export interface Variable extends Resource<
@@ -39,7 +34,9 @@ export interface Variable extends Resource<
      * ISO-8601 timestamp of the last update.
      */
     updatedAt: string;
-  }
+  },
+  never,
+  Providers
 > {}
 
 /**
@@ -51,9 +48,10 @@ export interface Variable extends Resource<
  * labels, or feature flags. For sensitive values, use `GitHub.Secret`
  * instead.
  *
- * Authentication is resolved in order: explicit `token` prop,
- * `GITHUB_ACCESS_TOKEN` env var, `GITHUB_TOKEN` env var. The token needs
- * `repo` scope for private repositories or `public_repo` for public ones.
+ * Authentication is resolved via the `GitHubCredentials` service supplied
+ * by `GitHub.providers()` (which uses the Alchemy AuthProvider — env,
+ * stored PAT, `gh` CLI, or OAuth). The token needs `repo` scope for
+ * private repositories or `public_repo` for public ones.
  *
  * @section Repository Variables
  * Store variables accessible to all GitHub Actions workflows in the
@@ -104,20 +102,15 @@ export interface Variable extends Resource<
  */
 export const Variable = Resource<Variable>("GitHub.Variable");
 
-function resolveToken(props: VariableProps): string | undefined {
-  return (
-    props.token ?? process.env.GITHUB_ACCESS_TOKEN ?? process.env.GITHUB_TOKEN
-  );
-}
-
-function createClient(props: VariableProps): Octokit {
-  return new Octokit({ auth: resolveToken(props) });
-}
+const getOctokit = Effect.gen(function* () {
+  const creds = yield* GitHubCredentials;
+  return creds.octokit();
+});
 
 export const VariableProvider = () =>
   Provider.succeed(Variable, {
     create: Effect.fn(function* ({ news }) {
-      const octokit = createClient(news);
+      const octokit = yield* getOctokit;
 
       yield* Effect.tryPromise(() =>
         octokit.rest.actions.createRepoVariable({
@@ -132,7 +125,7 @@ export const VariableProvider = () =>
     }),
 
     update: Effect.fn(function* ({ news }) {
-      const octokit = createClient(news);
+      const octokit = yield* getOctokit;
 
       yield* Effect.tryPromise(() =>
         octokit.rest.actions.updateRepoVariable({
@@ -147,7 +140,7 @@ export const VariableProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ olds }) {
-      const octokit = createClient(olds);
+      const octokit = yield* getOctokit;
 
       yield* Effect.tryPromise(async () => {
         try {

@@ -1,6 +1,26 @@
 import * as Layer from "effect/Layer";
-import { SecretProvider } from "./Secret.ts";
-import { VariableProvider } from "./Variable.ts";
+import * as Provider from "../Provider.ts";
+import { GitHubAuth } from "./Auth/AuthProvider.ts";
+import * as Credentials from "./Credentials.ts";
+import { Secret, SecretProvider } from "./Secret.ts";
+import { Variable, VariableProvider } from "./Variable.ts";
 
+export { GitHubCredentials } from "./Credentials.ts";
+
+export class Providers extends Provider.ProviderCollection<Providers>()(
+  "GitHub",
+) {}
+
+export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
+
+/**
+ * GitHub providers (Secret, Variable) plus the GitHub AuthProvider that
+ * `alchemy login` discovers.
+ */
 export const providers = () =>
-  Layer.mergeAll(SecretProvider(), VariableProvider());
+  Layer.effect(Providers, Provider.collection([Secret, Variable])).pipe(
+    Layer.provide(Layer.mergeAll(SecretProvider(), VariableProvider())),
+    Layer.provideMerge(Credentials.fromAuthProvider()),
+    Layer.provideMerge(GitHubAuth),
+    Layer.orDie,
+  );
