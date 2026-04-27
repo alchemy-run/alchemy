@@ -99,7 +99,9 @@ const execStack = Effect.fn(function* ({
         }
         const outputs = yield* apply(updatePlan);
 
-        yield* Console.log(outputs);
+        if (outputs !== undefined) {
+          yield* Console.log(outputs);
+        }
       }
     }).pipe(Effect.provide(stack.services));
   }).pipe(Effect.provide(services));
