@@ -18,6 +18,7 @@ import {
 } from "./commands/deploy.ts";
 import { loginCommand } from "./commands/login.ts";
 import { logsCommand } from "./commands/logs.ts";
+import { profileCommand } from "./commands/profile.ts";
 import { stateCommand } from "./commands/state.ts";
 import { tailCommand } from "./commands/tail.ts";
 
@@ -30,6 +31,7 @@ const root = Command.make("alchemy", {}).pipe(
     tailCommand,
     logsCommand,
     loginCommand,
+    profileCommand,
     stateCommand,
   ]),
 );
