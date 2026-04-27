@@ -13,7 +13,7 @@ import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSp
 import { AlchemyContext, AlchemyContextLive } from "./AlchemyContext.ts";
 import { provideFreshArtifactStore } from "./Artifacts.ts";
 import { AuthProviders } from "./Auth/AuthProvider.ts";
-import { inkCLIAutoApprove } from "./Cli/InkCLI.tsx";
+import { Cli } from "./Cli/Cli.ts";
 import type { Input, InputProps } from "./Input.ts";
 import * as Output from "./Output.ts";
 import { ref } from "./Ref.ts";
@@ -34,7 +34,8 @@ export type StackServices =
   | AlchemyContext
   | HttpClient
   | ChildProcessSpawner
-  | AuthProviders;
+  | AuthProviders
+  | Cli;
 
 export type StackEffect<A, Err = never, Req = never> = Effect.Effect<
   A,
@@ -44,6 +45,7 @@ export type StackEffect<A, Err = never, Req = never> = Effect.Effect<
   | Scope
   | AuthProviders
   | AlchemyContext
+  | Cli
   | State
   | Req
 >;
@@ -282,7 +284,6 @@ export const evalStack = <A, B, Err, Req>(
       ),
     ),
     Effect.provide(Layer.succeed(Stage, options.stage)),
-    Effect.provide(inkCLIAutoApprove()),
     Effect.provide(Layer.provideMerge(alchemy, platform)),
     Effect.scoped,
   );

@@ -9,6 +9,7 @@ import type { HookOptions } from "node:test";
 import { AlchemyContext, AlchemyContextLive } from "../AlchemyContext.ts";
 import { provideFreshArtifactStore } from "../Artifacts.ts";
 import { AuthProviders } from "../Auth/AuthProvider.ts";
+import { inkCLI } from "../Cli/InkCLI.tsx";
 import { deploy as _deploy } from "../Deploy.ts";
 import { destroy as _destroy } from "../Destroy.ts";
 import {
@@ -28,8 +29,7 @@ const platform = Layer.mergeAll(PlatformServices, FetchHttpClient.layer);
 
 // override alchemy state store, CLI/reporting, state, and dotAlchemy
 const alchemy = Layer.mergeAll(
-  // CLI.inkCLI(),
-  // optional
+  inkCLI(),
   Logger.layer([Logger.consolePretty()]),
   AlchemyContextLive,
 );
