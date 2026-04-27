@@ -59,7 +59,6 @@ const execStack = Effect.fn(function* ({
     ConfigProvider.layer(
       withProfileOverride(yield* loadConfigProvider(envFile), profile),
     ),
-    CLI.inkCLI(),
     Logger.layer([fileLogger("out")]),
     Layer.succeed(Stage, stage),
   );

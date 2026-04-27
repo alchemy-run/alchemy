@@ -6,6 +6,7 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
 import packageJson from "../package.json" with { type: "json" };
 import { AlchemyContextLive } from "../src/AlchemyContext.ts";
+import { inkCLI } from "../src/Cli/InkCLI.tsx";
 import { PlatformServices, runMain } from "../src/Util/PlatformServices.ts";
 
 import { handleCancellation } from "./commands/_shared.ts";
@@ -42,6 +43,7 @@ const services = Layer.mergeAll(
   Layer.provideMerge(AlchemyContextLive, PlatformServices),
   FetchHttpClient.layer,
   ConfigProvider.layer(ConfigProvider.fromEnv()),
+  inkCLI(),
 );
 
 cli.pipe(
