@@ -11,6 +11,10 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, closed]
 
+permissions:
+  contents: read
+  pull-requests: write
+
 env:
   PR_PACKAGE_HOST: 📦.alchemy.run
   NODE_VERSION: "24"
@@ -40,7 +44,12 @@ jobs:
 
       - run: bun install
 
+      # Only build the packages we publish — skip the website (root `build`
+      # script fans out to all workspaces, which is expensive and unnecessary
+      # here). better-auth's `build` script is just `bun pm pack`, which we run
+      # ourselves below, so no separate build step.
       - run: bun run build
+        working-directory: packages/alchemy
 
       - name: Compute tags
         id: tags
@@ -62,6 +71,7 @@ jobs:
           fi
           json=$(printf '%s\n' "${tags[@]}" | jq -R . | jq -s -c .)
           echo "tags=$json" >> "$GITHUB_OUTPUT"
+          echo "short=$short" >> "$GITHUB_OUTPUT"
           echo "Tags: $json"
 
       - name: Publish alchemy
@@ -99,6 +109,33 @@ jobs:
             -H "X-Tags: ${TAGS}" \
             -H "Content-Type: application/gzip" \
             --data-binary "@${tgz}"
+
+      # PR-only: leave a sticky comment with the install URL pinned to this
+      # commit. Only for the alchemy package (better-auth is intentionally
+      # excluded). Uses pkg.alchemy.run as the public alias, which 301s to
+      # 📦.alchemy.run/projects/alchemy/tags/:tag.
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          SHORT_SHA: ${{ steps.tags.outputs.short }}
+        run: |
+          set -euo pipefail
+          MARKER="<!-- pr-package-comment -->"
+          BODY=$(printf '%s\n\nInstall the alchemy package built from this commit:\n\n```sh\nbun add https://pkg.alchemy.run/%s\n```\n' "$MARKER" "$SHORT_SHA")
+
+          existing=$(gh api --paginate \
+            "repos/${REPO}/issues/${PR_NUMBER}/comments" \
+            --jq ".[] | select(.body | startswith(\"${MARKER}\")) | .id" \
+            | head -1)
+
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/${REPO}/issues/comments/${existing}" -f body="$BODY"
+          else
+            gh api -X POST "repos/${REPO}/issues/${PR_NUMBER}/comments" -f body="$BODY"
+          fi
 
   # ── Cleanup on PR close (merged or not). ──────────────────────────────────
   # Deletes the branch tag, pr-<number> tag, and short+long sha tags for every
