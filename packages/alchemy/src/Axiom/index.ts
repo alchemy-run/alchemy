@@ -1,6 +1,7 @@
 export * from "./Annotation.ts";
 export * from "./ApiToken.ts";
 export * from "./AuthProvider.ts";
+export * from "./Chart.ts";
 export * from "./Credentials.ts";
 export * from "./Dashboard.ts";
 export * from "./Dataset.ts";

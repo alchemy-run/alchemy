@@ -5,8 +5,19 @@ import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
+import { CliOverviewDashboard } from "./otel/Dashboard.ts";
 import { Logs, Metrics, Traces } from "./otel/Datasets.ts";
 import Ingester from "./otel/Ingester.ts";
+import {
+  ActiveUsersByCi,
+  ActiveUsersByVersion,
+  ActiveUsersHourly,
+  CliInvocations,
+  DeployDestroyLatency,
+  ResourceErrorRate,
+  ResourceLatency,
+  ResourcesUsed,
+} from "./otel/Views.ts";
 
 /**
  * Provisions an Axiom OTEL ingestion pipeline:
@@ -34,9 +45,29 @@ export default Alchemy.Stack(
     const logs = yield* Logs;
     const metrics = yield* Metrics;
 
-    // Public OTLP relay. Bound to `otel.alchemy.run` only in prod so dev
-    // stages exercise the same code path under a `*.workers.dev` URL.
+    // Public ingest relay. Bound to `otel.alchemy.run` and
+    // `analytics.alchemy.run` only in prod so dev stages exercise the same
+    // code path under a `*.workers.dev` URL. The same Worker also reverse-
+    // proxies PostHog Cloud for first-party browser analytics.
     const relay = yield* Ingester;
+
+    // const posthogProjectKey = yield* Config.string("POSTHOG_PROJECT_KEY")
+    //   .pipe(Config.option)
+    //   .asEffect()
+    //   .pipe(Effect.orDie);
+
+    // Saved APL queries — one per insight surfaced by the dashboard.
+    yield* ActiveUsersHourly;
+    yield* ActiveUsersByVersion;
+    yield* ActiveUsersByCi;
+    yield* ResourcesUsed;
+    yield* DeployDestroyLatency;
+    yield* ResourceLatency;
+    yield* CliInvocations;
+    yield* ResourceErrorRate;
+
+    // Composed dashboard combining the same signals on a 12-col grid.
+    yield* CliOverviewDashboard;
 
     const env = {
       OTEL_EXPORTER_OTLP_ENDPOINT: traces.otelEndpoint,
