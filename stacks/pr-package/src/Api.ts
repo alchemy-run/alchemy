@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { aliasRedirectUrl, parseAlias } from "./aliases.ts";
 import { AuthToken } from "./AuthToken.ts";
 import { Bucket } from "./Bucket.ts";
 import PackageStore from "./PackageStore.ts";
@@ -53,6 +54,20 @@ export default class Api extends Cloudflare.Worker<Api>()(
             return yield* Effect.fail(new Unauthorized());
           }
         });
+
+        // Pretty alias paths (e.g. /alchemy/<tag>, /@alchemy.run/<name>/<tag>)
+        // 301 to the canonical /projects/:project/tags/:tag URL.
+        if (method === "GET" && !path.startsWith("/projects/")) {
+          const aliasMatch = parseAlias(request.headers.host, path);
+          if (aliasMatch) {
+            return HttpServerResponse.fromWeb(
+              new Response(null, {
+                status: 301,
+                headers: { location: aliasRedirectUrl(aliasMatch) },
+              }),
+            );
+          }
+        }
 
         // Route pattern: /projects/:project/...
         const projectMatch = path.match(/^\/projects\/([^/]+)(\/.*)?$/);

@@ -3,26 +3,28 @@ import { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { aliasRedirectUrl, parseAlias } from "./aliases.ts";
 
 /**
- * Legacy host redirector.
+ * Public alias hosts. The canonical 📦.alchemy.run is owned by the Api
+ * worker and handles its own alias matching; this worker covers the other
+ * three:
  *
- * Maps the old public hosts to the canonical 📦.alchemy.run API:
+ *   pkg.alchemy.run         → alchemy.run packages
+ *   pkg.distilled.cloud     → distilled.cloud packages
+ *   📦.distilled.cloud      → emoji alias for pkg.distilled.cloud
  *
- *   pkg.alchemy.run/:tag                → 📦.alchemy.run/projects/alchemy/tags/:tag
- *   pkg.distilled.cloud/:package/:tag   → 📦.alchemy.run/projects/distilled-:package/tags/:tag
- *
- * All redirects are 301 (permanent) so HTTP clients cache and follow them.
+ * All matches are 301 (permanent) so HTTP clients cache the redirect.
  */
-const TARGET_HOST = "📦.alchemy.run";
-
 export default class Redirect extends Cloudflare.Worker<Redirect>()(
   "Redirect",
   Stack.useSync(({ stage }) => ({
     main: import.meta.path,
     url: true,
     domain:
-      stage === "prod" ? ["pkg.alchemy.run", "pkg.distilled.cloud"] : undefined,
+      stage === "prod"
+        ? ["pkg.alchemy.run", "pkg.distilled.cloud", "📦.distilled.cloud"]
+        : undefined,
     compatibility: {
       flags: ["nodejs_compat"],
       date: "2026-03-17",
@@ -33,27 +35,16 @@ export default class Redirect extends Cloudflare.Worker<Redirect>()(
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://localhost");
-        const host = (request.headers.host ?? "").toLowerCase();
-        const segments = url.pathname.split("/").filter(Boolean);
+        const match = parseAlias(request.headers.host, url.pathname);
 
-        let location: string | undefined;
-
-        if (host === "pkg.alchemy.run" && segments.length === 1) {
-          const tag = segments[0]!;
-          location = `https://${TARGET_HOST}/projects/alchemy/tags/${tag}`;
-        } else if (host === "pkg.distilled.cloud" && segments.length === 2) {
-          const [pkg, tag] = segments as [string, string];
-          location = `https://${TARGET_HOST}/projects/distilled-${pkg}/tags/${tag}`;
-        }
-
-        if (!location) {
+        if (!match) {
           return HttpServerResponse.text("Not Found", { status: 404 });
         }
 
         return HttpServerResponse.fromWeb(
           new Response(null, {
             status: 301,
-            headers: { location },
+            headers: { location: aliasRedirectUrl(match) },
           }),
         );
       }),
