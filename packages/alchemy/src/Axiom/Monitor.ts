@@ -1,0 +1,122 @@
+import * as Operations from "@distilled.cloud/axiom/Operations";
+import * as Effect from "effect/Effect";
+import * as Provider from "../Provider.ts";
+import { Resource } from "../Resource.ts";
+import { isResolved } from "../Diff.ts";
+import type { Providers } from "./Providers.ts";
+
+export type MonitorProps = Operations.CreateMonitorInput;
+
+export type Monitor = Resource<
+  "Axiom.Monitor",
+  MonitorProps,
+  Operations.CreateMonitorOutput,
+  never,
+  Providers
+>;
+
+/**
+ * An Axiom monitor — a scheduled APL/MPL query that evaluates on a fixed
+ * cadence and fires alerts via {@link Notifier notifiers} when its
+ * condition is met.
+ *
+ * Three monitor `type`s are supported:
+ *
+ * - **`Threshold`** — fires when an aggregate result crosses a static
+ *   `threshold` (compared with `operator`).
+ * - **`MatchEvent`** — fires for every event matching the query.
+ * - **`AnomalyDetection`** — fires when results deviate from a learned
+ *   baseline by more than `tolerance` over `compareDays`.
+ *
+ * Changing `type` triggers a replacement; everything else updates in place.
+ *
+ * @see https://axiom.co/docs/monitor-data/monitors
+ *
+ * @section Creating a Monitor
+ * @example Threshold: alert on >100 errors per 5m
+ * ```typescript
+ * yield* Axiom.Monitor("error-rate", {
+ *   name: "High error rate",
+ *   description: "Fires when error count exceeds 100/5m",
+ *   type: "Threshold",
+ *   aplQuery: `
+ *     ['my-app-traces']
+ *     | where status >= 500
+ *     | summarize count() by bin_auto(_time)
+ *   `,
+ *   operator: "Above",
+ *   threshold: 100,
+ *   intervalMinutes: 5,
+ *   rangeMinutes: 5,
+ *   alertOnNoData: false,
+ *   resolvable: true,
+ *   notifierIds: [slack.id, pagerduty.id],
+ * });
+ * ```
+ *
+ * @example MatchEvent: alert on every panic
+ * ```typescript
+ * yield* Axiom.Monitor("panics", {
+ *   name: "Service panic",
+ *   type: "MatchEvent",
+ *   aplQuery: `['my-app-logs'] | where message contains "panic:"`,
+ *   intervalMinutes: 1,
+ *   rangeMinutes: 1,
+ *   notifierIds: [pagerduty.id],
+ * });
+ * ```
+ *
+ * @example AnomalyDetection: deviation vs. last 7 days
+ * ```typescript
+ * yield* Axiom.Monitor("traffic-anomaly", {
+ *   name: "Traffic anomaly",
+ *   type: "AnomalyDetection",
+ *   aplQuery: `['my-app-traces'] | summarize count() by bin_auto(_time)`,
+ *   compareDays: 7,
+ *   tolerance: 25,             // %
+ *   intervalMinutes: 15,
+ *   rangeMinutes: 15,
+ *   notifierIds: [slack.id],
+ * });
+ * ```
+ */
+export const Monitor = Resource<Monitor>("Axiom.Monitor");
+
+export const MonitorProvider = () =>
+  Provider.effect(
+    Monitor,
+    Effect.gen(function* () {
+      const create = yield* Operations.createMonitor;
+      const update = yield* Operations.updateMonitor;
+      const get = yield* Operations.getMonitor;
+      const del = yield* Operations.deleteMonitor;
+
+      return {
+        stables: ["id"],
+        diff: Effect.fn(function* ({ news, output }) {
+          if (!isResolved(news)) return undefined;
+          if (output && news.type !== output.type) {
+            return { action: "replace" } as const;
+          }
+          return undefined;
+        }),
+        create: Effect.fn(function* ({ news }) {
+          return yield* create(news);
+        }),
+        update: Effect.fn(function* ({ news, output }) {
+          return yield* update({ ...news, id: output.id });
+        }),
+        delete: Effect.fn(function* ({ output }) {
+          yield* del({ id: output.id }).pipe(
+            Effect.catchTag("NotFound", () => Effect.void),
+          );
+        }),
+        read: Effect.fn(function* ({ output }) {
+          if (!output?.id) return undefined;
+          return yield* get({ id: output.id }).pipe(
+            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          );
+        }),
+      };
+    }),
+  );

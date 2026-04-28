@@ -136,6 +136,12 @@
       "worker": "./src/Cloudflare/*/index.ts",
       "import": "./lib/Cloudflare/*/index.js"
     },
+    "./Axiom": {
+      "types": "./src/Axiom/index.ts",
+      "bun": "./src/Axiom/index.ts",
+      "worker": "./src/Axiom/index.ts",
+      "import": "./lib/Axiom/index.js"
+    },
     "./GitHub": {
       "types": "./src/GitHub/index.ts",
       "bun": "./src/GitHub/index.ts",
@@ -232,6 +238,7 @@
     "@aws-sdk/credential-providers": "catalog:",
     "@clack/prompts": "^0.11.0",
     "@distilled.cloud/aws": "catalog:",
+    "@distilled.cloud/axiom": "catalog:",
     "@distilled.cloud/cloudflare": "catalog:",
     "@distilled.cloud/cloudflare-rolldown-plugin": "catalog:",
     "@distilled.cloud/cloudflare-vite-plugin": "catalog:",
@@ -254,6 +261,8 @@
     "ignore": "^7.0.5",
     "jszip": "^3.10.1",
     "libsodium-wrappers": "^0.8.3",
+    "magic-string": "^0.30.21",
+    "picomatch": "^4.0.4",
     "rolldown": "catalog:",
     "sonda": "catalog:",
     "web-tree-sitter": "catalog:",
@@ -269,6 +278,7 @@
     "@types/aws-lambda": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
+    "@types/picomatch": "^4.0.0",
     "@types/react": "^19.2.2",
     "better-auth": "catalog:",
     "effect": "catalog:",
