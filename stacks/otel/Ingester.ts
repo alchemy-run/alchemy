@@ -33,9 +33,15 @@ export default class Ingester extends Cloudflare.Worker<Ingester>()(
   })),
   Effect.gen(function* () {
     const tokenValue = yield* (yield* IngestToken).token;
-    const tracesEndpoint = yield* (yield* Traces).otelTracesEndpoint;
-    const logsEndpoint = yield* (yield* Logs).otelLogsEndpoint;
-    const metricsEndpoint = yield* (yield* Metrics).otelMetricsEndpoint;
+    const traces = yield* Traces;
+    const logs = yield* Logs;
+    const metrics = yield* Metrics;
+    const tracesEndpoint = yield* traces.otelTracesEndpoint;
+    const logsEndpoint = yield* logs.otelLogsEndpoint;
+    const metricsEndpoint = yield* metrics.otelMetricsEndpoint;
+    const tracesDataset = yield* traces.name;
+    const logsDataset = yield* logs.name;
+    const metricsDataset = yield* metrics.name;
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
@@ -45,18 +51,23 @@ export default class Ingester extends Cloudflare.Worker<Ingester>()(
         }
 
         const path = new URL(request.url, "http://x").pathname;
-        const target =
+        const route =
           path === "/v1/traces"
-            ? yield* tracesEndpoint
+            ? { endpoint: yield* tracesEndpoint, dataset: yield* tracesDataset }
             : path === "/v1/logs"
-              ? yield* logsEndpoint
+              ? { endpoint: yield* logsEndpoint, dataset: yield* logsDataset }
               : path === "/v1/metrics"
-                ? yield* metricsEndpoint
+                ? {
+                    endpoint: yield* metricsEndpoint,
+                    dataset: yield* metricsDataset,
+                  }
                 : undefined;
 
-        if (!target) {
+        if (!route) {
           return HttpServerResponse.text("Not Found", { status: 404 });
         }
+
+        const { endpoint: target, dataset } = route;
 
         const tokenRaw = yield* tokenValue.pipe(Effect.map(Redacted.value));
         const token = Redacted.isRedacted(tokenRaw)
@@ -73,6 +84,7 @@ export default class Ingester extends Cloudflare.Worker<Ingester>()(
                 "content-type":
                   request.headers["content-type"] ?? "application/json",
                 authorization: `Bearer ${token}`,
+                "x-axiom-dataset": dataset,
               },
               body,
             }),
