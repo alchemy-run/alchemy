@@ -114,10 +114,22 @@ jobs:
       # commit. Only for the alchemy package (better-auth is intentionally
       # excluded). Uses pkg.alchemy.run as the public alias, which 301s to
       # 📦.alchemy.run/projects/alchemy/tags/:tag.
+      #
+      # Authored by the alchemy-version-bot GitHub App (same identity that
+      # signs release commits) so the comment shows up under the bot's avatar
+      # rather than github-actions[bot].
+      - name: Generate bot token
+        if: github.event_name == 'pull_request'
+        id: bot-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.ALCHEMY_VERSION_BOT_ID }}
+          private-key: ${{ secrets.ALCHEMY_VERSION_BOT_PRIVATE_KEY }}
+
       - name: Comment on PR
         if: github.event_name == 'pull_request'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.bot-token.outputs.token }}
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           SHORT_SHA: ${{ steps.tags.outputs.short }}
