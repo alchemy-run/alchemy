@@ -21,11 +21,29 @@ import {
   envFile,
   force,
   importStack,
+  instrumentCommand,
   main,
   profile,
   stage,
   yes,
 } from "./_shared.ts";
+
+const stackSpanAttrs = (args: {
+  main: string;
+  stage: string;
+  profile: string;
+  dryRun?: boolean;
+  force?: boolean;
+  yes?: boolean;
+  destroy?: boolean;
+}) => ({
+  "alchemy.stage": args.stage,
+  "alchemy.profile": args.profile,
+  "alchemy.main": args.main,
+  "alchemy.dry_run": !!args.dryRun,
+  "alchemy.force": !!args.force,
+  "alchemy.destroy": !!args.destroy,
+});
 
 const execStack = Effect.fn(function* ({
   main,
@@ -118,7 +136,7 @@ export const deployCommand = Command.make(
     yes,
     profile,
   },
-  execStack,
+  instrumentCommand("deploy", stackSpanAttrs)(execStack),
 );
 
 export const destroyCommand = Command.make(
@@ -131,11 +149,12 @@ export const destroyCommand = Command.make(
     yes,
     profile,
   },
-  (args) =>
+  instrumentCommand("destroy", stackSpanAttrs)((args) =>
     execStack({
       ...args,
       destroy: true,
     }),
+  ),
 );
 
 export const planCommand = Command.make(
@@ -146,10 +165,11 @@ export const planCommand = Command.make(
     stage,
     profile,
   },
-  (args) =>
+  instrumentCommand("plan", stackSpanAttrs)((args) =>
     execStack({
       ...args,
       // plan is the same as deploy with dryRun always set to true
       dryRun: true,
     }),
+  ),
 );

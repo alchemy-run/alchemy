@@ -2,11 +2,11 @@ import * as Alchemy from "alchemy";
 import * as Axiom from "alchemy/Axiom";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as GitHub from "alchemy/GitHub";
-import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
 
+import { Logs, Metrics, Traces } from "./otel/Datasets.ts";
+import Ingester from "./otel/Ingester.ts";
 
 /**
  * Provisions an Axiom OTEL ingestion pipeline:
@@ -30,54 +30,13 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-    const stage = yield* Alchemy.Stage;
+    const traces = yield* Traces;
+    const logs = yield* Logs;
+    const metrics = yield* Metrics;
 
-    const traces = yield* Axiom.Dataset("Traces", {
-      name: `${stage}-traces`,
-      kind: "otel:traces:v1",
-      description: `OTEL traces for stage '${stage}'`,
-      retentionDays: 30,
-      useRetentionPeriod: true,
-    });
-
-    const logs = yield* Axiom.Dataset("Logs", {
-      name: `${stage}-logs`,
-      kind: "otel:logs:v1",
-      description: `OTEL logs for stage '${stage}'`,
-      retentionDays: 30,
-      useRetentionPeriod: true,
-    });
-
-    const metrics = yield* Axiom.Dataset("Metrics", {
-      name: `${stage}-metrics`,
-      kind: "otel:metrics:v1",
-      description: `OTEL metrics for stage '${stage}'`,
-      retentionDays: 30,
-      useRetentionPeriod: true,
-    });
-
-    const ingestToken = yield* Axiom.ApiToken("IngestToken", {
-      name: `${stage}-otel-ingest`,
-      description: `Ingest-only token for ${stage} OTEL datasets`,
-      // Reference dataset Outputs (rather than literal strings) so Alchemy
-      // sequences the token after the datasets exist.
-      datasetCapabilities: Output.all(
-        traces.name,
-        logs.name,
-        metrics.name,
-      ).pipe(
-        Output.map(([t, l, m]) => ({
-          [t]: { ingest: ["create"] as const },
-          [l]: { ingest: ["create"] as const },
-          [m]: { ingest: ["create"] as const },
-        })),
-      ),
-    });
-
-    const tokenValue = ingestToken.token.pipe(
-      Output.map((t) => (t ? Redacted.value(t) : "")),
-    );
-    const authHeader = tokenValue.pipe(Output.map((v) => `Bearer ${v}`));
+    // Public OTLP relay. Bound to `otel.alchemy.run` only in prod so dev
+    // stages exercise the same code path under a `*.workers.dev` URL.
+    const relay = yield* Ingester;
 
     const env = {
       OTEL_EXPORTER_OTLP_ENDPOINT: traces.otelEndpoint,
@@ -87,8 +46,7 @@ export default Alchemy.Stack(
       AXIOM_DATASET_TRACES: traces.name,
       AXIOM_DATASET_LOGS: logs.name,
       AXIOM_DATASET_METRICS: metrics.name,
-      AXIOM_INGEST_TOKEN: tokenValue,
-      AXIOM_AUTHORIZATION_HEADER: authHeader,
+      RELAY_URL: relay.url,
     };
 
     if (process.env.SYNC_GITHUB_SECRETS === "1") {
@@ -96,7 +54,6 @@ export default Alchemy.Stack(
         owner: "alchemy-run",
         repository: "alchemy-effect",
         secrets: {
-          AXIOM_INGEST_TOKEN: tokenValue,
           AXIOM_DATASET_TRACES: traces.name,
           AXIOM_DATASET_LOGS: logs.name,
           AXIOM_DATASET_METRICS: metrics.name,
@@ -106,5 +63,5 @@ export default Alchemy.Stack(
     }
 
     return env;
-  }).pipe(Effect.orDie),
+  }),
 );

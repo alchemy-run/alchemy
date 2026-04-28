@@ -18,6 +18,7 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     const testAccountId = yield* Config.string("TEST_CLOUDFLARE_ACCOUNT_ID");
     const prodAccountId = yield* Config.string("PROD_CLOUDFLARE_ACCOUNT_ID");
+    const discordWebhookUrl = yield* Config.string("DISCORD_WEBHOOK_URL");
 
     const testApiToken = yield* token("TestApiToken", {
       accountId: testAccountId,
@@ -34,6 +35,7 @@ export default Alchemy.Stack(
         TEST_CLOUDFLARE_ACCOUNT_ID: testAccountId,
         PROD_CLOUDFLARE_API_TOKEN: prodApiToken.value,
         PROD_CLOUDFLARE_ACCOUNT_ID: prodAccountId,
+        DISCORD_WEBHOOK_URL: discordWebhookUrl,
       },
     });
 
@@ -46,6 +48,7 @@ export default Alchemy.Stack(
         Output.map(Redacted.value),
       ),
       PROD_CLOUDFLARE_ACCOUNT_ID: prodAccountId,
+      DISCORD_WEBHOOK_URL: discordWebhookUrl,
     };
   }).pipe(Effect.orDie),
 );
@@ -78,4 +81,3 @@ const token = (
       },
     ],
   });
-

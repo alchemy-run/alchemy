@@ -21,7 +21,7 @@ import * as AWSRegion from "../../src/AWS/Region.ts";
 import { loadConfigProvider } from "../../src/Util/ConfigProvider.ts";
 import { fileLogger } from "../../src/Util/FileLogger.ts";
 
-import { envFile } from "./_shared.ts";
+import { envFile, instrumentCommand } from "./_shared.ts";
 
 const awsProfile = Flag.string("profile").pipe(
   Flag.withDescription("AWS profile to use for credentials"),
@@ -50,7 +50,14 @@ export const bootstrapCommand = Command.make(
     region: awsRegion,
     destroy: bootstrapDestroy,
   },
-  Effect.fnUntraced(function* ({ envFile, profile, region, destroy }) {
+  instrumentCommand(
+    "bootstrap",
+    (a: { profile: string; region: string | undefined; destroy: boolean }) => ({
+      "alchemy.profile": a.profile,
+      "alchemy.region": a.region ?? "",
+      "alchemy.destroy": a.destroy,
+    }),
+  )(Effect.fnUntraced(function* ({ envFile, profile, region, destroy }) {
     const logger = Logger.layer([fileLogger("bootstrap.txt")]);
 
     return yield* Effect.gen(function* () {
@@ -113,5 +120,5 @@ export const bootstrapCommand = Command.make(
         );
       });
     }).pipe(Effect.provide(logger));
-  }),
+  })),
 );

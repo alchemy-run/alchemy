@@ -397,7 +397,7 @@ export const make = <A>(
     const resourceGraph = Object.fromEntries(
       (yield* Effect.all(
         resources.map(
-          Effect.fn(function* (resource) {
+          Effect.fn("plan.diff.resource")(function* (resource) {
             const provider = yield* findProviderByType(resource.Type);
             const id = resource.LogicalId;
             const fqn = resource.FQN;
@@ -723,8 +723,7 @@ export const make = <A>(
     const deletions = Object.fromEntries(
       (yield* Effect.all(
         (yield* state.list({ stack: stackName, stage: stage })).map(
-          Effect.fn(function* (fqn) {
-            // Check if this FQN is in the new resources
+          Effect.fn("plan.diff.deletion")(function* (fqn) {
             if (newResourceFqns.has(fqn)) {
               return;
             }
@@ -805,7 +804,17 @@ export const make = <A>(
       deletions,
       output: stack.output,
     } satisfies Plan<A> as Plan<A>;
-  }).pipe(ensureArtifactStore);
+  }).pipe(
+    ensureArtifactStore,
+    Effect.withSpan("plan.make", {
+      attributes: {
+        "alchemy.stack": stack.name,
+        "alchemy.stage": stack.stage,
+        "alchemy.resources.count": Object.keys(stack.resources).length,
+        "alchemy.force": !!options.force,
+      },
+    }),
+  );
 
 const providePlanScope =
   (fqn: string, instanceId: string) =>

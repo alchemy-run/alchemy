@@ -25,6 +25,7 @@ import { findProviderByType } from "./Provider.ts";
 import type { ResourceBinding } from "./Resource.ts";
 import { Stack } from "./Stack.ts";
 import { Stage } from "./Stage.ts";
+import { recordResourceOp, type ResourceOp } from "./Telemetry/Metrics.ts";
 import {
   type CreatedResourceState,
   type CreatingResourceState,
@@ -80,6 +81,41 @@ const provideLifecycleScope =
         ),
       ),
     ) as Effect.Effect<A, E, Exclude<R, InstanceId | Artifacts>>;
+
+/**
+ * Instruments a single provider lifecycle call with an OTel span
+ * (`provider.<op>`), the resource counter / duration histogram, and the
+ * scoped artifacts/instance services normally supplied by
+ * {@link provideLifecycleScope}.
+ *
+ * This is the only call site through which provider lifecycle methods
+ * are dispatched, so wrapping it here gives us a fully-instrumented
+ * toolchain without touching any individual provider implementation.
+ */
+const instrumentLifecycle =
+  (
+    op: ResourceOp,
+    fqn: string,
+    resourceType: string,
+    logicalId: string,
+    instanceId: string,
+  ) =>
+  <A, E, R>(
+    effect: Effect.Effect<A, E, R>,
+  ): Effect.Effect<A, E, Exclude<R, InstanceId | Artifacts>> =>
+    effect.pipe(
+      provideLifecycleScope(fqn, instanceId),
+      recordResourceOp(resourceType, op),
+      Effect.withSpan(`provider.${op}`, {
+        attributes: {
+          "alchemy.resource.fqn": fqn,
+          "alchemy.resource.type": resourceType,
+          "alchemy.resource.logical_id": logicalId,
+          "alchemy.resource.instance_id": instanceId,
+          "alchemy.resource.op": op,
+        },
+      }),
+    );
 
 export const apply = <P extends Plan>(
   plan: P,
@@ -149,7 +185,15 @@ export const apply = <P extends Plan>(
       Object.entries(tracker).map(([fqn, t]) => [fqn, t.output]),
     );
     return yield* Output.evaluate(plan.output, outputs);
-  }).pipe(ensureArtifactStore);
+  }).pipe(
+    ensureArtifactStore,
+    Effect.withSpan("apply", {
+      attributes: {
+        "alchemy.resources.count": Object.keys(plan.resources).length,
+        "alchemy.deletions.count": Object.keys(plan.deletions).length,
+      },
+    }),
+  );
 
 // ── Phase 1: concurrent initial execution ──────────────────────────────────
 //
@@ -411,7 +455,15 @@ const executeNode = (
               instanceId,
               bindings: excludeDeletedBindings(node.bindings),
             })
-            .pipe(provideLifecycleScope(fqn, instanceId));
+            .pipe(
+              instrumentLifecycle(
+                "precreate",
+                fqn,
+                node.resource.Type,
+                logicalId,
+                instanceId,
+              ),
+            );
           yield* commit<CreatingResourceState>({
             status: "creating",
             fqn,
@@ -458,7 +510,15 @@ const executeNode = (
             session: scopedSession,
             output: attr,
           })
-          .pipe(provideLifecycleScope(fqn, instanceId));
+          .pipe(
+            instrumentLifecycle(
+              "create",
+              fqn,
+              node.resource.Type,
+              logicalId,
+              instanceId,
+            ),
+          );
 
         yield* commit<CreatedResourceState>({
           status: "created",
@@ -557,7 +617,15 @@ const executeNode = (
             // @ts-expect-error - type system says this can be undefined, can it be?
             output: node.state.attr,
           })
-          .pipe(provideLifecycleScope(fqn, instanceId));
+          .pipe(
+            instrumentLifecycle(
+              "update",
+              fqn,
+              node.resource.Type,
+              logicalId,
+              instanceId,
+            ),
+          );
 
         if (node.state.status === "replaced") {
           yield* commit<ReplacedResourceState>({
@@ -657,7 +725,15 @@ const executeNode = (
               instanceId,
               bindings: excludeDeletedBindings(node.bindings),
             })
-            .pipe(provideLifecycleScope(fqn, instanceId));
+            .pipe(
+              instrumentLifecycle(
+                "precreate",
+                fqn,
+                node.resource.Type,
+                logicalId,
+                instanceId,
+              ),
+            );
           yield* commit<ReplacingResourceState>({
             status: "replacing",
             fqn,
@@ -706,7 +782,15 @@ const executeNode = (
             session: scopedSession,
             output: attr,
           })
-          .pipe(provideLifecycleScope(fqn, instanceId));
+          .pipe(
+            instrumentLifecycle(
+              "create",
+              fqn,
+              node.resource.Type,
+              logicalId,
+              instanceId,
+            ),
+          );
 
         yield* commit<ReplacedResourceState>({
           // Creation of the new generation succeeded; from here on the only remaining
@@ -745,7 +829,16 @@ const executeNode = (
       // @ts-expect-error - node is never, this should be unreachable
       return yield* Effect.die(`Unknown action: ${node.action}`);
     });
-  }) as Effect.Effect<void, never, never>;
+  }).pipe(
+    Effect.withSpan("apply.resource", {
+      attributes: {
+        "alchemy.resource.fqn": fqn,
+        "alchemy.resource.type": node.resource.Type,
+        "alchemy.resource.logical_id": node.resource.LogicalId,
+        "alchemy.resource.action": node.action,
+      },
+    }),
+  ) as Effect.Effect<void, never, never>;
 
 // ── Phase 3: imperative convergence loop ───────────────────────────────────
 //
@@ -830,7 +923,15 @@ const converge = Effect.fnUntraced(function* (
           olds: oldProps,
           output: tracker[fqn].output,
         })
-        .pipe(provideLifecycleScope(fqn, instanceId));
+        .pipe(
+          instrumentLifecycle(
+            "update",
+            fqn,
+            node.resource.Type,
+            logicalId,
+            instanceId,
+          ),
+        );
 
       tracker[fqn] = {
         output: attr,
@@ -1007,7 +1108,15 @@ const collectGarbage = Effect.fnUntraced(function* (
                   session: scopedSession,
                   bindings: [],
                 })
-                .pipe(provideLifecycleScope(fqn, instanceId));
+                .pipe(
+                  instrumentLifecycle(
+                    "delete",
+                    fqn,
+                    resourceType,
+                    logicalId,
+                    instanceId,
+                  ),
+                );
             }
 
             if (isDeleteNode(node)) {

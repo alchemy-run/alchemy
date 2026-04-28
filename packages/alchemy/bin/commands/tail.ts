@@ -18,6 +18,7 @@ import {
   envFile,
   formatLocalTimestamp,
   importStack,
+  instrumentCommand,
   main,
   parseResourceFilter,
   profile,
@@ -36,7 +37,14 @@ export const tailCommand = Command.make(
     profile,
     filter: resourceFilter,
   },
-  Effect.fnUntraced(function* ({ main, stage, envFile, profile, filter }) {
+  instrumentCommand(
+    "tail",
+    (a: { main: string; stage: string; profile: string }) => ({
+      "alchemy.stage": a.stage,
+      "alchemy.profile": a.profile,
+      "alchemy.main": a.main,
+    }),
+  )(Effect.fnUntraced(function* ({ main, stage, envFile, profile, filter }) {
     const stackEffect = yield* importStack(main);
 
     const services = Layer.mergeAll(
@@ -134,5 +142,5 @@ export const tailCommand = Command.make(
         }).pipe(Stream.runForEach((line) => Console.log(line)));
       }).pipe(Effect.provide(stack.services));
     }).pipe(Effect.provide(services));
-  }),
+  })),
 );

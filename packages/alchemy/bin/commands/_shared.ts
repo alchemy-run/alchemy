@@ -11,6 +11,7 @@ import * as Flag from "effect/unstable/cli/Flag";
 
 import { AuthError } from "../../src/Auth/AuthProvider.ts";
 import type * as Stack from "../../src/Stack.ts";
+import { recordCli } from "../../src/Telemetry/Metrics.ts";
 import { PromptCancelled } from "../../src/Util/Clank.ts";
 
 export const USER = Config.string("USER").pipe(
@@ -217,6 +218,39 @@ export const parseSince = (value: string): Date => {
   }
   return parsed;
 };
+
+/**
+ * Wraps a CLI command handler with a top-level OpenTelemetry span
+ * (`cli.<command>`) and bumps the `alchemy.cli.invocations` counter.
+ *
+ * `attrs` runs against the parsed command args and contributes
+ * additional attributes to the span (e.g. stage, profile, dry-run flag).
+ *
+ * Usage:
+ * ```ts
+ * Command.make(
+ *   "deploy",
+ *   { ...flags },
+ *   instrumentCommand("deploy", (a) => ({
+ *     "alchemy.stage": a.stage,
+ *     "alchemy.profile": a.profile,
+ *   }))(execStack),
+ * );
+ * ```
+ */
+export const instrumentCommand =
+  <Args>(
+    command: string,
+    attrs: (args: Args) => Record<string, unknown> = () => ({}),
+  ) =>
+  <A, E, R>(
+    handler: (args: Args) => Effect.Effect<A, E, R>,
+  ): ((args: Args) => Effect.Effect<A, E, R>) =>
+  (args) =>
+    handler(args).pipe(
+      Effect.withSpan(`cli.${command}`, { attributes: attrs(args) }),
+      recordCli(command),
+    );
 
 export const importStack = Effect.fn(function* (main: string) {
   const path = yield* Path.Path;
