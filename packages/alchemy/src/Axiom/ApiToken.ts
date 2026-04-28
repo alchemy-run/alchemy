@@ -1,7 +1,7 @@
 import * as Operations from "@distilled.cloud/axiom/Operations";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import { isResolved } from "../Diff.ts";
+import { deepEqual, isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import type { Providers } from "./Providers.ts";
@@ -80,12 +80,15 @@ export const ApiTokenProvider = () =>
 
       return {
         stables: ["id", "token"],
-        diff: Effect.fn(function* ({ news, output }) {
+        diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isResolved(news)) return undefined;
           // First create — let the engine create normally.
           if (output == null) return undefined;
-          // Axiom has no update endpoint for tokens — every subsequent
-          // change is a replacement so the caller gets a fresh token value.
+          // Axiom has no update endpoint for tokens, so any actual change
+          // to the inputs forces a replacement (which mints a new bearer
+          // value). If nothing changed, fall through to `noop` so we don't
+          // needlessly rotate the token on every deploy.
+          if (deepEqual(olds, news)) return undefined;
           return { action: "replace" } as const;
         }),
         create: Effect.fn(function* ({ news }) {
