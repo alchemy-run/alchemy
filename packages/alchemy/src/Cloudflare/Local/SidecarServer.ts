@@ -1,6 +1,6 @@
 import * as Server from "@distilled.cloud/cloudflare-runtime/server";
 import * as Auth from "@distilled.cloud/cloudflare/Auth";
-import { Cause } from "effect";
+import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";

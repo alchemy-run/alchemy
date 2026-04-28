@@ -1,7 +1,8 @@
-import { Fiber, Schedule } from "effect";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
 import * as AlchemyContext from "../AlchemyContext.ts";
 import * as Lock from "./Lock.ts";
 import {

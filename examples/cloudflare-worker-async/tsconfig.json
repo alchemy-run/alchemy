@@ -2,7 +2,6 @@
   "extends": "../../tsconfig.base.json",
   "include": [
     "alchemy.run.ts",
-    "run-stack-dev.ts",
     "src/**/*.ts"
   ],
   "compilerOptions": {
@@ -11,7 +10,9 @@
     "module": "Preserve",
     "moduleResolution": "Bundler",
     "target": "ESNext",
-    "types": ["@cloudflare/workers-types"]
+    "types": [
+      "@cloudflare/workers-types"
+    ]
   },
   "references": [
     {
