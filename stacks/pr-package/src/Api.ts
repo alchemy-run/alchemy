@@ -23,9 +23,6 @@ export default class Api extends Cloudflare.Worker<Api>()(
     env: {
       DEFAULT_TTL: "3 weeks",
     },
-    // Canonical host plus the four legacy/branded aliases. Alias paths are
-    // matched in the fetch handler below and 301'd to /projects/<project>/...
-    // on pkg.ing — same logic regardless of which host received the request.
     domain:
       stage === "prod"
         ? [
