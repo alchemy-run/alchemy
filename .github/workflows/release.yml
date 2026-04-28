@@ -305,7 +305,4 @@ jobs:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
           VERSION: ${{ needs.bump.outputs.version }}
           CHANNEL: ${{ needs.bump.outputs.channel }}
-        run: |
-          curl -fsS -H 'content-type: application/json' \
-            -d "{\"content\":\"Released **v${VERSION}** (${CHANNEL}) — https://github.com/alchemy-run/alchemy/releases/tag/v${VERSION}\"}" \
-            "$DISCORD_WEBHOOK"
+        run: bun scripts/release/discord-notify.ts "v${VERSION}" "${CHANNEL}"

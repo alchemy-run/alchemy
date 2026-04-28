@@ -124,7 +124,7 @@ const { md } = await generate({
   to: tag,
   emoji: true,
   contributors: true,
-  repo: "alchemy-run/alchemy",
+  repo: "alchemy-run/alchemy-effect",
 });
 
 const args = [
