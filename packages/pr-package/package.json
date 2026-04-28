@@ -18,9 +18,10 @@
   },
   "exports": {
     ".": {
+      "types": "./src/index.ts",
       "bun": "./src/index.ts",
-      "default": "./lib/index.js",
-      "types": "./lib/index.d.ts"
+      "worker": "./src/index.ts",
+      "import": "./lib/index.js"
     }
   },
   "dependencies": {
