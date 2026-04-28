@@ -136,7 +136,7 @@ jobs:
 
           existing=$(gh api --paginate \
             "repos/${REPO}/issues/${PR_NUMBER}/comments" \
-            --jq ".[] | select(.user.login == \"${ME}\") | select(.body | startswith(\"${MARKER}\")) | .id" \
+            --jq ".[] | select(.user.login == \"alchemy-version-bot[bot]\") | select(.body | startswith(\"${MARKER}\")) | .id" \
             | head -1)
 
           if [ -n "$existing" ]; then
