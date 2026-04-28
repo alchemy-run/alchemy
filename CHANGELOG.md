@@ -1,3 +1,14 @@
+## v2.0.0-beta.18
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **CloudFront**: CachePolicy, OriginRequestPolicy, ResponseHeadersPolicy, PublicKey, KeyGroup &nbsp;-&nbsp; by **Jordan** and **Claude Opus 4.7** in https://github.com/alchemy-run/alchemy/issues/106 [<samp>(70201)</samp>](https://github.com/alchemy-run/alchemy/commit/7020108)
+- **GitHub**: Secrets helper for creating many secrets &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(7be53)</samp>](https://github.com/alchemy-run/alchemy/commit/7be536a)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.17...v2.0.0-beta.18)
+
+---
+
 ## v2.0.0-beta.17
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
