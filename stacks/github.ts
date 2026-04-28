@@ -19,6 +19,7 @@ export default Alchemy.Stack(
     const testAccountId = yield* Config.string("TEST_CLOUDFLARE_ACCOUNT_ID");
     const prodAccountId = yield* Config.string("PROD_CLOUDFLARE_ACCOUNT_ID");
     const discordWebhookUrl = yield* Config.string("DISCORD_WEBHOOK_URL");
+    const prPackageAuthToken = yield* Config.string("PR_PACKAGE_TOKEN");
 
     const testApiToken = yield* token("TestApiToken", {
       accountId: testAccountId,
@@ -36,6 +37,7 @@ export default Alchemy.Stack(
         PROD_CLOUDFLARE_API_TOKEN: prodApiToken.value,
         PROD_CLOUDFLARE_ACCOUNT_ID: prodAccountId,
         DISCORD_WEBHOOK_URL: discordWebhookUrl,
+        PR_PACKAGE_TOKEN: prPackageAuthToken,
       },
     });
 
