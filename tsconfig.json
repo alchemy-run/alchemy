@@ -61,6 +61,9 @@
     },
     {
       "path": "./packages/better-auth/tsconfig.json"
+    },
+    {
+      "path": "./packages/pr-package/tsconfig.json"
     }
   ],
   "compilerOptions": {

@@ -5,6 +5,7 @@
     "": {
       "name": "alchemy-monorepo",
       "devDependencies": {
+        "@alchemy.run/pr-package": "workspace:*",
         "@ark/attest": "^0.56.0",
         "@effect/language-service": "^0.77.0",
         "@effect/platform-bun": "catalog:",
@@ -336,6 +337,14 @@
         "effect": "catalog:",
       },
     },
+    "packages/pr-package": {
+      "name": "@alchemy.run/pr-package",
+      "version": "2.0.0-beta.20",
+      "dependencies": {
+        "alchemy": "workspace:*",
+        "effect": "catalog:",
+      },
+    },
     "website": {
       "name": "website",
       "version": "0.0.0",
@@ -438,6 +447,8 @@
     "@alcalzone/ansi-tokenize": ["@alcalzone/ansi-tokenize@0.2.5", "", { "dependencies": { "ansi-styles": "^6.2.1", "is-fullwidth-code-point": "^5.0.0" } }, "sha512-3NX/MpTdroi0aKz134A6RC2Gb2iXVECN4QaAXnvCIxxIm3C3AVB1mkUe8NaaiyvOpDfsrqWhYtj+Q6a62RrTsw=="],
 
     "@alchemy.run/better-auth": ["@alchemy.run/better-auth@workspace:packages/better-auth"],
+
+    "@alchemy.run/pr-package": ["@alchemy.run/pr-package@workspace:packages/pr-package"],
 
     "@alloc/quick-lru": ["@alloc/quick-lru@5.2.0", "", {}, "sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw=="],
 

@@ -40,8 +40,6 @@ export default class PackageStore extends Cloudflare.DurableObjectNamespace<Pack
               totalDownloads: current.totalDownloads,
             };
             yield* setState(newState);
-            // TODO: set DO alarm for TTL cleanup once alchemy-effect supports alarm handlers
-            // yield* doState.storage.setAlarm(expiresAt);
           }),
 
         removeTag: (tag: string) =>

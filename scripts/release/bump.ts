@@ -2,7 +2,7 @@
 /**
  * Compute and apply a version bump across all publishable workspace packages.
  *
- * Writes: packages/{alchemy,better-auth}/package.json
+ * Writes: packages/{alchemy,better-auth,pr-package}/package.json
  * and (via `bun install`) bun.lock.
  *
  * Prints the chosen version to stdout. All progress messages go to stderr,
@@ -44,9 +44,13 @@ import { $ } from "bun";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-const PUBLISHABLE_DIRS = ["alchemy", "better-auth"] as const;
+const PUBLISHABLE_DIRS = ["alchemy", "better-auth", "pr-package"] as const;
 
-const PUBLISHABLE_NAMES = ["alchemy", "@alchemy.run/better-auth"] as const;
+const PUBLISHABLE_NAMES = [
+  "alchemy",
+  "@alchemy.run/better-auth",
+  "@alchemy.run/pr-package",
+] as const;
 
 // Pre-release versions the beta/alpha auto-increment considers when deciding
 // whether to resume. Keeps the line `2.0.0-...` since that is the series

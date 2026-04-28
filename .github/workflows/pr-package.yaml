@@ -1,9 +1,9 @@
 name: pr-package
 
-# Publishes alchemy + better-auth tarballs to the pr-package service at
-# pkg.ing on every push to main and every PR sync. On PR close, deletes every
-# tag we ever assigned for that PR so the underlying tarballs become orphaned
-# and the bucket cleans them up.
+# Publishes alchemy + better-auth + pr-package tarballs to the pr-package
+# service at pkg.ing on every push to main and every PR sync. On PR close,
+# deletes every tag we ever assigned for that PR so the underlying tarballs
+# become orphaned and the bucket cleans them up.
 
 on:
   push:
@@ -44,12 +44,14 @@ jobs:
 
       - run: bun install
 
-      # Only build the packages we publish — skip the website (root `build`
-      # script fans out to all workspaces, which is expensive and unnecessary
-      # here). better-auth's `build` script is just `bun pm pack`, which we run
-      # ourselves below, so no separate build step.
+      # Build alchemy (full bundle) and run the workspace tsc to populate
+      # lib/ for the layer packages (better-auth, pr-package). Their tarballs
+      # ship both src/ and lib/, and consumers in non-bun runtimes resolve
+      # via the `import` condition → ./lib/index.js.
       - run: bun run build
         working-directory: packages/alchemy
+
+      - run: bun tsc -b packages/better-auth/tsconfig.json packages/pr-package/tsconfig.json
 
       - name: Compute tags
         id: tags
@@ -110,6 +112,24 @@ jobs:
             -H "Content-Type: application/gzip" \
             --data-binary "@${tgz}"
 
+      - name: Publish pr-package
+        env:
+          TOKEN: ${{ secrets.PR_PACKAGE_TOKEN }}
+          TAGS: ${{ steps.tags.outputs.tags }}
+        working-directory: packages/pr-package
+        run: |
+          set -euo pipefail
+          rm -f *.tgz
+          bun pm pack --destination .
+          tgz=$(ls *.tgz)
+          echo "Publishing $tgz with tags $TAGS"
+          curl -fsSL --show-error -X PUT \
+            "https://${PR_PACKAGE_HOST}/projects/@alchemy.run/pr-package/packages" \
+            -H "Authorization: Bearer ${TOKEN}" \
+            -H "X-Tags: ${TAGS}" \
+            -H "Content-Type: application/gzip" \
+            --data-binary "@${tgz}"
+
       # PR-only: leave a sticky comment with the install URLs pinned to this
       # commit. Uses pkg.ing (the canonical short host), which serves both
       # the pretty alias paths and the underlying /projects/:project/tags/:tag
@@ -132,7 +152,7 @@ jobs:
         run: |
           set -euo pipefail
           MARKER="<!-- pr-package-comment -->"
-          BODY=$(printf '%s\n\nInstall the packages built from this commit:\n\n**alchemy**\n```sh\nbun add https://pkg.ing/alchemy/%s\n```\n\n**@alchemy.run/better-auth**\n```sh\nbun add https://pkg.ing/@alchemy.run/better-auth/%s\n```\n' "$MARKER" "$SHORT_SHA" "$SHORT_SHA")
+          BODY=$(printf '%s\n\nInstall the packages built from this commit:\n\n**alchemy**\n```sh\nbun add https://pkg.ing/alchemy/%s\n```\n\n**@alchemy.run/better-auth**\n```sh\nbun add https://pkg.ing/@alchemy.run/better-auth/%s\n```\n\n**@alchemy.run/pr-package**\n```sh\nbun add https://pkg.ing/@alchemy.run/pr-package/%s\n```\n' "$MARKER" "$SHORT_SHA" "$SHORT_SHA" "$SHORT_SHA")
 
           existing=$(gh api --paginate \
             "repos/${REPO}/issues/${PR_NUMBER}/comments" \
@@ -177,7 +197,7 @@ jobs:
 
           # Project names match npm package names; scopes stay literal in the
           # URL (the API route accepts /projects/@scope/name/...).
-          for project in alchemy "@alchemy.run/better-auth"; do
+          for project in alchemy "@alchemy.run/better-auth" "@alchemy.run/pr-package"; do
             while IFS= read -r tag; do
               [ -z "$tag" ] && continue
               # URL-encode the tag (branch names can contain `/`).
