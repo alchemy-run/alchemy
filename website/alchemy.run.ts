@@ -40,9 +40,10 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
+    const { stage } = yield* Alchemy.Stack;
     const website = yield* Website;
 
-    if (process.env.PULL_REQUEST) {
+    if (stage.startsWith("pr-")) {
       yield* GitHub.Comment("preview-comment", {
         owner: "alchemy-run",
         repository: "alchemy-effect",
