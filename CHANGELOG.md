@@ -1,3 +1,13 @@
+## v2.0.0-beta.20
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Update to effect beta.58 & distilled 0.13 &nbsp;-&nbsp; by **Michael (Pear)** [<samp>(d6f4e)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/d6f4e53)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.19...HEAD)
+
+---
+
 ## v2.0.0-beta.19
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
