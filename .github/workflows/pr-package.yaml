@@ -114,10 +114,6 @@ jobs:
       # commit. Uses pkg.ing (the canonical short host), which serves both
       # the pretty alias paths and the underlying /projects/:project/tags/:tag
       # API directly.
-      #
-      # Authored by the alchemy-version-bot GitHub App (same identity that
-      # signs release commits) so the comment shows up under the bot's avatar
-      # rather than github-actions[bot].
       - name: Generate bot token
         if: github.event_name == 'pull_request'
         id: bot-token
