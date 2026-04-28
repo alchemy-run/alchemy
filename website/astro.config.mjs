@@ -69,7 +69,7 @@ function copyMarkdownSources() {
 }
 
 export default defineConfig({
-  site: "https://alchemy.run",
+  site: "https://v2.alchemy.run",
   prefetch: true,
   trailingSlash: "ignore",
   integrations: [
@@ -87,12 +87,13 @@ export default defineConfig({
     }),
     starlight({
       title: "alchemy",
-      favicon: "/favicon.png",
+      favicon: "/favicon.svg",
       customCss: ["./src/styles/global.css", "./src/styles/custom.css"],
       components: {
         ThemeProvider: "./src/components/ThemeProvider.astro",
         ThemeSelect: "./src/components/ThemeProvider.astro",
         Header: "./src/components/marketing/Nav.astro",
+        Head: "./src/components/starlight/Head.astro",
       },
       prerender: true,
       social: [

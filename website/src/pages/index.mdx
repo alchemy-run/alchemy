@@ -23,6 +23,7 @@ import HeroCta from "../components/marketing-islands/HeroCta.tsx";
 import HeadingOrnament from "../components/marketing/HeadingOrnament.astro";
 import AlchemicalDivider from "../components/marketing/AlchemicalDivider.astro";
 import HeroBgGraph from "../components/marketing/HeroBgGraph.astro";
+import Yantra from "../brand/Yantra.astro";
 
 export const STACK_SRC = `export default Alchemy.Stack(
   "MyApp",
@@ -105,19 +106,8 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
     <BetaBadge />
   </div>
   <div class="alc-hero__inner">
-    <div class="alc-hero__mark" aria-hidden="true">
-      {/* Downward water-triangle inscribed in a circle — the
-          Sri-Yantra-style descending triangle, also the alchemical
-          mark for water / dissolution. Used as a frontispiece glyph. */}
-      <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="miter" stroke-miterlimit="6">
-        <circle cx="12" cy="12" r="9.5" />
-        {/* Equilateral triangle inscribed in the circle (apex down):
-            apex at (12, 12 + r), top vertices at (12 ± r·cos30°, 12 - r·sin30°).
-            Centroid coincides with the circle center, so the dot sits at (12,12). */}
-        <path d="M12 21.5 L3.77 7.25 L20.23 7.25 Z" />
-        <circle cx="12" cy="12" r="1.1" fill="var(--alc-accent-deep)" stroke="none" />
-      </svg>
-    </div>
+    <Yantra class="alc-hero__mark" size={42} />
+
     <Eyebrow>typescript · effect · infrastructure as code</Eyebrow>
     <h1 class="alc-hero__title">
       <span style="color:var(--alc-accent-deep);font-style:italic;">Zero</span>{" "}
