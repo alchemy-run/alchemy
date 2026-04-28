@@ -17,7 +17,7 @@ export type ApiToken = Resource<
      * does not return it on subsequent reads. Persisted in resource state via
      * `Redacted` — handle with care.
      */
-    token: Redacted.Redacted<string> | undefined;
+    token: Redacted.Redacted<string>;
   },
   never,
   Providers
@@ -90,9 +90,14 @@ export const ApiTokenProvider = () =>
         }),
         create: Effect.fn(function* ({ news }) {
           const result = yield* create(news);
+          if (!result.token) {
+            return yield* Effect.die(
+              new Error("Axiom did not return a token on create"),
+            );
+          }
           return {
             ...result,
-            token: result.token ? Redacted.make(result.token) : undefined,
+            token: Redacted.make(result.token),
           };
         }),
         update: Effect.fn(function* ({ output }) {
