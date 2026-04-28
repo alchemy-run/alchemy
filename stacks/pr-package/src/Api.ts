@@ -71,9 +71,10 @@ export default class Api extends Cloudflare.Worker<Api>()(
 
         // Route pattern: /projects/:project/...
         // :project may be scoped (@scope/name) or unscoped (name) — matches
-        // npm package naming so URLs stay readable for scoped packages.
+        // npm package naming. Accept literal `@` or its percent-encoded form
+        // `%40` since strict HTTP clients (e.g. bun) encode `@` in paths.
         const projectMatch = path.match(
-          /^\/projects\/(@[^/]+\/[^/]+|[^/]+)(\/.*)?$/,
+          /^\/projects\/((?:@|%40)[^/]+\/[^/]+|[^/]+)(\/.*)?$/i,
         );
         if (!projectMatch) {
           return HttpServerResponse.text("Not Found", { status: 404 });
@@ -219,11 +220,18 @@ export default class Api extends Cloudflare.Worker<Api>()(
           const store = packages.getByName(resourceId);
           yield* store.recordDownload(tag).pipe(Effect.orDie);
 
+          // Encode each path segment but keep `/` literal so scoped projects
+          // round-trip through the route regex (which splits scope/name on
+          // a literal slash).
+          const encodedProject = project
+            .split("/")
+            .map(encodeURIComponent)
+            .join("/");
           return HttpServerResponse.fromWeb(
             new Response(null, {
               status: 302,
               headers: {
-                location: `/projects/${encodeURIComponent(project)}/packages/${resourceId}`,
+                location: `/projects/${encodedProject}/packages/${resourceId}`,
               },
             }),
           );
