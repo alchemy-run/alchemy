@@ -16,6 +16,7 @@ import {
   destroyCommand,
   planCommand,
 } from "./commands/deploy.ts";
+import { devCommand } from "./commands/dev.ts";
 import { loginCommand } from "./commands/login.ts";
 import { logsCommand } from "./commands/logs.ts";
 import { stateCommand } from "./commands/state.ts";
@@ -25,6 +26,7 @@ const root = Command.make("alchemy", {}).pipe(
   Command.withSubcommands([
     bootstrapCommand,
     deployCommand,
+    devCommand,
     destroyCommand,
     planCommand,
     tailCommand,

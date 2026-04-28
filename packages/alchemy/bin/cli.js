@@ -21,10 +21,9 @@
 //
 // foreground-child forwards stdio + signals and exits with the child's code,
 // so the launcher is transparent to the invoking shell / npm script.
-import { existsSync } from "node:fs";
+import { foregroundChild } from "foreground-child";
 import { createRequire } from "node:module";
 import path from "pathe";
-import { foregroundChild } from "foreground-child";
 
 const require = createRequire(import.meta.url);
 
@@ -57,5 +56,23 @@ if (runtime === "bun" && useTs) {
 }
 
 args.push(useTs ? tsEntry : jsEntry, ...process.argv.slice(2));
+
+process.on("uncaughtException", (error) => {
+  if (
+    error.message.includes(
+      "foreground-child watchdog process died unexpectedly!",
+    ) &&
+    typeof error.cause === "object" &&
+    error.cause !== null &&
+    "watchedProcess" in error.cause &&
+    error.cause.watchedProcess !== null &&
+    "cmd" in error.cause.watchedProcess &&
+    error.cause.signal === "SIGINT"
+  ) {
+    console.log("Interrupted.");
+    process.exit(0);
+  }
+  console.error(error);
+});
 
 foregroundChild(runtime, args);

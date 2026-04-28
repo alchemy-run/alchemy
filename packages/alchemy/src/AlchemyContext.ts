@@ -9,6 +9,7 @@ export class AlchemyContext extends EffectContext.Service<
   {
     dotAlchemy: string;
     updateStateStore: boolean;
+    dev: boolean;
   }
 >()("alchemy/Context") {}
 
@@ -22,6 +23,7 @@ export const AlchemyContextLive = Layer.effect(
     return {
       dotAlchemy: dir,
       updateStateStore: false,
+      dev: false,
     };
   }),
 );

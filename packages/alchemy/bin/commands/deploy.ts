@@ -4,8 +4,10 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import * as Command from "effect/unstable/cli/Command";
 
+import { AlchemyContext } from "../../src/AlchemyContext.ts";
 import { apply } from "../../src/Apply.ts";
 import { ArtifactStore, createArtifactStore } from "../../src/Artifacts.ts";
 import { AuthProviders } from "../../src/Auth/AuthProvider.ts";
@@ -27,7 +29,20 @@ import {
   yes,
 } from "./_shared.ts";
 
-const execStack = Effect.fn(function* ({
+export const ExecStackOptions = Schema.Struct({
+  main: Schema.String,
+  stage: Schema.String,
+  envFile: Schema.OptionFromOptional(Schema.String),
+  profile: Schema.optional(Schema.String),
+  dryRun: Schema.optional(Schema.Boolean),
+  force: Schema.optional(Schema.Boolean),
+  yes: Schema.optional(Schema.Boolean),
+  destroy: Schema.optional(Schema.Boolean),
+  dev: Schema.optional(Schema.Boolean),
+});
+export type ExecStackOptions = typeof ExecStackOptions.Type;
+
+export const execStack = Effect.fn(function* ({
   main,
   stage,
   envFile,
@@ -36,19 +51,20 @@ const execStack = Effect.fn(function* ({
   force = false,
   yes = false,
   destroy = false,
-}: {
-  main: string;
-  stage: string;
-  envFile: Option.Option<string>;
-  profile: string;
-  dryRun?: boolean;
-  force?: boolean;
-  yes?: boolean;
-  destroy?: boolean;
-}) {
+  dev = false,
+}: ExecStackOptions) {
   const stackEffect = yield* importStack(main);
 
   const services = Layer.mergeAll(
+    Layer.effect(
+      AlchemyContext,
+      AlchemyContext.asEffect().pipe(
+        Effect.map((ctx) => ({
+          ...ctx,
+          dev,
+        })),
+      ),
+    ),
     Layer.succeed(ArtifactStore, createArtifactStore()),
     Layer.succeed(
       AuthProviders,
@@ -93,6 +109,10 @@ const execStack = Effect.fn(function* ({
         const outputs = yield* apply(updatePlan);
 
         yield* Console.log(outputs);
+
+        if (dev) {
+          yield* Effect.never;
+        }
       }
     }).pipe(Effect.provide(stack.services));
   }).pipe(Effect.provide(services));

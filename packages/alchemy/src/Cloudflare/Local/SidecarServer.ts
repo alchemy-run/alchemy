@@ -1,10 +1,12 @@
 import * as Server from "@distilled.cloud/cloudflare-runtime/server";
 import * as Auth from "@distilled.cloud/cloudflare/Auth";
+import { Cause } from "effect";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
-import { identity } from "effect/Function";
+import * as Hash from "effect/Hash";
 import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
@@ -19,7 +21,11 @@ const SidecarServer = Effect.gen(function* () {
   const server = yield* Server.Server;
   const fibers = new Map<
     string,
-    Fiber.Fiber<void, Server.ServeError | Bundle.BundleError>
+    {
+      deferred: Deferred.Deferred<Server.ServeResult, Server.ServeError>;
+      fiber: Fiber.Fiber<void, Server.ServeError | Bundle.BundleError>;
+      hash: number;
+    }
   >();
   const scope = yield* Effect.scope;
   const bundle = yield* WorkerBundle;
@@ -28,20 +34,51 @@ const SidecarServer = Effect.gen(function* () {
     yield* server.stop(name);
     const fiber = fibers.get(name);
     if (fiber) {
-      yield* Fiber.interrupt(fiber);
+      yield* Fiber.interrupt(fiber.fiber);
       fibers.delete(name);
     }
   });
 
   return Sidecar.of({
     serve: Effect.fn(function* (worker: ServeOptions) {
-      yield* stop(worker.name);
+      const hash = Hash.structure(worker);
+      const existing = fibers.get(worker.name);
+      if (existing) {
+        if (existing.hash === hash) {
+          return yield* Deferred.await(existing.deferred);
+        }
+        yield* stop(worker.name);
+      }
       const deferred = yield* Deferred.make<
         Server.ServeResult,
         Server.ServeError
       >();
+      let start = Date.now();
       const fiber = yield* bundle.watch(worker).pipe(
-        Stream.filterMap(identity),
+        Stream.tap((event) => {
+          if (event._tag === "Start") {
+            start = Date.now();
+            return Effect.log(`[${worker.id}] Bundle start`);
+          }
+          if (event._tag === "Error") {
+            return Effect.logError(`[${worker.id}] Bundle error`, event.error);
+          }
+          return Effect.void;
+        }),
+        Stream.filterMap((event) =>
+          event._tag === "Success"
+            ? Result.succeed(event.output)
+            : Result.failVoid,
+        ),
+        Stream.changesWithEffect((a, b) =>
+          Effect.succeed(a.hash === b.hash).pipe(
+            Effect.tap((isSame) =>
+              isSame
+                ? Effect.log(`[${worker.id}] No changes detected`)
+                : Effect.void,
+            ),
+          ),
+        ),
         Stream.map(bundleOutputToWorkerd),
         Stream.mapEffect((modules) =>
           server
@@ -56,6 +93,21 @@ const SidecarServer = Effect.gen(function* () {
             })
             .pipe(
               Effect.exit,
+              Effect.tap((exit) => {
+                const isDone = Deferred.isDoneUnsafe(deferred);
+                if (exit._tag === "Success") {
+                  return Effect.log(
+                    `[${worker.id}] ${isDone ? "Updated" : "Started"} in ${Math.round(Date.now() - start)}ms`,
+                  );
+                }
+                if (isDone) {
+                  return Effect.logError(
+                    `[${worker.id}] Error`,
+                    Cause.squash(exit.cause),
+                  );
+                }
+                return Effect.void;
+              }),
               Effect.tap((exit) => Deferred.complete(deferred, exit)),
             ),
         ),
@@ -63,7 +115,7 @@ const SidecarServer = Effect.gen(function* () {
         Effect.forkScoped,
         Scope.provide(scope),
       );
-      fibers.set(worker.name, fiber);
+      fibers.set(worker.name, { deferred, fiber, hash });
       return yield* Deferred.await(deferred);
     }),
     stop,

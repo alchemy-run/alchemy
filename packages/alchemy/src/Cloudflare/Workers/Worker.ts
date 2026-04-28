@@ -22,6 +22,7 @@ import { pathToFileURL } from "node:url";
 import type * as rolldown from "rolldown";
 import Sonda from "sonda/rolldown";
 import type * as vite from "vite";
+import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Artifacts from "../../Artifacts.ts";
 import * as Binding from "../../Binding.ts";
 import { hashDirectory, type MemoOptions } from "../../Build/Memo.ts";
@@ -49,6 +50,7 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { D1Database } from "../D1/D1Database.ts";
 import { fromCloudflareFetcher } from "../Fetcher.ts";
 import type { KVNamespace } from "../KV/KVNamespace.ts";
+import { SidecarLive } from "../Local/Sidecar.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import type { Providers } from "../Providers.ts";
 import type { Queue as CloudflareQueue } from "../Queue/Queue.ts";
@@ -68,6 +70,7 @@ import {
   type DurableObjectNamespaceLike,
 } from "./DurableObjectNamespace.ts";
 import { workersHttpHandler } from "./HttpServer.ts";
+import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
 import { Request } from "./Request.ts";
 import { makeRpcStub } from "./Rpc.ts";
 import { isWorkflowExport } from "./Workflow.ts";
@@ -925,7 +928,31 @@ function getDurableObjectTagMap(tags: ReadonlyArray<string>) {
   );
 }
 
+const selectLayer = <
+  LayerLive extends Layer.Layer<any, any, any>,
+  LayerDev extends Layer.Layer<any, any, any>,
+>(input: {
+  live: LayerLive;
+  dev: LayerDev;
+}): Layer.Layer<
+  Layer.Success<LayerLive | LayerDev>,
+  Layer.Error<LayerLive | LayerDev>,
+  Layer.Services<LayerLive | LayerDev> | AlchemyContext
+> =>
+  Layer.unwrap(
+    Effect.gen(function* () {
+      const context = yield* AlchemyContext;
+      return context.dev ? input.dev : input.live;
+    }),
+  );
+
 export const WorkerProvider = () =>
+  selectLayer({
+    live: LiveWorkerProvider(),
+    dev: Layer.provide(LocalWorkerProvider(), SidecarLive),
+  });
+
+export const LiveWorkerProvider = () =>
   Provider.effect(
     Worker,
     Effect.gen(function* () {

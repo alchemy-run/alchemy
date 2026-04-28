@@ -1,5 +1,4 @@
 import * as Effect from "effect/Effect";
-import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
@@ -70,15 +69,7 @@ export const LocalWorkerProvider = () =>
       });
 
       return {
-        diff: Effect.fn(function* ({ id, olds, news, output }) {
-          if (!isResolved(news)) return undefined;
-          const oldName =
-            output?.workerName ?? (yield* createWorkerName(id, olds.name));
-          const newName = yield* createWorkerName(id, news.name);
-          return oldName === newName
-            ? { action: "update" }
-            : { action: "replace" };
-        }),
+        diff: () => Effect.succeed({ action: "update" }),
         create: ({ id, news, bindings }) => run(id, news, bindings),
         update: ({ id, news, bindings }) => run(id, news, bindings),
         delete: ({ output }) => sidecar.stop(output.workerName),

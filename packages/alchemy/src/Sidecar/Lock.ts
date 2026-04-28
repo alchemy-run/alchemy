@@ -1,7 +1,7 @@
 import * as Context from "effect/Context";
-import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -29,16 +29,18 @@ export class Lock extends Context.Service<
   Lock,
   {
     readonly check: Effect.Effect<boolean>;
-    readonly release: Effect.Effect<void, LockError>;
-    readonly acquire: Effect.Effect<void, LockError, Scope.Scope>;
-    readonly touch: Effect.Effect<void, LockError>;
-    readonly monitor: Effect.Effect<void, LockError>;
+    readonly acquire: Effect.Effect<
+      Fiber.Fiber<number, LockError>,
+      LockError,
+      Scope.Scope
+    >;
   }
 >()("Lock") {}
 
-export const LOCK_TTL = Duration.seconds(10);
+const LOCK_TTL = Duration.seconds(10);
+const TOUCH_INTERVAL = Duration.seconds(1);
 
-export const make = Effect.gen(function* () {
+const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const paths = yield* RpcPaths.RpcPaths;
 
@@ -47,7 +49,10 @@ export const make = Effect.gen(function* () {
       (e) =>
         new LockError({
           reason: "PlatformError",
-          message: "Failed to read lock file",
+          message:
+            e.reason._tag === "NotFound"
+              ? "Lock file not found"
+              : "Failed to read lock file",
           cause: e,
         }),
     ),
@@ -136,69 +141,50 @@ export const make = Effect.gen(function* () {
     ),
   );
 
-  const deferred = yield* Deferred.make<never, LockError>();
   const releaseLock = assertOwnLock.pipe(Effect.andThen(() => removeLock));
+
+  const acquireLock = makeLockFile.pipe(
+    Effect.catchIf(
+      (e) => e.reason === "Conflict",
+      (e) =>
+        isLockValid.pipe(
+          Effect.flatMap((valid) =>
+            valid
+              ? Effect.fail(e)
+              : removeLock.pipe(Effect.andThen(() => makeLockFile)),
+          ),
+        ),
+    ),
+  );
+
+  const touchLock = assertOwnLock.pipe(
+    Effect.flatMap(() => {
+      const now = Date.now();
+      return fs.utimes(paths.lock, now, now).pipe(
+        Effect.mapError(
+          (e) =>
+            new LockError({
+              reason: "PlatformError",
+              message: "Failed to update lock file",
+              cause: e,
+            }),
+        ),
+      );
+    }),
+  );
 
   return Lock.of({
     check: isLockValid,
-    release: Effect.all(
-      [
-        Deferred.fail(
-          deferred,
-          new LockError({ reason: "Cancelled", message: "Lock cancelled" }),
+    acquire: acquireLock.pipe(
+      Effect.flatMap(() =>
+        touchLock.pipe(
+          Effect.repeat(Schedule.spaced(TOUCH_INTERVAL)),
+          Effect.ensuring(releaseLock.pipe(Effect.ignore)),
+          Effect.forkScoped,
         ),
-        releaseLock,
-      ],
-      { concurrency: "unbounded" },
-    ),
-    acquire: makeLockFile.pipe(
-      Effect.catchIf(
-        (e) => e.reason === "Conflict",
-        (e) =>
-          isLockValid.pipe(
-            Effect.flatMap((valid) =>
-              valid
-                ? Effect.fail(e)
-                : removeLock.pipe(Effect.andThen(() => makeLockFile)),
-            ),
-          ),
       ),
-    ),
-    touch: assertOwnLock.pipe(
-      Effect.flatMap(() => {
-        const now = Date.now();
-        return fs.utimes(paths.lock, now, now).pipe(
-          Effect.mapError(
-            (e) =>
-              new LockError({
-                reason: "PlatformError",
-                message: "Failed to update lock file",
-                cause: e,
-              }),
-          ),
-        );
-      }),
-    ),
-    monitor: Effect.race(
-      Effect.zip(
-        assertOwnLock,
-        isLockFileStale.pipe(
-          Effect.flatMap((stale) =>
-            stale
-              ? Effect.fail(
-                  new LockError({
-                    reason: "Timeout",
-                    message: "Lock file is stale",
-                  }),
-                )
-              : Effect.void,
-          ),
-        ),
-        { concurrent: true },
-      ).pipe(Effect.repeat(Schedule.spaced(LOCK_TTL)), Effect.asVoid),
-      Deferred.await(deferred),
     ),
   });
 });
 
-export const layer = Layer.effect(Lock, make);
+export const LockLive = Layer.effect(Lock, make);

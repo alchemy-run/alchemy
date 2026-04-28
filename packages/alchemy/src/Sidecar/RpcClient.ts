@@ -1,7 +1,7 @@
 import { newWebSocketRpcSession } from "capnweb";
 import * as Context from "effect/Context";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
@@ -36,10 +36,12 @@ export const layer = <Self, T extends RpcHandlers>(
     schema: RpcHandlerDecoders<T>;
   },
 ) =>
-  Layer.provide(
-    Layer.effect(
-      tag,
-      maybeStartRpcServer(fileURLToPath(options.main)).pipe(
+  Layer.effect(
+    tag,
+    Effect.gen(function* () {
+      const fiber = yield* maybeStartRpcServer(
+        fileURLToPath(options.main),
+      ).pipe(
         Effect.flatMap(() => RpcSession),
         Effect.map((session) =>
           deserializeRpcHandlers(
@@ -47,22 +49,34 @@ export const layer = <Self, T extends RpcHandlers>(
             options.schema,
           ),
         ),
-      ),
-    ),
-    Layer.provideMerge(Lock.layer, RpcPaths.layer(options.main)),
+        Effect.retry(Schedule.exponential("100 millis")),
+        Effect.provide(
+          Layer.provideMerge(Lock.LockLive, RpcPaths.layer(options.main)),
+        ),
+        Effect.forkScoped,
+      );
+      return new Proxy({} as T, {
+        get(target, prop) {
+          return (...args: any[]) =>
+            Fiber.join(fiber).pipe(
+              Effect.flatMap((session) => session[prop as never](...args)),
+            );
+        },
+      });
+    }),
   );
 
 const maybeStartRpcServer = Effect.fn(function* (main: string) {
   const lock = yield* Lock.Lock;
   if (!(yield* lock.check)) {
-    console.log("[RpcClient] Starting RPC server", main);
+    yield* Effect.logDebug("[RpcClient] Starting RPC server", main);
     yield* ChildProcess.make("bun", ["run", main], {
       stdout: "inherit",
       stderr: "inherit",
       detached: true,
     });
   } else {
-    console.log("[RpcClient] RPC server already running", main);
+    yield* Effect.logDebug("[RpcClient] RPC server already running", main);
   }
 });
 
@@ -98,7 +112,16 @@ const RpcSession = Effect.gen(function* () {
         return Effect.sync(() => ws.close());
       }),
     ),
-    Effect.retry({}),
+    Effect.retry({
+      while: (e) => e.reason !== "WebSocketError",
+      schedule: Schedule.spaced("50 millis"),
+      times: 100,
+    }),
+    Effect.retry({
+      while: (e) => e.reason === "WebSocketError",
+      schedule: Schedule.exponential("100 millis"),
+      times: 3,
+    }),
   );
   const session = yield* Effect.acquireRelease(
     Effect.sync(() =>
@@ -110,7 +133,7 @@ const RpcSession = Effect.gen(function* () {
     (session) => Effect.sync(() => session[Symbol.dispose]()),
   );
   yield* Effect.promise(() => session.heartbeat()).pipe(
-    Effect.repeat(Schedule.spaced(Duration.times(Lock.LOCK_TTL, 0.4))),
+    Effect.repeat(Schedule.spaced("1 second")),
     Effect.ensuring(Effect.promise(() => session.shutdown())),
     Effect.forkScoped,
   );
