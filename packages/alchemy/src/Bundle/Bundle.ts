@@ -107,6 +107,11 @@ export const watch = (
             // The watcher event listener does not receive the bundle output, so we grab it using a plugin.
             {
               name: "alchemy:watch-bundle",
+              watchChange() {
+                Queue.offerUnsafe(queue, {
+                  _tag: "Start",
+                });
+              },
               generateBundle(_outputOptions, bundle) {
                 Queue.offerUnsafe(queue, {
                   _tag: "Success",
@@ -118,11 +123,7 @@ export const watch = (
           output: outputOptions,
         });
         watcher.on("event", (event) => {
-          if (event.code === "BUNDLE_START") {
-            Queue.offerUnsafe(queue, {
-              _tag: "Start",
-            });
-          } else if (event.code === "ERROR") {
+          if (event.code === "ERROR") {
             Queue.offerUnsafe(queue, {
               _tag: "Error",
               error: bundleErrorFromUnknown(event.error),

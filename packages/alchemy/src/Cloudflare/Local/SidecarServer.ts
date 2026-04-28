@@ -70,15 +70,6 @@ const SidecarServer = Effect.gen(function* () {
             ? Result.succeed(event.output)
             : Result.failVoid,
         ),
-        Stream.changesWithEffect((a, b) =>
-          Effect.succeed(a.hash === b.hash).pipe(
-            Effect.tap((isSame) =>
-              isSame
-                ? Effect.log(`[${worker.id}] No changes detected`)
-                : Effect.void,
-            ),
-          ),
-        ),
         Stream.map(bundleOutputToWorkerd),
         Stream.mapEffect((modules) =>
           server
