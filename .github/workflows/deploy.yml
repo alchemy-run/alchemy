@@ -58,7 +58,8 @@ jobs:
 
   cleanup:
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'pull_request' && github.event.action == 'closed'
+    if:
+      ${{ github.event_name == 'pull_request' && github.event.action == 'closed'
       }}
     permissions:
       contents: read

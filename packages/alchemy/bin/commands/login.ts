@@ -45,67 +45,74 @@ export const loginCommand = Command.make(
   },
   instrumentCommand(
     "login",
-    (a: { main: string; stage: string; profile: string; configure: boolean }) => ({
+    (a: {
+      main: string;
+      stage: string;
+      profile: string;
+      configure: boolean;
+    }) => ({
       "alchemy.stage": a.stage,
       "alchemy.profile": a.profile,
       "alchemy.main": a.main,
       "alchemy.configure": a.configure,
     }),
-  )(Effect.fnUntraced(function* ({ main, stage, envFile, profile, configure }) {
-    const stackEffect = yield* importStack(main);
+  )(
+    Effect.fnUntraced(function* ({ main, stage, envFile, profile, configure }) {
+      const stackEffect = yield* importStack(main);
 
-    const authProviders: AuthProviders["Service"] = {};
+      const authProviders: AuthProviders["Service"] = {};
 
-    const services = Layer.mergeAll(
-      Layer.succeed(AuthProviders, authProviders),
-      ConfigProvider.layer(
-        withProfileOverride(yield* loadConfigProvider(envFile), profile),
-      ),
-      Logger.layer([fileLogger("out")]),
-      Layer.succeed(Stage, stage),
-      State.localState(),
-    );
-
-    yield* Effect.gen(function* () {
-      yield* Effect.catchCause(stackEffect, (cause) =>
-        Console.warn(
-          `Ignoring error while building stack for login (likely due to missing or broken credentials):\n${Cause.pretty(cause)}`,
+      const services = Layer.mergeAll(
+        Layer.succeed(AuthProviders, authProviders),
+        ConfigProvider.layer(
+          withProfileOverride(yield* loadConfigProvider(envFile), profile),
         ),
+        Logger.layer([fileLogger("out")]),
+        Layer.succeed(Stage, stage),
+        State.localState(),
       );
 
-      const ci = yield* Config.boolean("CI").pipe(Config.withDefault(false));
-      const providers = Object.values(authProviders);
-
-      if (providers.length === 0) {
-        yield* Console.log(
-          "No AuthProviders registered. Make sure the stack's providers() layer includes AuthProviderLayer entries.",
+      yield* Effect.gen(function* () {
+        yield* Effect.catchCause(stackEffect, (cause) =>
+          Console.warn(
+            `Ignoring error while building stack for login (likely due to missing or broken credentials):\n${Cause.pretty(cause)}`,
+          ),
         );
-        return;
-      }
 
-      yield* Effect.forEach(
-        providers,
-        (provider) =>
-          Effect.gen(function* () {
-            const existing = yield* getProfile(profile);
-            const stored = existing?.[provider.name];
+        const ci = yield* Config.boolean("CI").pipe(Config.withDefault(false));
+        const providers = Object.values(authProviders);
 
-            let cfg: { method: string };
-            if (configure || stored == null) {
-              cfg = yield* provider.configure(profile, { ci });
-              yield* setProfile(profile, {
-                ...existing,
-                [provider.name]: cfg,
-              });
-            } else {
-              cfg = stored;
-            }
+        if (providers.length === 0) {
+          yield* Console.log(
+            "No AuthProviders registered. Make sure the stack's providers() layer includes AuthProviderLayer entries.",
+          );
+          return;
+        }
 
-            yield* provider.login(profile, cfg);
-            yield* provider.prettyPrint(profile, cfg);
-          }),
-        { discard: true },
-      );
-    }).pipe(Effect.provide(services));
-  })),
+        yield* Effect.forEach(
+          providers,
+          (provider) =>
+            Effect.gen(function* () {
+              const existing = yield* getProfile(profile);
+              const stored = existing?.[provider.name];
+
+              let cfg: { method: string };
+              if (configure || stored == null) {
+                cfg = yield* provider.configure(profile, { ci });
+                yield* setProfile(profile, {
+                  ...existing,
+                  [provider.name]: cfg,
+                });
+              } else {
+                cfg = stored;
+              }
+
+              yield* provider.login(profile, cfg);
+              yield* provider.prettyPrint(profile, cfg);
+            }),
+          { discard: true },
+        );
+      }).pipe(Effect.provide(services));
+    }),
+  ),
 );

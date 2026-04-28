@@ -102,9 +102,7 @@ export const UserApiTokenProvider = () =>
           const oldPolicyFp = policyFingerprint(
             resolvePolicies(olds?.policies ?? []),
           );
-          const newPolicyFp = policyFingerprint(
-            resolvePolicies(news.policies),
-          );
+          const newPolicyFp = policyFingerprint(resolvePolicies(news.policies));
           const oldCondFp = conditionFingerprint(olds?.condition);
           const newCondFp = conditionFingerprint(news.condition);
           if (

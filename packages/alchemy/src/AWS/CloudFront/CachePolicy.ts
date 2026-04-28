@@ -124,7 +124,9 @@ export const CachePolicyProvider = () =>
         const config = yield* cloudfront
           .getCachePolicyConfig({ Id: id })
           .pipe(
-            Effect.catchTag("NoSuchCachePolicy", () => Effect.succeed(undefined)),
+            Effect.catchTag("NoSuchCachePolicy", () =>
+              Effect.succeed(undefined),
+            ),
           );
         if (!config?.CachePolicyConfig) return undefined;
         return { config: config.CachePolicyConfig, etag: config.ETag };
@@ -186,7 +188,8 @@ export const CachePolicyProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           if (output?.cachePolicyId) {
             const found = yield* getById(output.cachePolicyId);
-            if (found) return toAttrs(output.cachePolicyId, found.config, found.etag);
+            if (found)
+              return toAttrs(output.cachePolicyId, found.config, found.etag);
           }
           const name = yield* createName(id, olds ?? {});
           const found = yield* getByName(name);

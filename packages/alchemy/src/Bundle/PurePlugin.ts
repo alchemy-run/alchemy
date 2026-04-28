@@ -131,12 +131,12 @@ export const purePlugin = (
         // intentional registrations / mutations the author made at the
         // top level of files in packages that did not declare so.
         const markSideEffectFree =
-          markSideEffectFreeOpt && !isEntry && isSideEffectFree(info.sideEffects);
+          markSideEffectFreeOpt &&
+          !isEntry &&
+          isSideEffectFree(info.sideEffects);
         const annotated = annotateModule(code, id);
         if (annotated === null) {
-          return markSideEffectFree
-            ? { code, moduleSideEffects: false }
-            : null;
+          return markSideEffectFree ? { code, moduleSideEffects: false } : null;
         }
         return {
           code: annotated.code,
@@ -446,7 +446,8 @@ export function annotateModule(
     if (isIIFE(call)) return;
     // For `new X()`, anchor BEFORE the `new` keyword so we get
     // `/*#__PURE__*/ new X()` (matches babel-plugin-annotate-pure-calls).
-    const anchor = call.type === "NewExpression" ? call.start : call.callee.start;
+    const anchor =
+      call.type === "NewExpression" ? call.start : call.callee.start;
     if (alreadyAnnotated(code, anchor)) return;
     s.appendLeft(anchor, PURE_COMMENT);
     mutated = true;

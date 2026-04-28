@@ -121,7 +121,9 @@ export const OriginRequestPolicyProvider = () =>
         if (!summary?.OriginRequestPolicy?.Id) return undefined;
         return yield* getById(summary.OriginRequestPolicy.Id).pipe(
           Effect.map((found) =>
-            found ? { id: summary.OriginRequestPolicy.Id, ...found } : undefined,
+            found
+              ? { id: summary.OriginRequestPolicy.Id, ...found }
+              : undefined,
           ),
         );
       });
@@ -166,7 +168,11 @@ export const OriginRequestPolicyProvider = () =>
           if (output?.originRequestPolicyId) {
             const found = yield* getById(output.originRequestPolicyId);
             if (found) {
-              return toAttrs(output.originRequestPolicyId, found.config, found.etag);
+              return toAttrs(
+                output.originRequestPolicyId,
+                found.config,
+                found.etag,
+              );
             }
           }
           const name = yield* createName(id, olds ?? {});

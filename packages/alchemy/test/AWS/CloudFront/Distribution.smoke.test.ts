@@ -112,8 +112,7 @@ describe("AWS.CloudFront smoke", () => {
               allowedMethods: ["GET", "HEAD"],
               cachedMethods: ["GET", "HEAD"],
               cachePolicyId: cachePolicy.cachePolicyId,
-              originRequestPolicyId:
-                originRequestPolicy.originRequestPolicyId,
+              originRequestPolicyId: originRequestPolicy.originRequestPolicyId,
               responseHeadersPolicyId:
                 responseHeadersPolicy.responseHeadersPolicyId,
             },
@@ -179,10 +178,9 @@ describe("AWS.CloudFront smoke", () => {
         deployed.originRequestPolicy.originRequestPolicyId,
       );
 
-      const responseHeadersPolicy =
-        yield* cloudfront.getResponseHeadersPolicy({
-          Id: deployed.responseHeadersPolicy.responseHeadersPolicyId,
-        });
+      const responseHeadersPolicy = yield* cloudfront.getResponseHeadersPolicy({
+        Id: deployed.responseHeadersPolicy.responseHeadersPolicyId,
+      });
       expect(responseHeadersPolicy.ResponseHeadersPolicy?.Id).toEqual(
         deployed.responseHeadersPolicy.responseHeadersPolicyId,
       );

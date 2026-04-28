@@ -240,7 +240,9 @@ export const fromCloudflareSocket = (cfSocket: cf.Socket): Socket.Socket => {
   ): Effect.Effect<void, Socket.SocketError | E, R> =>
     runRaw(
       (data) =>
-        typeof data === "string" ? handler(data) : handler(decoder.decode(data)),
+        typeof data === "string"
+          ? handler(data)
+          : handler(decoder.decode(data)),
       opts,
     );
 

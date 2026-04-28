@@ -62,7 +62,10 @@ export default class Ingester extends Cloudflare.Worker<Ingester>()(
         const otlp =
           request.method === "POST"
             ? path === "/v1/traces"
-              ? { endpoint: yield* tracesEndpoint, dataset: yield* tracesDataset }
+              ? {
+                  endpoint: yield* tracesEndpoint,
+                  dataset: yield* tracesDataset,
+                }
               : path === "/v1/logs"
                 ? { endpoint: yield* logsEndpoint, dataset: yield* logsDataset }
                 : path === "/v1/metrics"
@@ -102,7 +105,8 @@ export default class Ingester extends Cloudflare.Worker<Ingester>()(
         // 2. Everything else → PostHog Cloud (US region)
         // /static/* and /array/* live on the assets host; everything else on the
         // ingest host. Static assets are cacheable at the edge.
-        const isAsset = path.startsWith("/static/") || path.startsWith("/array/");
+        const isAsset =
+          path.startsWith("/static/") || path.startsWith("/array/");
         const upstreamHost = isAsset
           ? "https://us-assets.i.posthog.com"
           : "https://us.i.posthog.com";

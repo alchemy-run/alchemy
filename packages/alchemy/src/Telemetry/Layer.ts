@@ -53,13 +53,12 @@ const buildOtlpLayer = (
  * resolves to {@link Layer.empty}. Effect's default `Tracer` is a no-op,
  * so all `withSpan`/`Effect.fn` instrumentation in core stays free.
  */
-export const TelemetryLive: Layer.Layer<never, never, never> =
-  Layer.unwrap(
-    Effect.gen(function* () {
-      if (yield* isTelemetryDisabled) {
-        return Layer.empty;
-      }
-      const attrs = yield* collectAttributes;
-      return buildOtlpLayer(attrs as unknown as Record<string, unknown>);
-    }),
-  );
+export const TelemetryLive: Layer.Layer<never, never, never> = Layer.unwrap(
+  Effect.gen(function* () {
+    if (yield* isTelemetryDisabled) {
+      return Layer.empty;
+    }
+    const attrs = yield* collectAttributes;
+    return buildOtlpLayer(attrs as unknown as Record<string, unknown>);
+  }),
+);

@@ -149,7 +149,10 @@ export const destroyCommand = Command.make(
     yes,
     profile,
   },
-  instrumentCommand("destroy", stackSpanAttrs)((args) =>
+  instrumentCommand(
+    "destroy",
+    stackSpanAttrs,
+  )((args) =>
     execStack({
       ...args,
       destroy: true,
@@ -165,7 +168,10 @@ export const planCommand = Command.make(
     stage,
     profile,
   },
-  instrumentCommand("plan", stackSpanAttrs)((args) =>
+  instrumentCommand(
+    "plan",
+    stackSpanAttrs,
+  )((args) =>
     execStack({
       ...args,
       // plan is the same as deploy with dryRun always set to true

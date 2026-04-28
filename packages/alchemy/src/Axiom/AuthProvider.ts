@@ -83,11 +83,7 @@ export const AxiomAuth = AuthProviderLayer<
 const resolveCredentials = (
   profileName: string,
   config: AxiomAuthConfig,
-): Effect.Effect<
-  AxiomResolvedCredentials,
-  AuthError,
-  FileSystem.FileSystem
-> =>
+): Effect.Effect<AxiomResolvedCredentials, AuthError, FileSystem.FileSystem> =>
   Match.value(config).pipe(
     Match.when(
       { method: "env" },
@@ -101,8 +97,7 @@ const resolveCredentials = (
               "Axiom env credentials not found. Set AXIOM_TOKEN (or AXIOM_API_KEY).",
           });
         }
-        const apiBaseUrl =
-          (yield* getEnv("AXIOM_URL")) ?? DEFAULT_API_BASE_URL;
+        const apiBaseUrl = (yield* getEnv("AXIOM_URL")) ?? DEFAULT_API_BASE_URL;
         const orgId = yield* getEnv("AXIOM_ORG_ID");
         if (orgId) {
           return {

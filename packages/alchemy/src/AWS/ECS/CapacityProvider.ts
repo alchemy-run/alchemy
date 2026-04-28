@@ -128,11 +128,14 @@ export const CapacityProviderProvider = () =>
       const toEcsTags = (tags: Record<string, string>): ecs.Tag[] =>
         Object.entries(tags).map(([key, value]) => ({ key, value }));
 
-      const fromEcsTags = (tags: ecs.Tag[] | undefined): Record<string, string> =>
+      const fromEcsTags = (
+        tags: ecs.Tag[] | undefined,
+      ): Record<string, string> =>
         Object.fromEntries(
           (tags ?? [])
-            .filter((t): t is { key: string; value: string } =>
-              t.key !== undefined && t.value !== undefined,
+            .filter(
+              (t): t is { key: string; value: string } =>
+                t.key !== undefined && t.value !== undefined,
             )
             .map((t) => [t.key, t.value]),
         );
@@ -234,11 +237,9 @@ export const CapacityProviderProvider = () =>
               updateStatus: existing.updateStatus,
               autoScalingGroupArn:
                 existing.autoScalingGroupProvider?.autoScalingGroupArn ?? "",
-              managedScaling:
-                existing.autoScalingGroupProvider?.managedScaling,
+              managedScaling: existing.autoScalingGroupProvider?.managedScaling,
               managedTerminationProtection:
-                existing.autoScalingGroupProvider
-                  ?.managedTerminationProtection,
+                existing.autoScalingGroupProvider?.managedTerminationProtection,
               managedDraining:
                 existing.autoScalingGroupProvider?.managedDraining,
               tags: { ...fromEcsTags(existing.tags), ...tags },
@@ -265,7 +266,8 @@ export const CapacityProviderProvider = () =>
           return {
             capacityProviderArn,
             name,
-            status: (provider?.status ?? "ACTIVE") as ecs.CapacityProviderStatus,
+            status: (provider?.status ??
+              "ACTIVE") as ecs.CapacityProviderStatus,
             updateStatus: provider?.updateStatus,
             autoScalingGroupArn,
             managedScaling: news.managedScaling,
@@ -307,7 +309,8 @@ export const CapacityProviderProvider = () =>
           yield* session.note(output.capacityProviderArn);
           return {
             ...output,
-            status: (found?.status ?? output.status) as ecs.CapacityProviderStatus,
+            status: (found?.status ??
+              output.status) as ecs.CapacityProviderStatus,
             updateStatus: found?.updateStatus ?? output.updateStatus,
             managedScaling:
               found?.autoScalingGroupProvider?.managedScaling ??

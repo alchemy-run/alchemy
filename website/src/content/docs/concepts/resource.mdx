@@ -16,11 +16,9 @@ properties**:
 
 ```typescript
 const bucket = yield * Cloudflare.R2Bucket("Bucket");
-const queue =
-  yield *
-  AWS.SQS.Queue("Jobs", {
-    fifoQueue: true,
-  });
+const queue = yield* AWS.SQS.Queue("Jobs", {
+  fifoQueue: true,
+});
 ```
 
 The logical ID (`"Bucket"`, `"Jobs"`) is stable across deploys. It
