@@ -1,9 +1,9 @@
 name: pr-package
 
 # Publishes alchemy + better-auth tarballs to the pr-package service at
-# 📦.alchemy.run on every push to main and every PR sync. On PR close, deletes
-# every tag we ever assigned for that PR so the underlying tarballs become
-# orphaned and the bucket cleans them up.
+# pkg.ing on every push to main and every PR sync. On PR close, deletes every
+# tag we ever assigned for that PR so the underlying tarballs become orphaned
+# and the bucket cleans them up.
 
 on:
   push:
@@ -16,7 +16,7 @@ permissions:
   pull-requests: write
 
 env:
-  PR_PACKAGE_HOST: 📦.alchemy.run
+  PR_PACKAGE_HOST: pkg.ing
   NODE_VERSION: "24"
 
 jobs:
@@ -104,16 +104,16 @@ jobs:
           tgz=$(ls *.tgz)
           echo "Publishing $tgz with tags $TAGS"
           curl -fsSL --show-error -X PUT \
-            "https://${PR_PACKAGE_HOST}/projects/better-auth/packages" \
+            "https://${PR_PACKAGE_HOST}/projects/@alchemy.run/better-auth/packages" \
             -H "Authorization: Bearer ${TOKEN}" \
             -H "X-Tags: ${TAGS}" \
             -H "Content-Type: application/gzip" \
             --data-binary "@${tgz}"
 
-      # PR-only: leave a sticky comment with the install URL pinned to this
-      # commit. Only for the alchemy package (better-auth is intentionally
-      # excluded). Uses pkg.alchemy.run as the public alias, which 301s to
-      # 📦.alchemy.run/projects/alchemy/tags/:tag.
+      # PR-only: leave a sticky comment with the install URLs pinned to this
+      # commit. Uses pkg.ing (the canonical short host), which serves both
+      # the pretty alias paths and the underlying /projects/:project/tags/:tag
+      # API directly.
       #
       # Authored by the alchemy-version-bot GitHub App (same identity that
       # signs release commits) so the comment shows up under the bot's avatar
@@ -136,7 +136,7 @@ jobs:
         run: |
           set -euo pipefail
           MARKER="<!-- pr-package-comment -->"
-          BODY=$(printf '%s\n\nInstall the packages built from this commit:\n\n```sh\nbun add https://pkg.alchemy.run/alchemy/%s\nbun add https://pkg.alchemy.run/@alchemy.run/better-auth/%s\n```\n' "$MARKER" "$SHORT_SHA" "$SHORT_SHA")
+          BODY=$(printf '%s\n\nInstall the packages built from this commit:\n\n**alchemy**\n```sh\nbun add https://pkg.ing/alchemy/%s\n```\n\n**@alchemy.run/better-auth**\n```sh\nbun add https://pkg.ing/@alchemy.run/better-auth/%s\n```\n' "$MARKER" "$SHORT_SHA" "$SHORT_SHA")
 
           # Bot login GitHub assigns to this App's installation token. Used
           # to filter comments to ones we can actually PATCH — you can only
@@ -185,7 +185,9 @@ jobs:
           # Dedupe.
           unique=$(printf '%s\n' "${tags[@]}" | sort -u)
 
-          for project in alchemy better-auth; do
+          # Project names match npm package names; scopes stay literal in the
+          # URL (the API route accepts /projects/@scope/name/...).
+          for project in alchemy "@alchemy.run/better-auth"; do
             while IFS= read -r tag; do
               [ -z "$tag" ] && continue
               # URL-encode the tag (branch names can contain `/`).

@@ -25,7 +25,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
     },
     // pkg.alchemy.run and pkg.distilled.cloud are now served by the
     // Redirect worker, which 301s to this host.
-    domain: stage === "prod" ? ["📦.alchemy.run"] : undefined,
+    domain: stage === "prod" ? ["pkg.ing"] : undefined,
     compatibility: {
       flags: ["nodejs_compat"],
       date: "2026-03-17",
@@ -70,7 +70,11 @@ export default class Api extends Cloudflare.Worker<Api>()(
         }
 
         // Route pattern: /projects/:project/...
-        const projectMatch = path.match(/^\/projects\/([^/]+)(\/.*)?$/);
+        // :project may be scoped (@scope/name) or unscoped (name) — matches
+        // npm package naming so URLs stay readable for scoped packages.
+        const projectMatch = path.match(
+          /^\/projects\/(@[^/]+\/[^/]+|[^/]+)(\/.*)?$/,
+        );
         if (!projectMatch) {
           return HttpServerResponse.text("Not Found", { status: 404 });
         }

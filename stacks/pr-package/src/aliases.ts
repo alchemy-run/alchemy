@@ -1,19 +1,27 @@
 /**
  * Shared host+path parser for pretty install URLs.
  *
- * Maps incoming `(host, pathname)` to a `(project, tag)` on the canonical
- * 📦.alchemy.run API. Used by both the Redirect worker (legacy hosts) and
- * the Api worker (so the canonical host serves the same pretty URLs).
+ * Single canonical host (pkg.ing) serves every package. The other hosts
+ * are public aliases that 301 to the canonical /projects/:project/tags/:tag.
  *
- *   pkg.alchemy.run/alchemy/<tag>                → alchemy
- *   pkg.alchemy.run/@alchemy.run/<name>/<tag>    → <name>
- *   pkg.distilled.cloud/<name>/<tag>             → distilled-<name>
+ *   alchemy.run namespace
+ *     hosts:  pkg.ing, pkg.alchemy.run, 📦.alchemy.run
+ *     paths (project name == npm package name verbatim):
+ *       /<name>/<tag>                 → project "<name>"
+ *       /<scope>/<name>/<tag>         → project "<scope>/<name>"
  *
- * Each pkg.* host has an emoji-prefixed alias (📦.alchemy.run /
- * 📦.distilled.cloud) — Cloudflare stores those as their punycode form
- * (xn--cu8h.*), which is what the Host header carries at request time.
+ *   distilled.cloud namespace
+ *     hosts:  pkg.distilled.cloud, 📦.distilled.cloud
+ *     paths:
+ *       /<name>/<tag>                 → project "@distilled.cloud/<name>"
+ *
+ * Each emoji host has a punycode form (xn--cu8h.*) — Cloudflare normalizes
+ * domain config to punycode and that's what the Host header carries.
  */
+const CANONICAL_HOST = "pkg.ing";
+
 const ALCHEMY_HOSTS = new Set([
+  CANONICAL_HOST,
   "pkg.alchemy.run",
   "xn--cu8h.alchemy.run", // 📦.alchemy.run
 ]);
@@ -22,8 +30,6 @@ const DISTILLED_HOSTS = new Set([
   "pkg.distilled.cloud",
   "xn--cu8h.distilled.cloud", // 📦.distilled.cloud
 ]);
-
-export const CANONICAL_HOST = "xn--cu8h.alchemy.run"; // 📦.alchemy.run
 
 const normalizeHost = (h: string): string => {
   try {
@@ -56,19 +62,27 @@ export const parseAlias = (
     if (segments.length === 2) {
       return { project: segments[0]!, tag: segments[1]! };
     }
-    // /@alchemy.run/<name>/<tag>
-    if (segments.length === 3 && segments[0] === "@alchemy.run") {
-      return { project: segments[1]!, tag: segments[2]! };
+    // /<scope>/<name>/<tag> — scope must be a leading "@" segment.
+    if (segments.length === 3 && segments[0]!.startsWith("@")) {
+      return { project: `${segments[0]!}/${segments[1]!}`, tag: segments[2]! };
     }
   } else if (DISTILLED_HOSTS.has(h)) {
-    // /<name>/<tag> → distilled-<name>
+    // /<name>/<tag> → @distilled.cloud/<name>
     if (segments.length === 2) {
-      return { project: `distilled-${segments[0]!}`, tag: segments[1]! };
+      return {
+        project: `@distilled.cloud/${segments[0]!}`,
+        tag: segments[1]!,
+      };
     }
   }
 
   return null;
 };
 
+// Encode each path segment but keep `/` literal so scoped projects render as
+// /projects/@scope/name/... rather than /projects/%40scope%2Fname/... .
+const encodePath = (s: string) =>
+  s.split("/").map(encodeURIComponent).join("/");
+
 export const aliasRedirectUrl = (match: AliasMatch): string =>
-  `https://${CANONICAL_HOST}/projects/${encodeURIComponent(match.project)}/tags/${encodeURIComponent(match.tag)}`;
+  `https://${CANONICAL_HOST}/projects/${encodePath(match.project)}/tags/${encodeURIComponent(match.tag)}`;

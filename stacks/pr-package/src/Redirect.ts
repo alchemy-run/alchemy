@@ -6,13 +6,14 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { aliasRedirectUrl, parseAlias } from "./aliases.ts";
 
 /**
- * Public alias hosts. The canonical 📦.alchemy.run is owned by the Api
- * worker and handles its own alias matching; this worker covers the other
- * three:
+ * Public alias hosts. The canonical pkg.ing / pkg.build are owned by the
+ * Api worker (which serves the same alias paths on its own hostnames); this
+ * worker handles the four legacy / branded aliases:
  *
- *   pkg.alchemy.run         → alchemy.run packages
- *   pkg.distilled.cloud     → distilled.cloud packages
- *   📦.distilled.cloud      → emoji alias for pkg.distilled.cloud
+ *   pkg.alchemy.run        → alchemy.run packages
+ *   📦.alchemy.run         → emoji alias for pkg.alchemy.run
+ *   pkg.distilled.cloud    → distilled.cloud packages
+ *   📦.distilled.cloud     → emoji alias for pkg.distilled.cloud
  *
  * All matches are 301 (permanent) so HTTP clients cache the redirect.
  */
@@ -23,7 +24,12 @@ export default class Redirect extends Cloudflare.Worker<Redirect>()(
     url: true,
     domain:
       stage === "prod"
-        ? ["pkg.alchemy.run", "pkg.distilled.cloud", "📦.distilled.cloud"]
+        ? [
+            "pkg.alchemy.run",
+            "📦.alchemy.run",
+            "pkg.distilled.cloud",
+            "📦.distilled.cloud",
+          ]
         : undefined,
     compatibility: {
       flags: ["nodejs_compat"],
