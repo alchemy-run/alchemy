@@ -1,19 +1,22 @@
 /**
- * Satori template for Open Graph cards. This module is consumed only by
- * the static `og/[...slug].png.ts` endpoint at build time — never shipped
- * to the browser. The JSX is interpreted by satori, which supports a
- * Flexbox subset and inline `style` props (no CSS classes).
+ * Satori template for Open Graph cards. Consumed only by the static
+ * `og/[...slug].png.ts` endpoint at build time — never shipped to the
+ * browser. The JSX is interpreted by satori, which supports a Flexbox
+ * subset and inline `style` props (no CSS classes).
  *
  * The card mirrors the homepage hero: parchment background, Source Serif
- * headline with a key word italicized in deep moss, the yantra glyph, and
- * a hand-drawn "alchemy.run" caption in the bottom-right corner.
+ * for the headline, the yantra glyph in deep moss, JetBrains Mono eyebrow
+ * label, and a hand-drawn "alchemy.run" caption in the bottom-right
+ * corner. Title and description are rendered verbatim from the source
+ * page's frontmatter — no splitting, truncation, or glyph workarounds.
+ * The full unsubsetted variable TTFs loaded by the endpoint cover every
+ * Unicode codepoint we use.
  */
 
 import { yantraSvg } from "./yantra";
 
 const COLORS = {
   bg: "#f5efe3",
-  bgNav: "#efe7d6",
   fg1: "#2a2620",
   fg2: "#4e402c",
   fg3: "#85714f",
@@ -24,8 +27,21 @@ const COLORS = {
 
 export type OgCardKind = "marketing" | "doc" | "blog";
 
+/**
+ * One styled segment of a structured title — mirrors the way the
+ * homepage hero declares its own emphasis with explicit `<span>` markup.
+ * Pages that want the accent treatment supply an array; doc pages pass
+ * a plain string and get plain text.
+ */
+export interface TitlePart {
+  text: string;
+  italic?: boolean;
+  /** Render this part in the deep-moss accent color. */
+  accent?: boolean;
+}
+
 export interface OgCardProps {
-  title: string;
+  title: string | TitlePart[];
   description?: string;
   /** Drives the eyebrow label (e.g. "guide", "concept", "blog"). */
   eyebrow?: string;
@@ -35,31 +51,15 @@ export interface OgCardProps {
 const W = 1200;
 const H = 630;
 
-/**
- * Splits the title into two halves so we can italicize the second half in
- * the brand accent color — same treatment as the homepage hero ("Zero →
- * production"). When the title has no obvious split point we just render
- * it plain.
- */
-function splitTitle(title: string): { head: string; tail?: string } {
-  // Prefer splitting on a long arrow, em-dash, or colon.
-  const match = title.match(/^(.+?)\s*(?:→|->|—|-|:)\s*(.+)$/);
-  if (match) return { head: match[1], tail: match[2] };
-  return { head: title };
-}
-
 export function OgCard({
   title,
   description,
   eyebrow,
   kind = "doc",
 }: OgCardProps): any {
-  const { head, tail } = splitTitle(title);
-  const eyebrowText = (
-    eyebrow ?? defaultEyebrow(kind)
-  ).toUpperCase();
+  const eyebrowText = (eyebrow ?? defaultEyebrow(kind)).toUpperCase();
 
-  // Encode the yantra as a data URL so satori embeds it as an <img>.
+  // Embed the yantra as a data URL so satori inlines it as an <img>.
   const yantra = yantraSvg({
     size: 96,
     stroke: COLORS.accentDeep,
@@ -79,12 +79,12 @@ export function OgCard({
         flexDirection: "column",
         backgroundColor: COLORS.bg,
         padding: "56px 64px",
-        fontFamily: "Inter",
+        fontFamily: "Source Serif 4",
         color: COLORS.fg1,
         position: "relative",
       },
       children: [
-        // Top row: yantra + eyebrow
+        // Eyebrow row — yantra mark + monospace label.
         {
           type: "div",
           key: "top",
@@ -114,7 +114,7 @@ export function OgCard({
                     fontSize: 18,
                     letterSpacing: 3,
                     color: COLORS.accentDeep,
-                    fontWeight: 500,
+                    fontWeight: 400,
                   },
                   children: eyebrowText,
                 },
@@ -122,7 +122,11 @@ export function OgCard({
             ],
           },
         },
-        // Title — serif, large, with optional italicized tail in moss
+        // Title — serif, large, rendered verbatim. Either a plain string
+        // (doc pages) or an array of styled parts (marketing pages, which
+        // mirror the homepage hero's explicit per-word accent markup).
+        // Source Serif 4 static TTFs carry arrows, em-dashes etc. so no
+        // splitting or glyph substitution is needed.
         {
           type: "div",
           key: "title",
@@ -130,33 +134,35 @@ export function OgCard({
             style: {
               display: "flex",
               flexWrap: "wrap",
-              marginTop: 64,
-              fontFamily: "Source Serif 4",
-              fontWeight: 500,
-              fontSize: titleFontSize(title),
-              lineHeight: 1.06,
-              letterSpacing: -1.5,
+              alignItems: "baseline",
+              marginTop: 56,
+              // Display optical-size variant — chunkier serifs + more
+              // stroke contrast for headline scale. Matches the hero,
+              // which uses the variable font's display axis at ~72px.
+              fontFamily: "Source Serif 4 Display",
+              fontWeight: 300,
+              fontSize: 110,
+              lineHeight: 1.02,
+              letterSpacing: -2,
               color: COLORS.fg1,
             },
-            children: tail
-              ? [
-                  { type: "span", key: "h", props: { children: head + "\u00A0" } },
-                  {
-                    type: "span",
-                    key: "t",
-                    props: {
-                      style: {
-                        fontStyle: "italic",
-                        color: COLORS.accentDeep,
-                      },
-                      children: tail,
+            children: Array.isArray(title)
+              ? title.map((part, i) => ({
+                  type: "span",
+                  key: `tp${i}`,
+                  props: {
+                    style: {
+                      fontStyle: part.italic ? "italic" : "normal",
+                      color: part.accent ? COLORS.accentDeep : COLORS.fg1,
+                      fontWeight: 300,
                     },
+                    children: part.text,
                   },
-                ]
-              : head,
+                }))
+              : title,
           },
         },
-        // Description
+        // Description.
         description
           ? {
               type: "div",
@@ -170,17 +176,17 @@ export function OgCard({
                   color: COLORS.fg2,
                   maxWidth: 980,
                 },
-                children: truncate(description, 180),
+                children: description,
               },
             }
           : null,
-        // Spacer to push footer to the bottom
+        // Spacer pushes the footer to the bottom.
         {
           type: "div",
           key: "spacer",
           props: { style: { display: "flex", flexGrow: 1 } },
         },
-        // Footer row: hairline + url tag
+        // Footer — hairline + wordmark + hand-drawn URL.
         {
           type: "div",
           key: "footer",
@@ -191,9 +197,6 @@ export function OgCard({
               justifyContent: "space-between",
               borderTop: `1px solid ${COLORS.hairline}`,
               paddingTop: 24,
-              fontFamily: "JetBrains Mono",
-              fontSize: 18,
-              color: COLORS.fg3,
             },
             children: [
               {
@@ -203,7 +206,7 @@ export function OgCard({
                   style: {
                     fontFamily: "Source Serif 4",
                     fontStyle: "italic",
-                    fontWeight: 500,
+                    fontWeight: 400,
                     fontSize: 32,
                     color: COLORS.fg1,
                   },
@@ -216,6 +219,7 @@ export function OgCard({
                 props: {
                   style: {
                     fontFamily: "Caveat",
+                    fontWeight: 400,
                     fontSize: 36,
                     color: COLORS.accentDeep,
                   },
@@ -240,18 +244,4 @@ function defaultEyebrow(kind: OgCardKind): string {
     default:
       return "alchemy · documentation";
   }
-}
-
-/** Headline font size shrinks for very long titles so they always fit. */
-function titleFontSize(title: string): number {
-  const len = title.length;
-  if (len <= 32) return 88;
-  if (len <= 56) return 72;
-  if (len <= 80) return 60;
-  return 52;
-}
-
-function truncate(s: string, max: number): string {
-  if (s.length <= max) return s;
-  return s.slice(0, max - 1).trimEnd() + "…";
 }

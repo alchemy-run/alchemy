@@ -9,7 +9,10 @@
  * - Starlight docs (`getCollection("docs")`) → /og/<entry.slug>.png.
  *
  * The card itself lives in `src/brand/OgCard.tsx` and is rendered via
- * satori → resvg.
+ * satori → resvg. Fonts are the same families used on the website
+ * (`tokens.css`), loaded as full unsubsetted variable TTFs from
+ * `website/assets/fonts/` so satori has complete Unicode coverage —
+ * arrows, em-dashes, fancy quotes, etc. all render verbatim.
  */
 
 import type { APIRoute, GetStaticPaths } from "astro";
@@ -19,62 +22,71 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import satori from "satori";
-import { OgCard, type OgCardKind } from "../../brand/OgCard";
+import { OgCard, type OgCardKind, type TitlePart } from "../../brand/OgCard";
 
 interface Entry {
   slug: string;
-  title: string;
+  title: string | TitlePart[];
   description?: string;
   kind: OgCardKind;
   eyebrow?: string;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Font loading. Satori needs TTF or WOFF; we use the .woff files shipped by
-// @fontsource/* (woff2 is unsupported). Loaded once at module scope so a
-// build that renders N pages only pays this cost once.
+// Font loading. The website's font stack for the hero is
+//   "Source Serif 4", "Source Serif Pro", Georgia, "Times New Roman", serif
+// We mirror that here with Source Serif 4 as the primary face (regular,
+// italic, semibold, semibold-italic), plus JetBrains Mono for the eyebrow
+// label and Caveat for the hand-drawn URL stamp. All loaded as static TTFs
+// from `website/assets/fonts/` (populated by `scripts/download-fonts.ts`),
+// which carry the full Unicode glyph table — arrows, em-dashes, etc. — so
+// the source content renders verbatim with no glyph workarounds.
 // ────────────────────────────────────────────────────────────────────────────
 
-const fontsRoot = (pkg: string) =>
-  path.dirname(fileURLToPath(import.meta.resolve(`${pkg}/package.json`)));
+const fontsDir = fileURLToPath(new URL("../../../assets/fonts/", import.meta.url));
 
-async function readFont(pkg: string, filename: string): Promise<Buffer> {
-  const file = path.join(fontsRoot(pkg), "files", filename);
-  return fs.readFile(file);
+async function readFont(filename: string): Promise<Buffer> {
+  return fs.readFile(path.join(fontsDir, filename));
 }
 
 const fontsPromise = (async () => {
   const [
-    interRegular,
-    interMedium,
-    serifRegular,
-    serifItalic,
-    serifMedium,
-    serifMediumItalic,
-    monoRegular,
-    monoMedium,
-    caveatBold,
+    serif,
+    serifIt,
+    displayLight,
+    displayLightIt,
+    displayReg,
+    displayRegIt,
+    mono,
+    caveat,
   ] = await Promise.all([
-    readFont("@fontsource/inter", "inter-latin-400-normal.woff"),
-    readFont("@fontsource/inter", "inter-latin-500-normal.woff"),
-    readFont("@fontsource/source-serif-4", "source-serif-4-latin-400-normal.woff"),
-    readFont("@fontsource/source-serif-4", "source-serif-4-latin-400-italic.woff"),
-    readFont("@fontsource/source-serif-4", "source-serif-4-latin-500-normal.woff"),
-    readFont("@fontsource/source-serif-4", "source-serif-4-latin-500-italic.woff"),
-    readFont("@fontsource/jetbrains-mono", "jetbrains-mono-latin-400-normal.woff"),
-    readFont("@fontsource/jetbrains-mono", "jetbrains-mono-latin-500-normal.woff"),
-    readFont("@fontsource/caveat", "caveat-latin-600-normal.woff"),
+    readFont("SourceSerif4-Regular.ttf"),
+    readFont("SourceSerif4-It.ttf"),
+    readFont("SourceSerif4Display-Light.ttf"),
+    readFont("SourceSerif4Display-LightIt.ttf"),
+    readFont("SourceSerif4Display-Regular.ttf"),
+    readFont("SourceSerif4Display-It.ttf"),
+    readFont("JetBrainsMono-Regular.ttf"),
+    readFont("Caveat-Regular.ttf"),
   ]);
+
   return [
-    { name: "Inter", data: interRegular, weight: 400, style: "normal" },
-    { name: "Inter", data: interMedium, weight: 500, style: "normal" },
-    { name: "Source Serif 4", data: serifRegular, weight: 400, style: "normal" },
-    { name: "Source Serif 4", data: serifItalic, weight: 400, style: "italic" },
-    { name: "Source Serif 4", data: serifMedium, weight: 500, style: "normal" },
-    { name: "Source Serif 4", data: serifMediumItalic, weight: 500, style: "italic" },
-    { name: "JetBrains Mono", data: monoRegular, weight: 400, style: "normal" },
-    { name: "JetBrains Mono", data: monoMedium, weight: 500, style: "normal" },
-    { name: "Caveat", data: caveatBold, weight: 600, style: "normal" },
+    // Text optical-size variant (description, wordmark, etc.).
+    { name: "Source Serif 4", data: serif, weight: 400, style: "normal" },
+    { name: "Source Serif 4", data: serifIt, weight: 400, style: "italic" },
+
+    // Display optical-size variant for the headline. Carries chunkier
+    // serifs and more stroke contrast at large sizes — matches the
+    // website hero, which uses the variable font's display optical axis
+    // automatically. Light (300) is what the hero renders at ~72px;
+    // Regular (400) is the default fallback.
+    { name: "Source Serif 4 Display", data: displayLight, weight: 300, style: "normal" },
+    { name: "Source Serif 4 Display", data: displayLightIt, weight: 300, style: "italic" },
+    { name: "Source Serif 4 Display", data: displayReg, weight: 400, style: "normal" },
+    { name: "Source Serif 4 Display", data: displayRegIt, weight: 400, style: "italic" },
+
+    { name: "JetBrains Mono", data: mono, weight: 400, style: "normal" },
+    { name: "Caveat", data: caveat, weight: 400, style: "normal" },
   ] as const;
 })();
 
@@ -88,11 +100,18 @@ const fontsPromise = (async () => {
  * `index` for `/`).
  */
 const MARKETING_PAGES: Record<string, Omit<Entry, "slug" | "kind">> = {
+  // Title parts mirror the homepage hero markup, which explicitly
+  // italicizes "Zero" in the deep-moss accent — see index.mdx:
+  //   <span style="color:var(--alc-accent-deep);font-style:italic;">Zero</span>
+  //   {" "}&rarr; production.
   index: {
-    title: "alchemy — zero → production",
+    title: [
+      { text: "Zero", italic: true, accent: true },
+      { text: "\u00A0\u2192\u00A0production." },
+    ],
     description:
       "TypeScript IaC on Effect. Stand up your whole cloud in one program, type-check the IAM, hot-reload it locally, run tests against the real cloud, preview every PR.",
-    eyebrow: "alchemy · zero to production",
+    eyebrow: "typescript · effect · infrastructure as code",
   },
 };
 
