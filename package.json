@@ -44,7 +44,6 @@
   "workspaces": {
     "packages": [
       "website",
-      "stacks",
       "packages/*",
       "services/*",
       "examples/*"
