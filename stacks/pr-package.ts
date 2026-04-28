@@ -4,7 +4,6 @@ import * as Effect from "effect/Effect";
 
 import Api from "./pr-package/src/Api.ts";
 import { AuthTokenValue } from "./pr-package/src/AuthToken.ts";
-import Redirect from "./pr-package/src/Redirect.ts";
 
 export default Alchemy.Stack(
   "PrPackage",
@@ -14,11 +13,9 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const api = yield* Api;
-    const redirect = yield* Redirect;
     const authToken = yield* AuthTokenValue;
     return {
       url: api.url.as<string>(),
-      redirectUrl: redirect.url.as<string>(),
       authToken: authToken.text,
     };
   }),

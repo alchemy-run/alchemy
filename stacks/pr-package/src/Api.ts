@@ -23,9 +23,19 @@ export default class Api extends Cloudflare.Worker<Api>()(
     env: {
       DEFAULT_TTL: "3 weeks",
     },
-    // pkg.alchemy.run and pkg.distilled.cloud are now served by the
-    // Redirect worker, which 301s to this host.
-    domain: stage === "prod" ? ["pkg.ing"] : undefined,
+    // Canonical host plus the four legacy/branded aliases. Alias paths are
+    // matched in the fetch handler below and 301'd to /projects/<project>/...
+    // on pkg.ing — same logic regardless of which host received the request.
+    domain:
+      stage === "prod"
+        ? [
+            "pkg.ing",
+            "pkg.alchemy.run",
+            "📦.alchemy.run",
+            "pkg.distilled.cloud",
+            "📦.distilled.cloud",
+          ]
+        : undefined,
     compatibility: {
       flags: ["nodejs_compat"],
       date: "2026-03-17",
