@@ -5,6 +5,7 @@
  *
  * Usage: bun scripts/release/release-notes.ts v2.0.0-beta.13
  */
+import { $ } from "bun";
 import { generate } from "changelogithub";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -22,9 +23,19 @@ if (existing.includes(`## ${tag}\n`)) {
   process.exit(0);
 }
 
-console.log(`Generating release notes for ${tag}`);
+// changelogithub uses `to` as a git revision in `git log <from>...<to>`.
+// In the commit-then-tag flow this script runs BEFORE the tag is created,
+// so resolve the revision to HEAD while keeping the tag string for the
+// markdown heading. If the tag already exists locally (resumed run), use
+// it so the diff is stable.
+const tagExists =
+  (await $`git rev-parse --verify ${`refs/tags/${tag}`}`.nothrow().quiet())
+    .exitCode === 0;
+const toRev = tagExists ? tag : "HEAD";
+
+console.log(`Generating release notes for ${tag} (using ${toRev})`);
 const changelog = await generate({
-  to: tag,
+  to: toRev,
   emoji: true,
   contributors: true,
   repo: "alchemy-run/alchemy-effect",

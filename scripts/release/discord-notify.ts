@@ -1,20 +1,19 @@
 #!/usr/bin/env bun
 /**
- * Post a release announcement to Discord using markdown so the message
- * renders inline (rather than relying on GitHub's link unfurl, which
- * produces a tall, ugly embed).
+ * Post a release announcement to Discord as a single embed. The body is
+ * read verbatim from the CHANGELOG.md entry the release-notes step just
+ * wrote, so Discord matches the GitHub Release copy exactly.
  *
  * Reads DISCORD_WEBHOOK from the environment. Silently no-ops if unset.
  *
  * Usage: bun scripts/release/discord-notify.ts <tag> <release|beta|alpha|tag>
  */
-import { $ } from "bun";
-import { generate } from "changelogithub";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 
 const REPO = "alchemy-run/alchemy-effect";
-// Discord caps message content at 2000 chars; leave headroom for the
-// header, the trailing footer link, and markdown formatting.
-const MAX_BODY = 1500;
+// Discord embed description hard limit.
+const EMBED_DESCRIPTION_LIMIT = 4096;
 
 const tag = process.argv[2];
 const channel = process.argv[3];
@@ -31,46 +30,58 @@ if (!webhook) {
   process.exit(0);
 }
 
-const prev = await $`git describe --tags --abbrev=0 ${`${tag}^`}`
-  .nothrow()
-  .quiet();
-const from = prev.exitCode === 0 ? prev.stdout.toString().trim() : undefined;
-
-const { md } = await generate({
-  from,
-  to: tag,
-  emoji: true,
-  contributors: false,
-  repo: REPO,
-});
-
-// changelogithub leads with `## <tag>` then the section list. Drop the
-// outer heading (we render our own) and trim down to fit Discord's limit.
-let body = md.replace(/^##[^\n]*\n+/, "").trim();
-if (body.length > MAX_BODY) {
-  body = `${body.slice(0, MAX_BODY).trimEnd()}\n\n_…truncated; see full notes below._`;
+// Pull the entry for this tag out of CHANGELOG.md. release-notes.ts writes
+// each entry as `## <tag>\n\n<body>\n\n---\n\n<previous entries>`.
+const changelogPath = join(process.cwd(), "CHANGELOG.md");
+const changelog = await readFile(changelogPath, "utf-8");
+const heading = `## ${tag}\n`;
+const start = changelog.indexOf(heading);
+if (start === -1) {
+  console.error(`CHANGELOG.md has no entry for ${tag}`);
+  process.exit(1);
 }
+const after = changelog.slice(start + heading.length);
+// Stop at the separator that release-notes.ts inserts between entries, or
+// the next `## ` heading if the separator is missing.
+const sepIdx = after.indexOf("\n---\n");
+const nextHeadingIdx = after.indexOf("\n## ");
+const end =
+  sepIdx === -1
+    ? nextHeadingIdx === -1
+      ? after.length
+      : nextHeadingIdx
+    : nextHeadingIdx === -1
+      ? sepIdx
+      : Math.min(sepIdx, nextHeadingIdx);
+const body = after.slice(0, end).trim();
 
 const releaseUrl = `https://github.com/${REPO}/releases/tag/${tag}`;
-// Wrap the link in <…> so Discord does NOT generate an unfurl embed.
-const content = [
-  `## ${tag} (${channel}) released`,
-  "",
-  body,
-  "",
-  `[Full release notes →](<${releaseUrl}>)`,
-].join("\n");
+const description = `${body}\n\n[Full release notes →](${releaseUrl})`;
+
+if (description.length > EMBED_DESCRIPTION_LIMIT) {
+  console.error(
+    `Changelog (${description.length} chars) exceeds Discord embed description limit (${EMBED_DESCRIPTION_LIMIT}). Trim the changelog or split the release.`,
+  );
+  process.exit(1);
+}
 
 const res = await fetch(webhook, {
   method: "POST",
   headers: { "content-type": "application/json" },
-  body: JSON.stringify({ content, allowed_mentions: { parse: [] } }),
+  body: JSON.stringify({
+    embeds: [
+      {
+        title: `${tag} (${channel}) released`,
+        url: releaseUrl,
+        description,
+      },
+    ],
+    allowed_mentions: { parse: [] },
+  }),
 });
 
 if (!res.ok) {
-  console.error(
-    `Discord webhook failed: ${res.status} ${await res.text()}`,
-  );
+  console.error(`Discord webhook failed: ${res.status} ${await res.text()}`);
   process.exit(1);
 }
 console.log(`Posted Discord release notification for ${tag}`);
