@@ -3,7 +3,7 @@ import * as Option from "effect/Option";
 import { pipeArguments, type Pipeable } from "effect/Pipeable";
 import { SingleShotGen } from "effect/Utils";
 import { toFqn } from "./FQN.ts";
-import type { Input } from "./Input.ts";
+import type { Input, InputProps } from "./Input.ts";
 import { CurrentNamespace, type NamespaceNode } from "./Namespace.ts";
 import * as Output from "./Output.ts";
 import { Provider } from "./Provider.ts";
@@ -33,7 +33,7 @@ export type ResourceConstructor<R extends ResourceLike, Req = never> = {
   ): Effect.Effect<R, never, Req>;
   <PropsReq = never>(
     id: string,
-    props: Effect.Effect<Input<R["Props"]>, never, PropsReq>,
+    props: Effect.Effect<InputProps<R["Props"]>, never, PropsReq>,
   ): Effect.Effect<R, never, PropsReq | Req>;
 };
 

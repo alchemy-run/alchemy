@@ -18,6 +18,7 @@ import {
   envFile,
   formatLocalTimestamp,
   importStack,
+  instrumentCommand,
   main,
   parseResourceFilter,
   parseSince,
@@ -52,7 +53,15 @@ export const logsCommand = Command.make(
     limit: logsLimit,
     since: logsSince,
   },
-  Effect.fnUntraced(function* ({
+  instrumentCommand(
+    "logs",
+    (a: { main: string; stage: string; profile: string; limit: number }) => ({
+      "alchemy.stage": a.stage,
+      "alchemy.profile": a.profile,
+      "alchemy.main": a.main,
+      "alchemy.limit": a.limit,
+    }),
+  )(Effect.fnUntraced(function* ({
     main,
     stage,
     envFile,
@@ -153,5 +162,5 @@ export const logsCommand = Command.make(
         }
       }).pipe(Effect.provide(stack.services));
     }).pipe(Effect.provide(services));
-  }),
+  })),
 );

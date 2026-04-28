@@ -10,7 +10,7 @@
   "type": "module",
   "scripts": {
     "build:reference": "bun ../scripts/generate-api-reference.ts",
-    "build": "bun run build:reference && astro build",
+    "build": "bun run build:reference && bun scripts/download-fonts.ts && bun scripts/generate-brand-assets.ts && astro build",
     "dev:site": "astro dev",
     "deploy": "alchemy deploy",
     "dev": "alchemy dev",
@@ -29,6 +29,7 @@
     "@iconify-json/logos": "^1.2.11",
     "@iconify-json/lucide": "^1.2.102",
     "@iconify/react": "^6.0.2",
+    "@resvg/resvg-js": "^2.6.2",
     "@tailwindcss/vite": "^4.1.14",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
@@ -39,6 +40,7 @@
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-icons": "^5.6.0",
+    "satori": "^0.26.0",
     "starlight-blog": "0.24.0",
     "tailwindcss": "^4.1.14"
   },

@@ -23,6 +23,7 @@ import {
   envFile,
   force,
   importStack,
+  instrumentCommand,
   main,
   profile,
   stage,
@@ -41,6 +42,16 @@ export const ExecStackOptions = Schema.Struct({
   dev: Schema.optional(Schema.Boolean),
 });
 export type ExecStackOptions = typeof ExecStackOptions.Type;
+
+const stackSpanAttrs = (args: ExecStackOptions) => ({
+  "alchemy.stage": args.stage,
+  "alchemy.profile": args.profile,
+  "alchemy.main": args.main,
+  "alchemy.dry_run": !!args.dryRun,
+  "alchemy.force": !!args.force,
+  "alchemy.destroy": !!args.destroy,
+  "alchemy.dev": !!args.dev,
+});
 
 export const execStack = Effect.fn(function* ({
   main,
@@ -138,7 +149,7 @@ export const deployCommand = Command.make(
     yes,
     profile,
   },
-  execStack,
+  instrumentCommand("deploy", stackSpanAttrs)(execStack),
 );
 
 export const destroyCommand = Command.make(
@@ -151,11 +162,15 @@ export const destroyCommand = Command.make(
     yes,
     profile,
   },
-  (args) =>
+  instrumentCommand(
+    "destroy",
+    stackSpanAttrs,
+  )((args) =>
     execStack({
       ...args,
       destroy: true,
     }),
+  ),
 );
 
 export const planCommand = Command.make(
@@ -166,10 +181,14 @@ export const planCommand = Command.make(
     stage,
     profile,
   },
-  (args) =>
+  instrumentCommand(
+    "plan",
+    stackSpanAttrs,
+  )((args) =>
     execStack({
       ...args,
       // plan is the same as deploy with dryRun always set to true
       dryRun: true,
     }),
+  ),
 );

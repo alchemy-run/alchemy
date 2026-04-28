@@ -1,4 +1,5 @@
 ---
+import Search from "@astrojs/starlight/components/Search.astro";
 import Logo from "./Logo.astro";
 import Button from "./Button.astro";
 ---
@@ -10,11 +11,7 @@ import Button from "./Button.astro";
 
   <div class="alc-nav__spacer"></div>
   <div class="alc-nav__search">
-    <span class="alc-nav__search-icon">⌕</span>
-    <span class="alc-nav__search-text">Search docs</span>
-    <span class="alc-nav__spacer"></span>
-    <span class="alc-kbd">⌘</span>
-    <span class="alc-kbd">K</span>
+    <Search />
   </div>
   <a href="/getting-started" class="alc-nav__link">Docs</a>
   <a
@@ -65,32 +62,54 @@ import Button from "./Button.astro";
     display: flex;
     align-items: center;
     width: 220px;
+  }
+  .alc-nav__search :global(site-search) {
+    display: block;
+    width: 100%;
+  }
+  .alc-nav__search :global(button[data-open-modal]) {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
     height: 32px;
     padding: 0 8px 0 12px;
     background: var(--alc-bg);
     border: 1px solid var(--alc-hairline-2);
     border-radius: 8px;
-    font-size: 13px;
-  }
-  .alc-nav__search-icon,
-  .alc-nav__search-text {
-    color: var(--alc-fg-4);
-  }
-  .alc-nav__search-icon {
-    margin-right: 8px;
-  }
-  .alc-nav__search-text {
     font-size: 12px;
+    color: var(--alc-fg-4);
+    cursor: pointer;
+    font-family: inherit;
   }
-  .alc-kbd {
+  .alc-nav__search :global(button[data-open-modal]:hover) {
+    border-color: var(--alc-fg-4);
+    color: var(--alc-fg-2);
+  }
+  .alc-nav__search :global(button[data-open-modal] svg) {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+  }
+  .alc-nav__search :global(button[data-open-modal] > :last-child) {
+    margin-inline-start: auto;
+  }
+  .alc-nav__search :global(button[data-open-modal] kbd) {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    background: transparent;
+    border: 0;
+    padding: 0;
     font-family: var(--alc-font-mono);
     font-size: 11px;
+    color: var(--alc-fg-2);
+  }
+  .alc-nav__search :global(button[data-open-modal] kbd kbd) {
     background: var(--alc-bg-elev-1);
     border: 1px solid var(--alc-hairline-2);
     border-radius: 4px;
     padding: 1px 5px;
-    color: var(--alc-fg-2);
-    margin-left: 3px;
   }
   .alc-nav__link {
     color: var(--alc-fg-2);
@@ -117,5 +136,162 @@ import Button from "./Button.astro";
   @media (max-width: 640px) {
     .alc-nav { gap: 16px; }
     .alc-nav :global(.alc-btn) { display: none; }
+  }
+</style>
+
+<style is:global>
+  /*
+   * Starlight's Search dialog is rendered in the top layer (outside any
+   * scoped style boundary) and relies on Starlight tokens / utility classes
+   * (`--sl-color-*`, `sl-hidden`, `md:sl-hidden`) that are not loaded on
+   * marketing pages. We map the missing Starlight color tokens onto our
+   * parchment palette inside the search dialog so Starlight's own Pagefind
+   * styling (page icon, sub-result tree connector, focus rings, etc.)
+   * "just works" on every page.
+   */
+  site-search {
+    /* Starlight color tokens, mapped to our palette. Scoped to site-search
+       so docs pages keep their existing Starlight theme untouched. */
+    --sl-color-white: var(--alc-fg-1);
+    --sl-color-text: var(--alc-fg-1);
+    --sl-color-text-accent: var(--alc-accent-deep);
+    --sl-color-accent: var(--alc-accent);
+    --sl-color-accent-high: var(--alc-accent-deep);
+    --sl-color-accent-low: var(--alc-accent-12);
+    --sl-color-gray-1: var(--alc-fg-1);
+    --sl-color-gray-2: var(--alc-fg-2);
+    --sl-color-gray-3: var(--alc-fg-3);
+    --sl-color-gray-4: var(--alc-fg-4);
+    --sl-color-gray-5: var(--alc-hairline-2);
+    --sl-color-gray-6: var(--alc-bg-sunk);
+    --sl-color-black: var(--alc-bg-elev-1);
+    --sl-color-backdrop-overlay: rgba(42, 38, 32, 0.35);
+    --sl-shadow-lg: 0 24px 64px rgba(42, 38, 32, 0.25);
+    --__sl-font: var(--alc-font-sans);
+  }
+
+  site-search dialog {
+    color: var(--alc-fg-2);
+    border-radius: 12px;
+    font-family: var(--alc-font-sans);
+  }
+  site-search dialog::backdrop {
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+  }
+
+  /* Hide the mobile-only Cancel button on desktop. Starlight uses
+     `md:sl-hidden` for this but the utility CSS isn't loaded on the
+     marketing pages, so it otherwise leaks into the input on desktop. */
+  site-search button[data-close-modal] {
+    display: none;
+    font-family: var(--alc-font-sans);
+  }
+  @media (max-width: 50rem) {
+    site-search button[data-close-modal] {
+      display: inline-flex;
+    }
+  }
+
+  /* ── Pagefind UI re-skin (Effect-style result cards) ────────────────── */
+  site-search #starlight__search {
+    --pagefind-ui-primary: var(--alc-fg-1);
+    --pagefind-ui-text: var(--alc-fg-2);
+    --pagefind-ui-background: var(--alc-bg-sunk);
+    --pagefind-ui-border: var(--alc-hairline-2);
+    --pagefind-ui-tag: var(--alc-bg-sunk);
+    --pagefind-ui-border-width: 1px;
+    --pagefind-ui-font: var(--alc-font-sans);
+    --pagefind-ui-scale: 0.85;
+  }
+  /* Search input — sits on a slightly sunk surface so the white result
+     cards beneath it have something to pop against. */
+  site-search #starlight__search .pagefind-ui__form {
+    border-bottom: 1px solid var(--alc-hairline-2);
+    padding-bottom: 0.75rem;
+    margin-bottom: 0.25rem;
+  }
+  site-search #starlight__search .pagefind-ui__search-input {
+    color: var(--alc-fg-1);
+    background: var(--alc-bg-elev-1);
+    font-family: var(--alc-font-sans);
+    border: 1px solid var(--alc-hairline-2);
+    border-radius: 8px;
+  }
+  site-search #starlight__search input:focus {
+    --pagefind-ui-border: var(--alc-accent);
+    box-shadow: 0 0 0 3px var(--alc-accent-12);
+  }
+  site-search #starlight__search .pagefind-ui__message {
+    color: var(--alc-fg-3);
+    font-weight: 500;
+    padding-block: 0.5rem;
+  }
+
+  /* Each "result" = a page = a white elevated card. */
+  site-search #starlight__search .pagefind-ui__results {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  site-search #starlight__search .pagefind-ui__results > * + * {
+    margin-top: 0;
+  }
+  site-search #starlight__search .pagefind-ui__result {
+    background: var(--alc-bg-elev-1);
+    border: 1px solid var(--alc-hairline);
+    border-radius: 10px;
+    box-shadow: 0 1px 2px rgba(42, 38, 32, 0.04);
+    overflow: hidden;
+  }
+  site-search #starlight__search .pagefind-ui__result-inner {
+    background: transparent;
+  }
+  /* Top-level page row + sub-result rows share the same elevated card,
+     so we drop the per-row backgrounds Starlight applies. */
+  site-search
+    #starlight__search
+    .pagefind-ui__result-title:not(:where(.pagefind-ui__result-nested *)),
+  site-search #starlight__search .pagefind-ui__result-nested {
+    background: transparent;
+  }
+  /* Hover/focus highlight — soft accent tint instead of a hard outline. */
+  site-search
+    #starlight__search
+    .pagefind-ui__result-title:not(:where(.pagefind-ui__result-nested *)):hover,
+  site-search #starlight__search .pagefind-ui__result-nested:hover,
+  site-search
+    #starlight__search
+    .pagefind-ui__result-title:not(
+      :where(.pagefind-ui__result-nested *)
+    ):focus-within,
+  site-search #starlight__search .pagefind-ui__result-nested:focus-within {
+    outline: none;
+    background: var(--alc-accent-12);
+  }
+
+  site-search #starlight__search .pagefind-ui__result-link {
+    --pagefind-ui-text: var(--alc-fg-1);
+    color: var(--alc-fg-1);
+    font-weight: 700;
+    font-size: 1rem;
+  }
+  site-search #starlight__search .pagefind-ui__result-excerpt {
+    color: var(--alc-fg-3);
+    font-size: 0.9rem;
+    line-height: 1.55;
+    margin-top: 0.25rem;
+  }
+  site-search #starlight__search mark {
+    color: var(--alc-accent-deep);
+    background: transparent;
+    font-weight: 700;
+  }
+  /* Page / tree icons recolored to fit parchment. */
+  site-search #starlight__search .pagefind-ui__result-title::before {
+    background: var(--alc-fg-4) !important;
+  }
+  site-search #starlight__search .pagefind-ui__result-nested::before {
+    background: var(--alc-hairline-3) !important;
   }
 </style>

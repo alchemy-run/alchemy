@@ -1,3 +1,46 @@
+## v2.0.0-beta.20
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Update to effect beta.58 & distilled 0.13 &nbsp;-&nbsp; by **Michael (Pear)** [<samp>(d6f4e)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/d6f4e53)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.19...HEAD)
+
+---
+
+## v2.0.0-beta.19
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **Axiom**:
+  - Axiom resources &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(f2ffd)</samp>](https://github.com/alchemy-run/alchemy/commit/f2ffde1)
+  - Type-safe dashboard charts &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(46f05)</samp>](https://github.com/alchemy-run/alchemy/commit/46f051d)
+- **Bundle**:
+  - Auto-detect entry package for pure annotations &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(ce5f3)</samp>](https://github.com/alchemy-run/alchemy/commit/ce5f35b)
+- **core**:
+  - Annotate pure calls to optimize tree shaking &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(e21a6)</samp>](https://github.com/alchemy-run/alchemy/commit/e21a605)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **Axiom**:
+  - Ensure token is always present and handle missing token error in ApiTokenProvider &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(da86a)</samp>](https://github.com/alchemy-run/alchemy/commit/da86abb)
+  - Don't replace token when props don't cange &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(ac655)</samp>](https://github.com/alchemy-run/alchemy/commit/ac65581)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.18...v2.0.0-beta.19)
+
+---
+
+## v2.0.0-beta.18
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **CloudFront**: CachePolicy, OriginRequestPolicy, ResponseHeadersPolicy, PublicKey, KeyGroup &nbsp;-&nbsp; by **Jordan** and **Claude Opus 4.7** in https://github.com/alchemy-run/alchemy/issues/106 [<samp>(70201)</samp>](https://github.com/alchemy-run/alchemy/commit/7020108)
+- **GitHub**: Secrets helper for creating many secrets &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(7be53)</samp>](https://github.com/alchemy-run/alchemy/commit/7be536a)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.17...v2.0.0-beta.18)
+
+---
+
 ## v2.0.0-beta.17
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features

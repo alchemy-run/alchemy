@@ -233,6 +233,17 @@ export const fromCloudflareSocket = (cfSocket: cf.Socket): Socket.Socket => {
       opts,
     );
 
+  const decoder = new TextDecoder();
+  const runString = <_, E, R>(
+    handler: (_: string) => Effect.Effect<_, E, R> | void,
+    opts?: { readonly onOpen?: Effect.Effect<void> | undefined },
+  ): Effect.Effect<void, Socket.SocketError | E, R> =>
+    runRaw(
+      (data) =>
+        typeof data === "string" ? handler(data) : handler(decoder.decode(data)),
+      opts,
+    );
+
   const write = (
     chunk: Uint8Array | string | Socket.CloseEvent,
   ): Effect.Effect<void, Socket.SocketError> =>
@@ -275,6 +286,7 @@ export const fromCloudflareSocket = (cfSocket: cf.Socket): Socket.Socket => {
     [Socket.TypeId]: Socket.TypeId,
     run,
     runRaw,
+    runString,
     writer,
   });
 };

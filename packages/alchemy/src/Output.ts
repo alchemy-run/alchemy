@@ -353,7 +353,8 @@ function proxy(self: any): any {
       prop === ExprSymbol || prop === inspect ? true : prop in self,
     get: (target, prop) =>
       prop === Symbol.toPrimitive
-        ? (hint: string) => (hint === "string" ? self.toString() : self)
+        ? (hint: string) =>
+            hint === "number" ? Number.NaN : self.toString()
         : prop === ExprSymbol
           ? self
           : prop === inspect

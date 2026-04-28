@@ -18,7 +18,14 @@ import * as State from "../../src/State/index.ts";
 import { loadConfigProvider } from "../../src/Util/ConfigProvider.ts";
 import { fileLogger } from "../../src/Util/FileLogger.ts";
 
-import { envFile, importStack, main, profile, stage } from "./_shared.ts";
+import {
+  envFile,
+  importStack,
+  instrumentCommand,
+  main,
+  profile,
+  stage,
+} from "./_shared.ts";
 
 const loginConfigure = Flag.boolean("configure").pipe(
   Flag.withDescription(
@@ -36,7 +43,15 @@ export const loginCommand = Command.make(
     profile,
     configure: loginConfigure,
   },
-  Effect.fnUntraced(function* ({ main, stage, envFile, profile, configure }) {
+  instrumentCommand(
+    "login",
+    (a: { main: string; stage: string; profile: string; configure: boolean }) => ({
+      "alchemy.stage": a.stage,
+      "alchemy.profile": a.profile,
+      "alchemy.main": a.main,
+      "alchemy.configure": a.configure,
+    }),
+  )(Effect.fnUntraced(function* ({ main, stage, envFile, profile, configure }) {
     const stackEffect = yield* importStack(main);
 
     const authProviders: AuthProviders["Service"] = {};
@@ -92,5 +107,5 @@ export const loginCommand = Command.make(
         { discard: true },
       );
     }).pipe(Effect.provide(services));
-  }),
+  })),
 );

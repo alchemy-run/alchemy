@@ -18,12 +18,15 @@ import { CloudflareAuth } from "../../src/Cloudflare/Auth/AuthProvider.ts";
 import { loadConfigProvider } from "../../src/Util/ConfigProvider.ts";
 import { fileLogger } from "../../src/Util/FileLogger.ts";
 
-import { envFile, profile } from "./_shared.ts";
+import { envFile, instrumentCommand, profile } from "./_shared.ts";
 
 const showCommand = Command.make(
   "show",
   { profile, envFile },
-  Effect.fnUntraced(function* ({ profile, envFile }) {
+  instrumentCommand(
+    "profile.show",
+    (a: { profile: string }) => ({ "alchemy.profile": a.profile }),
+  )(Effect.fnUntraced(function* ({ profile, envFile }) {
     const stored = yield* getProfile(profile);
     if (stored == null) {
       const config = yield* readConfig;
@@ -80,13 +83,16 @@ const showCommand = Command.make(
         yield* provider.prettyPrint(profile, cfg);
       }
     }).pipe(Effect.provide(services));
-  }),
+  })),
 );
 
 const clearCommand = Command.make(
   "clear",
   { profile },
-  Effect.fnUntraced(function* ({ profile }) {
+  instrumentCommand(
+    "profile.clear",
+    (a: { profile: string }) => ({ "alchemy.profile": a.profile }),
+  )(Effect.fnUntraced(function* ({ profile }) {
     const removed = yield* deleteProfile(profile);
     yield* deleteProfileCredentials(profile);
     if (removed) {
@@ -98,7 +104,7 @@ const clearCommand = Command.make(
         `Profile '${profile}' not found in profiles.json; removed any stray credentials directory.`,
       );
     }
-  }),
+  })),
 );
 
 export const profileCommand = Command.make("profile", {}).pipe(

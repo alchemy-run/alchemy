@@ -15,7 +15,15 @@ import * as Clank from "../../src/Util/Clank.ts";
 import { loadConfigProvider } from "../../src/Util/ConfigProvider.ts";
 import { fileLogger } from "../../src/Util/FileLogger.ts";
 
-import { envFile, importStack, main, profile, stage, yes } from "./_shared.ts";
+import {
+  envFile,
+  importStack,
+  instrumentCommand,
+  main,
+  profile,
+  stage,
+  yes,
+} from "./_shared.ts";
 
 /**
  * When set, the State service is replaced with the on-disk
@@ -91,7 +99,7 @@ const withStateService = <A, E>(
 const stacksCommand = Command.make(
   "stacks",
   { main, envFile, stage, profile, local: localFlag },
-  Effect.fnUntraced(function* (args) {
+  instrumentCommand("state.stacks")(Effect.fnUntraced(function* (args) {
     yield* withStateService(args, (state) =>
       Effect.gen(function* () {
         const stacks = yield* state.listStacks();
@@ -104,13 +112,13 @@ const stacksCommand = Command.make(
         }
       }),
     );
-  }),
+  })),
 );
 
 const stagesCommand = Command.make(
   "stages",
   { stack: stackArg, main, envFile, stage, profile, local: localFlag },
-  Effect.fnUntraced(function* ({ stack: stackName, ...rest }) {
+  instrumentCommand("state.stages")(Effect.fnUntraced(function* ({ stack: stackName, ...rest }) {
     yield* withStateService(rest, (state) =>
       Effect.gen(function* () {
         const stages = yield* state.listStages(stackName);
@@ -123,7 +131,7 @@ const stagesCommand = Command.make(
         }
       }),
     );
-  }),
+  })),
 );
 
 const resourcesCommand = Command.make(
@@ -139,7 +147,7 @@ const resourcesCommand = Command.make(
     profile,
     local: localFlag,
   },
-  Effect.fnUntraced(function* ({ stack: stackName, stageName, ...rest }) {
+  instrumentCommand("state.resources")(Effect.fnUntraced(function* ({ stack: stackName, stageName, ...rest }) {
     yield* withStateService(rest, (state) =>
       Effect.gen(function* () {
         const fqns = yield* state.list({ stack: stackName, stage: stageName });
@@ -152,7 +160,7 @@ const resourcesCommand = Command.make(
         }
       }),
     );
-  }),
+  })),
 );
 
 const getCommand = Command.make(
@@ -169,7 +177,7 @@ const getCommand = Command.make(
     profile,
     local: localFlag,
   },
-  Effect.fnUntraced(function* ({ stack: stackName, stageName, fqn, ...rest }) {
+  instrumentCommand("state.get")(Effect.fnUntraced(function* ({ stack: stackName, stageName, fqn, ...rest }) {
     yield* withStateService(rest, (state) =>
       Effect.gen(function* () {
         const value = yield* state.get({
@@ -187,13 +195,13 @@ const getCommand = Command.make(
         yield* Console.log(JSON.stringify(encodeState(value), null, 2));
       }),
     );
-  }),
+  })),
 );
 
 const treeCommand = Command.make(
   "tree",
   { main, envFile, stage, profile, local: localFlag },
-  Effect.fnUntraced(function* (args) {
+  instrumentCommand("state.tree")(Effect.fnUntraced(function* (args) {
     yield* withStateService(args, (state) =>
       Effect.gen(function* () {
         const stacks = [...(yield* state.listStacks())].sort();
@@ -221,7 +229,7 @@ const treeCommand = Command.make(
         }
       }),
     );
-  }),
+  })),
 );
 
 const clearStackArg = Argument.string("stack").pipe(
@@ -255,7 +263,7 @@ const clearCommand = Command.make(
     local: localFlag,
     yes,
   },
-  Effect.fnUntraced(function* ({ stack: stackOpt, stageName: stageOpt, yes: yesFlag, ...rest }) {
+  instrumentCommand("state.clear")(Effect.fnUntraced(function* ({ stack: stackOpt, stageName: stageOpt, yes: yesFlag, ...rest }) {
     const stackName = Option.getOrUndefined(stackOpt);
     const stageName = Option.getOrUndefined(stageOpt);
 
@@ -308,7 +316,7 @@ const clearCommand = Command.make(
         }
       }),
     );
-  }),
+  })),
 );
 
 export const stateCommand = Command.make("state", {}).pipe(

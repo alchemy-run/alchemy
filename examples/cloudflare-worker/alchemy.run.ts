@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 
 import Api from "./src/Api.ts";
 import { Bucket } from "./src/Bucket.ts";
+import WorkerTagLive, { WorkerTag } from "./src/WorkerTag.ts";
 
 export default Alchemy.Stack(
   "CloudflareWorkerExample",
@@ -14,10 +15,12 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     const api = yield* Api;
     const bucket = yield* Bucket;
+    const workerTag = yield* WorkerTag;
 
     return {
       url: api.url.as<string>(),
       bucket: bucket.bucketName,
+      workerTagUrl: workerTag.url.as<string>(),
     };
-  }),
+  }).pipe(Effect.provide(WorkerTagLive)),
 );

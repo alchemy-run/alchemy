@@ -10,6 +10,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import starlightBlog from "starlight-blog";
+import { pagefindIgnoreNoise } from "./plugins/pagefind-ignore-noise.mjs";
 
 /**
  * Copies `src/content/docs/**\/*.{md,mdx}` into the build output dir, preserving
@@ -69,11 +70,12 @@ function copyMarkdownSources() {
 }
 
 export default defineConfig({
-  site: "https://alchemy.run",
+  site: "https://v2.alchemy.run",
   prefetch: true,
   trailingSlash: "ignore",
   integrations: [
     react(),
+    pagefindIgnoreNoise(),
     copyMarkdownSources(),
     astroBrokenLinksChecker({
       checkExternalLinks: false,
@@ -87,12 +89,13 @@ export default defineConfig({
     }),
     starlight({
       title: "alchemy",
-      favicon: "/favicon.png",
+      favicon: "/favicon.svg",
       customCss: ["./src/styles/global.css", "./src/styles/custom.css"],
       components: {
         ThemeProvider: "./src/components/ThemeProvider.astro",
         ThemeSelect: "./src/components/ThemeProvider.astro",
         Header: "./src/components/marketing/Nav.astro",
+        Head: "./src/components/starlight/Head.astro",
       },
       prerender: true,
       social: [
