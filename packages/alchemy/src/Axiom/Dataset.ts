@@ -1,5 +1,5 @@
+import * as Axiom from "@distilled.cloud/axiom";
 import { Credentials } from "@distilled.cloud/axiom/Credentials";
-import * as Operations from "@distilled.cloud/axiom";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { AdoptPolicy } from "../AdoptPolicy.ts";
@@ -169,14 +169,12 @@ export const DatasetProvider = () =>
     Dataset,
     Effect.gen(function* () {
       const { apiBaseUrl } = yield* Credentials;
-      const create = yield* Operations.createDataset;
-      const update = yield* Operations.updateDataset;
-      const get = yield* Operations.getDataset;
-      const del = yield* Operations.deleteDataset;
+      const create = yield* Axiom.createDataset;
+      const update = yield* Axiom.updateDataset;
+      const get = yield* Axiom.getDataset;
+      const del = yield* Axiom.deleteDataset;
 
-      const toAttrs = (
-        dataset: Operations.CreateDatasetOutput,
-      ) => ({
+      const toAttrs = (dataset: Axiom.CreateDatasetOutput) => ({
         id: dataset.id,
         name: dataset.name,
         kind: dataset.kind,
@@ -219,15 +217,13 @@ export const DatasetProvider = () =>
               retentionDays: news.retentionDays,
               useRetentionPeriod: news.useRetentionPeriod,
             }) as Effect.Effect<
-              Operations.CreateDatasetOutput,
+              Axiom.CreateDatasetOutput,
               { readonly _tag: string },
               never
             >
           ).pipe(
             Effect.catchIf(
-              (
-                e,
-              ): e is { readonly _tag: "Conflict" | "UnprocessableEntity" } =>
+              (e): e is { readonly _tag: "Conflict" | "UnprocessableEntity" } =>
                 e._tag === "Conflict" || e._tag === "UnprocessableEntity",
               () =>
                 Effect.gen(function* () {

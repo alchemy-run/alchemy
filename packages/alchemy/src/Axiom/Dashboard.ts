@@ -1,11 +1,11 @@
-import * as Operations from "@distilled.cloud/axiom";
+import * as Axiom from "@distilled.cloud/axiom";
 import * as Effect from "effect/Effect";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import type { Chart, LayoutCell } from "./Chart.ts";
 import type { Providers } from "./Providers.ts";
 
-type DashboardDoc = Operations.CreateDashboardInput["dashboard"];
+type DashboardDoc = Axiom.CreateDashboardInput["dashboard"];
 
 /**
  * Dashboard input. Mirrors `Operations.CreateDashboardInput` but
@@ -14,10 +14,7 @@ type DashboardDoc = Operations.CreateDashboardInput["dashboard"];
  * as `Schema.Array(Schema.Unknown)`, so this is a compile-time-only
  * refinement; runtime validation is unchanged).
  */
-export type DashboardProps = Omit<
-  Operations.CreateDashboardInput,
-  "dashboard"
-> & {
+export type DashboardProps = Omit<Axiom.CreateDashboardInput, "dashboard"> & {
   readonly dashboard: Omit<DashboardDoc, "charts" | "layout"> & {
     readonly charts: readonly Chart[];
     readonly layout: readonly LayoutCell[];
@@ -36,7 +33,7 @@ export type Dashboard = Resource<
     updatedAt: string;
     updatedBy: string;
     /** The full dashboard document as returned by Axiom. */
-    dashboard: Operations.CreateDashboardOutput["dashboard"]["dashboard"];
+    dashboard: Axiom.CreateDashboardOutput["dashboard"]["dashboard"];
   },
   never,
   Providers
@@ -138,12 +135,12 @@ export const DashboardProvider = () =>
   Provider.effect(
     Dashboard,
     Effect.gen(function* () {
-      const create = yield* Operations.createDashboard;
-      const update = yield* Operations.updateDashboard;
-      const get = yield* Operations.getDashboard;
-      const del = yield* Operations.deleteDashboard;
+      const create = yield* Axiom.createDashboard;
+      const update = yield* Axiom.updateDashboard;
+      const get = yield* Axiom.getDashboard;
+      const del = yield* Axiom.deleteDashboard;
 
-      const toAttrsFromCreate = (envelope: Operations.CreateDashboardOutput) => ({
+      const toAttrsFromCreate = (envelope: Axiom.CreateDashboardOutput) => ({
         uid: envelope.dashboard.uid,
         id: envelope.dashboard.id,
         createdAt: envelope.dashboard.createdAt,
@@ -152,7 +149,7 @@ export const DashboardProvider = () =>
         updatedBy: envelope.dashboard.updatedBy,
         dashboard: envelope.dashboard.dashboard,
       });
-      const toAttrsFromGet = (current: Operations.GetDashboardOutput) => ({
+      const toAttrsFromGet = (current: Axiom.GetDashboardOutput) => ({
         uid: current.uid,
         id: current.id,
         createdAt: current.createdAt,

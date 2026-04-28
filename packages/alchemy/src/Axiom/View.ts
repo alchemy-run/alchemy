@@ -1,16 +1,16 @@
-import * as Operations from "@distilled.cloud/axiom";
+import * as Axiom from "@distilled.cloud/axiom";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import type { Providers } from "./Providers.ts";
 
-export type ViewProps = Operations.CreateViewInput;
+export type ViewProps = Axiom.CreateViewInput;
 
 export type View = Resource<
   "Axiom.View",
   ViewProps,
-  Operations.CreateViewOutput & {
+  Axiom.CreateViewOutput & {
     /**
      * Path identifier used by `updateView` / `getView` / `deleteView`.
      * Currently derived from `name` because Axiom's view list/get responses
@@ -67,10 +67,10 @@ export const ViewProvider = () =>
   Provider.effect(
     View,
     Effect.gen(function* () {
-      const create = yield* Operations.createView;
-      const update = yield* Operations.updateView;
-      const get = yield* Operations.getView;
-      const del = yield* Operations.deleteView;
+      const create = yield* Axiom.createView;
+      const update = yield* Axiom.updateView;
+      const get = yield* Axiom.getView;
+      const del = yield* Axiom.deleteView;
 
       return {
         stables: ["id"],

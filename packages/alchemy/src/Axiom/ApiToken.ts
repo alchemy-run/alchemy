@@ -1,4 +1,4 @@
-import * as Operations from "@distilled.cloud/axiom";
+import * as Axiom from "@distilled.cloud/axiom";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { deepEqual, isResolved } from "../Diff.ts";
@@ -6,12 +6,12 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import type { Providers } from "./Providers.ts";
 
-export type ApiTokenProps = Omit<Operations.CreateAPITokenInput, never>;
+export type ApiTokenProps = Omit<Axiom.CreateAPITokenInput, never>;
 
 export type ApiToken = Resource<
   "Axiom.ApiToken",
   ApiTokenProps,
-  Omit<Operations.CreateAPITokenOutput, "token"> & {
+  Omit<Axiom.CreateAPITokenOutput, "token"> & {
     /**
      * The bearer token. Returned only by `create` (and `regenerate`); Axiom
      * does not return it on subsequent reads. Persisted in resource state via
@@ -74,9 +74,9 @@ export const ApiTokenProvider = () =>
   Provider.effect(
     ApiToken,
     Effect.gen(function* () {
-      const create = yield* Operations.createAPIToken;
-      const get = yield* Operations.getAPIToken;
-      const del = yield* Operations.deleteAPIToken;
+      const create = yield* Axiom.createAPIToken;
+      const get = yield* Axiom.getAPIToken;
+      const del = yield* Axiom.deleteAPIToken;
 
       return {
         stables: ["id", "token"],

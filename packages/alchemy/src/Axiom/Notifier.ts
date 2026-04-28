@@ -1,15 +1,15 @@
-import * as Operations from "@distilled.cloud/axiom";
+import * as Axiom from "@distilled.cloud/axiom";
 import * as Effect from "effect/Effect";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import type { Providers } from "./Providers.ts";
 
-export type NotifierProps = Operations.CreateNotifierInput;
+export type NotifierProps = Axiom.CreateNotifierInput;
 
 export type Notifier = Resource<
   "Axiom.Notifier",
   NotifierProps,
-  Operations.CreateNotifierOutput & { id: string },
+  Axiom.CreateNotifierOutput & { id: string },
   never,
   Providers
 >;
@@ -72,10 +72,10 @@ export const NotifierProvider = () =>
   Provider.effect(
     Notifier,
     Effect.gen(function* () {
-      const create = yield* Operations.createNotifier;
-      const update = yield* Operations.updateNotifier;
-      const get = yield* Operations.getNotifier;
-      const del = yield* Operations.deleteNotifier;
+      const create = yield* Axiom.createNotifier;
+      const update = yield* Axiom.updateNotifier;
+      const get = yield* Axiom.getNotifier;
+      const del = yield* Axiom.deleteNotifier;
 
       return {
         stables: ["id"],
@@ -95,7 +95,10 @@ export const NotifierProvider = () =>
         read: Effect.fn(function* ({ output }) {
           if (!output?.id) return undefined;
           return yield* get({ id: output.id }).pipe(
-            Effect.map((current) => ({ ...current, id: current.id ?? output.id })),
+            Effect.map((current) => ({
+              ...current,
+              id: current.id ?? output.id,
+            })),
             Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
           );
         }),

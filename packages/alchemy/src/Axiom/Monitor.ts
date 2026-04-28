@@ -1,16 +1,16 @@
-import * as Operations from "@distilled.cloud/axiom";
+import * as Axiom from "@distilled.cloud/axiom";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { isResolved } from "../Diff.ts";
 import type { Providers } from "./Providers.ts";
 
-export type MonitorProps = Operations.CreateMonitorInput;
+export type MonitorProps = Axiom.CreateMonitorInput;
 
 export type Monitor = Resource<
   "Axiom.Monitor",
   MonitorProps,
-  Operations.CreateMonitorOutput,
+  Axiom.CreateMonitorOutput,
   never,
   Providers
 >;
@@ -86,10 +86,10 @@ export const MonitorProvider = () =>
   Provider.effect(
     Monitor,
     Effect.gen(function* () {
-      const create = yield* Operations.createMonitor;
-      const update = yield* Operations.updateMonitor;
-      const get = yield* Operations.getMonitor;
-      const del = yield* Operations.deleteMonitor;
+      const create = yield* Axiom.createMonitor;
+      const update = yield* Axiom.updateMonitor;
+      const get = yield* Axiom.getMonitor;
+      const del = yield* Axiom.deleteMonitor;
 
       return {
         stables: ["id"],

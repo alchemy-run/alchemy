@@ -1,16 +1,16 @@
-import * as Operations from "@distilled.cloud/axiom";
+import * as Axiom from "@distilled.cloud/axiom";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import type { Providers } from "./Providers.ts";
 
-export type VirtualFieldProps = Operations.CreateVirtualFieldInput;
+export type VirtualFieldProps = Axiom.CreateVirtualFieldInput;
 
 export type VirtualField = Resource<
   "Axiom.VirtualField",
   VirtualFieldProps,
-  Operations.CreateVirtualFieldOutput,
+  Axiom.CreateVirtualFieldOutput,
   never,
   Providers
 >;
@@ -54,10 +54,10 @@ export const VirtualFieldProvider = () =>
   Provider.effect(
     VirtualField,
     Effect.gen(function* () {
-      const create = yield* Operations.createVirtualField;
-      const update = yield* Operations.updateVirtualField;
-      const get = yield* Operations.getVirtualField;
-      const del = yield* Operations.deleteVirtualField;
+      const create = yield* Axiom.createVirtualField;
+      const update = yield* Axiom.updateVirtualField;
+      const get = yield* Axiom.getVirtualField;
+      const del = yield* Axiom.deleteVirtualField;
 
       return {
         stables: ["id"],

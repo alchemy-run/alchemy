@@ -1,15 +1,15 @@
-import * as Operations from "@distilled.cloud/axiom";
+import * as Axiom from "@distilled.cloud/axiom";
 import * as Effect from "effect/Effect";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import type { Providers } from "./Providers.ts";
 
-export type AnnotationProps = Operations.CreateAnnotationInput;
+export type AnnotationProps = Axiom.CreateAnnotationInput;
 
 export type Annotation = Resource<
   "Axiom.Annotation",
   AnnotationProps,
-  Operations.CreateAnnotationOutput,
+  Axiom.CreateAnnotationOutput,
   never,
   Providers
 >;
@@ -60,10 +60,10 @@ export const AnnotationProvider = () =>
   Provider.effect(
     Annotation,
     Effect.gen(function* () {
-      const create = yield* Operations.createAnnotation;
-      const update = yield* Operations.updateAnnotation;
-      const get = yield* Operations.getAnnotation;
-      const del = yield* Operations.deleteAnnotation;
+      const create = yield* Axiom.createAnnotation;
+      const update = yield* Axiom.updateAnnotation;
+      const get = yield* Axiom.getAnnotation;
+      const del = yield* Axiom.deleteAnnotation;
 
       return {
         stables: ["id"],

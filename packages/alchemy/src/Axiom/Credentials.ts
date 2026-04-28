@@ -1,13 +1,9 @@
-import {
-  Credentials,
-  DEFAULT_API_BASE_URL,
-} from "@distilled.cloud/axiom/Credentials";
+import { Credentials } from "@distilled.cloud/axiom/Credentials";
 import { ConfigError } from "@distilled.cloud/core/errors";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
-import * as Redacted from "effect/Redacted";
-import * as Config from "effect/Config";
 import { getAuthProvider } from "../Auth/AuthProvider.ts";
 import { ALCHEMY_PROFILE, loadOrConfigure } from "../Auth/Profile.ts";
 import {
