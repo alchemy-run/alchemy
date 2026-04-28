@@ -134,12 +134,6 @@ jobs:
           MARKER="<!-- pr-package-comment -->"
           BODY=$(printf '%s\n\nInstall the packages built from this commit:\n\n**alchemy**\n```sh\nbun add https://pkg.ing/alchemy/%s\n```\n\n**@alchemy.run/better-auth**\n```sh\nbun add https://pkg.ing/@alchemy.run/better-auth/%s\n```\n' "$MARKER" "$SHORT_SHA" "$SHORT_SHA")
 
-          # Bot login GitHub assigns to this App's installation token. Used
-          # to filter comments to ones we can actually PATCH — you can only
-          # edit your own comments. Hardcoded because `gh api user` is a
-          # user-to-server endpoint and 403s with installation tokens.
-          ME="alchemy-version-bot[bot]"
-
           existing=$(gh api --paginate \
             "repos/${REPO}/issues/${PR_NUMBER}/comments" \
             --jq ".[] | select(.user.login == \"${ME}\") | select(.body | startswith(\"${MARKER}\")) | .id" \
