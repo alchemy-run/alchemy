@@ -272,6 +272,17 @@ export interface WorkerProps<
      * @default false
      */
     metafile?: boolean;
+    /**
+     * Configures the {@link Bundle.purePlugin} which annotates top-level
+     * call/new expressions in matching packages with `/*#__PURE__*\/`
+     * so rolldown can tree-shake them.
+     *
+     * - `undefined` (default): plugin is enabled with default packages
+     *   (`effect`, `@effect/*`).
+     * - `PurePluginOptions`: plugin is enabled with the provided options.
+     * - `false`: plugin is disabled.
+     */
+    pure?: Bundle.BundleExtraOptions["pure"];
   };
 }
 
@@ -751,8 +762,19 @@ export const Worker: Platform<
           Effect.map((json) => {
             try {
               const value = JSON.parse(json);
-              if (!Redacted.isRedacted(value)) {
-                return Redacted.make(value.value);
+              // The `set` path serializes Redacted values as
+              // `{_tag: "Redacted", value: ...}`. After JSON.parse the
+              // result is a plain object — `Redacted.isRedacted` would
+              // always return `false` on it — so detect the marker shape
+              // and rebuild the Redacted wrapper. Plain values pass
+              // through unchanged.
+              if (
+                value !== null &&
+                typeof value === "object" &&
+                (value as { _tag?: unknown })._tag === "Redacted" &&
+                "value" in (value as object)
+              ) {
+                return Redacted.make((value as { value: unknown }).value);
               }
               return value;
             } catch {
@@ -763,13 +785,21 @@ export const Worker: Platform<
       set: (id: string, output: Output.Output) =>
         Effect.sync(() => {
           const key = id.replaceAll(/[^a-zA-Z0-9]/g, "_");
+          // Preserve `Redacted`-ness across the Output → env → Cloudflare
+          // binding boundary so the put-worker loop can deploy secrets via
+          // `secret_text` instead of leaking them as `plain_text`. The JSON
+          // payload still carries the `{_tag: "Redacted", …}` marker so the
+          // runtime `get` accessor can rebuild the wrapper after Cloudflare
+          // hands the binding back as a plain string.
           env[key] = output.pipe(
             Output.map((value) =>
               Redacted.isRedacted(value)
-                ? JSON.stringify({
-                    _tag: "Redacted",
-                    value: Redacted.value(value),
-                  })
+                ? Redacted.make(
+                    JSON.stringify({
+                      _tag: "Redacted",
+                      value: Redacted.value(value),
+                    }),
+                  )
                 : JSON.stringify(value),
             ),
           );
@@ -1226,6 +1256,7 @@ export const WorkerProvider = () =>
                 keepNames: true,
                 dir: `.alchemy/bundles/${id}`,
               },
+              { pure: props.build?.pure },
             );
 
           if (props.isExternal) {

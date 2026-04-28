@@ -275,6 +275,7 @@
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/platform-node-shared": "catalog:",
+    "@oxc-project/types": "^0.127.0",
     "@types/aws-lambda": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
