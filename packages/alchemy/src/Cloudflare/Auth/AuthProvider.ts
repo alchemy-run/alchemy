@@ -46,8 +46,8 @@ const options: Array<{
   },
   {
     value: "stored",
-    label: "Stored",
-    hint: "stored in ~/.alchemy/credentials",
+    label: "API Token or API Key",
+    hint: "enter credentials interactively, stored in ~/.alchemy/credentials",
   },
 ];
 

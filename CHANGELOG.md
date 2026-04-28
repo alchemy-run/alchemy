@@ -1,3 +1,69 @@
+## v2.0.0-beta.17
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **ECS**:
+  - Add CapacityProvider resource &nbsp;-&nbsp; by **Jordan** in https://github.com/alchemy-run/alchemy/issues/103 [<samp>(cb218)</samp>](https://github.com/alchemy-run/alchemy/commit/cb2183e)
+- **cli**:
+  - Add alchemy profile clear command &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/104 [<samp>(9dde9)</samp>](https://github.com/alchemy-run/alchemy/commit/9dde996)
+  - Add `alchemy state clear` command &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/105 [<samp>(26bf5)</samp>](https://github.com/alchemy-run/alchemy/commit/26bf5e4)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **Cloudflare**:
+  - Don't modify ApiToken policies, let user write explicitly. &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/102 [<samp>(5c31b)</samp>](https://github.com/alchemy-run/alchemy/commit/5c31b1f)
+- **GitHub**:
+  - Place Comment in the GitHub.Providers collection &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(3ad95)</samp>](https://github.com/alchemy-run/alchemy/commit/3ad95cb)
+- **cli**:
+  - Don't prompt for approval if plan has no changes &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(891cf)</samp>](https://github.com/alchemy-run/alchemy/commit/891cf1c)
+  - Dont print undefined outputs &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(31ade)</samp>](https://github.com/alchemy-run/alchemy/commit/31ade04)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.16...v2.0.0-beta.17)
+
+---
+
+## v2.0.0-beta.16
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **Cloudflare**:
+  - Artifacts Store &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(e531f)</samp>](https://github.com/alchemy-run/alchemy/commit/e531fbe)
+  - Allow account ID to be passed into AccountApiToken and UserApiToken &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(0f8ac)</samp>](https://github.com/alchemy-run/alchemy/commit/0f8ac88)
+- **GitHub**:
+  - Auth provider for github supporting env, PAT and gh cli &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(1de51)</samp>](https://github.com/alchemy-run/alchemy/commit/1de5180)
+- **cli**:
+  - Alchemy profile show &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(f83e2)</samp>](https://github.com/alchemy-run/alchemy/commit/f83e216)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **Cloudflare**: Remove InstanceId from Artifact store requirement &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(de489)</samp>](https://github.com/alchemy-run/alchemy/commit/de489c7)
+- **cli**: Don't fail on broken profiles when logging in &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(d8296)</samp>](https://github.com/alchemy-run/alchemy/commit/d829616)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.15...v2.0.0-beta.16)
+
+---
+
+## v2.0.0-beta.15
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **Cloudflare**: UserApiToken and AccountApiToken &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(56e0f)</samp>](https://github.com/alchemy-run/alchemy/commit/56e0f79)
+- **GitHub**: Export a providers() Layer &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(e5cd4)</samp>](https://github.com/alchemy-run/alchemy/commit/e5cd471)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Properly handle redacted outputs &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy/issues/101 [<samp>(0d049)</samp>](https://github.com/alchemy-run/alchemy/commit/0d049aa)
+- **Cloudflare**:
+  - Prefix State Store secrets with Alchemy &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(e2533)</samp>](https://github.com/alchemy-run/alchemy/commit/e25338e)
+- **core**:
+  - Clearer error when Stack is missing state or providers &nbsp;-&nbsp; by **Michael K** [<samp>(52cf4)</samp>](https://github.com/alchemy-run/alchemy/commit/52cf431)
+  - Core no longer requires cli &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy/issues/100 [<samp>(aba0e)</samp>](https://github.com/alchemy-run/alchemy/commit/aba0ea4)
+  - Handle Redacted values in Plan &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(4fc48)</samp>](https://github.com/alchemy-run/alchemy/commit/4fc4874)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.14...v2.0.0-beta.15)
+
+---
+
 ## v2.0.0-beta.14
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features

@@ -41,3 +41,4 @@ packages/alchemy/docs
 examples/cloudflare-worker/src/scratch.ts
 
 !/packages/alchemy/bin/cli.js
+.vendor/*

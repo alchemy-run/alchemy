@@ -1,3 +1,4 @@
+import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Console from "effect/Console";
@@ -51,9 +52,11 @@ export const loginCommand = Command.make(
     );
 
     yield* Effect.gen(function* () {
-      // Build the stack — this triggers each provider's AuthProviderLayer,
-      // which registers itself into the shared `authProviders` registry.
-      yield* stackEffect;
+      yield* Effect.catchCause(stackEffect, (cause) =>
+        Console.warn(
+          `Ignoring error while building stack for login (likely due to missing or broken credentials):\n${Cause.pretty(cause)}`,
+        ),
+      );
 
       const ci = yield* Config.boolean("CI").pipe(Config.withDefault(false));
       const providers = Object.values(authProviders);

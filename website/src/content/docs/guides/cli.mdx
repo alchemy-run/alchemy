@@ -1,6 +1,6 @@
 ---
 title: CLI Reference
-description: All Alchemy CLI commands — deploy, destroy, plan, dev, tail, logs, and bootstrap.
+description: All Alchemy CLI commands — deploy, destroy, plan, dev, tail, logs, bootstrap, login, and profile.
 sidebar:
   order: 1
 ---
@@ -251,6 +251,83 @@ alchemy bootstrap --profile prod --region us-west-2
 
 # Remove bootstrap resources
 alchemy bootstrap --destroy
+```
+
+## `login`
+
+Configure and log in to each cloud provider used by your stack. The
+command imports your stack file to discover which `AuthProvider`s are
+registered, then walks through each one — prompting for the auth method
+the first time, and refreshing tokens (e.g. Cloudflare OAuth) on
+subsequent runs.
+
+Credentials are written to `~/.alchemy/profiles.json`, keyed by
+**profile name** (defaults to `default`, overridable with
+`$ALCHEMY_PROFILE` or `--profile`).
+
+```sh
+alchemy login [file] [options]
+```
+
+| Option              | Description                                                                |
+| ------------------- | -------------------------------------------------------------------------- |
+| `--profile <name>`  | Profile to write to (defaults to `default` or `$ALCHEMY_PROFILE`)          |
+| `--configure`       | Re-run the provider's interactive configure step before logging in         |
+| `--stage <name>`    | Stage used while loading the stack (defaults to `dev_$USER`)               |
+| `--env-file <path>` | Load environment variables from a file                                     |
+
+```sh
+# Log in with the default profile
+alchemy login
+
+# Log in to a separate profile
+alchemy login --profile prod
+
+# Re-configure (e.g. switch from OAuth to API token) and log in
+alchemy login --configure
+```
+
+## `profile`
+
+Inspect credentials stored in `~/.alchemy/profiles.json`.
+
+### `profile show`
+
+Print every auth method configured under a profile, along with its
+resolved credentials (redacted). Unlike `login`, this does **not**
+import your stack file — it reads the profile store directly and uses
+the bundled providers (Cloudflare, AWS) to pretty-print each entry.
+
+```sh
+alchemy profile show [options]
+```
+
+<Terminal content={`Profile: default
+
+── AWS ──
+  accessKeyId:     ASIA****
+  secretAccessKey: Pj5T****
+  sessionToken:    IQoJ****
+  region:          us-west-2
+  source: sso - default
+
+── Cloudflare ──
+  accessToken: Xl06****
+  expires: in 59m 58s 999ms (2026-04-27T20:45:47.937Z)
+  accountId: 123456789...
+  source: oauth`} />
+
+| Option              | Description                                                       |
+| ------------------- | ----------------------------------------------------------------- |
+| `--profile <name>`  | Profile to show (defaults to `default` or `$ALCHEMY_PROFILE`)     |
+| `--env-file <path>` | Load environment variables from a file                            |
+
+```sh
+# Show the default profile
+alchemy profile show
+
+# Show a named profile
+alchemy profile show --profile prod
 ```
 
 ## Stages

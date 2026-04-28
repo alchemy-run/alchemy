@@ -21,23 +21,26 @@
 //
 // foreground-child forwards stdio + signals and exits with the child's code,
 // so the launcher is transparent to the invoking shell / npm script.
-import { foregroundChild } from "foreground-child";
-import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 import path from "pathe";
-
-const require = createRequire(import.meta.url);
+import { foregroundChild } from "foreground-child";
 
 const execpath = (process.env.npm_execpath ?? "").toLowerCase();
 const userAgent = (process.env.npm_config_user_agent ?? "").toLowerCase();
 const invokedByBun = execpath.includes("bun") || userAgent.startsWith("bun/");
 
-const jsEntry = require.resolve("alchemy/bin/alchemy.js");
-const binDir = path.dirname(jsEntry);
+// Derive the bin dir from this launcher's own location rather than
+// require.resolve("alchemy/bin/alchemy.js"). The bundled alchemy.js is a
+// build artifact (tsdown output) and may not exist in a fresh checkout
+// (e.g. CI before `bun run build`); resolving it would throw
+// MODULE_NOT_FOUND before we get a chance to fall back to the .ts source.
+const binDir = path.dirname(fileURLToPath(import.meta.url));
+const jsEntry = path.join(binDir, "alchemy.js");
 const tsEntry = path.join(binDir, "alchemy.ts");
 
 // Treat any install-tree path as published; only a raw checkout uses .ts.
 const useTs = !(
-  jsEntry.includes("/node_modules/") || jsEntry.includes("\\node_modules\\")
+  binDir.includes("/node_modules/") || binDir.includes("\\node_modules\\")
 );
 
 // .ts only runs under bun. Force bun in dev even if node was the invoker.
@@ -56,23 +59,5 @@ if (runtime === "bun" && useTs) {
 }
 
 args.push(useTs ? tsEntry : jsEntry, ...process.argv.slice(2));
-
-process.on("uncaughtException", (error) => {
-  if (
-    error.message.includes(
-      "foreground-child watchdog process died unexpectedly!",
-    ) &&
-    typeof error.cause === "object" &&
-    error.cause !== null &&
-    "watchedProcess" in error.cause &&
-    error.cause.watchedProcess !== null &&
-    "cmd" in error.cause.watchedProcess &&
-    error.cause.signal === "SIGINT"
-  ) {
-    console.log("Interrupted.");
-    process.exit(0);
-  }
-  console.error(error);
-});
 
 foregroundChild(runtime, args);

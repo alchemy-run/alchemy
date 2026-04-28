@@ -1,22 +1,24 @@
-import * as Cloudflare from "alchemy/Cloudflare";
 import type { ReplacedResourceState, ResourceState } from "alchemy/State";
 import { encodeState } from "alchemy/State";
 import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
+import * as Secret from "../SecretsStore/Secret.ts";
+import { DurableObjectNamespace } from "../Workers/DurableObjectNamespace.ts";
+import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { EncryptionKey } from "./Token.ts";
 
-export default class Store extends Cloudflare.DurableObjectNamespace<Store>()(
+export default class Store extends DurableObjectNamespace<Store>()(
   "Store",
   Effect.gen(function* () {
     // Outer (class-level) phase — resolve the binding factory once.
     // The actual secret read happens inside each DO instance below,
     // since `SecretClient.get()` needs the per-instance worker env.
-    const encryptionSecret = yield* Cloudflare.Secret.bind(EncryptionKey);
+    const encryptionSecret = yield* Secret.Secret.bind(EncryptionKey);
 
     return Effect.gen(function* () {
       // Inner (per-instance) phase — set up storage and the AES key.
       // The key is imported once per DO boot and reused thereafter.
-      const doState = yield* Cloudflare.DurableObjectState;
+      const doState = yield* DurableObjectState;
       const storage = doState.storage;
 
       const keyHex = yield* encryptionSecret.get().pipe(Effect.orDie);

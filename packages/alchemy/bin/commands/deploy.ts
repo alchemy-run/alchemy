@@ -100,7 +100,14 @@ export const execStack = Effect.fn(function* ({
       if (dryRun) {
         yield* cli.displayPlan(updatePlan);
       } else {
-        if (!yes) {
+        const hasChanges =
+          Object.keys(updatePlan.deletions).length > 0 ||
+          Object.values(updatePlan.resources).some(
+            (node) =>
+              node.action !== "noop" ||
+              node.bindings.some((b) => b.action !== "noop"),
+          );
+        if (!yes && hasChanges) {
           const approved = yield* cli.approvePlan(updatePlan);
           if (!approved) {
             return;
@@ -108,7 +115,9 @@ export const execStack = Effect.fn(function* ({
         }
         const outputs = yield* apply(updatePlan);
 
-        yield* Console.log(outputs);
+        if (outputs !== undefined) {
+          yield* Console.log(outputs);
+        }
 
         if (dev) {
           yield* Effect.never;

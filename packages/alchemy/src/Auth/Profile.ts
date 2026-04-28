@@ -92,6 +92,21 @@ export const setProfile = (name: string, profile: AlchemyProfile) =>
   );
 
 /**
+ * Remove `name` and all its provider credentials from the on-disk config.
+ * Returns `true` if the profile existed and was removed, `false` otherwise.
+ */
+export const deleteProfile = (name: string) =>
+  readConfig.pipe(
+    Effect.flatMap((config) => {
+      if (!(name in config.profiles)) {
+        return Effect.succeed(false);
+      }
+      delete config.profiles[name];
+      return writeConfig(config).pipe(Effect.as(true));
+    }),
+  );
+
+/**
  * Returns a `ConfigProvider` that overrides `ALCHEMY_PROFILE` with the
  * given `profile` (when explicitly passed via the CLI `--profile` flag),
  * falling through to `base` for everything else.

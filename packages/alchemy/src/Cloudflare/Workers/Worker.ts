@@ -25,6 +25,10 @@ import type * as vite from "vite";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Artifacts from "../../Artifacts.ts";
 import * as Binding from "../../Binding.ts";
+import {
+  isArtifacts as isArtifactsBinding,
+  type Artifacts as ArtifactsBinding,
+} from "../Artifacts/Artifacts.ts";
 import { hashDirectory, type MemoOptions } from "../../Build/Memo.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
@@ -186,6 +190,7 @@ export type WorkerBindingResource =
   | D1Database
   | KVNamespace
   | CloudflareQueue
+  | ArtifactsBinding
   | DurableObjectNamespaceLike<any>;
 
 export type WorkerBindings = {
@@ -670,7 +675,13 @@ export const Worker: Platform<
               type: "assets",
               name: bindingName,
             }
-          : isDurableObjectNamespaceLike(binding)
+          : isArtifactsBinding(binding)
+            ? ({
+                type: "artifacts",
+                name: bindingName,
+                namespace: binding.namespace,
+              } as any)
+            : isDurableObjectNamespaceLike(binding)
             ? {
                 type: "durable_object_namespace",
                 name: bindingName,

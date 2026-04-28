@@ -12,6 +12,7 @@ import { destroy, test } from "@/Test/Vitest";
 import { describe, expect } from "@effect/vitest";
 import { Data, Layer } from "effect";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import {
   ArtifactProbe,
   BindingTarget,
@@ -4029,4 +4030,128 @@ describe("static stable properties (provider.stables)", () => {
       }).pipe(Effect.provide(MockLayers())),
     );
   });
+});
+
+describe("Redacted props/outputs survive deploy", () => {
+  test(
+    "preserves a Redacted prop end-to-end through create",
+    Effect.gen(function* () {
+      const secret = Redacted.make("hunter2");
+      const created = yield* Effect.gen(function* () {
+        return yield* TestResource("A", {
+          string: "x",
+          redacted: secret,
+        });
+      }).pipe(test.deploy);
+
+      expect(Redacted.isRedacted(created.redacted)).toBe(true);
+      expect(Redacted.value(created.redacted!)).toBe("hunter2");
+
+      const state = yield* getState("A");
+      expect(state).toBeDefined();
+      expect(Redacted.isRedacted((state!.props as any).redacted)).toBe(true);
+      expect(Redacted.value((state!.props as any).redacted)).toBe("hunter2");
+      expect(Redacted.isRedacted((state!.attr as any).redacted)).toBe(true);
+      expect(Redacted.value((state!.attr as any).redacted)).toBe("hunter2");
+    }).pipe(Effect.provide(MockLayers())),
+  );
+
+  test(
+    "preserves Redacted values nested inside an array end-to-end",
+    Effect.gen(function* () {
+      const created = yield* Effect.gen(function* () {
+        return yield* TestResource("A", {
+          string: "x",
+          redactedArray: [Redacted.make("a"), Redacted.make("b")],
+        });
+      }).pipe(test.deploy);
+
+      expect(created.redactedArray).toBeDefined();
+      expect(created.redactedArray!.length).toBe(2);
+      expect(Redacted.isRedacted(created.redactedArray![0]!)).toBe(true);
+      expect(Redacted.value(created.redactedArray![0]!)).toBe("a");
+      expect(Redacted.isRedacted(created.redactedArray![1]!)).toBe(true);
+      expect(Redacted.value(created.redactedArray![1]!)).toBe("b");
+    }).pipe(Effect.provide(MockLayers())),
+  );
+
+  test(
+    "preserves a Redacted output flowing into a downstream resource prop",
+    Effect.gen(function* () {
+      const output = yield* Effect.gen(function* () {
+        const A = yield* TestResource("A", {
+          string: "x",
+          redacted: Redacted.make("hunter2"),
+        });
+        const B = yield* TestResource("B", {
+          string: "y",
+          redacted: A.redacted as any,
+        });
+        return { A, B };
+      }).pipe(test.deploy);
+
+      expect(Redacted.isRedacted(output.B.redacted)).toBe(true);
+      expect(Redacted.value(output.B.redacted!)).toBe("hunter2");
+
+      const bState = yield* getState("B");
+      expect(Redacted.isRedacted((bState!.props as any).redacted)).toBe(true);
+      expect(Redacted.value((bState!.props as any).redacted)).toBe("hunter2");
+      expect(Redacted.isRedacted((bState!.attr as any).redacted)).toBe(true);
+      expect(Redacted.value((bState!.attr as any).redacted)).toBe("hunter2");
+    }).pipe(Effect.provide(MockLayers())),
+  );
+
+  test(
+    "no-op redeploy when only Redacted prop is present and value unchanged",
+    Effect.gen(function* () {
+      const first = yield* Effect.gen(function* () {
+        return yield* TestResource("A", {
+          string: "x",
+          redacted: Redacted.make("hunter2"),
+        });
+      }).pipe(test.deploy);
+      expect(Redacted.value(first.redacted!)).toBe("hunter2");
+
+      const before = yield* getState("A");
+
+      yield* Effect.gen(function* () {
+        return yield* TestResource("A", {
+          string: "x",
+          redacted: Redacted.make("hunter2"),
+        });
+      }).pipe(test.deploy);
+
+      const after = yield* getState("A");
+      expect(after?.status).toBe("created");
+      expect((before as any).updatedAt ?? null).toEqual(
+        (after as any).updatedAt ?? null,
+      );
+      expect(Redacted.value((after!.attr as any).redacted)).toBe("hunter2");
+    }).pipe(Effect.provide(MockLayers())),
+  );
+
+  test(
+    "update redeploy when Redacted prop value changes",
+    Effect.gen(function* () {
+      yield* Effect.gen(function* () {
+        return yield* TestResource("A", {
+          string: "x",
+          redacted: Redacted.make("old"),
+        });
+      }).pipe(test.deploy);
+
+      const updated = yield* Effect.gen(function* () {
+        return yield* TestResource("A", {
+          string: "x",
+          redacted: Redacted.make("new"),
+        });
+      }).pipe(test.deploy);
+
+      expect(Redacted.isRedacted(updated.redacted)).toBe(true);
+      expect(Redacted.value(updated.redacted!)).toBe("new");
+      const state = yield* getState("A");
+      expect(state?.status).toBe("updated");
+      expect(Redacted.value((state!.attr as any).redacted)).toBe("new");
+    }).pipe(Effect.provide(MockLayers())),
+  );
 });

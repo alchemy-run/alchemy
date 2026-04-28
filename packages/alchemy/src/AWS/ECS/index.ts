@@ -1,3 +1,7 @@
+export {
+  CapacityProvider,
+  CapacityProviderProvider,
+} from "./CapacityProvider.ts";
 export { Cluster, ClusterProvider } from "./Cluster.ts";
 export {
   DescribeTasks,

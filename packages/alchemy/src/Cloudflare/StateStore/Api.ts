@@ -1,4 +1,3 @@
-import * as Cloudflare from "alchemy/Cloudflare";
 import {
   BearerTokenValidator,
   StateApi,
@@ -13,12 +12,15 @@ import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 import * as HttpApiError from "effect/unstable/httpapi/HttpApiError";
 import crypto from "node:crypto";
+import { SecretBindingLive } from "../SecretsStore/SecretBinding.ts";
+import * as Secret from "../SecretsStore/Secret.ts";
+import { Worker } from "../Workers/Worker.ts";
 import Store from "./Store.ts";
 import { AuthToken } from "./Token.ts";
 
 export const STATE_STORE_SCRIPT_NAME = "alchemy-state-store" as const;
 
-export default Cloudflare.Worker(
+export default Worker(
   "Api",
   {
     name: STATE_STORE_SCRIPT_NAME,
@@ -30,7 +32,7 @@ export default Cloudflare.Worker(
     },
   },
   Effect.gen(function* () {
-    const secret = yield* Cloudflare.Secret.bind(AuthToken);
+    const secret = yield* Secret.Secret.bind(AuthToken);
     const store = yield* Store;
 
     const bearerTokenValidator = Layer.effect(
@@ -126,7 +128,7 @@ export default Cloudflare.Worker(
         HttpRouter.toHttpEffect,
       ),
     };
-  }).pipe(Effect.provide(Layer.mergeAll(Cloudflare.SecretBindingLive))),
+  }).pipe(Effect.provide(Layer.mergeAll(SecretBindingLive))),
 );
 
 /**
