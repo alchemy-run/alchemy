@@ -24,7 +24,7 @@ const parseAliasUrl: PrPackage.ParseAliasUrl = (url) => {
       }
     });
 
-  if (ALCHEMY_HOSTS.includes(url.hostname)) {
+  if (url.hostname === "pkg.ing" || ALCHEMY_HOSTS.includes(url.hostname)) {
     if (segments.length === 2) {
       return { pkgName: segments[0]!, tag: segments[1]! };
     }
