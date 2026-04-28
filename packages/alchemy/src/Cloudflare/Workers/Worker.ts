@@ -932,24 +932,23 @@ const selectLayer = <
   LayerLive extends Layer.Layer<any, any, any>,
   LayerDev extends Layer.Layer<any, any, any>,
 >(input: {
-  live: LayerLive;
-  dev: LayerDev;
+  live: () => LayerLive;
+  dev: () => LayerDev;
 }): Layer.Layer<
   Layer.Success<LayerLive | LayerDev>,
   Layer.Error<LayerLive | LayerDev>,
   Layer.Services<LayerLive | LayerDev> | AlchemyContext
 > =>
   Layer.unwrap(
-    Effect.gen(function* () {
-      const context = yield* AlchemyContext;
-      return context.dev ? input.dev : input.live;
-    }),
+    AlchemyContext.useSync((context) =>
+      context.dev ? input.dev() : input.live(),
+    ),
   );
 
 export const WorkerProvider = () =>
   selectLayer({
-    live: LiveWorkerProvider(),
-    dev: Layer.provide(LocalWorkerProvider(), SidecarLive),
+    live: LiveWorkerProvider,
+    dev: () => Layer.provide(LocalWorkerProvider(), SidecarLive),
   });
 
 export const LiveWorkerProvider = () =>
