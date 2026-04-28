@@ -298,3 +298,14 @@ jobs:
           CHANNEL: ${{ needs.bump.outputs.channel }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bun scripts/release/github-release.ts "v${VERSION}" "${CHANNEL}"
+
+      - name: Notify Discord
+        if: success() && env.DISCORD_WEBHOOK != ''
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          VERSION: ${{ needs.bump.outputs.version }}
+          CHANNEL: ${{ needs.bump.outputs.channel }}
+        run: |
+          curl -fsS -H 'content-type: application/json' \
+            -d "{\"content\":\"Released **v${VERSION}** (${CHANNEL}) — https://github.com/alchemy-run/alchemy/releases/tag/v${VERSION}\"}" \
+            "$DISCORD_WEBHOOK"
