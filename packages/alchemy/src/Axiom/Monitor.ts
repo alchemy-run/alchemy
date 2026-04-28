@@ -1,4 +1,4 @@
-import * as Operations from "@distilled.cloud/axiom/Operations";
+import * as Operations from "@distilled.cloud/axiom";
 import * as Effect from "effect/Effect";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";

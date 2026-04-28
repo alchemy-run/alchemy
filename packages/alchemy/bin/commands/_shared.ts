@@ -239,16 +239,18 @@ export const parseSince = (value: string): Date => {
  * ```
  */
 export const instrumentCommand =
-  <Args>(
+  <AttrsArgs = unknown>(
     command: string,
-    attrs: (args: Args) => Record<string, unknown> = () => ({}),
+    attrs?: (args: AttrsArgs) => Record<string, unknown>,
   ) =>
-  <A, E, R>(
+  <Args extends AttrsArgs, A, E, R>(
     handler: (args: Args) => Effect.Effect<A, E, R>,
   ): ((args: Args) => Effect.Effect<A, E, R>) =>
   (args) =>
     handler(args).pipe(
-      Effect.withSpan(`cli.${command}`, { attributes: attrs(args) }),
+      Effect.withSpan(`cli.${command}`, {
+        attributes: attrs ? attrs(args) : {},
+      }),
       recordCli(command),
     );
 

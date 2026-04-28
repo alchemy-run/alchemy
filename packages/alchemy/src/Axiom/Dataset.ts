@@ -1,5 +1,5 @@
 import { Credentials } from "@distilled.cloud/axiom/Credentials";
-import * as Operations from "@distilled.cloud/axiom/Operations";
+import * as Operations from "@distilled.cloud/axiom";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { AdoptPolicy } from "../AdoptPolicy.ts";
