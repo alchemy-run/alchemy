@@ -248,7 +248,7 @@
     },
     "packages/alchemy": {
       "name": "alchemy",
-      "version": "2.0.0-beta.16",
+      "version": "2.0.0-beta.17",
       "bin": {
         "alchemy": "./bin/cli.js",
       },
@@ -323,7 +323,7 @@
     },
     "packages/better-auth": {
       "name": "@alchemy.run/better-auth",
-      "version": "2.0.0-beta.16",
+      "version": "2.0.0-beta.17",
       "dependencies": {
         "alchemy": "workspace:*",
         "better-auth": "catalog:",
@@ -336,14 +336,6 @@
       "dependencies": {
         "@effect/platform-bun": "catalog:",
         "@effect/platform-node": "catalog:",
-        "alchemy": "workspace:*",
-        "effect": "catalog:",
-      },
-    },
-    "stacks": {
-      "name": "stacks",
-      "version": "0.0.0",
-      "dependencies": {
         "alchemy": "workspace:*",
         "effect": "catalog:",
       },
@@ -3040,8 +3032,6 @@
     "stackback": ["stackback@0.0.2", "", {}, "sha512-1XMJE5fQo1jGH6Y/7ebnwPOBEkIEnT4QF32d5R1+VXdXveM0IBMJt8zfaxX1P3QhVwrYe+576+jkANtSS2mBbw=="],
 
     "stackframe": ["stackframe@1.3.4", "", {}, "sha512-oeVtt7eWQS+Na6F//S4kJ2K2VbRlS9D43mAlMyVpVWovy9o+jfgH8O9agzANzaiLjclA0oYzUXEM4PurhSUChw=="],
-
-    "stacks": ["stacks@workspace:stacks"],
 
     "standard-as-callback": ["standard-as-callback@2.1.0", "", {}, "sha512-qoRRSyROncaz1z0mvYqIE4lCd9p2R90i6GxW3uZv5ucSu8tU7B5HXUP1gG8pVZsYNVaXjk8ClXHPttLyxAL48A=="],
 
