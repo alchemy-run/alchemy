@@ -7,6 +7,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 
+const REPO = { owner: "alchemy-run", repository: "alchemy-effect" } as const;
+
 export default Alchemy.Stack(
   "AlchemyGitHubSecrets",
   {
@@ -25,11 +27,14 @@ export default Alchemy.Stack(
       accountId: prodAccountId,
     });
 
-    yield* secrets({
-      TEST_CLOUDFLARE_API_TOKEN: testApiToken.value,
-      TEST_CLOUDFLARE_ACCOUNT_ID: testAccountId,
-      PROD_CLOUDFLARE_API_TOKEN: prodApiToken.value,
-      PROD_CLOUDFLARE_ACCOUNT_ID: prodAccountId,
+    yield* GitHub.Secrets({
+      ...REPO,
+      secrets: {
+        TEST_CLOUDFLARE_API_TOKEN: testApiToken.value,
+        TEST_CLOUDFLARE_ACCOUNT_ID: testAccountId,
+        PROD_CLOUDFLARE_API_TOKEN: prodApiToken.value,
+        PROD_CLOUDFLARE_ACCOUNT_ID: prodAccountId,
+      },
     });
 
     return {
@@ -74,16 +79,3 @@ const token = (
     ],
   });
 
-const secrets = (
-  secrets: Record<string, Alchemy.Input<string | Redacted.Redacted<string>>>,
-) =>
-  Effect.all(
-    Object.entries(secrets).map(([name, value]) =>
-      GitHub.Secret(name, {
-        owner: "alchemy-run",
-        repository: "alchemy-effect",
-        name,
-        value: Redacted.make(value),
-      }),
-    ),
-  );
