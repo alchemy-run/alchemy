@@ -1,11 +1,14 @@
 import * as Cloudflare from "alchemy/Cloudflare";
-import { Stack } from "alchemy/Stack";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { aliasRedirectUrl, parseAlias } from "./aliases.ts";
+import {
+  aliasRedirectPath,
+  type AliasParserOptions,
+  type ParseAliasUrl,
+} from "./aliases.ts";
 import { AuthToken } from "./AuthToken.ts";
 import { Bucket } from "./Bucket.ts";
 import PackageStore from "./PackageStore.ts";
@@ -15,44 +18,54 @@ class Unauthorized {
   readonly _tag = "Unauthorized";
 }
 
-export default class Api extends Cloudflare.Worker<Api>()(
-  "Api",
-  Stack.useSync(({ stage }) => ({
-    main: import.meta.path,
-    url: true,
-    env: {
-      DEFAULT_TTL: "3 weeks",
-    },
-    domain:
-      stage === "prod"
-        ? [
-            "pkg.ing",
-            "pkg.alchemy.run",
-            "📦.alchemy.run",
-            "pkg.distilled.cloud",
-            "📦.distilled.cloud",
-          ]
-        : undefined,
-    compatibility: {
-      flags: ["nodejs_compat"],
-      date: "2026-03-17",
-    },
-  })),
+export interface HandlerOptions extends AliasParserOptions {
+  /** Default TTL when X-TTL is not provided on upload. e.g. "3 weeks". */
+  defaultTtl?: string;
+}
+
+const bindings = Layer.mergeAll(
+  Cloudflare.R2BucketBindingLive,
+  Cloudflare.KVNamespaceBindingLive,
+  Cloudflare.SecretBindingLive,
+);
+
+/**
+ * Init effect for a pr-package worker. Pass as the third argument to
+ * `Cloudflare.Worker<X>()(...)` in your stack file.
+ *
+ * The user's stack file must be the worker entry (`main: import.meta.path`)
+ * because `parseAliasUrl` is a closure that has to live in the bundle.
+ *
+ * @example
+ * ```ts
+ * import * as PrPackage from "@alchemy.run/pr-package";
+ *
+ * class Api extends Cloudflare.Worker<Api>()(
+ *   "Api",
+ *   { main: import.meta.path, url: true, ... },
+ *   PrPackage.handler({
+ *     parseAliasUrl: (url) => ({ pkgName: "...", tag: "..." }),
+ *   }),
+ * ) {}
+ * ```
+ */
+export const handler = (options: HandlerOptions = {}) =>
   Effect.gen(function* () {
-    const r2 = yield* Cloudflare.R2Bucket.bind(Bucket);
-    const kv = yield* Cloudflare.KVNamespace.bind(TagIndex);
-    const authToken = yield* Cloudflare.Secret.bind(AuthToken);
+    const r2 = yield* Cloudflare.R2Bucket.bind(yield* Bucket);
+    const kv = yield* Cloudflare.KVNamespace.bind(yield* TagIndex);
+    const authToken = yield* Cloudflare.Secret.bind(yield* AuthToken);
     const packages = yield* PackageStore;
+
+    const parseAliasUrl: ParseAliasUrl = options.parseAliasUrl ?? (() => null);
+    const defaultTtl = options.defaultTtl ?? "3 weeks";
 
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
-        const url = new URL(request.url, "http://localhost");
+        const host = request.headers.host ?? "localhost";
+        const url = new URL(request.url, `https://${host}`);
         const path = url.pathname;
         const method = request.method;
-
-        const env = yield* Cloudflare.WorkerEnvironment;
-        const defaultTtl = ((env as any).DEFAULT_TTL as string) || "3 weeks";
 
         const requireAuth = Effect.gen(function* () {
           const authHeader = request.headers.authorization;
@@ -62,24 +75,20 @@ export default class Api extends Cloudflare.Worker<Api>()(
           }
         });
 
-        // Pretty alias paths (e.g. /alchemy/<tag>, /@alchemy.run/<name>/<tag>)
-        // 301 to the canonical /projects/:project/tags/:tag URL.
+        // Pretty alias paths 301 → /projects/:pkgName/tags/:tag (relative).
         if (method === "GET" && !path.startsWith("/projects/")) {
-          const aliasMatch = parseAlias(request.headers.host, path);
-          if (aliasMatch) {
+          const match = parseAliasUrl(url);
+          if (match) {
             return HttpServerResponse.fromWeb(
               new Response(null, {
                 status: 301,
-                headers: { location: aliasRedirectUrl(aliasMatch) },
+                headers: { location: aliasRedirectPath(match) },
               }),
             );
           }
         }
 
-        // Route pattern: /projects/:project/...
-        // :project may be scoped (@scope/name) or unscoped (name) — matches
-        // npm package naming. Accept literal `@` or its percent-encoded form
-        // `%40` since strict HTTP clients (e.g. bun) encode `@` in paths.
+        // Route: /projects/:pkgName/...
         const projectMatch = path.match(
           /^\/projects\/((?:@|%40)[^/]+\/[^/]+|[^/]+)(\/.*)?$/i,
         );
@@ -89,9 +98,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
         const project = decodeURIComponent(projectMatch[1]);
         const subPath = projectMatch[2] || "/";
 
-        // --- PUT /projects/:project/packages ---
-        // Body: raw .tgz stream (streamed directly to R2)
-        // Headers: X-Tags (JSON array), X-TTL (optional, Effect Duration string e.g. "7 hours", "3 weeks"), Content-Length
+        // --- PUT /projects/:pkgName/packages ---
         if (method === "PUT" && subPath === "/packages") {
           return yield* Effect.gen(function* () {
             yield* requireAuth;
@@ -156,7 +163,6 @@ export default class Api extends Cloudflare.Worker<Api>()(
             const resourceId = crypto.randomUUID();
             const expiresAt = Date.now() + ttlMillis;
 
-            // reassign tags: remove from old resources, cleanup orphans
             for (const tag of tags) {
               const oldResourceId = yield* kv.get(`tag:${project}:${tag}`);
               if (oldResourceId && oldResourceId !== resourceId) {
@@ -171,27 +177,21 @@ export default class Api extends Cloudflare.Worker<Api>()(
               }
             }
 
-            // Stream body directly to R2 via FixedLengthStream (no buffering).
-            // Uses request.stream from Effect's HttpServerRequest which
-            // provides the raw body as a ReadableStream.
             yield* r2
               .put(resourceId + ".tgz", request.stream, {
                 contentLength,
               })
               .pipe(Effect.orDie);
 
-            // store tag pointers in KV (scoped by project)
             for (const tag of tags) {
               yield* kv.put(`tag:${project}:${tag}`, resourceId);
             }
 
-            // store metadata in KV (for potential cron cleanup)
             yield* kv.put(
               `metadata:${resourceId}`,
               JSON.stringify({ project, tags, expiresAt }),
             );
 
-            // init DO state
             const store = packages.getByName(resourceId);
             yield* store.init(tags, expiresAt).pipe(Effect.orDie);
 
@@ -212,7 +212,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
           );
         }
 
-        // --- GET /projects/:project/tags/:tag --- (302 redirect to /projects/:project/packages/:resourceId)
+        // --- GET /projects/:pkgName/tags/:tag ---
         if (method === "GET" && subPath.startsWith("/tags/")) {
           const tag = decodeURIComponent(subPath.slice("/tags/".length));
           const resourceId = yield* kv.get(`tag:${project}:${tag}`);
@@ -223,13 +223,9 @@ export default class Api extends Cloudflare.Worker<Api>()(
             );
           }
 
-          // record download (before redirect so we know which tag was used)
           const store = packages.getByName(resourceId);
           yield* store.recordDownload(tag).pipe(Effect.orDie);
 
-          // Encode each path segment but keep `/` literal so scoped projects
-          // round-trip through the route regex (which splits scope/name on
-          // a literal slash).
           const encodedProject = project
             .split("/")
             .map(encodeURIComponent)
@@ -244,7 +240,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
           );
         }
 
-        // --- GET /projects/:project/packages/:resourceId --- (serve blob, cacheable)
+        // --- GET /projects/:pkgName/packages/:resourceId ---
         if (
           method === "GET" &&
           subPath.startsWith("/packages/") &&
@@ -271,7 +267,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
           );
         }
 
-        // --- DELETE /projects/:project/tags/:tag ---
+        // --- DELETE /projects/:pkgName/tags/:tag ---
         if (method === "DELETE" && subPath.startsWith("/tags/")) {
           return yield* Effect.gen(function* () {
             yield* requireAuth;
@@ -306,7 +302,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
           );
         }
 
-        // --- GET /projects/:project/packages/:resourceId/stats ---
+        // --- GET /projects/:pkgName/packages/:resourceId/stats ---
         if (
           method === "GET" &&
           subPath.startsWith("/packages/") &&
@@ -353,13 +349,4 @@ export default class Api extends Cloudflare.Worker<Api>()(
         ),
       ),
     };
-  }).pipe(
-    Effect.provide(
-      Layer.mergeAll(
-        Cloudflare.R2BucketBindingLive,
-        Cloudflare.KVNamespaceBindingLive,
-        Cloudflare.SecretBindingLive,
-      ),
-    ),
-  ),
-) {}
+  }).pipe(Effect.provide(bindings));
