@@ -1,0 +1,190 @@
+name: pr-package
+
+# Publishes alchemy + better-auth tarballs to the pr-package service at
+# pkg.ing on every push to main and every PR sync. On PR close, deletes every
+# tag we ever assigned for that PR so the underlying tarballs become orphaned
+# and the bucket cleans them up.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  PR_PACKAGE_HOST: pkg.ing
+  NODE_VERSION: "24"
+
+jobs:
+  # ── Publish on push-to-main and PR sync. ──────────────────────────────────
+  publish:
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - run: bun install
+
+      # Only build the packages we publish — skip the website (root `build`
+      # script fans out to all workspaces, which is expensive and unnecessary
+      # here). better-auth's `build` script is just `bun pm pack`, which we run
+      # ourselves below, so no separate build step.
+      - run: bun run build
+        working-directory: packages/alchemy
+
+      - name: Compute tags
+        id: tags
+        env:
+          EVENT: ${{ github.event_name }}
+          # `head_ref` for PRs (source branch), `ref_name` for push (e.g. "main").
+          BRANCH: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          # PR builds run on the merge commit by default; tag the actual head sha
+          # so consumers can pin to a specific PR commit.
+          SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          short="${SHA:0:7}"
+          long="$SHA"
+          tags=("$short" "$long" "$BRANCH")
+          if [ "$EVENT" = "pull_request" ]; then
+            tags+=("pr-${PR_NUMBER}")
+          fi
+          json=$(printf '%s\n' "${tags[@]}" | jq -R . | jq -s -c .)
+          echo "tags=$json" >> "$GITHUB_OUTPUT"
+          echo "short=$short" >> "$GITHUB_OUTPUT"
+          echo "Tags: $json"
+
+      - name: Publish alchemy
+        env:
+          TOKEN: ${{ secrets.PR_PACKAGE_TOKEN }}
+          TAGS: ${{ steps.tags.outputs.tags }}
+        working-directory: packages/alchemy
+        run: |
+          set -euo pipefail
+          rm -f *.tgz
+          bun pm pack --destination .
+          tgz=$(ls *.tgz)
+          echo "Publishing $tgz with tags $TAGS"
+          curl -fsSL --show-error -X PUT \
+            "https://${PR_PACKAGE_HOST}/projects/alchemy/packages" \
+            -H "Authorization: Bearer ${TOKEN}" \
+            -H "X-Tags: ${TAGS}" \
+            -H "Content-Type: application/gzip" \
+            --data-binary "@${tgz}"
+
+      - name: Publish better-auth
+        env:
+          TOKEN: ${{ secrets.PR_PACKAGE_TOKEN }}
+          TAGS: ${{ steps.tags.outputs.tags }}
+        working-directory: packages/better-auth
+        run: |
+          set -euo pipefail
+          rm -f *.tgz
+          bun pm pack --destination .
+          tgz=$(ls *.tgz)
+          echo "Publishing $tgz with tags $TAGS"
+          curl -fsSL --show-error -X PUT \
+            "https://${PR_PACKAGE_HOST}/projects/@alchemy.run/better-auth/packages" \
+            -H "Authorization: Bearer ${TOKEN}" \
+            -H "X-Tags: ${TAGS}" \
+            -H "Content-Type: application/gzip" \
+            --data-binary "@${tgz}"
+
+      # PR-only: leave a sticky comment with the install URLs pinned to this
+      # commit. Uses pkg.ing (the canonical short host), which serves both
+      # the pretty alias paths and the underlying /projects/:project/tags/:tag
+      # API directly.
+      - name: Generate bot token
+        if: github.event_name == 'pull_request'
+        id: bot-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.ALCHEMY_VERSION_BOT_ID }}
+          private-key: ${{ secrets.ALCHEMY_VERSION_BOT_PRIVATE_KEY }}
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ steps.bot-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          SHORT_SHA: ${{ steps.tags.outputs.short }}
+        run: |
+          set -euo pipefail
+          MARKER="<!-- pr-package-comment -->"
+          BODY=$(printf '%s\n\nInstall the packages built from this commit:\n\n**alchemy**\n```sh\nbun add https://pkg.ing/alchemy/%s\n```\n\n**@alchemy.run/better-auth**\n```sh\nbun add https://pkg.ing/@alchemy.run/better-auth/%s\n```\n' "$MARKER" "$SHORT_SHA" "$SHORT_SHA")
+
+          existing=$(gh api --paginate \
+            "repos/${REPO}/issues/${PR_NUMBER}/comments" \
+            --jq ".[] | select(.user.login == \"alchemy-version-bot[bot]\") | select(.body | startswith(\"${MARKER}\")) | .id" \
+            | head -1)
+
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/${REPO}/issues/comments/${existing}" -f body="$BODY"
+          else
+            gh api -X POST "repos/${REPO}/issues/${PR_NUMBER}/comments" -f body="$BODY"
+          fi
+
+  # ── Cleanup on PR close (merged or not). ──────────────────────────────────
+  # Deletes the branch tag, pr-<number> tag, and short+long sha tags for every
+  # commit in the PR. 404s are ignored (tag may have been TTL'd or never set).
+  cleanup:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete tags
+        env:
+          TOKEN: ${{ secrets.PR_PACKAGE_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # Collect every commit sha that appeared in the PR (paginated).
+          shas=$(gh api --paginate "repos/${REPO}/pulls/${PR_NUMBER}/commits" --jq '.[].sha')
+
+          tags=()
+          while IFS= read -r sha; do
+            [ -z "$sha" ] && continue
+            tags+=("$sha" "${sha:0:7}")
+          done <<< "$shas"
+          tags+=("$BRANCH" "pr-${PR_NUMBER}")
+
+          # Dedupe.
+          unique=$(printf '%s\n' "${tags[@]}" | sort -u)
+
+          # Project names match npm package names; scopes stay literal in the
+          # URL (the API route accepts /projects/@scope/name/...).
+          for project in alchemy "@alchemy.run/better-auth"; do
+            while IFS= read -r tag; do
+              [ -z "$tag" ] && continue
+              # URL-encode the tag (branch names can contain `/`).
+              encoded=$(jq -rn --arg t "$tag" '$t|@uri')
+              code=$(curl -sS -o /dev/null -w "%{http_code}" -X DELETE \
+                "https://${PR_PACKAGE_HOST}/projects/${project}/tags/${encoded}" \
+                -H "Authorization: Bearer ${TOKEN}")
+              echo "DELETE ${project}:${tag} → ${code}"
+            done <<< "$unique"
+          done

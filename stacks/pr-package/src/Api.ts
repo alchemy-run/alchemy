@@ -1,9 +1,12 @@
 import * as Cloudflare from "alchemy/Cloudflare";
+import { Stack } from "alchemy/Stack";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { aliasRedirectUrl, parseAlias } from "./aliases.ts";
+import { AuthToken } from "./AuthToken.ts";
 import { Bucket } from "./Bucket.ts";
 import PackageStore from "./PackageStore.ts";
 import { TagIndex } from "./TagIndex.ts";
@@ -14,21 +17,31 @@ class Unauthorized {
 
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
-  {
+  Stack.useSync(({ stage }) => ({
     main: import.meta.path,
     url: true,
     env: {
-      AUTH_TOKEN: "test-bearer-token",
       DEFAULT_TTL: "3 weeks",
     },
+    domain:
+      stage === "prod"
+        ? [
+            "pkg.ing",
+            "pkg.alchemy.run",
+            "📦.alchemy.run",
+            "pkg.distilled.cloud",
+            "📦.distilled.cloud",
+          ]
+        : undefined,
     compatibility: {
       flags: ["nodejs_compat"],
       date: "2026-03-17",
     },
-  },
+  })),
   Effect.gen(function* () {
     const r2 = yield* Cloudflare.R2Bucket.bind(Bucket);
     const kv = yield* Cloudflare.KVNamespace.bind(TagIndex);
+    const authToken = yield* Cloudflare.Secret.bind(AuthToken);
     const packages = yield* PackageStore;
 
     return {
@@ -39,18 +52,37 @@ export default class Api extends Cloudflare.Worker<Api>()(
         const method = request.method;
 
         const env = yield* Cloudflare.WorkerEnvironment;
-        const authToken = (env as any).AUTH_TOKEN as string;
         const defaultTtl = ((env as any).DEFAULT_TTL as string) || "3 weeks";
 
         const requireAuth = Effect.gen(function* () {
           const authHeader = request.headers.authorization;
-          if (!authHeader || authHeader !== `Bearer ${authToken}`) {
+          const expected = yield* authToken;
+          if (!authHeader || authHeader !== `Bearer ${expected}`) {
             return yield* Effect.fail(new Unauthorized());
           }
         });
 
+        // Pretty alias paths (e.g. /alchemy/<tag>, /@alchemy.run/<name>/<tag>)
+        // 301 to the canonical /projects/:project/tags/:tag URL.
+        if (method === "GET" && !path.startsWith("/projects/")) {
+          const aliasMatch = parseAlias(request.headers.host, path);
+          if (aliasMatch) {
+            return HttpServerResponse.fromWeb(
+              new Response(null, {
+                status: 301,
+                headers: { location: aliasRedirectUrl(aliasMatch) },
+              }),
+            );
+          }
+        }
+
         // Route pattern: /projects/:project/...
-        const projectMatch = path.match(/^\/projects\/([^/]+)(\/.*)?$/);
+        // :project may be scoped (@scope/name) or unscoped (name) — matches
+        // npm package naming. Accept literal `@` or its percent-encoded form
+        // `%40` since strict HTTP clients (e.g. bun) encode `@` in paths.
+        const projectMatch = path.match(
+          /^\/projects\/((?:@|%40)[^/]+\/[^/]+|[^/]+)(\/.*)?$/i,
+        );
         if (!projectMatch) {
           return HttpServerResponse.text("Not Found", { status: 404 });
         }
@@ -195,11 +227,18 @@ export default class Api extends Cloudflare.Worker<Api>()(
           const store = packages.getByName(resourceId);
           yield* store.recordDownload(tag).pipe(Effect.orDie);
 
+          // Encode each path segment but keep `/` literal so scoped projects
+          // round-trip through the route regex (which splits scope/name on
+          // a literal slash).
+          const encodedProject = project
+            .split("/")
+            .map(encodeURIComponent)
+            .join("/");
           return HttpServerResponse.fromWeb(
             new Response(null, {
               status: 302,
               headers: {
-                location: `/projects/${encodeURIComponent(project)}/packages/${resourceId}`,
+                location: `/projects/${encodedProject}/packages/${resourceId}`,
               },
             }),
           );
@@ -319,6 +358,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
       Layer.mergeAll(
         Cloudflare.R2BucketBindingLive,
         Cloudflare.KVNamespaceBindingLive,
+        Cloudflare.SecretBindingLive,
       ),
     ),
   ),

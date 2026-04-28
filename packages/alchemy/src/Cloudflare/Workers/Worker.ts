@@ -1018,14 +1018,27 @@ export const WorkerProvider = () =>
               maxLength: 54,
             }).pipe(Effect.map((name) => name.toLowerCase()));
 
+      // Convert non-ASCII hostnames (emoji, IDN, etc.) to punycode so the
+      // Cloudflare API receives the form it stores domains in. `new URL(...)`
+      // does IDNA via WHATWG URL parsing — `📦.alchemy.run` → `xn--5z8h.alchemy.run`.
+      const toPunycode = (hostname: string): string => {
+        try {
+          return new URL(`https://${hostname}`).hostname;
+        } catch {
+          return hostname;
+        }
+      };
+
       const normalizeDomains = (
         domain: string | string[] | undefined,
       ): string[] =>
         domain === undefined
           ? []
-          : Array.isArray(domain)
-            ? Array.from(new Set(domain))
-            : [domain];
+          : Array.from(
+              new Set(
+                (Array.isArray(domain) ? domain : [domain]).map(toPunycode),
+              ),
+            );
 
       /**
        * Infer the Cloudflare Zone ID for a given hostname by listing the
