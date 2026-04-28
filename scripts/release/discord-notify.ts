@@ -53,7 +53,18 @@ const end =
     : nextHeadingIdx === -1
       ? sepIdx
       : Math.min(sepIdx, nextHeadingIdx);
-const body = after.slice(0, end).trim();
+const rawBody = after.slice(0, end).trim();
+
+// CHANGELOG.md is formatted for GitHub Releases, which renders HTML.
+// Discord renders neither HTML entities nor the `<samp>` tag, so swap them
+// for plain-text/markdown equivalents before posting.
+const body = rawBody
+  .replace(/&nbsp;/g, " ")
+  .replace(/<\/?samp>/g, "`")
+  // Collapse the long indent that the GitHub-flavored headings use.
+  .replace(/^(#{1,6})\s+/gm, "$1 ")
+  // Strip any other stray HTML tags just in case.
+  .replace(/<\/?[a-z][^>]*>/gi, "");
 
 const releaseUrl = `https://github.com/${REPO}/releases/tag/${tag}`;
 const description = `${body}\n\n[Full release notes →](${releaseUrl})`;
