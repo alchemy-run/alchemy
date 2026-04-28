@@ -1,10 +1,12 @@
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
+import { extractValue } from "./common.ts";
 
 export interface PublicKeyProps {
   /**
@@ -19,7 +21,7 @@ export interface PublicKeyProps {
    * replacement (CloudFront does not allow rotating an existing public
    * key in place).
    */
-  encodedKey: string;
+  encodedKey: Redacted.Redacted<string> | string;
   /**
    * Optional comment describing the key.
    */
@@ -73,7 +75,7 @@ export interface PublicKey extends Resource<
  * @example PEM-encoded RSA public key
  * ```typescript
  * const key = yield* PublicKey("SignedUrlKey", {
- *   encodedKey: yield* fs.readFileString("./public_key.pem"),
+ *   encodedKey: Redacted.make(yield* fs.readFileString("./public_key.pem")),
  *   comment: "RSA-2048 signed URL key for /private",
  * });
  * ```
@@ -114,7 +116,7 @@ export const PublicKeyProvider = () =>
       ): cloudfront.PublicKeyConfig => ({
         Name: name,
         CallerReference: callerReference,
-        EncodedKey: props.encodedKey,
+        EncodedKey: extractValue(props.encodedKey),
         Comment: props.comment,
       });
 
@@ -143,7 +145,7 @@ export const PublicKeyProvider = () =>
           }
           if (
             isResolved(olds.encodedKey) &&
-            olds.encodedKey !== news.encodedKey
+            extractValue(olds.encodedKey) !== extractValue(news.encodedKey)
           ) {
             return { action: "replace" } as const;
           }
