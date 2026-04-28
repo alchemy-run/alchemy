@@ -1,9 +1,11 @@
 import * as Cloudflare from "alchemy/Cloudflare";
+import { Stack } from "alchemy/Stack";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { AuthToken } from "./AuthToken.ts";
 import { Bucket } from "./Bucket.ts";
 import PackageStore from "./PackageStore.ts";
 import { TagIndex } from "./TagIndex.ts";
@@ -14,21 +16,24 @@ class Unauthorized {
 
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
-  {
+  Stack.useSync(({ stage }) => ({
     main: import.meta.path,
     url: true,
     env: {
-      AUTH_TOKEN: "test-bearer-token",
       DEFAULT_TTL: "3 weeks",
     },
+    // pkg.alchemy.run and pkg.distilled.cloud are now served by the
+    // Redirect worker, which 301s to this host.
+    domain: stage === "prod" ? ["📦.alchemy.run"] : undefined,
     compatibility: {
       flags: ["nodejs_compat"],
       date: "2026-03-17",
     },
-  },
+  })),
   Effect.gen(function* () {
     const r2 = yield* Cloudflare.R2Bucket.bind(Bucket);
     const kv = yield* Cloudflare.KVNamespace.bind(TagIndex);
+    const authToken = yield* Cloudflare.Secret.bind(AuthToken);
     const packages = yield* PackageStore;
 
     return {
@@ -39,12 +44,12 @@ export default class Api extends Cloudflare.Worker<Api>()(
         const method = request.method;
 
         const env = yield* Cloudflare.WorkerEnvironment;
-        const authToken = (env as any).AUTH_TOKEN as string;
         const defaultTtl = ((env as any).DEFAULT_TTL as string) || "3 weeks";
 
         const requireAuth = Effect.gen(function* () {
           const authHeader = request.headers.authorization;
-          if (!authHeader || authHeader !== `Bearer ${authToken}`) {
+          const expected = yield* authToken;
+          if (!authHeader || authHeader !== `Bearer ${expected}`) {
             return yield* Effect.fail(new Unauthorized());
           }
         });
@@ -319,6 +324,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
       Layer.mergeAll(
         Cloudflare.R2BucketBindingLive,
         Cloudflare.KVNamespaceBindingLive,
+        Cloudflare.SecretBindingLive,
       ),
     ),
   ),

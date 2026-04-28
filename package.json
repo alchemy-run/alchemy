@@ -52,7 +52,6 @@
     "packages": [
       "website",
       "packages/*",
-      "services/*",
       "examples/*"
     ],
     "catalog": {
