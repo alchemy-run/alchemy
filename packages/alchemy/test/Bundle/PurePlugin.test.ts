@@ -287,24 +287,24 @@ describe("purePlugin", () => {
     expect(effectResult).toBeNull();
   });
 
-  it("returns moduleSideEffects: false for matched modules with no annotatable calls", async () => {
+  it("does NOT override moduleSideEffects when the package's sideEffects field is unknown", async () => {
+    // Virtual id — there is no real `package.json` to read, so the
+    // plugin must conservatively leave `moduleSideEffects` alone.
     const plugin = purePlugin();
-
     const result = await runTransform(
       plugin,
       `function f() { return 1; }`,
       "/proj/node_modules/effect/dist/Effect.js",
     );
-    expect(result).not.toBeNull();
-    expect((result as { moduleSideEffects?: boolean }).moduleSideEffects).toBe(
-      false,
-    );
+    // No annotatable top-level calls AND no disk-backed sideEffects:false
+    // declaration → plugin returns null (no rewrite, no hint).
+    expect(result).toBeNull();
   });
 });
 
 describe("auto-detect entry package", () => {
   it.effect(
-    "auto-detects the entry's owning package when sideEffects: false",
+    "auto-detects the entry's owning package even WITHOUT a sideEffects field (default-on for user code)",
     () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
@@ -312,13 +312,10 @@ describe("auto-detect entry package", () => {
         const root = yield* fs.makeTempDirectory({
           prefix: "alchemy-pure-autodetect-",
         });
+        // Plain user package.json — no `sideEffects` field.
         yield* fs.writeFileString(
           path.join(root, "package.json"),
-          JSON.stringify({
-            name: "my-app",
-            type: "module",
-            sideEffects: false,
-          }),
+          JSON.stringify({ name: "my-app", type: "module" }),
         );
         yield* fs.writeFileString(
           path.join(root, "entry.ts"),
@@ -326,20 +323,15 @@ describe("auto-detect entry package", () => {
         );
 
         const plugin = purePlugin();
-        yield* Effect.promise(() => callOptions(plugin, {
-          input: path.join(root, "entry.ts"),
-          cwd: root,
-        }));
-
-        // Now any module from `my-app/...` should be annotated, and
-        // because the entry is excluded from the side-effects override
-        // the plugin returns the rewritten code without
-        // `moduleSideEffects: false`.
-        const sourcePath = path.join(root, "lib.ts");
-        yield* fs.writeFileString(
-          sourcePath,
-          `export const v = make();\nfunction make() { return 1; }`,
+        yield* Effect.promise(() =>
+          callOptions(plugin, {
+            input: path.join(root, "entry.ts"),
+            cwd: root,
+          }),
         );
+
+        // Annotation must happen even though `sideEffects` is absent.
+        const sourcePath = path.join(root, "lib.ts");
         const result = yield* Effect.promise(() =>
           callTransform(
             plugin,
@@ -351,44 +343,53 @@ describe("auto-detect entry package", () => {
         expect((result as { code: string }).code).toContain(
           "/*#__PURE__*/ make()",
         );
+        // …but moduleSideEffects must NOT be forced false on a package
+        // that did not declare `sideEffects: false`.
+        expect(
+          (result as { moduleSideEffects?: boolean | null }).moduleSideEffects,
+        ).not.toBe(false);
 
         yield* fs.remove(root, { recursive: true });
       }).pipe(Effect.provide(NodeServices.layer)),
   );
 
   it.effect(
-    "does NOT auto-detect when entry's package declares sideEffects: true",
+    "still overrides moduleSideEffects when the package DOES declare sideEffects: false",
     () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const root = yield* fs.makeTempDirectory({
-          prefix: "alchemy-pure-autodetect-optout-",
+          prefix: "alchemy-pure-autodetect-sef-",
         });
         yield* fs.writeFileString(
           path.join(root, "package.json"),
           JSON.stringify({
-            name: "my-stateful-app",
+            name: "my-pure-app",
             type: "module",
-            sideEffects: true,
+            sideEffects: false,
           }),
         );
 
         const plugin = purePlugin();
-        yield* Effect.promise(() => callOptions(plugin, {
-          input: path.join(root, "entry.ts"),
-          cwd: root,
-        }));
+        yield* Effect.promise(() =>
+          callOptions(plugin, {
+            input: path.join(root, "entry.ts"),
+            cwd: root,
+          }),
+        );
 
-        const sourcePath = path.join(root, "lib.ts");
         const result = yield* Effect.promise(() =>
           callTransform(
             plugin,
             `export const v = make();\nfunction make() { return 1; }`,
-            sourcePath,
+            path.join(root, "lib.ts"),
           ),
         );
-        expect(result).toBeNull();
+        expect(result).not.toBeNull();
+        expect(
+          (result as { moduleSideEffects?: boolean | null }).moduleSideEffects,
+        ).toBe(false);
 
         yield* fs.remove(root, { recursive: true });
       }).pipe(Effect.provide(NodeServices.layer)),
