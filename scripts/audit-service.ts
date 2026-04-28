@@ -1007,6 +1007,8 @@ async function auditService(serviceName: string): Promise<AuditReport> {
       kinesis: { distilled: "kinesis", alchemy: "Kinesis" },
       ec2: { distilled: "ec2", alchemy: "EC2" },
       ecs: { distilled: "ecs", alchemy: "ECS" },
+      cloudfront: { distilled: "cloudfront", alchemy: "CloudFront" },
+      cloudwatch: { distilled: "cloudwatch", alchemy: "CloudWatch" },
       eventbridge: { distilled: "eventbridge", alchemy: "EventBridge" },
       iam: { distilled: "iam", alchemy: "IAM" },
       pipes: { distilled: "pipes", alchemy: "Pipes" },
@@ -1042,12 +1044,14 @@ async function auditService(serviceName: string): Promise<AuditReport> {
     );
   const distilledPath =
     resolvedDistilledPath ?? `@distilled.cloud/aws/${config.distilled}`;
-  const alchemyPath = path.resolve(`alchemy/src/AWS/${config.alchemy}`);
+  const alchemyPath = path.resolve(
+    `packages/alchemy/src/AWS/${config.alchemy}`,
+  );
   const bindingTestPath = path.resolve(
-    `alchemy/test/AWS/${config.alchemy}/Bindings.test.ts`,
+    `packages/alchemy/test/AWS/${config.alchemy}/Bindings.test.ts`,
   );
   const indexPath = path.join(alchemyPath, "index.ts");
-  const providersPath = path.resolve("alchemy/src/AWS/Providers.ts");
+  const providersPath = path.resolve("packages/alchemy/src/AWS/Providers.ts");
 
   // Extract data
   const distilledOps = await extractDistilledOperations(
