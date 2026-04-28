@@ -25,12 +25,11 @@ export const CliOverviewDashboard = Axiom.Dashboard(
     const charts: Axiom.Chart[] = [
       {
         id: "active-users-7d",
-        name: "Active users (7d)",
+        name: "Active users",
         type: "Statistic",
         query: {
           apl: `
             ['${traces}']
-            | where _time > ago(7d)
             | extend uid=tostring(['resource.custom']['alchemy.user.id'])
             | summarize users=dcount(uid)
           `,
@@ -38,12 +37,11 @@ export const CliOverviewDashboard = Axiom.Dashboard(
       },
       {
         id: "cli-invocations-24h",
-        name: "CLI invocations (24h)",
+        name: "CLI invocations",
         type: "Statistic",
         query: {
           apl: `
             ['${traces}']
-            | where _time > ago(24h)
             | where name startswith "cli."
             | summarize total=count()
           `,
@@ -56,9 +54,8 @@ export const CliOverviewDashboard = Axiom.Dashboard(
         query: {
           apl: `
             ['${traces}']
-            | where _time > ago(7d)
             | extend uid=tostring(['resource.custom']['alchemy.user.id'])
-            | summarize users=dcount(uid) by bin(_time, 1h)
+            | summarize users=dcount(uid) by bin_auto(_time)
             | order by _time asc
           `,
         },
@@ -70,11 +67,10 @@ export const CliOverviewDashboard = Axiom.Dashboard(
         query: {
           apl: `
             ['${traces}']
-            | where _time > ago(7d)
             | where name in ("cli.deploy", "cli.destroy")
             | summarize p50=percentile(duration, 50),
                         p95=percentile(duration, 95)
-                by name, bin(_time, 1h)
+                by name, bin_auto(_time)
             | order by _time asc
           `,
         },
@@ -86,11 +82,10 @@ export const CliOverviewDashboard = Axiom.Dashboard(
         query: {
           apl: `
             ['${traces}']
-            | where _time > ago(7d)
             | where name startswith "cli."
             | extend command=extract("cli\\\\.(.+)", 1, name),
                      status=iff(tobool(['error']), "error", "success")
-            | summarize count=count() by command, status, bin(_time, 1h)
+            | summarize count=count() by command, status, bin_auto(_time)
             | order by _time asc
           `,
         },
@@ -102,7 +97,6 @@ export const CliOverviewDashboard = Axiom.Dashboard(
         query: {
           apl: `
             ['${traces}']
-            | where _time > ago(7d)
             | where name startswith "provider."
             | extend rt=tostring(['attributes.custom']['alchemy.resource.type']),
                      op=tostring(['attributes.custom']['alchemy.resource.op'])
@@ -119,7 +113,6 @@ export const CliOverviewDashboard = Axiom.Dashboard(
         query: {
           apl: `
             ['${traces}']
-            | where _time > ago(7d)
             | where name startswith "provider."
             | extend rt=tostring(['attributes.custom']['alchemy.resource.type']),
                      op=tostring(['attributes.custom']['alchemy.resource.op'])
@@ -139,7 +132,6 @@ export const CliOverviewDashboard = Axiom.Dashboard(
         query: {
           apl: `
             ['${traces}']
-            | where _time > ago(7d)
             | extend uid=tostring(['resource.custom']['alchemy.user.id']),
                      version=tostring(['resource.custom']['alchemy.version'])
             | summarize users=dcount(uid) by version
@@ -154,11 +146,10 @@ export const CliOverviewDashboard = Axiom.Dashboard(
         query: {
           apl: `
             ['${traces}']
-            | where _time > ago(7d)
             | where name startswith "provider."
             | extend rt=tostring(['attributes.custom']['alchemy.resource.type']),
                      status=iff(tobool(['error']), "error", "success")
-            | summarize total=count() by rt, status, bin(_time, 1h)
+            | summarize total=count() by rt, status, bin_auto(_time)
             | order by _time asc
           `,
         },
