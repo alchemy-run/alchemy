@@ -396,6 +396,7 @@ export default Alchemy.Stack(
             "Queues Write",
             "Pages Write",
             "Account Settings Write",
+            "Secrets Store Write",
             "Workers Tail Read",
           ],
           resources: {
@@ -434,6 +435,19 @@ A few details worth knowing:
   app.
 - The resource diff is stable across redeploys. Editing a policy
   produces a clean update against the same token ID.
+
+:::note[Why `Secrets Store Write`?]
+`Cloudflare.state()` keeps the state-store worker's bearer token in
+the account-wide [Cloudflare Secrets Store](https://developers.cloudflare.com/secrets-store/).
+On every CI run Alchemy reads that secret back by uploading a
+short-lived edge-preview worker that *binds* the secret — and
+binding a Secrets Store secret to a worker (even an ephemeral
+preview) requires the **`Secrets Store Write`** permission, not
+just `Read`. `Read` is only enough to enumerate the store via
+`GET /accounts/{id}/secrets_store/stores`; the
+`POST .../scripts/{name}/edge-preview` call that mounts the
+binding is rejected without `Write`.
+:::
 
 Then add the secrets to your workflow's deploy and cleanup steps:
 
@@ -498,6 +512,7 @@ export default Alchemy.Stack(
           "Queues Write",
           "Pages Write",
           "Account Settings Write",
+          "Secrets Store Write",
           "Workers Tail Read",
         ],
         resources: { [`com.cloudflare.api.account.${accountId}`]: "*" },

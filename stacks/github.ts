@@ -1,6 +1,7 @@
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as GitHub from "alchemy/GitHub";
+import * as Output from "alchemy/Output";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -30,6 +31,17 @@ export default Alchemy.Stack(
       PROD_CLOUDFLARE_API_TOKEN: prodApiToken.value,
       PROD_CLOUDFLARE_ACCOUNT_ID: prodAccountId,
     });
+
+    return {
+      TEST_CLOUDFLARE_API_TOKEN: testApiToken.value.pipe(
+        Output.map(Redacted.value),
+      ),
+      TEST_CLOUDFLARE_ACCOUNT_ID: testAccountId,
+      PROD_CLOUDFLARE_API_TOKEN: prodApiToken.value.pipe(
+        Output.map(Redacted.value),
+      ),
+      PROD_CLOUDFLARE_ACCOUNT_ID: prodAccountId,
+    };
   }).pipe(Effect.orDie),
 );
 
@@ -52,6 +64,7 @@ const token = (
           "Queues Write",
           "Pages Write",
           "Account Settings Write",
+          "Secrets Store Write",
           "Workers Tail Read",
         ],
         resources: {
