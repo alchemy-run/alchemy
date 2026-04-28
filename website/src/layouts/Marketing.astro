@@ -4,6 +4,7 @@ import "../styles/marketing.css";
 
 import Nav from "../components/marketing/Nav.astro";
 import Footer from "../components/marketing/Footer.astro";
+import PostHog from "../components/analytics/PostHog.astro";
 
 interface Props {
   title?: string;
@@ -71,6 +72,8 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <meta name="twitter:title" content={title} />
     {description && <meta name="twitter:description" content={description} />}
     <meta name="twitter:image" content={ogImage.href} />
+
+    <PostHog />
   </head>
   <body class="alc-root">
     <header class="alc-marketing-header">

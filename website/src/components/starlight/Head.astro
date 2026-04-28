@@ -11,6 +11,7 @@
  * still ship.
  */
 import Default from "@astrojs/starlight/components/Head.astro";
+import PostHog from "../analytics/PostHog.astro";
 
 // Starlight injects route data via Astro.locals at runtime; the public
 // types aren't ambient-declared in this project, so we cast through any.
@@ -37,3 +38,5 @@ const ogImage = new URL(`/og/${ogSlug}.png`, Astro.site);
 {/* Twitter / X */}
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:image" content={ogImage.href} />
+
+<PostHog />
