@@ -5,13 +5,15 @@ sidebar:
   order: 0
 ---
 
+import StackOutputsTerminal from "../../../components/marketing-islands/StackOutputsTerminal.tsx";
+
 A **Stack** is the top-level unit of deployment in Alchemy. It groups
 resources together, wires up providers, and tracks state across
 deploys.
 
 ## Defining a Stack
 
-Every Alchemy program exports a default Stack from an `alchemy.run.ts`
+A Stack is just an Effect that you `export default` from a TypeScript
 file:
 
 ```typescript
@@ -35,11 +37,25 @@ export default Alchemy.Stack(
 2. **Options** — `providers` (required), `state` (optional)
 3. **Effect** — a generator that declares resources and returns outputs
 
+:::note[`alchemy.run.ts` is a convention]
+The CLI looks for `alchemy.run.ts` by default, but **any TypeScript
+file with a default-exported Stack works**. Pass the path as the
+first positional argument:
+
+```sh
+alchemy deploy infra/my-stack.ts
+alchemy destroy stacks/github.ts
+```
+
+See the [CLI reference](/guides/cli#deploy) for the full invocation
+syntax.
+:::
+
 ## Stack outputs
 
-The value returned from the generator becomes the stack's output.
+The value returned from the generator becomes the **stack output**.
 After a deploy, outputs are printed to the console and available
-programmatically in tests:
+programmatically in tests.
 
 ```typescript
 Effect.gen(function* () {
@@ -53,19 +69,25 @@ Effect.gen(function* () {
 });
 ```
 
+The CLI renders them after every successful deploy:
+
+<StackOutputsTerminal client:visible />
+
 ## Stages
 
-Every Stack deploy targets a **stage** — an isolated instance like
-`dev_sam`, `staging`, or `prod`. The stage defaults to `dev_$USER`.
-
-Resources are namespaced by stage, so `dev` and `prod` never
-interfere. Physical names include the stage (e.g.
-`myapp-prod-bucket-abc123`).
+Every deploy targets a **stage** — an isolated instance of the stack
+like `dev_sam`, `staging`, or `prod`. The stage defaults to
+`dev_$USER`, so each developer gets their own environment
+automatically. State and physical names are namespaced by stage.
 
 ```sh
 alchemy deploy --stage prod
 alchemy deploy --stage pr-42
 ```
+
+For naming patterns, isolation, and per-stage configuration see
+[Stages](/concepts/stages). Credentials per environment are managed
+via [Profiles](/concepts/profiles).
 
 ## Accessing the Stack
 
@@ -75,35 +97,47 @@ metadata via the `Stack` service:
 ```typescript
 import { Stack } from "alchemy/Stack";
 
-const table =
-  yield *
-  DynamoDB.Table("Jobs", {
-    partitionKey: "id",
-    attributes: { id: "S" },
-  });
+Effect.gen(function* () {
+  const stack = yield* Stack;
+  console.log(stack.name); // "MyApp"
+  console.log(stack.stage); // "dev_sam"
 
-// Access stack metadata
-const stack = yield * Stack;
-console.log(stack.name); // "MyApp"
-console.log(stack.stage); // "dev_sam"
+  const queue = yield* SQS.Queue("Jobs").pipe(
+    RemovalPolicy.retain(stack.stage === "prod"),
+  );
+});
 ```
 
-This is useful for conditional logic based on the stage:
+### `Stack.useSync` for module-scope resources
+
+When you declare a resource at module scope (outside any
+`Effect.gen`), there is no `yield*` available to read the `Stack`
+service. `Stack.useSync` lets you compute props synchronously from
+the current stack — useful for parameterizing names by stage:
 
 ```typescript
-const queue =
-  yield * SQS.Queue("Jobs").pipe(RemovalPolicy.retain(stack.stage === "prod"));
+import * as Axiom from "alchemy/Axiom";
+import { Stack } from "alchemy/Stack";
+
+export const Traces = Axiom.Dataset(
+  "Traces",
+  Stack.useSync(({ stage }) => ({
+    name: `${stage}-traces`,
+    kind: "otel:traces:v1" as const,
+    description: `OTEL traces for stage '${stage}'`,
+    retentionDays: 30,
+  })),
+);
 ```
+
+The function runs once at plan time, after the stage is resolved.
+Use it anywhere a resource accepts a `props` object.
 
 ## Stack and stages — the engine
 
-`Alchemy.Stack` takes a name, a provider Layer, and an Effect that
-declares resources. After every deploy, alchemy persists the state of
-each resource so the next plan knows exactly what changed.
-
-Every deploy targets a **stage**. State and physical names are
-namespaced per stage, so `dev_sam`, `pr-147`, and `prod` are
-completely isolated. Same program. Different stages.
+After every deploy, alchemy persists the state of each resource so
+the next plan knows exactly what changed. Stages keep these state
+files (and physical names) isolated:
 
 ```sh
 # Each stage = its own state file + its own physical names.

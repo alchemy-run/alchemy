@@ -5,7 +5,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/alchemy-run/alchemy"
+    "url": "https://github.com/alchemy-run/alchemy-effect"
   },
   "type": "module",
   "scripts": {
@@ -40,6 +40,7 @@
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-icons": "^5.6.0",
+    "rehype-mermaid": "^3.0.0",
     "satori": "^0.26.0",
     "starlight-blog": "0.24.0",
     "tailwindcss": "^4.1.14"

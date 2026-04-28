@@ -2333,16 +2333,20 @@ body.alc-root,
   opacity: 0.9;
   mix-blend-mode: multiply;
   color: var(--alc-fg-1);
-  /* Just feather the canvas at the outer edges so it doesn't reach
-     the page borders. Center protection is handled by the parchment
-     halo in .alc-hero::after. */
+  /* Vanishing-point coordinates pushed in from JS once it has measured
+     the Yantra mark. Defaults are the canvas geometric center, so the
+     mask still looks reasonable before the script runs. */
+  --alc-bg-cx: 50%;
+  --alc-bg-cy: 50%;
+  /* Feather around the vanishing point so the animation appears to
+     emanate from the bindu and fades into the parchment at the edges. */
   -webkit-mask-image: radial-gradient(
-    ellipse 95% 90% at 50% 50%,
+    ellipse 95% 90% at var(--alc-bg-cx) var(--alc-bg-cy),
     #000 60%,
     transparent 100%
   );
   mask-image: radial-gradient(
-    ellipse 95% 90% at 50% 50%,
+    ellipse 95% 90% at var(--alc-bg-cx) var(--alc-bg-cy),
     #000 60%,
     transparent 100%
   );

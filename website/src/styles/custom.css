@@ -653,7 +653,11 @@ h1.hero-title,
 .sl-markdown-content .starlight-aside__content a:hover {
   color: var(--alc-accent-deep);
 }
-.sl-markdown-content .starlight-aside__content code {
+/* Inline-code only — must NOT match the per-token <code> elements that
+   Expressive Code emits inside <pre>, otherwise the dark walnut code-block
+   background and bright sunrise syntax tokens get repainted to cream + walnut
+   and the whole block bleaches out. */
+.sl-markdown-content .starlight-aside__content :not(pre) > code {
   background: var(--alc-bg-sunk);
   border: 1px solid var(--alc-hairline);
   color: var(--alc-fg-1);
@@ -790,8 +794,14 @@ starlight-tabs [role="tablist"] > li:nth-child(4) [role="tab"] > svg {
 /* Match Starlight's docs <header> chrome to the marketing <header>: same
    translucent cream + backdrop-blur + hairline border. Defined in custom.css
    (rather than scoped to a single component) so the docs layout picks it up
-   without a Page/Header override. */
-.header {
+   without a Page/Header override.
+
+   IMPORTANT: must be scoped to the <header> element, not bare `.header`.
+   Expressive Code emits a <div class="header"> for its terminal titlebar
+   inside every shell/sh code block, and an unscoped `.header` rule with
+   !important repaints that titlebar in cream parchment instead of the
+   intended dark walnut, leaving an ugly cream strip above shell snippets. */
+header.header {
   background: color-mix(in srgb, var(--alc-bg-nav) 92%, transparent) !important;
   backdrop-filter: saturate(140%) blur(8px);
   border-bottom: 1px solid var(--alc-hairline) !important;

@@ -4,8 +4,8 @@ import react from "@astrojs/react";
 import sitemap from "@astrojs/sitemap";
 import starlight from "@astrojs/starlight";
 import tailwindcss from "@tailwindcss/vite";
-import { defineConfig } from "astro/config";
 import astroBrokenLinksChecker from "astro-broken-links-checker";
+import { defineConfig } from "astro/config";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -102,11 +102,12 @@ export default defineConfig({
         {
           icon: "github",
           label: "GitHub",
-          href: "https://github.com/alchemy-run/alchemy",
+          href: "https://github.com/alchemy-run/alchemy-effect",
         },
       ],
       editLink: {
-        baseUrl: "https://github.com/alchemy-run/alchemy/edit/main/website",
+        baseUrl:
+          "https://github.com/alchemy-run/alchemy-effect/edit/main/website",
       },
       sidebar: [
         { label: "What is Alchemy?", link: "/what-is-alchemy" },

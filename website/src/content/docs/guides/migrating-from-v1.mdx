@@ -77,7 +77,8 @@ Your existing Worker runtime code does not need to change. The async
 pattern passes bindings as props on the Worker resource and uses
 `Cloudflare.InferEnv` to type the `env` object:
 
-```diff lang="typescript"
+```typescript twoslash
+// @noErrors
 // alchemy.run.ts
 +export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
 
@@ -89,7 +90,8 @@ export const Worker = Cloudflare.Worker("Worker", {
 
 Your handler stays the same — just update the type import:
 
-```diff lang="typescript"
+```typescript twoslash
+// @noErrors
 // src/worker.ts
 -import type { Env } from "../alchemy.run.ts";
 +import type { WorkerEnv } from "../alchemy.run.ts";
@@ -136,7 +138,8 @@ integration.
 Instead of passing `bindings` as props, you bind resources in the
 Worker's Init phase using `yield*`:
 
-```diff lang="typescript"
+```typescript twoslash
+// @noErrors
 // src/worker.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
@@ -173,7 +176,8 @@ The Worker resource declaration moves from `alchemy.run.ts` into the
 Worker file itself (using `import.meta.path` as the `main`), and the
 Stack just `yield*`-s the imported Worker:
 
-```diff lang="typescript"
+```typescript twoslash
+// @noErrors
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
 +import * as Cloudflare from "alchemy/Cloudflare";

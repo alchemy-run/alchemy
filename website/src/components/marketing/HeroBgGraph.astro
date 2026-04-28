@@ -1,66 +1,78 @@
 ---
 /**
- * Animated 3D coordinate-system tunnel for the hero background.
+ * Animated mandala background for the hero — endless lotus zoom
+ * emanating from the Yantra's bindu (center dot).
  *
- * Renders a perspective-projected scene viewed from a fixed off-axis
- * angle (mild yaw + pitch, like a textbook diagram of a Cartesian
- * frame). Three axes (x, y, z) extend from the origin in both
- * directions. A stack of concentric wireframe cubes, log-spaced in
- * size, continuously expand outward at the same proportional rate —
- * an infinite zoom into the origin of the coordinate system. Each
- * cube fades in near the origin and fades out before the canvas edge,
- * so when one wraps from "far → small" the recycle is invisible.
+ * The vanishing point is measured at runtime from the element matched
+ * by `center` (default `.alc-hero__mark`), so the animation truly
+ * radiates from the brand mark's dot rather than the canvas geometric
+ * center. The same coordinates are pushed back to CSS as `--alc-bg-cx`
+ * / `--alc-bg-cy` so the mask feather follows.
+ *
+ * Multiple stylistic variants live in this file. The active one is
+ * picked by the `?variant=N` query string (default 1) so we can A/B
+ * compare on the live page without editing the MDX.
+ *
+ * Only variant 1 is exposed: concentric rings + radial vesica arcs
+ * blooming back toward the bindu. The trippy/subtle baseline.
+ *
+ * Variant 2 is kept in this file as a backup (Sri-Yantra-style lotus
+ * petals from the canonical TikZ construction) but is intentionally
+ * not toggleable via `?variant=` — flip the dispatch in `draw()`
+ * manually to revisit it.
  */
 
 interface Props {
-  /** Stroke color for axes + cubes. */
+  /** CSS selector for the element whose center the animation emanates from. */
+  center?: string;
+  /** Stroke color. */
   color?: string;
   /** Multiplier on stroke alpha (0..1). */
   intensity?: number;
-  /** How many cubes are visible at once. */
-  cubes?: number;
+  /** Number of concurrent layers. */
+  count?: number;
   /** Zoom rate. ~0.06 = one octave of growth per ~16s. */
   zoom?: number;
-  /** Camera yaw (radians). */
-  yaw?: number;
-  /** Camera pitch (radians). */
-  pitch?: number;
+  /** Default variant number when no `?variant=` query is present.
+   * Only `1` is exposed in the public API; variant 2 is kept in the
+   * file as a backup but isn't toggleable from a query string. */
+  variant?: 1;
 }
 
 const {
+  center = ".alc-hero__mark",
   color = "var(--alc-fg-1)",
   intensity = 1,
-  cubes = 8,
-  zoom = 0.06,
-  yaw = -0.55,
-  pitch = -0.35,
+  count = 10,
+  zoom = 0.02,
+  variant = 1,
 } = Astro.props;
 ---
 
 <canvas
   class="alc-hero__bg-graph"
+  data-variant={variant}
+  data-center={center}
   data-intensity={intensity}
-  data-cubes={cubes}
+  data-count={count}
   data-zoom={zoom}
-  data-yaw={yaw}
-  data-pitch={pitch}
   style={`color: ${color};`}
   aria-hidden="true"
 ></canvas>
 
 <script>
   /* eslint-disable */
-  type Vec3 = [number, number, number];
 
   const init = (canvas: HTMLCanvasElement) => {
     const ctx = canvas.getContext("2d", { alpha: true });
     if (!ctx) return;
 
+    const variant: number = Number(canvas.dataset.variant ?? 1);
+
+    const centerSel = canvas.dataset.center ?? ".alc-hero__mark";
     const intensity = Number(canvas.dataset.intensity ?? 1);
-    const nCubes = Math.max(1, Number(canvas.dataset.cubes ?? 8));
+    const nLayers = Math.max(1, Number(canvas.dataset.count ?? 10));
     const zoom = Number(canvas.dataset.zoom ?? 0.06);
-    const yaw = Number(canvas.dataset.yaw ?? -0.55);
-    const pitch = Number(canvas.dataset.pitch ?? -0.35);
     const reduced = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
@@ -68,6 +80,27 @@ const {
     let dpr = Math.min(window.devicePixelRatio || 1, 2);
     let width = 0;
     let height = 0;
+    /** Vanishing point in canvas-local CSS pixels. Updated by `resize`. */
+    let cx0 = 0;
+    let cy0 = 0;
+
+    const centerEl =
+      (centerSel && (document.querySelector(centerSel) as HTMLElement | null)) ||
+      null;
+
+    const measureCenter = () => {
+      if (centerEl) {
+        const heroRect = canvas.getBoundingClientRect();
+        const markRect = centerEl.getBoundingClientRect();
+        cx0 = markRect.left + markRect.width / 2 - heroRect.left;
+        cy0 = markRect.top + markRect.height / 2 - heroRect.top;
+        canvas.style.setProperty("--alc-bg-cx", `${cx0.toFixed(2)}px`);
+        canvas.style.setProperty("--alc-bg-cy", `${cy0.toFixed(2)}px`);
+      } else {
+        cx0 = width / 2;
+        cy0 = height / 2;
+      }
+    };
 
     const resize = () => {
       const rect = canvas.getBoundingClientRect();
@@ -77,10 +110,9 @@ const {
       canvas.width = Math.round(width * dpr);
       canvas.height = Math.round(height * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      measureCenter();
     };
 
-    /** Resolve the CSS-declared `color` (set inline by the component or
-     * overridden in stylesheet) into r,g,b. */
     const resolveRGB = (): [number, number, number] => {
       const rgb = getComputedStyle(canvas).color;
       const m = rgb.match(/\d+(\.\d+)?/g);
@@ -89,141 +121,235 @@ const {
     };
 
     let rgb = resolveRGB();
+    const rgba = (a: number) =>
+      `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${a.toFixed(3)})`;
 
-    // Precomputed rotation matrix entries (yaw around Y then pitch
-    // around X).
-    const cy = Math.cos(yaw);
-    const sy = Math.sin(yaw);
-    const cp = Math.cos(pitch);
-    const sp = Math.sin(pitch);
-
-    /** Project a 3D point to canvas (x, y), with `scale` applied to the
-     * model coordinates and a perspective divide based on the viewer's
-     * distance from origin. Returns [x, y, depth] — depth used for
-     * culling/alpha. */
-    const project = (
-      p: Vec3,
-      scale: number,
-      cx0: number,
-      cy0: number,
-      focal: number,
-      camDist: number,
-    ): [number, number, number] => {
-      const x = p[0] * scale;
-      const y = p[1] * scale;
-      const z = p[2] * scale;
-      // Yaw (around Y): X and Z mix.
-      const x1 = x * cy + z * sy;
-      const z1 = -x * sy + z * cy;
-      // Pitch (around X): Y and Z mix.
-      const y2 = y * cp - z1 * sp;
-      const z2 = y * sp + z1 * cp;
-      // Perspective: viewer at (0,0,camDist) looking toward -z.
-      const zv = camDist - z2;
-      if (zv <= 0.0001) return [cx0, cy0, zv];
-      const d = focal / zv;
-      return [cx0 + x1 * d, cy0 - y2 * d, zv];
+    /** Tiny bindu marker — drawn for every variant so the dot visually
+     * sources the emanation. */
+    const drawBindu = () => {
+      ctx.fillStyle = rgba(0.55 * intensity);
+      ctx.beginPath();
+      ctx.arc(cx0, cy0, 1.8, 0, Math.PI * 2);
+      ctx.fill();
     };
 
-    /** Cube edges as pairs of corner indices (0..7).
-     * Corner i has bits = (x, y, z) in that order. */
-    const cubeEdges: [number, number][] = [
-      // bottom face (z = -1)
-      [0b000, 0b001], [0b001, 0b011], [0b011, 0b010], [0b010, 0b000],
-      // top face (z = +1)
-      [0b100, 0b101], [0b101, 0b111], [0b111, 0b110], [0b110, 0b100],
-      // verticals
-      [0b000, 0b100], [0b001, 0b101], [0b011, 0b111], [0b010, 0b110],
-    ];
-    const corners: Vec3[] = [];
-    for (let i = 0; i < 8; i++) {
-      const x = (i & 1) ? 1 : -1;
-      const y = (i & 2) ? 1 : -1;
-      const z = (i & 4) ? 1 : -1;
-      corners.push([x, y, z]);
-    }
+    // ============================================================
+    // Variant 1 — concentric rings + radial vesica arcs (original)
+    // ============================================================
+
+    /** Petal count per ring index. Grows outward so outer rings bloom
+     * into more detail while inner rings stay restful. */
+    const petalsAtRing = (i: number) => {
+      const seq = [6, 8, 12, 16, 18, 20, 24, 28, 32, 36, 40];
+      return seq[Math.min(i, seq.length - 1)];
+    };
+
+    const drawV1 = (t: number) => {
+      const minR = Math.max(width, height) * 0.02;
+      const maxR = Math.max(width, height) * 0.95;
+      const logRange = Math.log(maxR / minR);
+      const clock = ((t * 0.001 * zoom) % 1 + 1) % 1;
+      const tSec = t * 0.001;
+
+      drawBindu();
+
+      ctx.lineWidth = 1;
+      const cap = 0.32 * intensity;
+
+      for (let i = 0; i < nLayers; i++) {
+        const phase = (i / nLayers + clock) % 1;
+        const r = minR * Math.exp(phase * logRange);
+        const fade = Math.pow(Math.sin(phase * Math.PI), 1.2);
+        const a = cap * fade;
+        if (a < 0.01) continue;
+
+        // Very slow uniform drift — adjacent rings counter-rotate,
+        // but at the same gentle rate (no per-ring parallax speed-up).
+        // ~1 revolution per ~3 minutes.
+        const spin = tSec * 0.035 * (i % 2 === 0 ? 1 : -1);
+
+        // Concentric ring.
+        ctx.strokeStyle = rgba(a * 0.85);
+        ctx.beginPath();
+        ctx.arc(cx0, cy0, r, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Radial petal arcs — small arcs centered on points around the
+        // ring, drawing a vesica-like bloom. Arc radius scales with
+        // the ring radius so they read as part of the same petal.
+        const k = petalsAtRing(i);
+        const petalR = r * 0.35;
+        const petalSweep = Math.PI * 0.55;
+        ctx.strokeStyle = rgba(a * 0.65);
+        for (let p = 0; p < k; p++) {
+          const ang = spin + (p * 2 * Math.PI) / k;
+          const px = cx0 + Math.cos(ang) * r;
+          const py = cy0 + Math.sin(ang) * r;
+          // Arc faces back toward the bindu so each petal forms a leaf
+          // pointing outward.
+          ctx.beginPath();
+          ctx.arc(
+            px,
+            py,
+            petalR,
+            ang + Math.PI - petalSweep / 2,
+            ang + Math.PI + petalSweep / 2,
+          );
+          ctx.stroke();
+        }
+      }
+    };
+
+    // ============================================================
+    // Variant 2 (backup, not query-string toggleable) — Sri Yantra
+    // lotus rim built from the canonical TikZ construction
+    // (bhaskatripathi/SriYantra). Two cubic Beziers per side + an
+    // arc base on the inner circle, so the petal silhouette has a
+    // smooth scalloped base and a single sharp tip on the outer
+    // circle. Petal-band aspect (r1/r0 = 1.2) is decoupled from the
+    // inter-layer log spacing.
+    // ============================================================
+
+    /** Stroke a single canonical lotus petal — the TikZ Sri Yantra
+     * construction.
+     *
+     * The petal occupies angular span `[theta - halfAngle, theta +
+     * halfAngle]` on the inner circle (radius `r0`). Its tip sits on
+     * the outer circle (radius `r1`) at the petal's center angle
+     * `theta`. Two cubic Beziers form the upward + downward sides;
+     * the base is a circular arc along `r0` between the two anchor
+     * points, so neighbors share an arc segment (not a single point)
+     * — that's what gives the silhouette a smooth, rounded base
+     * rather than the spiky triangle we had before.
+     *
+     * Control radii / angular offsets follow the proportions used in
+     * the bhaskatripathi/SriYantra LaTeX source (8-petal: anchors
+     * 45° apart, controls at ±5° / ±17.5° at radii 0.7·len /
+     * 0.5·len above the inner circle). Generalized here to any
+     * petal count. */
+    const strokeLotusPetal = (
+      theta: number,
+      r0: number,
+      r1: number,
+      halfAngle: number,
+    ) => {
+      const len = r1 - r0;
+
+      // Anchor points where the petal meets the inner circle.
+      const startAng = theta + halfAngle;
+      const endAng = theta - halfAngle;
+      const sx = cx0 + Math.cos(startAng) * r0;
+      const sy = cy0 + Math.sin(startAng) * r0;
+      const ex = cx0 + Math.cos(endAng) * r0;
+      const ey = cy0 + Math.sin(endAng) * r0;
+
+      // Tip on the outer circle.
+      const tx = cx0 + Math.cos(theta) * r1;
+      const ty = cy0 + Math.sin(theta) * r1;
+
+      // First cubic: from start anchor up to the tip. Two controls
+      // bow the curve up + sideways before pinching back to the tip.
+      const c1Ang = theta + halfAngle * (7 / 9);
+      const c1R = r0 + 0.7 * len;
+      const c1x = cx0 + Math.cos(c1Ang) * c1R;
+      const c1y = cy0 + Math.sin(c1Ang) * c1R;
+
+      const c2Ang = theta + halfAngle * (2 / 9);
+      const c2R = r0 + 0.5 * len;
+      const c2x = cx0 + Math.cos(c2Ang) * c2R;
+      const c2y = cy0 + Math.sin(c2Ang) * c2R;
+
+      // Second cubic (mirror): tip down to end anchor.
+      const c3Ang = theta - halfAngle * (2 / 9);
+      const c3R = r0 + 0.5 * len;
+      const c3x = cx0 + Math.cos(c3Ang) * c3R;
+      const c3y = cy0 + Math.sin(c3Ang) * c3R;
+
+      const c4Ang = theta - halfAngle * (7 / 9);
+      const c4R = r0 + 0.7 * len;
+      const c4x = cx0 + Math.cos(c4Ang) * c4R;
+      const c4y = cy0 + Math.sin(c4Ang) * c4R;
+
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.bezierCurveTo(c1x, c1y, c2x, c2y, tx, ty);
+      ctx.bezierCurveTo(c3x, c3y, c4x, c4y, ex, ey);
+      // Close the base with an arc along the inner circle from the
+      // end anchor back to the start anchor (anticlockwise=true in
+      // canvas coords traces the short arc from endAng up to
+      // startAng).
+      ctx.arc(cx0, cy0, r0, endAng, startAng, true);
+      ctx.closePath();
+      ctx.stroke();
+    };
+
+    const drawV2 = (t: number) => {
+      const minR = Math.max(width, height) * 0.015;
+      const maxR = Math.max(width, height) * 1.0;
+      const logRange = Math.log(maxR / minR);
+      // Petal-band aspect (`r1/r0`) is decoupled from inter-layer
+      // spacing — the LaTeX reference uses 1.2 for nice wide petals.
+      const petalRatio = 1.2;
+      const clock = ((t * 0.001 * zoom) % 1 + 1) % 1;
+      const tSec = t * 0.001;
+
+      drawBindu();
+
+      const cap = 0.5 * intensity;
+
+      for (let i = 0; i < nLayers; i++) {
+        const phase = (i / nLayers + clock) % 1;
+        const r0 = minR * Math.exp(phase * logRange);
+        const r1 = r0 * petalRatio;
+        // Asymmetric envelope: quick fade-in near the bindu, then a
+        // steep (1−phase)^2 falloff so outer layers dissolve faster
+        // than they grow.
+        const fadeIn = Math.min(1, phase / 0.12);
+        const fadeOut = Math.pow(1 - phase, 1.8);
+        const fade = fadeIn * fadeOut;
+        const a = cap * fade;
+        if (a < 0.01) continue;
+
+        const spinScale = 0.06 / Math.max(0.06, phase + 0.05);
+        const spin = tSec * spinScale * (i % 2 === 0 ? 1 : -1);
+
+        // Bounding circles for this lotus rim — faint so the petal
+        // silhouettes dominate (matches the block-print reference).
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = rgba(a * 0.4);
+        ctx.beginPath();
+        ctx.arc(cx0, cy0, r0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(cx0, cy0, r1, 0, Math.PI * 2);
+        ctx.stroke();
+
+        const k = 8;
+        const halfAngle = Math.PI / k;
+
+        ctx.lineWidth = 1.05;
+        ctx.strokeStyle = rgba(a * 0.9);
+        for (let p = 0; p < k; p++) {
+          const ang = spin + (p * 2 * Math.PI) / k;
+          strokeLotusPetal(ang, r0, r1, halfAngle);
+        }
+      }
+    };
+
+    // ============================================================
+    // Frame loop
+    // ============================================================
 
     const draw = (t: number) => {
       ctx.clearRect(0, 0, width, height);
-
-      const cx0 = width / 2;
-      const cy0 = height / 2;
-      // Focal length and camera distance scale with the canvas so the
-      // scene fills nicely on any aspect ratio. Camera distance in
-      // model units of `maxScale`; focal in pixels.
-      const focal = Math.min(width, height) * 0.9;
-      const camDist = 3.2;
-
-      // Log-radius range: smallest cube has scale = minScale, largest
-      // = maxScale. Log-linear spacing means uniform "octaves".
-      const minScale = 0.04;
-      const maxScale = 1.4;
-      const logRange = Math.log(maxScale / minScale);
-
-      // Continuous phase clock ∈ [0..1).
-      const clock = ((t * 0.001 * zoom) % 1 + 1) % 1;
-
-      // ---- coordinate axes ----
-      // Drawn first, very faint — so the cubes layer over them. Each
-      // axis goes from -maxScale to +maxScale.
-      const axisA = 0.28 * intensity;
-      ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${axisA.toFixed(3)})`;
-      ctx.lineWidth = 1;
-      const axes: Vec3[] = [
-        [1, 0, 0], [0, 1, 0], [0, 0, 1],
-      ];
-      for (const a of axes) {
-        const p1 = project(
-          [-a[0] * maxScale, -a[1] * maxScale, -a[2] * maxScale],
-          1, cx0, cy0, focal, camDist,
-        );
-        const p2 = project(
-          [a[0] * maxScale, a[1] * maxScale, a[2] * maxScale],
-          1, cx0, cy0, focal, camDist,
-        );
-        ctx.beginPath();
-        ctx.moveTo(p1[0], p1[1]);
-        ctx.lineTo(p2[0], p2[1]);
-        ctx.stroke();
-      }
-
-      // Tiny origin marker (project [0,0,0] just in case the canvas
-      // is shifted by some future transform).
-      const o = project([0, 0, 0], 1, cx0, cy0, focal, camDist);
-      ctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${(0.55 * intensity).toFixed(3)})`;
-      ctx.beginPath();
-      ctx.arc(o[0], o[1], 1.8, 0, Math.PI * 2);
-      ctx.fill();
-
-      // ---- concentric cubes ----
-      // Each cube's phase ∈ [0..1] maps log-linearly to its scale.
-      // Alpha = sin(phase·π) so cubes fade in near origin and fade out
-      // before reaching their max projected size.
-      ctx.lineWidth = 1.05;
-      const cubeMax = 0.55 * intensity;
-      // Cache projected corners per cube to avoid 12× redundant work
-      // on shared corners.
-      const projected: [number, number, number][] = new Array(8);
-      for (let i = 0; i < nCubes; i++) {
-        const phase = (i / nCubes + clock) % 1;
-        const scale = minScale * Math.exp(phase * logRange);
-        const fade = Math.pow(Math.sin(phase * Math.PI), 1.2);
-        const a = cubeMax * fade;
-        if (a < 0.01) continue;
-
-        for (let k = 0; k < 8; k++) {
-          projected[k] = project(corners[k], scale, cx0, cy0, focal, camDist);
-        }
-
-        ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${a.toFixed(3)})`;
-        ctx.beginPath();
-        for (const [a1, b1] of cubeEdges) {
-          const p = projected[a1];
-          const q = projected[b1];
-          ctx.moveTo(p[0], p[1]);
-          ctx.lineTo(q[0], q[1]);
-        }
-        ctx.stroke();
+      // Variant 2 (`drawV2`) is intentionally unreachable from the
+      // public API — uncomment the case below to revisit it.
+      void drawV2;
+      switch (variant) {
+        case 1:
+        default:
+          drawV1(t);
+          break;
       }
     };
 
@@ -252,6 +378,16 @@ const {
       });
     };
     window.addEventListener("resize", onResize, { passive: true });
+
+    if (centerEl && typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(() => {
+        measureCenter();
+        if (reduced) draw(0);
+      });
+      ro.observe(centerEl);
+      const hero = canvas.parentElement;
+      if (hero) ro.observe(hero);
+    }
 
     const io = new IntersectionObserver(
       (entries) => {

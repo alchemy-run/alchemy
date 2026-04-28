@@ -1,0 +1,152 @@
+---
+title: Resource Lifecycle
+description: How alchemy plans, applies, replaces, and destroys resources — and how to think about idempotency and recovery.
+sidebar:
+  order: 3
+---
+
+import Terminal from "../../../components/Terminal.astro";
+import DAG from "../../../components/DAG.astro";
+
+Every [Resource](/concepts/resource) goes through the same lifecycle:
+**plan → create → update → (replace) → delete**. This page walks
+through each step, what triggers it, and how alchemy recovers when
+things go wrong. For the CLI flags that drive these operations, see
+the [CLI reference](/guides/cli).
+
+## The lifecycle, end-to-end
+
+<DAG
+  nodes={[
+    { id: "Plan", tone: "accent" },
+    { id: "Create" },
+    { id: "Update" },
+    { id: "Replace", tone: "warn" },
+    { id: "Delete", tone: "danger" },
+    { id: "Noop" },
+  ]}
+  edges={[
+    { from: "Plan", to: "Create", label: "new" },
+    { from: "Plan", to: "Update", label: "changed" },
+    { from: "Plan", to: "Replace", label: "breaking" },
+    { from: "Plan", to: "Delete", label: "removed" },
+    { from: "Plan", to: "Noop", label: "unchanged" },
+    { from: "Replace", to: "Delete", dashed: true },
+  ]}
+/>
+
+Each transition is implemented by the resource's
+[Provider](/concepts/provider). The same engine drives `alchemy
+deploy`, `alchemy destroy`, and `alchemy dev`.
+
+## Plan
+
+When you run `alchemy deploy`, alchemy first **plans** the change.
+It compares the desired state (what your code declares) against the
+last persisted state and classifies each resource:
+
+- **Create** (`+`) — declared in code, not in state
+- **Update** (`~`) — declared and persisted, but properties differ
+- **Replace** (`±`) — change requires destroy-and-recreate
+- **Delete** (`-`) — persisted but no longer declared
+- **No-op** (`•`) — unchanged
+
+<Terminal content={`[u]Plan[/u]: [g]1 to create[/g], [y]1 to update[/y]
+
+[g]+[/g] [b]Queue[/b] [d](AWS.SQS.Queue)[/d]
+[y]~[/y] [b]Worker[/b] [d](Cloudflare.Worker)[/d]
+[d]•[/d] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d]`} />
+
+The classification comes from each provider's `diff` function. See
+[Provider › diff](/concepts/provider#diff) for how providers decide
+between in-place updates and replacements.
+
+Use `alchemy plan` (or `alchemy deploy --dry-run`) to see the plan
+without applying it.
+
+## Create
+
+When a resource doesn't exist in state, alchemy calls
+`provider.create`. Creates are **idempotent**: physical names are
+deterministic from `stack/stage/logical-id`, so retrying a failed
+create finds the existing resource instead of duplicating it.
+
+Resources with no dependencies create in parallel. Resources that
+depend on others wait for upstream `Output`s to resolve.
+
+## Update
+
+When properties change but the resource doesn't need to be replaced,
+alchemy calls `provider.update`. The provider receives both the old
+and new props and applies the diff in-place.
+
+A second pass — **convergence** — re-runs `update` for any resource
+whose inputs changed because an upstream output changed mid-deploy.
+
+## Replace
+
+Some property changes can't be applied in place — for example,
+changing a DynamoDB table's partition key. The provider's `diff`
+returns `{ action: "replace" }`, and alchemy:
+
+1. Creates a new resource with a new instance ID
+2. Updates downstream resources to reference the new resource
+3. Deletes the old resource
+
+Because new and old coexist briefly, dependents get a clean cutover
+without downtime.
+
+## Delete
+
+`provider.delete` is called when a resource disappears from your
+code, when a replacement supersedes it, or when you run
+`alchemy destroy`. Like create, delete must be **idempotent**:
+deleting an already-gone resource is a success, not an error.
+
+`alchemy destroy` is just a plan where every persisted resource is
+marked for deletion. Resources are removed in **reverse dependency
+order** — dependents go first.
+
+<Terminal content={`[u]Plan[/u]: [r]2 to delete[/r]
+
+[r]-[/r] [b]Worker[/b] [d](Cloudflare.Worker)[/d]
+[r]-[/r] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d]
+
+Proceed?
+◉ Yes ○ No
+[r]✗[/r] [b]Worker[/b] [d](Cloudflare.Worker)[/d] [r]deleted[/r]
+[r]✗[/r] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d] [r]deleted[/r]`} />
+
+## Idempotency and recovery
+
+State persistence can fail after the cloud operation succeeds — the
+network drops between "bucket created" and "state saved". Alchemy
+handles this by requiring `create` and `delete` to be safe to retry:
+
+- **Create**: deterministic physical names mean a retry finds the
+  existing resource instead of creating a duplicate.
+- **Delete**: a missing resource is treated as already deleted.
+- **Read**: providers can implement `read` so alchemy can recover
+  state from the live cloud when persistence fails partway.
+
+## Errors
+
+- **Retryable errors** (eventual consistency, dependency races) are
+  retried automatically with backoff.
+- **Non-retryable errors** (validation, authorization) fail
+  immediately and surface in the plan output.
+- **Partial failures** are safe to re-run thanks to idempotency.
+
+## Driving the lifecycle from the CLI
+
+The same engine powers all of these commands:
+
+| Command            | What it does                                  |
+| ------------------ | --------------------------------------------- |
+| `alchemy plan`     | Run plan, print diff, exit                    |
+| `alchemy deploy`   | Plan, prompt for approval, apply              |
+| `alchemy destroy`  | Plan with everything marked deleted, apply    |
+| `alchemy dev`      | Plan + apply continuously on file changes     |
+
+See the [CLI reference](/guides/cli) for the full set of flags
+(`--yes`, `--force`, `--dry-run`, `--stage`, `--profile`, ...).

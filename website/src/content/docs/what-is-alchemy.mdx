@@ -106,9 +106,9 @@ databases, queues, workers, IAM roles, DNS records, and more. Each
 resource is declared as an Effect and `yield*`-ed inside a Stack:
 
 ```typescript
-const bucket = yield * Cloudflare.R2Bucket("Bucket");
-const db = yield * Cloudflare.D1Database("DB");
-const queue = yield * AWS.SQS.Queue("Jobs");
+const bucket = yield* Cloudflare.R2Bucket("Bucket");
+const db = yield* Cloudflare.D1Database("DB");
+const queue = yield* AWS.SQS.Queue("Jobs");
 ```
 
 Resources are just descriptions until they're yielded. You can
@@ -122,7 +122,7 @@ export const Bucket = Cloudflare.R2Bucket("Bucket");
 ```typescript
 // src/worker.ts
 import { Bucket } from "./bucket.ts";
-const bucket = yield * Cloudflare.R2Bucket.bind(Bucket);
+const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
 ```
 
 ## Stacks and stages

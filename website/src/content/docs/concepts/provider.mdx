@@ -1,53 +1,37 @@
 ---
 title: Provider
-description: Providers implement the lifecycle operations for resources — create, update, delete, and more.
+description: Providers implement the lifecycle operations for a resource type — create, update, delete, diff, read, and more.
 sidebar:
-  order: 2
+  order: 4
 ---
 
 A **Provider** implements the lifecycle operations for a resource
-type. When you `yield*` a resource inside a Stack, Alchemy looks up
+type. When you `yield*` a resource inside a Stack, alchemy looks up
 the provider for that resource's type and calls the appropriate
-lifecycle method.
-
-## Lifecycle operations
-
-Each provider can implement these operations:
-
-| Operation     | Description                                                          |
-| ------------- | -------------------------------------------------------------------- |
-| **create**    | Create a new resource. Must be idempotent.                           |
-| **update**    | Update an existing resource with new properties.                     |
-| **delete**    | Delete a resource. Must be idempotent.                               |
-| **diff**      | Compare old and new properties to decide: update, replace, or no-op. |
-| **read**      | Read the current state of a resource from the cloud provider.        |
-| **precreate** | Create a stub resource to break circular dependencies.               |
+lifecycle method. This is what gives meaning to a
+[Resource](/concepts/resource) declaration — the engine plans, the
+provider acts.
 
 ## Provider Layers
 
-Providers are registered as Effect Layers. When you call
-`Cloudflare.providers()` or `AWS.providers()`, you get a Layer
-that includes all the providers for that cloud platform:
+Providers are registered as Effect Layers. `Cloudflare.providers()`
+and `AWS.providers()` return Layers bundling every built-in provider
+for that cloud:
 
 ```typescript
 Alchemy.Stack(
   "MyApp",
   { providers: Cloudflare.providers() },
   Effect.gen(function* () {
-    // Cloudflare.R2Bucket's provider is now available
     yield* Cloudflare.R2Bucket("Bucket");
   }),
 );
 ```
 
-The type system enforces this — if you use a Cloudflare resource
-without providing `Cloudflare.providers()`, TypeScript reports a
-type error.
+The type system enforces this — using a Cloudflare resource without
+`Cloudflare.providers()` raises a compile-time error.
 
-## Combining providers
-
-If your stack uses resources from multiple cloud providers, merge
-the provider layers:
+To mix clouds, merge the layers:
 
 ```typescript
 import * as Layer from "effect/Layer";
@@ -58,58 +42,193 @@ Alchemy.Stack(
     providers: Layer.mergeAll(Cloudflare.providers(), AWS.providers()),
   },
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2Bucket("Bucket");
-    const queue = yield* AWS.SQS.Queue("Jobs");
+    yield* Cloudflare.R2Bucket("Bucket");
+    yield* AWS.SQS.Queue("Jobs");
   }),
 );
 ```
 
-## Diff and stable properties
+## Lifecycle operations
 
-The `diff` function determines what happens when a resource's
-properties change:
+A provider is an object implementing some subset of these operations.
+`create`, `update`, and `delete` are required; the rest are optional
+hooks alchemy uses for richer behavior.
 
-- **Return `void`** — apply the default update logic
-- **Return `{ replace: true }`** — delete and recreate the resource
-- **Return `{ stables: [...] }`** — list attributes that won't
-  change during the update
+### `create`
 
-Providers also declare `stables` at the top level for attributes
-that never change across any update (e.g. ARNs, resource IDs).
-
-## Idempotency
-
-Both `create` and `delete` must be idempotent. This is because
-state persistence can fail after the cloud operation succeeds:
-
-- **Create**: use deterministic physical names so re-running create
-  finds the existing resource instead of creating a duplicate
-- **Delete**: if the resource doesn't exist, don't treat it as an
-  error
-
-## Implementing your own provider
-
-To add support for a new cloud or third-party API, declare a
-[Resource type](/concepts/resource) and implement its provider as an
-`Effect.Layer`:
+Required. Called when a resource is declared but not yet persisted.
+Returns the **output attributes** that downstream resources can
+reference.
 
 ```typescript
-// 2. Implement the provider as an Effect Layer.
-export const StripeProductLive = Layer.effect(
-  StripeProduct.Provider,
-  Effect.gen(function* () {
+create: Effect.fnUntraced(function* ({ id, instanceId, news, bindings }) {
+  const stripe = yield* StripeClient;
+  const product = yield* Effect.promise(() =>
+    stripe.products.create({ name: news.name }),
+  );
+  return { productId: product.id };
+}),
+```
+
+`create` must be **idempotent** — alchemy may retry it after a state
+persistence failure. Use deterministic physical names so a retry
+finds the existing resource.
+
+### `update`
+
+Required. Called when a resource exists and at least one input
+property changed (and the change isn't a replacement). Receives both
+old and new props plus the previous output:
+
+```typescript
+update: Effect.fnUntraced(function* ({ news, olds, output }) {
+  const stripe = yield* StripeClient;
+  yield* Effect.promise(() =>
+    stripe.products.update(output.productId, { name: news.name }),
+  );
+  return output;
+}),
+```
+
+### `delete`
+
+Required. Called when a resource is removed from code, replaced, or
+when running `alchemy destroy`. Like `create`, must be **idempotent**
+— treat "already deleted" as success.
+
+```typescript
+delete: ({ output }) =>
+  Effect.promise(() => stripe.products.del(output.productId));
+```
+
+### `diff`
+
+Optional. Called during planning to decide what kind of change is
+needed when properties differ. Returns a tagged `Diff` describing
+the action:
+
+```typescript
+diff: Effect.fnUntraced(function* ({ news, olds }) {
+  if (news.region !== olds.region) {
+    return { action: "replace" } as const;
+  }
+  if (news.name !== olds.name) {
+    return { action: "update" } as const;
+  }
+  return { action: "noop" } as const;
+}),
+```
+
+The shape is one of:
+
+- **`{ action: "noop" }`** — properties differ trivially; don't
+  call `update`.
+- **`{ action: "update", stables?: [...] }`** — apply an in-place
+  update. `stables` lists props that are guaranteed not to change
+  during this update.
+- **`{ action: "replace", deleteFirst?: boolean }`** — destroy and
+  recreate (see [Resource Lifecycle › Replace](/concepts/resource-lifecycle#replace)).
+  Set `deleteFirst: true` for resources that can't coexist with
+  their replacement (e.g. unique-name constraints).
+- **`void` / `undefined`** — fall back to the default behavior
+  (treat the change as an `update`).
+
+A provider can also declare top-level `stables` for attributes that
+are immutable across all updates (e.g. ARNs, resource IDs).
+
+For comparing nested objects, use the `deepEqual` and
+`anyPropsAreDifferent` helpers from `alchemy/Diff`. If any input
+might still be unresolved when `diff` runs (an unresolved `Output`),
+guard with `isResolved` first and return `undefined` to let the
+default path handle it.
+
+### `read`
+
+Optional. Called during recovery — if state was lost between create
+and persist, alchemy uses `read` to look up the live resource and
+sync state.
+
+```typescript
+read: ({ id, output }) =>
+  Effect.promise(() => stripe.products.retrieve(output.productId));
+```
+
+Returning `undefined` tells alchemy the resource doesn't actually
+exist and should be re-created.
+
+### `precreate`
+
+Optional. Reserves a physical name (or stub resource) before
+`create` runs. This is what enables [circular
+bindings](/guides/circular-bindings) — Worker A can know Worker B's
+URL before either is fully created.
+
+### `tail` / `logs`
+
+Optional. Power `alchemy tail` (live log streaming) and
+`alchemy logs` (historical fetch). Each returns a `Stream` or
+`Effect` of `LogLine` values respectively.
+
+## Plan and apply
+
+Alchemy combines every provider's lifecycle operations into a single
+**plan**, then **applies** it.
+
+- **Plan** — for each declared resource, alchemy compares the
+  desired props against persisted state and uses `diff` to decide
+  whether it's a `create`, `update`, `replace`, or `noop`. Anything
+  in state but no longer declared is marked for `delete`.
+- **Apply** — alchemy walks the plan in dependency order and calls
+  the matching lifecycle operation on each provider, surfacing the
+  results as `Output`s for downstream resources.
+
+See [Resource Lifecycle](/concepts/resource-lifecycle) for how a
+resource moves through these phases over time.
+
+## Authoring a custom provider
+
+To add support for a new cloud or third-party API, declare a
+[Resource type](/concepts/resource) and implement its provider as a
+`Layer`:
+
+```typescript
+// 1. Declare the resource type.
+export type StripeProduct = Resource<
+  "Stripe.Product",
+  { name: string; price: number },
+  { productId: string; priceId: string }
+>;
+export const StripeProduct = Resource<StripeProduct>("Stripe.Product");
+
+// 2. Implement the provider.
+export const StripeProductLive = Provider.effect(
+  StripeProduct,
+  Effect.fnUntraced(function* () {
     const stripe = yield* StripeClient;
-    return {
-      create: ({ props }) => stripe.products.create(props),
-      update: ({ props, output }) => /* ... */,
-      delete: ({ output }) => stripe.products.del(output.productId),
-    };
+    return StripeProduct.Provider.of({
+      create: Effect.fnUntraced(function* ({ news }) {
+        const p = yield* Effect.promise(() => stripe.products.create(news));
+        return { productId: p.id, priceId: p.default_price };
+      }),
+      update: Effect.fnUntraced(function* ({ news, output }) {
+        yield* Effect.promise(() =>
+          stripe.products.update(output.productId, news),
+        );
+        return output;
+      }),
+      delete: Effect.fnUntraced(function* ({ output }) {
+        yield* Effect.promise(() => stripe.products.del(output.productId));
+      }),
+    });
   }),
 );
 ```
 
 - **Effect Layer = provider** — Provide a Layer that implements
   `create`, `update`, `delete`. No registry, no schema, no codegen.
-- **Compose with built-in providers** — Merge your provider Layer with
-  `Cloudflare.providers()` or `AWS.providers()`. One stack, mixed
-  clouds.
+- **Compose with built-in providers** — Merge your provider Layer
+  with `Cloudflare.providers()` or `AWS.providers()`. One stack,
+  mixed clouds.
+
+For the lifecycle semantics that govern when each operation fires,
+see [Resource Lifecycle](/concepts/resource-lifecycle).
