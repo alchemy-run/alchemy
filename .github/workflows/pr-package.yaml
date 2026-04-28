@@ -136,7 +136,7 @@ jobs:
         run: |
           set -euo pipefail
           MARKER="<!-- pr-package-comment -->"
-          BODY=$(printf '%s\n\nInstall the alchemy package built from this commit:\n\n```sh\nbun add https://pkg.alchemy.run/alchemy/%s\n```\n' "$MARKER" "$SHORT_SHA")
+          BODY=$(printf '%s\n\nInstall the packages built from this commit:\n\n```sh\nbun add https://pkg.alchemy.run/alchemy/%s\nbun add https://pkg.alchemy.run/@alchemy.run/better-auth/%s\n```\n' "$MARKER" "$SHORT_SHA" "$SHORT_SHA")
 
           existing=$(gh api --paginate \
             "repos/${REPO}/issues/${PR_NUMBER}/comments" \
