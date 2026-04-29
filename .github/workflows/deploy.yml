@@ -50,7 +50,14 @@ jobs:
         working-directory: website
         run: bun alchemy deploy --stage ${{ env.STAGE }}
         env:
-          CLOUDFLARE_API_TOKEN: ${{ env.STAGE == 'prod' && secrets.PROD_CLOUDFLARE_API_TOKEN || secrets.TEST_CLOUDFLARE_API_TOKEN }}
+          # Alchemy's Cloudflare auth provider accepts either a scoped
+          # API token (CLOUDFLARE_API_TOKEN) or the legacy global API
+          # key paired with email (CLOUDFLARE_API_KEY +
+          # CLOUDFLARE_EMAIL). We use the latter here so CI matches
+          # the credentials in Doppler / .env, where only the admin
+          # global key is provisioned.
+          CLOUDFLARE_API_KEY: ${{ secrets.ADMIN_CLOUDFLARE_API_KEY }}
+          CLOUDFLARE_EMAIL: ${{ secrets.ADMIN_CLOUDFLARE_EMAIL }}
           CLOUDFLARE_ACCOUNT_ID: ${{ env.STAGE == 'prod' && secrets.PROD_CLOUDFLARE_ACCOUNT_ID || secrets.TEST_CLOUDFLARE_ACCOUNT_ID }}
           PULL_REQUEST: ${{ github.event.number }}
           GITHUB_SHA: ${{ github.sha }}
@@ -84,6 +91,7 @@ jobs:
         working-directory: website
         run: bun alchemy destroy --stage ${{ env.STAGE }}
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.TEST_CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_KEY: ${{ secrets.ADMIN_CLOUDFLARE_API_KEY }}
+          CLOUDFLARE_EMAIL: ${{ secrets.ADMIN_CLOUDFLARE_EMAIL }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.TEST_CLOUDFLARE_ACCOUNT_ID }}
           PULL_REQUEST: ${{ github.event.number }}
