@@ -30,7 +30,7 @@ export const Worker = Cloudflare.Worker("Worker", {
   bindings: {
     DB,
     Bucket,
-    // Queue,
+    Queue,
     Counter,
   },
 });
@@ -47,15 +47,15 @@ export default Alchemy.Stack(
 
     // Register the same worker script as a consumer of Queue. The worker's
     // `queue(batch)` handler (see src/worker.ts) receives each message batch.
-    // yield* Cloudflare.QueueConsumer("QueueConsumer", {
-    //   queueId: queue.queueId,
-    //   scriptName: worker.workerName,
-    //   settings: {
-    //     batchSize: 10,
-    //     maxRetries: 3,
-    //     maxWaitTimeMs: 5000,
-    //   },
-    // });
+    yield* Cloudflare.QueueConsumer("QueueConsumer", {
+      queueId: queue.queueId,
+      scriptName: worker.workerName,
+      settings: {
+        batchSize: 10,
+        maxRetries: 3,
+        maxWaitTimeMs: 5000,
+      },
+    });
 
     return worker.url;
   }),
