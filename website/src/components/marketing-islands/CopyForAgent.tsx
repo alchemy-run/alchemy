@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 const PROMPT =
-  "Read https://alchemy.run/getting-started and help me scaffold an Alchemy app.";
+  "Read https://v2.alchemy.run/getting-started and help me scaffold an Alchemy app.";
 
 export default function CopyForAgent() {
   const [copied, setCopied] = useState(false);
