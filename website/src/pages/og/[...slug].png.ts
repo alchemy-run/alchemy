@@ -43,12 +43,17 @@ interface Entry {
 // the source content renders verbatim with no glyph workarounds.
 // ────────────────────────────────────────────────────────────────────────────
 
-const fontsDir = fileURLToPath(
+const buildFontsDir = fileURLToPath(
   new URL("../../../assets/fonts/", import.meta.url),
 );
+const publicFontsDir = fileURLToPath(
+  new URL("../../../public/fonts/", import.meta.url),
+);
 
-async function readFont(filename: string): Promise<Buffer> {
-  return fs.readFile(path.join(fontsDir, filename));
+async function readFont(filename: string, publicScope = false): Promise<Buffer> {
+  return fs.readFile(
+    path.join(publicScope ? publicFontsDir : buildFontsDir, filename),
+  );
 }
 
 const fontsPromise = (async () => {
@@ -59,6 +64,9 @@ const fontsPromise = (async () => {
     displayLightIt,
     displayReg,
     displayRegIt,
+    displaySemi,
+    displaySemiIt,
+    tinos,
     mono,
     caveat,
   ] = await Promise.all([
@@ -68,6 +76,9 @@ const fontsPromise = (async () => {
     readFont("SourceSerif4Display-LightIt.ttf"),
     readFont("SourceSerif4Display-Regular.ttf"),
     readFont("SourceSerif4Display-It.ttf"),
+    readFont("SourceSerif4Display-Semibold.ttf"),
+    readFont("SourceSerif4Display-SemiboldIt.ttf"),
+    readFont("Tinos-Regular.ttf", true),
     readFont("JetBrainsMono-Regular.ttf"),
     readFont("Caveat-Regular.ttf"),
   ]);
@@ -107,6 +118,28 @@ const fontsPromise = (async () => {
       style: "italic",
     },
 
+    // Semibold (600) approximates the website hero's runtime "Medium"
+    // (500) — Adobe doesn't ship a static Medium Display cut, so we
+    // snap up. Used by the title.
+    {
+      name: "Source Serif 4 Display",
+      data: displaySemi,
+      weight: 600,
+      style: "normal",
+    },
+    {
+      name: "Source Serif 4 Display",
+      data: displaySemiIt,
+      weight: 600,
+      style: "italic",
+    },
+
+    // Tinos — TNR-equivalent. Used only for the marketing arrow glyph
+    // so the OG matches the website's font stack (which lands on Times
+    // New Roman for U+2192). See OgCard.tsx — this family is opted into
+    // explicitly via fontFamily on individual title spans.
+    { name: "Tinos", data: tinos, weight: 400, style: "normal" },
+
     { name: "JetBrains Mono", data: mono, weight: 400, style: "normal" },
     { name: "Caveat", data: caveat, weight: 400, style: "normal" },
   ] as const;
@@ -129,7 +162,12 @@ const MARKETING_PAGES: Record<string, Omit<Entry, "slug" | "kind">> = {
   index: {
     title: [
       { text: "Zero", italic: true, accent: true },
-      { text: "\u00A0\u2192\u00A0production." },
+      // Arrow rendered from Tinos (TNR-equivalent) so the OG mirrors
+      // the website, where this glyph falls through the font stack to
+      // Times New Roman. Non-breaking spaces flank it so the line
+      // doesn't break around the arrow.
+      { text: "\u00A0\u2192\u00A0", font: "tinos" },
+      { text: "production." },
     ],
     description:
       "TypeScript IaC on Effect. Stand up your whole cloud in one program, type-check the IAM, hot-reload it locally, run tests against the real cloud, preview every PR.",

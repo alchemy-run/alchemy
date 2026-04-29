@@ -40,21 +40,51 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Mint a token for the alchemy-version-bot GitHub App so the PR
+      # preview comment (created via GitHub.Comment in alchemy.run.ts)
+      # posts under the bot's identity instead of `github-actions[bot]`.
+      # Same App as release.yml — its installation scopes already cover
+      # PR comments.
+      - name: Generate bot token
+        id: bot-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.ALCHEMY_VERSION_BOT_ID }}
+          private-key: ${{ secrets.ALCHEMY_VERSION_BOT_PRIVATE_KEY }}
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
 
       - name: Install dependencies
         run: bun install
 
+      # Build the website ahead of `alchemy deploy`. The
+      # Cloudflare.StaticSite resource declares the same `bun run build`
+      # in its config and runs it as part of the create lifecycle, but
+      # on update plans alchemy reads `dist/` during plan.diff before
+      # the embedded Build resource gets a chance to (re)run, causing
+      # a NotFound on a fresh CI checkout. Building here makes the
+      # workflow correct under both create and update plans.
+      - name: Build website
+        working-directory: website
+        run: bun run build
+
       - name: Deploy
         working-directory: website
-        run: bun alchemy deploy --stage ${{ env.STAGE }}
+        run: bun alchemy deploy --stage ${{ env.STAGE }} --yes
         env:
-          CLOUDFLARE_API_TOKEN: ${{ env.STAGE == 'prod' && secrets.PROD_CLOUDFLARE_API_TOKEN || secrets.TEST_CLOUDFLARE_API_TOKEN }}
+          # Alchemy's Cloudflare auth provider accepts either a scoped
+          # API token (CLOUDFLARE_API_TOKEN) or the legacy global API
+          # key paired with email (CLOUDFLARE_API_KEY +
+          # CLOUDFLARE_EMAIL). We use the latter here so CI matches
+          # the credentials in Doppler / .env, where only the admin
+          # global key is provisioned.
+          CLOUDFLARE_API_KEY: ${{ secrets.ADMIN_CLOUDFLARE_API_KEY }}
+          CLOUDFLARE_EMAIL: ${{ secrets.ADMIN_CLOUDFLARE_EMAIL }}
           CLOUDFLARE_ACCOUNT_ID: ${{ env.STAGE == 'prod' && secrets.PROD_CLOUDFLARE_ACCOUNT_ID || secrets.TEST_CLOUDFLARE_ACCOUNT_ID }}
           PULL_REQUEST: ${{ github.event.number }}
           GITHUB_SHA: ${{ github.sha }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
 
   cleanup:
     runs-on: ubuntu-latest
@@ -82,8 +112,9 @@ jobs:
 
       - name: Destroy Preview Environment
         working-directory: website
-        run: bun alchemy destroy --stage ${{ env.STAGE }}
+        run: bun alchemy destroy --stage ${{ env.STAGE }} --yes
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.TEST_CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_KEY: ${{ secrets.ADMIN_CLOUDFLARE_API_KEY }}
+          CLOUDFLARE_EMAIL: ${{ secrets.ADMIN_CLOUDFLARE_EMAIL }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.TEST_CLOUDFLARE_ACCOUNT_ID }}
           PULL_REQUEST: ${{ github.event.number }}

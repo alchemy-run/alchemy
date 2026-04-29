@@ -6,6 +6,22 @@
 
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&family=JetBrains+Mono:wght@400;500;600&family=Caveat:wght@500;600;700&display=swap");
 
+/* Tinos (Apache 2.0, Steve Matteson / Ascender / Google) — metrically
+   compatible with Times New Roman. Self-hosted because we use it as a
+   pinned target for specific glyphs (currently just the marketing
+   arrow `→` U+2192). The OG image renderer reads the same TTF from
+   `assets/fonts/Tinos-Regular.ttf` so the website and the OG card
+   render that glyph from the same face. unicode-range scopes the
+   download so it only fires when a Tinos glyph actually appears. */
+@font-face {
+  font-family: "Tinos";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/Tinos-Regular.ttf") format("truetype");
+  unicode-range: U+2192; /* → only — keep payload focused */
+}
+
 :root {
   /* ---------- Brand: muted forest greens ---------- */
   --alc-accent: #5c7a3e; /* moss — primary brand */
@@ -76,7 +92,8 @@
   --alc-font-sans:
     "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --alc-font-serif:
-    "Source Serif 4", "Source Serif Pro", Georgia, "Times New Roman", serif;
+    "Source Serif 4", "Tinos", "Source Serif Pro", Georgia, "Times New Roman",
+    serif;
   --alc-font-mono:
     "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   --alc-font-hand:
