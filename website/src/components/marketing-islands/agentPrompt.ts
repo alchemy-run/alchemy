@@ -1,6 +1,6 @@
-export const AGENT_PROMPT = `Help me build an Alchemy app on Cloudflare. Start by reading https://v2.alchemy.run/getting-started and walking me through scaffolding a project, logging in to Cloudflare, and deploying a hello-world Worker. Confirm I'm green.
+export const AGENT_PROMPT = `Help me build an Alchemy app on Cloudflare. Start by reading https://v2.alchemy.run/getting-started and follow it exactly: scaffold a fresh project, install the dependencies, create the \`alchemy.run.ts\` Stack with a single Cloudflare R2 Bucket (no Worker yet), and run \`alchemy deploy\` so I sign in to Cloudflare and provision the Bucket. Confirm the Bucket is live before moving on.
 
-Then STOP and ASK ME what I want to build. From there, consult only the docs you need for what I asked for — don't march me through every tutorial.
+Then STOP and ASK ME what I want to build. From there, consult only the docs you need for what I asked for — don't march me through every tutorial. A Worker only gets added later if what I want to build needs one (the tutorial covers that in part-2).
 
 Reference material (read on demand, skip the rest):
 

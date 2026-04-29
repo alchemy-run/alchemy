@@ -276,6 +276,89 @@ mapping won't ack them until the stream completes — which is the
 same delivery semantics SQS already gives you, just with
 controllable concurrency on top.
 
+## Bonus: forward a stream to SQS with `QueueSink`
+
+`SendMessage.bind(queue)` is perfect for one-off sends from a
+request handler, but if you've got a `Stream` of payloads —
+DynamoDB change records, S3 notifications, anything — you don't
+want to call `sendMessage` per item. **`SQS.QueueSink`** is the
+sink-shaped counterpart: it consumes a `Stream<string>`, batches
+items into chunks of up to 10, and ships each chunk through
+`sqs:SendMessageBatch` for you.
+
+Skip the per-write `sendMessage` in `PUT /items/:id` and forward
+the existing DynamoDB stream straight into the queue instead:
+
+```diff lang="typescript"
+// src/api.ts
+import * as Stream from "effect/Stream";
+import { Jobs } from "./queue.ts";
+// ...
+
+const queue = yield* Jobs;
+const putItem = yield* DynamoDB.PutItem.bind(table);
+-const sendMessage = yield* SQS.SendMessage.bind(queue);
++const sink = yield* SQS.QueueSink.bind(queue);
+
+yield* DynamoDB.stream(table, {
+  streamViewType: "NEW_AND_OLD_IMAGES",
+}).process((stream) =>
+  stream.pipe(
++    Stream.map((record) =>
++      JSON.stringify({
++        eventName: record.eventName,
++        keys: record.dynamodb.Keys,
++        newImage: record.dynamodb.NewImage,
++      }),
++    ),
++    Stream.run(sink),
+  ),
+);
+```
+
+`QueueSink.bind(queue)` grants `sqs:SendMessage` and
+`sqs:SendMessageBatch` on the queue ARN, then returns a
+`Sink<void, string, readonly string[]>` you compose with
+`Stream.run`. `QueueSinkLive` is itself implemented on top of
+`SendMessageBatch`, so split the merged layer into two tiers
+with `Layer.provideMerge` — sink + event sources on top,
+the underlying request layers + policy on the bottom:
+
+```diff lang="typescript"
+}).pipe(
+  Effect.provide(
+-    Layer.mergeAll(
+-      AWS.Lambda.BucketEventSource,
+-      AWS.Lambda.TableEventSource,
+-      DynamoDB.GetItemLive,
+-      DynamoDB.PutItemLive,
+-      S3.PutObjectLive,
+-      S3.GetObjectLive,
+-      SQS.SendMessageLive,
+-    ),
++    Layer.provideMerge(
++      Layer.mergeAll(
++        AWS.Lambda.BucketEventSource,
++        AWS.Lambda.TableEventSource,
++        SQS.QueueSinkLive,
++      ),
++      Layer.mergeAll(
++        DynamoDB.GetItemLive,
++        DynamoDB.PutItemLive,
++        S3.PutObjectLive,
++        S3.GetObjectLive,
++        SQS.SendMessageBatchLive,
++        SQS.SendMessageBatchPolicyLive,
++      ),
++    ),
+  ),
+),
+```
+
+The consumer doesn't change — `JobsWorker` still subscribes via
+`SQS.messages(queue)` and now sees one record per DynamoDB
+change, batched ten-at-a-time on the producer side.
+
 Next you'll [stream higher-volume records through Kinesis](/tutorial/aws/kinesis) —
 ordered, sharded, and with the same `Stream` consumer surface
 you've used everywhere else in this section.
