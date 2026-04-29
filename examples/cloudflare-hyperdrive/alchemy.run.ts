@@ -3,6 +3,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 
 import Api from "./src/Api.ts";
+import { MyDb } from "./src/db.ts";
 
 export default Alchemy.Stack(
   "CloudflareHyperdriveExample",
@@ -12,9 +13,11 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const api = yield* Api;
+    const db = yield* MyDb
 
     return {
       url: api.url.as<string>(),
+      hyperdriveId: db.hyperdriveId
     };
   }),
 );
