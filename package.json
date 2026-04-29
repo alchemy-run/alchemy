@@ -18,7 +18,7 @@
     "clean:shallow": "rm -rf alchemy/*.tgz && bun tsc -b --clean",
     "clean": "git clean -fqdx -e .env",
     "dev": "tsc -b -w & bun run --filter alchemy dev",
-    "deploy:website": "cd ./website && bun alchemy deploy",
+    "deploy:website": "cd ./website && bun run build && bun alchemy deploy",
     "deploy:website:prod": "bun deploy:website --stage prod --profile prod",
     "deploy:github": "doppler run -c dev --project alchemy-v2 -- bun alchemy deploy ./stacks/github.ts --profile admin",
     "logs:otel": "doppler run -c dev --project alchemy-v2 -- bun alchemy logs ./stacks/otel.ts",
