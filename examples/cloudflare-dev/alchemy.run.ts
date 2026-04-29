@@ -1,7 +1,8 @@
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Alchemy from "alchemy/Stack";
 import * as Effect from "effect/Effect";
-import type { Counter as CounterClass } from "./src/HelloWorld.ts";
+import type { Counter as CounterClass } from "./src/AsyncWorker.ts";
+import EffectWorker from "./src/EffectWorker.ts";
 
 export const Counter = Cloudflare.DurableObjectNamespace<CounterClass>(
   "Counter",
@@ -10,10 +11,10 @@ export const Counter = Cloudflare.DurableObjectNamespace<CounterClass>(
   },
 );
 
-export type HelloWorldEnv = Cloudflare.InferEnv<typeof HelloWorld>;
+export type AsyncWorkerEnv = Cloudflare.InferEnv<typeof AsyncWorker>;
 
-export const HelloWorld = Cloudflare.Worker("HelloWorld", {
-  main: "./src/HelloWorld.ts",
+export const AsyncWorker = Cloudflare.Worker("AsyncWorker", {
+  main: "./src/AsyncWorker.ts",
   bindings: {
     Counter,
   },
@@ -26,20 +27,12 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-    const worker = yield* HelloWorld;
+    const asyncWorker = yield* AsyncWorker;
+    const effectWorker = yield* EffectWorker;
 
-    // Register the same worker script as a consumer of Queue. The worker's
-    // `queue(batch)` handler (see src/worker.ts) receives each message batch.
-    // yield* Cloudflare.QueueConsumer("QueueConsumer", {
-    //   queueId: queue.queueId,
-    //   scriptName: worker.workerName,
-    //   settings: {
-    //     batchSize: 10,
-    //     maxRetries: 3,
-    //     maxWaitTimeMs: 5000,
-    //   },
-    // });
-
-    return worker.url;
+    return {
+      asyncWorker: asyncWorker.url,
+      effectWorker: effectWorker.url,
+    };
   }),
 );

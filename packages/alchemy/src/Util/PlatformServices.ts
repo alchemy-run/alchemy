@@ -5,6 +5,8 @@ import type { Path } from "effect/Path";
 import type { Teardown } from "effect/Runtime";
 import type { Stdio } from "effect/Stdio";
 import type { Terminal } from "effect/Terminal";
+import type { HttpServer } from "effect/unstable/http/HttpServer";
+import type { ServeError } from "effect/unstable/http/HttpServerError";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import type { WebSocketConstructor } from "effect/unstable/socket/Socket";
 
@@ -60,3 +62,20 @@ export const runMain = <E, A>(
     );
   }
 };
+
+export const httpServer = (
+  port: number = 0,
+  host: string = "localhost",
+): Layer.Layer<HttpServer, ServeError> =>
+  Effect.promise(async () => {
+    if (isBun) {
+      const BunHttpServer = await import("@effect/platform-bun/BunHttpServer");
+      return BunHttpServer.layer({ hostname: host, port });
+    } else {
+      const [NodeHttpServer, Http] = await Promise.all([
+        import("@effect/platform-node/NodeHttpServer"),
+        import("node:http"),
+      ]);
+      return NodeHttpServer.layerServer(Http.createServer, { host, port });
+    }
+  }).pipe(Layer.unwrap);

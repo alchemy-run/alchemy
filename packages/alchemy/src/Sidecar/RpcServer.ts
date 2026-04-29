@@ -32,12 +32,17 @@ export const makeRpcServer = Effect.fn(function* <T extends RpcHandlers, E, R>(
     const handlers = yield* handlersEffect;
     const server = yield* Effect.acquireRelease(
       Effect.sync(() =>
-        makeBunWebSocketRpcServer(() =>
-          Object.assign(serializeRpcHandlers(handlers, schema), {
-            heartbeat: () => Effect.runPromise(heartbeat.touch),
-            shutdown: () => Effect.runPromise(heartbeat.shutdown),
-          }),
-        ),
+        makeBunWebSocketRpcServer(() => {
+          const methods = Object.assign(
+            serializeRpcHandlers(handlers, schema),
+            {
+              heartbeat: () => Effect.runPromise(heartbeat.touch),
+              shutdown: () => Effect.runPromise(heartbeat.shutdown),
+            },
+          );
+          void methods.heartbeat();
+          return methods;
+        }),
       ),
       (server) => Effect.promise(() => server.stop(true)),
     );

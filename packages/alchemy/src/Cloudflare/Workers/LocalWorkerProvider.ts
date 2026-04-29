@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Provider from "../../Provider.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
@@ -30,6 +31,21 @@ export const LocalWorkerProvider = () =>
             if (binding.type === "durable_object_namespace") {
               durableObjectNamespaces[binding.name] = sid;
             }
+          }
+        }
+        for (const [key, value] of Object.entries(props.env ?? {})) {
+          if (Redacted.isRedacted(value)) {
+            workerBindings.push({
+              type: "secret_text",
+              name: key,
+              text: Redacted.value(value),
+            });
+          } else {
+            workerBindings.push({
+              type: "plain_text",
+              name: key,
+              text: value,
+            });
           }
         }
         const result = yield* sidecar.serve({

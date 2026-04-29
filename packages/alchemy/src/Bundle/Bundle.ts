@@ -1,7 +1,7 @@
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import assert from "node:assert";
 import * as rolldown from "rolldown";
@@ -44,10 +44,13 @@ export interface BundleFile {
   readonly hash: string;
 }
 
-export class BundleError extends Data.TaggedError("BundleError")<{
-  message: string;
-  cause?: unknown;
-}> {}
+export class BundleError extends Schema.TaggedErrorClass<BundleError>()(
+  "BundleError",
+  {
+    message: Schema.String,
+    cause: Schema.optional(Schema.DefectWithStack),
+  },
+) {}
 
 export type BundleWatchEvent =
   | BundleWatchEvent.Start
@@ -160,12 +163,12 @@ export const watch = (
       (watcher) => Effect.promise(() => watcher.close()),
     ),
   ).pipe(
-    Stream.mapEffect((result) =>
+    Stream.mapEffect((event) =>
       Effect.gen(function* () {
-        if (result._tag !== "Success") {
-          return result;
+        if (event._tag !== "Success") {
+          return event;
         }
-        return yield* bundleOutputFromRolldownOutputBundle(result.output).pipe(
+        return yield* bundleOutputFromRolldownOutputBundle(event.output).pipe(
           Effect.map(
             (output): BundleWatchEvent.Success => ({
               _tag: "Success",

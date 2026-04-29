@@ -1,11 +1,11 @@
-import { BridgeError } from "@distilled.cloud/cloudflare-runtime/bridge";
 import {
   ServeError,
-  ServeResult,
-  type DurableObjectNamespaceInput,
-} from "@distilled.cloud/cloudflare-runtime/server";
+  type ServeResult,
+} from "@distilled.cloud/cloudflare-runtime/Server";
+import * as Worker from "@distilled.cloud/cloudflare-runtime/Worker";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import { BundleError } from "../../Bundle/Bundle.ts";
 import * as RpcClient from "../../Sidecar/RpcClient.ts";
 import { defineSchema } from "../../Sidecar/RpcHandler.ts";
 import type { WorkerBinding } from "../Workers/Worker.ts";
@@ -15,12 +15,18 @@ export interface ServeOptions extends WorkerBundleOptions {
   name: string;
   accountId: string;
   bindings: WorkerBinding[];
-  durableObjectNamespaces: DurableObjectNamespaceInput[];
+  durableObjectNamespaces: Worker.DurableObjectNamespace[];
 }
 
 export const SidecarSchema = defineSchema<Sidecar["Service"]>({
-  serve: { success: ServeResult, error: ServeError },
-  stop: { success: Schema.Void, error: BridgeError },
+  serve: {
+    success: Schema.Struct({
+      name: Schema.String,
+      address: Schema.String,
+    }),
+    error: Schema.Union([ServeError, BundleError]),
+  },
+  stop: { success: Schema.Void, error: Schema.Never },
 });
 
 export class Sidecar extends RpcClient.RpcClientService<
@@ -28,8 +34,8 @@ export class Sidecar extends RpcClient.RpcClientService<
   {
     readonly serve: (
       options: ServeOptions,
-    ) => Effect.Effect<ServeResult, ServeError>;
-    readonly stop: (name: string) => Effect.Effect<void, BridgeError>;
+    ) => Effect.Effect<ServeResult, ServeError | BundleError>;
+    readonly stop: (name: string) => Effect.Effect<void>;
   }
 >()("Sidecar") {}
 
