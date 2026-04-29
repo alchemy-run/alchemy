@@ -43,8 +43,8 @@ export const ASYNC_RUN_SRC = `// alchemy.run.ts — declare resources, attach as
 export const Bucket = Cloudflare.R2Bucket("Bucket");
 
 export const Worker = Cloudflare.Worker("Worker", {
-  main: "./src/worker.ts",
-  bindings: { Bucket },
+	main: "./src/worker.ts",
+	bindings: { Bucket },
 });
 
 export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;`;
@@ -117,6 +117,7 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
       Ship <span style="color:var(--alc-accent-deep);font-style:italic;">safely</span> with fast feedback loops, ephemeral test stacks, type-checked IAM policies, and built-in observability.
     </h2>
     <HeroCta client:load />
+
   </div>
 </Section>
 
@@ -134,25 +135,25 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
   </div>
 
 <div class="stack-deploy-diagram">
-  <div class="stack-deploy-diagram__col">
-    <CodeBlock filename="alchemy.run.ts" code={STACK_SRC} />
-    <div class="stack-deploy-diagram__caption">
-      <SketchLabel>Stack</SketchLabel>
-      <span>one TypeScript program</span>
-    </div>
-  </div>
-  <div class="stack-deploy-diagram__arrow" aria-hidden>
-    <span>plan</span>
-    <span style="font-size:24px;line-height:1;">&rarr;</span>
-    <span>deploy</span>
-  </div>
-  <div class="stack-deploy-diagram__col">
-    <DeployTerminal client:visible />
-    <div class="stack-deploy-diagram__caption">
-      <SketchLabel>Resources</SketchLabel>
-      <span>live across your accounts</span>
-    </div>
-  </div>
+	<div class="stack-deploy-diagram__col">
+		<CodeBlock filename="alchemy.run.ts" code={STACK_SRC} />
+		<div class="stack-deploy-diagram__caption">
+			<SketchLabel>Stack</SketchLabel>
+			<span>one TypeScript program</span>
+		</div>
+	</div>
+	<div class="stack-deploy-diagram__arrow" aria-hidden>
+		<span>plan</span>
+		<span style="font-size:24px;line-height:1;">&rarr;</span>
+		<span>deploy</span>
+	</div>
+	<div class="stack-deploy-diagram__col">
+		<DeployTerminal client:visible />
+		<div class="stack-deploy-diagram__caption">
+			<SketchLabel>Resources</SketchLabel>
+			<span>live across your accounts</span>
+		</div>
+	</div>
 </div>
 
 {/* Mobile-only: just the deploy terminal — the alchemy.run.ts source
@@ -197,18 +198,18 @@ reads poorly when stacked above it on narrow screens. */}
   </div>
 
 <div class="alc-split-2 async-split-desktop">
-  <CodeBlock
-    filename="alchemy.run.ts"
-    code={ASYNC_RUN_SRC}
-    caption="infer your WorkerEnv"
-    compact
-  />
-  <CodeBlock
-    filename="src/worker.ts"
-    code={ASYNC_WORKER_SRC}
-    caption="import and use in your worker"
-    compact
-  />
+	<CodeBlock
+		filename="alchemy.run.ts"
+		code={ASYNC_RUN_SRC}
+		caption="infer your WorkerEnv"
+		compact
+	/>
+	<CodeBlock
+		filename="src/worker.ts"
+		code={ASYNC_WORKER_SRC}
+		caption="import and use in your worker"
+		compact
+	/>
 </div>
 
 {/* Narrow-screen replacement: a single tabbed card that auto-flips
@@ -273,8 +274,8 @@ between the two files with a short caption explaining each step. */}
   </div>
 
 <div class="alc-split-2 alc-split-2--wide-left">
-  <TestTerminal client:visible />
-  <CodeBlock filename="test/api.test.ts" code={TEST_SRC} compact />
+	<TestTerminal client:visible />
+	<CodeBlock filename="test/api.test.ts" code={TEST_SRC} compact />
 </div>
 
   <div class="alc-stat-strip">
@@ -336,28 +337,20 @@ between the two files with a short caption explaining each step. */}
 {/* ───── OUTRO ───── */}
 
 <Section padding="56px 32px 64px" id="outro">
-  <DiscordCallout />
-  <div class="alc-cta" style="margin-top:48px;text-align:center;">
-    <h2 class="alc-h2">
-      <HeadingOrnament variant="fleuron" position="prefix" />
-      Paste this into your coding agent{" "}
-      <span style="color:var(--alc-accent-deep);font-style:italic;">
-        to get started
-      </span>
-      .
-    </h2>
+	<DiscordCallout />
+	<div class="alc-cta" style="margin-top:48px;text-align:center;">
+		<h2 class="alc-h2">
+			<HeadingOrnament variant="fleuron" position="prefix" />
+			Paste this into your coding agent{" "}
+			<span style="color:var(--alc-accent-deep);font-style:italic;">
+				to get started
+			</span>
+			.
+		</h2>
     <CopyForAgent client:load />
     <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:24px;">
-      <Button variant="secondary" href="/getting-started">
-        Read the tutorial
-      </Button>
-      <Button
-        variant="ghost"
-        icon="github"
-        href="https://github.com/alchemy-run/alchemy-effect"
-      >
-        GitHub
-      </Button>
+      <Button variant="secondary" href="/getting-started">Read the tutorial</Button>
+      <Button variant="ghost" icon="github" href="https://github.com/alchemy-run/alchemy-effect">GitHub</Button>
     </div>
   </div>
 </Section>

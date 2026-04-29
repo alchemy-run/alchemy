@@ -21,7 +21,7 @@ export default function CopyForAgent() {
       }
     }
     setCopied(true);
-    window.setTimeout(() => setCopied(false), 1600);
+    window.setTimeout(() => setCopied(false), 1400);
   };
 
   return (
@@ -31,17 +31,12 @@ export default function CopyForAgent() {
         type="button"
         onClick={onCopy}
         className="alc-copy-agent__btn"
-        aria-label={copied ? "Copied to clipboard" : "Copy prompt to clipboard"}
+        data-copied={copied ? "true" : undefined}
+        aria-label={
+          copied ? "Prompt copied to clipboard" : "Copy prompt to clipboard"
+        }
       >
-        {copied ? (
-          <>
-            <CheckIcon /> Copied
-          </>
-        ) : (
-          <>
-            <CopyIcon /> Copy
-          </>
-        )}
+        {copied ? <CheckIcon /> : <CopyIcon />} Copy
       </button>
     </div>
   );

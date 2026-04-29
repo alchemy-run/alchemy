@@ -1,7 +1,20 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+} from "react";
 import { Line, sleep, TermChrome, useSpinner } from "./_terminal";
 
 type Phase = "open" | "deploy" | "comment" | "observe" | "destroy";
+type ResourceStatus = "ready" | "creating" | "created" | "deleting" | "deleted";
+type ResourceRow = {
+  id: string;
+  type: string;
+  status: ResourceStatus;
+};
 
 const PHASES: { id: Phase; label: string }[] = [
   { id: "open", label: "PR opened" },
@@ -21,20 +34,78 @@ const PR_NUMBER = 147;
 const STAGE = `pr-${PR_NUMBER}`;
 const PREVIEW_URL = `https://${STAGE}.api.example.workers.dev`;
 
+const rowsWith = (status: ResourceStatus): ResourceRow[] =>
+  RESOURCES.map((r) => ({ ...r, status }));
+
 export default function PRLifecycle() {
   const [phase, setPhase] = useState<Phase>("open");
   const [cmd, setCmd] = useState("");
   const [caret, setCaret] = useState(false);
-  const [rows, setRows] = useState<
-    {
-      id: string;
-      type: string;
-      status: "ready" | "creating" | "created" | "deleting" | "deleted";
-    }[]
-  >([]);
+  const [rows, setRows] = useState<ResourceRow[]>([]);
   const [done, setDone] = useState<{ verb: string; secs: string } | null>(null);
+  const [indicator, setIndicator] = useState({ x: 0, width: 0 });
 
   const cancelRef = useRef(false);
+  const timelineRef = useRef<HTMLOListElement | null>(null);
+  const phaseButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  const showPhase = (next: Phase) => {
+    setPhase(next);
+    setCaret(false);
+    switch (next) {
+      case "open":
+        setCmd("");
+        setRows([]);
+        setDone(null);
+        break;
+      case "deploy":
+        setCmd(`alchemy deploy --stage ${STAGE}`);
+        setRows(rowsWith("created"));
+        setDone({ verb: "deployed", secs: "2.0" });
+        break;
+      case "comment":
+      case "observe":
+        setCmd(`alchemy deploy --stage ${STAGE}`);
+        setRows(rowsWith("created"));
+        setDone({ verb: "deployed", secs: "2.0" });
+        break;
+      case "destroy":
+        setCmd(`alchemy destroy --stage ${STAGE}`);
+        setRows(rowsWith("deleted"));
+        setDone({ verb: "destroyed", secs: "1.4" });
+        break;
+    }
+  };
+
+  const selectPhase = (next: Phase) => {
+    cancelRef.current = true;
+    showPhase(next);
+  };
+
+  const onPhaseKeyDown = (
+    event: KeyboardEvent<HTMLButtonElement>,
+    index: number,
+  ) => {
+    const last = PHASES.length - 1;
+    const nextIndex =
+      event.key === "ArrowRight"
+        ? index === last
+          ? 0
+          : index + 1
+        : event.key === "ArrowLeft"
+          ? index === 0
+            ? last
+            : index - 1
+          : event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? last
+              : undefined;
+    if (nextIndex === undefined) return;
+    event.preventDefault();
+    selectPhase(PHASES[nextIndex].id);
+    phaseButtonRefs.current[nextIndex]?.focus();
+  };
 
   useEffect(() => {
     cancelRef.current = false;
@@ -52,7 +123,7 @@ export default function PRLifecycle() {
       setCaret(false);
     };
 
-    const updateRow = (id: string, status: (typeof rows)[number]["status"]) =>
+    const updateRow = (id: string, status: ResourceStatus) =>
       setRows((rs) => rs.map((r) => (r.id === id ? { ...r, status } : r)));
 
     const run = async () => {
@@ -148,18 +219,72 @@ export default function PRLifecycle() {
           : phase === "observe"
             ? "OBSERVE"
             : "DESTROY";
+  const activeIdx = PHASES.findIndex((p) => p.id === phase);
+
+  useLayoutEffect(() => {
+    const timeline = timelineRef.current;
+    const button = phaseButtonRefs.current[activeIdx];
+    if (!timeline || !button) return;
+
+    const updateIndicator = () => {
+      const timelineRect = timeline.getBoundingClientRect();
+      const buttonRect = button.getBoundingClientRect();
+      setIndicator({
+        x: buttonRect.left - timelineRect.left,
+        width: buttonRect.width,
+      });
+    };
+
+    updateIndicator();
+    const resizeObserver = new ResizeObserver(updateIndicator);
+    resizeObserver.observe(timeline);
+    resizeObserver.observe(button);
+    window.addEventListener("resize", updateIndicator);
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", updateIndicator);
+    };
+  }, [activeIdx]);
 
   return (
     <div className="pr-lc">
-      <ol className="pr-lc__timeline" aria-label="PR lifecycle">
+      <ol
+        ref={timelineRef}
+        className="pr-lc__timeline"
+        aria-label="PR lifecycle"
+        role="tablist"
+        style={
+          {
+            "--indicator-x": `${indicator.x}px`,
+            "--indicator-width": `${indicator.width}px`,
+          } as CSSProperties
+        }
+      >
+        <li className="pr-lc__timeline-indicator" aria-hidden />
         {PHASES.map((p, i) => {
-          const activeIdx = PHASES.findIndex((x) => x.id === phase);
           const state =
             i < activeIdx ? "done" : i === activeIdx ? "active" : "todo";
           return (
-            <li key={p.id} className={`pr-lc__step pr-lc__step--${state}`}>
-              <span className="pr-lc__step-num">{i + 1}</span>
-              <span className="pr-lc__step-label">{p.label}</span>
+            <li
+              key={p.id}
+              className={`pr-lc__step pr-lc__step--${state}`}
+              role="presentation"
+            >
+              <button
+                type="button"
+                className="pr-lc__tab"
+                role="tab"
+                aria-selected={i === activeIdx}
+                tabIndex={i === activeIdx ? 0 : -1}
+                ref={(button) => {
+                  phaseButtonRefs.current[i] = button;
+                }}
+                onClick={() => selectPhase(p.id)}
+                onKeyDown={(event) => onPhaseKeyDown(event, i)}
+              >
+                <span className="pr-lc__step-num">{i + 1}</span>
+                <span className="pr-lc__step-label">{p.label}</span>
+              </button>
             </li>
           );
         })}

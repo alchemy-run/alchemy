@@ -4,17 +4,11 @@ import { AGENT_PROMPT as PROMPT } from "./agentPrompt";
 export default function HeroCta() {
   return (
     <>
-      <div className="hero-cta hero-cta--cards">
-        <a
-          className="hero-cta__card hero-cta__card--human"
-          href="/getting-started"
-        >
-          <span className="hero-cta__eyebrow">For humans</span>
-          <span className="hero-cta__title">
-            Get started <span aria-hidden>→</span>
-          </span>
+      <div className="hero-cta hero-cta--desktop">
+        <a className="hero-cta__primary" href="/getting-started">
+          Get started <span aria-hidden>→</span>
         </a>
-        <CopyCard />
+        <CopyPrompt />
       </div>
       <div className="hero-cta hero-cta--simple">
         <div className="hero-cta__buttons">
@@ -52,25 +46,23 @@ function InlineCopyChip() {
   );
 }
 
-function CopyCard() {
+function CopyPrompt() {
   const [copied, setCopied] = useState(false);
   const onCopy = () => copy(PROMPT, setCopied);
   return (
     <button
       type="button"
-      className="hero-cta__card hero-cta__card--agent"
+      className="hero-cta__prompt"
       onClick={onCopy}
       aria-label={
         copied ? "Copied prompt" : "Copy prompt for your coding agent"
       }
     >
-      <span className="hero-cta__eyebrow">
-        For coding agents
-        <span className="hero-cta__icon" aria-hidden>
-          {copied ? <CheckIcon /> : <CopyIcon />}
-        </span>
-      </span>
+      <span className="hero-cta__prompt-label">Copy prompt</span>
       <code className="hero-cta__prompt-code">{PROMPT}</code>
+      <span className="hero-cta__icon" aria-hidden>
+        {copied ? <CheckIcon /> : <CopyIcon />}
+      </span>
     </button>
   );
 }
