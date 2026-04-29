@@ -3071,8 +3071,11 @@ body.alc-root,
   color: var(--alc-fg-1);
   background: transparent;
   border: 0;
-  white-space: normal;
+  white-space: pre-wrap;
   overflow-wrap: anywhere;
+  text-align: left;
+  max-height: 240px;
+  overflow-y: auto;
 }
 .alc-copy-agent__btn {
   flex: 0 0 auto;
