@@ -124,6 +124,10 @@ export default defineConfig({
               label: "Cloudflare",
               autogenerate: { directory: "tutorial/cloudflare" },
             },
+            {
+              label: "AWS",
+              autogenerate: { directory: "tutorial/aws" },
+            },
           ],
         },
         {

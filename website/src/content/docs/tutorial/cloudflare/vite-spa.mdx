@@ -5,8 +5,6 @@ sidebar:
   order: 3
 ---
 
-import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
-
 You have a Worker, a Durable Object, and a chat `Room` that
 broadcasts WebSocket messages — enough backend for an interesting
 app, but no UI. In this part you'll add a Vite single-page app
@@ -17,56 +15,44 @@ Worker, with no separate build pipeline or Wrangler config.
 Cloudflare, and serves them through a Worker — so your frontend and
 backend share one URL surface and one deploy.
 
-## Scaffold a Vite app
+## What `Cloudflare.Vite` expects
 
-Create a Vite project in a `web/` subfolder so it lives next to your
-existing `alchemy.run.ts` and `src/worker.ts`:
+`Cloudflare.Vite` points at any directory containing a Vite project.
+The minimum it needs is:
 
-<Tabs syncKey="pkgManager">
-  <TabItem label="bun" icon="bun">
-    <Code code="bun create vite@latest web -- --template vanilla-ts" lang="sh" />
-  </TabItem>
-  <TabItem label="npm" icon="npm">
-    <Code code="npm create vite@latest web -- --template vanilla-ts" lang="sh" />
-  </TabItem>
-  <TabItem label="pnpm" icon="pnpm">
-    <Code code="pnpm create vite@latest web --template vanilla-ts" lang="sh" />
-  </TabItem>
-  <TabItem label="yarn" icon="seti:yarn">
-    <Code code="yarn create vite web --template vanilla-ts" lang="sh" />
-  </TabItem>
-</Tabs>
+```
+web/
+├── package.json        # has a "build" script that runs `vite build`
+├── vite.config.ts      # (or .js) — standard Vite config
+├── index.html          # entry HTML, references your client bundle
+└── src/
+    └── main.ts         # client entry imported by index.html
+```
 
-Install its deps:
+It doesn't matter how the project got there — `bun create vite`,
+`npm create vite`, copied from another repo, or hand-written. Any
+Vite-based framework (vanilla TS, React, Vue, Solid, TanStack
+Start, SolidStart, …) works the same way: a `package.json` with a
+`build` script and a `vite.config.*` is all `Cloudflare.Vite`
+looks for.
 
-<Tabs syncKey="pkgManager">
-  <TabItem label="bun" icon="bun">
-    <Code code="cd web && bun install && cd .." lang="sh" />
-  </TabItem>
-  <TabItem label="npm" icon="npm">
-    <Code code="cd web && npm install && cd .." lang="sh" />
-  </TabItem>
-  <TabItem label="pnpm" icon="pnpm">
-    <Code code="cd web && pnpm install && cd .." lang="sh" />
-  </TabItem>
-  <TabItem label="yarn" icon="seti:yarn">
-    <Code code="cd web && yarn && cd .." lang="sh" />
-  </TabItem>
-</Tabs>
-
-You should now have a `web/index.html`, `web/src/main.ts`,
-`web/vite.config.ts`, etc. Confirm it builds standalone:
+If you're starting from scratch, the canonical template is:
 
 ```sh
-cd web && bun run build && cd ..
+bun create vite@latest web -- --template vanilla-ts
+cd web && bun install && cd ..
 ```
+
+…but treat that as one option, not a required step. If you already
+have a `web/`, `app/`, `frontend/`, or `client/` folder with a Vite
+project inside, just point `rootDir` at it.
 
 ## Add `Cloudflare.Vite` to the Stack
 
 `Cloudflare.Vite` is a thin wrapper over `Cloudflare.Worker` that
-runs `vite build` and ships the resulting assets. Point `rootDir`
-at your Vite project; configure asset handling for SPA fallback
-(every unmatched route serves `index.html`):
+runs the project's `build` script and ships the resulting assets.
+Point `rootDir` at your Vite project; configure asset handling for
+SPA fallback (every unmatched route serves `index.html`):
 
 ```diff lang="typescript"
 // alchemy.run.ts
@@ -114,8 +100,9 @@ client.
 bun alchemy deploy
 ```
 
-Alchemy runs `vite build` in `web/`, uploads the assets, creates a
-Worker that serves them, and prints the new `webUrl` stack output:
+Alchemy runs the `build` script in `rootDir`, uploads the assets,
+creates a Worker that serves them, and prints the new `webUrl`
+stack output:
 
 ```
 {
