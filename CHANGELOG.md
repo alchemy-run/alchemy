@@ -1,3 +1,13 @@
+## v2.0.0-beta.22
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **Cloudflare**: D1Database migrationsDir, importFiles, and clone &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/111 [<samp>(555e8)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/555e8ff)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.21...HEAD)
+
+---
+
 ## v2.0.0-beta.21
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
