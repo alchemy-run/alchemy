@@ -14,9 +14,11 @@ export class TestFunction extends Lambda.Function<Lambda.Function>()(
 
 export const TestFunctionLive = TestFunction.make(
   Effect.gen(function* () {
-    return Effect.gen(function* () {
-      return HttpServerResponse.text("Hello, world!");
-    });
+    return {
+      fetch: Effect.gen(function* () {
+        return HttpServerResponse.text("Hello, world!");
+      }),
+    };
   }),
 );
 

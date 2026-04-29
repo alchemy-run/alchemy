@@ -19,7 +19,9 @@ export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
   const safeHandler = Http.safeHttpEffect(handler);
   return (event: any) => {
     if (isFunctionURLEvent(event)) {
-      const request = HttpServerRequest.fromWeb(toWebRequest(event)).modify({
+      const webRequest = toWebRequest(event);
+      const request = HttpServerRequest.fromWeb(webRequest).modify({
+        url: webRequest.url,
         remoteAddress: Option.some(event.requestContext.http.sourceIp),
       });
       return safeHandler.pipe(

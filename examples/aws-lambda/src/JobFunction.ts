@@ -30,7 +30,7 @@ export default class JobFunction extends AWS.Lambda.Function<JobFunction>()(
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
-        const url = new URL(request.url);
+        const url = new URL(request.originalUrl);
 
         if (request.method === "GET" && url.pathname === "/") {
           const jobId = url.searchParams.get("jobId");

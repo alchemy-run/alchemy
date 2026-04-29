@@ -37,7 +37,7 @@ describe("AWS.Lambda.HttpServer", () => {
     expect(result.headers?.["content-type"]).toContain("application/json");
     expect(JSON.parse(result.body ?? "")).toEqual({
       method: "GET",
-      url: "/inspect?jobId=job-123&trace=1",
+      url: "https://example.lambda-url.us-east-1.on.aws/inspect?jobId=job-123&trace=1",
       originalUrl:
         "https://example.lambda-url.us-east-1.on.aws/inspect?jobId=job-123&trace=1",
       host: "example.lambda-url.us-east-1.on.aws",
@@ -85,7 +85,7 @@ describe("AWS.Lambda.HttpServer", () => {
     expect(result.cookies?.[0]).toContain("job-session=created");
     expect(JSON.parse(result.body ?? "")).toEqual({
       method: "POST",
-      url: "/jobs",
+      url: "https://example.lambda-url.us-east-1.on.aws/jobs",
       payload: {
         content: "ship it",
       },

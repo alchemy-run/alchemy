@@ -23,6 +23,7 @@ import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
 import type { LogLine, LogsInput } from "../../Provider.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
+import { Self } from "../../Self.ts";
 import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
 import { createInternalTags, createTagsList, hasTags } from "../../Tags.ts";
@@ -617,7 +618,6 @@ export const FunctionProvider = () =>
               cwd,
               external: [
                 /^@aws-sdk\//,
-                /^@smithy\//,
                 ...((props.build?.input?.external as string[]) ?? []),
               ],
               platform: "node",
@@ -627,8 +627,9 @@ export const FunctionProvider = () =>
               ...props.build?.output,
               format: "esm",
               sourcemap: rolldownSourcemap,
-              minify: props.build?.output?.minify ?? true,
+              minify: props.build?.output?.minify ?? false,
               entryFileNames: "index.js",
+              codeSplitting: props.build?.output?.codeSplitting ?? false,
             },
           );
         });
@@ -639,29 +640,33 @@ export const FunctionProvider = () =>
               realMain,
               virtualEntryPlugin(
                 (importPath) => `
-import { NodeServices } from "@effect/platform-node";
+import { layer as nodeServicesLayer } from "@effect/platform-node/NodeServices";
 import { Stack } from "alchemy/Stack";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import { layer as fetchHttpClientLayer } from "effect/unstable/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Region from "@distilled.cloud/aws/Region";
 import * as Context from "effect/Context";
 import { MinimumLogLevel } from "effect/References";
 
-import { ${handler} as layer } from "${importPath}";
+import entry from "${importPath}";
+
+const tag = Context.Service("${Self.key}")
+const layer =
+  typeof entry?.build === "function"
+    ? entry
+    : Layer.effect(tag, typeof entry?.asEffect === "function" ? entry.asEffect() : entry);
 
 const platform = Layer.mergeAll(
-  NodeServices.layer,
-  FetchHttpClient.layer,
+  nodeServicesLayer,
+  fetchHttpClientLayer,
   // TODO(sam): wire this up to telemetry more directly
   Logger.layer([Logger.consolePretty()]),
 );
-
-const tag = Context.Service("${FunctionTypeId}<${id}>")
 
 const stack = Layer.effect(
   Stack,
@@ -679,7 +684,8 @@ const stack = Layer.effect(
 );
 
 const handlerEffect = tag.asEffect().pipe(
-  Effect.flatMap(func => func.ExecutionContext.exports.handler),
+  Effect.flatMap(func => func.ExecutionContext.exports),
+  Effect.flatMap(exports => exports.handler),
   Effect.provide(
     layer.pipe(
       Layer.provideMerge(stack),
@@ -714,23 +720,23 @@ export default await Effect.runPromise(handlerEffect)
             ? new TextEncoder().encode(mainFile.content)
             : mainFile.content;
 
-        const sourceMapFile =
-          uploadSourceMap && (sourcemap === true || sourcemap === "hidden")
-            ? bundleOutput.files.find((f: Bundle.BundleFile) =>
-                f.path.endsWith(".map"),
-              )
-            : undefined;
+        const includeSourceMaps =
+          uploadSourceMap && (sourcemap === true || sourcemap === "hidden");
+
+        const extraFiles = bundleOutput.files
+          .slice(1)
+          .filter(
+            (f: Bundle.BundleFile) =>
+              includeSourceMaps || !f.path.endsWith(".map"),
+          )
+          .map((f: Bundle.BundleFile) => ({
+            path: f.path,
+            content: f.content,
+          }));
 
         const archive = yield* zipCode(
           code,
-          sourceMapFile
-            ? [
-                {
-                  path: sourceMapFile.path,
-                  content: sourceMapFile.content,
-                },
-              ]
-            : undefined,
+          extraFiles.length > 0 ? extraFiles : undefined,
         );
         return {
           archive,

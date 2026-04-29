@@ -139,168 +139,182 @@ export const SNSApiFunctionLive = SNSApiFunction.make(
       ),
     );
 
-    return Effect.gen(function* () {
-      const request = yield* HttpServerRequest;
-      const url = new URL(request.originalUrl);
-      const pathname = url.pathname;
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const url = new URL(request.originalUrl);
+        const pathname = url.pathname;
 
-      if (request.method === "GET" && pathname === "/ready") {
-        return yield* HttpServerResponse.json({ ok: true });
-      }
+        if (request.method === "GET" && pathname === "/ready") {
+          return yield* HttpServerResponse.json({ ok: true });
+        }
 
-      if (request.method === "POST" && pathname === "/publish") {
-        const body = (yield* request.json) as {
-          message: string;
-          subject?: string;
-        };
-        const response = yield* publish({
-          Message: body.message,
-          Subject: body.subject,
-        });
-        return yield* HttpServerResponse.json(response);
-      }
+        if (request.method === "POST" && pathname === "/publish") {
+          const body = (yield* request.json) as {
+            message: string;
+            subject?: string;
+          };
+          const response = yield* publish({
+            Message: body.message,
+            Subject: body.subject,
+          });
+          return yield* HttpServerResponse.json(response);
+        }
 
-      if (request.method === "POST" && pathname === "/publish-batch") {
-        const body = (yield* request.json) as { messages: string[] };
-        const response = yield* publishBatch({
-          PublishBatchRequestEntries: body.messages.map((message, index) => ({
-            Id: `${index}`,
-            Message: message,
-          })),
-        });
-        return yield* HttpServerResponse.json(response);
-      }
+        if (request.method === "POST" && pathname === "/publish-batch") {
+          const body = (yield* request.json) as { messages: string[] };
+          const response = yield* publishBatch({
+            PublishBatchRequestEntries: body.messages.map((message, index) => ({
+              Id: `${index}`,
+              Message: message,
+            })),
+          });
+          return yield* HttpServerResponse.json(response);
+        }
 
-      if (request.method === "POST" && pathname === "/sink") {
-        const body = (yield* request.json) as { messages: string[] };
-        yield* Stream.fromIterable(body.messages).pipe(Stream.run(sink));
-        return yield* HttpServerResponse.json({ ok: true });
-      }
+        if (request.method === "POST" && pathname === "/sink") {
+          const body = (yield* request.json) as { messages: string[] };
+          yield* Stream.fromIterable(body.messages).pipe(Stream.run(sink));
+          return yield* HttpServerResponse.json({ ok: true });
+        }
 
-      if (request.method === "GET" && pathname === "/topic-attributes") {
-        return yield* HttpServerResponse.json(yield* getTopicAttributes());
-      }
+        if (request.method === "GET" && pathname === "/topic-attributes") {
+          return yield* HttpServerResponse.json(yield* getTopicAttributes());
+        }
 
-      if (request.method === "POST" && pathname === "/topic-attributes") {
-        const body = (yield* request.json) as {
-          name: string;
-          value?: string;
-        };
+        if (request.method === "POST" && pathname === "/topic-attributes") {
+          const body = (yield* request.json) as {
+            name: string;
+            value?: string;
+          };
+          return yield* HttpServerResponse.json(
+            yield* setTopicAttributes({
+              AttributeName: body.name,
+              AttributeValue: body.value,
+            }),
+          );
+        }
+
+        if (request.method === "POST" && pathname === "/add-permission") {
+          const label = "FixturePublishPermission";
+          const response = yield* addPermission({
+            Label: label,
+            AWSAccountId: [yield* accountId],
+            ActionName: ["Publish"],
+          });
+          return yield* HttpServerResponse.json({ label, response });
+        }
+
+        if (request.method === "POST" && pathname === "/remove-permission") {
+          const response = yield* removePermission({
+            Label: "FixturePublishPermission",
+          });
+          return yield* HttpServerResponse.json(response);
+        }
+
+        if (
+          request.method === "GET" &&
+          pathname === "/data-protection-policy"
+        ) {
+          return yield* HttpServerResponse.json(
+            yield* getDataProtectionPolicy().pipe(
+              Effect.catch((error) => Effect.succeed(formatError(error))),
+            ),
+          );
+        }
+
+        if (
+          request.method === "POST" &&
+          pathname === "/data-protection-policy"
+        ) {
+          const body = (yield* request.json) as { policy: string };
+          const response = yield* putDataProtectionPolicy({
+            DataProtectionPolicy: body.policy,
+          }).pipe(Effect.catch((error) => Effect.succeed(formatError(error))));
+          return yield* HttpServerResponse.json(response);
+        }
+
+        if (request.method === "GET" && pathname === "/topics") {
+          return yield* HttpServerResponse.json(yield* listTopics());
+        }
+
+        if (request.method === "GET" && pathname === "/subscriptions") {
+          return yield* HttpServerResponse.json(yield* listSubscriptions());
+        }
+
+        if (
+          request.method === "GET" &&
+          pathname === "/subscriptions-by-topic"
+        ) {
+          return yield* HttpServerResponse.json(
+            yield* listSubscriptionsByTopic(),
+          );
+        }
+
+        if (request.method === "GET" && pathname === "/tags") {
+          return yield* HttpServerResponse.json(yield* listTagsForResource());
+        }
+
+        if (request.method === "POST" && pathname === "/tags") {
+          const body = (yield* request.json) as {
+            key: string;
+            value: string;
+          };
+          return yield* HttpServerResponse.json(
+            yield* tagResource({
+              Tags: [{ Key: body.key, Value: body.value }],
+            }),
+          );
+        }
+
+        if (request.method === "DELETE" && pathname === "/tags") {
+          const body = (yield* request.json) as { keys: string[] };
+          return yield* HttpServerResponse.json(
+            yield* untagResource({
+              TagKeys: body.keys,
+            }),
+          );
+        }
+
+        if (
+          request.method === "GET" &&
+          pathname === "/subscription-attributes"
+        ) {
+          return yield* HttpServerResponse.json(
+            yield* getSubscriptionAttributes(),
+          );
+        }
+
+        if (
+          request.method === "POST" &&
+          pathname === "/subscription-attributes"
+        ) {
+          const body = (yield* request.json) as {
+            name: string;
+            value?: string;
+          };
+          return yield* HttpServerResponse.json(
+            yield* setSubscriptionAttributes({
+              AttributeName: body.name,
+              AttributeValue: body.value,
+            }),
+          );
+        }
+
+        if (request.method === "POST" && pathname === "/confirm-subscription") {
+          const body = (yield* request.json) as { token: string };
+          const response = yield* confirmSubscription({
+            Token: body.token,
+          }).pipe(Effect.catch((error) => Effect.succeed(formatError(error))));
+          return yield* HttpServerResponse.json(response);
+        }
+
         return yield* HttpServerResponse.json(
-          yield* setTopicAttributes({
-            AttributeName: body.name,
-            AttributeValue: body.value,
-          }),
+          { error: "Not found", method: request.method, pathname },
+          { status: 404 },
         );
-      }
-
-      if (request.method === "POST" && pathname === "/add-permission") {
-        const label = "FixturePublishPermission";
-        const response = yield* addPermission({
-          Label: label,
-          AWSAccountId: [yield* accountId],
-          ActionName: ["Publish"],
-        });
-        return yield* HttpServerResponse.json({ label, response });
-      }
-
-      if (request.method === "POST" && pathname === "/remove-permission") {
-        const response = yield* removePermission({
-          Label: "FixturePublishPermission",
-        });
-        return yield* HttpServerResponse.json(response);
-      }
-
-      if (request.method === "GET" && pathname === "/data-protection-policy") {
-        return yield* HttpServerResponse.json(
-          yield* getDataProtectionPolicy().pipe(
-            Effect.catch((error) => Effect.succeed(formatError(error))),
-          ),
-        );
-      }
-
-      if (request.method === "POST" && pathname === "/data-protection-policy") {
-        const body = (yield* request.json) as { policy: string };
-        const response = yield* putDataProtectionPolicy({
-          DataProtectionPolicy: body.policy,
-        }).pipe(Effect.catch((error) => Effect.succeed(formatError(error))));
-        return yield* HttpServerResponse.json(response);
-      }
-
-      if (request.method === "GET" && pathname === "/topics") {
-        return yield* HttpServerResponse.json(yield* listTopics());
-      }
-
-      if (request.method === "GET" && pathname === "/subscriptions") {
-        return yield* HttpServerResponse.json(yield* listSubscriptions());
-      }
-
-      if (request.method === "GET" && pathname === "/subscriptions-by-topic") {
-        return yield* HttpServerResponse.json(
-          yield* listSubscriptionsByTopic(),
-        );
-      }
-
-      if (request.method === "GET" && pathname === "/tags") {
-        return yield* HttpServerResponse.json(yield* listTagsForResource());
-      }
-
-      if (request.method === "POST" && pathname === "/tags") {
-        const body = (yield* request.json) as {
-          key: string;
-          value: string;
-        };
-        return yield* HttpServerResponse.json(
-          yield* tagResource({
-            Tags: [{ Key: body.key, Value: body.value }],
-          }),
-        );
-      }
-
-      if (request.method === "DELETE" && pathname === "/tags") {
-        const body = (yield* request.json) as { keys: string[] };
-        return yield* HttpServerResponse.json(
-          yield* untagResource({
-            TagKeys: body.keys,
-          }),
-        );
-      }
-
-      if (request.method === "GET" && pathname === "/subscription-attributes") {
-        return yield* HttpServerResponse.json(
-          yield* getSubscriptionAttributes(),
-        );
-      }
-
-      if (
-        request.method === "POST" &&
-        pathname === "/subscription-attributes"
-      ) {
-        const body = (yield* request.json) as {
-          name: string;
-          value?: string;
-        };
-        return yield* HttpServerResponse.json(
-          yield* setSubscriptionAttributes({
-            AttributeName: body.name,
-            AttributeValue: body.value,
-          }),
-        );
-      }
-
-      if (request.method === "POST" && pathname === "/confirm-subscription") {
-        const body = (yield* request.json) as { token: string };
-        const response = yield* confirmSubscription({
-          Token: body.token,
-        }).pipe(Effect.catch((error) => Effect.succeed(formatError(error))));
-        return yield* HttpServerResponse.json(response);
-      }
-
-      return yield* HttpServerResponse.json(
-        { error: "Not found", method: request.method, pathname },
-        { status: 404 },
-      );
-    }).pipe(Effect.orDie);
+      }).pipe(Effect.orDie),
+    };
   }).pipe(
     Effect.provide(
       Layer.provideMerge(

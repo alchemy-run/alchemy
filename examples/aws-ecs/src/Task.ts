@@ -20,8 +20,7 @@ export default class ApiTask extends AWS.ECS.Task<ApiTask>()(
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
-        const url = new URL(request.url);
-
+        const url = new URL(request.originalUrl);
         if (request.method === "GET" && url.pathname === "/") {
           return yield* HttpServerResponse.json({
             ok: true,

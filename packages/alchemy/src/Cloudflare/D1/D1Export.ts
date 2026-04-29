@@ -35,11 +35,7 @@ export const exportD1Database = (
 
     const poll = (
       currentBookmark?: string,
-    ): Effect.Effect<
-      ExportD1DatabaseResult,
-      d1.ExportDatabaseError,
-      never
-    > =>
+    ): Effect.Effect<ExportD1DatabaseResult, d1.ExportDatabaseError, never> =>
       Effect.gen(function* () {
         const data = yield* exportDb({
           accountId: options.accountId,

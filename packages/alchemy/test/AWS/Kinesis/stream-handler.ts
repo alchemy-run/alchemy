@@ -61,14 +61,16 @@ export default KinesisStreamFunction.make(
     const streamArn = yield* stream.streamArn;
     const queueUrl = yield* queue.queueUrl;
 
-    return Effect.gen(function* () {
-      return yield* HttpServerResponse.json({
-        ok: true,
-        streamArn: yield* streamArn,
-        streamName: yield* streamName,
-        queueUrl: yield* queueUrl,
-      });
-    });
+    return {
+      fetch: Effect.gen(function* () {
+        return yield* HttpServerResponse.json({
+          ok: true,
+          streamArn: yield* streamArn,
+          streamName: yield* streamName,
+          queueUrl: yield* queueUrl,
+        });
+      }),
+    };
   }).pipe(
     Effect.provide(
       Layer.provideMerge(

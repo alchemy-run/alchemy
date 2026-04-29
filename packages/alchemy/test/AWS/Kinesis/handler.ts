@@ -82,207 +82,211 @@ export const KinesisApiFunctionLive = KinesisApiFunction.make(
     const streamName = yield* stream.streamName;
     const consumerName = yield* consumer.consumerName;
 
-    return Effect.gen(function* () {
-      const request = yield* HttpServerRequest;
-      const url = new URL(request.originalUrl);
-      const pathname = url.pathname;
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const url = new URL(request.originalUrl);
+        const pathname = url.pathname;
 
-      if (request.method === "GET" && pathname === "/ready") {
-        return yield* HttpServerResponse.json({
-          ok: true,
-          streamName: yield* streamName,
-          consumerName: yield* consumerName,
-        });
-      }
+        if (request.method === "GET" && pathname === "/ready") {
+          return yield* HttpServerResponse.json({
+            ok: true,
+            streamName: yield* streamName,
+            consumerName: yield* consumerName,
+          });
+        }
 
-      if (request.method === "GET" && pathname === "/account-settings") {
-        const response = yield* describeAccountSettings().pipe(
-          Effect.match({
-            onFailure: (error) => ({
-              ok: false as const,
-              error:
-                typeof error === "object" && error !== null && "_tag" in error
-                  ? (error as { _tag: string })._tag
-                  : `${error}`,
+        if (request.method === "GET" && pathname === "/account-settings") {
+          const response = yield* describeAccountSettings().pipe(
+            Effect.match({
+              onFailure: (error) => ({
+                ok: false as const,
+                error:
+                  typeof error === "object" && error !== null && "_tag" in error
+                    ? (error as { _tag: string })._tag
+                    : `${error}`,
+              }),
+              onSuccess: (value) => ({
+                ok: true as const,
+                value,
+              }),
             }),
-            onSuccess: (value) => ({
-              ok: true as const,
-              value,
+          );
+          return yield* HttpServerResponse.json(response);
+        }
+
+        if (request.method === "GET" && pathname === "/limits") {
+          const response = yield* describeLimits().pipe(
+            Effect.match({
+              onFailure: (error) => ({
+                ok: false as const,
+                error:
+                  typeof error === "object" && error !== null && "_tag" in error
+                    ? (error as { _tag: string })._tag
+                    : `${error}`,
+              }),
+              onSuccess: (value) => ({
+                ok: true as const,
+                value,
+              }),
             }),
-          }),
-        );
-        return yield* HttpServerResponse.json(response);
-      }
+          );
+          return yield* HttpServerResponse.json(response);
+        }
 
-      if (request.method === "GET" && pathname === "/limits") {
-        const response = yield* describeLimits().pipe(
-          Effect.match({
-            onFailure: (error) => ({
-              ok: false as const,
-              error:
-                typeof error === "object" && error !== null && "_tag" in error
-                  ? (error as { _tag: string })._tag
-                  : `${error}`,
+        if (request.method === "GET" && pathname === "/streams") {
+          return yield* HttpServerResponse.json(yield* listStreams());
+        }
+
+        if (request.method === "GET" && pathname === "/stream") {
+          return yield* HttpServerResponse.json(yield* describeStream());
+        }
+
+        if (request.method === "GET" && pathname === "/stream-summary") {
+          return yield* HttpServerResponse.json(yield* describeStreamSummary());
+        }
+
+        if (request.method === "GET" && pathname === "/resource-policy") {
+          const response = yield* getResourcePolicy().pipe(
+            Effect.match({
+              onFailure: (error) => ({
+                ok: false as const,
+                error:
+                  typeof error === "object" && error !== null && "_tag" in error
+                    ? (error as { _tag: string })._tag
+                    : `${error}`,
+              }),
+              onSuccess: (value) => ({
+                ok: true as const,
+                value,
+              }),
             }),
-            onSuccess: (value) => ({
-              ok: true as const,
-              value,
-            }),
-          }),
-        );
-        return yield* HttpServerResponse.json(response);
-      }
+          );
+          return yield* HttpServerResponse.json(response);
+        }
 
-      if (request.method === "GET" && pathname === "/streams") {
-        return yield* HttpServerResponse.json(yield* listStreams());
-      }
+        if (request.method === "GET" && pathname === "/shards") {
+          return yield* HttpServerResponse.json(yield* listShards());
+        }
 
-      if (request.method === "GET" && pathname === "/stream") {
-        return yield* HttpServerResponse.json(yield* describeStream());
-      }
+        if (request.method === "GET" && pathname === "/stream-consumers") {
+          return yield* HttpServerResponse.json(yield* listStreamConsumers());
+        }
 
-      if (request.method === "GET" && pathname === "/stream-summary") {
-        return yield* HttpServerResponse.json(yield* describeStreamSummary());
-      }
-
-      if (request.method === "GET" && pathname === "/resource-policy") {
-        const response = yield* getResourcePolicy().pipe(
-          Effect.match({
-            onFailure: (error) => ({
-              ok: false as const,
-              error:
-                typeof error === "object" && error !== null && "_tag" in error
-                  ? (error as { _tag: string })._tag
-                  : `${error}`,
-            }),
-            onSuccess: (value) => ({
-              ok: true as const,
-              value,
-            }),
-          }),
-        );
-        return yield* HttpServerResponse.json(response);
-      }
-
-      if (request.method === "GET" && pathname === "/shards") {
-        return yield* HttpServerResponse.json(yield* listShards());
-      }
-
-      if (request.method === "GET" && pathname === "/stream-consumers") {
-        return yield* HttpServerResponse.json(yield* listStreamConsumers());
-      }
-
-      if (request.method === "GET" && pathname === "/consumer") {
-        return yield* HttpServerResponse.json(yield* describeStreamConsumer());
-      }
-
-      if (request.method === "GET" && pathname === "/tags") {
-        return yield* HttpServerResponse.json(yield* listTagsForResource());
-      }
-
-      if (request.method === "POST" && pathname === "/put-record") {
-        const body = (yield* request.json) as {
-          partitionKey: string;
-          data: string;
-        };
-        return yield* HttpServerResponse.json(
-          yield* putRecord({
-            PartitionKey: body.partitionKey,
-            Data: new TextEncoder().encode(body.data),
-          }),
-        );
-      }
-
-      if (request.method === "POST" && pathname === "/put-records") {
-        const body = (yield* request.json) as {
-          records: Array<{ partitionKey: string; data: string }>;
-        };
-        return yield* HttpServerResponse.json(
-          yield* putRecords({
-            Records: body.records.map((record) => ({
-              PartitionKey: record.partitionKey,
-              Data: new TextEncoder().encode(record.data),
-            })),
-          }),
-        );
-      }
-
-      if (request.method === "POST" && pathname === "/sink") {
-        const body = (yield* request.json) as {
-          records: Array<{ partitionKey: string; data: string }>;
-        };
-        yield* Stream.fromIterable(
-          body.records.map((record) => ({
-            PartitionKey: record.partitionKey,
-            Data: new TextEncoder().encode(record.data),
-          })),
-        ).pipe(Stream.run(sink));
-        return yield* HttpServerResponse.json({ ok: true });
-      }
-
-      if (request.method === "POST" && pathname === "/iterator") {
-        const body = (yield* request.json) as { shardId: string };
-        return yield* HttpServerResponse.json(
-          yield* getShardIterator({
-            ShardId: body.shardId,
-            ShardIteratorType: "LATEST",
-          }),
-        );
-      }
-
-      if (request.method === "POST" && pathname === "/records") {
-        const body = (yield* request.json) as {
-          shardId: string;
-          partitionKey: string;
-          data: string;
-        };
-
-        const iterator = yield* getShardIterator({
-          ShardId: body.shardId,
-          ShardIteratorType: "LATEST",
-        });
-        const shardIterator = iterator.ShardIterator;
-
-        if (!shardIterator) {
+        if (request.method === "GET" && pathname === "/consumer") {
           return yield* HttpServerResponse.json(
-            { error: "No shard iterator returned" },
-            { status: 500 },
+            yield* describeStreamConsumer(),
           );
         }
 
-        yield* putRecord({
-          PartitionKey: body.partitionKey,
-          Data: new TextEncoder().encode(body.data),
-        });
+        if (request.method === "GET" && pathname === "/tags") {
+          return yield* HttpServerResponse.json(yield* listTagsForResource());
+        }
 
-        const result = yield* waitForRecords(getRecords, shardIterator);
-        return yield* HttpServerResponse.json({
-          records: (result.Records ?? []).map((record) => ({
-            partitionKey: record.PartitionKey,
-            data: decodeText(record.Data),
-          })),
-          millisBehindLatest: result.MillisBehindLatest,
-        });
-      }
+        if (request.method === "POST" && pathname === "/put-record") {
+          const body = (yield* request.json) as {
+            partitionKey: string;
+            data: string;
+          };
+          return yield* HttpServerResponse.json(
+            yield* putRecord({
+              PartitionKey: body.partitionKey,
+              Data: new TextEncoder().encode(body.data),
+            }),
+          );
+        }
 
-      if (request.method === "POST" && pathname === "/subscribe") {
-        const body = (yield* request.json) as { shardId: string };
-        const result = yield* subscribeToShard({
-          ShardId: body.shardId,
-          StartingPosition: {
-            Type: "LATEST",
-          },
-        });
-        return yield* HttpServerResponse.json({
-          ok: result.EventStream !== undefined,
-        });
-      }
+        if (request.method === "POST" && pathname === "/put-records") {
+          const body = (yield* request.json) as {
+            records: Array<{ partitionKey: string; data: string }>;
+          };
+          return yield* HttpServerResponse.json(
+            yield* putRecords({
+              Records: body.records.map((record) => ({
+                PartitionKey: record.partitionKey,
+                Data: new TextEncoder().encode(record.data),
+              })),
+            }),
+          );
+        }
 
-      return yield* HttpServerResponse.json(
-        { error: "Not found", method: request.method, pathname },
-        { status: 404 },
-      );
-    }).pipe(Effect.orDie);
+        if (request.method === "POST" && pathname === "/sink") {
+          const body = (yield* request.json) as {
+            records: Array<{ partitionKey: string; data: string }>;
+          };
+          yield* Stream.fromIterable(
+            body.records.map((record) => ({
+              PartitionKey: record.partitionKey,
+              Data: new TextEncoder().encode(record.data),
+            })),
+          ).pipe(Stream.run(sink));
+          return yield* HttpServerResponse.json({ ok: true });
+        }
+
+        if (request.method === "POST" && pathname === "/iterator") {
+          const body = (yield* request.json) as { shardId: string };
+          return yield* HttpServerResponse.json(
+            yield* getShardIterator({
+              ShardId: body.shardId,
+              ShardIteratorType: "LATEST",
+            }),
+          );
+        }
+
+        if (request.method === "POST" && pathname === "/records") {
+          const body = (yield* request.json) as {
+            shardId: string;
+            partitionKey: string;
+            data: string;
+          };
+
+          const iterator = yield* getShardIterator({
+            ShardId: body.shardId,
+            ShardIteratorType: "LATEST",
+          });
+          const shardIterator = iterator.ShardIterator;
+
+          if (!shardIterator) {
+            return yield* HttpServerResponse.json(
+              { error: "No shard iterator returned" },
+              { status: 500 },
+            );
+          }
+
+          yield* putRecord({
+            PartitionKey: body.partitionKey,
+            Data: new TextEncoder().encode(body.data),
+          });
+
+          const result = yield* waitForRecords(getRecords, shardIterator);
+          return yield* HttpServerResponse.json({
+            records: (result.Records ?? []).map((record) => ({
+              partitionKey: record.PartitionKey,
+              data: decodeText(record.Data),
+            })),
+            millisBehindLatest: result.MillisBehindLatest,
+          });
+        }
+
+        if (request.method === "POST" && pathname === "/subscribe") {
+          const body = (yield* request.json) as { shardId: string };
+          const result = yield* subscribeToShard({
+            ShardId: body.shardId,
+            StartingPosition: {
+              Type: "LATEST",
+            },
+          });
+          return yield* HttpServerResponse.json({
+            ok: result.EventStream !== undefined,
+          });
+        }
+
+        return yield* HttpServerResponse.json(
+          { error: "Not found", method: request.method, pathname },
+          { status: 404 },
+        );
+      }).pipe(Effect.orDie),
+    };
   }).pipe(
     Effect.provide(
       Layer.provideMerge(

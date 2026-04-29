@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
@@ -15,7 +16,7 @@ export const TestHttpEffect = Effect.gen(function* () {
       host: request.headers.host,
       protocol: request.headers["x-forwarded-proto"],
       requestId: request.headers["x-request-id"],
-      remoteAddress: request.remoteAddress,
+      remoteAddress: Option.getOrUndefined(request.remoteAddress),
       query: Object.fromEntries(url.searchParams.entries()),
       cookies: request.cookies,
     });

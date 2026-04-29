@@ -29,9 +29,7 @@ export const listSqlFiles = (directory: string) =>
         return a.localeCompare(b);
       });
 
-    return yield* Effect.all(
-      sqlFiles.map((id) => readSqlFile(directory, id)),
-    );
+    return yield* Effect.all(sqlFiles.map((id) => readSqlFile(directory, id)));
   });
 
 /**
