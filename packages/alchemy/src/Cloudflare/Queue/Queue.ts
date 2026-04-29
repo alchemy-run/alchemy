@@ -49,12 +49,42 @@ export type Queue = Resource<
  * ```
  *
  * @section Binding to a Worker
+ * In an Effect-style Worker, use `Cloudflare.QueueBinding.bind` in
+ * the init phase and provide `Cloudflare.QueueBindingLive` in the
+ * runtime layer. The returned `QueueSender` exposes `send` and
+ * `sendBatch`.
+ *
  * @example Sending messages from a Worker
  * ```typescript
- * // In your Worker definition, add the queue to bindings:
- * const Worker = Cloudflare.Worker("Worker", {
- *   bindings: { MY_QUEUE: queue },
- * });
+ * import * as Cloudflare from "alchemy/Cloudflare";
+ * import * as Effect from "effect/Effect";
+ * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+ * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ *
+ * export const Queue = Cloudflare.Queue("Queue");
+ *
+ * export default Cloudflare.Worker(
+ *   "Worker",
+ *   { main: import.meta.path },
+ *   Effect.gen(function* () {
+ *     const queue = yield* Cloudflare.QueueBinding.bind(Queue);
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const request = yield* HttpServerRequest;
+ *         if (request.url === "/queue/send" && request.method === "POST") {
+ *           const text = yield* request.text;
+ *           yield* queue.send({ text, sentAt: Date.now() }).pipe(Effect.orDie);
+ *           return yield* HttpServerResponse.json(
+ *             { sent: { text } },
+ *             { status: 202 },
+ *           );
+ *         }
+ *         return HttpServerResponse.text("Not Found", { status: 404 });
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(Cloudflare.QueueBindingLive)),
+ * );
  * ```
  */
 export const Queue = Resource<Queue>("Cloudflare.Queue")({

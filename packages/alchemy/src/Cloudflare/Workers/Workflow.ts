@@ -248,6 +248,36 @@ export class WorkflowScope extends Context.Service<
  * yield* Cloudflare.sleep("cooldown", "30 seconds");
  * ```
  *
+ * @example Accessing env bindings inside a step
+ * `Cloudflare.WorkerEnvironment` is the same service available
+ * inside a Worker — it gives you typed access to env bindings (KV,
+ * R2, etc.) from inside a workflow body. Wrap any side-effecting
+ * call in `task` so the result is persisted across replays.
+ *
+ * ```typescript
+ * Effect.gen(function* () {
+ *   const env = yield* Cloudflare.WorkerEnvironment;
+ *   const event = yield* Cloudflare.WorkflowEvent;
+ *   const { roomId, message } = event.payload as {
+ *     roomId: string;
+ *     message: string;
+ *   };
+ *
+ *   const stored = yield* Cloudflare.task(
+ *     "kv-roundtrip",
+ *     Effect.tryPromise({
+ *       try: async () => {
+ *         await env.KV.put(`workflow:${roomId}`, message);
+ *         return await env.KV.get(`workflow:${roomId}`);
+ *       },
+ *       catch: (cause) =>
+ *         cause instanceof Error ? cause : new Error(String(cause)),
+ *     }).pipe(Effect.orDie),
+ *   );
+ *   return stored;
+ * });
+ * ```
+ *
  * @section Starting and Monitoring Instances
  * @example Creating an instance from a Worker
  * ```typescript
@@ -260,6 +290,70 @@ export class WorkflowScope extends Context.Service<
  * const workflow = yield* MyWorkflow;
  * const handle = yield* workflow.get(instanceId);
  * const status = yield* handle.status();
+ * ```
+ *
+ * @section Triggering from a Worker
+ * Wire the workflow into HTTP routes so callers can fire instances
+ * and poll for completion.
+ *
+ * @example Workflow start + status routes
+ * ```typescript
+ * // src/worker.ts
+ * const notifier = yield* MyWorkflow;
+ *
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     const request = yield* HttpServerRequest;
+ *
+ *     if (request.url.startsWith("/workflow/start/")) {
+ *       const id = request.url.split("/").pop()!;
+ *       const instance = yield* notifier.create({ id });
+ *       return HttpServerResponse.json({ instanceId: instance.id });
+ *     }
+ *
+ *     if (request.url.startsWith("/workflow/status/")) {
+ *       const id = request.url.split("/").pop()!;
+ *       const instance = yield* notifier.get(id);
+ *       return HttpServerResponse.json(yield* instance.status());
+ *     }
+ *
+ *     return HttpServerResponse.text("Not Found", { status: 404 });
+ *   }),
+ * };
+ * ```
+ *
+ * @section Testing Workflows
+ * Workflows run asynchronously, so tests start an instance and
+ * poll until it reaches a terminal status. A simple recipe with
+ * `alchemy/Test/Bun`:
+ *
+ * @example Polling for workflow completion
+ * ```typescript
+ * test(
+ *   "workflow completes",
+ *   Effect.gen(function* () {
+ *     const { url } = yield* stack;
+ *
+ *     const start = yield* HttpClient.post(`${url}/workflow/start/x`);
+ *     const { instanceId } = (yield* start.json) as { instanceId: string };
+ *
+ *     let status: { status: string } | undefined;
+ *     const deadline = Date.now() + 60_000;
+ *     while (Date.now() < deadline) {
+ *       const res = yield* HttpClient.get(
+ *         `${url}/workflow/status/${instanceId}`,
+ *       );
+ *       status = (yield* res.json) as { status: string };
+ *       if (status.status === "complete" || status.status === "errored") {
+ *         break;
+ *       }
+ *       yield* Effect.sleep("2 seconds");
+ *     }
+ *
+ *     expect(status?.status).toBe("complete");
+ *   }),
+ *   { timeout: 120_000 },
+ * );
  * ```
  */
 export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((

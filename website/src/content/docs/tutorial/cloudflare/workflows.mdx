@@ -1,0 +1,280 @@
+---
+title: Add a Workflow
+description: Orchestrate durable, multi-step work with Cloudflare Workflows — automatic retries, replayable steps, and at-least-once delivery.
+sidebar:
+  order: 5
+---
+
+The `Sandbox` container handles long-lived compute, but sometimes
+you need to coordinate **many** steps that should outlive any single
+request — a checkout flow, a multi-stage data pipeline, a "send a
+reminder in 24 hours" job. That's what **Cloudflare Workflows** are
+for: durable, retryable, replayable step sequences with at-least-once
+delivery semantics. The example below broadcasts each step's
+progress back to the chat `Room` you built two parts ago.
+
+## How a Workflow looks
+
+The shape mirrors what you've seen for Workers and Durable Objects —
+two `Effect.gen` blocks. The outer one resolves shared dependencies;
+the inner one is the workflow body, executed step-by-step by the
+Cloudflare Workflows runtime:
+
+```typescript
+Effect.gen(function* () {
+  // Phase 1: init — runs at deploy and once per workflow instance.
+  const room = yield* Room;
+
+  return Effect.gen(function* () {
+    // Phase 2: workflow body — runs as durable steps.
+    const event = yield* Cloudflare.WorkflowEvent;
+    const result = yield* Cloudflare.task("process", doWork(event.payload));
+    yield* Cloudflare.sleep("cooldown", "10 seconds");
+    return result;
+  });
+});
+```
+
+Each `task` call is a checkpoint. If the worker crashes mid-step,
+Cloudflare replays the workflow from the last completed task — your
+code is _not_ retried, the persisted result is.
+
+## Create the workflow file
+
+Create `src/NotifyWorkflow.ts` with an empty workflow body. The
+inner Effect reads the `WorkflowEvent` service to get the payload
+you'll pass when starting an instance:
+
+```typescript
+// src/NotifyWorkflow.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import Room from "./room.ts";
+
+export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>()(
+  "Notifier",
+  Effect.gen(function* () {
+    const rooms = yield* Room;
+
+    return Effect.gen(function* () {
+      const event = yield* Cloudflare.WorkflowEvent;
+      const { roomId, message } = event.payload as {
+        roomId: string;
+        message: string;
+      };
+      return { roomId, message };
+    });
+  }),
+) {}
+```
+
+The outer init resolves shared dependencies — here, the `Room` DO
+namespace from the previous tutorial so we can broadcast back to
+it. The inner Effect is the workflow body that the Cloudflare
+runtime steps through.
+
+## Add a step
+
+`Cloudflare.task("name", effect)` checkpoints the result so a
+crash + replay returns the persisted value instead of re-running
+the side effect. Use it for **anything** that has an external
+effect — HTTP calls, env-binding access, file writes. Add a step
+that roundtrips a value through KV:
+
+```diff lang="typescript"
+return Effect.gen(function* () {
++ const env = yield* Cloudflare.WorkerEnvironment;
+  const event = yield* Cloudflare.WorkflowEvent;
+  const { roomId, message } = event.payload as {
+    roomId: string;
+    message: string;
+  };
+
++ const stored = yield* Cloudflare.task(
++   "kv-roundtrip",
++   Effect.tryPromise({
++     try: async () => {
++       const key = `workflow:${roomId}`;
++       await env.KV.put(key, message);
++       return await env.KV.get(key);
++     },
++     catch: (cause) =>
++       cause instanceof Error ? cause : new Error(String(cause)),
++   }).pipe(Effect.orDie),
++ );
+
+- return { roomId, message };
++ return { roomId, message: stored };
+});
+```
+
+`Cloudflare.WorkerEnvironment` gives you typed access to env
+bindings (`KV`, `R2`, etc.) from inside a workflow body — same
+service you'd `yield*` from a Worker.
+
+:::caution[Always wrap I/O in `task`]
+The body Effect can re-execute many times during a replay. Anything
+you do outside a `task` (like a raw `fetch` or `env.KV.put`) runs
+on every replay. Wrapping the I/O in `task` makes the result
+persisted and the side effect run exactly once.
+:::
+
+## Broadcast to the chat room
+
+Add a step that fans the stored value out to the matching `Room`
+instance:
+
+```diff lang="typescript"
+const stored = yield* Cloudflare.task("kv-roundtrip", /* ... */);
+
++ const room = rooms.getByName(roomId);
++ yield* Cloudflare.task(
++   "broadcast",
++   room.broadcast(`[workflow] ${stored}`),
++ );
+
+return { roomId, message: stored };
+```
+
+Calling the DO's `broadcast` RPC method from inside a `task` makes
+the message-send durable too — replays don't double-broadcast.
+
+## Sleep between steps
+
+`Cloudflare.sleep("name", "2 seconds")` parks the workflow without
+billing for compute, then resumes at the requested time. Names are
+required because Cloudflare uses them as replay keys:
+
+```diff lang="typescript"
+yield* Cloudflare.task(
+  "broadcast",
+  room.broadcast(`[workflow] ${stored}`),
+);
+
++ yield* Cloudflare.sleep("cooldown", "2 seconds");
+
++ yield* Cloudflare.task(
++   "finalize",
++   room.broadcast(`[workflow] complete for ${roomId}`),
++ );
+
+return { roomId, message: stored };
+```
+
+After the cool-down the workflow broadcasts a "complete" message
+and finishes. The whole sequence — KV roundtrip → broadcast →
+sleep → broadcast → return — is durable end to end.
+
+## Trigger from the Worker
+
+A Workflow becomes a typed handle when you `yield*` it in the
+Worker's init phase. Use `create()` to start an instance and
+`get(id).status()` to poll it:
+
+```diff lang="typescript"
+// src/worker.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
++import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
++import NotifyWorkflow from "./NotifyWorkflow.ts";
+
+export default Cloudflare.Worker(
+  "Worker",
+  { main: import.meta.path },
+  Effect.gen(function* () {
++   const notifier = yield* NotifyWorkflow;
+
+    return {
+      fetch: Effect.gen(function* () {
++       const request = yield* HttpServerRequest;
++
++       if (
++         request.url.startsWith("/workflow/start/") &&
++         request.method === "POST"
++       ) {
++         const roomId = request.url.split("/").pop()!;
++         const instance = yield* notifier.create({
++           roomId,
++           message: "hello from workflow",
++         });
++         return yield* HttpServerResponse.json({ instanceId: instance.id });
++       }
++
++       if (request.url.startsWith("/workflow/status/")) {
++         const instanceId = request.url.split("/").pop()!;
++         const instance = yield* notifier.get(instanceId);
++         const status = yield* instance.status();
++         return yield* HttpServerResponse.json(status);
++       }
++
+        return HttpServerResponse.text("Hello from my Worker!");
+      }),
+    };
+  }),
+);
+```
+
+`notifier.create({ ... })` immediately returns an instance id — the
+workflow runs asynchronously on Cloudflare's side. `instance.status()`
+returns one of `"queued"`, `"running"`, `"paused"`, `"complete"`, or
+`"errored"` along with the `output` (what the body Effect returned)
+or `error`.
+
+Deploy:
+
+```sh
+bun alchemy deploy
+```
+
+Add a test that POSTs to `/workflow/start/:roomId`, then polls
+`/workflow/status/:instanceId` until the workflow reaches
+`complete`:
+
+```diff lang="typescript"
+// test/integ.test.ts
+import { beforeAll, deploy, expect, test } from "alchemy/Test/Bun";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import Stack from "../alchemy.run.ts";
+
+const stack = beforeAll(deploy(Stack));
+
++test(
++  "Notifier workflow completes within 60s",
++  Effect.gen(function* () {
++    const { url } = yield* stack;
++    const roomId = `room-${Date.now()}`;
++
++    const start = yield* HttpClient.post(`${url}/workflow/start/${roomId}`);
++    const { instanceId } = (yield* start.json) as { instanceId: string };
++    expect(instanceId).toBeString();
++
++    let status: { status: string } | undefined;
++    const deadline = Date.now() + 60_000;
++    while (Date.now() < deadline) {
++      const res = yield* HttpClient.get(`${url}/workflow/status/${instanceId}`);
++      status = (yield* res.json) as { status: string };
++      if (status.status === "complete" || status.status === "errored") break;
++      yield* Effect.sleep("2 seconds");
++    }
++
++    expect(status?.status).toBe("complete");
++  }),
++  { timeout: 120_000 },
++);
+```
+
+```sh
+bun test test/integ.test.ts
+```
+
+The polling loop should see the workflow transition through
+`running` and finish in `complete` within ~5 seconds (most of which
+is the `sleep("cooldown", "2 seconds")` step).
+
+Your app now spans a Worker, a Vite frontend, Durable Objects,
+hibernatable WebSockets, a Container, and a Workflow — all
+deploying from CI thanks to [Part 5](/tutorial/part-5). From here,
+browse the [Concepts](/concepts/stack), [Guides](/guides/cli), and
+[Providers](/providers) sections for whatever you need next.

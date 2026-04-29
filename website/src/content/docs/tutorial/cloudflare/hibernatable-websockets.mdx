@@ -1,0 +1,462 @@
+---
+title: Accept WebSockets
+description: Accept WebSocket connections in a Durable Object, broadcast between peers, and survive Cloudflare's hibernation.
+sidebar:
+  order: 2
+---
+
+The `Counter` Durable Object you added in the previous part holds
+state per key but only over plain HTTP. Now you'll build `Room` — a
+chat Durable Object that accepts WebSocket connections, broadcasts
+messages between peers, and **survives hibernation**.
+
+Cloudflare can evict an idle Durable Object from memory while
+keeping its WebSocket connections open. When a message arrives the
+DO is reconstructed from scratch, your init Effect runs again, and
+your `webSocketMessage` handler is invoked. Any per-instance state
+you held in JavaScript variables is gone — you have to put it back.
+
+## Accept a connection
+
+Start with the smallest possible Room — just enough to complete
+the WebSocket handshake. Create `src/room.ts`:
+
+```typescript
+// src/room.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+
+export default class Room extends Cloudflare.DurableObjectNamespace<Room>()(
+  "Rooms",
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      return {
+        fetch: Effect.gen(function* () {
+          const [response, socket] = yield* Cloudflare.upgrade();
+          return response;
+        }),
+      };
+    });
+  }),
+) {}
+```
+
+`Cloudflare.upgrade()` does two things in one call: it builds a
+`101 Switching Protocols` response with the right headers, and it
+hands you a `DurableWebSocket` you can `send` / `close` /
+`serializeAttachment` on. Returning the response from `fetch` is
+what tells Cloudflare to hijack the TCP connection and complete the
+handshake.
+
+This compiles and accepts connections, but messages go nowhere yet.
+
+## Remember who's connected
+
+Add a `sessions` map and stash the new socket into it on every
+upgrade. Tag each socket with an id so we know which session sent
+what later:
+
+```diff lang="typescript"
+// src/room.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+
+export default class Room extends Cloudflare.DurableObjectNamespace<Room>()(
+  "Rooms",
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
++      const sessions = new Map<string, Cloudflare.DurableWebSocket>();
+
+      return {
+        fetch: Effect.gen(function* () {
+          const [response, socket] = yield* Cloudflare.upgrade();
++          const id = crypto.randomUUID();
++          socket.serializeAttachment({ id });
++          sessions.set(id, socket);
+          return response;
+        }),
+      };
+    });
+  }),
+) {}
+```
+
+`socket.serializeAttachment({ id })` persists a JSON-safe value
+**alongside the socket itself**. Cloudflare keeps it across
+hibernation, so when the DO wakes back up the socket still
+remembers which session it belongs to. We'll need that in the next
+two steps.
+
+## Handle incoming messages
+
+Add a `webSocketMessage` handler. Cloudflare invokes it every time
+a peer sends data; we look up the sender's session id from the
+attachment, prefix each message with a short label, and fan it out
+to everyone in the room:
+
+```diff lang="typescript"
+return {
+  fetch: Effect.gen(function* () {
+    const [response, socket] = yield* Cloudflare.upgrade();
+    const id = crypto.randomUUID();
+    socket.serializeAttachment({ id });
+    sessions.set(id, socket);
+    return response;
+  }),
++  webSocketMessage: Effect.fnUntraced(function* (
++    socket: Cloudflare.DurableWebSocket,
++    message: string | ArrayBuffer,
++  ) {
++     const attachment = socket.deserializeAttachment<{ id: string }>();
++     if (!attachment) return;
++     const text =
++       typeof message === "string"
++         ? message
++         : new TextDecoder().decode(message);
++     const label = attachment.id.slice(0, 8);
++     for (const peer of sessions.values()) {
++       yield* peer.send(`[${label}] ${text}`);
++     }
++   }),
+};
+```
+
+`Effect.fnUntraced` lets you write a generator function with
+arbitrary parameters. The Cloudflare runtime calls it with the
+socket and the inbound payload (which can be a string or an
+`ArrayBuffer` depending on how the client sent it).
+
+## Clean up on disconnect
+
+When a peer disconnects, drop them from the `sessions` map so we
+don't try to send to a dead socket:
+
+```diff lang="typescript"
+return {
+  fetch: /* ... */,
+  webSocketMessage: /* ... */,
++  webSocketClose: Effect.fnUntraced(function* (
++    ws: Cloudflare.DurableWebSocket,
++    code: number,
++    reason: string,
++  ) {
++    const attachment = ws.deserializeAttachment<{ id: string }>();
++    if (attachment) sessions.delete(attachment.id);
++    yield* ws.close(code, reason);
++  }),
+};
+```
+
+## Restore sessions after hibernation
+
+Here's the catch. Cloudflare can evict an idle DO from memory
+while keeping its WebSockets open. When the next message arrives,
+the DO is reconstructed: the inner `Effect.gen` runs again, and
+your `sessions` map starts empty — but the open sockets are still
+there.
+
+Rehydrate the map at the top of the inner init by reading every
+attached socket back from the runtime:
+
+```diff lang="typescript"
+Effect.gen(function* () {
++  const state = yield* Cloudflare.DurableObjectState;
+  const sessions = new Map<string, Cloudflare.DurableWebSocket>();
+
++  for (const socket of yield* state.getWebSockets()) {
++    const data = socket.deserializeAttachment<{ id: string }>();
++    if (data) sessions.set(data.id, socket);
++  }
+
+  return {
+    fetch: /* ... */,
+    webSocketMessage: /* ... */,
+    webSocketClose: /* ... */,
+  };
+});
+```
+
+`state.getWebSockets()` returns every still-attached socket on the
+current instance, and `deserializeAttachment` recovers the
+`{ id }` we stashed in the upgrade step. Without this loop the
+first message after hibernation would broadcast to nobody.
+
+## Extract a broadcast helper
+
+Before wiring this up, pull the broadcast loop into a reusable
+`broadcast` function — we'll need it again when we add scheduled
+reminders below:
+
+```diff lang="typescript"
+Effect.gen(function* () {
+  const state = yield* Cloudflare.DurableObjectState;
+  const sessions = new Map<string, Cloudflare.DurableWebSocket>();
+
+  for (const socket of yield* state.getWebSockets()) {
+    const data = socket.deserializeAttachment<{ id: string }>();
+    if (data) sessions.set(data.id, socket);
+  }
+
++  const broadcast = (text: string) =>
++    Effect.gen(function* () {
++      for (const peer of sessions.values()) {
++        yield* peer.send(text);
++      }
++    });
+
+  return {
+    fetch: /* ... */,
+    webSocketMessage: Effect.fnUntraced(function* (socket, message) {
+      const attachment = socket.deserializeAttachment<{ id: string }>();
+      if (!attachment) return;
+      const text = typeof message === "string"
+        ? message
+        : new TextDecoder().decode(message);
+-      for (const peer of sessions.values()) {
+-        yield* peer.send(`[${attachment.id.slice(0, 8)}] ${text}`);
+-      }
++      yield* broadcast(`[${attachment.id.slice(0, 8)}] ${text}`);
+    }),
+    webSocketClose: /* ... */,
++    broadcast,
+  };
+});
+```
+
+Returning `broadcast` from the inner Effect makes it callable as an
+RPC method — handy when other resources (a Workflow, a Container)
+want to push messages into the room.
+
+## Wire the Room into the Worker
+
+The Worker forwards any `Upgrade: websocket` request on `/room/:id`
+to the matching DO instance:
+
+```diff lang="typescript"
+// src/worker.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
++import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
++import Room from "./room.ts";
+
+export default Cloudflare.Worker(
+  "Worker",
+  { main: import.meta.path },
+  Effect.gen(function* () {
++    const rooms = yield* Room;
+
+    return {
+      fetch: Effect.gen(function* () {
++        const request = yield* HttpServerRequest;
++
++        if (request.url.startsWith("/room/")) {
++          if (request.headers.upgrade !== "websocket") {
++            return HttpServerResponse.text(
++              "Expected Upgrade: websocket",
++              { status: 426 },
++            );
++          }
++          const id = request.url.split("/").pop()!;
++          return yield* rooms.getByName(id).fetch(request);
++        }
++
+        return HttpServerResponse.text("Hello from my Worker!");
+      }),
+    };
+  }),
+);
+```
+
+`rooms.getByName(id).fetch(request)` is the typed equivalent of
+"forward this HTTP request to the DO". Because the DO returned a
+`fetch` field with the upgrade response, the runtime hijacks the
+TCP connection — the Worker's response **is** the WebSocket
+handshake.
+
+## Deploy
+
+```sh
+bun alchemy deploy
+```
+
+## Wait for the connection to open
+
+The integration test uses Bun's built-in `WebSocket` global wrapped
+in `Effect.tryPromise`. The trick is that `new WebSocket(url)`
+returns immediately — you have to wait for the `open` event before
+you can send anything. Add a small `open` helper to `test/integ.test.ts`:
+
+```diff lang="typescript"
+// test/integ.test.ts
+import { beforeAll, deploy, expect, test } from "alchemy/Test/Bun";
+import * as Effect from "effect/Effect";
+import Stack from "../alchemy.run.ts";
+
+const stack = beforeAll(deploy(Stack));
+
++const open = (url: string) =>
++  Effect.tryPromise(
++    () =>
++      new Promise<WebSocket>((resolve, reject) => {
++        const ws = new WebSocket(url);
++        ws.addEventListener("open", () => resolve(ws), { once: true });
++        ws.addEventListener("error", reject, { once: true });
++      }),
++  );
+```
+
+`open(url)` returns an `Effect<WebSocket>` that resolves once the
+handshake completes, or fails if the connection errors out before
+opening.
+
+## Read the next message
+
+We also need a way to await the next inbound message. Add a
+`nextMessage` helper that resolves with the first `message` event:
+
+```diff lang="typescript"
++const nextMessage = (ws: WebSocket) =>
++  Effect.tryPromise(
++    () =>
++      new Promise<string>((resolve) => {
++        ws.addEventListener(
++          "message",
++          (e) => resolve(String(e.data)),
++          { once: true },
++        );
++      }),
++  );
+```
+
+`{ once: true }` removes the listener as soon as it fires, so each
+`yield* nextMessage(ws)` call drains exactly one message.
+
+## Write the test
+
+Now the test itself: open two clients to the same room, have one
+send `"hello bob"`, and assert the other receives the broadcast.
+
+```diff lang="typescript"
++test(
++  "Room broadcasts messages between peers",
++  Effect.gen(function* () {
++    const { url } = yield* stack;
++    const wsUrl = url.replace(/^http/, "ws") + "/room/test";
++
++    const alice = yield* open(wsUrl);
++    const bob = yield* open(wsUrl);
++
++    alice.send("hello bob");
++
++    const received = yield* nextMessage(bob);
++    expect(received).toMatch(/hello bob$/);
++
++    alice.close();
++    bob.close();
++  }),
++);
+```
+
+Run it:
+
+```sh
+bun test test/integ.test.ts
+```
+
+Alice's `"hello bob"` arrives at the Room as a `webSocketMessage`,
+the broadcast loop sends `"[<alice-id>] hello bob"` to every peer,
+and Bob's `nextMessage` resolves with it.
+
+## Schedule a future broadcast (alarms)
+
+Durable Objects have **alarms** — single-shot timers backed by the
+DO's storage. Alchemy ships a small SQLite-backed scheduler on top
+so you can register many named events instead of juggling a single
+alarm timestamp yourself. We'll use it to add a
+`/remind <seconds> <message>` chat command.
+
+First, recognise the command inside `webSocketMessage` and schedule
+the event:
+
+```diff lang="typescript"
+webSocketMessage: Effect.fnUntraced(function* (socket, message) {
+  const attachment = socket.deserializeAttachment<{ id: string }>();
+  if (!attachment) return;
+  const text = typeof message === "string"
+    ? message
+    : new TextDecoder().decode(message);
+
++  const remindMatch = text.match(/^\/remind\s+(\d+)\s+(.+)$/);
++  if (remindMatch) {
++    const delaySec = parseInt(remindMatch[1], 10);
++    const reminder = remindMatch[2];
++    const id = crypto.randomUUID();
++    const runAt = new Date(Date.now() + delaySec * 1000);
++    yield* Cloudflare.scheduleEvent(id, runAt, { message: reminder });
++    yield* socket.send(`[system] Reminder scheduled in ${delaySec}s`);
++    return;
++  }
+
+  yield* broadcast(`[${attachment.id.slice(0, 8)}] ${text}`);
+}),
+```
+
+`scheduleEvent` upserts a row into a DO-local SQLite table and
+sets the DO alarm to the earliest pending timestamp. The `id` is
+the upsert key, so reusing it overwrites the previous schedule.
+
+Now add an `alarm` handler to drain fired events:
+
+```diff lang="typescript"
+return {
+  fetch: /* ... */,
+  webSocketMessage: /* ... */,
+  webSocketClose: /* ... */,
++  alarm: () =>
++    Effect.gen(function* () {
++      const fired = yield* Cloudflare.processScheduledEvents;
++      for (const event of fired) {
++        const payload = event.payload as { message: string };
++        yield* broadcast(`[reminder] ${payload.message}`);
++      }
++    }),
+  broadcast,
+};
+```
+
+`processScheduledEvents` returns every event whose `runAt <= now`,
+deletes the one-shot ones (or re-schedules repeating ones), and
+re-sets the alarm to the next pending event. All you do is loop
+over the returned events and act on them.
+
+Verify it with a test that sends `/remind 1 hello` and waits up to
+5 seconds for the broadcast to arrive:
+
+```diff lang="typescript"
+// test/integ.test.ts (additions)
++test(
++  "Room schedules a reminder broadcast",
++  Effect.gen(function* () {
++    const { url } = yield* stack;
++    const wsUrl = url.replace(/^http/, "ws") + "/room/reminders";
++
++    const peer = yield* open(wsUrl);
++    peer.send("/remind 1 hello");
++
++    // First message back is the [system] confirmation;
++    // the second is the [reminder] broadcast a second later.
++    yield* nextMessage(peer);
++    const reminder = yield* nextMessage(peer);
++    expect(reminder).toContain("[reminder] hello");
++
++    peer.close();
++  }),
++  { timeout: 10_000 },
++);
+```
+
+You now have an interesting backend. Next you'll
+[add a Vite SPA](/tutorial/cloudflare/vite-spa) so users have a UI
+to talk to it — frontend and backend deploying together from the
+same `alchemy.run.ts`.

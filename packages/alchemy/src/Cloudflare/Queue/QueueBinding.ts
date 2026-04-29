@@ -26,6 +26,39 @@ export class QueueSendError extends Data.TaggedError("QueueSendError")<{
   cause?: unknown;
 }> {}
 
+/**
+ * Binding service that turns a {@link Queue} resource into a typed
+ * {@link QueueSender} you can call from a Worker's runtime Effect.
+ *
+ * @section Sending Messages
+ * Bind the queue in the Worker's init phase, then use `send` for
+ * single messages or `sendBatch` for many messages in one call.
+ * Messages can be any JSON-serializable value.
+ *
+ * @example Producer route
+ * ```typescript
+ * const queue = yield* Cloudflare.QueueBinding.bind(Queue);
+ *
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     yield* queue.send({ text: "hi", sentAt: Date.now() });
+ *     return HttpServerResponse.empty({ status: 202 });
+ *   }),
+ * };
+ * ```
+ *
+ * @example Sending a batch
+ * ```typescript
+ * yield* queue.sendBatch([
+ *   { body: { event: "click", id: 1 } },
+ *   { body: { event: "click", id: 2 } },
+ *   { body: "raw text", contentType: "text" },
+ * ]);
+ * ```
+ *
+ * Provide {@link QueueBindingLive} in the worker's runtime layer to
+ * resolve the underlying Cloudflare queue at request time.
+ */
 export class QueueBinding extends Binding.Service<
   QueueBinding,
   (queue: Queue) => Effect.Effect<QueueSender>

@@ -114,7 +114,17 @@ export default defineConfig({
         { label: "Getting Started", link: "/getting-started" },
         {
           label: "Tutorial",
-          autogenerate: { directory: "tutorial" },
+          items: [
+            { label: "Part 1: Your First Stack", link: "/tutorial/part-1" },
+            { label: "Part 2: Add a Worker", link: "/tutorial/part-2" },
+            { label: "Part 3: Testing", link: "/tutorial/part-3" },
+            { label: "Part 4: Local Dev", link: "/tutorial/part-4" },
+            { label: "Part 5: CI/CD", link: "/tutorial/part-5" },
+            {
+              label: "Cloudflare",
+              autogenerate: { directory: "tutorial/cloudflare" },
+            },
+          ],
         },
         {
           label: "Concepts",
