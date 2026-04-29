@@ -3258,6 +3258,27 @@ body.alc-root,
    Outro: copy-prompt-for-coding-agent pill.
    ============================================================ */
 
+.alc-outro-heading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  margin: 0;
+  line-height: 1;
+}
+.alc-outro-heading .alc-orn {
+  margin: 0 0 22px;
+}
+.alc-outro-heading__main,
+.alc-outro-heading__sub {
+  display: block;
+}
+.alc-outro-heading__sub {
+  margin-top: 12px;
+  color: var(--alc-accent-deep);
+  font-style: italic;
+}
+
 .alc-copy-agent {
   display: flex;
   align-items: stretch;
