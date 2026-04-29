@@ -7,6 +7,7 @@ export * from "./DynamicWorkerLoader.ts";
 export * from "./Fetch.ts";
 export * from "./HttpServer.ts";
 export * from "./InferEnv.ts";
+export * from "./LocalWorkerProvider.ts";
 export * from "./Request.ts";
 export * from "./Rpc.ts";
 export * from "./ScheduledEvents.ts";

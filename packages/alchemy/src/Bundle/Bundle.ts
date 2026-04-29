@@ -1,8 +1,7 @@
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
-import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import assert from "node:assert";
 import * as rolldown from "rolldown";
@@ -45,10 +44,32 @@ export interface BundleFile {
   readonly hash: string;
 }
 
-export class BundleError extends Data.TaggedError("BundleError")<{
-  readonly message: string;
-  readonly cause?: unknown;
-}> {}
+export class BundleError extends Schema.TaggedErrorClass<BundleError>()(
+  "BundleError",
+  {
+    message: Schema.String,
+    cause: Schema.optional(Schema.DefectWithStack),
+  },
+) {}
+
+export type BundleWatchEvent =
+  | BundleWatchEvent.Start
+  | BundleWatchEvent.Success
+  | BundleWatchEvent.Error;
+
+export declare namespace BundleWatchEvent {
+  interface Start {
+    readonly _tag: "Start";
+  }
+  interface Success {
+    readonly _tag: "Success";
+    readonly output: BundleOutput;
+  }
+  interface Error {
+    readonly _tag: "Error";
+    readonly error: BundleError;
+  }
+}
 
 /**
  * Build a bundle using rolldown from the given input options and output options.
@@ -93,8 +114,15 @@ export const watch = (
   inputOptions: rolldown.InputOptions,
   outputOptions?: rolldown.OutputOptions,
   extra?: BundleExtraOptions,
-): Stream.Stream<Result.Result<BundleOutput, BundleError>> =>
-  Stream.callback<Result.Result<rolldown.OutputBundle, BundleError>>((queue) =>
+): Stream.Stream<BundleWatchEvent> =>
+  Stream.callback<
+    | BundleWatchEvent.Start
+    | BundleWatchEvent.Error
+    | {
+        readonly _tag: "Success";
+        readonly output: rolldown.OutputBundle;
+      }
+  >((queue) =>
     Effect.acquireRelease(
       Effect.sync(() => {
         const watcher = rolldown.watch({
@@ -104,8 +132,16 @@ export const watch = (
             // The watcher event listener does not receive the bundle output, so we grab it using a plugin.
             {
               name: "alchemy:watch-bundle",
+              watchChange() {
+                Queue.offerUnsafe(queue, {
+                  _tag: "Start",
+                });
+              },
               generateBundle(_outputOptions, bundle) {
-                Queue.offerUnsafe(queue, Result.succeed(bundle));
+                Queue.offerUnsafe(queue, {
+                  _tag: "Success",
+                  output: bundle,
+                });
               },
             },
           ],
@@ -113,10 +149,10 @@ export const watch = (
         });
         watcher.on("event", (event) => {
           if (event.code === "ERROR") {
-            Queue.offerUnsafe(
-              queue,
-              Result.fail(bundleErrorFromUnknown(event.error)),
-            );
+            Queue.offerUnsafe(queue, {
+              _tag: "Error",
+              error: bundleErrorFromUnknown(event.error),
+            });
           } else if (event.code === "BUNDLE_END") {
             // This must be called to avoid resource leaks.
             event.result.close().catch(() => {});
@@ -127,23 +163,27 @@ export const watch = (
       (watcher) => Effect.promise(() => watcher.close()),
     ),
   ).pipe(
-    Stream.mapEffect((result) =>
+    Stream.mapEffect((event) =>
       Effect.gen(function* () {
-        if (result._tag === "Failure") {
-          return Result.fail(result.failure);
+        if (event._tag !== "Success") {
+          return event;
         }
-        return yield* bundleOutputFromRolldownOutputBundle(result.success).pipe(
-          Effect.map(Result.succeed),
-          Effect.catch((error) => Effect.succeed(Result.fail(error))),
+        return yield* bundleOutputFromRolldownOutputBundle(event.output).pipe(
+          Effect.map(
+            (output): BundleWatchEvent.Success => ({
+              _tag: "Success",
+              output,
+            }),
+          ),
+          Effect.catch((error) =>
+            Effect.succeed<BundleWatchEvent.Error>({
+              _tag: "Error",
+              error: bundleErrorFromUnknown(error),
+            }),
+          ),
         );
       }),
     ),
-    Stream.changesWith((left, right) => {
-      if (left._tag === "Success" && right._tag === "Success") {
-        return left.success.hash === right.success.hash;
-      }
-      return false;
-    }),
   );
 
 const ENTRY_MODULE_ID = "virtual:alchemy-entry";
