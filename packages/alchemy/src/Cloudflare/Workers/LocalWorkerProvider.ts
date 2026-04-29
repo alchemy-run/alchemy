@@ -62,7 +62,6 @@ export const LocalWorkerProvider = () =>
                 exports: (props.exports ?? {}) as any,
               },
           stack: { name: stack.name, stage: stack.stage },
-          accountId,
           bindings: workerBindings,
           durableObjectNamespaces: Object.entries(durableObjectNamespaces).map(
             ([className, namespaceId]) => ({

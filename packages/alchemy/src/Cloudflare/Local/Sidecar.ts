@@ -13,7 +13,6 @@ import type { WorkerBundleOptions } from "../Workers/WorkerBundle.ts";
 
 export interface ServeOptions extends WorkerBundleOptions {
   name: string;
-  accountId: string;
   bindings: WorkerBinding[];
   durableObjectNamespaces: Worker.DurableObjectNamespace[];
 }
