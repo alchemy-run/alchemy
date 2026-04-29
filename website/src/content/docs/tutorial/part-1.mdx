@@ -225,17 +225,6 @@ export default Alchemy.Stack(
 
 ## Deploy
 
-Set your Cloudflare environment variables.
-
-```sh
-export CLOUDFLARE_ACCOUNT_ID=your_account_id_here
-export CLOUDFLARE_API_TOKEN=your_api_token_here
-```
-
-:::note
-Find your Cloudflare Account ID on [Account Home](https://dash.cloudflare.com/?to=/:account/home) and [create your Cloudflare API Token here](https://dash.cloudflare.com/profile/api-tokens). The "Edit Cloudflare Workers" template is sufficient for this tutorial.
-:::
-
 Run `alchemy deploy` to create the Bucket on Cloudflare:
 
 <Tabs syncKey="pkgManager">
@@ -252,6 +241,20 @@ Run `alchemy deploy` to create the Bucket on Cloudflare:
     <Code code="yarn alchemy deploy" lang="sh" />
   </TabItem>
 </Tabs>
+
+The first time you deploy, Alchemy walks each provider in your stack
+through an interactive login and saves the credentials to your
+**`default`** [profile](/concepts/profiles) at
+`~/.alchemy/profiles.json`. For Cloudflare you can sign in with
+OAuth in the browser or paste an API token — no environment
+variables or `wrangler login` required.
+
+:::tip
+To re-run the credential prompt later (e.g. to switch from OAuth to
+an API token, or to add a `prod` profile) use
+`alchemy login --configure` or
+`alchemy login --profile prod --configure`.
+:::
 
 <Terminal content={`[u]Plan[/u]: [g]1 to create[/g]
 [g]+[/g] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d]
