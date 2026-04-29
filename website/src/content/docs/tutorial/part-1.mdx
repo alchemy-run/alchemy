@@ -10,8 +10,7 @@ import StateStoreBootstrap from "../../../components/marketing-islands/StateStor
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 import { alchemyVersion, effectVersion } from "../../../versions";
 
-export const bunPkgs = `alchemy@${alchemyVersion} effect@${effectVersion} @effect/platform-bun@${effectVersion}`;
-export const nodePkgs = `alchemy@${alchemyVersion} effect@${effectVersion} @effect/platform-node@${effectVersion}`;
+export const pkgs = `alchemy@${alchemyVersion} effect@${effectVersion} @effect/platform-bun@${effectVersion} @effect/platform-node@${effectVersion}`;
 
 In this first part you'll install Alchemy and Effect, create a Stack
 with a Cloudflare R2 Bucket, and deploy it — all in under five
@@ -47,16 +46,16 @@ Install <code>alchemy@{alchemyVersion}</code> and <code>effect@{effectVersion}</
 
 <Tabs syncKey="pkgManager">
   <TabItem label="bun" icon="bun">
-    <Code code={`bun add ${bunPkgs}`} lang="sh" />
+    <Code code={`bun add ${pkgs}`} lang="sh" />
   </TabItem>
   <TabItem label="npm" icon="npm">
-    <Code code={`npm install ${nodePkgs}`} lang="sh" />
+    <Code code={`npm install ${pkgs}`} lang="sh" />
   </TabItem>
   <TabItem label="pnpm" icon="pnpm">
-    <Code code={`pnpm add ${nodePkgs}`} lang="sh" />
+    <Code code={`pnpm add ${pkgs}`} lang="sh" />
   </TabItem>
   <TabItem label="yarn" icon="seti:yarn">
-    <Code code={`yarn add ${nodePkgs}`} lang="sh" />
+    <Code code={`yarn add ${pkgs}`} lang="sh" />
   </TabItem>
 </Tabs>
 
