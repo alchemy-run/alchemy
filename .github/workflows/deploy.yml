@@ -48,7 +48,7 @@ jobs:
 
       - name: Deploy
         working-directory: website
-        run: bun alchemy deploy --stage ${{ env.STAGE }}
+        run: bun alchemy deploy --stage ${{ env.STAGE }} --yes
         env:
           # Alchemy's Cloudflare auth provider accepts either a scoped
           # API token (CLOUDFLARE_API_TOKEN) or the legacy global API
@@ -89,7 +89,7 @@ jobs:
 
       - name: Destroy Preview Environment
         working-directory: website
-        run: bun alchemy destroy --stage ${{ env.STAGE }}
+        run: bun alchemy destroy --stage ${{ env.STAGE }} --yes
         env:
           CLOUDFLARE_API_KEY: ${{ secrets.ADMIN_CLOUDFLARE_API_KEY }}
           CLOUDFLARE_EMAIL: ${{ secrets.ADMIN_CLOUDFLARE_EMAIL }}
