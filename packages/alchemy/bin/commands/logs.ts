@@ -86,10 +86,10 @@ export const logsCommand = Command.make(
       const sinceDate = since ? parseSince(since) : undefined;
 
       yield* Effect.gen(function* () {
-        const state = yield* State.State;
         const stack = yield* stackEffect;
 
         yield* Effect.gen(function* () {
+          const state = yield* State.State;
           const filterSet = parseResourceFilter(filter);
           const availableIds = [
             ...new Set(Object.values(stack.resources).map((r) => r.LogicalId)),
