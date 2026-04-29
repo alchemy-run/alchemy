@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { Icon } from "@iconify/react";
 import { highlightTS } from "../marketing/highlightTS";
 
@@ -189,7 +195,15 @@ export default function EffectPilledShowcase() {
   const [tab, setTab] = useState<Tab>("iam");
   const [pinned, setPinned] = useState(false);
   const [layerImpl, setLayerImpl] = useState<LayerImpl>("ddb");
+  const [indicator, setIndicator] = useState({
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+  });
   const wrapRef = useRef<HTMLDivElement>(null);
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const tabButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   // Tab auto-cycle. Dwell longer on the Layer tab so both impls show
   // before moving on to the next tab.
@@ -260,6 +274,32 @@ export default function EffectPilledShowcase() {
   // does NOT include layerImpl — the Layer tab uses CSS transitions to
   // breathe between its two impls without remounting.
   const splitKey = tab;
+  const activeIdx = TABS.findIndex((t) => t.id === tab);
+
+  useLayoutEffect(() => {
+    const tabs = tabsRef.current;
+    const button = tabButtonRefs.current[activeIdx];
+    if (!tabs || !button) return;
+
+    const updateIndicator = () => {
+      setIndicator({
+        x: button.offsetLeft,
+        y: button.offsetTop,
+        width: button.offsetWidth,
+        height: button.offsetHeight,
+      });
+    };
+
+    updateIndicator();
+    const resizeObserver = new ResizeObserver(updateIndicator);
+    resizeObserver.observe(tabs);
+    resizeObserver.observe(button);
+    window.addEventListener("resize", updateIndicator);
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", updateIndicator);
+    };
+  }, [activeIdx]);
 
   return (
     <div ref={wrapRef} className="eff-showcase">
@@ -277,10 +317,26 @@ export default function EffectPilledShowcase() {
             className="alc-code-block__dot"
             style={{ background: "var(--alc-accent-bright)" }}
           />
-          <div className="eff-showcase__tabs" role="tablist">
-            {TABS.map((t) => (
+          <div
+            ref={tabsRef}
+            className="eff-showcase__tabs"
+            role="tablist"
+            style={
+              {
+                "--indicator-x": `${indicator.x}px`,
+                "--indicator-y": `${indicator.y}px`,
+                "--indicator-width": `${indicator.width}px`,
+                "--indicator-height": `${indicator.height}px`,
+              } as CSSProperties
+            }
+          >
+            <span className="eff-showcase__tab-indicator" aria-hidden />
+            {TABS.map((t, i) => (
               <button
                 key={t.id}
+                ref={(node) => {
+                  tabButtonRefs.current[i] = node;
+                }}
                 type="button"
                 role="tab"
                 aria-selected={tab === t.id}

@@ -10,11 +10,20 @@
    ============================================================ */
 
 .alc-term {
-  background: var(--alc-bg-code);
-  border: 1px solid var(--alc-hairline);
+  --alc-bg-code: var(--alc-bg-elev-1);
+  --alc-fg-invert: var(--alc-fg-1);
+  --alc-code-keyword: var(--alc-accent-deep);
+  --alc-code-string: var(--alc-terracotta-deep);
+  --alc-code-fn: var(--alc-info);
+  --alc-code-type: #6f5a9a;
+  --alc-code-comment: var(--alc-fg-3);
+  --alc-code-var: var(--alc-fg-1);
+  --alc-code-literal: var(--alc-danger);
+  background: var(--alc-bg-elev-1);
+  border: 1px solid var(--alc-hairline-3);
   border-radius: 10px;
   overflow: hidden;
-  box-shadow: var(--alc-shadow-sm);
+  box-shadow: none;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -25,8 +34,8 @@
   align-items: center;
   gap: 6px;
   padding: 10px 14px;
-  border-bottom: 1px solid rgba(232, 220, 192, 0.08);
-  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid var(--alc-hairline-2);
+  background: var(--alc-bg-nav);
 }
 .alc-term__title {
   margin-left: 10px;

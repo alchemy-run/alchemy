@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { highlightTS } from "../marketing/highlightTS";
 
 interface Panel {
@@ -11,7 +17,15 @@ const DWELL_MS = 5000;
 
 export default function AsyncTabs({ panels }: { panels: Panel[] }) {
   const [active, setActive] = useState(0);
+  const [indicator, setIndicator] = useState({
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+  });
   const wrapRef = useRef<HTMLDivElement>(null);
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const tabButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,6 +62,31 @@ export default function AsyncTabs({ panels }: { panels: Panel[] }) {
 
   const html = panels.map((p) => highlightTS(p.code));
 
+  useLayoutEffect(() => {
+    const tabs = tabsRef.current;
+    const button = tabButtonRefs.current[active];
+    if (!tabs || !button) return;
+
+    const updateIndicator = () => {
+      setIndicator({
+        x: button.offsetLeft,
+        y: button.offsetTop,
+        width: button.offsetWidth,
+        height: button.offsetHeight,
+      });
+    };
+
+    updateIndicator();
+    const resizeObserver = new ResizeObserver(updateIndicator);
+    resizeObserver.observe(tabs);
+    resizeObserver.observe(button);
+    window.addEventListener("resize", updateIndicator);
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", updateIndicator);
+    };
+  }, [active]);
+
   return (
     <div ref={wrapRef} className="async-tabs">
       <div className="async-tabs__chrome">
@@ -64,10 +103,26 @@ export default function AsyncTabs({ panels }: { panels: Panel[] }) {
             className="alc-code-block__dot"
             style={{ background: "var(--alc-accent-bright)" }}
           />
-          <div className="async-tabs__tabs" role="tablist">
+          <div
+            ref={tabsRef}
+            className="async-tabs__tabs"
+            role="tablist"
+            style={
+              {
+                "--indicator-x": `${indicator.x}px`,
+                "--indicator-y": `${indicator.y}px`,
+                "--indicator-width": `${indicator.width}px`,
+                "--indicator-height": `${indicator.height}px`,
+              } as CSSProperties
+            }
+          >
+            <span className="async-tabs__tab-indicator" aria-hidden />
             {panels.map((p, i) => (
               <button
                 key={p.filename}
+                ref={(node) => {
+                  tabButtonRefs.current[i] = node;
+                }}
                 type="button"
                 role="tab"
                 aria-selected={active === i}
