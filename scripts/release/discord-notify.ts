@@ -61,6 +61,9 @@ const body = rawBody
   .replace(/<\/?samp>/g, "`")
   // Collapse the long indent that the GitHub-flavored headings use.
   .replace(/^(#{1,6})\s+/gm, "$1 ")
+  // Discord only renders #, ##, ### as headings; drop deeper levels so
+  // lines like "##### View changes on GitHub" become plain text.
+  .replace(/^#{4,6}\s+/gm, "")
   // Strip any other stray HTML tags just in case.
   .replace(/<\/?[a-z][^>]*>/gi, "");
 
