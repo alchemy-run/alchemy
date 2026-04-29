@@ -38,6 +38,13 @@ export interface TitlePart {
   italic?: boolean;
   /** Render this part in the deep-moss accent color. */
   accent?: boolean;
+  /**
+   * Override the font family for this part. Use `"tinos"` for glyphs
+   * that should render from the TNR-equivalent face (the marketing
+   * arrow `→` — mirrors the website's font stack falling through to
+   * Times New Roman for U+2192). Default: Source Serif 4 Display.
+   */
+  font?: "tinos";
 }
 
 export interface OgCardProps {
@@ -140,7 +147,7 @@ export function OgCard({
               // stroke contrast for headline scale. Matches the hero,
               // which uses the variable font's display axis at ~72px.
               fontFamily: "Source Serif 4 Display",
-              fontWeight: 300,
+              fontWeight: 600,
               fontSize: 110,
               lineHeight: 1.02,
               letterSpacing: -2,
@@ -152,9 +159,21 @@ export function OgCard({
                   key: `tp${i}`,
                   props: {
                     style: {
+                      // Explicit fontFamily on the span (not just inherited)
+                      // — satori's font matcher is fussier about (family,
+                      // weight, style) tuples when style is overridden on a
+                      // child. Without this, the italic span often
+                      // resolves to faux italic (skewed upright) instead
+                      // of the true SemiboldIt cut.
+                      fontFamily:
+                        part.font === "tinos"
+                          ? "Tinos"
+                          : "Source Serif 4 Display",
                       fontStyle: part.italic ? "italic" : "normal",
                       color: part.accent ? COLORS.accentDeep : COLORS.fg1,
-                      fontWeight: 300,
+                      // Tinos only ships at weight 400 in our pipeline.
+                      // Forcing 600 here would trigger faux-bold synthesis.
+                      fontWeight: part.font === "tinos" ? 400 : 600,
                     },
                     children: part.text,
                   },

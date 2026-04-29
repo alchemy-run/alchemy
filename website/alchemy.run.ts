@@ -10,7 +10,7 @@ export type WorkerEnv = Cloudflare.InferEnv<typeof Website>;
 const Website = Cloudflare.StaticSite(
   "Website",
   Alchemy.Stack.useSync((stack) => ({
-    command: "bun astro build",
+    command: "bun run build",
     main: "./src/worker.ts",
     outdir: "dist",
     domain: stack.stage === "prod" ? "v2.alchemy.run" : undefined,
