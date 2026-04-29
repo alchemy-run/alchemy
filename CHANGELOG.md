@@ -1,3 +1,14 @@
+## v2.0.0-beta.23
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **AWS**: Various bugs in Lambda Function &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(92611)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/92611cd)
+- **cli**: Logs and tail command read state from right place &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/114 [<samp>(00163)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/0016361)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.22...HEAD)
+
+---
+
 ## v2.0.0-beta.22
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
