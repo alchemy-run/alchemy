@@ -280,83 +280,114 @@ handshake.
 bun alchemy deploy
 ```
 
-## Wait for the connection to open
+## Connect from a test
 
-The integration test uses Bun's built-in `WebSocket` global wrapped
-in `Effect.tryPromise`. The trick is that `new WebSocket(url)`
-returns immediately — you have to wait for the `open` event before
-you can send anything. Add a small `open` helper to `test/integ.test.ts`:
+The integration test connects to the deployed Worker over a real
+WebSocket using Effect's native [`Socket`](https://effect.website/docs/platform/socket/)
+module. Unlike the raw `WebSocket` global, `Socket` is fully
+Effect-aware: the connection lifecycle is tied to a `Scope`,
+incoming frames flow through a `Queue`, and the open handshake is
+signalled with a `Deferred`.
 
-```diff lang="typescript"
+Start the test file with the imports and a `stack` deployed once
+per run:
+
+```typescript
 // test/integ.test.ts
 import { beforeAll, deploy, expect, test } from "alchemy/Test/Bun";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Queue from "effect/Queue";
+import * as Socket from "effect/unstable/socket/Socket";
 import Stack from "../alchemy.run.ts";
 
 const stack = beforeAll(deploy(Stack));
-
-+const open = (url: string) =>
-+  Effect.tryPromise(
-+    () =>
-+      new Promise<WebSocket>((resolve, reject) => {
-+        const ws = new WebSocket(url);
-+        ws.addEventListener("open", () => resolve(ws), { once: true });
-+        ws.addEventListener("error", reject, { once: true });
-+      }),
-+  );
 ```
 
-`open(url)` returns an `Effect<WebSocket>` that resolves once the
-handshake completes, or fails if the connection errors out before
-opening.
+`beforeAll(deploy(Stack))` deploys your Worker + Room once and
+exposes the result (including the public `url`) as an `Effect`
+the tests can `yield*`.
 
-## Read the next message
+## A Socket-based `connect` helper
 
-We also need a way to await the next inbound message. Add a
-`nextMessage` helper that resolves with the first `message` event:
+We want each test to say "give me a connected client" and get back
+something with `send` and `next` methods. Build that on top of
+`Socket.makeWebSocket`:
 
-```diff lang="typescript"
-+const nextMessage = (ws: WebSocket) =>
-+  Effect.tryPromise(
-+    () =>
-+      new Promise<string>((resolve) => {
-+        ws.addEventListener(
-+          "message",
-+          (e) => resolve(String(e.data)),
-+          { once: true },
-+        );
-+      }),
-+  );
+```typescript
+const connect = (url: string) =>
+  Effect.gen(function* () {
+    const socket = yield* Socket.makeWebSocket(url);
+    const messages = yield* Queue.unbounded<string>();
+    const send = yield* socket.writer;
+    const opened = yield* Deferred.make<void>();
+
+    yield* Effect.forkScoped(
+      socket.runString((msg) => Queue.offer(messages, msg), {
+        onOpen: Deferred.succeed(opened, undefined),
+      }),
+    );
+    yield* Deferred.await(opened);
+
+    return {
+      send: (msg: string) => send(msg),
+      next: Queue.take(messages),
+    };
+  });
 ```
 
-`{ once: true }` removes the listener as soon as it fires, so each
-`yield* nextMessage(ws)` call drains exactly one message.
+A few things are happening here:
+
+- `Socket.makeWebSocket(url)` builds a `Socket` resource. It needs
+  a `WebSocketConstructor` in context, which we'll provide at the
+  test boundary.
+- `socket.writer` returns a function for sending frames. Acquiring
+  it once is more efficient than re-deriving it per send.
+- `socket.runString` consumes inbound text frames and hands each
+  one to your callback. We push them into an unbounded `Queue` so
+  the test can pull them off in order with `Queue.take`.
+- `Effect.forkScoped` runs the read loop in the background, tied
+  to the surrounding scope — when the test scope closes, the loop
+  is interrupted and the socket is closed.
+- The `onOpen` hook fulfils a `Deferred`, and we wait on it before
+  returning. That guarantees the caller can `send` immediately
+  without racing the handshake.
 
 ## Write the test
 
-Now the test itself: open two clients to the same room, have one
-send `"hello bob"`, and assert the other receives the broadcast.
+Open two clients to the same room, have one send `"hello bob"`,
+and assert the other receives the broadcast:
 
-```diff lang="typescript"
-+test(
-+  "Room broadcasts messages between peers",
-+  Effect.gen(function* () {
-+    const { url } = yield* stack;
-+    const wsUrl = url.replace(/^http/, "ws") + "/room/test";
-+
-+    const alice = yield* open(wsUrl);
-+    const bob = yield* open(wsUrl);
-+
-+    alice.send("hello bob");
-+
-+    const received = yield* nextMessage(bob);
-+    expect(received).toMatch(/hello bob$/);
-+
-+    alice.close();
-+    bob.close();
-+  }),
-+);
+```typescript
+test(
+  "Room broadcasts messages between peers",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const wsUrl = url.replace(/^http/, "ws") + "/room/test";
+
+    const alice = yield* connect(wsUrl);
+    const bob = yield* connect(wsUrl);
+
+    yield* alice.send("hello bob");
+
+    const received = yield* bob.next;
+    expect(received).toMatch(/hello bob$/);
+  }).pipe(
+    Effect.scoped,
+    Effect.provide(Socket.layerWebSocketConstructorGlobal),
+  ),
+  { timeout: 30_000 },
+);
 ```
+
+Two pieces at the bottom do the heavy lifting:
+
+- `Effect.scoped` closes the scope at the end of the test, which
+  interrupts every forked read loop and closes both sockets.
+- `Effect.provide(Socket.layerWebSocketConstructorGlobal)` supplies
+  the runtime's global `WebSocket` constructor so `Socket.makeWebSocket`
+  knows how to actually open a connection. On Bun and Node 22+ this
+  picks up the built-in `WebSocket`.
 
 Run it:
 
@@ -366,7 +397,7 @@ bun test test/integ.test.ts
 
 Alice's `"hello bob"` arrives at the Room as a `webSocketMessage`,
 the broadcast loop sends `"[<alice-id>] hello bob"` to every peer,
-and Bob's `nextMessage` resolves with it.
+and Bob's `next` resolves with it from the queue.
 
 ## Schedule a future broadcast (alarms)
 
@@ -433,27 +464,28 @@ over the returned events and act on them.
 Verify it with a test that sends `/remind 1 hello` and waits up to
 5 seconds for the broadcast to arrive:
 
-```diff lang="typescript"
+```typescript
 // test/integ.test.ts (additions)
-+test(
-+  "Room schedules a reminder broadcast",
-+  Effect.gen(function* () {
-+    const { url } = yield* stack;
-+    const wsUrl = url.replace(/^http/, "ws") + "/room/reminders";
-+
-+    const peer = yield* open(wsUrl);
-+    peer.send("/remind 1 hello");
-+
-+    // First message back is the [system] confirmation;
-+    // the second is the [reminder] broadcast a second later.
-+    yield* nextMessage(peer);
-+    const reminder = yield* nextMessage(peer);
-+    expect(reminder).toContain("[reminder] hello");
-+
-+    peer.close();
-+  }),
-+  { timeout: 10_000 },
-+);
+test(
+  "Room schedules a reminder broadcast",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const wsUrl = url.replace(/^http/, "ws") + "/room/reminders";
+
+    const peer = yield* connect(wsUrl);
+    yield* peer.send("/remind 1 hello");
+
+    // First message back is the [system] confirmation;
+    // the second is the [reminder] broadcast a second later.
+    yield* peer.next;
+    const reminder = yield* peer.next;
+    expect(reminder).toContain("[reminder] hello");
+  }).pipe(
+    Effect.scoped,
+    Effect.provide(Socket.layerWebSocketConstructorGlobal),
+  ),
+  { timeout: 30_000 },
+);
 ```
 
 You now have an interesting backend. Next you'll
