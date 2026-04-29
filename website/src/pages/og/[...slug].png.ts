@@ -15,9 +15,9 @@
  * arrows, em-dashes, fancy quotes, etc. all render verbatim.
  */
 
+import { Resvg } from "@resvg/resvg-js";
 import type { APIRoute, GetStaticPaths } from "astro";
 import { getCollection } from "astro:content";
-import { Resvg } from "@resvg/resvg-js";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -43,7 +43,9 @@ interface Entry {
 // the source content renders verbatim with no glyph workarounds.
 // ────────────────────────────────────────────────────────────────────────────
 
-const fontsDir = fileURLToPath(new URL("../../../assets/fonts/", import.meta.url));
+const fontsDir = fileURLToPath(
+  new URL("../../../assets/fonts/", import.meta.url),
+);
 
 async function readFont(filename: string): Promise<Buffer> {
   return fs.readFile(path.join(fontsDir, filename));
@@ -80,10 +82,30 @@ const fontsPromise = (async () => {
     // website hero, which uses the variable font's display optical axis
     // automatically. Light (300) is what the hero renders at ~72px;
     // Regular (400) is the default fallback.
-    { name: "Source Serif 4 Display", data: displayLight, weight: 300, style: "normal" },
-    { name: "Source Serif 4 Display", data: displayLightIt, weight: 300, style: "italic" },
-    { name: "Source Serif 4 Display", data: displayReg, weight: 400, style: "normal" },
-    { name: "Source Serif 4 Display", data: displayRegIt, weight: 400, style: "italic" },
+    {
+      name: "Source Serif 4 Display",
+      data: displayLight,
+      weight: 300,
+      style: "normal",
+    },
+    {
+      name: "Source Serif 4 Display",
+      data: displayLightIt,
+      weight: 300,
+      style: "italic",
+    },
+    {
+      name: "Source Serif 4 Display",
+      data: displayReg,
+      weight: 400,
+      style: "normal",
+    },
+    {
+      name: "Source Serif 4 Display",
+      data: displayRegIt,
+      weight: 400,
+      style: "italic",
+    },
 
     { name: "JetBrains Mono", data: mono, weight: 400, style: "normal" },
     { name: "Caveat", data: caveat, weight: 400, style: "normal" },
@@ -149,16 +171,18 @@ export const getStaticPaths: GetStaticPaths = async () => {
     };
   });
 
-  const marketingPaths = Object.entries(MARKETING_PAGES).map(([slug, meta]) => ({
-    params: { slug },
-    props: {
-      slug,
-      title: meta.title,
-      description: meta.description,
-      kind: "marketing" as const,
-      eyebrow: meta.eyebrow,
-    } satisfies Entry,
-  }));
+  const marketingPaths = Object.entries(MARKETING_PAGES).map(
+    ([slug, meta]) => ({
+      params: { slug },
+      props: {
+        slug,
+        title: meta.title,
+        description: meta.description,
+        kind: "marketing" as const,
+        eyebrow: meta.eyebrow,
+      } satisfies Entry,
+    }),
+  );
 
   return [...marketingPaths, ...docPaths];
 };
@@ -181,7 +205,7 @@ export const GET: APIRoute = async ({ props }) => {
     .render()
     .asPng();
 
-  return new Response(png, {
+  return new Response(png as any, {
     headers: {
       "Content-Type": "image/png",
       "Cache-Control": "public, max-age=31536000, immutable",

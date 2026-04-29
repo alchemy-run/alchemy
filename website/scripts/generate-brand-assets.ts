@@ -115,8 +115,14 @@ async function main() {
   await writeFile(path.join(publicDir, "favicon.svg"), favSvg);
 
   // 2. Raster favicons.
-  await writeFile(path.join(publicDir, "favicon-32.png"), rasterize(favSvg, 32));
-  await writeFile(path.join(publicDir, "favicon-16.png"), rasterize(favSvg, 16));
+  await writeFile(
+    path.join(publicDir, "favicon-32.png"),
+    rasterize(favSvg, 32),
+  );
+  await writeFile(
+    path.join(publicDir, "favicon-16.png"),
+    rasterize(favSvg, 16),
+  );
 
   // 3. apple-touch-icon (180×180, padded, opaque parchment).
   const apple = appleTouchSvg();
@@ -126,17 +132,11 @@ async function main() {
   );
 
   // 4. Larger PWA / share fallback at 512×512.
-  await writeFile(
-    path.join(publicDir, "icon-512.png"),
-    rasterize(apple, 512),
-  );
+  await writeFile(path.join(publicDir, "icon-512.png"), rasterize(apple, 512));
 
   // 5. Backwards-compat: keep the old /favicon.png reference (used by
   //    some cached nav code) pointing to the 32px raster.
-  await writeFile(
-    path.join(publicDir, "favicon.png"),
-    rasterize(favSvg, 32),
-  );
+  await writeFile(path.join(publicDir, "favicon.png"), rasterize(favSvg, 32));
 
   // 6. OG fallback (1200×630). Per-page OG images come from the static
   //    endpoint; this is the bare-domain fallback.

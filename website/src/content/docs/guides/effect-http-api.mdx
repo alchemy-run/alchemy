@@ -16,9 +16,24 @@ schemas for payloads, responses, and errors, then implement handlers
 against those schemas. The result is an `HttpEffect` — the same type
 a Worker's `fetch` expects — so it plugs in directly.
 
-## Define a schema
+The mental model we'll follow is:
 
-Start with a domain model. Create `src/task.ts`:
+1. **Define the schema and API outside the Worker.** Both are pure
+   descriptions and can be imported by clients.
+2. **Construct the service inside the Worker's Init phase.**
+   The Init phase runs at plan time *and* runtime, so we only do
+   pure construction here — we never `yield*` something that needs
+   a request to exist.
+3. **Return `{ fetch }`** where `fetch` is an `HttpEffect`.
+   That's the value Workers invoke on every request.
+4. **Bonus:** deploy, grab the URL, and call the API from a fully
+   typed client.
+
+## 1. Define the schema
+
+Start with a domain model. The schema lives outside the Worker so
+the same file can be imported by clients without pulling in any
+runtime code.
 
 ```typescript
 // src/task.ts
@@ -29,16 +44,23 @@ export class Task extends Schema.Class<Task>("Task")({
   title: Schema.String,
   completed: Schema.Boolean,
 }) {}
+
+export class TaskNotFound extends Schema.TaggedClass<TaskNotFound>()(
+  "TaskNotFound",
+  { id: Schema.String },
+) {}
 ```
 
 `Schema.Class` gives you a runtime-validated class with an inferred
-TypeScript type. You'll use `Task` as the success schema for your
-GET endpoint.
+TypeScript type. `Schema.TaggedClass` gives you a typed error you
+can return from handlers and discriminate against on the client.
 
-## Define the API
+## 2. Declare the API
 
-Create `src/api.ts` with two endpoints — one to create a task and
-one to retrieve it:
+Endpoints are declarations — they describe `(method, path,
+payload, success, error)` without implementing anything yet. Putting
+them in their own file keeps the spec importable from both the
+server *and* a typed client.
 
 ```typescript
 // src/api.ts
@@ -46,10 +68,11 @@ import * as Schema from "effect/Schema";
 import * as HttpApi from "effect/unstable/httpapi/HttpApi";
 import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
-import { Task } from "./task.ts";
+import { Task, TaskNotFound } from "./task.ts";
 
 const getTask = HttpApiEndpoint.get("getTask", "/:id", {
   success: Task,
+  error: TaskNotFound,
 });
 
 const createTask = HttpApiEndpoint.post("createTask", "/", {
@@ -59,131 +82,217 @@ const createTask = HttpApiEndpoint.post("createTask", "/", {
   }),
 });
 
-export const TaskApi = HttpApi.make("TaskApi").add(
-  HttpApiGroup.make("Tasks").add(getTask, createTask),
-);
+export class TasksGroup extends HttpApiGroup.make("Tasks")
+  .add(getTask)
+  .add(createTask) {}
+
+export class TaskApi extends HttpApi.make("TaskApi").add(TasksGroup) {}
 ```
 
-`HttpApiEndpoint.get` and `.post` declare the HTTP method, path,
-success schema, and (optionally) payload / query / error schemas.
-`HttpApiGroup` groups related endpoints, and `HttpApi.make` combines
-groups into a full API definition.
+Nothing executes yet — `TaskApi` is purely a value-level description.
+The same `TaskApi` constant is what we'll hand to the client at the
+end of this guide.
 
-Nothing executes yet — this is purely a description.
+## 3. Build the Worker
 
-## Implement the handlers
+Now we wire it up. Create `src/worker.ts` with an empty Init phase:
 
-Now wire up the handlers. For simplicity, we'll use an in-memory
-`Map`:
-
-```typescript ins={3,10-11,14-42}
-// src/api.ts
+```typescript
+// src/worker.ts
+import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Schema from "effect/Schema";
-import * as HttpApi from "effect/unstable/httpapi/HttpApi";
-import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
-import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
-import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { Task } from "./task.ts";
 
-const getTask = HttpApiEndpoint.get("getTask", "/:id", {
-  success: Task,
-});
-
-const createTask = HttpApiEndpoint.post("createTask", "/", {
-  success: Task,
-  payload: Schema.Struct({
-    title: Schema.String,
+export default Cloudflare.Worker(
+  "Worker",
+  { main: import.meta.path },
+  Effect.gen(function* () {
+    return {};
   }),
-});
-
-export const TaskApi = HttpApi.make("TaskApi").add(
-  HttpApiGroup.make("Tasks").add(getTask, createTask),
-);
-
-const tasks = new Map<string, Task>();
-
-export const TaskApiLive = HttpApiBuilder.layer(TaskApi).pipe(
-  Layer.provide(
-    HttpApiBuilder.group(TaskApi, "Tasks", (handlers) =>
-      Effect.gen(function* () {
-        return handlers
-          .handle(
-            "getTask",
-            Effect.fn(function* (req) {
-              const task = tasks.get(req.path.id);
-              if (!task) {
-                return HttpServerResponse.text("Not found", { status: 404 });
-              }
-              return task;
-            }),
-          )
-          .handle(
-            "createTask",
-            Effect.fn(function* (req) {
-              const task = new Task({
-                id: crypto.randomUUID(),
-                title: req.payload.title,
-                completed: false,
-              });
-              tasks.set(task.id, task);
-              return task;
-            }),
-          );
-      }),
-    ),
-  ),
 );
 ```
 
-`HttpApiBuilder.group` gives you a `handlers` object with a
-`.handle(endpointName, effectFn)` method for each endpoint in the
-group. The request type is inferred from the endpoint schema —
-`req.path.id` and `req.payload.title` are fully typed.
+The generator inside `Cloudflare.Worker` is the **Init phase**. It
+runs both at *plan time* (when Alchemy builds the deployment graph)
+and at *runtime* (when the Worker boots a fresh isolate). Anything
+you `yield*` here must be safe in both contexts — typically resource
+binding factories like `R2Bucket.bind(...)`, never per-request work.
 
-## Wire into a Worker
+### 3a. Bind an R2 bucket for storage
 
-The key step: convert the API layer into an `HttpEffect` and assign
-it to the Worker's `fetch`. Create `src/worker.ts`:
+Tasks need to live somewhere durable. Declare an `R2Bucket` resource
+and bind it inside Init — `bind()` returns a typed handle whose
+`get` / `put` / `delete` / `list` methods we'll call from the
+handlers below.
+
+```typescript
+// src/bucket.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+
+export const Tasks = Cloudflare.R2Bucket("Tasks");
+```
+
+```typescript twoslash
+// @noErrors
++import { Tasks } from "./bucket.ts";
+
+export default Cloudflare.Worker(
+  "Worker",
+  { main: import.meta.path },
+  Effect.gen(function* () {
++   const tasks = yield* Cloudflare.R2Bucket.bind(Tasks);
+
+    return {};
+  }),
+);
+```
+
+We'll provide the runtime side of this binding
+(`Cloudflare.R2BucketBindingLive`) in step 3c when we wire up the
+`fetch` handler.
+
+### 3b. Construct the handler group inside Init
+
+`HttpApiBuilder.group` *constructs* a `Layer` that wires handlers
+into the API spec. It's pure — it doesn't run them. That makes it
+safe to call inside Init.
+
+> Don't `yield*` `HttpApiBuilder.layer(TaskApi)` here — building the
+> layer is fine, but actually executing the server requires an
+> incoming request. Init only does construction; the work happens
+> later, on each `fetch` call.
+
+```typescript twoslash
+// @noErrors
+  Effect.gen(function* () {
+    const tasks = yield* Cloudflare.R2Bucket.bind(Tasks);
+
++   const tasksGroup = HttpApiBuilder.group(TaskApi, "Tasks", (handlers) =>
++     handlers
++       .handle("getTask", ({ path }) =>
++         Effect.gen(function* () {
++           const object = yield* tasks.get(path.id);
++           if (!object) {
++             return yield* Effect.fail(new TaskNotFound({ id: path.id }));
++           }
++           return Schema.decodeUnknownSync(Task)(JSON.parse(yield* object.text()));
++         }).pipe(Effect.orDie),
++       )
++       .handle("createTask", ({ payload }) =>
++         Effect.gen(function* () {
++           const task = new Task({
++             id: crypto.randomUUID(),
++             title: payload.title,
++             completed: false,
++           });
++           yield* tasks.put(task.id, JSON.stringify(task));
++           return task;
++         }).pipe(Effect.orDie),
++       ),
++   );
+
+    return {};
+  }),
+```
+
+Each handler receives a typed request. `path.id` is a `string`
+because that's what the endpoint declared, and the return type must
+satisfy `Task` (or fail with `TaskNotFound`). Mismatches are caught
+at compile time.
+
+`tasks.get` and `tasks.put` can fail with `R2Error`, which isn't in
+either endpoint's declared error set. `Effect.orDie` converts those
+into defects so the HttpApi runtime turns them into 500 responses —
+keeping the typed error channel reserved for `TaskNotFound`.
+
+### 3c. Return `{ fetch }`
+
+The return value of Init is the *Worker's surface* — for a
+fetch-style Worker that means an object with a `fetch` field. The
+value of `fetch` must be an `HttpEffect`: an `Effect` that, given an
+`HttpServerRequest`, produces an `HttpServerResponse`.
+
+We assemble it in three layers:
+
+- `HttpApiBuilder.layer(TaskApi)` — the top-level API layer.
+- `Layer.provide(tasksGroup)` — plug in the handlers we just built.
+- `Layer.provide([HttpPlatform.layer, Etag.layer])` — platform
+  services the builder needs (content negotiation, ETag generation).
+- `HttpRouter.toHttpEffect` — convert the assembled layer into an
+  `HttpEffect`.
+
+```typescript twoslash
+// @noErrors
+    return {
++     fetch: HttpApiBuilder.layer(TaskApi).pipe(
++       Layer.provide(tasksGroup),
++       Layer.provide([HttpPlatform.layer, Etag.layer]),
++       HttpRouter.toHttpEffect,
++     ),
+    };
+```
+
+### Putting it together
+
+Here's the complete `src/worker.ts`:
 
 ```typescript
 // src/worker.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import * as Etag from "effect/unstable/http/Etag";
 import * as HttpPlatform from "effect/unstable/http/HttpPlatform";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
-import { TaskApiLive } from "./api.ts";
+import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+import { TaskApi } from "./api.ts";
+import { Tasks } from "./bucket.ts";
+import { Task, TaskNotFound } from "./task.ts";
 
 export default Cloudflare.Worker(
   "Worker",
   { main: import.meta.path },
-  HttpRouter.toHttpEffect(TaskApiLive).pipe(
-    Effect.map((fetch) => ({ fetch })),
-    Effect.provide(Layer.mergeAll(HttpPlatform.layer, Etag.layer)),
-  ),
+  Effect.gen(function* () {
+    const tasks = yield* Cloudflare.R2Bucket.bind(Tasks);
+
+    const tasksGroup = HttpApiBuilder.group(TaskApi, "Tasks", (handlers) =>
+      handlers
+        .handle("getTask", ({ path }) =>
+          Effect.gen(function* () {
+            const object = yield* tasks.get(path.id);
+            if (!object) {
+              return yield* Effect.fail(new TaskNotFound({ id: path.id }));
+            }
+            return Schema.decodeUnknownSync(Task)(
+              JSON.parse(yield* object.text()),
+            );
+          }).pipe(Effect.orDie),
+        )
+        .handle("createTask", ({ payload }) =>
+          Effect.gen(function* () {
+            const task = new Task({
+              id: crypto.randomUUID(),
+              title: payload.title,
+              completed: false,
+            });
+            yield* tasks.put(task.id, JSON.stringify(task));
+            return task;
+          }).pipe(Effect.orDie),
+        ),
+    );
+
+    return {
+      fetch: HttpApiBuilder.layer(TaskApi).pipe(
+        Layer.provide(tasksGroup),
+        Layer.provide([HttpPlatform.layer, Etag.layer]),
+        HttpRouter.toHttpEffect,
+      ),
+    };
+  }).pipe(Effect.provide(Cloudflare.R2BucketBindingLive)),
 );
 ```
 
-`HttpRouter.toHttpEffect` takes the API layer and returns an
-`HttpEffect` — an Effect that reads `HttpServerRequest`, can fail
-with `HttpServerError | HttpBodyError`, and succeeds with
-`HttpServerResponse`. This is the exact type a Worker's `fetch`
-expects, so `Effect.map((fetch) => ({ fetch }))` is all it takes to
-bridge them.
-
-:::note
-`HttpPlatform.layer` and `Etag.layer` are required by the HTTP API
-builder for content negotiation and ETag generation. You provide them
-once at the Worker level.
-:::
-
-## Add to the Stack
-
-Create `alchemy.run.ts`:
+## 4. Add to the Stack
 
 ```typescript
 // alchemy.run.ts
@@ -194,49 +303,85 @@ import Worker from "./src/worker.ts";
 
 export default Alchemy.Stack(
   "TaskApi",
-  {
-    providers: Cloudflare.providers(),
-  },
+  { providers: Cloudflare.providers() },
   Effect.gen(function* () {
     const worker = yield* Worker;
-
-    return {
-      url: worker.url,
-    };
+    return { url: worker.url };
   }),
 );
 ```
 
-## Deploy and test
+## 5. Deploy
 
 ```sh
 alchemy deploy
 ```
 
-Use `curl` to create and retrieve a task:
+You can hit it directly with `curl`:
 
 ```sh
-# Create a task
 curl -X POST https://your-worker.workers.dev/ \
   -H "Content-Type: application/json" \
   -d '{"title": "Write docs"}'
 # → {"id":"...","title":"Write docs","completed":false}
 
-# Retrieve it
 curl https://your-worker.workers.dev/<id>
 # → {"id":"...","title":"Write docs","completed":false}
 ```
 
-Invalid payloads get automatic 400 responses with validation errors
-— no manual checking needed.
+Invalid payloads get automatic 400 responses with structured
+validation errors — no manual checking needed.
+
+## Bonus: call it from a typed client
+
+Because `TaskApi` is just a value, the same spec drives a fully
+typed client. There's no codegen step — `HttpApiClient.make`
+produces methods whose argument and return types come straight from
+the endpoint schemas.
+
+```typescript
+// scripts/client.ts
+import * as Effect from "effect/Effect";
+import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
+import { TaskApi } from "../src/api.ts";
+
+const program = Effect.gen(function* () {
+  const client = yield* HttpApiClient.make(TaskApi, {
+    baseUrl: process.env.TASK_API_URL!,
+  });
+
+  const created = yield* client.Tasks.createTask({
+    payload: { title: "Write docs" },
+  });
+  console.log("Created:", created.id);
+
+  const fetched = yield* client.Tasks.getTask({
+    path: { id: created.id },
+  });
+  console.log("Fetched:", fetched.title);
+});
+
+Effect.runPromise(program);
+```
+
+Get the URL from the deploy output and run it:
+
+```sh
+TASK_API_URL=https://your-worker.workers.dev bun scripts/client.ts
+```
+
+`client.Tasks.getTask` returns `Effect<Task, TaskNotFound | HttpClientError>`.
+The `TaskNotFound` branch is a real typed value you can pattern-match
+on, not an HTTP status code you have to interpret.
 
 ## Recap
 
-- `HttpApiEndpoint` declares endpoints with schemas for payloads,
-  responses, and errors
-- `HttpApiGroup` and `HttpApi.make` compose endpoints into an API
-  definition
-- `HttpApiBuilder.group` implements handlers with full type inference
-- `HttpRouter.toHttpEffect` converts the API layer into an
-  `HttpEffect` — the same type a Worker's `fetch` expects
-- The API validates requests and serializes responses automatically
+- The **schema** (`Task`, `TaskNotFound`) and the **API spec**
+  (`TaskApi`) live outside the Worker — they're pure descriptions.
+- The **handlers** are constructed inside the Worker's Init phase
+  closure. We build a `Layer` with `HttpApiBuilder.group` but never
+  `yield*` the running server — that only makes sense per-request.
+- The Worker's surface is `{ fetch }`, where `fetch` is an
+  `HttpEffect` produced by `HttpRouter.toHttpEffect`.
+- The same `TaskApi` value drives a fully typed client via
+  `HttpApiClient.make` — no codegen, no string URLs.

@@ -18,9 +18,7 @@ const EMBED_DESCRIPTION_LIMIT = 4096;
 const tag = process.argv[2];
 const channel = process.argv[3];
 if (!tag || !channel) {
-  console.error(
-    "Usage: bun scripts/release/discord-notify.ts <tag> <channel>",
-  );
+  console.error("Usage: bun scripts/release/discord-notify.ts <tag> <channel>");
   process.exit(1);
 }
 

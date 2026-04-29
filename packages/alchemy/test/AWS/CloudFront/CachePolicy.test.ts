@@ -40,12 +40,10 @@ describe("AWS.CloudFront.CachePolicy", () => {
         Id: created.cachePolicyId,
       });
       expect(initial.CachePolicy?.Id).toEqual(created.cachePolicyId);
-      expect(
-        initial.CachePolicy?.CachePolicyConfig?.Comment,
-      ).toEqual("initial");
-      expect(
-        initial.CachePolicy?.CachePolicyConfig?.DefaultTTL,
-      ).toEqual(60);
+      expect(initial.CachePolicy?.CachePolicyConfig?.Comment).toEqual(
+        "initial",
+      );
+      expect(initial.CachePolicy?.CachePolicyConfig?.DefaultTTL).toEqual(60);
 
       const updated = yield* test.deploy(
         Effect.gen(function* () {
@@ -70,15 +68,9 @@ describe("AWS.CloudFront.CachePolicy", () => {
       const after = yield* cloudfront.getCachePolicy({
         Id: updated.cachePolicyId,
       });
-      expect(
-        after.CachePolicy?.CachePolicyConfig?.Comment,
-      ).toEqual("updated");
-      expect(
-        after.CachePolicy?.CachePolicyConfig?.DefaultTTL,
-      ).toEqual(120);
-      expect(
-        after.CachePolicy?.CachePolicyConfig?.MaxTTL,
-      ).toEqual(86400);
+      expect(after.CachePolicy?.CachePolicyConfig?.Comment).toEqual("updated");
+      expect(after.CachePolicy?.CachePolicyConfig?.DefaultTTL).toEqual(120);
+      expect(after.CachePolicy?.CachePolicyConfig?.MaxTTL).toEqual(86400);
 
       yield* destroy();
       yield* assertCachePolicyDeleted(updated.cachePolicyId);

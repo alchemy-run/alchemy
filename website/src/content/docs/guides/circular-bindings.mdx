@@ -1,0 +1,174 @@
+---
+title: Circular Bindings
+description: How to model two services that reference each other (Worker A ↔ Worker B, Lambda ↔ Lambda) using tagged classes and Layers.
+sidebar:
+  order: 6
+---
+
+import DAG from "../../../components/DAG.astro";
+
+Real systems have cycles. A web Worker calls an internal Worker for
+auth; the internal Worker calls back into the web Worker for
+billing. Two Lambdas trigger each other through a queue. Tables
+reference each other.
+
+Most IaC engines reject these — you can't create A before B if A
+needs B's URL, but B needs A's URL too. Alchemy resolves the
+deadlock by separating **identity** from **implementation**.
+
+## The pattern: class as Tag, default export as Layer
+
+Every [Platform](/concepts/platform) (Worker, Lambda, Container) can
+be split across two declarations in the same file:
+
+```typescript
+// 1. The class is the Tag — a typed identifier you can refer to
+//    before its implementation exists.
+export class MyWorker extends Cloudflare.Worker<MyWorker>()("MyWorker", {
+  main: import.meta.path,
+}) {}
+
+// 2. The default export is the Layer — the runtime implementation
+//    that satisfies the Tag.
+export default MyWorker.make(
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.gen(function* () {
+        return HttpServerResponse.text("hello");
+      }),
+    };
+  }),
+);
+```
+
+Other files can `import { MyWorker } from "./MyWorker.ts"` and use
+`MyWorker` as a Tag — `yield* MyWorker` — without forcing its Layer
+to be evaluated. The Layer is only attached when the default export
+is provided to the Stack.
+
+## Worked example: A ↔ B
+
+Two Workers, each handling part of every request and calling the
+other for the rest.
+
+```typescript
+// src/A.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { B } from "./B.ts"; // imports the Tag, not the Layer
+
+export class A extends Cloudflare.Worker<A>()("A", {
+  main: import.meta.path,
+}) {}
+
+export default A.make(
+  Effect.gen(function* () {
+    const b = yield* Cloudflare.Worker.bind(B);
+    return {
+      fetch: Effect.gen(function* () {
+        // calls B for the second half of the work
+        return yield* b.fetch(new Request("https://b/work"));
+      }),
+    };
+  }),
+);
+```
+
+```typescript
+// src/B.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { A } from "./A.ts"; // imports the Tag, not the Layer
+
+export class B extends Cloudflare.Worker<B>()("B", {
+  main: import.meta.path,
+}) {}
+
+export default B.make(
+  Effect.gen(function* () {
+    const a = yield* Cloudflare.Worker.bind(A);
+    return {
+      fetch: Effect.gen(function* () {
+        return yield* a.fetch(new Request("https://a/callback"));
+      }),
+    };
+  }),
+);
+```
+
+Compose them in your Stack by providing both Layers:
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import ALive, { A } from "./src/A.ts";
+import BLive, { B } from "./src/B.ts";
+
+export default Alchemy.Stack(
+  "AB",
+  { providers: Cloudflare.providers() },
+  Effect.gen(function* () {
+    const a = yield* A;
+    const b = yield* B;
+    return { aUrl: a.url, bUrl: b.url };
+  }).pipe(Effect.provide(Layer.mergeAll(ALive, BLive))),
+);
+```
+
+## How alchemy resolves the cycle
+
+Under the hood, alchemy plans the cycle in **two passes**:
+
+<DAG
+  nodes={[
+    { id: "Decl", label: "declare", type: "A & B Tags" },
+    { id: "Pre", label: "precreate", type: "reserve URLs", tone: "accent" },
+    { id: "Create", label: "create", type: "deferred Outputs" },
+    { id: "Wire", label: "update", type: "wire bindings", tone: "accent" },
+  ]}
+  edges={[
+    { from: "Decl", to: "Pre" },
+    { from: "Pre", to: "Create" },
+    { from: "Create", to: "Wire" },
+  ]}
+/>
+
+1. The **Tags** are registered up front, so the graph knows that A
+   and B both exist.
+2. Each provider's [`precreate`](/concepts/provider#precreate) hook
+   reserves the resource (and its physical URL) without needing the
+   other side's outputs.
+3. `create` runs in parallel using deferred Outputs — bindings see
+   `Output<string>` placeholders that resolve later.
+4. A converge pass calls `update` once both sides exist, wiring the
+   real cross-references in. Types stay sound the whole way through
+   because Outputs are typed.
+
+The same pattern works for Lambda↔Lambda, Worker↔Container, or any
+mix of platforms — the Tag/Layer split is a property of every
+Platform resource, not just Workers.
+
+## When you don't need this
+
+If your services form a DAG (no cycles), you can keep declaration
+and implementation in one expression:
+
+```typescript
+export default Cloudflare.Worker(
+  "MyWorker",
+  { main: import.meta.path },
+  Effect.gen(function* () {
+    /* ... */
+  }),
+);
+```
+
+The tagged-class pattern only pays off when something else needs to
+reference the Worker before its implementation is in scope. For
+non-circular reuse across files, see
+[Layers](/concepts/layers).

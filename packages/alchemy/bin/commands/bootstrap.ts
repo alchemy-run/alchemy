@@ -57,68 +57,70 @@ export const bootstrapCommand = Command.make(
       "alchemy.region": a.region ?? "",
       "alchemy.destroy": a.destroy,
     }),
-  )(Effect.fnUntraced(function* ({ envFile, profile, region, destroy }) {
-    const logger = Logger.layer([fileLogger("bootstrap.txt")]);
-
-    return yield* Effect.gen(function* () {
-      const ssoProfile = yield* Auth.loadProfile(profile);
-      if (!ssoProfile.sso_account_id) {
-        return yield* Effect.die(
-          `AWS SSO profile '${profile}' is missing sso_account_id`,
-        );
-      }
-
-      // Build a single AWSEnvironment, then derive Region/Credentials from
-      // it so resource providers downstream see a consistent view. The
-      // credentials Effect captures FileSystem/Path/HttpClient via the
-      // ambient context; AWSEnvironment expects R=never, so we provide it
-      // here.
-      const ambient = yield* Effect.context<FileSystem | Path | HttpClient>();
-      const environment = AWSEnvironment.makeEnvironment({
-        accountId: ssoProfile.sso_account_id,
-        region: region ?? ssoProfile.region ?? "us-east-1",
-        credentials: Auth.loadProfileCredentials(profile).pipe(
-          Effect.provide(ambient),
-        ),
-        profile,
-      });
-
-      const awsLayers = Layer.provideMerge(
-        Layer.mergeAll(
-          AWSRegion.fromEnvironment,
-          AWSCredentials.fromEnvironment,
-        ),
-        environment,
-      );
+  )(
+    Effect.fnUntraced(function* ({ envFile, profile, region, destroy }) {
+      const logger = Logger.layer([fileLogger("bootstrap.txt")]);
 
       return yield* Effect.gen(function* () {
-        const provider = yield* loadConfigProvider(envFile);
-        const bootstrapLayer = Layer.provide(
-          awsLayers,
-          Layer.succeed(ConfigProvider.ConfigProvider, provider),
+        const ssoProfile = yield* Auth.loadProfile(profile);
+        if (!ssoProfile.sso_account_id) {
+          return yield* Effect.die(
+            `AWS SSO profile '${profile}' is missing sso_account_id`,
+          );
+        }
+
+        // Build a single AWSEnvironment, then derive Region/Credentials from
+        // it so resource providers downstream see a consistent view. The
+        // credentials Effect captures FileSystem/Path/HttpClient via the
+        // ambient context; AWSEnvironment expects R=never, so we provide it
+        // here.
+        const ambient = yield* Effect.context<FileSystem | Path | HttpClient>();
+        const environment = AWSEnvironment.makeEnvironment({
+          accountId: ssoProfile.sso_account_id,
+          region: region ?? ssoProfile.region ?? "us-east-1",
+          credentials: Auth.loadProfileCredentials(profile).pipe(
+            Effect.provide(ambient),
+          ),
+          profile,
+        });
+
+        const awsLayers = Layer.provideMerge(
+          Layer.mergeAll(
+            AWSRegion.fromEnvironment,
+            AWSCredentials.fromEnvironment,
+          ),
+          environment,
         );
-        if (destroy) {
-          yield* destroyBootstrapAws().pipe(
-            Effect.tap((result) =>
-              result.destroyed === 0
-                ? Console.log("✓ No bootstrap buckets found to destroy")
-                : Console.log(
-                    `✓ Destroyed ${result.destroyed} bootstrap bucket(s): ${result.bucketNames.join(", ")}`,
-                  ),
+
+        return yield* Effect.gen(function* () {
+          const provider = yield* loadConfigProvider(envFile);
+          const bootstrapLayer = Layer.provide(
+            awsLayers,
+            Layer.succeed(ConfigProvider.ConfigProvider, provider),
+          );
+          if (destroy) {
+            yield* destroyBootstrapAws().pipe(
+              Effect.tap((result) =>
+                result.destroyed === 0
+                  ? Console.log("✓ No bootstrap buckets found to destroy")
+                  : Console.log(
+                      `✓ Destroyed ${result.destroyed} bootstrap bucket(s): ${result.bucketNames.join(", ")}`,
+                    ),
+              ),
+              Effect.provide(bootstrapLayer),
+            );
+            return;
+          }
+          yield* bootstrapAws().pipe(
+            Effect.tap(({ bucketName, created }) =>
+              created
+                ? Console.log(`✓ Created assets bucket: ${bucketName}`)
+                : Console.log(`✓ Assets bucket already exists: ${bucketName}`),
             ),
             Effect.provide(bootstrapLayer),
           );
-          return;
-        }
-        yield* bootstrapAws().pipe(
-          Effect.tap(({ bucketName, created }) =>
-            created
-              ? Console.log(`✓ Created assets bucket: ${bucketName}`)
-              : Console.log(`✓ Assets bucket already exists: ${bucketName}`),
-          ),
-          Effect.provide(bootstrapLayer),
-        );
-      });
-    }).pipe(Effect.provide(logger));
-  })),
+        });
+      }).pipe(Effect.provide(logger));
+    }),
+  ),
 );

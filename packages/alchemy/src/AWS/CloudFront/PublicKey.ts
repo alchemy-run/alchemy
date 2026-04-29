@@ -153,7 +153,8 @@ export const PublicKeyProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           if (output?.publicKeyId) {
             const found = yield* getById(output.publicKeyId);
-            if (found) return toAttrs(output.publicKeyId, found.config, found.etag);
+            if (found)
+              return toAttrs(output.publicKeyId, found.config, found.etag);
           }
           const name = yield* createName(id, olds ?? {});
           const found = yield* getByName(name);

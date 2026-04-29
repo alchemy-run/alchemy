@@ -4,8 +4,8 @@ import react from "@astrojs/react";
 import sitemap from "@astrojs/sitemap";
 import starlight from "@astrojs/starlight";
 import tailwindcss from "@tailwindcss/vite";
-import { defineConfig } from "astro/config";
 import astroBrokenLinksChecker from "astro-broken-links-checker";
+import { defineConfig } from "astro/config";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -102,18 +102,33 @@ export default defineConfig({
         {
           icon: "github",
           label: "GitHub",
-          href: "https://github.com/alchemy-run/alchemy",
+          href: "https://github.com/alchemy-run/alchemy-effect",
         },
       ],
       editLink: {
-        baseUrl: "https://github.com/alchemy-run/alchemy/edit/main/website",
+        baseUrl:
+          "https://github.com/alchemy-run/alchemy-effect/edit/main/website",
       },
       sidebar: [
         { label: "What is Alchemy?", link: "/what-is-alchemy" },
         { label: "Getting Started", link: "/getting-started" },
         {
           label: "Tutorial",
-          autogenerate: { directory: "tutorial" },
+          items: [
+            { label: "Part 1: Your First Stack", link: "/tutorial/part-1" },
+            { label: "Part 2: Add a Worker", link: "/tutorial/part-2" },
+            { label: "Part 3: Testing", link: "/tutorial/part-3" },
+            { label: "Part 4: Local Dev", link: "/tutorial/part-4" },
+            { label: "Part 5: CI/CD", link: "/tutorial/part-5" },
+            {
+              label: "Cloudflare",
+              autogenerate: { directory: "tutorial/cloudflare" },
+            },
+            {
+              label: "AWS",
+              autogenerate: { directory: "tutorial/aws" },
+            },
+          ],
         },
         {
           label: "Concepts",

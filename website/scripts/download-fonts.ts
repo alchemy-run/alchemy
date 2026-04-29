@@ -104,9 +104,7 @@ async function main() {
   const results = await Promise.all(FONTS.map(downloadOne));
   const fetched = results.filter((r) => r === "fetched").length;
   const cached = results.filter((r) => r === "cached").length;
-  console.log(
-    `[fonts] ${fetched} downloaded, ${cached} cached → ${fontsDir}`,
-  );
+  console.log(`[fonts] ${fetched} downloaded, ${cached} cached → ${fontsDir}`);
 }
 
 await main();

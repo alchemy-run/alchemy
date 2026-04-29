@@ -17,16 +17,14 @@ import { rolldown } from "rolldown";
 
 describe("packageNameFromId", () => {
   it("extracts a top-level package name", () => {
-    expect(
-      packageNameFromId("/proj/node_modules/effect/dist/Effect.js"),
-    ).toBe("effect");
+    expect(packageNameFromId("/proj/node_modules/effect/dist/Effect.js")).toBe(
+      "effect",
+    );
   });
 
   it("extracts a scoped package name", () => {
     expect(
-      packageNameFromId(
-        "/proj/node_modules/@effect/cluster/dist/index.js",
-      ),
+      packageNameFromId("/proj/node_modules/@effect/cluster/dist/index.js"),
     ).toBe("@effect/cluster");
   });
 
@@ -519,80 +517,78 @@ describe("Bundle.build with purePlugin", () => {
       }).pipe(Effect.provide(NodeServices.layer)),
   );
 
-  it.effect(
-    "drops unused exports from a side-effect-free fake package",
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectory({
-          prefix: "alchemy-pure-plugin-",
-        });
+  it.effect("drops unused exports from a side-effect-free fake package", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-pure-plugin-",
+      });
 
-        const fakePkgDir = path.join(root, "node_modules", "fake-effect");
-        yield* fs.makeDirectory(fakePkgDir, { recursive: true });
-        yield* fs.writeFileString(
-          path.join(fakePkgDir, "package.json"),
-          JSON.stringify({
-            name: "fake-effect",
-            version: "0.0.0",
-            type: "module",
-            main: "./index.js",
-            exports: { ".": "./index.js" },
+      const fakePkgDir = path.join(root, "node_modules", "fake-effect");
+      yield* fs.makeDirectory(fakePkgDir, { recursive: true });
+      yield* fs.writeFileString(
+        path.join(fakePkgDir, "package.json"),
+        JSON.stringify({
+          name: "fake-effect",
+          version: "0.0.0",
+          type: "module",
+          main: "./index.js",
+          exports: { ".": "./index.js" },
+        }),
+      );
+      // Module-top-level call without annotation: bundlers normally
+      // assume this could have side-effects and keep it. With pure
+      // annotations + sideEffects:false we expect it dropped.
+      yield* fs.writeFileString(
+        path.join(fakePkgDir, "index.js"),
+        [
+          `export const used = makeUsed();`,
+          `export const unused = makeUnused();`,
+          `function makeUsed() { return "USED_MARKER"; }`,
+          `function makeUnused() { return "UNUSED_MARKER"; }`,
+        ].join("\n"),
+      );
+
+      const entry = path.join(root, "entry.js");
+      yield* fs.writeFileString(
+        entry,
+        `import { used } from "fake-effect"; console.log(used);`,
+      );
+
+      const result = yield* Effect.tryPromise({
+        try: () =>
+          rolldown({
+            input: entry,
+            cwd: root,
+            plugins: [
+              purePlugin({
+                packages: ["fake-effect"],
+                replaceDefaults: true,
+              }),
+            ],
+            treeshake: true,
           }),
-        );
-        // Module-top-level call without annotation: bundlers normally
-        // assume this could have side-effects and keep it. With pure
-        // annotations + sideEffects:false we expect it dropped.
-        yield* fs.writeFileString(
-          path.join(fakePkgDir, "index.js"),
-          [
-            `export const used = makeUsed();`,
-            `export const unused = makeUnused();`,
-            `function makeUsed() { return "USED_MARKER"; }`,
-            `function makeUnused() { return "UNUSED_MARKER"; }`,
-          ].join("\n"),
-        );
+        catch: (cause) => cause,
+      });
+      const { output } = yield* Effect.tryPromise({
+        try: () => result.generate({ format: "esm" }),
+        catch: (cause) => cause,
+      });
+      yield* Effect.tryPromise({
+        try: () => result.close(),
+        catch: (cause) => cause,
+      });
 
-        const entry = path.join(root, "entry.js");
-        yield* fs.writeFileString(
-          entry,
-          `import { used } from "fake-effect"; console.log(used);`,
-        );
+      const code = output
+        .filter((c) => c.type === "chunk")
+        .map((c) => c.code)
+        .join("\n");
+      expect(code).toContain("USED_MARKER");
+      expect(code).not.toContain("UNUSED_MARKER");
 
-        const result = yield* Effect.tryPromise({
-          try: () =>
-            rolldown({
-              input: entry,
-              cwd: root,
-              plugins: [
-                purePlugin({
-                  packages: ["fake-effect"],
-                  replaceDefaults: true,
-                }),
-              ],
-              treeshake: true,
-            }),
-          catch: (cause) => cause,
-        });
-        const { output } = yield* Effect.tryPromise({
-          try: () => result.generate({ format: "esm" }),
-          catch: (cause) => cause,
-        });
-        yield* Effect.tryPromise({
-          try: () => result.close(),
-          catch: (cause) => cause,
-        });
-
-        const code = output
-          .filter((c) => c.type === "chunk")
-          .map((c) => c.code)
-          .join("\n");
-        expect(code).toContain("USED_MARKER");
-        expect(code).not.toContain("UNUSED_MARKER");
-
-        yield* fs.remove(root, { recursive: true });
-      }).pipe(Effect.provide(NodeServices.layer)),
+      yield* fs.remove(root, { recursive: true });
+    }).pipe(Effect.provide(NodeServices.layer)),
   );
 });
 

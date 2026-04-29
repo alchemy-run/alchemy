@@ -301,6 +301,51 @@ export class DurableObjectNamespaceScope extends Context.Service<
  * };
  * ```
  *
+ * @section Returning Streams from RPC
+ * RPC methods can return an Effect `Stream` and the caller will see
+ * the chunks as they're produced. Combine with `Stream.schedule` to
+ * pace emission, or with `Stream.fromQueue` to bridge an inbound
+ * subscription.
+ *
+ * @example Streaming sequential numbers
+ * ```typescript
+ * import * as Schedule from "effect/Schedule";
+ * import * as Stream from "effect/Stream";
+ *
+ * return {
+ *   tick: (n: number) =>
+ *     Stream.iterate(0, (i) => i + 1).pipe(
+ *       Stream.take(n),
+ *       Stream.schedule(Schedule.spaced("100 millis")),
+ *     ),
+ * };
+ * ```
+ *
+ * @example Forwarding the stream as a chunked HTTP response
+ * ```typescript
+ * // in a Worker fetch handler
+ * const counter = counters.getByName("tick");
+ * const stream = counter.tick(5).pipe(
+ *   Stream.map((i) => `${i}\n`),
+ *   Stream.encodeText,
+ * );
+ * return HttpServerResponse.stream(stream, {
+ *   headers: { "content-type": "text/plain" },
+ * });
+ * ```
+ *
+ * @section Worker → DO HTTP forwarding
+ * In addition to RPC methods, the typed stub exposes a `fetch`
+ * method that forwards an `HttpServerRequest` straight to the DO.
+ * The DO's own `fetch` Effect produces the response — useful for
+ * WebSocket upgrades and other request-shaped interactions.
+ *
+ * @example Forwarding an HTTP request to a DO
+ * ```typescript
+ * const room = rooms.getByName(roomId);
+ * return yield* room.fetch(request);
+ * ```
+ *
  * @section Accessing Instance State
  * Each Durable Object instance has its own transactional key-value
  * storage via `Cloudflare.DurableObjectState`. Use `storage.get` and
@@ -356,14 +401,66 @@ export class DurableObjectNamespaceScope extends Context.Service<
  * ```
  *
  * @example Recovering sessions after hibernation
- * ```typescript
- * const state = yield* Cloudflare.DurableObjectState;
- * const sockets = yield* state.getWebSockets();
+ * Place the rehydration loop **inside the inner `Effect.gen`** so
+ * it runs every time the DO instance is reconstructed (including
+ * after Cloudflare wakes the DO from hibernation).
  *
- * for (const socket of sockets) {
- *   const data = socket.deserializeAttachment<{ id: string }>();
- *   // re-populate your session map
- * }
+ * ```typescript
+ * return Effect.gen(function* () {
+ *   const state = yield* Cloudflare.DurableObjectState;
+ *   const sessions = new Map<string, Cloudflare.DurableWebSocket>();
+ *
+ *   // Rehydrate the in-memory session map after hibernation.
+ *   for (const socket of yield* state.getWebSockets()) {
+ *     const data = socket.deserializeAttachment<{ id: string }>();
+ *     if (data) sessions.set(data.id, socket);
+ *   }
+ *
+ *   return {
+ *     fetch: Effect.gen(function* () {
+ *       const [response, socket] = yield* Cloudflare.upgrade();
+ *       const id = crypto.randomUUID();
+ *       socket.serializeAttachment({ id });
+ *       sessions.set(id, socket);
+ *       return response;
+ *     }),
+ *     webSocketMessage: Effect.fnUntraced(function* (socket, message) {
+ *       const text =
+ *         typeof message === "string" ? message : new TextDecoder().decode(message);
+ *       for (const peer of sessions.values()) {
+ *         yield* peer.send(text);
+ *       }
+ *     }),
+ *   };
+ * });
+ * ```
+ *
+ * @section Scheduled Alarms
+ * Each Durable Object can have a single alarm timestamp. Alchemy
+ * layers a small SQLite-backed scheduler on top via
+ * `Cloudflare.scheduleEvent` and `Cloudflare.processScheduledEvents`,
+ * so you can register many named events with arbitrary payloads and
+ * fire them from a single `alarm` handler.
+ *
+ * @example Scheduling and processing events
+ * ```typescript
+ * // schedule from a request or message handler
+ * yield* Cloudflare.scheduleEvent(
+ *   "reminder-1",
+ *   new Date(Date.now() + 60_000),
+ *   { message: "your meeting starts in a minute" },
+ * );
+ *
+ * return {
+ *   alarm: () =>
+ *     Effect.gen(function* () {
+ *       const fired = yield* Cloudflare.processScheduledEvents;
+ *       for (const event of fired) {
+ *         const payload = event.payload as { message: string };
+ *         // dispatch / broadcast / persist...
+ *       }
+ *     }),
+ * };
  * ```
  *
  * @section Using from a Worker

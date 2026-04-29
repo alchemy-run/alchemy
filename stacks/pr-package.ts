@@ -1,8 +1,8 @@
+import * as PrPackage from "@alchemy.run/pr-package";
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
-
-import Api from "./src/Api.ts";
+import Api from "./pr-package/Api.ts";
 
 export default Alchemy.Stack(
   "PrPackage",
@@ -11,9 +11,11 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
+    const authToken = yield* PrPackage.AuthTokenValue;
     const api = yield* Api;
     return {
       url: api.url.as<string>(),
+      authToken: authToken.text,
     };
   }),
 );

@@ -693,42 +693,42 @@ export const Worker: Platform<
                 namespace: binding.namespace,
               } as any)
             : isDurableObjectNamespaceLike(binding)
-            ? {
-                type: "durable_object_namespace",
-                name: bindingName,
-                className: binding.className ?? binding.name,
-              }
-            : binding.Type === "Cloudflare.D1Database"
               ? {
-                  type: "d1",
-                  id: binding.databaseId,
+                  type: "durable_object_namespace",
                   name: bindingName,
+                  className: binding.className ?? binding.name,
                 }
-              : binding.Type === "Cloudflare.R2Bucket"
+              : binding.Type === "Cloudflare.D1Database"
                 ? {
-                    type: "r2_bucket",
+                    type: "d1",
+                    id: binding.databaseId,
                     name: bindingName,
-                    bucketName: binding.bucketName,
-                    jurisdiction: binding.jurisdiction.pipe(
-                      Output.map((jurisdiction) =>
-                        jurisdiction === "default" ? undefined : jurisdiction,
-                      ),
-                    ),
                   }
-                : binding.Type === "Cloudflare.KVNamespace"
+                : binding.Type === "Cloudflare.R2Bucket"
                   ? {
-                      type: "kv_namespace",
+                      type: "r2_bucket",
                       name: bindingName,
-                      namespaceId: binding.namespaceId,
+                      bucketName: binding.bucketName,
+                      jurisdiction: binding.jurisdiction.pipe(
+                        Output.map((jurisdiction) =>
+                          jurisdiction === "default" ? undefined : jurisdiction,
+                        ),
+                      ),
                     }
-                  : binding.Type === "Cloudflare.Queue"
+                  : binding.Type === "Cloudflare.KVNamespace"
                     ? {
-                        type: "queue",
+                        type: "kv_namespace",
                         name: bindingName,
-                        queueName: binding.queueName,
+                        namespaceId: binding.namespaceId,
                       }
-                    : // TODO(sam): handle others
-                      undefined;
+                    : binding.Type === "Cloudflare.Queue"
+                      ? {
+                          type: "queue",
+                          name: bindingName,
+                          queueName: binding.queueName,
+                        }
+                      : // TODO(sam): handle others
+                        undefined;
 
         if (bindingMeta) {
           yield* resource.bind`${bindingName}`({
@@ -1044,14 +1044,27 @@ export const LiveWorkerProvider = () =>
               maxLength: 54,
             }).pipe(Effect.map((name) => name.toLowerCase()));
 
+      // Convert non-ASCII hostnames (emoji, IDN, etc.) to punycode so the
+      // Cloudflare API receives the form it stores domains in. `new URL(...)`
+      // does IDNA via WHATWG URL parsing — `📦.alchemy.run` → `xn--5z8h.alchemy.run`.
+      const toPunycode = (hostname: string): string => {
+        try {
+          return new URL(`https://${hostname}`).hostname;
+        } catch {
+          return hostname;
+        }
+      };
+
       const normalizeDomains = (
         domain: string | string[] | undefined,
       ): string[] =>
         domain === undefined
           ? []
-          : Array.isArray(domain)
-            ? Array.from(new Set(domain))
-            : [domain];
+          : Array.from(
+              new Set(
+                (Array.isArray(domain) ? domain : [domain]).map(toPunycode),
+              ),
+            );
 
       /**
        * Infer the Cloudflare Zone ID for a given hostname by listing the

@@ -98,7 +98,9 @@ describe("AWS.CloudFront.ResponseHeadersPolicy", () => {
       ).toEqual(["https://app.example.com"]);
 
       yield* destroy();
-      yield* assertResponseHeadersPolicyDeleted(updated.responseHeadersPolicyId);
+      yield* assertResponseHeadersPolicyDeleted(
+        updated.responseHeadersPolicyId,
+      );
     }).pipe(Effect.provide(AWS.providers())),
   );
 });

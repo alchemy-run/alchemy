@@ -1,57 +1,95 @@
 ---
 title: Binding
-description: Bindings give your functions and workers typed access to cloud resources, with automatic IAM policies and environment variables.
+description: A binding connects a resource to a Worker or Lambda. It generates IAM policies, env vars, and a typed SDK in one call.
 sidebar:
   order: 7
 ---
 
-A **Binding** connects a resource to a function or worker. When you
-bind an S3 Bucket to a Lambda Function, Alchemy automatically:
+A **Binding** connects a [Resource](/concepts/resource) to a
+[Platform](/concepts/platform) — a Worker, a Lambda Function, a
+Container. One `bind()` call generates the IAM policies, the
+environment variables, **and** the typed SDK wrapper your handler
+uses. You don't write any of that by hand.
 
-- Attaches the correct **IAM policies** (e.g. `s3:GetObject`)
-- Sets **environment variables** (e.g. `BUCKET_NAME`, `BUCKET_ARN`)
-- Provides a **typed SDK wrapper** you can call at runtime
+This page covers the mechanics. For the bigger picture of how
+bindings fit into a Platform's runtime, see
+[Platform › Bindings in action](/concepts/platform#bindings-in-action).
 
-You don't write IAM policies by hand or configure environment
-variables — bindings handle it.
-
-## Using bindings
-
-Bind a resource in the Init phase using `.bind()`:
+## A binding in one line
 
 ```typescript
-Effect.gen(function* () {
-  const bucket = yield* S3.GetObject.bind(myBucket);
-  const queue = yield* SQS.SendMessage.bind(myQueue);
+const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
 
-  return {
-    fetch: Effect.gen(function* () {
-      // bucket and queue are typed SDK wrappers
-      const obj = yield* bucket({ Key: "hello.txt" });
-      yield* queue({ MessageBody: "hello" });
-    }),
-  };
-});
+// later, in fetch:
+yield* bucket.put("hello.txt", "world");
 ```
 
-Each `.bind()` call does two things at once:
+`bucket` here is the resource itself, presented as a typed client.
+There is no `env.BUCKET`, no `BUCKET_NAME` lookup — the binding **is**
+the SDK.
 
-1. Grants the function permission to call that API
-2. Gives you a typed function to call at runtime
+## Effect style vs async style
 
-In the async style, pass resources as `bindings` props instead:
+Bindings work in both handler styles a Platform supports. Pick
+whichever your Worker / Lambda is using.
+
+**Effect style** — `bind()` inside the init Effect, returns a typed
+handle:
 
 ```typescript
+export default Cloudflare.Worker(
+  "Worker",
+  { main: import.meta.path },
+  Effect.gen(function* () {
+    const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
+    return {
+      fetch: Effect.gen(function* () {
+        const obj = yield* bucket.get("key");
+        // ...
+      }),
+    };
+  }),
+);
+```
+
+**Async style** — declare bindings on the resource, type the env
+with `InferEnv`:
+
+```typescript
+// alchemy.run.ts
+export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
+
 export const Worker = Cloudflare.Worker("Worker", {
   main: "./src/worker.ts",
   bindings: { Bucket, KV },
 });
+
+// src/worker.ts
+export default {
+  async fetch(request: Request, env: WorkerEnv) {
+    const obj = await env.Bucket.get("key");
+    // ...
+  },
+};
 ```
 
-## Automatic IAM policies
+The rest of this page walks through the Effect style; the same
+deploy-time mechanics apply to both.
 
-On AWS, each binding maps to specific IAM actions. Alchemy generates
-least-privilege policies scoped to the exact resource:
+## What `.bind()` does at deploy time
+
+Each call records three things on the platform's plan:
+
+1. **Permissions** — IAM (AWS) or Worker bindings (Cloudflare)
+2. **Environment / configuration** — physical names, ARNs, URLs
+3. **A typed SDK wrapper** — bundled into the handler
+
+### Automatic IAM (AWS)
+
+Each binding maps to specific IAM actions on the exact resource
+ARNs. Alchemy generates **least-privilege** policies — `Resource:
+"*"` is only used when the API genuinely doesn't support
+resource-level scoping.
 
 | Binding                        | IAM Actions        | Resource                     |
 | ------------------------------ | ------------------ | ---------------------------- |
@@ -61,71 +99,73 @@ least-privilege policies scoped to the exact resource:
 | `DynamoDB.GetItem.bind(table)` | `dynamodb:GetItem` | Table ARN                    |
 | `DynamoDB.PutItem.bind(table)` | `dynamodb:PutItem` | Table ARN                    |
 
-You never write `PolicyStatement` objects — the binding knows which
-actions and resources to attach.
-
-## Automatic environment variables
-
-Bindings also inject environment variables so the runtime SDK knows
-which resource to talk to. For example, binding an SQS Queue sets
-`QUEUE_URL` and `QUEUE_ARN`. Binding an S3 Bucket sets `BUCKET_NAME`
-and `BUCKET_ARN`.
-
-These are injected automatically and used internally by the SDK
-wrapper — you don't need to read them yourself.
-
-## Event Sources
-
-An **Event Source** is a special binding that triggers your function
-when events occur on a resource:
+Multi-resource bindings enumerate every ARN they touch:
 
 ```typescript
-yield *
-  DynamoDB.stream(table, {
-    streamViewType: "NEW_AND_OLD_IMAGES",
-    startingPosition: "LATEST",
-    batchSize: 10,
-  }).process((stream) =>
-    stream.pipe(
-      Stream.map((record) => JSON.stringify(record)),
-      Stream.run(sink),
-    ),
-  );
+const get = yield* DynamoDB.GetItem.bind(JobsTable, AuditTable);
+// → policy enumerates both table ARNs explicitly
 ```
 
-Event sources work the same way as regular bindings — they attach
-the necessary permissions and event source mappings automatically.
+### Automatic environment variables
+
+Bindings inject the env vars the SDK wrapper needs — `BUCKET_NAME`,
+`QUEUE_URL`, `TABLE_ARN`, etc. You don't read these yourself; the
+typed wrapper takes care of it.
 
 ## Cloudflare bindings
 
-On Cloudflare, the same concept applies but uses native Worker
-bindings instead of IAM:
+On Cloudflare, the same call attaches a native Worker binding (R2,
+KV, D1, Durable Object…) instead of an IAM policy:
 
 ```typescript
-const bucket = yield * Cloudflare.R2Bucket.bind(Bucket);
-const kv = yield * Cloudflare.KVNamespace.bind(KV);
+const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
+const kv = yield* Cloudflare.KVNamespace.bind(Sessions);
 ```
 
-Alchemy attaches the R2 and KV bindings to the Worker's
-configuration, and provides typed wrappers at runtime.
+The runtime API is identical to the AWS counterpart — code that
+consumes one consumes the other.
+
+## Event sources
+
+An **event source** is a binding that triggers your function when
+something happens on a resource (DynamoDB stream, SQS message, S3
+object event, etc.):
+
+```typescript
+yield* DynamoDB.stream(table, {
+  streamViewType: "NEW_AND_OLD_IMAGES",
+  startingPosition: "LATEST",
+  batchSize: 10,
+}).process((stream) =>
+  stream.pipe(
+    Stream.map((record) => JSON.stringify(record)),
+    Stream.run(sink),
+  ),
+);
+```
+
+Event sources work like regular bindings — they attach the necessary
+permissions and the event source mapping in one call.
 
 ## How it works under the hood
 
-Each binding is split into two parts internally:
+Internally each binding splits into two layers — and which one runs
+depends on the [phase](/concepts/phases):
 
 - **`Binding.Service`** — the runtime SDK wrapper that gets bundled
-  into your function. This is what you call when you use
-  `bucket.get(...)` or `queue.send(...)`.
+  into your function. This is what `bucket.get(...)` actually calls.
+- **`Binding.Policy`** — the deploy-time logic that emits IAM,
+  Worker bindings, and env vars. This is **not** included in the
+  runtime bundle.
 
-- **`Binding.Policy`** — the deploy-time logic that attaches IAM
-  policies and environment variables. This runs only at plantime
-  and is **not included in the runtime bundle**.
+At plantime the Policy layer is provided, so `bind()` records what
+the function needs. At runtime the Policy layer is absent, so the
+same call resolves to just the lightweight Service wrapper. The
+runtime bundle stays small because none of the planning code ships.
 
-At plantime, the Policy records binding data (IAM statements,
-env vars, Cloudflare bindings) on the stack. The function's provider
-receives this data during create/update and applies it. At runtime,
-the Policy layer is absent, so it gracefully becomes a no-op — only
-the lightweight Service wrapper runs.
+See [Plantime and Runtime › `Binding.Service` vs
+`Binding.Policy`](/concepts/phases#bindingservice-vs-bindingpolicy)
+for a deeper look.
 
 ## All of Effect, on every binding
 
@@ -134,13 +174,14 @@ Bindings return `Effect` values. That means `Effect.retry`,
 typed error channels:
 
 ```typescript
-// All Effect operators work out of the box on bindings.
-const sendWithRetry = send({ MessageBody: msg }).pipe(
+const sendWithRetry = enqueue({ MessageBody: msg }).pipe(
   Effect.retry({ times: 3, schedule: Schedule.exponential("100 millis") }),
   Effect.timeout("5 seconds"),
   Effect.catchTag("ThrottlingException", () => Effect.succeed(undefined)),
 );
 ```
 
-A Cloudflare R2 binding and an AWS S3 binding obey the same shape.
-Code that consumes one consumes the other.
+Because every binding is an Effect with the same shape, you can
+hide them behind a service interface and swap implementations
+without touching handler code. That's exactly what
+[Layers](/concepts/layers) is about — read on.

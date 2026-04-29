@@ -144,7 +144,8 @@ export const KeyGroupProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           if (output?.keyGroupId) {
             const found = yield* getById(output.keyGroupId);
-            if (found) return toAttrs(output.keyGroupId, found.config, found.etag);
+            if (found)
+              return toAttrs(output.keyGroupId, found.config, found.etag);
           }
           const name = yield* createName(id, olds ?? {});
           const found = yield* getByName(name);

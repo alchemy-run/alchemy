@@ -1,154 +1,215 @@
 ---
 title: Layers
-description: Use Effect Layers and Context.Service to componentize infrastructure into reusable, swappable modules.
+description: Use Effect Layers to encapsulate infrastructure behind a clean interface — define a service once, swap implementations across stacks, providers, and tests.
 sidebar:
   order: 8
 ---
 
-As your stack grows, you'll want to organize infrastructure into
-reusable components. Alchemy uses Effect's `Context.Service` and
-`Layer` to define **infrastructure modules** with clean interfaces
-and swappable implementations.
+A [Binding](/concepts/binding) is the smallest unit of "use this
+resource". A **Layer** is the next step up: take a *group* of
+resources and bindings, hide them behind a typed interface, and
+hand callers an object that just **does the thing**.
 
-## The pattern
+This is how alchemy lets a single Worker swap from D1 to Postgres,
+or from in-memory mocks to live cloud, by changing one line of
+configuration.
 
-1. Define a **service interface** using `Context.Service`
-2. Implement it as a **Layer** that creates resources and binds
-   capabilities
-3. Provide the Layer on your function or worker
+## The problem layers solve
 
-## Example: JobStorage
+A real authentication module needs at least:
 
-Consider a job storage module that needs a DynamoDB table, an SQS
-queue, and capabilities to read/write items:
+- A database
+- A connection
+- A secret
+- Adapter glue between an HTTP handler and the auth library
 
-**Define the interface:**
+Inlining all of that in every Worker that needs auth is fine for
+one project. By the fifth Worker, you've copy-pasted four versions
+of the same setup with subtle differences. By the time you want to
+move from D1 to Postgres, every Worker has to change.
+
+Layers fix this by defining the **contract** once and the
+**implementation** separately.
+
+## Step 1 — Define the service interface
+
+A service is a `Context.Service` — a typed Tag that says "somewhere
+in the program, an implementation of this exists":
 
 ```typescript
-// src/JobStorage.ts
+// packages/better-auth/src/BetterAuth.ts
+import type { HttpEffect } from "alchemy/Http";
+import { type Auth } from "better-auth";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 
-export class JobStorage extends Context.Service<
-  JobStorage,
+export class BetterAuth extends Context.Service<
+  BetterAuth,
   {
-    putJob(job: Job): Effect.Effect<Job, PutJobError>;
-    getJob(jobId: string): Effect.Effect<Job | undefined, GetJobError>;
+    auth: Effect.Effect<Auth<any>>;
+    fetch: HttpEffect;
   }
->()("JobStorage") {}
+>()("BetterAuth") {}
 ```
 
-**Implement with DynamoDB:**
+Anyone who depends on `BetterAuth` writes `yield* BetterAuth` and
+gets the typed object — no idea where it comes from. That's the
+whole point.
+
+## Step 2 — Implement it as a Layer
+
+A Layer creates whatever resources it needs and returns a value
+satisfying the service. Here's the real
+[`@alchemy/better-auth`](https://github.com/alchemy-run/alchemy-effect/blob/main/packages/better-auth/src/CloudflareD1.ts)
+implementation backed by Cloudflare D1:
 
 ```typescript
-export const JobStorageDynamoDB = Layer.provideMerge(
-  Layer.effect(
-    JobStorage,
-    Effect.gen(function* () {
-      const stack = yield* Stack;
-      const table = yield* DynamoDB.Table("JobsTable", {
-        partitionKey: "id",
-        attributes: { id: "S" },
+// packages/better-auth/src/CloudflareD1.ts
+import { Random } from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import { betterAuth as makeBetterAuth } from "better-auth";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { BetterAuth } from "./BetterAuth.ts";
+
+export const CloudflareD1 = Layer.effect(
+  BetterAuth,
+  Effect.gen(function* () {
+    // 1. Declare the infrastructure this Layer needs.
+    const d1 = yield* Cloudflare.D1Database("BetterAuth");
+    const connection = yield* Cloudflare.D1Connection.bind(d1);
+    const secret = yield* Random("BETTER_AUTH_SECRET");
+
+    // 2. Build the better-auth instance, cached so it's created once.
+    const betterAuth = yield* Effect.gen(function* () {
+      return makeBetterAuth({
+        database: yield* connection.raw,
+        secret: yield* secret.text.pipe(Effect.map(Redacted.value)),
       });
-      const queue = yield* SQS.Queue("JobsQueue").pipe(
-        RemovalPolicy.retain(stack.stage === "prod"),
-      );
+    }).pipe(Effect.cached);
 
-      const getItem = yield* DynamoDB.GetItem.bind(table);
-      const putItem = yield* DynamoDB.PutItem.bind(table);
+    // 3. Return the service implementation.
+    return {
+      auth: betterAuth,
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const auth = yield* betterAuth;
+        const response = yield* Effect.promise(() =>
+          auth.handler(request.source as Request),
+        );
+        return HttpServerResponse.fromWeb(response);
+      }),
+    };
+  }),
+).pipe(Layer.provide(Cloudflare.D1ConnectionLive));
+```
 
-      return JobStorage.of({
-        putJob: (job) =>
-          putItem({
-            Item: { id: { S: job.id }, content: { S: job.content } },
-          }).pipe(Effect.map(() => job)),
+Three things happen in one expression:
 
-        getJob: (jobId) =>
-          getItem({ Key: { id: { S: jobId } } }).pipe(
-            Effect.map((item) =>
-              item.Item
-                ? { id: item.Item.id.S, content: item.Item.content.S }
-                : undefined,
-            ),
-          ),
-      });
-    }),
-  ),
-  Layer.mergeAll(DynamoDB.GetItemLive, DynamoDB.PutItemLive),
+1. **Infrastructure is declared** — the D1 database and connection
+   are real resources. They go through plan/create/update like any
+   other.
+2. **Bindings are wired** — `D1Connection.bind(d1)` connects the
+   database to whatever Worker eventually consumes this Layer.
+3. **A typed implementation is returned** — `auth` and `fetch`
+   satisfy the `BetterAuth` interface.
+
+## Step 3 — Provide the Layer to a Platform
+
+A Worker that wants auth doesn't reach for D1 or `better-auth`
+directly. It depends on `BetterAuth` and provides whichever
+implementation it likes:
+
+```typescript
+// src/Api.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import { BetterAuth, CloudflareD1 } from "@alchemy/better-auth";
+import * as Effect from "effect/Effect";
+
+export default Cloudflare.Worker(
+  "Api",
+  { main: import.meta.path },
+  Effect.gen(function* () {
+    const auth = yield* BetterAuth;
+
+    return {
+      fetch: auth.fetch,
+    };
+  }).pipe(Effect.provide(CloudflareD1)),
 );
 ```
 
-The `Layer.provideMerge` combines:
+The Worker handler doesn't know D1 exists. It asks for `BetterAuth`
+and gets it. `Effect.provide(CloudflareD1)` wires in the D1 layer
+— and along with it, the database resource itself joins the Stack.
 
-- The inner `Layer.effect` that creates resources and returns the
-  service implementation
-- The capability layers (`GetItemLive`, `PutItemLive`) that provide
-  the deploy-time policies
+## Step 4 — Swap the implementation
 
-## Using the Layer
-
-Provide the layer on your function:
-
-```typescript
-export default class JobFunction extends AWS.Lambda.Function<JobFunction>()(
-  "JobFunction",
-  { main: import.meta.filename, url: true },
-  Effect.gen(function* () {
-    const storage = yield* JobStorage;
-
-    return {
-      fetch: Effect.gen(function* () {
-        const request = yield* HttpServerRequest;
-        const job = yield* storage.getJob("some-id");
-        return yield* HttpServerResponse.json(job);
-      }),
-    };
-  }).pipe(Effect.provide(JobStorageDynamoDB)),
-) {}
-```
-
-## Swapping implementations
-
-The power of this pattern is that the function doesn't know or care
-which backing service is used. You can swap implementations without
-changing the function code:
+Because the Worker depends on `BetterAuth`, not `CloudflareD1`,
+moving from D1 to Postgres is a one-line change. Imagine a
+hypothetical `PostgresLayer`:
 
 ```typescript
-// DynamoDB implementation
-Effect.provide(JobStorageDynamoDB);
+// before
+.pipe(Effect.provide(CloudflareD1))
 
-// S3 implementation
-Effect.provide(JobStorageS3);
+// after
+.pipe(Effect.provide(BetterAuthPostgres))
 ```
 
-Each implementation creates different resources (Table vs Bucket),
-binds different capabilities (GetItem vs GetObject), but exposes the
-same `JobStorage` interface.
+The next deploy:
+
+- Tears down the D1 database (no longer declared)
+- Creates whatever `BetterAuthPostgres` declares (a `Hyperdrive`
+  binding, a Neon database…)
+- Updates the Worker's bindings accordingly
+- Leaves the handler code untouched
+
+The same trick works in tests: provide an in-memory layer, run the
+Worker as a normal Effect, assert on the result.
+
+## Composing layers
+
+Layers compose with the standard Effect combinators:
+
+| Combinator              | Use it for                                                |
+| ----------------------- | --------------------------------------------------------- |
+| `Layer.mergeAll(a, b)`  | Provide multiple independent services                     |
+| `Layer.provideMerge`    | A Layer that supplies *and* exposes a service             |
+| `Layer.provide`         | Satisfy a Layer's dependencies privately                  |
+
+A typical app stack looks like this:
+
+```typescript
+.pipe(Effect.provide(Layer.mergeAll(
+  CloudflareD1,        // provides BetterAuth
+  JobStorageDynamoDB,  // provides JobStorage
+  RateLimiterKV,       // provides RateLimiter
+)))
+```
+
+For the deploy-time mechanics that make these layers work — IAM,
+typed clients, env injection — see [Binding](/concepts/binding).
+For Workers that reference each other across Layers, see
+[Circular Bindings](/guides/circular-bindings).
 
 ## Why this works
 
-Because resources are Effects, they compose naturally with Effect's
-dependency injection:
+The trick is that **resources are Effects**. They participate in
+Effect's dependency injection like any other value. So a `Layer`
+that creates a database, binds it, and returns a typed service is
+just a normal Effect Layer — no special mechanism, no extra runtime.
 
-- **`Context.Service`** defines the contract
-- **`Layer.effect`** creates resources and implements the contract
-- **`Layer.provideMerge`** attaches capability policies
-- **`Effect.provide`** wires the implementation to the consumer
+That means:
 
-The infrastructure (tables, queues, buckets) and the code that uses
-it (the function handler) are all expressed in the same type system.
-The compiler verifies that every capability is provided and every
-service is satisfied.
-
-## Resources move with the Layer
-
-Swap `SessionsKV` for `SessionsDynamoDB` — alchemy creates the table,
-attaches the IAM, destroys the old KV namespace. One line of code.
-Whole-stack diffs.
-
-- **Distribute on npm** — A Service is just a TypeScript module that
-  exports an interface and a Layer. Publish `@org/sessions`,
+- **Distribute on npm** — A Service is just a TypeScript module
+  exporting an interface and a Layer. Publish `@org/sessions`,
   `npm install` it elsewhere, `Effect.provide` it.
-- **Test against any backend** — Provide an in-memory Layer in tests;
-  provide the cloud Layer in CI. The handler under test never
-  changes.
+- **Test against any backend** — Provide an in-memory Layer in
+  tests; provide the cloud Layer in CI. The handler under test
+  never changes.
+- **Migrate without rewrites** — Moving from one cloud primitive
+  to another is a Layer swap, not a Worker rewrite.

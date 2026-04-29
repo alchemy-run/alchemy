@@ -9,13 +9,12 @@ import Terminal from "../../components/Terminal.astro";
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 import { alchemyVersion, effectVersion } from "../../versions";
 
-export const bunPkgs = `alchemy@${alchemyVersion} effect@${effectVersion} @effect/platform-bun@${effectVersion}`;
-export const nodePkgs = `alchemy@${alchemyVersion} effect@${effectVersion} @effect/platform-node@${effectVersion}`;
+export const pkgs = `alchemy@${alchemyVersion} effect@${effectVersion} @effect/platform-bun@${effectVersion} @effect/platform-node@${effectVersion}`;
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) (recommended) or Node.js 20+
-- A [Cloudflare](https://dash.cloudflare.com/sign-up) account with an API token
+- [Bun](https://bun.sh) (recommended) or Node.js 22+
+- A [Cloudflare](https://dash.cloudflare.com/sign-up) account
 
 ## Create a project
 
@@ -38,16 +37,16 @@ export const nodePkgs = `alchemy@${alchemyVersion} effect@${effectVersion} @effe
 
 <Tabs syncKey="pkgManager">
   <TabItem label="bun" icon="bun">
-    <Code code={`bun add ${bunPkgs}`} lang="sh" />
+    <Code code={`bun add ${pkgs}`} lang="sh" />
   </TabItem>
   <TabItem label="npm" icon="npm">
-    <Code code={`npm install ${nodePkgs}`} lang="sh" />
+    <Code code={`npm install ${pkgs}`} lang="sh" />
   </TabItem>
   <TabItem label="pnpm" icon="pnpm">
-    <Code code={`pnpm add ${nodePkgs}`} lang="sh" />
+    <Code code={`pnpm add ${pkgs}`} lang="sh" />
   </TabItem>
   <TabItem label="yarn" icon="seti:yarn">
-    <Code code={`yarn add ${nodePkgs}`} lang="sh" />
+    <Code code={`yarn add ${pkgs}`} lang="sh" />
   </TabItem>
 </Tabs>
 
@@ -79,9 +78,32 @@ export default Alchemy.Stack(
 
 ## Deploy
 
-```sh
-alchemy deploy
-```
+Run `alchemy deploy` to create the Bucket on Cloudflare:
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="bun alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="npx alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="pnpm alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="yarn alchemy deploy" lang="sh" />
+  </TabItem>
+</Tabs>
+
+The first time you deploy, Alchemy walks each provider in your stack
+(here, Cloudflare) through an interactive login and saves the
+credentials to your **`default`** [profile](/concepts/profiles) at
+`~/.alchemy/profiles.json`. For Cloudflare you can sign in with
+OAuth in the browser or paste an API token — no environment
+variables required.
+
+Once you're authenticated, Alchemy shows a plan, asks for
+confirmation, and provisions the resource:
 
 <Terminal content={`[u]Plan[/u]: [g]1 to create[/g]
 [g]+[/g] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d]
@@ -95,24 +117,30 @@ Proceed?
 
 That's it — you have a live R2 Bucket on Cloudflare.
 
+:::tip
+To re-run the credential prompt later (e.g. to switch from OAuth to
+an API token, or to add a `prod` profile) use
+`alchemy login --configure` or `alchemy login --profile prod --configure`.
+See [Profiles](/concepts/profiles) for the full picture.
+:::
+
 ## What's next
 
 <div class="next-steps">
 
 <a href="/tutorial/part-1" class="next-card">
-  <strong>Tutorial</strong>
-  <span>
-    New to Alchemy? Follow the hands-on tutorial from zero to CI/CD in five
-    parts.
-  </span>
+  <strong>Tutorial — recommended</strong>
+  <span>Adds a Worker to this Stack and covers the core concepts.</span>
+</a>
+
+<a href="/providers" class="next-card">
+  <strong>Providers reference</strong>
+  <span>Every supported Resource with copy-pasteable examples.</span>
 </a>
 
 <a href="/guides/migrating-from-v1" class="next-card">
   <strong>Migrating from v1</strong>
-  <span>
-    Already using Alchemy v1 with async/await? Learn what changed and how to
-    upgrade.
-  </span>
+  <span>Upgrading from async/await Alchemy? Start here.</span>
 </a>
 
 </div>

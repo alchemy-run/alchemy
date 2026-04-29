@@ -5,12 +5,12 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/alchemy-run/alchemy"
+    "url": "https://github.com/alchemy-run/alchemy-effect"
   },
   "type": "module",
   "scripts": {
-    "build:reference": "bun ../scripts/generate-api-reference.ts",
-    "build": "bun run build:reference && bun scripts/download-fonts.ts && bun scripts/generate-brand-assets.ts && astro build",
+    "build:reference": "bun ../scripts/generate-api-reference.ts && bun scripts/download-fonts.ts && bun scripts/generate-brand-assets.ts",
+    "build": "bun run build:reference && astro build",
     "dev:site": "astro dev",
     "deploy": "alchemy deploy",
     "dev": "alchemy dev",
@@ -40,6 +40,7 @@
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-icons": "^5.6.0",
+    "rehype-mermaid": "^3.0.0",
     "satori": "^0.26.0",
     "starlight-blog": "0.24.0",
     "tailwindcss": "^4.1.14"

@@ -61,7 +61,7 @@ export interface YantraOptions {
    * inline Astro component on the homepage.
    */
   useCurrentColor?: boolean;
-};
+}
 
 /**
  * Returns a complete, standalone SVG string for the brand mark.
@@ -78,9 +78,7 @@ export function yantraSvg(opts: YantraOptions = {}): string {
   } = opts;
 
   const strokeColor = useCurrentColor ? "currentColor" : stroke;
-  const bgRect = bg
-    ? `<rect width="24" height="24" fill="${bg}"/>`
-    : "";
+  const bgRect = bg ? `<rect width="24" height="24" fill="${bg}"/>` : "";
 
   // `stroke-linejoin="round"` is critical: at a 60° interior angle (equilateral
   // triangle) a mitered join projects past the geometric vertex by ~1 stroke

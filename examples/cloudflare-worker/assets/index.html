@@ -458,11 +458,7 @@
           >
             Create
           </button>
-          <button
-            id="artifacts-info"
-            type="button"
-            style="background: #6366f1"
-          >
+          <button id="artifacts-info" type="button" style="background: #6366f1">
             Info
           </button>
           <button
@@ -472,11 +468,7 @@
           >
             New token
           </button>
-          <button
-            id="artifacts-list"
-            type="button"
-            style="background: #475569"
-          >
+          <button id="artifacts-list" type="button" style="background: #475569">
             List
           </button>
         </div>
@@ -842,7 +834,10 @@
             { name, description: "Created from Room Chat" },
           );
           setArtifactsStatus(`HTTP ${status}`, body);
-          addMessage(`Artifacts: created repo "${name}" -> HTTP ${status}`, true);
+          addMessage(
+            `Artifacts: created repo "${name}" -> HTTP ${status}`,
+            true,
+          );
         } catch (e) {
           setArtifactsStatus("request failed", e.message);
         } finally {
@@ -874,11 +869,11 @@
         artifactsTokenBtn.disabled = true;
         setArtifactsStatus(`POST /repos/token ${name}`, "...");
         try {
-          const { status, body } = await callArtifacts(
-            "POST",
-            "/repos/token",
-            { name, scope: "write", ttl: 3600 },
-          );
+          const { status, body } = await callArtifacts("POST", "/repos/token", {
+            name,
+            scope: "write",
+            ttl: 3600,
+          });
           setArtifactsStatus(`HTTP ${status}`, body);
         } catch (e) {
           setArtifactsStatus("request failed", e.message);

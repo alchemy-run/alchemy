@@ -1,7 +1,5 @@
 import { useState } from "react";
-
-const PROMPT =
-  "Read https://alchemy.run/getting-started and help me scaffold an Alchemy app.";
+import { AGENT_PROMPT as PROMPT } from "./agentPrompt";
 
 export default function HeroCta() {
   return (

@@ -10,8 +10,7 @@ import StateStoreBootstrap from "../../../components/marketing-islands/StateStor
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 import { alchemyVersion, effectVersion } from "../../../versions";
 
-export const bunPkgs = `alchemy@${alchemyVersion} effect@${effectVersion} @effect/platform-bun@${effectVersion}`;
-export const nodePkgs = `alchemy@${alchemyVersion} effect@${effectVersion} @effect/platform-node@${effectVersion}`;
+export const pkgs = `alchemy@${alchemyVersion} effect@${effectVersion} @effect/platform-bun@${effectVersion} @effect/platform-node@${effectVersion}`;
 
 In this first part you'll install Alchemy and Effect, create a Stack
 with a Cloudflare R2 Bucket, and deploy it — all in under five
@@ -19,7 +18,7 @@ minutes.
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) (recommended) or Node.js 20+
+- [Bun](https://bun.sh) (recommended) or Node.js 22+
 - A [Cloudflare](https://dash.cloudflare.com/sign-up) account
 
 ## Create a project
@@ -47,16 +46,16 @@ Install <code>alchemy@{alchemyVersion}</code> and <code>effect@{effectVersion}</
 
 <Tabs syncKey="pkgManager">
   <TabItem label="bun" icon="bun">
-    <Code code={`bun add ${bunPkgs}`} lang="sh" />
+    <Code code={`bun add ${pkgs}`} lang="sh" />
   </TabItem>
   <TabItem label="npm" icon="npm">
-    <Code code={`npm install ${nodePkgs}`} lang="sh" />
+    <Code code={`npm install ${pkgs}`} lang="sh" />
   </TabItem>
   <TabItem label="pnpm" icon="pnpm">
-    <Code code={`pnpm add ${nodePkgs}`} lang="sh" />
+    <Code code={`pnpm add ${pkgs}`} lang="sh" />
   </TabItem>
   <TabItem label="yarn" icon="seti:yarn">
-    <Code code={`yarn add ${nodePkgs}`} lang="sh" />
+    <Code code={`yarn add ${pkgs}`} lang="sh" />
   </TabItem>
 </Tabs>
 
@@ -225,17 +224,6 @@ export default Alchemy.Stack(
 
 ## Deploy
 
-Set your Cloudflare environment variables.
-
-```sh
-export CLOUDFLARE_ACCOUNT_ID=your_account_id_here
-export CLOUDFLARE_API_TOKEN=your_api_token_here
-```
-
-:::note
-Find your Cloudflare Account ID on [Account Home](https://dash.cloudflare.com/?to=/:account/home) and [create your Cloudflare API Token here](https://dash.cloudflare.com/profile/api-tokens). The "Edit Cloudflare Workers" template is sufficient for this tutorial.
-:::
-
 Run `alchemy deploy` to create the Bucket on Cloudflare:
 
 <Tabs syncKey="pkgManager">
@@ -252,6 +240,20 @@ Run `alchemy deploy` to create the Bucket on Cloudflare:
     <Code code="yarn alchemy deploy" lang="sh" />
   </TabItem>
 </Tabs>
+
+The first time you deploy, Alchemy walks each provider in your stack
+through an interactive login and saves the credentials to your
+**`default`** [profile](/concepts/profiles) at
+`~/.alchemy/profiles.json`. For Cloudflare you can sign in with
+OAuth in the browser or paste an API token — no environment
+variables or `wrangler login` required.
+
+:::tip
+To re-run the credential prompt later (e.g. to switch from OAuth to
+an API token, or to add a `prod` profile) use
+`alchemy login --configure` or
+`alchemy login --profile prod --configure`.
+:::
 
 <Terminal content={`[u]Plan[/u]: [g]1 to create[/g]
 [g]+[/g] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d]

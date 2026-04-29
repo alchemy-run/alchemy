@@ -118,8 +118,10 @@ export type Container = {
  * @section Configuration
  * The props object accepts `main` (entrypoint file), `instanceType`
  * (compute size), `runtime` (`"bun"` or `"node"`), and
- * `observability` settings. Use `Stack.useSync` to vary config by
- * stage.
+ * `observability` settings. Use `Stack.useSync` to read the
+ * surrounding stack at declaration time and pick a beefier
+ * `instanceType` in prod while keeping the cheap `dev` instance for
+ * preview environments.
  *
  * @example Stage-dependent configuration
  * ```typescript
@@ -130,6 +132,57 @@ export type Container = {
  *     instanceType: stack.stage === "prod" ? "standard-1" : "dev",
  *     observability: { logs: { enabled: true } },
  *   })),
+ * ) {}
+ * ```
+ *
+ * @section Stack-level wiring
+ * The `.make()` `export default` is the side-effect that registers
+ * the container's runtime. It must be reachable from your
+ * `alchemy.run.ts` so the bundler emits the runtime entrypoint.
+ * Provide it on the Stack's generator with `Effect.provide`.
+ *
+ * @example Wiring SandboxLive into the Stack
+ * ```typescript
+ * // alchemy.run.ts
+ * import SandboxLive from "./src/Sandbox.runtime.ts";
+ *
+ * export default Alchemy.Stack(
+ *   "MyApp",
+ *   { providers: Cloudflare.providers(), state: Cloudflare.state() },
+ *   Effect.gen(function* () {
+ *     const worker = yield* Worker;
+ *     return { url: worker.url };
+ *   }).pipe(Effect.provide(SandboxLive)),
+ * );
+ * ```
+ *
+ * @section Calling from a Durable Object
+ * Use `Cloudflare.Container.bind(Sandbox)` in the **outer** init
+ * phase of a Durable Object — only the class is imported, so the
+ * DO bundle stays tiny. Then `Cloudflare.start(sandbox)` in the
+ * **inner** per-instance phase ensures the container is running
+ * and gives you a typed handle that exposes every method declared
+ * on the container's shape **plus** a `getTcpPort` helper.
+ *
+ * @example Binding and starting a container from a DO
+ * ```typescript
+ * export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
+ *   "Agents",
+ *   Effect.gen(function* () {
+ *     // OUTER (init): only the class is referenced — the runtime
+ *     // implementation in `Sandbox.runtime.ts` is tree-shaken out
+ *     // of this DO's bundle.
+ *     const sandbox = yield* Cloudflare.Container.bind(Sandbox);
+ *
+ *     return Effect.gen(function* () {
+ *       // INNER (per-instance): start the container and expose RPC.
+ *       const container = yield* Cloudflare.start(sandbox);
+ *
+ *       return {
+ *         exec: (cmd: string) => container.exec(cmd),
+ *       };
+ *     });
+ *   }),
  * ) {}
  * ```
  *

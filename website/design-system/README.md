@@ -77,7 +77,7 @@ emphasis, and never uses emoji outside the occasional Discord context.
   paraphrase what the code shows — show it.
 - **No hype adjectives.** Never say "amazing", "powerful", "revolutionary",
   "magical". Say what it does.
-- **Specific numbers > vague claims.** "in under two minutes", "Node.js 20+",
+- **Specific numbers > vague claims.** "in under two minutes", "Node.js 22+",
   "under 30 minutes" — concrete, verifiable.
 - **Em-dashes (—) for rhetorical pivots**; used frequently. Same character,
   no spaces around it sometimes, with spaces sometimes — match the docs.

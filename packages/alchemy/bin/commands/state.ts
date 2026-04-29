@@ -99,39 +99,43 @@ const withStateService = <A, E>(
 const stacksCommand = Command.make(
   "stacks",
   { main, envFile, stage, profile, local: localFlag },
-  instrumentCommand("state.stacks")(Effect.fnUntraced(function* (args) {
-    yield* withStateService(args, (state) =>
-      Effect.gen(function* () {
-        const stacks = yield* state.listStacks();
-        if (stacks.length === 0) {
-          yield* Console.log("(no stacks)");
-          return;
-        }
-        for (const s of [...stacks].sort()) {
-          yield* Console.log(s);
-        }
-      }),
-    );
-  })),
+  instrumentCommand("state.stacks")(
+    Effect.fnUntraced(function* (args) {
+      yield* withStateService(args, (state) =>
+        Effect.gen(function* () {
+          const stacks = yield* state.listStacks();
+          if (stacks.length === 0) {
+            yield* Console.log("(no stacks)");
+            return;
+          }
+          for (const s of [...stacks].sort()) {
+            yield* Console.log(s);
+          }
+        }),
+      );
+    }),
+  ),
 );
 
 const stagesCommand = Command.make(
   "stages",
   { stack: stackArg, main, envFile, stage, profile, local: localFlag },
-  instrumentCommand("state.stages")(Effect.fnUntraced(function* ({ stack: stackName, ...rest }) {
-    yield* withStateService(rest, (state) =>
-      Effect.gen(function* () {
-        const stages = yield* state.listStages(stackName);
-        if (stages.length === 0) {
-          yield* Console.log(`(no stages in ${stackName})`);
-          return;
-        }
-        for (const s of [...stages].sort()) {
-          yield* Console.log(s);
-        }
-      }),
-    );
-  })),
+  instrumentCommand("state.stages")(
+    Effect.fnUntraced(function* ({ stack: stackName, ...rest }) {
+      yield* withStateService(rest, (state) =>
+        Effect.gen(function* () {
+          const stages = yield* state.listStages(stackName);
+          if (stages.length === 0) {
+            yield* Console.log(`(no stages in ${stackName})`);
+            return;
+          }
+          for (const s of [...stages].sort()) {
+            yield* Console.log(s);
+          }
+        }),
+      );
+    }),
+  ),
 );
 
 const resourcesCommand = Command.make(
@@ -147,20 +151,25 @@ const resourcesCommand = Command.make(
     profile,
     local: localFlag,
   },
-  instrumentCommand("state.resources")(Effect.fnUntraced(function* ({ stack: stackName, stageName, ...rest }) {
-    yield* withStateService(rest, (state) =>
-      Effect.gen(function* () {
-        const fqns = yield* state.list({ stack: stackName, stage: stageName });
-        if (fqns.length === 0) {
-          yield* Console.log(`(no resources in ${stackName}/${stageName})`);
-          return;
-        }
-        for (const f of [...fqns].sort()) {
-          yield* Console.log(f);
-        }
-      }),
-    );
-  })),
+  instrumentCommand("state.resources")(
+    Effect.fnUntraced(function* ({ stack: stackName, stageName, ...rest }) {
+      yield* withStateService(rest, (state) =>
+        Effect.gen(function* () {
+          const fqns = yield* state.list({
+            stack: stackName,
+            stage: stageName,
+          });
+          if (fqns.length === 0) {
+            yield* Console.log(`(no resources in ${stackName}/${stageName})`);
+            return;
+          }
+          for (const f of [...fqns].sort()) {
+            yield* Console.log(f);
+          }
+        }),
+      );
+    }),
+  ),
 );
 
 const getCommand = Command.make(
@@ -177,59 +186,68 @@ const getCommand = Command.make(
     profile,
     local: localFlag,
   },
-  instrumentCommand("state.get")(Effect.fnUntraced(function* ({ stack: stackName, stageName, fqn, ...rest }) {
-    yield* withStateService(rest, (state) =>
-      Effect.gen(function* () {
-        const value = yield* state.get({
-          stack: stackName,
-          stage: stageName,
-          fqn,
-        });
-        if (value === undefined) {
-          yield* Console.log(`(not found: ${stackName}/${stageName}/${fqn})`);
-          return;
-        }
-        // encodeState produces a JSON-friendly view: redacted secrets
-        // are unwrapped into `{ __redacted__: ... }`, Resources are
-        // flattened, etc. Same shape the store persists.
-        yield* Console.log(JSON.stringify(encodeState(value), null, 2));
-      }),
-    );
-  })),
+  instrumentCommand("state.get")(
+    Effect.fnUntraced(function* ({
+      stack: stackName,
+      stageName,
+      fqn,
+      ...rest
+    }) {
+      yield* withStateService(rest, (state) =>
+        Effect.gen(function* () {
+          const value = yield* state.get({
+            stack: stackName,
+            stage: stageName,
+            fqn,
+          });
+          if (value === undefined) {
+            yield* Console.log(`(not found: ${stackName}/${stageName}/${fqn})`);
+            return;
+          }
+          // encodeState produces a JSON-friendly view: redacted secrets
+          // are unwrapped into `{ __redacted__: ... }`, Resources are
+          // flattened, etc. Same shape the store persists.
+          yield* Console.log(JSON.stringify(encodeState(value), null, 2));
+        }),
+      );
+    }),
+  ),
 );
 
 const treeCommand = Command.make(
   "tree",
   { main, envFile, stage, profile, local: localFlag },
-  instrumentCommand("state.tree")(Effect.fnUntraced(function* (args) {
-    yield* withStateService(args, (state) =>
-      Effect.gen(function* () {
-        const stacks = [...(yield* state.listStacks())].sort();
-        if (stacks.length === 0) {
-          yield* Console.log("(empty state store)");
-          return;
-        }
-        for (const stk of stacks) {
-          yield* Console.log(stk);
-          const stages = [...(yield* state.listStages(stk))].sort();
-          for (let i = 0; i < stages.length; i++) {
-            const stg = stages[i]!;
-            const stageBranch = i === stages.length - 1 ? "└─" : "├─";
-            yield* Console.log(`${stageBranch} ${stg}`);
-            const indent = i === stages.length - 1 ? "   " : "│  ";
-            const fqns = [
-              ...(yield* state.list({ stack: stk, stage: stg })),
-            ].sort();
-            for (let j = 0; j < fqns.length; j++) {
-              const fqn = fqns[j]!;
-              const leaf = j === fqns.length - 1 ? "└─" : "├─";
-              yield* Console.log(`${indent}${leaf} ${fqn}`);
+  instrumentCommand("state.tree")(
+    Effect.fnUntraced(function* (args) {
+      yield* withStateService(args, (state) =>
+        Effect.gen(function* () {
+          const stacks = [...(yield* state.listStacks())].sort();
+          if (stacks.length === 0) {
+            yield* Console.log("(empty state store)");
+            return;
+          }
+          for (const stk of stacks) {
+            yield* Console.log(stk);
+            const stages = [...(yield* state.listStages(stk))].sort();
+            for (let i = 0; i < stages.length; i++) {
+              const stg = stages[i]!;
+              const stageBranch = i === stages.length - 1 ? "└─" : "├─";
+              yield* Console.log(`${stageBranch} ${stg}`);
+              const indent = i === stages.length - 1 ? "   " : "│  ";
+              const fqns = [
+                ...(yield* state.list({ stack: stk, stage: stg })),
+              ].sort();
+              for (let j = 0; j < fqns.length; j++) {
+                const fqn = fqns[j]!;
+                const leaf = j === fqns.length - 1 ? "└─" : "├─";
+                yield* Console.log(`${indent}${leaf} ${fqn}`);
+              }
             }
           }
-        }
-      }),
-    );
-  })),
+        }),
+      );
+    }),
+  ),
 );
 
 const clearStackArg = Argument.string("stack").pipe(
@@ -263,60 +281,67 @@ const clearCommand = Command.make(
     local: localFlag,
     yes,
   },
-  instrumentCommand("state.clear")(Effect.fnUntraced(function* ({ stack: stackOpt, stageName: stageOpt, yes: yesFlag, ...rest }) {
-    const stackName = Option.getOrUndefined(stackOpt);
-    const stageName = Option.getOrUndefined(stageOpt);
+  instrumentCommand("state.clear")(
+    Effect.fnUntraced(function* ({
+      stack: stackOpt,
+      stageName: stageOpt,
+      yes: yesFlag,
+      ...rest
+    }) {
+      const stackName = Option.getOrUndefined(stackOpt);
+      const stageName = Option.getOrUndefined(stageOpt);
 
-    if (stageName !== undefined && stackName === undefined) {
-      yield* Console.log(
-        "Error: cannot specify <stage> without <stack>. Pass the stack name as the first argument.",
-      );
-      return yield* Effect.fail(new Error("missing stack"));
-    }
+      if (stageName !== undefined && stackName === undefined) {
+        yield* Console.log(
+          "Error: cannot specify <stage> without <stack>. Pass the stack name as the first argument.",
+        );
+        return yield* Effect.fail(new Error("missing stack"));
+      }
 
-    yield* withStateService(rest, (state) =>
-      Effect.gen(function* () {
-        const targets: ReadonlyArray<{ stack: string; stage?: string }> =
-          stackName === undefined
-            ? [...(yield* state.listStacks())]
-                .sort()
-                .map((s) => ({ stack: s }))
-            : stageName === undefined
-              ? [{ stack: stackName }]
-              : [{ stack: stackName, stage: stageName }];
+      yield* withStateService(rest, (state) =>
+        Effect.gen(function* () {
+          const targets: ReadonlyArray<{ stack: string; stage?: string }> =
+            stackName === undefined
+              ? [...(yield* state.listStacks())]
+                  .sort()
+                  .map((s) => ({ stack: s }))
+              : stageName === undefined
+                ? [{ stack: stackName }]
+                : [{ stack: stackName, stage: stageName }];
 
-        if (targets.length === 0) {
-          yield* Console.log("(nothing to clear)");
-          return;
-        }
-
-        const scope =
-          stackName === undefined
-            ? `ALL stacks (${targets.length}): ${targets.map((t) => t.stack).join(", ")}`
-            : stageName === undefined
-              ? `stack '${stackName}' (all stages)`
-              : `stage '${stageName}' in stack '${stackName}'`;
-
-        if (!yesFlag) {
-          const ok = yield* Clank.confirm({
-            message: `About to delete ${scope} from the state store. This cannot be undone. Continue?`,
-            initialValue: false,
-          });
-          if (!ok) {
-            yield* Console.log("Cancelled.");
+          if (targets.length === 0) {
+            yield* Console.log("(nothing to clear)");
             return;
           }
-        }
 
-        for (const target of targets) {
-          yield* state.deleteStack(target);
-          yield* Console.log(
-            `cleared ${target.stack}${target.stage ? `/${target.stage}` : ""}`,
-          );
-        }
-      }),
-    );
-  })),
+          const scope =
+            stackName === undefined
+              ? `ALL stacks (${targets.length}): ${targets.map((t) => t.stack).join(", ")}`
+              : stageName === undefined
+                ? `stack '${stackName}' (all stages)`
+                : `stage '${stageName}' in stack '${stackName}'`;
+
+          if (!yesFlag) {
+            const ok = yield* Clank.confirm({
+              message: `About to delete ${scope} from the state store. This cannot be undone. Continue?`,
+              initialValue: false,
+            });
+            if (!ok) {
+              yield* Console.log("Cancelled.");
+              return;
+            }
+          }
+
+          for (const target of targets) {
+            yield* state.deleteStack(target);
+            yield* Console.log(
+              `cleared ${target.stack}${target.stage ? `/${target.stage}` : ""}`,
+            );
+          }
+        }),
+      );
+    }),
+  ),
 );
 
 export const stateCommand = Command.make("state", {}).pipe(

@@ -33,6 +33,7 @@ env:
   BUMP_ARTIFACT_PATHS: |
     packages/alchemy/package.json
     packages/better-auth/package.json
+    packages/pr-package/package.json
     bun.lock
 
 jobs:
@@ -193,6 +194,7 @@ jobs:
           # the new changelog entry as a single commit.
           git add packages/alchemy/package.json \
                   packages/better-auth/package.json \
+                  packages/pr-package/package.json \
                   bun.lock \
                   CHANGELOG.md
 
@@ -306,11 +308,63 @@ jobs:
 
       - run: bun scripts/release/publish-package.ts packages/better-auth ${{ needs.bump.outputs.channel }}
 
+  # ── Step 3c: Build and publish `@alchemy.run/pr-package`. ──
+  publish-pr-package:
+    needs: [bump, commit-and-tag, publish-alchemy]
+    if: always() && needs.bump.result == 'success' && (needs.commit-and-tag.result == 'success' || needs.commit-and-tag.result == 'skipped') && needs.publish-alchemy.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.commit-and-tag.outputs.sha || needs.bump.outputs.sha }}
+
+      - uses: actions/setup-node@v6
+        with:
+          registry-url: https://registry.npmjs.org/
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Upgrade npm for OIDC trusted publishing
+        run: |
+          npm install -g npm@latest && npm --version
+          sed -i '/always-auth/d' ~/.npmrc 2>/dev/null || true
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: bump-files
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - run: bun install
+
+      - run: bun run build
+        working-directory: packages/alchemy
+
+      - run: bun run build
+        working-directory: packages/pr-package
+
+      - run: bun scripts/release/publish-package.ts packages/pr-package ${{ needs.bump.outputs.channel }}
+
   # ── Step 4: Create GitHub Release and notify Discord. ──
   # Runs only after every publish job succeeded. The bump+changelog commit
   # and tag were already pushed by `commit-and-tag` before publishing.
   finalize:
-    needs: [bump, commit-and-tag, publish-alchemy, publish-better-auth]
+    needs:
+      [
+        bump,
+        commit-and-tag,
+        publish-alchemy,
+        publish-better-auth,
+        publish-pr-package,
+      ]
     if: inputs.channel != 'tag'
     runs-on: ubuntu-latest
     steps:

@@ -7,16 +7,28 @@ sidebar:
 
 The [HTTP API guide](/guides/effect-http-api) showed how to build
 REST-style endpoints with schema validation. Effect RPC takes a
-different approach — you define procedures instead of HTTP endpoints.
-The transport is still HTTP under the hood, but you get a fully
-typed client for free. No URL construction, no manual serialization.
+different angle — you define **procedures** instead of HTTP
+endpoints, and you get a fully typed client for free with no URL
+construction or manual serialization.
 
-Both patterns produce the same `HttpEffect` type, so wiring into a
-Worker is identical.
+The transport is still HTTP under the hood, and both patterns
+produce the same `HttpEffect` type, so the wiring story is
+identical to the HTTP API guide:
 
-## Define the schemas
+1. **Define schemas outside.** Domain types and tagged errors,
+   importable by both server and client.
+2. **Construct the service inside the Worker's Init phase.**
+   `RpcGroup.toLayer` is pure construction — safe to call at plan
+   time. Don't `yield*` the running server; it can't run without a
+   request.
+3. **Return `{ fetch }`** where `fetch` is the `HttpEffect`
+   produced by `RpcServer.toHttpEffect`.
+4. **Bonus:** deploy and call the procedures from a typed client
+   that shares the exact same `RpcGroup` value.
 
-Create a domain model and error types. Create `src/task.ts`:
+## 1. Define the schemas
+
+Domain model and error types — pure schemas, no runtime concerns:
 
 ```typescript
 // src/task.ts
@@ -40,11 +52,13 @@ export class CreateTaskFailed extends Schema.TaggedClass<CreateTaskFailed>()(
 ```
 
 RPC errors are schema-backed tagged classes. The client receives
-them as typed values — not raw HTTP status codes.
+them as typed values you can `match` on — not raw HTTP status codes.
 
-## Define the RPCs
+## 2. Declare the RPCs
 
-Create `src/rpcs.ts` with two procedures:
+Each `Rpc.make` declares one procedure: a name, a payload schema,
+a success schema, and an error schema. `RpcGroup.make` collects them
+into a single value that both the server and the client will share.
 
 ```typescript
 // src/rpcs.ts
@@ -55,72 +69,181 @@ import { Task, TaskNotFound, CreateTaskFailed } from "./task.ts";
 const getTask = Rpc.make("getTask", {
   success: Task,
   error: TaskNotFound,
-  payload: {
-    id: Schema.String,
-  },
+  payload: { id: Schema.String },
 });
 
 const createTask = Rpc.make("createTask", {
   success: Task,
   error: CreateTaskFailed,
-  payload: {
-    title: Schema.String,
-  },
+  payload: { title: Schema.String },
 });
 
 export class TaskRpcs extends RpcGroup.make(getTask, createTask) {}
 ```
 
-`Rpc.make` declares a procedure with a name, success schema, error
-schema, and payload schema. `RpcGroup.make` collects them into a
-group — similar to `HttpApiGroup`, but for RPC.
+`TaskRpcs` is just a value-level description. Nothing executes yet.
 
-## Implement the handlers
+## 3. Build the Worker
 
-Add the implementation to `src/rpcs.ts`:
+Create `src/worker.ts` with an empty Init phase:
 
-```typescript ins={2,8-9,20-46}
-// src/rpcs.ts
+```typescript
+// src/worker.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+
+export default Cloudflare.Worker(
+  "Worker",
+  { main: import.meta.path },
+  Effect.gen(function* () {
+    return {};
+  }),
+);
+```
+
+The generator inside `Cloudflare.Worker` is the **Init phase** — it
+runs both at *plan time* and at *runtime*. Only do pure construction
+or resource-binding factories here; never `yield*` work that needs
+an incoming request.
+
+### 3a. Bind an R2 bucket for storage
+
+Tasks need durable storage. Declare an `R2Bucket` resource and bind
+it inside Init — `bind()` returns a typed handle whose `get` /
+`put` / `delete` / `list` methods we'll call from the handlers
+below.
+
+```typescript
+// src/bucket.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+
+export const Tasks = Cloudflare.R2Bucket("Tasks");
+```
+
+```typescript twoslash
+// @noErrors
++import { Tasks } from "./bucket.ts";
+
+export default Cloudflare.Worker(
+  "Worker",
+  { main: import.meta.path },
+  Effect.gen(function* () {
++   const tasks = yield* Cloudflare.R2Bucket.bind(Tasks);
+
+    return {};
+  }),
+);
+```
+
+We'll provide the runtime side of this binding
+(`Cloudflare.R2BucketBindingLive`) in step 3c when we wire up the
+`fetch` handler.
+
+### 3b. Construct the handlers inside Init
+
+`TaskRpcs.toLayer` takes an `Effect` that returns one handler per
+procedure and produces a `Layer`. Like `HttpApiBuilder.group`, this
+is pure construction — it builds a value, it doesn't run the server.
+
+> Don't `yield* TaskRpcs.toLayer(...)` here. Building a layer is
+> fine, but actually executing the procedures requires an incoming
+> request. Init only constructs; the work happens later, on each
+> `fetch` call.
+
+```typescript twoslash
+// @noErrors
+  Effect.gen(function* () {
+    const tasks = yield* Cloudflare.R2Bucket.bind(Tasks);
+
++   const handlersLayer = TaskRpcs.toLayer({
++     getTask: ({ id }) =>
++       Effect.gen(function* () {
++         const object = yield* tasks.get(id);
++         if (!object) {
++           return yield* Effect.fail(new TaskNotFound({ id }));
++         }
++         return Schema.decodeUnknownSync(Task)(JSON.parse(yield* object.text()));
++       }).pipe(Effect.orDie),
++     createTask: ({ title }) =>
++       Effect.gen(function* () {
++         const task = new Task({
++           id: crypto.randomUUID(),
++           title,
++           completed: false,
++         });
++         yield* tasks.put(task.id, JSON.stringify(task));
++         return task;
++       }).pipe(
++         Effect.catchTag("R2Error", (error) =>
++           Effect.fail(new CreateTaskFailed({ message: error.message })),
++         ),
++       ),
++   });
+
+    return {};
+  }),
+```
+
+Each handler receives the typed payload and returns an `Effect`
+that either succeeds with the declared success schema or fails with
+the declared error schema. `getTask` uses `Effect.orDie` to turn
+unexpected R2 failures into 500s — `TaskNotFound` is the only
+client-visible error. `createTask` maps R2 failures into the
+declared `CreateTaskFailed` error so the client can match on it.
+
+### 3c. Return `{ fetch }`
+
+`RpcServer.toHttpEffect` converts the `RpcGroup` into an
+`HttpEffect` — exactly the type Workers expect for `fetch`. We
+provide two layers to it:
+
+- The `handlersLayer` we just built.
+- `RpcSerialization.layerJson` — tells the server to encode and
+  decode messages as JSON. (Swap for `layerNdjson`, `layerMsgPack`,
+  etc. as needed.)
+
+Unlike the HTTP API approach, RPC doesn't need `HttpPlatform.layer`
+or `Etag.layer` — the RPC server handles message framing internally.
+
+```typescript twoslash
+// @noErrors
+    return {
++     fetch: RpcServer.toHttpEffect(TaskRpcs).pipe(
++       Effect.provide(handlersLayer),
++       Effect.provide(RpcSerialization.layerJson),
++     ),
+    };
+```
+
+### Putting it together
+
+```typescript
+// src/worker.ts
+import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import {
-  Rpc,
-  RpcGroup,
-  RpcSerialization,
-  RpcServer,
-} from "effect/unstable/rpc";
-import { Task, TaskNotFound, CreateTaskFailed } from "./task.ts";
+import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
+import { Tasks } from "./bucket.ts";
+import { CreateTaskFailed, Task, TaskNotFound } from "./task.ts";
+import { TaskRpcs } from "./rpcs.ts";
 
-const getTask = Rpc.make("getTask", {
-  success: Task,
-  error: TaskNotFound,
-  payload: {
-    id: Schema.String,
-  },
-});
-
-const createTask = Rpc.make("createTask", {
-  success: Task,
-  error: CreateTaskFailed,
-  payload: {
-    title: Schema.String,
-  },
-});
-
-export class TaskRpcs extends RpcGroup.make(getTask, createTask) {}
-
-const tasks = new Map<string, Task>();
-
-export const TaskRpcsLive = TaskRpcs.toLayer(
+export default Cloudflare.Worker(
+  "Worker",
+  { main: import.meta.path },
   Effect.gen(function* () {
-    return {
-      getTask: ({ id }) => {
-        const task = tasks.get(id);
-        if (!task) {
-          return Effect.fail(new TaskNotFound({ id }));
-        }
-        return Effect.succeed(task);
-      },
+    const tasks = yield* Cloudflare.R2Bucket.bind(Tasks);
+
+    const handlersLayer = TaskRpcs.toLayer({
+      getTask: ({ id }) =>
+        Effect.gen(function* () {
+          const object = yield* tasks.get(id);
+          if (!object) {
+            return yield* Effect.fail(new TaskNotFound({ id }));
+          }
+          return Schema.decodeUnknownSync(Task)(
+            JSON.parse(yield* object.text()),
+          );
+        }).pipe(Effect.orDie),
       createTask: ({ title }) =>
         Effect.gen(function* () {
           const task = new Task({
@@ -128,60 +251,26 @@ export const TaskRpcsLive = TaskRpcs.toLayer(
             title,
             completed: false,
           });
-          tasks.set(task.id, task);
+          yield* tasks.put(task.id, JSON.stringify(task));
           return task;
-        }),
+        }).pipe(
+          Effect.catchTag("R2Error", (error) =>
+            Effect.fail(new CreateTaskFailed({ message: error.message })),
+          ),
+        ),
+    });
+
+    return {
+      fetch: RpcServer.toHttpEffect(TaskRpcs).pipe(
+        Effect.provide(handlersLayer),
+        Effect.provide(RpcSerialization.layerJson),
+      ),
     };
-  }),
-);
-
-export const TaskRpcHttpEffect = RpcServer.toHttpEffect(TaskRpcs).pipe(
-  Effect.provide(TaskRpcsLive),
-  Effect.provide(RpcSerialization.layerJson),
+  }).pipe(Effect.provide(Cloudflare.R2BucketBindingLive)),
 );
 ```
 
-`TaskRpcs.toLayer` takes an Effect that returns an object with one
-handler function per procedure. Each handler receives the typed
-payload and returns an Effect that can fail with the declared error
-type.
-
-`RpcServer.toHttpEffect` converts the RPC group into an `HttpEffect`
-— the same type a Worker's `fetch` expects.
-`RpcSerialization.layerJson` tells the server to encode/decode
-messages as JSON.
-
-## Wire into a Worker
-
-Create `src/worker.ts`:
-
-```typescript
-// src/worker.ts
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Effect from "effect/Effect";
-import { TaskRpcHttpEffect } from "./rpcs.ts";
-
-export default Cloudflare.Worker(
-  "Worker",
-  { main: import.meta.path },
-  TaskRpcHttpEffect.pipe(Effect.map((fetch) => ({ fetch }))),
-);
-```
-
-The pattern is the same as the HTTP API guide:
-`RpcServer.toHttpEffect` returns an `HttpEffect`, and
-`Effect.map((fetch) => ({ fetch }))` wraps it into the shape a
-Worker expects.
-
-:::note
-Unlike the HTTP API approach, RPC doesn't require `HttpPlatform.layer`
-or `Etag.layer` — the RPC server handles serialization internally
-via `RpcSerialization`.
-:::
-
-## Add to the Stack
-
-Create `alchemy.run.ts`:
+## 4. Add to the Stack
 
 ```typescript
 // alchemy.run.ts
@@ -192,35 +281,33 @@ import Worker from "./src/worker.ts";
 
 export default Alchemy.Stack(
   "TaskRpc",
-  {
-    providers: Cloudflare.providers(),
-  },
+  { providers: Cloudflare.providers() },
   Effect.gen(function* () {
     const worker = yield* Worker;
-
-    return {
-      url: worker.url,
-    };
+    return { url: worker.url };
   }),
 );
 ```
 
-## Deploy
+## 5. Deploy
 
 ```sh
 alchemy deploy
 ```
 
-## Call from a typed client
+## Bonus: call it from a typed client
 
-The main advantage of RPC over a REST API: you get a fully typed
-client with no code generation.
+Because `TaskRpcs` is just a value, the same group drives a fully
+typed client — no codegen. `client.createTask` accepts
+`{ title: string }` and returns `Effect<Task, CreateTaskFailed>`.
 
 ```typescript
+// scripts/client.ts
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import { RpcClient, RpcSerialization, RpcServer } from "effect/unstable/rpc";
-import { TaskRpcs } from "./rpcs.ts";
+import { FetchHttpClient } from "effect/unstable/http/FetchHttpClient";
+import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
+import { TaskRpcs } from "../src/rpcs.ts";
 
 const program = Effect.gen(function* () {
   const client = yield* RpcClient.make(TaskRpcs);
@@ -231,33 +318,53 @@ const program = Effect.gen(function* () {
   const fetched = yield* client.getTask({ id: task.id });
   console.log("Fetched:", fetched.title);
 });
+
+Effect.runPromise(
+  program.pipe(
+    Effect.provide(
+      RpcClient.layerProtocolHttp({
+        url: process.env.TASK_RPC_URL!,
+      }),
+    ),
+    Effect.provide(RpcSerialization.layerJson),
+    Effect.provide(FetchHttpClient.layer),
+  ),
+);
 ```
 
-The client methods are typed end-to-end — `client.createTask`
-accepts `{ title: string }` and returns `Effect<Task, CreateTaskFailed>`.
-Errors are typed values, not HTTP status codes you have to interpret.
+Get the URL from the deploy output and run it:
+
+```sh
+TASK_RPC_URL=https://your-worker.workers.dev bun scripts/client.ts
+```
+
+The errors are typed values: `client.getTask` returns
+`Effect<Task, TaskNotFound>`, and you can `Effect.catchTag(
+"TaskNotFound", ...)` to handle the missing case explicitly.
 
 ## HTTP API vs RPC
 
 Both approaches produce the same `HttpEffect` and wire into a Worker
-the same way. The difference is in how clients interact with your
-service:
+the same way. The difference is in how clients interact:
 
 - **HTTP API** — standard REST endpoints, any HTTP client can call
-  them, good for public APIs
+  them. Best for public APIs.
 - **RPC** — typed procedures, ideal for service-to-service
-  communication where both sides share the schema definitions
+  communication where both sides share the schema definitions.
 
-You can even combine them in the same Worker — serve an HTTP API for
-external consumers and RPC for internal services.
+You can even combine them in the same Worker — serve an HTTP API
+for external consumers and RPC for internal services.
 
 ## Recap
 
-- `Rpc.make` declares procedures with typed payloads, success
-  schemas, and error schemas
-- `RpcGroup.make` collects procedures and `toLayer` implements them
-- `RpcServer.toHttpEffect` converts the group into an `HttpEffect`
-  — the same type a Worker's `fetch` expects
-- `RpcClient.make` gives you a fully typed client with no code
-  generation
-- Errors are schema-backed tagged classes, not HTTP status codes
+- **Schemas** (`Task`, `TaskNotFound`, `CreateTaskFailed`) and the
+  **RPC group** (`TaskRpcs`) live outside the Worker — pure
+  descriptions, importable by clients.
+- The **handlers** are constructed inside the Worker's Init phase
+  closure via `TaskRpcs.toLayer`. We build a `Layer` but never
+  `yield*` the running server.
+- The Worker's surface is `{ fetch }`, where `fetch` is the
+  `HttpEffect` produced by `RpcServer.toHttpEffect`.
+- The same `TaskRpcs` value drives a fully typed client via
+  `RpcClient.make`, with errors as typed values rather than HTTP
+  status codes.

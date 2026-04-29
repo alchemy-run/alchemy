@@ -96,9 +96,7 @@ const resolveResources = (
   return out;
 };
 
-export const resolvePolicies = (
-  policies: ApiTokenPolicy[],
-): ResolvedPolicy[] =>
+export const resolvePolicies = (policies: ApiTokenPolicy[]): ResolvedPolicy[] =>
   policies.map((policy) => ({
     effect: policy.effect,
     permissionGroups: policy.permissionGroups.map(resolvePermissionGroup),
