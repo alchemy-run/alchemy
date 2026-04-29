@@ -2164,6 +2164,7 @@ body.alc-root,
   display: flex;
   flex-direction: column;
   border-color: var(--alc-hairline-3);
+  box-shadow: none;
 }
 .pr-lc__gh .gh-mock__head {
   border-bottom-color: var(--alc-hairline-3);
@@ -2178,7 +2179,7 @@ body.alc-root,
   border: 1px solid var(--alc-hairline-3);
   border-radius: 10px;
   overflow: hidden;
-  box-shadow: var(--alc-shadow-sm);
+  box-shadow: none;
   display: flex;
   flex-direction: column;
 }
@@ -2348,6 +2349,14 @@ body.alc-root,
 .alc-hero {
   position: relative;
   isolation: isolate;
+  min-height: 85vh;
+  min-height: 85svh;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+}
+.alc-hero > .alc-section__inner {
+  width: 100%;
 }
 /* Aged-paper plate behind the entire hero. Two layers of SVG fractal
    noise — a fine fiber grain plus a large-scale foxing/aging blotch
@@ -2432,9 +2441,18 @@ body.alc-root,
 .alc-hero__inner {
   position: relative;
   z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   text-align: center;
   max-width: 880px;
   margin: 0 auto 16px;
+}
+.alc-hero__badge {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  margin-bottom: 24px;
 }
 /* Centered alchemical glyph above the title — the "title-page mark"
    in the spirit of an engraved frontispiece. */
@@ -2452,18 +2470,18 @@ body.alc-root,
   font-family: var(--alc-font-serif);
   font-weight: 500;
   font-size: clamp(40px, 8.4vw, 72px);
-  line-height: 1.04;
+  line-height: 0.9;
   letter-spacing: -0.02em;
-  margin: 18px 0 0;
+  margin: -28px 0 0;
   color: var(--alc-fg-1);
 }
 .alc-hero__subtitle {
   font-family: var(--alc-font-serif);
   font-weight: 400;
   font-size: clamp(18px, 3.4vw, 30px);
-  line-height: 1.25;
+  line-height: 1.15;
   letter-spacing: -0.005em;
-  margin: 8px auto 32px;
+  margin: -56px auto 16px;
   color: var(--alc-fg-2);
   max-width: 780px;
 }
@@ -3250,7 +3268,7 @@ body.alc-root,
 
 .hero-cta {
   max-width: 720px;
-  margin: 10px auto 0;
+  margin: 4px auto 0;
   text-align: left;
 }
 .hero-cta--desktop {
@@ -3258,7 +3276,7 @@ body.alc-root,
   align-items: center;
   justify-content: center;
   gap: 10px;
-  --hero-cta-button-width: 136px;
+  --hero-cta-button-width: fit-content;
 }
 .hero-cta__primary {
   box-sizing: border-box;
