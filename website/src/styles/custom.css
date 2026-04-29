@@ -778,8 +778,18 @@ starlight-tabs [role="tab"] > svg {
    our docs is bun(1), npm(2), pnpm(3), yarn(4). Colors come from
    each project's brand guidelines, tuned slightly for contrast
    on the warm cream surface. */
+
+/* Bun: Starlight's built-in `bun` icon is a single-path silhouette —
+   painting it any single color loses the eyes, cheeks and mouth that
+   make the mascot recognizable. We hide that path and overlay the
+   official multi-color mascot from bun.com/logo.svg (saved locally as
+   /bun-logo.svg) via a background image. */
 starlight-tabs [role="tablist"] > li:nth-child(1) [role="tab"] > svg {
-  color: #cf8f3a; /* bun — warm gold */
+  color: transparent;
+  background-image: url("/bun-logo.svg");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
 }
 starlight-tabs [role="tablist"] > li:nth-child(2) [role="tab"] > svg {
   color: #cb3837; /* npm — npm red */
