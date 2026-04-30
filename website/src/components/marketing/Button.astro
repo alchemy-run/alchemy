@@ -61,12 +61,18 @@ const { variant = "primary", icon, href = "#", class: className } = Astro.props;
   .alc-btn--primary:hover {
     background: var(--alc-accent-deep);
   }
+  /* Secondary: subtle moss-tinted surface with a soft accent border so it
+     reads as an action without the heavy hairline-rect look. The bg uses
+     the same translucent accent-soft as the hero CTA cards, so it tracks
+     light/dark and lets background patterns peek through. */
   .alc-btn--secondary {
-    background: transparent;
-    border-color: var(--alc-hairline-3);
-    color: var(--alc-fg-1);
+    background: var(--alc-accent-soft);
+    border-color: var(--alc-accent-40);
+    color: var(--alc-accent-deep);
+    padding: 8px 14px;
   }
   .alc-btn--secondary:hover {
+    background: color-mix(in srgb, var(--alc-accent) 14%, transparent);
     border-color: var(--alc-accent);
     color: var(--alc-accent-deep);
   }

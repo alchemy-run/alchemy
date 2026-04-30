@@ -3224,6 +3224,12 @@ body.alc-root,
   font-family: var(--alc-font-sans);
   text-align: left;
   background: var(--alc-bg-sunk);
+  /* The CTA cards sit directly on the hero mandala, and their tint
+     fills are translucent so the pattern bleeds through. Blur what
+     sits behind so the card text stays readable — same approach as
+     the marketing header. */
+  backdrop-filter: saturate(140%) blur(8px);
+  -webkit-backdrop-filter: saturate(140%) blur(8px);
   transition:
     border-color 140ms ease,
     transform 140ms ease;
