@@ -196,7 +196,7 @@ function classifyDoc(slug: string): { kind: OgCardKind; eyebrow: string } {
 
 export const getStaticPaths: GetStaticPaths = async () => {
   const docs = await getCollection("docs");
-  const docPaths = docs.map((entry) => {
+  const docPaths = docs.map((entry: any) => {
     const slug = (entry as { slug?: string; id?: string }).slug ?? entry.id;
     const meta = classifyDoc(slug);
     const data = entry.data as { title?: string; description?: string };
