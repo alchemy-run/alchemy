@@ -50,7 +50,10 @@ const publicFontsDir = fileURLToPath(
   new URL("../../../public/fonts/", import.meta.url),
 );
 
-async function readFont(filename: string, publicScope = false): Promise<Buffer> {
+async function readFont(
+  filename: string,
+  publicScope = false,
+): Promise<Buffer> {
   return fs.readFile(
     path.join(publicScope ? publicFontsDir : buildFontsDir, filename),
   );

@@ -18,10 +18,16 @@ import {
 import * as AWSCredentials from "../../src/AWS/Credentials.ts";
 import * as AWSEnvironment from "../../src/AWS/Environment.ts";
 import * as AWSRegion from "../../src/AWS/Region.ts";
+import { AuthProviders } from "../../src/Auth/AuthProvider.ts";
+import { withProfileOverride } from "../../src/Auth/Profile.ts";
+import { CloudflareAuth } from "../../src/Cloudflare/Auth/AuthProvider.ts";
+import * as CloudflareCredentials from "../../src/Cloudflare/Credentials.ts";
+import * as CloudflareEnvironment from "../../src/Cloudflare/CloudflareEnvironment.ts";
+import { bootstrap as bootstrapCloudflare } from "../../src/Cloudflare/StateStore/State.ts";
 import { loadConfigProvider } from "../../src/Util/ConfigProvider.ts";
 import { fileLogger } from "../../src/Util/FileLogger.ts";
 
-import { envFile, instrumentCommand } from "./_shared.ts";
+import { envFile, instrumentCommand, profile } from "./_shared.ts";
 
 const awsProfile = Flag.string("profile").pipe(
   Flag.withDescription("AWS profile to use for credentials"),
@@ -42,8 +48,8 @@ const bootstrapDestroy = Flag.boolean("destroy").pipe(
   Flag.withDefault(false),
 );
 
-export const bootstrapCommand = Command.make(
-  "bootstrap",
+const bootstrapAwsCommand = Command.make(
+  "aws",
   {
     envFile,
     profile: awsProfile,
@@ -51,7 +57,7 @@ export const bootstrapCommand = Command.make(
     destroy: bootstrapDestroy,
   },
   instrumentCommand(
-    "bootstrap",
+    "bootstrap.aws",
     (a: { profile: string; region: string | undefined; destroy: boolean }) => ({
       "alchemy.profile": a.profile,
       "alchemy.region": a.region ?? "",
@@ -123,4 +129,82 @@ export const bootstrapCommand = Command.make(
       }).pipe(Effect.provide(logger));
     }),
   ),
+);
+
+const cloudflareForce = Flag.boolean("force").pipe(
+  Flag.withDescription(
+    "Force a full redeploy even if the state-store worker already exists. " +
+      "Without this flag, an existing worker is adopted and only its credentials are refreshed.",
+  ),
+  Flag.withDefault(false),
+);
+
+const cloudflareWorkerName = Flag.string("worker-name").pipe(
+  Flag.withDescription(
+    "Override the default state-store worker name (advanced; only needed for multiple state stores per account).",
+  ),
+  Flag.optional,
+  Flag.map(Option.getOrUndefined),
+);
+
+const bootstrapCloudflareCommand = Command.make(
+  "cloudflare",
+  {
+    envFile,
+    profile,
+    force: cloudflareForce,
+    workerName: cloudflareWorkerName,
+  },
+  instrumentCommand(
+    "bootstrap.cloudflare",
+    (a: {
+      profile: string;
+      force: boolean;
+      workerName: string | undefined;
+    }) => ({
+      "alchemy.profile": a.profile,
+      "alchemy.force": a.force,
+      "alchemy.worker_name": a.workerName ?? "",
+    }),
+  )(
+    Effect.fnUntraced(function* ({ envFile, profile, force, workerName }) {
+      const logger = Logger.layer([fileLogger("bootstrap.txt")]);
+
+      // Wire up the same Cloudflare auth chain that
+      // `Cloudflare.state(...)` uses internally. CloudflareAuth is an
+      // `effectDiscard` layer that registers itself into the
+      // `AuthProviders` registry at build time, and downstream layers
+      // (`fromProfile`, `fromAuthProvider`) plus the deploy stack all
+      // look the registry back up through `getAuthProvider`. We need
+      // the registry to remain visible all the way through, so the
+      // composition uses `provideMerge` (provides + re-exports) rather
+      // than `provide` (provides + hides).
+      const authProviders: AuthProviders["Service"] = {};
+      const authRegistry = Layer.succeed(AuthProviders, authProviders);
+      const authLayer = Layer.provideMerge(CloudflareAuth, authRegistry);
+      const cloudflareLayers = Layer.provideMerge(
+        Layer.mergeAll(
+          CloudflareCredentials.fromAuthProvider(),
+          CloudflareEnvironment.fromProfile(),
+        ),
+        authLayer,
+      );
+
+      const services = Layer.mergeAll(
+        cloudflareLayers,
+        ConfigProvider.layer(
+          withProfileOverride(yield* loadConfigProvider(envFile), profile),
+        ),
+        logger,
+      );
+
+      yield* bootstrapCloudflare({ workerName, force }).pipe(
+        Effect.provide(services),
+      );
+    }),
+  ),
+);
+
+export const bootstrapCommand = Command.make("bootstrap", {}).pipe(
+  Command.withSubcommands([bootstrapAwsCommand, bootstrapCloudflareCommand]),
 );
