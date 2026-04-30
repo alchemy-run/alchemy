@@ -864,7 +864,10 @@ const executeNode = (
           type: node.resource.Type,
           cause,
         });
-        yield* Deferred.failCause(ready[fqn], cause);
+        yield* Deferred.failCause(
+          ready[fqn],
+          cause as Cause.Cause<never>,
+        );
         yield* session.emit({
           kind: "status-change",
           id: node.resource.LogicalId,
