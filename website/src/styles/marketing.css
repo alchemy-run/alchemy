@@ -3083,9 +3083,7 @@ body.alc-root,
    ============================================================ */
 
 .alc-copy-agent {
-  display: flex;
-  align-items: stretch;
-  gap: 0;
+  position: relative;
   max-width: 720px;
   margin: 24px auto 0;
   background: var(--alc-bg-sunk);
@@ -3095,9 +3093,10 @@ body.alc-root,
   text-align: left;
 }
 .alc-copy-agent__text {
-  flex: 1 1 auto;
-  min-width: 0;
-  padding: 12px 16px;
+  display: block;
+  /* Reserve space at the right edge so long prompt lines never run
+     under the floating copy icon. */
+  padding: 12px 52px 12px 16px;
   font-family: var(--alc-font-mono);
   font-size: 13.5px;
   line-height: 1.5;
@@ -3111,38 +3110,33 @@ body.alc-root,
   overflow-y: auto;
 }
 .alc-copy-agent__btn {
-  flex: 0 0 auto;
+  position: absolute;
+  top: 8px;
+  right: 8px;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 16px;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
   background: transparent;
-  border: 0;
-  border-left: 1px solid var(--alc-hairline);
-  font-family: var(--alc-font-sans);
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--alc-fg-2);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--alc-fg-3);
   cursor: pointer;
   transition:
     color 120ms ease,
-    background 120ms ease;
+    background 120ms ease,
+    border-color 120ms ease;
 }
 .alc-copy-agent__btn:hover {
   color: var(--alc-accent-deep);
-  background: var(--alc-accent-soft);
+  background: var(--alc-bg-elev-1);
+  border-color: var(--alc-hairline-2);
 }
-
-@media (max-width: 640px) {
-  .alc-copy-agent {
-    flex-direction: column;
-  }
-  .alc-copy-agent__btn {
-    border-left: 0;
-    border-top: 1px solid var(--alc-hairline);
-    padding: 10px 16px;
-    justify-content: center;
-  }
+.alc-copy-agent__btn:focus-visible {
+  outline: 2px solid var(--alc-accent-40);
+  outline-offset: 2px;
 }
 
 /* ============================================================
