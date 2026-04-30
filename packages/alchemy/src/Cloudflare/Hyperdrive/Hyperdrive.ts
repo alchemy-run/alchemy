@@ -212,7 +212,7 @@ export const HyperdriveProvider = () =>
       const createConfigName = (id: string, name: string | undefined) =>
         Effect.gen(function* () {
           if (name) return name;
-          return (yield* createPhysicalName({ id }));
+          return (yield* createPhysicalName({ id, lowercase: true }));
         });
 
       const findByName = (name: string) =>
