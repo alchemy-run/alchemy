@@ -44,14 +44,11 @@ jobs:
 
       - run: bun install
 
-      # Build alchemy (full bundle) and run the workspace tsc to populate
-      # lib/ for the layer packages (better-auth, pr-package). Their tarballs
-      # ship both src/ and lib/, and consumers in non-bun runtimes resolve
-      # via the `import` condition → ./lib/index.js.
+      # Build everything: tsdown bundles alchemy (bin/ + cli lib) and tsc -b
+      # populates lib/ for the layer packages (better-auth, pr-package).
+      # Their tarballs ship both src/ and lib/, and consumers in non-bun
+      # runtimes resolve via the `import` condition → ./lib/index.js.
       - run: bun run build
-        working-directory: packages/alchemy
-
-      - run: bun tsc -b packages/better-auth/tsconfig.json packages/pr-package/tsconfig.json
 
       - name: Compute tags
         id: tags

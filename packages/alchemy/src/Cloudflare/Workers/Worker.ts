@@ -1139,9 +1139,7 @@ export const LiveWorkerProvider = () =>
 
           // Detach what's no longer wanted. Use the live list so we
           // don't try to delete domains we no longer track.
-          const toRemove = liveAll.filter(
-            (d) => !desiredSet.has(d.hostname),
-          );
+          const toRemove = liveAll.filter((d) => !desiredSet.has(d.hostname));
           yield* Effect.all(
             toRemove.map((d) =>
               deleteDomain({ accountId, domainId: d.id }).pipe(
@@ -1208,10 +1206,9 @@ export const LiveWorkerProvider = () =>
             };
           });
 
-          const applied = yield* Effect.all(
-            desired.map(attachDomain),
-            { concurrency: "unbounded" },
-          );
+          const applied = yield* Effect.all(desired.map(attachDomain), {
+            concurrency: "unbounded",
+          });
           return applied;
         });
 
@@ -1650,12 +1647,7 @@ ${[
           yield* Effect.logInfo(
             `Cloudflare Worker ${olds ? "update" : "create"}: uploading assets for ${name}`,
           );
-          const { jwt } = yield* uploadAssets(
-            accountId,
-            name,
-            assets,
-            session,
-          );
+          const { jwt } = yield* uploadAssets(accountId, name, assets, session);
           metadataAssets = {
             jwt,
             config: assets.config,
