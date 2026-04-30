@@ -53,6 +53,38 @@ export const state = (props?: {
 
       const scriptName = props?.workerName ?? STATE_STORE_SCRIPT_NAME;
 
+      // The bootstrap of the Cloudflare State Store is only considered
+      // successful once two invariants hold:
+      //   1. the worker has been deployed and the credentials persisted
+      //   2. the local CloudflareStateStore stack has been synced into
+      //      the HTTP store and removed from disk
+      //
+      // If a previous run failed anywhere between deploying the worker
+      // and deleting the local stack (e.g. the worker got created but
+      // sync/credential-write/delete never ran) we will detect the
+      // leftover local stack here and resume the bootstrap. This loop
+      // re-runs deploy (idempotent over already-applied resources) and
+      // finishes the sync/credential/cleanup steps until both
+      // invariants are satisfied.
+      const localState = yield* makeLocalState();
+
+      const hasLocalStack = yield* Effect.map(
+        localState.listStages("CloudflareStateStore"),
+        (stages) => stages.includes(scriptName),
+      );
+
+      if (hasLocalStack) {
+        yield* Clank.info(
+          `Resuming Cloudflare State Store '${scriptName}' deployment...`,
+        );
+        return yield* finishBootstrap({
+          scriptName,
+          profileName,
+          localState,
+          isCI,
+        });
+      }
+
       // TODO(sam): support upgrading state store, right now we only deploy once
       if (credentials) {
         // it's in the profile, let's go
@@ -63,79 +95,63 @@ export const state = (props?: {
         }
 
         return httpState;
-      } else {
-        // our profile does not contain a reference to the state store, let's try and resolve it
-        const { accountId } =
-          yield* CloudflareEnvironment.CloudflareEnvironment;
-        const workerExists = yield* workers
-          .getScriptSetting({
-            accountId,
-            scriptName,
-          })
-          .pipe(
-            Effect.map((setting) => setting !== undefined),
-            Effect.catchTag("WorkerNotFound", () => Effect.succeed(false)),
-          );
+      }
 
-        if (workerExists) {
-          // it exists, so fetch the secret token
-          const credentials = yield* loginWithCloudflare();
-          if (!isCI) {
-            yield* writeCredentials<HttpStateStoreProps>(
-              profileName,
-              CREDENTIALS_FILE,
-              credentials,
-            );
-          }
-          const httpState = yield* makeHttpStateStore(credentials);
-
-          if (alchemyContext.updateStateStore) {
-            yield* deployStateStore(scriptName, httpState);
-          }
-
-          return httpState;
-        } else if (isCI) {
-          // TODO(sam): do we want to support bootstrapping the state store from CI?
-          // for now - just die here
-          return yield* Effect.die(
-            new AuthError({
-              message: `State store not found for script ${scriptName}. Deploy the state store first.`,
-            }),
-          );
-        }
-
-        const shouldDeploy = yield* Clank.confirm({
-          message:
-            "Cloudflare State Store not found. Do you want to deploy it?",
-        });
-
-        if (!shouldDeploy) {
-          return yield* Effect.die(new Clank.PromptCancelled());
-        }
-
-        const { url, authToken, localState } =
-          yield* deployStateStore(scriptName);
-
-        const httpState = yield* makeHttpStateStore({ url, authToken });
-
-        yield* syncState(localState, httpState);
-
-        yield* writeCredentials<HttpStateStoreProps>(
-          profileName,
-          CREDENTIALS_FILE,
-          {
-            url,
-            authToken,
-          },
+      // our profile does not contain a reference to the state store, let's try and resolve it
+      const { accountId } = yield* CloudflareEnvironment.CloudflareEnvironment;
+      const workerExists = yield* workers
+        .getScriptSetting({
+          accountId,
+          scriptName,
+        })
+        .pipe(
+          Effect.map((setting) => setting !== undefined),
+          Effect.catchTag("WorkerNotFound", () => Effect.succeed(false)),
         );
 
-        yield* localState.deleteStack({
-          stack: "CloudflareStateStore",
-          stage: scriptName,
-        });
+      if (workerExists) {
+        // it exists, so fetch the secret token
+        const credentials = yield* loginWithCloudflare();
+        if (!isCI) {
+          yield* writeCredentials<HttpStateStoreProps>(
+            profileName,
+            CREDENTIALS_FILE,
+            credentials,
+          );
+        }
+        const httpState = yield* makeHttpStateStore(credentials);
+
+        if (alchemyContext.updateStateStore) {
+          yield* deployStateStore(scriptName, httpState);
+        }
 
         return httpState;
       }
+
+      if (isCI) {
+        // TODO(sam): do we want to support bootstrapping the state store from CI?
+        // for now - just die here
+        return yield* Effect.die(
+          new AuthError({
+            message: `State store not found for script ${scriptName}. Deploy the state store first.`,
+          }),
+        );
+      }
+
+      const shouldDeploy = yield* Clank.confirm({
+        message: "Cloudflare State Store not found. Do you want to deploy it?",
+      });
+
+      if (!shouldDeploy) {
+        return yield* Effect.die(new Clank.PromptCancelled());
+      }
+
+      return yield* finishBootstrap({
+        scriptName,
+        profileName,
+        localState,
+        isCI,
+      });
     }).pipe(Effect.orDie),
   ).pipe(
     Layer.provideMerge(Credentials.fromAuthProvider()),
@@ -143,6 +159,47 @@ export const state = (props?: {
     Layer.provideMerge(CloudflareAuth),
     Layer.orDie,
   );
+
+/**
+ * Finish (or resume) the bootstrap of the Cloudflare State Store using
+ * the provided local state as the source of truth. This is idempotent
+ * and safe to re-run: any resources already applied during a previous
+ * partial run will be reconciled, the local stack will be synced into
+ * the deployed HTTP store, credentials persisted, and finally the
+ * local stack removed - which is what marks the bootstrap as complete.
+ */
+const finishBootstrap = ({
+  scriptName,
+  profileName,
+  localState,
+  isCI,
+}: {
+  scriptName: string;
+  profileName: string;
+  localState: StateService;
+  isCI: boolean;
+}) =>
+  Effect.gen(function* () {
+    const { url, authToken } = yield* deployStateStore(scriptName, localState);
+    const httpState = yield* makeHttpStateStore({ url, authToken });
+
+    yield* syncState(localState, httpState);
+
+    if (!isCI) {
+      yield* writeCredentials<HttpStateStoreProps>(
+        profileName,
+        CREDENTIALS_FILE,
+        { url, authToken },
+      );
+    }
+
+    yield* localState.deleteStack({
+      stack: "CloudflareStateStore",
+      stage: scriptName,
+    });
+
+    return httpState;
+  });
 
 const deployStateStore = (scriptName: string, state?: StateService) =>
   Effect.gen(function* () {
