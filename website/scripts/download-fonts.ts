@@ -130,7 +130,10 @@ function mirrorsFor(url: string): string[] {
   );
   if (!m) return [url];
   const [, owner, repo, ref, rest] = m;
-  return [url, `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/${rest}`];
+  return [
+    url,
+    `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/${rest}`,
+  ];
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
