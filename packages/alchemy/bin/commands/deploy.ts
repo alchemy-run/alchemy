@@ -6,7 +6,9 @@ import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Command from "effect/unstable/cli/Command";
+import * as Flag from "effect/unstable/cli/Flag";
 
+import { AdoptPolicy } from "../../src/AdoptPolicy.ts";
 import { AlchemyContext } from "../../src/AlchemyContext.ts";
 import { apply } from "../../src/Apply.ts";
 import { ArtifactStore, createArtifactStore } from "../../src/Artifacts.ts";
@@ -40,6 +42,7 @@ export const ExecStackOptions = Schema.Struct({
   yes: Schema.optional(Schema.Boolean),
   destroy: Schema.optional(Schema.Boolean),
   dev: Schema.optional(Schema.Boolean),
+  adopt: Schema.optional(Schema.Boolean),
 });
 export type ExecStackOptions = typeof ExecStackOptions.Type;
 
@@ -51,7 +54,16 @@ const stackSpanAttrs = (args: ExecStackOptions) => ({
   "alchemy.force": !!args.force,
   "alchemy.destroy": !!args.destroy,
   "alchemy.dev": !!args.dev,
+  "alchemy.adopt": !!args.adopt,
 });
+
+const adopt = Flag.boolean("adopt").pipe(
+  Flag.withDescription(
+    "Adopt pre-existing cloud resources that conflict with this stack instead of failing. " +
+      "Useful for re-importing infrastructure into a fresh state store.",
+  ),
+  Flag.withDefault(false),
+);
 
 export const execStack = Effect.fn(function* ({
   main,
@@ -63,6 +75,7 @@ export const execStack = Effect.fn(function* ({
   yes = false,
   destroy = false,
   dev = false,
+  adopt = false,
 }: ExecStackOptions) {
   const stackEffect = yield* importStack(main);
 
@@ -76,6 +89,13 @@ export const execStack = Effect.fn(function* ({
         })),
       ),
     ),
+    // `--adopt` opts the entire deploy in to adoption-on-conflict.
+    // Resource providers that wire `AdoptPolicy` (Worker domains,
+    // Cloudflare.SecretsStore, etc.) will reconcile against
+    // pre-existing cloud resources instead of failing on duplicates.
+    // Default is `false` so an unintentional collision still surfaces
+    // loudly.
+    Layer.succeed(AdoptPolicy, adopt),
     Layer.succeed(ArtifactStore, createArtifactStore()),
     Layer.succeed(
       AuthProviders,
@@ -148,6 +168,7 @@ export const deployCommand = Command.make(
     stage,
     yes,
     profile,
+    adopt,
   },
   instrumentCommand("deploy", stackSpanAttrs)(execStack),
 );
