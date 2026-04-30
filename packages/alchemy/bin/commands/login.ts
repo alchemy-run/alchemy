@@ -67,7 +67,7 @@ export const loginCommand = Command.make(
         ConfigProvider.layer(
           withProfileOverride(yield* loadConfigProvider(envFile), profile),
         ),
-        Logger.layer([fileLogger("out")]),
+        Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
         Layer.succeed(Stage, stage),
         State.localState(),
       );
