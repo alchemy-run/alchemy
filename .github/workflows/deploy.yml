@@ -83,13 +83,13 @@ jobs:
           CLOUDFLARE_EMAIL: ${{ secrets.ADMIN_CLOUDFLARE_EMAIL }}
           CLOUDFLARE_ACCOUNT_ID: ${{ env.STAGE == 'prod' && secrets.PROD_CLOUDFLARE_ACCOUNT_ID || secrets.TEST_CLOUDFLARE_ACCOUNT_ID }}
           PULL_REQUEST: ${{ github.event.number }}
-          # On `pull_request` events `github.sha` is the synthetic merge
-          # commit (PR head merged into base) that GitHub generates for
-          # testing — it doesn't appear in the PR's git log, so the
-          # preview comment looked like it was reporting a phantom SHA.
-          # Prefer the PR head SHA when available; fall back to
-          # `github.sha` for `push` (main) deploys.
-          GITHUB_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          # On `pull_request` events GitHub Actions' built-in
+          # `GITHUB_SHA` is the synthetic merge commit (PR head merged
+          # into base) — that SHA never shows up in the PR's git log.
+          # `GITHUB_SHA` is also a reserved env var, so a step-level
+          # override is silently ignored. Pass the PR head SHA under
+          # a non-reserved name and read it from alchemy.run.ts.
+          BUILD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
 
   cleanup:
