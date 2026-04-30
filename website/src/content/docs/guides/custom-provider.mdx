@@ -1,0 +1,544 @@
+---
+title: Writing a Custom Resource Provider
+description: Add support for a new cloud or third-party API by declaring a Resource type and implementing its lifecycle as an Effect Layer.
+sidebar:
+  order: 8
+---
+
+A **provider** is what gives meaning to a [Resource](/concepts/resource)
+declaration. When you `yield*` a resource inside a Stack, Alchemy
+looks up the provider for that resource's type and calls the
+appropriate lifecycle method — `create`, `update`, `delete`, and
+optionally `diff`, `read`, `precreate`, `tail`, `logs`.
+
+Providers are just Effect `Layer`s, which means **adding support for
+a new cloud or third-party API is "declare a type, implement a
+Layer"** — no codegen, no registry, no schema.
+
+This guide walks through building a Stripe `Product` provider
+end-to-end: declaring props and attributes, defining the resource
+type, implementing the lifecycle, bundling it into a `providers()`
+layer, and writing a test.
+
+See [Provider](/concepts/provider) for the conceptual overview and
+[Resource Lifecycle](/concepts/resource-lifecycle) for the semantics
+of when each lifecycle method fires.
+
+## Declare props and attributes
+
+Every resource has two sides:
+
+- **Input properties** — the desired configuration you pass in
+- **Output attributes** — the values the cloud returns after creation
+
+Start with two plain TypeScript types. Both are pure data, so
+they're trivial to share between the provider and call sites.
+
+Create `src/stripe/Product.ts`:
+
+```typescript
+// src/stripe/Product.ts
+export interface StripeProductProps {
+  name: string;
+  description?: string;
+  active?: boolean;
+}
+
+export interface StripeProductAttributes {
+  productId: string;
+  created: number;
+}
+```
+
+## Declare the Resource type
+
+A `Resource<Type, Props, Attributes>` is a phantom type that ties a
+string `Type` to its props and attributes. The string `Type` (here
+`"Stripe.Product"`) is what Alchemy uses to look up the provider at
+plan time — it must be globally unique.
+
+```diff lang="typescript"
+// src/stripe/Product.ts
++import { Resource } from "alchemy";
++
+export interface StripeProductProps {
+  name: string;
+  description?: string;
+  active?: boolean;
+}
+
+export interface StripeProductAttributes {
+  productId: string;
+  created: number;
+}
++
++export type StripeProduct = Resource<
++  "Stripe.Product",
++  StripeProductProps,
++  StripeProductAttributes
++>;
+```
+
+## Declare the Resource constructor (the "tag")
+
+`Resource<T>(type)` returns the value users actually call —
+`StripeProduct("Pro", { ... })`. It also doubles as the **tag**
+the provider Layer registers itself against, so by convention the
+type and the value share the same name.
+
+```diff lang="typescript"
+// src/stripe/Product.ts
+import { Resource } from "alchemy";
+
+// ... props / attributes / type unchanged ...
+
+export type StripeProduct = Resource<
+  "Stripe.Product",
+  StripeProductProps,
+  StripeProductAttributes
+>;
++
++export const StripeProduct = Resource<StripeProduct>("Stripe.Product");
+```
+
+You can already use this constructor in a stack — but with no
+provider registered, planning will fail with `Provider not found
+for Stripe.Product`. Let's fix that.
+
+## Scaffold the provider layer
+
+A provider layer is a `Layer<Provider<R>>` produced by
+`Provider.effect(ResourceClass, effect)`. The inner Effect
+constructs a `ProviderService` — an object with `create`, `update`,
+`delete` (required) and optional hooks like `diff`, `read`,
+`precreate`.
+
+Start with stubs so the types compile, then fill them in:
+
+```diff lang="typescript"
+// src/stripe/Product.ts
+-import { Resource } from "alchemy";
++import * as Provider from "alchemy/Provider";
++import { Resource } from "alchemy";
++import * as Effect from "effect/Effect";
+
+// ... props / attributes / type / constructor unchanged ...
+
+export const StripeProduct = Resource<StripeProduct>("Stripe.Product");
++
++export const StripeProductProvider = () =>
++  Provider.effect(
++    StripeProduct,
++    Effect.gen(function* () {
++      return StripeProduct.Provider.of({
++        create: () => Effect.die("not implemented"),
++        update: () => Effect.die("not implemented"),
++        delete: () => Effect.die("not implemented"),
++      });
++    }),
++  );
+```
+
+A few patterns worth knowing:
+
+- **`Provider.effect`** wraps an Effect that returns a
+  `ProviderService` into a `Layer<Provider<StripeProduct>>`.
+- **`StripeProduct.Provider.of({...})`** is a typed constructor —
+  it forces every method's input/output to match the resource's
+  props and attributes.
+- **The outer `Effect.gen`** runs once when the layer is built. Use
+  it to acquire shared dependencies (clients, credentials, HTTP).
+
+## Acquire dependencies in the outer Effect
+
+The Stripe API needs a client. Resolve it from a `StripeClient`
+service so it can be configured per-stack:
+
+```diff lang="typescript"
+// src/stripe/Client.ts
++import * as Context from "effect/Context";
++import Stripe from "stripe";
++
++export class StripeClient extends Context.Tag("StripeClient")<
++  StripeClient,
++  Stripe
++>() {}
+```
+
+Then yield it inside the provider's outer Effect. Anything you
+yield there becomes a requirement on the resulting Layer:
+
+```diff lang="typescript"
+// src/stripe/Product.ts
+import * as Provider from "alchemy/Provider";
+import { Resource } from "alchemy";
+import * as Effect from "effect/Effect";
++import { StripeClient } from "./Client.ts";
+
+// ...
+
+export const StripeProductProvider = () =>
+  Provider.effect(
+    StripeProduct,
+    Effect.gen(function* () {
++      const stripe = yield* StripeClient;
++
+      return StripeProduct.Provider.of({
+        create: () => Effect.die("not implemented"),
+        update: () => Effect.die("not implemented"),
+        delete: () => Effect.die("not implemented"),
+      });
+    }),
+  );
+```
+
+The provider Layer now has type
+`Layer<Provider<StripeProduct>, never, StripeClient>` — Alchemy
+won't let you use it in a stack without supplying `StripeClient`
+somewhere.
+
+## Implement `create`
+
+`create` is called when a resource is declared but not yet in
+state. It receives `news` (resolved input props), `id` (logical
+ID), `instanceId` (deterministic suffix), and `bindings`. It
+returns the output attributes.
+
+It **must be idempotent** — Alchemy may retry it if state
+persistence fails. Use `instanceId` as part of any
+externally-visible identifier so retries find the same row.
+
+:::tip[Use `Effect.tryPromise`, not `Effect.promise`]
+`Effect.tryPromise` surfaces SDK errors as Effect failures the
+lifecycle machinery can report cleanly. `Effect.promise` swallows
+them and turns rejections into defects.
+:::
+
+:::note[Bindings]
+The `bindings` argument carries data attached by upstream policies
+and event sources (IAM grants, queue subscriptions, etc.). If your
+resource type supports being a binding target, read them here. See
+[Binding](/concepts/binding) for the full contract.
+:::
+
+```diff lang="typescript"
+return StripeProduct.Provider.of({
+-  create: () => Effect.die("not implemented"),
++  create: Effect.fnUntraced(function* ({ news }) {
++    const product = yield* Effect.tryPromise(() =>
++      stripe.products.create({
++        name: news.name,
++        description: news.description,
++        active: news.active,
++      }),
++    );
++    return {
++      productId: product.id,
++      created: product.created,
++    };
++  }),
+   update: () => Effect.die("not implemented"),
+   delete: () => Effect.die("not implemented"),
+ });
+```
+
+## Implement `update`
+
+`update` runs when the resource exists and at least one input
+property changed (and the diff didn't classify it as a
+replacement). It receives `news`, `olds`, and the previous
+`output`, and returns the new output attributes.
+
+If your update is a partial PATCH, return the merged shape so
+downstream resources see the full attributes:
+
+:::tip[`news` + `olds` enable real PATCH]
+Both the new and old props are passed in. Diff them yourself to
+build a minimal PATCH payload instead of re-sending the entire
+desired state — useful for APIs with strict update semantics or
+audit logs.
+:::
+
+```diff lang="typescript"
+return StripeProduct.Provider.of({
+   create: Effect.fnUntraced(function* ({ news }) { /* ... */ }),
+-  update: () => Effect.die("not implemented"),
++  update: Effect.fnUntraced(function* ({ news, output }) {
++    yield* Effect.tryPromise(() =>
++      stripe.products.update(output.productId, {
++        name: news.name,
++        description: news.description,
++        active: news.active,
++      }),
++    );
++    return output;
++  }),
+   delete: () => Effect.die("not implemented"),
+ });
+```
+
+## Implement `delete`
+
+`delete` runs when the resource is removed from code, replaced, or
+when `alchemy destroy` runs.
+
+:::tip[Treat 404 as success]
+Like `create`, `delete` **must be idempotent**. Alchemy may retry
+it if persistence fails between the cloud call succeeding and state
+being written. Catch "not found" errors and return `Effect.void`.
+:::
+
+```diff lang="typescript"
+return StripeProduct.Provider.of({
+   create: Effect.fnUntraced(function* ({ news }) { /* ... */ }),
+   update: Effect.fnUntraced(function* ({ news, output }) { /* ... */ }),
+-  delete: () => Effect.die("not implemented"),
++  delete: Effect.fnUntraced(function* ({ output }) {
++    yield* Effect.tryPromise(() =>
++      stripe.products.del(output.productId),
++    ).pipe(
++      Effect.catchAll((cause) =>
++        cause instanceof Error && cause.message.includes("No such product")
++          ? Effect.void
++          : Effect.fail(cause),
++      ),
++    );
++  }),
+ });
+```
+
+## Implement `diff` (optional)
+
+Some property changes can't be applied in place. For Stripe
+products the `name` is mutable but (hypothetically) the
+`description` is not — changing it requires recreating the
+product. Implement `diff` to tell Alchemy which kind of change to
+plan.
+
+`diff` runs at **plan time**, before `update`, and returns one of:
+
+- `{ action: "noop" }` — change is trivial, skip `update`
+- `{ action: "update", stables?: [...] }` — apply in place
+- `{ action: "replace", deleteFirst?: boolean }` — destroy and
+  recreate
+- `undefined` / `void` — fall back to default (treat as `update`)
+
+:::note[`diff` runs during planning]
+Props may still be unresolved `Output`s when `diff` is called —
+they're only fully resolved at apply time. Always guard with
+`isResolved(news)` and return `undefined` to defer to the default
+path when you can't decide.
+:::
+
+```diff lang="typescript"
++import { isResolved } from "alchemy/Diff";
++
+// ...
+
+return StripeProduct.Provider.of({
++  diff: Effect.fnUntraced(function* ({ news, olds }) {
++    if (!isResolved(news)) return undefined;
++    if (news.description !== olds.description) {
++      return { action: "replace" } as const;
++    }
++    return undefined;
++  }),
+   create: Effect.fnUntraced(function* ({ news }) { /* ... */ }),
+   update: Effect.fnUntraced(function* ({ news, output }) { /* ... */ }),
+   delete: Effect.fnUntraced(function* ({ output }) { /* ... */ }),
+ });
+```
+
+For attributes that are immutable across **all** updates (e.g.
+the Stripe `productId`, an ARN), declare them in
+`stables` at the top level:
+
+```diff lang="typescript"
+return StripeProduct.Provider.of({
++  stables: ["productId"],
+   diff: Effect.fnUntraced(function* ({ news, olds }) { /* ... */ }),
+   // ...
+ });
+```
+
+## Implement `read` (optional, for state recovery)
+
+If state is lost between `create` succeeding and Alchemy
+persisting the result, the next deploy uses `read` to look up the
+live resource and re-sync. Returning `undefined` tells Alchemy the
+resource doesn't exist and should be re-created.
+
+```diff lang="typescript"
+return StripeProduct.Provider.of({
+   stables: ["productId"],
+   diff: Effect.fnUntraced(function* ({ news, olds }) { /* ... */ }),
++  read: Effect.fnUntraced(function* ({ output }) {
++    if (!output?.productId) return undefined;
++    const product = yield* Effect.tryPromise(() =>
++      stripe.products.retrieve(output.productId),
++    ).pipe(
++      Effect.catchAll(() => Effect.succeed(undefined)),
++    );
++    if (!product) return undefined;
++    return { productId: product.id, created: product.created };
++  }),
+   create: Effect.fnUntraced(function* ({ news }) { /* ... */ }),
+   update: Effect.fnUntraced(function* ({ news, output }) { /* ... */ }),
+   delete: Effect.fnUntraced(function* ({ output }) { /* ... */ }),
+ });
+```
+
+## Bundle into a `providers()` layer
+
+Users expect the same one-line ergonomics as the built-ins
+(`Cloudflare.providers()`, `AWS.providers()`). Bundle every
+resource type for your integration into a single layer that
+includes the credentials, HTTP client, and any other supporting
+services.
+
+Create `src/stripe/Providers.ts`:
+
+```typescript
+// src/stripe/Providers.ts
+import * as Provider from "alchemy/Provider";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import Stripe from "stripe";
+import { StripeClient } from "./Client.ts";
+import { StripeProduct, StripeProductProvider } from "./Product.ts";
+
+export class Providers extends Provider.ProviderCollection<Providers>()(
+  "Stripe",
+) {}
+
+export const providers = (config: { apiKey: string }) =>
+  Layer.effect(
+    Providers,
+    Provider.collection([StripeProduct]),
+  ).pipe(
+    Layer.provide(StripeProductProvider()),
+    Layer.provideMerge(
+      Layer.succeed(StripeClient, new Stripe(config.apiKey)),
+    ),
+  );
+```
+
+Now users plug your providers in like any built-in:
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Stripe from "./src/stripe";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Stripe.providers({ apiKey: process.env.STRIPE_API_KEY! }) },
+  Effect.gen(function* () {
+    const pro = yield* Stripe.Product("Pro", {
+      name: "Pro plan",
+      description: "Everything in Free, plus...",
+    });
+    return { productId: pro.productId };
+  }),
+);
+```
+
+To mix with another cloud, merge the layers:
+
+```typescript
+import * as Layer from "effect/Layer";
+
+providers: Layer.mergeAll(
+  Cloudflare.providers(),
+  Stripe.providers({ apiKey: process.env.STRIPE_API_KEY! }),
+),
+```
+
+## Test the lifecycle
+
+Alchemy's test harness (`alchemy/Test/Vitest` or `alchemy/Test/Bun`)
+runs an in-memory state store and lets you `deploy` a sub-stack,
+make assertions against the live resource, then `destroy` it.
+
+:::note[Three things the harness gives you]
+- **`yield* destroy()`** — clears any leftover state from a
+  previous run. Call it at the start (and end) of each test.
+- **`test.deploy(effect)`** — runs a sub-stack with the in-memory
+  state store. The same logical ID across two `test.deploy` calls
+  triggers an `update` (or `replace`, depending on `diff`).
+- **`Effect.provide(providers(...))`** — wires your provider Layer
+  into the test so the resource type resolves.
+:::
+
+Create `test/Product.test.ts`:
+
+```typescript
+// test/Product.test.ts
+import * as Alchemy from "alchemy";
+import { destroy, test } from "alchemy/Test/Vitest";
+import { expect } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import Stripe from "stripe";
+import * as StripeProvider from "../src/stripe";
+
+const stripe = new Stripe(process.env.STRIPE_TEST_API_KEY!);
+
+test(
+  "create, update, delete a product",
+  Effect.gen(function* () {
+    yield* destroy();
+
+    // Create
+    const created = yield* test.deploy(
+      Effect.gen(function* () {
+        return yield* StripeProvider.Product("TestProduct", {
+          name: "v1",
+          description: "first version",
+        });
+      }),
+    );
+    expect(created.productId).toBeDefined();
+
+    const live1 = yield* Effect.promise(() =>
+      stripe.products.retrieve(created.productId),
+    );
+    expect(live1.name).toBe("v1");
+
+    // Update (in place)
+    const updated = yield* test.deploy(
+      Effect.gen(function* () {
+        return yield* StripeProvider.Product("TestProduct", {
+          name: "v2",
+          description: "first version",
+        });
+      }),
+    );
+    expect(updated.productId).toBe(created.productId);
+
+    const live2 = yield* Effect.promise(() =>
+      stripe.products.retrieve(updated.productId),
+    );
+    expect(live2.name).toBe("v2");
+
+    // Destroy
+    yield* destroy();
+  }).pipe(
+    Effect.provide(
+      StripeProvider.providers({ apiKey: process.env.STRIPE_TEST_API_KEY! }),
+    ),
+  ),
+);
+```
+
+To verify replacement semantics, change a `stables` field (or the
+field your `diff` flags as `replace`) and assert that
+`updated.productId !== created.productId`.
+
+## Reference implementations
+
+If you'd rather start from a real provider:
+
+- [`Axiom/VirtualField.ts`](https://github.com/sam-goodwin/alchemy-effect/blob/main/packages/alchemy/src/Axiom/VirtualField.ts) — minimal CRUD with `diff` and `read`
+- [`Cloudflare/R2/Bucket.ts`](https://github.com/sam-goodwin/alchemy-effect/blob/main/packages/alchemy/src/Cloudflare/R2/Bucket.ts) — production provider with bindings and replace semantics
+- [`Axiom/Providers.ts`](https://github.com/sam-goodwin/alchemy-effect/blob/main/packages/alchemy/src/Axiom/Providers.ts) — example of bundling a `providers()` layer
