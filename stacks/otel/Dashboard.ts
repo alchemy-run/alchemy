@@ -12,6 +12,7 @@ import { Stack } from "alchemy/Stack";
  * 2. Deploy/destroy latency p50/p95 | CLI invocations by command/status
  * 3. Top resources by op count | Resource latency p95 by type/op
  * 4. Active users by version | Resource error rate
+ * 5. State store deploy success vs error | State store deploy error rate
  *
  * All queries target `${stage}-traces` — Axiom's metrics datasets
  * cannot be queried via APL, but every metric we emit has an
@@ -140,6 +141,36 @@ export const CliOverviewDashboard = Axiom.Dashboard(
         },
       },
       {
+        id: "state-store-deploys",
+        name: "State store deploys (success vs error)",
+        type: "TimeSeries",
+        query: {
+          apl: `
+            ['${traces}']
+            | where name == "state_store.deploy"
+            | extend status=iff(tobool(['error']), "error", "success")
+            | summarize count=count() by status, bin_auto(_time)
+            | order by _time asc
+          `,
+        },
+      },
+      {
+        id: "state-store-error-rate",
+        name: "State store deploy error rate (%)",
+        type: "TimeSeries",
+        query: {
+          apl: `
+            ['${traces}']
+            | where name == "state_store.deploy"
+            | extend is_error=toint(tobool(['error']))
+            | summarize total=count(), errors=sum(is_error) by bin_auto(_time)
+            | extend error_rate_pct=todouble(errors) * 100.0 / todouble(total)
+            | project _time, error_rate_pct
+            | order by _time asc
+          `,
+        },
+      },
+      {
         id: "resource-error-rate",
         name: "Resource error rate",
         type: "TimeSeries",
@@ -170,6 +201,9 @@ export const CliOverviewDashboard = Axiom.Dashboard(
       // Row 4
       { i: "active-users-by-version", x: 0, y: 18, w: 6, h: 6 },
       { i: "resource-error-rate", x: 6, y: 18, w: 6, h: 6 },
+      // Row 5
+      { i: "state-store-deploys", x: 0, y: 24, w: 6, h: 6 },
+      { i: "state-store-error-rate", x: 6, y: 24, w: 6, h: 6 },
     ];
 
     return {
@@ -179,7 +213,7 @@ export const CliOverviewDashboard = Axiom.Dashboard(
         // can't create per-user "private" dashboards.
         owner: "",
         description:
-          "End-user CLI telemetry: active users, resource usage, deploy/destroy and per-resource latency, error rate.",
+          "End-user CLI telemetry: active users, resource usage, deploy/destroy and per-resource latency, error rate, and Cloudflare State Store deploy success/error rate.",
         refreshTime: 60 as const,
         schemaVersion: 2 as const,
         // Axiom requires the `qr-now-{duration}` form for relative times.

@@ -24,7 +24,7 @@ import * as Credentials from "../Credentials.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import { makeLocalState } from "../../State/LocalState.ts";
 import { State, type StateService } from "../../State/State.ts";
-import { syncState } from "../../State/Sync.ts";
+import { recordStateStoreOp } from "../../Telemetry/Metrics.ts";
 import * as Clank from "../../Util/Clank.ts";
 import { CloudflareAuth } from "../Auth/AuthProvider.ts";
 import { EdgeSessionError, createEdgeSession } from "../EdgeSession.ts";
@@ -261,6 +261,36 @@ export const state = (props?: {
   );
 
 /**
+ * Non-destructively copy every resource in the
+ * `CloudflareStateStore/<scriptName>` stack from `source` into
+ * `destination`, leaving every other stack in `destination` untouched.
+ *
+ * This intentionally does not delete anything from `destination`: at
+ * bootstrap time the destination is the user's live remote state
+ * store, and removing entries that happen to be missing locally would
+ * be catastrophic.
+ */
+const hoistBootstrapStack = Effect.fnUntraced(function* (
+  source: StateService,
+  destination: StateService,
+  scriptName: string,
+) {
+  const stack = "CloudflareStateStore";
+  const stage = scriptName;
+  const fqns = yield* source.list({ stack, stage });
+  yield* Effect.forEach(
+    fqns,
+    Effect.fnUntraced(function* (fqn) {
+      const value = yield* source.get({ stack, stage, fqn });
+      if (value) {
+        yield* destination.set({ stack, stage, fqn, value });
+      }
+    }),
+    { concurrency: "unbounded" },
+  );
+});
+
+/**
  * Finish (or resume) the bootstrap of the Cloudflare State Store using
  * the provided local state as the source of truth. This is idempotent
  * and safe to re-run: any resources already applied during a previous
@@ -300,7 +330,14 @@ const finishBootstrap = ({
     void profileName;
     void isCI;
 
-    yield* syncState(localState, httpState);
+    // Copy the freshly-deployed CloudflareStateStore stack into the
+    // remote store. We deliberately do NOT call `syncState` here:
+    // syncState is a *mirror* that deletes everything in the
+    // destination that is not in the source, which would wipe every
+    // user stack in the remote store on any subsequent bootstrap
+    // (resume / --force / partial-failure recovery), since by that
+    // point local state only contains the bootstrap stack itself.
+    yield* hoistBootstrapStack(localState, httpState, scriptName);
 
     yield* localState.deleteStack({
       stack: "CloudflareStateStore",
@@ -348,7 +385,15 @@ const deployStateStore = (scriptName: string, state?: StateService) =>
       Effect.provide(stateLayer),
     );
     return { url, authToken, localState };
-  });
+  }).pipe(
+    Effect.withSpan("state_store.deploy", {
+      attributes: {
+        "alchemy.state_store.script_name": scriptName,
+        "alchemy.state_store.op": "deploy",
+      },
+    }),
+    recordStateStoreOp("deploy"),
+  );
 
 /**
  * Log in to a Cloudflare-deployed HTTP state-store.
