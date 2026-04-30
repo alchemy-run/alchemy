@@ -1,3 +1,13 @@
+## v2.0.0-beta.25
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **Cloudflare**: Remove broken keepAssets optimization &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(845a7)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/845a7b7)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.24...HEAD)
+
+---
+
 ## v2.0.0-beta.24
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
