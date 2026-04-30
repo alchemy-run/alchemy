@@ -11,6 +11,11 @@ const Website = Cloudflare.StaticSite(
   "Website",
   Alchemy.Stack.useSync((stack) => ({
     command: "bun run build",
+    name:
+      stack.stage === "prod"
+        ? // FUCK: i deleted state lol, let's adopt this to avoid potential DNS prop issue
+          "alchemyeffectwebsite-worker-prod-piyvp3qw7565vvin"
+        : undefined,
     main: "./src/worker.ts",
     outdir: "dist",
     domain: stack.stage === "prod" ? "v2.alchemy.run" : undefined,

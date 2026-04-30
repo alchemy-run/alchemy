@@ -109,7 +109,16 @@ export const readAssets = Effect.fnUntraced(function* (props: AssetsProps) {
   const path = yield* Path.Path;
   const resolvedDirectory = path.resolve(props.directory);
   const [files, ignore, _headers, _redirects] = yield* Effect.all([
-    fs.readDirectory(resolvedDirectory, { recursive: true }),
+    // Tolerate a missing directory: state may carry an absolute path
+    // from a different machine (e.g. CI) and we'd rather upload no
+    // assets than crash the whole deploy.
+    fs.readDirectory(resolvedDirectory, { recursive: true }).pipe(
+      Effect.catchTag("PlatformError", (e) =>
+        e.reason._tag === "NotFound"
+          ? Effect.succeed([] as readonly string[])
+          : Effect.fail(e),
+      ),
+    ),
     maybeReadString(path.join(resolvedDirectory, ".assetsignore")),
     maybeReadString(path.join(resolvedDirectory, "_headers")),
     maybeReadString(path.join(resolvedDirectory, "_redirects")),

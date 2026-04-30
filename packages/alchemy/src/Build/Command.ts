@@ -143,12 +143,19 @@ export const CommandProvider = () =>
           if (!output) {
             return undefined;
           }
+          // Recompute the output path against the *current* cwd. State
+          // may have been written by a different machine (e.g. CI) and
+          // the absolute path baked into `output.outdir` won't exist
+          // locally. As long as the path resolved against this
+          // machine's cwd is present, return the refreshed output so
+          // downstream consumers (e.g. `Cloudflare.Worker` assets)
+          // don't try to read a stale, foreign-machine path.
           const outputPath = getOutputPath(olds);
           const exists = yield* fs.exists(outputPath);
           if (!exists) {
             return undefined;
           }
-          return output;
+          return { ...output, outdir: outputPath };
         }),
         create: Effect.fnUntraced(function* ({ news, session }) {
           const hash = yield* hashDirectory(news);

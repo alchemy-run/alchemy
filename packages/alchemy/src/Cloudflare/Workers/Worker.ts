@@ -22,6 +22,7 @@ import { pathToFileURL } from "node:url";
 import type * as rolldown from "rolldown";
 import Sonda from "sonda/rolldown";
 import type * as vite from "vite";
+import { AdoptPolicy } from "../../AdoptPolicy.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Artifacts from "../../Artifacts.ts";
 import * as Binding from "../../Binding.ts";
@@ -1120,27 +1121,83 @@ export const LiveWorkerProvider = () =>
 
           if (desired.length === 0) return [];
 
+          const adoptEnabled = yield* Effect.serviceOption(AdoptPolicy).pipe(
+            Effect.map(Option.getOrElse(() => false)),
+          );
+
           const zoneCache = new Map<string, string>();
+
+          /**
+           * Attach `hostname` to `scriptName`, recovering from a "hostname
+           * already in use" conflict when adoption is enabled.
+           *
+           * The Cloudflare API rejects a `PUT /workers/domains` whose
+           * hostname is already registered (even when the existing entry
+           * points at the same Worker, which is exactly what happens
+           * after a state-store wipe). The SDK surfaces this as the
+           * unmatched `UnknownCloudflareError` channel because there's
+           * no dedicated error tag for it. With adoption opted-in we
+           * list domains for the hostname; if the existing entry
+           * already targets *this* Worker we adopt it in place. We
+           * never transfer a hostname off another Worker — that would
+           * silently re-route someone else's traffic.
+           */
+          const attachDomain = Effect.fnUntraced(function* (hostname: string) {
+            const zoneId = yield* inferZoneIdForHostname(hostname, zoneCache);
+            return yield* putDomain({
+              accountId,
+              hostname,
+              service: scriptName,
+              zoneId,
+            }).pipe(
+              Effect.map((res) => ({
+                hostname,
+                id: res.id ?? "",
+                zoneId: res.zoneId ?? zoneId,
+              })),
+              Effect.catchTag("UnknownCloudflareError", (err) =>
+                adoptEnabled && /already in use/i.test(err.message)
+                  ? adoptDomainIfSameService(hostname, zoneId, err)
+                  : Effect.fail(err),
+              ),
+            );
+          });
+
+          const adoptDomainIfSameService = Effect.fnUntraced(function* (
+            hostname: string,
+            zoneId: string,
+            originalError: { message: string },
+          ) {
+            const existing = yield* listDomains({
+              accountId,
+              hostname,
+            }).pipe(
+              Effect.map((r) =>
+                (r.result ?? []).find((d) => d.hostname === hostname),
+              ),
+            );
+            if (existing?.id && existing.service === scriptName) {
+              return {
+                hostname,
+                id: existing.id,
+                zoneId: existing.zoneId ?? zoneId,
+              };
+            }
+            // The hostname exists but on a different Worker. Refuse to
+            // hijack it; surface a more actionable message than the raw
+            // Cloudflare error.
+            return yield* Effect.die(
+              new Error(
+                `Cannot attach hostname '${hostname}' to Worker '${scriptName}': ` +
+                  `it is already attached to Worker '${existing?.service ?? "<unknown>"}'. ` +
+                  `Detach it from that Worker first, or pick a different hostname. ` +
+                  `(Cloudflare reported: ${originalError.message})`,
+              ),
+            );
+          });
+
           const applied = yield* Effect.all(
-            desired.map((hostname) =>
-              Effect.gen(function* () {
-                const zoneId = yield* inferZoneIdForHostname(
-                  hostname,
-                  zoneCache,
-                );
-                const res = yield* putDomain({
-                  accountId,
-                  hostname,
-                  service: scriptName,
-                  zoneId,
-                });
-                return {
-                  hostname,
-                  id: res.id ?? "",
-                  zoneId: res.zoneId ?? zoneId,
-                };
-              }),
-            ),
+            desired.map(attachDomain),
             { concurrency: "unbounded" },
           );
           return applied;
