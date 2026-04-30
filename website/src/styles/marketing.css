@@ -2299,6 +2299,13 @@ body.alc-root,
     transparent 100%
   );
 }
+/* In dark mode the brown noise multiplied onto the dark page just turns
+   to mud. Flip to `screen` so the same noise pattern adds a faint warm
+   highlight grain instead of subtracting into black. */
+[data-theme="dark"] .alc-hero::before {
+  mix-blend-mode: screen;
+  opacity: 0.16;
+}
 /* Parchment "halo" between the animation canvas and the hero text.
    Solid parchment at the center (where the headline + subtitle live)
    so the animation never competes with type, fading to transparent
@@ -2311,11 +2318,14 @@ body.alc-root,
   inset: 0;
   z-index: 0;
   pointer-events: none;
+  /* The halo's job is to fade the page color *over* the canvas animation
+     so the headline reads cleanly. Anchored to `--alc-bg` so it matches
+     whatever theme is active. */
   background: radial-gradient(
     ellipse 55% 50% at 50% 52%,
-    rgba(245, 239, 227, 0.92) 0%,
-    rgba(245, 239, 227, 0.78) 30%,
-    rgba(245, 239, 227, 0.4) 60%,
+    color-mix(in srgb, var(--alc-bg) 92%, transparent) 0%,
+    color-mix(in srgb, var(--alc-bg) 78%, transparent) 30%,
+    color-mix(in srgb, var(--alc-bg) 40%, transparent) 60%,
     transparent 100%
   );
 }
@@ -2350,6 +2360,19 @@ body.alc-root,
     #000 60%,
     transparent 100%
   );
+}
+/* In dark mode `multiply` collapses the strokes into the page (cream × dark
+   walnut ≈ dark walnut). Flip to `screen` so the same stroke reads as a
+   light highlight on the dark page. Color is bumped to pure white and
+   opacity raised so the screen-blended markings sit a notch above
+   light-mode visibility — they otherwise read as muted warm cream. */
+[data-theme="dark"] .alc-hero__bg-graph {
+  mix-blend-mode: screen;
+  color: #ffffff;
+  opacity: 1;
+  /* Strokes are drawn at low alpha by the JS (cap ~0.32). Boost the
+     compositing brightness so they read clearly above the dark page. */
+  filter: brightness(2.6);
 }
 .alc-hero__inner {
   position: relative;

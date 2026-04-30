@@ -93,7 +93,6 @@ export default defineConfig({
       customCss: ["./src/styles/global.css", "./src/styles/custom.css"],
       components: {
         ThemeProvider: "./src/components/ThemeProvider.astro",
-        ThemeSelect: "./src/components/ThemeProvider.astro",
         Header: "./src/components/marketing/Nav.astro",
         Head: "./src/components/starlight/Head.astro",
       },
