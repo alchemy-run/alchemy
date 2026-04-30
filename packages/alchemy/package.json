@@ -227,7 +227,8 @@
       "import": "./lib/Util/Clank.js"
     },
     "./bin/alchemy.js": "./bin/alchemy.js",
-    "./bin/exec.ts": "./bin/exec.ts"
+    "./bin/exec.ts": "./bin/exec.ts",
+    "./bin/exec.js": "./bin/exec.js"
   },
   "publishConfig": {
     "access": "public"
