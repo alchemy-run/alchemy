@@ -28,10 +28,11 @@ export default defineEcConfig({
           module: /** @type {any} */ (99), // ESNext
           target: /** @type {any} */ (9), // ES2022
           strict: true,
+          types: ["bun"],
           baseUrl,
           paths: {
-            alchemy: ["./alchemy/src/index.ts"],
-            "alchemy/*": ["./alchemy/src/*"],
+            alchemy: ["./packages/alchemy/src/index.ts"],
+            "alchemy/*": ["./packages/alchemy/src/*"],
           },
         },
       },

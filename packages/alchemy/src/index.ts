@@ -31,3 +31,17 @@ export { inMemoryState, localState } from "./State/index.ts";
 export * from "./Trait.ts";
 
 export * as Construct from "./Construct.ts";
+
+// Re-export internal types so they can be portably named in
+// downstream `.d.ts` emissions (fixes TS2883 in user files).
+export { AuthProviders } from "./Auth/AuthProvider.ts";
+export { Cli } from "./Cli/Cli.ts";
+export {
+  ExecutionContext,
+  type BaseExecutionContext,
+  type ExecutionContext as ExecutionContextInterface,
+} from "./ExecutionContext.ts";
+export type * from "./Platform.ts";
+export { Platform } from "./Platform.ts";
+export type { ProviderCollectionLike } from "./Provider.ts";
+export type * from "./Stack.ts";
