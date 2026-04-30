@@ -16,8 +16,7 @@ test(
   "deploys and exposes a url",
   Effect.gen(function* () {
     const out = (yield* stack) as unknown;
-    const url =
-      typeof out === "string" ? out : (out as { url: string }).url;
+    const url = typeof out === "string" ? out : (out as { url: string }).url;
     expect(url).toBeString();
   }),
 );

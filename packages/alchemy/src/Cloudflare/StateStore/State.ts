@@ -86,9 +86,7 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
         `Resuming Cloudflare State Store '${scriptName}' deployment...`,
       );
       yield* finishBootstrap({ scriptName, profileName, localState, isCI });
-      yield* Clank.success(
-        `Cloudflare State Store '${scriptName}' is ready.`,
-      );
+      yield* Clank.success(`Cloudflare State Store '${scriptName}' is ready.`);
       return;
     }
 
@@ -113,9 +111,7 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
           credentials,
         );
       }
-      yield* Clank.success(
-        `Cloudflare State Store '${scriptName}' is ready.`,
-      );
+      yield* Clank.success(`Cloudflare State Store '${scriptName}' is ready.`);
       return;
     }
 
@@ -124,9 +120,7 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
         `Forcing redeploy of Cloudflare State Store '${scriptName}'...`,
       );
     } else {
-      yield* Clank.info(
-        `Deploying Cloudflare State Store '${scriptName}'...`,
-      );
+      yield* Clank.info(`Deploying Cloudflare State Store '${scriptName}'...`);
     }
 
     yield* finishBootstrap({ scriptName, profileName, localState, isCI });
