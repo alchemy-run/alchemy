@@ -1,13 +1,13 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["alchemy.run.ts", "src/**/*.ts"],
+  "include": ["alchemy.run.ts", "src/**/*.ts", "test/**/*.ts"],
   "compilerOptions": {
     "noEmit": true,
     "rootDir": ".",
     "module": "Preserve",
     "moduleResolution": "Bundler",
     "target": "ESNext",
-    "types": ["@cloudflare/workers-types"]
+    "types": ["bun", "@cloudflare/workers-types"]
   },
   "references": [
     {
