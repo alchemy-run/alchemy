@@ -16,6 +16,24 @@ export default [
     noExternal: ["execa", "open", "env-paths"],
     tsconfig: "tsconfig.bundle.json",
   }),
+  // bundle the dev-mode worker entrypoint. dev.ts spawns this in a child bun
+  // process; under a published install it loads from node_modules and would
+  // otherwise need react/ink/pathe at runtime to resolve InkCLI.tsx as source.
+  // Bundling inlines those so they stay devDependencies (same rationale as
+  // the cli bundle below).
+  defineConfig({
+    entry: ["bin/exec.ts"],
+    format: ["esm"],
+    clean: false,
+    shims: true,
+    outDir: "bin",
+    dts: false,
+    sourcemap: true,
+    outputOptions: {
+      inlineDynamicImports: true,
+    },
+    tsconfig: "tsconfig.bundle.json",
+  }),
   // bundlde the cli entrypoint so that react does not end up in our dependencies
   // problem‼️ this means react is bundled twice in our tar.gz. Should we have bin/alchemy.ts import the cli entrypoint instead?
   defineConfig({
