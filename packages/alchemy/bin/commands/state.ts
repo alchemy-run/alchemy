@@ -79,7 +79,7 @@ const withStateService = <A, E>(
           args.profile,
         ),
       ),
-      Logger.layer([fileLogger("out")]),
+      Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
       Layer.succeed(Stage, args.stage),
       // When --local is set we still build the stack to get its other
       // services, but force State to be LocalState. Without --local the

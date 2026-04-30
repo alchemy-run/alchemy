@@ -106,7 +106,7 @@ export const execStack = Effect.fn(function* ({
     ConfigProvider.layer(
       withProfileOverride(yield* loadConfigProvider(envFile), profile),
     ),
-    Logger.layer([fileLogger("out")]),
+    Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
     Layer.succeed(Stage, stage),
   );
 

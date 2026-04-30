@@ -79,7 +79,7 @@ export const logsCommand = Command.make(
         ),
         Layer.succeed(AuthProviders, {}),
         Layer.succeed(Stage, stage),
-        Logger.layer([fileLogger("out")]),
+        Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
         State.localState(),
       );
 

@@ -18,6 +18,7 @@ import {
   type StackServices,
 } from "../Stack.ts";
 import * as State from "../State/index.ts";
+import { TelemetryLive } from "../Telemetry/Layer.ts";
 import { loadConfigProvider } from "../Util/ConfigProvider.ts";
 import { PlatformServices } from "../Util/PlatformServices.ts";
 
@@ -30,7 +31,7 @@ const platform = Layer.mergeAll(PlatformServices, FetchHttpClient.layer);
 // override alchemy state store, CLI/reporting, state, and dotAlchemy
 const alchemy = Layer.mergeAll(
   inkCLI(),
-  Logger.layer([Logger.consolePretty()]),
+  Logger.layer([Logger.consolePretty()], { mergeWithExisting: true }),
   AlchemyContextLive,
 );
 
@@ -148,7 +149,7 @@ export const deploy = <A>(
   _deploy({
     stack: stack,
     stage: options?.stage ?? "test",
-  });
+  }).pipe(Effect.provide(TelemetryLive));
 
 export const destroy = (
   stack: TestEffect<CompiledStack, AlchemyContext>,
@@ -160,4 +161,4 @@ export const destroy = (
   _destroy({
     stack,
     stage: options?.stage ?? "test",
-  });
+  }).pipe(Effect.provide(TelemetryLive));
