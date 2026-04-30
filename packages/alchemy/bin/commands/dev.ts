@@ -28,7 +28,7 @@ export const devCommand = Command.make(
         "run",
         "--watch",
         "--no-clear-screen",
-        fileURLToPath(import.meta.resolve("../exec.ts")),
+        fileURLToPath(import.meta.resolve("alchemy/bin/exec.ts")),
       ],
       {
         stdin: "inherit",
