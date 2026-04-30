@@ -65,7 +65,9 @@ const bootstrapAwsCommand = Command.make(
     }),
   )(
     Effect.fnUntraced(function* ({ envFile, profile, region, destroy }) {
-      const logger = Logger.layer([fileLogger("bootstrap.txt")]);
+      const logger = Logger.layer([fileLogger("bootstrap.txt")], {
+        mergeWithExisting: true,
+      });
 
       return yield* Effect.gen(function* () {
         const ssoProfile = yield* Auth.loadProfile(profile);
@@ -168,7 +170,9 @@ const bootstrapCloudflareCommand = Command.make(
     }),
   )(
     Effect.fnUntraced(function* ({ envFile, profile, force, workerName }) {
-      const logger = Logger.layer([fileLogger("bootstrap.txt")]);
+      const logger = Logger.layer([fileLogger("bootstrap.txt")], {
+        mergeWithExisting: true,
+      });
 
       // Wire up the same Cloudflare auth chain that
       // `Cloudflare.state(...)` uses internally. CloudflareAuth is an

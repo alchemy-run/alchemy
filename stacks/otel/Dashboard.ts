@@ -1,5 +1,6 @@
 import * as Alchemy from "alchemy";
 import * as Axiom from "alchemy/Axiom";
+import { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import { Effect } from "effect";
 import { Traces } from "./Datasets.ts";
@@ -31,7 +32,7 @@ export const CliOverviewDashboard = Axiom.Dashboard(
   Effect.all([Alchemy.Stack.asEffect(), Traces]).pipe(
     Effect.map(([stack, traces]) => {
       const t = traces.name;
-      const charts: Axiom.Chart[] = [
+      const charts: Input<Axiom.Chart>[] = [
         {
           id: "active-users-7d",
           name: "Active users",

@@ -15,10 +15,10 @@ on:
           - tag
       spec:
         description: >-
-          Channel-specific value.
-          tag: REQUIRED, the explicit full version (e.g. 2.0.0-experimental.1).
-          release: REQUIRED, patch|minor|major or an explicit x.y.z.
-          beta|alpha: optional, an integer N to force 2.0.0-<channel>.N; leave blank to auto-increment.
+          Channel-specific value. tag: REQUIRED, the explicit full version (e.g.
+          2.0.0-experimental.1). release: REQUIRED, patch|minor|major or an
+          explicit x.y.z. beta|alpha: optional, an integer N to force
+          2.0.0-<channel>.N; leave blank to auto-increment.
         required: false
         type: string
 
@@ -35,7 +35,6 @@ env:
     packages/better-auth/package.json
     packages/pr-package/package.json
     bun.lock
-
 jobs:
   # ── Step 1: Compute the next version and stage the bump in-memory. ──
   # No git commit: we want a failed publish to leave no orphan commit
@@ -107,12 +106,27 @@ jobs:
           echo "Resolved version: $VERSION (channel: $CHANNEL)"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
+      # Build everything once, up front, against the bumped versions. Outputs
+      # ride to every publish job as the `build-output` artifact so we don't
+      # rebuild three times in parallel.
+      - run: bun run build
+
       - uses: actions/upload-artifact@v4
         with:
           name: bump-files
           path: ${{ env.BUMP_ARTIFACT_PATHS }}
           if-no-files-found: error
           retention-days: 7
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: |
+            packages/*/lib
+            packages/*/bin
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: true
 
   # ── Step 2: Commit (bump + changelog) and tag BEFORE publishing.
   # Committing first means the publishable source of truth is the tagged
@@ -224,7 +238,9 @@ jobs:
   # on the bump-files artifact instead.
   publish-alchemy:
     needs: [bump, commit-and-tag]
-    if: always() && needs.bump.result == 'success' && (needs.commit-and-tag.result == 'success' || needs.commit-and-tag.result == 'skipped')
+    if:
+      always() && needs.bump.result == 'success' && (needs.commit-and-tag.result
+      == 'success' || needs.commit-and-tag.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -249,6 +265,10 @@ jobs:
         with:
           name: bump-files
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-output
+
       - uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
@@ -258,15 +278,16 @@ jobs:
 
       - run: bun install
 
-      - run: bun run build
-        working-directory: packages/alchemy
-
-      - run: bun scripts/release/publish-package.ts packages/alchemy ${{ needs.bump.outputs.channel }}
+      - run: bun scripts/release/publish-package.ts packages/alchemy ${{
+          needs.bump.outputs.channel }}
 
   # ── Step 3b: Build and publish `@alchemy.run/better-auth`. ──
   publish-better-auth:
     needs: [bump, commit-and-tag, publish-alchemy]
-    if: always() && needs.bump.result == 'success' && (needs.commit-and-tag.result == 'success' || needs.commit-and-tag.result == 'skipped') && needs.publish-alchemy.result == 'success'
+    if:
+      always() && needs.bump.result == 'success' && (needs.commit-and-tag.result
+      == 'success' || needs.commit-and-tag.result == 'skipped') &&
+      needs.publish-alchemy.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -291,6 +312,10 @@ jobs:
         with:
           name: bump-files
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-output
+
       - uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
@@ -300,18 +325,16 @@ jobs:
 
       - run: bun install
 
-      - run: bun run build
-        working-directory: packages/alchemy
-
-      - run: bun run build
-        working-directory: packages/better-auth
-
-      - run: bun scripts/release/publish-package.ts packages/better-auth ${{ needs.bump.outputs.channel }}
+      - run: bun scripts/release/publish-package.ts packages/better-auth ${{
+          needs.bump.outputs.channel }}
 
   # ── Step 3c: Build and publish `@alchemy.run/pr-package`. ──
   publish-pr-package:
     needs: [bump, commit-and-tag, publish-alchemy]
-    if: always() && needs.bump.result == 'success' && (needs.commit-and-tag.result == 'success' || needs.commit-and-tag.result == 'skipped') && needs.publish-alchemy.result == 'success'
+    if:
+      always() && needs.bump.result == 'success' && (needs.commit-and-tag.result
+      == 'success' || needs.commit-and-tag.result == 'skipped') &&
+      needs.publish-alchemy.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -336,6 +359,10 @@ jobs:
         with:
           name: bump-files
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-output
+
       - uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
@@ -345,13 +372,8 @@ jobs:
 
       - run: bun install
 
-      - run: bun run build
-        working-directory: packages/alchemy
-
-      - run: bun run build
-        working-directory: packages/pr-package
-
-      - run: bun scripts/release/publish-package.ts packages/pr-package ${{ needs.bump.outputs.channel }}
+      - run: bun scripts/release/publish-package.ts packages/pr-package ${{
+          needs.bump.outputs.channel }}
 
   # ── Step 4: Create GitHub Release and notify Discord. ──
   # Runs only after every publish job succeeded. The bump+changelog commit
