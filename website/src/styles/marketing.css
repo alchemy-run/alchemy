@@ -243,6 +243,16 @@ body.alc-root,
 .stack-deploy-diagram__col .alc-term .alc-term__body {
   flex: 1;
   min-height: 0;
+}
+/* Static code snippet fits the fixed-height card already; allowing
+   `overflow: auto` here causes a few-pixel scroll region that
+   hijacks page wheel events. Clip instead. */
+.stack-deploy-diagram__col .alc-code-block .alc-code-block__pre {
+  overflow: hidden;
+}
+/* The animated deploy terminal grows as resources stream in, so it
+   genuinely needs to scroll. */
+.stack-deploy-diagram__col .alc-term .alc-term__body {
   overflow: auto;
 }
 .stack-deploy-diagram__caption {
@@ -2372,7 +2382,7 @@ body.alc-root,
   opacity: 1;
   /* Strokes are drawn at low alpha by the JS (cap ~0.32). Boost the
      compositing brightness so they read clearly above the dark page. */
-  filter: brightness(2.6);
+  filter: brightness(3.6);
 }
 .alc-hero__inner {
   position: relative;

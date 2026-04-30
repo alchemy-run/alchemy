@@ -28,7 +28,10 @@
   --alc-accent-deep: #3f5a2a; /* deep forest — pressed/emphasis */
   --alc-accent-warm: #7a9a5e; /* sage — lighter, sunny */
   --alc-accent-bright: #8fb15e; /* lit leaves — accents on cream */
-  --alc-accent-soft: #d8e3c4; /* washed sage — tints */
+  /* Translucent so surfaces using `accent-soft` (hero CTA cards, asides,
+     selection) let the underlying texture show through — same approach
+     as the dark-mode token below. */
+  --alc-accent-soft: color-mix(in srgb, #5c7a3e 18%, transparent);
   --alc-accent-60: color-mix(in srgb, #5c7a3e 60%, transparent);
   --alc-accent-40: color-mix(in srgb, #5c7a3e 40%, transparent);
   --alc-accent-12: color-mix(in srgb, #5c7a3e 12%, transparent);
@@ -36,7 +39,7 @@
   /* ---------- Secondary: warm terracotta ---------- */
   --alc-terracotta: #c56e3c;
   --alc-terracotta-deep: #9a4f27;
-  --alc-terracotta-soft: #eccfb8;
+  --alc-terracotta-soft: color-mix(in srgb, #c56e3c 18%, transparent);
 
   /* ---------- Surfaces (warm cream / parchment) ---------- */
   --alc-bg: #f5efe3; /* page — parchment */

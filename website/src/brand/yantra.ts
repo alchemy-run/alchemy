@@ -31,9 +31,11 @@ export const YANTRA_TRIANGLE_PATH =
 
 /** Brand color defaults — mirror tokens.css. */
 export const YANTRA_COLORS = {
-  /** Deep forest green — primary stroke / dot fill. */
+  /** Deep forest green — primary stroke. */
   stroke: "#3f5a2a",
-  dot: "#3f5a2a",
+  /** Warm terracotta — matches `--alc-terracotta` / the BETA badge dot,
+   * so the bindu pops as the focal point of the mark. */
+  dot: "#c56e3c",
   /** Parchment background (e.g. for favicon tiles, OG cards). */
   bg: "#f5efe3",
 } as const;
