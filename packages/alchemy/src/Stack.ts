@@ -184,7 +184,7 @@ export const make =
                 `    providers: Cloudflare.providers(),\n` +
                 `    state: Cloudflare.state(), // <-- required\n` +
                 `  }, ...)\n` +
-                `See https://alchemy.run/concepts/state-store for available state stores.`,
+                `See https://v2.alchemy.run/concepts/state-store for available state stores.`,
             ),
           );
         }
