@@ -1,10 +1,12 @@
 import * as AWS from "@/AWS";
 import { PublicKey } from "@/AWS/CloudFront";
-import { destroy, test } from "@/Test/Vitest";
+import * as Test from "@/Test/Vitest";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+
+const { test } = Test.make({ providers: AWS.providers() });
 
 const runLive = process.env.ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS === "true";
 
@@ -20,50 +22,51 @@ HQIDAQAB
 `;
 
 describe("AWS.CloudFront.PublicKey", () => {
-  test.skipIf(!runLive)(
+  test.provider.skipIf(!runLive)(
     "create, update comment, and delete a public key",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const created = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* PublicKey("SignedUrlKey", {
+              encodedKey: TEST_PUBLIC_KEY,
+              comment: "initial",
+            });
+          }),
+        );
+
+        const initial = yield* cloudfront.getPublicKey({
+          Id: created.publicKeyId,
+        });
+        expect(initial.PublicKey?.Id).toEqual(created.publicKeyId);
+        expect(initial.PublicKey?.PublicKeyConfig?.Comment).toEqual("initial");
+        expect(initial.PublicKey?.PublicKeyConfig?.EncodedKey).toEqual(
+          TEST_PUBLIC_KEY,
+        );
+
+        const updated = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* PublicKey("SignedUrlKey", {
+              encodedKey: TEST_PUBLIC_KEY,
+              comment: "updated",
+            });
+          }),
+        );
+
+        expect(updated.publicKeyId).toEqual(created.publicKeyId);
+        expect(updated.callerReference).toEqual(created.callerReference);
+
+        const after = yield* cloudfront.getPublicKey({
+          Id: updated.publicKeyId,
+        });
+        expect(after.PublicKey?.PublicKeyConfig?.Comment).toEqual("updated");
+
+        yield* stack.destroy();
+        yield* assertPublicKeyDeleted(updated.publicKeyId);
+      }),
     { timeout: 300_000 },
-    Effect.gen(function* () {
-      yield* destroy();
-
-      const created = yield* test.deploy(
-        Effect.gen(function* () {
-          return yield* PublicKey("SignedUrlKey", {
-            encodedKey: TEST_PUBLIC_KEY,
-            comment: "initial",
-          });
-        }),
-      );
-
-      const initial = yield* cloudfront.getPublicKey({
-        Id: created.publicKeyId,
-      });
-      expect(initial.PublicKey?.Id).toEqual(created.publicKeyId);
-      expect(initial.PublicKey?.PublicKeyConfig?.Comment).toEqual("initial");
-      expect(initial.PublicKey?.PublicKeyConfig?.EncodedKey).toEqual(
-        TEST_PUBLIC_KEY,
-      );
-
-      const updated = yield* test.deploy(
-        Effect.gen(function* () {
-          return yield* PublicKey("SignedUrlKey", {
-            encodedKey: TEST_PUBLIC_KEY,
-            comment: "updated",
-          });
-        }),
-      );
-
-      expect(updated.publicKeyId).toEqual(created.publicKeyId);
-      expect(updated.callerReference).toEqual(created.callerReference);
-
-      const after = yield* cloudfront.getPublicKey({
-        Id: updated.publicKeyId,
-      });
-      expect(after.PublicKey?.PublicKeyConfig?.Comment).toEqual("updated");
-
-      yield* destroy();
-      yield* assertPublicKeyDeleted(updated.publicKeyId);
-    }).pipe(Effect.provide(AWS.providers())),
   );
 });
 

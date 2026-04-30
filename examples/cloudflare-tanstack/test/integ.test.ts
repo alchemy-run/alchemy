@@ -1,11 +1,11 @@
-import {
-  afterAll,
-  beforeAll,
-  deploy,
-  destroy,
-  expect,
-  test,
-} from "alchemy/Test/Bun";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Test from "alchemy/Test/Bun";
+import { expect } from "bun:test";
+
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Cloudflare.providers(),
+  state: Cloudflare.state(),
+});
 import * as Effect from "effect/Effect";
 import Stack from "../alchemy.run.ts";
 
