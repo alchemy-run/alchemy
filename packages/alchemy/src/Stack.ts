@@ -249,7 +249,7 @@ export const CurrentStack = Effect.serviceOption(Stack)
 const platform = Layer.mergeAll(
   PlatformServices,
   FetchHttpClient.layer,
-  Logger.layer([fileLogger("out")]),
+  Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
 );
 // override alchemy state store, CLI/reporting, state, and Config
 const alchemy = Layer.mergeAll(

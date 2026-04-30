@@ -55,7 +55,7 @@ const showCommand = Command.make(
         ConfigProvider.layer(
           withProfileOverride(yield* loadConfigProvider(envFile), profile),
         ),
-        Logger.layer([fileLogger("out")]),
+        Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
         // Building these layers triggers their AuthProviderLayer effect, which
         // registers the provider into the shared `authProviders` registry.
         Layer.provide(Layer.mergeAll(CloudflareAuth, AwsAuth), authRegistry),
