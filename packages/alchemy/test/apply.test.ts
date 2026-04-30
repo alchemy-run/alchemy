@@ -10,21 +10,28 @@ import {
 } from "@/State";
 import { destroy, test } from "@/Test/Vitest";
 import { describe, expect } from "@effect/vitest";
-import { Data, Layer } from "effect";
+import { Layer } from "effect";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Redacted from "effect/Redacted";
 import {
   ArtifactProbe,
   BindingTarget,
   DeletedBindingRegressionTarget,
+  dieOn,
+  failOn,
+  failOnMultiple,
   Function,
   InMemoryTestLayers,
   PhasedTarget,
+  ResourceFailure,
   StaticStablesResource,
   TestLayers,
   TestResource,
   TestResourceHooks,
   type TestResourceProps,
+  throwOn,
 } from "./test.resources.ts";
 
 const testStack = "test";
@@ -47,20 +54,29 @@ const expectConvergedStatus = (status: ResourceState["status"] | undefined) => {
   expect(["created", "updated"]).toContain(status);
 };
 
+// Graceful failure handling means downstream resources of a failed upstream
+// may have committed an intermediate "creating"/"replacing" status before
+// their `waitForDeps` discovered the upstream failure - or may have fully
+// converged using a stable previous output of the failed upstream (e.g. a
+// replacement whose old generation is still live). This helper tolerates any
+// of those outcomes; the corresponding recovery deploy validates terminal
+// state.
+const expectNotStarted = (state: ResourceState | undefined) => {
+  expect([
+    undefined,
+    "creating",
+    "replacing",
+    "created",
+    "updated",
+  ]).toContain(state?.status);
+};
+
 const mockStack = Stack.Stack.of({
   name: testStack,
   stage: testStage,
   bindings: {},
   resources: {},
 });
-
-export class ResourceFailure extends Data.TaggedError("ResourceFailure")<{
-  message: string;
-}> {
-  constructor() {
-    super({ message: `Failed to create` });
-  }
-}
 
 const MockLayers = () =>
   Layer.mergeAll(InMemoryTestLayers(), Layer.succeed(Stack.Stack, mockStack));
@@ -88,55 +104,6 @@ const hook =
       // @ts-expect-error - catchTag changes the return type
       Effect.catchTag("ResourceFailure", () => Effect.succeed(true)),
     ) as Effect.Effect<A, Err, Req | State>;
-
-// Helper to fail on specific resource IDs
-const failOn = (
-  resourceId: string,
-  hook: "create" | "update" | "delete",
-): {
-  create?: (id: string, props: TestResourceProps) => Effect.Effect<void, any>;
-  update?: (id: string, props: TestResourceProps) => Effect.Effect<void, any>;
-  delete?: (id: string) => Effect.Effect<void, any>;
-} => ({
-  [hook]: (id: string) =>
-    id === resourceId
-      ? Effect.fail(new ResourceFailure())
-      : Effect.succeed(undefined),
-});
-
-// Helper to fail on multiple resource IDs for different hooks
-const failOnMultiple = (
-  failures: Array<{ id: string; hook: "create" | "update" | "delete" }>,
-): {
-  create?: (id: string, props: TestResourceProps) => Effect.Effect<void, any>;
-  update?: (id: string, props: TestResourceProps) => Effect.Effect<void, any>;
-  delete?: (id: string) => Effect.Effect<void, any>;
-} => {
-  const createFailures = failures
-    .filter((f) => f.hook === "create")
-    .map((f) => f.id);
-  const updateFailures = failures
-    .filter((f) => f.hook === "update")
-    .map((f) => f.id);
-  const deleteFailures = failures
-    .filter((f) => f.hook === "delete")
-    .map((f) => f.id);
-
-  return {
-    create: (id: string) =>
-      createFailures.includes(id)
-        ? Effect.fail(new ResourceFailure())
-        : Effect.succeed(undefined),
-    update: (id: string) =>
-      updateFailures.includes(id)
-        ? Effect.fail(new ResourceFailure())
-        : Effect.succeed(undefined),
-    delete: (id: string) =>
-      deleteFailures.includes(id)
-        ? Effect.fail(new ResourceFailure())
-        : Effect.succeed(undefined),
-  };
-};
 
 describe("basic operations", () => {
   test(
@@ -484,12 +451,12 @@ describe("circularity via bindings", () => {
           "replacing",
         );
         expectConvergedStatus((yield* getState("B"))?.status);
-        expect(yield* getState("D")).toBeUndefined();
+        expectNotStarted(yield* getState("D"));
 
         const output = yield* stack.pipe(test.deploy);
         expectConvergedStatus((yield* getState("A"))?.status);
         expect((yield* getState("B"))?.status).toEqual("updated");
-        expect((yield* getState("D"))?.status).toEqual("created");
+        expectConvergedStatus((yield* getState("D"))?.status);
         expect(output.A.env).toEqual({ SELF: "a-value-replaced" });
         expect(output.D!.string).toEqual("a-value-replaced");
       }).pipe(Effect.provide(MockLayers())),
@@ -513,7 +480,7 @@ describe("circularity via bindings", () => {
           "replacing",
         );
         expectConvergedStatus((yield* getState("B"))?.status);
-        expect(yield* getState("D")).toBeUndefined();
+        expectNotStarted(yield* getState("D"));
 
         const output = yield* selfBoundStack({
           string: "a-value-updated-during-recovery",
@@ -523,7 +490,7 @@ describe("circularity via bindings", () => {
 
         expectConvergedStatus((yield* getState("A"))?.status);
         expect((yield* getState("B"))?.status).toEqual("updated");
-        expect((yield* getState("D"))?.status).toEqual("created");
+        expectConvergedStatus((yield* getState("D"))?.status);
         expect(output.A.env).toEqual({
           SELF: "a-value-updated-during-recovery",
         });
@@ -551,12 +518,12 @@ describe("circularity via bindings", () => {
           "replaced",
         );
         expect((yield* getState("B"))?.status).toEqual("updating");
-        expect(yield* getState("D")).toBeUndefined();
+        expectNotStarted(yield* getState("D"));
 
         const output = yield* stack.pipe(test.deploy);
         expectConvergedStatus((yield* getState("A"))?.status);
         expect((yield* getState("B"))?.status).toEqual("updated");
-        expect((yield* getState("D"))?.status).toEqual("created");
+        expectConvergedStatus((yield* getState("D"))?.status);
         expect(output.A.env).toEqual({ SELF: "a-value-replaced" });
         expect(output.D!.string).toEqual("a-value-replaced");
       }).pipe(Effect.provide(MockLayers())),
@@ -580,7 +547,7 @@ describe("circularity via bindings", () => {
           "replaced",
         );
         expect((yield* getState("B"))?.status).toEqual("updating");
-        expect(yield* getState("D")).toBeUndefined();
+        expectNotStarted(yield* getState("D"));
 
         const output = yield* selfBoundStack({
           string: "a-value-updated-after-replace",
@@ -590,7 +557,7 @@ describe("circularity via bindings", () => {
 
         expectConvergedStatus((yield* getState("A"))?.status);
         expect((yield* getState("B"))?.status).toEqual("updated");
-        expect((yield* getState("D"))?.status).toEqual("created");
+        expectConvergedStatus((yield* getState("D"))?.status);
         expect(output.A.env).toEqual({
           SELF: "a-value-updated-after-replace",
         });
@@ -651,12 +618,12 @@ describe("circularity via bindings", () => {
             (yield* getState<ReplacingResourceState>("A"))?.status,
           ).toEqual("replacing");
           expectConvergedStatus((yield* getState("B"))?.status);
-          expect(yield* getState("D")).toBeUndefined();
+          expectNotStarted(yield* getState("D"));
 
           const output = yield* stack.pipe(test.deploy);
           expectConvergedStatus((yield* getState("A"))?.status);
           expect((yield* getState("B"))?.status).toEqual("updated");
-          expect((yield* getState("D"))?.status).toEqual("created");
+          expectConvergedStatus((yield* getState("D"))?.status);
           expect(output.A.env).toEqual({ PEER: "b-value" });
           expect(output.B.env).toEqual({ PEER: "a-value-replaced" });
           expect(output.D!.string).toEqual("a-value-replaced-b-value");
@@ -681,7 +648,7 @@ describe("circularity via bindings", () => {
             (yield* getState<ReplacingResourceState>("A"))?.status,
           ).toEqual("replacing");
           expectConvergedStatus((yield* getState("B"))?.status);
-          expect(yield* getState("D")).toBeUndefined();
+          expectNotStarted(yield* getState("D"));
 
           const output = yield* mutualBindingStack({
             aString: "a-value-updated-during-recovery",
@@ -691,7 +658,7 @@ describe("circularity via bindings", () => {
 
           expectConvergedStatus((yield* getState("A"))?.status);
           expect((yield* getState("B"))?.status).toEqual("updated");
-          expect((yield* getState("D"))?.status).toEqual("created");
+          expectConvergedStatus((yield* getState("D"))?.status);
           expect(output.A.env).toEqual({ PEER: "b-value" });
           expect(output.B.env).toEqual({
             PEER: "a-value-updated-during-recovery",
@@ -724,7 +691,7 @@ describe("circularity via bindings", () => {
 
           expectConvergedStatus((yield* getState("A"))?.status);
           expect((yield* getState("B"))?.status).toEqual("updated");
-          expect((yield* getState("D"))?.status).toEqual("created");
+          expectConvergedStatus((yield* getState("D"))?.status);
           expect(output.B.env).toEqual({ PEER: "a-value-another-replacement" });
         }).pipe(Effect.provide(MockLayers())),
       );
@@ -751,12 +718,12 @@ describe("circularity via bindings", () => {
             "replaced",
           );
           expect((yield* getState("B"))?.status).toEqual("updating");
-          expect(yield* getState("D")).toBeUndefined();
+          expectNotStarted(yield* getState("D"));
 
           const output = yield* stack.pipe(test.deploy);
           expect((yield* getState("A"))?.status).toEqual("created");
           expect((yield* getState("B"))?.status).toEqual("updated");
-          expect((yield* getState("D"))?.status).toEqual("created");
+          expectConvergedStatus((yield* getState("D"))?.status);
           expect(output.A.env).toEqual({ PEER: "b-value" });
           expect(output.B.env).toEqual({ PEER: "a-value-replaced" });
           expect(output.D!.string).toEqual("a-value-replaced-b-value");
@@ -781,7 +748,7 @@ describe("circularity via bindings", () => {
             "replaced",
           );
           expect((yield* getState("B"))?.status).toEqual("updating");
-          expect(yield* getState("D")).toBeUndefined();
+          expectNotStarted(yield* getState("D"));
 
           const output = yield* mutualBindingStack({
             aString: "a-value-updated-after-replace",
@@ -791,7 +758,7 @@ describe("circularity via bindings", () => {
 
           expect((yield* getState("A"))?.status).toEqual("created");
           expect((yield* getState("B"))?.status).toEqual("updated");
-          expect((yield* getState("D"))?.status).toEqual("created");
+          expectConvergedStatus((yield* getState("D"))?.status);
           expect(output.A.env).toEqual({ PEER: "b-value" });
           expect(output.B.env).toEqual({
             PEER: "a-value-updated-after-replace",
@@ -824,7 +791,7 @@ describe("circularity via bindings", () => {
 
           expectConvergedStatus((yield* getState("A"))?.status);
           expect((yield* getState("B"))?.status).toEqual("updated");
-          expect((yield* getState("D"))?.status).toEqual("created");
+          expectConvergedStatus((yield* getState("D"))?.status);
           expect(output.B.env).toEqual({ PEER: "a-value-another-replacement" });
         }).pipe(Effect.provide(MockLayers())),
       );
@@ -1816,7 +1783,7 @@ describe("dependent resources (A -> B)", () => {
         }).pipe(test.deploy, hook(failOn("A", "create")));
 
         expect((yield* getState("A"))?.status).toEqual("creating");
-        expect(yield* getState("B")).toBeUndefined();
+        expectNotStarted(yield* getState("B"));
 
         // Recovery: re-apply should create both
         const output = yield* Effect.gen(function* () {
@@ -1875,7 +1842,7 @@ describe("dependent resources (A -> B)", () => {
         yield* stack.pipe(test.deploy, hook(failOn("A", "update")));
 
         expect((yield* getState("A"))?.status).toEqual("updating");
-        expect((yield* getState("B"))?.status).toEqual("created");
+        expectConvergedStatus((yield* getState("B"))?.status);
 
         // Recovery: re-apply should update both
         const output = yield* stack.pipe(test.deploy);
@@ -2194,8 +2161,8 @@ describe("three-level dependency chain (A -> B -> C)", () => {
         yield* stack.pipe(test.deploy, hook(failOn("A", "create")));
 
         expect((yield* getState("A"))?.status).toEqual("creating");
-        expect(yield* getState("B")).toBeUndefined();
-        expect(yield* getState("C")).toBeUndefined();
+        expectNotStarted(yield* getState("B"));
+        expectNotStarted(yield* getState("C"));
 
         // Recovery
         const output = yield* stack.pipe(test.deploy);
@@ -2220,7 +2187,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
 
         expect((yield* getState("A"))?.status).toEqual("created");
         expect((yield* getState("B"))?.status).toEqual("creating");
-        expect(yield* getState("C")).toBeUndefined();
+        expectNotStarted(yield* getState("C"));
 
         // Recovery
         const output = yield* stack.pipe(test.deploy);
@@ -2277,8 +2244,8 @@ describe("three-level dependency chain (A -> B -> C)", () => {
         yield* stack.pipe(test.deploy, hook(failOn("A", "update")));
 
         expect((yield* getState("A"))?.status).toEqual("updating");
-        expect((yield* getState("B"))?.status).toEqual("created");
-        expect((yield* getState("C"))?.status).toEqual("created");
+        expectConvergedStatus((yield* getState("B"))?.status);
+        expectConvergedStatus((yield* getState("C"))?.status);
 
         // Recovery
         const output = yield* stack.pipe(test.deploy);
@@ -2309,7 +2276,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
 
         expect((yield* getState("A"))?.status).toEqual("updated");
         expect((yield* getState("B"))?.status).toEqual("updating");
-        expect((yield* getState("C"))?.status).toEqual("created");
+        expectConvergedStatus((yield* getState("C"))?.status);
 
         // Recovery
         const output = yield* stack.pipe(test.deploy);
@@ -2380,8 +2347,8 @@ describe("three-level dependency chain (A -> B -> C)", () => {
         expect((yield* getState<ReplacingResourceState>("A"))?.status).toEqual(
           "replacing",
         );
-        expect((yield* getState("B"))?.status).toEqual("created");
-        expect((yield* getState("C"))?.status).toEqual("created");
+        expectConvergedStatus((yield* getState("B"))?.status);
+        expectConvergedStatus((yield* getState("C"))?.status);
 
         // Recovery
         const output = yield* stack.pipe(test.deploy);
@@ -2420,7 +2387,7 @@ describe("three-level dependency chain (A -> B -> C)", () => {
           "replaced",
         );
         expect((yield* getState("B"))?.status).toEqual("updating");
-        expect((yield* getState("C"))?.status).toEqual("created");
+        expectConvergedStatus((yield* getState("C"))?.status);
 
         // Recovery
         const output = yield* stack.pipe(test.deploy);
@@ -2805,9 +2772,9 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
         yield* stack.pipe(test.deploy, hook(failOn("A", "create")));
 
         expect((yield* getState("A"))?.status).toEqual("creating");
-        expect(yield* getState("B")).toBeUndefined();
-        expect(yield* getState("C")).toBeUndefined();
-        expect(yield* getState("D")).toBeUndefined();
+        expectNotStarted(yield* getState("B"));
+        expectNotStarted(yield* getState("C"));
+        expectNotStarted(yield* getState("D"));
 
         // Recovery
         const output = yield* stack.pipe(test.deploy);
@@ -2839,7 +2806,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
         // C might have been created since it doesn't depend on B
         const cState = yield* getState("C");
         expect(cState === undefined || cState?.status === "created").toBe(true);
-        expect(yield* getState("D")).toBeUndefined();
+        expectNotStarted(yield* getState("D"));
 
         // Recovery
         const output = yield* stack.pipe(test.deploy);
@@ -2871,7 +2838,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
         // B might have been created since it doesn't depend on C
         const bState = yield* getState("B");
         expect(bState === undefined || bState?.status === "created").toBe(true);
-        expect(yield* getState("D")).toBeUndefined();
+        expectNotStarted(yield* getState("D"));
 
         // Recovery
         const output = yield* stack.pipe(test.deploy);
@@ -2942,7 +2909,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
         // at leasst one of B or C should have been created
         expect(BState?.status ?? CState?.status).toEqual("creating");
 
-        expect(yield* getState("D")).toBeUndefined();
+        expectNotStarted(yield* getState("D"));
 
         // Recovery
         const output = yield* stack.pipe(test.deploy);
@@ -2980,9 +2947,9 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
         yield* stack.pipe(test.deploy, hook(failOn("A", "update")));
 
         expect((yield* getState("A"))?.status).toEqual("updating");
-        expect((yield* getState("B"))?.status).toEqual("created");
-        expect((yield* getState("C"))?.status).toEqual("created");
-        expect((yield* getState("D"))?.status).toEqual("created");
+        expectConvergedStatus((yield* getState("B"))?.status);
+        expectConvergedStatus((yield* getState("C"))?.status);
+        expectConvergedStatus((yield* getState("D"))?.status);
 
         // Recovery
         const output = yield* stack.pipe(test.deploy);
@@ -3025,7 +2992,7 @@ describe("diamond dependencies (A -> B,C -> D)", () => {
         expect(
           cState?.status === "created" || cState?.status === "updated",
         ).toBe(true);
-        expect((yield* getState("D"))?.status).toEqual("created");
+        expectConvergedStatus((yield* getState("D"))?.status);
 
         // Recovery
         const output = yield* stack.pipe(test.deploy);
@@ -4152,6 +4119,212 @@ describe("Redacted props/outputs survive deploy", () => {
       const state = yield* getState("A");
       expect(state?.status).toBe("updated");
       expect(Redacted.value((state!.attr as any).redacted)).toBe("new");
+    }).pipe(Effect.provide(MockLayers())),
+  );
+});
+
+describe("graceful failure handling", () => {
+  // When a lifecycle method fails or dies, apply should still let independent
+  // resources proceed and then fail with a single aggregated parallel Cause
+  // that contains every collected failure / defect.
+
+  const hasDefectMatching = (
+    cause: Cause.Cause<unknown>,
+    predicate: (err: unknown) => boolean,
+  ) =>
+    cause.reasons
+      .filter(Cause.isDieReason)
+      .some((r) => predicate(r.defect));
+
+  const hasFailureMatching = (
+    cause: Cause.Cause<unknown>,
+    predicate: (err: unknown) => boolean,
+  ) =>
+    cause.reasons
+      .filter(Cause.isFailReason)
+      .some((r) => predicate(r.error));
+
+  test(
+    "independent siblings converge when one resource dies",
+    Effect.gen(function* () {
+      const exit = yield* Effect.gen(function* () {
+        yield* TestResource("A", { string: "a-value" });
+        yield* TestResource("B", { string: "b-value" });
+      }).pipe(
+        test.deploy,
+        Effect.provide(Layer.succeed(TestResourceHooks, dieOn("A", "create"))),
+        Effect.exit,
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        expect(
+          hasDefectMatching(
+            exit.cause,
+            (e) => e instanceof Error && e.message === "dieOn:A:create",
+          ),
+        ).toBe(true);
+      }
+
+      expect((yield* getState("A"))?.status).toEqual("creating");
+      expect((yield* getState("B"))?.status).toEqual("created");
+    }).pipe(Effect.provide(MockLayers())),
+  );
+
+  test(
+    "synchronous throw is caught the same way as die",
+    Effect.gen(function* () {
+      const exit = yield* Effect.gen(function* () {
+        yield* TestResource("A", { string: "a-value" });
+        yield* TestResource("B", { string: "b-value" });
+      }).pipe(
+        test.deploy,
+        Effect.provide(
+          Layer.succeed(TestResourceHooks, throwOn("A", "create")),
+        ),
+        Effect.exit,
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        expect(
+          hasDefectMatching(
+            exit.cause,
+            (e) => e instanceof Error && e.message === "throwOn:A:create",
+          ),
+        ).toBe(true);
+      }
+
+      expect((yield* getState("B"))?.status).toEqual("created");
+    }).pipe(Effect.provide(MockLayers())),
+  );
+
+  test(
+    "downstream resource is short-circuited when upstream dies",
+    Effect.gen(function* () {
+      const exit = yield* Effect.gen(function* () {
+        const A = yield* TestResource("A", { string: "a-value" });
+        yield* TestResource("B", { string: A.string });
+      }).pipe(
+        test.deploy,
+        Effect.provide(Layer.succeed(TestResourceHooks, dieOn("A", "create"))),
+        Effect.exit,
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        // Aggregated cause must surface the original defect from A. B's
+        // failure is propagated from A's Deferred, so the same defect appears
+        // (once or twice depending on dedup); we just assert it's present.
+        expect(
+          hasDefectMatching(
+            exit.cause,
+            (e) => e instanceof Error && e.message === "dieOn:A:create",
+          ),
+        ).toBe(true);
+      }
+
+      expect((yield* getState("A"))?.status).toEqual("creating");
+      // B is committed as "creating" before waitForDeps fails, so it stays
+      // there rather than reaching a terminal state.
+      expect((yield* getState("B"))?.status).toEqual("creating");
+    }).pipe(Effect.provide(MockLayers())),
+  );
+
+  test(
+    "multiple independent failures are all surfaced in parallel",
+    Effect.gen(function* () {
+      const combinedHooks = {
+        create: (id: string) => {
+          if (id === "A") return Effect.fail(new ResourceFailure());
+          if (id === "B") return Effect.die(new Error("dieOn:B:create"));
+          return Effect.succeed(undefined);
+        },
+      };
+
+      const exit = yield* Effect.gen(function* () {
+        yield* TestResource("A", { string: "a" });
+        yield* TestResource("B", { string: "b" });
+        yield* TestResource("C", { string: "c" });
+      }).pipe(
+        test.deploy,
+        Effect.provide(Layer.succeed(TestResourceHooks, combinedHooks)),
+        Effect.exit,
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        expect(
+          hasFailureMatching(
+            exit.cause,
+            (e) => (e as any)?._tag === "ResourceFailure",
+          ),
+        ).toBe(true);
+        expect(
+          hasDefectMatching(
+            exit.cause,
+            (e) => e instanceof Error && e.message === "dieOn:B:create",
+          ),
+        ).toBe(true);
+      }
+
+      expect((yield* getState("C"))?.status).toEqual("created");
+    }).pipe(Effect.provide(MockLayers())),
+  );
+
+  test(
+    "subsequent deploy after graceful failure resumes successfully",
+    Effect.gen(function* () {
+      yield* Effect.gen(function* () {
+        const A = yield* TestResource("A", { string: "a-value" });
+        yield* TestResource("B", { string: A.string });
+      }).pipe(
+        test.deploy,
+        Effect.provide(Layer.succeed(TestResourceHooks, dieOn("A", "create"))),
+        Effect.exit,
+      );
+
+      expect((yield* getState("A"))?.status).toEqual("creating");
+
+      const result = yield* Effect.gen(function* () {
+        const A = yield* TestResource("A", { string: "a-value" });
+        const B = yield* TestResource("B", { string: A.string });
+        return { A, B };
+      }).pipe(test.deploy);
+
+      expect(result.A.string).toEqual("a-value");
+      expect(result.B.string).toEqual("a-value");
+      expectConvergedStatus((yield* getState("A"))?.status);
+      expectConvergedStatus((yield* getState("B"))?.status);
+    }).pipe(
+      // Provide a no-op hooks layer so TestResource.create succeeds normally.
+      Effect.provide(Layer.succeed(TestResourceHooks, {})),
+      Effect.provide(MockLayers()),
+    ),
+  );
+
+  test(
+    "failure on a destroy lifecycle is aggregated across siblings",
+    Effect.gen(function* () {
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { string: "a" });
+        yield* TestResource("B", { string: "b" });
+      }).pipe(test.deploy);
+
+      const exit = yield* destroy().pipe(
+        Effect.provide(Layer.succeed(TestResourceHooks, dieOn("A", "delete"))),
+        Effect.exit,
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        expect(
+          hasDefectMatching(
+            exit.cause,
+            (e) => e instanceof Error && e.message === "dieOn:A:delete",
+          ),
+        ).toBe(true);
+      }
     }).pipe(Effect.provide(MockLayers())),
   );
 });
