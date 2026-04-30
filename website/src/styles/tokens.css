@@ -36,6 +36,11 @@
   --alc-accent-40: color-mix(in srgb, #5c7a3e 40%, transparent);
   --alc-accent-12: color-mix(in srgb, #5c7a3e 12%, transparent);
 
+  /* Bindu (yantra centroid dot) — deep moss in light mode. The dark
+     block overrides this to terracotta so the brand mark gets a warm
+     focal point against the dark page. */
+  --alc-yantra-dot: #3f5a2a;
+
   /* ---------- Secondary: warm terracotta ---------- */
   --alc-terracotta: #c56e3c;
   --alc-terracotta-deep: #9a4f27;
@@ -153,6 +158,9 @@
   --alc-accent-60: color-mix(in srgb, #a3c473 60%, transparent);
   --alc-accent-40: color-mix(in srgb, #a3c473 40%, transparent);
   --alc-accent-12: color-mix(in srgb, #a3c473 18%, transparent);
+
+  /* Bindu pops in terracotta against the dark page. */
+  --alc-yantra-dot: #c56e3c;
 
   /* Secondary: warm terracotta — lifted */
   --alc-terracotta: #d8835a;

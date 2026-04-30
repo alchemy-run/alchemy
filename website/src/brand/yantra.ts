@@ -33,10 +33,11 @@ export const YANTRA_TRIANGLE_PATH =
 export const YANTRA_COLORS = {
   /** Deep forest green — primary stroke. */
   stroke: "#3f5a2a",
-  /** Warm terracotta — matches `--alc-terracotta` / the BETA badge dot,
-   * so the bindu pops as the focal point of the mark. */
-  dot: "#c56e3c",
-  /** Parchment background (e.g. for favicon tiles, OG cards). */
+  /** Centroid dot — same deep moss as the stroke. The runtime Astro
+   * component overrides this with a CSS variable so it can flip to
+   * terracotta in dark mode. */
+  dot: "#3f5a2a",
+  /** Parchment background (e.g. for OG cards). */
   bg: "#f5efe3",
 } as const;
 
