@@ -1,3 +1,21 @@
+## v2.0.0-beta.24
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- Dev mode for cloudflare workers &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/88 [<samp>(5a0d7)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/5a0d779)
+- **core**: --adopt &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(2af88)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/2af8851)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **Cloudflare**:
+  - Add bootstrap command and harden bootstrap process of cloudflare &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/118 [<samp>(0858d)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/0858dd8)
+  - Hoist stack non-destructively &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(c9621)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/c9621d1)
+  - Don't fail on broken paths in state &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(05f16)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/05f16c8)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.23...HEAD)
+
+---
+
 ## v2.0.0-beta.23
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
