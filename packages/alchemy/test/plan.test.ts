@@ -1847,6 +1847,47 @@ describe("Outputs should resolve to old values", () => {
   );
 });
 
+describe("raw Resource refs in props are tracked as upstream dependencies", () => {
+  test(
+    "raw Resource passed directly as a prop value populates the upstream's downstream",
+    {
+      state: test.state(),
+    },
+    Effect.gen(function* () {
+      const plan = yield* Effect.gen(function* () {
+        const A = yield* TestResource("A", { string: "a-value" });
+        yield* TestResource("B", {
+          object: A as any,
+        });
+      }).pipe(makePlan);
+
+      expect(plan.resources.A!.downstream).toEqual(["B"]);
+      expect(plan.resources.B!.downstream).toEqual([]);
+    }),
+  );
+
+  test(
+    "raw Resources nested in arrays/objects are tracked as upstream dependencies",
+    {
+      state: test.state(),
+    },
+    Effect.gen(function* () {
+      const plan = yield* Effect.gen(function* () {
+        const A = yield* TestResource("A", { string: "a-value" });
+        const B = yield* TestResource("B", { string: "b-value" });
+        yield* TestResource("C", {
+          stringArray: [A] as any,
+          object: { ref: B } as any,
+        });
+      }).pipe(makePlan);
+
+      expect(plan.resources.A!.downstream).toEqual(["C"]);
+      expect(plan.resources.B!.downstream).toEqual(["C"]);
+      expect(plan.resources.C!.downstream).toEqual([]);
+    }),
+  );
+});
+
 describe("stable properties should not cause downstream changes", () => {
   const test = (
     description: string,
