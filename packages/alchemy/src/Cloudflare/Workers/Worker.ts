@@ -22,7 +22,6 @@ import { pathToFileURL } from "node:url";
 import type * as rolldown from "rolldown";
 import Sonda from "sonda/rolldown";
 import type * as vite from "vite";
-import { AdoptPolicy } from "../../AdoptPolicy.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Artifacts from "../../Artifacts.ts";
 import * as Binding from "../../Binding.ts";
@@ -1105,11 +1104,44 @@ export const LiveWorkerProvider = () =>
       const reconcileDomains = (
         scriptName: string,
         desired: string[],
-        previous: Worker["Attributes"]["domains"],
+        _previous: Worker["Attributes"]["domains"],
       ) =>
         Effect.gen(function* () {
+          // Always query the live state of domains attached to *this*
+          // Worker rather than trusting `_previous` from local state.
+          // State may have been wiped, populated by another machine, or
+          // simply be out of date. Without this we PUT domains that are
+          // already registered to this same Worker and Cloudflare
+          // returns a confusing "hostname already in use" error.
+          const liveAll = yield* listDomains({
+            accountId,
+            service: scriptName,
+          }).pipe(
+            Effect.map((r) =>
+              (r.result ?? []).flatMap((d) =>
+                d.id && d.hostname && d.zoneId
+                  ? [
+                      {
+                        id: d.id,
+                        hostname: d.hostname,
+                        zoneId: d.zoneId,
+                        service: d.service ?? undefined,
+                      },
+                    ]
+                  : [],
+              ),
+            ),
+            Effect.catch(() => Effect.succeed([])),
+          );
+
           const desiredSet = new Set(desired);
-          const toRemove = previous.filter((p) => !desiredSet.has(p.hostname));
+          const liveByHostname = new Map(liveAll.map((d) => [d.hostname, d]));
+
+          // Detach what's no longer wanted. Use the live list so we
+          // don't try to delete domains we no longer track.
+          const toRemove = liveAll.filter(
+            (d) => !desiredSet.has(d.hostname),
+          );
           yield* Effect.all(
             toRemove.map((d) =>
               deleteDomain({ accountId, domainId: d.id }).pipe(
@@ -1121,79 +1153,59 @@ export const LiveWorkerProvider = () =>
 
           if (desired.length === 0) return [];
 
-          const adoptEnabled = yield* Effect.serviceOption(AdoptPolicy).pipe(
-            Effect.map(Option.getOrElse(() => false)),
-          );
-
           const zoneCache = new Map<string, string>();
 
-          /**
-           * Attach `hostname` to `scriptName`, recovering from a "hostname
-           * already in use" conflict when adoption is enabled.
-           *
-           * The Cloudflare API rejects a `PUT /workers/domains` whose
-           * hostname is already registered (even when the existing entry
-           * points at the same Worker, which is exactly what happens
-           * after a state-store wipe). The SDK surfaces this as the
-           * unmatched `UnknownCloudflareError` channel because there's
-           * no dedicated error tag for it. With adoption opted-in we
-           * list domains for the hostname; if the existing entry
-           * already targets *this* Worker we adopt it in place. We
-           * never transfer a hostname off another Worker — that would
-           * silently re-route someone else's traffic.
-           */
+          // Attach `hostname` to this Worker. Skip the PUT entirely if
+          // the hostname is already attached to *this* Worker — that's a
+          // no-op for Cloudflare and avoids the "already in use" 409.
+          // If it's attached to a *different* Worker, refuse with a
+          // clear message rather than silently re-routing traffic.
           const attachDomain = Effect.fnUntraced(function* (hostname: string) {
-            const zoneId = yield* inferZoneIdForHostname(hostname, zoneCache);
-            return yield* putDomain({
-              accountId,
-              hostname,
-              service: scriptName,
-              zoneId,
-            }).pipe(
-              Effect.map((res) => ({
-                hostname,
-                id: res.id ?? "",
-                zoneId: res.zoneId ?? zoneId,
-              })),
-              Effect.catchTag("UnknownCloudflareError", (err) =>
-                adoptEnabled && /already in use/i.test(err.message)
-                  ? adoptDomainIfSameService(hostname, zoneId, err)
-                  : Effect.fail(err),
-              ),
-            );
-          });
+            const live = liveByHostname.get(hostname);
+            if (live) {
+              return {
+                hostname: live.hostname,
+                id: live.id,
+                zoneId: live.zoneId,
+              };
+            }
 
-          const adoptDomainIfSameService = Effect.fnUntraced(function* (
-            hostname: string,
-            zoneId: string,
-            originalError: { message: string },
-          ) {
-            const existing = yield* listDomains({
+            // Not attached to this Worker — but it could still belong
+            // to another Worker. Check before we try to PUT so we can
+            // emit a helpful error instead of the raw 409.
+            const otherOwner = yield* listDomains({
               accountId,
               hostname,
             }).pipe(
               Effect.map((r) =>
-                (r.result ?? []).find((d) => d.hostname === hostname),
+                (r.result ?? []).find(
+                  (d) => d.hostname === hostname && d.service !== scriptName,
+                ),
               ),
+              Effect.catch(() => Effect.succeed(undefined)),
             );
-            if (existing?.id && existing.service === scriptName) {
-              return {
-                hostname,
-                id: existing.id,
-                zoneId: existing.zoneId ?? zoneId,
-              };
+            if (otherOwner?.id) {
+              return yield* Effect.die(
+                new Error(
+                  `Cannot attach hostname '${hostname}' to Worker '${scriptName}': ` +
+                    `it is already attached to Worker '${otherOwner.service ?? "<unknown>"}'. ` +
+                    `Detach it from that Worker first, or pick a different hostname.`,
+                ),
+              );
             }
-            // The hostname exists but on a different Worker. Refuse to
-            // hijack it; surface a more actionable message than the raw
-            // Cloudflare error.
-            return yield* Effect.die(
-              new Error(
-                `Cannot attach hostname '${hostname}' to Worker '${scriptName}': ` +
-                  `it is already attached to Worker '${existing?.service ?? "<unknown>"}'. ` +
-                  `Detach it from that Worker first, or pick a different hostname. ` +
-                  `(Cloudflare reported: ${originalError.message})`,
-              ),
-            );
+
+            const zoneId = yield* inferZoneIdForHostname(hostname, zoneCache);
+            const res = yield* putDomain({
+              accountId,
+              hostname,
+              service: scriptName,
+              zoneId,
+            });
+            return {
+              hostname,
+              id: res.id ?? "",
+              zoneId: res.zoneId ?? zoneId,
+            };
           });
 
           const applied = yield* Effect.all(
@@ -1288,21 +1300,15 @@ export const LiveWorkerProvider = () =>
           return undefined;
         }
 
-        // Handle AssetsWithHash (from Build resource)
-        // Props are resolved by Plan, so Input<string> values are already strings at runtime
         if (
           typeof assets === "object" &&
           "path" in assets &&
           "hash" in assets
         ) {
-          const result = yield* readAssets({
+          return yield* readAssets({
             directory: assets.path as string,
             config: assets.config,
           });
-          return {
-            ...result,
-            hash: assets.hash as string,
-          };
         }
 
         // Handle string path or AssetsProps
@@ -1630,31 +1636,30 @@ ${[
         let metadataAssets:
           | workers.PutScriptRequest["metadata"]["assets"]
           | undefined;
-        let keepAssets = false;
+        const keepAssets = false;
         if (assets) {
-          if (output?.hash?.assets !== assets.hash) {
-            yield* Effect.logInfo(
-              `Cloudflare Worker ${olds ? "update" : "create"}: uploading assets for ${name}`,
-            );
-            const { jwt } = yield* uploadAssets(
-              accountId,
-              name,
-              assets,
-              session,
-            );
-            metadataAssets = {
-              jwt,
-              config: assets.config,
-            };
-          } else {
-            yield* Effect.logInfo(
-              `Cloudflare Worker update: reusing existing assets for ${name}`,
-            );
-            metadataAssets = {
-              config: assets.config,
-            };
-            keepAssets = true;
-          }
+          // Always upload assets on every deploy. The "skip if hash
+          // unchanged" optimization was the source of subtle bundle/
+          // asset desync bugs (deploy succeeds but worker serves 404s
+          // because the bundle references hashed asset filenames that
+          // aren't in the still-on-Cloudflare manifest). The upload
+          // session is content-addressed on Cloudflare's side — only
+          // genuinely-new asset bytes are PUT; unchanged assets cost
+          // a manifest check and nothing else, so the optimization
+          // wasn't worth the failure mode.
+          yield* Effect.logInfo(
+            `Cloudflare Worker ${olds ? "update" : "create"}: uploading assets for ${name}`,
+          );
+          const { jwt } = yield* uploadAssets(
+            accountId,
+            name,
+            assets,
+            session,
+          );
+          metadataAssets = {
+            jwt,
+            config: assets.config,
+          };
           metadataBindings.push({
             type: "assets",
             name: "ASSETS",
@@ -1951,11 +1956,19 @@ ${[
           const input = yield* hashDirectory(props.vite);
           return input !== output.hash?.input;
         }
+        // Always recompute both hashes by walking `dist/` (assets) and
+        // re-bundling the worker. The previous short-circuit
+        // (`Effect.succeed(output.hash.assets)`) compared the cached
+        // hash to itself and could never detect drift, and the
+        // `props.assets.hash` form is the *input* (source) hash which
+        // misses non-deterministic build output (e.g. Astro/Vite
+        // shuffling content-hashed filenames between builds). The
+        // result of either shortcut was deploying a new bundle on top
+        // of stale assets and 404'ing in production. Re-walking is the
+        // only correct comparison.
         const [assetsHash, bundleHash] = yield* Effect.all(
           [
-            "assets" in output && output.hash?.assets
-              ? Effect.succeed(output.hash.assets)
-              : prepareAssets(props.assets).pipe(Effect.map((a) => a?.hash)),
+            prepareAssets(props.assets).pipe(Effect.map((a) => a?.hash)),
             prepareBundle(id, props).pipe(Effect.map((b) => b.hash)),
           ],
           { concurrency: "unbounded" },
