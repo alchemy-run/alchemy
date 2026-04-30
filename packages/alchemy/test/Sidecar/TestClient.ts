@@ -1,4 +1,4 @@
-import * as Config from "@/Config.ts";
+import * as AlchemyContext from "@/AlchemyContext.ts";
 import * as RpcClient from "@/Sidecar/RpcClient.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
@@ -26,7 +26,7 @@ const program = Effect.gen(function* () {
 
 program.pipe(
   Effect.provide(layer),
-  Effect.provide(Config.dotAlchemy),
+  Effect.provide(AlchemyContext.AlchemyContextLive),
   Effect.provide(PlatformServices),
   NodeRuntime.runMain,
 );
