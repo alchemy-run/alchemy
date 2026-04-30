@@ -32,6 +32,7 @@ import {
 import { hashDirectory, type MemoOptions } from "../../Build/Memo.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
+import { sha256 } from "../../Util/sha256.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
 import type { HttpEffect } from "../../Http.ts";
@@ -287,6 +288,30 @@ export interface WorkerProps<
      */
     pure?: Bundle.BundleExtraOptions["pure"];
   };
+  /**
+   * When `false`, skip alchemy's rolldown step and upload `main` to
+   * Cloudflare byte-for-byte.
+   *
+   * Use this when `main` already points at a complete, runtime-ready
+   * Workers ESM bundle produced by an external tool (for example,
+   * OpenNext, wrangler, or a custom build pipeline) and the bundle
+   * must not be re-processed by rolldown.
+   *
+   * Re-bundling such artifacts is unsafe: the dynamic `import()` calls
+   * the upstream tool relies on can be rewritten in ways that break
+   * runtime behavior (a common symptom is OpenNext failing inside
+   * `createGenericHandler` when its wrapper resolver returns
+   * `undefined`).
+   *
+   * `bundle: false` is intended for use with the
+   * `yield* Cloudflare.Worker("id", { main, bundle: false })` form,
+   * where {@link PlatformProps.isExternal | `isExternal: true`} is
+   * already inferred automatically. It can also be combined with an
+   * explicit `isExternal: true` if needed.
+   *
+   * @default true
+   */
+  bundle?: boolean;
 }
 
 export type Worker<Bindings extends WorkerBindings = any> = Resource<
@@ -1273,6 +1298,28 @@ export const LiveWorkerProvider = () =>
           const cwd = yield* findCwdForBundle(main);
           const { compatibilityDate, compatibilityFlags } =
             getCompatibility(props);
+
+          // bundle: false → upload `main` to Cloudflare as-is.
+          //
+          // Pre-bundled artifacts (OpenNext, wrangler output, etc.) are
+          // intentionally complete; running them through rolldown a second
+          // time can rewrite dynamic imports in ways that break the
+          // upstream tool's runtime resolution.
+          if (props.bundle === false) {
+            const content = yield* fs.readFile(main);
+            const hash = yield* sha256(content);
+            return {
+              files: [
+                {
+                  path: path.basename(main),
+                  content,
+                  hash,
+                },
+              ],
+              hash,
+            } satisfies Bundle.BundleOutput;
+          }
+
           const buildBundle = (plugins?: rolldown.RolldownPluginOption) =>
             Bundle.build(
               {
