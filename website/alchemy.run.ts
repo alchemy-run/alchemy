@@ -58,7 +58,11 @@ export default Alchemy.Stack(
 
           **URL:** ${website.url}
 
-          Built from commit ${process.env.GITHUB_SHA?.slice(0, 7) ?? "unknown"}.
+          Built from commit ${
+            process.env.GITHUB_SHA
+              ? `[\`${process.env.GITHUB_SHA.slice(0, 7)}\`](https://github.com/alchemy-run/alchemy-effect/commit/${process.env.GITHUB_SHA})`
+              : "unknown"
+          }.
 
           ---
           _This comment updates automatically with each push._

@@ -83,7 +83,13 @@ jobs:
           CLOUDFLARE_EMAIL: ${{ secrets.ADMIN_CLOUDFLARE_EMAIL }}
           CLOUDFLARE_ACCOUNT_ID: ${{ env.STAGE == 'prod' && secrets.PROD_CLOUDFLARE_ACCOUNT_ID || secrets.TEST_CLOUDFLARE_ACCOUNT_ID }}
           PULL_REQUEST: ${{ github.event.number }}
-          GITHUB_SHA: ${{ github.sha }}
+          # On `pull_request` events `github.sha` is the synthetic merge
+          # commit (PR head merged into base) that GitHub generates for
+          # testing — it doesn't appear in the PR's git log, so the
+          # preview comment looked like it was reporting a phantom SHA.
+          # Prefer the PR head SHA when available; fall back to
+          # `github.sha` for `push` (main) deploys.
+          GITHUB_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
 
   cleanup:
