@@ -1,3 +1,25 @@
+## v2.0.0-beta.26
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **test**: Align vitest and bun test helpers and integrate with profiles &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/129 [<samp>(07e83)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/07e83f3)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Export types as lib/.d.ts &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/121 [<samp>(a000c)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/a000c26)
+- Resolve bin/exec.ts via package name so devs modes bundled CLI works &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy-effect/issues/128 [<samp>(303da)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/303daeb)
+- **cli**:
+  - Parallelize alchemy state tree &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/126 [<samp>(f3e8f)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/f3e8fef)
+- **cloudflare**:
+  - Bootstrap regressions in SecretsStore and StateStore &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/131 [<samp>(37db0)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/37db01a)
+- **core**:
+  - Fix broken url in error message and add state store guide &nbsp;-&nbsp; by **sam** [<samp>(4b991)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/4b991e7)
+  - Treat raw Resource refs as upstream dependencies &nbsp;-&nbsp; by **Mathieu Post** and **sam** in https://github.com/alchemy-run/alchemy-effect/issues/122 [<samp>(416f1)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/416f19c)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.25...HEAD)
+
+---
+
 ## v2.0.0-beta.25
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
