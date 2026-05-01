@@ -5,66 +5,97 @@ sidebar:
   order: 3
 ---
 
-You have a Worker, a Durable Object, and a chat `Room` that
-broadcasts WebSocket messages — enough backend for an interesting
-app, but no UI. In this part you'll add a Vite single-page app
-that builds and deploys from the same `alchemy.run.ts` as your
-Worker, with no separate build pipeline or Wrangler config.
-
 `Cloudflare.Vite` invokes Vite programmatically (via
-`createBuilder`) with the `@cloudflare/vite-plugin` already wired
-in. It builds your client assets, ships them to Cloudflare, and
-serves them through a Worker — so your frontend and backend share
-one URL surface and one deploy.
+`createBuilder`), builds your client assets, ships them to
+Cloudflare, and serves them through a Worker — so your frontend
+and backend share one URL surface and one deploy.
 
-## What `Cloudflare.Vite` actually requires
+Pick the path that fits where you're starting from:
 
-The bare minimum is **an `index.html` with a script tag**. That's
-it. No `vite.config.ts`, no `package.json` `build` script, no
-`main` entry. Alchemy supplies the Vite config and the
-`@cloudflare/vite-plugin` itself.
+1. [Set it up manually](#set-it-up-manually) — start from an
+   empty project; the bare minimum is an `index.html` and an
+   entry module.
+2. [Use the `create-vite` template](#use-the-create-vite-template)
+   — start from Vite's official React + TS scaffold.
+3. [Deploy an existing Vite project](#deploy-an-existing-vite-project)
+   — point Alchemy at a SPA you already have.
 
-A typical SPA layout — whether at the project root or in a
-subfolder — looks like:
+## Set it up manually
+
+The bare minimum is **an `index.html` with a script tag**. No
+`vite.config.ts`, no `package.json` `build` script, no `main`
+entry. Alchemy supplies the Vite config itself.
+
+A minimal React SPA looks like:
 
 ```
-.                       # or web/, app/, frontend/, client/ — your call
+.
 ├── index.html          # entry HTML, references the client bundle
 └── src/
-    └── main.ts         # client entry imported by index.html
+    └── main.tsx        # client entry imported by index.html
 ```
+
+### Install React
+
+```sh
+bun add react react-dom
+bun add -d @types/react @types/react-dom @vitejs/plugin-react
+```
+
+### Create index.html
 
 `index.html` just needs to load your entry module:
 
 ```html
 <!doctype html>
 <html lang="en">
-  <head><meta charset="UTF-8" /><title>My App</title></head>
+  <head>
+    <meta charset="UTF-8" />
+    <title>My App</title>
+  </head>
   <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.ts"></script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
 ```
 
-That's the contract. Use any framework Vite supports (vanilla TS,
-React, Vue, Solid, Svelte, …) — bring whatever `src/` layout the
-framework wants.
-
-:::tip[Use root, subfolder, whatever]
-`rootDir` defaults to `process.cwd()`. Drop `index.html` next to
-your `alchemy.run.ts` and you're done — no subfolder required, no
-duplicate `package.json`. If you prefer separation (e.g. you want
-the SPA's deps isolated from the Worker's), put it in `web/` and
-pass `rootDir: "./web"`. Either way works; pick what fits the
-project.
+:::caution[index.html must be at rootDir]
+Vite resolves `index.html` relative to its project root. Alchemy's
+`rootDir` defaults to `process.cwd()` — so place `index.html`
+next to your `alchemy.run.ts`, or set `rootDir` to the folder
+that contains it. See Vite's
+[project structure docs](https://vite.dev/guide/#index-html-and-project-root).
 :::
 
-## Add `Cloudflare.Vite` to the Stack
+### Create src/main.tsx
 
-Configure asset handling for SPA fallback (every unmatched route
-serves `index.html`) and enable `nodejs_compat` (the Cloudflare
-Vite plugin's runtime shim imports from `node:*`):
+Mount a React component into the `#root` div:
+
+```tsx
+// src/main.tsx
+import React from "react";
+import ReactDOM from "react-dom/client";
+
+function App() {
+  return (
+    <main>
+      <h1>Hello from Alchemy + Vite</h1>
+      <p>Edit <code>src/main.tsx</code> and redeploy.</p>
+    </main>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+);
+```
+
+### Add it to the Stack
+
+Yield `Cloudflare.Vite("Website")` from your Stack:
 
 ```diff lang="typescript"
 // alchemy.run.ts
@@ -72,17 +103,6 @@ import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import Worker from "./src/worker.ts";
-
-+const Web = Cloudflare.Vite("Web", {
-+  // rootDir: "./web",   // omit to use the project root
-+  compatibility: { flags: ["nodejs_compat"] },
-+  assets: {
-+    config: {
-+      htmlHandling: "auto-trailing-slash",
-+      notFoundHandling: "single-page-application",
-+    },
-+  },
-+});
 
 export default Alchemy.Stack(
   "MyApp",
@@ -92,7 +112,7 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const worker = yield* Worker;
-+    const web = yield* Web;
++    const web = yield* Cloudflare.Vite("Website");
     return {
       url: worker.url,
 +      webUrl: web.url,
@@ -101,23 +121,82 @@ export default Alchemy.Stack(
 );
 ```
 
-`notFoundHandling: "single-page-application"` is what makes
-client-side routing work — a deep link like `/about` returns
-`index.html` instead of a 404, and your router handles it on the
-client.
+The defaults set `notFoundHandling: "single-page-application"`,
+which is what makes client-side routing work — a deep link like
+`/about` returns `index.html` instead of a 404, and your router
+handles it on the client.
 
-## What NOT to do
+Any framework Vite supports works the same way — vanilla TS,
+Vue, Solid, Svelte — bring whatever `src/` layout the framework
+wants.
 
-A few things that look helpful but break the build:
+## Use the create-vite template
 
-- **Don't add `build.rollupOptions.input` to a custom
-  `vite.config.ts`.** Alchemy uses Vite's multi-environment build
-  with both a `client` and an `ssr` environment. A top-level
-  `rollupOptions.input` leaks into the `ssr` environment and
-  collides with the Cloudflare plugin's server entry. If you
-  don't have an SSR framework, skip `vite.config.ts` entirely.
-- **Don't forget `nodejs_compat`.** Without it, the upload fails
-  with `Cannot find module 'node:module'`.
+If you'd rather start from a real framework scaffold (React + TS
+with HMR, ESLint, etc.), use Vite's official template:
+
+```sh
+bun create vite@latest web -- --template react-ts
+cd web && bun install && cd ..
+```
+
+That drops a complete project into `./web/` with its own
+`package.json`, `tsconfig.json`, and `vite.config.ts`.
+
+### Point Cloudflare.Vite at the subfolder
+
+Since the SPA isn't at the project root, set `rootDir`:
+
+```diff lang="typescript"
+// alchemy.run.ts
+Effect.gen(function* () {
+  const worker = yield* Worker;
++  const web = yield* Cloudflare.Vite("Website", {
++    rootDir: "./web",
++  });
+  return {
+    url: worker.url,
+    webUrl: web.url,
+  };
+}),
+```
+
+`rootDir` defaults to `process.cwd()`, so you only set it when
+your `index.html` isn't next to `alchemy.run.ts`.
+
+## Deploy an existing Vite project
+
+Already have a Vite SPA? Point `Cloudflare.Vite` at it with
+`rootDir` and you're done:
+
+```ts
+// alchemy.run.ts
+const web = yield* Cloudflare.Vite("Website", {
+  rootDir: "./path/to/your/spa",
+});
+```
+
+Your existing `vite.config.ts`, plugins, aliases, and `tsconfig`
+are all preserved — Alchemy merges its Cloudflare integration on
+top of your config. Two things to check first:
+
+:::caution[Remove @cloudflare/vite-plugin if present]
+Remove @cloudflare/vite-plugin if present from your `vite.config.ts`.
+Alchemy ships its own Cloudflare integration and is **not compatible** with `@cloudflare/vite-plugin`.
+
+
+```diff lang="typescript"
+// vite.config.ts
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+-import cloudflare from "@cloudflare/vite-plugin";
+
+export default defineConfig({
+-  plugins: [react(), cloudflare()],
++  plugins: [react()],
+});
+```
+:::
 
 ## Deploy
 
@@ -173,15 +252,7 @@ const stack = beforeAll(deploy(Stack));
 
 ## Local dev
 
-`alchemy dev` (from [Tutorial Part 4](/tutorial/part-4)) runs Vite,
-your Worker, and any Durable Objects / Containers / Workflows you
-added — all under one watcher. Edit a `.ts` in `src/` and the
-browser hot-reloads against the live Cloudflare resources you
-deployed earlier.
-
-```sh
-alchemy dev
-```
+Coming soon.
 
 ## Use a different framework
 
