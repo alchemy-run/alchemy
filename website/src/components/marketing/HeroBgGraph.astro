@@ -396,6 +396,21 @@ const {
     };
     window.addEventListener("resize", onResize, { passive: true });
 
+    // The stroke color is derived from `getComputedStyle(canvas).color`,
+    // which resolves `var(--alc-fg-1)` against the current theme. When
+    // the user toggles light/dark mid-session the cached `rgb` would
+    // otherwise stay frozen on the previous theme until the next resize
+    // — observable as a flash of stale-color strokes after the theme
+    // switch. Re-resolve whenever `<html data-theme>` changes.
+    const themeObs = new MutationObserver(() => {
+      rgb = resolveRGB();
+      if (reduced) draw(0);
+    });
+    themeObs.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
+
     // Honor live changes to the user's `prefers-reduced-motion` setting.
     // When the user enables reduced motion mid-session, stop the loop and
     // hold a static frame; when they disable it, resume the animation.
