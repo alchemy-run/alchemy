@@ -64,41 +64,23 @@
       "worker": "./src/AWS/*/index.ts",
       "import": "./lib/AWS/*/index.js"
     },
-    "./AWS/AuthProvider": {
-      "types": "./lib/AWS/AuthProvider.d.ts",
-      "bun": "./src/AWS/AuthProvider.ts",
-      "worker": "./src/AWS/AuthProvider.ts",
-      "import": "./lib/AWS/AuthProvider.js"
-    },
-    "./AWS/Bootstrap": {
-      "types": "./lib/AWS/Bootstrap.d.ts",
-      "bun": "./src/AWS/Bootstrap.ts",
-      "worker": "./src/AWS/Bootstrap.ts",
-      "import": "./lib/AWS/Bootstrap.js"
-    },
     "./AWS/Credentials": {
-      "types": "./lib/AWS/Credentials.d.ts",
-      "bun": "./src/AWS/Credentials.ts",
-      "worker": "./src/AWS/Credentials.ts",
-      "import": "./lib/AWS/Credentials.js"
+      "types": "./lib/AWS/Credentials/index.d.ts",
+      "bun": "./src/AWS/Credentials/index.ts",
+      "worker": "./src/AWS/Credentials/index.ts",
+      "import": "./lib/AWS/Credentials/index.js"
     },
     "./AWS/Endpoint": {
-      "types": "./lib/AWS/Endpoint.d.ts",
-      "bun": "./src/AWS/Endpoint.ts",
-      "worker": "./src/AWS/Endpoint.ts",
-      "import": "./lib/AWS/Endpoint.js"
-    },
-    "./AWS/Environment": {
-      "types": "./lib/AWS/Environment.d.ts",
-      "bun": "./src/AWS/Environment.ts",
-      "worker": "./src/AWS/Environment.ts",
-      "import": "./lib/AWS/Environment.js"
+      "types": "./lib/AWS/Endpoint/index.d.ts",
+      "bun": "./src/AWS/Endpoint/index.ts",
+      "worker": "./src/AWS/Endpoint/index.ts",
+      "import": "./lib/AWS/Endpoint/index.js"
     },
     "./AWS/Region": {
-      "types": "./lib/AWS/Region.d.ts",
-      "bun": "./src/AWS/Region.ts",
-      "worker": "./src/AWS/Region.ts",
-      "import": "./lib/AWS/Region.js"
+      "types": "./lib/AWS/Region/index.d.ts",
+      "bun": "./src/AWS/Region/index.ts",
+      "worker": "./src/AWS/Region/index.ts",
+      "import": "./lib/AWS/Region/index.js"
     },
     "./AWS/Profile": {
       "types": "./lib/AWS/Profile/index.d.ts",
@@ -153,30 +135,6 @@
       "bun": "./src/Cloudflare/Live.ts",
       "worker": "./src/Cloudflare/Live.ts",
       "import": "./lib/Cloudflare/Live.js"
-    },
-    "./Cloudflare/Credentials": {
-      "types": "./lib/Cloudflare/Credentials.d.ts",
-      "bun": "./src/Cloudflare/Credentials.ts",
-      "worker": "./src/Cloudflare/Credentials.ts",
-      "import": "./lib/Cloudflare/Credentials.js"
-    },
-    "./Cloudflare/CloudflareEnvironment": {
-      "types": "./lib/Cloudflare/CloudflareEnvironment.d.ts",
-      "bun": "./src/Cloudflare/CloudflareEnvironment.ts",
-      "worker": "./src/Cloudflare/CloudflareEnvironment.ts",
-      "import": "./lib/Cloudflare/CloudflareEnvironment.js"
-    },
-    "./Cloudflare/Auth/AuthProvider": {
-      "types": "./lib/Cloudflare/Auth/AuthProvider.d.ts",
-      "bun": "./src/Cloudflare/Auth/AuthProvider.ts",
-      "worker": "./src/Cloudflare/Auth/AuthProvider.ts",
-      "import": "./lib/Cloudflare/Auth/AuthProvider.js"
-    },
-    "./Cloudflare/StateStore/State": {
-      "types": "./lib/Cloudflare/StateStore/State.d.ts",
-      "bun": "./src/Cloudflare/StateStore/State.ts",
-      "worker": "./src/Cloudflare/StateStore/State.ts",
-      "import": "./lib/Cloudflare/StateStore/State.js"
     },
     "./Cloudflare/*": {
       "types": "./lib/Cloudflare/*/index.d.ts",
@@ -289,10 +247,10 @@
     "@clack/prompts": "^0.11.0",
     "@distilled.cloud/aws": "catalog:",
     "@distilled.cloud/axiom": "catalog:",
-    "@distilled.cloud/cloudflare": "catalog:",
     "@distilled.cloud/cloudflare-rolldown-plugin": "catalog:",
     "@distilled.cloud/cloudflare-runtime": "catalog:",
     "@distilled.cloud/cloudflare-vite-plugin": "catalog:",
+    "@distilled.cloud/cloudflare": "catalog:",
     "@distilled.cloud/core": "catalog:",
     "@effect/vitest": "catalog:",
     "@libsql/client": "catalog:",
@@ -310,14 +268,14 @@
     "fast-glob": "^3.3.2",
     "fast-xml-parser": "catalog:",
     "foreground-child": "^4.0.3",
-    "ink": "^6.3.1",
-    "react": "^19.2.0",
-    "pathe": "^2.0.3",
     "ignore": "^7.0.5",
+    "ink": "^6.3.1",
     "jszip": "^3.10.1",
     "libsodium-wrappers": "^0.8.3",
     "magic-string": "^0.30.21",
+    "pathe": "^2.0.3",
     "picomatch": "^4.0.4",
+    "react": "^19.2.0",
     "rolldown": "catalog:",
     "sonda": "catalog:",
     "web-tree-sitter": "catalog:",
@@ -337,6 +295,7 @@
     "@types/picomatch": "^4.0.0",
     "@types/react": "^19.2.2",
     "better-auth": "catalog:",
+    "effect": "catalog:",
     "react-devtools-core": "^7.0.1",
     "solid-js": "catalog:",
     "tsconfig-paths": "^4.2.0",
