@@ -28,15 +28,23 @@
   --alc-accent-deep: #3f5a2a; /* deep forest — pressed/emphasis */
   --alc-accent-warm: #7a9a5e; /* sage — lighter, sunny */
   --alc-accent-bright: #8fb15e; /* lit leaves — accents on cream */
-  --alc-accent-soft: #d8e3c4; /* washed sage — tints */
+  /* Translucent so surfaces using `accent-soft` (hero CTA cards, asides,
+     selection) let the underlying texture show through — same approach
+     as the dark-mode token below. */
+  --alc-accent-soft: color-mix(in srgb, #5c7a3e 18%, transparent);
   --alc-accent-60: color-mix(in srgb, #5c7a3e 60%, transparent);
   --alc-accent-40: color-mix(in srgb, #5c7a3e 40%, transparent);
   --alc-accent-12: color-mix(in srgb, #5c7a3e 12%, transparent);
 
+  /* Bindu (yantra centroid dot) — deep moss in light mode. The dark
+     block overrides this to terracotta so the brand mark gets a warm
+     focal point against the dark page. */
+  --alc-yantra-dot: #3f5a2a;
+
   /* ---------- Secondary: warm terracotta ---------- */
   --alc-terracotta: #c56e3c;
   --alc-terracotta-deep: #9a4f27;
-  --alc-terracotta-soft: #eccfb8;
+  --alc-terracotta-soft: color-mix(in srgb, #c56e3c 18%, transparent);
 
   /* ---------- Surfaces (warm cream / parchment) ---------- */
   --alc-bg: #f5efe3; /* page — parchment */
@@ -130,6 +138,73 @@
   --alc-dur-fast: 120ms;
   --alc-dur: 180ms;
   --alc-dur-slow: 320ms;
+}
+
+/* ============================================================
+   Dark mode — "night forest, walnut interior".
+   Same warm/earthy logic as light, inverted around the walnut
+   scale. The page joins the dark code-block surface; cream
+   becomes the text scale; moss & terracotta lift one step so
+   they read on dark.
+   ============================================================ */
+
+[data-theme="dark"] {
+  /* Brand: lifted moss for emphasis on dark walnut */
+  --alc-accent: #7a9a5e;
+  --alc-accent-deep: #a3c473; /* emphasis / text-accent — lifted, not darkened */
+  --alc-accent-warm: #8fb15e;
+  --alc-accent-bright: #b3d188;
+  --alc-accent-soft: color-mix(in srgb, #7a9a5e 22%, transparent);
+  --alc-accent-60: color-mix(in srgb, #a3c473 60%, transparent);
+  --alc-accent-40: color-mix(in srgb, #a3c473 40%, transparent);
+  --alc-accent-12: color-mix(in srgb, #a3c473 18%, transparent);
+
+  /* Bindu pops in terracotta against the dark page. */
+  --alc-yantra-dot: #c56e3c;
+
+  /* Secondary: warm terracotta — lifted */
+  --alc-terracotta: #d8835a;
+  --alc-terracotta-deep: #e89a72;
+  --alc-terracotta-soft: color-mix(in srgb, #d8835a 20%, transparent);
+
+  /* Surfaces — page joins the code-block aesthetic. In dark mode the
+     code surface LIFTS above the page (vs. light mode where it sinks),
+     so terminal/code chrome still reads as a distinct card on the page. */
+  --alc-bg: #14110d;
+  --alc-bg-nav: #1a1613;
+  --alc-bg-elev-1: #221e18;
+  --alc-bg-elev-2: #2a2620;
+  --alc-bg-code: #2a2620; /* same as light-mode code surface — chrome/syntax tuning carries over */
+  --alc-bg-sunk: #100c08;
+
+  /* Text — cream scale */
+  --alc-fg-1: #faf6ec; /* primary — parchment */
+  --alc-fg-2: #e2d7bc; /* body — washed parchment */
+  --alc-fg-3: #a89572; /* muted — walnut-400 still reads */
+  --alc-fg-4: #85714f; /* tertiary / captions */
+  /* `--alc-fg-invert` is text on the dark code surface, which stays dark in
+     both modes — so this token is the same in light and dark. */
+  --alc-fg-invert: #fbf6ea;
+  --alc-fg-on-accent: #fbf6ea;
+
+  /* Hairlines — cream over walnut */
+  --alc-hairline: rgba(250, 246, 236, 0.08);
+  --alc-hairline-2: rgba(250, 246, 236, 0.14);
+  --alc-hairline-3: rgba(250, 246, 236, 0.22);
+
+  /* Semantic — lifted on dark for AA contrast */
+  --alc-success: #8fb15e;
+  --alc-warn: #e8b04a;
+  --alc-danger: #d76a4e;
+  --alc-info: #6da4b4;
+  --alc-muted: #85714f;
+
+  /* Shadows — heavier black, less warmth shows through */
+  --alc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --alc-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  --alc-shadow-lg: 0 20px 40px rgba(0, 0, 0, 0.6);
+  --alc-glow:
+    0 0 0 1px var(--alc-accent-40), 0 0 24px -4px var(--alc-accent-40);
 }
 
 /* ============================================================

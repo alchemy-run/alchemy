@@ -1,16 +1,17 @@
 import * as AWS from "@/AWS";
 import { Group, GroupMembership, InstanceProfile, Role, User } from "@/AWS/IAM";
-import { destroy, test } from "@/Test/Vitest";
+import * as Test from "@/Test/Vitest";
 import * as IAM from "@distilled.cloud/aws/iam";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 
-test(
-  "create user, group membership, and instance profile",
-  Effect.gen(function* () {
-    yield* destroy();
+const { test } = Test.make({ providers: AWS.providers() });
 
-    const resources = yield* test.deploy(
+test.provider("create user, group membership, and instance profile", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const resources = yield* stack.deploy(
       Effect.gen(function* () {
         const role = yield* Role("ProfileRole", {
           assumeRolePolicyDocument: {
@@ -59,6 +60,6 @@ test(
       resources.role.roleName,
     );
 
-    yield* destroy();
-  }).pipe(Effect.provide(AWS.providers())),
+    yield* stack.destroy();
+  }),
 );

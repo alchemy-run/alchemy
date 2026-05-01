@@ -2,15 +2,20 @@ import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as R2 from "@/Cloudflare/R2";
 import { Stack } from "@/Stack";
-import { destroy, test } from "@/Test/Vitest";
+import * as Test from "@/Test/Vitest";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { expect } from "@effect/vitest";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
+import {
+  findWorker,
+  getWorkerTags,
+  waitForWorkerToBeDeleted,
+} from "../Utils/Worker.ts";
 import InternalWorker from "./internal-worker.ts";
+
+const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -19,15 +24,14 @@ const logLevel = Effect.provideService(
 
 const main = pathe.resolve(import.meta.dirname, "worker.ts");
 
-test(
-  "create, update, delete worker",
+test.provider("create, update, delete worker", (stack) =>
   Effect.gen(function* () {
     const { accountId } = yield* CloudflareEnvironment;
-    const stack = yield* Stack;
+    const s = yield* Stack;
 
-    yield* destroy();
+    yield* stack.destroy();
 
-    const worker = yield* test.deploy(
+    const worker = yield* stack.deploy(
       Effect.gen(function* () {
         yield* R2.R2Bucket("Bucket", {
           storageClass: "Standard",
@@ -48,10 +52,10 @@ test(
     const actualWorker = yield* findWorker(worker.workerName, accountId);
     expect(actualWorker?.scriptName).toEqual(worker.workerName);
     expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
-      `alchemy:stack:${stack.name}`,
+      `alchemy:stack:${s.name}`,
     );
     expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
-      `alchemy:stage:${stack.stage}`,
+      `alchemy:stage:${s.stage}`,
     );
     expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
       "alchemy:id:TestWorker",
@@ -63,7 +67,7 @@ test(
     }
 
     // Update the worker
-    const updatedWorker = yield* test.deploy(
+    const updatedWorker = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.Worker("TestWorker", {
           main,
@@ -89,21 +93,20 @@ test(
       previewsEnabled: true,
     });
 
-    yield* destroy();
+    yield* stack.destroy();
 
     yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
-  }).pipe(Effect.provide(Cloudflare.providers()), logLevel),
+  }).pipe(logLevel),
 );
 
-test(
-  "create, update, delete worker with assets",
+test.provider("create, update, delete worker with assets", (stack) =>
   Effect.gen(function* () {
     const { accountId } = yield* CloudflareEnvironment;
-    const stack = yield* Stack;
+    const s = yield* Stack;
 
-    yield* destroy();
+    yield* stack.destroy();
 
-    const worker = yield* test.deploy(
+    const worker = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.Worker("TestWorkerWithAssets", {
           main,
@@ -119,10 +122,10 @@ test(
     const actualWorker = yield* findWorker(worker.workerName, accountId);
     expect(actualWorker?.scriptName).toEqual(worker.workerName);
     expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
-      `alchemy:stack:${stack.name}`,
+      `alchemy:stack:${s.name}`,
     );
     expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
-      `alchemy:stage:${stack.stage}`,
+      `alchemy:stage:${s.stage}`,
     );
     expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
       "alchemy:id:TestWorkerWithAssets",
@@ -137,7 +140,7 @@ test(
     }
 
     // Update the worker
-    const updatedWorker = yield* test.deploy(
+    const updatedWorker = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.Worker("TestWorkerWithAssets", {
           main,
@@ -158,7 +161,7 @@ test(
     expect(updatedWorker.hash?.assets).toBeDefined();
 
     // Final update
-    const finalWorker = yield* test.deploy(
+    const finalWorker = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.Worker("TestWorkerWithAssets", {
           main,
@@ -172,21 +175,20 @@ test(
       }),
     );
 
-    yield* destroy();
+    yield* stack.destroy();
 
     yield* waitForWorkerToBeDeleted(finalWorker.workerName, accountId);
-  }).pipe(Effect.provide(Cloudflare.providers()), logLevel),
+  }).pipe(logLevel),
 );
 
-test(
-  "create, update, delete internal worker",
+test.provider("create, update, delete internal worker", (stack) =>
   Effect.gen(function* () {
     const { accountId } = yield* CloudflareEnvironment;
-    const stack = yield* Stack;
+    const s = yield* Stack;
 
-    yield* destroy();
+    yield* stack.destroy();
 
-    const worker = yield* test.deploy(
+    const worker = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* InternalWorker;
       }),
@@ -195,16 +197,16 @@ test(
     const actualWorker = yield* findWorker(worker.workerName, accountId);
     expect(actualWorker?.scriptName).toEqual(worker.workerName);
     expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
-      `alchemy:stack:${stack.name}`,
+      `alchemy:stack:${s.name}`,
     );
     expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
-      `alchemy:stage:${stack.stage}`,
+      `alchemy:stage:${s.stage}`,
     );
     expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
       "alchemy:id:InternalWorker",
     );
 
-    const updatedWorker = yield* test.deploy(
+    const updatedWorker = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* InternalWorker;
       }),
@@ -212,48 +214,8 @@ test(
 
     expect(updatedWorker.workerName).toEqual(worker.workerName);
 
-    yield* destroy();
+    yield* stack.destroy();
 
     yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
-  }).pipe(Effect.provide(Cloudflare.providers()), logLevel),
+  }).pipe(logLevel),
 );
-
-const findWorker = Effect.fn(function* (workerName: string, accountId: string) {
-  const matches = yield* workers.searchScript({
-    accountId,
-    name: workerName,
-  });
-  return matches.find((worker) => worker.scriptName === workerName);
-});
-
-const getWorkerTags = Effect.fn(function* (
-  workerName: string,
-  accountId: string,
-) {
-  const settings = yield* workers.getScriptScriptAndVersionSetting({
-    accountId,
-    scriptName: workerName,
-  });
-  return settings.tags ?? [];
-});
-
-const waitForWorkerToBeDeleted = Effect.fn(function* (
-  workerName: string,
-  accountId: string,
-) {
-  yield* workers
-    .getScript({
-      accountId,
-      scriptName: workerName,
-    })
-    .pipe(
-      Effect.flatMap(() => Effect.fail(new WorkerStillExists())),
-      Effect.retry({
-        while: (e): e is WorkerStillExists => e instanceof WorkerStillExists,
-        schedule: Schedule.exponential(100),
-      }),
-      Effect.catchTag("WorkerNotFound", () => Effect.void),
-    );
-});
-
-class WorkerStillExists extends Data.TaggedError("WorkerStillExists") {}

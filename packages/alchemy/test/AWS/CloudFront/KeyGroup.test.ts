@@ -1,10 +1,12 @@
 import * as AWS from "@/AWS";
 import { KeyGroup, PublicKey } from "@/AWS/CloudFront";
-import { destroy, test } from "@/Test/Vitest";
+import * as Test from "@/Test/Vitest";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+
+const { test } = Test.make({ providers: AWS.providers() });
 
 const runLive = process.env.ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS === "true";
 
@@ -31,71 +33,72 @@ JQIDAQAB
 `;
 
 describe("AWS.CloudFront.KeyGroup", () => {
-  test.skipIf(!runLive)(
+  test.provider.skipIf(!runLive)(
     "create, update items, and delete a key group",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const created = yield* stack.deploy(
+          Effect.gen(function* () {
+            const primary = yield* PublicKey("PrimarySigningKey", {
+              encodedKey: PRIMARY_PUBLIC_KEY,
+              comment: "primary",
+            });
+            const secondary = yield* PublicKey("SecondarySigningKey", {
+              encodedKey: SECONDARY_PUBLIC_KEY,
+              comment: "secondary",
+            });
+            const group = yield* KeyGroup("SignedUrlKeys", {
+              comment: "initial",
+              items: [primary.publicKeyId],
+            });
+            return { primary, secondary, group };
+          }),
+        );
+
+        const initial = yield* cloudfront.getKeyGroup({
+          Id: created.group.keyGroupId,
+        });
+        expect(initial.KeyGroup?.Id).toEqual(created.group.keyGroupId);
+        expect(initial.KeyGroup?.KeyGroupConfig?.Comment).toEqual("initial");
+        expect(initial.KeyGroup?.KeyGroupConfig?.Items).toEqual([
+          created.primary.publicKeyId,
+        ]);
+
+        const updated = yield* stack.deploy(
+          Effect.gen(function* () {
+            const primary = yield* PublicKey("PrimarySigningKey", {
+              encodedKey: PRIMARY_PUBLIC_KEY,
+              comment: "primary",
+            });
+            const secondary = yield* PublicKey("SecondarySigningKey", {
+              encodedKey: SECONDARY_PUBLIC_KEY,
+              comment: "secondary",
+            });
+            const group = yield* KeyGroup("SignedUrlKeys", {
+              comment: "updated",
+              items: [primary.publicKeyId, secondary.publicKeyId],
+            });
+            return { primary, secondary, group };
+          }),
+        );
+
+        expect(updated.group.keyGroupId).toEqual(created.group.keyGroupId);
+
+        const after = yield* cloudfront.getKeyGroup({
+          Id: updated.group.keyGroupId,
+        });
+        expect(after.KeyGroup?.KeyGroupConfig?.Comment).toEqual("updated");
+        expect(after.KeyGroup?.KeyGroupConfig?.Items).toEqual([
+          updated.primary.publicKeyId,
+          updated.secondary.publicKeyId,
+        ]);
+
+        yield* stack.destroy();
+        yield* assertKeyGroupDeleted(updated.group.keyGroupId);
+      }),
     { timeout: 300_000 },
-    Effect.gen(function* () {
-      yield* destroy();
-
-      const created = yield* test.deploy(
-        Effect.gen(function* () {
-          const primary = yield* PublicKey("PrimarySigningKey", {
-            encodedKey: PRIMARY_PUBLIC_KEY,
-            comment: "primary",
-          });
-          const secondary = yield* PublicKey("SecondarySigningKey", {
-            encodedKey: SECONDARY_PUBLIC_KEY,
-            comment: "secondary",
-          });
-          const group = yield* KeyGroup("SignedUrlKeys", {
-            comment: "initial",
-            items: [primary.publicKeyId],
-          });
-          return { primary, secondary, group };
-        }),
-      );
-
-      const initial = yield* cloudfront.getKeyGroup({
-        Id: created.group.keyGroupId,
-      });
-      expect(initial.KeyGroup?.Id).toEqual(created.group.keyGroupId);
-      expect(initial.KeyGroup?.KeyGroupConfig?.Comment).toEqual("initial");
-      expect(initial.KeyGroup?.KeyGroupConfig?.Items).toEqual([
-        created.primary.publicKeyId,
-      ]);
-
-      const updated = yield* test.deploy(
-        Effect.gen(function* () {
-          const primary = yield* PublicKey("PrimarySigningKey", {
-            encodedKey: PRIMARY_PUBLIC_KEY,
-            comment: "primary",
-          });
-          const secondary = yield* PublicKey("SecondarySigningKey", {
-            encodedKey: SECONDARY_PUBLIC_KEY,
-            comment: "secondary",
-          });
-          const group = yield* KeyGroup("SignedUrlKeys", {
-            comment: "updated",
-            items: [primary.publicKeyId, secondary.publicKeyId],
-          });
-          return { primary, secondary, group };
-        }),
-      );
-
-      expect(updated.group.keyGroupId).toEqual(created.group.keyGroupId);
-
-      const after = yield* cloudfront.getKeyGroup({
-        Id: updated.group.keyGroupId,
-      });
-      expect(after.KeyGroup?.KeyGroupConfig?.Comment).toEqual("updated");
-      expect(after.KeyGroup?.KeyGroupConfig?.Items).toEqual([
-        updated.primary.publicKeyId,
-        updated.secondary.publicKeyId,
-      ]);
-
-      yield* destroy();
-      yield* assertKeyGroupDeleted(updated.group.keyGroupId);
-    }).pipe(Effect.provide(AWS.providers())),
   );
 });
 

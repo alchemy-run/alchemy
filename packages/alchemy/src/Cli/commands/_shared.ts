@@ -9,10 +9,10 @@ import * as Argument from "effect/unstable/cli/Argument";
 import * as CliError from "effect/unstable/cli/CliError";
 import * as Flag from "effect/unstable/cli/Flag";
 
-import { AuthError } from "../../src/Auth/AuthProvider.ts";
-import type * as Stack from "../../src/Stack.ts";
-import { recordCli } from "../../src/Telemetry/Metrics.ts";
-import { PromptCancelled } from "../../src/Util/Clank.ts";
+import { AuthError } from "../../Auth/AuthProvider";
+import type * as Stack from "../../Stack";
+import { recordCli } from "../../Telemetry/Metrics";
+import { PromptCancelled } from "../../Util/Clank";
 
 export const USER = Config.string("USER").pipe(
   Config.orElse(() => Config.string("USERNAME")),
@@ -131,7 +131,7 @@ export const force = Flag.boolean("force").pipe(
   Flag.withDefault(false),
 );
 
-export const main = Argument.file("main", {
+export const script = Argument.file("main", {
   mustExist: true,
 }).pipe(
   Argument.withDescription("Main file to deploy, defaults to alchemy.run.ts"),

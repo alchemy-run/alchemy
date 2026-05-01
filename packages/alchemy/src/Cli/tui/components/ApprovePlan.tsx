@@ -2,7 +2,7 @@
 import { useState, type JSX } from "react";
 
 import { Box, Text, useApp, useInput } from "ink";
-import type { Plan as AlchemyPlan } from "../../Plan.ts";
+import type { Plan as AlchemyPlan } from "../../../Plan.ts";
 
 import { Plan } from "./Plan.tsx";
 

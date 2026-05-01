@@ -1,5 +1,5 @@
 import * as AWS from "@/AWS";
-import { destroy, test } from "@/Test/Vitest";
+import * as Test from "@/Test/Vitest";
 import * as SNS from "@distilled.cloud/aws/sns";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
@@ -12,46 +12,49 @@ import {
   TopicAndQueue,
 } from "./handler.ts";
 
-test(
+const { test } = Test.make({ providers: AWS.providers() });
+
+test.provider(
   "create and delete lambda subscription",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const { topic, queue, subscription } = yield* TopicAndQueue;
+
+          const apiFunction = yield* SNSApiFunction;
+
+          return {
+            apiFunction,
+            topic,
+            queue,
+            subscription,
+          };
+        }).pipe(Effect.provide(SNSApiFunctionLive)),
+      );
+
+      expect(deployed.subscription.subscriptionArn).toBeDefined();
+
+      const attributes = yield* SNS.getSubscriptionAttributes({
+        SubscriptionArn: deployed.subscription.subscriptionArn,
+      }).pipe(
+        Effect.tapError((err) =>
+          Effect.logError(deployed.subscription.subscriptionArn, err),
+        ),
+        Effect.retry({
+          while: (error) => error._tag === "NotFoundException",
+          schedule: Schedule.fixed(300),
+        }),
+      );
+      expect(attributes.Attributes?.Protocol).toBe("lambda");
+      expect(attributes.Attributes?.TopicArn).toBe(deployed.topic.topicArn);
+
+      yield* stack.destroy();
+      yield* assertSubscriptionDeleted(deployed.subscription.subscriptionArn);
+    }),
   { timeout: 180_000 },
-  Effect.gen(function* () {
-    yield* destroy();
-
-    const deployed = yield* test.deploy(
-      Effect.gen(function* () {
-        const { topic, queue, subscription } = yield* TopicAndQueue;
-
-        const apiFunction = yield* SNSApiFunction;
-
-        return {
-          apiFunction,
-          topic,
-          queue,
-          subscription,
-        };
-      }).pipe(Effect.provide(SNSApiFunctionLive)),
-    );
-
-    expect(deployed.subscription.subscriptionArn).toBeDefined();
-
-    const attributes = yield* SNS.getSubscriptionAttributes({
-      SubscriptionArn: deployed.subscription.subscriptionArn,
-    }).pipe(
-      Effect.tapError((err) =>
-        Effect.logError(deployed.subscription.subscriptionArn, err),
-      ),
-      Effect.retry({
-        while: (error) => error._tag === "NotFoundException",
-        schedule: Schedule.fixed(300),
-      }),
-    );
-    expect(attributes.Attributes?.Protocol).toBe("lambda");
-    expect(attributes.Attributes?.TopicArn).toBe(deployed.topic.topicArn);
-
-    yield* destroy();
-    yield* assertSubscriptionDeleted(deployed.subscription.subscriptionArn);
-  }).pipe(Effect.provide(AWS.providers())),
 );
 
 class SubscriptionStillExists extends Data.TaggedError(

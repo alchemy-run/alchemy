@@ -1,6 +1,6 @@
 import * as AWS from "@/AWS";
 import { Queue } from "@/AWS/SQS";
-import { destroy, test } from "@/Test/Vitest";
+import * as Test from "@/Test/Vitest";
 import * as SQS from "@distilled.cloud/aws/sqs";
 import { expect } from "@effect/vitest";
 import * as Console from "effect/Console";
@@ -11,10 +11,11 @@ import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import { QueueSinkFunction, QueueSinkFunctionLive } from "./sink-handler";
 
-test(
-  "create and delete queue with default props",
+const { test } = Test.make({ providers: AWS.providers() });
+
+test.provider("create and delete queue with default props", (stack) =>
   Effect.gen(function* () {
-    const queue = yield* test.deploy(
+    const queue = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Queue("DefaultQueue");
       }),
@@ -30,16 +31,15 @@ test(
     });
     expect(queueAttributes.Attributes).toBeDefined();
 
-    yield* destroy();
+    yield* stack.destroy();
 
     yield* assertQueueDeleted(queue.queueUrl);
-  }).pipe(Effect.provide(AWS.providers())),
+  }),
 );
 
-test(
-  "create, update, delete standard queue",
+test.provider("create, update, delete standard queue", (stack) =>
   Effect.gen(function* () {
-    const queue = yield* test.deploy(
+    const queue = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Queue("TestQueue", {
           visibilityTimeout: 30,
@@ -57,7 +57,7 @@ test(
     expect(queueAttributes.Attributes?.DelaySeconds).toEqual("0");
 
     // Update the queue
-    const updatedQueue = yield* test.deploy(
+    const updatedQueue = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Queue("TestQueue", {
           visibilityTimeout: 60,
@@ -72,16 +72,15 @@ test(
       DelaySeconds: "5",
     });
 
-    yield* destroy();
+    yield* stack.destroy();
 
     yield* assertQueueDeleted(queue.queueUrl);
-  }).pipe(Effect.provide(AWS.providers())),
+  }),
 );
 
-test(
-  "create, update, delete fifo queue",
+test.provider("create, update, delete fifo queue", (stack) =>
   Effect.gen(function* () {
-    const queue = yield* test.deploy(
+    const queue = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Queue("TestFifoQueue", {
           fifo: true,
@@ -105,7 +104,7 @@ test(
     );
 
     // Update the FIFO queue to enable content-based deduplication
-    const updatedQueue = yield* test.deploy(
+    const updatedQueue = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Queue("TestFifoQueue", {
           fifo: true,
@@ -121,16 +120,15 @@ test(
       VisibilityTimeout: "60",
     });
 
-    yield* destroy();
+    yield* stack.destroy();
 
     yield* assertQueueDeleted(queue.queueUrl);
-  }).pipe(Effect.provide(AWS.providers())),
+  }),
 );
 
-test(
-  "create queue with custom name",
+test.provider("create queue with custom name", (stack) =>
   Effect.gen(function* () {
-    const queue = yield* test.deploy(
+    const queue = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Queue("CustomNameQueue", {
           queueName: "my-custom-test-queue",
@@ -148,59 +146,62 @@ test(
     });
     expect(queueAttributes.Attributes).toBeDefined();
 
-    yield* destroy();
+    yield* stack.destroy();
 
     yield* assertQueueDeleted(queue.queueUrl);
-  }).pipe(Effect.provide(AWS.providers())),
+  }),
 );
 
-test(
+test.provider(
   "QueueSink writes arbitrary messages through a deployed Lambda",
-  { timeout: 180_000 },
-  Effect.gen(function* () {
-    // yield* destroy();
+  (stack) =>
+    Effect.gen(function* () {
+      // yield* stack.destroy();
 
-    const apiFunction = yield* test.deploy(
-      QueueSinkFunction.asEffect().pipe(Effect.provide(QueueSinkFunctionLive)),
-    );
-    const baseUrl = apiFunction.functionUrl!.replace(/\/+$/, "");
-
-    const { queueUrl } = yield* waitForFunctionReady(`${baseUrl}/ready`);
-
-    const messages = [
-      `sink-${crypto.randomUUID()}`,
-      `sink-${crypto.randomUUID()}`,
-      `sink-${crypto.randomUUID()}`,
-    ];
-    const response = yield* HttpClient.post(`${baseUrl}/sink`, {
-      body: yield* HttpBody.json({ messages }),
-    }).pipe(
-      Effect.flatMap((result) =>
-        result.status === 200
-          ? Effect.succeed(result)
-          : Effect.fail("not ready"),
-      ),
-      Effect.tapError(Console.log),
-      Effect.retry({
-        while: (error) => error === "not ready",
-        schedule: Schedule.fixed("2 seconds").pipe(
-          Schedule.both(Schedule.recurs(9)),
+      const apiFunction = yield* stack.deploy(
+        QueueSinkFunction.asEffect().pipe(
+          Effect.provide(QueueSinkFunctionLive),
         ),
-      }),
-      Effect.flatMap((result) => result.json),
-    );
+      );
+      const baseUrl = apiFunction.functionUrl!.replace(/\/+$/, "");
 
-    expect((response as any).ok).toBe(true);
-    expect((response as any).count).toBe(messages.length);
+      const { queueUrl } = yield* waitForFunctionReady(`${baseUrl}/ready`);
 
-    const received = yield* waitForQueueMessages(queueUrl, messages.length);
+      const messages = [
+        `sink-${crypto.randomUUID()}`,
+        `sink-${crypto.randomUUID()}`,
+        `sink-${crypto.randomUUID()}`,
+      ];
+      const response = yield* HttpClient.post(`${baseUrl}/sink`, {
+        body: yield* HttpBody.json({ messages }),
+      }).pipe(
+        Effect.flatMap((result) =>
+          result.status === 200
+            ? Effect.succeed(result)
+            : Effect.fail("not ready"),
+        ),
+        Effect.tapError(Console.log),
+        Effect.retry({
+          while: (error) => error === "not ready",
+          schedule: Schedule.fixed("2 seconds").pipe(
+            Schedule.both(Schedule.recurs(9)),
+          ),
+        }),
+        Effect.flatMap((result) => result.json),
+      );
 
-    expect(received.sort()).toEqual([...messages].sort());
+      expect((response as any).ok).toBe(true);
+      expect((response as any).count).toBe(messages.length);
 
-    yield* destroy();
+      const received = yield* waitForQueueMessages(queueUrl, messages.length);
 
-    yield* assertQueueDeleted(queueUrl);
-  }).pipe(Effect.provide(AWS.providers())),
+      expect(received.sort()).toEqual([...messages].sort());
+
+      yield* stack.destroy();
+
+      yield* assertQueueDeleted(queueUrl);
+    }),
+  { timeout: 180_000 },
 );
 
 class QueueStillExists extends Data.TaggedError("QueueStillExists") {}

@@ -2,6 +2,17 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
+import { withLock } from "./Lock.ts";
+
+/**
+ * Methods on an {@link AuthProviderImpl} that mutate (or could trigger
+ * mutation of) on-disk credentials. The factory wraps these in a
+ * cross-process file lock keyed by `(profileName, providerName)` so that
+ * concurrent processes never refresh / write credentials simultaneously.
+ *
+ * `prettyPrint` is intentionally excluded: it's read-only display.
+ */
+const LOCKED_METHODS = new Set(["read", "login", "logout", "configure"]);
 
 export class AuthError extends Schema.TaggedErrorClass<AuthError>()(
   "AuthError",
@@ -129,10 +140,17 @@ export const AuthProvider =
             kind: "AuthProvider",
             name,
             ...Object.fromEntries(
-              Object.entries(service).map(([name, fn]) => [
-                name,
-                (...args: Parameters<typeof fn>) =>
-                  fn(...args).pipe(Effect.provideContext(ctx)),
+              Object.entries(service).map(([methodName, fn]) => [
+                methodName,
+                (...args: Parameters<typeof fn>) => {
+                  const eff = (fn as any)(...args).pipe(
+                    Effect.provideContext(ctx),
+                  );
+                  if (!LOCKED_METHODS.has(methodName)) return eff;
+                  // First positional arg is always `profileName`.
+                  const profileName = args[0] as string;
+                  return withLock(`${profileName}-${name}`, eff);
+                },
               ]),
             ),
           } as AuthProvider<Config, Credentials>),

@@ -1,0 +1,225 @@
+import { ConfigProvider } from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as Option from "effect/Option";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+
+import type { AlchemyContext } from "../AlchemyContext.ts";
+import { AlchemyContextLive } from "../AlchemyContext.ts";
+import { apply } from "../Apply.ts";
+import { provideFreshArtifactStore } from "../Artifacts.ts";
+import { AuthProviders } from "../Auth/AuthProvider.ts";
+import { withProfileOverride } from "../Auth/Profile.ts";
+import { LoggingCli } from "../Cli/LoggingCli.ts";
+import { deploy as _deploy } from "../Deploy.ts";
+import { destroy as _destroy } from "../Destroy.ts";
+import type { Input } from "../Input.ts";
+import * as Plan from "../Plan.ts";
+import {
+  type CompiledStack,
+  make as makeStack,
+  Stack,
+  type StackEffect,
+  type StackServices,
+} from "../Stack.ts";
+import { Stage } from "../Stage.ts";
+import * as State from "../State/index.ts";
+import { TelemetryLive } from "../Telemetry/Layer.ts";
+import { loadConfigProvider } from "../Util/ConfigProvider.ts";
+import { PlatformServices } from "../Util/PlatformServices.ts";
+
+/**
+ * Configuration shared by every test in a file. Pass to `Test.make(...)`.
+ */
+export interface MakeOptions<ROut = any> {
+  /** Provider layer for the stack — e.g. `AWS.providers()`, `Cloudflare.providers()`. */
+  providers: Layer.Layer<ROut, never, StackServices>;
+  /** State store for top-level `deploy(Stack)` / `destroy(Stack)`; defaults to {@link State.localState}. */
+  state?: Layer.Layer<State.State, never, StackServices>;
+  /** Override `ALCHEMY_PROFILE`; otherwise resolved from env / .env. */
+  profile?: string;
+  /** Default stage for deploy/destroy (default `"test"`). */
+  stage?: string;
+}
+
+export type TestEffect<A, Req = never> = StackEffect<A, any, Req>;
+
+const platformLayer = Layer.mergeAll(PlatformServices, FetchHttpClient.layer);
+
+const alchemyLayer = Layer.mergeAll(
+  LoggingCli,
+  Logger.layer([Logger.consolePretty()], { mergeWithExisting: true }),
+  AlchemyContextLive,
+);
+
+/**
+ * Build the per-test runtime and return a self-contained Effect.
+ *
+ * Mirrors {@link "../bin/alchemy.ts"} composition: ConfigProvider via
+ * `loadConfigProvider` + `withProfileOverride`, an empty `AuthProviders`
+ * registry that the user's `providers` layer populates, the platform layers,
+ * and the configured state store. Adapters wrap this into runner-specific
+ * thunks (`bun.test` -> `runPromise`, `it.live` -> as-is).
+ */
+export const toEffect = <A>(
+  effect: TestEffect<A>,
+  options: MakeOptions,
+): Effect.Effect<A, any, never> =>
+  Effect.gen(function* () {
+    const base = yield* loadConfigProvider(Option.none());
+    const configProvider = withProfileOverride(base, options.profile);
+    return yield* effect.pipe(
+      provideFreshArtifactStore,
+      Effect.provide(Layer.succeed(ConfigProvider, configProvider)),
+    );
+  }).pipe(
+    Effect.provideService(AuthProviders, {}),
+    Effect.provide(options.state ?? State.localState()),
+    Effect.provide(Layer.provideMerge(alchemyLayer, platformLayer)),
+    Effect.scoped,
+  ) as Effect.Effect<A, any, never>;
+
+/** Promise wrapper around {@link toEffect} for `bun.test`-style runners. */
+export const run = <A>(
+  effect: TestEffect<A>,
+  options: MakeOptions,
+): Promise<A> => Effect.runPromise(toEffect(effect, options));
+
+/**
+ * Wrap an effect so it runs with `options.providers` + a placeholder Stack +
+ * Stage in scope. Used by `test.provider` so user code can call provider SDK
+ * APIs (e.g. `DynamoDB.describeTable`) directly inside the test body.
+ */
+export const withProviders = <A, E, R, ROut>(
+  effect: Effect.Effect<A, E, R>,
+  options: MakeOptions<ROut>,
+  stackName: string,
+): Effect.Effect<A, E, Exclude<R, ROut | Stack | Stage>> =>
+  effect.pipe(
+    Effect.provide(options.providers as Layer.Layer<any, never, any>),
+    Effect.provide(
+      Layer.succeed(Stack, {
+        name: stackName,
+        stage: options.stage ?? "test",
+        resources: {},
+        bindings: {},
+      }),
+    ),
+    Effect.provide(Layer.succeed(Stage, options.stage ?? "test")),
+  ) as Effect.Effect<A, E, Exclude<R, ROut | Stack | Stage>>;
+
+/**
+ * Curried `deploy` for the test factory: bakes in the configured stage and
+ * adds the telemetry layer the CLI uses, so `beforeAll(deploy(Stack))` works
+ * the same way as `alchemy deploy`.
+ */
+export const deploy = <A>(
+  options: MakeOptions,
+  stack: TestEffect<CompiledStack<A>, Stage | AlchemyContext>,
+  callOptions?: { stage?: string },
+) =>
+  _deploy({
+    stack: stack as Effect.Effect<CompiledStack<A>, never, any>,
+    stage: callOptions?.stage ?? options.stage ?? "test",
+  }).pipe(Effect.provide(TelemetryLive));
+
+export const destroy = (
+  options: MakeOptions,
+  stack: TestEffect<CompiledStack, Stage | AlchemyContext>,
+  callOptions?: { stage?: string },
+) =>
+  _destroy({
+    stack: stack as Effect.Effect<CompiledStack, never, any>,
+    stage: callOptions?.stage ?? options.stage ?? "test",
+  }).pipe(Effect.provide(TelemetryLive));
+
+/**
+ * In-test scratch stack handed to `test.provider(name, (stack) => ...)`.
+ *
+ * Each scratch stack owns a private in-memory state store that is shared
+ * between successive `deploy`/`destroy` calls AND visible to the user's test
+ * body (so `yield* State` / `state.get(...)` see the same store the deploys
+ * mutated). This makes create / update / replace / delete paths exercisable
+ * without polluting `.alchemy/` or other tests in the same file.
+ */
+export interface ScratchStack<ROut = any> {
+  readonly name: string;
+  /** The shared in-memory state Layer for this scratch. @internal */
+  readonly state: Layer.Layer<State.State, never, never>;
+  deploy<A, E, R>(
+    effect: Effect.Effect<A, E, R>,
+  ): Effect.Effect<Input.Resolve<A>, any, Exclude<R, ROut | StackServices>>;
+  destroy(): Effect.Effect<void, any, never>;
+}
+
+const sanitizeStackName = (name: string) =>
+  name.replaceAll(/[^a-zA-Z0-9_]/g, "-").replace(/-+/g, "-");
+
+/**
+ * Build a fresh `ScratchStack` for `test.provider`. Allocates a private
+ * in-memory state store so the test is isolated from `.alchemy/` and from
+ * other tests in the same file.
+ */
+export const scratchStack = <ROut>(
+  options: MakeOptions<ROut>,
+  name: string,
+): ScratchStack<ROut> => {
+  const stage = options.stage ?? "test";
+  const stackName = sanitizeStackName(name);
+  const inMemory: Record<
+    string,
+    Record<string, Record<string, State.ResourceState>>
+  > = {};
+  const stateLayer = Layer.succeed(
+    State.State,
+    State.InMemoryService(inMemory),
+  );
+
+  const buildAndApply = (effect: Effect.Effect<any, any, any>) =>
+    (effect as Effect.Effect<any, any, never>).pipe(
+      makeStack({
+        name: stackName,
+        providers: options.providers,
+        state: stateLayer,
+      } as any) as any,
+      Effect.flatMap((compiled: any) =>
+        Plan.make(compiled).pipe(
+          Effect.flatMap(apply),
+          Effect.provide(compiled.services),
+        ),
+      ),
+      Effect.provide(Layer.succeed(Stage, stage)),
+      provideFreshArtifactStore,
+    );
+
+  return {
+    name: stackName,
+    state: stateLayer,
+    deploy: ((effect: Effect.Effect<any, any, any>) =>
+      buildAndApply(effect)) as ScratchStack<ROut>["deploy"],
+    destroy: () =>
+      Plan.make({
+        name: stackName,
+        stage,
+        resources: {},
+        bindings: {},
+        output: {},
+      }).pipe(
+        Effect.flatMap(apply),
+        Effect.asVoid,
+        Effect.provide(stateLayer),
+        Effect.provide(options.providers as Layer.Layer<any, never, any>),
+        Effect.provide(
+          Layer.succeed(Stack, {
+            name: stackName,
+            stage,
+            resources: {},
+            bindings: {},
+          }),
+        ),
+        Effect.provide(Layer.succeed(Stage, stage)),
+        provideFreshArtifactStore,
+      ) as Effect.Effect<void, any, never>,
+  };
+};

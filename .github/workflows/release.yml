@@ -31,9 +31,13 @@ env:
   # Files produced by the bump job and consumed by every publish job + the
   # final commit job. Listed once here so additions stay in sync.
   BUMP_ARTIFACT_PATHS: |
+    packages/alchemy/lib
+    packages/alchemy/bin
     packages/alchemy/package.json
     packages/better-auth/package.json
+    packages/better-auth/lib
     packages/pr-package/package.json
+    packages/pr-package/lib
     bun.lock
 jobs:
   # ── Step 1: Compute the next version and stage the bump in-memory. ──
@@ -109,7 +113,7 @@ jobs:
       # Build everything once, up front, against the bumped versions. Outputs
       # ride to every publish job as the `build-output` artifact so we don't
       # rebuild three times in parallel.
-      - run: bun run build
+      - run: bun run build:packages
 
       - uses: actions/upload-artifact@v4
         with:

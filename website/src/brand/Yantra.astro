@@ -22,7 +22,18 @@ const {
   class: className,
 } = Astro.props;
 
-const svg = yantraSvg({ size, stroke, dot, bg, strokeWidth, useCurrentColor });
+// Theme-aware bindu: green in light, terracotta in dark. Defined per
+// theme in tokens.css; falls back to deep moss outside the website.
+const resolvedDot = dot ?? "var(--alc-yantra-dot, #3f5a2a)";
+
+const svg = yantraSvg({
+  size,
+  stroke,
+  dot: resolvedDot,
+  bg,
+  strokeWidth,
+  useCurrentColor,
+});
 ---
 
 <span class={className} aria-hidden="true" set:html={svg} />
