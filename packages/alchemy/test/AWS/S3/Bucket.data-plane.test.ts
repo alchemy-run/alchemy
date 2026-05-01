@@ -1,14 +1,16 @@
 import * as AWS from "@/AWS";
 import { Bucket } from "@/AWS/S3";
-import { destroy, test } from "@/Test/Vitest";
+import * as Test from "@/Test/Vitest";
 import * as S3 from "@distilled.cloud/aws/s3";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
-const deployTestBucket = () =>
-  test.deploy(
+const { test } = Test.make({ providers: AWS.providers() });
+
+const deployTestBucket = (stack: Test.ScratchStack) =>
+  stack.deploy(
     Effect.gen(function* () {
       return yield* Bucket("DataPlaneTestBucket", {
         forceDestroy: true,
@@ -16,13 +18,11 @@ const deployTestBucket = () =>
     }),
   );
 
-test(
-  "listObjectsV2 - list objects in bucket",
+test.provider("listObjectsV2 - list objects in bucket", (stack) =>
   Effect.gen(function* () {
-    const bucket = yield* deployTestBucket();
+    const bucket = yield* deployTestBucket(stack);
     const bucketName = bucket.bucketName;
 
-    // Put some test objects
     yield* S3.putObject({
       Bucket: bucketName,
       Key: "file1.txt",
@@ -39,7 +39,6 @@ test(
       Body: "content 3",
     });
 
-    // Test listObjectsV2
     const result = yield* S3.listObjectsV2({
       Bucket: bucketName,
     });
@@ -50,7 +49,6 @@ test(
     expect(result.Contents!.map((c) => c.Key)).toContain("file2.txt");
     expect(result.Contents!.map((c) => c.Key)).toContain("folder/file3.txt");
 
-    // Test with prefix
     const prefixResult = yield* S3.listObjectsV2({
       Bucket: bucketName,
       Prefix: "folder/",
@@ -58,7 +56,6 @@ test(
     expect(prefixResult.Contents!.length).toBe(1);
     expect(prefixResult.Contents![0].Key).toBe("folder/file3.txt");
 
-    // Test with maxKeys
     const limitResult = yield* S3.listObjectsV2({
       Bucket: bucketName,
       MaxKeys: 1,
@@ -66,18 +63,16 @@ test(
     expect(limitResult.Contents!.length).toBe(1);
     expect(limitResult.IsTruncated).toBe(true);
 
-    yield* destroy();
+    yield* stack.destroy();
     yield* assertBucketDeleted(bucketName);
-  }).pipe(Effect.provide(AWS.providers())),
+  }),
 );
 
-test(
-  "headObject - get object metadata",
+test.provider("headObject - get object metadata", (stack) =>
   Effect.gen(function* () {
-    const bucket = yield* deployTestBucket();
+    const bucket = yield* deployTestBucket(stack);
     const bucketName = bucket.bucketName;
 
-    // Put a test object
     yield* S3.putObject({
       Bucket: bucketName,
       Key: "test-file.txt",
@@ -85,28 +80,25 @@ test(
       ContentType: "text/plain",
     });
 
-    // Test headObject
     const result = yield* S3.headObject({
       Bucket: bucketName,
       Key: "test-file.txt",
     });
 
     expect(result.ContentType).toBe("text/plain");
-    expect(result.ContentLength).toBe(13); // "Hello, World!" is 13 bytes
+    expect(result.ContentLength).toBe(13);
     expect(result.ETag).toBeDefined();
 
-    yield* destroy();
+    yield* stack.destroy();
     yield* assertBucketDeleted(bucketName);
-  }).pipe(Effect.provide(AWS.providers())),
+  }),
 );
 
-test(
-  "headObject - returns error for non-existent object",
+test.provider("headObject - returns error for non-existent object", (stack) =>
   Effect.gen(function* () {
-    const bucket = yield* deployTestBucket();
+    const bucket = yield* deployTestBucket(stack);
     const bucketName = bucket.bucketName;
 
-    // Try to head a non-existent object
     const result = yield* S3.headObject({
       Bucket: bucketName,
       Key: "non-existent.txt",
@@ -117,18 +109,16 @@ test(
 
     expect(result).toBe("not-found");
 
-    yield* destroy();
+    yield* stack.destroy();
     yield* assertBucketDeleted(bucketName);
-  }).pipe(Effect.provide(AWS.providers())),
+  }),
 );
 
-test(
-  "copyObject - copy object within bucket",
+test.provider("copyObject - copy object within bucket", (stack) =>
   Effect.gen(function* () {
-    const bucket = yield* deployTestBucket();
+    const bucket = yield* deployTestBucket(stack);
     const bucketName = bucket.bucketName;
 
-    // Put source object
     yield* S3.putObject({
       Bucket: bucketName,
       Key: "source.txt",
@@ -136,40 +126,35 @@ test(
       ContentType: "text/plain",
     });
 
-    // Copy the object
     yield* S3.copyObject({
       Bucket: bucketName,
       Key: "destination.txt",
       CopySource: `${bucketName}/source.txt`,
     });
 
-    // Verify destination exists
     const destHead = yield* S3.headObject({
       Bucket: bucketName,
       Key: "destination.txt",
     });
     expect(destHead.ContentType).toBe("text/plain");
-    expect(destHead.ContentLength).toBe(16); // "Original content" is 16 bytes
+    expect(destHead.ContentLength).toBe(16);
 
-    // Verify source still exists
     const sourceHead = yield* S3.headObject({
       Bucket: bucketName,
       Key: "source.txt",
     });
     expect(sourceHead.ContentLength).toBe(16);
 
-    yield* destroy();
+    yield* stack.destroy();
     yield* assertBucketDeleted(bucketName);
-  }).pipe(Effect.provide(AWS.providers())),
+  }),
 );
 
-test(
-  "copyObject - copy with metadata replacement",
+test.provider("copyObject - copy with metadata replacement", (stack) =>
   Effect.gen(function* () {
-    const bucket = yield* deployTestBucket();
+    const bucket = yield* deployTestBucket(stack);
     const bucketName = bucket.bucketName;
 
-    // Put source object
     yield* S3.putObject({
       Bucket: bucketName,
       Key: "source.txt",
@@ -177,7 +162,6 @@ test(
       ContentType: "text/plain",
     });
 
-    // Copy with new content type
     yield* S3.copyObject({
       Bucket: bucketName,
       Key: "destination.txt",
@@ -186,7 +170,6 @@ test(
       MetadataDirective: "REPLACE",
     });
 
-    // Verify destination has new content type
     const destHead = yield* S3.headObject({
       Bucket: bucketName,
       Key: "destination.txt",
@@ -194,18 +177,16 @@ test(
     // AWS may normalize content-type to binary/octet-stream
     expect(destHead.ContentType).toBe("binary/octet-stream");
 
-    yield* destroy();
+    yield* stack.destroy();
     yield* assertBucketDeleted(bucketName);
-  }).pipe(Effect.provide(AWS.providers())),
+  }),
 );
 
-test(
-  "multipart upload - complete workflow",
+test.provider("multipart upload - complete workflow", (stack) =>
   Effect.gen(function* () {
-    const bucket = yield* deployTestBucket();
+    const bucket = yield* deployTestBucket(stack);
     const bucketName = bucket.bucketName;
 
-    // Create multipart upload
     const createResult = yield* S3.createMultipartUpload({
       Bucket: bucketName,
       Key: "multipart-file.txt",
@@ -215,8 +196,8 @@ test(
     expect(createResult.UploadId).toBeDefined();
     const uploadId = createResult.UploadId!;
 
-    // Use a single part - AWS S3 requires parts to be at least 5MB except for
-    // the last (or only) part, so a single-part upload works with any size
+    // AWS S3 requires parts to be at least 5MB except for the last (or only)
+    // part, so a single-part upload works with any size
     const partContent = "Complete multipart upload content";
 
     const partResult = yield* S3.uploadPart({
@@ -228,7 +209,6 @@ test(
     });
     expect(partResult.ETag).toBeDefined();
 
-    // Complete the multipart upload with single part
     yield* S3.completeMultipartUpload({
       Bucket: bucketName,
       Key: "multipart-file.txt",
@@ -238,27 +218,24 @@ test(
       },
     });
 
-    // Verify the object exists and has correct size
     const headResult = yield* S3.headObject({
       Bucket: bucketName,
       Key: "multipart-file.txt",
     });
-    // Note: AWS S3 may use binary/octet-stream for multipart uploads even when
+    // AWS S3 may use binary/octet-stream for multipart uploads even when
     // ContentType is set on createMultipartUpload
     expect(headResult.ContentLength).toBe(partContent.length);
 
-    yield* destroy();
+    yield* stack.destroy();
     yield* assertBucketDeleted(bucketName);
-  }).pipe(Effect.provide(AWS.providers())),
+  }),
 );
 
-test(
-  "multipart upload - abort",
+test.provider("multipart upload - abort", (stack) =>
   Effect.gen(function* () {
-    const bucket = yield* deployTestBucket();
+    const bucket = yield* deployTestBucket(stack);
     const bucketName = bucket.bucketName;
 
-    // Create multipart upload
     const createResult = yield* S3.createMultipartUpload({
       Bucket: bucketName,
       Key: "aborted-file.txt",
@@ -267,7 +244,6 @@ test(
 
     const uploadId = createResult.UploadId!;
 
-    // Upload a part
     yield* S3.uploadPart({
       Bucket: bucketName,
       Key: "aborted-file.txt",
@@ -276,14 +252,12 @@ test(
       Body: "Some content",
     });
 
-    // Abort the upload
     yield* S3.abortMultipartUpload({
       Bucket: bucketName,
       Key: "aborted-file.txt",
       UploadId: uploadId,
     });
 
-    // Verify the object does not exist
     const headResult = yield* S3.headObject({
       Bucket: bucketName,
       Key: "aborted-file.txt",
@@ -294,18 +268,16 @@ test(
 
     expect(headResult).toBe("not-found");
 
-    yield* destroy();
+    yield* stack.destroy();
     yield* assertBucketDeleted(bucketName);
-  }).pipe(Effect.provide(AWS.providers())),
+  }),
 );
 
-test(
-  "putObject and getObject - basic operations",
+test.provider("putObject and getObject - basic operations", (stack) =>
   Effect.gen(function* () {
-    const bucket = yield* deployTestBucket();
+    const bucket = yield* deployTestBucket(stack);
     const bucketName = bucket.bucketName;
 
-    // Test putObject
     yield* S3.putObject({
       Bucket: bucketName,
       Key: "test-put.txt",
@@ -313,7 +285,6 @@ test(
       ContentType: "text/plain",
     });
 
-    // Verify with headObject
     const headResult = yield* S3.headObject({
       Bucket: bucketName,
       Key: "test-put.txt",
@@ -321,7 +292,6 @@ test(
     expect(headResult.ContentType).toBe("text/plain");
     expect(headResult.ContentLength).toBe(30);
 
-    // Test getObject
     const getResult = yield* S3.getObject({
       Bucket: bucketName,
       Key: "test-put.txt",
@@ -329,37 +299,32 @@ test(
     expect(getResult.ContentType).toBe("text/plain");
     expect(getResult.ContentLength).toBe(30);
 
-    yield* destroy();
+    yield* stack.destroy();
     yield* assertBucketDeleted(bucketName);
-  }).pipe(Effect.provide(AWS.providers())),
+  }),
 );
 
-test(
-  "deleteObject - remove object",
+test.provider("deleteObject - remove object", (stack) =>
   Effect.gen(function* () {
-    const bucket = yield* deployTestBucket();
+    const bucket = yield* deployTestBucket(stack);
     const bucketName = bucket.bucketName;
 
-    // Put an object
     yield* S3.putObject({
       Bucket: bucketName,
       Key: "to-delete.txt",
       Body: "Delete me",
     });
 
-    // Verify it exists
     yield* S3.headObject({
       Bucket: bucketName,
       Key: "to-delete.txt",
     });
 
-    // Delete it
     yield* S3.deleteObject({
       Bucket: bucketName,
       Key: "to-delete.txt",
     });
 
-    // Verify it's gone
     const headResult = yield* S3.headObject({
       Bucket: bucketName,
       Key: "to-delete.txt",
@@ -370,9 +335,9 @@ test(
 
     expect(headResult).toBe("not-found");
 
-    yield* destroy();
+    yield* stack.destroy();
     yield* assertBucketDeleted(bucketName);
-  }).pipe(Effect.provide(AWS.providers())),
+  }),
 );
 
 class BucketStillExists extends Data.TaggedError("BucketStillExists") {}

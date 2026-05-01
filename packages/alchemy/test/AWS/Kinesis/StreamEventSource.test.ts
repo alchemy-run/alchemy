@@ -1,5 +1,5 @@
 import * as AWS from "@/AWS";
-import { destroy, test } from "@/Test/Vitest";
+import * as Test from "@/Test/Vitest";
 import * as Kinesis from "@distilled.cloud/aws/kinesis";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import { describe, expect } from "@effect/vitest";
@@ -11,54 +11,61 @@ import KinesisStreamFunctionLive, {
   KinesisStreamFunction,
 } from "./stream-handler.ts";
 
+const { test } = Test.make({ providers: AWS.providers() });
+
 describe.sequential("AWS.Kinesis.StreamEventSource", () => {
-  test(
+  test.provider(
     "processes real Kinesis records through Lambda",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const streamFunction = yield* stack.deploy(
+          KinesisStreamFunction.asEffect().pipe(
+            Effect.provide(KinesisStreamFunctionLive),
+          ),
+        );
+
+        const functionUrl = streamFunction.functionUrl!;
+
+        const { streamName, streamArn } = yield* HttpClient.get(
+          functionUrl,
+        ).pipe(
+          Effect.flatMap((response) =>
+            response.status === 200
+              ? (response.json as Effect.Effect<{
+                  streamName: string;
+                  streamArn: string;
+                }>)
+              : Effect.fail(
+                  new Error(`Function not ready: ${response.status}`),
+                ),
+          ),
+          Effect.retry({ schedule: Schedule.fixed("1 seconds") }),
+        );
+
+        yield* waitForEventSourceMappingEnabled(
+          streamFunction.functionName,
+          streamArn,
+        );
+        yield* Effect.sleep("10 seconds");
+
+        yield* Kinesis.putRecord({
+          StreamName: streamName,
+          PartitionKey: "stream-event-source",
+          Data: new TextEncoder().encode("payload"),
+        });
+        yield* Effect.sleep("5 seconds");
+
+        const mapping = yield* waitForEventSourceMappingEnabled(
+          streamFunction.functionName,
+          streamArn,
+        );
+        expect(mapping.State).toEqual("Enabled");
+
+        yield* stack.destroy();
+      }),
     { timeout: 240_000 },
-    Effect.gen(function* () {
-      yield* destroy();
-
-      const streamFunction = yield* test.deploy(
-        KinesisStreamFunction.asEffect().pipe(
-          Effect.provide(KinesisStreamFunctionLive),
-        ),
-      );
-
-      const functionUrl = streamFunction.functionUrl!;
-
-      const { streamName, streamArn } = yield* HttpClient.get(functionUrl).pipe(
-        Effect.flatMap((response) =>
-          response.status === 200
-            ? (response.json as Effect.Effect<{
-                streamName: string;
-                streamArn: string;
-              }>)
-            : Effect.fail(new Error(`Function not ready: ${response.status}`)),
-        ),
-        Effect.retry({ schedule: Schedule.fixed("1 seconds") }),
-      );
-
-      yield* waitForEventSourceMappingEnabled(
-        streamFunction.functionName,
-        streamArn,
-      );
-      yield* Effect.sleep("10 seconds");
-
-      yield* Kinesis.putRecord({
-        StreamName: streamName,
-        PartitionKey: "stream-event-source",
-        Data: new TextEncoder().encode("payload"),
-      });
-      yield* Effect.sleep("5 seconds");
-
-      const mapping = yield* waitForEventSourceMappingEnabled(
-        streamFunction.functionName,
-        streamArn,
-      );
-      expect(mapping.State).toEqual("Enabled");
-
-      yield* destroy();
-    }).pipe(Effect.provide(AWS.providers())),
   );
 });
 

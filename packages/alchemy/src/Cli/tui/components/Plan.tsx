@@ -2,12 +2,16 @@
 import { useMemo, type JSX } from "react";
 
 import { Box, Text } from "ink";
-import type { Plan as AlchemyPlan, BindingAction, CRUD } from "../../Plan.ts";
+import type {
+  Plan as AlchemyPlan,
+  BindingAction,
+  CRUD,
+} from "../../../Plan.ts";
 import {
   buildNamespaceTree,
   flattenTree,
   type DerivedAction,
-} from "../NamespaceTree.ts";
+} from "../../NamespaceTree.ts";
 
 export interface PlanProps {
   plan: AlchemyPlan;

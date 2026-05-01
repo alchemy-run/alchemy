@@ -1,4 +1,7 @@
-import { afterAll, beforeAll, destroy, test } from "@/Test/Vitest";
+import * as AWS from "@/AWS";
+import { make as makeStack } from "@/Stack";
+import * as State from "@/State";
+import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -6,6 +9,20 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { describe } from "vitest";
 import KinesisApiFunctionLive, { KinesisApiFunction } from "./handler.ts";
+
+const providers = AWS.providers();
+const state = State.localState();
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers,
+  state,
+});
+
+const fixtureStack = Effect.gen(function* () {
+  return yield* KinesisApiFunction;
+}).pipe(
+  Effect.provide(KinesisApiFunctionLive),
+  makeStack({ name: "kinesis-bindings", providers, state }),
+);
 
 const readinessPolicy = Schedule.fixed("2 seconds").pipe(
   Schedule.both(Schedule.recurs(9)),
@@ -18,12 +35,8 @@ let consumerName: string;
 describe.sequential("Kinesis Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* destroy();
-      const deployed = yield* test.deploy(
-        Effect.gen(function* () {
-          return yield* KinesisApiFunction;
-        }).pipe(Effect.provide(KinesisApiFunctionLive)),
-      );
+      yield* destroy(fixtureStack);
+      const deployed = yield* deploy(fixtureStack);
 
       baseUrl = deployed.functionUrl!.replace(/\/+$/, "");
 
@@ -49,11 +62,10 @@ describe.sequential("Kinesis Bindings", () => {
     { timeout: 120_000 },
   );
 
-  afterAll(destroy(), { timeout: 60_000 });
+  afterAll(destroy(fixtureStack), { timeout: 60_000 });
 
   describe("DescribeAccountSettings", () => {
-    test(
-      "returns the account settings payload",
+    test.provider("returns the account settings payload", (stack) =>
       Effect.gen(function* () {
         const response = yield* getJson("/account-settings");
         if ((response as any).ok === false) {
@@ -66,8 +78,7 @@ describe.sequential("Kinesis Bindings", () => {
   });
 
   describe("DescribeLimits", () => {
-    test(
-      "returns shard and stream limits",
+    test.provider("returns shard and stream limits", (stack) =>
       Effect.gen(function* () {
         const response = yield* getJson("/limits");
         if ((response as any).ok === false) {
@@ -80,8 +91,7 @@ describe.sequential("Kinesis Bindings", () => {
   });
 
   describe("ListStreams", () => {
-    test(
-      "lists the deployed stream",
+    test.provider("lists the deployed stream", (stack) =>
       Effect.gen(function* () {
         const response = yield* getJson("/streams");
         const names = (response as any).StreamNames ?? [];
@@ -91,8 +101,7 @@ describe.sequential("Kinesis Bindings", () => {
   });
 
   describe("DescribeStream", () => {
-    test(
-      "describes the bound stream",
+    test.provider("describes the bound stream", (stack) =>
       Effect.gen(function* () {
         const response = yield* getJson("/stream");
         expect((response as any).StreamDescription.StreamName).toBe(streamName);
@@ -101,8 +110,7 @@ describe.sequential("Kinesis Bindings", () => {
   });
 
   describe("DescribeStreamSummary", () => {
-    test(
-      "describes the bound stream summary",
+    test.provider("describes the bound stream summary", (stack) =>
       Effect.gen(function* () {
         const response = yield* getJson("/stream-summary");
         expect((response as any).StreamDescriptionSummary.StreamName).toBe(
@@ -113,8 +121,7 @@ describe.sequential("Kinesis Bindings", () => {
   });
 
   describe("GetResourcePolicy", () => {
-    test(
-      "returns the stream policy or a structured error",
+    test.provider("returns the stream policy or a structured error", (stack) =>
       Effect.gen(function* () {
         const response = yield* getJson("/resource-policy");
         if ((response as any).ok === false) {
@@ -127,8 +134,7 @@ describe.sequential("Kinesis Bindings", () => {
   });
 
   describe("ListShards", () => {
-    test(
-      "lists shards for the stream",
+    test.provider("lists shards for the stream", (stack) =>
       Effect.gen(function* () {
         const response = yield* getJson("/shards");
         expect(((response as any).Shards ?? []).length).toBeGreaterThan(0);
@@ -137,8 +143,7 @@ describe.sequential("Kinesis Bindings", () => {
   });
 
   describe("GetShardIterator", () => {
-    test(
-      "returns a shard iterator for the first shard",
+    test.provider("returns a shard iterator for the first shard", (stack) =>
       Effect.gen(function* () {
         const shardId = yield* getFirstShardId();
         const response = yield* postJson("/iterator", { shardId });
@@ -148,27 +153,27 @@ describe.sequential("Kinesis Bindings", () => {
   });
 
   describe("GetRecords", () => {
-    test(
+    test.provider(
       "reads a just-written record through the shard iterator",
-      Effect.gen(function* () {
-        const shardId = yield* getFirstShardId();
-        const marker = `records-${crypto.randomUUID()}`;
-        const response = yield* postJson("/records", {
-          shardId,
-          partitionKey: "records-test",
-          data: marker,
-        });
-        const records = (response as any).records ?? [];
-        expect(records.some((record: any) => record.data === marker)).toBe(
-          true,
-        );
-      }),
+      (stack) =>
+        Effect.gen(function* () {
+          const shardId = yield* getFirstShardId();
+          const marker = `records-${crypto.randomUUID()}`;
+          const response = yield* postJson("/records", {
+            shardId,
+            partitionKey: "records-test",
+            data: marker,
+          });
+          const records = (response as any).records ?? [];
+          expect(records.some((record: any) => record.data === marker)).toBe(
+            true,
+          );
+        }),
     );
   });
 
   describe("ListStreamConsumers", () => {
-    test(
-      "lists the registered consumer",
+    test.provider("lists the registered consumer", (stack) =>
       Effect.gen(function* () {
         const response = yield* getJson("/stream-consumers");
         const consumers = (response as any).Consumers ?? [];
@@ -182,8 +187,7 @@ describe.sequential("Kinesis Bindings", () => {
   });
 
   describe("DescribeStreamConsumer", () => {
-    test(
-      "describes the registered consumer",
+    test.provider("describes the registered consumer", (stack) =>
       Effect.gen(function* () {
         const response = yield* getJson("/consumer");
         expect((response as any).ConsumerDescription.ConsumerName).toBe(
@@ -194,8 +198,7 @@ describe.sequential("Kinesis Bindings", () => {
   });
 
   describe("SubscribeToShard", () => {
-    test(
-      "opens a subscribe-to-shard stream",
+    test.provider("opens a subscribe-to-shard stream", (stack) =>
       Effect.gen(function* () {
         const shardId = yield* getFirstShardId();
         const response = yield* postJson("/subscribe", { shardId });
@@ -205,8 +208,7 @@ describe.sequential("Kinesis Bindings", () => {
   });
 
   describe("ListTagsForResource", () => {
-    test(
-      "lists the stream ownership tags",
+    test.provider("lists the stream ownership tags", (stack) =>
       Effect.gen(function* () {
         const response = yield* getJson("/tags");
         const keys = ((response as any).Tags ?? []).map((tag: any) => tag.Key);
@@ -219,8 +221,7 @@ describe.sequential("Kinesis Bindings", () => {
   });
 
   describe("PutRecord", () => {
-    test(
-      "writes a single record",
+    test.provider("writes a single record", (stack) =>
       Effect.gen(function* () {
         const response = yield* postJson("/put-record", {
           partitionKey: "put-record",
@@ -233,8 +234,7 @@ describe.sequential("Kinesis Bindings", () => {
   });
 
   describe("PutRecords", () => {
-    test(
-      "writes a batch of records",
+    test.provider("writes a batch of records", (stack) =>
       Effect.gen(function* () {
         const response = yield* postJson("/put-records", {
           records: [
@@ -255,8 +255,7 @@ describe.sequential("Kinesis Bindings", () => {
   });
 
   describe("StreamSink", () => {
-    test(
-      "writes records through the sink helper",
+    test.provider("writes records through the sink helper", (stack) =>
       Effect.gen(function* () {
         const response = yield* postJson("/sink", {
           records: [

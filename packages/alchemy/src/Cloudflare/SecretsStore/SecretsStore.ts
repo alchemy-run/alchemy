@@ -83,8 +83,9 @@ export const SecretsStoreProvider = () =>
 
           const create = createStore({
             accountId,
-            //`default_secrets_store` is the name cloudflare uses to create a secret store
-            body: [{ name: "default_secrets_store" }],
+            // `default_secrets_store` is the name Cloudflare uses for an
+            // account's default Secrets Store.
+            name: "default_secrets_store",
           });
           const response = adoptEnabled
             ? yield* create.pipe(
@@ -97,10 +98,9 @@ export const SecretsStoreProvider = () =>
             : yield* create;
 
           if (response) {
-            const store = response.result[0]!;
             return {
-              storeId: store.id,
-              storeName: store.name,
+              storeId: response.id,
+              storeName: response.name,
               accountId,
             };
           }

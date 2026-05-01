@@ -776,42 +776,44 @@ providers: Layer.mergeAll(Cloudflare.providers(), Stripe.providers()),
 ## Test the lifecycle
 
 Alchemy's test harness (`alchemy/Test/Vitest` or `alchemy/Test/Bun`)
-runs an in-memory state store and lets you `deploy` a sub-stack,
-make assertions against the live resource, then `destroy` it.
+configures providers + state once at the top of the file, then
+exposes `test.provider(name, (stack) => ...)` for provider-level
+tests. Each `test.provider` body receives a fresh in-memory scratch
+stack with `.deploy(effect)` and `.destroy()` helpers.
 
 :::note[Three things the harness gives you]
-- **`yield* destroy()`** — clears any leftover state from a
-  previous run. Call it at the start (and end) of each test.
-- **`test.deploy(effect)`** — runs a sub-stack with the in-memory
-  state store. The same logical ID across two `test.deploy` calls
+- **`Test.make({ providers })`** — wires your provider Layer into
+  every test in the file so the resource type resolves.
+- **`stack.deploy(effect)`** — runs a sub-stack with an in-memory
+  state store. The same logical ID across two `stack.deploy` calls
   triggers an `update` (or `replace`, depending on `diff`).
-- **`Effect.provide(providers(...))`** — wires your provider Layer
-  into the test so the resource type resolves.
+- **`stack.destroy()`** — replans against an empty desired state to
+  tear everything down. Call at the end of the test.
 :::
 
 Create `test/Product.test.ts`:
 
 ```typescript
 // test/Product.test.ts
-import * as Alchemy from "alchemy";
-import { destroy, test } from "alchemy/Test/Vitest";
+import * as Test from "alchemy/Test/Vitest";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import Stripe from "stripe";
 import * as StripeProvider from "../src/stripe";
 
-// Tests resolve credentials through the same AuthProvider as deploys
-// — set STRIPE_API_KEY (with `method: "env"`) or run `alchemy login`
-// against a test profile beforehand.
+// Configure providers once per file. Credentials resolve through the
+// same AuthProvider system as `alchemy deploy` — set STRIPE_API_KEY
+// (with `method: "env"`) or run `alchemy login` against a test
+// profile beforehand.
+const { test } = Test.make({ providers: StripeProvider.providers() });
+
 const stripe = new Stripe(process.env.STRIPE_API_KEY!);
 
-test(
+test.provider(
   "create, update, delete a product",
-  Effect.gen(function* () {
-    yield* destroy();
-
+  (stack) => Effect.gen(function* () {
     // Create
-    const created = yield* test.deploy(
+    const created = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* StripeProvider.Product("TestProduct", {
           name: "v1",
@@ -827,7 +829,7 @@ test(
     expect(live1.name).toBe("v1");
 
     // Update (in place)
-    const updated = yield* test.deploy(
+    const updated = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* StripeProvider.Product("TestProduct", {
           name: "v2",
@@ -843,8 +845,8 @@ test(
     expect(live2.name).toBe("v2");
 
     // Destroy
-    yield* destroy();
-  }).pipe(Effect.provide(StripeProvider.providers())),
+    yield* stack.destroy();
+  }),
 );
 ```
 

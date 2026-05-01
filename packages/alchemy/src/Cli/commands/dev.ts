@@ -3,7 +3,7 @@ import * as Schema from "effect/Schema";
 import * as Command from "effect/unstable/cli/Command";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { fileURLToPath } from "node:url";
-import { envFile, force, main, profile, stage } from "./_shared.ts";
+import { envFile, force, profile, script, stage } from "./_shared.ts";
 import { ExecStackOptions } from "./deploy.ts";
 
 // Source iteration uses unbundled exec.ts so --watch sees source-file changes;
@@ -14,15 +14,13 @@ import { ExecStackOptions } from "./deploy.ts";
 const selfPath = fileURLToPath(import.meta.url);
 const isInstalled =
   selfPath.includes("/node_modules/") || selfPath.includes("\\node_modules\\");
-const execEntry = isInstalled
-  ? "alchemy/bin/exec.js"
-  : "alchemy/bin/exec.ts";
+const execEntry = isInstalled ? "alchemy/bin/exec.js" : "alchemy/bin/exec.ts";
 
 export const devCommand = Command.make(
   "dev",
   {
     force,
-    main,
+    main: script,
     envFile,
     stage,
     profile,

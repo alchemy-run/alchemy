@@ -5,6 +5,7 @@ import "../styles/marketing.css";
 import Nav from "../components/marketing/Nav.astro";
 import Footer from "../components/marketing/Footer.astro";
 import PostHog from "../components/analytics/PostHog.astro";
+import ThemeProvider from "../components/ThemeProvider.astro";
 
 interface Props {
   title?: string;
@@ -47,6 +48,11 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    {/* Pre-paint theme script + color-scheme/theme-color metas. Must
+        run before any paint so navigating from a docs page (where the
+        Starlight head includes the same partial) doesn't drop the
+        user's theme on a marketing page. */}
+    <ThemeProvider />
     <title>{title}</title>
     {description && <meta name="description" content={description} />}
     <link rel="canonical" href={canonical.href} />

@@ -22,7 +22,7 @@
       "path": "./tsconfig.json"
     },
     {
-      "path": "../alchemy/tsconfig.json"
+      "path": "./tsconfig.bin.json"
     }
   ]
 }

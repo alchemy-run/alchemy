@@ -7,23 +7,23 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import { Command, Flag } from "effect/unstable/cli";
 
-import { AuthProviders } from "../../src/Auth/AuthProvider.ts";
+import { AuthProviders } from "../..//Auth/AuthProvider";
 import {
   getProfile,
   setProfile,
   withProfileOverride,
-} from "../../src/Auth/Profile.ts";
-import { Stage } from "../../src/Stage.ts";
-import * as State from "../../src/State/index.ts";
-import { loadConfigProvider } from "../../src/Util/ConfigProvider.ts";
-import { fileLogger } from "../../src/Util/FileLogger.ts";
+} from "../..//Auth/Profile";
+import { Stage } from "../..//Stage";
+import * as State from "../..//State/index";
+import { loadConfigProvider } from "../..//Util/ConfigProvider";
+import { fileLogger } from "../..//Util/FileLogger";
 
 import {
   envFile,
   importStack,
   instrumentCommand,
-  main,
   profile,
+  script,
   stage,
 } from "./_shared.ts";
 
@@ -37,7 +37,7 @@ const loginConfigure = Flag.boolean("configure").pipe(
 export const loginCommand = Command.make(
   "login",
   {
-    main,
+    main: script,
     envFile,
     stage,
     profile,
