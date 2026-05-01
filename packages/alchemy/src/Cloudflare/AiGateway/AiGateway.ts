@@ -6,6 +6,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { AiGatewayBinding } from "./AiGatewayBinding.ts";
 
 export type AiGatewayRateLimitingTechnique = "fixed" | "sliding";
 
@@ -215,6 +216,12 @@ export type AiGateway = Resource<
   Providers
 >;
 
+export const isAiGateway = (value: unknown): value is AiGateway =>
+  typeof value === "object" &&
+  value !== null &&
+  "Type" in value &&
+  (value as AiGateway).Type === "Cloudflare.AiGateway";
+
 /**
  * A Cloudflare AI Gateway for observability, caching, rate limiting, and
  * governance across AI provider requests.
@@ -250,7 +257,17 @@ export type AiGateway = Resource<
  * });
  * ```
  */
-export const AiGateway = Resource<AiGateway>("Cloudflare.AiGateway");
+export const AiGateway = Object.assign(
+  Resource<AiGateway>("Cloudflare.AiGateway"),
+  {
+    /**
+     * Bind this gateway to the surrounding Worker, returning an Effect-native
+     * client for the runtime AI Gateway binding.
+     */
+    bind: (...args: Parameters<typeof AiGatewayBinding.bind>) =>
+      AiGatewayBinding.bind(...args),
+  },
+);
 
 export const AiGatewayProvider = () =>
   Provider.effect(
