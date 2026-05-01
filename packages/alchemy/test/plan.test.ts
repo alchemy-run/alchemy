@@ -1908,9 +1908,6 @@ describe("Outputs should resolve to old values", () => {
 describe("raw Resource refs in props are tracked as upstream dependencies", () => {
   test(
     "raw Resource passed directly as a prop value populates the upstream's downstream",
-    {
-      state: test.state(),
-    },
     Effect.gen(function* () {
       const plan = yield* Effect.gen(function* () {
         const A = yield* TestResource("A", { string: "a-value" });
@@ -1926,9 +1923,6 @@ describe("raw Resource refs in props are tracked as upstream dependencies", () =
 
   test(
     "raw Resources nested in arrays/objects are tracked as upstream dependencies",
-    {
-      state: test.state(),
-    },
     Effect.gen(function* () {
       const plan = yield* Effect.gen(function* () {
         const A = yield* TestResource("A", { string: "a-value" });

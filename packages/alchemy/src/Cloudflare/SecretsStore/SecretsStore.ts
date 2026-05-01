@@ -1,14 +1,6 @@
-import {
-  Credentials,
-  formatHeaders,
-} from "@distilled.cloud/cloudflare/Credentials";
 import * as secretsStore from "@distilled.cloud/cloudflare/secrets-store";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import { AdoptPolicy } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -59,7 +51,7 @@ export const SecretsStoreProvider = () =>
     SecretsStore,
     Effect.gen(function* () {
       const { accountId } = yield* CloudflareEnvironment;
-      const createStore = yield* makeCreateStore;
+      const createStore = yield* secretsStore.createStore;
       const listStores = yield* secretsStore.listStores;
 
       return {
@@ -91,7 +83,8 @@ export const SecretsStoreProvider = () =>
 
           const create = createStore({
             accountId,
-            //`default_secrets_store` is the name cloudflare uses to create a secret store
+            // `default_secrets_store` is the name Cloudflare uses for an
+            // account's default Secrets Store.
             name: "default_secrets_store",
           });
           const response = adoptEnabled
@@ -106,8 +99,8 @@ export const SecretsStoreProvider = () =>
 
           if (response) {
             return {
-              storeId: response.result.id,
-              storeName: response.result.name,
+              storeId: response.id,
+              storeName: response.name,
               accountId,
             };
           }
@@ -146,85 +139,3 @@ export const SecretsStoreProvider = () =>
       };
     }),
   );
-
-/**
- * Direct HTTP `POST /accounts/{account_id}/secrets_store/stores` call.
- *
- * Cloudflare's REST API expects a single `{ "name": "..." }` JSON object
- * for this endpoint and rejects an array body with `invalid_json_body`
- * (code `1001`). The auto-generated `@distilled.cloud/cloudflare`
- * `createStore` operation incorrectly models the body as an array of
- * objects, so any call through it fails on accounts that don't already
- * have a Secrets Store. This helper bypasses the SDK and posts the
- * correct shape directly. The returned response shape matches the
- * actual API: `result` is a single store object (not an array).
- *
- * Surfaces `MaximumStoresExceeded` as a tagged error so the caller can
- * `Effect.catchTag` the same as if it had used the SDK's typed error.
- */
-export const makeCreateStore = Effect.gen(function* () {
-  const credentialsService = yield* Credentials;
-  const client = yield* HttpClient.HttpClient;
-  return (input: { accountId: string; name: string }) =>
-    Effect.gen(function* () {
-      const credentials = yield* credentialsService;
-      const headers = formatHeaders(credentials);
-      const url = `${credentials.apiBaseUrl}/accounts/${encodeURIComponent(input.accountId)}/secrets_store/stores`;
-      const request = HttpClientRequest.post(url).pipe(
-        HttpClientRequest.setHeaders(headers),
-        HttpClientRequest.setHeader("Accept", "application/json"),
-        HttpClientRequest.bodyJsonUnsafe({ name: input.name }),
-      );
-      const response = yield* client.execute(request).pipe(Effect.scoped);
-      const body = yield* HttpClientResponse.schemaBodyJson(
-        CreateStoreEnvelope,
-      )(response);
-
-      if (response.status >= 400 || body.success === false) {
-        const first = body.errors?.[0];
-        if (
-          first?.code === 1003 &&
-          first.message?.includes("maximum_stores_exceeded")
-        ) {
-          return yield* new secretsStore.MaximumStoresExceeded({
-            code: first.code,
-            message: first.message,
-          });
-        }
-        return yield* Effect.die(
-          new Error(
-            `Cloudflare createStore failed (${response.status}): ${first?.message ?? "unknown error"} (code ${first?.code ?? "n/a"})`,
-          ),
-        );
-      }
-      const store = body.result!;
-      return {
-        result: {
-          id: store.id,
-          name: store.name,
-          created: store.created,
-          modified: store.modified,
-        },
-      };
-    });
-});
-
-const CreateStoreEnvelope = Schema.Struct({
-  success: Schema.optional(Schema.Boolean),
-  errors: Schema.optional(
-    Schema.Array(
-      Schema.Struct({
-        code: Schema.optional(Schema.Number),
-        message: Schema.optional(Schema.String),
-      }),
-    ),
-  ),
-  result: Schema.optional(
-    Schema.Struct({
-      id: Schema.String,
-      created: Schema.String,
-      modified: Schema.String,
-      name: Schema.String,
-    }),
-  ),
-});
