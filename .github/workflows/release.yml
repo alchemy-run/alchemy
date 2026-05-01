@@ -113,7 +113,7 @@ jobs:
       # Build everything once, up front, against the bumped versions. Outputs
       # ride to every publish job as the `build-output` artifact so we don't
       # rebuild three times in parallel.
-      - run: bun run build
+      - run: bun run build:packages
 
       - uses: actions/upload-artifact@v4
         with:
